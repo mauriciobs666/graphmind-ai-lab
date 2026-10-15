@@ -37,7 +37,7 @@ worktree, so it is **fresh**.
 | U2 | `analyst` | `aac9e86c2d6a811c4` | accepted | `falkor-chat/docs/reviews/extract-transient-retry.md` Pass 1 → needs changes; Pass 2 → **approve w/ suggestions** + stopping condition (six items N-1..N-7) | — | 183k+240k tok / 52+13 tools |
 | U1b | `architect` (fresh: U1 context >250k) | `ad060137934b29957` | accepted | plan v3 (§8.2): all six items accepted; N-5 condition amended (WARNING or gate INFO) | `analyst` targeted check (U2b) → approve w/ suggestions | 108k tok / 41 tools |
 | U2b | `analyst` | `aac9e86c2d6a811c4` | accepted | review Pass 3 (targeted) → **approve w/ suggestions**; P3-1, P3-2 carried verbatim into U5 (no v4) | — | — |
-| U3a | `tdd-engineer` | — | queued | plan step 1 (error fields, rung 3b, `retry.py`) | `analyst` (U4a) → — | — |
+| U3a | `tdd-engineer` | `aedc20a61b45fb469` | accepted (resumed once after 429 kill, no files lost) | plan step 1: `transport.py`, `llm.py`, `embedding.py`, new `retry.py` + 4 test files; 173 passed after P4 fixes (teco re-ran; teco mutants on rung-1 `status`/`detail` both killed) | `analyst` (U4a, `af49f6c63460dc1b3`) → Pass 4 **approve w/ suggestions**; P4-1/P4-2/599 row sent back to U3a; P4-3 (R-6 list, plan text) → close; other P4-4 nits kept | 151k tok / 45 tools |
 | U3b | `tdd-engineer` | — | queued | plan step 2 (extract wiring, gate method, live tests) | `analyst` (U4b) → — | — |
 | U3c | `tdd-engineer` | — | queued | plan step 3 (embed wiring, docs) | `analyst` (U4c) → — | — |
 | U5 | `qa-engineer` | — | queued | live proof per plan: proxy legs, then real-fault legs (e)–(g) **only after the stakeholder's go-ahead** (they disrupt the shared LM Studio) | — | — |

@@ -79,7 +79,8 @@ class OpenAICompatibleEmbedder:
             return resp["data"][0]["embedding"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderCallError(
-                f"{self._model} @ {self._base_url}: response missing data: {exc}"
+                f"{self._model} @ {self._base_url}: response missing data: {exc}",
+                kind="response_shape",
             ) from exc
 
 

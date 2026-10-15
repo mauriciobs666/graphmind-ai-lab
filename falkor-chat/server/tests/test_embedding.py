@@ -493,3 +493,16 @@ def test_embedder_raises_provider_call_error_on_missing_data():
     with pytest.raises(ProviderCallError) as excinfo:
         embedder.embed("x")
     assert "m" in str(excinfo.value)
+
+
+def test_u4_embedder_missing_data_is_kind_response_shape():
+    # K-067 (plan `falkor-chat/docs/plans/extract-transient-retry.md` §3.1).
+    from falkorchat.transport import ProviderCallError
+
+    def fake_transport(url: str, payload: dict) -> dict:
+        return {"unexpected": "shape"}
+
+    embedder = OpenAICompatibleEmbedder("http://x/v1", "m", transport=fake_transport)
+    with pytest.raises(ProviderCallError, match="response missing data") as excinfo:
+        embedder.embed("x")
+    assert excinfo.value.kind == "response_shape"

@@ -7,6 +7,7 @@ One case per ordered exception-ladder branch (B-2), each driven through an injec
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 
@@ -232,3 +233,157 @@ def test_payload_is_posted_as_json():
 
     assert seen["method"] == "POST"
     assert seen["body"] == {"model": MODEL, "messages": [{"role": "user", "content": "hi"}]}
+
+
+# ── K-067 U-1: structured classification fields per rung (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.1 raise-site table). The
+#    message assertions above stay untouched — they are the "message unchanged" pin. ──
+
+
+def _raised(opener) -> ProviderCallError:
+    with pytest.raises(ProviderCallError) as excinfo:
+        _transport(opener)(URL, {"model": MODEL})
+    return excinfo.value
+
+
+def test_u1_rung1_http_error_carries_kind_status_and_detail():
+    def opener(req, timeout=None):
+        raise urllib.error.HTTPError(
+            URL, 400, "Bad Request", {}, _FakeResponse(b'{"error":"terminated"}')
+        )
+
+    exc = _raised(opener)
+    assert exc.kind == "http"
+    assert exc.status == 400
+    assert "terminated" in exc.detail
+    assert str(exc).endswith('HTTP 400 Bad Request: {"error":"terminated"}')
+
+
+def test_u1_rung2_url_error_wrapping_a_timeout_is_kind_timeout():
+    def opener(req, timeout=None):
+        raise urllib.error.URLError(TimeoutError("timed out"))
+
+    exc = _raised(opener)
+    assert exc.kind == "timeout"
+    assert exc.status is None
+
+
+def test_u1_rung2_url_error_wrapping_a_refusal_is_kind_connection():
+    def opener(req, timeout=None):
+        raise urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    assert _raised(opener).kind == "connection"
+
+
+def test_u1_rung3_remote_disconnected_is_kind_network():
+    def opener(req, timeout=None):
+        raise http.client.RemoteDisconnected("Remote end closed connection")
+
+    assert _raised(opener).kind == "network"
+
+
+def test_u1_rung3_bare_timeout_is_kind_timeout():
+    def opener(req, timeout=None):
+        raise TimeoutError("timed out")
+
+    assert _raised(opener).kind == "timeout"
+
+
+def test_u1_rung3_bad_status_line_is_wrapped_as_kind_network():
+    # m-3: BadStatusLine is an HTTPException, not an OSError — it escaped raw before.
+    def opener(req, timeout=None):
+        raise http.client.BadStatusLine("x")
+
+    exc = _raised(opener)
+    assert exc.kind == "network"
+    _assert_names_provider_model_url(str(exc))
+    assert "BadStatusLine" in str(exc)
+
+
+def test_u1_rung3a_invalid_url_is_malformed_request_and_never_transient():
+    # N-1: InvalidURL is an HTTPException (not a ValueError), so rung 3a must sit
+    # before rung 3 or it is classified "network" and retried for a full budget.
+    from falkorchat.retry import is_transient
+
+    def opener(req, timeout=None):
+        raise http.client.InvalidURL("nonnumeric port: 'abc'")
+
+    exc = _raised(opener)
+    assert exc.kind == "malformed_request"
+    assert str(exc).endswith("malformed request: nonnumeric port: 'abc'")
+    assert is_transient(exc) is False
+
+
+def test_u1_rung4_value_error_is_kind_malformed_request():
+    def opener(req, timeout=None):
+        raise ValueError("unknown url type: acme")
+
+    assert _raised(opener).kind == "malformed_request"
+
+
+def test_u1_invalid_json_body_is_kind_invalid_json():
+    def opener(req, timeout=None):
+        return _FakeResponse(b"not json at all")
+
+    assert _raised(opener).kind == "invalid_json"
+
+
+def test_u1_rung5_body_error_carries_kind_and_rendered_detail():
+    def opener(req, timeout=None):
+        return _FakeResponse(json.dumps({"error": {"message": "terminated"}}).encode())
+
+    exc = _raised(opener)
+    assert exc.kind == "body_error"
+    assert exc.detail == "terminated"
+
+
+def test_u1_rung6_non_object_body_is_kind_body_shape():
+    def opener(req, timeout=None):
+        return _FakeResponse(json.dumps([1, 2, 3]).encode())
+
+    assert _raised(opener).kind == "body_shape"
+
+
+def test_u1_bare_provider_call_error_has_empty_fields():
+    exc = ProviderCallError("x")
+    assert (exc.kind, exc.status, exc.detail, exc.causes) == (None, None, None, ())
+    assert str(exc) == "x"
+
+
+# ── K-067 U-2: rung 3b — a failure inside `resp.read()` is wrapped, not raw ──
+
+
+class _ReadFailsResponse:
+    def __init__(self, exc: BaseException):
+        self._exc = exc
+        self.closed = False
+
+    def read(self) -> bytes:
+        raise self._exc
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize(
+    ("read_exc", "kind"),
+    [
+        (ConnectionResetError(104, "Connection reset by peer"), "read"),
+        (http.client.IncompleteRead(b""), "read"),
+        (TimeoutError("timed out"), "timeout"),
+    ],
+    ids=["connection-reset", "incomplete-read", "timeout"],
+)
+def test_u2_rung3b_body_read_failure_is_wrapped_and_the_response_closed(read_exc, kind):
+    resp = _ReadFailsResponse(read_exc)
+
+    def opener(req, timeout=None):
+        return resp
+
+    exc = _raised(opener)
+    assert exc.kind == kind
+    assert exc.__cause__ is read_exc
+    assert resp.closed is True
+    message = str(exc)
+    _assert_names_provider_model_url(message)
+    assert f"reading response failed: {type(read_exc).__name__}" in message

@@ -855,3 +855,51 @@ def test_fallback_client_has_no_mutable_last_used_state():
     a._fail = True  # now force the next call to fall back to b
     client.chat([{"role": "user", "content": "hi"}], [])
     assert not hasattr(client, "__dict__")
+
+
+# ── K-067 U-3/U-4: structured classification fields (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.1) ──
+
+
+def _shapeless_transport(url: str, payload: dict) -> dict:
+    return {"unexpected": "shape"}
+
+
+@pytest.mark.parametrize("call", ["complete", "chat"])
+def test_u4_missing_choices_is_kind_response_shape(call):
+    llm = OpenAICompatibleLLM("http://x/v1", "m", transport=_shapeless_transport, ref="p/m")
+    msgs = [{"role": "user", "content": "hi"}]
+    with pytest.raises(ProviderCallError, match="response missing choices") as excinfo:
+        llm.complete(msgs) if call == "complete" else llm.chat(msgs, [])
+    assert excinfo.value.kind == "response_shape"
+
+
+class _AlwaysFails:
+    def __init__(self, exc: ProviderCallError):
+        self._exc = exc
+
+    def complete(self, messages):
+        raise self._exc
+
+    def chat(self, messages, tools):
+        raise self._exc
+
+
+@pytest.mark.parametrize("call", ["complete", "chat"])
+def test_u3_exhausted_fallback_chain_carries_kind_and_causes_in_order(call):
+    first = ProviderCallError("first boom", kind="http", status=503)
+    second = ProviderCallError("second boom", kind="connection")
+    client = FallbackClient([_AlwaysFails(first), _AlwaysFails(second)], ["a/one", "b/two"])
+    msgs = [{"role": "user", "content": "hi"}]
+
+    with pytest.raises(ProviderCallError, match="fallback chain failed") as excinfo:
+        client.complete(msgs) if call == "complete" else client.chat(msgs, [])
+
+    exc = excinfo.value
+    assert exc.kind == "fallback_exhausted"
+    assert len(exc.causes) == 2
+    assert exc.causes[0] is first
+    assert exc.causes[1] is second
+    assert str(exc) == (
+        "all models in fallback chain failed: a/one: first boom; b/two: second boom"
+    )

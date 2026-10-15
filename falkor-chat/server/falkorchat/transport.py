@@ -14,10 +14,16 @@ seam every offline test injects), and the ordered exception ladder below.
      `URLError`-first ladder makes this branch dead code. Includes the (truncated)
      response body — on a cloud 401 that body is the only thing that says *why*.
   2. `urllib.error.URLError` — connection refused, DNS failure, unknown URL type.
-  3. `(TimeoutError, OSError)` — the bare read-phase timeout and any other socket
-     error. `TimeoutError` is **not** a `URLError` and must be named explicitly, or a
-     read timeout escapes classification entirely (the single most likely reason to
-     want FR-18's fallback chain to fire).
+  3a. `http.client.InvalidURL` — a URL `modelconfig` lets through but `urlopen`
+     rejects (non-numeric port, control characters in the host): a permanent
+     misconfiguration, reported like rung 4. It **must precede rung 3**, because
+     `InvalidURL` is an `HTTPException`, not a `ValueError` (K-067, plan
+     `falkor-chat/docs/plans/extract-transient-retry.md` §3.1, review N-1).
+  3. `(TimeoutError, OSError, http.client.HTTPException)` — the bare read-phase
+     timeout, any other socket error, and a malformed status line (`BadStatusLine`,
+     `LineTooLong` are not `OSError`s). `TimeoutError` is **not** a `URLError` and
+     must be named explicitly, or a read timeout escapes classification entirely (the
+     single most likely reason to want FR-18's fallback chain to fire).
   4. `ValueError` — belt and braces for malformed-URL shapes.
   5. **Body-level:** a `200` whose decoded JSON object carries an `error` key. LM
      Studio returns a **string** `error` on the wrong-`/v1`-prefix path and an
@@ -25,6 +31,10 @@ seam every offline test injects), and the ordered exception ladder below.
      render, or `body["error"]["message"]` raises `TypeError` in exactly the case this
      check exists to diagnose.
   6. **Body-shape:** a `200` body that decodes to something other than a JSON object.
+
+Rung 3b sits between the connect ladder and the body checks: a failure inside
+`resp.read()` (a reset or truncated body, a read timeout) is wrapped as a
+`ProviderCallError` ("reading response failed") instead of escaping raw (K-067).
 
 Every raised `ProviderCallError` names provider · model · the resolved URL · cause —
 callers pass `provider=`/`model=` at construction so the message identifies which
@@ -34,6 +44,7 @@ client layer's seventh class (`llm.py`/`embedding.py`), not this module's.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import urllib.error
@@ -56,7 +67,32 @@ class ProviderCallError(RuntimeError):
     """A provider HTTP call failed — transport/connection, HTTP, timeout, malformed
     URL, or a loud body-level error (the §4.9 ladder). Always names provider, model,
     the resolved URL, and the underlying cause, so a run/log/trace never carries a
-    bare `KeyError` or an opaque `TypeError` in its place (FR-10)."""
+    bare `KeyError` or an opaque `TypeError` in its place (FR-10).
+
+    Beyond the human-facing message, each raiser records structured, keyword-only
+    facts (K-067, `falkor-chat/docs/plans/extract-transient-retry.md` §3.1): `kind`
+    (which ladder rung or client check raised — `"http"`, `"connection"`,
+    `"network"`, `"timeout"`, `"read"`, `"malformed_request"`, `"invalid_json"`,
+    `"body_error"`, `"body_shape"`, `"response_shape"`, `"fallback_exhausted"`),
+    `status` (the HTTP status, rung 1 only), `detail` (the provider's own error text)
+    and `causes` (an exhausted fallback chain's per-element errors). They are additive
+    — `str(exc)` is unchanged — and `retry.is_transient` is their only consumer of
+    record: this module reports facts, `retry.py` alone decides what is transient."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: str | None = None,
+        status: int | None = None,
+        detail: str | None = None,
+        causes: tuple[ProviderCallError, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.status = status
+        self.detail = detail
+        self.causes = causes
 
 
 def _read_error_body(exc: urllib.error.HTTPError) -> str:
@@ -110,17 +146,37 @@ def make_http_transport(
         except urllib.error.HTTPError as exc:  # rung 1 — MUST precede URLError (B-2)
             body = _read_error_body(exc)
             raise ProviderCallError(
-                f"{label}: HTTP {exc.code} {exc.reason}: {body}"
+                f"{label}: HTTP {exc.code} {exc.reason}: {body}",
+                kind="http",
+                status=exc.code,
+                detail=body,
             ) from exc
         except urllib.error.URLError as exc:  # rung 2
-            raise ProviderCallError(f"{label}: connection failed: {exc.reason}") from exc
-        except (TimeoutError, OSError) as exc:  # rung 3 — TimeoutError is NOT a URLError
-            raise ProviderCallError(f"{label}: {type(exc).__name__}: {exc}") from exc
+            raise ProviderCallError(
+                f"{label}: connection failed: {exc.reason}",
+                kind="timeout" if isinstance(exc.reason, TimeoutError) else "connection",
+            ) from exc
+        except http.client.InvalidURL as exc:  # rung 3a — MUST precede rung 3 (N-1)
+            raise ProviderCallError(
+                f"{label}: malformed request: {exc}", kind="malformed_request"
+            ) from exc
+        except (TimeoutError, OSError, http.client.HTTPException) as exc:  # rung 3
+            raise ProviderCallError(
+                f"{label}: {type(exc).__name__}: {exc}",
+                kind="timeout" if isinstance(exc, TimeoutError) else "network",
+            ) from exc
         except ValueError as exc:  # rung 4 — malformed-URL shapes
-            raise ProviderCallError(f"{label}: malformed request: {exc}") from exc
+            raise ProviderCallError(
+                f"{label}: malformed request: {exc}", kind="malformed_request"
+            ) from exc
 
         try:
             raw = resp.read()
+        except (TimeoutError, OSError, http.client.HTTPException) as exc:  # rung 3b
+            raise ProviderCallError(
+                f"{label}: reading response failed: {type(exc).__name__}: {exc}",
+                kind="timeout" if isinstance(exc, TimeoutError) else "read",
+            ) from exc
         finally:
             close = getattr(resp, "close", None)
             if callable(close):
@@ -130,19 +186,21 @@ def make_http_transport(
             body = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
         except (ValueError, TypeError) as exc:
             raise ProviderCallError(
-                f"{label}: response body is not valid JSON: {exc}"
+                f"{label}: response body is not valid JSON: {exc}", kind="invalid_json"
             ) from exc
 
         if isinstance(body, dict):
             if "error" in body:  # rung 5 — body-level error, string OR object (m-1)
+                detail = _render_body_error(body["error"])
                 raise ProviderCallError(
-                    f"{label}: provider error: {_render_body_error(body['error'])}"
+                    f"{label}: provider error: {detail}", kind="body_error", detail=detail
                 )
             return body
 
         # rung 6 — a 200 body that decoded to something other than a JSON object
         raise ProviderCallError(
-            f"{label}: response body is not a JSON object (got {type(body).__name__})"
+            f"{label}: response body is not a JSON object (got {type(body).__name__})",
+            kind="body_shape",
         )
 
     return _transport

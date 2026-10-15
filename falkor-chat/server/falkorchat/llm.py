@@ -139,7 +139,8 @@ class OpenAICompatibleLLM:
             return resp["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderCallError(
-                f"{self._ref} @ {self._base_url}: response missing choices: {exc}"
+                f"{self._ref} @ {self._base_url}: response missing choices: {exc}",
+                kind="response_shape",
             ) from exc
 
     def chat(
@@ -170,7 +171,8 @@ class OpenAICompatibleLLM:
             message = resp["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderCallError(
-                f"{self._ref} @ {self._base_url}: response missing choices: {exc}"
+                f"{self._ref} @ {self._base_url}: response missing choices: {exc}",
+                kind="response_shape",
             ) from exc
         return replace(_parse_chat_message(message), model=self._ref)
 
@@ -208,24 +210,33 @@ class FallbackClient:
     def chat(
         self, messages: list[ChatMessage], tools: list[dict[str, Any]]
     ) -> ChatResult:
-        errors: list[str] = []
+        caught: list[ProviderCallError] = []
         for index, client in enumerate(self._clients):
             try:
                 result = client.chat(messages, tools)
             except ProviderCallError as exc:
-                errors.append(f"{self._refs[index]}: {exc}")
+                caught.append(exc)
                 continue
             return replace(result, fallback=True if index > 0 else None)
-        raise ProviderCallError(self._errors_message(errors))
+        raise self._exhausted(caught)
 
     def complete(self, messages: list[ChatMessage]) -> str:
-        errors: list[str] = []
-        for index, client in enumerate(self._clients):
+        caught: list[ProviderCallError] = []
+        for client in self._clients:
             try:
                 return client.complete(messages)
             except ProviderCallError as exc:
-                errors.append(f"{self._refs[index]}: {exc}")
-        raise ProviderCallError(self._errors_message(errors))
+                caught.append(exc)
+        raise self._exhausted(caught)
+
+    def _exhausted(self, caught: list[ProviderCallError]) -> ProviderCallError:
+        """The every-element-failed error: the message names each model tried, and
+        `causes` keeps the per-element errors (in chain order) so `retry.is_transient`
+        can judge the chain as a whole (K-067)."""
+        errors = [f"{ref}: {exc}" for ref, exc in zip(self._refs, caught)]
+        return ProviderCallError(
+            self._errors_message(errors), kind="fallback_exhausted", causes=tuple(caught)
+        )
 
 
 def _parse_chat_message(message: dict[str, Any]) -> ChatResult:

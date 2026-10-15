@@ -591,3 +591,221 @@ closes both. The architect's reading is right, and nothing is outstanding.
 Both new findings come from the v3 fix text, and each is a one-paragraph edit with its fix stated
 above. Another plan revision cycle is not worth it: QA's U5 test plan can carry P3-1/P3-2 verbatim
 and be checked against them at the U5 gate.
+
+## Pass 4 — code, step 1
+
+**Scope.** Unit U4a: the uncommitted working-tree diff for plan Step 1
+(`falkor-chat/docs/plans/extract-transient-retry.md` v3, §3.1, §3.2, §3.6, §4 Step 1, §5 Step 1),
+against baseline `d497a06d`. Files under `falkor-chat/server/`: `falkorchat/transport.py`,
+`falkorchat/llm.py`, `falkorchat/embedding.py`, new `falkorchat/retry.py`,
+`tests/test_transport.py`, `tests/test_llm.py`, `tests/test_embedding.py`, new
+`tests/test_retry.py`. Steps 2–3 (wiring, gate query, docs) are out of scope.
+
+**Verdict: approve with suggestions.** No blocker and no major. Four minors/nits, all of them
+test pins or plan-text follow-ups; none changes behaviour.
+
+CPG: used cpg_falkorchat — confirmed the baseline's production `ProviderCallError` raise sites (7 in `transport._transport`, 2 each in `llm` `chat`/`complete`, 1 in `embedding.embed`) are exactly the sites the diff touches; `retry.py` is uncommitted, so it is not in the graph.
+
+### Evidence gathered (all executed)
+
+- **Suite.** `.venv/bin/python -m pytest tests/test_retry.py tests/test_transport.py
+  tests/test_llm.py tests/test_embedding.py` → **172 passed**. Collection splits it **91 baseline
+  + 81 new** (`test_u<n>` ids). `git diff d497a06d -- tests` has **0 deleted lines**. The
+  implementer's counts hold.
+- **Live ladder probe.** I drove the real `urllib.request.urlopen` through `make_http_transport`
+  against local raw-socket servers (no FalkorDB, no LM Studio). The table is in the Appendix. Every
+  rung lands where §3.1 says. That includes rung 3a for both `InvalidURL` shapes (`nonnumeric
+  port`, space in host), `BadStatusLine` → `network`, and `IncompleteRead` from a short body →
+  `read` with `__cause__` kept. It also includes a real HTTP 400 `{"error":"terminated"}` →
+  `http`/400/transient.
+- **Mutation probe**, 13 mutants. Each file was copied aside, mutated, run with `-x`, restored,
+  and checked byte-identical with `filecmp.cmp(shallow=False)`. Results are in the Appendix: 9
+  killed and 4 survived. The survivors are findings P4-1 to P4-3.
+- **Gate-raises re-raise probe.** I scripted the gate as `[RuntimeError, False]`. The re-raised
+  object `is` the original provider error, with `__context__`/`__cause__` both `None`. So the
+  nested `except` inside `_gate_open` does not disturb the outer bare `raise`.
+
+### Answers to the brief's focus questions
+
+1. **`call_with_retry` vs §3.6: it matches.** The order is:
+   1. transient check, with a bare `raise` and no log;
+   2. last-attempt check, then a `giving up after %d attempts (%s, kind=%s, status=%s): %s`
+      WARNING, then re-raise;
+   3. pre-sleep gate;
+   4. `delay = delays_s[i]·(1 + jitter·rand())`;
+   5. the retry WARNING, in the §3.6 format;
+   6. `sleep`;
+   7. post-sleep gate;
+   8. loop.
+
+   The gate INFO line is `"%s: owning document no longer processing; abandoning retry (kind=%s,
+   status=%s)"` with `label`, as v3/N-5 requires. It is emitted from either read.
+
+   Only `Exception` is caught, and U-8 pins `KeyboardInterrupt`. `sleep` and `rand` are both
+   injectable keyword parameters with the §3.6 defaults (`time.sleep`, `random.random`), so jitter
+   is fully deterministic in tests. Every test passes `rand=lambda: 0.0` or `0.9999999`.
+
+   **A raising gate treated as open, logged via `_log.exception`, is per plan.** §5 U-8b states
+   "`keep_going` raises → treated as `True`: retries continue and an error is logged". It is also
+   the right call: a gate read fails when FalkorDB is unreachable, and failing the provider retry
+   for that reason would turn a recoverable hiccup into a `failed` document. The worst case is
+   six ERROR tracebacks per job (pre+post × 3); see P4-4.
+2. **Ladder order and scope: correct.**
+   - Rung 3a sits immediately before rung 3. Swapping them was killed by the U-1 3a row.
+   - Rung 3b wraps only `raw = resp.read()`, and `close()` stays in the `finally`. U-2 asserts
+     `resp.closed` for all three read failures.
+   - `HTTPError` cannot reach rung 3, because rung 1 catches it first. JSON decode and body checks
+     sit after the `try/finally`, so a body-level error is never re-wrapped as `read`.
+   - `ProviderCallError` (a `RuntimeError`) is neither `OSError` nor `HTTPException`, so no rung
+     re-wraps it.
+   - The new `HTTPException` reach of rung 3 covers `UnknownProtocol`, `LineTooLong`,
+     `ImproperConnectionState` and similar. All are wire-level, and `network` is defensible for
+     them.
+3. **R-6: nothing observable beyond R-6, except one omission in its list (P4-3).**
+   - Messages: every pre-existing message is byte-identical. The diff only adds keyword arguments,
+     and 91 baseline tests that assert the strings are unchanged and green. Only the newly wrapped
+     shapes get new messages.
+   - Types: `FallbackClient`'s exhausted error is still a bare `ProviderCallError`, still raised
+     outside any `except`. Its `__context__` is `None` as before, and the message is identical
+     (U-3 asserts the full string).
+   - Callers, from a grep for `except.*ProviderCallError|OSError|HTTPException|TimeoutError` in
+     `falkorchat/`:
+     - The provider path has only `llm.py:217/228` (`FallbackClient`) and the `services.py:2588`
+       drive-fault catch that R-6 names.
+     - `db.py:46` and `modelconfig.py:303/357` catch `OSError` around Redis and file reads, not
+       provider calls, so they are unaffected.
+     - `tools.py:929` documents that it does **not** catch `ProviderCallError`, and that is
+       unchanged.
+4. **Test quality: good.**
+   - No test checks only `kind` where the classifier also reads `status`/`detail`. Rung 1 pins
+     `status==400` and `detail`, and rung 5 pins `detail=="terminated"` exactly.
+   - Stub values are distinct where swaps matter:
+     - U-6 uses `http/503`, then `connection/None`;
+     - U-7 uses statuses 500–503, so `status=503` in the give-up line pins the **last** error;
+     - U-3 uses `http/503` and `connection` with distinct refs, plus an exact message.
+   - No fixture invents keys. The verbatim LM Studio bodies come from §2.2.
+   - There are three weak pins (P4-1, P4-2, nit in P4-4).
+5. **Departures: all sound.**
+   - **Per-marker U-5 rows.** Correct and valuable: the verbatim load-failure body carries two
+     markers, so without per-marker rows deleting either marker would survive.
+   - **Unplanned plumbing test** (`test_u5b_call_with_retry_passes_the_policy_timeout_switch_through`).
+     Sound. It is the only step-1 pin that `call_with_retry` forwards `policy.retry_timeouts`, and
+     U-17 in step 3 builds on that.
+   - **Log levels.** These are WARNING/WARNING/INFO as §3.6 specifies, plus ERROR for a raising
+     gate, which the plan's "an error is logged" asks for.
+   - **`_exhausted()` refactor.** Sound. `zip(self._refs, caught)` is length-safe, because every
+     loop iteration that does not `return` appends exactly once. Dropping `enumerate` in `complete`
+     loses nothing.
+   - **`jitter < 0` validation.** This is §3.2's stated invariant, not a departure.
+   - **Plan note.** No plan revision is needed. One text omission in R-6 (P4-3) can ride along with
+     whichever step-2/3 doc edit touches the plan next, or the ledger can record it.
+
+### Findings
+
+#### P4-1 (minor) — U-7 does not pin the third delay, the 30 s point §3.2 derives
+
+- **Evidence.**
+  - Mutant `delay = policy.delays_s[min(attempt - 1, 1)]` sleeps `[2, 8, 8]` instead of
+    `[2, 8, 30]`. It **survived**: 172 passed.
+  - U-6 asserts only the first two delays. U-7 asserts `len(sleep.delays) == 3`, but not the
+    values.
+- **Why it matters.** Attempt 4 at 40–60 s cumulative is the design's whole argument for clearing
+  the ~21 s cold load (§3.2). An off-by-one index or a truncated tuple would quietly move it to
+  ~18 s, inside the reload window K-067 warns about.
+- **Fix.** U-7 already passes `rand=lambda: 0.0`. Add `assert sleep.delays == [2.0, 8.0, 30.0]`.
+
+#### P4-2 (minor) — The give-up WARNING's `label` is unpinned
+
+- **Evidence.**
+  - Mutant: the `giving up after …` line logs `""` in place of `label`. It **survived**.
+  - U-7 calls `call_with_retry` with no `label`, so the line it checks has an empty label either
+    way.
+- **Why it matters.** This line is the only record of a job that spent its whole budget. Live leg
+  (g)'s per-job table and the P3-1 job set attribute outcomes by `extract|embed chunkId=…`. A
+  label-less give-up line cannot be joined to its job.
+- **Fix.** In U-7, pass `label="extract chunkId=c1"` and assert that it appears in
+  `giving_up[0]`.
+
+#### P4-3 (nit, plan text) — R-6's list of newly wrapped raw escapes omits the read-phase `TimeoutError`
+
+- **Evidence.** Rung 3b also wraps a `TimeoutError` raised by `resp.read()` (U-2 `timeout` row,
+  `kind="timeout"`). Before this change, that error escaped raw. So `FallbackClient` now falls
+  through on a body-read timeout, and `services.py`'s drive-fault catch now sees it. R-6 (plan
+  §6) lists only `ConnectionResetError`/`IncompleteRead`/`BadStatusLine`/`InvalidURL`.
+- **Why it matters.** The behaviour is right; it is the same improvement R-6 describes. But R-6 is
+  the reference list of contract changes on a shared seam, and an incomplete list misleads the
+  next reader auditing the `FallbackClient` change.
+- **Fix.** `architect`/`teco`: add "and a read-phase `TimeoutError` (as `kind=timeout`)" to the
+  R-6 first bullet at the next plan touch. This needs no code change.
+
+#### P4-4 (nits; take or leave)
+
+- **5xx upper bound.** Mutant `<= 598` survived, because no U-5 row covers `599`. Add `http 599`
+  to transient. Optionally add `http 499` to permanent as the lower neighbour; `500` already pins
+  the low edge, since mutant `501 <=` was killed.
+- **Rung-1 `detail`.** U-1 uses `"terminated" in exc.detail`. A mutant that sets `detail` to the
+  whole message survived. That is harmless to classification today, but `detail` is documented as
+  "the provider's own error text". `assert exc.detail == '{"error":"terminated"}'` pins it.
+- **Retry WARNING's trailing `%s`** (the exception text). Its removal survived. Optional: assert
+  `"boom"` appears in `warnings[0]`.
+- **Raising gate logs a full traceback per read.** That is up to 6 ERROR tracebacks per job while
+  FalkorDB is down. This is acceptable as specified. If it proves noisy live, log the traceback
+  once per call, not per read. No action is needed now.
+- **Marker `"terminated"` is a substring of `"unterminated"`** (checked: `'terminated' in
+  'unterminated string literal'` → `True`). A permanent 400 whose body says "Unterminated …"
+  would burn one budget. This is **inferred, not observed**: I have no LM Studio body showing it,
+  and the cost is bounded by §3.2. Route it to `architect` only if leg (g) captures one; if so,
+  the fix is a word-boundary match in `_has_marker`. It is plan-level, not an implementation
+  defect.
+
+### What's solid
+
+- `retry.py` is a direct, readable transcription of §3.1/§3.6. `_gate_open` factors the two gate
+  reads without changing the order. The docstring states the order contract that tests pin.
+- `test_u8b_gate_is_read_before_and_after_each_sleep` asserts on a shared event log, and
+  `…_never_read_after_the_final_attempt` counts exactly 6 reads. Together they pin the M-1 fix
+  structurally rather than by inference.
+- The U-2 rows assert `exc.__cause__ is read_exc` and `resp.closed`, which pins rung 3b's scope
+  and the `finally`.
+- The baseline tests are untouched (0 deleted lines), so the "message byte-identical" pin is the
+  existing 91 tests, as the plan intended.
+
+### Open questions
+
+None. P4-1/P4-2 can be folded into U3b's first commit or a one-line follow-up before the step-1
+commit, at `teco`'s discretion.
+
+### Appendix — Pass 4 probes
+
+**A. Real `urlopen` through `make_http_transport`** (script:
+`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/probe_live.py`):
+
+| scenario | kind | status | transient | `__cause__` |
+|---|---|---|---|---|
+| `http://localhost:abc/…` | `malformed_request` | — | False | `InvalidURL` |
+| `http://local host/…` | `malformed_request` | — | False | `InvalidURL` |
+| server sends `GARBAGE\r\n\r\n` | `network` | — | True | `BadStatusLine` |
+| server closes without reply | `network` | — | True | `RemoteDisconnected` |
+| 200, `Content-Length: 100`, 5 bytes sent | `read` | — | True | `IncompleteRead` |
+| 400 `{"error":"terminated"}` | `http` | 400 | True | `HTTPError` |
+| 200 `{"error":{"message":"Failed to load model x"}}` | `body_error` | — | True | — |
+| closed port | `connection` | — | True | `URLError` |
+
+**B. Mutants** (script: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut.py`;
+all restored, `filecmp` byte-identical):
+
+| mutant | result |
+|---|---|
+| rung 3a moved after rung 3 | killed |
+| rung 3b tuple drops `HTTPException` | killed |
+| rung 3 tuple drops `HTTPException` | killed |
+| rung 3b `kind` always `"read"` | killed |
+| raising gate → closed | killed |
+| post-sleep gate removed | killed |
+| 5xx lower bound `501` | killed |
+| rung 2 `kind` always `"connection"` | killed |
+| 5xx upper bound `598` | **survived** (P4-4) |
+| third delay `delays_s[min(i,1)]` | **survived** (P4-1) |
+| give-up line drops `label` | **survived** (P4-2) |
+| retry WARNING drops exception text | **survived** (P4-4) |
+| rung 1 `detail` = whole message | **survived** (P4-4) |
