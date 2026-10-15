@@ -563,7 +563,10 @@ count with no FalkorDB connection and no writes — the correct way to check a p
   every in-flight background daemon thread** (the ingestion pipeline's extraction/embedding work,
   `mcp.py`'s fire-and-forget `threading.Thread(daemon=True)` dispatch — see `background.py`). A
   document write mid-run produces false-negative-looking failures (entities/embeddings that never
-  land) with nothing in the response indicating why. Confirmed K-050 M5: editing
+  land) with nothing in the response indicating why. A reload mid-retry is worse: an ingestion job
+  retrying a transient provider error (K-067) stays in flight for typically 40–60 s and up to under
+  13 min worst case (`falkor-chat/docs/plans/extract-transient-retry.md` §3.2), and a job killed
+  then never reports, so its document stays `processing` for good. Confirmed K-050 M5: editing
   `docs/test-plans/document-ingestion.md` mid-pass logged uvicorn's "2 changes detected" and left
   several in-flight documents without their entities/embeddings; reproduced cleanly, then resolved
   by disabling reload for the pass (see the `UVICORN_ARGS` gotcha immediately below). Do all

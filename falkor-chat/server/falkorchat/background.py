@@ -76,7 +76,8 @@ def _report_document_job(
     scheduling behavior, not document-status bookkeeping, and must keep
     working unmodified. The report call itself is guarded the same
     failure-isolation way as the job it reports on: it must never raise into
-    the caller's scheduling mechanism either.
+    the caller's scheduling mechanism either. A job retrying a transient
+    provider error (K-067) is not reported until it finishes.
     """
     repo = getattr(worker_or_pipeline, "repo", None)
     if repo is None:
@@ -102,7 +103,10 @@ def _safe_embed_chunk(
     every other `_safe_*` wrapper in this module). K-051: either way, the
     outcome is reported back onto `document_id` via `_report_document_job` —
     this is one of the two paths (`_safe_extract` is the other) whose
-    completion `Document.status` needs to reach a terminal state.
+    completion `Document.status` needs to reach a terminal state. K-067: a
+    transient provider error is retried inside the worker per
+    `retry.EMBED_CHUNK_RETRY`, and the job still reports exactly once, with
+    its final outcome.
     """
     try:
         embed_worker.embed_chunk(ws, chunk_id=chunk_id, text=text)
@@ -132,7 +136,9 @@ def _safe_extract(
     surface to the ingesting caller, corrupt the `Document`, or block sibling
     chunks (same failure-isolation discipline as every other `_safe_*`
     wrapper in this module). K-051: either way, the outcome is reported back
-    onto `document_id` via `_report_document_job`.
+    onto `document_id` via `_report_document_job`. K-067: a transient provider
+    error is retried inside the pipeline per `retry.DEFAULT_PROVIDER_RETRY`,
+    and the job still reports exactly once, with its final outcome.
     """
     try:
         ingestion_pipeline.extract_chunk(

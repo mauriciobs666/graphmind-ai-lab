@@ -19,9 +19,11 @@ consumer) schedules `embed_message` after `services.post_message` returns.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any, Protocol
 
-from . import config
+from . import config, retry
 from .modelconfig import StaticModelGateway
 from .repository import EmbeddingDimensionError
 from .transport import ProviderCallError, Transport, make_http_transport
@@ -114,8 +116,12 @@ class EmbeddingWorker:
         *,
         models: Any = None,
         expected_dim: int | None = None,
+        retry_policy: retry.RetryPolicy = retry.EMBED_CHUNK_RETRY,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._repo = repo
+        self._retry_policy = retry_policy
+        self._sleep = sleep
         self._models = models or StaticModelGateway(embedder=embedder)
         self._expected_dim = expected_dim
         # K-042 Landing 2 (FR-19, `-graph.md` §3.3 layer 2 — "the correctness
@@ -237,10 +243,29 @@ class EmbeddingWorker:
         plan §4 Stage 2's "done" condition) and the same FR-19 pre-flight
         dimension guard, gated on `Chunk`'s own vector index only (never
         `Message`'s). See `_resolve_and_embed`.
+
+        **Transient provider errors are retried — the pre-flight and provider call
+        only (K-067, plan `falkor-chat/docs/plans/extract-transient-retry.md`
+        §3.4).** `_resolve_and_embed` runs inside `retry.call_with_retry` under
+        `retry.EMBED_CHUNK_RETRY` by default; it makes zero graph writes (gateway
+        resolution and the index-dimension read are read-only), so failed attempts
+        leave nothing behind and `set_chunk_embedding` runs at most once, on the
+        single successful vector. Between attempts the liveness gate
+        `repo.chunk_document_is_processing` stops retrying once the owning document
+        is no longer `'processing'` (§3.5). `embed_message` is deliberately **not**
+        retried: the responder calls it synchronously on the `@mention` reply path,
+        and a retry budget there would change that path's latency contract.
         """
-        vector, dim = self._resolve_and_embed(
-            ws, write_label=self._CHUNK_WRITE_LABEL, text=text,
-            id_desc=f"chunkId={chunk_id!r}",
+        vector, dim = retry.call_with_retry(
+            lambda: self._resolve_and_embed(
+                ws, write_label=self._CHUNK_WRITE_LABEL, text=text,
+                id_desc=f"chunkId={chunk_id!r}",
+            ),
+            policy=self._retry_policy, sleep=self._sleep,
+            keep_going=lambda: self._repo.chunk_document_is_processing(
+                ws, chunk_id=chunk_id
+            ),
+            label=f"embed chunkId={chunk_id}",
         )
         self._repo.set_chunk_embedding(
             ws, chunk_id=chunk_id, embedding=vector, expected_dim=dim

@@ -988,3 +988,193 @@ chunk_document_is_processing` (66 tests).
 | `retry_policy` not forwarded | **survived** (P5-1) |
 | `extract(text[:1], llm)` | **survived** (P5-2) |
 | gate `.query` instead of `.ro_query` | survived — behaviour-equivalent, no action |
+
+## Pass 6 — code, step 3
+
+**Scope.** This is unit U4c: the uncommitted diff for plan Step 3 against `128941a6`, read with
+plan sections §3.2.1, §3.4, §4 Step 3 and §5 Step 3. It covers:
+- `server/falkorchat/embedding.py` (the `EmbeddingWorker` constructor and `embed_chunk` wrap);
+- docstring-only changes to `background.py` and `repository.py`;
+- `docs/QUERIES.md` §14.1a;
+- `tests/test_embedding.py`;
+- `tests/test_background.py` (I-3).
+
+The diff also edits the coordination ledger; that is `teco`'s and is not reviewed here.
+
+**Pass 5 dispositions:** P5-1 and P5-2 are fixed in `128941a6`, per the coordinator. Step 3's
+U-14 also applies the P5-2 lesson, with a multi-word `_CHUNK_TEXT` and `seen == [text] * 3`.
+
+**Verdict: approve with suggestions.** There is no blocker or major. The wiring is correct and
+mirrors step 2. The one minor is that §3.2.1's flip is not the edit the plan says it is (P6-1).
+
+CPG: considered, not relevant — a one-call wrap plus docstrings/docs; I read every function the wrap spans (`_resolve_and_embed`, `_index_dimension`, `ModelGateway.embedder`/`resolve`) directly, and the CPG predates the uncommitted diff.
+
+### Evidence gathered (all executed)
+
+- **Suites.**
+  - I ran the six files the coordinator named (`test_embedding`, `test_background`,
+    `test_ingestion`, `test_retry`, `test_transport`, `test_llm`) plus `test_responder`: **258
+    passed** in 0.60 s. That is the coordinator's 246 plus the responder's 12.
+  - The slowest call took 0.02 s, so nothing sleeps for real.
+  - Every *pre-existing* `embed_chunk` failure test in `test_embedding.py` (around lines 339–390)
+    raises `EmbeddingDimensionError`, which is non-transient. The other test files that construct
+    `EmbeddingWorker` without `sleep=` (`test_api`, `test_workflow_live`,
+    `test_ac5_chat_grounding_live`) script no provider error.
+  - So my Pass 5 forward note resolves to **latent, not live**.
+- **Mutation and flip probe.** I ran five mutants on copies; each file was restored and checked
+  byte-identical with `filecmp`, and the md5 matched before and after. Appendix D has the
+  details. All five were killed, including the §3.2.1 flip itself, which is the subject of P6-1.
+- **Identity.** `retry.DEFAULT_PROVIDER_RETRY is retry.EMBED_CHUNK_RETRY` → `False`, while `==` →
+  `True`.
+- **Docs grep.**
+  - `grep -n 'pendingJobs|report_document_job|K-051|_safe_extract|_safe_embed_chunk|retry|Document.status' docs/SERVER.md`
+    returns only line 63, an unrelated "idempotent retry".
+  - A broader `ingest|background|extract` grep finds no description of the document lifecycle.
+
+### Answers to the focus questions
+
+1. **The pre-flight inside the retry is safe, and it is what the plan specifies.** §3.4 says to
+   wrap `_resolve_and_embed` and argues that re-running the pre-flight is cheap. I read every raise
+   inside that region:
+   - `ModelGateway.embedder`/`resolve` build clients and never make a provider call;
+     `make_http_transport` only constructs.
+   - Their failures are `ModelResolutionError` or a Redis error from the override `ro_query`.
+   - `_index_dimension` → `read_index_dimension` is a Redis `ro_query`.
+   - Both dimension checks raise `EmbeddingDimensionError(Exception)`.
+   - None of these is a `ProviderCallError`, so `is_transient` is `False`, it re-raises on
+     attempt 1, and the gate is never read.
+   - A permanent misconfiguration therefore cannot be hidden by a transient error. The pre-flight
+     runs **before** the provider call on every attempt, so a permanent fault surfaces on attempt
+     1, before any transient error can occur.
+   - U-15 pins this: an `index_dim=8` mismatch gives `embedder.calls == 0`, no sleeps, no gate
+     reads, and no write.
+   - The only cost is that a non-`None` index dimension is cached, so a retry re-reads at most the
+     two cheap gateway reads. That is the cost §3.4 states.
+2. **The `inspect.signature` identity check is sound.**
+   - It is the only check that can tell `EMBED_CHUNK_RETRY` from the equal-valued
+     `DEFAULT_PROVIDER_RETRY`, because they are distinct objects. The mutant that defaults to
+     `DEFAULT_PROVIDER_RETRY` was killed.
+   - Its one brittleness is a refactor to a `None`-sentinel default. That turns it **red**, never
+     falsely green, which is the safe direction.
+   - `test_worker_uses_an_injected_retry_policy` covers "injection ignored", so between them the
+     pair closes the P5-1 class for the worker.
+3. **The timeout switch reaches the worker, but the flip is not a one-constant edit (P6-1).**
+   - The switch-on U-17 row injects `dataclasses.replace(EMBED_CHUNK_RETRY, retry_timeouts=True)`
+     and passes through the worker, so the plumbing is pinned.
+   - I flipped `EMBED_CHUNK_RETRY` in a copy of `retry.py`. Two tests went red:
+     `test_retry.py::test_u5b_both_shipped_policies_leave_timeout_retry_off`, which §3.2.1
+     done-condition 2 names, and `test_embedding.py::test_u17_shipped_embed_policy_does_not_retry_a_timeout`,
+     which no done-condition names.
+4. **Docs are accurate.**
+   - The QUERIES.md §14.1a block's Cypher is byte-identical to `repository.py`.
+   - Its EXPLAIN text matches my Pass 5 re-run on `ws:test` and `ws:agent-team`.
+   - "Only on the failure path" is slightly loose: precisely, the gate runs only after a *transient*
+     failure, and never after the final attempt. The `retry.py` docstring already says this, so it
+     is a nit with no action.
+   - The `background.py`, `repository.py` and `embed_chunk` docstrings say what the code does.
+     "Gateway resolution and the index-dimension read are read-only" is verified above.
+   - **"SERVER.md needs no change" is right** by the grep. One adjacent fact is in P6-2.
+5. **`test_queries.sh` gate case: recommend no.**
+   - §14.1a's sibling progress queries (`start_document_progress`, `report_document_job_done`)
+     are `[verified]` by `tests/test_repository.py` alone. `test_queries.sh` line 1641–1642 says
+     outright that "§14.1 … has no test_queries.sh harness yet".
+   - The gate already has stronger live coverage than a script case would add:
+     - five I-2 rows, built from two documents in opposite states;
+     - I-4's end-to-end post-sleep row;
+     - I-3, all on `ws:test`.
+   - A script case would duplicate that coverage.
+   - It would also cost a coordinated run of a script that is destructive to `reference`.
+   - Revisit only when §14.1 as a whole gets a script harness.
+6. **Cross-step consistency: consistent, and the P3-1 join works.**
+   - The labels are `extract chunkId={chunk_id}` and `embed chunkId={chunk_id}`. Both use the raw
+     id, as does the `_safe_*` traceback line `background … failed (chunkId=%s)`
+     (`background.py:114/148`). So one `chunkId=<id>` token joins every line a job emits: retry
+     WARNING, give-up, gate INFO and the final traceback.
+   - Defaults: extract uses `DEFAULT_PROVIDER_RETRY` and embed uses `EMBED_CHUNK_RETRY`, as §3.2
+     says.
+   - Both call the same gate method with the same `(ws, chunk_id=chunk_id)`.
+   - The label is pinned on both sides: by P5-1 for extract, and for embed by three U-14 rows that
+     catch the `extract`/`embed` swap mutant.
+   - Note that `id_desc=f"chunkId={chunk_id!r}"` (quoted) appears only inside
+     `EmbeddingDimensionError` text. That error is non-transient, so it never meets a retry line,
+     and the join is unaffected.
+
+### Findings
+
+#### P6-1 (minor, plan text and a test comment): §3.2.1's flip turns a second, unnamed row red, and the "re-point" comment points at the wrong row
+
+- **Evidence.**
+  - The flip probe (Appendix D) fails both `test_u5b_both_shipped_policies_leave_timeout_retry_off`
+    and `test_u17_shipped_embed_policy_does_not_retry_a_timeout`.
+  - §3.2.1 says "One constant. No other production code changes … The flip turns U-5b's
+    shipped-policy row red by design, so the same edit updates that row." Its done-conditions 1–2
+    name only U-17's parametrization and U-5b.
+  - The comment above the switch-on row says the flip "reuses this row (parametrize over the
+    flipped constant)". But that row injects its own policy, so it stays green before and after
+    the flip, and re-pointing it adds nothing.
+- **Why it matters.** The engineer doing the flip under §3.2.1's pre-authorization would hit an
+  unlisted red test. They might "fix" it by weakening it (for example, deriving the expectation
+  from `EMBED_CHUNK_RETRY.retry_timeouts`), which would turn the only default-worker timeout pin
+  into a test that can never fail. The row that actually proves "the flipped constant reaches a
+  default-constructed worker" is the shipped-off row, **inverted**.
+- **Fix.**
+  - In this change: rewrite the test comment to say that on the §3.2.1 flip,
+    `test_u17_shipped_embed_policy_does_not_retry_a_timeout` is red by design. It is then inverted
+    to "a default worker retries a timeout" (`calls == 2`, one sleep), with its expectation
+    **hard-coded**, never derived from the constant.
+  - `architect`/`teco`: add that row to §3.2.1 done-condition 2 alongside U-5b. This is a text
+    edit with no code change.
+
+#### P6-2 (nit, U5 setup): the retry widens the window in which the default `--reload` kills an in-flight job
+
+- **Evidence.**
+  - `scripts/start_server.sh:108` defaults `UVICORN_ARGS` to `--reload`.
+  - `SERVER.md` ~line 560 documents that a reload "silently kills every in-flight background
+    daemon thread".
+  - Before this change a job was in flight for about one provider call. Now a retrying job stays
+    in flight for typically 40–60 s, and up to < 780 s in the worst case (§3.2). If the job is
+    killed mid-sleep, it never reports, so its document stays `processing` with `pendingJobs > 0`
+    forever.
+- **Why it is only a nit.** The plan's live-proof setup already requires `--reload` off (plan line
+  ~1136), and production deployment is not `start_server.sh`'s dev default.
+- **Optional fix.** Add one clause to that `SERVER.md` gotcha: "a job retrying a transient
+  provider error (K-067) is in flight for up to a minute or more, so the exposure is larger". This
+  is `teco`'s call at close. It does not change the "no lifecycle text in SERVER.md" conclusion.
+
+#### P6-3 (nit): departures, all sound
+
+- **Extra U-14 rows** (write-phase error not retried, exhausted, gate-closed): sound. They mirror
+  U-9b/U-10/U-12 and pin the label on three lines.
+- **The `inspect.signature` default check:** sound (see answer 2).
+- **The U-17 split and parametrization:** sound as plumbing, but see P6-1 on what its comment
+  promises.
+- **I-3's second, untouched document:** sound. It catches a gate or write keyed on the wrong
+  chunk or document.
+- **Pre-flight inside the retried region:** not a departure. §3.4 specifies it (see answer 1).
+
+### What's solid
+
+- U-14's main row pins five things in one pass: `seen == [text] * 3`, one write, the
+  `("acme","chunk-7")` gate key × 4, the label prefix on both WARNINGs, and `repo.calls == []` (no
+  `Message` write).
+- U-16 pins §3.4's exclusion of `embed_message` directly: one call, no sleep, no gate read.
+- I-3 checks the live vector with `pytest.approx` and the document reaching `ready, 0`, and it
+  confirms that B's chunk and progress are untouched.
+
+### Open questions
+
+None. P6-1's test comment can ride along with this step's commit; the plan line is a text edit.
+
+### Appendix D: Pass 6 mutants and flip probe
+
+Script:
+`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut3.py`.
+It runs over `test_embedding`, `test_retry`, `test_background` and `test_responder` (143 tests).
+
+| mutant | result |
+|---|---|
+| **§3.2.1 flip**: `EMBED_CHUNK_RETRY(..., retry_timeouts=True)` | 2 red: `test_u5b_both_shipped_policies…` **and** `test_u17_shipped_embed_policy…` (P6-1) |
+| worker default → `DEFAULT_PROVIDER_RETRY` | killed (1): the identity check |
+| label `embed` → `extract` | killed (3): the U-14 rows |
+| injected `sleep` ignored | killed (6) |
+| `keep_going=None` | killed (2) |

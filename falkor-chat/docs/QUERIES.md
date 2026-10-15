@@ -2026,6 +2026,27 @@ immediately even with other jobs still outstanding; a late success after a failu
 `'failed'`; a late failure after `'ready'` does not revert it either; `total_jobs <= 0` reaches
 `'ready'` immediately and, same guard, does not resurrect an already-`'failed'` document.
 
+A reported failure is **post-retry** (K-067): `IngestionPipeline.extract_chunk` and
+`EmbeddingWorker.embed_chunk` retry a transient provider error in place, with bounded backoff
+(`retry.DEFAULT_PROVIDER_RETRY` / `retry.EMBED_CHUNK_RETRY`, plan
+`falkor-chat/docs/plans/extract-transient-retry.md` §3.2), so `success=False` means the job's final
+outcome, never one attempt. A retrying job stays outstanding in `pendingJobs` until it finishes.
+
+**`chunk_document_is_processing` — the K-067 retry liveness gate (read-only)**
+```cypher
+MATCH (c:Chunk {chunkId: $chunkId})<-[:HAS_CHUNK]-(d:Document)
+RETURN d.status = 'processing'
+```
+*Run (`ro_query`) by `retry.call_with_retry`'s `keep_going` callback, from `extract_chunk` and
+`embed_chunk`, only on the failure path: once before and once after each backoff sleep. `False`
+(including no row: chunk or document deleted) stops the retry and re-raises the last transient
+error, so a document a sibling job already failed (first terminal write wins) or a deleted one
+costs no further attempts. EXPLAIN: `Node By Index Scan (c:Chunk)` → `Conditional Traverse
+(c)->(d:Document)` → `Project`.*
+
+**[verified]** (`tests/test_repository.py -k chunk_document_is_processing`, live against
+`falkordb-dev`; EXPLAIN re-checked on `ws:agent-team` and `ws:test`).
+
 ### 14.2 `get_document` — read back the verbatim text + ingesting actor
 
 ```cypher

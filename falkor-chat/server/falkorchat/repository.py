@@ -1154,7 +1154,9 @@ class Repository:
         instant any single job reports failure — regardless of how many
         others are still outstanding (one failed chunk is enough to call the
         whole document's background processing failed, mirroring the
-        `_safe_*` wrappers' own per-job isolation one layer up). Both
+        `_safe_*` wrappers' own per-job isolation one layer up). "Failure"
+        here means a job's final outcome after the worker's own bounded
+        transient-provider-error retry (K-067), never one attempt. Both
         branches guard on `d.status = 'processing'` so the first terminal
         write wins: a late-arriving report — success after a failure, or a
         stray failure after every other job already reported success and the

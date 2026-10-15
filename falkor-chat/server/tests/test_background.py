@@ -800,3 +800,56 @@ def test_i4_a_sibling_failure_during_the_sleep_stops_the_retry_at_the_real_gate(
     assert len(sleep.delays) == 1
     assert _document_progress(conn, doc) == ("failed", 0)
     assert _document_graph_counts(conn, doc)["entities"] == 0
+
+
+# ── K-067 step 3: the chunk-embed retry seen from `_safe_embed_chunk` (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.4/§3.5, row I-3) ──────
+
+import pytest  # noqa: E402
+
+from falkorchat.embedding import EmbeddingWorker  # noqa: E402
+
+
+class _ScriptedEmbedder:
+    """`embed` pops the next outcome (exception → raised, vector → returned); the
+    last outcome repeats once the script runs out. `seen` records each input."""
+
+    def __init__(self, *outcomes):
+        self._outcomes = list(outcomes)
+        self.seen: list[str] = []
+
+    def embed(self, text):
+        self.seen.append(text)
+        outcome = self._outcomes.pop(0) if len(self._outcomes) > 1 else self._outcomes[0]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return list(outcome)
+
+
+def _chunk_embedding(conn, chunk_id: str):
+    [[embedding]] = db.workspace_graph(conn, "test").ro_query(
+        "MATCH (c:Chunk {chunkId: $id}) RETURN c.embedding", {"id": chunk_id},
+    ).result_set
+    return embedding
+
+
+def test_i3_a_retried_chunk_embed_lands_its_vector_and_readies_the_document(repo, conn):
+    # Two documents: only A's job runs, so a gate or write keyed on the wrong
+    # chunk/document would either stop A's retry or touch B.
+    doc_a, chunk_a = _ingest_one_chunk(repo, "Fabio founded Flux in Lisbon.")
+    doc_b, chunk_b = _ingest_one_chunk(repo, "Gina founded Gale in Braga.")
+    repo.start_document_progress("test", document_id=doc_a, total_jobs=1)
+    repo.start_document_progress("test", document_id=doc_b, total_jobs=1)
+    vector = [0.5, 0.25, 0.125, 1.0]  # `ws:test`'s vector index is dim 4
+    embedder = _ScriptedEmbedder(_transient_503(), vector)
+    sleep = _RecordingSleep()
+    worker = EmbeddingWorker(repo, embedder, expected_dim=4, sleep=sleep)
+
+    _safe_embed_chunk(worker, "test", doc_a, chunk_a, "Fabio founded Flux in Lisbon.")
+
+    assert embedder.seen == ["Fabio founded Flux in Lisbon."] * 2
+    assert len(sleep.delays) == 1
+    assert _chunk_embedding(conn, chunk_a) == pytest.approx(vector)
+    assert _document_progress(conn, doc_a) == ("ready", 0)
+    assert _chunk_embedding(conn, chunk_b) is None
+    assert _document_progress(conn, doc_b) == ("processing", 1)

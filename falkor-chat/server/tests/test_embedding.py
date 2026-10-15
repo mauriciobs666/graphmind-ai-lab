@@ -40,6 +40,14 @@ class SpyRepo:
         self.calls: list[tuple] = []
         self.chunk_calls: list[tuple] = []
         self.index_dim_calls: list[tuple] = []
+        # K-067 retry liveness gate: scriptable answer (default "still processing")
+        # and a record of every read's arguments.
+        self.document_processing = True
+        self.gate_reads: list[tuple] = []
+
+    def chunk_document_is_processing(self, ws, *, chunk_id):
+        self.gate_reads.append((ws, chunk_id))
+        return self.document_processing
 
     def read_index_dimension(self, ws, *, label, prop="embedding"):
         self.index_dim_calls.append((ws, label, prop))
@@ -506,3 +514,256 @@ def test_u4_embedder_missing_data_is_kind_response_shape():
     with pytest.raises(ProviderCallError, match="response missing data") as excinfo:
         embedder.embed("x")
     assert excinfo.value.kind == "response_shape"
+
+
+# ── K-067 step 3: chunk-embed retry (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.2.1/§3.4, rows U-14…U-17) ──
+
+import dataclasses  # noqa: E402
+import inspect  # noqa: E402
+import logging  # noqa: E402
+
+from falkorchat import retry  # noqa: E402
+from falkorchat.retry import EMBED_CHUNK_RETRY, RetryPolicy  # noqa: E402
+from falkorchat.transport import ProviderCallError  # noqa: E402
+
+_VEC = [0.5, 0.25, 0.125, 1.0]
+# Multi-word, so a truncated or rebuilt input (e.g. `text[:1]`) is visible.
+_CHUNK_TEXT = "Alice works at Acme, a small robotics firm in Porto."
+
+
+class _ScriptedEmbedder:
+    """`embed` pops the next outcome per call: an exception instance is raised, a
+    vector is returned. The last outcome repeats once the script runs out.
+    `seen` records the text each attempt received."""
+
+    def __init__(self, *outcomes):
+        self._outcomes = list(outcomes)
+        self.seen: list[str] = []
+
+    @property
+    def calls(self) -> int:
+        return len(self.seen)
+
+    def embed(self, text):
+        self.seen.append(text)
+        outcome = self._outcomes.pop(0) if len(self._outcomes) > 1 else self._outcomes[0]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return list(outcome)
+
+
+class _FakeSleep:
+    def __init__(self):
+        self.delays: list[float] = []
+
+    def __call__(self, delay):
+        self.delays.append(delay)
+
+
+def _transient():
+    return ProviderCallError("p/m @ url: HTTP 503", kind="http", status=503)
+
+
+def _timeout():
+    return ProviderCallError("p/m @ url: read timed out", kind="timeout")
+
+
+def _worker(repo, embedder, sleep, **kwargs):
+    return EmbeddingWorker(repo, embedder, expected_dim=4, sleep=sleep, **kwargs)
+
+
+def _embed_chunk(worker, text=_CHUNK_TEXT):
+    # ws, chunk_id and text all distinct, so a gate or write keyed on the wrong
+    # argument is visible.
+    return worker.embed_chunk("acme", chunk_id="chunk-7", text=text)
+
+
+def test_u14_chunk_embed_retries_two_transient_failures_then_writes_once(caplog):
+    caplog.set_level(logging.INFO, logger="falkorchat.retry")
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    embedder = _ScriptedEmbedder(_transient(), _transient(), _VEC)
+
+    vector = _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert vector == _VEC
+    assert embedder.calls == 3
+    # Every attempt embeds the chunk's full text, unaltered (lesson from P5-2).
+    assert embedder.seen == [_CHUNK_TEXT] * 3
+    assert len(sleep.delays) == 2
+    assert repo.chunk_calls == [("acme", "chunk-7", tuple(_VEC), 4)]
+    assert repo.calls == []
+    # Pre- and post-sleep gate reads, keyed on this job's own ws and chunk.
+    assert repo.gate_reads == [("acme", "chunk-7")] * 4
+    # The job label is the join key the live proof greps for.
+    retries = [r.getMessage() for r in caplog.records
+               if r.name == "falkorchat.retry" and r.levelno == logging.WARNING]
+    assert len(retries) == 2
+    assert all(m.startswith("transient provider error (embed chunkId=chunk-7, kind=http,")
+               for m in retries)
+
+
+def test_u14_a_provider_error_in_the_write_is_never_retried():
+    class _WriteRaisesTransient(SpyRepo):
+        def __init__(self):
+            super().__init__(expected_dim=4)
+            self.write_attempts = 0
+
+        def set_chunk_embedding(self, ws, **kwargs):
+            self.write_attempts += 1
+            raise _transient()
+
+    repo, sleep = _WriteRaisesTransient(), _FakeSleep()
+    embedder = _ScriptedEmbedder(_VEC)
+
+    with pytest.raises(ProviderCallError, match="HTTP 503"):
+        _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert embedder.calls == 1
+    assert repo.write_attempts == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == []
+
+
+def test_u14_exhausted_budget_raises_and_writes_nothing(caplog):
+    caplog.set_level(logging.INFO, logger="falkorchat.retry")
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    err = _transient()
+    embedder = _ScriptedEmbedder(err)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert excinfo.value is err
+    assert embedder.calls == 4
+    assert len(sleep.delays) == 3
+    assert repo.chunk_calls == []
+    gave_up = [r.getMessage() for r in caplog.records
+               if r.name == "falkorchat.retry" and "giving up" in r.getMessage()]
+    assert len(gave_up) == 1
+    assert gave_up[0].startswith("giving up after 4 attempts (embed chunkId=chunk-7, ")
+
+
+def test_u14_gate_closed_stops_after_one_attempt_and_logs_the_jobs_label(caplog):
+    caplog.set_level(logging.INFO, logger="falkorchat.retry")
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    repo.document_processing = False
+    err = _transient()
+    embedder = _ScriptedEmbedder(err, _VEC)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert excinfo.value is err
+    assert embedder.calls == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == [("acme", "chunk-7")]
+    assert repo.chunk_calls == []
+    abandoned = [r.getMessage() for r in caplog.records
+                 if r.name == "falkorchat.retry" and "abandoning retry" in r.getMessage()]
+    assert len(abandoned) == 1
+    assert abandoned[0].startswith("embed chunkId=chunk-7: ")
+
+
+def test_u15_preflight_dimension_mismatch_fails_fast_without_retry():
+    repo, sleep = SpyRepo(expected_dim=4, index_dim=8), _FakeSleep()
+    embedder = _ScriptedEmbedder(_VEC)
+
+    with pytest.raises(EmbeddingDimensionError):
+        _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert embedder.calls == 0
+    assert sleep.delays == []
+    assert repo.gate_reads == []
+    assert repo.index_dim_calls == [("acme", "Chunk", "embedding")]
+    assert repo.chunk_calls == []
+
+
+def test_u16_embed_message_is_not_retried():
+    # §3.4: the responder calls embed_message synchronously; no retry budget there.
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    err = _transient()
+    embedder = _ScriptedEmbedder(err, _VEC)
+    worker = _worker(repo, embedder, sleep)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        worker.embed_message("acme", msg_id="m-9", text=_CHUNK_TEXT)
+
+    assert excinfo.value is err
+    assert embedder.calls == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == []
+    assert repo.calls == []
+
+
+# Plan §3.2.1 flip (`EMBED_CHUNK_RETRY.retry_timeouts=True`): this row turns red
+# BY DESIGN, alongside `test_retry.py`'s U-5b shipped-policy row. It is the only
+# row proving the shipped constant reaches a default-constructed worker, so on
+# the flip it is INVERTED to "a default worker retries a timeout" with the
+# expectation HARD-CODED (`embedder.calls == 2`, one sleep, the vector written).
+# Never derive the expectation from `EMBED_CHUNK_RETRY.retry_timeouts`: a test
+# whose expected value follows the constant passes whatever the constant is,
+# so it can never fail.
+def test_u17_shipped_embed_policy_does_not_retry_a_timeout():
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    err = _timeout()
+    embedder = _ScriptedEmbedder(err, _VEC)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        _embed_chunk(_worker(repo, embedder, sleep))  # default: EMBED_CHUNK_RETRY
+
+    assert excinfo.value is err
+    assert embedder.calls == 1
+    assert sleep.delays == []
+    assert repo.chunk_calls == []
+
+
+# §3.2.1's done-condition 1: the switch plumbing through the worker. This row
+# injects its own policy, so it stays green before and after the flip and does
+# NOT prove the flipped constant is in effect; the shipped row above, inverted
+# with a hard-coded expectation, is what does.
+@pytest.mark.parametrize(
+    "policy", [dataclasses.replace(EMBED_CHUNK_RETRY, retry_timeouts=True)],
+    ids=["embed-chunk-retry-timeouts-on"],
+)
+def test_u17_timeout_switch_on_retries_a_timeout_through_the_worker(policy):
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    embedder = _ScriptedEmbedder(_timeout(), _VEC)
+
+    vector = _embed_chunk(_worker(repo, embedder, sleep, retry_policy=policy))
+
+    assert vector == _VEC
+    assert embedder.calls == 2
+    assert embedder.seen == [_CHUNK_TEXT] * 2
+    assert len(sleep.delays) == 1
+    assert repo.chunk_calls == [("acme", "chunk-7", tuple(_VEC), 4)]
+
+
+def test_worker_defaults_to_the_shipped_embed_chunk_retry_policy():
+    # The §3.2.1 flip edits `EMBED_CHUNK_RETRY` alone, so the worker must default
+    # to that very constant — not to the equal-today `DEFAULT_PROVIDER_RETRY`.
+    default = inspect.signature(EmbeddingWorker).parameters["retry_policy"].default
+    assert default is retry.EMBED_CHUNK_RETRY
+
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    embedder = _ScriptedEmbedder(_transient())
+    with pytest.raises(ProviderCallError):
+        _embed_chunk(_worker(repo, embedder, sleep))
+
+    assert embedder.calls == 4
+    assert [d >= floor for d, floor in zip(sleep.delays, (2.0, 8.0, 30.0))] == [True] * 3
+
+
+def test_worker_uses_an_injected_retry_policy():
+    # Distinguishes "uses the injected policy" from "ignores it for the default".
+    repo, sleep = SpyRepo(expected_dim=4), _FakeSleep()
+    embedder = _ScriptedEmbedder(_transient())
+    worker = _worker(
+        repo, embedder, sleep, retry_policy=RetryPolicy(max_attempts=2, delays_s=(0.0,)),
+    )
+
+    with pytest.raises(ProviderCallError):
+        _embed_chunk(worker)
+
+    assert embedder.calls == 2
+    assert sleep.delays == [0.0]
