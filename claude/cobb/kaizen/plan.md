@@ -29,6 +29,7 @@
 | K-033 | 2026-09-13 | medium | 🔵 | **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> \| wc -w` vs. `git show 320f682:<path> \| wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures. |
 | K-032 | 2026-09-10 | low | 🔵 | **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation. |
 | K-053 | 2026-09-20 | low | 🔵 | `agent-maintenance` §5 doesn't warn a reviewer that `0 PRODUCED`/live `MENTIONS` on a post-M8 node can be a correctly-functioning kept-open state, not a write-path defect |
+| K-054 | 2026-10-14 | medium | 🔵 | Make `teco` bring the FalkorDB-backed environment (FalkorDB, `cypher` MCP, `ws:agent-team` server on :8200) up automatically at agent start, ideally as an agent-start hook rather than prompt prose. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -693,3 +694,33 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 - **Notes:** low-priority documentation polish, not a defect fix — no `cypher-mcp` backlog item
   was warranted this time (contrast K-020/K-021, both confirmed against live code).
 
+### K-054 — Auto-bring-up of teco's FalkorDB environment at agent start, as a hook if possible
+
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Origin:** user request to `teco`, 2026-10-14.
+- **Rationale:** `teco`'s step 1 ("Environment readiness — bring it up, don't report it down")
+  is prompt prose, fired only when a unit is judged to touch FalkorDB, and it covers FalkorDB
+  alone. On 2026-10-14 a session started with FalkorDB and the `cypher` MCP container just up
+  but the `ws:agent-team` falkor-chat server (`falkor-chat/scripts/start_agent_team.sh`, port
+  8200) down, so the `falkor-chat-agent-team` MCP failed at session start (`ECONNREFUSED`) and
+  `teco` lost `ingest_document`/`search_documents`/`get_document` (learning capture, KB
+  retrieval). `teco` started the server on request (healthy at `/health` → 200), but the MCP
+  client does not reconnect by itself — the user had to `/mcp` reconnect.
+- **Proposed change (user's ask):** make the check-and-bring-up automatic when `teco` starts —
+  FalkorDB (`redis-cli -p 6379 ping`, else `falkor-chat/scripts/start_falkordb.sh -d`), the
+  `ws:agent-team` server (`curl -sf http://127.0.0.1:8200/health`, else start
+  `start_agent_team.sh` detached with a log file), and any other always-needed service.
+  **Preferred mechanism: a hook**, not prompt prose. Open questions for cobb to verify
+  against current Claude Code docs: (1) whether a frontmatter or settings `SessionStart` /
+  `SubagentStart` hook can run for `claude --agent teco` specifically, (2) whether a hook firing
+  *before* MCP connection can bring the server up early enough that the
+  `falkor-chat-agent-team` MCP connects at startup (no `/mcp` reconnect needed), and if it
+  can't, what the hook should tell the user, (3) how the server's process lifetime relates to
+  the session that started it (it's meant to be always on — `nohup`/detached vs. a
+  user-managed service), (4) keep it additive and idempotent: start only what's down, never
+  stop/restart a running shared service (`teco` Guardrails). If no hook can do it, fall back to
+  tightening step 1's prose to cover the `:8200` server and to run unconditionally at start.
+- **Notes:** K-019 (hooks under Auto Mode) is about `ask` decisions on `PreToolUse`, not a
+  start hook running a command, but test the hook under Auto Mode anyway. Bringing a service
+  up is in `teco`'s `Bash` grant; the hook must not widen it.
