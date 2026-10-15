@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-067
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-072
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -581,40 +581,129 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-067 — Extract job in `background.py` has no retry/backoff for transient provider errors (🔵 proposed — filed out of K-030 Track 2 Stage 6 bulk-migration ingestion failures, observed 2026-09-18)
+### K-067 — Transient provider-error retry for chunk extract/embed jobs: live proof Half B outstanding (🟡 in-progress — mechanism delivered 2026-10-15, real-fault acceptance legs not yet run)
 
-> **Why it exists.** `falkor-chat/server/falkorchat/background.py`'s document-ingestion extract job
-> calls an LM Studio-hosted chat model (`qwen/qwen3-4b-2507`) per chunk; that model has been
-> observed to hard-crash mid-request under suspected cross-model contention on the shared local LM
-> Studio instance, returning HTTP 400 `{"error":"terminated"}` followed by HTTP 500, then full
-> recovery within seconds — a transient failure, not a permanently bad chunk.
+> **Why it is still open.** The retry mechanism is delivered (`HISTORY.md` 2026-10-15;
+> `docs/plans/extract-transient-retry.md` v3), and the live proof's Half A (proxy legs) passed
+> (`docs/test-reports/extract-transient-retry-report.md`). Half A uses injected bodies copied from
+> the classifier's own allow-list, so it cannot show the classifier fires on LM Studio's *real*
+> fault shapes (review Pass 1 M-3; report §5 "Not covered"). That proof is Half B, and K-067's
+> user-visible goal — a contended ingest reaches `ready` — is not met until it runs.
 >
-> `repository.py`'s `report_document_job_done` (~lines 1144-1175) flips `Document.status` to
-> `"failed"` **permanently** the instant any single scheduled job (embed OR extract) fails, by
-> design (K-051) — so one transient extract-call failure strands an otherwise-successfully-embedded
-> document as unsearchable, with no automatic recovery. The only current remedy is a manual
-> delete-then-recreate.
->
-> **Confirmed in the field:** observed during K-030 Track 2 Stage 6 bulk-migration sessions across
-> two separate batches (12/12 and 19/19 documents each), both later confirmed byte-exact/content-intact
-> but requiring manual re-ingestion. Recurrence is at a scale/timing uncorrelated with request batch
-> size or pacing — i.e. it can happen to any ingestion call, not just large ones.
->
-> **This is not a one-line fix — real design/testing required.** Distinguishing a transient
-> provider error (HTTP 5xx, "terminated" 400) from a genuinely bad/malformed chunk that should fail
-> fast, retry-with-backoff timing relative to LM Studio's own recovery window, and idempotency of
-> the extract side-effect (what happens if a retry fires after a partial write, or fires twice?)
-> all need deliberate choices, not guesses. A backoff strategy that exceeds LM Studio's actual
-> recovery time loses the ingestion for no benefit; one that underestimates it retries against a
-> still-crashed instance.
-- **Owner:** `coder`/`tdd-engineer` — needs an `architect` design pass first (distinguish transient
-  from permanent, backoff timing, retry limit, side-effect idempotency) before implementation.
-- **Risks/RAM:** none — query/schema/topology unchanged.
-- **Test strategy:** a design that names (1) the transient error shapes to catch, (2) the backoff
-  strategy (duration/max-attempts), (3) proof of idempotency (extract can be safely retried N times
-  on the same chunk without changing the document state), then unit/integration tests exercising
-  each lever — both happy-path retries and a case where the max-attempts budget is exhausted,
-  falling back to `"failed"`.
+> **What remains:**
+> 1. **Run Half B, legs (e)–(g)**, as TP-101…TP-105 in `docs/test-plans/extract-transient-retry.md`
+>    §6. Preconditions:
+>    - the stakeholder at the machine (the legs unload models and stop/start the shared LM Studio
+>      server);
+>    - `teco`'s confirmation that no other agent is ingesting into `ws:agent-team` or otherwise
+>      using LM Studio during the window (review Pass 2 N-7);
+>    - the P3-2 positive control on `lms.exe log stream --source server --json` (review Pass 3
+>      P3-2, carried verbatim in test plan §6);
+>    - the server log captured at INFO via `--log-config` until K-069 lands (report §6 F-1).
+> 2. **Apply the plan §3.2.1 embed-timeout flip rule if leg (g) shows an embed job with
+>    `kind=timeout`.** The change is one constant: `EMBED_CHUNK_RETRY.retry_timeouts=True` in
+>    `retry.py`. The flip turns **two** rows red by design — U-5b's shipped-policy row in
+>    `server/tests/test_retry.py` and U-17's shipped-policy row
+>    (`test_u17_shipped_embed_policy_does_not_retry_a_timeout`) in `server/tests/test_embedding.py`.
+>    Both are **inverted with hard-coded expectations, never derived from the constant** (review
+>    Pass 6 P6-1). Plan §3.2.1 done-condition 2 still names only U-5b; the U-17 row is the plan-text
+>    side of P6-1 for `architect`. Then re-run (g) once under the P3-1 condition-3 rule (test plan
+>    §6).
+> 3. **Apply the plan §3.2.1 closure rule.** If the final (g) document ends `failed` with the
+>    classifier firing, file **F-4** (per-document job serialisation on MCP, plan §6 R-8) in this
+>    backlog, carrying (g)'s per-job table, **before** K-067 leaves it; `HISTORY.md` records
+>    "mechanism delivered", never that the field failure is cured. A `ready` (g) is reported as
+>    "converged in this run" (n = 1), not as convergence.
+> 4. **Carry one plan-text nit** (review Pass 4 P4-3): plan §6 R-6's list of newly wrapped raw
+>    errors omits a `TimeoutError` during the body read, which rung 3b now wraps as `kind=timeout`.
+- **Owner:** `qa-engineer` (Half B, with the stakeholder) · `teco` (pre-leg coordinator
+  confirmation, closure) · `tdd-engineer` (the §3.2.1 flip, if triggered) · `architect` (plan text:
+  P4-3 and the P6-1 done-condition row).
+- **Risks/RAM:** Half B disrupts the shared LM Studio by design — hence the stakeholder and
+  coordinator preconditions. No schema or RAM change.
+- **Test strategy:** test plan §6 as written, including its pre-leg and post-leg `ws:agent-team`
+  checks; any new `failed` document a leg leaves there joins K-071's re-drive.
+
+### K-068 — `fusion._fuzzy_query` sends hyphenated tokens to RediSearch unescaped, so suggested-tier fusion fails for names like `Kestrel-0` (🔵 proposed — filed out of the K-067 live proof, `docs/test-reports/extract-transient-retry-report.md` D-1, 2026-10-15)
+
+> **Why it exists.** `fusion._fuzzy_query` (`server/falkorchat/fusion.py`) builds one `%tok%` term
+> per whitespace token with no escaping, so an extracted entity name containing `-<digit>` (seen
+> live: `Kestrel-0`) makes RediSearch reject the query — `background fuse failed … RediSearch:
+> Syntax error at offset 8 near -0`. `_safe_fuse` isolates the failure per entity, so entity
+> creation, `ABOUT` edges and `Document.status` are unaffected; what is lost is the suggested-tier
+> `SAME_AS` candidate lookup for that entity. This is the "same root pattern" K-064 names as a
+> related, unaddressed instance — naive whitespace-token RediSearch fuzzy-query construction — but
+> a different failure: a syntax-error crash on punctuation, not K-064's implicit-AND recall gap.
+> The 2026-09-13 `find_update_shortlist` metacharacter fix (`HISTORY.md`) is the precedent for the
+> escaping side.
+- **Owner:** `tdd-engineer` (reproduction test first) or `coder`.
+- **Scope:** escape RediSearch special characters per token in `fusion._fuzzy_query`. The
+  implicit-AND combination stays out of scope (K-064 owns that decision).
+- **Risks/RAM:** none — query-construction change only.
+- **Test strategy:** a regression case with an entity name carrying `-<digit>` (and other
+  RediSearch metacharacters) that runs the fuzzy lookup without a syntax error.
+
+### K-069 — falkor-chat configures no logging, so every `falkorchat.*` INFO line is dropped under uvicorn's default config (🔵 proposed — filed out of the K-067 live proof, `docs/test-reports/extract-transient-retry-report.md` §6 F-1, 2026-10-15)
+
+> **Why it exists.** The app installs no log configuration. Under uvicorn's default log config every
+> `falkorchat.*` INFO line is dropped — including the K-067 liveness gate's `abandoning retry`
+> line — and WARNINGs reach stderr only through Python's `lastResort` handler, bare and with no
+> timestamp (report F-1, verified by applying `uvicorn.config.LOGGING_CONFIG` and logging from
+> `falkorchat.retry`). The K-067 live proof worked around it by passing `--log-config` with a
+> root-at-INFO dictConfig; without such a config, `ws:agent-team`'s long-running server cannot
+> show a gate abandonment at all.
+- **Owner:** `devops` (ship a log config through `scripts/start_server.sh` /
+  `scripts/start_agent_team.sh`).
+- **Scope:** a shipped log config giving `falkorchat.*` INFO and timestamps on the server's start
+  scripts; until then, K-067's Half B must keep the `--log-config` workaround.
+- **Risks/RAM:** none.
+- **Test strategy:** start the server through the script, trigger a `falkorchat.*` INFO line, and
+  confirm it appears with a timestamp.
+
+### K-070 — Schedule a document's embeds before its extracts to cut model swaps on a one-model-at-a-time LM Studio (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-1, 2026-10-15)
+
+> **Why it exists.** `_schedule_chunk_processing` interleaves `embed(c1), extract(c1), embed(c2), …`.
+> On the sequential REST path, with LM Studio holding one model at a time (plan §2.5), that forces
+> a model swap on **every** job — and the eviction/reload is what triggers the K-067 faults in the
+> first place. Scheduling all of a document's embeds, then all its extracts, would cut swaps per
+> document from ~2N to ~2 (plan F-1). It is a behaviour change to scheduling order, so it needs its
+> own small design and a live measurement. The MCP-side analogue, per-document job serialisation,
+> is F-4 under K-067's closure rule.
+- **Owner:** `architect` (small design) → `coder`/`tdd-engineer`.
+- **Scope:** `_schedule_chunk_processing`'s job order on the REST chain.
+- **Risks/RAM:** none in graph terms; changes when each chunk becomes searchable within a document.
+- **Test strategy:** an offline test pinning the new order, plus a live measurement of swaps per
+  document before and after.
+
+### K-071 — Re-ingest the 12 `failed` documents in `ws:agent-team` (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-2, 2026-10-15)
+
+> **Why it exists.** Twelve `ws:agent-team` documents are `failed` from the bulk ingestion K-067
+> was filed out of, each with at least one un-embedded chunk (plan §2.6), and the K-067 retry does
+> not re-drive a document that is already `failed` (plan §1, out of scope). `teco` re-read the workspace on 2026-10-15: 12 `failed`,
+> 340 `ready`. Their remedy is the existing manual delete-then-re-ingest procedure, now that the
+> retry has landed (plan F-2).
+- **Owner:** `teco` (coordinator owns `ws:agent-team` re-drives; QA never re-drives one — test plan
+  §6).
+- **Scope:** the 12, plus any new `failed` document a K-067 Half B leg leaves behind (test plan §6
+  post-leg re-check hands those to the coordinator).
+- **Risks/RAM:** shared-workspace writes; confirm no other agent is ingesting during the re-drive.
+- **Test strategy:** re-read `ws:agent-team`'s status counts after the re-drive — `failed` 0.
+
+### K-072 — Per-request "provider down" short-circuit for REST batch ingestion (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15)
+
+> **Why it exists.** `api.ingest_documents` puts every document's jobs on one sequential
+> `BackgroundTasks` chain. In an outage, the K-067 liveness gate bounds the cost **per document**,
+> not per request: each document's first faulting job burns its full retry budget before the gate
+> can trip, so a 19-document batch costs ≈ 13–19 min of one worker token asleep, with every later
+> document stuck in `processing` (review m-2; plan §6 R-4). The named option is one shared flag per
+> chain: after one job exhausts its budget on a transient kind, later documents in the same chain
+> make one attempt and no sleeps, turning the outage cost into one budget per request (plan F-3).
+> Worth doing only if batch latency matters.
+- **Owner:** `architect` (design) → `coder`/`tdd-engineer`.
+- **Scope:** the REST batch chain only; the MCP path's per-job threads are unaffected.
+- **Risks/RAM:** none in graph terms.
+- **Test strategy:** an offline test with an always-transient fake provider over a multi-document
+  batch, asserting one full budget per request, not per document.
 
 ### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
 

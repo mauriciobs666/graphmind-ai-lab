@@ -5,6 +5,48 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-15 — K-067: chunk extract and embed jobs retry transient provider errors (mechanism delivered; live proof Half B outstanding)
+
+- **What:** a transient provider error during a document chunk's background extract **or** embed
+  call is now retried in place with bounded, upward-jittered backoff, instead of failing the whole
+  `Document` on the first fault. Design: `falkor-chat/docs/plans/extract-transient-retry.md` (v3)
+  §3; policy figures (4 attempts, nominal 2/8/30 s delays, per-job worst case) are its §3.2 table.
+  - **Step 1 (`91b65fed`):** `transport.ProviderCallError` gains additive keyword fields
+    `kind`/`status`/`detail`/`causes`, with messages byte-for-byte unchanged (plan §3.1). The
+    transport ladder gains rung 3a (`http.client.InvalidURL` → permanent `malformed_request`) and
+    rung 3b (a `resp.read()` failure → `kind=read`, or `kind=timeout` for a `TimeoutError`), and
+    rung 3 now also catches `http.client.HTTPException`. These change a shared contract: callers
+    that saw raw exceptions now see `ProviderCallError` (plan §6 R-6, plus review Pass 4 P4-3).
+    New `falkorchat/retry.py` holds the allow-list classifier `is_transient`, `RetryPolicy` with
+    the two shipped constants `DEFAULT_PROVIDER_RETRY`/`EMBED_CHUNK_RETRY` (timeout retry off in
+    both), and `call_with_retry`.
+  - **Step 2 (`128941a6`):** `IngestionPipeline.extract_chunk` wraps only the provider call, so the
+    graph-write phase runs at most once (plan §3.3). New `Repository.chunk_document_is_processing`
+    is the liveness gate, read before and after each retry sleep; a terminal or deleted document
+    stops the retry (plan §3.5).
+  - **Step 3 (`6519db83`):** `EmbeddingWorker.embed_chunk` gets the same wrap and gate;
+    `embed_message` and the responder path are untouched (plan §3.4). Docstrings in
+    `background.py`/`repository.py`, `QUERIES.md` §14.1a (the gate query), and a `SERVER.md`
+    clause on `--reload` killing a job mid-retry (review Pass 6 P6-2). No new runtime knob or env
+    var, so `falkor-chat/AGENTS.md` is unchanged.
+- **Contract kept:** a permanent error (a 4xx with no transient marker, a malformed request, a bad
+  response shape, any graph error) still fails on attempt 1; an exhausted budget still ends
+  `failed`; the K-051 report-once contract is unchanged in code — each job reports once, after
+  its final outcome.
+- **Scope:** widened from extract-only to include the chunk-embed job, stakeholder-approved
+  2026-10-15 (plan §3.4).
+- **Verified:** offline suite at `6519db83`, solo run, `2988 passed, 14 deselected`. Plan review
+  Passes 1–3 and code-gate Passes 4–6 in `falkor-chat/docs/reviews/extract-transient-retry.md`.
+  Live proof Half A (proxy legs) per `falkor-chat/docs/test-plans/extract-transient-retry.md`:
+  12/12 pass, no K-067 defect (`falkor-chat/docs/test-reports/extract-transient-retry-report.md`,
+  committed in `966f8a64`).
+- **Not claimed:** this ships the retry *mechanism*; it does **not** claim the K-067 field failure
+  is cured. Classifier fit to LM Studio's real fault shapes is Half B (legs (e)–(g)), not yet run;
+  K-067 stays in `BACKLOG.md` for it. If leg (g) ends `failed`, the plan §3.2.1 closure rule files
+  F-4 (per-document job serialisation on MCP) as the open continuation.
+- **Filed:** K-068 (report D-1), K-069 (report F-1), K-070/K-071/K-072 (plan §6 F-1/F-2/F-3).
+  Ledger: `falkor-chat/docs/plans/extract-transient-retry-coordination.md`.
+
 ## 2026-10-14 — `start_server.sh` and `start_demo.sh` step 1 decide FalkorDB is up by port, not container name
 
 - **What:** the same decision as the `start_agent_team.sh` entry below, applied to both siblings. Step 1 treats any server answering PONG on `$FALKORDB_HOST:$FALKORDB_PORT` as up; the `falkordb-dev` running check only selects a wait-for-boot branch; `start_falkordb.sh -d` runs only when neither holds. In `start_server.sh` the wait loop now runs for both the "running but not answering" and "started now" branches (before, a running-but-silent container skipped the wait and failed later). `start_demo.sh`'s preflight is unchanged: its 30s wait still fails loudly before uvicorn when nothing answers.
