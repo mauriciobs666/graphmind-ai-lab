@@ -31,6 +31,7 @@ from modelbench.results import (
     BinaryMetric,
     ContinuousMetric,
     DistributionSummary,
+    ExtractionAggregates,
     IncompleteItemRecord,
     InvalidRecord,
     ItemResult,
@@ -1229,6 +1230,158 @@ def _render_role_caveat(pack: PackRef) -> list[str]:
     ]
 
 
+#: Every scalar count an aggregate kind carries beside its rates — never a rate, never in
+#: `named_metrics()`, so the Arms/rank tables never reach them — keyed by `Aggregates.kind`, in
+#: the dataclass's own field order. A kind absent here carries none (`retrieval`, `toolcalls`,
+#: whose structural counts have `_render_funnel` instead). Bound to `results.py`'s dataclasses by
+#: `tests/test_report.py` (every `int` field but `ClassificationAggregates.n`, the run's item
+#: count, which is a denominator rather than a count of anything that happened to an item).
+_SCORER_COUNTS: dict[str, tuple[str, ...]] = {
+    "classification": ("parseFailures",),
+    "extraction": (
+        "parseFailures", "malformedSpecCount", "schemaViolationCount", "luckyPassCount",
+    ),
+    "grounding": ("parseFailures",),
+}
+
+#: One clause per counter, printed under `## Scorer counts`. Wording follows the field's own
+#: definition in `results.py` / the producing scorer's `aggregate()` docstring.
+_SCORER_COUNT_GLOSS: dict[str, str] = {
+    "parseFailures": "replies the scorer could not parse",
+    "malformedSpecCount": "specs that failed structural validation (Layer A)",
+    "schemaViolationCount": "specs that failed schema-bound validation (Layer B)",
+    "luckyPassCount": (
+        "items stamped `answerable: false` whose exploratory spec nonetheless scored correct — "
+        "each is **also** counted in its shape's `exactMatchBy*` k, additive, never an "
+        "alternative"
+    ),
+}
+
+_LUCKY_PASS_FOOTNOTE = (
+    "_† This shape's k **includes lucky passes** (`luckyPassCount`, `scoring/extraction.py` "
+    "`aggregate()`): items stamped `answerable: false` whose exploratory spec nonetheless matched "
+    "the expected answer. Each is counted in the shape's successes as well — additive, never an "
+    "alternative — so a marked k/n is not a count of genuine answers._"
+)
+
+_LUCKY_PASS_DISAGREEMENT_FOOTNOTE = (
+    "_‡ The arm's stored `luckyPassCount` disagrees with the lucky passes its own items place on a "
+    "shape ({arms}) — an inconsistent record, since `aggregate()` derives one from the other. "
+    "Every shape row of that arm is marked: the † counts follow the items, and where the stored "
+    "count is higher the remainder cannot be placed, so any of them may include one._"
+)
+
+
+#: The per-shape metrics a lucky pass is counted in (`scoring/extraction.py` names each
+#: `f"exactMatchBy{shape}"`). `ExtractionAggregates.byShape` also carries
+#: `unanswerableAbstainRate`, which a lucky item scores too — but as an abstention, not as the
+#: lucky pass, so it is never marked.
+_LUCKY_PASS_METRIC_PREFIX = "exactMatchBy"
+
+
+def _lucky_shape_metrics(agg: ExtractionAggregates) -> set[str]:
+    return {m.name for m in agg.byShape if m.name.startswith(_LUCKY_PASS_METRIC_PREFIX)}
+
+
+def _lucky_by_shape(run: RunResult) -> tuple[dict[str, int], int]:
+    """Where an extraction run's lucky passes sit: `({exactMatchBy* name: lucky passes in its
+    k}, stored luckyPassCount)`. `({}, 0)` for every other aggregate kind.
+
+    `aggregate()` stores one run-level scalar, but its docstring's obligation is per shape rate —
+    any rendering of `luckyPassCount` "must not let the shape rate stand alone unlabelled". The
+    attribution reads only what the scorer **declared** on each item: `detail["luckyPass"] is
+    True` and a `True` outcome for that `exactMatchBy*` metric via `ItemResult.scored_outcome`
+    (the one reader of an item's outcome). Nothing is inferred; a record that cannot be read for
+    a metric attributes nothing to it. When the placed total and the stored count disagree, in
+    **either** direction, the record is inconsistent (`aggregate()` derives the count from the
+    same flags in one pass): `_lucky_mark` then marks every shape row of the arm `‡` rather than
+    none — fail-safe where the stored count is higher, since the remainder cannot be placed — and
+    the footnote prints both numbers rather than silently preferring one."""
+    agg = run.aggregates
+    if not isinstance(agg, ExtractionAggregates):
+        return {}, 0
+    lucky_items = [it for it in run.items if it.detail.get("luckyPass") is True]
+    by_shape: dict[str, int] = {}
+    for name in sorted(_lucky_shape_metrics(agg)):
+        count = 0
+        for it in lucky_items:
+            try:
+                if it.scored_outcome(name) is True:
+                    count += 1
+            except (IncompleteItemRecord, MetricKindError):
+                continue
+        if count:
+            by_shape[name] = count
+    return by_shape, agg.luckyPassCount
+
+
+def _lucky_mark(run: RunResult, metric: str) -> str:
+    """The suffix a shape row's k/n cell carries: `" † (N lucky)"` when N of its successes are
+    lucky passes, `" ‡"` when the arm's stored `luckyPassCount` disagrees with the lucky passes
+    its items place, `""` otherwise — and
+    always `""` for any metric but an `exactMatchBy*` one, so every other row renders
+    byte-for-byte as before."""
+    agg = run.aggregates
+    if not isinstance(agg, ExtractionAggregates) or metric not in _lucky_shape_metrics(agg):
+        return ""
+    by_shape, stored = _lucky_by_shape(run)
+    mark = f" † ({by_shape[metric]} lucky)" if metric in by_shape else ""
+    if stored != sum(by_shape.values()):
+        mark += " ‡"
+    return mark
+
+
+def _lucky_footnotes(cells: Sequence[tuple[str, RunResult, str]]) -> list[str]:
+    """The legend for whichever lucky-pass markers a table actually printed — none, one, or both.
+    `cells` is `(arm label, run, mark)` per rendered binary row; the `‡` legend names each marked
+    arm with its stored count and its items' placed count, both printed, neither preferred."""
+    lines: list[str] = []
+    if any("†" in mark for _, _, mark in cells):
+        lines += [_LUCKY_PASS_FOOTNOTE, ""]
+    disagreeing: dict[str, str] = {}
+    for label, run, mark in cells:
+        if "‡" in mark and label not in disagreeing:
+            by_shape, stored = _lucky_by_shape(run)
+            disagreeing[label] = (
+                f"{label}: stored `luckyPassCount` {stored}, items place {sum(by_shape.values())}"
+            )
+    if disagreeing:
+        arms = "; ".join(disagreeing.values())
+        lines += [_LUCKY_PASS_DISAGREEMENT_FOOTNOTE.format(arms=arms), ""]
+    return lines
+
+
+def _render_scorer_counts(labelled: Sequence[tuple[str, RunResult]]) -> list[str]:
+    """Every arm's `_SCORER_COUNTS` fields, verbatim by name, one line per arm, plus a legend for
+    the fields shown. `[]` when every such count in the report is zero — a run with nothing to
+    report under these fields renders exactly as it did before they were printed at all (and an
+    all-zero block for a role whose scorer never populates the field, `grounding`'s
+    `parseFailures`, would read as a measurement). Once any arm has a non-zero count, every arm's
+    counts print, zeros included, so arms can be read side by side."""
+    rows = [
+        (label, [(name, getattr(r.aggregates, name)) for name in _SCORER_COUNTS[r.aggregates.kind]])
+        for label, r in labelled
+        if r.aggregates.kind in _SCORER_COUNTS
+    ]
+    if not any(value for _, counts in rows for _, value in counts):
+        return []
+    lines = [
+        "## Scorer counts",
+        "",
+        "_Scalar counts the scorer records beside its rates — never a rate, never in a verdict._",
+        "",
+    ]
+    for label, counts in rows:
+        lines.append(
+            f"- {label}: " + " · ".join(f"`{name}` {value}" for name, value in counts)
+        )
+    lines.append("")
+    shown = list(dict.fromkeys(name for _, counts in rows for name, _ in counts))
+    legend = "; ".join(f"`{name}`: {_SCORER_COUNT_GLOSS[name]}" for name in shown)
+    lines += [f"_{legend}._", ""]
+    return lines
+
+
 def _render_speed(runs: Sequence[RunResult], arm_names: Mapping[str, str]) -> list[str]:
     """FR-11's headline block, printed once this component-wide: `RunResult.latency` has
     existed since S2 and this is its first renderer (S7 spec §2.5). `[]` when every run's
@@ -1383,6 +1536,7 @@ def _render_one_rank_table(
         ]
 
     rendered: list[tuple[RunResult, float, float, float]] = []
+    lucky_cells: list[tuple[str, RunResult, str]] = []
     for r, value in rows:
         agg = _metric_aggregate(r, metric)
         if isinstance(agg, ContinuousMetric):
@@ -1395,7 +1549,9 @@ def _render_one_rank_table(
             value_cell, ci_cell = f"{agg.mean:.4f}", f"[{lo:.4f}, {hi:.4f}]"
         else:
             lo, hi = stats.wilson_interval(agg.successes, agg.n)
-            count_cell = f"{agg.successes}/{agg.n}"
+            lucky = _lucky_mark(r, metric)
+            lucky_cells.append((r.modelKey, r, lucky))
+            count_cell = f"{agg.successes}/{agg.n}{lucky}"
             value_cell, ci_cell = f"{agg.rate:.3f}", f"[{lo:.3f}, {hi:.3f}]"
         latency_cell = _rank_latency_cell(r)
         footprint_cell = (footprints or {}).get(r.modelKey, "—")
@@ -1407,6 +1563,7 @@ def _render_one_rank_table(
 
     lines.append("")
     lines += [_MEAN_DESCRIPTIVE_NOTE if continuous else _DESCRIPTIVE_NOTE, ""]
+    lines += _lucky_footnotes(lucky_cells)
 
     top_run, top_value, top_lo, top_hi = rendered[0]
     lines.append(
@@ -1765,6 +1922,9 @@ def rank_report(
                     correction_k=correction_k, unit_kind=unit_kind,
                 )
 
+    # Once, after every ranked table: these are per-model, not per-metric. In-scope models only —
+    # an excluded one is named in the banner above and is not in the report.
+    lines += _render_scorer_counts([(r.modelKey, r) for r in runs])
     return "\n".join(lines) + "\n"
 
 
@@ -1861,6 +2021,7 @@ def compare_report(
     # --- per-arm descriptive table --------------------------------------------------------------
     lines += ["## Arms", "", "| arm | metric | k/n | rate | 95% Wilson |", "|---|---|---|---|---|"]
     pooled_seen = False
+    lucky_cells: list[tuple[str, RunResult, str]] = []
     for run in runs:
         for metric in run.aggregates.named_metrics():
             if isinstance(metric, BinaryMetric) and not metric.n:
@@ -1875,6 +2036,8 @@ def compare_report(
                     "— (no observations) |"
                 )
             elif isinstance(metric, BinaryMetric):
+                lucky = _lucky_mark(run, metric.name)
+                lucky_cells.append((_arm_label(run, arm_names[run.runId]), run, lucky))
                 if metric.unit == unit_kind_for_role(pack.role):
                     lo, hi = stats.wilson_interval(metric.successes, metric.n)
                     interval = f"[{lo:.3f}, {hi:.3f}]"
@@ -1887,7 +2050,7 @@ def compare_report(
                     interval = f"— (n is {metric.unit}s; not the analysis unit)"
                 lines.append(
                     f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | "
-                    f"{metric.successes}/{metric.n} | "
+                    f"{metric.successes}/{metric.n}{lucky} | "
                     f"{metric.successes / metric.n:.3f} | {interval} |"
                 )
             elif isinstance(metric, DistributionSummary):
@@ -1905,6 +2068,10 @@ def compare_report(
     lines += ["", _DESCRIPTIVE_NOTE, ""]
     if pooled_seen:
         lines += [_POOLED_FOOTNOTE, ""]
+    lines += _lucky_footnotes(lucky_cells)
+    lines += _render_scorer_counts(
+        [(_arm_label(r, arm_names[r.runId]), r) for r in runs]
+    )
 
     # --- speed (S7 spec §2.5/§3.5): FR-11's headline latency block, one more descriptive block
     # before the verdict machinery, after the Arms table and its footnotes -----------------------

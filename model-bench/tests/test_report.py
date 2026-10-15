@@ -6,6 +6,7 @@ Every fixture is a hand-built `RunResult`; no LM Studio, no network, no pack on 
 from __future__ import annotations
 
 import json
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,8 @@ from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import (
     _SAMPLE_NOUN,
+    _SCORER_COUNT_GLOSS,
+    _SCORER_COUNTS,
     DuplicateModelInReport,
     _better,
     _metric_value,
@@ -37,6 +40,7 @@ from modelbench.report import (
     _render_hazard,
     _render_per_turn_position,
     _render_role_caveat,
+    _render_scorer_counts,
     _render_speed,
     _resolve_reference_kinds,
     compare_report,
@@ -44,8 +48,10 @@ from modelbench.report import (
     resolving_power_line,
 )
 from modelbench.results import (
+    _AGGREGATE_BY_KIND,
     ContinuousMetric,
     DistributionSummary,
+    ExtractionAggregates,
     FunnelCounts,
     GroundingAggregates,
     HazardPoint,
@@ -61,6 +67,7 @@ from modelbench.results import (
 )
 from modelbench.roles import UNIT_KIND_BY_ROLE
 from modelbench.roles import unit_kind as unit_kind_for_role
+from modelbench.scoring.extraction import aggregate as extraction_aggregate
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
 METRIC = "falseAdvanceRate"
@@ -4519,3 +4526,302 @@ def test_rank_report_guard_judge_binary_reference_family_is_byte_for_byte_unchan
     md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
 
     assert md == _GUARD_JUDGE_REFERENCE_FAMILY_GOLDEN
+
+
+# ==================================================================================================
+# S4 code-gate follow-up — `luckyPassCount`/`parseFailures`/`malformedSpecCount`/
+# `schemaViolationCount` rendered (`docs/reviews/small-model-benchmarking-s4.md`, first minor
+# finding). Binding contract: `scoring/extraction.py`'s `aggregate()` docstring — a rendering of
+# `luckyPassCount` "must not let the shape rate stand alone unlabelled". Every fixture uses
+# DISTINCT non-zero counter values (2/3/5/4 for `cand`) so a field swap cannot pass.
+# ==================================================================================================
+
+_NLQ_PACK_ID = "nlq-structured-query"
+_RT = "exactMatchByRelationshipTraversal"
+_CF = "exactMatchByConflictingFacts"
+_FL = "exactMatchByFilterList"
+
+
+def _nlq_pack(
+    verdicts: tuple[str, ...] = ("layer1ExactMatchRate",),
+    headline: str | None = "layer1ExactMatchRate",
+) -> PackRef:
+    return PackRef(
+        packId=_NLQ_PACK_ID, packVersion="1.0.0", contentHash="a" * 64, role="nlq-generator",
+        metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260911,
+    )
+
+
+def _nlq_item(item_id: str, scoreable: dict, counts: dict, detail: dict, outcome="pass"):
+    return ItemResult(
+        itemId=item_id, pairingKey=(item_id,), outcome=outcome, scoreable=scoreable,
+        counts=counts, timing=ItemTiming(wallClockMs=900.0, calls=(), withheldFor=None),
+        detail=detail,
+    )
+
+
+def _nlq_items(*, parse: int, malformed: int, schema: int, rt_lucky: int, cf_lucky: int):
+    """Shape `scoring/extraction.py`'s `score_item` emits, item for item: 6 answerable
+    `filter-list` items (4 correct), 4 unanswerable `relationship-traversal` and 2 unanswerable
+    `conflicting-facts` items (the first `rt_lucky`/`cf_lucky` of each scoring correct, so lucky),
+    plus `parse`/`malformed`/`schema` failure-class items with `scoreable={}`. One lucky item also
+    abstained (`unanswerableAbstainRate` count 1) — it must not mark that row."""
+    items = [
+        _nlq_item(
+            f"a{i}", {"layer1ExactMatchRate": True, _FL: True},
+            {"layer1ExactMatchRate": int(i < 4), _FL: int(i < 4)}, {"shape": "filter-list"},
+        )
+        for i in range(6)
+    ]
+    for prefix, shape, metric, total, lucky in (
+        ("rt", "relationship-traversal", _RT, 4, rt_lucky),
+        ("cf", "conflicting-facts", _CF, 2, cf_lucky),
+    ):
+        for i in range(total):
+            detail = {"dataset": "catalog", "shape": shape}
+            if i < lucky:
+                detail["luckyPass"] = True
+            items.append(_nlq_item(
+                f"{prefix}{i}", {"unanswerableAbstainRate": True, metric: True},
+                {"unanswerableAbstainRate": int(i == 0), metric: int(i < lucky)}, detail,
+            ))
+    for prefix, failure, count, outcome in (
+        ("p", "no_json", parse, "parse_failure"),
+        ("m", "malformed_spec", malformed, "fail"),
+        ("s", "schema_violation", schema, "fail"),
+    ):
+        items += [
+            _nlq_item(f"{prefix}{i}", {}, {}, {"failureClass": failure}, outcome=outcome)
+            for i in range(count)
+        ]
+    return items
+
+
+def _nlq_arm(run_id: str, *, parse=2, malformed=3, schema=5, rt_lucky=3, cf_lucky=1,
+             aggregates=None) -> RunResult:
+    items = _nlq_items(
+        parse=parse, malformed=malformed, schema=schema, rt_lucky=rt_lucky, cf_lucky=cf_lucky,
+    )
+    # The real scorer's own `aggregate()`, so the fixture's counters are derived from its items
+    # exactly as a stored run's are (it never reads `pack`).
+    agg = aggregates if aggregates is not None else extraction_aggregate(items, pack=None)
+    return run(
+        run_id, role="nlq-generator", items=items, aggregates=agg,
+        fingerprint_fields=model_fields(modelKey=run_id, packId=_NLQ_PACK_ID),
+    )
+
+
+def _arms_row(md: str, arm: str, metric: str) -> str:
+    rows = [ln for ln in md.splitlines() if ln.startswith(f"| {arm} | {metric} |")]
+    assert len(rows) == 1, rows
+    return rows[0]
+
+
+class TestScorerCountsConstant:
+    def test_binds_to_every_int_count_field_of_every_aggregate_kind(self) -> None:
+        """AGENTS.md's asserted-constant rule: `_SCORER_COUNTS` is bound to `results.py`'s own
+        dataclasses — every `int` field except `ClassificationAggregates.n` (a denominator), per
+        kind, in declaration order. A shrink, a widen, or a value moved to another key reddens."""
+        derived = {}
+        for kind, cls in _AGGREGATE_BY_KIND.items():
+            names = tuple(
+                f.name for f in dataclass_fields(cls)
+                if f.type in (int, "int")
+                and not (cls is ClassificationAggregates and f.name == "n")
+            )
+            if names:
+                derived[kind] = names
+        assert _SCORER_COUNTS == derived
+
+    def test_every_rendered_counter_has_a_gloss_and_no_gloss_is_orphaned(self) -> None:
+        assert set(_SCORER_COUNT_GLOSS) == {n for names in _SCORER_COUNTS.values() for n in names}
+
+
+class TestScorerCountsBlock:
+    def test_compare_report_prints_each_counter_from_its_own_field(self) -> None:
+        cand = _nlq_arm("cand")  # 2 / 3 / 5 / 4 (3 + 1 lucky)
+        inc = _nlq_arm("incumbent", parse=6, malformed=7, schema=8, rt_lucky=0, cf_lucky=0)
+        md = compare_report([cand, inc], pack=_nlq_pack())
+        assert "## Scorer counts" in md
+        assert (
+            "- cand: `parseFailures` 2 · `malformedSpecCount` 3 · `schemaViolationCount` 5 · "
+            "`luckyPassCount` 4"
+        ) in md
+        assert (
+            "- incumbent: `parseFailures` 6 · `malformedSpecCount` 7 · `schemaViolationCount` 8 · "
+            "`luckyPassCount` 0"
+        ) in md
+        # One literal, field-distinguishing fragment per gloss — never read back out of
+        # `_SCORER_COUNT_GLOSS` itself, so a gloss moved to another field reddens (review F3).
+        for fragment in (
+            "`parseFailures`: replies the scorer could not parse",
+            "`malformedSpecCount`: specs that failed structural validation (Layer A)",
+            "`schemaViolationCount`: specs that failed schema-bound validation (Layer B)",
+            "`luckyPassCount`: items stamped `answerable: false` whose exploratory spec "
+            "nonetheless scored correct",
+        ):
+            assert fragment in md
+
+    def test_compare_report_places_the_block_after_the_arms_table_before_the_verdicts(
+        self,
+    ) -> None:
+        md = compare_report([_nlq_arm("cand"), _nlq_arm("incumbent")], pack=_nlq_pack())
+        assert md.index("## Arms") < md.index("## Scorer counts") < md.index("## Verdicts")
+
+    def test_absent_when_every_counter_is_zero(self) -> None:
+        cand = _nlq_arm("cand", parse=0, malformed=0, schema=0, rt_lucky=0, cf_lucky=0)
+        inc = _nlq_arm("incumbent", parse=0, malformed=0, schema=0, rt_lucky=0, cf_lucky=0)
+        md = compare_report([cand, inc], pack=_nlq_pack())
+        assert "Scorer counts" not in md
+        assert "†" not in md and "‡" not in md
+        assert "`parseFailures`" not in md
+
+    def test_one_non_zero_arm_prints_every_arm_zeros_included(self) -> None:
+        cand = _nlq_arm("cand", parse=0, malformed=0, schema=9, rt_lucky=0, cf_lucky=0)
+        inc = _nlq_arm("incumbent", parse=0, malformed=0, schema=0, rt_lucky=0, cf_lucky=0)
+        md = compare_report([cand, inc], pack=_nlq_pack())
+        assert "- cand: `parseFailures` 0 · `malformedSpecCount` 0 · `schemaViolationCount` 9" in md
+        assert "- incumbent: `parseFailures` 0 · `malformedSpecCount` 0 · " in md
+
+    def test_classification_prints_parse_failures_only(self) -> None:
+        a, b = _nested_arms()
+        a = run(a.runId, items=list(a.items), aggregates=ClassificationAggregates(
+            perClass=a.aggregates.perClass, parseFailures=11, n=40,
+        ), fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+        md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+        assert "- cand: `parseFailures` 11\n" in md
+        assert "- incumbent: `parseFailures` 0\n" in md
+        assert "malformedSpecCount" not in md and "luckyPassCount" not in md
+
+    def test_grounding_prints_parse_failures(self) -> None:
+        arm = _chat_responder_arm("cand", 8)
+        arm = run(arm.runId, role="chat-responder", items=list(arm.items),
+                  aggregates=GroundingAggregates(checklistPass=arm.aggregates.checklistPass,
+                                                 perCheck=(), parseFailures=13),
+                  fingerprint_fields=model_fields(
+                      modelKey="cand", packId="chat-responder-grounded-answers"))
+        text = "\n".join(_render_scorer_counts([("cand", arm)]))
+        assert "## Scorer counts" in text
+        assert "- cand: `parseFailures` 13\n" in text
+
+    def test_roles_without_counters_render_nothing(self) -> None:
+        retrieval = run("r", role="embedder", call_surface="embeddings",
+                        aggregates=RetrievalAggregates(),
+                        fingerprint_fields=embeddings_fields(modelKey="r"))
+        tools = run("t", role="tool-caller", aggregates=ToolCallAggregates())
+        assert _render_scorer_counts([("r", retrieval), ("t", tools)]) == []
+
+    def test_rank_report_prints_the_block_once_after_the_tables(self) -> None:
+        md = rank_report(
+            [_nlq_arm("cand"), _nlq_arm("incumbent", parse=6, malformed=7, schema=8,
+                                        rt_lucky=0, cf_lucky=0)],
+            pack=_nlq_pack(),
+        )
+        assert md.count("## Scorer counts") == 1
+        assert md.index("### layer1ExactMatchRate") < md.index("## Scorer counts")
+        assert (
+            "- cand: `parseFailures` 2 · `malformedSpecCount` 3 · `schemaViolationCount` 5 · "
+            "`luckyPassCount` 4"
+        ) in md
+
+
+class TestLuckyPassMarker:
+    def test_a_lucky_shape_k_n_never_stands_alone_in_the_arms_table(self) -> None:
+        """The docstring obligation itself: the shape's k/n carries the marker and its own
+        lucky count, never the bare `3/4`."""
+        md = compare_report([_nlq_arm("cand"), _nlq_arm("incumbent")], pack=_nlq_pack())
+        rt = _arms_row(md, "cand", _RT)
+        cf = _arms_row(md, "cand", _CF)
+        assert f"| cand | {_RT} | 3/4 † (3 lucky) | 0.750 |" in rt
+        assert f"| cand | {_CF} | 1/2 † (1 lucky) | 0.500 |" in cf
+        assert f"| cand | {_RT} | 3/4 |" not in md
+        assert "_† This shape's k **includes lucky passes**" in md
+
+    def test_non_shape_rows_stay_unmarked(self) -> None:
+        """`layer1ExactMatchRate`, an unlucky shape, and `unanswerableAbstainRate` — which a lucky
+        item also scores (one lucky fixture item abstained) — carry no marker."""
+        md = compare_report([_nlq_arm("cand"), _nlq_arm("incumbent")], pack=_nlq_pack())
+        assert "| cand | layer1ExactMatchRate | 4/6 | " in md
+        assert f"| cand | {_FL} | 4/6 | " in md
+        assert "| cand | unanswerableAbstainRate | 2/6 | " in md
+
+    def test_no_marker_and_no_footnote_without_lucky_passes(self) -> None:
+        cand = _nlq_arm("cand", rt_lucky=0, cf_lucky=0)
+        inc = _nlq_arm("incumbent", rt_lucky=0, cf_lucky=0)
+        md = compare_report([cand, inc], pack=_nlq_pack())
+        assert f"| cand | {_RT} | 0/4 | " in md
+        # The counts block renders (parse/malformed/schema are non-zero) and its legend makes no
+        # † claim of its own (review N2) — so no † appears anywhere in this report.
+        assert "## Scorer counts" in md
+        assert "†" not in md and "‡" not in md
+        assert "includes lucky passes" not in md
+
+    def test_unattributable_lucky_passes_mark_every_shape_row(self) -> None:
+        """A stored `luckyPassCount` larger than its items place (6 vs 1): every `exactMatchBy*`
+        row of that arm takes `‡` (any could hold one), never none, and both numbers print."""
+        base = _nlq_arm("cand", rt_lucky=1, cf_lucky=0)
+        agg = base.aggregates
+        inflated = ExtractionAggregates(
+            exactMatch=agg.exactMatch, byShape=agg.byShape, parseFailures=agg.parseFailures,
+            malformedSpecCount=agg.malformedSpecCount,
+            schemaViolationCount=agg.schemaViolationCount, luckyPassCount=6,
+        )
+        cand = _nlq_arm("cand", rt_lucky=1, cf_lucky=0, aggregates=inflated)
+        md = compare_report([cand, _nlq_arm("incumbent", rt_lucky=0, cf_lucky=0)],
+                            pack=_nlq_pack())
+        assert f"| cand | {_RT} | 1/4 † (1 lucky) ‡ |" in md
+        assert f"| cand | {_CF} | 0/2 ‡ |" in md
+        assert f"| cand | {_FL} | 4/6 ‡ |" in md
+        assert "| cand | unanswerableAbstainRate | 2/6 | " in md
+        assert "_‡ The arm's stored `luckyPassCount` disagrees" in md
+        assert "(cand: stored `luckyPassCount` 6, items place 1)" in md
+        assert f"| incumbent | {_CF} | 0/2 | " in md
+        assert "incumbent: stored" not in md
+
+    @staticmethod
+    def _with_stored_lucky(arm: RunResult, stored: int, **kwargs) -> RunResult:
+        agg = arm.aggregates
+        return _nlq_arm(arm.runId, aggregates=ExtractionAggregates(
+            exactMatch=agg.exactMatch, byShape=agg.byShape, parseFailures=agg.parseFailures,
+            malformedSpecCount=agg.malformedSpecCount,
+            schemaViolationCount=agg.schemaViolationCount, luckyPassCount=stored,
+        ), **kwargs)
+
+    def test_a_stored_count_below_what_items_place_is_named_not_clamped(self) -> None:
+        """Review F1: stored `luckyPassCount` 1, items place 4 (3 + 1) — the opposite direction
+        must not be silently clamped. † follows the items, every shape row takes ‡, and the
+        footnote prints both numbers; the Scorer-counts block keeps the stored 1."""
+        cand = self._with_stored_lucky(_nlq_arm("cand"), 1)
+        md = compare_report([cand, _nlq_arm("incumbent", rt_lucky=0, cf_lucky=0)],
+                            pack=_nlq_pack())
+        assert f"| cand | {_RT} | 3/4 † (3 lucky) ‡ |" in md
+        assert f"| cand | {_CF} | 1/2 † (1 lucky) ‡ |" in md
+        assert f"| cand | {_FL} | 4/6 ‡ |" in md
+        assert "(cand: stored `luckyPassCount` 1, items place 4)" in md
+        assert "`schemaViolationCount` 5 · `luckyPassCount` 1" in md
+
+    def test_the_disagreement_is_named_even_when_the_counts_block_is_hidden(self) -> None:
+        """Stored 0, items place 2, every other counter 0: the Scorer-counts block is suppressed,
+        so the ‡ footnote is the one place the disagreement shows — it must."""
+        zeros = dict(parse=0, malformed=0, schema=0, cf_lucky=0)
+        cand = self._with_stored_lucky(_nlq_arm("cand", rt_lucky=2, **zeros), 0,
+                                       rt_lucky=2, **zeros)
+        md = compare_report([cand, _nlq_arm("incumbent", rt_lucky=0, **zeros)],
+                            pack=_nlq_pack())
+        assert "## Scorer counts" not in md
+        assert f"| cand | {_RT} | 2/4 † (2 lucky) ‡ |" in md
+        assert "(cand: stored `luckyPassCount` 0, items place 2)" in md
+
+    def test_rank_table_marks_a_lucky_shape_verdict_metric(self) -> None:
+        pack = _nlq_pack(verdicts=("layer1ExactMatchRate", _RT), headline=None)
+        md = rank_report(
+            [_nlq_arm("cand"), _nlq_arm("incumbent", rt_lucky=0, cf_lucky=0)], pack=pack
+        )
+        section = md.split(f"### {_RT}")[1]
+        assert "| cand | 3/4 † (3 lucky) | 0.750 |" in section
+        assert "| incumbent | 0/4 | 0.000 |" in section
+        assert "_† This shape's k **includes lucky passes**" in section
+        assert "‡" not in section
+        layer1 = md.split("### layer1ExactMatchRate")[1].split(f"### {_RT}")[0]
+        assert "†" not in layer1
