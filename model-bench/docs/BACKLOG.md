@@ -18,25 +18,34 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   *better* one on recall (plan §3.8.1; the report prints this as a standing honesty line). Lifting
   the ceiling means new queries, several with |R| ≥ 3, each human-verified per FR-19 — new golden
   data, which is why it is not in first delivery.
-- **`report.py` never renders `luckyPassCount`/`parseFailures`/`malformedSpecCount`/`schemaViolationCount`.**
-  Flagged in the S4 code gate (`docs/reviews/small-model-benchmarking-s4.md`) — currently harmless
-  (`luckyPassCount=0` on the only live run), but a future non-zero `luckyPassCount` would surface
-  in a shape's raw `k/n` with no visual distinction from a genuine pass. Whoever wires this
-  rendering must add a footnote/asterisk on a shape's `k/n` line whenever that shape's
-  `luckyPassCount` contribution is non-zero, per `extraction.py:325-328`'s own docstring obligation.
-- **`tools/exec.py`'s `order_by` sort has no defensive handling for a `None`-valued sort key.**
-  Flagged in the S4 code gate (`docs/reviews/small-model-benchmarking-s4.md`) — not reachable by
-  any shipped golden item today (every `order_by` item sorts on a never-null `Product.price`), but
-  a future sparse property in `tables.json`'s catalog half would raise an uncaught `TypeError`
-  instead of a graceful `SchemaViolationError`. Needs a one-line guard plus a regression test the
-  next time that file is touched.
-
-- **`validate_pack` doesn't check that a pack's declared `"scorer"` name resolves to an importable
-  module** (named as a possible follow-up in `docs/plans/small-model-benchmarking-s3-spec.md` §9,
-  carried open since S3's close, still nobody's). A typo'd scorer name fails at `run`'s
-  `_load_item_scorer` import instead of at `validate` — a `RunRefused` (exit 4), the correct exit
-  code, just one step later than a pre-flight check would catch it. Low risk, not blocking any
-  stage.
+- **`tools/exec.py`'s `order_by` sort raises an uncaught `TypeError` on a `None`-valued sort key;
+  the fix is deferred to the next deliberate `packVersion` bump of `nlq-structured-query`.** No
+  shipped golden item reaches it (every `order_by` item sorts on a never-null `Product.price`), but
+  a sparse property in `tables.json`'s catalog half would. The file lives inside the content-hashed
+  pack (`packs/nlq-structured-query/tools/exec.py`), so any edit changes the pack's `contentHash`
+  (`8f975842`) and unpairs future runs from the 18 recorded `1.2.0` runs — hence the stakeholder's
+  deferral. The fix orders nulls the way FalkorDB does (last ASC, first DESC — live-verified,
+  including the `WITH DISTINCT … ORDER BY` shape `querygen.compile` emits for an order key outside
+  the projection), not by raising `SchemaViolationError`: `compile_and_execute` never raises past
+  validation. The spec already exists —
+  `tests/test_tools_exec.py::test_order_by_a_sparse_property_places_nulls_the_way_falkordb_does`,
+  `xfail(strict=True, raises=TypeError)` — and its marker comes off with the fix. A later test with
+  tied keys or several nulls compares each tie group as a set, not a sequence: FalkorDB's order
+  among ties is not mirrored between ASC and DESC (`docs/reviews/s4-gate-followups.md`, Pass 1 —
+  FX1, N2).
+- **`report.py`'s lucky-pass labelling (†/‡) covers the descriptive k/n cells only.** If a pack
+  ever makes an `exactMatchBy*` metric a verdict metric, everything downstream of it goes
+  unlabelled — `compare_report`'s verdict text, its Holm row, `rank_report`'s reference-anchored
+  family and the `<!-- rank-report -->` marker (which `scripts/consolidate_sweep_reports.py` carries
+  into a sweep consolidation) — exactly where discordant pairs made of lucky passes matter most. Not
+  reachable by any shipped pack (`nlq-structured-query` declares only `layer1ExactMatchRate` as
+  verdict and headline). Whoever ships such a pack either labels those sections (one line under the
+  heading reusing the † footnote) or accepts the limit knowingly
+  (`docs/reviews/s4-gate-followups.md`, Pass 1 — FX2, F2). Optional polish in the same file: a
+  headline-only `rank_report` never names a stored-vs-placed `luckyPassCount` disagreement (suffix
+  the value in `_render_scorer_counts` with `‡`; Pass 2, N3), and
+  `_LUCKY_PASS_DISAGREEMENT_FOOTNOTE` is worded for one arm though it can list several (Pass 2,
+  N4).
 - **`results.Outcome`'s `Literal` (`results.py:38`, `["pass", "fail", "n_a", "parse_failure"]`) has
   been missing `"unrunnable"` since S4.** `classification.score_item`/`extraction.score_item` both
   already construct `ItemResult(outcome="unrunnable", ...)` on a `no_response` withholding

@@ -2,6 +2,40 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-15 — FX1–FX2 — S4 code-gate follow-ups: scorer counters rendered, `exec.py` null-sort gap pinned
+
+**What:** Closed two of the S4 code-gate follow-ups (`docs/reviews/small-model-benchmarking-s4.md`)
+under `docs/plans/s4-gate-followups-coordination.md`; gate review `docs/reviews/s4-gate-followups.md`.
+
+- **FX2 — `report.py` renders the scorer counters (`aba53a11`).** `compare_report` and
+  `rank_report` print a `## Scorer counts` block (`parseFailures`, `malformedSpecCount`,
+  `schemaViolationCount`, `luckyPassCount`, per aggregate kind via `_SCORER_COUNTS`, each glossed)
+  only when some count is non-zero, so all-zero output is byte-identical to before — on the stored
+  runs only the guard-judge rank and the two `nlq-structured-query` reports gained the block. This
+  closes `scoring/extraction.py` `aggregate()`'s docstring obligation: an `exactMatchBy*` k/n that
+  includes lucky passes reads `k/n † (N lucky)`, and a stored `luckyPassCount` that disagrees in
+  either direction with what its items place marks every shape row of that arm `‡`, the footnote
+  printing both numbers. Rate and Wilson cells are untouched. Gate: `analyst` Pass 1 approve with
+  suggestions (F1 over-attribution silence, F3 gloss prose unpinned, N2 — all fixed), Pass 2
+  approve. F2 — the labelling stops at the descriptive tables, so a pack making an `exactMatchBy*`
+  metric a verdict metric would get unlabelled verdict/Holm/reference/marker output — was ruled a
+  documented scope limit, unreachable by any shipped pack, and filed to `docs/BACKLOG.md` with
+  Pass 2's nits N3/N4. The manual names no report sections, so it needs no change.
+- **FX1 — `exec.py`'s `None` sort-key gap pinned, fix deferred (`88172da5`).** `exec.py` lives
+  inside the content-hashed `nlq-structured-query` pack, so any edit changes its `contentHash` and
+  unpairs future runs from the 18 recorded `1.2.0` runs; the stakeholder deferred the fix to the
+  next deliberate `packVersion` bump and chose FalkorDB null ordering (last ASC, first DESC,
+  live-verified on the `WITH DISTINCT … ORDER BY` shape `querygen.compile` emits) over a
+  `SchemaViolationError`. The spec is
+  `tests/test_tools_exec.py::test_order_by_a_sparse_property_places_nulls_the_way_falkordb_does`,
+  `xfail(strict=True, raises=TypeError)`, so a correct fix turns it into a strict XPASS failure
+  until the marker comes off. Pack hash unchanged (`8f975842`). The `docs/BACKLOG.md` item was
+  rewritten in place as the deferral record the marker's reason points at.
+
+The stale `validate_pack` scorer-resolution item was also dropped from `docs/BACKLOG.md` — already
+delivered 2026-09-11 (`609b090b`, entry below). Full suite `1817 passed, 3 deselected, 2 xfailed`
+(baseline at `5d106332`: `1800 passed, 3 deselected`); `ruff` clean.
+
 ## 2026-09-20 — U188 — `rank --reference` fixed on a continuous verdict metric (D-1)
 
 **What:** Fixed a real, shipped crash `qa-engineer` found while testing the user manual (D-1,
