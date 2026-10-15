@@ -1174,6 +1174,27 @@ class Repository:
             {"documentId": document_id, "success": bool(success)},
         )
 
+    def chunk_document_is_processing(self, ws: str, *, chunk_id: str) -> bool:
+        """Is the `Document` that owns `chunk_id` still `'processing'`?
+
+        The K-067 retry liveness gate (plan
+        `falkor-chat/docs/plans/extract-transient-retry.md` §3.5): a background
+        job retrying a transient provider error reads this before and after each
+        backoff sleep, and stops retrying once the document has reached a
+        terminal state — a sibling job already failed it (first terminal write
+        wins, so no later success can help) — or has been deleted. Returns
+        `False` when no row comes back (chunk or document gone). Read-only
+        (`ro_query`), one indexed `Chunk` lookup plus one `HAS_CHUNK` hop.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (c:Chunk {chunkId: $chunkId})<-[:HAS_CHUNK]-(d:Document) "
+            "RETURN d.status = 'processing'",
+            {"chunkId": chunk_id},
+        )
+        if not res.result_set:
+            return False
+        return bool(res.result_set[0][0])
+
     def list_document_chunks(
         self, ws: str, *, document_id: str
     ) -> list[dict[str, Any]]:

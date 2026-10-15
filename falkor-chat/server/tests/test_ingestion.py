@@ -65,6 +65,14 @@ class SpyRepo:
         self.reopen_calls: list[dict] = []
         self.exact_matches: dict[tuple[str, str], dict] = {}
         self.fuzzy_results: list[list[dict]] = []
+        # K-067 retry liveness gate: scriptable answer (default "still processing")
+        # and a record of every read's arguments.
+        self.document_processing = True
+        self.gate_reads: list[tuple] = []
+
+    def chunk_document_is_processing(self, ws, *, chunk_id):
+        self.gate_reads.append((ws, chunk_id))
+        return self.document_processing
 
     def create_entity_with_auto_match(
         self, ws, *, entity_id, name, name_normalized, type, created_at, match_id,
@@ -559,3 +567,227 @@ def test_batch_ingest_two_documents_mentioning_the_same_entity_fuse(repo, conn):
 
     assert entity_count == 2  # one Entity per batch item
     assert edge_count == 1    # the two batch items' entities are fused, not two islands
+
+
+# ── K-067 step 2: extract-call retry (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.3/§3.5, rows U-9…U-13) ──
+
+import itertools  # noqa: E402
+import logging  # noqa: E402
+
+import pytest  # noqa: E402
+
+from falkorchat.retry import RetryPolicy  # noqa: E402
+from falkorchat.transport import ProviderCallError  # noqa: E402
+
+
+class _ScriptedLLM:
+    """`complete` pops the next outcome per call: an exception instance is raised,
+    a string is returned. The last outcome repeats once the script runs out."""
+
+    def __init__(self, *outcomes):
+        self._outcomes = list(outcomes)
+        self.calls = 0
+        self.inputs: list = []  # the `messages` each attempt sent (P5-2)
+
+    def complete(self, messages):
+        self.calls += 1
+        self.inputs.append(json.dumps(messages, sort_keys=True))
+        outcome = self._outcomes.pop(0) if len(self._outcomes) > 1 else self._outcomes[0]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class _FakeSleep:
+    def __init__(self):
+        self.delays: list[float] = []
+
+    def __call__(self, delay):
+        self.delays.append(delay)
+
+
+def _transient():
+    return ProviderCallError("p/m @ url: HTTP 503", kind="http", status=503)
+
+
+def _context_overflow():
+    return ProviderCallError(
+        "p/m @ url: HTTP 400", kind="http", status=400,
+        detail='{"error":{"type":"exceed_context_size_error"}}',
+    )
+
+
+# One entity + one relationship whose object is not an entity → stub-repaired to
+# two entities (extraction.py), so the write phase has entities AND a relationship.
+_U9_REPLY = _reply(
+    [{"name": "Alice", "type": "Person"}],
+    [{"subject": "Alice", "predicate": "works_at", "object": "Acme"}],
+)
+
+
+def _pipeline(repo, llm, sleep):
+    """Fresh deterministic id/clock counters per pipeline (never shared — U-9 nit)."""
+    ids = itertools.count()
+    ticks = itertools.count(1000)
+    return IngestionPipeline(
+        repo, llm, id_gen=lambda: f"id-{next(ids)}", clock=lambda: next(ticks),
+        sleep=sleep,
+    )
+
+
+def _extract(pipeline, text="t"):
+    pipeline.extract_chunk("acme", chunk_id="chunk-7", document_id="doc-3", text=text)
+
+
+# Multi-word, so a truncated or rebuilt request (e.g. `text[:1]`) is visible.
+_U9_TEXT = "Alice works at Acme, a small robotics firm in Porto."
+
+
+def _writes(repo):
+    return (repo.entities, repo.about_edges, repo.relationships,
+            repo.fuzzy_lookups, repo.reopen_calls)
+
+
+def test_u9_write_phase_runs_once_after_two_transient_failures():
+    control_repo, control_sleep = SpyRepo(), _FakeSleep()
+    control_llm = _ScriptedLLM(_U9_REPLY)
+    _extract(_pipeline(control_repo, control_llm, control_sleep), text=_U9_TEXT)
+
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_transient(), _transient(), _U9_REPLY)
+    _extract(_pipeline(repo, llm, sleep), text=_U9_TEXT)
+
+    assert llm.calls == 3
+    # Every attempt re-sends the very request a single clean call sends, built
+    # from the chunk's full text (P5-2).
+    assert llm.inputs == control_llm.inputs * 3
+    assert _U9_TEXT in json.loads(llm.inputs[0])[-1]["content"]
+    assert len(sleep.delays) == 2
+    assert len(control_repo.entities) == 2 and len(control_repo.relationships) == 1
+    assert _writes(repo) == _writes(control_repo)
+    assert control_sleep.delays == []
+
+
+class _WritePhaseProviderErrorRepo(SpyRepo):
+    """The first graph write raises a transient-classified provider error — a
+    stand-in for a future provider call inside the write loop (U-9b)."""
+
+    def __init__(self):
+        super().__init__()
+        self.write_attempts = 0
+
+    def create_entity_with_auto_match(self, ws, **kwargs):
+        self.write_attempts += 1
+        raise _transient()
+
+
+def test_u9b_a_provider_error_in_the_write_phase_is_never_retried():
+    repo, sleep = _WritePhaseProviderErrorRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_U9_REPLY)
+
+    with pytest.raises(ProviderCallError, match="HTTP 503"):
+        _extract(_pipeline(repo, llm, sleep))
+
+    assert llm.calls == 1
+    assert repo.write_attempts == 1
+    assert sleep.delays == []
+
+
+def test_u10_exhausted_budget_raises_and_writes_nothing():
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_transient())
+
+    with pytest.raises(ProviderCallError, match="HTTP 503"):
+        _extract(_pipeline(repo, llm, sleep))
+
+    assert llm.calls == 4
+    assert len(sleep.delays) == 3
+    assert _writes(repo) == ([], [], [], [], [])
+
+
+def test_u11_permanent_error_fails_on_the_first_call_and_writes_nothing():
+    repo, sleep = SpyRepo(), _FakeSleep()
+    err = _context_overflow()
+    llm = _ScriptedLLM(err)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        _extract(_pipeline(repo, llm, sleep))
+
+    assert excinfo.value is err
+    assert llm.calls == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == []
+    assert _writes(repo) == ([], [], [], [], [])
+
+
+def test_u12_gate_closed_stops_after_one_attempt_and_reads_the_jobs_own_chunk(caplog):
+    caplog.set_level(logging.INFO, logger="falkorchat.retry")
+    repo, sleep = SpyRepo(), _FakeSleep()
+    repo.document_processing = False
+    err = _transient()
+    llm = _ScriptedLLM(err, _U9_REPLY)
+
+    with pytest.raises(ProviderCallError) as excinfo:
+        _extract(_pipeline(repo, llm, sleep))
+
+    assert excinfo.value is err
+    assert llm.calls == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == [("acme", "chunk-7")]
+    assert _writes(repo) == ([], [], [], [], [])
+    # The job label is the join key the live proof greps for (P5-1).
+    abandoned = [r.getMessage() for r in caplog.records
+                 if r.name == "falkorchat.retry" and "abandoning retry" in r.getMessage()]
+    assert len(abandoned) == 1
+    assert abandoned[0].startswith("extract chunkId=chunk-7: ")
+
+
+def test_u12_gate_open_is_read_with_the_jobs_own_workspace_and_chunk():
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_transient(), _U9_REPLY)
+
+    _extract(_pipeline(repo, llm, sleep))
+
+    assert llm.calls == 2
+    assert repo.gate_reads == [("acme", "chunk-7"), ("acme", "chunk-7")]  # pre + post
+
+
+def test_u13_unparseable_reply_is_not_an_error_and_is_not_retried():
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM("this is not json {{{")
+
+    _extract(_pipeline(repo, llm, sleep))
+
+    assert llm.calls == 1
+    assert sleep.delays == []
+    assert repo.gate_reads == []
+    assert _writes(repo) == ([], [], [], [], [])
+
+
+def test_pipeline_defaults_to_the_shipped_provider_retry_policy():
+    # No retry_policy injected → plan §3.2's 4 attempts at the 2/8/30 s floors.
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_transient())
+    pipeline = IngestionPipeline(repo, llm, sleep=sleep)
+
+    with pytest.raises(ProviderCallError):
+        _extract(pipeline)
+
+    assert llm.calls == 4
+    assert [d >= floor for d, floor in zip(sleep.delays, (2.0, 8.0, 30.0))] == [True] * 3
+
+
+def test_pipeline_uses_an_injected_retry_policy():
+    # P5-1: distinguishes "uses the injected policy" from "ignores it for the default".
+    repo, sleep = SpyRepo(), _FakeSleep()
+    llm = _ScriptedLLM(_transient())
+    pipeline = IngestionPipeline(
+        repo, llm, sleep=sleep, retry_policy=RetryPolicy(max_attempts=2, delays_s=(0.0,)),
+    )
+
+    with pytest.raises(ProviderCallError):
+        _extract(pipeline)
+
+    assert llm.calls == 2
+    assert sleep.delays == [0.0]

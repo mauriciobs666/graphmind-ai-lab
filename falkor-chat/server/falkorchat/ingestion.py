@@ -41,7 +41,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from . import extraction, fusion
+from . import extraction, fusion, retry
 from .background import _safe_fuse
 from .modelconfig import StaticModelGateway
 
@@ -82,11 +82,15 @@ class IngestionPipeline:
         models: Any = None,
         id_gen: Callable[[], str] = _default_id,
         clock: Callable[[], int] = _default_clock,
+        retry_policy: retry.RetryPolicy = retry.DEFAULT_PROVIDER_RETRY,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._repo = repo
         self._models = models or StaticModelGateway(llm=llm)
         self._id = id_gen
         self._clock = clock
+        self._retry_policy = retry_policy
+        self._sleep = sleep
 
     @property
     def repo(self) -> Any:
@@ -119,9 +123,26 @@ class IngestionPipeline:
         but one odd relationship must never cost the rest of the chunk's
         extraction, same failure-isolation spirit as `background._safe_extract`
         one layer up).
+
+        **Transient provider errors are retried — the provider call only (K-067,
+        plan `falkor-chat/docs/plans/extract-transient-retry.md` §3.3).** Only
+        `extraction.extract(text, llm)` runs inside `retry.call_with_retry`; it
+        makes zero graph writes, so failed attempts leave nothing behind and the
+        write loop below runs at most once, on the single successful result. The
+        writes themselves are not idempotent (fresh-uuid `CREATE`s), which is why
+        the retry boundary must never widen to this whole method. Between attempts
+        the liveness gate `repo.chunk_document_is_processing` stops retrying once
+        the owning document is no longer `'processing'` (§3.5).
         """
         llm = self._models.llm("extraction", ws=ws)
-        result = extraction.extract(text, llm)
+        result = retry.call_with_retry(
+            lambda: extraction.extract(text, llm),
+            policy=self._retry_policy, sleep=self._sleep,
+            keep_going=lambda: self._repo.chunk_document_is_processing(
+                ws, chunk_id=chunk_id
+            ),
+            label=f"extract chunkId={chunk_id}",
+        )
 
         entity_ids_by_name: dict[str, str] = {}
         for entity in result.entities:

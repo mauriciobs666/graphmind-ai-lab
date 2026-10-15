@@ -809,3 +809,182 @@ all restored, `filecmp` byte-identical):
 | give-up line drops `label` | **survived** (P4-2) |
 | retry WARNING drops exception text | **survived** (P4-4) |
 | rung 1 `detail` = whole message | **survived** (P4-4) |
+
+## Pass 5 — code, step 2
+
+**Scope.** Unit U4b: the uncommitted working-tree diff for plan Step 2, against `91b65fed`. The
+plan sections are §3.3, §3.5, §3.6, §4 Step 2 and §5 Step 2. The files, under
+`falkor-chat/server/`, are:
+- `falkorchat/ingestion.py`;
+- `falkorchat/repository.py` (new `chunk_document_is_processing`);
+- `tests/test_ingestion.py`;
+- `tests/test_background.py`;
+- `tests/test_repository.py`.
+
+Pass 4's dispositions: P4-1, P4-2 and the 599 row (P4-4) are **fixed** in `91b65fed`, per the
+coordinator.
+
+**Verdict: approve with suggestions.** There is no blocker or major. The wiring, the boundary and
+the gate are correct. The two minors are three wiring facts that no test pins, each closed by a
+small test addition.
+
+CPG: considered, not relevant — the change is a one-call wrap plus one new read query; I read every caller and callee directly, and the CPG predates the uncommitted diff.
+
+### Evidence gathered (all executed)
+
+- **Suites.**
+  - `tests/test_ingestion.py tests/test_background.py`, run whole and live on `ws:test`, gave
+    **61 passed** with no skips (`-rs`).
+  - `test_repository.py -k chunk_document_is_processing` gave **5 passed, 328 deselected**.
+  - Both match the implementer's figures. The slowest call is 0.25 s (fixture setup), so nothing
+    sleeps for real.
+- **Gate EXPLAIN**, run on `ws:test` and `ws:agent-team`:
+  `Node By Index Scan (c:Chunk)` → `Conditional Traverse (c)->(d:Document)` → `Project`. This
+  matches §3.5 and QUERIES' shape.
+  - `HAS_CHUNK` points Document→Chunk. That agrees with I-1's own count query and with the live
+    I-2 rows passing.
+  - A `null` status evaluates to `null = 'processing'` → `bool(None)` → `False`, which is safe.
+  - An empty result set returns `False`.
+- **Mutation probe**, 8 mutants. Each file was copied aside and restored, `filecmp`
+  byte-identical, with the same md5 before and after. 4 were killed and 4 survived (Appendix C).
+- **Model resolution.** `ModelGateway.llm` → `resolve_llm` → `resolve` + `_client_for_chain`.
+  Those steps build the clients (`make_http_transport` at `modelconfig.py:575/589` only
+  constructs a transport) and make **no provider call**. A workspace-override read is a Redis
+  `ro_query`, and its errors are not `ProviderCallError`.
+
+### Answers to the focus questions
+
+1. **Gate Cypher: correct.** The `HAS_CHUNK` direction is right and the query goes through
+   `ro_query`. It hits the index and returns `False` on no row; mutants of the `False`-on-no-row
+   and status-test branches were killed. Making it read through `.query` instead of `.ro_query`
+   survives, but that mutant is behaviour-equivalent for a query with no write, so there is
+   nothing to pin.
+2. **Retry boundary: exactly the provider call.**
+   - `lambda: extraction.extract(text, llm)` is the only thing wrapped. The write loop sits after
+     `call_with_retry` returns.
+   - U-9b (pipeline altitude) and U-9c (`_safe_extract` altitude) both pin the boundary against
+     widening.
+   - `llm` resolution sits outside the retry, and that is correct, as the plan intends. Resolution
+     makes no provider call, so it cannot raise a transient `ProviderCallError`. Its own failures
+     (`ModelResolutionError`, a Redis error from the overrides read) are permanent or
+     infrastructure faults, and they fail fast exactly as before. Retrying them would mean
+     retrying graph errors, which §3.1 explicitly excludes.
+3. **I-1's absolute counts follow from the stub.**
+   - The reply has one entity and one relationship whose object (`Acme`/`Bolt`) is not an
+     entity. Stub-repair makes that 2 entities, 2 `ABOUT` (each entity linked to the one chunk),
+     and 1 `RELATES_TO`.
+   - With distinct names there is no exact-tier fusion, so the confirmed `SAME_AS` count is 0.
+     That cell is therefore a constant, not a comparison. The plan's distinct-name instruction
+     makes this so, it is accepted, and `A == B` on the other three is the load-bearing part.
+   - Using distinct *texts* (departure 1) is necessary and correct: same text auto-supersedes.
+   - The orphan check is whole-graph, as specified.
+4. **Real-sleep hazard (departure 4): genuinely latent today.**
+   - Every pre-existing `IngestionPipeline(...)` built without `sleep=` uses either `_ReplyLLM`
+     (`test_ingestion.py`) or `_StubExtractionLLM` (`test_api.py:1015`). Neither ever raises. The
+     other pipelines in `test_mcp.py`/`test_background.py`/`test_api.py` are recording fakes.
+   - `app.py:619` builds a real pipeline only under `ENABLE_AGENT`. No test that sets it ingests
+     a document: `grep -l ENABLE_AGENT tests | xargs grep -l 'ingest|documents'` matches only
+     `conftest.py`.
+   - Nothing sleeps for real now (durations above). **Forward note for U4c:** step 3 brings the
+     same hazard to `EmbeddingWorker`. 23 test constructions pass no `sleep=`, and some
+     `test_embedding.py` `embed_chunk` tests drive provider failures (around lines 337 and 363).
+     If any of those failures is transient-classified, it will sleep 40–60 s for real. U4c checks
+     this.
+5. **Interaction with step 1.**
+   - The label is `extract chunkId={chunk_id}`, which matches §4 Step 2.3 and is the token P3-1
+     and §3.2.1 condition 3 match on.
+   - The INFO and WARNING lines carry `kind`/`status` from step 1's helper.
+   - **But no step-2 test asserts the label** (P5-1).
+
+### Findings
+
+#### P5-1 (minor) — Two pieces of wiring are unpinned: the job label and the injected `retry_policy`
+
+- **Evidence.** Two mutants survived, both at 66 passed:
+  - `label=f"extract chunk={chunk_id}"`;
+  - `policy=retry.DEFAULT_PROVIDER_RETRY`, which ignores `self._retry_policy`.
+- **Why it matters.**
+  - The label is the join key the live proof uses (P3-1, §3.2.1 condition 3, leg (c′)). A
+    drifted label passes every unit test and then fails silently in U5, where diagnosis is
+    expensive.
+  - The `retry_policy` seam is the constructor contract §3.2 names. Today it is
+    behaviour-equivalent only because nobody injects a non-default policy.
+    `test_pipeline_defaults_…` cannot tell "default used" from "injected ignored".
+- **Fix.**
+  - In U-12 (gate closed), add `caplog` and assert that the INFO line contains
+    `extract chunkId=chunk-7`.
+  - Add one row:
+    `IngestionPipeline(..., retry_policy=RetryPolicy(max_attempts=2, delays_s=(0.0,)), sleep=fake)`
+    with an always-transient LLM. Assert `llm.calls == 2`.
+
+#### P5-2 (minor) — The retried call's input is unpinned (the coordinator's `text[:1]` survivor), and this diff now owns that line
+
+- **Evidence.**
+  - The `extract(text[:1], llm)` mutant survived, as the coordinator found.
+  - In `test_ingestion.py` it is **equivalent by construction**: every new row passes `text="t"`,
+    so `"t"[:1] == "t"`.
+  - Every LLM stub in the diff ignores its input: `_ScriptedLLM.complete(messages)` and
+    `_CountingScriptedLLM.complete(messages)`, like the pre-existing `_ReplyLLM`.
+- **Ruling on Q1: fix it in this change, not as a follow-up.** The gap predates step 2, but step 2
+  rewrites that exact call into a closure that is re-invoked per attempt. "Every attempt sends
+  the same request built from this chunk's text" is now a retry property. A future edit that
+  rebuilds or truncates the prompt per attempt would pass every row.
+- **Fix.** In U-9:
+  - give `_ScriptedLLM` a `seen: list` that records `messages`;
+  - pass a multi-word `text` (for example `"Alice works at Acme."`);
+  - assert that all three recorded `messages` are equal and contain the text.
+
+  That is three lines, and the same check is optional in I-1.
+- **Ruling on Q2: yes, both LLM stubs ignore their input, and nothing else does.**
+  - The `SpyRepo` gate records `(ws, chunk_id)`, and U-12 pins it. The `ws`/`chunk_id` mutants
+    were killed (6 failed).
+  - `_WritePhase503Repo.chunk_document_is_processing` ignores its arguments. That is harmless,
+    because U-9c never reaches the gate.
+  - The fake sleeps record delays.
+  - So the input-blindness is confined to the LLM stubs, and P5-2's fix covers it.
+
+#### P5-3 (nit) — Departures: all sound; one wording point
+
+- **I-1 distinct texts.** This one is required: same text would trigger auto-supersede.
+- **Extra live I-4 row.** It is valuable. It is the only end-to-end pin of the post-sleep read
+  against real FalkorDB (one call, one sleep, `failed`, 0 entities), so a gate that is wired but
+  wrong would turn it red.
+- **Default-policy test asserts behaviour, not private attributes.** This is correct in spirit,
+  but see P5-1: it cannot distinguish "default" from "ignored injection".
+- **`import` blocks mid-file with `# noqa: E402`** in both test files. Both files already put
+  live sections at the bottom, so this is consistent enough. If either file gets a later touch,
+  hoisting the imports is cleaner.
+
+### What's solid
+
+- The docstring added to `extract_chunk` states the boundary and why it must not widen
+  (fresh-uuid `CREATE`s), so the next editor meets the constraint at the call site.
+- The I-2 rows seed **two documents in opposite states**, and the delete row keeps a third
+  `processing` document alive. A query keyed on the wrong id, or on "any processing document",
+  goes red, as the gate mutants confirm (4 failed).
+- The I-4 `seen_during_sleep == [("processing", 2)]` check observes the live document **from
+  inside the sleep**, which is exactly the "retrying ≠ reported" claim in §3.5.
+- U-11/U-13 also assert `gate_reads == []`, which pins "the gate runs only on the transient path"
+  at the pipeline altitude.
+
+### Open questions
+
+None.
+
+### Appendix C — Pass 5 mutants
+
+Script:
+`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut2.py`.
+Run over `test_ingestion.py`, `test_background.py` and `test_repository.py -k
+chunk_document_is_processing` (66 tests).
+
+| mutant | result |
+|---|---|
+| gate keyed on `document_id` | killed (6 failed) |
+| `keep_going=None` | killed (3) |
+| gate `RETURN d.status <> 'deleted'` | killed (4) |
+| gate `True` on no row | killed (2) |
+| label `extract chunk=` | **survived** (P5-1) |
+| `retry_policy` not forwarded | **survived** (P5-1) |
+| `extract(text[:1], llm)` | **survived** (P5-2) |
+| gate `.query` instead of `.ro_query` | survived — behaviour-equivalent, no action |

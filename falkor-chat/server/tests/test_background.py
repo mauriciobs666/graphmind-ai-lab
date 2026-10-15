@@ -576,3 +576,227 @@ def test_schedule_update_detection_with_no_repo_schedules_nothing():
     _schedule_update_detection(_recording_schedule, None, "test", "d1")
 
     assert scheduled == []
+
+
+# ── K-067 step 2: the extract retry seen from `_safe_extract` (plan
+#    `falkor-chat/docs/plans/extract-transient-retry.md` §3.3/§3.5) ──────────────
+#
+# U-9c is offline (fakes). I-1 and I-4 run against the live `ws:test` graph via
+# the `repo`/`conn` fixtures (which wipe only `ws:test`).
+
+import json  # noqa: E402
+
+from falkorchat import db  # noqa: E402
+from falkorchat.ingestion import IngestionPipeline  # noqa: E402
+from falkorchat.services import Services  # noqa: E402
+from falkorchat.transport import ProviderCallError  # noqa: E402
+
+
+def _transient_503():
+    return ProviderCallError("p/m @ url: HTTP 503", kind="http", status=503)
+
+
+def _extraction_reply(person: str, org: str) -> str:
+    # One entity + one relationship whose object is stub-repaired → 2 entities.
+    return json.dumps({
+        "entities": [{"name": person, "type": "Person"}],
+        "relationships": [{"subject": person, "predicate": "founded", "object": org}],
+    })
+
+
+class _CountingScriptedLLM:
+    """`complete` pops the next outcome (exception → raised, str → returned);
+    the last outcome repeats once the script runs out."""
+
+    def __init__(self, *outcomes):
+        self._outcomes = list(outcomes)
+        self.calls = 0
+
+    def complete(self, messages):
+        self.calls += 1
+        outcome = self._outcomes.pop(0) if len(self._outcomes) > 1 else self._outcomes[0]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class _RecordingSleep:
+    def __init__(self, on_sleep=None):
+        self.delays: list[float] = []
+        self._on_sleep = on_sleep
+
+    def __call__(self, delay):
+        self.delays.append(delay)
+        if self._on_sleep is not None:
+            self._on_sleep()
+
+
+class _WritePhase503Repo(_RecordingProgressRepo):
+    """U-9c: gate open; the first graph write raises a transient-classified 503 —
+    a stand-in for a future provider call inside the write loop."""
+
+    def __init__(self):
+        super().__init__()
+        self.write_attempts = 0
+
+    def chunk_document_is_processing(self, ws, *, chunk_id):
+        return True
+
+    def create_entity_with_auto_match(self, ws, **kwargs):
+        self.write_attempts += 1
+        raise ProviderCallError("x", kind="http", status=503)
+
+
+def test_u9c_safe_extract_never_retries_a_write_phase_provider_error():
+    repo = _WritePhase503Repo()
+    llm = _CountingScriptedLLM(_extraction_reply("Alice", "Acme"))
+    sleep = _RecordingSleep()
+    pipeline = IngestionPipeline(repo, llm, sleep=sleep)
+
+    _safe_extract(pipeline, "ws", "chunk-7", "doc-3", "Alice founded Acme.")
+
+    assert llm.calls == 1
+    assert repo.write_attempts == 1
+    assert sleep.delays == []
+    assert repo.calls == [("ws", "doc-3", False)]  # reported exactly once, as a failure
+
+
+# ── live helpers (ws:test) ──
+
+
+def _ingest_one_chunk(repo, text: str) -> tuple[str, str]:
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    receipt = Services(repo).ingest_document(CTX, text=text)
+    document_id = receipt["documentId"]
+    [chunk] = repo.list_document_chunks("test", document_id=document_id)
+    return document_id, chunk["chunkId"]
+
+
+def _document_progress(conn, document_id: str) -> tuple[str, int]:
+    [[status, pending]] = db.workspace_graph(conn, "test").ro_query(
+        "MATCH (d:Document {documentId: $id}) RETURN d.status, d.pendingJobs",
+        {"id": document_id},
+    ).result_set
+    return status, pending
+
+
+def _document_graph_counts(conn, document_id: str) -> dict[str, int]:
+    g = db.workspace_graph(conn, "test")
+    [[entities]] = g.ro_query(
+        "MATCH (:Document {documentId: $id})-[:HAS_CHUNK]->(:Chunk)-[:ABOUT]->(e:Entity) "
+        "RETURN count(DISTINCT e)", {"id": document_id},
+    ).result_set
+    [[about]] = g.ro_query(
+        "MATCH (:Document {documentId: $id})-[:HAS_CHUNK]->(:Chunk)-[a:ABOUT]->(:Entity) "
+        "RETURN count(a)", {"id": document_id},
+    ).result_set
+    [[relates]] = g.ro_query(
+        "MATCH ()-[r:RELATES_TO {sourceDocumentId: $id}]->() RETURN count(r)",
+        {"id": document_id},
+    ).result_set
+    [[same_as]] = g.ro_query(
+        "MATCH (:Document {documentId: $id})-[:HAS_CHUNK]->(:Chunk)-[:ABOUT]->(e:Entity) "
+        "MATCH (e)-[s:SAME_AS {status: 'confirmed'}]->(:Entity) RETURN count(s)",
+        {"id": document_id},
+    ).result_set
+    return {"entities": entities, "about": about, "relates_to": relates,
+            "same_as_confirmed": same_as}
+
+
+def _orphan_entity_count(conn) -> int:
+    [[orphans]] = db.workspace_graph(conn, "test").ro_query(
+        "MATCH (e:Entity) OPTIONAL MATCH (:Chunk)-[a:ABOUT]->(e) "
+        "WITH e, count(a) AS n WHERE n = 0 RETURN count(e)"
+    ).result_set
+    return orphans
+
+
+# ── I-1: idempotency — N failed attempts + 1 success == 1 clean success ──
+
+
+def test_i1_retried_extract_leaves_exactly_the_graph_of_a_clean_extract(repo, conn):
+    # Distinct texts and entity names per document: identical text would make B
+    # auto-supersede A, and shared names would make exact-tier SAME_AS
+    # order-dependent — neither is what this test is about.
+    doc_a, chunk_a = _ingest_one_chunk(repo, "Alice founded Acme.")
+    doc_b, chunk_b = _ingest_one_chunk(repo, "Bruno founded Bolt.")
+    repo.start_document_progress("test", document_id=doc_a, total_jobs=1)
+    repo.start_document_progress("test", document_id=doc_b, total_jobs=1)
+
+    llm_a = _CountingScriptedLLM(
+        _transient_503(), _transient_503(), _extraction_reply("Alice", "Acme"))
+    sleep_a = _RecordingSleep()
+    _safe_extract(IngestionPipeline(repo, llm_a, sleep=sleep_a),
+                  "test", chunk_a, doc_a, "Alice founded Acme.")
+
+    llm_b = _CountingScriptedLLM(_extraction_reply("Bruno", "Bolt"))
+    sleep_b = _RecordingSleep()
+    _safe_extract(IngestionPipeline(repo, llm_b, sleep=sleep_b),
+                  "test", chunk_b, doc_b, "Bruno founded Bolt.")
+
+    assert (llm_a.calls, len(sleep_a.delays)) == (3, 2)
+    assert (llm_b.calls, len(sleep_b.delays)) == (1, 0)
+    assert _document_progress(conn, doc_a) == ("ready", 0)
+    assert _document_progress(conn, doc_b) == ("ready", 0)
+    counts_a = _document_graph_counts(conn, doc_a)
+    counts_b = _document_graph_counts(conn, doc_b)
+    assert counts_a == counts_b
+    assert counts_a == {"entities": 2, "about": 2, "relates_to": 1, "same_as_confirmed": 0}
+    assert _orphan_entity_count(conn) == 0
+
+
+# ── I-4: pendingJobs/status during and after retries ──
+
+
+def test_i4_a_retrying_job_is_still_outstanding_then_a_sibling_failure_fails_the_document(
+    repo, conn,
+):
+    doc, chunk = _ingest_one_chunk(repo, "Carla founded Crux.")
+    repo.start_document_progress("test", document_id=doc, total_jobs=2)
+    seen_during_sleep: list[tuple[str, int]] = []
+    sleep = _RecordingSleep(
+        on_sleep=lambda: seen_during_sleep.append(_document_progress(conn, doc)))
+    llm = _CountingScriptedLLM(_transient_503(), _extraction_reply("Carla", "Crux"))
+
+    _safe_extract(IngestionPipeline(repo, llm, sleep=sleep),
+                  "test", chunk, doc, "Carla founded Crux.")
+
+    assert seen_during_sleep == [("processing", 2)]  # retrying ≠ reported
+    assert _document_progress(conn, doc) == ("processing", 1)
+
+    _safe_embed_chunk(_FailingChunkWorker(repo=repo), "test", doc, chunk, "x")
+
+    assert _document_progress(conn, doc) == ("failed", 0)
+
+
+def test_i4_exhausted_retries_fail_the_document_with_exactly_one_decrement(repo, conn):
+    doc, chunk = _ingest_one_chunk(repo, "Dana founded Dyne.")
+    repo.start_document_progress("test", document_id=doc, total_jobs=1)
+    llm = _CountingScriptedLLM(_transient_503())
+    sleep = _RecordingSleep()
+
+    _safe_extract(IngestionPipeline(repo, llm, sleep=sleep),
+                  "test", chunk, doc, "Dana founded Dyne.")
+
+    assert llm.calls == 4
+    assert len(sleep.delays) == 3
+    assert _document_progress(conn, doc) == ("failed", 0)
+    assert _orphan_entity_count(conn) == 0
+
+
+def test_i4_a_sibling_failure_during_the_sleep_stops_the_retry_at_the_real_gate(repo, conn):
+    # Not a plan row: pins the real `chunk_document_is_processing` gate end to end
+    # (the post-sleep read against live FalkorDB), not only at the repository altitude.
+    doc, chunk = _ingest_one_chunk(repo, "Erin founded Ergo.")
+    repo.start_document_progress("test", document_id=doc, total_jobs=2)
+    sleep = _RecordingSleep(on_sleep=lambda: repo.report_document_job_done(
+        "test", document_id=doc, success=False))  # the sibling embed job gives up
+    llm = _CountingScriptedLLM(_transient_503(), _extraction_reply("Erin", "Ergo"))
+
+    _safe_extract(IngestionPipeline(repo, llm, sleep=sleep),
+                  "test", chunk, doc, "Erin founded Ergo.")
+
+    assert llm.calls == 1  # no attempt 2 once the document is already failed
+    assert len(sleep.delays) == 1
+    assert _document_progress(conn, doc) == ("failed", 0)
+    assert _document_graph_counts(conn, doc)["entities"] == 0

@@ -927,6 +927,67 @@ def test_start_document_progress_zero_total_jobs_does_not_revert_an_already_fail
     assert repo.get_document("test", document_id="d1")["status"] == "failed"
 
 
+# ── K-067 retry liveness gate: `chunk_document_is_processing` (I-2) ──────────
+#
+# Plan `falkor-chat/docs/plans/extract-transient-retry.md` §3.5. Every case seeds
+# TWO documents with distinct ids in opposite states, so a query keyed on the
+# wrong id (or on no id at all) answers for the wrong document and goes red.
+
+
+def _two_documents_one_failed(repo):
+    """`doc-alpha` (chunk `chunk-a1`) stays processing; `doc-beta` (chunk
+    `chunk-b1`) is failed by its only job."""
+    _document_with_chunk(repo, document_id="doc-alpha", chunk_id="chunk-a1")
+    _document_with_chunk(repo, document_id="doc-beta", chunk_id="chunk-b1")
+    repo.start_document_progress("test", document_id="doc-alpha", total_jobs=2)
+    repo.start_document_progress("test", document_id="doc-beta", total_jobs=1)
+    repo.report_document_job_done("test", document_id="doc-beta", success=False)
+
+
+def test_chunk_document_is_processing_true_only_for_the_chunks_own_processing_document(repo):
+    _two_documents_one_failed(repo)
+
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-a1") is True
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-b1") is False
+
+
+def test_chunk_document_is_processing_false_after_its_document_fails(repo):
+    _two_documents_one_failed(repo)
+
+    repo.report_document_job_done("test", document_id="doc-alpha", success=False)
+
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-a1") is False
+
+
+def test_chunk_document_is_processing_false_after_its_document_is_ready(repo):
+    _two_documents_one_failed(repo)
+
+    repo.report_document_job_done("test", document_id="doc-alpha", success=True)
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-a1") is True
+    repo.report_document_job_done("test", document_id="doc-alpha", success=True)
+
+    assert repo.get_document("test", document_id="doc-alpha")["status"] == "ready"
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-a1") is False
+
+
+def test_chunk_document_is_processing_false_for_an_unknown_chunk(repo):
+    _two_documents_one_failed(repo)
+
+    assert repo.chunk_document_is_processing("test", chunk_id="no-such-chunk") is False
+
+
+def test_chunk_document_is_processing_false_after_its_document_is_deleted(repo):
+    _two_documents_one_failed(repo)
+    # A second processing document survives, so "any processing document" is wrong.
+    _document_with_chunk(repo, document_id="doc-gamma", chunk_id="chunk-g1")
+    repo.start_document_progress("test", document_id="doc-gamma", total_jobs=1)
+
+    repo.delete_document("test", document_id="doc-alpha", deleted_by="u1", deleted_at=500)
+
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-a1") is False
+    assert repo.chunk_document_is_processing("test", chunk_id="chunk-g1") is True
+
+
 # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
 
 
