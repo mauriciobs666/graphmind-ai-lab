@@ -41,6 +41,10 @@ worktree, so it is **fresh**.
 | U3b | `tdd-engineer` | `aedc20a61b45fb469` | accepted | plan step 2: `ingestion.py`, `repository.py` + 3 test files; 62 + 5 passed after P5 fixes (teco re-ran; teco mutant on gate `ws` killed; `extract(text[:1])` survived, pre-existing, closed by P5-2) | `analyst` (U4b, `af49f6c63460dc1b3`) → Pass 5 **approve w/ suggestions**; P5-1/P5-2 sent back to U3b; P5-3 nits kept | 230k tok cumulative / 39 tools |
 | U3c | `tdd-engineer` (fresh: U3a/b context ~238k) | `aba640fb7455f820d` | accepted | plan step 3: `embedding.py`, docstrings, `QUERIES.md` §14.1a + 2 test files; 246 passed on 6 files (teco re-ran; teco mutant on `write_label` killed) | `analyst` (U4c, `af49f6c63460dc1b3`) → Pass 6 **approve w/ suggestions**; P6-1 (test comments) + P6-2 (SERVER.md `--reload` clause) closed by U3c; plan-text side of P6-1 + P4-3 → `architect` at close; `test_queries.sh` case: **no** (gate recommendation, accepted) | 132k+12k tok / 39+8 tools |
 | U5 | `qa-engineer` | `a2ac7e86e7b763370` | accepted (Half A) | `falkor-chat/docs/test-plans/extract-transient-retry.md` + `falkor-chat/docs/test-reports/extract-transient-retry-report.md`: Half A 12/12 pass, no K-067 defect; D-1 (fusion RediSearch escaping) out of scope; Half B (e)–(g) specified, **not run**, awaits stakeholder at machine | teco evidence check: proxy log 58 POST / 28 fwd, per-nonce hit counts and 6 gate-INFO / 1 give-up lines match report; `ws:retryprobe` gone; `ws:agent-team` 340/12 unchanged | 224k tok / 64 tools |
+| U5b | `qa-engineer` (fresh: U5 context 224k) | `ae5f48131019a0527` | delivered | Half B (TP-101..TP-105) appended to `falkor-chat/docs/test-reports/extract-transient-retry-report.md` §Half B: 4/5 pass, TP-101 fail (D-2: `Model unloaded by user or API request.` matches no marker); teco N-7 confirmation given at dispatch 2026-10-16 | teco evidence check → verified (`ws:retryprobe` gone, `lms ps` empty, ports free, D-2 body in `u5b/runs/TP-101.json`, `ws:agent-team` 341/15, +1 = U5b's own capture `9b2c6b30…` via pre-K-067 `:8200`) | 218k tok / 76 tools |
+| A1 | `architect` | `ad3a8c8d31d05179d` | accepted | inline consult on D-2: adopt `"model unloaded"`; covered by plan R-1 (§6) + §3.2.1 pre-authorization (the "(g)" wording is a drafting narrowing); no plan revision (collision rule 5) | — | 51k tok / 5 tools |
+| U3d | `tdd-engineer` | — | queued | D-2: marker in `retry.py:TRANSIENT_DETAIL_MARKERS` + U-5 row in `server/tests/test_retry.py` | `analyst` → — | — |
+| U5c | `qa-engineer` | — | queued | TP-101 re-run (fresh nonce, server started after the `retry.py` change), appended to the report | teco evidence check → — | — |
 | C1 | `coder` | `a7072d6998e9129d4` | accepted | `falkor-chat/docs/BACKLOG.md` (K-067 rewritten: Half B outstanding; new K-068…K-072) + `falkor-chat/docs/HISTORY.md` 2026-10-15 entry | teco integration check → verified (K-numbers unique, figures sourced, no line >700 chars) | 133k tok / 23 tools |
 
 U3a–U3c follow the plan's step table, one dispatch per step (sizing rule). Each step is resumed on the same `tdd-engineer` where its context allows, gated by `analyst` on that step's diff, and committed before the next step starts.
@@ -53,6 +57,8 @@ every `verify_*` script failed. My re-seed (`bootstrap_schema` → `seed_demo` �
 (Modify Shared Resources)** and escalated to the stakeholder. U5 waits on the stakeholder's go-ahead.
 
 The units run strictly in sequence. Each one depends on the artifact produced by the one before it.
+
+**D-2 decision (2026-10-16):** the stakeholder chose "add retry marker". The independent `architect` consult (A1) agreed, and so did QA's recommendation.
 
 ## State at session end (2026-10-15)
 
