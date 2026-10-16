@@ -52,6 +52,7 @@ TRANSIENT_DETAIL_MARKERS = (
     "error loading model",
     "engine protocol startup was aborted",
     "channel error",  # serving-layer error seen alongside "terminated" (inferred, §3.1)
+    "model unloaded",  # LM Studio mid-request unload, observed on `lms unload`; same body assumed for Eject/API — D-2
 )
 
 _CONNECTION_KINDS = frozenset({"connection", "network", "read"})

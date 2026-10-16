@@ -1178,3 +1178,69 @@ It runs over `test_embedding`, `test_retry`, `test_background` and `test_respond
 | label `embed` → `extract` | killed (3): the U-14 rows |
 | injected `sleep` ignored | killed (6) |
 | `keep_going=None` | killed (2) |
+
+## Pass 7 — code, D-2 marker fix
+
+**Scope.** This pass reviews the uncommitted diff against `1b55e404`. It adds the marker
+`"model unloaded"` to `retry.TRANSIENT_DETAIL_MARKERS` and one U-5 transient row using the
+verbatim live body. The baseline is D-2 in `falkor-chat/docs/test-reports/extract-transient-retry-report.md`
+(Half B, sections B.3 TP-101 and B.6). Pass 6 findings are out of scope here.
+
+**Verdict: approve.** There are no findings above nit.
+
+CPG: considered, not relevant — a one-string allow-list addition; verified by executing the classifier and transport directly.
+
+### Evidence gathered (executed)
+
+- **Suites.** `test_retry.py` and `test_transport.py` give **91 passed**.
+- **Mutant.** I deleted the marker line from a copy of the file. Result: **1 failed**, the
+  `http 400 model unloaded (D-2)` row. I restored the file and `cmp` confirmed it is identical.
+- **Q1: rung 1 does fill `detail`.** I ran `make_http_transport` with an opener that raises
+  `HTTPError(400, "Bad Request", fp=<D-2 body>)`. It returned:
+  - `kind='http'`, `status=400`;
+  - `detail='{"error":"Model unloaded by user or API request."}'`;
+  - a message byte-identical to TP-101's traceback line;
+  - `is_transient` → `True`.
+
+  The traceback does not show `detail` because `detail` is an attribute, not part of `str(exc)`.
+  The message carries the same body, so the live line is enough to confirm the shape. Pass 4
+  Appendix A already exercised the same rung through a real `urlopen` socket round-trip.
+
+### Answers
+
+- **Q2: false-match risk is low, and if it happens the cost is bounded.** I ran `_has_marker`
+  against these strings:
+
+  | text | matches? |
+  |---|---|
+  | `No models loaded. Please load a model…` | no |
+  | `Model not found` | no |
+  | `model is not loaded` | no |
+  | `Failed to unload model` | no |
+  | the D-2 body | yes |
+
+  The existing permanent row `body_error no marker` ("No models loaded") stays green.
+  - The likely follow-on case is an ejected model with JIT loading off. There, attempt 2 should
+    get a no-model-loaded style body, which is permanent, so the job fails after one 2–3 s sleep.
+    This is **inferred**: I did not run it against LM Studio.
+  - This is the R-2 class of risk the plan already accepts.
+  - The "by user" trade-off is acceptable. On the REST chain, the document's *next* job would
+    JIT-reload the ejected model anyway. Retrying this job does not change what an operator
+    experiences after an Eject.
+- **Q3: one `http` row is enough.** `_has_marker` is a single function that both the `http`
+  branch and the `body_error` branch call. Both branches are already pinned by marker rows
+  (`body_error terminated`, `body_error no marker`), so a `body_error` row for the new marker would
+  test the same line twice. No 200-with-error-key shape of this body has been observed.
+- **The authorization reading is sound.**
+  - R-1 (§6) states the pre-authorization generally: "adding a marker is a one-line change …
+    pre-authorized by §3.2.1; legs (e)–(g) are the first real-fault sample".
+  - Plan §5 (e) calls the unload "the closest reproducible relative of `terminated`".
+  - §3.2.1's "(g)" is that bullet's local context, not a scope limit.
+  - No plan revision is needed. A one-line ledger entry recording the reading is enough.
+
+### Findings
+
+- **P7-1 (nit).** The marker comment says "(Eject / lms unload / API)". TP-101 tested only
+  `lms unload`. Whether a GUI Eject or a TTL/JIT auto-evict produces the same body is untested
+  (report B.6). Optional fix: change the comment to "observed on `lms unload`; same body assumed
+  for Eject/API".

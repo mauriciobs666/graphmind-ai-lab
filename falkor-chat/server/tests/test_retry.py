@@ -35,6 +35,8 @@ _CONTEXT_OVERFLOW = (
     'try increasing it","type":"exceed_context_size_error","n_prompt_tokens":9000,'
     '"n_ctx":4096}}'
 )
+# Captured live (K-067 Half B, D-2): the chat model unloaded mid-generation.
+_MODEL_UNLOADED = '{"error":"Model unloaded by user or API request."}'
 _JINJA = ('{"error":"Error rendering prompt with jinja template: \\"Only user, assistant '
           'and tool roles are supported!\\"."}')
 
@@ -59,6 +61,7 @@ _TRANSIENT = {
         "http", 400, "Engine protocol startup was aborted"),
     "http 400 channel error": _pce("http", 400, "Channel Error"),
     "http 400 TERMINATED uppercase": _pce("http", 400, '{"error":"TERMINATED"}'),
+    "http 400 model unloaded (D-2)": _pce("http", 400, _MODEL_UNLOADED),
     "connection": _pce("connection"),
     "network": _pce("network"),
     "read": _pce("read"),
