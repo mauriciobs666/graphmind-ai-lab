@@ -1,6 +1,6 @@
 # Extract job transient-error retry — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-067
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-067
 
 Goal: close `falkor-chat/docs/BACKLOG.md` **K-067**. Today one transient LM Studio failure during a
 chunk's extract call (HTTP 400 `{"error":"terminated"}`, then 500, then recovery within seconds) marks the
@@ -46,6 +46,7 @@ worktree, so it is **fresh**.
 | U3d | `tdd-engineer` | `a6d8c19ff353cc1ba` | accepted (`21ff9f9b`) | D-2: marker in `retry.py:TRANSIENT_DETAIL_MARKERS` + U-5 row in `server/tests/test_retry.py`; teco re-ran 63 / 91 passed, live body → transient | `analyst` (U4d, `af49f6c63460dc1b3`) → Pass 7 **approve**; P7-1 (comment wording) applied by teco; architect's R-1 authorization reading confirmed | 58k tok / 5 tools |
 | U5c | `qa-engineer` (resumed U5b) | `ae5f48131019a0527` | accepted | report §B.7: TP-101 re-run on `21ff9f9b` **pass**, so Half B is 5/5 and D-2 is closed | teco evidence check → verified: the `attempt 1/4` WARNING for `bb015cc9…` is in `u5b/server.log`; the log's one traceback is `_safe_fuse` (D-1 / K-068), not extract; `ws:retryprobe` is gone; `lms ps` is empty; ports are free | 231k tok cumulative / 8 tools |
 | C1 | `coder` | `a7072d6998e9129d4` | accepted | `falkor-chat/docs/BACKLOG.md` (K-067 rewritten: Half B outstanding; new K-068…K-072) + `falkor-chat/docs/HISTORY.md` 2026-10-15 entry | teco integration check → verified (K-numbers unique, figures sourced, no line >700 chars) | 133k tok / 23 tools |
+| C2 | `coder` (resumed C1) | `a7072d6998e9129d4` | accepted | final close-out: K-067 removed from `BACKLOG.md`, HISTORY 2026-10-16 entry, K-071 rewritten (15 failed docs, `:8200` restart precondition), K-068 evidence folded in | teco integration check → verified (K-067 removed, HISTORY 2026-10-16 entry cites `1b55e404`/`21ff9f9b`/`498c086e`, no line >700 chars) | 166k tok cumulative / 15 tools |
 
 U3a–U3c follow the plan's step table, one dispatch per step (sizing rule). Each step is resumed on the same `tdd-engineer` where its context allows, gated by `analyst` on that step's diff, and committed before the next step starts.
 
@@ -60,12 +61,10 @@ The units run strictly in sequence. Each one depends on the artifact produced by
 
 **D-2 decision (2026-10-16):** the stakeholder chose "add retry marker". The independent `architect` consult (A1) agreed, and so did QA's recommendation.
 
-## State at session end (2026-10-15)
+## Closure (2026-10-16)
 
-The code is delivered and gated, and Half A passed. **This coordination stays `active`** until Half B runs.
-Remaining work is in `falkor-chat/docs/BACKLOG.md` K-067. Starting it cold needs no agent ids: the
-test plan (`falkor-chat/docs/test-plans/extract-transient-retry.md` §6) is self-contained. The plan
-text nits P4-3 and the P6-1 done-condition row are owned by `architect`, and the next plan revision
-can fold them in. `reference` was re-seeded by the stakeholder on 2026-10-16, and all `verify_*` scripts pass.
-teco read it back: 15 `Product`, 5 `WorkflowDef`, `salesperson@v8` in `reference` and `ws:demo`.
-The `timers-stale-key` test leftover is still present.
+K-067 is closed. Half B passed 5/5 after the D-2 fix (`21ff9f9b`, report §B.7), and the record is in
+`falkor-chat/docs/HISTORY.md` 2026-10-16. The plan-text nits P4-3 and P6-1 were deliberately not applied.
+The plan was executed against, so it freezes as-is (A1, collision rule 5), and the nits stay recorded in
+the review. Follow-ups: K-068…K-072, in `falkor-chat/docs/BACKLOG.md`. K-071 needs the stakeholder to
+restart the shared `:8200` server first.

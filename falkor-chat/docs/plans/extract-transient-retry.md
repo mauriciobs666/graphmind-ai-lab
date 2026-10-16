@@ -1,6 +1,6 @@
 # Transient provider-error retry for document-ingestion background jobs
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-067 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/extract-transient-retry.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-067 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/extract-transient-retry.md`
 
 *Revision 2026-10-15 (v2): folds in Pass 1 plan review findings M-1…M-4 and m-1…m-5 (dispositions in §8.1) and the stakeholder's confirmation that embed is in scope.*
 

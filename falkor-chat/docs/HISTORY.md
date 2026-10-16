@@ -5,6 +5,41 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-16 — K-067 closed: live proof Half B 5/5 after the D-2 "model unloaded" marker fix
+
+Completes the 2026-10-15 K-067 entry below, which delivered the mechanism and Half A.
+- **Half B, first run** (`1b55e404`; `falkor-chat/docs/test-reports/extract-transient-retry-report.md`
+  §Half B, B.1–B.6): TP-101…TP-105 direct to LM Studio, 4 of 5 pass. Report B.1 records
+  `teco`'s N-7 confirmation, the P3-2 positive control seen before each leg, and the server
+  logging at INFO via `--log-config`. TP-101 (leg (e), unload
+  mid-generation) failed with **D-2**: LM Studio answers `HTTP 400 {"error":"Model unloaded by user
+  or API request."}`, a body no marker matched, so the document failed on attempt 1.
+- **D-2 fix** (`21ff9f9b`): `"model unloaded"` added to `retry.TRANSIENT_DETAIL_MARKERS`, with a
+  U-5 row on the verbatim live body; review Pass 7 (`falkor-chat/docs/reviews/extract-transient-retry.md`)
+  **approve**. The stakeholder chose "add retry marker"; an `architect` consult read it as covered
+  by plan §6 R-1 and the §3.2.1 marker pre-authorization, so the plan was not revised. Accepted
+  trade-off: a retry JIT-reloads a model an operator deliberately ejected (report B.6).
+- **TP-101 re-run** (`498c086e`, report §B.7): pass, so **Half B is 5 of 5** and D-2 is closed.
+  The classifier is now live-evidenced on the three real fault shapes Half B saw: the mid-request
+  unload `400`, server-stop `network`/`connection` (TP-102/103) and the cold-load `500` (TP-104).
+- **Leg (g) reading, plan §3.2.1** (report B.4): nothing triggered. No embed `kind=timeout`, so
+  `EMBED_CHUNK_RETRY.retry_timeouts` stays off; no unmatched 4xx in (g); no raw
+  non-`ProviderCallError`. Both (g) runs ended `ready`, reported as **"converged in this run"
+  (n = 1 each)**, so the F-4 branch of the closure rule did not fire and F-4 is not filed. This
+  is not a claim that the field failure is cured or that the MCP path converges.
+- **Not covered live** (report B.6/B.7): an embed `kind=timeout`, attempt-4 recovery on a real
+  fault, a REST (g) with faults, (e) over MCP; every (g) result is n = 1. Harness notes B-R2…B-R4
+  are for any future re-run and are not backlog items.
+- **Still standing:** if an embed `kind=timeout` ever appears, plan §3.2.1's one-constant flip
+  applies; it turns both the U-5b (`server/tests/test_retry.py`) and U-17 shipped-policy rows
+  (`server/tests/test_embedding.py`) red by design, to be inverted with hard-coded expectations
+  (review Pass 6 P6-1; the test comment says so). Two plan-text nits stay unapplied, owned by
+  `architect` for the next plan revision: P4-3 (plan §6 R-6 omits the read-phase `TimeoutError`
+  rung 3b now wraps as `kind=timeout`) and P6-1's U-17 row in §3.2.1 done-condition 2.
+- **Backlog:** K-067 removed. K-068…K-072 stay open; K-071 now covers 15 `failed` `ws:agent-team`
+  documents and needs the shared `:8200` server restarted onto K-067 code first. Ledger:
+  `falkor-chat/docs/plans/extract-transient-retry-coordination.md`.
+
 ## 2026-10-15 — K-067: chunk extract and embed jobs retry transient provider errors (mechanism delivered; live proof Half B outstanding)
 
 - **What:** a transient provider error during a document chunk's background extract **or** embed

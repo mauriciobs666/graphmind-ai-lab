@@ -1,6 +1,6 @@
 # Review — Transient provider-error retry for document-ingestion background jobs
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-067
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-067
 
 ## Pass 1 — plan
 

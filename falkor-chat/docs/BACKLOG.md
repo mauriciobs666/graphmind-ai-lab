@@ -581,49 +581,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-067 — Transient provider-error retry for chunk extract/embed jobs: live proof Half B outstanding (🟡 in-progress — mechanism delivered 2026-10-15, real-fault acceptance legs not yet run)
-
-> **Why it is still open.** The retry mechanism is delivered (`HISTORY.md` 2026-10-15;
-> `docs/plans/extract-transient-retry.md` v3), and the live proof's Half A (proxy legs) passed
-> (`docs/test-reports/extract-transient-retry-report.md`). Half A uses injected bodies copied from
-> the classifier's own allow-list, so it cannot show the classifier fires on LM Studio's *real*
-> fault shapes (review Pass 1 M-3; report §5 "Not covered"). That proof is Half B, and K-067's
-> user-visible goal — a contended ingest reaches `ready` — is not met until it runs.
->
-> **What remains:**
-> 1. **Run Half B, legs (e)–(g)**, as TP-101…TP-105 in `docs/test-plans/extract-transient-retry.md`
->    §6. Preconditions:
->    - the stakeholder at the machine (the legs unload models and stop/start the shared LM Studio
->      server);
->    - `teco`'s confirmation that no other agent is ingesting into `ws:agent-team` or otherwise
->      using LM Studio during the window (review Pass 2 N-7);
->    - the P3-2 positive control on `lms.exe log stream --source server --json` (review Pass 3
->      P3-2, carried verbatim in test plan §6);
->    - the server log captured at INFO via `--log-config` until K-069 lands (report §6 F-1).
-> 2. **Apply the plan §3.2.1 embed-timeout flip rule if leg (g) shows an embed job with
->    `kind=timeout`.** The change is one constant: `EMBED_CHUNK_RETRY.retry_timeouts=True` in
->    `retry.py`. The flip turns **two** rows red by design — U-5b's shipped-policy row in
->    `server/tests/test_retry.py` and U-17's shipped-policy row
->    (`test_u17_shipped_embed_policy_does_not_retry_a_timeout`) in `server/tests/test_embedding.py`.
->    Both are **inverted with hard-coded expectations, never derived from the constant** (review
->    Pass 6 P6-1). Plan §3.2.1 done-condition 2 still names only U-5b; the U-17 row is the plan-text
->    side of P6-1 for `architect`. Then re-run (g) once under the P3-1 condition-3 rule (test plan
->    §6).
-> 3. **Apply the plan §3.2.1 closure rule.** If the final (g) document ends `failed` with the
->    classifier firing, file **F-4** (per-document job serialisation on MCP, plan §6 R-8) in this
->    backlog, carrying (g)'s per-job table, **before** K-067 leaves it; `HISTORY.md` records
->    "mechanism delivered", never that the field failure is cured. A `ready` (g) is reported as
->    "converged in this run" (n = 1), not as convergence.
-> 4. **Carry one plan-text nit** (review Pass 4 P4-3): plan §6 R-6's list of newly wrapped raw
->    errors omits a `TimeoutError` during the body read, which rung 3b now wraps as `kind=timeout`.
-- **Owner:** `qa-engineer` (Half B, with the stakeholder) · `teco` (pre-leg coordinator
-  confirmation, closure) · `tdd-engineer` (the §3.2.1 flip, if triggered) · `architect` (plan text:
-  P4-3 and the P6-1 done-condition row).
-- **Risks/RAM:** Half B disrupts the shared LM Studio by design — hence the stakeholder and
-  coordinator preconditions. No schema or RAM change.
-- **Test strategy:** test plan §6 as written, including its pre-leg and post-leg `ws:agent-team`
-  checks; any new `failed` document a leg leaves there joins K-071's re-drive.
-
 ### K-068 — `fusion._fuzzy_query` sends hyphenated tokens to RediSearch unescaped, so suggested-tier fusion fails for names like `Kestrel-0` (🔵 proposed — filed out of the K-067 live proof, `docs/test-reports/extract-transient-retry-report.md` D-1, 2026-10-15)
 
 > **Why it exists.** `fusion._fuzzy_query` (`server/falkorchat/fusion.py`) builds one `%tok%` term
@@ -635,7 +592,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > related, unaddressed instance — naive whitespace-token RediSearch fuzzy-query construction — but
 > a different failure: a syntax-error crash on punctuation, not K-064's implicit-AND recall gap.
 > The 2026-09-13 `find_update_shortlist` metacharacter fix (`HISTORY.md`) is the precedent for the
-> escaping side.
+> escaping side. It recurs on ordinary ingestion: the K-067 live proof logged it 6 times in Half A
+> (report §4) and 10 times in Half B, including a new `near Vell` variant (report B.6) — so the
+> trigger is not limited to `-<digit>` names.
 - **Owner:** `tdd-engineer` (reproduction test first) or `coder`.
 - **Scope:** escape RediSearch special characters per token in `fusion._fuzzy_query`. The
   implicit-AND combination stays out of scope (K-064 owns that decision).
@@ -655,7 +614,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Owner:** `devops` (ship a log config through `scripts/start_server.sh` /
   `scripts/start_agent_team.sh`).
 - **Scope:** a shipped log config giving `falkorchat.*` INFO and timestamps on the server's start
-  scripts; until then, K-067's Half B must keep the `--log-config` workaround.
+  scripts. Until then a live run that needs those lines passes its own `--log-config`, as the
+  K-067 proof did. The shared `:8200` server has none, which is why the cause of `ws:agent-team`
+  document `9b2c6b30…`'s failure is not visible (report B.5; K-071).
 - **Risks/RAM:** none.
 - **Test strategy:** start the server through the script, trigger a `falkorchat.*` INFO line, and
   confirm it appears with a timestamp.
@@ -667,27 +628,36 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > a model swap on **every** job — and the eviction/reload is what triggers the K-067 faults in the
 > first place. Scheduling all of a document's embeds, then all its extracts, would cut swaps per
 > document from ~2N to ~2 (plan F-1). It is a behaviour change to scheduling order, so it needs its
-> own small design and a live measurement. The MCP-side analogue, per-document job serialisation,
-> is F-4 under K-067's closure rule.
+> own small design and a live measurement. The MCP-side analogue, per-document job serialisation
+> (plan §6 F-4), is not filed: both K-067 leg (g) runs ended `ready` (n = 1 each), so its filing
+> rule did not fire (report B.4).
 - **Owner:** `architect` (small design) → `coder`/`tdd-engineer`.
 - **Scope:** `_schedule_chunk_processing`'s job order on the REST chain.
 - **Risks/RAM:** none in graph terms; changes when each chunk becomes searchable within a document.
 - **Test strategy:** an offline test pinning the new order, plus a live measurement of swaps per
   document before and after.
 
-### K-071 — Re-ingest the 12 `failed` documents in `ws:agent-team` (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-2, 2026-10-15)
+### K-071 — Re-ingest the 15 `failed` documents in `ws:agent-team`, after restarting the shared `:8200` server onto K-067 code (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-2, 2026-10-15)
 
-> **Why it exists.** Twelve `ws:agent-team` documents are `failed` from the bulk ingestion K-067
-> was filed out of, each with at least one un-embedded chunk (plan §2.6), and the K-067 retry does
-> not re-drive a document that is already `failed` (plan §1, out of scope). `teco` re-read the workspace on 2026-10-15: 12 `failed`,
-> 340 `ready`. Their remedy is the existing manual delete-then-re-ingest procedure, now that the
-> retry has landed (plan F-2).
+> **Why it exists.** `ws:agent-team` holds 15 `failed` and 341 `ready` documents (read-only
+> `MATCH (d:Document {status:'failed'}) RETURN count(d)`, 2026-10-16). Twelve are from the bulk
+> ingestion K-067 was filed out of, each with at least one un-embedded chunk (plan §2.6). Three
+> came later, all ingested through the shared `:8200` server: `0c765795…` and `4bcc13a3…`
+> (2026-10-15, before Half B, report B.1) and `9b2c6b30…` (QA's post-teardown capture, report B.5).
+> Their causes are not visible, because `:8200` configures no logging (K-069). The K-067 retry
+> never re-drives a document that is already `failed` (plan §1), so the remedy is the existing
+> manual delete-then-re-ingest procedure (plan F-2).
+>
+> **Precondition: restart `:8200` first.** That process (PID 1882) started on 2026-10-15
+> before the first K-067 commit `91b65fed` and was left untouched by the live proof (report B.5,
+> B.7), so it still runs pre-K-067 code: a re-drive through it gets no retry, and is exposed to
+> the same transient faults. The restart is the stakeholder's call.
 - **Owner:** `teco` (coordinator owns `ws:agent-team` re-drives; QA never re-drives one — test plan
-  §6).
-- **Scope:** the 12, plus any new `failed` document a K-067 Half B leg leaves behind (test plan §6
-  post-leg re-check hands those to the coordinator).
+  §6), after the stakeholder restarts `:8200`.
+- **Scope:** the 15 documents above, plus any `failed` document that appears before the re-drive.
 - **Risks/RAM:** shared-workspace writes; confirm no other agent is ingesting during the re-drive.
-- **Test strategy:** re-read `ws:agent-team`'s status counts after the re-drive — `failed` 0.
+- **Test strategy:** confirm the `:8200` process start time is later than `retry.py`'s mtime, then
+  re-read `ws:agent-team`'s status counts after the re-drive — `failed` 0.
 
 ### K-072 — Per-request "provider down" short-circuit for REST batch ingestion (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15)
 

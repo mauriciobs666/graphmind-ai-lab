@@ -1,6 +1,6 @@
 # Transient provider-error retry — live proof report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-067
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-067
 
 ## 1. Summary
 

@@ -1,6 +1,6 @@
 # Transient provider-error retry — live proof test plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-067
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-067
 
 ## 1. Scope & objective
 
