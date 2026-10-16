@@ -14,8 +14,9 @@
   - The server was uvicorn PID 69080 on `127.0.0.1:8311`, `--reload` off. It started at
     16:01:08 -03:00, after `retry.py`'s mtime of 14:40:22 -03:00.
 - **Verdict: PASS. All 12 Half A items passed and no K-067 defect was found.**
-- **Half B, legs (e)–(g), ran on 2026-10-16** (section "Half B", below). **Verdict: FAIL, 4 of 5
-  pass.**
+- **Half B, legs (e)–(g), ran on 2026-10-16** (section "Half B", below). **Verdict: PASS, 5 of 5
+  after the D-2 fix.** On the first run it was 4 of 5. TP-101 re-run on `21ff9f9b` passed and D-2 is
+  closed (B.7).
   - TP-101 fails, D-2: LM Studio's real mid-request unload body
     `{"error":"Model unloaded by user or API request."}` is a 400 that matches no marker, so it is
     not retried.
@@ -299,7 +300,11 @@ No permission denials occurred in this run.
 > `91b65fed`/`128941a6`/`6519db83`), direct to LM Studio (`http://localhost:1234/v1`), per test
 > plan §6.
 
-**Half B verdict: FAIL, 4 of 5 pass.**
+**Half B verdict: PASS, 5 of 5 after the D-2 fix.** On the first run, TP-101 failed (D-2) and
+TP-102…TP-105 passed. TP-101 re-run on 2026-10-16 against `21ff9f9b`: **pass**, so **D-2 is closed**
+(B.7). The first-run detail is kept below as recorded.
+
+First run (2026-10-16, 08:45–09:10):
 - **TP-101 fails (D-2).** When the chat model is unloaded mid-generation, LM Studio returns
   `HTTP 400 {"error":"Model unloaded by user or API request."}`. No marker matches that body, so
   the classifier treats it as permanent and the document fails on attempt 1 with no retry.
@@ -658,3 +663,72 @@ mid-request unload (D-2). This row stays open until D-2 is decided.
 - **B-R4:** in `lms log stream --source server`, every `lms.exe` call logs
   `[LMSAuthenticator][Client=lms-cli]` lines. A quiet-window check must not run concurrently
   with `lms` polling, and `precheck.py` never does.
+
+### B.7 TP-101 re-run after D-2 fix (21ff9f9b)
+
+**Result: pass. D-2 is closed.** The fix adds `"model unloaded"` to
+`retry.TRANSIENT_DETAIL_MARKERS` (`server/falkorchat/retry.py:55`).
+
+- **Wiring:**
+  - HEAD `21ff9f9b`; `retry.py` mtime **2026-10-16 09:17:46** (epoch 1792153066).
+  - Fresh uvicorn **PID 150688** on `127.0.0.1:8311`, with the same env, configs and
+    `--log-config` as B.1. Its `ps -o lstart` reads **09:18:18**, and `server.log` shows
+    `Application startup complete` at 09:18:18.452. Both are after the mtime.
+  - `ws:retryprobe` was re-created with `bootstrap_schema.sh` and `seed_demo.sh` (`rc=0`).
+  - Both `lms log stream` processes were restarted at 09:18:24.
+  - The run-1 `server.log` was kept as `server.halfB-run1.log`. QA's mistake: the stream restart
+    overwrote run 1's raw `lms-*-stream.jsonl` files. Each run-1 leg's stream lines remain in its
+    `runs/TP-10N.json` (`lms_server_stream`), which is what B.3 quotes.
+- **Coordinator N-7:** `teco` confirmed that no other coordinated agent was in flight.
+- **Pre-leg checks (09:18:38), 3 of 3 pass:**
+  - `ws:agent-team` `processing` 0, `failed` **15**. The new baseline is the old 14 plus QA's own
+    `9b2c6b30…` capture (B.5); `comm` against the 14-list shows exactly that one ID added.
+  - The sweep check `pgrep` returned nothing.
+  - The positive-control line was seen, followed by 60 s of quiet.
+- **Leg:** nonce `d659a408`, document `4bfb7f6457a94247ab7e76ffadcc2ef3`, chunk
+  `bb015cc9ada34c8bba60be4d020b69d5`. Times below are seconds after ingest.
+  - The embed job finished by 1.05 s.
+  - LM Studio logged `Running chat completion` at ≈3.39 s and `Prompt processing progress: 100.0%`
+    at ≈3.56 s.
+  - `lms ps --json` showed `"status": "generating"` at the 3.79 s trigger.
+  - `lms.exe unload qwen/qwen3-4b-2507` started at **5.287 s**: `rc=0` in 0.607 s, `Model
+    "qwen/qwen3-4b-2507" unloaded.`
+  - LM Studio logged `Unloading model` and then `[ERROR][qwen/qwen3-4b-2507] Error: Channel Error`,
+    the same as in run 1.
+- **falkor-chat side.** Now classified transient:
+
+```
+2026-10-16T09:19:48.744 WARNING falkorchat.retry [AnyIO worker thread] transient provider error (extract chunkId=bb015cc9ada34c8bba60be4d020b69d5, kind=http, status=400), attempt 1/4, retrying in 2.6s: lmstudio/qwen/qwen3-4b-2507 @ http://localhost:1234/v1/chat/completions: HTTP 400 Bad Request: {"error":"Model unloaded by user or API request."}
+```
+
+- **JIT reload.** About 2.6 s after the WARNING, attempt 2 reached LM Studio as `[qwen/qwen3-4b-2507]
+  Running chat completion` (≈10.40 s, stream clock), on the model that had just been unloaded. It
+  completed with `Generated prediction` at ≈25.48 s. `lms ps` after the leg shows
+  `qwen/qwen3-4b-2507` loaded (`idle`). The server log has no further line for this chunk: no
+  traceback, no give-up.
+- **State:** `processing`/2 → /1 at 1.05 s → **`ready`/0 at 26.48 s**. 26 `ABOUT` edges, embedding
+  present, orphans 0→0. REST `search_documents` returns the chunk.
+- **The three done-conditions:** an `attempt 1/4` WARNING, a JIT reload, and `ready`. All three are
+  observed.
+- **Post-leg `ws:agent-team` check (09:20:20):** `processing` 0, `failed` 15, `ready` 341. The
+  failed delta was **0**.
+- **Acceptance-mapping row** ("classifier fires on real LM Studio faults"): now **evidenced** for
+  the three shapes Half B observed:
+  - mid-request unload `400` (this re-run);
+  - server-stop `network` and `connection` (TP-102/103);
+  - cold-load `500` (TP-104).
+
+  Still not covered: any embed `kind=timeout`, and attempt-4 recovery on a real fault (B.6).
+- **Teardown (09:29):**
+  - uvicorn 150688 stopped (`Finished server process [150688]`), and both stream processes
+    stopped. Ports 1299 and 8311 are free. `:8200` (PID 1882) was untouched and is still
+    listening.
+  - `GRAPH.DELETE ws:retryprobe` → `OK` (it held 1 `ready` document), and it is gone from
+    `GRAPH.LIST`.
+  - `lms.exe unload --all` → `Unloaded 1 model.` (the search had JIT-loaded the embedding model).
+    `lms ps --json` → `[]`, the same as before the re-run. The LM Studio server is running on
+    1234.
+  - Final `ws:agent-team` check (09:29:10): `processing` 0, `failed` 15, `ready` 341. The delta
+    was 0.
+  - No `ingest_document` capture was filed, and no commit or tree-mutating git command was run.
+
