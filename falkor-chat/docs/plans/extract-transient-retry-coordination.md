@@ -60,5 +60,6 @@ The code is delivered and gated, and Half A passed. **This coordination stays `a
 Remaining work is in `falkor-chat/docs/BACKLOG.md` K-067. Starting it cold needs no agent ids: the
 test plan (`falkor-chat/docs/test-plans/extract-transient-retry.md` §6) is self-contained. The plan
 text nits P4-3 and the P6-1 done-condition row are owned by `architect`, and the next plan revision
-can fold them in. The stakeholder restores `reference` by hand (re-seed blocked by the permission
-classifier).
+can fold them in. `reference` was re-seeded by the stakeholder on 2026-10-16, and all `verify_*` scripts pass.
+teco read it back: 15 `Product`, 5 `WorkflowDef`, `salesperson@v8` in `reference` and `ws:demo`.
+The `timers-stale-key` test leftover is still present.
