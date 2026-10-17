@@ -37,6 +37,17 @@ _CONTEXT_OVERFLOW = (
 )
 # Captured live (K-067 Half B, D-2): the chat model unloaded mid-generation.
 _MODEL_UNLOADED = '{"error":"Model unloaded by user or API request."}'
+# Captured live (K-071 re-drive, D-3, 2026-10-17): LM Studio JIT swapping chat and
+# embedding models, all HTTP 400. The first four did not match the D-2 "model unloaded"
+# marker; the last two did, and are pinned so a narrower marker cannot drop them.
+_MODEL_IS_UNLOADED = '{"error":"Model is unloaded."}'  # chat
+_MODEL_IS_UNLOADED_EMBED = '{"error":"Model is unloaded.."}'  # embeddings
+_MODEL_UNLOADED_IN_QUEUE = (  # embeddings
+    '{"error":"Model was unloaded while the request was still in queue.."}')
+_PREDICT_FETCH_FAILED = (  # chat
+    '{"error":"Engine protocol predict request failed: fetch failed"}')
+_MODEL_UNLOADED_SHORT = '{"error":"Model unloaded."}'  # chat
+_MODEL_UNLOADED_SHORT_EMBED = '{"error":"Model unloaded.."}'  # embeddings
 _JINJA = ('{"error":"Error rendering prompt with jinja template: \\"Only user, assistant '
           'and tool roles are supported!\\"."}')
 
@@ -62,6 +73,13 @@ _TRANSIENT = {
     "http 400 channel error": _pce("http", 400, "Channel Error"),
     "http 400 TERMINATED uppercase": _pce("http", 400, '{"error":"TERMINATED"}'),
     "http 400 model unloaded (D-2)": _pce("http", 400, _MODEL_UNLOADED),
+    "http 400 model is unloaded (D-3)": _pce("http", 400, _MODEL_IS_UNLOADED),
+    "http 400 model is unloaded embed (D-3)": _pce("http", 400, _MODEL_IS_UNLOADED_EMBED),
+    "http 400 model unloaded in queue (D-3)": _pce("http", 400, _MODEL_UNLOADED_IN_QUEUE),
+    "http 400 predict fetch failed (D-3)": _pce("http", 400, _PREDICT_FETCH_FAILED),
+    "http 400 model unloaded short (D-3)": _pce("http", 400, _MODEL_UNLOADED_SHORT),
+    "http 400 model unloaded short embed (D-3)": _pce(
+        "http", 400, _MODEL_UNLOADED_SHORT_EMBED),
     "connection": _pce("connection"),
     "network": _pce("network"),
     "read": _pce("read"),
@@ -77,6 +95,8 @@ _PERMANENT = {
     "http 404": _pce("http", 404),
     "http 422": _pce("http", 422),
     "http 400 detail None": _pce("http", 400, None),
+    # "loaded" is not "unloaded": nothing loaded and JIT off is configuration, not a swap.
+    "http 400 no models loaded": _pce("http", 400, '{"error":"No models loaded"}'),
     "timeout": _pce("timeout"),
     "malformed_request": _pce("malformed_request"),
     "invalid_json": _pce("invalid_json"),

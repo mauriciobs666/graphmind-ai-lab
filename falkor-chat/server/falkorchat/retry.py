@@ -52,7 +52,14 @@ TRANSIENT_DETAIL_MARKERS = (
     "error loading model",
     "engine protocol startup was aborted",
     "channel error",  # serving-layer error seen alongside "terminated" (inferred, §3.1)
-    "model unloaded",  # LM Studio mid-request unload, observed on `lms unload`; same body assumed for Eject/API — D-2
+    # LM Studio model unload, any wording containing "unloaded": "Model unloaded by user
+    # or API request." on `lms unload` (D-2); "Model unloaded.", "Model is unloaded.",
+    # "Model was unloaded while the request was still in queue.." during JIT chat/embed
+    # model swapping, re-drive 2026-10-17 (D-3)
+    "unloaded",
+    # Engine's internal fetch to its model worker failed mid-swap, same re-drive (D-3;
+    # inferred, one observation)
+    "predict request failed: fetch failed",
 )
 
 _CONNECTION_KINDS = frozenset({"connection", "network", "read"})
