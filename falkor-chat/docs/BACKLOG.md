@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-072
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-074
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -592,9 +592,12 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > related, unaddressed instance — naive whitespace-token RediSearch fuzzy-query construction — but
 > a different failure: a syntax-error crash on punctuation, not K-064's implicit-AND recall gap.
 > The 2026-09-13 `find_update_shortlist` metacharacter fix (`HISTORY.md`) is the precedent for the
-> escaping side. It recurs on ordinary ingestion: the K-067 live proof logged it 6 times in Half A
-> (report §4) and 10 times in Half B, including a new `near Vell` variant (report B.6) — so the
-> trigger is not limited to `-<digit>` names.
+> escaping side. It fires on ordinary ingestion, not just test fixtures: the K-067 live proof
+> logged it 6 times in Half A (report §4) and 10 times in Half B, including a new `near Vell`
+> variant (report B.6), and the 2026-10-17 K-071 re-drive of 13 `ws:agent-team` documents logged
+> 70 `_safe_fuse` tracebacks, all RediSearch syntax errors (`HISTORY.md` 2026-10-17). The trigger
+> is not limited to `-<digit>` names, and every real knowledge-base ingest loses some
+> suggested-tier `SAME_AS` candidates to it.
 - **Owner:** `tdd-engineer` (reproduction test first) or `coder`.
 - **Scope:** escape RediSearch special characters per token in `fusion._fuzzy_query`. The
   implicit-AND combination stays out of scope (K-064 owns that decision).
@@ -615,8 +618,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `scripts/start_agent_team.sh`).
 - **Scope:** a shipped log config giving `falkorchat.*` INFO and timestamps on the server's start
   scripts. Until then a live run that needs those lines passes its own `--log-config`, as the
-  K-067 proof did. The shared `:8200` server has none, which is why the cause of `ws:agent-team`
-  document `9b2c6b30…`'s failure is not visible (report B.5; K-071).
+  K-067 proof did. The shared `:8200` server's process at the time had none, which is why the
+  cause of `ws:agent-team` document `9b2c6b30…`'s 2026-10-16 failure was never visible (report
+  B.5).
 - **Risks/RAM:** none.
 - **Test strategy:** start the server through the script, trigger a `falkorchat.*` INFO line, and
   confirm it appears with a timestamp.
@@ -631,33 +635,18 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > own small design and a live measurement. The MCP-side analogue, per-document job serialisation
 > (plan §6 F-4), is not filed: both K-067 leg (g) runs ended `ready` (n = 1 each), so its filing
 > rule did not fire (report B.4).
+>
+> **Live data point** (2026-10-17 K-071 re-drive, `HISTORY.md`): 13 documents re-ingested at once
+> through `:8200` drove LM Studio into JIT chat/embed model swapping, whose unload bodies failed
+> 11 of them fast (D-3). The sequential re-drive that followed, with both models pre-loaded
+> (`lms load`), brought every document to `ready` with no `ProviderCallError` or retry line at
+> all. Avoiding swaps removed the failures entirely; that shows the lever matters, but it is not a
+> measurement of this item's reordering, which still needs its own.
 - **Owner:** `architect` (small design) → `coder`/`tdd-engineer`.
 - **Scope:** `_schedule_chunk_processing`'s job order on the REST chain.
 - **Risks/RAM:** none in graph terms; changes when each chunk becomes searchable within a document.
 - **Test strategy:** an offline test pinning the new order, plus a live measurement of swaps per
   document before and after.
-
-### K-071 — Re-ingest the 15 `failed` documents in `ws:agent-team`, after restarting the shared `:8200` server onto K-067 code (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-2, 2026-10-15)
-
-> **Why it exists.** `ws:agent-team` holds 15 `failed` and 341 `ready` documents (read-only
-> `MATCH (d:Document {status:'failed'}) RETURN count(d)`, 2026-10-16). Twelve are from the bulk
-> ingestion K-067 was filed out of, each with at least one un-embedded chunk (plan §2.6). Three
-> came later, all ingested through the shared `:8200` server: `0c765795…` and `4bcc13a3…`
-> (2026-10-15, before Half B, report B.1) and `9b2c6b30…` (QA's post-teardown capture, report B.5).
-> Their causes are not visible, because `:8200` configures no logging (K-069). The K-067 retry
-> never re-drives a document that is already `failed` (plan §1), so the remedy is the existing
-> manual delete-then-re-ingest procedure (plan F-2).
->
-> **Precondition: restart `:8200` first.** That process (PID 1882) started on 2026-10-15
-> before the first K-067 commit `91b65fed` and was left untouched by the live proof (report B.5,
-> B.7), so it still runs pre-K-067 code: a re-drive through it gets no retry, and is exposed to
-> the same transient faults. The restart is the stakeholder's call.
-- **Owner:** `teco` (coordinator owns `ws:agent-team` re-drives; QA never re-drives one — test plan
-  §6), after the stakeholder restarts `:8200`.
-- **Scope:** the 15 documents above, plus any `failed` document that appears before the re-drive.
-- **Risks/RAM:** shared-workspace writes; confirm no other agent is ingesting during the re-drive.
-- **Test strategy:** confirm the `:8200` process start time is later than `retry.py`'s mtime, then
-  re-read `ws:agent-team`'s status counts after the re-drive — `failed` 0.
 
 ### K-072 — Per-request "provider down" short-circuit for REST batch ingestion (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-3 / review Pass 1 m-2, 2026-10-15)
 
@@ -674,6 +663,41 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** none in graph terms.
 - **Test strategy:** an offline test with an always-transient fake provider over a multi-document
   batch, asserting one full budget per request, not per document.
+
+### K-073 — Jobs of an already-failed document still make their first provider call, because the liveness gate is read only between attempts (🔵 proposed — filed out of the D-3 review, `docs/reviews/extract-transient-retry2.md` O-1, 2026-10-17)
+
+> **Why it exists.** Once one job fails a document (K-051: one failure fails it), every remaining
+> job of that document still runs attempt 1: `_safe_*` has no status check, and the K-067 liveness
+> gate (`Repository.chunk_document_is_processing`) is read only before and after each retry sleep
+> (`docs/plans/extract-transient-retry.md` §3.5). Each of those calls is wasted, and under LM
+> Studio's one-model-at-a-time JIT swapping each one adds a swap — the trigger of the failures in
+> the first place. The 2026-10-17 re-drive log shows such jobs failing transiently and then
+> abandoning at the pre-sleep gate read (review O-1). Not a defect: it is the specified design.
+> The review's candidate is one gate read before attempt 1. The finding is **inferred** from the
+> code; the log cannot show how many of those calls began after the document had failed.
+- **Owner:** `architect` (decide whether the pre-attempt read is worth it) → `tdd-engineer`.
+- **Related:** K-070 (fewer swaps per document) — the natural companion; design them together.
+- **Risks/RAM:** a pre-attempt read moves the gate onto the success path — one more indexed read
+  per job, where today it costs nothing until a job fails (plan §6 R-7).
+- **Test strategy:** an offline test where a sibling has already failed the document: the job
+  makes no provider call and still reports exactly once.
+
+### K-074 — MCP `ingest_document` accepts a title over `MAX_NAME_LEN` (200) that REST `POST /documents` rejects with a 422 (🔵 proposed — found during the K-071 re-drive, 2026-10-17)
+
+> **Why it exists.** REST validates `title` (and `sourceLabel`/`producedBy`) at the pydantic
+> boundary, `IngestDocumentIn` in `server/falkorchat/schemas.py`, capped at `MAX_NAME_LEN` = 200.
+> MCP `ingest_document` has no schema layer, and `Services.ingest_document` checks only the text
+> (empty, `MAX_DOCUMENT_CHARS`), not the title. So the same document is accepted on one front door
+> and rejected on the other: `ws:agent-team` document `9b2c6b30…` was ingested through MCP with a
+> 331-char title, and its 2026-10-17 re-ingest through REST was rejected with a 422 until the
+> title was shortened to 200 chars (`HISTORY.md` 2026-10-17).
+- **Owner:** `tdd-engineer` (reproduction test first).
+- **Scope:** make the two front doors agree on the title cap (and check the other capped fields).
+  The direction is the implementer's call: enforce `MAX_NAME_LEN` in `Services.ingest_document`
+  for both paths — the precedent is the text cap, already mirrored there for MCP's sake — or
+  relax REST.
+- **Risks/RAM:** enforcing the cap on MCP rejects long titles that MCP callers send today.
+- **Test strategy:** the same over-length title through both REST and MCP gets the same outcome.
 
 ### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
 

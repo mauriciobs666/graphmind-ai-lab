@@ -5,6 +5,33 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-17 — K-071 delivered: `ws:agent-team` failed documents re-driven to `ready`; D-3 broadens the LM Studio unload marker
+
+- **Restart and trial (2026-10-16):** the shared `:8200` server was restarted onto K-067 code, and
+  a one-document trial re-drive succeeded.
+- **First batch (2026-10-17) and D-3:** 13 documents were deleted and re-ingested at once through
+  `:8200`. LM Studio's JIT chat/embed model swapping answered with `Model is unloaded.` and
+  `Model was unloaded while the request was still in queue..`; neither matched the D-2 marker, so
+  11 failed fast. A 14th document, `9b2c6b30…`, was deleted, but its REST re-ingest was rejected
+  with a 422: its 331-char title exceeds `MAX_NAME_LEN` (200) in `IngestDocumentIn`, although the
+  MCP `ingest_document` path had accepted it originally (filed as K-074).
+- **D-3 fix** (`73769651`): in `retry.TRANSIENT_DETAIL_MARKERS`, the D-2 marker `"model unloaded"`
+  (2026-10-16 entry below) is **replaced** by `"unloaded"`, and `"predict request failed: fetch
+  failed"` is added, with verbatim-body rows in `server/tests/test_retry.py`. Same authority as
+  D-2 (plan `falkor-chat/docs/plans/extract-transient-retry.md` §6 R-1 + §3.2.1), so the plan was not revised.
+  `analyst` approved with suggestions (`falkor-chat/docs/reviews/extract-transient-retry2.md`); F-1…F-3 were
+  applied, and `test_retry.py` + `test_transport.py` gave 98 passed. Ledger:
+  `falkor-chat/docs/plans/extract-transient-retry2-coordination.md`.
+- **Re-drive (K-071):** `:8200` was restarted onto `73769651`, both models were loaded explicitly
+  (`lms load`), and the documents were re-driven sequentially, one at a time. All 12 failed
+  documents plus `9b2c6b30…` (title shortened to 200 chars) reached `ready`; `ws:agent-team` now
+  holds 356 `ready` and 0 `failed`. K-071 is removed from `BACKLOG.md`.
+- **Not claimed:** that run's server log has **zero** `ProviderCallError` or retry lines, so D-3's
+  new markers were **not exercised live**. The success comes from pre-loading both models, which
+  removed the swapping; that is evidence for K-070, not for the classifier.
+- **Also seen:** the same log has 70 `_safe_fuse` tracebacks, all RediSearch syntax errors (folded
+  into K-068). Review O-1 (jobs of an already-failed document still make attempt 1) filed as K-073.
+
 ## 2026-10-16 — K-067 closed: live proof Half B 5/5 after the D-2 "model unloaded" marker fix
 
 Completes the 2026-10-15 K-067 entry below, which delivered the mechanism and Half A.

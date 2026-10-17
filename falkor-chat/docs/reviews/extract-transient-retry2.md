@@ -1,6 +1,6 @@
 # Review — K-071 D-3: broadened LM Studio unload marker in the transient-retry classifier
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-071 (follow-up of K-067)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-071 (follow-up of K-067)
 
 ## Scope & verdict
 
