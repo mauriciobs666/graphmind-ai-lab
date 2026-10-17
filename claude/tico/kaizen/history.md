@@ -2,6 +2,22 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-10-17 — Write guard becomes repository-bounded (`guard-tico-repo-writes.sh`)
+
+- **What:** replaced `hooks/guard-tico-doc-writes.sh` (allowlist `docs/requirements/*`,
+  `docs/manuals/*`, `docs/plans/*-coordination.md` + `/tmp`, over `scripts/guard-doc-writes.sh`)
+  with `hooks/guard-tico-repo-writes.sh`, a thin wrapper over the new shared
+  `scripts/guard-repo-writes.sh` (teco's 2026-10-14 guard, extracted into a core now that a second
+  orchestrator uses it): **allow** any path inside the git repo the session started in, or `/tmp`;
+  **ask** outside it and for its `.git/`. Prompt (Guardrails: write boundary now prompt-held;
+  commit grants (a)/(c) re-anchored to doc kinds / stakeholder-approved one-offs instead of "what
+  the guard lets through", so they don't silently widen to any in-repo file), `claude/AGENTS.md`
+  and `claude/README.md` updated to match.
+- **Why:** stakeholder request — same as teco: tico's frontmatter hooks also gate its delegates'
+  calls, so the doc-scoped allowlist made every consulted/coordinated specialist (architect's
+  plan, analyst's review, …) ask for its own deliverable. Tico's role is unchanged: it still
+  authors only requirements, manuals and its own docs-only ledger — prompt-held, not hook-backed.
+
 ## 2026-09-20 — K-016 ✅ closed: eager-provider-resolution trap published into `llm-provider-config.md` (U10, last unit of the pass)
 
 U10 of `claude/docs/plans/kaizen-distillation3-coordination.md` (curator: `cobb`) — the pass's

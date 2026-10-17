@@ -84,14 +84,14 @@ approval every time) ·
 
 ## Hook machinery
 
-**Five shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
+**Six shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
 `hooks:` → `$HOME/.claude/agents/<name>/hooks/<script>.sh` (resolves through the deployment
 symlink):
 
 - **`scripts/guard-doc-writes.sh`** — an ALLOW-LIST core for a doc-scoped (or topic-scoped)
-  agent: escalate everything except a small set of paths that ARE the whole remit. Seven
-  `Write|Edit` wrappers sit on this core today: four of the original doc-scoped agents (`architect`,
-  `analyst`, `data-scientist`, `tico`), plus `security-expert`'s review guard, plus
+  agent: escalate everything except a small set of paths that ARE the whole remit. Six
+  `Write|Edit` wrappers sit on this core today: three of the original doc-scoped agents (`architect`,
+  `analyst`, `data-scientist`), plus `security-expert`'s review guard, plus
   `cobb` (topic-bounded — any agent's own
   definition file, kaizen curation for the team, and a small explicitly-maintained list of
   MCP/agent-standards docs outside `claude/`/`skills/`, e.g. `cypher-mcp/README.md` — cuts across
@@ -100,15 +100,19 @@ symlink):
   globs (every `claude/`/`skills/`-rooted glob doubled — a bare form plus a `*/`-prefixed sibling
   — because `tool_input.file_path` can arrive absolute, and a leading `*` is what lets the doubled
   form absorb an arbitrary absolute prefix ahead of the literal directory), an escalation message,
-  and an optional third arg, `on_mismatch` (`ask`, the default — six of the seven wrappers use
+  and an optional third arg, `on_mismatch` (`ask`, the default — five of the six wrappers use
   this; or `pass`, used only by `qa-engineer`, whose remit is genuinely wider than its two doc
   kinds — it also authors source/test files as part of execution, and those must fall through to
   the ambient permission flow unmediated rather than newly escalate). On a match the core emits an
   explicit `permissionDecision: "allow"`; on a mismatch (`on_mismatch="ask"`) it emits
-  `permissionDecision: "ask"`. `teco` left this core 2026-10-14 for a standalone,
-  repository-bounded guard, `teco/hooks/guard-repo-writes.sh`: allow any path inside the git repo
-  the session started in (or `/tmp`), ask for anything outside it or inside its `.git/` (contract
-  in its header).
+  `permissionDecision: "ask"`.
+- **`scripts/guard-repo-writes.sh`** — a REPOSITORY-BOUNDED `Write|Edit` core for the two
+  orchestrators, `teco` (`teco/hooks/guard-repo-writes.sh`, 2026-10-14) and `tico`
+  (`tico/hooks/guard-tico-repo-writes.sh`, 2026-10-17); each passes its agent name. Allow any path
+  inside the git repo the session started in (or `/tmp`), ask for anything outside it or inside its
+  `.git/` (contract in its header). An orchestrator's frontmatter hooks also gate its delegates'
+  calls, so a doc-scoped guard there made every delegate ask for its own deliverable; what each
+  orchestrator may *author* stays prompt-held.
 - **`scripts/guard-broad-write.sh`** — the DENY-LIST inverse: for an
   implementer agent whose remit is genuinely "the whole codebase, this task" and has no single
   folder/kind to allowlist. Allow everything except a small set of paths KNOWN to belong to a
@@ -195,10 +199,10 @@ backstopped only by `scripts/audit-team.sh` check 8. The policy has two layers:
   case), once tico has confirmed the artifact fits; the returned deliverable of a unit tico is
   **actively coordinating** under its own docs-only coordination (new 2026-09-01, mirrors teco's
   integrator grant, narrower in scope — only tico's own docs-only chain, never one already handed
-  off to teco), once checked against its done-condition; and **a file it itself wrote in the
-  current session that its `Write`/`Edit` guard let through**, including a one-off the human
-  approved at the guard's escalation prompt (e.g. a `docs/BACKLOG.md` entry). In that last case
-  the write-approval is what confers committability — a human who has just approved the write has
+  off to teco), once checked against its done-condition; and **a one-off outside its doc kinds that it
+  itself wrote in the current session on the stakeholder's explicit approval** (e.g. a
+  `docs/BACKLOG.md` entry) — not merely one its repository-bounded write hook let through. In
+  that last case the write-approval is what confers committability — a human who has just approved the write has
   already supplied the review — so **that case alone** covers only files `tico` wrote itself this
   session; it does not stretch to an earlier session's writes, and it does not narrow the other
   three. Explicit-path staging applies to all four. Both agents' grants hold whether they are

@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-17 — Write guard logic moves to the shared `scripts/guard-repo-writes.sh` core
+
+- **What:** `hooks/guard-repo-writes.sh` is now a thin wrapper (passes `teco`) over
+  `claude/scripts/guard-repo-writes.sh`; behavior unchanged. **Why:** `tico` adopted the same
+  repository-bounded guard (`tico/kaizen/history.md`, same date), so the logic became a sixth
+  shared core instead of two copies.
+
 ## 2026-10-14 — Write guard becomes repository-bounded (`guard-repo-writes.sh`)
 
 - **What:** replaced `hooks/guard-coordination-doc-writes.sh` (allowlist `docs/plans/*` + `/tmp`,
