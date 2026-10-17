@@ -5,6 +5,70 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-17 — K-069 delivered: a shipped log config gives every server log line a timestamp, a level and a guarded shape
+
+- **Defect:** the app installs no log configuration. Under uvicorn's default config, the only
+  root handler is the one FastMCP's import installs: `app.py` imports `mcp.py`, and its
+  module-level `FastMCP(...)` calls `logging.basicConfig(level=INFO, format="%(message)s")`. So
+  INFO from every logger printed bare, with no time, level or logger name: `falkorchat.*`, mcp's
+  per-request lines and httpx. uvicorn's own lines carried no timestamp, and the shape depended
+  on a dependency's side effect. **Erratum:** report F-1 and B.5
+  (`docs/test-reports/extract-transient-retry-report.md`) say `falkorchat.*` INFO was dropped and
+  never visible. That is incomplete for the real app: F-1 logged without importing it, and the
+  shared `:8200` log holds 18 bare `abandoning retry` lines.
+- **Fix:**
+  - **The config.** A shipped dictConfig, `config/logging.json`:
+    - every line starts with an ISO 8601 local timestamp with milliseconds and offset
+      (`2026-10-17T19:58:51.376-03:00`), then the level;
+    - `falkorchat.*` lines name their logger;
+    - `falkorchat` and uvicorn's `uvicorn`/`uvicorn.error`/`uvicorn.access` print at INFO,
+      access on stdout and the rest on stderr;
+    - root is at WARNING with its own handler, which also makes FastMCP's `basicConfig` a no-op.
+  - **The timestamp formatter.** The format comes from the new `server/falkorchat/logformat.py`:
+    uvicorn's formatter classes with a `formatTime` override, because a stdlib `datefmt` cannot
+    put milliseconds before the offset.
+  - **Deliberate behaviour change:** third-party INFO is now dropped, including mcp's
+    per-request lines. One logger entry brings them back (`docs/SERVER.md` §1.10).
+  - **The scripts.**
+    - `start_server.sh`, `start_agent_team.sh` and `start_demo.sh` resolve `UVICORN_LOG_CONFIG`
+      (default: that file) before step 1, and fail loudly if it is missing.
+    - They append `--log-config` **after** `UVICORN_ARGS`, so a caller's override keeps it.
+    - A `--log-config` already in `UVICORN_ARGS` wins; the check normalizes whitespace first.
+  - **Other wiring.**
+    - The `Dockerfile` CMD passes the file.
+    - `load_test.sh`'s throwaway benchmark server is left out, deliberately.
+    - App-side configuration was rejected: under pytest, `falkorchat.propagate: false` would
+      blind every `caplog` test.
+  - **Docs.** `docs/SERVER.md` gains §1.10 Logging (including that `--use-colors`/`--log-level`
+    don't reach the file), and `README.md`'s manual run command passes the flag.
+- **Guard (`server/tests/test_logging_config.py`):**
+  - **Setup.** In a subprocess with a clean env and no FalkorDB, it applies the file, imports
+    `falkorchat.app` (so FastMCP's `basicConfig` runs on top, as under uvicorn), and asserts the
+    number of handlers each (logger, level) reaches, 1 or 0.
+  - **Rendering.** It emits real records and checks that each line prints once, on the right
+    stream, with the timestamp format.
+  - **Mutants, all killed:**
+    - `propagate=true` on `falkorchat`, `uvicorn` or `uvicorn.access` (counted 2);
+    - `uvicorn` with no handler (counted 0);
+    - `root` deleted, or root at INFO (third-party INFO back);
+    - `falkorchat` at WARNING;
+    - no timestamp in the app format;
+    - access lines on stderr;
+    - uvicorn's stock formatters (no offset);
+    - `formatTime` without the offset.
+- **Live proof** (throwaway servers on ports 8296–8299 and `ws:k069probe`, never `:8200`):
+  - `start_agent_team.sh` under `env -i`, as the hook runs it, with and without a caller
+    `UVICORN_ARGS`;
+  - `start_server.sh` with `UVICORN_ARGS` overrides, with and without `--reload` (the `--reload`
+    case with the final formatters was re-verified in review Pass 2, on `:8294`);
+  - a caller's `--log-config` winning;
+  - the built image (container log stamped `+00:00`).
+  Every line after the banner was timestamped, with no duplicates and startup and shutdown lines
+  present. A missing `UVICORN_LOG_CONFIG` exits 1 before step 1 in all three scripts.
+- **The running `:8200` server is not using the config yet.** It was started without
+  `--log-config` and picks the config up at its next start through the hook.
+- K-069 is removed from `BACKLOG.md`.
+
 ## 2026-10-17 — K-075 fixed: an underscore-only title token no longer crashes `find_update_shortlist`
 
 - **Defect:** the title branch of `Repository.find_update_shortlist` sent each whitespace token

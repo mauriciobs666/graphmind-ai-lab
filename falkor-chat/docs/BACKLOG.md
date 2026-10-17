@@ -581,26 +581,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
 
-### K-069 — falkor-chat configures no logging, so every `falkorchat.*` INFO line is dropped under uvicorn's default config (🔵 proposed — filed out of the K-067 live proof, `docs/test-reports/extract-transient-retry-report.md` §6 F-1, 2026-10-15)
-
-> **Why it exists.** The app installs no log configuration. Under uvicorn's default log config every
-> `falkorchat.*` INFO line is dropped — including the K-067 liveness gate's `abandoning retry`
-> line — and WARNINGs reach stderr only through Python's `lastResort` handler, bare and with no
-> timestamp (report F-1, verified by applying `uvicorn.config.LOGGING_CONFIG` and logging from
-> `falkorchat.retry`). The K-067 live proof worked around it by passing `--log-config` with a
-> root-at-INFO dictConfig; without such a config, `ws:agent-team`'s long-running server cannot
-> show a gate abandonment at all.
-- **Owner:** `devops` (ship a log config through `scripts/start_server.sh` /
-  `scripts/start_agent_team.sh`).
-- **Scope:** a shipped log config giving `falkorchat.*` INFO and timestamps on the server's start
-  scripts. Until then a live run that needs those lines passes its own `--log-config`, as the
-  K-067 proof did. The shared `:8200` server's process at the time had none, which is why the
-  cause of `ws:agent-team` document `9b2c6b30…`'s 2026-10-16 failure was never visible (report
-  B.5).
-- **Risks/RAM:** none.
-- **Test strategy:** start the server through the script, trigger a `falkorchat.*` INFO line, and
-  confirm it appears with a timestamp.
-
 ### K-070 — Schedule a document's embeds before its extracts to cut model swaps on a one-model-at-a-time LM Studio (🔵 proposed — filed out of K-067, `docs/plans/extract-transient-retry.md` §6 follow-up F-1, 2026-10-15)
 
 > **Why it exists.** `_schedule_chunk_processing` interleaves `embed(c1), extract(c1), embed(c2), …`.

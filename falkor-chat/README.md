@@ -275,8 +275,14 @@ steps, for when you want to run pieces yourself:
 cd server
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'          # first time
 EMBEDDING_DIM=1024 ./../scripts/bootstrap_schema.sh acme            # schema for the default tenant (ws:acme), M2 dim
-FALKORCHAT_EMBEDDING_DIM=1024 .venv/bin/uvicorn falkorchat.app:app  # web UI + REST under /, MCP at /mcp
+FALKORCHAT_EMBEDDING_DIM=1024 .venv/bin/uvicorn falkorchat.app:app \
+  --log-config ../config/logging.json                                # web UI + REST under /, MCP at /mcp
 ```
+
+The path in `--log-config ../config/logging.json` is relative to `server/`, where these commands
+run. Without the flag every log line prints bare (no timestamp, level or logger name) through the
+handler FastMCP's import installs, and third-party INFO comes with it (`docs/SERVER.md` §1.10).
+The start scripts pass the flag for you.
 
 Then open **http://localhost:8000/** for the minimal web client (channels · threads · messages ·
 search). It talks to the REST API on the same origin (no CORS). The browser and MCP front doors

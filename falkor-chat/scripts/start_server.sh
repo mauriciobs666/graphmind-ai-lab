@@ -46,6 +46,22 @@ set -euo pipefail
 #                          also on (the sweep needs the same executor the trigger does);
 #                          `POST /workflow-runs/due` is the manual/cron entry point either way.
 #   UVICORN_ARGS           (default: --reload)
+#   UVICORN_LOG_CONFIG     (default: falkor-chat/config/logging.json) — K-069: the
+#                          dictConfig passed as uvicorn's --log-config. Every line
+#                          gets an ISO 8601 timestamp with UTC offset and a level;
+#                          falkorchat.* lines also name their logger. falkorchat.*
+#                          and uvicorn's own error/access lines print at INFO; every
+#                          other logger at WARNING, so mcp/httpx INFO (e.g. mcp's
+#                          per-request lines) is dropped on purpose. Without it, the
+#                          only root handler is the one FastMCP's import installs via
+#                          basicConfig: INFO from every logger, printed bare (no
+#                          time, level or logger name). Appended AFTER UVICORN_ARGS,
+#                          never folded into its default, so it survives a caller's
+#                          UVICORN_ARGS override; a caller who puts their own
+#                          --log-config in UVICORN_ARGS wins and this one is not
+#                          passed. uvicorn's --use-colors/--log-level do not reach
+#                          this file's falkorchat.* settings: edit or swap the file.
+#                          A missing file fails loudly before step 1.
 #
 # Example (custom workspace + headless FalkorDB):
 #   FALKORCHAT_WS_ID=myws ./scripts/start_server.sh
@@ -67,6 +83,7 @@ Stop FalkorDB: docker stop falkordb-dev
 
 Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID, FALKORDB_HOST,
                FALKORDB_PORT, EMBEDDING_DIM (default 1024), UVICORN_ARGS,
+               UVICORN_LOG_CONFIG (default falkor-chat/config/logging.json),
                FALKORCHAT_ENABLE_AGENT (default 1), FALKORCHAT_WORKFLOW_ENABLED
                (default 1), FALKORCHAT_AGENT_ID, FALKORCHAT_AGENT_NAME,
                FALKORCHAT_TRIGGER_DEF_KEY (default triage), FALKORCHAT_TRIGGER_DEF_VERSION
@@ -115,6 +132,24 @@ FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER_DIR="$REPO_DIR/server"
 VENV_DIR="$SERVER_DIR/.venv"
+
+# K-069: the shipped log config rides outside UVICORN_ARGS so a caller's override keeps
+# it; a --log-config the caller already put in UVICORN_ARGS wins. Resolved and checked
+# here, before step 1, so a bad path fails before anything is seeded.
+UVICORN_LOG_CONFIG="${UVICORN_LOG_CONFIG:-$REPO_DIR/config/logging.json}"
+LOG_CONFIG_ARGS=()
+# Whitespace normalized first, so a tab-separated --log-config is still seen.
+case " ${UVICORN_ARGS//[[:space:]]/ } " in
+  *" --log-config "*|*" --log-config="*)
+    LOG_CONFIG_DESC="caller's own --log-config (in UVICORN_ARGS)" ;;
+  *)
+    if [ ! -f "$UVICORN_LOG_CONFIG" ]; then
+      echo "ERROR: UVICORN_LOG_CONFIG=$UVICORN_LOG_CONFIG does not exist" >&2
+      exit 1
+    fi
+    LOG_CONFIG_ARGS=(--log-config "$UVICORN_LOG_CONFIG")
+    LOG_CONFIG_DESC="$UVICORN_LOG_CONFIG" ;;
+esac
 
 # ── 1. FalkorDB ───────────────────────────────────────────────────────────────
 # Decided by port first, container name second (precedent: start_agent_team.sh,
@@ -191,6 +226,7 @@ echo "      Model config: opencode=$FALKORCHAT_OPENCODE_CONFIG  overlay=${FALKOR
 echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED (triage def ${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION})  sweep_interval=${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S}s"
 echo "      MCP endpoint: http://localhost:8000/mcp"
 echo "      Web UI:       http://localhost:8000/"
+echo "      Log config:   $LOG_CONFIG_DESC"
 echo "      Stop with Ctrl+C (FalkorDB keeps running in background)"
 echo ""
 # FALKORCHAT_EMBEDDING_DIM MUST match the workspace's vector index (a wrong-dim
@@ -206,4 +242,4 @@ export FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S
 # right for the vast majority of runs; export it yourself to point at a different
 # overlay.
 export FALKORCHAT_OPENCODE_CONFIG
-exec "$VENV_DIR/bin/uvicorn" falkorchat.app:app $UVICORN_ARGS
+exec "$VENV_DIR/bin/uvicorn" falkorchat.app:app $UVICORN_ARGS ${LOG_CONFIG_ARGS[@]+"${LOG_CONFIG_ARGS[@]}"}

@@ -723,6 +723,47 @@ K-065/DEF-6 (`docs/HISTORY.md`, 2026-09-18) added its anti-drift sentence to `sa
 `systemPrompt` rather than strengthening the `CONTEXT` block an earlier diagnostic spike had found
 to be a weak signal.
 
+### 1.10 Logging
+
+**The app installs no log configuration of its own; `config/logging.json` (repo path
+`falkor-chat/config/logging.json`) is the configuration, applied by uvicorn's `--log-config`.**
+
+- **Without it** the only handler on the root logger is the one FastMCP installs at import:
+  `app.py` imports `mcp.py`, whose module-level `FastMCP(...)` calls `logging.basicConfig(level=INFO,
+  format="%(message)s")`. INFO from every logger (`falkorchat.*`, mcp, httpx) then prints bare,
+  with no time, level or logger name, and uvicorn's own lines carry no timestamp either.
+- **With it:** every line starts with an ISO 8601 local timestamp with milliseconds and UTC offset
+  (`2026-10-17T19:53:14.394-03:00`; the Docker container runs UTC, so `+00:00`), then the level.
+  `falkorchat.*` lines also name their logger. `falkorchat.*` and uvicorn's error and access lines
+  print at INFO, access lines on stdout and the rest on stderr. Every other logger prints at
+  WARNING. The timestamp comes from `falkorchat/logformat.py`, uvicorn's formatter classes with
+  one `formatTime` override, because a stdlib `datefmt` cannot put milliseconds before the offset.
+- **A deliberate behaviour change:** third-party INFO is dropped. That includes mcp's per-request
+  `Processing request of type …` and `StreamableHTTP session manager …` lines, which used to be
+  most of the shared `:8200` server's INFO output. To get the per-request trace back, give that
+  logger its own handler in the file, e.g. `"mcp.server.lowlevel.server": {"handlers": ["app"],
+  "level": "INFO", "propagate": false}`. A level alone is not enough, because root's handler only
+  passes WARNING and above.
+- **Who passes it.** `start_server.sh`, `start_agent_team.sh` and `start_demo.sh` resolve
+  `UVICORN_LOG_CONFIG` (default: the shipped file, absolute) before step 1, fail loudly if it is
+  missing, and append `--log-config` **after** `UVICORN_ARGS`, so a caller's override keeps it.
+  A `--log-config` the caller puts in `UVICORN_ARGS` wins outright; the check normalizes
+  whitespace first, so tabs count. The `Dockerfile` CMD passes `/app/config/logging.json`.
+- **Who does not.** A bare `uvicorn falkorchat.app:app`, `load_test.sh`'s throwaway benchmark
+  server, and pytest get none of it. A live run started outside the scripts passes
+  `--log-config ../config/logging.json` from `server/`, or `--log-config config/logging.json`
+  from `falkor-chat/`.
+- **uvicorn's `--use-colors`/`--no-use-colors` are ignored under a file config** (uvicorn applies
+  them only to a dict config), so colour follows whether stdout is a terminal. `--log-level`
+  still reaches the `uvicorn.*` loggers but never `falkorchat`. Change either by editing the file
+  or by pointing `UVICORN_LOG_CONFIG` at another one.
+- **Configuring logging in app code was rejected.** It would also run under pytest, where
+  `falkorchat.propagate: false` would blind every `caplog` test, and inside every embedding of
+  the app.
+- **Guard:** `server/tests/test_logging_config.py` applies the file, imports the app in a
+  subprocess, and asserts how many handlers each (logger, level) reaches, 1 or 0, plus each line's
+  stream and format.
+
 ---
 
 ## 2. MCP transport — the agent front door
