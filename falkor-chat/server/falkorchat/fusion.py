@@ -24,6 +24,8 @@ entity.
 
 from __future__ import annotations
 
+import re
+import string
 from typing import Any, Literal
 
 # {entityId, name, type, score} — score is RediSearch's raw relevance score,
@@ -31,15 +33,57 @@ from typing import Any, Literal
 MatchCandidate = dict[str, Any]
 
 
+# The `Entity.name` index's own separators, measured live (K-068): ASCII space,
+# tab, and ASCII punctuation except `_` and `\\`. Everything else — letters,
+# `_`, non-ASCII punctuation and symbols — stays inside an indexed term.
+_INDEX_SEPARATORS = re.compile(
+    "[" + re.escape(" \t" + "".join(c for c in string.punctuation if c not in "_\\")) + "]+"
+)
+# Characters the query parser rejects inside a term but the index does not
+# separate on: `\\` (an escape to the tokenizer) and the ASCII control
+# characters other than tab. Deleted before splitting.
+_DELETED = re.compile(r"[\x00-\x08\x0a-\x1f\x7f\\]")
+
+
 def _fuzzy_query(name: str) -> str:
     """One RediSearch 1-edit fuzzy term per name token (`%token%` syntax,
-    `document-ingestion-graph.md` §2.3), space-joined. Empty/whitespace-only
-    input (should not reach here — extraction never hands back a blank name,
-    `extraction._coerce_entities`) yields an empty string; the caller treats
-    that as "no candidates" rather than issuing a degenerate query.
+    `document-ingestion-graph.md` §2.3), space-joined (implicit AND — K-064
+    owns that decision).
+
+    Tokens follow the `Entity.name` index's own tokenizer (K-068), measured
+    live per character on a throwaway graph: the name is split on ASCII
+    space, tab and ASCII punctuation other than `_` and `\\` — `model-bench/
+    tests.py` -> `%model% %bench% %tests% %py%`; `\\` and the other ASCII
+    control characters are deleted; everything else stays inside a term, as
+    it does in the index — `A1–A15` -> `%A1–A15%`. Why:
+
+    * Between word characters, RediSearch's query parser rejects every ASCII
+      punctuation and control character except `_` (`RediSearch: Syntax
+      error`), so a raw extracted name made the lookup crash and `_safe_fuse`
+      drop that entity's suggested tier.
+    * The index separates on exactly the characters split on here, so each
+      term is one the index can hold for the same name. Stripping punctuation
+      inside a token instead (`repository._escape_fuzzy_token`, the title
+      path) glues `model-bench` into `%modelbench%`, a term the index never
+      holds; splitting on *every* non-word character (`[^\\w]+`) breaks a
+      name like `A1–A15` into terms the index never holds either.
+
+    A token made only of underscores is dropped: it carries no word content,
+    and a lone `%_%` is itself a syntax error. A name left with no token
+    (`--`, `...`, `_`, `\\`) yields an empty string, as does empty/whitespace-
+    only input (should not reach here — extraction never hands back a blank
+    name, `extraction._coerce_entities`); the caller treats that as "no
+    candidates" rather than issuing a degenerate query.
+
+    Known limitation: a name with an emoji inside a word (`aa😀bb`) is not
+    found even when stored verbatim — RediSearch misses it under every
+    query shape tried.
     """
-    tokens = name.split()
-    return " ".join(f"%{tok}%" for tok in tokens)
+    return " ".join(
+        f"%{tok}%"
+        for tok in _INDEX_SEPARATORS.split(_DELETED.sub("", name))
+        if tok.strip("_")
+    )
 
 
 def find_fuzzy_candidates(

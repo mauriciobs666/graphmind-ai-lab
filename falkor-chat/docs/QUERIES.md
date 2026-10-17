@@ -2377,7 +2377,8 @@ this same query, cannot structurally already carry a `SAME_AS` edge to reopen.
 
 ```cypher
 // $fuzzyQuery is built app-side (falkorchat.fusion._fuzzy_query), one RediSearch
-// 1-edit fuzzy term per name token: '%acme%'.
+// 1-edit fuzzy term per name token, tokenized the way this index tokenizes Entity.name:
+// 'model-bench FX1' -> '%model% %bench% %FX1%', 'A1–A15' -> '%A1–A15%'.
 CALL db.idx.fulltext.queryNodes('Entity', $fuzzyQuery) YIELD node AS candidate, score
 WHERE candidate.type = $type
 RETURN candidate.entityId AS entityId, candidate.name AS name,
@@ -2395,6 +2396,22 @@ plan-mandated. `falkorchat.fusion.find_fuzzy_candidates` builds `$fuzzyQuery` an
 classifying — **live-confirmed necessary**: a same-connection write is synchronously visible to the
 next RediSearch fulltext query on this build, so an entity's own fuzzy lookup against its own name
 can and does return itself as a hit.
+
+Between word characters, RediSearch's query parser rejects every ASCII punctuation and control
+character except `_` (`RediSearch: Syntax error`). So `_fuzzy_query` builds terms the way this index
+tokenizes `Entity.name`, which was measured live, one character at a time:
+- it splits on ASCII space, tab and ASCII punctuation other than `_` and `\`;
+- it deletes `\` and the other ASCII control characters;
+- it keeps everything else inside a term, as the index does, including non-ASCII punctuation such
+  as `–`, `→` and `∅`.
+
+Each term is therefore one the index can hold for the same name. Stripping (`%modelbench%`) and
+splitting on every non-word character (`%A1% %A15%`) would each produce terms it never holds. The
+builder also drops underscore-only tokens, because a lone `%_%` is a syntax error. A name left with
+no token produces an empty query, and no call is made. An emoji inside a word is a known miss under
+every query shape (K-068, `HISTORY.md` 2026-10-17). The `Document` title lookup
+(`Repository.find_update_shortlist`) still strips per token, which is a different, older choice
+(K-075).
 
 **`create_or_reopen_match` — the guarded find-or-create-or-reopen write (OQ-3)**
 

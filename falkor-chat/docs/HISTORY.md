@@ -5,6 +5,69 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-17 — K-068 fixed: suggested-tier fuzzy lookup no longer crashes on punctuation in entity names
+
+- **Defect:** `fusion._fuzzy_query` wrapped each whitespace token of an extracted entity name in
+  `%tok%` unescaped. RediSearch rejected the query (`RediSearch: Syntax error at offset N near X`),
+  and `_safe_fuse` swallowed the error, so that entity's suggested-tier `SAME_AS` lookup was
+  silently lost. The `:8200` log (`agent-team-8200.log`) held 157 `background fuse failed`
+  tracebacks, all syntax errors, over 157 distinct entities; their names were read from
+  `ws:agent-team` read-only.
+- **Characterized live, read-only and on throwaway graphs that were deleted afterwards:**
+  - **Parser:** between word characters, RediSearch rejects every ASCII punctuation and control
+    character except `_`. A lone `%_%` is also rejected.
+  - **Real triggers:** real names failed on `-`, `.` (`exec.py`), `/` (`HTTP 400/500`),
+    `:` (`Unloading model: <id>`), `'`, `%` (`43%`), `=` (`rc=1`), `()`, `[]`, `{}`, `"` and on
+    leading punctuation (`--name`).
+  - **Index tokenizer** (`Entity.name`, one character at a time, 160 characters): it separates only
+    on ASCII space, tab and ASCII punctuation other than `_` and `\`. Nothing else is a separator:
+    not the other control characters, and not non-ASCII punctuation or symbols (`–`, `→`, `’`,
+    `∅`), which stay inside a term.
+- **Fix (`server/falkorchat/fusion.py`), which tokenizes like the index:**
+  - split on that separator set;
+  - delete `\` and the ASCII control characters other than tab;
+  - drop underscore-only and empty tokens.
+
+  For example, `model-bench FX1` becomes `%model% %bench% %FX1%`, and `A1–A15` becomes `%A1–A15%`.
+  A name with no token yields an empty query, and the existing posture applies: no call, no
+  candidates. An emoji inside a word is a known miss under every query shape tried, which is
+  documented on `_fuzzy_query`.
+- **Alternatives rejected on measurements:**
+  - **Stripping** punctuation inside a token, as the 2026-09-13 title fix does
+    (`repository._escape_fuzzy_token`), glues `model-bench` into `%modelbench%`. Over the 157 real
+    names, it found the identical name 22 times.
+  - **Splitting on every non-word character** (`[^\w]+`) was the first green. `analyst`'s review
+    (`docs/reviews/fusion-fuzzy-escape.md` F-1) found that it breaks names like `A1–A15`, which the
+    index keeps whole.
+  - **The review's suggested separator set** (ASCII whitespace plus punctuation) parse-errored on 27
+    ASCII control characters, so control characters are deleted instead.
+
+  The helper stays private to `fusion.py`. In `repository.py`, `find_update_shortlist` and
+  `_escape_fuzzy_token` are unchanged in code; only their docstrings changed. `docs/QUERIES.md`
+  §14.6 documents the shape.
+- **Proof:** `server/tests/test_fusion.py` drives `fusion.find_fuzzy_candidates` against live
+  `ws:test`. Each case seeds a name and asserts the lookup parses and finds it:
+  - 19 punctuated names: 17 real, 1 synthetic, and 1 real name with a lone `_` token;
+  - 5 real non-ASCII names, such as `A1–A15` and `∅`;
+  - `aa<c>bb` for every ASCII non-alphanumeric character and one character per non-word Unicode
+    category, with emoji as a strict `xfail`.
+
+  Further tests cover a 1-edit plain-name match, punctuated-to-plain-word counterparts, a precision
+  case (a same-type entity sharing one word is not returned), empty queries, and the query-string
+  shape. The suite went red first, then 141 passed and 1 xfailed. Eight in-memory mutants were all
+  killed: the original unescaped build, the precedent's strip, kept underscore-only tokens,
+  backslash-escaping, the `[^\w]+` split, the review's separator set, an OR-join, and keeping `\`.
+- **Replay against `ws:agent-team`, read-only, using the exact `Repository.find_fuzzy_candidates`
+  Cypher:**
+  - **157 real failing names:** all 157 errored before the fix; after it, all 157 run clean and
+    find their identical name.
+  - **All 7480 `Entity` rows:** before the fix, 2418 errored and 43 missed their identical name.
+    After it, 7464 find it, 0 miss, 0 error, and 16 names made only of ASCII punctuation, `_` or `\` yield no query.
+- **Filed:** K-075, because the title path's `_escape_fuzzy_token` keeps a lone `_`.
+  `Report _ draft` builds `%Report% %_% %draft%`, which raised a syntax error live, and the
+  exception discards that document's whole update-detection shortlist. K-068 is removed from
+  `BACKLOG.md`. K-064's "Related" paragraph is rewritten to match.
+
 ## 2026-10-17 — K-071 delivered: `ws:agent-team` failed documents re-driven to `ready`; D-3 broadens the LM Studio unload marker
 
 - **Restart and trial (2026-10-16):** the shared `:8200` server was restarted onto K-067 code, and

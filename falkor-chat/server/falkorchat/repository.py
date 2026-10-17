@@ -167,11 +167,14 @@ def _escape_fuzzy_token(tok: str) -> str:
     `docs/test-reports/document-ingestion2-report.md`).
 
     RediSearch's query parser treats parentheses, hyphen, colon, quotes,
-    brackets, pipe, and others as syntax — `fusion._fuzzy_query`'s original
-    shape (built for short, LLM-extracted entity names) never hit this
-    because those rarely carry punctuation; free-form, caller-supplied
-    document titles do. Stripping (rather than backslash-escaping) keeps the
-    surviving characters plain word characters, which is what RediSearch's
+    brackets, pipe, and others as syntax. Entity names turned out to hit
+    this too (K-068); `fusion._fuzzy_query` fixes it its own way, by
+    tokenizing the name the way the full-text index does (split on ASCII
+    punctuation, keep everything else), because a glued `%modelbench%` is a
+    term the index never holds. This title path keeps stripping — unchanged
+    by K-068, and still crashes on a lone `_` token (K-075).
+    Stripping (rather than backslash-escaping) keeps the surviving
+    characters plain word characters, which is what RediSearch's
     fuzzy (`%...%`) matching expects — an escaped-but-still-present
     metacharacter would remain in the term and be a poor fuzzy match target
     even where it did not outright crash the parser. May return `""` for a
@@ -1948,14 +1951,13 @@ class Repository:
            candidates," same defensive posture `fusion._fuzzy_query` already
            uses for entity names), and also skipped when every token strips
            to nothing (see below) — same reasoning, a degenerate query. One
-           `%token%` fuzzy term per title word, built the same way
-           `fusion._fuzzy_query` builds one for entity names — title is short
-           (`MAX_NAME_LEN=200`), so this stays cheap. Unlike
-           `fusion._fuzzy_query`, each token is run through
-           `_escape_fuzzy_token` first: free-form document titles routinely
-           carry RediSearch query-syntax metacharacters (parens, hyphen,
-           colon, quotes, brackets, pipe — document-ingestion2 QA Defect 1),
-           which the entity-name helper was never built to expect.
+           `%token%` fuzzy term per title word — title is short
+           (`MAX_NAME_LEN=200`), so this stays cheap. Each whitespace token
+           is run through `_escape_fuzzy_token` first: free-form document
+           titles routinely carry RediSearch query-syntax metacharacters
+           (parens, hyphen, colon, quotes, brackets, pipe — document-
+           ingestion2 QA Defect 1). The entity-name builder handles the same
+           metacharacters differently, by splitting on them (K-068).
 
         Unioned + de-duplicated by `documentId` in Python (a document
         matching both signals is returned once). Returns `{documentId, title,
@@ -2169,7 +2171,8 @@ class Repository:
         """FR-9 suggested-tier candidate lookup — RediSearch fuzzy full-text
         against `Entity.name`, `type`-filtered (`document-ingestion-graph.md`
         §2.3). `fuzzy_query` is built app-side by `fusion.find_fuzzy_candidates`
-        (one `%token%` 1-edit fuzzy term per name token) — this method issues
+        (one `%token%` 1-edit fuzzy term per name token, tokenized the way
+        the full-text index tokenizes `Entity.name`, K-068) — this method issues
         the query verbatim, no further construction here (Cypher stays only
         in this module). Ranked by score, highest first.
         """
