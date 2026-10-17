@@ -171,16 +171,24 @@ def _escape_fuzzy_token(tok: str) -> str:
     this too (K-068); `fusion._fuzzy_query` fixes it its own way, by
     tokenizing the name the way the full-text index does (split on ASCII
     punctuation, keep everything else), because a glued `%modelbench%` is a
-    term the index never holds. This title path keeps stripping — unchanged
-    by K-068, and still crashes on a lone `_` token (K-075).
+    term the index never holds. This title path keeps stripping, unchanged
+    by K-068; whether it should tokenize like the index instead is K-064's call.
     Stripping (rather than backslash-escaping) keeps the surviving
     characters plain word characters, which is what RediSearch's
     fuzzy (`%...%`) matching expects — an escaped-but-still-present
     metacharacter would remain in the term and be a poor fuzzy match target
-    even where it did not outright crash the parser. May return `""` for a
-    token that was pure punctuation; the caller skips empty results.
+    even where it did not outright crash the parser. Every character kept
+    (`\\w`) parses inside a term (live-probed, K-075).
+
+    Returns `""` for a token that was pure punctuation, and also for one left
+    with only underscores (`_`, `__`, `*_*`), as `fusion._fuzzy_query` drops
+    them (K-075): a lone `%_%` is a RediSearch syntax error, and a longer
+    all-underscore term, though it parses, carries no word content and under
+    the implicit AND makes the title query match nothing. The caller skips
+    empty results.
     """
-    return _FUZZY_TOKEN_UNSAFE.sub("", tok)
+    stripped = _FUZZY_TOKEN_UNSAFE.sub("", tok)
+    return stripped if stripped.strip("_") else ""
 
 
 class Repository:
@@ -1946,18 +1954,23 @@ class Repository:
            single-property `$param IS NULL OR prop = $param` optional-filter
            idiom).
         2. A separate title-fuzzy full-text lookup (RediSearch on
-           `Document.title`) — skipped entirely when `title` is empty (an
-           empty-string RediSearch fulltext query is a caller error, not "no
-           candidates," same defensive posture `fusion._fuzzy_query` already
-           uses for entity names), and also skipped when every token strips
-           to nothing (see below) — same reasoning, a degenerate query. One
+           `Document.title`) — skipped entirely when `title` is empty (no
+           degenerate query is issued — on this build an empty query returns
+           no rows rather than erroring, live-probed in K-075 — the same
+           posture `fusion._fuzzy_query`'s caller takes for entity names),
+           and also skipped when every token strips
+           to nothing or to underscores only (see below) — same reasoning, a
+           degenerate query, and the band candidates are still returned. One
            `%token%` fuzzy term per title word — title is short
            (`MAX_NAME_LEN=200`), so this stays cheap. Each whitespace token
            is run through `_escape_fuzzy_token` first: free-form document
            titles routinely carry RediSearch query-syntax metacharacters
            (parens, hyphen, colon, quotes, brackets, pipe — document-
-           ingestion2 QA Defect 1). The entity-name builder handles the same
-           metacharacters differently, by splitting on them (K-068).
+           ingestion2 QA Defect 1). A token left with only underscores is
+           dropped too, never sent: a lone `%_%` is a syntax error whose
+           exception would discard the band candidates as well (K-075). The
+           entity-name builder handles the same metacharacters differently,
+           by splitting on them (K-068).
 
         Unioned + de-duplicated by `documentId` in Python (a document
         matching both signals is returned once). Returns `{documentId, title,

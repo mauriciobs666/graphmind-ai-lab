@@ -1923,6 +1923,86 @@ def test_find_update_shortlist_survives_the_qa_characterization_table(repo, titl
     assert isinstance(candidates, list)
 
 
+@pytest.mark.parametrize(
+    "title", ["Report _ draft", "Report *_* draft", "Report (_) draft", "_", "*_*"],
+)
+def test_find_update_shortlist_lone_underscore_title_token_keeps_band_candidates(repo, title):
+    """K-075: a title token that is `_` once stripped (`_`, `*_*`, `(_)`)
+    built a lone `%_%`, a RediSearch syntax error (live-probed 2026-10-17)
+    that discarded the band candidates already fetched. It must not raise,
+    and the band candidate must survive — including when no title token is
+    left at all (`_`, `*_*`), where the title query is skipped."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    text = " ".join(f"word{i}" for i in range(100))
+    _, bands = _document_with_lsh(repo, document_id="d1", text=text, title="Unrelated")
+
+    candidates = repo.find_update_shortlist("test", bands=bands, title=title)
+
+    assert [c["documentId"] for c in candidates] == ["d1"]
+
+
+@pytest.mark.parametrize("title", ["_", "__", "*_*", "_ (__) _-_"])
+def test_find_update_shortlist_all_underscore_title_skips_the_title_query(repo, monkeypatch, title):
+    """K-075: a title with no token left once underscore-only tokens are
+    dropped issues no full-text query at all, as an all-punctuation title
+    already did. (An empty RediSearch query returns no rows rather than
+    erroring on this build — live-probed — so only the call itself shows
+    the skip.)"""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    issued: list[str] = []
+    real_graph = repo._graph
+
+    class _Recording:
+        def __init__(self, graph):
+            self._g = graph
+
+        def ro_query(self, q, params=None):
+            issued.append(q)
+            return self._g.ro_query(q, params)
+
+    monkeypatch.setattr(repo, "_graph", lambda ws: _Recording(real_graph(ws)))
+
+    repo.find_update_shortlist("test", bands=["zzzzzzzzzzzzzzzz"] * 8, title=title)
+
+    assert issued and not any("fulltext" in q for q in issued)
+
+
+@pytest.mark.parametrize("title", ["Report _ draft", "Report __ draft", "Report _-_ draft"])
+def test_find_update_shortlist_underscore_only_title_token_keeps_the_title_signal(repo, title):
+    """K-075: an underscore-only token is dropped, not sent — so the other
+    title words still find a title match. `__` parses (live-probed), but
+    under the implicit AND a term no indexed title holds zeroes the whole
+    title signal, so it is dropped too."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _document_with_lsh(
+        repo, document_id="d1", text="completely unrelated filler content here",
+        title="Report draft",
+    )
+
+    candidates = repo.find_update_shortlist(
+        "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title=title,
+    )
+
+    assert [c["documentId"] for c in candidates] == ["d1"]
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("_", ""), ("__", ""), ("___", ""), ("_-_", ""), ("*_*", ""), ("(_)", ""),
+        ("foo_", "foo_"), ("_foo", "_foo"), ("f_o", "f_o"), ("(Draft)", "Draft"),
+        ("--", ""),
+    ],
+)
+def test_escape_fuzzy_token_drops_underscore_only_results(token, expected):
+    """K-075: pure function — a token left with only underscores after
+    stripping comes back `""` (the caller skips it), like a pure-punctuation
+    token; underscores inside a word survive."""
+    from falkorchat.repository import _escape_fuzzy_token
+
+    assert _escape_fuzzy_token(token) == expected
+
+
 # ── `produced_by` attribution (agent-team-ingestion-graph.md §2, K-030) ───────
 
 

@@ -675,28 +675,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** enforcing the cap on MCP rejects long titles that MCP callers send today.
 - **Test strategy:** the same over-length title through both REST and MCP gets the same outcome.
 
-### K-075 — A lone `_` in a document title crashes `find_update_shortlist`, so that document loses all update detection (🔵 proposed — found during the K-068 fix and its review, `docs/reviews/fusion-fuzzy-escape.md` F-2, 2026-10-17)
-
-> **Why it exists.** `find_update_shortlist`'s title-fuzzy branch runs each whitespace token through
-> `repository._escape_fuzzy_token`, which strips RediSearch metacharacters but keeps `_`. A title
-> with a token that is only an underscore, such as `Report _ draft`, builds `%Report% %_% %draft%`,
-> and a lone `%_%` is a RediSearch syntax error: live, read-only against `ws:agent-team`'s
-> `Document` index, it raised `RediSearch: Syntax error at offset 19`. Tokens like `__` or `foo_` parse.
->
-> The loss is wider than the title signal. The LSH-band query and the title query run inside one
-> `find_update_shortlist` call, so the title query's exception discards the band candidates already
-> fetched. `background._safe_detect_update` then logs and swallows the error, and that document
-> gets no update detection at all. The entity-name path solved the same parser rule in K-068 by
-> dropping underscore-only tokens (`fusion._fuzzy_query`, `HISTORY.md` 2026-10-17).
-- **Owner:** `tdd-engineer` (reproduction test first).
-- **Scope:** the title branch of `find_update_shortlist` only: never send an underscore-only
-  token. Whether titles should also tokenize the way the index does, as entity names now do, rather
-  than strip, is K-064's decision, not this item's.
-- **Risks/RAM:** none — query-construction change only.
-- **Test strategy:** a live `find_update_shortlist` call in `test_repository.py`, using the `repo`
-  fixture and never `wf_repo`, with a lone-`_` title and a band-matching candidate. It must not
-  raise, and it must still return the band candidate.
-
 ### K-076 — Entity fuzzy query: symbol-only names make junk suggestions, and `\`-escaped punctuation misses its own name (🔵 proposed — `docs/reviews/fusion-fuzzy-escape.md` Pass 2, P2-1/P2-2, 2026-10-17)
 
 > **Why it exists.** Two minor gaps left by K-068's `fusion._fuzzy_query`, both measured live and
@@ -746,9 +724,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > **Related:** the entity-name path (`fusion._fuzzy_query`) no longer crashes on punctuation
 > (K-068, `HISTORY.md` 2026-10-17). It now builds its terms the way the index tokenizes the name,
 > so it adds terms only where the index holds them too. The title path still strips per token
-> (`_escape_fuzzy_token`, `HISTORY.md` 2026-09-13) and still crashes on a lone `_` token (K-075).
-> Both paths still AND their terms. One input for the OR-vs-subset call, if it is ever extended to
-> fusion: a stored glued name (`modelbench`) can be missed by a punctuated new name (`model-bench`)
+> (`_escape_fuzzy_token`, `HISTORY.md` 2026-09-13); like the entity path, it drops
+> underscore-only tokens (K-075, `HISTORY.md` 2026-10-17). Both paths still AND their terms.
+> One input for the OR-vs-subset call, if it is ever extended to fusion: a stored glued name (`modelbench`) can be missed by a punctuated new name (`model-bench`)
 > under index-aligned tokens, though stripping would have found it.
 - **Owner:** **`data-scientist`** (method note) → **`coder`**/**`tdd-engineer`** (implementation).
 - **Scope:** `falkor-chat/server/falkorchat/repository.py`'s `find_update_shortlist` title-fuzzy

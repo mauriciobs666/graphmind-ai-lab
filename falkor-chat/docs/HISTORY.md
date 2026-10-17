@@ -5,6 +5,37 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-17 — K-075 fixed: an underscore-only title token no longer crashes `find_update_shortlist`
+
+- **Defect:** the title branch of `Repository.find_update_shortlist` sent each whitespace token
+  through `_escape_fuzzy_token`, which keeps `_`. A token left as `_` (`Report _ draft`, but also
+  `*_*` or `(_)`, which strip to `_`) built a lone `%_%`, a RediSearch syntax error. The exception
+  discarded the LSH-band candidates already fetched, and `background._safe_detect_update` swallowed
+  it, so that document got no update detection.
+- **Characterized live**, unless noted, on a throwaway `ws:probe-k075` graph with the
+  `Document.title` full-text index, deleted afterwards:
+  - only a term that is exactly one `_` is rejected; `%__%`, `%___%`, `%____%`, `%_foo%`, `%foo_%`
+    and `%f_o%` parse. A kept `%__%` still makes `%Report% %__% %draft%` return nothing under the
+    implicit AND, although `Report draft` is indexed;
+  - every other character `_escape_fuzzy_token` keeps parses: 52838 non-ASCII `\w` code points (all
+    of the BMP plus a sample of the astral planes) gave 0 errors, both as `%aa<c>bb%` and alone;
+  - an empty full-text query returns 0 rows rather than erroring (checked on `ws:test`).
+- **Fix (`server/falkorchat/repository.py`):** `_escape_fuzzy_token` returns `""` for a token left
+  with only underscores, as `fusion._fuzzy_query` does for entity names (K-068), so the caller's
+  existing empty-token skip drops it, and a title with no token left issues no title query. Titles
+  still strip per token; index-like splitting stays K-064's call. Docstrings of both functions were
+  updated, including the claim that an empty query is a caller error. `docs/QUERIES.md` §14.6's
+  closing sentence on the title path now says so.
+- **Proof (`server/tests/test_repository.py`, live `ws:test` via the `repo` fixture):** band
+  candidates survive five lone-`_` titles; `Report _ draft`, `Report __ draft` and
+  `Report _-_ draft` still find a title match; four all-underscore titles issue no full-text query;
+  a pure test pins the helper. Before the fix, the first three tests failed 14 cases (6 syntax errors,
+  2 empty results, 6 helper asserts); the no-query test came later, to kill the no-token-left
+  mutant. The final selection passed 36. Mutants, all killed: no filter (18 failed), filtering only the literal
+  `_` (7), running the title query when no token is left (4), checking the token before stripping
+  (9).
+- K-075 is removed from `BACKLOG.md`; K-064's "Related" paragraph is updated.
+
 ## 2026-10-17 — K-068 fixed: suggested-tier fuzzy lookup no longer crashes on punctuation in entity names
 
 - **Defect:** `fusion._fuzzy_query` wrapped each whitespace token of an extracted entity name in

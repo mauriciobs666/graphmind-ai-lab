@@ -2410,8 +2410,9 @@ splitting on every non-word character (`%A1% %A15%`) would each produce terms it
 builder also drops underscore-only tokens, because a lone `%_%` is a syntax error. A name left with
 no token produces an empty query, and no call is made. An emoji inside a word is a known miss under
 every query shape (K-068, `HISTORY.md` 2026-10-17). The `Document` title lookup
-(`Repository.find_update_shortlist`) still strips per token, which is a different, older choice
-(K-075).
+(`Repository.find_update_shortlist`) still strips per token, which is a different, older choice;
+it also drops underscore-only tokens and skips the call when none is left (K-075, `HISTORY.md`
+2026-10-17).
 
 **`create_or_reopen_match` — the guarded find-or-create-or-reopen write (OQ-3)**
 
