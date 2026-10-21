@@ -29,7 +29,7 @@ options assessed" (item D) and §"Recommendation" in full — do not work from t
 | U3 | `qa-engineer` | `adcdf1e1b0ba2c48e` | accepted | `falkor-chat/docs/test-reports/salesperson-language-salience-report.md` | `teco` (direct verification) → clean result, see below | 361.5k tok / 519 tools |
 | U4 | `qa-engineer` | `a0411acf57dbe0b05` | gated | `salesperson/scripts/language_salience_probe.py` (committed harness + smoke run n=2) | `analyst` (U5) → approve with suggestions | 164k tok / 49 tools |
 | U5 | `analyst` | `a954f171484317f46` | accepted | `falkor-chat/docs/reviews/salesperson-language-salience.md` (`## Pass 2`, harness review) | — → — | — |
-| U6 | `qa-engineer` | `a0411acf57dbe0b05` (U4 resumed) | in-flight | `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md` (dedicated-instance rerun, K-065 + K-066) | `teco` (direct verification) → — | — |
+| U6 | `qa-engineer` | `a0411acf57dbe0b05` (U4 resumed) | accepted | `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md` (dedicated-instance rerun, K-065 + K-066) | `teco` (direct verification) → clean | 391k tok cumulative (U4+U6) |
 | U7 | `tdd-engineer` | — | queued | harness fixes per review Pass 2 (F1–F7, fake-storefront tests for `run_participant`) + v3 re-score of U6's stored JSONL | `analyst` → — | — |
 
 **Mid-run relay to U3 (2026-09-18):** user surfaced LM Studio server-log lines timestamped
@@ -145,3 +145,12 @@ participant) and confirmed the harness md5 unchanged. Relayed to U6 mid-run, 202
 wrong-language count is U6's **hand-read of every replied turn**; the v2 classifier figure is reported
 alongside for comparability only; plus the unknown-trial count and the F4 trigger counts. Harness fixes
 are U7, after U6, never during it.
+
+**U6 result, verified by `teco` (2026-10-21):** 75/75 trials complete, 0 wrong-language replies in
+1,119 replied turns by full hand-read (`teco` checked the hand-read file: 1,119 judgments, all equal
+to the participant's language and to the v2 classifier; independent marker-regex check over the raw
+JSONL also 0), trial-level 0/75 per language (Wilson upper 4.9%). Dead turns 6/1,125 (0.5%), all
+`ministral` "Context size has been exceeded" (6 matching log lines) — K-066 rewritten accordingly.
+Per the stakeholder's 2026-10-20 decision ("K-065 closes afterwards if the result stays clean"),
+K-065 closes. U7's harness fixes no longer gate anything (no figure depended on F1/F2/F4) — moved to
+the backlog rather than run here.

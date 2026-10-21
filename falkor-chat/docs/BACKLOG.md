@@ -91,41 +91,42 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   B is authorized later, the same TP-007-based protocol (Wilson interval, per-trial reporting)
   applies again.
 
-### K-066 — Very high no-reply ("dead-turn") rate observed under 3-way concurrent load, self-inflicted against the pinned `ministral-3-3b` model (🔵 proposed — filed out of the K-065 Mitigation D live re-test, `docs/test-reports/salesperson-language-salience-report.md`, 2026-09-18)
+### K-066 — Storefront dead-turn ("no reply") rate depends on LM Studio's model residency: 0.5% with all demo models pinned, ~63% when JIT-swapping (🔵 proposed — measured 2026-10-20, `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`)
 
-> **Why it exists.** While live re-verifying K-065/DEF-6's Mitigation D at n=25 trials (3-way
-> concurrent, `en`/`pt-BR`/`es`, 5 turns each), 235 of 375 turns (62.7%) never produced a reply at
-> all — `falkor-chat`'s own dead-turn signal (`turn.lastTurn == 'failed'`, the K-065-adjacent
-> DEF-3 fix `4cebd96`) fired correctly on every genuine failure (zero turns showed a missing reply
-> with the latch unset — positive evidence DEF-3 holds under this load), but the underlying
-> failure rate itself is new and high: 371 `ProviderCallError`s against
-> `lmstudio/mistralai/ministral-3-3b` (this def's own pinned model; `HTTP 400 "terminated"` /
-> `500 Internal Server Error`) inside a single ~17-minute run, far above this feature's prior
-> live-testing history.
+> **What is true now.** Under TP-007's 3-way concurrent load (`en`/`pt-BR`/`es`, 5 turns each), the
+> storefront's dead-turn rate (`turn.lastTurn == 'failed'`, the DEF-3 latch, which never missed in
+> either run) is set mostly by whether LM Studio keeps the demo's models co-resident:
+> - **All three demo models explicitly loaded** (`lms load`, ctx 8192, `PARALLEL 4`) on a dedicated
+>   instance, n=75 (2026-10-20): **6/1,125 turns dead (0.5%, Wilson [0.2%, 1.2%])**. All six are
+>   `ministral-3-3b` `HTTP 400 "Context size has been exceeded"`, in two bursts where all three
+>   concurrent participants failed within 5 ms (trials 11 and 42). There were 0 `qwen` failures and
+>   none of the earlier `terminated` / HTTP 500 / model-load shapes.
+> - **JIT loading** (2026-09-18, n=25: 235/375 = 62.7%; U4 smoke 2026-10-20, n=2: 20/30): `ministral`
+>   `"terminated"`/HTTP 500 errors plus `qwen` "Failed to load model … Engine protocol startup was
+>   aborted". One JIT warm-up per model leaves only the last one resident, so the demo thrashes
+>   between models.
 >
-> **Not yet a clean baseline — confirmed contended, not isolated.** A second, unrelated live
-> process (PID 172892, port 8200, `ws:agent-team`, default model `qwen/qwen3-4b-2507`) was sharing
-> the same LM Studio instance throughout this pass, contributing a further 102 unrelated
-> load-failure events. This does not explain the 371 self-inflicted `ministral` failures, but is
-> consistent with an already-contended instance degrading further under additional load — itself
-> relevant to K-065's own root-cause framing (LM Studio's concurrent-request serving/decoding
-> path). **A rerun against a dedicated, single-consumer LM Studio instance is needed before this
-> rate can be trusted as a demo-day estimate.**
+> **The demo calls two LLMs, not one.** `SALESPERSON_DEF` pins only the `assistant` step's chat
+> model (`ministral-3-3b`). Its `query_graph_data` tool resolves the shared `step`-role model
+> (`qwen/qwen3-4b-2507`, `config/models.json`; `ws:demo` has no `agentModelOverride`). The
+> 2026-09-18 attribution of its `qwen` failures to the `:8200` process is therefore wrong or
+> incomplete. The correction and evidence are in the 2026-10-20 report. The 2026-09-18 trial-12
+> sub-observation (a never-delivered tool-call draft in Spanish for a `pt-BR` participant) is still
+> single-instance and can't be measured from storefront-side evidence.
 >
-> **A narrower, single-instance sub-finding, not yet actionable:** one aborted tool-call (trial 12,
-> `pt-BR` participant, an address-confirmation step) drafted its never-delivered JSON argument in
-> Spanish — related to but distinct from DEF-6's own shape (a *completed* wrong-language reply),
-> invisible to K-065's language-adherence metric since it never reached the user. Only one
-> instance observed; true frequency unmeasurable from this pass's evidence (LM Studio's own
-> per-request log isn't visible from this box).
-- **Owner:** none yet — needs a dedicated-instance rerun first (demo-day LM Studio
-  infrastructure/`devops`) before a fix owner can be assigned against a trustworthy rate.
-- **Risks/RAM:** none structurally — a live-behavior finding, not a code defect yet. The risk is
-  disruption to a live demo audience if unaddressed — arguably more disruptive than an occasional
-  wrong-language reply.
-- **Test strategy:** re-run the same TP-007 literal-concurrency protocol against an LM Studio
-  instance confirmed to have no other concurrent consumer, at the same or larger n, before
-  trusting any dead-turn-rate figure as representative of demo-day conditions.
+> **What remains.** (1) Make residency part of demo bring-up: load `ministral`, `qwen` and the
+> embedding model explicitly, and have a preflight check `/api/v0/models` before serving. Without
+> it, demo day gets the ~63% regime. (2) Characterize the residual context-overflow bursts: re-run
+> with `ministral` at a larger context or `--parallel 1`. The shared-context-budget explanation is
+> an unverified hypothesis. A single burst fails every in-flight participant at once.
+- **Owner:** `devops` for the residency/preflight change to the demo bring-up; `qa-engineer` for the
+  follow-up re-run on context/parallel settings.
+- **Risks/RAM:** pinning all three models costs about 7 GiB of LM Studio memory (ministral 4.18 GiB,
+  qwen 2.33 GiB, embedding ~0.6 GB as loaded on the dev box). Live-demo disruption if residency is
+  not pinned.
+- **Test strategy:** the same TP-007 protocol with the committed harness
+  (`salesperson/scripts/language_salience_probe.py`), reporting dead turns by failing model from the
+  demo log, as in the 2026-10-20 report.
 
 ### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
 
