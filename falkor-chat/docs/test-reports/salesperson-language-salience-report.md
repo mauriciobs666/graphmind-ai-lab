@@ -1,6 +1,6 @@
 # Salesperson `systemPrompt` language salience — Mitigation D for K-065/DEF-6 — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-065 · **Extended by:** `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-065 · **Extended by:** `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`
 
 ## Summary
 

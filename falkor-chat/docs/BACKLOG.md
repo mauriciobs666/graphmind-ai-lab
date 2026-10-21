@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-076
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-077
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,57 +40,6 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-065 — DEF-6: `en`-configured storefront participants sometimes get a Spanish reply under concurrency, confirmed at LM Studio's own serving layer (🟡 in-progress — Mitigation D live-verified at 0/25 wrong-language trials, stakeholder sufficiency call pending, gates the first live audience-facing demo only, 2026-09-18)
-
-> **Why it exists.** `docs/test-reports/salesperson-ui-report.md`'s DEF-6: an `en`-configured
-> storefront participant sometimes gets a fully-formed, coherent **Spanish** reply under
-> concurrent load (QA: 2/10 at the plan's own literal 3-way-concurrent wording, 5/10 at 40-way;
-> never at concurrency=1). A dedicated diagnostic spike (`docs/plans/salesperson-ui-ml.md`)
-> reproduced the failure directly against LM Studio with `falkor-chat`/`salesperson` application
-> code bypassed entirely, ruling out an application-layer cause and confirming the mechanism sits
-> in LM Studio's own concurrent-request serving/decoding path — a **finding**, not merely a
-> hypothesis, though the exact internal cause (KV-cache/prompt-prefix cross-talk vs.
-> batch-composition-dependent floating-point non-associativity vs. something else) remains open.
->
-> **This gates the first live, audience-facing demo specifically, not any current milestone** —
-> same shape as the existing K-056→AC-10 precedent (`HISTORY.md` 2026-08-28/2026-08-30 entries).
-> **Mitigation D authorized 2026-09-18 (stakeholder decision), implemented, reviewed, and now
-> live-verified**: `SALESPERSON_DEF` bumped to `v8` (`falkor-chat/server/falkorchat/proof_defs.py`),
-> adding a redundant, more emphatic "entire reply" / anti-drift language instruction to
-> `systemPrompt`, landing in the `system` message resent every LLM turn rather than the
-> tail-of-user-turn CONTEXT-block JSON key the diagnostic spike found to be a weak signal.
-> Statically reviewed (`docs/reviews/salesperson-language-salience.md`, approve with suggestions,
-> no blockers) and committed. **Live re-test result** (`docs/test-reports/salesperson-language-salience-report.md`,
-> QA's own TP-007 literal-concurrency protocol at n=25 trials, independently re-verified by
-> `teco`): **zero wrong-language occurrences across `en`/`pt-BR`/`es`, every trial, every reply**
-> (turn-level 61/61 · 46/46 · 33/33; trial-level 0/23 trials-with-a-reply affected, Wilson 95% CI
-> [0.0%, 14.3%]) — down from the recorded baseline point estimate of ~20% (QA original 2/10, CI
-> [5.7%, 51.0%]). **Reported as the measured rate only — whether it clears the bar for the first
-> live demo is a stakeholder risk-tolerance call, not yet made.** Do not treat this item as closed
-> until that call lands.
->
-> **A second, unrelated finding surfaced during the live re-test — filed separately as `K-066`**
-> (a high no-reply/"dead-turn" rate under this session's contended, shared LM Studio instance) —
-> a distinct demo-readiness risk, not folded into this item's own measurement in either direction.
-- **Recommended mitigation path, in priority order** (`docs/plans/salesperson-ui-ml.md`'s own
-  recommendation): **(D)** strengthen `SALESPERSON_DEF`'s `systemPrompt` language salience —
-  **implemented and live-verified clean, see above** — → **(C)** a post-hoc language classifier +
-  bounded retry on `post_message.text`, forced through a serialized path → **(B)** a bounded
-  concurrency semaphore as a complementary throughput/exposure lever. **Do not ship (A) full
-  serialization.** C and B remain unauthorized and, given D's clean result, may not be needed at
-  all — that determination is the pending stakeholder call, not an automatic escalation.
-- **Owner:** `tdd-engineer` implemented D, `analyst` reviewed, `qa-engineer` live-verified
-  (2026-09-18) — full ledger: `falkor-chat/docs/plans/salesperson-language-salience-coordination.md`.
-  Next owner is the stakeholder (sufficiency call); `data-scientist`/`coder`/`tdd-engineer` again
-  only if C or B is separately authorized.
-- **Risks/RAM:** none identified structurally — `analyst`'s review confirmed `config.model`/
-  `config.tools`/topology byte-identical to `v7`. Empirically, the live re-test found no
-  wrong-language occurrences at n=25 (CI ceiling 14.3%); the only remaining question is whether
-  that clears the demo's own risk bar, which is not this item's call to make.
-- **Test strategy:** live-verification complete for this increment — see the report above. If C or
-  B is authorized later, the same TP-007-based protocol (Wilson interval, per-trial reporting)
-  applies again.
-
 ### K-066 — Storefront dead-turn ("no reply") rate depends on LM Studio's model residency: 0.5% with all demo models pinned, ~63% when JIT-swapping (🔵 proposed — measured 2026-10-20, `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`)
 
 > **What is true now.** Under TP-007's 3-way concurrent load (`en`/`pt-BR`/`es`, 5 turns each), the
@@ -127,6 +76,33 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** the same TP-007 protocol with the committed harness
   (`salesperson/scripts/language_salience_probe.py`), reporting dead turns by failing model from the
   demo log, as in the 2026-10-20 report.
+
+### K-077 — Language-salience probe harness: classifier false negatives, a blind trial-level table, and untested `run_participant` (🔵 proposed — `docs/reviews/salesperson-language-salience.md` Pass 2, F1–F7, 2026-10-20)
+
+> **Why it exists.** `salesperson/scripts/language_salience_probe.py`, the committed TP-007 harness,
+> was reviewed before the 2026-10-20 rerun and approved with suggestions. Its fixes were deferred so
+> they would not touch the live window. They gate nothing: no 2026-10-20 figure depended on them,
+> because every reply was hand-read and every F4 trigger counted zero
+> (`docs/test-reports/salesperson-language-salience2-report.md`, Feedback item 5). The next run of
+> the protocol would rely on them, though. The open findings: **F1** the v2 lexicon has false
+> negatives in the dangerous direction (`con`/`en`/`una` vote for nobody; `in` matches the catalog
+> name `USB-C Hub 7-in-1`, so a Spanish reply can score `en`; `do` is in both `EN_WORDS` and
+> `PT_WORDS`). **F2** the trial-level table ignores `unknown` replies. **F3** `run_participant` has
+> no coverage, and 7 of 9 planted mutants survived. **F4** abnormal paths (timeout, poll/read error,
+> transport `-1`) misattribute a reply to the next turn, and `aggregate` hides them. **F5** scoring
+> the joined turn misses code-switching. **F6** two exceptions escape `http_json` and abort the
+> run. **F7** dead lexicon entries, and `--resume` ends one trial short.
+- **Owner:** `tdd-engineer` (failing test first).
+- **Scope:** the review's suggested fix for each finding (Pass 2, "Findings"). That includes F1's
+  coverage-probe corpus with a `CLASSIFIER_VERSION` bump to `v3`, rather than a lexicon edit alone,
+  and a fake storefront on stdlib `http.server` that kills every F3 survivor. Re-scoring the stored
+  2026-10-20 JSONL with `v3` is optional; it cannot change that run's hand-read headline.
+- **Risks/RAM:** none. The harness is an offline-testable dev script with no runtime consumer. A
+  `v3` classifier is not comparable with the v2 figures, so report both on the next run.
+- **Test strategy:** the 21 offline tests stay green. Add the fake-storefront tests for
+  `run_participant`, the F1 coverage probe, and aggregate fixtures with an `es` participant, an
+  `unknown` reply, a multi-row reply and a 409/timeout record. Re-run the review's mutants
+  (Appendix B) to confirm they are killed.
 
 ### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
 

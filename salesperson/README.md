@@ -11,8 +11,8 @@ CORS. Node is a **build-time dependency only**.
 
 Delivered per `docs/requirements/salesperson-ui.md` (FR-1…FR-11, AC-1…AC-11) and
 `docs/plans/salesperson-ui.md` (the stack rationale is §4.2); delivery record, the S15 QA pass and
-defect-fix wave, and the one still-open pre-live-demo gate (`K-065`, a language swap under
-LLM-serving-layer concurrency) are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
+defect-fix wave, and the one still-open pre-live-demo item (`K-066`, pinning the demo's LM Studio
+models before serving) are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
 
 > This directory previously held a retired Streamlit chatbot. That app now lives at
 > `deprecated/salesperson/` and is unrelated to the code here — see `deprecated/README.md`.
@@ -206,12 +206,10 @@ order).
 
 Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and QA'd
 (`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
-carries the full unit-by-unit ledger). Two still-open items gate the *first live, audience-facing*
-demo specifically, not ordinary use (`falkor-chat/docs/BACKLOG.md`): `K-065`, an occasional
-wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer —
-Mitigation D (`systemPrompt` language salience, `v8`) is implemented, reviewed, and live-verified
-clean (0 wrong-language occurrences across n=25 trials); whether that clears the bar for a live
-demo is a pending stakeholder call. `K-066`, filed out of that same live re-test: a high no-reply
-rate under concurrent load against a contended LM Studio instance, not yet isolated from that
-contention. See `falkor-chat/docs/BACKLOG.md`'s `K-065`/`K-066` entries for current status. See
-`AGENTS.md` for file ownership and conventions.
+carries the full unit-by-unit ledger). One open item affects the *first live, audience-facing*
+demo specifically, not ordinary use: `K-066` (`falkor-chat/docs/BACKLOG.md`). The demo's dead-turn
+rate depends on LM Studio keeping its models resident: 0.5% with all three pinned, about 63% when
+they are JIT-swapped. So load them explicitly before serving. The occasional wrong-language reply
+under concurrency (`K-065`) is closed: Mitigation D (`systemPrompt` language salience, `v8`) was
+live-verified clean (`falkor-chat/docs/HISTORY.md` 2026-10-21). See `AGENTS.md` for file ownership
+and conventions.

@@ -1,6 +1,6 @@
 # Salesperson language salience — dedicated-instance rerun (K-065 / K-066) — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-065, K-066 · **Extends:** `falkor-chat/docs/test-reports/salesperson-language-salience-report.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-065, K-066 · **Extends:** `falkor-chat/docs/test-reports/salesperson-language-salience-report.md`
 
 ## Summary
 

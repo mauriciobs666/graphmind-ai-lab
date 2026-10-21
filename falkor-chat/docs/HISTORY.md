@@ -5,6 +5,61 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-21 — K-065 closed: Mitigation D (`salesperson@v8`) holds clean at n=75 on a dedicated LM Studio instance
+
+- **The defect.** DEF-6: under concurrent load, an `en`-configured storefront participant
+  sometimes got a fully-formed Spanish reply. It was root-caused to LM Studio's own
+  concurrent-request serving path, with application code bypassed (`docs/plans/salesperson-ui-ml.md`).
+- **The fix, Mitigation D** (`999141fe`). `SALESPERSON_DEF` was bumped to `v8`
+  (`server/falkorchat/proof_defs.py`). The bump adds a redundant, more emphatic "entire reply"
+  language instruction to `systemPrompt`, which is resent in the `system` message on every LLM
+  turn. `config.model`, `config.tools` and the topology are byte-identical to `v7`. The same
+  commit extended the regression test (`test_salesperson_scaffold.py`) and swept the `v7`
+  references in scripts, `AGENTS.md` and both READMEs to `v8`.
+- **Review** (`c420ab6`). `analyst`'s Pass 1 of `docs/reviews/salesperson-language-salience.md`
+  approved with suggestions and found no blockers. Its one Major finding was stale "not yet
+  mitigated" status claims. `fe3cfe3` fixed those in `BACKLOG.md`, `AGENTS.md` and
+  `salesperson/README.md`, and added the 2026-09-18 implementation entry below.
+- **Live run 1, 2026-09-18** (`cfb87c00`, `docs/test-reports/salesperson-language-salience-report.md`).
+  TP-007's literal-concurrency protocol: 3-way `en`/`pt-BR`/`es`, 5 turns each, n=25, on a
+  shared LM Studio instance. Result: 0 wrong-language replies. Turn level 61/61 `en`, 46/46
+  `pt-BR`, 33/33 `es`; trial level 0/23 trials with a reply, Wilson 95% CI [0.0%, 14.3%]. That
+  is down from QA's original 2/10 [5.7%, 51.0%]. 235/375 turns (62.7%) got no reply at all.
+  `effc5ae6` updated the status docs, filed that dead-turn finding as K-066, and committed the
+  coordination doc.
+- **The probe harness** (`39407f9c`). The 2026-09-18 scratch harness was lost with its session.
+  It was rebuilt and committed as `salesperson/scripts/language_salience_probe.py`. It writes one
+  flushed JSONL line per turn, `aggregate` re-derives every figure from that file, and it takes
+  LM Studio snapshots. It has 21 offline tests (`scripts/test_language_salience_probe.py`). The
+  same commit added `analyst`'s Pass 2 harness review (approve with suggestions, findings F1–F7)
+  and the README and `salesperson/AGENTS.md` lines for it. The fixes are filed as K-077.
+- **Stakeholder decision, 2026-10-20.** 0/23 was not yet accepted as sufficient. One rerun was
+  ordered on an LM Studio instance with no other consumer, at a larger n, and "K-065 closes
+  afterwards if the result stays clean". C and B stayed unauthorized.
+- **Live run 2, 2026-10-20** (`ab58fd72`, `docs/test-reports/salesperson-language-salience2-report.md`).
+  Same protocol with the committed harness, n=75 (1,125 turns, 1,119 replied), all three demo
+  models explicitly pinned resident. Result: 0 wrong-language replies out of 1,119 replied turns,
+  by a full hand-read of every reply; the v2 classifier agreed on all 1,119. Trial level 0/75 for
+  each language, Wilson [0.0%, 4.9%]; turn level 0/373 for each language, [0.0%, 1.0%]. Dead turns:
+  6/1,125 (0.5%, Wilson [0.2%, 1.2%]), all `ministral` "Context size has been exceeded". The same
+  commit rewrote K-066 and marked the first report `Extended by:` the second.
+- **K-065 closes** under that decision: the result stayed clean. `teco` verified it against the
+  hand-read file and the raw JSONL (`docs/plans/salesperson-language-salience-coordination.md`,
+  Phase 2).
+- **If the language swap ever recurs**, the fallback path is still the ml plan's
+  (`docs/plans/salesperson-ui-ml.md`): **(C)** a post-hoc language classifier plus a bounded retry
+  on `post_message.text`, through a serialized path, then **(B)** a bounded concurrency semaphore.
+  **Never (A)**, full serialization. Re-measure with the committed harness and the same TP-007
+  protocol (Wilson interval, per-trial reporting).
+- **K-066** is re-characterised: the dead-turn rate depends on model residency, not on load as
+  such. See `BACKLOG.md`.
+- **Correction.** The 2026-09-18 report put its `qwen/qwen3-4b-2507` failures down to the `:8200`
+  `ws:agent-team` process. That is wrong, or at least incomplete. The storefront demo itself calls
+  `qwen`, through the `query_graph_data` tool's `step`-role model. Details: the 2026-10-20 report,
+  "Correction to the 2026-09-18 report's `qwen` attribution". The 2026-09-18 K-065 figures are
+  unaffected, since they count delivered replies only.
+- K-065 is removed from `BACKLOG.md`.
+
 ## 2026-10-17 — K-069 delivered: a shipped log config gives every server log line a timestamp, a level and a guarded shape
 
 - **Defect:** the app installs no log configuration. Under uvicorn's default config, the only

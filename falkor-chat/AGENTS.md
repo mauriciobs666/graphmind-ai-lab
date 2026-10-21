@@ -102,14 +102,12 @@ across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — 
 starts over REST; advancing `Order.status` is a separate `services.advance_order` call, not a
 REST route. Per-version history lives in `proof_defs.py`'s `SALESPERSON_DEF` comment block.
 
-**Before running a live, audience-facing storefront demo, check `docs/BACKLOG.md`'s `K-065`/`K-066`.**
-Under concurrent load, an `en`-configured participant can occasionally get a fully-formed Spanish
-reply — confirmed reproducing at LM Studio's own serving layer, application code bypassed
-(`docs/plans/salesperson-ui-ml.md`). Mitigation D (`systemPrompt` language salience, `v8`) is
-implemented, reviewed, and live-verified clean (0 wrong-language occurrences, n=25) — whether that
-clears the bar for a live demo is a pending stakeholder call, so check `K-065`'s current status
-before relying on it. `K-066` (a separate, unrelated no-reply/dead-turn rate under concurrent load)
-is also worth checking before demo day. Gates a live demo specifically, not ordinary dev/test use.
+**Before running a live, audience-facing storefront demo, pin the demo's models (`docs/BACKLOG.md`
+`K-066`).** The demo calls two LLMs: `ministral-3-3b` for the `assistant` step and
+`qwen/qwen3-4b-2507` through `query_graph_data`. Load both, plus the embedding model, with
+`lms load` before serving. Under JIT loading they evict each other, and about 63% of turns die.
+The language swap under concurrency (K-065) is closed: Mitigation D (`v8`) was live-verified clean
+(`docs/HISTORY.md` 2026-10-21).
 
 **`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
 are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without

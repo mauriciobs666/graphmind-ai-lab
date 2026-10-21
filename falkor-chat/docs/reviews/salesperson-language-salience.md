@@ -1,6 +1,6 @@
 # Salesperson `systemPrompt` language salience (Mitigation D, K-065/DEF-6) — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-065 (gates the first live demo only)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-065 (gates the first live demo only)
 
 ## Scope & verdict
 
