@@ -24,9 +24,13 @@ options assessed" (item D) and §"Recommendation" in full — do not work from t
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 | `tdd-engineer` | `aa84d8a313ab78f7d` | delivered | `falkor-chat/server/falkorchat/proof_defs.py` (+ sweep) | `analyst` → — | 144k tok / 59 tools |
+| U1 | `tdd-engineer` | `aa84d8a313ab78f7d` | accepted | `falkor-chat/server/falkorchat/proof_defs.py` (+ sweep) | `analyst` (U2) → approve with suggestions | 144k tok / 59 tools |
 | U2 | `analyst` | `af2954b05a0768e1e` | accepted | `falkor-chat/docs/reviews/salesperson-language-salience.md` | `analyst` → approve with suggestions | 105k tok / 28 tools |
 | U3 | `qa-engineer` | `adcdf1e1b0ba2c48e` | accepted | `falkor-chat/docs/test-reports/salesperson-language-salience-report.md` | `teco` (direct verification) → clean result, see below | 361.5k tok / 519 tools |
+| U4 | `qa-engineer` | `a0411acf57dbe0b05` | gated | `salesperson/scripts/language_salience_probe.py` (committed harness + smoke run n=2) | `analyst` (U5) → approve with suggestions | 164k tok / 49 tools |
+| U5 | `analyst` | `a954f171484317f46` | accepted | `falkor-chat/docs/reviews/salesperson-language-salience.md` (`## Pass 2`, harness review) | — → — | — |
+| U6 | `qa-engineer` | `a0411acf57dbe0b05` (U4 resumed) | in-flight | `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md` (dedicated-instance rerun, K-065 + K-066) | `teco` (direct verification) → — | — |
+| U7 | `tdd-engineer` | — | queued | harness fixes per review Pass 2 (F1–F7, fake-storefront tests for `run_participant`) + v3 re-score of U6's stored JSONL | `analyst` → — | — |
 
 **Mid-run relay to U3 (2026-09-18):** user surfaced LM Studio server-log lines timestamped
 22:54:53–22:54:55 during/near U3's window — a terminated tool-call generation with a Spanish
@@ -110,3 +114,34 @@ this coordination doc are the last two pieces to commit** — holding both for t
 pass since they're the final artifacts of an otherwise-closed unit chain. K-065 itself stays open
 in `BACKLOG.md`, marked in-progress pending the stakeholder's sufficiency call — not closed by this
 coordination, per its own charter.
+
+## Phase 2 — dedicated-instance rerun (2026-10-20)
+
+**Stakeholder decision 2026-10-20:** Mitigation D's 0/23 (CI ceiling 14.3%) is not yet accepted as
+sufficient; run one rerun against an LM Studio instance with no other consumer, at a larger n, so it
+both tightens K-065's bound and gives K-066 a trustworthy dead-turn baseline. K-065 closes on that
+result if it stays clean; C/B remain unauthorized.
+
+The U3 harness (`language_salience_probe.py`) lived in a dead session's scratchpad and is lost —
+U4 rebuilds it as a committed script (the U3 report's own Feedback item 4), U5 gates it statically
+before the live budget is spent, U6 runs it. U4 → U5 → U6 strictly sequential. U6 is dispatched only
+after the stakeholder confirms the LM Studio instance is dedicated for the run window.
+
+**U4 verified by `teco`** (2026-10-20): 21/21 offline tests re-run green; smoke JSONL recounted
+independently (per-language replied / no-reply / dead / dead-but-replied all match U4's table); own
+argument mutant (`is_wrong_language` fed a constant `"en"` instead of the participant's language)
+killed by the suite, file restored byte-identical. Not yet committed (held until the U5 gate). U5
+runs in parallel with U6 to use the stakeholder's LM Studio window — safe for classifier defects,
+since every raw reply is stored and re-scorable, not for turn-driving defects, which `teco` checked
+by reading the post/poll/read loop. **U4 finding carried into U6:** the demo has two LLM consumers —
+`ministral-3-3b` (assistant step) and `qwen/qwen3-4b-2507` (`query_graph_data` → `llm("step")`,
+`falkor-chat/server/falkorchat/tools.py`) — so the 2026-09-18 report's attribution of the `qwen`
+failures to the :8200 process was at least partly wrong. U6 preloads both and splits dead turns by
+failing model.
+
+**U5 verdict: approve with suggestions, no re-run needed** (`falkor-chat/docs/reviews/salesperson-language-salience.md`
+Pass 2). `teco` reproduced F1 directly (`"Agregado: USB-C Hub 7-in-1 por $39.99"` → `en` for an `en`
+participant) and confirmed the harness md5 unchanged. Relayed to U6 mid-run, 2026-10-20: the headline
+wrong-language count is U6's **hand-read of every replied turn**; the v2 classifier figure is reported
+alongside for comparability only; plus the unknown-trial count and the F4 trigger counts. Harness fixes
+are U7, after U6, never during it.

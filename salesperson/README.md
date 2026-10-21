@@ -147,12 +147,26 @@ Playwright's browser binary is not installed by `npm ci`; get it once with:
 npx playwright install chromium
 ```
 
+## Language-adherence probe (TP-007, K-065/K-066)
+
+`scripts/language_salience_probe.py` drives TP-007's literal-concurrency protocol against a running
+demo (one `en` + `pt-BR` + `es` participant per trial, 3-way concurrent, 5 scripted turns), appending
+one flushed JSON line per turn. `aggregate` re-derives every reported metric from that file:
+
+```bash
+python3 scripts/language_salience_probe.py run --trials 60 --out /path/run.jsonl   # --resume continues a killed run
+python3 scripts/language_salience_probe.py aggregate /path/run.jsonl --dump-replies
+python3 -m unittest scripts/test_language_salience_probe.py                        # offline, no LM Studio
+```
+
 ## Layout
 
 ```
 salesperson/
 ├── build.sh                 # the supported build entry point
 ├── scripts/install_node.sh  # per-user Node provisioning
+├── scripts/load_demo.py     # load/concurrency harness (stub + live sweep)
+├── scripts/language_salience_probe.py  # TP-007 language-adherence probe (+ offline tests beside it)
 ├── .node-version / .nvmrc   # the toolchain pin
 ├── index.html               # Vite's HTML entry
 ├── vite.config.ts           # base "/shop/", Tailwind, Vitest config

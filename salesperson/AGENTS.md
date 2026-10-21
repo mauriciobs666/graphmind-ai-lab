@@ -72,6 +72,7 @@ a structural map of which subtree covers which feature area; the step labels bel
 | `tests/e2e/**` | S12b |
 | `public/products/**` | S14 |
 | `scripts/load_demo.py` | S15 |
+| `scripts/language_salience_probe.py`, `scripts/test_language_salience_probe.py` | `qa-engineer` (K-065/K-066 TP-007 probe; README "Language-adherence probe") |
 | `README.md`, `AGENTS.md` | S5 → S16 |
 
 **Adding a dependency is the sanctioned exception** to `package.json`'s S5 ownership: any step may
