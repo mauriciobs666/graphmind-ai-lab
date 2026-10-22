@@ -246,6 +246,31 @@ to the general fact here.
   future MCP tool) bypasses it entirely; the guard belongs at the service/repository boundary too.
   Full write-up incl. crash log: `falkor-chat/docs/reviews/unique-constraint-oversized-value-
   crash-rca.md` (K-049).
+- **A string with LEADING or TRAILING whitespace written into a `UNIQUE`-constrained property
+  crashes the ENTIRE instance (SIGSEGV in `EnforceUniqueEntity`) — at any length, even 2 bytes —
+  and an exact-match index silently MISSES such a value on lookup** (verified 2026-10-21,
+  v4.18.11 / module `41811`, in throwaway `falkordb/falkordb:v4.18.11` containers on port 6390 —
+  after the same bug had already taken down the shared `falkordb-dev` once, 2026-10-20, during a
+  `coordination-graph` load probe). `GRAPH.CONSTRAINT CREATE g UNIQUE NODE U PROPERTIES 1 key`
+  then `CREATE (:U {key:'set '})` → `redis-server` exits 139, stack top
+  `falkordb.so(EnforceUniqueEntity+0x1e9)`, *"Accessing address: (nil)"*. Reproduced for `'a '`,
+  `' a'`, `'a\t'`, `'x "y '`; **interior** whitespace (`'a  b'`) and `'a"b'` are safe. Same crash
+  as a literal through `redis-cli` and as a `falkordb-py` parameter, so it is not client escaping.
+  The index-only half (no constraint, no crash): with a RANGE index on `U.key`,
+  `MATCH (u:U {key:'set '}) RETURN count(u)` returns **0** (plan `Node By Index Scan`) while the
+  same query before the index existed returned **1**; `' lead'` likewise 0, `'plain'` 1 —
+  apparently the index stores a whitespace-trimmed key, so the UNIQUE check's lookup finds
+  nothing it expects and dereferences null. Consequences: (1) **any caller-built value that reaches
+  a `UNIQUE` property must be stripped (or hashed) before the write** — a parser that cuts a
+  Markdown cell at a delimiter is exactly how a trailing space gets in; this joins the 4096-byte
+  limit above as a second mandatory guard at the repository boundary; (2) even without a
+  constraint, an indexed equality anchor on an unstripped value is a **silent miss**, so normalise
+  at write *and* at lookup. **The crashing set is exactly C `isspace()`** (verified 2026-10-21,
+  same throwaway setup, `falkordb-py` parameters, one value per fresh graph): trailing `\n`, `\r`,
+  `\v`, `\f` crash like space/tab and miss on an index lookup; trailing/leading NBSP ` `,
+  ` `, `　`, `​` and `\x1f` are **safe** — index lookup finds them, the UNIQUE write
+  succeeds. So a guard that strips/asserts with Python's `str.strip()`/`str.isspace()` (a strict
+  superset) is sufficient. Not yet checked: relationship-scoped constraints.
 
 ## Concurrency & atomicity
 
@@ -622,11 +647,18 @@ to the general fact here.
 - **FalkorDB refuses a multi-statement query outright — one `GRAPH.QUERY`, one statement.**
   `RETURN 1 AS a; RETURN 2 AS b` comes back as the error *"query with more than one statement is
   not supported"* (re-verified 2026-09-09 through the `cypher` MCP tool against `kaizen_team`).
-  Two consequences, pulling opposite ways. For a **design**: there is no clear-then-write, no
-  delete-and-recreate, no two-phase anything in a single call — either express it as one statement,
-  or accept two round trips with a window in which the node is absent. That is why a singleton
-  marker/stamp is a `MERGE … SET`, not a `DELETE` followed by a `CREATE`: the atomic version of
-  the latter is unconstructible here. For **injection**: a `;` buys an attacker nothing, so the
+  Two consequences, pulling opposite ways. For a **design**: a clear-then-write must be ONE
+  statement — and it can be: **correction 2026-10-20** (module `41811`, disposable graph), a
+  whole-subgraph delete-and-recreate fits in one statement with `WITH` as the bridge —
+  `OPTIONAL MATCH (old:Source {path:$path}) OPTIONAL MATCH (old)-[]->(c) WITH old, collect(c) AS cs
+  FOREACH (x IN cs | DETACH DELETE x) FOREACH (o IN CASE WHEN old IS NULL THEN [] ELSE [old] END |
+  DETACH DELETE o) WITH count(*) AS _ CREATE (s:Source) SET s = $meta WITH s UNWIND $rows AS row
+  CREATE (s)-[:HAS]->(u:Unit) SET u = row` re-creates the same UNIQUE keys it deleted without a
+  violation, rolls back the deletes too when a later `CREATE` violates a constraint, and was never
+  seen half-applied by concurrent `RO_QUERY` readers (104 polls across 8 replaces of 20k–30k rows);
+  full design at `claude/docs/plans/coordination-graph-graph.md` §3. What is unconstructible is
+  only the *two-statement* form. A singleton marker is still best as `MERGE … SET`. For
+  **injection**: a `;` buys an attacker nothing, so the
   identifier-splice hazard in the next bullet is entirely about what fits inside *one* statement —
   which, as that bullet shows, is more than the grammar first suggests.
 

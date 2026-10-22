@@ -1,6 +1,6 @@
 # In-flight work, backlogs and reference lookup in the graph — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-20
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-21
 
 ## Intent
 
@@ -275,3 +275,32 @@ None — all settled at the 2026-10-20 readback (see Decision log).
   Chosen over "order by default, parallel as a flagged accepted risk" and "flag only".
 - 2026-10-20 — Closing readback confirmed by the stakeholder (incl. FR-1 revision, US-4/FR-13–FR-15
   planning thread, strict overlap rule). → Status **Ready for design**; handed to `architect`.
+- 2026-10-21 — Architect's plan questions (`claude/docs/plans/coordination-graph.md` §6), answered
+  by the stakeholder: **Q1** a one-time *layout* reformat of every backlog into the common item
+  format is accepted — FR-14's "no one-time backfill" bans filling in planning facts, not
+  reformatting. **Q1b** "Parking lot / ideas" sections in agent kaizen plans **are** items the
+  planner sees (they get ids and the item format in the same reformat; chosen over the
+  recommended exclusion). **Q2** if step S0 shows the post-edit hook doesn't fire in every agent
+  context: accept instant sync where it fires and FR-5 staleness flagging elsewhere — no watcher,
+  no prompt-level sync. **Q3** milestones cap at 6 items by default, adjustable per proposal.
+  **Q4** `docs/requirements/cross-initiative-coordination.md` stays open and gets re-scoped by
+  `tico` against this feature once the plan is approved. **Q5** the stakeholder applies the
+  `.claude/settings.json` blocks (S0 probe, S8 hook) by hand. **Q6** keep RDB-only snapshots;
+  the post-crash window is flagged stale and repaired by `sync --all`.
+- 2026-10-21 — Review-driven questions (`claude/docs/reviews/coordination-graph.md` Pass 1, open
+  questions 1–2): while the sync cannot run (FalkorDB or LM Studio down), **warn on every edit**
+  made during the failure — stricter than the analyst's proposed "once per file version" — but
+  retries are backed off and never make a command hang (B1 stands). An **approved `Milestone`
+  is fixed**: later proposals place only unassigned items around approved ones and flag any
+  approved placement a new dependency makes impossible.
+- 2026-10-21 — Plan v2 §6 Q7 (multi-chunk KB edits stay "pending" until falkor-chat's
+  embed-after-extract ordering is fixed): **schedule `falkor-chat:K-070` alongside**, in parallel
+  with the KB-mirror step, as a prerequisite of AC-8's final acceptance; K-070 stays
+  falkor-chat's own item and is not folded into this plan.
+- 2026-10-22 — Review Pass 2 open question (`claude/docs/reviews/coordination-graph.md`): a
+  high-priority new item **may** be proposed into a gap before an approved later milestone, marked
+  as inserted ahead of it, and approved or rejected like any placement — approved milestones
+  themselves never move. The one-time reformat **converts** an existing milestone table's
+  open rows into `Milestone` fields on their items (falkor-chat: M2.5 → K-016, K-017, K-018), so
+  the planner treats them as already placed; the table may remain as the human-readable milestone
+  map.
