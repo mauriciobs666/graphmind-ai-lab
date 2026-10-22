@@ -1,6 +1,6 @@
 # Salesperson demo on one LLM (`ministral` for agent + `query_graph_data` step) — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-066 (demo residency; not a milestone)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-066 (demo residency; not a milestone)
 
 ## Why this exists
 
@@ -48,3 +48,12 @@ default flip.
 `falkor-chat/AGENTS.md` / `salesperson/AGENTS.md` (demo model set), `falkor-chat/docs/BACKLOG.md`
 K-066 (preload list), `falkor-chat/docs/HISTORY.md` (entry at close), `falkor-chat/docs/SERVER.md`
 if it documents the model config.
+
+## Close (2026-10-22)
+
+Definition of done met: the demo runs on `ministral` + the embedder (U2 `ad01aee7`), live QA passed
+(U3), the `nlq-12` gate was fixed (U4 `7f3ad0e5`, catalog 21/21 live), the manual note landed (U5
+`d042611b`), and the K-066 preload guidance names the two-model set. K-066 stays open in
+`falkor-chat/docs/BACKLOG.md` for the residency preflight only. Follow-ups filed: K-078–K-081, plus
+a `model-bench/docs/BACKLOG.md` item for the NLQ pack's parse (P5-4). Pass 4's carry-overs (the
+results-path parent check and the static-gateway nit) are minor and not filed.

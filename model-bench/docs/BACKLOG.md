@@ -171,3 +171,13 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   silently assumes an even (or any particular) split. Full mechanism, reproduction, and the
   precedent this follows: `docs/reviews/small-model-catalog-sweep-impl.md`, "Verification round 2
   — 2026-09-20" under the Defect 1 fix section.
+
+- **The `nlq-structured-query` pack no longer mirrors falkor-chat's production parse (filed
+  2026-10-22 from `falkor-chat/docs/reviews/salesperson-single-model.md` P5-4).** Since
+  falkor-chat `7f3ad0e5`, `QueryGraphDataTool` parses with `querygen.merge_duplicate_keys`
+  (repeated list keys merged, conflicting scalar rejected) and fills an absent `returns` via
+  `querygen.default_returns`. The pack's `tools/exec.py` (`returns` check and plain `json.loads`)
+  still rejects a missing `returns` and keeps last-wins, so it under-scores a model that repeats
+  `filters` or omits `returns` (ministral on `nlq-12`). Decide between a pack version bump that
+  copies the two normalizations, or a `PROVENANCE.md` note that the pack scores the stricter
+  pre-K-066 contract. Copy, don't import: the pack must not read from `falkor-chat/` at runtime.

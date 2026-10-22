@@ -1,6 +1,6 @@
 # Salesperson single-model — live GPU-fit check
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-066
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-066
 
 ## Summary
 

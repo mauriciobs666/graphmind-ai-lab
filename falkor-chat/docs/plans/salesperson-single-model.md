@@ -1,6 +1,6 @@
 # Salesperson demo on one LLM — `query_graph_data` inherits the calling step's model
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-066 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/salesperson-single-model.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-066 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/salesperson-single-model.md`
 
 _Revision 2026-10-21 (v2): analyst Pass 1 + teco rulings applied; §2.3, §4 (S5/S8/S9), §5 (T7), §6, §7 and §8 revised, with dispositions in §9._
 _Revision 2026-10-21 (v3): analyst Pass 2, U0's final fit report and the stakeholder's "build it, accept WDDM paging" decision applied; §7, §8, §9 only (§3–§5 and S1–S9 unchanged)._

@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-077
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-081
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,42 +40,61 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-066 — Storefront dead-turn ("no reply") rate depends on LM Studio's model residency: 0.5% with all demo models pinned, ~63% when JIT-swapping (🔵 proposed — measured 2026-10-20, `falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`)
+### K-066 — Demo bring-up does not check LM Studio model residency before serving the storefront (🔵 proposed — single-model set adopted and live-measured 2026-10-22, `docs/test-reports/salesperson-single-model-report.md`)
 
-> **What is true now.** Under TP-007's 3-way concurrent load (`en`/`pt-BR`/`es`, 5 turns each), the
-> storefront's dead-turn rate (`turn.lastTurn == 'failed'`, the DEF-3 latch, which never missed in
-> either run) is set mostly by whether LM Studio keeps the demo's models co-resident:
-> - **All three demo models explicitly loaded** (`lms load`, ctx 8192, `PARALLEL 4`) on a dedicated
->   instance, n=75 (2026-10-20): **6/1,125 turns dead (0.5%, Wilson [0.2%, 1.2%])**. All six are
->   `ministral-3-3b` `HTTP 400 "Context size has been exceeded"`, in two bursts where all three
->   concurrent participants failed within 5 ms (trials 11 and 42). There were 0 `qwen` failures and
->   none of the earlier `terminated` / HTTP 500 / model-load shapes.
-> - **JIT loading** (2026-09-18, n=25: 235/375 = 62.7%; U4 smoke 2026-10-20, n=2: 20/30): `ministral`
->   `"terminated"`/HTTP 500 errors plus `qwen` "Failed to load model … Engine protocol startup was
->   aborted". One JIT warm-up per model leaves only the last one resident, so the demo thrashes
->   between models.
+> **What is true now.** The storefront's dead-turn rate is set by whether LM Studio keeps the demo's
+> models resident. JIT swapping gave ~63% dead turns (`docs/test-reports/salesperson-language-salience2-report.md`).
+> Since `ad01aee7`, `query_graph_data`'s internal call uses the calling step's model
+> (`docs/plans/salesperson-single-model.md`), so the demo needs **one chat LLM plus the embedder**:
+> `mistralai/ministral-3-3b` (`-c 8192 --gpu max`) and `text-embedding-qwen3-embedding-0.6b`, with
+> `qwen` unloaded and the `:8200` server idle (it can JIT-load `qwen`). The demo set-up is
+> `falkor-chat/AGENTS.md`. With that set pinned (n=75, 2026-10-22), there were **0/1,125 dead turns**,
+> 0 context overflows, 0 wrong-language replies and a p95 of 14.1 s, against 6/1,125 and 24.1 s with
+> three models. On the 6 GB GPU it fits only with WDDM paging: ≤1.6 s on the first embed after a
+> chat (`docs/test-reports/salesperson-single-model-fit-report.md`). The storefront never embeds.
 >
-> **The demo calls two LLMs, not one.** `SALESPERSON_DEF` pins only the `assistant` step's chat
-> model (`ministral-3-3b`). Its `query_graph_data` tool resolves the shared `step`-role model
-> (`qwen/qwen3-4b-2507`, `config/models.json`; `ws:demo` has no `agentModelOverride`). The
-> 2026-09-18 attribution of its `qwen` failures to the `:8200` process is therefore wrong or
-> incomplete. The correction and evidence are in the 2026-10-20 report. The 2026-09-18 trial-12
-> sub-observation (a never-delivered tool-call draft in Spanish for a `pt-BR` participant) is still
-> single-instance and can't be measured from storefront-side evidence.
->
-> **What remains.** (1) Make residency part of demo bring-up: load `ministral`, `qwen` and the
-> embedding model explicitly, and have a preflight check `/api/v0/models` before serving. Without
-> it, demo day gets the ~63% regime. (2) Characterize the residual context-overflow bursts: re-run
-> with `ministral` at a larger context or `--parallel 1`. The shared-context-budget explanation is
-> an unverified hypothesis. A single burst fails every in-flight participant at once.
-- **Owner:** `devops` for the residency/preflight change to the demo bring-up; `qa-engineer` for the
-  follow-up re-run on context/parallel settings.
-- **Risks/RAM:** pinning all three models costs about 7 GiB of LM Studio memory (ministral 4.18 GiB,
-  qwen 2.33 GiB, embedding ~0.6 GB as loaded on the dev box). Live-demo disruption if residency is
-  not pinned.
-- **Test strategy:** the same TP-007 protocol with the committed harness
-  (`salesperson/scripts/language_salience_probe.py`), reporting dead turns by failing model from the
-  demo log, as in the 2026-10-20 report.
+> **What remains.** (1) A preflight in demo bring-up that reads `/api/v0/models` and refuses to
+> serve unless exactly the two-model set is loaded. Today the guidance is prose only. (2) Optional:
+> a long-conversation stress variant of the probe. Q3 saw 0 overflows, but U0's synthetic three
+> concurrent ~3.1k-token requests still exceed the shared 8,192-token KV budget. (3) Optional: a clean
+> rerun of the `TURN_WORKERS` lever (Q4 was contaminated by a host suspend; keep 4).
+- **Owner:** `devops` (1); `qa-engineer` (2), (3).
+- **Test strategy:** TP-007 protocol with `salesperson/scripts/language_salience_probe.py`; residency
+  via `salesperson/scripts/qwen_watch.sh` and `lms ps`.
+
+### K-078 — es/pt-BR carts end up empty: the agent translates product names, so `add_to_cart` is held by the off-turn guard (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
+
+> In the n=75 run, the demo log held 146 `off-turn write held … add_to_cart(productName=…)`
+> warnings, every one with a Portuguese or Spanish rendering of an English catalog name (e.g.
+> `Mouse sem fio Pro` 70, `Ratón inalámbrico profesional` 23). The K-058 guard requires the product
+> name to appear in the turn's text, and the catalog lookup needs the canonical name, so non-English
+> carts mostly stay empty. Agent behaviour that predates K-066 (ministral was already the agent model).
+> Serious for an es/pt-BR demo.
+- **Owner:** `architect` (prompt vs. canonical-name resolution vs. guard matching), then an implementer.
+
+### K-079 — Storefront replies sometimes state fabricated or scrambled prices (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
+
+> Two `en` replies to "What products do you have?" (#156, #286) listed invented prices, e.g. Wireless
+> Mouse Pro at $349.99, and some replies quote € instead of $. Agent behaviour, not attributed to
+> K-066. `query_graph_data` now abstains rather than return a bare name for a single-item lookup
+> with no projection (`querygen.default_returns`), which removes one fabrication-shaped hand-off.
+- **Owner:** `analyst` (RCA: prompt vs. tool-result rendering), then an implementer.
+
+### K-080 — Model kind `extraction` sits outside `modelconfig.KINDS`, so a workspace override can't reach it (🔵 proposed — `docs/reviews/salesperson-single-model.md` Pass 4 R5, 2026-10-22)
+
+> `IngestionPipeline` resolves kind `extraction`, which is absent from `modelconfig.KINDS` and
+> `_KIND_TO_OVERRIDE_KEY`. `SERVER.md` §1.8's "four closed consumer kinds" is therefore false, and
+> `agentModelOverride`-style workspace overrides do not apply to extraction. Pre-existing.
+- **Owner:** `architect` (add the kind vs. document it as deliberate), then `tdd-engineer`.
+
+### K-081 — NLQ: ministral answers an entity-type question with the `Product` label (`nlq-27`) (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q2, 2026-10-22)
+
+> "Can you list all the Product-type entities?" (knowledge_base) should match `Entity {type:'Product'}`;
+> ministral emits `label: "Product"`, gets the catalog, and finds nothing. qwen passes it, so the
+> knowledge_base subset is 12/19 vs 13/19. Catalog is 21/21 on both. Not on the storefront path
+> (the shop asks catalog questions only). A tool-prompt fix would follow R3 in
+> `docs/plans/salesperson-single-model.md`.
+- **Owner:** `data-scientist` (whether to fix by prompt), then an implementer.
 
 ### K-077 — Language-salience probe harness: classifier false negatives, a blind trial-level table, and untested `run_participant` (🔵 proposed — `docs/reviews/salesperson-language-salience.md` Pass 2, F1–F7, 2026-10-20)
 

@@ -1,6 +1,6 @@
 # Salesperson demo on one LLM — live QA (U3)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-066
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-066
 
 ## Summary
 

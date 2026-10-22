@@ -5,6 +5,38 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-22 — K-066 single-model demo: the storefront runs on `ministral` + the embedder (two resident models, not three)
+
+- **Why.** Three resident models (`ministral-3-3b` agent, `qwen3-4b-2507` for `query_graph_data`'s
+  `step` call, the 0.6B embedder) overfill the 6 GB demo GPU. The stakeholder chose `ministral` for
+  both roles; `qwen` for both was ruled out by its turn-4 tool-call collapse (K-056).
+- **Plan and gates.** `docs/plans/salesperson-single-model.md` (v3, `architect`), reviewed by
+  `analyst` in `docs/reviews/salesperson-single-model.md` Passes 1–6. Fit check first:
+  `docs/test-reports/salesperson-single-model-fit-report.md`. The two models fit only with WDDM
+  paging: ≤1.6 s on the first embed after a chat; the storefront never embeds. Committed in `b8c2d1ef`.
+- **Code** (`ad01aee7`). `_run_agent_node` passes the step's own `config.model` to tools as
+  `run["stepModel"]`; `QueryGraphDataTool` resolves `llm("step", requested=…)` from it, so a step's
+  model also drives its query call. The `config/models.json` defaults are unchanged (shared with the
+  `:8200` server). `SERVER.md` §1.8, `falkor-chat/AGENTS.md` (the demo model set) and
+  `salesperson/README.md` were updated. Manual note in `docs/manuals/llm-provider-config.md` §4
+  (`d042611b`).
+- **Live QA** (`b699b849`, `docs/test-reports/salesperson-single-model-report.md`, n=75 TP-007).
+  Results: 0/1,125 dead turns, against 6/1,125 with three models; 0 context overflows;
+  0/1,125 wrong-language replies (full hand-read); p95 14.1 s, against 24.1 s; 0 embedding
+  requests from the storefront. The measuring scripts were re-created durably in
+  `salesperson/scripts/`.
+- **`nlq-12` fix** (`7f3ad0e5`). The live NLQ gate found one catalog regression (20/21): `ministral`
+  repeats the `filters` key inside one match, and `json` last-wins dropped the category filter. It
+  also omitted `returns`. The stakeholder chose to fix it before closing. `tdd-engineer` added
+  `querygen.merge_duplicate_keys` and `querygen.default_returns`, applied only by
+  `QueryGraphDataTool`. The guard judge and extraction keep the shared parser's default. Two
+  `analyst` passes followed. The live rerun on the final code scored **catalog 21/21**; knowledge
+  base 12/19 against `qwen`'s 13/19 (`nlq-27`, filed as K-081).
+- **Filed.** K-066 rewritten: demo bring-up still needs a residency preflight. New items:
+  K-078 (es/pt-BR translated names empty the cart), K-079 (fabricated prices), K-080 (`extraction`
+  kind outside `KINDS`), K-081 (`nlq-27`). Also a `model-bench/docs/BACKLOG.md` item: the NLQ pack's
+  parse no longer mirrors production.
+
 ## 2026-10-21 — K-065 closed: Mitigation D (`salesperson@v8`) holds clean at n=75 on a dedicated LM Studio instance
 
 - **The defect.** DEF-6: under concurrent load, an `en`-configured storefront participant

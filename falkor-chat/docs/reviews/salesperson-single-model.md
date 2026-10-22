@@ -1,6 +1,6 @@
 # Review — Salesperson demo on one LLM (`query_graph_data` inherits the calling step's model)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-066
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-066
 
 ## Pass 1 (2026-10-21)
 
