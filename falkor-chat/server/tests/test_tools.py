@@ -553,6 +553,57 @@ def test_filter_products_all_arguments_optional():
     ]
 
 
+def test_filter_products_blank_price_bounds_are_treated_as_omitted():
+    """Sibling of `salesperson-fabricated-prices-rca.md` CF-1: a model that
+    sends `""` for "no category" can send `""` for "no price bound". A string
+    reaching `p.price >= coalesce($minPrice, -1.0)` is not null, so `coalesce`
+    keeps it and the number-vs-string comparison matches nothing (live-checked:
+    0 of 15 catalog rows). A blank/whitespace-only price string must reach
+    services as `None`, exactly like an omitted bound.
+    """
+    for blank in ("", " ", "\t", " \n "):
+        svc = StubServices(filter_result=[])
+        tool = FilterProductsTool(svc)
+
+        tool.run({"minPrice": blank, "maxPrice": blank}, ctx=CTX, run={})
+
+        assert svc.filtered == [
+            {"category": None, "min_price": None, "max_price": None,
+             "limit": DEFAULT_FILTER_LIMIT}
+        ], f"price bound {blank!r} did not behave as omitted"
+
+
+def test_filter_products_numeric_string_price_bounds_become_numbers():
+    """`docs/reviews/salesperson-fabricated-prices-impl.md` m1: `maxPrice: "50"`
+    reaches `coalesce('50', …)` and matches 0 rows where the number 50 matches 6
+    (live-verified). A string that parses as a finite number must reach services
+    as that `float`.
+    """
+    for raw, expected in (("50", 50.0), (" 49.99 ", 49.99), ("0", 0.0), ("1e2", 100.0)):
+        svc = StubServices(filter_result=[])
+        tool = FilterProductsTool(svc)
+
+        tool.run({"minPrice": raw, "maxPrice": raw}, ctx=CTX, run={})
+
+        call = svc.filtered[0]
+        assert (call["min_price"], call["max_price"]) == (expected, expected), raw
+        assert isinstance(call["min_price"], float) and isinstance(call["max_price"], float)
+
+
+def test_filter_products_non_numeric_price_bound_passes_through_unchanged():
+    """m1's other half: no new error path. A string that is not a finite number
+    (incl. `"nan"`/`"inf"`, which `float()` would accept) is left as is; numbers
+    are untouched.
+    """
+    for raw in ("cheap", "$50", "nan", "inf", 50, 49.99):
+        svc = StubServices(filter_result=[])
+        tool = FilterProductsTool(svc)
+
+        tool.run({"maxPrice": raw}, ctx=CTX, run={})
+
+        assert svc.filtered[0]["max_price"] is raw, raw
+
+
 # ── view_cart / add_to_cart / remove_from_cart / clear_cart / place_order ────
 # (K-053 M6, unit, stub services)
 

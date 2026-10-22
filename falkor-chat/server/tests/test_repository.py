@@ -4128,6 +4128,59 @@ def test_filter_products_empty_catalog_returns_empty(wf_repo):
     ) == []
 
 
+class _RecordingGraph:
+    """Captures `ro_query` params; returns no rows. No FalkorDB needed."""
+
+    def __init__(self) -> None:
+        self.params: list[dict] = []
+
+    def ro_query(self, cypher, params):
+        self.params.append(params)
+
+        class _Res:
+            result_set: list = []
+
+        return _Res()
+
+
+class _RecordingConn:
+    def __init__(self) -> None:
+        self.graph = _RecordingGraph()
+
+    def select_graph(self, name):
+        assert name == "reference"
+        return self.graph
+
+
+def test_filter_products_blank_category_is_treated_as_omitted():
+    """`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1/F1: the storefront
+    model sent `{"category": ""}` meaning "no category"; `normalize_name("")` is
+    `""`, not `None`, and the query's `coalesce($categoryNormalized, …)` only
+    treats null as "no filter" — so 0 rows (live-verified in the RCA). Any
+    category the normalizer maps to `""` must reach the query exactly as an
+    omitted one does. Offline: a recording connection, never the live
+    `reference` graph (which `wf_repo` would wipe).
+
+    Probes the axis rather than a list: every variant is first asserted to
+    normalize to `""`, so the set is "strings the normalizer blanks".
+    """
+    from falkorchat.extraction import normalize_name
+
+    conn = _RecordingConn()
+    repo = Repository(conn)
+    repo.filter_products(category=None, min_price=None, max_price=None, limit=20)
+    omitted = conn.graph.params[-1]
+
+    for blank in ("", " ", "   ", "\t", "\n", " \t\n "):
+        assert normalize_name(blank) == ""
+        repo.filter_products(
+            category=blank, min_price=None, max_price=None, limit=20,
+        )
+        assert conn.graph.params[-1] == omitted, (
+            f"category={blank!r} did not behave as omitted"
+        )
+
+
 # ── §16 Cart / Order (K-053 M6) ──────────────────────────────────────────────
 #
 # Workspace-scoped (`ws:test`, via `repo`/`conn`) — no `reference` graph is

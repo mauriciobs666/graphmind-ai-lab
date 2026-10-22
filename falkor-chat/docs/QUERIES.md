@@ -2647,6 +2647,8 @@ code, never against each other.
 // Repository.filter_products via extraction.normalize_name from the caller's raw
 // `category` — same convention as $nameNormalized (§15.1) and Entity.nameNormalized
 // (§14.5): a precomputed normalized property + exact match, not a runtime toLower().
+// A category that normalizes to "" (empty/whitespace-only) is sent as NULL, never "" —
+// coalesce reads only NULL as "no filter"; "" would match no Product at all.
 MATCH (p:Product)
 WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)
   AND p.price >= coalesce($minPrice, -1.0)
@@ -2690,7 +2692,12 @@ would require up to 8 query strings; instead:
 
 An all-omitted call (`$categoryNormalized`/`$minPrice`/`$maxPrice` all `NULL`) lists the whole
 catalog, bounded by `$limit` — acceptable at this catalog's demo scale (~15 rows) and, per the
-profiling above, index-anchored anyway. Zero rows back means "nothing matches" (AC-3 abstention);
+profiling above, index-anchored anyway. **Blank means omitted:** `Repository.filter_products` maps a `category`
+that normalizes to `""` to `NULL`, and `FilterProductsTool` (`_coerce_price_bound`) maps a blank/whitespace-only string
+`minPrice`/`maxPrice` to `None` and a numeric string (`"50"`) to that `float`; any other string is
+passed through unchanged. A non-null string would survive `coalesce` and match nothing
+(`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1: the model sent `{"category": ""}` for
+"any category"). Zero rows back means "nothing matches" (AC-3 abstention);
 the service maps that to `{"items": [], "finding": "no matching products found"}`. Ordered by price
 ascending — a stable, predictable order for a listing shape, cheap once index-backed.
 

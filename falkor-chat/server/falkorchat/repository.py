@@ -3543,9 +3543,17 @@ class Repository:
         returns these rows verbatim to the model, so the slug now reaches the
         LLM's context — deliberate, and consistent with
         `LookupProductFactTool`, which has done exactly that since K-053.
+
+        A `category` that normalizes to `""` (empty or whitespace-only) is
+        treated as **omitted**, i.e. `None`: the query's `coalesce` only reads
+        null as "no filter", so `""` would otherwise match no product at all —
+        the storefront model sent `{"category": ""}` meaning "any category"
+        (`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1). Done here,
+        not in the tool, because this is where normalization already happens,
+        so every caller gets the same meaning of "blank".
         """
         category_normalized = (
-            normalize_name(category) if category is not None else None
+            (normalize_name(category) or None) if category is not None else None
         )
         res = self._reference().ro_query(
             "MATCH (p:Product) "

@@ -87,6 +87,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import threading
 from concurrent.futures import Future
 from typing import Any, Protocol
@@ -438,6 +439,33 @@ class LookupProductFactTool:
         return json.dumps({"found": True, **row})
 
 
+def _coerce_price_bound(value: Any) -> Any:
+    """Normalize a model-sent price bound at the untyped JSON boundary.
+
+    - A blank/whitespace-only string means "not given" → `None`. The model sends
+      `""` for "no bound" the same way it sends `""` for "no category"
+      (`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1).
+    - A string that parses as a finite number (`"50"`, `" 49.99 "`) → that `float`
+      (`docs/reviews/salesperson-fabricated-prices-impl.md` m1).
+    - Anything else is returned unchanged — no new error path.
+
+    Why: a non-null string reaching `coalesce($minPrice, -1.0)` is kept, and the
+    number-vs-string comparison matches nothing, so the call silently abstains.
+    `"nan"`/`"inf"` are left alone even though `float()` accepts them. Services
+    and repository are typed `float | None`; this is the boundary that isn't.
+    """
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return value
+    return number if math.isfinite(number) else value
+
+
 class FilterProductsTool:
     """FR-2/FR-3 (K-052 M6) — category/price-range catalog filter: list matching products.
 
@@ -461,8 +489,8 @@ class FilterProductsTool:
                 "name": self.name,
                 "description": (
                     "List products matching an optional category and/or price range. "
-                    "Omit any argument you don't need to filter by; omitting all of them "
-                    "lists the whole catalog."
+                    "Omit any argument you don't need to filter by (an empty value counts "
+                    "as omitted); omitting all of them lists the whole catalog."
                 ),
                 "parameters": {
                     "type": "object",
@@ -499,8 +527,8 @@ class FilterProductsTool:
         rows = self._services.filter_products(
             ctx,
             category=arguments.get("category"),
-            min_price=arguments.get("minPrice"),
-            max_price=arguments.get("maxPrice"),
+            min_price=_coerce_price_bound(arguments.get("minPrice")),
+            max_price=_coerce_price_bound(arguments.get("maxPrice")),
             limit=DEFAULT_FILTER_LIMIT,
         )
         if not rows:
