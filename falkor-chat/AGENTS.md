@@ -83,7 +83,8 @@ idempotent retry, `hadHead` = lost the first-post race). See DESIGN §5.3 for th
 | `./scripts/verify_catalog.sh` | Read-only (`GRAPH.RO_QUERY` only) check that the product catalog is present as expected — total count plus two named products' category/price. Exit `0`/`1` with a printed diagnosis, same contract as `verify_workflows.sh`. |
 | `./scripts/seed_salesperson.sh [<wsId>]` | Publishes + materializes two defs into `reference` + `ws:<id>`, imported from `falkorchat.proof_defs`: `salesperson@v8` (`conversation`-kind demo agent) and `order-fulfillment@v1` (`process`-kind). Run after `bootstrap_schema.sh` + `seed_demo.sh` + `seed_catalog.sh`. Three traps below. |
 | `./scripts/verify_salesperson.sh [<wsId>]` | Read-only check that `reference` and `ws:<id>` agree on **both** `salesperson@v8` and `order-fulfillment@v1` — present, in sync, exactly one start key, and each def's own expected topology (salesperson: 2-step/1-transition; order-fulfillment: 4-step/3-transition) — **plus every stored step `config`, on both sides, against the shipped `falkorchat.proof_defs` constant**. That last check is the only one that can see a version whose `config` was stored from an earlier or uncommitted tree: the def↔snapshot diff compares the two sides against *each other*, so both agree, the topology is right, and the version name silently denotes something `proof_defs.py` can no longer produce (exactly the burned-`v6` shape in `ws:acme`). `config` is create-only, so re-seeding cannot repair it — the failure names the drifted fields and says to bump the version. Exit `0`/`1`, same contract as `verify_workflows.sh`, scoped to these two defs. |
-| `./scripts/start_demo.sh` | From-cold-box bring-up of the `salesperson` storefront demo (`docs/plans/salesperson-ui.md` S11): FalkorDB → schema → seed demo/catalog/salesperson → catalog/salesperson preflight → `salesperson/build.sh` → uvicorn as the **storefront** deployment (trigger pinned to `salesperson@v8`, responder fall-through off, `--reload` off). **Pins `FALKORCHAT_WS_ID=demo`**, never `config.py`'s `"acme"` default. Fails loudly, before uvicorn starts, when FalkorDB, Node, the built bundle, a def, the catalog, or the demo Agent is missing — env overrides in the script's own header comment. Skips `seed_workflows.sh`. |
+| `./scripts/start_demo.sh` | From-cold-box bring-up of the `salesperson` storefront demo (`docs/plans/salesperson-ui.md` S11): FalkorDB → model ensure (next row) → schema → seed demo/catalog/salesperson → catalog/salesperson preflight → `salesperson/build.sh` → uvicorn as the **storefront** deployment (trigger pinned to `salesperson@v8`, responder fall-through off, `--reload` off). **Pins `FALKORCHAT_WS_ID=demo`**, never `config.py`'s `"acme"` default. Fails loudly, before uvicorn starts, when FalkorDB, the demo's models, Node, the built bundle, a def, the catalog, or the demo Agent is missing — env overrides in the script's own header comment. Skips `seed_workflows.sh`. |
+| `./scripts/ensure_demo_models.sh` | K-066 ensure step, run by `start_demo.sh` (safe alone): loads whichever demo model is missing, at the `lmstudio` baseURL in `FALKORCHAT_OPENCODE_CONFIG`. **Never unloads or reloads** — refuses while a foreign model is loaded or ministral's context isn't 8192. Does not read `ws:demo` model overrides. Details and env in the script header. |
 
 Bootstrap takes an optional `EMBEDDING_DIM` env var (default `1536`). Set it to match the
 embedding model before creating a workspace — **for this system that means `EMBEDDING_DIM=1024`**
@@ -103,15 +104,18 @@ across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — 
 starts over REST; advancing `Order.status` is a separate `services.advance_order` call, not a
 REST route. Per-version history lives in `proof_defs.py`'s `SALESPERSON_DEF` comment block.
 
-**Before running a live, audience-facing storefront demo, pin the demo's models (`docs/BACKLOG.md`
-`K-066`).** The demo calls **one** chat LLM, `ministral-3-3b` (the `assistant` step, and,
-inherited from it, `query_graph_data`'s internal call), plus the embedding model. Load both with
-`lms load` before serving. `qwen/qwen3-4b-2507` must stay **unloaded** for the whole demo: the
-`:8200` agent-team server idle (no `ingest_document`, no `@bot1`) or stopped by its owner, and
-`lms ps` checked right before going live. Never call `ingest_document` on `:8200` during a demo —
-its `IngestionPipeline`'s `extraction` default is still `qwen`, which would JIT-load onto the same
-GPU and evict the demo's models (the storefront process itself mounts no `/mcp`, `app.py`
-`dev_surface`).
+**A live, audience-facing storefront demo needs exactly the demo's models resident (`docs/BACKLOG.md`
+`K-066`) — `start_demo.sh` step 3 ensures it, never by unloading.** The demo calls **one** chat
+LLM, `ministral-3-3b` (the `assistant` step, and, inherited from it, `query_graph_data`'s internal
+call), plus the embedding model; bring-up loads whichever is missing and **refuses** while any other
+model (e.g. `qwen/qwen3-4b-2507`) is loaded or ministral's context isn't 8192 — unloading is the
+operator's call, since the `:8200` agent-team server may be using `qwen`. Bring-up checks once:
+keep `:8200` idle for the whole demo (no `ingest_document`, no `@bot1`) — its `IngestionPipeline`'s
+`extraction` default is still `qwen`, which would JIT-load onto the same GPU and evict the demo's
+models (the storefront process itself mounts no `/mcp`, `app.py` `dev_surface`). The check runs
+against the `lmstudio` baseURL in `FALKORCHAT_OPENCODE_CONFIG`, so it fails loudly when that URL is
+unreachable rather than serving a storefront whose every turn would fail — on the usual dev box the
+shared `opencode.json` is stale; pass `FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json`.
 
 **`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
 are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without

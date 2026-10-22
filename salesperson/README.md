@@ -102,12 +102,18 @@ storefront rather than starting one — it is pointed at `http://127.0.0.1:8000/
 ## Running the demo
 
 `falkor-chat/scripts/start_demo.sh` is the supported one-command, from-cold-box bring-up: FalkorDB
-→ schema → seed demo/catalog/salesperson → preflight checks → `./build.sh` → uvicorn as the
-**storefront** deployment (`FALKORCHAT_WS_ID=demo`, trigger pinned to `salesperson@v8`, responder
-fall-through off, `--reload` off). Run it from `falkor-chat/`:
+→ LM Studio model ensure → schema → seed demo/catalog/salesperson → preflight checks →
+`./build.sh` → uvicorn as the **storefront** deployment (`FALKORCHAT_WS_ID=demo`, trigger pinned
+to `salesperson@v8`, responder fall-through off, `--reload` off). The model ensure
+(`falkor-chat/scripts/ensure_demo_models.sh`) loads whichever of the demo's two models is missing
+on the LM Studio at the `lmstudio` baseURL in `FALKORCHAT_OPENCODE_CONFIG`, and never unloads:
+another loaded model (e.g. `qwen`) stops bring-up with what to unload yourself. If that URL is
+unreachable, bring-up stops at that step: point `FALKORCHAT_OPENCODE_CONFIG` at a config whose
+`lmstudio` baseURL reaches LM Studio — on the usual dev box, whose shared `opencode.json` is stale,
+`~/.config/opencode/opencode.local.json`. Run it from `falkor-chat/`:
 
 ```bash
-./scripts/start_demo.sh
+FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json ./scripts/start_demo.sh
 ```
 
 It is **not** `start_server.sh` with different flags — `start_server.sh` also seeds the `triage`/
@@ -209,8 +215,9 @@ Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and 
 carries the full unit-by-unit ledger). One open item affects the *first live, audience-facing*
 demo specifically, not ordinary use: `K-066` (`falkor-chat/docs/BACKLOG.md`). The demo runs on one
 chat model, `ministral-3-3b` (the agent and its `query_graph_data` tool), plus the embedding model,
-and its dead-turn rate depends on LM Studio keeping both resident, so load them explicitly before
-serving; the current measured rate is in `K-066`. The occasional wrong-language reply
+and its dead-turn rate depends on LM Studio keeping both resident; `start_demo.sh` ensures both are
+loaded before serving and refuses to start while any other model is loaded. The measured rate is in
+`K-066`. The occasional wrong-language reply
 under concurrency (`K-065`) is closed: Mitigation D (`systemPrompt` language salience, `v8`) was
 live-verified clean (`falkor-chat/docs/HISTORY.md` 2026-10-21). See `AGENTS.md` for file ownership
 and conventions.

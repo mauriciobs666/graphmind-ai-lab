@@ -15,6 +15,24 @@ set -euo pipefail
 # though the pin already makes their own default correct: defence in depth,
 # not a load-bearing requirement (docs/plans/salesperson-ui.md §4.9 move 2).
 #
+# **Ensures LM Studio has the demo's models loaded before serving (K-066,
+# step 3, scripts/ensure_demo_models.sh).** The set is derived from
+# SALESPERSON_DEF's agent-step config.model (ministral) and the overlay's
+# embedding default, at the lmstudio baseURL in FALKORCHAT_OPENCODE_CONFIG. A
+# missing model is loaded (`lms load <id> -c 8192 --gpu max`); nothing is ever
+# unloaded or reloaded — a foreign loaded model (e.g. qwen, which the :8200
+# agent-team server may use) or ministral at the wrong context stops bring-up
+# with what to unload yourself. Both already loaded: a read-only no-op that
+# needs no CLI. No lms CLI and a model missing: stops with load-it-yourself
+# instructions (load in the LM Studio app, re-run). An unreachable LM Studio URL
+# stops it too — on a box whose shared opencode.json is stale, export
+# FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json.
+# DEMO_ENSURE_MODELS=0 skips the step with a printed warning — for a
+# non-LM-Studio provider only (the step exits 3 and says so); a live audience
+# demo without it is the ~63% dead-turn JIT regime. LIMIT: workspace model
+# overrides on ws:demo are not read — an agentModelOverride there (none is set
+# by any script) would cap config.model and go unchecked.
+#
 # Deliberately NOT run: seed_workflows.sh — this demo needs neither `triage`
 # nor `access-request`, only `salesperson`/`order-fulfillment`.
 #
@@ -53,6 +71,12 @@ set -euo pipefail
 #                          default, same as start_server.sh.
 #   FALKORCHAT_MODEL_CONFIG(default: falkor-chat/config/models.json, config.py's
 #                          own default — no need to export it here)
+#   DEMO_ENSURE_MODELS     (default: 1) — 0 skips step 3's LM Studio model ensure
+#                          (see the K-066 note above); anything else runs it.
+#   LMS_CLI                (default: unset — `lms`, then `lms.exe`, on PATH) — the
+#                          lms CLI step 3 loads a missing model with, e.g. under
+#                          WSL /mnt/c/Users/<you>/.lmstudio/bin/lms.exe. Only
+#                          needed when a demo model is not loaded yet.
 #   SALESPERSON_DIR        (default: <repo-root>/salesperson) — the SPA component
 #   SALESPERSON_BUILD_ARGS (default: empty) — extra args forwarded to
 #                          salesperson/build.sh, e.g. `--skip-install`
@@ -90,13 +114,15 @@ From a cold box, brings up the full salesperson storefront demo in one
 terminal:
   1. Starts FalkorDB (detached) if not already running
   2. Creates/updates the server's Python venv
-  3. Bootstraps schema for the demo workspace (EMBEDDING_DIM)
-  4. Seeds the demo agent + channel/thread, then verifies the Agent exists
-  5. Seeds the product catalog, then preflight-verifies it
-  6. Seeds the salesperson + order-fulfillment workflow defs, then
+  3. Ensures LM Studio has the demo's two models loaded (loads a missing
+     one; never unloads; stops on a foreign model or wrong context)
+  4. Bootstraps schema for the demo workspace (EMBEDDING_DIM)
+  5. Seeds the demo agent + channel/thread, then verifies the Agent exists
+  6. Seeds the product catalog, then preflight-verifies it
+  7. Seeds the salesperson + order-fulfillment workflow defs, then
      preflight-verifies both against 'reference'
-  7. Builds the SPA (salesperson/build.sh) and checks the built bundle exists
-  8. Starts uvicorn as the storefront deployment (--reload OFF)
+  8. Builds the SPA (salesperson/build.sh) and checks the built bundle exists
+  9. Starts uvicorn as the storefront deployment (--reload OFF)
 
 Stop with Ctrl+C; FalkorDB keeps running in the background.
 Stop FalkorDB: docker stop falkordb-dev
@@ -130,6 +156,7 @@ FALKORCHAT_ENABLE_AGENT="${FALKORCHAT_ENABLE_AGENT:-1}"
 FALKORCHAT_WORKFLOW_ENABLED="${FALKORCHAT_WORKFLOW_ENABLED:-1}"
 FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S="${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S:-30}"
 FALKORCHAT_STOREFRONT_ENABLED="${FALKORCHAT_STOREFRONT_ENABLED:-1}"
+DEMO_ENSURE_MODELS="${DEMO_ENSURE_MODELS:-1}"
 # K-042 §4.1: no product default pointing into one user's home — this dev/demo
 # script supplies the convenience default (mirrors start_server.sh).
 FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
@@ -162,7 +189,7 @@ esac
 SALESPERSON_DIR="${SALESPERSON_DIR:-$ROOT_DIR/salesperson}"
 FALKORCHAT_STOREFRONT_DIR="${FALKORCHAT_STOREFRONT_DIR:-$SALESPERSON_DIR/dist}"
 
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 
 # ── 1. FalkorDB ───────────────────────────────────────────────────────────────
 # Decided by port first, container name second (precedent: start_agent_team.sh,
@@ -200,13 +227,36 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 "$VENV_DIR/bin/pip" install -q -e "$SERVER_DIR[dev]"
 
-# ── 3. Bootstrap schema ───────────────────────────────────────────────────────
-echo "[3/$TOTAL_STEPS] Bootstrapping schema for workspace '$FALKORCHAT_WS_ID' (dim $EMBEDDING_DIM)..."
+# ── 3. LM Studio: ensure the demo's models are loaded (K-066) ────────────────
+# Before any seeding, so a refusal costs nothing. Never unloads — see header.
+echo "[3/$TOTAL_STEPS] LM Studio demo models"
+if [ "$DEMO_ENSURE_MODELS" = "0" ]; then
+  echo "      WARNING: DEMO_ENSURE_MODELS=0 — skipping the model ensure. Unless the demo's"
+  echo "      models are already resident, the first turns JIT-load them (the dead-turn regime)."
+else
+  ensure_rc=0
+  FALKORCHAT_OPENCODE_CONFIG="$FALKORCHAT_OPENCODE_CONFIG" \
+    "$REPO_DIR/scripts/ensure_demo_models.sh" || ensure_rc=$?
+  if [ "$ensure_rc" -ne 0 ]; then
+    echo "ERROR: the demo's LM Studio models are not ready — see the message above." >&2
+    # The bypass is offered ONLY when the URL is not LM Studio at all (exit 3) —
+    # never on a foreign-model / wrong-context refusal the step exists to enforce.
+    if [ "$ensure_rc" -eq 3 ]; then
+      echo "       Not an LM Studio server: for another provider, DEMO_ENSURE_MODELS=0 skips this step." >&2
+    else
+      echo "       Fix it as the message says and re-run." >&2
+    fi
+    exit 1
+  fi
+fi
+
+# ── 4. Bootstrap schema ───────────────────────────────────────────────────────
+echo "[4/$TOTAL_STEPS] Bootstrapping schema for workspace '$FALKORCHAT_WS_ID' (dim $EMBEDDING_DIM)..."
 EMBEDDING_DIM="$EMBEDDING_DIM" FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
   "$REPO_DIR/scripts/create_workspace.sh" "$FALKORCHAT_WS_ID"
 
-# ── 4. Seed the agent + demo channel/thread, verify the Agent exists ─────────
-echo "[4/$TOTAL_STEPS] Seeding agent '$FALKORCHAT_AGENT_ID' + demo channel/thread..."
+# ── 5. Seed the agent + demo channel/thread, verify the Agent exists ─────────
+echo "[5/$TOTAL_STEPS] Seeding agent '$FALKORCHAT_AGENT_ID' + demo channel/thread..."
 FALKORCHAT_WS_ID="$FALKORCHAT_WS_ID" FALKORCHAT_USER_ID="$FALKORCHAT_USER_ID" \
 FALKORCHAT_AGENT_ID="$FALKORCHAT_AGENT_ID" FALKORCHAT_AGENT_NAME="$FALKORCHAT_AGENT_NAME" \
 FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
@@ -230,8 +280,8 @@ if ! printf '%s\n' "$agent_check" | grep -q "$FALKORCHAT_AGENT_ID"; then
 fi
 echo "      Agent present — ok"
 
-# ── 5. Seed + verify the product catalog ─────────────────────────────────────
-echo "[5/$TOTAL_STEPS] Seeding product catalog..."
+# ── 6. Seed + verify the product catalog ─────────────────────────────────────
+echo "[6/$TOTAL_STEPS] Seeding product catalog..."
 FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
   "$REPO_DIR/scripts/seed_catalog.sh" "$FALKORCHAT_WS_ID"
 echo "      Preflight: verify_catalog.sh"
@@ -241,8 +291,8 @@ if ! FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
   exit 1
 fi
 
-# ── 6. Seed + verify the salesperson + order-fulfillment defs ────────────────
-echo "[6/$TOTAL_STEPS] Seeding salesperson + order-fulfillment defs..."
+# ── 7. Seed + verify the salesperson + order-fulfillment defs ────────────────
+echo "[7/$TOTAL_STEPS] Seeding salesperson + order-fulfillment defs..."
 FALKORCHAT_WS_ID="$FALKORCHAT_WS_ID" \
 FALKORDB_HOST="$FALKORDB_HOST" FALKORDB_PORT="$FALKORDB_PORT" \
   "$REPO_DIR/scripts/seed_salesperson.sh" "$FALKORCHAT_WS_ID"
@@ -254,8 +304,8 @@ if ! FALKORCHAT_WS_ID="$FALKORCHAT_WS_ID" \
   exit 1
 fi
 
-# ── 7. Build the SPA ──────────────────────────────────────────────────────────
-echo "[7/$TOTAL_STEPS] Building the SPA ($SALESPERSON_DIR)..."
+# ── 8. Build the SPA ──────────────────────────────────────────────────────────
+echo "[8/$TOTAL_STEPS] Building the SPA ($SALESPERSON_DIR)..."
 if [ ! -d "$SALESPERSON_DIR" ]; then
   echo "ERROR: salesperson component not found at $SALESPERSON_DIR" >&2
   echo "       Set SALESPERSON_DIR if the component lives elsewhere." >&2
@@ -282,8 +332,8 @@ if [ ! -f "$FALKORCHAT_STOREFRONT_DIR/index.html" ]; then
 fi
 echo "      Bundle present at $FALKORCHAT_STOREFRONT_DIR — ok"
 
-# ── 8. Start uvicorn (storefront deployment) ─────────────────────────────────
-echo "[8/$TOTAL_STEPS] Starting uvicorn on http://localhost:8000..."
+# ── 9. Start uvicorn (storefront deployment) ─────────────────────────────────
+echo "[9/$TOTAL_STEPS] Starting uvicorn on http://localhost:8000..."
 echo ""
 echo "      ══════════════════════════════════════════════════════════════"
 echo "      Workspace: ws:${FALKORCHAT_WS_ID}  (pinned — never config.py's 'acme' default)"
