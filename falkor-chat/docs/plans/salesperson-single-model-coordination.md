@@ -39,7 +39,8 @@ default flip.
 | U0 fit check | `qa-engineer` | `ab6fa3f58c13a8954` | delivered — fits only with WDDM paging (~1.6 GiB, ≤1.4 s on first embed after chat); 3 concurrent reqs → context exceeded; stakeholder 2026-10-21: build it, paging cost accepted | `falkor-chat/docs/test-reports/salesperson-single-model-fit-report.md` | — | 94k tok / 31 tools |
 | U1 plan | `architect` | `ab2626a6195c6dc05` | accepted | `falkor-chat/docs/plans/salesperson-single-model.md` | `analyst` (`a686db21f34087f02`) → pass 1 needs changes (§7, §2.3; `falkor-chat/docs/reviews/salesperson-single-model.md`) → v2 → pass 2 needs changes (§7 only; code half S1–S9 cleared) → v3 → pass 3 approve w/ suggestions (P3-1 scratchpad baseline/instruments lost in session restart — U3 rebuilds them durably; P3-2/nits folded into U3 brief; P3-3 applied by teco) | 170k tok / 69 tools |
 | U2 implement | `coder` | `a9d95df64f7cd7175` | accepted | per U1 step table (suite 3161/14/1; teco argument mutant red) | `analyst` (`a686db21f34087f02`) pass 4 → approve; committed `ad01aee7` | 160k tok |
-| U3 live QA | `qa-engineer` | `a917311eb4da9b33b` | in-flight (stakeholder 2026-10-22: ministral + embedder both loaded) | `falkor-chat/docs/test-reports/salesperson-single-model-report.md` | — | — |
+| U3 live QA | `qa-engineer` | `a917311eb4da9b33b` | accepted — Q3 0/1,125 dead, 0 wrong-language; p95 14.1 s; Q5(d) 0 embeds; Q2 gate: stakeholder 2026-10-22 → fix before closing (U4) | `falkor-chat/docs/test-reports/salesperson-single-model-report.md` | — | 433k tok / 133 tools |
+| U4 fix `nlq-12` duplicate `filters` key | `tdd-engineer` | `a2d3f370c9533bca0` | in-flight | repro test + parse fix in `falkor-chat/server/falkorchat/` | `analyst` → —; then live Q2 re-run | — |
 
 ## Documentation-impact scan
 
