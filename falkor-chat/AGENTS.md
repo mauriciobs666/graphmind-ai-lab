@@ -104,8 +104,8 @@ across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — 
 starts over REST; advancing `Order.status` is a separate `services.advance_order` call, not a
 REST route. Per-version history lives in `proof_defs.py`'s `SALESPERSON_DEF` comment block.
 
-**A live, audience-facing storefront demo needs exactly the demo's models resident (`docs/BACKLOG.md`
-`K-066`) — `start_demo.sh` step 3 ensures it, never by unloading.** The demo calls **one** chat
+**A live, audience-facing storefront demo needs exactly the demo's models resident (`docs/HISTORY.md`
+2026-10-22) — `start_demo.sh` step 3 ensures it, never by unloading.** The demo calls **one** chat
 LLM, `ministral-3-3b` (the `assistant` step, and, inherited from it, `query_graph_data`'s internal
 call), plus the embedding model; bring-up loads whichever is missing and **refuses** while any other
 model (e.g. `qwen/qwen3-4b-2507`) is loaded or ministral's context isn't 8192 — unloading is the

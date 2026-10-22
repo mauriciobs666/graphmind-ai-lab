@@ -11,8 +11,7 @@ CORS. Node is a **build-time dependency only**.
 
 Delivered per `docs/requirements/salesperson-ui.md` (FR-1…FR-11, AC-1…AC-11) and
 `docs/plans/salesperson-ui.md` (the stack rationale is §4.2); delivery record, the S15 QA pass and
-defect-fix wave, and the one still-open pre-live-demo item (`K-066`, pinning the demo's LM Studio
-models before serving) are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
+defect-fix wave, and open items are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
 
 > This directory previously held a retired Streamlit chatbot. That app now lives at
 > `deprecated/salesperson/` and is unrelated to the code here — see `deprecated/README.md`.
@@ -212,12 +211,11 @@ order).
 
 Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and QA'd
 (`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
-carries the full unit-by-unit ledger). One open item affects the *first live, audience-facing*
-demo specifically, not ordinary use: `K-066` (`falkor-chat/docs/BACKLOG.md`). The demo runs on one
+carries the full unit-by-unit ledger). The demo runs on one
 chat model, `ministral-3-3b` (the agent and its `query_graph_data` tool), plus the embedding model,
 and its dead-turn rate depends on LM Studio keeping both resident; `start_demo.sh` ensures both are
-loaded before serving and refuses to start while any other model is loaded. The measured rate is in
-`K-066`. The occasional wrong-language reply
+loaded before serving and refuses to start while any other model is loaded (K-066, closed; measured
+rate in `falkor-chat/docs/HISTORY.md` 2026-10-22). The occasional wrong-language reply
 under concurrency (`K-065`) is closed: Mitigation D (`systemPrompt` language salience, `v8`) was
 live-verified clean (`falkor-chat/docs/HISTORY.md` 2026-10-21). See `AGENTS.md` for file ownership
 and conventions.

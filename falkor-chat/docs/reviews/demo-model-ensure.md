@@ -1,6 +1,6 @@
 # Review — demo model ensure-loaded startup step (K-066 item 1)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-066
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-066
 
 ## Scope & verdict
 

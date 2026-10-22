@@ -19,8 +19,7 @@ engineering** (Claude Code and OpenCode artifacts).
   agent hosted by `falkor-chat/`'s server: a pure static bundle, served at `/shop` on that same
   FastAPI process (one process, one port, no CORS), replacing the retired Streamlit app
   (`deprecated/salesperson/`). Delivered per `docs/requirements/salesperson-ui.md` /
-  `docs/plans/salesperson-ui.md`; delivery record, the defect-fix wave, and the one open
-  pre-live-demo item (`K-066` — pin the demo's LM Studio models before serving) are in
+  `docs/plans/salesperson-ui.md`; delivery record, the defect-fix wave, and open items are in
   `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`.
 - `opencode/` — Personal OpenCode configuration. **`agents/tank/`** is the one live agent: a
   headless, local-model DevOps variant that runs a read-only health/hygiene check by default and

@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-081
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-083
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,39 +40,32 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-066 — Demo bring-up does not ensure LM Studio has the demo's models loaded before serving the storefront (🔵 proposed — single-model set adopted and live-measured 2026-10-22, `docs/test-reports/salesperson-single-model-report.md`)
+### K-082 — Storefront demo: optional load-robustness reruns (long-conversation KV stress; clean `TURN_WORKERS` rerun) (🔵 proposed — carried from K-066, closed 2026-10-22)
 
-> **What is true now.** The storefront's dead-turn rate is set by whether LM Studio keeps the demo's
-> models resident. JIT swapping gave ~63% dead turns (`docs/test-reports/salesperson-language-salience2-report.md`).
-> Since `ad01aee7`, `query_graph_data`'s internal call uses the calling step's model
-> (`docs/plans/salesperson-single-model.md`), so the demo needs **one chat LLM plus the embedder**:
-> `mistralai/ministral-3-3b` (`-c 8192 --gpu max`) and `text-embedding-qwen3-embedding-0.6b`, with
-> `qwen` unloaded and the `:8200` server idle (it can JIT-load `qwen`). The demo set-up is
-> `falkor-chat/AGENTS.md`. With that set pinned (n=75, 2026-10-22), there were **0/1,125 dead turns**,
-> 0 context overflows, 0 wrong-language replies and a p95 of 14.1 s, against 6/1,125 and 24.1 s with
-> three models. On the 6 GB GPU it fits only with WDDM paging: ≤1.6 s on the first embed after a
-> chat (`docs/test-reports/salesperson-single-model-fit-report.md`). The storefront never embeds.
->
-> **What remains.** (1) An **ensure step** in demo bring-up. Today the guidance is prose only.
-> Stakeholder decision, 2026-10-22: load at startup, never on demand (on-demand JIT is the ~63%
-> regime). The step must:
-> - read what is loaded (`/api/v0/models`);
-> - **load whichever of the two models is missing**, with the demo settings (`-c 8192 --gpu max`),
->   then serve;
-> - **never unload or reload anything**. It stops with a clear message instead when a model outside
->   the set is loaded (e.g. `qwen`, which the `:8200` server may be using) or a demo model is
->   loaded with the wrong settings;
-> - be idempotent: a second run with both models present does nothing.
->
-> The read-only check is portable over HTTP. The load path uses the `lms` CLI, which on the dev box
-> is the Windows binary reached from WSL, so the step should find it by configuration rather than a
-> hard-coded path, and fall back to stopping with instructions when it is absent. (2) Optional:
-> a long-conversation stress variant of the probe. Q3 saw 0 overflows, but U0's synthetic three
-> concurrent ~3.1k-token requests still exceed the shared 8,192-token KV budget. (3) Optional: a clean
-> rerun of the `TURN_WORKERS` lever (Q4 was contaminated by a host suspend; keep 4).
-- **Owner:** `devops` (1); `qa-engineer` (2), (3).
+> The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and
+> `start_demo.sh` now ensures exactly that set is resident (`docs/HISTORY.md` 2026-10-22). Two
+> optional measurements remain. (1) A long-conversation stress variant of the TP-007 probe: the
+> n=75 run saw 0 context overflows, but U0's three concurrent ~3.1k-token requests still exceed the
+> shared 8,192-token KV pool (`docs/test-reports/salesperson-single-model-fit-report.md`). (2) A
+> clean rerun of the `TURN_WORKERS` lever: Q4 was contaminated by a host suspend; keep 4 until then
+> (`docs/test-reports/salesperson-single-model-report.md`).
+- **Owner:** `qa-engineer`.
 - **Test strategy:** TP-007 protocol with `salesperson/scripts/language_salience_probe.py`; residency
   via `salesperson/scripts/qwen_watch.sh` and `lms ps`.
+
+### K-083 — `start_demo.sh` defaults to an LM Studio URL this dev box cannot reach; ensure-step leftovers (🔵 proposed — `docs/reviews/demo-model-ensure.md` m4 + Pass 3, 2026-10-22)
+
+> `start_demo.sh` defaults `FALKORCHAT_OPENCODE_CONFIG` to `~/.config/opencode/opencode.json`,
+> whose `lmstudio` baseURL (`192.168.0.69:1234`) is unreachable here, so bring-up stops at step 3
+> until the operator exports `opencode.local.json`. Decide whether `start_demo.sh` adopts
+> `start_agent_team.sh`'s fallback (env var → `opencode.local.json` → shared file); the default is
+> shared with `start_server.sh`. Minor leftovers from the ensure step's review, none of which can
+> unload a model or serve a wrong set: a non-numeric `ENSURE_DEMO_MODELS_SETTLE_*` crashes at
+> import; no test pins the settle wait to the post-load path; an `http.client.HTTPException`
+> mid-response is a traceback (non-zero exit); no test drives `start_demo.sh`'s exit-3 branch;
+> `ws:demo` model overrides are not read; whether `/api/v0/models` lists an instance under a
+> custom identifier rests on one unsaved live probe.
+- **Owner:** `devops`.
 
 ### K-078 — es/pt-BR carts end up empty: the agent translates product names, so `add_to_cart` is held by the off-turn guard (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
 

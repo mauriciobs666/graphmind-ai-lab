@@ -5,6 +5,27 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-22 — K-066 closed: `start_demo.sh` ensures LM Studio has the demo's models loaded before serving
+
+- **What.** New step 3 of 9 in `scripts/start_demo.sh`, `scripts/ensure_demo_models.sh` →
+  `ensure_demo_models.py`. It derives the demo set from `SALESPERSON_DEF`'s agent-step `config.model`
+  and the overlay `embedding` default via `ModelGateway`, reads `/api/v0/models`, and loads whichever
+  is missing with `lms load <id> -c 8192 --gpu max --identifier <id> -y` (CLI: `LMS_CLI`, else
+  `lms`/`lms.exe` on `PATH`), then re-reads with a bounded wait while a model is `loading`. It never
+  unloads or reloads: a foreign loaded model (e.g. `qwen`) or ministral at a context other than
+  8192 stops bring-up (exit 1) with what to unload. Exit 3 = not an LM Studio server, the only case
+  that offers the `DEMO_ENSURE_MODELS=0` bypass. Stakeholder decision 2026-10-22: load at startup,
+  never on demand, never unload.
+- **Found.** `/api/v0/models` reports `loaded_context_length` 2048 for embedding models while `lms ps
+  --json` reports 8192; a prefix-truncation probe confirmed 8192, so the embedder's context is not
+  checked. A `lms load` of one model did not evict the other.
+- **Verified.** 28 offline tests (stub API + stub `lms`, driving the real `.sh`); implementer and
+  teco mutants all red. Live: both loaded → no-op; embedder unloaded → loaded; `qwen` loaded →
+  refused, nothing unloaded. `analyst` 3 passes → approve (`docs/reviews/demo-model-ensure.md`).
+  Commit `23b516f0`. Coordination: `docs/plans/demo-model-ensure-coordination.md`.
+- **Follow-ups.** K-082 (optional QA reruns carried from K-066), K-083 (default opencode config
+  unreachable from this box; review leftovers).
+
 ## 2026-10-22 — K-066 single-model demo: the storefront runs on `ministral` + the embedder (two resident models, not three)
 
 - **Why.** Three resident models (`ministral-3-3b` agent, `qwen3-4b-2507` for `query_graph_data`'s
