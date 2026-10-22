@@ -40,7 +40,7 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-066 — Demo bring-up does not check LM Studio model residency before serving the storefront (🔵 proposed — single-model set adopted and live-measured 2026-10-22, `docs/test-reports/salesperson-single-model-report.md`)
+### K-066 — Demo bring-up does not ensure LM Studio has the demo's models loaded before serving the storefront (🔵 proposed — single-model set adopted and live-measured 2026-10-22, `docs/test-reports/salesperson-single-model-report.md`)
 
 > **What is true now.** The storefront's dead-turn rate is set by whether LM Studio keeps the demo's
 > models resident. JIT swapping gave ~63% dead turns (`docs/test-reports/salesperson-language-salience2-report.md`).
@@ -53,8 +53,20 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > three models. On the 6 GB GPU it fits only with WDDM paging: ≤1.6 s on the first embed after a
 > chat (`docs/test-reports/salesperson-single-model-fit-report.md`). The storefront never embeds.
 >
-> **What remains.** (1) A preflight in demo bring-up that reads `/api/v0/models` and refuses to
-> serve unless exactly the two-model set is loaded. Today the guidance is prose only. (2) Optional:
+> **What remains.** (1) An **ensure step** in demo bring-up. Today the guidance is prose only.
+> Stakeholder decision, 2026-10-22: load at startup, never on demand (on-demand JIT is the ~63%
+> regime). The step must:
+> - read what is loaded (`/api/v0/models`);
+> - **load whichever of the two models is missing**, with the demo settings (`-c 8192 --gpu max`),
+>   then serve;
+> - **never unload or reload anything**. It stops with a clear message instead when a model outside
+>   the set is loaded (e.g. `qwen`, which the `:8200` server may be using) or a demo model is
+>   loaded with the wrong settings;
+> - be idempotent: a second run with both models present does nothing.
+>
+> The read-only check is portable over HTTP. The load path uses the `lms` CLI, which on the dev box
+> is the Windows binary reached from WSL, so the step should find it by configuration rather than a
+> hard-coded path, and fall back to stopping with instructions when it is absent. (2) Optional:
 > a long-conversation stress variant of the probe. Q3 saw 0 overflows, but U0's synthetic three
 > concurrent ~3.1k-token requests still exceed the shared 8,192-token KV budget. (3) Optional: a clean
 > rerun of the `TURN_WORKERS` lever (Q4 was contaminated by a host suspend; keep 4).
