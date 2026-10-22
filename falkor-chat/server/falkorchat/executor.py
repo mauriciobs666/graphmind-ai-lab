@@ -827,6 +827,13 @@ class WorkflowExecutor:
             overrides=run.get("modelOverrides"),
         )
         model_source_rung = _MODEL_SOURCE_LABEL[resolution.source]
+        # K-066: a per-node shallow copy of the drive's `run` for every tool dispatch
+        # below, carrying this node's own `config.model` as `stepModel` (possibly
+        # `None`), so a tool that makes its own `step`-kind call (`query_graph_data`)
+        # resolves exactly as this node did (`docs/plans/salesperson-single-model.md`).
+        # Never write into `run` itself: it is per-drive, and a value stamped there
+        # would leak to every later node of the same drive.
+        tool_run = {**run, "stepModel": requested_model}
         granted = list(config.get("tools", []))
         granted_set = set(granted)
         offered = [self._tools.schema(name) for name in granted]
@@ -905,7 +912,7 @@ class WorkflowExecutor:
                         "it implicitly as a fallback (K-039)",
                     ))
                     self._handle_tool_call(
-                        implicit_call, granted_set, required_by, ctx, run, step,
+                        implicit_call, granted_set, required_by, ctx, tool_run, step,
                         trace, emissions, satisfied, dispatched_writes,
                         turn_text=trigger_text,
                     )
@@ -931,7 +938,7 @@ class WorkflowExecutor:
             turn_text = f"{trigger_text} {last_text}"
             for call in result.tool_calls:
                 content = self._handle_tool_call(
-                    call, granted_set, required_by, ctx, run, step, trace,
+                    call, granted_set, required_by, ctx, tool_run, step, trace,
                     emissions, satisfied, dispatched_writes, turn_text=turn_text,
                 )
                 messages.append(

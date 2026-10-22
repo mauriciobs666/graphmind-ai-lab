@@ -31,6 +31,13 @@ Run:
 
     cd server && .venv/bin/python tests/eval/run_nlq_golden_set_eval.py
 
+    # write the results somewhere other than the tracked baseline file
+    cd server && NLQ_EVAL_RESULTS_PATH=/tmp/nlq.json .venv/bin/python tests/eval/run_nlq_golden_set_eval.py
+
+`NLQ_EVAL_RESULTS_PATH`, when set (non-empty), replaces the results file's
+path. Unset, the run **overwrites the tracked `tests/eval/nlq_eval_results.json`**
+(the recorded K-055 baseline) — set it for any exploratory or comparison run.
+
 **Deliberately sequential, one golden pair at a time — never concurrent.**
 Live-verified fact from this lab's own session history (`kaizen_team`,
 confirmed independently twice): this LM Studio instance JIT-loads one model at
@@ -41,9 +48,11 @@ to two live LLM calls each (the tool's own internal structured-completion call
 plus this script's Layer 2 render call), takes real wall-clock time — expected,
 not a bug to work around.
 
-Writes `tests/eval/nlq_eval_results.json` (every pair's raw tool result,
-Layer 1/Layer 2 verdicts, and diagnostics — the input the report is generated
-from) and prints an accuracy summary. Does **not** itself write the
+Writes `tests/eval/nlq_eval_results.json`, or `NLQ_EVAL_RESULTS_PATH` (every
+pair's raw tool result, the tool's raw structured completion as
+`toolCompletion` — `None` when the tool made no model call, e.g. an unknown
+dataset — Layer 1/Layer 2 verdicts, and diagnostics — the input the report is
+generated from) and prints an accuracy summary. Does **not** itself write the
 `docs/test-reports/` markdown report — that's a deliberate, separate step
 (inspect the JSON, then write the report) so a partial/exploratory run never
 overwrites the last complete one's narrative report by accident.
@@ -88,7 +97,11 @@ from falkorchat.tools import QueryGraphDataTool  # noqa: E402
 from nlq_scoring import layer2_contains, load_golden_set, score_pair, wilson_interval  # noqa: E402
 
 _GOLDEN_PATH = _EVAL_DIR / "nlq_golden_set.jsonl"
-_RESULTS_PATH = _EVAL_DIR / "nlq_eval_results.json"
+_RESULTS_PATH = (
+    Path(os.environ["NLQ_EVAL_RESULTS_PATH"])
+    if os.environ.get("NLQ_EVAL_RESULTS_PATH")
+    else _EVAL_DIR / "nlq_eval_results.json"
+)
 
 # Catalog pairs' `ctx.ws` is never actually read (querygen.CATALOG_SCHEMA has a
 # fixed graph_key="reference") but CallContext still needs a valid-looking
@@ -150,6 +163,38 @@ def _check_kb_seeded() -> None:
         )
 
 
+class _RecordingClient:
+    """Forwards `complete()` to the real client and hands the reply text to its
+    recorder — so a miss can be diagnosed from the model's raw completion, not only
+    from the tool's abstention JSON."""
+
+    def __init__(self, inner: Any, recorder: "_CompletionRecordingGateway") -> None:
+        self._inner = inner
+        self._recorder = recorder
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        text = self._inner.complete(messages)
+        self._recorder.last_completion = text
+        return text
+
+
+class _CompletionRecordingGateway:
+    """Wraps the gateway handed to `QueryGraphDataTool` (only that one —
+    `_render_answer` keeps the raw gateway) and records the tool's raw
+    structured completion. `take()` returns it and resets, once per pair."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.last_completion: str | None = None
+
+    def llm(self, kind: str, **kwargs: Any) -> _RecordingClient:
+        return _RecordingClient(self._inner.llm(kind, **kwargs), self)
+
+    def take(self) -> str | None:
+        text, self.last_completion = self.last_completion, None
+        return text
+
+
 def _render_answer(gateway: Any, ctx: CallContext, question: str, tool_result: dict) -> str:
     llm = gateway.llm("step", ws=ctx.ws)
     prompt = _RENDER_SYSTEM_PROMPT.format(result_json=json.dumps(tool_result))
@@ -159,9 +204,14 @@ def _render_answer(gateway: Any, ctx: CallContext, question: str, tool_result: d
     ])
 
 
-def _run_one(tool: QueryGraphDataTool, gateway: Any, row: dict[str, Any]) -> dict[str, Any]:
+def _run_one(
+    tool: QueryGraphDataTool, gateway: Any, completions: _CompletionRecordingGateway,
+    row: dict[str, Any],
+) -> dict[str, Any]:
     ctx = _ctx_for(row["dataset"])
+    completions.take()  # discard anything left over from a previous pair
     raw = tool.run({"question": row["question"], "dataset": row["dataset"]}, ctx=ctx, run={})
+    tool_completion = completions.take()
     tool_result = json.loads(raw)
     layer1 = score_pair(row, tool_result)
 
@@ -175,6 +225,7 @@ def _run_one(tool: QueryGraphDataTool, gateway: Any, row: dict[str, Any]) -> dic
         "question": row["question"],
         "expected": row["expected"],
         "toolResult": tool_result,
+        "toolCompletion": tool_completion,
         "layer1Correct": layer1.correct,
         "layer1Reason": layer1.reason,
         "layer1Extracted": layer1.extracted,
@@ -192,7 +243,17 @@ def _write_results(records: list[dict[str, Any]], model_ref: str) -> None:
     _RESULTS_PATH.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(f"\nResults written: {_RESULTS_PATH.relative_to(_REPO_ROOT)}")
+    print(f"\nResults written: {_display_path(_RESULTS_PATH)}")
+
+
+def _display_path(path: Path) -> Path:
+    """Repo-relative when the path is inside the repo, else absolute
+    (`NLQ_EVAL_RESULTS_PATH` may point anywhere, e.g. a scratch directory)."""
+    absolute = path.resolve()
+    try:
+        return absolute.relative_to(_REPO_ROOT)
+    except ValueError:
+        return absolute
 
 
 def _print_summary(records: list[dict[str, Any]]) -> None:
@@ -248,7 +309,8 @@ def main() -> None:
     conn = db.connect()
     repo = Repository(conn)
     services = Services(repo)
-    tool = QueryGraphDataTool(services, models=gateway)
+    completions = _CompletionRecordingGateway(gateway)
+    tool = QueryGraphDataTool(services, models=completions)
 
     rows = load_golden_set(_GOLDEN_PATH)
     print(
@@ -260,7 +322,7 @@ def main() -> None:
     records: list[dict[str, Any]] = []
     for i, row in enumerate(rows, start=1):
         t0 = time.monotonic()
-        record = _run_one(tool, gateway, row)
+        record = _run_one(tool, gateway, completions, row)
         elapsed = time.monotonic() - t0
         l1 = "OK  " if record["layer1Correct"] else "MISS"
         l2 = "OK  " if record["layer2Correct"] else "MISS"

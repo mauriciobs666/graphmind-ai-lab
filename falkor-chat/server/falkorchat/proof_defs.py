@@ -208,7 +208,11 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # republishes a full, fresh `config` without repeating this line would silently
 # fall back to the shared `step`-role default (`qwen/qwen3-4b-2507`) and undo
 # the whole re-point, defeating K-056's fix. Every subsequent version (`v4`,
-# K-055) must carry it forward too, for the same reason.
+# K-055) must carry it forward too, for the same reason. Since K-066
+# (`docs/plans/salesperson-single-model.md`), `config.model` also selects the
+# model `query_graph_data`'s internal structured-completion call uses (the tool
+# inherits its calling node's model), so dropping it moves **both** the agent
+# and the tool back to the shared `step` default.
 #
 # **`v4` (K-055, natural-language query generation) is back on the
 # `v1`->`v2`->`v3`->`v4` capability sequence** — it adds `query_graph_data` to

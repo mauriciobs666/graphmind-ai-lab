@@ -609,17 +609,21 @@ model id from `config.py` or any file directly. Enforced, not aspirational: an A
                              v
         OpenAICompatibleLLM / OpenAICompatibleEmbedder
                              ^
-      +--------------+-------+--------+------------------+----------------+
-   responder      judge            executor         embedding worker   retrieval tool
-   (kind=agent)   (kind=guard)     (kind=step)      (kind=embedding)   (kind=embedding)
+      +--------------+-------+--------+----------------+------------------+----------------+
+   responder      judge            executor       query tool         embedding worker   retrieval tool
+   (kind=agent)   (kind=guard)     (kind=step)    (kind=step,        (kind=embedding)   (kind=embedding)
+                                                   inherits node
+                                                   model)
 ```
 
 **Four closed consumer kinds** (`agent`, `step`, `embedding`, `guard`) — adding a fifth means
 adding its own override property, or it silently escapes FR-17's future hard cap (routed to
-`tico`, `docs/plans/llm-provider-config.md` §9.3). Five binding sites resolve through them:
+`tico`, `docs/plans/llm-provider-config.md` §9.3). Six binding sites resolve through them:
 `AgentResponder.maybe_respond` (`agent` + `embedding`), the executor's `_run_agent_node` (`step`),
-`EmbeddingWorker.embed_message` (`embedding`), `GraphragRetrieveTool.run` (`embedding`), and the
-llm-kind guard judge (`guard`). Resolution is **per call**, not at construction — the workspace
+`QueryGraphDataTool.run` (`step`, inheriting the invoking node's `config.model` and override
+snapshot via `run["stepModel"]`/`run["modelOverrides"]`; with neither, e.g. `run={}` from the NLQ
+eval runner, the `step` default), `EmbeddingWorker.embed_message` (`embedding`),
+`GraphragRetrieveTool.run` (`embedding`), and the llm-kind guard judge (`guard`). Resolution is **per call**, not at construction — the workspace
 override is then a function of `ws` with no signature changes.
 
 **Two hand-edited files** feed the gateway (`FALKORCHAT_OPENCODE_CONFIG` — a pristine, unmodified

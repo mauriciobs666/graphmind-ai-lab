@@ -898,6 +898,74 @@ def test_query_graph_data_schema_description_is_generated_from_the_dataset_regis
             assert label in description
 
 
+# ── query_graph_data inherits the calling step's model (K-066) ───────────────
+# `docs/plans/salesperson-single-model.md` §3.1/§5 T1–T3: the tool's internal
+# `step` call resolves with the invoking node's `config.model` (`run["stepModel"]`,
+# stamped by `_run_agent_node`) and the drive's override snapshot
+# (`run["modelOverrides"]`), and with neither (`run={}`, the NLQ eval runner)
+# exactly as before.
+
+_MINISTRAL = "lmstudio/mistralai/ministral-3-3b"
+# The `Repository.read_model_overrides` shape: all four keys, all unset.
+_NO_OVERRIDES = {
+    "agentModel": None, "guardModel": None,
+    "embeddingModel": None, "responderModel": None,
+}
+
+
+class RecordingStepGateway:
+    """A `ModelGateway`-shaped double for the tool's `.llm()` seam: records every
+    call's full `(kind, requested, ws, overrides)` and answers with one
+    `StubQueryLLM`. (The module's `RecordingGateway` above is embedder-only.)"""
+
+    def __init__(self, reply: str = _CATALOG_FILTER_REPLY) -> None:
+        self.calls: list[dict] = []
+        self.client = StubQueryLLM(reply)
+
+    def llm(self, kind, *, requested=None, ws=None, overrides=None):
+        self.calls.append(
+            {"kind": kind, "requested": requested, "ws": ws, "overrides": overrides}
+        )
+        return self.client
+
+
+def _run_catalog_query(run: dict) -> RecordingStepGateway:
+    gateway = RecordingStepGateway()
+    tool = QueryGraphDataTool(StubServices(structured_query_rows=[{"p.name": "x"}]),
+                              models=gateway)
+    tool.run({"question": "what audio products?", "dataset": "catalog"}, ctx=CTX, run=run)
+    return gateway
+
+
+def test_query_graph_data_resolves_step_with_the_calling_nodes_model_and_overrides():
+    gateway = _run_catalog_query({"stepModel": _MINISTRAL, "modelOverrides": _NO_OVERRIDES})
+
+    assert gateway.calls == [
+        {"kind": "step", "requested": _MINISTRAL, "ws": CTX.ws, "overrides": _NO_OVERRIDES}
+    ]
+    assert len(gateway.client.calls) == 1
+
+
+def test_query_graph_data_passes_a_workspace_override_snapshot_through_untouched():
+    overrides = {**_NO_OVERRIDES, "agentModel": "lmstudio/some/override"}
+
+    gateway = _run_catalog_query({"stepModel": _MINISTRAL, "modelOverrides": overrides})
+
+    [call] = gateway.calls
+    # the exact snapshot object — the gateway's own precedence decides, the tool
+    # neither drops it nor re-reads the workspace
+    assert call["overrides"] is overrides
+    assert call["requested"] == _MINISTRAL
+
+
+def test_query_graph_data_with_an_empty_run_requests_the_step_default_as_before():
+    gateway = _run_catalog_query({})
+
+    assert gateway.calls == [
+        {"kind": "step", "requested": None, "ws": CTX.ws, "overrides": None}
+    ]
+
+
 # ── U29f fix D: prompt hardening (`_QUERY_REQUEST_INSTRUCTIONS`) ────────────
 
 

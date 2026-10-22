@@ -207,9 +207,10 @@ order).
 Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and QA'd
 (`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
 carries the full unit-by-unit ledger). One open item affects the *first live, audience-facing*
-demo specifically, not ordinary use: `K-066` (`falkor-chat/docs/BACKLOG.md`). The demo's dead-turn
-rate depends on LM Studio keeping its models resident: 0.5% with all three pinned, about 63% when
-they are JIT-swapped. So load them explicitly before serving. The occasional wrong-language reply
+demo specifically, not ordinary use: `K-066` (`falkor-chat/docs/BACKLOG.md`). The demo runs on one
+chat model, `ministral-3-3b` (the agent and its `query_graph_data` tool), plus the embedding model,
+and its dead-turn rate depends on LM Studio keeping both resident, so load them explicitly before
+serving; the current measured rate is in `K-066`. The occasional wrong-language reply
 under concurrency (`K-065`) is closed: Mitigation D (`systemPrompt` language salience, `v8`) was
 live-verified clean (`falkor-chat/docs/HISTORY.md` 2026-10-21). See `AGENTS.md` for file ownership
 and conventions.

@@ -92,8 +92,9 @@ overridden explicitly. `start_server.sh` already passes 1024.
 
 **Three traps when bumping `SALESPERSON_DEF`.** (1) `config.tools`, `systemPrompt` and
 `config.model` are **create-only** — changing any of them requires a new version, and every new
-version must repeat `config.model` or the `assistant` step silently falls back to the shared role
-default (`qwen/qwen3-4b-2507`) and undoes K-056's Ministral re-point. Topology is byte-identical
+version must repeat `config.model` or **both** the `assistant` step and `query_graph_data` (which
+inherits the step's model) silently fall back to the shared `step` default (`qwen/qwen3-4b-2507`)
+and undo K-056's Ministral re-point. Topology is byte-identical
 across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — denoted a reverted K-060 experiment; the stray copy it left in `ws:acme`
 (`config` create-only, so unfixable in place) was removed in a 2026-09-18 graph cleanup
 (`docs/HISTORY.md`), but the version number itself stays retired; never reuse it. (3) **`salesperson` is chat-triggered, not startable via a bare
@@ -103,11 +104,14 @@ starts over REST; advancing `Order.status` is a separate `services.advance_order
 REST route. Per-version history lives in `proof_defs.py`'s `SALESPERSON_DEF` comment block.
 
 **Before running a live, audience-facing storefront demo, pin the demo's models (`docs/BACKLOG.md`
-`K-066`).** The demo calls two LLMs: `ministral-3-3b` for the `assistant` step and
-`qwen/qwen3-4b-2507` through `query_graph_data`. Load both, plus the embedding model, with
-`lms load` before serving. Under JIT loading they evict each other, and about 63% of turns die.
-The language swap under concurrency (K-065) is closed: Mitigation D (`v8`) was live-verified clean
-(`docs/HISTORY.md` 2026-10-21).
+`K-066`).** The demo calls **one** chat LLM, `ministral-3-3b` (the `assistant` step, and,
+inherited from it, `query_graph_data`'s internal call), plus the embedding model. Load both with
+`lms load` before serving. `qwen/qwen3-4b-2507` must stay **unloaded** for the whole demo: the
+`:8200` agent-team server idle (no `ingest_document`, no `@bot1`) or stopped by its owner, and
+`lms ps` checked right before going live. Never call `ingest_document` on `:8200` during a demo —
+its `IngestionPipeline`'s `extraction` default is still `qwen`, which would JIT-load onto the same
+GPU and evict the demo's models (the storefront process itself mounts no `/mcp`, `app.py`
+`dev_surface`).
 
 **`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
 are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without

@@ -150,6 +150,13 @@ class ToolRegistry:
     when the node builds its offer); `dispatch(name, arguments, *, ctx, run)` runs the tool
     and returns the string fed back to the model. Both raise `UnknownToolError` for an
     unregistered name.
+
+    `run` is the executor's per-drive run dict (`run["ws"]`, `run["modelOverrides"]`
+    stamped by `_drive`), plus one executor-supplied key, `run["stepModel"]`: the
+    invoking agent node's `config.model` (may be `None`); present only on executor
+    dispatches (`_run_agent_node` passes a per-node copy, never the drive's own dict).
+    A tool that makes its own `step`-kind LLM call resolves with it, so it runs on the
+    same model as the node that called it (`QueryGraphDataTool`).
     """
 
     def __init__(self, tools: list[Tool] | None = None) -> None:
@@ -912,8 +919,11 @@ class QueryGraphDataTool:
     The model's own function-call arguments are **not** the answer — they
     select a `dataset` and restate the `question`. This tool then makes a
     **second, internal, non-agent-loop** structured-completion LLM call
-    (resolved through the same `ModelGateway` `step` kind `_run_agent_node`
-    already uses, `executor.py`) whose only allowed output shape is
+    (`ModelGateway` `step` kind, inheriting the calling node's `config.model`
+    and the drive's override snapshot via `run["stepModel"]`/
+    `run["modelOverrides"]`, so it resolves exactly as the invoking agent step
+    did; falling back to the `step` default when called with neither, e.g.
+    `run={}` from the NLQ eval runner) whose only allowed output shape is
     `querygen.QueryRequest`, parsed via the same fence-tolerant
     `llm.extract_own_line_json_object` helper `extraction.py` already proved
     for a different feature — reused here, never a second,
@@ -981,7 +991,10 @@ class QueryGraphDataTool:
             return json.dumps({"items": [], "finding": "unknown dataset"})
 
         question = arguments.get("question", "")
-        llm = self._models.llm("step", ws=ctx.ws)
+        llm = self._models.llm(
+            "step", requested=run.get("stepModel"), ws=ctx.ws,
+            overrides=run.get("modelOverrides"),
+        )
         reply = llm.complete([
             {"role": "system", "content": _build_query_request_system_prompt(schema)},
             {"role": "user", "content": question},

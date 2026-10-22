@@ -76,12 +76,14 @@ class StubRegistry:
         self._schemas = schemas
         self._results = results or {}
         self.dispatched: list[tuple[str, dict]] = []
+        self.dispatched_runs: list[dict] = []
 
     def schema(self, name):
         return self._schemas[name]
 
     def dispatch(self, name, arguments, *, ctx, run):
         self.dispatched.append((name, arguments))
+        self.dispatched_runs.append(run)
         return self._results.get(name, f"result:{name}")
 
 
@@ -1270,6 +1272,51 @@ def test_run_agent_node_threads_run_model_overrides_to_the_gateway():
         "agentModel": None, "guardModel": None, "embeddingModel": None,
         "responderModel": None,
     }
+
+
+# ── K-066: tools see the invoking node's model as `run["stepModel"]` ───────────────
+# `docs/plans/salesperson-single-model.md` §3.1/§5 T4–T6: `_run_agent_node` hands every
+# dispatch a per-node copy of the drive's `run` carrying the node's own `config.model`,
+# so a tool making its own `step` call (`query_graph_data`) inherits the node's model —
+# without ever mutating the per-drive `run` (no leak to a later node or another test).
+
+def _run_one_tool_call_node(config):
+    llm = StubChatLLM([
+        ChatResult(tool_calls=[ToolCall(id="c1", name="graphrag_retrieve",
+                                        arguments={"query": "q"})]),
+        ChatResult(text="done"),
+    ])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    _executor(llm=llm, registry=reg)._run_agent_node(
+        CTX, RUN, STEP, config, {"threadId": "t1"}
+    )
+    return reg
+
+
+def test_tool_dispatch_run_carries_the_nodes_config_model_as_step_model():
+    reg = _run_one_tool_call_node(_config(model="M", tools=["graphrag_retrieve"]))
+
+    [dispatched_run] = reg.dispatched_runs
+    assert dispatched_run["stepModel"] == "M"
+    for key, value in RUN.items():
+        assert dispatched_run[key] == value
+
+
+def test_tool_dispatch_run_carries_an_explicit_none_step_model_when_the_node_names_none():
+    reg = _run_one_tool_call_node(_config(tools=["graphrag_retrieve"]))
+
+    [dispatched_run] = reg.dispatched_runs
+    assert "stepModel" in dispatched_run
+    assert dispatched_run["stepModel"] is None
+
+
+def test_tool_dispatch_never_mutates_the_callers_run_dict():
+    before = dict(RUN)
+
+    _run_one_tool_call_node(_config(model="M", tools=["graphrag_retrieve"]))
+
+    assert "stepModel" not in RUN
+    assert RUN == before
 
 
 # ── K-042 Landing 2 (L2-2, FR-8): resolvedModel/modelSource/modelFallback ─────────
