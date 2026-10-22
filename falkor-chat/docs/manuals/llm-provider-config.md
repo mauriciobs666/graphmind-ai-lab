@@ -180,6 +180,10 @@ Leave `model` out and that step or guard uses its kind's default (Walkthrough 3)
 how you give an expensive reasoning step a strong model while a routine judging step stays on a
 cheap, fast one.
 
+When an agent step names a model (or role), the internal query the `query_graph_data` tool runs for
+that step uses the same model, still capped by any workspace override. A step naming no model
+behaves as before.
+
 **A model or role a step names is checked when the workflow definition is published, not only
 when it runs** — publishing fails immediately, naming the step and the unresolvable name, if it
 can't be matched against your providers (Walkthrough 8).
