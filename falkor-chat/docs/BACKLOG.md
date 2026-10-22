@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-083
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-084
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -53,19 +53,16 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Test strategy:** TP-007 protocol with `salesperson/scripts/language_salience_probe.py`; residency
   via `salesperson/scripts/qwen_watch.sh` and `lms ps`.
 
-### K-083 — `start_demo.sh` defaults to an LM Studio URL this dev box cannot reach; ensure-step leftovers (🔵 proposed — `docs/reviews/demo-model-ensure.md` m4 + Pass 3, 2026-10-22)
+### K-084 — One-off embedder scripts still default to the shared `opencode.json`; custom-identifier listing unverified (🔵 proposed — `docs/reviews/demo-opencode-config.md`, 2026-10-22)
 
-> `start_demo.sh` defaults `FALKORCHAT_OPENCODE_CONFIG` to `~/.config/opencode/opencode.json`,
-> whose `lmstudio` baseURL (`192.168.0.69:1234`) is unreachable here, so bring-up stops at step 3
-> until the operator exports `opencode.local.json`. Decide whether `start_demo.sh` adopts
-> `start_agent_team.sh`'s fallback (env var → `opencode.local.json` → shared file); the default is
-> shared with `start_server.sh`. Minor leftovers from the ensure step's review, none of which can
-> unload a model or serve a wrong set: a non-numeric `ENSURE_DEMO_MODELS_SETTLE_*` crashes at
-> import; no test pins the settle wait to the post-load path; an `http.client.HTTPException`
-> mid-response is a traceback (non-zero exit); no test drives `start_demo.sh`'s exit-3 branch;
-> `ws:demo` model overrides are not read; whether `/api/v0/models` lists an instance under a
-> custom identifier rests on one unsaved live probe.
-- **Owner:** `devops`.
+> `seed_eval_corpus.sh` and `migrate_embeddings.sh` embed through the `lmstudio` baseURL of the
+> shared `opencode.json`, which is unreachable on the usual dev box, so they fail unless
+> `FALKORCHAT_OPENCODE_CONFIG` is exported. The bring-up scripts resolve through
+> `scripts/shlib/opencode_config.sh` instead (K-083). Stakeholder call: adopt that helper here too,
+> or keep the shared default on purpose (the scripts' comments currently say it is deliberate).
+> Also: `ensure_demo_models.py` assumes `/api/v0/models` lists an instance under its custom
+> `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
+- **Owner:** stakeholder decision, then `devops`.
 
 ### K-078 — es/pt-BR carts end up empty: the agent translates product names, so `add_to_cart` is held by the off-turn guard (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
 

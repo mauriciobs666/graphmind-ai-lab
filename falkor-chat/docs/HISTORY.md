@@ -5,6 +5,28 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-22 — K-083 closed: demo bring-up finds a reachable LM Studio config by itself
+
+- **What.** New sourced helper `scripts/shlib/opencode_config.sh` (`resolve_opencode_config`), used
+  by `start_demo.sh`, `start_server.sh`, `ensure_demo_models.sh` and `start_agent_team.sh` (whose
+  inline copy it replaces). Unset `FALKORCHAT_OPENCODE_CONFIG` resolves to
+  `~/.config/opencode/opencode.local.json` if present (INFO line), else the shared `opencode.json`
+  (WARNING); the value is exported, so `create_workspace.sh`/pin read the same file. The helper
+  lives in `shlib/` because the root `.gitignore` ignores any `lib/` directory. One-off scripts
+  (`seed_eval_corpus.sh`, `migrate_embeddings.sh`, `pin_workspace_embedding_model.sh`) are
+  unchanged (→ K-084).
+- **Ensure-step leftovers.** Settle knobs are validated when `ensure` starts (non-finite, negative or
+  zero interval → exit-1 refusal, not an import crash); an `http.client.HTTPException` mid-response
+  is an exit-1 refusal, while a connection closed before any answer still reports "unreachable"
+  with the config hint.
+- **Verified.** 69 targeted tests, including `start_demo.sh`'s exit-3/exit-1 branches run on a copy
+  of the real script with stubs; implementer mutants (20) and two teco mutants all red. Live: with
+  the variable unset, `ensure_demo_models.sh` picked `opencode.local.json` and was a no-op (exit 0).
+  `analyst` 2 passes → approve (`docs/reviews/demo-opencode-config.md`). Manual
+  `docs/manuals/llm-provider-config.md` Walkthrough 1 updated (`tico`). Commit `32d9b842`.
+  Coordination: `docs/plans/demo-opencode-config-coordination.md`.
+- **Follow-ups.** K-084 (one-off scripts' default; custom-identifier re-probe).
+
 ## 2026-10-22 — K-066 closed: `start_demo.sh` ensures LM Studio has the demo's models loaded before serving
 
 - **What.** New step 3 of 9 in `scripts/start_demo.sh`, `scripts/ensure_demo_models.sh` →
