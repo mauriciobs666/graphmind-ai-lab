@@ -499,3 +499,228 @@ item for this (grep). It needs one. It is not a defect of this diff.
   affect the code.
 - **P3-3 (demo `/mcp` clause): fixed in `falkor-chat/AGENTS.md`** by the coordinator; I checked
   the text in the diff. Plan R2 and the §6 row still carry the old clause, which is plan-only.
+
+## Pass 5 (2026-10-22) — U4 nlq-12 fix (code gate)
+
+### Scope & verdict
+
+This pass reviews the uncommitted diff in `falkorchat/{llm,querygen,tools}.py` and
+`tests/{test_tools,test_extraction}.py`, judged against U3's Q2 finding
+(`falkor-chat/docs/test-reports/salesperson-single-model-report.md`, "The catalog regression,
+verbatim").
+
+**Verdict: needs changes.** There is one major finding with a one-line fix. Everything else is
+minor.
+
+CPG: considered, not relevant — `cpg_falkorchat` is stale; the diff is two helpers and one call site, read directly.
+
+**What I ran:**
+- **The brief's fixture-free command:** 200 passed, 3 deselected. The implementer reports 201;
+  I didn't reconcile the one-test difference.
+- **A probe script** that calls the real `QueryGraphDataTool` with a stub LLM and stub services.
+  It covered 8 edge shapes, and its results are cited below.
+
+**Implementer claims, checked:**
+- **Other callers unchanged: confirmed.** The hook defaults to `None`, so `json.loads` keeps its
+  normal last-wins behaviour for the guard judge (`app.py`) and `extraction.py`. That is pinned by
+  the new `test_extraction` case.
+- **Default-`returns` premise: confirmed.** `QueryRequest.returns` is required with `min_length=1`
+  and has no default. `querygen.py`'s history has only one commit touching `"returns"`
+  (`6fd89417`, the DSL's birth). So there was nothing for the brief's "follow what querygen
+  already does" to point at, and adding a default was the implementer's own choice.
+
+**How the parse paths fail (question 2).** A `ValueError` raised by the hook doesn't reject the
+whole reply, only the candidate object that triggered it:
+- On the whole-text path it makes `_load_json_object` return `None`, and parsing falls through to
+  the line scan.
+- The line scan re-parses the same object with the hook, gets the error again, and skips it.
+  `consumed` is already set, so nested own-line filter objects aren't re-scanned.
+- One consequence (probe): when a conflicting object and a valid one each sit on their own line,
+  the valid one is accepted. That matches how the line scan already treats any unparseable
+  candidate, so it's acceptable.
+- A merged payload with two `matches` passes through `default_returns` unchanged and is rejected by
+  validation (probe), which is correct.
+
+### New findings
+
+**P5-1 (major) — Identical repeated lists are concatenated, which contradicts the docstring and
+regresses some previously working replies.** `merge_duplicate_keys` tests "both lists" before it
+tests "identical". So an identical repeat of a list-valued key is concatenated, not "kept once" as
+its docstring promises. Probe results:
+- An identical repeated `returns` becomes `["p.name", "p.name"]`. `compile()` rejects the
+  duplicate expression, and the tool abstains. Before this diff, last-wins answered it.
+- An identical repeated `filters` produces `p.category = $p0 AND p.category = $p1`. The results are
+  harmless, but the list counts toward `QueryMatch.filters`' `max_length=4`.
+
+So the fix adds a new false "no matching data found", for exactly the model behaviour (repeating
+keys) it exists to absorb.
+
+**Fix:** test `merged[key] == value` first (keep the repeat once), then concatenate lists, then
+raise. Add two tests: identical repeated `returns` answers, and identical repeated `filters`
+compiles to a single condition.
+
+**P5-2 (minor) — The default `returns` also fires on single-fact questions, not only list ones.**
+In the probe, "How much does the Wireless Charging Pad cost?" with no `returns` now compiles to
+`WHERE p.name = $p0 RETURN DISTINCT p.name`. The agent gets back the product's name with no price,
+where it used to get an abstention. That's a fabrication-shaped hand-off, because the agent may
+supply a price itself. The docstring's "known limit" covers aggregates but not this case.
+
+Weighed on its merits, the default is still better than abstaining for `nlq-12`'s list shape. The
+prompt prescribes `<var>.name` for list questions, and the salesperson agent has
+`lookup_product_fact` for prices. So I don't ask for it to be removed.
+
+**Fix:** either skip the default when a filter targets `name` (a single-entity lookup, where a
+name-only answer is uninformative), or document this second limit in the docstring. That's the
+implementer's call. No current test pins either behaviour, so whichever is chosen needs one.
+
+**P5-3 (minor) — No positive test goes through the line-scan path.** The verbatim `nlq-12` test is
+fenced, and `_strip_code_fence` sends it down the whole-text path. That's why mutant A survives
+every positive test, and only the conflicting-scalar test (via fallback) catches it. My probe
+shows a prose-wrapped, own-line, repeated-`filters` reply does AND correctly today. **Fix:** add
+that case as a test. It's cheap, and it reddens under mutant A on its own merits.
+
+**P5-4 (minor) — The bench's NLQ pack no longer mirrors production parsing.** Plan §2.3 says the
+`nlq-structured-query` pack mirrors production parsing. After this diff, production merges
+repeated keys and fills an absent `returns`. The pack's `tools/exec.py:126-130` still rejects a
+missing `returns` and keeps last-wins, so the bench now under-scores production for this failure
+class. **Fix:** route a note to the pack's `PROVENANCE.md`, or a pack version bump, via `teco`. No
+change in falkor-chat.
+
+**Gate note (not a code finding).** The fix is proven only against the stubbed verbatim completion.
+Closing Q2's stakeholder item needs a live ministral rerun of Q2, with `NLQ_EVAL_RESULTS_PATH`, to
+confirm two things: `nlq-12` now passes, and no other pair changes (21 catalog pairs; the
+default-`returns` change can move single-fact pairs per P5-2).
+
+**Docs (question 4): the claim holds for living documents.**
+- `docs/QUERIES.md:2201` mentions `extract_own_line_json_object`, but only for extraction, whose
+  behaviour is unchanged.
+- No manual, `SERVER.md` or `DESIGN.md` section describes this parse.
+- The K-055 plan (`docs/plans/workflow-nl-query-generation.md`) is `archived` and stays frozen.
+- `falkor-chat/AGENTS.md` already says parse tolerance is documented in the `llm.py` docstrings,
+  and the diff updates those.
+
+### Dispositions of Pass 4 findings
+
+- **Results-path parent check (nit): not fixed.** It's outside this diff.
+- **T4–T6 use static-gateway sugar (nit): unchanged**, as accepted.
+- **R5 `extraction` kind (pre-existing, `teco`): still open.** It's outside this diff.
+
+## Pass 6 (2026-10-22) — U4 nlq-12 fix, re-gate of the Pass 5 fixes (code gate)
+
+### Scope & verdict
+
+This pass covers the same uncommitted diff as Pass 5, as revised: `falkorchat/{llm,querygen,tools}.py`
+and `tests/{test_tools,test_extraction}.py`.
+
+**Verdict: approve with suggestions.** All three Pass 5 findings in scope are closed, and each
+fix is pinned by a test that goes red under a targeted mutant. One new minor finding (P6-1) is
+the same class as P5-1, a shape the "identical" check doesn't reach. Its fix is one line and I
+have run it, so I recommend landing it in this revision. It doesn't block.
+
+CPG: considered, not relevant — `cpg_falkorchat` is stale; the diff is two helpers and one call site, read directly.
+
+**What I ran:**
+- **The brief's fixture-free command:** 207 passed, 3 deselected. This matches the implementer's
+  count.
+- **Mutants.** Each was copied aside and restored, checked with `cmp`. Afterwards
+  `git diff --stat` still showed the same 5 files, +361/−10.
+  - A, the line-scan call drops `object_pairs_hook`: 2 red, the prose-wrapped test and the
+    conflicting-scalar test.
+  - B, P5-1's order reverted (concatenate before the identical check): 2 red, both
+    identical-repeat tests.
+  - C, `nameNormalized` removed from the skip set: 1 red, the parametrized `[nameNormalized]`
+    case.
+  - Teco's `value`-for-`property` mutant was already red (per the brief).
+- **A probe of the interactions.** It drives the real `QueryGraphDataTool` with stub LLM and
+  services over 12 shapes. The script is in the session scratchpad (`probe6.py`), and its results
+  are in the Appendix table below.
+
+### Dispositions of Pass 5 findings
+
+- **P5-1 (major): fixed.** `merge_duplicate_keys` checks `merged[key] == value` before the
+  list concatenation. Identical repeated `returns` answers, and identical repeated `filters`
+  compiles to one condition. Both are tested, and both tests go red under mutant B.
+- **P5-2 (minor): fixed**, using the skip option. A filter on `name`/`nameNormalized` leaves
+  `returns` absent, so the tool abstains. Both properties are tested via parametrize, and the
+  `nameNormalized` case goes red under mutant C.
+- **P5-3 (minor): fixed.** The prose-wrapped own-line test can only parse through the line scan.
+  It goes red under mutant A on its own merits.
+- **P5-4 (minor): deferred** to the backlog by `teco`, per the brief. I didn't recheck it.
+- **Pass 4 carry-overs:** unchanged and outside this diff.
+
+### New findings
+
+**P6-1 (minor) — Lists that are repeated with overlapping content are still concatenated with
+duplicates, and the docstring says otherwise.** The identical check only catches a repeat that is
+equal as a whole list. Probe results:
+- `"returns": ["p.name","p.price"]` repeated reordered, or `["p.name"]` then `["p.name","p.price"]`:
+  the tool **abstains**. `compile()`'s duplicate-expression guard (`querygen.py:459`) rejects the
+  result. Before this diff, last-wins answered both. This is the regression P5-1 described, for the
+  next shape along the same axis.
+- `filters` as A, B, A, or `[A,B]` then `[B,A]`: the tool answers with redundant `AND` conditions.
+  These use up `max_length=4`, so with three or more conditions the tool would abstain.
+- The docstring's rule 2 says "two different `returns` lists simply project both". That is false
+  when the lists overlap.
+
+**Fix:** remove duplicates element by element during the concatenation:
+`merged[key] = merged[key] + [v for v in value if v not in merged[key]]`. I ran this. It closes
+every overlap row in the probe, leaves the abstain rows abstaining, and keeps the 207 tests green.
+That last point means no existing test constrains it. So add tests along the axis rather than per
+shape: one parametrized test over {identical, reordered, partial overlap, disjoint} × {`returns`,
+`filters`}, asserting the compiled Cypher. With dedup in place, the identical branch only matters
+for scalars, so update rule 1 and rule 2 of the docstring to say so. For `filters`, dedup is
+semantically exact, because `X AND X` is `X`.
+
+**P6-2 (nit) — The name skip is not too broad, and it can't collide with `CONTAINS`.** The
+brief's question 3 asked whether it could. `QueryFilter.op` is a closed six-op whitelist with no
+`CONTAINS` (`querygen.py:81-83`), so no substring-on-name list question can be expressed at all.
+- The only list-shaped name filter the DSL can express is `<>` ("everything except X"). In the
+  probe it abstains when `returns` is omitted.
+- Narrowing the skip to `op == "="` would recover that case. It's take-or-leave, because the
+  shape hasn't been observed.
+- A merged `filters` list that contains a name condition (category plus name) also skips and
+  abstains. That's correct, because it's still a single-entity lookup.
+
+**P6-3 (nit) — The class docstring in `tools.py` abbreviates the skip as "a filter on
+`name`".** It omits `nameNormalized`. `querygen.default_returns`' own docstring is the accurate
+one, so either name both properties or point to it.
+
+### Repeated different `matches` abstaining (question asked by the brief)
+
+**Judged right.** Two different match objects name two queried entities. Last-wins would
+silently answer about the second one, the same hazard the conflicting-scalar rule refuses.
+Abstaining is the conservative choice and consistent with that rule.
+- One recoverable variant is lost. When both repeats share `var`/`label` and differ only in
+  `filters`, the probe shows it abstains, although the intent is plausibly AND, the same as
+  `nlq-12` one level up.
+- That shape hasn't been observed, so I don't recommend handling it now. Revisit only if the live
+  Q2 rerun or a later golden run shows it.
+
+### Docstrings vs behaviour (question 4)
+
+- **`llm.extract_own_line_json_object`: accurate.** It describes the hook and says a
+  `ValueError` rejects that object.
+- **`querygen.default_returns`: accurate**, including the name-lookup exception and the
+  aggregate limit.
+- **`querygen.merge_duplicate_keys`: accurate except rule 2's overlap claim** (P6-1).
+- **`tools.QueryGraphDataTool`: accurate except the abbreviation** in P6-3.
+
+### Appendix — Pass 6 interaction probe (current tree)
+
+| Shape | Result | Compiled `WHERE`/`RETURN` |
+|---|---|---|
+| `filters` A, B, A | answer | `cat AND price AND cat` (redundant) |
+| `filters` [A,B] then [A] | answer | `cat AND price AND cat` (redundant) |
+| `filters` [A,B] then [B,A] | answer | 4 conditions, 2 redundant |
+| `returns` reordered repeat | **abstain** | — (duplicate-expression guard) |
+| `returns` partial overlap | **abstain** | — (duplicate-expression guard) |
+| `returns` disjoint | answer | `p.name, p.price` |
+| merged `filters` cat + name, no `returns` | abstain | — (name skip, correct) |
+| merged `filters` cat + price, no `returns` | answer | `cat AND price`, `RETURN p.name` |
+| `name <> X`, no `returns` | abstain | — (P6-2) |
+| same `var`/`label` `matches` × 2, different `filters` | abstain | — (one-match limit) |
+| `price < 200` vs `< 200.0` repeat | answer | single condition (`200 == 200.0`) |
+| repeated `op` with a different value inside one filter object | abstain | — (conflicting scalar) |
+
+With the P6-1 dedup applied (trial, then restored), the first five rows compile without
+duplicates and answer. Every other row is unchanged.

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
@@ -549,7 +550,8 @@ _OWN_LINE_OBJECT_OPEN = re.compile(r"^[ \t]*\{", re.MULTILINE)
 
 
 def extract_own_line_json_object(
-    content: Any, *, require_key: str | None = None
+    content: Any, *, require_key: str | None = None,
+    object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] | None = None,
 ) -> dict[str, Any] | None:
     """Conservative sibling of `extract_json_object` — biased to find *nothing*.
 
@@ -572,6 +574,13 @@ def extract_own_line_json_object(
     **Residual, by design:** a hypothetical verdict the model writes on its own line,
     with no second object to disambiguate it, is still accepted. Closing that needs
     the model's intent, not a parser.
+
+    **Duplicate keys:** by default a key repeated inside one object keeps its *last*
+    value (plain `json.loads`). A caller whose output shape gives a repeat a meaning
+    passes `object_pairs_hook` (forwarded to `json.loads`; a `ValueError` it raises
+    rejects that object like any other parse failure) — `query_graph_data` does,
+    with `querygen.merge_duplicate_keys`. The default is deliberately not changed
+    for every caller (guard judge, extraction).
     """
     if not isinstance(content, str):
         return None
@@ -579,7 +588,7 @@ def extract_own_line_json_object(
     if not text:
         return None
 
-    whole = _load_json_object(text)
+    whole = _load_json_object(text, object_pairs_hook)
     if whole is not None:
         return whole
 
@@ -595,7 +604,7 @@ def extract_own_line_json_object(
         consumed = after
         if text[after:].split("\n", 1)[0].strip():
             continue  # trailing prose on the closing line ⇒ quoted, not asserted
-        parsed = _load_json_object(text[match.end() - 1 : after])
+        parsed = _load_json_object(text[match.end() - 1 : after], object_pairs_hook)
         if parsed is None or (require_key is not None and require_key not in parsed):
             continue
         matches.append(parsed)
@@ -603,10 +612,13 @@ def extract_own_line_json_object(
     return matches[0] if len(matches) == 1 else None
 
 
-def _load_json_object(text: str) -> dict[str, Any] | None:
+def _load_json_object(
+    text: str,
+    object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] | None = None,
+) -> dict[str, Any] | None:
     """`json.loads(text)` when it yields a dict, else None."""
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(text, object_pairs_hook=object_pairs_hook)
     except (ValueError, TypeError):
         return None
     return parsed if isinstance(parsed, dict) else None

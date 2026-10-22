@@ -853,7 +853,8 @@ def _describe_all_datasets() -> str:
 # The internal, non-agent-loop structured-completion call's system prompt
 # (§3.1 step 2) — mirrors `extraction._SYSTEM_PROMPT`'s own "reply with a
 # single JSON object and nothing else, in exactly this shape" discipline,
-# parsed the same fence-tolerant way (`llm.extract_own_line_json_object`).
+# parsed the same fence-tolerant way (`llm.extract_own_line_json_object`,
+# plus `querygen.merge_duplicate_keys`/`default_returns` — see the class doc).
 # `dataset` is deliberately NOT part of the shape the model fills: the dataset
 # was already selected by the outer tool call's own argument, so this tool
 # injects it itself rather than asking the filling model to restate (and
@@ -927,7 +928,19 @@ class QueryGraphDataTool:
     `querygen.QueryRequest`, parsed via the same fence-tolerant
     `llm.extract_own_line_json_object` helper `extraction.py` already proved
     for a different feature — reused here, never a second,
-    independently-written parser.
+    independently-written parser. Two querygen-specific tolerances sit on
+    top of it, both before `QueryRequest` validation and neither bypassing
+    it (K-066 Q2, golden item `nlq-12`): the parse passes
+    `querygen.merge_duplicate_keys` as its `object_pairs_hook`, so a
+    `filters` key the model repeats inside one match is ANDed rather than
+    last-wins-dropped (repeated lists merge element by element, never
+    duplicating a condition or `returns` expression; a conflicting repeated
+    scalar, or two different `matches`, abstains), and
+    `querygen.default_returns` fills an absent `returns` with `<var>.name`
+    — except for a single-entity lookup (an `=` filter on `name` or
+    `nameNormalized`; see `default_returns`), which abstains.
+    The shared parser's default (last-wins) is unchanged for every other
+    caller.
 
     Every failure short of a genuine infrastructure fault — an unparseable or
     schema-invalid structured completion, or a `querygen.compile` rejection
@@ -999,13 +1012,16 @@ class QueryGraphDataTool:
             {"role": "system", "content": _build_query_request_system_prompt(schema)},
             {"role": "user", "content": question},
         ])
-        parsed = extract_own_line_json_object(reply, require_key="matches")
+        parsed = extract_own_line_json_object(
+            reply, require_key="matches",
+            object_pairs_hook=querygen.merge_duplicate_keys,
+        )
         if parsed is None:
             return json.dumps({"items": [], "finding": "no matching data found"})
 
         try:
             request = querygen.QueryRequest.model_validate(
-                {**parsed, "dataset": arguments["dataset"]}
+                {**querygen.default_returns(parsed, schema), "dataset": arguments["dataset"]}
             )
             compiled = querygen.compile(request, schema)
         except (ValidationError, ValueError):

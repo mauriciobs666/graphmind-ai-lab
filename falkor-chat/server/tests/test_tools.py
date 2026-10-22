@@ -889,6 +889,303 @@ def test_query_graph_data_ignores_a_dataset_field_the_model_supplied_and_uses_th
     assert call["graph_key"] == "reference"  # catalog's graph_key, not knowledge_base's
 
 
+# K-066 Q2 (`docs/test-reports/salesperson-single-model-report.md`): ministral's
+# verbatim completion for golden item `nlq-12` — a two-condition filter spelled
+# as the `filters` key REPEATED inside one match object, fenced, no `returns`.
+_NLQ12_MINISTRAL_COMPLETION = """```json
+{
+  "matches": [
+    {
+      "var": "p",
+      "label": "Product",
+      "filters": [{"property": "category", "op": "=", "value": "Wearables"}],
+      "filters": [{"property": "price", "op": "<", "value": 200}]
+    }
+  ]
+}
+```"""
+
+
+def test_query_graph_data_ands_repeated_filters_keys_from_the_verbatim_nlq12_completion():
+    rows = [{"p.name": "Fitness Tracker Band"}]
+    svc = StubServices(structured_query_rows=rows)
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(_NLQ12_MINISTRAL_COMPLETION))
+
+    out = json.loads(tool.run(
+        {"question": "Show me Wearables products that cost under $200.", "dataset": "catalog"},
+        ctx=CTX, run={},
+    ))
+
+    assert out == {"items": rows}
+    [call] = svc.structured_query_calls
+    # Both repeated `filters` arrays survive, ANDed — the category condition is
+    # not dropped by last-wins — and the absent `returns` defaults to the name.
+    assert call["compiled"].cypher == (
+        "MATCH (p:Product) WHERE p.category = $p0 AND p.price < $p1 "
+        "RETURN DISTINCT p.name LIMIT $limit"
+    )
+    assert call["compiled"].params == {"p0": "Wearables", "p1": 200.0, "limit": 20}
+
+
+def test_query_graph_data_ands_repeated_filters_keys_when_returns_is_present():
+    # Isolates the duplicate-key merge from the `returns` default.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", '
+        '"filters": [{"property": "category", "op": "=", "value": "Wearables"}], '
+        '"filters": [{"property": "price", "op": "<", "value": 200}]}], '
+        '"returns": ["p.name"]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "Fitness Tracker Band"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert "p.category = $p0 AND p.price < $p1" in call["compiled"].cypher
+    assert call["compiled"].params["p0"] == "Wearables"
+
+
+def test_query_graph_data_defaults_absent_returns_to_the_match_name():
+    # Isolates the `returns` default from the duplicate-key merge.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", '
+        '"filters": [{"property": "category", "op": "=", "value": "Audio"}]}]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "Bluetooth Speaker Mini"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert call["compiled"].cypher.endswith("RETURN DISTINCT p.name LIMIT $limit")
+
+
+def test_query_graph_data_still_abstains_on_absent_returns_when_the_label_has_no_name():
+    # `Chunk` registers no `name` property — no default exists to fall back
+    # on, so the absent `returns` stays a validation failure (abstention).
+    reply = '{"matches": [{"var": "c", "label": "Chunk", "filters": []}]}'
+    svc = StubServices(structured_query_rows=[{"c.text": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "knowledge_base"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_abstains_not_crashes_on_absent_returns_with_a_non_string_label():
+    # The `returns` default must not trip over a malformed label (an
+    # unhashable list) — that is validation's job, ending in abstention.
+    reply = '{"matches": [{"var": "p", "label": ["Product"], "filters": []}]}'
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+
+
+def test_query_graph_data_abstains_on_a_conflicting_repeated_scalar_key():
+    # A repeated scalar with two different values has no unambiguous merge —
+    # rejected (abstention), never a silent last-wins pick. Fixture chosen so
+    # last-wins would SUCCEED (`var` "p" matches `returns`), so only the
+    # rejection rule can make this abstain.
+    reply = (
+        '{"matches": [{"var": "q", "var": "p", "label": "Product", '
+        '"filters": []}], "returns": ["p.name"]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_keeps_an_identically_repeated_returns_list_once():
+    # analyst Pass 5 P5-1: an identical repeat is kept once, never
+    # concatenated — `["p.name", "p.name"]` would be rejected by `compile()`'s
+    # duplicate-expression guard, a new false abstention.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": []}], '
+        '"returns": ["p.name"], "returns": ["p.name"]}'
+    )
+    rows = [{"p.name": "x"}]
+    svc = StubServices(structured_query_rows=rows)
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": rows}
+
+
+def test_query_graph_data_keeps_an_identically_repeated_filters_list_once():
+    # P5-1: an identical repeated `filters` compiles to ONE condition, not a
+    # redundant `p.category = $p0 AND p.category = $p1`.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", '
+        '"filters": [{"property": "category", "op": "=", "value": "Audio"}], '
+        '"filters": [{"property": "category", "op": "=", "value": "Audio"}]}], '
+        '"returns": ["p.name"]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert call["compiled"].cypher == (
+        "MATCH (p:Product) WHERE p.category = $p0 RETURN DISTINCT p.name LIMIT $limit"
+    )
+
+
+_RA = '"p.name"'
+_RB = '"p.price"'
+_FA = '{"property": "category", "op": "=", "value": "Audio"}'
+_FB = '{"property": "price", "op": "<", "value": 50}'
+_REPEAT_SHAPES = {  # (first list, repeated list) — every shape's union is {A, B}
+    "identical": ("[{a}, {b}]", "[{a}, {b}]"),
+    "reordered": ("[{a}, {b}]", "[{b}, {a}]"),
+    "partial-overlap": ("[{a}]", "[{a}, {b}]"),
+    "disjoint": ("[{a}]", "[{b}]"),
+}
+
+
+@pytest.mark.parametrize("shape", list(_REPEAT_SHAPES))
+def test_query_graph_data_dedups_a_repeated_returns_list_per_element(shape):
+    # analyst Pass 6 P6-1: a reordered/overlapping repeat must not produce a
+    # duplicate `returns` expression, which `compile()` would reject (a false
+    # abstention).
+    first, second = (s.format(a=_RA, b=_RB) for s in _REPEAT_SHAPES[shape])
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": []}], '
+        f'"returns": {first}, "returns": {second}}}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x", "p.price": 1.0}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert call["compiled"].cypher == (
+        "MATCH (p:Product) RETURN DISTINCT p.name, p.price LIMIT $limit"
+    )
+
+
+@pytest.mark.parametrize("shape", list(_REPEAT_SHAPES))
+def test_query_graph_data_dedups_a_repeated_filters_list_per_element(shape):
+    # P6-1: overlapping repeats AND each distinct condition exactly once — a
+    # redundant `X AND X` would count toward `QueryMatch.filters`' max of 4.
+    first, second = (s.format(a=_FA, b=_FB) for s in _REPEAT_SHAPES[shape])
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", '
+        f'"filters": {first}, "filters": {second}}}], "returns": ["p.name"]}}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert call["compiled"].cypher == (
+        "MATCH (p:Product) WHERE p.category = $p0 AND p.price < $p1 "
+        "RETURN DISTINCT p.name LIMIT $limit"
+    )
+
+
+def test_query_graph_data_defaults_returns_for_a_name_exclusion_list_question():
+    # analyst Pass 6 P6-2: only an EQUALITY on the name is a single-entity
+    # lookup; `name <> X` ("everything except X") is a list question, so the
+    # name default applies.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": '
+        '[{"property": "name", "op": "<>", "value": "Wireless Charging Pad"}]}]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert call["compiled"].cypher.endswith("RETURN DISTINCT p.name LIMIT $limit")
+
+
+def test_query_graph_data_abstains_on_two_different_repeated_matches_lists():
+    # Two DIFFERENT `matches` lists name two different queried entities — an
+    # ambiguity like a conflicting scalar, so the tool abstains (the
+    # concatenation fails the one-match limit) instead of last-wins
+    # silently answering about the second one.
+    reply = (
+        '{"matches": [{"var": "e", "label": "Entity", "filters": []}], '
+        '"matches": [{"var": "p", "label": "Product", "filters": []}], '
+        '"returns": ["p.name"]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+@pytest.mark.parametrize("name_prop", ["name", "nameNormalized"])
+def test_query_graph_data_does_not_default_returns_for_a_single_entity_name_lookup(name_prop):
+    # analyst Pass 5 P5-2: "How much does X cost?" with `returns` omitted
+    # must abstain, not hand back X's bare name with no price (a hand-off
+    # that invites the agent to fabricate the price).
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": '
+        f'[{{"property": "{name_prop}", "op": "=", "value": "Wireless Charging Pad"}}]}}]}}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "Wireless Charging Pad"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run(
+        {"question": "How much does the Wireless Charging Pad cost?", "dataset": "catalog"},
+        ctx=CTX, run={},
+    ))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_ands_repeated_filters_in_a_prose_wrapped_own_line_reply():
+    # P5-3: the verbatim nlq-12 reply is fenced, so it parses whole; this one
+    # is prose-wrapped and only the own-line scan can find it — the hook must
+    # reach that path too.
+    reply = (
+        "Here is the query:\n"
+        '{"matches": [{"var": "p", "label": "Product", '
+        '"filters": [{"property": "category", "op": "=", "value": "Wearables"}], '
+        '"filters": [{"property": "price", "op": "<", "value": 200}]}], '
+        '"returns": ["p.name"]}\n'
+        "Hope that helps."
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "Fitness Tracker Band"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    [call] = svc.structured_query_calls
+    assert "p.category = $p0 AND p.price < $p1" in call["compiled"].cypher
+
+
+def test_query_graph_data_tolerates_an_identically_repeated_scalar_key():
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "label": "Product", '
+        '"filters": []}], "returns": ["p.name"]}'
+    )
+    rows = [{"p.name": "x"}]
+    svc = StubServices(structured_query_rows=rows)
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": rows}
+
+
 def test_query_graph_data_schema_description_is_generated_from_the_dataset_registry():
     tool = QueryGraphDataTool(StubServices(), llm=StubQueryLLM(""))
     description = tool.schema["function"]["description"]

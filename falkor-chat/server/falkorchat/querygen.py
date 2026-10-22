@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -223,6 +223,97 @@ DATASET_REGISTRY: dict[str, DatasetSchema] = {
     "catalog": CATALOG_SCHEMA,
     "knowledge_base": KNOWLEDGE_BASE_SCHEMA,
 }
+
+
+# ── Pre-validation normalization of the model's structured completion ───────
+# Both functions below act on the raw parsed JSON, BEFORE `QueryRequest`
+# validation; neither bypasses it — whatever they produce is still validated by
+# Pydantic and re-checked by `compile()`'s allowlist.
+
+
+def merge_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """`json.loads` `object_pairs_hook` for a `QueryRequest` completion.
+
+    Small models express a multi-condition filter by repeating the `filters`
+    key inside one match object (K-066 Q2, golden item `nlq-12`) instead of one
+    list holding every condition; plain `json.loads` keeps only the last
+    repeat and silently drops the rest. Checked in this order:
+
+    1. A repeat with an **identical** value is kept once. This is the rule that
+       matters for scalars (`"label": "Product"` twice); an identical list
+       would come out the same through rule 2.
+    2. Repeats whose values are **all lists are merged element by element** —
+       the first list, then each element of the repeat not already in it (so
+       reordered, overlapping or identical repeats never yield a duplicate).
+       For `filters` that is exactly AND — the semantics of one list holding
+       every condition, with `X AND X` collapsed to `X` so redundant
+       conditions never count toward the four-filter limit. For `returns` it
+       is the union of the projections, never a duplicate expression
+       `compile()` would reject. For `matches` it is still validated: two
+       different match objects name two queried entities, an ambiguity the
+       one-match limit rejects (the tool abstains rather than last-wins
+       answering about the second).
+    3. Any other repeat — two different scalars (`"label": "Product",
+       "label": "Entity"`), or a list against a non-list — has no unambiguous
+       merge, so it raises `ValueError` (the caller abstains) rather than
+       letting last-wins silently pick one meaning.
+    """
+    merged: dict[str, Any] = {}
+    for key, value in pairs:
+        if key not in merged or merged[key] == value:
+            merged[key] = value
+        elif isinstance(merged[key], list) and isinstance(value, list):
+            merged[key] = merged[key] + [v for v in value if v not in merged[key]]
+        else:
+            raise ValueError(f"conflicting values for repeated key {key!r}")
+    return merged
+
+
+# An equality filter on one of these marks a single-entity lookup
+# (`default_returns`).
+_NAME_LOOKUP_PROPERTIES = frozenset({"name", "nameNormalized"})
+
+
+def default_returns(payload: dict[str, Any], schema: DatasetSchema) -> dict[str, Any]:
+    """Fill an **absent** `returns` with `["<var>.name"]` when the single
+    match's label registers a `name` property in `schema`; otherwise return
+    `payload` unchanged (so validation still rejects it).
+
+    `QueryRequest.returns` is required — querygen itself has no default — and
+    small models sometimes omit it on a list-style question (K-066 Q2,
+    `nlq-12`). `<var>.name` is the projection the tool prompt already tells the
+    model to use for list/identify questions. Only an *absent* key is filled:
+    an explicit `"returns": []` or a malformed match is left for validation to
+    reject.
+
+    **Not filled for a single-entity lookup** — an *equality* (`=`) filter on
+    `name` or `nameNormalized` ("How much does X cost?"): the answer there is a fact
+    *about* X, and handing back X's bare name invites the caller to fabricate
+    that fact, so the request stays invalid and the tool abstains. Any other
+    op on the name (`name <> X`, "everything except X") is list-shaped, so
+    the default applies.
+
+    Known limit: an aggregate question whose completion omits `returns` gets a
+    name list (capped by `limit`), not a count.
+    """
+    if "returns" in payload:
+        return payload
+    matches = payload.get("matches")
+    if not (isinstance(matches, list) and len(matches) == 1 and isinstance(matches[0], dict)):
+        return payload
+    var, label = matches[0].get("var"), matches[0].get("label")
+    if not (isinstance(var, str) and isinstance(label, str)):
+        return payload
+    if "name" not in schema.labels.get(label, {}):
+        return payload
+    filters = matches[0].get("filters")
+    if isinstance(filters, list) and any(
+        isinstance(f, dict) and f.get("op") == "="
+        and f.get("property") in _NAME_LOOKUP_PROPERTIES
+        for f in filters
+    ):
+        return payload
+    return {**payload, "returns": [f"{var}.name"]}
 
 
 def _require(condition: bool, message: str) -> None:

@@ -109,6 +109,23 @@ def test_extract_parses_an_own_line_json_reply_amid_prose():
     assert result.entities == [{"name": "Bob", "type": "Person"}]
 
 
+def test_extract_keeps_last_wins_on_repeated_keys_unaffected_by_the_querygen_merge():
+    # K-066 Q2 gave `query_graph_data` its own duplicate-key merge
+    # (`querygen.merge_duplicate_keys`, passed as `object_pairs_hook`); the
+    # shared parser's DEFAULT stays plain `json.loads` last-wins, so this
+    # caller neither concatenates repeated lists nor rejects a conflicting
+    # repeated scalar.
+    reply = (
+        '{"entities": [{"name": "Alice", "type": "Person"}], '
+        '"entities": [{"name": "Acme", "type": "Location", "type": "Organization"}], '
+        '"relationships": []}'
+    )
+
+    result = _extract(reply)
+
+    assert result.entities == [{"name": "Acme", "type": "Organization"}]
+
+
 def test_extract_returns_empty_result_on_unparseable_prose():
     result = _extract("I could not find anything meaningful in this passage.")
 
