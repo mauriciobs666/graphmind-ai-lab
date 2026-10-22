@@ -70,6 +70,13 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         srv = self.server
+        if srv.mode == "close":  # accept, read the request, answer nothing, close
+            self.close_connection = True
+            return
+        if srv.mode == "garbage":  # a non-HTTP status line -> BadStatusLine
+            self.wfile.write(b"garbage\r\n\r\n")
+            self.close_connection = True
+            return
         if srv.status != 200:  # type: ignore[attr-defined]
             self.send_response(srv.status)  # type: ignore[attr-defined]
             self.end_headers()
@@ -80,7 +87,9 @@ class _Handler(BaseHTTPRequestHandler):
             body = _settle_one_read(srv.state_file)  # type: ignore[attr-defined]
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
+        # truncate: promise more bytes than are sent, then close -> IncompleteRead
+        extra = 1000 if srv.truncate else 0  # type: ignore[attr-defined]
+        self.send_header("Content-Length", str(len(body) + extra))
         self.end_headers()
         self.wfile.write(body)
 
@@ -135,11 +144,12 @@ class Rig:
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
     def run(self, *, lms: bool = True, opencode: Path | None = None,
-            settle_s: float = 2.0) -> subprocess.CompletedProcess:
+            settle_s: float | str = 2.0,
+            settle_interval_s: float | str = 0.05) -> subprocess.CompletedProcess:
         env = {
             # Post-load settle wait, shrunk from the operator default so the suite stays fast.
             "ENSURE_DEMO_MODELS_SETTLE_S": str(settle_s),
-            "ENSURE_DEMO_MODELS_SETTLE_INTERVAL_S": "0.05",
+            "ENSURE_DEMO_MODELS_SETTLE_INTERVAL_S": str(settle_interval_s),
             "HOME": os.environ.get("HOME", str(self.tmp)),
             # Minimal PATH: the dev box's Windows interop PATH carries lms.exe.
             "PATH": "/usr/bin:/bin",
@@ -159,6 +169,8 @@ def rig(tmp_path):
     server.state_file = r.state  # type: ignore[attr-defined]
     server.status = 200  # type: ignore[attr-defined]
     server.raw_body = None  # type: ignore[attr-defined]
+    server.truncate = False  # type: ignore[attr-defined]
+    server.mode = None  # type: ignore[attr-defined]
     r.server = server
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
@@ -427,8 +439,25 @@ def test_model_still_loading_right_after_load_is_waited_for(rig):
     _stub_lms_leaving_loading(rig, reads=3)
     out = rig.run()
     assert out.returncode == 0, out.stdout + out.stderr
+    assert "waiting for" in out.stdout  # the settle wait actually ran, after the load
     assert "demo models ready" in out.stdout
     assert len(_loads(rig.calls())) == 1 and _unloads(rig.calls()) == []
+
+
+def test_settle_wait_runs_after_a_load_only_never_before(rig):
+    # K-083 (review pass 3): a demo model already `loading` BEFORE any load is someone
+    # else's load in flight -> an immediate refusal, with no wait, even though it would
+    # settle within the (generous) bound. A wait moved before the load would instead
+    # wait it out and succeed.
+    models = _catalog(chat=None, embed=2048)
+    models[0] = {"id": CHAT, "type": "llm", "state": "loading",
+                 "loaded_context_length": 8192, "_loading_reads": 2}
+    rig.set_models(models)
+    out = rig.run(settle_s=30)
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "still loading" in out.stderr
+    assert "waiting for" not in out.stdout
+    assert rig.calls() == []
 
 
 def test_model_never_leaving_loading_after_load_stops_when_the_wait_runs_out(rig):
@@ -460,4 +489,64 @@ def test_200_with_a_non_json_body_is_not_lm_studio(rig):
     assert out.returncode == 3, out.stderr
     assert "unreachable" not in out.stderr
     assert "DEMO_ENSURE_MODELS=0" in out.stderr
+    assert rig.calls() == []
+
+
+@pytest.mark.parametrize(("knob", "value"), [
+    ("settle_s", "abc"), ("settle_s", "nan"), ("settle_s", "-1"), ("settle_s", "inf"),
+    ("settle_interval_s", "abc"), ("settle_interval_s", "0"),
+])
+def test_bad_settle_knob_is_a_refusal_not_a_traceback(rig, knob, value):
+    # K-083: was a ValueError at import. Refuses (exit 1) naming the knob, before any
+    # read or load.
+    rig.set_models(_catalog(chat=None, embed=None))
+    out = rig.run(**{knob: value})
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "Traceback" not in out.stderr
+    env_name = {"settle_s": "ENSURE_DEMO_MODELS_SETTLE_S",
+                "settle_interval_s": "ENSURE_DEMO_MODELS_SETTLE_INTERVAL_S"}[knob]
+    assert f"{env_name}={value!r}" in out.stderr
+    assert rig.calls() == []
+
+
+def test_valid_zero_settle_is_accepted(rig):
+    rig.set_models(_catalog(chat=8192, embed=2048))
+    out = rig.run(settle_s="0")
+    assert out.returncode == 0, out.stderr
+
+
+def test_answer_cut_off_mid_body_is_a_refusal_not_a_traceback(rig):
+    # K-083: http.client.IncompleteRead (an HTTPException, not an OSError) used to escape.
+    # Exit 1, not 3: a broken answer is no proof the server isn't LM Studio.
+    rig.set_models(_catalog(chat=8192, embed=2048))
+    rig.server.truncate = True
+    out = rig.run()
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "Traceback" not in out.stderr
+    assert "cut off or malformed" in out.stderr and "IncompleteRead" in out.stderr
+    assert "DEMO_ENSURE_MODELS" not in out.stderr
+    assert rig.calls() == []
+
+
+def test_connection_closed_before_any_answer_is_unreachable_with_the_config_hint(rig):
+    # Review m1: RemoteDisconnected is an OSError AND an HTTPException; nothing was
+    # answered, so it is the wrong-URL symptom and must keep the config-fix hint.
+    rig.server.mode = "close"
+    out = rig.run()
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "unreachable" in out.stderr
+    assert "opencode.local.json" in out.stderr
+    assert "cut off" not in out.stderr and "Traceback" not in out.stderr
+    assert "DEMO_ENSURE_MODELS" not in out.stderr
+    assert rig.calls() == []
+
+
+def test_garbage_status_line_is_cut_off_or_malformed(rig):
+    # Review m1: BadStatusLine (not a RemoteDisconnected) stays on the "cut off" path.
+    rig.server.mode = "garbage"
+    out = rig.run()
+    assert out.returncode == 1, out.stdout + out.stderr
+    assert "cut off or malformed" in out.stderr and "BadStatusLine" in out.stderr
+    assert "unreachable" not in out.stderr and "Traceback" not in out.stderr
+    assert "DEMO_ENSURE_MODELS" not in out.stderr
     assert rig.calls() == []

@@ -107,12 +107,14 @@ to `salesperson@v8`, responder fall-through off, `--reload` off). The model ensu
 (`falkor-chat/scripts/ensure_demo_models.sh`) loads whichever of the demo's two models is missing
 on the LM Studio at the `lmstudio` baseURL in `FALKORCHAT_OPENCODE_CONFIG`, and never unloads:
 another loaded model (e.g. `qwen`) stops bring-up with what to unload yourself. If that URL is
-unreachable, bring-up stops at that step: point `FALKORCHAT_OPENCODE_CONFIG` at a config whose
-`lmstudio` baseURL reaches LM Studio — on the usual dev box, whose shared `opencode.json` is stale,
-`~/.config/opencode/opencode.local.json`. Run it from `falkor-chat/`:
+unreachable, bring-up stops at that step. With `FALKORCHAT_OPENCODE_CONFIG` unset, the script uses
+`~/.config/opencode/opencode.local.json` if it exists (and says so on an INFO line), else the shared
+`~/.config/opencode/opencode.json` with a WARNING. On the usual dev box the shared file's baseURL is
+stale and the local one is right, so no env var is needed; set `FALKORCHAT_OPENCODE_CONFIG` only to
+point somewhere else. Run it from `falkor-chat/`:
 
 ```bash
-FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json ./scripts/start_demo.sh
+./scripts/start_demo.sh
 ```
 
 It is **not** `start_server.sh` with different flags — `start_server.sh` also seeds the `triage`/
@@ -138,7 +140,7 @@ cd salesperson && ./build.sh && cd ../server && \
   FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0 \
   FALKORCHAT_STOREFRONT_ENABLED=1 \
   FALKORCHAT_STOREFRONT_DIR="$PWD/../../salesperson/dist" \
-  FALKORCHAT_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json" \
+  FALKORCHAT_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.local.json" \
   .venv/bin/uvicorn falkorchat.app:app
 ```
 

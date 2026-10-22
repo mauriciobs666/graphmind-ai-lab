@@ -25,8 +25,8 @@ set -euo pipefail
 # with what to unload yourself. Both already loaded: a read-only no-op that
 # needs no CLI. No lms CLI and a model missing: stops with load-it-yourself
 # instructions (load in the LM Studio app, re-run). An unreachable LM Studio URL
-# stops it too — on a box whose shared opencode.json is stale, export
-# FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json.
+# stops it too — the config comes from the env var, else opencode.local.json, else
+# the shared opencode.json (see FALKORCHAT_OPENCODE_CONFIG below).
 # DEMO_ENSURE_MODELS=0 skips the step with a printed warning — for a
 # non-LM-Studio provider only (the step exits 3 and says so); a live audience
 # demo without it is the ~63% dead-turn JIT regime. LIMIT: workspace model
@@ -65,10 +65,12 @@ set -euo pipefail
 #   FALKORCHAT_STOREFRONT_PRESENTER_KEY (default: unset — no presenter surface;
 #                          export it yourself, this script sets no default so a
 #                          demo secret is never invented on the operator's behalf)
-#   FALKORCHAT_OPENCODE_CONFIG(default: $HOME/.config/opencode/opencode.json)
-#                          — required whenever ENABLE_AGENT/WORKFLOW_ENABLED is on
-#                          (K-042 §4.1); this script supplies the dev convenience
-#                          default, same as start_server.sh.
+#   FALKORCHAT_OPENCODE_CONFIG(default: resolved by scripts/shlib/opencode_config.sh,
+#                          same as start_server.sh/start_agent_team.sh) — the env
+#                          var as-is; else $HOME/.config/opencode/opencode.local.json
+#                          if present (INFO line); else the shared opencode.json
+#                          (WARNING). Required whenever ENABLE_AGENT/WORKFLOW_ENABLED
+#                          is on (K-042 §4.1); the product itself has no default.
 #   FALKORCHAT_MODEL_CONFIG(default: falkor-chat/config/models.json, config.py's
 #                          own default — no need to export it here)
 #   DEMO_ENSURE_MODELS     (default: 1) — 0 skips step 3's LM Studio model ensure
@@ -158,8 +160,11 @@ FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S="${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S:-30
 FALKORCHAT_STOREFRONT_ENABLED="${FALKORCHAT_STOREFRONT_ENABLED:-1}"
 DEMO_ENSURE_MODELS="${DEMO_ENSURE_MODELS:-1}"
 # K-042 §4.1: no product default pointing into one user's home — this dev/demo
-# script supplies the convenience default (mirrors start_server.sh).
-FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
+# script supplies the convenience default. K-083: env var → opencode.local.json →
+# shared opencode.json, from the one shared definition in shlib/opencode_config.sh.
+# shellcheck source=shlib/opencode_config.sh
+. "$(dirname "$0")/shlib/opencode_config.sh"
+resolve_opencode_config
 # `:-` substitutes on unset OR empty — see the header note. Default is
 # deliberately not `--reload`.
 UVICORN_ARGS="${UVICORN_ARGS:---host 0.0.0.0}"

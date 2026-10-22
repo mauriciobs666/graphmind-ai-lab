@@ -41,7 +41,10 @@ FALKORDB_HOST="${FALKORDB_HOST:-127.0.0.1}"
 FALKORDB_PORT="${FALKORDB_PORT:-6379}"
 # K-042 §4.1: the product carries no home-directory default (a default pointing
 # into one specific user's home is the "works on my box" failure mode) — this
-# dev script supplies the convenience default instead, same as start_server.sh.
+# dev script supplies the shared file as its default, deliberately — unlike
+# start_server.sh/start_demo.sh, which fall back through shlib/opencode_config.sh
+# (opencode.local.json first). On a box whose shared baseURL is stale, export
+# FALKORCHAT_OPENCODE_CONFIG yourself: this script embeds through it.
 FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"

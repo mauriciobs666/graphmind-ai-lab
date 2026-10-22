@@ -71,10 +71,13 @@ disappearing.
    use OpenCode, you can point falkor-chat straight at your existing file — no changes needed.
 2. Set `FALKORCHAT_OPENCODE_CONFIG` to that file's path. This is **required** the moment you turn
    on the AI assistant (`FALKORCHAT_ENABLE_AGENT=1`) or workflows
-   (`FALKORCHAT_WORKFLOW_ENABLED=1`) — there's no built-in default. (`./scripts/start_server.sh`
-   sets a convenience default of `$HOME/.config/opencode/opencode.json` for local dev, so if
-   you're using that script and already have an OpenCode config there, you don't need to do
-   anything.)
+   (`FALKORCHAT_WORKFLOW_ENABLED=1`) — there's no built-in default. (If you leave it unset, the
+   bring-up scripts — `./scripts/start_server.sh`, `start_demo.sh`, `ensure_demo_models.sh` and
+   `start_agent_team.sh` — pick a local-dev default for you and say which on startup:
+   `$HOME/.config/opencode/opencode.local.json` if that file exists, otherwise the shared
+   `$HOME/.config/opencode/opencode.json`, with a warning. Creating that `opencode.local.json` is
+   the way to fix a provider address that isn't reachable from your machine without editing the
+   shared file other tools read.)
 3. Optionally set `FALKORCHAT_MODEL_CONFIG` to your own overlay file. If you skip this, falkor-chat
    uses the shipped `config/models.json` as-is.
 4. Start the server. If a file is missing, unreadable, or malformed, **the server refuses to

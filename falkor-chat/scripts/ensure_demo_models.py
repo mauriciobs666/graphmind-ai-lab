@@ -19,7 +19,8 @@ What it does, in order — every refusal happens before any load:
      override `ws:demo` carries is the embedding pin `create_workspace.sh` writes, which
      equalled the overlay default at pin time (it is never re-pinned).
   2. Reads what is loaded: `GET <host>/api/v0/models` (portable, read-only). Unreachable,
-     or any HTTP error other than 404/405 (a sick LM Studio) -> stop (exit 1). A server
+     any HTTP error other than 404/405 (a sick LM Studio), or an answer cut off mid-body
+     (`http.client.HTTPException`) -> stop (exit 1). A server
      that answers 404/405, a non-JSON body, or JSON without a `data` list is not LM Studio
      -> stop with exit 3, the one case where skipping this step (`DEMO_ENSURE_MODELS=0`)
      is legitimate.
@@ -38,7 +39,8 @@ What it does, in order — every refusal happens before any load:
   5. Otherwise loads each missing model with the `lms` CLI —
      `lms load <id> -c 8192 --gpu max --identifier <id> -y` — then re-reads the API
      (while a demo model still reports `loading`, every SETTLE_INTERVAL_S for up to
-     SETTLE_S = 30 s) and stops unless the full set is loaded and nothing foreign appeared. `--identifier`
+     SETTLE_S = 30 s; an override that isn't a finite number of seconds — > 0 for the
+     interval, >= 0 for SETTLE_S — is a refusal) and stops unless the full set is loaded and nothing foreign appeared. `--identifier`
      makes a racing duplicate load fail instead of silently creating `<id>:2`.
 
 It NEVER runs `lms unload`, never reloads a loaded model, and never JIT-loads by
@@ -55,7 +57,9 @@ says why and what to do); 2 = usage; 3 = the URL answered but is not LM Studio.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -80,9 +84,13 @@ DEMO_GPU = "max"
 
 API_TIMEOUT_S = 5.0
 LOAD_TIMEOUT_S = 300.0
-# Post-load wait while a demo model still reports `loading` (env-overridable for tests).
-SETTLE_S = float(os.environ.get("ENSURE_DEMO_MODELS_SETTLE_S", "30"))
-SETTLE_INTERVAL_S = float(os.environ.get("ENSURE_DEMO_MODELS_SETTLE_INTERVAL_S", "1"))
+# Post-load wait while a demo model still reports `loading` (env-overridable for tests,
+# read by settle_config() when ensure() starts — never at import, so a bad value is a
+# refusal rather than a traceback).
+SETTLE_S = 30.0
+SETTLE_INTERVAL_S = 1.0
+SETTLE_ENV = "ENSURE_DEMO_MODELS_SETTLE_S"
+SETTLE_INTERVAL_ENV = "ENSURE_DEMO_MODELS_SETTLE_INTERVAL_S"
 
 PREFIX = "ensure_demo_models:"
 
@@ -167,6 +175,30 @@ def derive_demo_set() -> DemoSet:
     return DemoSet(api_root=roots.pop(), chat=tuple(chat), embedding=embedding.primary.model)
 
 
+def _env_seconds(name: str, default: float, *, allow_zero: bool) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value) or value < 0 or (value == 0 and not allow_zero):
+        bound = ">= 0" if allow_zero else "> 0"
+        raise Refusal(f"{name}={raw!r} is not a finite number of seconds {bound} — "
+                      f"fix or unset it (default {default:g}) and re-run.")
+    return value
+
+
+def settle_config() -> tuple[float, float]:
+    """(SETTLE_S, SETTLE_INTERVAL_S) from the env, or a Refusal naming the bad knob.
+    A typo'd knob refuses (exit 1) rather than falling back to a default: the knobs are
+    test seams nobody sets on an operator path, so refusing costs a real bring-up nothing,
+    while a silent default would hide the typo (and NaN would make the wait unbounded)."""
+    return (_env_seconds(SETTLE_ENV, SETTLE_S, allow_zero=True),
+            _env_seconds(SETTLE_INTERVAL_ENV, SETTLE_INTERVAL_S, allow_zero=False))
+
+
 # ── 2. read what is loaded ─────────────────────────────────────────────────────────
 
 def read_models(api_root: str) -> list[dict]:
@@ -190,9 +222,20 @@ def read_models(api_root: str) -> list[dict]:
             "  The URL is the lmstudio baseURL in FALKORCHAT_OPENCODE_CONFIG"
             f" ({os.environ.get('FALKORCHAT_OPENCODE_CONFIG', '<unset>')}).\n"
             "  Fix: point it at a reachable LM Studio — e.g. on a box whose shared opencode.json\n"
-            "  is stale, export FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json\n"
+            "  is stale, create $HOME/.config/opencode/opencode.local.json with a reachable\n"
+            "  baseURL (the bring-up scripts pick it up when the env var is unset), or\n"
+            "  export FALKORCHAT_OPENCODE_CONFIG=$HOME/.config/opencode/opencode.local.json\n"
             "  — or start LM Studio's server (Developer tab, or `lms server start`)."
         )
+    except http.client.HTTPException as exc:
+        # After the OSError clause on purpose: RemoteDisconnected is both a BadStatusLine
+        # and a ConnectionResetError, and a connection closed before any answer is the
+        # wrong-URL symptom, so it must get the "unreachable" fix hint above. What lands
+        # here answered and then broke the exchange (IncompleteRead: body shorter than
+        # Content-Length; BadStatusLine: not an HTTP status line). Not proof of "not LM
+        # Studio", so never the bypass.
+        raise Refusal(f"the answer from {url} was cut off or malformed ({exc!r}) — if this is "
+                      "LM Studio, check its server log (Developer tab), then re-run.")
     data = body.get("data") if isinstance(body, dict) else None
     if not isinstance(data, list):
         raise NotLMStudio(f"{url} returned an unexpected body (no 'data' list) — is this an "
@@ -269,22 +312,23 @@ def manual_instructions(missing: list[str]) -> str:
     )
 
 
-def _settle_after_load(demo: DemoSet) -> dict[str, dict]:
+def _settle_after_load(demo: DemoSet, settle_s: float, interval_s: float) -> dict[str, dict]:
     """Re-read until no demo model reports `loading` (whether LM Studio's API can still
     say so after `lms load` returns is unknown), up to SETTLE_S; a model still `loading`
     then is refused by check_refusals. Post-load only: before a load, `loading` means
     someone else's load is in flight, and that stays an immediate refusal."""
-    deadline = time.monotonic() + SETTLE_S
+    deadline = time.monotonic() + settle_s
     while True:
         after = loaded_models(read_models(demo.api_root))
         busy = [mid for mid in demo.all_ids if after.get(mid, {}).get("state") == "loading"]
         if not busy or time.monotonic() >= deadline:
             return after
         _say("waiting for " + ", ".join(busy) + " to finish loading")
-        time.sleep(SETTLE_INTERVAL_S)
+        time.sleep(interval_s)
 
 
 def ensure(demo: DemoSet) -> int:
+    settle_s, interval_s = settle_config()
     _say(f"demo models: chat={', '.join(demo.chat)}  embedding={demo.embedding}  "
          f"(LM Studio at {demo.api_root})")
     loaded = loaded_models(read_models(demo.api_root))
@@ -315,7 +359,7 @@ def ensure(demo: DemoSet) -> int:
 
     # Re-read: catches a CLI wired to a different LM Studio than the server's URL, and a
     # load that evicted something.
-    after = _settle_after_load(demo)
+    after = _settle_after_load(demo, settle_s, interval_s)
     still_missing = [mid for mid in demo.all_ids if mid not in after]
     if still_missing:
         raise Refusal(

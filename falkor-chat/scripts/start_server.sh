@@ -16,12 +16,14 @@ set -euo pipefail
 #   FALKORCHAT_ENABLE_AGENT(default: 1)      — wire the live embedder + LLM + AI
 #                          responder (@mention the agent to get a reply). Set 0 to
 #                          serve the UI/REST without the AI loop.
-#   FALKORCHAT_OPENCODE_CONFIG(default: $HOME/.config/opencode/opencode.json)
-#                          — K-042: the pristine, unmodified shared OpenCode file
-#                          (providers only). Required whenever ENABLE_AGENT/
-#                          WORKFLOW_ENABLED is on; this script supplies the dev
-#                          convenience default (the product itself has none — see
-#                          config/opencode.example.json for the expected shape).
+#   FALKORCHAT_OPENCODE_CONFIG(default: resolved by scripts/shlib/opencode_config.sh)
+#                          — K-042: an OpenCode providers file (providers only).
+#                          Required whenever ENABLE_AGENT/WORKFLOW_ENABLED is on;
+#                          the product itself has no default (see
+#                          config/opencode.example.json for the shape). This script
+#                          resolves: the env var as-is; else
+#                          $HOME/.config/opencode/opencode.local.json if present
+#                          (INFO line); else the shared opencode.json (WARNING).
 #   FALKORCHAT_MODEL_CONFIG(default: falkor-chat/config/models.json, set by
 #                          config.py itself — no need to export it here) — K-042:
 #                          falkor-chat's own overlay (per-kind defaults/settings).
@@ -87,8 +89,9 @@ Env overrides: FALKORCHAT_WS_ID, FALKORCHAT_USER_ID, FALKORDB_HOST,
                FALKORCHAT_ENABLE_AGENT (default 1), FALKORCHAT_WORKFLOW_ENABLED
                (default 1), FALKORCHAT_AGENT_ID, FALKORCHAT_AGENT_NAME,
                FALKORCHAT_TRIGGER_DEF_KEY (default triage), FALKORCHAT_TRIGGER_DEF_VERSION
-               (default v1), FALKORCHAT_OPENCODE_CONFIG (default
-               \$HOME/.config/opencode/opencode.json), FALKORCHAT_MODEL_CONFIG
+               (default v1), FALKORCHAT_OPENCODE_CONFIG (unset:
+               ~/.config/opencode/opencode.local.json if present, else
+               opencode.json), FALKORCHAT_MODEL_CONFIG
                (default falkor-chat/config/models.json)
 EOF
 }
@@ -126,8 +129,11 @@ UVICORN_ARGS="${UVICORN_ARGS:---reload}"
 # K-042 §4.1: the product carries no home-directory default (a default pointing into
 # one specific user's home is the "works on my box" failure mode) — this dev script
 # supplies the convenience default instead, so the stakeholder's day-to-day command
-# stays unchanged while a bare `uvicorn` run must be explicit.
-FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
+# stays unchanged while a bare `uvicorn` run must be explicit. K-083: env var →
+# opencode.local.json → shared opencode.json, from shlib/opencode_config.sh.
+# shellcheck source=shlib/opencode_config.sh
+. "$(dirname "$0")/shlib/opencode_config.sh"
+resolve_opencode_config
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SERVER_DIR="$REPO_DIR/server"

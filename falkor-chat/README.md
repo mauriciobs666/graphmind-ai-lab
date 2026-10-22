@@ -297,7 +297,8 @@ match the workspace's vector index (1024 for `ws:acme`).
 (or `FALKORCHAT_WORKFLOW_ENABLED=1`) now also requires `FALKORCHAT_OPENCODE_CONFIG` — the path to
 a pristine, unmodified OpenCode `opencode.json` (providers only; see
 `config/opencode.example.json`). There is no product default (`start_server.sh` sets the dev
-convenience default, `$HOME/.config/opencode/opencode.json`, for you). falkor-chat's own overlay
+convenience default for you: `$HOME/.config/opencode/opencode.local.json` if present, else
+`$HOME/.config/opencode/opencode.json`). falkor-chat's own overlay
 (per-kind defaults/settings) defaults to the shipped `config/models.json` — override with
 `FALKORCHAT_MODEL_CONFIG` if you want a different one. Missing/malformed/legacy-env-var-set all
 fail startup loudly, naming the variable and the shipped example.
