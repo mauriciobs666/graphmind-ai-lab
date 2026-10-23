@@ -1,6 +1,6 @@
 # Cart writes keyed by product ID, not the model's rendering of the name
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-078 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/salesperson-cart-product-id.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** K-078 · **Version:** 3 · **Reviews:** `falkor-chat/docs/reviews/salesperson-cart-product-id.md` · **Extended by:** `falkor-chat/docs/plans/salesperson-cart-product-id2.md`
 
 *2026-10-22 v2: revised per analyst Pass 1 (F1–F8, n1–n3). Changes: conditional hold message, re-fire live condition, S4+S5 coupling, per-tool ID sources, mutant fixes, gate definitions, F1-landed wording.*
 

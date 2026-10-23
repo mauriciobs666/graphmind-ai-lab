@@ -329,11 +329,13 @@ can be classified as (a), (b) or (c).
 ### 5.1 DEF-1 fix options compared
 
 "Demand" is the summed length of the in-flight sequences at the binding concurrency. S7's measured
-3-way maximum is 8,863 (runtime log). The 2-way maximum, estimated from proxy prompts, is ~6.4k.
+3-way maximum is 8,863 (runtime log). The 2-way maximum is **7,072–7,074**: runtime log (any two concurrently active slots) and proxy (any two time-overlapping successful calls from different threads) agree. v8's was 5,602.
+
+*2026-10-23 correction (plan-gate of `plans/salesperson-cart-product-id2.md`, `reviews/salesperson-cart-product-id2.md` Pass 1): this section first gave ~6.4k / ~1.8k headroom, which was the worst pair inside the overflow groups only, not across the run.*
 
 | Option | Effect on headroom | Cost | Verdict |
 |---|---|---|---|
-| **O1 `FALKORCHAT_STOREFRONT_TURN_WORKERS=2`** for the demo (`start_demo.sh`, overridable) | The binding concurrency becomes 2-way: ~6.4k of 8,192, **~1.8k headroom (22%)**. That is enough to absorb DEF-2's +397 | A third concurrent customer queues behind the first finished turn. U3 Q4 (v8, 2 workers) measured p95 14.1 s, the same as at 4 workers. Replaying S7's alive groups with a crude queue gives an upper bound of ~20 s pooled p95. No model reload and no VRAM. Does not cover `:8200` traffic | **Recommended (first)** |
+| **O1 `FALKORCHAT_STOREFRONT_TURN_WORKERS=2`** for the demo (`start_demo.sh`, overridable) | The binding concurrency becomes 2-way: worst observed 7,074 of 8,192, **~1.1k headroom (13.6%)**; S7's worst pairs are turn-4 re-adds after a dead turn, a cascade the cap removes. Enough to absorb DEF-2's ~+440, at ~8–9% margin on that cascade path | A third concurrent customer queues behind the first finished turn. U3 Q4 (v8, 2 workers) measured p95 14.1 s, the same as at 4 workers. Replaying S7's alive groups with a crude queue gives an upper bound of ~20 s pooled p95. No model reload and no VRAM. Does not cover `:8200` traffic | **Recommended (first)** |
 | O2 LM Studio `--parallel 2` | Same cap, enforced globally (`:8200` too) | Needs an unload and reload of ministral (operator call). `ensure_demo_models` checks only context, so it would need a parallel check too | Optional hardening after O1 |
 | O3 a larger context (`-c 12288`) | The 3-way pool becomes 12,288: S7's worst instant fits with ~3.4k to spare | **VRAM ≈ +416 MiB per +4,096 tokens** (inferred: ~104 KiB/token for 26 layers × 8 KV heads × 128 × K+V × f16; check with `lms load … --estimate-only`). ministral alone already uses 5,353 of 6,141 MiB, plus WDDM paging when the embedder runs. `ensure_demo_models.py` hard-codes `DEMO_CONTEXT_LENGTH = 8192`, so it needs script and doc changes and a live fit check | Only if the stakeholder requires true 3-way parallelism |
 | O4 trim each call | Without a def bump: catalog as `[id, name]` pairs ≈ −100 per miss (IDs only ≈ −225); a storefront speaker label (the DEF-4 fix) ≈ −8 per customer line. With `v10`: removing prompt/schema duplication ≈ −100–170 per call | Getting back just to v8's **3%** margin needs ≈ −227 per sequence, plus whatever DEF-2 adds | **Insufficient alone.** Worth it as a latency/headroom bonus |
@@ -344,12 +346,12 @@ can be classified as (a), (b) or (c).
 
 With O1 in place, 2-way demand is the binding quantity:
 
-| Change | Δ per sequence | 2-way worst (≈6.4k) | 3-way worst (8,863 measured) |
+| Change | Δ per sequence | 2-way worst (7,074) | 3-way worst (8,863 measured) |
 |---|---|---|---|
-| as-is (S7) | — | ~6.4k | 8,863 (overflows) |
-| + DEF-2 (a), on pt-BR filter turns only | +397 | ~6.8k (fits) | ~9.2k (overflows) |
-| + DEF-4 storefront speaker label | −~8 per customer line (≤ −40 on turn 4) | ~6.75k | — |
-| + optional catalog `[id, name]` pairs | −~100 per miss | ~6.65k | — |
+| as-is (S7) | — | 7,074 | 8,863 (overflows) |
+| + DEF-2 (a), on pt-BR filter turns only | +397 | ~7.5k (fits, ~8% margin) | ~9.2k (overflows) |
+| + DEF-4 storefront speaker label | −~8 per customer line (≤ −40 on turn 4) | ~7.45k | — |
+| + optional catalog `[id, name]` pairs | −~100 per miss | ~7.35k | — |
 | a future `v10` (e.g. DEF-5) | ± its prompt delta, on every call | must stay under ~8.0k | — |
 
 **The ordering constraint:** DEF-2 (a) *spends* budget, so it must land after O1 (or O3).
