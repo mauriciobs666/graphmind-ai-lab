@@ -62,6 +62,13 @@ set -euo pipefail
 #                          SPA output, never the source tree. Overriding this to a
 #                          directory with no `index.html` is a loud failure below,
 #                          not a silent 404 once uvicorn is up.
+#   FALKORCHAT_STOREFRONT_TURN_WORKERS (default: 2 — config.py's own default is 4)
+#                          — how many storefront turns run at once. Capped at 2 for
+#                          the demo because LM Studio's 8,192-token KV pool is shared
+#                          by every in-flight call: 3-way concurrent turns overflow it
+#                          and every in-flight call dies together; 2-way leaves ~22%
+#                          headroom. A third concurrent customer queues instead
+#                          (docs/reviews/salesperson-cart-product-id-rca.md DEF-1, O1).
 #   FALKORCHAT_STOREFRONT_PRESENTER_KEY (default: unset — no presenter surface;
 #                          export it yourself, this script sets no default so a
 #                          demo secret is never invented on the operator's behalf)
@@ -158,6 +165,8 @@ FALKORCHAT_ENABLE_AGENT="${FALKORCHAT_ENABLE_AGENT:-1}"
 FALKORCHAT_WORKFLOW_ENABLED="${FALKORCHAT_WORKFLOW_ENABLED:-1}"
 FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S="${FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S:-30}"
 FALKORCHAT_STOREFRONT_ENABLED="${FALKORCHAT_STOREFRONT_ENABLED:-1}"
+# 2, not config.py's 4: the shared KV pool overflows at 3-way (header, RCA DEF-1).
+FALKORCHAT_STOREFRONT_TURN_WORKERS="${FALKORCHAT_STOREFRONT_TURN_WORKERS:-2}"
 DEMO_ENSURE_MODELS="${DEMO_ENSURE_MODELS:-1}"
 # K-042 §4.1: no product default pointing into one user's home — this dev/demo
 # script supplies the convenience default. K-083: env var → opencode.local.json →
@@ -346,6 +355,7 @@ echo "      User:      $FALKORCHAT_USER_ID   |  Dim: $EMBEDDING_DIM"
 echo "      AI agent:  enabled=$FALKORCHAT_ENABLE_AGENT  id=$FALKORCHAT_AGENT_ID"
 echo "      Workflow:  enabled=$FALKORCHAT_WORKFLOW_ENABLED  trigger=${FALKORCHAT_TRIGGER_DEF_KEY}@${FALKORCHAT_TRIGGER_DEF_VERSION}  fallthrough=${FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH}"
 echo "      Storefront: enabled=$FALKORCHAT_STOREFRONT_ENABLED  dir=$FALKORCHAT_STOREFRONT_DIR"
+echo "      Turn workers: $FALKORCHAT_STOREFRONT_TURN_WORKERS  (concurrent storefront turns)"
 echo "      Model config: opencode=$FALKORCHAT_OPENCODE_CONFIG  overlay=${FALKORCHAT_MODEL_CONFIG:-<falkor-chat>/config/models.json}"
 echo "      Shop:      http://localhost:8000/shop"
 echo "      UVICORN_ARGS: $UVICORN_ARGS  (--reload OFF)"
@@ -360,7 +370,7 @@ export FALKORCHAT_ENABLE_AGENT FALKORCHAT_AGENT_ID FALKORCHAT_AGENT_NAME
 export FALKORCHAT_WORKFLOW_ENABLED FALKORCHAT_WORKFLOW_SWEEP_INTERVAL_S
 export FALKORCHAT_TRIGGER_DEF_KEY FALKORCHAT_TRIGGER_DEF_VERSION
 export FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH
-export FALKORCHAT_STOREFRONT_ENABLED FALKORCHAT_STOREFRONT_DIR
+export FALKORCHAT_STOREFRONT_ENABLED FALKORCHAT_STOREFRONT_DIR FALKORCHAT_STOREFRONT_TURN_WORKERS
 export FALKORCHAT_OPENCODE_CONFIG
 # FALKORCHAT_STOREFRONT_PRESENTER_KEY is intentionally NOT defaulted here —
 # it is exported only if the caller already set it in their environment.
