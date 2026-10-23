@@ -356,6 +356,29 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # (`lmstudio/mistralai/ministral-3-3b`) is carried forward **unchanged** at
 # `v8` too, for the same create-only reason every prior bump's note gives.
 #
+# **`v9` (K-078, cart writes keyed by `productId`, plus K-079 F3 — `docs/plans/
+# salesperson-cart-product-id.md` D7) is a `v2.1`/`v5`/`v7`/`v8`-shaped bump**
+# — `config.tools`, `config.model`, `requiredTools`, `maxIterations` and topology
+# are byte-identical to `v8`; only `systemPrompt` changes, in two places.
+#   1. **Cart paragraph.** `add_to_cart`/`remove_from_cart` now take a
+#      `productId` (tool schemas are code, `tools.py`, so that change reaches
+#      every version granting the tools), and the K-058 guard holds a write
+#      whose ID no grounding tool returned this turn (`executor.py`
+#      `_GROUNDING_SOURCES`). `v8`'s "if a product name does not match anything
+#      in the catalog, say so plainly rather than adding it anyway" is replaced
+#      by per-tool ID sources — an add copies the ID from `lookup_product_fact`
+#      or `filter_products` this turn, never from `view_cart`; a remove may also
+#      use `view_cart` — "never translate" an ID, "only … the current message",
+#      and what to do with `lookup_product_fact`'s not-found `catalog` list.
+#      Root cause: es/pt-BR customers' adds failed because the model translated
+#      the product name into its tool arguments (plan §2).
+#   2. **Catalog paragraph** (K-079 F3, `docs/reviews/
+#      salesperson-fabricated-prices-rca.md`): one closing sentence saying all
+#      prices are US dollars, always written with `$`. Folded into this bump
+#      because `systemPrompt` is create-only — a separate fix would cost a `v10`.
+# Both are prompt-adherence claims on a 3 B model, measured live by the plan's
+# §6.3 run, not signed off by code review.
+#
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
 # to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
@@ -375,7 +398,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v8",
+    "version": "v9",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -393,10 +416,10 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
                 # at first use. Carried forward unchanged from `v2.1` into `v3`
-                # (K-054), `v4` (K-055), `v5` (K-057), `v7` (the storefront demo) and
-                # again into `v8` (K-065/DEF-6, Mitigation D) — `config.model` is
-                # create-only, so omitting this line on a version bump would silently
-                # undo the re-point (see the `v3`/`v4`/`v5`/`v7`/`v8` notes above).
+                # (K-054), `v4` (K-055), `v5` (K-057), `v7` (the storefront demo),
+                # `v8` (K-065/DEF-6, Mitigation D) and again into `v9` (K-078) —
+                # `config.model` is create-only, so omitting this line on a version
+                # bump would silently undo the re-point (see the `v3`…`v9` notes above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
@@ -416,13 +439,24 @@ SALESPERSON_DEF: dict[str, Any] = {
                     "a filter came up empty or that nothing matches until you have made "
                     "your last catalog lookup for this question — if an earlier attempt "
                     "looked empty or wrong, a later corrected one wins; never report "
-                    "both.\n\n"
+                    "both. All prices are in US dollars; always write them with `$`, "
+                    "never another currency symbol.\n\n"
                     "You can also manage the customer's shopping cart: view it, add or "
                     "remove items, clear it, and place an order once they are ready to "
                     "check out. Only add or remove an item the customer actually asked "
                     "for, using your cart tools — never assume a quantity or invent a "
-                    "cart line; if a product name does not match anything in the "
-                    "catalog, say so plainly rather than adding it anyway. Prices shown "
+                    "cart line. To add an item, pass its `productId`, copied exactly "
+                    "from a `lookup_product_fact` or `filter_products` result in this "
+                    "same turn. A `productId` you only saw in `view_cart` is not enough "
+                    "for an add. To remove an item, you may also copy the `productId` "
+                    "from `view_cart`. A `productId` is an identifier: never translate "
+                    "it, reword it, or build it from a product name. Only add or remove "
+                    "what the customer asked for in their current message. Look "
+                    "products up by their catalog name. If `lookup_product_fact` finds "
+                    "no exact match, it lists the catalog; pick the product the "
+                    "customer means from that list and use its `productId`. If nothing "
+                    "in the list matches, say so plainly rather than adding anything. "
+                    "Prices shown "
                     "in the cart and in a placed order always reflect the catalog's "
                     "current price, retrieved fresh, never a guess. Before you place "
                     "an order, confirm the delivery address on file with the customer; "

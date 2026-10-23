@@ -2614,18 +2614,27 @@ RETURN p.productId AS productId, p.name AS name,
 LIMIT 1
 ```
 Anchors on the `Product.nameNormalized` range index — a single `Node By Index Scan`, no label
-scan. Zero rows back means "no such product" (AC-3 abstention); the service maps that to
-`{"found": false}`, never a fabricated row. `LIMIT 1` is belt-and-suspenders: `nameNormalized`
-carries no uniqueness constraint (see DDL note above), so a future data quirk that produced two
-same-named products in different categories still returns exactly one row rather than erroring.
+scan. Zero rows back means "no such product" (AC-3 abstention); the service maps that to `None`,
+never a fabricated row, and `LookupProductFactTool` answers `{"found": false, "hint": …,
+"catalog": [{productId, name}, …]}` — every product (up to `CATALOG_INDEX_LIMIT`, 50), sorted by
+name, ID and name only, no price (K-078, `Services.catalog_index`, built from §15.2's query with
+no filters; this query is unchanged), so a model that looked up a translated name can pick the
+real product's `productId`. `LIMIT 1` is belt-and-suspenders: `nameNormalized` carries no
+uniqueness constraint (see DDL note above), so a future data quirk that produced two same-named
+products in different categories still returns exactly one row rather than erroring.
 
 **`productId` in the projection (K-053 M6).** K-052's original shape projected
 `{name, category, price}` only — a pure fact lookup, with no cart concept yet to key on an id.
-K-053 added `p.productId` so `services.add_cart_item` could resolve a customer-named product to
-the `productId` a `CartItem` is keyed on (`docs/plans/workflow-cart-and-totals-graph.md` §2);
-additive and backward-compatible, since the `Product` node always carried the property and no
-caller reads the row positionally. `LookupProductFactTool` returns the row verbatim, so the slug
-reaches the model's context — the precedent §15.2's own widening was judged against.
+K-053 added `p.productId` — the key a `CartItem` is keyed on
+(`docs/plans/workflow-cart-and-totals-graph.md` §2); additive and backward-compatible, since the
+`Product` node always carried the property and no caller reads the row positionally.
+`LookupProductFactTool` returns the row verbatim, so the slug reaches the model's context — the
+precedent §15.2's own widening was judged against. Since K-078 that is the projection's whole
+cart role: the cart tools take that `productId`, copied by the model from this turn's tool
+result, and `services.add_cart_item`/`remove_cart_item` resolve it with
+`Services.lookup_product_by_id` (`Repository.lookup_products_by_id`, §16.9's batched read), no
+longer from a customer-named product through this query
+(`docs/plans/salesperson-cart-product-id.md` D1/D5).
 *Transcribed here on 2026-09-03, and the gap it closes is checkable rather than approximate:*
 this block was written at **`14891c9`** (K-052, 2026-08-28 09:53) and the code widened at
 **`bcd2dcc`** (K-053, 2026-08-28 20:21) — ten hours later the same day — so §15.1 documented a

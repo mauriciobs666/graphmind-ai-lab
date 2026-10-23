@@ -336,3 +336,154 @@ parameters reach `wf_repo`/`conn`/`repo`/`catalog_repo`, directly or through a l
 found 5 tests in `test_salesperson_scaffold.py` (all `wf_repo`) and 3 `*_live` tests in
 `test_tools.py` (`repo`). `test_extraction.py`, `test_services.py` and `test_executor_agent.py`
 have none.
+
+## Pass 3 — S4–S6
+
+### Scope & verdict
+
+**Reviewed:** the uncommitted working-tree diff against `f02faa69`, excluding the coordination
+ledger: `server/falkorchat/proof_defs.py` (`salesperson@v9`), `server/tests/test_salesperson_scaffold.py`,
+`scripts/{start_demo,seed_salesperson,verify_salesperson}.sh`, `AGENTS.md`, `README.md`,
+`docs/QUERIES.md` and `salesperson/README.md`. The spec is plan v3 D7, §5 S4–S6 and §7, plus the
+plan gate (F2, F3). The guard is the committed `4dac501e` one (`_GROUNDING_SOURCES` without the
+self-source rows, Pass 2).
+
+**Verdict: approve with suggestions.** There are no blockers and no majors. The `v9` prompt
+agrees with the tool schemas, the hold reasons and the guard. `v9`'s def equals `v8`'s in every
+field except `systemPrompt`, which I checked by evaluating both modules. S4+S5 are safe to commit
+as one unit and then publish. The findings are a test gap (F1), a publish-ordering precaution
+(F2) and one doc nit.
+
+CPG: considered, not relevant — the diff is a prompt string, shell defaults and prose; no call-graph question arises, and no loaded `cpg_falkorchat` graph contains uncommitted code.
+
+**What I ran:**
+- **Scaffold tests without a database:** `-k "pins_ministral or carries or keys_cart"` gave 4
+  passed, 5 deselected (the `wf_repo` tests).
+- **`v8` and `v9` compared by evaluation.** I loaded `git show f02faa69:…/proof_defs.py` beside
+  the tree module. With `systemPrompt` and `version` removed, `SALESPERSON_DEF` is equal
+  (`True`), and every other upper-case module constant is unchanged. A sentence diff of the two
+  prompts shows exactly D7's two edits: the `v8` name-matching clause is gone, the nine D7
+  sentences match D7's text verbatim, and the US-dollar sentence closes the catalog paragraph.
+- **Live state, read-only** (`mcp__cypher__query`): `reference` holds `salesperson` `v8` only,
+  and `ws:demo` holds `v7` and `v8`. No `v9` exists on either side, so the publish creates it
+  fresh.
+- **S5's done-condition grep, verbatim:** it shows three `v8` hits, all history lines in
+  `seed_salesperson.sh` (73, 89, 117). `bash -n` passes on all three scripts. A repo sweep for
+  `salesperson@v<n>` and `TRIGGER_DEF_VERSION` pins finds no live `v8` left. `config.py`'s
+  default is `v1`, and it belongs to the dev `triage` deployment.
+- **Prompt mutants:** 9 hand edits to a scratch copy via `PYTHONPATH`. Two were killed: adding `view_cart` to the add sentence, and removing the USD sentence. The 7 survivors are tabled in F1.
+
+### Findings
+
+**F1 (minor): the prompt test leaves three behaviour-relevant properties unpinned, and its
+`view_cart` check matches a keyword.** `test_salesperson_v9_keys_cart_writes_on_product_id_and_states_usd`
+pins the add and remove sources, "never translate it", "current message", the miss-list sentence
+and the USD sentence. These mutants all **survive** (4/4 green):
+
+| Mutant | Why it matters |
+|---|---|
+| drop "in this same turn" from the add sentence | the turn scope is what the guard enforces |
+| drop "copied exactly" | copying is the fix for translated IDs (R1) |
+| drop "If nothing in the list matches, say so plainly rather than adding anything." | the only abstention against a wrong-product add (C1's M2 gate) |
+| drop "use its `productId`" from the pick sentence | the miss-list → ID link |
+| drop "or build it from a product name" | slug-guessing (R1) |
+| drop "Look products up by their catalog name." | the lookup-name nudge |
+| add "To increase the quantity of an item already in the cart, copy its `productId` from `view_cart`." | a `view_cart` add source without the word "add": exactly the re-fire shape D3 excludes |
+
+The last row is why a keyword list is the wrong tool here. The loop only checks sentences that
+contain both `view_cart` and `\badd\b`, so any other wording of a `view_cart` add source gets
+through. **Fix: a coverage assertion over the axis, not a list of phrasings.** Assert that the
+sentences mentioning `view_cart` are **exactly** two: the negative one, and the one starting
+"To remove an item". Then pin "in this same turn" and "copied exactly" inside the add sentence,
+and pin the abstention sentence verbatim. I ran this check against the tree (all true) and against
+the quantity mutant (the `view_cart` assertion fails).
+*Timing:* this changes tests only, never the published `v9` content, so it can go into the S4+S5
+commit or follow it. It matters for the next bump, the `v10` that R2 names as the first fallback.
+*Stopping condition:* each mutant in the table turns the v9 test red, and the tree stays 4/4
+green.
+
+**F2 (minor): the publish reads the working tree, not the commit.** `seed_salesperson.sh` and
+`verify_salesperson.sh` both import `falkorchat.proof_defs` through the editable install, which
+resolves to `falkor-chat/server/falkorchat/proof_defs.py` in the tree (I checked). They check
+against the same constant, so a publish from the committed tree is consistent with
+`verify_salesperson.sh`. Two orderings can still burn `v9`:
+- **`start_demo.sh` also seeds `salesperson`.** A demo start before the commit publishes `v9`
+  from whatever is in the tree at that moment, without anyone running the seed script.
+- **Any prompt edit after the first publish** changes the constant but not the stored `v9`
+  (create-only). After that, `verify_salesperson.sh` fails for good. This is the burned-`v6`
+  shape. A follow-up prompt fix (for example a review suggestion that rewords D7) must therefore
+  be a `v10`, never an amend.
+
+Today the tree's `proof_defs.py` is exactly what will be committed, so nothing is wrong yet.
+**Fix:** in the U5→U6 hand-off, check `git diff --quiet HEAD -- falkor-chat/server/falkorchat`
+before the first `seed_salesperson.sh demo` or `start_demo.sh`. Record in the ledger that `v9`'s
+prompt is frozen from that publish on.
+
+**n1 (nit): QUERIES §15.1 reflow.** The edit splits a backticked citation across a line break
+(`` `docs/plans/ `` / `` workflow-cart-and-totals-graph.md` ``, line 2628). It was one line at
+`f02faa69`, and the split breaks grep and copy-paste of the path. Line 2621 is 122 characters,
+and line 2622 is a short fragment. The file has one earlier split citation (3007), so this has
+precedent, but it is still worth undoing here.
+
+### Answers to the brief's checks
+
+- **Prompt vs. as-built tools, `_HELD_REASON` and guard sources: consistent.**
+  - *Add sources.* The prompt, the `AddToCartTool.productId` description and
+    `_HELD_REASON["add_to_cart"]` all name `lookup_product_fact`/`filter_products` and never
+    `view_cart`. The guard accepts those two plus `query_graph_data`. The prompt is narrower than
+    the guard and never wider, which is the safe direction, and the `_HELD_REASON` comment says
+    so on purpose.
+  - *Remove sources.* The prompt adds `view_cart`, and so do the schema, the hold reason and
+    `_GROUNDING_SOURCES["remove_from_cart"]`.
+  - *Self-source rows.* The prompt never names a write tool as an ID source, so dropping those
+    rows (Pass 2) has no prompt-side counterpart.
+  - *Miss list.* "Pick … from that list and use its `productId`" is grounded: the miss is a
+    `lookup_product_fact` result whose `catalog` rows carry `productId`, and
+    `_collect_target_values` walks lists.
+  - *Shared wording.* The prompt, the schemas and the hold reasons all say "in this (same) turn".
+- **"Never translate" vs. the reply-language rule: no clash.** "Never translate" is scoped
+  explicitly to "a `productId` is an identifier", and the language rule governs "your entire
+  reply". The USD sentence fixes a symbol, not a language. The remaining tension is not a
+  contradiction (see Open questions).
+- **S4+S5 as one commit, then publish:** safe. The default version is `v9` in the constant, in
+  both seed/verify scripts and in `start_demo.sh`. No `v9` exists yet in `reference` or
+  `ws:demo`. Ordering caveat in F2.
+- **Pinned vs. incidental text:** the exact-phrase pins (USD sentence at the paragraph end, the
+  negative `view_cart` sentence) cost little, because any prompt edit already costs a version
+  bump and a test edit. The gap is what is left unpinned (F1), not brittleness.
+- **§7 rows for S4–S6: all done or rightly skipped.**
+  - Done: QUERIES §15.1 (abstention plus the K-053 projection note), the three `AGENTS.md` rows
+    (replaced, not appended), both READMEs, the script headers and the `proof_defs.py` `v9`
+    note.
+  - §16 not edited, correctly: I grepped §16 for name-resolution wording and found none.
+  - SERVER.md / DESIGN.md / `docs/manuals/`: grepping for
+    `productName|add_to_cart|K-058|off-turn` gives zero hits, so the no-change row holds. The
+    one `v8` mention in SERVER.md (726) is history.
+  - Owned by others: HISTORY/BACKLOG (`teco` at close), and D3's table and D2's wording
+    (`architect`, Pass 2 carry-over, still open).
+- **§15.1 claims vs. code: accurate.** `lookup_product` → `None` → `{"found": false, "hint",
+  "catalog"}` (`tools.py` `LookupProductFactTool.run`). `catalog_index` is the whole-catalog
+  `repository.filter_products(None, None, None, limit=CATALOG_INDEX_LIMIT=50)`, projected to
+  `{productId, name}` and sorted by name. The cart services resolve through
+  `lookup_product_by_id` → `lookup_products_by_id` (§16.9).
+
+### What's solid
+
+- The prompt edit is D7 verbatim, and every carried-forward field is byte-equal to `v8`'s.
+- The prompt names ID sources per tool exactly the way the schemas and hold reasons do, which
+  closes the plan gate's F3 on the model-facing side.
+- The pins moved in all six places in one change, and the documentation was replaced in place,
+  never appended.
+
+### Open questions (for the S7 brief, not fixes)
+
+- **Tool arguments are not carved out of the language rule.** "Governs your entire reply … no
+  exceptions" still pushes a pt/es model to translate the lookup name. "Look products up by their
+  catalog name" does not say that the catalog is English. The design accepts this and relies on
+  the miss-list recovery, so the cost shows up as iterations, which the turn-2 p95 gate covers.
+  Worth reporting in C1: the first-lookup miss rate per language. A carve-out is a `v10`
+  decision for `architect`, and only if C1 shows the latency cost.
+- **A confirmation-turn add** ("yes, add it" after the model offers) is in neither TP-007 nor C2.
+  "Only … what the customer asked for in their current message" could make a 3B model refuse it.
+  `v8`'s text guard would also have held that turn, so this is not a regression. It is unmeasured,
+  though, and worth one scripted C2 variant if `qa-engineer` has budget.

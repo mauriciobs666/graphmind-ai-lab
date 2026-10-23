@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
@@ -315,16 +316,18 @@ def test_salesperson_def_pins_ministral_model_and_version_bump():
     salesperson-tool-reliability-ml.md` §8), first bumped at `v2.1` and carried
     forward unchanged into `v3` (K-054, the durable-profile capability bump),
     `v4` (K-055, NL query generation), `v5` (K-057, the compound-filter
-    wording fix), `v7` (the storefront demo's two `systemPrompt` sentences)
-    and `v8` (K-065/DEF-6, Mitigation D's language-salience `systemPrompt`
-    sentence — `v2.1` → `v3` → `v4` → `v5` → `v7` → `v8`) — `config.model` is
+    wording fix), `v7` (the storefront demo's two `systemPrompt` sentences),
+    `v8` (K-065/DEF-6, Mitigation D's language-salience `systemPrompt`
+    sentence) and `v9` (K-078's `productId` cart guidance + K-079 F3's
+    US-dollar sentence — `v2.1` → `v3` → `v4` → `v5` → `v7` → `v8` → `v9`;
+    `v6` is burned) — `config.model` is
     create-only exactly like `config.tools`/`systemPrompt` (`proof_defs.py`'s
     module docstring), so a version that republished a full, fresh `config`
     without repeating this line would silently fall back to the shared
     `step`-role default and undo the re-point."""
     assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
     assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
-    assert SALESPERSON_DEF["version"] == "v8"
+    assert SALESPERSON_DEF["version"] == "v9"
 
 
 #: The exact `config.tools` list `salesperson@v5` shipped — the cumulative set
@@ -420,6 +423,94 @@ def test_salesperson_v8_carries_v7_forward_and_adds_language_salience_sentence()
     # Topology is byte-identical to v7/v5 — a change here is the K-034 409 path.
     assert [s["key"] for s in SALESPERSON_DEF["steps"]] == ["assistant", "ended"]
     assert len(SALESPERSON_DEF["transitions"]) == 1
+
+
+def _sentences(text: str) -> list[str]:
+    """Split a prompt into sentences at a period followed by whitespace — good
+    enough for the hand-written `systemPrompt`, whose sentences never embed one."""
+    return [s.strip() for s in re.split(r"(?<=\.)\s+", text) if s.strip()]
+
+
+def test_salesperson_v9_keys_cart_writes_on_product_id_and_states_usd():
+    """`v9` (K-078 + K-079 F3, `docs/plans/salesperson-cart-product-id.md` D7)
+    is a prompt-only bump: every other `config` field and the topology are
+    `v8`'s, asserted as literals so a bump that republishes a fresh `config`
+    cannot drop one silently (all create-only).
+
+    The prompt changes in two places. The cart paragraph's name-matching
+    sentence is replaced by `productId` guidance whose per-tool sources must
+    match the K-058 guard (`executor._GROUNDING_SOURCES`): an add copies the
+    ID from `lookup_product_fact`/`filter_products`, **never** `view_cart` (a
+    cart view is exactly the previous turn's writes, i.e. the re-fire shape),
+    while a remove may also use `view_cart`. The catalog paragraph gains K-079
+    F3's US-dollar sentence."""
+    assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
+    config = assistant["config"]
+
+    # Carried forward byte-identical from v8 (create-only fields).
+    assert config["model"] == "lmstudio/mistralai/ministral-3-3b"
+    assert set(config["tools"]) == V5_TOOLS
+    assert len(config["tools"]) == len(V5_TOOLS)
+    assert config["requiredTools"] == ["post_message"]
+    assert config["maxIterations"] == 8
+    assert config["waitsForHuman"] is True
+    assert [(s["key"], s["type"]) for s in SALESPERSON_DEF["steps"]] == [
+        ("assistant", "agent"), ("ended", "decision"),
+    ]
+    assert SALESPERSON_DEF["transitions"] == [{
+        "from": "assistant", "to": "ended", "on": "ended", "order": 0,
+        "guard": {"kind": "cmp", "path": "ctx.endConversation", "op": "truthy"},
+    }]
+
+    prompt = config["systemPrompt"]
+    # v8's name-matching sentence is gone (it is the translation failure).
+    assert "if a product name does not match anything in the catalog" not in prompt
+    # ID guidance. Each pin is a behaviour the guard or the plan's live gates
+    # depend on, located inside its own sentence rather than matched anywhere.
+    sentences = _sentences(prompt)
+
+    def sentence(prefix: str) -> str:
+        return next(s for s in sentences if s.startswith(prefix))
+
+    add_sentence = sentence("To add an item")
+    # Sources the K-058 guard accepts for an add, scoped to the current turn
+    # (the guard is per node execution) and copied, never retyped (R1).
+    assert "`lookup_product_fact`" in add_sentence
+    assert "`filter_products`" in add_sentence
+    assert "in this same turn" in add_sentence
+    assert "copied exactly" in add_sentence
+    assert "view_cart" not in add_sentence
+    assert "`view_cart`" in sentence("To remove an item")
+    # An ID is never translated and never built from a name (slug guessing, R1).
+    identifier = sentence("A `productId` is an identifier")
+    assert "never translate it" in identifier
+    assert "build it from a product name" in identifier
+    assert "Only add or remove what the customer asked for in their current message." in sentences
+    # The miss path: look up by catalog name; a miss lists the catalog, the
+    # model picks from it and uses that row's ID; if nothing fits, it abstains
+    # (the only defence against a wrong-product add, the live run's M2 gate).
+    assert "catalog name" in sentence("Look products up")
+    pick = sentence("If `lookup_product_fact` finds no exact match")
+    assert "lists the catalog" in pick
+    assert "use its `productId`" in pick
+    assert "say so plainly rather than adding anything" in sentence(
+        "If nothing in the list matches"
+    )
+    # `view_cart` is an ID source for a remove only. Coverage over the whole
+    # prompt, not a keyword list: exactly these two sentences may name it, so
+    # any other wording of a `view_cart` source (e.g. "to increase a quantity,
+    # copy it from `view_cart`") fails here.
+    assert [s for s in sentences if "view_cart" in s] == [
+        "A `productId` you only saw in `view_cart` is not enough for an add.",
+        sentence("To remove an item"),
+    ]
+
+    # K-079 F3, in the catalog paragraph (the one that talks about prices).
+    catalog_paragraph = next(p for p in prompt.split("\n\n") if "Never guess a price" in p)
+    assert catalog_paragraph.endswith(
+        "All prices are in US dollars; always write them with `$`, "
+        "never another currency symbol."
+    )
 
 
 # ── 2. a same-version republish is a clean structural no-op ───────────────────
