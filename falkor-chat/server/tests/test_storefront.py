@@ -1930,8 +1930,8 @@ def test_get_state_reports_profile_cart_order_and_turn(stocked, conn):
     ctx = stocked.context_for(record.participant_id)
     services = stocked._services
     services.save_profile(ctx, delivery_address="12 Rua das Flores")
-    services.add_cart_item(ctx, product_name="Widget 001", quantity=2)
-    services.add_cart_item(ctx, product_name="Widget 002", quantity=1)
+    services.add_cart_item(ctx, product_id="widget-001", quantity=2)
+    services.add_cart_item(ctx, product_id="widget-002", quantity=1)
     # Two *other* participants booked ahead of Ada, so her derived position is
     # `2` — the number cannot be fabricated any more, it has to be earned.
     stocked.reserve_turn("p-ahead-1")
@@ -1989,11 +1989,11 @@ def test_get_states_order_block_is_the_repository_read_not_a_local_composition(
     record = stocked.join("Ada", "en")
     ctx = stocked.context_for(record.participant_id)
     services = stocked._services
-    services.add_cart_item(ctx, product_name="Widget 001", quantity=1)
+    services.add_cart_item(ctx, product_id="widget-001", quantity=1)
     first = services.place_order(ctx)
-    services.add_cart_item(ctx, product_name="Widget 002", quantity=3)
+    services.add_cart_item(ctx, product_id="widget-002", quantity=3)
     second = services.place_order(ctx)
-    services.add_cart_item(ctx, product_name="Widget 003", quantity=1)
+    services.add_cart_item(ctx, product_id="widget-003", quantity=1)
 
     order = stocked.get_state(ctx)["order"]
 
@@ -2015,7 +2015,7 @@ def test_get_state_is_scoped_to_the_calling_participant(stocked, conn):
     bob = stocked.join("Bob", "es")
     ada_ctx = stocked.context_for(ada.participant_id)
     bob_ctx = stocked.context_for(bob.participant_id)
-    stocked._services.add_cart_item(ada_ctx, product_name="Widget 001", quantity=4)
+    stocked._services.add_cart_item(ada_ctx, product_id="widget-001", quantity=4)
     stocked._services.place_order(ada_ctx)
     _pin_thinking(stocked, ada.participant_id)
 
@@ -2328,7 +2328,7 @@ def _with_order(shop, name="Ada"):
     """A participant holding one `placed` order for one product."""
     record = shop.join(name, "en")
     ctx = shop.context_for(record.participant_id)
-    shop._services.add_cart_item(ctx, product_name="Widget 001", quantity=1)
+    shop._services.add_cart_item(ctx, product_id="widget-001", quantity=1)
     order = shop._services.place_order(ctx)
     return record, ctx, order["orderId"]
 
@@ -2492,9 +2492,9 @@ def _busy_participant(shop, conn, name="Ada"):
         conn, run_id=f"{record.participant_id}-run", trigger_msg_id=posted["msgId"],
         status="done",
     )
-    services.add_cart_item(ctx, product_name="Widget 001", quantity=2)
+    services.add_cart_item(ctx, product_id="widget-001", quantity=2)
     services.place_order(ctx)
-    services.add_cart_item(ctx, product_name="Widget 002", quantity=1)
+    services.add_cart_item(ctx, product_id="widget-002", quantity=1)
     return record, ctx
 
 

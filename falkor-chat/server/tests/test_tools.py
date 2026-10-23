@@ -62,7 +62,7 @@ class StubServices:
                  products_by_name=None, filter_result=None,
                  add_result=_UNSET, remove_result=_UNSET,
                  cart_result=None, order_result=_UNSET,
-                 profile_result=None, structured_query_rows=None):
+                 profile_result=None, structured_query_rows=None, catalog=None):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -74,9 +74,12 @@ class StubServices:
         self._filter_result = filter_result or []
         self.looked_up: list[str] = []
         self.filtered: list[dict] = []
+        # K-078 D2: what `catalog_index` returns on a `lookup_product_fact` miss
+        self._catalog = catalog or []
+        self.catalog_reads: int = 0
         # §16 Cart / Order (K-053 M6) — set the *_result kwargs to script a
         # call's return value; every call is recorded so the tool's
-        # argument-mapping into the service (name/quantity keyword
+        # argument-mapping into the service (productId/quantity keyword
         # translation, defaulting) is checkable.
         self._add_result = add_result
         self._remove_result = remove_result
@@ -128,12 +131,16 @@ class StubServices:
         )
         return list(self._filter_result)
 
-    def add_cart_item(self, ctx, *, product_name, quantity):
-        self.added.append({"product_name": product_name, "quantity": quantity})
+    def catalog_index(self, ctx):
+        self.catalog_reads += 1
+        return list(self._catalog)
+
+    def add_cart_item(self, ctx, *, product_id, quantity):
+        self.added.append({"product_id": product_id, "quantity": quantity})
         return None if self._add_result is _UNSET else self._add_result
 
-    def remove_cart_item(self, ctx, *, product_name, quantity=None):
-        self.removed.append({"product_name": product_name, "quantity": quantity})
+    def remove_cart_item(self, ctx, *, product_id, quantity=None):
+        self.removed.append({"product_id": product_id, "quantity": quantity})
         return None if self._remove_result is _UNSET else self._remove_result
 
     def get_cart(self, ctx):
@@ -486,25 +493,38 @@ def test_human_handoff_dispatch_signals_suspend():
 
 def test_lookup_product_fact_returns_found_row():
     svc = StubServices(products_by_name={
-        "Bluetooth Speaker": {"name": "Bluetooth Speaker", "category": "audio",
+        "Bluetooth Speaker": {"productId": "bluetooth-speaker",
+                              "name": "Bluetooth Speaker", "category": "audio",
                               "price": 89.99},
     })
     tool = LookupProductFactTool(svc)
 
     out = json.loads(tool.run({"name": "Bluetooth Speaker"}, ctx=CTX, run={}))
 
-    assert out == {"found": True, "name": "Bluetooth Speaker", "category": "audio",
-                    "price": 89.99}
+    assert out == {"found": True, "productId": "bluetooth-speaker",
+                   "name": "Bluetooth Speaker", "category": "audio", "price": 89.99}
     assert svc.looked_up == ["Bluetooth Speaker"]
+    assert svc.catalog_reads == 0  # a hit never lists the catalog
 
 
-def test_lookup_product_fact_abstains_when_not_found():
-    svc = StubServices()
+def test_lookup_product_fact_miss_lists_the_catalog_with_a_hint():
+    """K-078 D2: a miss returns `found: false`, a non-empty `hint`, and the
+    catalog as `{productId, name}` rows only — never a price."""
+    catalog = [
+        {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker"},
+        {"productId": "wireless-mouse-pro", "name": "Wireless Mouse Pro"},
+    ]
+    svc = StubServices(catalog=catalog)
     tool = LookupProductFactTool(svc)
 
-    out = json.loads(tool.run({"name": "nonexistent gadget"}, ctx=CTX, run={}))
+    out = json.loads(tool.run({"name": "Mouse sem fio Pro"}, ctx=CTX, run={}))
 
-    assert out == {"found": False}
+    assert out["found"] is False
+    assert isinstance(out["hint"], str) and out["hint"]
+    assert "lookup_product_fact" in out["hint"]
+    assert out["catalog"] == catalog
+    assert all(set(row) == {"productId", "name"} for row in out["catalog"])
+    assert set(out) == {"found", "hint", "catalog"}
 
 
 def test_lookup_product_fact_defaults_missing_name_to_empty_string():
@@ -628,25 +648,40 @@ def test_add_to_cart_returns_found_row():
     tool = AddToCartTool(svc)
 
     out = json.loads(tool.run(
-        {"productName": "Bluetooth Speaker", "quantity": 2}, ctx=CTX, run={},
+        {"productId": "prod2", "quantity": 2}, ctx=CTX, run={},
     ))
 
     assert out == {
         "found": True, "productId": "prod2", "name": "Bluetooth Speaker",
         "price": 89.99, "quantity": 2,
     }
-    assert svc.added == [{"product_name": "Bluetooth Speaker", "quantity": 2}]
+    assert svc.added == [{"product_id": "prod2", "quantity": 2}]
 
 
-def test_add_to_cart_abstains_when_product_unknown():
+def test_add_to_cart_abstains_with_a_reason_when_product_unknown():
     svc = StubServices()  # add_result unset -> add_cart_item returns None
     tool = AddToCartTool(svc)
 
     out = json.loads(tool.run(
-        {"productName": "nonexistent gadget", "quantity": 1}, ctx=CTX, run={},
+        {"productId": "nonexistent-gadget", "quantity": 1}, ctx=CTX, run={},
     ))
 
-    assert out == {"found": False}
+    assert out == {
+        "found": False,
+        "reason": "no catalog product has productId 'nonexistent-gadget'",
+    }
+
+
+def test_add_to_cart_ignores_an_extra_product_name():
+    """K-078 D1: `productName` is gone; a stray one next to a `productId` is
+    ignored — only the ID reaches the service."""
+    svc = StubServices(add_result={"productId": "p", "name": "X", "price": 1.0,
+                                   "quantity": 1})
+    tool = AddToCartTool(svc)
+
+    tool.run({"productId": "p", "productName": "Something Else"}, ctx=CTX, run={})
+
+    assert svc.added == [{"product_id": "p", "quantity": 1}]
 
 
 def test_add_to_cart_defaults_missing_quantity_to_one():
@@ -654,9 +689,9 @@ def test_add_to_cart_defaults_missing_quantity_to_one():
                                     "quantity": 1})
     tool = AddToCartTool(svc)
 
-    tool.run({"productName": "X"}, ctx=CTX, run={})
+    tool.run({"productId": "p"}, ctx=CTX, run={})
 
-    assert svc.added == [{"product_name": "X", "quantity": 1}]
+    assert svc.added == [{"product_id": "p", "quantity": 1}]
 
 
 def test_remove_from_cart_partial_quantity():
@@ -667,14 +702,14 @@ def test_remove_from_cart_partial_quantity():
     tool = RemoveFromCartTool(svc)
 
     out = json.loads(tool.run(
-        {"productName": "Bluetooth Speaker", "quantity": 2}, ctx=CTX, run={},
+        {"productId": "prod2", "quantity": 2}, ctx=CTX, run={},
     ))
 
     assert out == {
         "found": True, "removed": False, "productId": "prod2",
         "name": "Bluetooth Speaker", "quantity": 3,
     }
-    assert svc.removed == [{"product_name": "Bluetooth Speaker", "quantity": 2}]
+    assert svc.removed == [{"product_id": "prod2", "quantity": 2}]
 
 
 def test_remove_from_cart_omitted_quantity_passes_none_through():
@@ -683,18 +718,52 @@ def test_remove_from_cart_omitted_quantity_passes_none_through():
     })
     tool = RemoveFromCartTool(svc)
 
-    tool.run({"productName": "Bluetooth Speaker"}, ctx=CTX, run={})
+    tool.run({"productId": "prod2"}, ctx=CTX, run={})
 
-    assert svc.removed == [{"product_name": "Bluetooth Speaker", "quantity": None}]
+    assert svc.removed == [{"product_id": "prod2", "quantity": None}]
 
 
-def test_remove_from_cart_abstains_when_product_unknown():
+def test_remove_from_cart_abstains_with_a_reason_when_product_unknown():
     svc = StubServices()  # remove_result unset -> remove_cart_item returns None
     tool = RemoveFromCartTool(svc)
 
-    out = json.loads(tool.run({"productName": "nonexistent gadget"}, ctx=CTX, run={}))
+    out = json.loads(tool.run({"productId": "nonexistent-gadget"}, ctx=CTX, run={}))
 
-    assert out == {"found": False}
+    assert out == {
+        "found": False,
+        "reason": "no catalog product has productId 'nonexistent-gadget'",
+    }
+
+
+def _schema_text(tool) -> str:
+    """Every model-visible string in a tool schema: its description plus the
+    `productId` parameter's description (K-078 review F3)."""
+    fn = tool.schema["function"]
+    return fn["description"] + " " + fn["parameters"]["properties"]["productId"][
+        "description"
+    ]
+
+
+@pytest.mark.parametrize("tool_cls", [AddToCartTool, RemoveFromCartTool])
+def test_cart_write_schemas_require_product_id_and_have_no_product_name(tool_cls):
+    params = tool_cls(StubServices()).schema["function"]["parameters"]
+
+    assert params["required"] == ["productId"]
+    assert params["properties"]["productId"]["type"] == "string"
+    assert "productName" not in params["properties"]
+    assert set(params["properties"]) == {"productId", "quantity"}
+
+
+def test_add_to_cart_schema_never_names_view_cart_as_a_source():
+    """K-078 D1/D3: a `view_cart` ID does not ground an add, so the add
+    schema must not tell the model it does; the remove schema does."""
+    add_text = _schema_text(AddToCartTool(StubServices()))
+    remove_text = _schema_text(RemoveFromCartTool(StubServices()))
+
+    assert "view_cart" not in add_text
+    assert "lookup_product_fact" in add_text and "filter_products" in add_text
+    assert "view_cart" in remove_text
+    assert "lookup_product_fact" in remove_text and "filter_products" in remove_text
 
 
 def test_clear_cart_calls_services_and_confirms():

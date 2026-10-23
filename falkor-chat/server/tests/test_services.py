@@ -24,6 +24,7 @@ from falkorchat.schemas import (
     MAX_KEY_LEN,
 )
 from falkorchat.services import (
+    CATALOG_INDEX_LIMIT,
     CHAT_START_ANCHOR_KEYS,
     DEMO_EXPECTED_DEFS,
     POST_SUCCESS_SAMPLE_SIZE,
@@ -4257,6 +4258,61 @@ def test_filter_products_abstains_when_nothing_matches():
     ) == []
 
 
+# ── K-078: lookup_product_by_id / catalog_index ───────────────────────────────
+
+
+def test_lookup_product_by_id_returns_the_row_for_a_known_id():
+    repo = FakeRepo()
+    repo.products_by_id["prod2"] = {"name": "Bluetooth Speaker", "price": 89.99}
+    svc = make_service(repo)
+
+    row = svc.lookup_product_by_id(CTX, product_id=" Prod2 ")
+
+    assert row == {"productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99}
+    assert repo.calls == [("lookup_products_by_id", ("prod2",))]
+
+
+def test_lookup_product_by_id_none_for_unknown_and_no_query_for_blank():
+    repo = FakeRepo()
+    repo.products_by_id["prod2"] = {"name": "Bluetooth Speaker", "price": 89.99}
+    svc = make_service(repo)
+
+    assert svc.lookup_product_by_id(CTX, product_id="prod9") is None
+    assert repo.calls == [("lookup_products_by_id", ("prod9",))]
+    repo.calls.clear()
+    assert svc.lookup_product_by_id(CTX, product_id="  ") is None
+    assert svc.lookup_product_by_id(CTX, product_id=None) is None
+    assert repo.calls == []
+
+
+def test_catalog_index_is_id_and_name_only_sorted_by_name():
+    """K-078 D2: no `price`/`category` — a not-found answer must never become a
+    second price list (K-079). Sorted by name, unlike `filter_products`' price
+    order; built from one whole-catalog `filter_products` call."""
+    repo = FakeRepo()
+    repo.products = [
+        {"productId": "wireless-mouse", "name": "Wireless Mouse",
+         "category": "accessories", "price": 25.0},
+        {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker",
+         "category": "audio", "price": 89.99},
+        {"productId": "usb-c-cable", "name": "USB-C Cable",
+         "category": "accessories", "price": 9.99},
+    ]
+    svc = make_service(repo)
+
+    index = svc.catalog_index(CTX)
+
+    assert index == [
+        {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker"},
+        {"productId": "usb-c-cable", "name": "USB-C Cable"},
+        {"productId": "wireless-mouse", "name": "Wireless Mouse"},
+    ]
+    assert all(set(row) == {"productId", "name"} for row in index)
+    assert repo.calls == [
+        ("filter_products", None, None, None, CATALOG_INDEX_LIMIT)
+    ]
+
+
 # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────────
 #
 # `docs/plans/workflow-cart-and-totals.md` §3.3 — the explicit `ensure_customer`/
@@ -4291,7 +4347,7 @@ def test_add_cart_item_brand_new_customer_ensures_customer_and_cart_first():
     _seed_speaker(repo)
     svc = make_service(repo, now=1000)
 
-    row = svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+    row = svc.add_cart_item(CTX, product_id="prod2", quantity=2)
 
     assert row == {
         "productId": "prod2", "name": "Bluetooth Speaker", "price": 89.99, "quantity": 2,
@@ -4311,29 +4367,51 @@ def test_add_cart_item_repeated_call_accumulates_quantity():
     _seed_speaker(repo)
     svc = make_service(repo, now=1000)
 
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
-    row = svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=3)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=2)
+    row = svc.add_cart_item(CTX, product_id="prod2", quantity=3)
 
     assert row["quantity"] == 5
 
 
-def test_add_cart_item_unknown_product_abstains_without_writing_anything():
-    repo = FakeRepo()
-    svc = make_service(repo)
-
-    assert svc.add_cart_item(CTX, product_name="nonexistent gadget", quantity=1) is None
-    assert repo.customers == set()
-    assert repo.carts == set()
-
-
-def test_add_cart_item_normalizes_name_via_lookup_product():
+@pytest.mark.parametrize("product_id", ["nonexistent-gadget", "", "   ", None, 5])
+def test_add_cart_item_unresolvable_id_abstains_without_writing_anything(product_id):
+    """K-078 D5/D6: an unknown, blank or non-string `productId` returns `None`
+    and writes nothing — not even the `ensure_customer`/`ensure_cart` anchors
+    (resolution runs first, so an unknown ID costs no writes)."""
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
 
-    row = svc.add_cart_item(CTX, product_name="  Bluetooth   Speaker ", quantity=1)
+    assert svc.add_cart_item(CTX, product_id=product_id, quantity=1) is None
+    assert repo.customers == set()
+    assert repo.carts == set()
+    kinds = [c[0] for c in repo.calls]
+    assert "ensure_customer" not in kinds
+    assert "ensure_cart" not in kinds
+    assert "add_to_cart" not in kinds
+
+
+def test_add_cart_item_tolerates_id_case_and_whitespace():
+    """K-078 D5: the ID goes through `extraction.normalize_product_id` before
+    resolution — FakeRepo IDs are lowercase, like the real `_slugify` slugs."""
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+
+    row = svc.add_cart_item(CTX, product_id=" PROD2 ", quantity=1)
 
     assert row["productId"] == "prod2"
+    assert repo.cart_items["u1"]["prod2"]["quantity"] == 1
+
+
+def test_add_cart_item_resolves_by_id_not_by_name():
+    """K-078 D1: a product *name* is not an ID — passing one abstains."""
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+
+    assert svc.add_cart_item(CTX, product_id="Bluetooth Speaker", quantity=1) is None
+    assert "lookup_product" not in [c[0] for c in repo.calls]
 
 
 # ── get_cart ─────────────────────────────────────────────────────────────────────
@@ -4352,8 +4430,8 @@ def test_get_cart_reflects_added_items_with_live_price_and_total():
     _seed_speaker(repo)
     _seed_mouse(repo)
     svc = make_service(repo, now=1000)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
-    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=2)
+    svc.add_cart_item(CTX, product_id="prod1", quantity=1)
 
     cart = svc.get_cart(CTX)
 
@@ -4372,7 +4450,7 @@ def test_get_cart_uses_current_catalog_price_not_a_stale_one():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
 
     repo.products_by_id["prod2"]["price"] = 79.99  # catalog price change
 
@@ -4388,8 +4466,8 @@ def test_get_cart_drops_a_line_whose_product_vanished_from_the_catalog():
     _seed_speaker(repo)
     _seed_mouse(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
-    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod1", quantity=1)
 
     del repo.products_by_id["prod1"]  # "Wireless Mouse" deleted from the catalog
 
@@ -4404,9 +4482,9 @@ def test_remove_cart_item_partial_quantity_decrements_in_place():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=5)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=5)
 
-    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
+    row = svc.remove_cart_item(CTX, product_id="prod2", quantity=2)
 
     assert row == {
         "removed": False, "productId": "prod2", "name": "Bluetooth Speaker",
@@ -4419,9 +4497,9 @@ def test_remove_cart_item_omitted_quantity_removes_the_whole_line():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=5)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=5)
 
-    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker")
+    row = svc.remove_cart_item(CTX, product_id="prod2")
 
     assert row["removed"] is True
     assert "prod2" not in repo.cart_items.get("u1", {})
@@ -4432,18 +4510,35 @@ def test_remove_cart_item_no_ensure_calls_against_a_never_touched_cart():
     _seed_speaker(repo)
     svc = make_service(repo)
 
-    row = svc.remove_cart_item(CTX, product_name="Bluetooth Speaker")
+    row = svc.remove_cart_item(CTX, product_id="prod2")
 
     assert row == {"removed": False, "productId": "prod2", "name": "Bluetooth Speaker"}
     assert repo.customers == set()
     assert repo.carts == set()
 
 
-def test_remove_cart_item_unknown_product_abstains():
+@pytest.mark.parametrize("product_id", ["nonexistent-gadget", "", None])
+def test_remove_cart_item_unresolvable_id_abstains_before_any_cart_read(product_id):
     repo = FakeRepo()
+    _seed_speaker(repo)
     svc = make_service(repo)
 
-    assert svc.remove_cart_item(CTX, product_name="nonexistent gadget") is None
+    assert svc.remove_cart_item(CTX, product_id=product_id) is None
+    kinds = [c[0] for c in repo.calls]
+    assert "read_cart" not in kinds
+    assert "adjust_cart_item" not in kinds
+
+
+def test_remove_cart_item_tolerates_id_case_and_whitespace():
+    repo = FakeRepo()
+    _seed_speaker(repo)
+    svc = make_service(repo)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=3)
+
+    row = svc.remove_cart_item(CTX, product_id=" Prod2", quantity=1)
+
+    assert row["productId"] == "prod2"
+    assert repo.cart_items["u1"]["prod2"]["quantity"] == 2
 
 
 def test_remove_cart_item_known_product_not_in_cart_is_a_noop():
@@ -4451,9 +4546,9 @@ def test_remove_cart_item_known_product_not_in_cart_is_a_noop():
     _seed_speaker(repo)
     _seed_mouse(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
 
-    row = svc.remove_cart_item(CTX, product_name="Wireless Mouse")
+    row = svc.remove_cart_item(CTX, product_id="prod1")
 
     assert row == {"removed": False, "productId": "prod1", "name": "Wireless Mouse"}
 
@@ -4464,7 +4559,7 @@ def test_clear_cart_removes_every_item_no_ensure_calls():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=3)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=3)
 
     svc.clear_cart(CTX)
 
@@ -4488,8 +4583,8 @@ def test_place_order_snapshots_current_prices_and_clears_the_cart():
     _seed_speaker(repo)
     _seed_mouse(repo)
     svc = make_service(repo, now=1000)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=2)
-    svc.add_cart_item(CTX, product_name="Wireless Mouse", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=2)
+    svc.add_cart_item(CTX, product_id="prod1", quantity=1)
 
     calls_before = len(repo.calls)
     result = svc.place_order(CTX)
@@ -4513,7 +4608,7 @@ def test_place_order_snapshot_survives_a_later_catalog_price_change_ac6():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo, now=1000)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
 
     result = svc.place_order(CTX)
     order_id = result["orderId"]
@@ -4536,7 +4631,7 @@ def test_place_order_every_line_products_vanished_is_treated_as_empty():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
 
     del repo.products_by_id["prod2"]
 
@@ -4547,10 +4642,10 @@ def test_place_order_mints_a_fresh_order_id_each_call():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     first = svc.place_order(CTX)
 
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     second = svc.place_order(CTX)
 
     assert first["orderId"] != second["orderId"]
@@ -4574,7 +4669,7 @@ def test_place_order_twice_in_direct_succession_creates_only_one_order():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
 
     first = svc.place_order(CTX)
     calls_after_first = len(repo.calls)
@@ -4594,7 +4689,7 @@ def test_get_order_status_returns_current_status():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     result = svc.place_order(CTX)
 
     assert svc.get_order_status(CTX, order_id=result["orderId"]) == "placed"
@@ -4611,7 +4706,7 @@ def test_advance_order_fulfill_then_deliver_lifecycle():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     order_id = svc.place_order(CTX)["orderId"]
 
     fulfilled = svc.advance_order(CTX, order_id=order_id, transition="fulfill")
@@ -4627,7 +4722,7 @@ def test_advance_order_cancel_before_fulfillment_succeeds():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     order_id = svc.place_order(CTX)["orderId"]
 
     cancelled = svc.advance_order(CTX, order_id=order_id, transition="cancel")
@@ -4638,7 +4733,7 @@ def test_advance_order_cancel_after_fulfilled_is_blocked_ac8():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     order_id = svc.place_order(CTX)["orderId"]
     svc.advance_order(CTX, order_id=order_id, transition="fulfill")
 
@@ -4650,7 +4745,7 @@ def test_advance_order_stale_transition_is_a_noop_returning_none():
     repo = FakeRepo()
     _seed_speaker(repo)
     svc = make_service(repo)
-    svc.add_cart_item(CTX, product_name="Bluetooth Speaker", quantity=1)
+    svc.add_cart_item(CTX, product_id="prod2", quantity=1)
     order_id = svc.place_order(CTX)["orderId"]
 
     # deliver before fulfill — the guard requires 'fulfilled', order is 'placed'

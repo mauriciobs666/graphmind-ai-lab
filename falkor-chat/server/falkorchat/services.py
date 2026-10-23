@@ -192,6 +192,12 @@ POST_SUCCESS_SAMPLE_SIZE = 20
 # never caps `limit`.
 MAX_WAIT_FOR_SECONDS = 180 * 24 * 3600
 
+# ── K-078 — catalog index on a `lookup_product_fact` miss ───────────────────────
+# Upper bound on `catalog_index` (docs/plans/salesperson-cart-product-id.md D5):
+# comfortably above the ~15-product demo catalog. Silent truncation at this
+# limit is the same posture `filter_products` already has.
+CATALOG_INDEX_LIMIT = 50
+
 # ── errors ─────────────────────────────────────────────────────────────────────
 
 
@@ -2900,6 +2906,45 @@ class Services:
             limit=limit,
         )
 
+    def lookup_product_by_id(
+        self, ctx: CallContext, *, product_id: Any,
+    ) -> dict[str, Any] | None:
+        """Resolve one catalog `productId` to `{productId, name, price}` (K-078
+        D5), via `repository.lookup_products_by_id` — no Cypher of its own.
+
+        `product_id` goes through `extraction.normalize_product_id` first (the
+        same shared normalizer the executor's K-058 guard and K-061 dedup key
+        use), so `" Wireless-Mouse-Pro "` resolves like `wireless-mouse-pro`. A
+        non-string or blank value normalizes to `""` and returns `None` without
+        a query; an ID not in the catalog also returns `None` (AC-3
+        abstention) — never a fabricated row.
+        """
+        pid = extraction.normalize_product_id(product_id)
+        if not pid:
+            return None
+        rows = self._repo.lookup_products_by_id(product_ids=[pid])
+        return rows[0] if rows else None
+
+    def catalog_index(self, ctx: CallContext) -> list[dict[str, Any]]:
+        """Every catalog product as `{productId, name}` only, sorted by `name`
+        (K-078 D2) — what `lookup_product_fact` lists on a miss so the model
+        can pick a real `productId` instead of re-typing a (possibly
+        translated) name.
+
+        Deliberately **no** `price`/`category`: a not-found answer must never
+        become a second price list the model can misjoin against
+        `filter_products`' price-sorted rows (K-079). Built from the existing
+        whole-catalog `repository.filter_products` call (no new Cypher),
+        projected and re-sorted here; truncated silently at
+        `CATALOG_INDEX_LIMIT`, the same posture `filter_products` has.
+        """
+        rows = self._repo.filter_products(
+            category=None, min_price=None, max_price=None,
+            limit=CATALOG_INDEX_LIMIT,
+        )
+        index = [{"productId": r["productId"], "name": r["name"]} for r in rows]
+        return sorted(index, key=lambda r: r["name"])
+
     # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
     #
     # `docs/plans/workflow-cart-and-totals.md` §3.3, with the explicit
@@ -2957,21 +3002,21 @@ class Services:
         return cart_lines, priced
 
     def add_cart_item(
-        self, ctx: CallContext, *, product_name: str, quantity: int,
+        self, ctx: CallContext, *, product_id: str, quantity: int,
     ) -> dict[str, Any] | None:
-        """Resolve `product_name`, ensure the `Customer`/`Cart` anchors, add the
-        line (FR-1). `None` when `product_name` doesn't resolve (AC-3
-        abstention, mirrors `lookup_product`'s own contract) — never a
-        fabricated cart line.
+        """Resolve `product_id` via `lookup_product_by_id`, ensure the
+        `Customer`/`Cart` anchors, add the line (FR-1). `None` when it doesn't
+        resolve (AC-3 abstention) — never a fabricated cart line. Keyed by the
+        catalog's `productId`, never a model-rendered name (K-078 D1/D5).
 
         `ensure_customer` → `ensure_cart` → `add_to_cart`, in that order
         (§3.3) — closes the MAJOR finding: without this, a brand-new
         customer's very first add would hit `add_to_cart`'s own `MATCH
         (cart:Cart …)` and silently write nothing (graph note §2.1). Run
-        *after* the product lookup so an unknown product name costs no
-        extra writes.
+        *after* the product lookup so an unknown `productId` costs no extra
+        writes.
         """
-        product = self.lookup_product(ctx, name=product_name)
+        product = self.lookup_product_by_id(ctx, product_id=product_id)
         if product is None:
             return None
         customer_id = ctx.actor
@@ -3000,11 +3045,12 @@ class Services:
         return {"items": priced, "total": total}
 
     def remove_cart_item(
-        self, ctx: CallContext, *, product_name: str, quantity: int | None = None,
+        self, ctx: CallContext, *, product_id: str, quantity: int | None = None,
     ) -> dict[str, Any] | None:
-        """Remove `quantity` of `product_name` from the cart, or the whole line
-        when `quantity` is omitted (FR-1). `None` when `product_name` doesn't
-        resolve (AC-3 abstention) — checked first, before any cart read.
+        """Remove `quantity` of `product_id` from the cart, or the whole line
+        when `quantity` is omitted (FR-1). Resolves `product_id` via
+        `lookup_product_by_id`; `None` when it doesn't resolve (AC-3
+        abstention) — checked first, before any cart read.
 
         No `ensure_customer`/`ensure_cart` call (§3.3's explicit exception) —
         removing from a cart that doesn't exist is a no-op, not an error.
@@ -3016,7 +3062,7 @@ class Services:
         matching cart line (never added, or already removed) is a no-op the
         caller reports as such (`"removed": False`), not an error.
         """
-        product = self.lookup_product(ctx, name=product_name)
+        product = self.lookup_product_by_id(ctx, product_id=product_id)
         if product is None:
             return None
         customer_id = ctx.actor

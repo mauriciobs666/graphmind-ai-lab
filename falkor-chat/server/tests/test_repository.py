@@ -3948,9 +3948,10 @@ def test_lookup_product_exact_name_hit(conn, wf_repo):
 
     row = wf_repo.lookup_product(name_normalized="bluetooth speaker")
 
-    # K-053 M6: `lookup_product` now also returns `productId` (additive,
-    # backward-compatible — see the method's own docstring) so
-    # `services.add_cart_item` can key the `CartItem` on it.
+    # K-053 M6: `lookup_product` also returns `productId` (additive,
+    # backward-compatible — see the method's own docstring); since K-078 it is
+    # the ID `lookup_product_fact` hands the model to copy into
+    # `add_to_cart`/`remove_from_cart`.
     assert row == {
         "productId": "prod2", "name": "Bluetooth Speaker",
         "category": "Audio", "price": 89.99,

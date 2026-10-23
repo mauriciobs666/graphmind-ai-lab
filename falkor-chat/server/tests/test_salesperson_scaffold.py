@@ -108,14 +108,14 @@ _SCHEMAS = {
         "type": "function",
         "function": {
             "name": "add_to_cart",
-            "description": "Add a quantity of a named product to the cart.",
+            "description": "Add a quantity of a product to the cart.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "productName": {"type": "string"},
+                    "productId": {"type": "string"},
                     "quantity": {"type": "integer"},
                 },
-                "required": ["productName"],
+                "required": ["productId"],
             },
         },
     },
@@ -123,14 +123,14 @@ _SCHEMAS = {
         "type": "function",
         "function": {
             "name": "remove_from_cart",
-            "description": "Remove a quantity of a named product from the cart.",
+            "description": "Remove a quantity of a product from the cart.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "productName": {"type": "string"},
+                    "productId": {"type": "string"},
                     "quantity": {"type": "integer"},
                 },
-                "required": ["productName"],
+                "required": ["productId"],
             },
         },
     },

@@ -78,6 +78,27 @@ def normalize_name(name: str) -> str:
     return _WHITESPACE_RE.sub(" ", name.strip()).casefold()
 
 
+def normalize_product_id(value: Any) -> str:
+    """Normalize a catalog `productId` for comparison — the ONE shared helper
+    (K-078, `docs/plans/salesperson-cart-product-id.md` D5).
+
+    `value.strip().lower()` for a `str`, `""` for anything else (`None`, a
+    number, a dict — whatever a model put in a tool argument). The executor's
+    K-058 provenance guard, its K-061 dedup key and the cart services all key
+    on this exact function, so a model's `" Wireless-Mouse-Pro "` and the
+    catalog's `wireless-mouse-pro` compare equal everywhere or nowhere.
+
+    This is ID *format* normalization, not name mapping. The case-folding is
+    only safe because every `productId` is lowercase, and that is guaranteed
+    by `scripts/seed_catalog.sh`'s `_slugify` alone (all 15 live IDs on
+    `reference` verified lowercase). A future catalog source that produces
+    mixed-case IDs must keep that invariant or drop the `.lower()` here.
+    """
+    if not isinstance(value, str):
+        return ""
+    return value.strip().lower()
+
+
 _SYSTEM_PROMPT = (
     "You extract entities and relationships from a passage of text for a knowledge "
     "graph. Classify every entity into EXACTLY one of these seven types:\n"

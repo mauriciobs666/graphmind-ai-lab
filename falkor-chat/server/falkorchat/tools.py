@@ -45,17 +45,18 @@ Built-ins (§4):
     granted" posture `human_handoff` already established for `triage`. `lookup_product_fact`
     resolves one named product's category/price via `services.lookup_product`; `filter_products`
     lists products by category and/or price range via `services.filter_products`. Both abstain
-    with a JSON `{"found": false}` / `{"items": [], "finding": ...}` shape rather than a
-    fabricated answer — the same idiom `graphrag_retrieve`'s "no relevant context found" already
-    uses.
+    with a JSON `{"found": false, "hint", "catalog"}` (K-078: the catalog as `{productId,
+    name}` rows) / `{"items": [], "finding": ...}` shape rather than a fabricated answer —
+    the same idiom `graphrag_retrieve`'s "no relevant context found" already uses.
   * `view_cart` / `add_to_cart` / `remove_from_cart` / `clear_cart` / `place_order` (K-053 M6,
     `docs/plans/workflow-cart-and-totals.md` §3.3) — the `salesperson` demo's cart/order
     capabilities, going through `services.get_cart`/`add_cart_item`/`remove_cart_item`/
     `clear_cart`/`place_order`, which own the `ensure_customer`/`ensure_cart` write-path
     ordering and the FR-8 pure-arithmetic call (`pricing.compute_line_total`) — no Cypher and
-    no arithmetic lives in this module. `add_to_cart`/`remove_from_cart` abstain
-    `{"found": false}` on an unknown product name, same idiom as the catalog tools;
-    `place_order` on an empty cart returns an explanatory **string**, not a zero-line order.
+    no arithmetic lives in this module. `add_to_cart`/`remove_from_cart` take the catalog's
+    `productId` (K-078), never a name, and abstain `{"found": false, "reason": ...}` on an ID
+    that doesn't resolve; `place_order` on an empty cart returns an explanatory **string**,
+    not a zero-line order.
   * `get_profile` / `save_profile` (K-054 M6, `docs/plans/workflow-durable-profile.md` §3.2) —
     the `salesperson` demo's durable customer-profile capabilities, going through
     `services.get_profile`/`save_profile`, which own the `coalesce()`-guarded partial-update
@@ -390,15 +391,39 @@ class GraphragRetrieveTool:
         return json.dumps({"seeds": seeds})
 
 
+#: `lookup_product_fact`'s not-found `hint` (K-078 D2). Points a price/category
+#: question back at an exact-name lookup, since the `catalog` list it rides with
+#: deliberately carries no prices (K-079: this model invents one when none is in context).
+LOOKUP_MISS_HINT = (
+    "no exact match; to get a product's price or category, call lookup_product_fact "
+    "again with its exact catalog name from this list"
+)
+
+
+def _product_not_found(product_id: Any) -> str:
+    """The cart tools' abstention result for a `productId` that doesn't resolve
+    (K-078 D6) — defence in depth behind the executor's K-058 provenance guard,
+    for an ID that was surfaced this turn but no longer resolves."""
+    return json.dumps({
+        "found": False,
+        "reason": f"no catalog product has productId '{product_id}'",
+    })
+
+
 class LookupProductFactTool:
     """FR-1/FR-4 (K-052 M6) — exact-name catalog fact lookup: one product's category/price.
 
     Thin dispatch onto `services.lookup_product`, which normalizes the model-supplied
-    name and does the exact `=` lookup (`docs/QUERIES.md` §15.1). Abstention shape mirrors
-    `GraphragRetrieveTool`'s "no relevant context found" idiom: `{"found": false}` when
-    nothing matches, never a fabricated row (AC-3). AC-4's wording tolerance ("how much is
-    the X" vs "what's the price of the X") is the calling model's own argument-extraction
-    job — both phrasings are expected to extract the same `name` argument.
+    name and does the exact `=` lookup (`docs/QUERIES.md` §15.1). When nothing matches it
+    never fabricates a row (AC-3): it returns `{"found": false, "hint": …, "catalog": […]}`,
+    where `catalog` is `services.catalog_index` — every product as `{productId, name}`
+    only, sorted by name, no price or category (K-078 D2). A model that looked up a
+    translated name ("Mouse sem fio Pro") can then pick the real product and copy its
+    `productId` into `add_to_cart`/`remove_from_cart`; the cross-language match happens in
+    the model, never in our code. The `hint` sends a price/category question back to an
+    exact-name lookup rather than letting the model invent a price (K-079). AC-4's wording
+    tolerance ("how much is the X" vs "what's the price of the X") is the calling model's
+    own argument-extraction job — both phrasings are expected to extract the same `name`.
     """
 
     name = "lookup_product_fact"
@@ -421,9 +446,7 @@ class LookupProductFactTool:
                     "properties": {
                         "name": {
                             "type": "string",
-                            "description": (
-                                "The product's name, as the customer referred to it."
-                            ),
+                            "description": "The product's name as listed in the catalog.",
                         },
                     },
                     "required": ["name"],
@@ -435,7 +458,10 @@ class LookupProductFactTool:
             run: dict[str, Any]) -> str:
         row = self._services.lookup_product(ctx, name=arguments.get("name", ""))
         if row is None:
-            return json.dumps({"found": False})
+            return json.dumps({
+                "found": False, "hint": LOOKUP_MISS_HINT,
+                "catalog": self._services.catalog_index(ctx),
+            })
         return json.dumps({"found": True, **row})
 
 
@@ -571,14 +597,17 @@ class ViewCartTool:
 
 
 class AddToCartTool:
-    """FR-1 (K-053 M6) — add a quantity of a named product to the cart.
+    """FR-1 (K-053 M6) — add a quantity of a product to the cart.
 
-    Thin dispatch onto `services.add_cart_item`, which resolves `productName`
-    via the same catalog lookup `LookupProductFactTool` uses, then ensures
-    the `Customer`/`Cart` anchors and writes the line (plan §3.3, the MAJOR-
-    finding fix). Abstention shape mirrors `LookupProductFactTool`'s:
-    `{"found": false}` on an unknown product name, since it calls the same
-    underlying lookup. `quantity` defaults to `1` when the model omits it.
+    Keyed by the catalog's `productId`, copied by the model from a
+    `lookup_product_fact`/`filter_products` result this turn — never by the
+    model's rendering of a name (K-078 D1). Thin dispatch onto
+    `services.add_cart_item`, which resolves the ID via
+    `lookup_product_by_id`, then ensures the `Customer`/`Cart` anchors and
+    writes the line (plan §3.3, the MAJOR-finding fix). An ID that doesn't
+    resolve → `{"found": false, "reason": …}` (D6), never a written line. The
+    executor's K-058 guard holds an ID no grounding tool returned this turn
+    before it ever reaches `run()`. `quantity` defaults to `1` when omitted.
     """
 
     name = "add_to_cart"
@@ -593,17 +622,20 @@ class AddToCartTool:
             "function": {
                 "name": self.name,
                 "description": (
-                    "Add a quantity of a named product to the customer's cart. "
+                    "Add a quantity of a product to the customer's cart. "
                     "Calling this again for the same product adds more of it "
                     "(quantities accumulate, they don't replace)."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "productName": {
+                        "productId": {
                             "type": "string",
                             "description": (
-                                "The product's name, as the customer referred to it."
+                                "The product's `productId`, copied exactly from a "
+                                "`lookup_product_fact` or `filter_products` result in "
+                                "this turn. An identifier: never translate it or build "
+                                "it from a name."
                             ),
                         },
                         "quantity": {
@@ -612,30 +644,33 @@ class AddToCartTool:
                             "minimum": 1,
                         },
                     },
-                    "required": ["productName"],
+                    "required": ["productId"],
                 },
             },
         }
 
     def run(self, arguments: dict[str, Any], *, ctx: CallContext,
             run: dict[str, Any]) -> str:
+        product_id = arguments.get("productId", "")
         row = self._services.add_cart_item(
-            ctx, product_name=arguments.get("productName", ""),
-            quantity=arguments.get("quantity") or 1,
+            ctx, product_id=product_id, quantity=arguments.get("quantity") or 1,
         )
         if row is None:
-            return json.dumps({"found": False})
+            return _product_not_found(product_id)
         return json.dumps({"found": True, **row})
 
 
 class RemoveFromCartTool:
-    """FR-1 (K-053 M6) — remove a quantity of a named product from the cart,
-    or the whole line when `quantity` is omitted.
+    """FR-1 (K-053 M6) — remove a quantity of a product from the cart, or the
+    whole line when `quantity` is omitted.
 
-    Thin dispatch onto `services.remove_cart_item` (plan §3.3). Abstention
-    shape mirrors `LookupProductFactTool`'s: `{"found": false}` on an unknown
-    product name. A known product with no matching cart line (never added,
-    or already removed) is a distinct, non-abstaining outcome —
+    Keyed by the catalog's `productId`, copied by the model from a
+    `lookup_product_fact`/`filter_products`/`view_cart` result this turn
+    (K-078 D1). Thin dispatch onto `services.remove_cart_item` (plan §3.3),
+    which resolves the ID via `lookup_product_by_id`. An ID that doesn't
+    resolve → `{"found": false, "reason": …}` (D6). A known product with no
+    matching cart line (never added, or already removed) is a distinct,
+    non-abstaining outcome —
     `{"found": true, "removed": false, ...}` — since the *product* resolved
     fine, there was simply nothing of it in the cart to remove.
     """
@@ -652,17 +687,20 @@ class RemoveFromCartTool:
             "function": {
                 "name": self.name,
                 "description": (
-                    "Remove a quantity of a named product from the customer's "
+                    "Remove a quantity of a product from the customer's "
                     "cart. Omit quantity to remove the entire line for that "
                     "product, however many are in the cart."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "productName": {
+                        "productId": {
                             "type": "string",
                             "description": (
-                                "The product's name, as the customer referred to it."
+                                "The product's `productId`, copied exactly from a "
+                                "`lookup_product_fact`, `filter_products` or `view_cart` "
+                                "result in this turn. An identifier: never translate it "
+                                "or build it from a name."
                             ),
                         },
                         "quantity": {
@@ -673,19 +711,19 @@ class RemoveFromCartTool:
                             "minimum": 1,
                         },
                     },
-                    "required": ["productName"],
+                    "required": ["productId"],
                 },
             },
         }
 
     def run(self, arguments: dict[str, Any], *, ctx: CallContext,
             run: dict[str, Any]) -> str:
+        product_id = arguments.get("productId", "")
         row = self._services.remove_cart_item(
-            ctx, product_name=arguments.get("productName", ""),
-            quantity=arguments.get("quantity"),
+            ctx, product_id=product_id, quantity=arguments.get("quantity"),
         )
         if row is None:
-            return json.dumps({"found": False})
+            return _product_not_found(product_id)
         return json.dumps({"found": True, **row})
 
 

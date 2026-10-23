@@ -1226,11 +1226,11 @@ def _services_on(repo) -> Services:
     return Services(repo, clock=_ticking_clock())
 
 
-def _place_order(repo, participant_id: str, product: str = "Widget 001") -> str:
+def _place_order(repo, participant_id: str, product_id: str = "widget-001") -> str:
     """Give a participant a real, placed order (the §16 cart → order path)."""
     services = _services_on(repo)
     ctx = CallContext(ws=WS, actor=participant_id)
-    services.add_cart_item(ctx, product_name=product, quantity=1)
+    services.add_cart_item(ctx, product_id=product_id, quantity=1)
     order = services.place_order(ctx)
     assert order is not None
     return order["orderId"]
@@ -1983,7 +1983,7 @@ def test_a_participant_token_reaches_no_other_participants_data(client, seeded):
     _place_order(seeded, ada["participantId"])
     services = _services_on(seeded)
     ada_ctx = CallContext(ws=WS, actor=ada["participantId"])
-    services.add_cart_item(ada_ctx, product_name="Widget 002", quantity=3)
+    services.add_cart_item(ada_ctx, product_id="widget-002", quantity=3)
 
     state = client.get(f"{API_PREFIX}/state", headers=bob_h).json()
     assert state["profile"]["name"] == "Bob"

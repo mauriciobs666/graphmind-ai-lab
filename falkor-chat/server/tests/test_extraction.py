@@ -18,6 +18,7 @@ from falkorchat.extraction import (
     ExtractionResult,
     extract,
     normalize_name,
+    normalize_product_id,
 )
 
 
@@ -48,6 +49,24 @@ def test_normalize_name_case_folds_and_collapses_whitespace():
 
 def test_normalize_name_is_the_matching_key_used_by_repair():
     assert normalize_name("IBM") == normalize_name("  ibm ")
+
+
+# ── normalize_product_id (K-078 D5) ──────────────────────────────────────────
+
+
+def test_normalize_product_id_strips_and_lowercases():
+    assert normalize_product_id(" Wireless-Mouse-Pro ") == "wireless-mouse-pro"
+    assert normalize_product_id("wireless-mouse-pro") == "wireless-mouse-pro"
+
+
+def test_normalize_product_id_non_string_is_empty():
+    for value in (None, 3, {}, [], 1.5, True):
+        assert normalize_product_id(value) == ""
+
+
+def test_normalize_product_id_is_idempotent():
+    once = normalize_product_id("  Mechanical-Keyboard-K200\t")
+    assert normalize_product_id(once) == once == "mechanical-keyboard-k200"
 
 
 # ── happy path: bare JSON, fenced JSON, prose-wrapped ────────────────────────

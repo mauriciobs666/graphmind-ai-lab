@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .config import CallContext
-from .extraction import normalize_name
+from .extraction import normalize_product_id
 from .guards import CMP_KINDS, GuardVerdict, evaluate_guard, render_label
 from .llm import ToolCall
 from .modelconfig import StaticModelGateway
@@ -307,64 +307,172 @@ def _looks_fact_bearing(text: str) -> bool:
     return bool(_FACT_BEARING_RE.search(text))
 
 
-# K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4): the
-# write-mutating tools whose call carries a single resolved-target argument that
-# should be traceable to the current turn's own text. `add_to_cart`/
-# `remove_from_cart` both resolve `productName` against the catalog exactly like
-# `lookup_product_fact`/`filter_products` do (`Product.nameNormalized`) — the
-# same class of call the confirmed repro (§9.2) and the remove-retrigger
-# condition (§9, 0/4 but same named mechanism) both target. `place_order`/
-# `clear_cart` carry no such argument (nothing to check presence of) and
-# `save_profile`'s `name`/`deliveryAddress` are free-form customer-supplied
-# text, not a catalog-resolved target — both deliberately out of scope here,
-# extend this mapping if a future incident needs it.
+# K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4) under
+# provenance grounding (K-078, `docs/plans/salesperson-cart-product-id.md` D3):
+# the write-mutating tools whose call carries a single catalog-target argument,
+# and that argument's name. `add_to_cart`/`remove_from_cart` take the catalog's
+# `productId`, copied by the model from a tool result — the class of call the
+# confirmed repro (§9.2, a later turn's tool loop re-issuing an earlier turn's
+# add) and the remove-retrigger condition (§9) both target. Such a call is held
+# unless a grounding tool (`_GROUNDING_SOURCES`) dispatched in THIS node
+# execution returned that same `productId`.
 #
-# Adding a write tool here? Check whether its own `run()` wrapper applies a
-# post-guard argument default (like `add_to_cart`'s `quantity` — K-061's
-# original bug, `docs/reviews/salesperson-tool-reliability-ml.md` §15.2) and,
-# if so, add a matching entry to `_DEDUP_ARG_RESOLVERS` below — otherwise the
-# new tool silently falls through to the raw-argument dedup key and can
-# reintroduce the exact same loophole.
+# Why provenance, not text (K-078): the guard used to hold a call whose
+# `productName` was not a substring of the turn's own text. That failed every
+# es/pt-BR customer — the model translated the name, and an ID is never in the
+# user's text at all — so it now asks a language-independent question instead:
+# did a tool this node execution ran return this ID? An earlier turn's tool
+# results never reach the model (`_assemble_messages` rebuilds each turn from
+# the prompt, the posted thread and `CONTEXT` only), so a re-fire's ID is never
+# grounded unless the model looks it up again this turn.
+#
+# `place_order`/`clear_cart` carry no such argument and `save_profile`'s
+# `name`/`deliveryAddress` are free-form customer text, not a catalog target —
+# deliberately out of scope; extend this mapping if a future incident needs it.
+#
+# Adding a write tool here?
+#   * add its `_GROUNDING_SOURCES` row (which tools' results may ground it) and
+#     its `_HELD_REASON` text — a missing row fails loudly (`KeyError` on the
+#     node's first successful dispatch, or on its first hold), never silently;
+#   * check whether its own `run()` wrapper applies a post-guard argument
+#     default (like `add_to_cart`'s `quantity` — K-061's original bug,
+#     `docs/reviews/salesperson-tool-reliability-ml.md` §15.2) and give it a
+#     `_DEDUP_ARG_RESOLVERS` entry below — otherwise it falls through to the
+#     raw-argument dedup key and can reintroduce the exact same loophole.
 _WRITE_TARGET_ARG: dict[str, str] = {
-    "add_to_cart": "productName",
-    "remove_from_cart": "productName",
+    "add_to_cart": "productId",
+    "remove_from_cart": "productId",
+}
+
+# K-078 D3: per write tool, the tools whose successful result may ground its
+# target ID this node execution. `view_cart` deliberately does NOT ground an
+# add: the cart's contents are exactly the previous turn's writes, so "it was
+# in the cart I just viewed" is the re-fire shape itself. A remove, by
+# contrast, naturally targets what is in the cart. `query_graph_data` is here
+# so a future row carrying `p.productId` (K-079 F2) grounds with no further
+# change. A write tool is deliberately not a source for itself (plan D3 listed
+# it; dropped on review n1): a write dispatches only when its normalized ID is
+# already in its own set, and its result echoes that same ID, so the row could
+# never add anything — it only suggested that a write grounds itself.
+_GROUNDING_SOURCES: dict[str, frozenset[str]] = {
+    "add_to_cart": frozenset({
+        "lookup_product_fact", "filter_products", "query_graph_data",
+    }),
+    "remove_from_cart": frozenset({
+        "lookup_product_fact", "filter_products", "query_graph_data", "view_cart",
+    }),
+}
+
+# K-078 D3 (review F1): the held call's `reason`, per tool — **conditional** on
+# purpose. An unconditional "look it up, then retry" would hand a re-fire its own
+# recovery path; this restates "only what the customer asked for in their
+# current message" first. `{value}` is the call's raw `productId`, repr'd.
+# The add message names only `lookup_product_fact`/`filter_products` — narrower
+# than `_GROUNDING_SOURCES["add_to_cart"]` on purpose (the model is pointed at
+# the two lookups it should use); do not "fix" one to match the other.
+_HELD_REASON: dict[str, str] = {
+    "add_to_cart": (
+        "productId {value} was not returned by lookup_product_fact or "
+        "filter_products in this turn, so the call was not run. Only add a "
+        "product the customer asked for in their current message. If they did "
+        "ask for this one, look it up first with lookup_product_fact (by its "
+        "catalog name) or filter_products, and pass the productId that result "
+        "returns. If they did not, do not add it."
+    ),
+    "remove_from_cart": (
+        "productId {value} was not returned by lookup_product_fact, "
+        "filter_products or view_cart in this turn, so the call was not run. "
+        "Only remove a product the customer asked for in their current message. "
+        "If they did ask for this one, look it up first with lookup_product_fact "
+        "(by its catalog name), filter_products or view_cart, and pass the "
+        "productId that result returns. If they did not, do not remove it."
+    ),
 }
 
 
+def _collect_target_values(content: str, arg: str) -> set[str]:
+    """Every normalized ID a tool result surfaces for a write tool's target
+    argument `arg` (K-078 D3): parse `content` as JSON (a non-JSON result, e.g.
+    `place_order`'s empty-cart string, contributes nothing), walk dicts and
+    lists recursively, and collect `normalize_product_id(v)` for every `str`
+    value `v` whose key is `arg` or ends in `"." + arg` — the dotted form keeps
+    a `query_graph_data` row like `{"p.productId": …}` counting. `""` is
+    dropped, so a blank ID can never be grounded."""
+    try:
+        root = json.loads(content)
+    except (ValueError, TypeError):
+        return set()
+    suffix = "." + arg
+    found: set[str] = set()
+    stack: list[Any] = [root]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if isinstance(value, str):
+                    if key == arg or (isinstance(key, str) and key.endswith(suffix)):
+                        found.add(normalize_product_id(value))
+                else:
+                    stack.append(value)
+        elif isinstance(node, list):
+            stack.extend(node)
+    found.discard("")
+    return found
+
+
 def _resolve_add_to_cart_dedup_args(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Mirror `AddToCartTool.run`'s own wrapper-level default (`tools.py`,
-    `arguments.get("quantity") or 1`) for K-061 dedup-key purposes only —
-    the call actually dispatched still receives the model's raw arguments
-    unchanged; only the *key computed for the same-turn guard* is resolved
-    through this collapse, so an omitted `quantity` and an explicit
-    `quantity: 1` (both mean "add 1") hash identically."""
-    return {**arguments, "quantity": arguments.get("quantity") or 1}
+    """Project an `add_to_cart` call onto exactly what `AddToCartTool.run`
+    honours (K-078 D4): the normalized `productId` and the wrapper-level
+    `quantity` default (`arguments.get("quantity") or 1`). For K-061 dedup-key
+    purposes only — the dispatched call still receives the model's raw
+    arguments. So an omitted `quantity` and an explicit `quantity: 1` (both
+    "add 1"), an ID's letter case, and an ignored extra argument (a stray
+    `productName`) all hash identically."""
+    return {
+        "productId": normalize_product_id(arguments.get("productId")),
+        "quantity": arguments.get("quantity") or 1,
+    }
+
+
+def _resolve_remove_from_cart_dedup_args(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Project a `remove_from_cart` call onto exactly what
+    `RemoveFromCartTool.run` honours (K-078 D4): the normalized `productId` and
+    `quantity` **exactly as passed** — never `or None`/`or 1`, since an omitted
+    `quantity` means "remove the whole line", a distinct request from any
+    explicit value (including `0`, review F8)."""
+    return {
+        "productId": normalize_product_id(arguments.get("productId")),
+        "quantity": arguments.get("quantity"),
+    }
 
 
 # K-061 keying-loophole fix (`docs/reviews/salesperson-tool-reliability-ml.md`
 # §15.2, rep-20 ground truth): a live regression pass found the shipped guard's
 # `dispatch_key = (call.name, _dumps(call.arguments))` hashes the model's raw,
-# pre-default JSON — so `add_to_cart({"productName": "X"})` and
-# `add_to_cart({"productName": "X", "quantity": 1})`, semantically identical
-# ("add 1"), produce two different keys and both dispatch, doubling the cart
-# line. Each tool named in `_WRITE_TARGET_ARG` gets its OWN resolver here,
-# mirroring that tool's own `run()` wrapper's actual default-collapse
-# semantics — deliberately not a generic "look up the JSON-schema `default`"
-# lookup (neither tool's schema declares one) and deliberately not a single
-# shared resolver, because the two tools' semantics genuinely differ:
+# pre-default JSON — so two semantically identical calls ("add 1" with and
+# without an explicit `quantity: 1`) produced two different keys and both
+# dispatched, doubling the cart line. Each tool named in `_WRITE_TARGET_ARG`
+# gets its OWN resolver here, projecting the call onto exactly the arguments
+# that tool's `run()` honours (K-078 D4) — deliberately not a generic "look up
+# the JSON-schema `default`" lookup (neither tool's schema declares one) and
+# deliberately not a single shared resolver, because the two tools' semantics
+# genuinely differ:
 #
 #   * `add_to_cart` collapses an omitted/falsy `quantity` to `1` INSIDE THE
 #     WRAPPER (`tools.py` `AddToCartTool.run`), so its dedup key must too.
 #   * `remove_from_cart` has NO such default — `quantity` is passed through
 #     unchanged (`tools.py` `RemoveFromCartTool.run`), and an omitted
-#     `quantity` there means "remove the whole line," a semantically
-#     DISTINCT request from any explicit quantity value, not an implicit
-#     stand-in for some fixed number. It is deliberately absent from this
-#     table: `_resolve_dedup_arguments` falls through to the raw arguments
-#     unchanged for any tool with no entry, keeping "omit quantity" and
-#     "quantity: N" as different dedup keys for `remove_from_cart`.
+#     `quantity` there means "remove the whole line", a semantically DISTINCT
+#     request from any explicit quantity value. Its resolver normalizes the
+#     `productId` and keeps `quantity` raw, so "omit quantity" and
+#     "quantity: N" stay different dedup keys.
+#
+# Both normalize the `productId` (`normalize_product_id`) and drop every
+# argument the tool ignores, so neither letter case nor a stray `productName`
+# gives one request two keys.
 _DEDUP_ARG_RESOLVERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "add_to_cart": _resolve_add_to_cart_dedup_args,
+    "remove_from_cart": _resolve_remove_from_cart_dedup_args,
 }
 
 
@@ -374,19 +482,6 @@ def _resolve_dedup_arguments(name: str, arguments: dict[str, Any]) -> dict[str, 
     per-tool resolver, not a generic default lookup."""
     resolver = _DEDUP_ARG_RESOLVERS.get(name)
     return resolver(arguments) if resolver else arguments
-
-
-def _target_mentioned_in_turn_text(target: str, turn_text: str) -> bool:
-    """Case/whitespace-insensitive substring check — mirrors the existing
-    `nameNormalized`/`categoryNormalized` precedent (`extraction.normalize_name`,
-    the one shared case-fold + whitespace-collapse helper) rather than inventing
-    a second, independently-written normalizer (K-058 candidate fix, ml note
-    §9.4). An empty `turn_text` (no thread context available — the offline-stub
-    path several pre-existing tests use) means there is nothing to check
-    against, so this returns `True` — fail open on missing data, not closed."""
-    if not turn_text.strip():
-        return True
-    return normalize_name(target) in normalize_name(turn_text)
 
 
 def _missing_required_tools(
@@ -850,11 +945,6 @@ class WorkflowExecutor:
 
         thread_msgs = self._read_thread_context(ctx, run_ctx)
         messages = self._assemble_messages(config, run_ctx, thread_msgs)
-        # K-058: the current turn's own triggering text (the newest thread entry —
-        # by construction, the message that caused this node execution; empty in
-        # the offline-stub path where no thread is wired, per `_target_mentioned_
-        # in_turn_text`'s fail-open contract on missing data).
-        trigger_text = thread_msgs[-1].get("text", "") if thread_msgs else ""
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
         satisfied: set[str] = set()
@@ -864,6 +954,12 @@ class WorkflowExecutor:
         # through `_handle_tool_call` so it can hold an exact same-turn repeat
         # rather than re-dispatching it.
         dispatched_writes: set[tuple[str, str]] = set()
+        # K-058 under provenance grounding (K-078 D3): per write tool, the
+        # normalized target IDs a grounding tool's successful result returned in
+        # THIS node execution. A local, never state on `self`: the executor is a
+        # process-wide singleton running turns concurrently, so anything on
+        # `self` would carry grounding across turns and across customers.
+        surfaced: dict[str, set[str]] = {tool: set() for tool in _WRITE_TARGET_ARG}
         last_text = ""
         resolved_model: str | None = None
         model_source: str | None = None
@@ -913,8 +1009,7 @@ class WorkflowExecutor:
                     ))
                     self._handle_tool_call(
                         implicit_call, granted_set, required_by, ctx, tool_run, step,
-                        trace, emissions, satisfied, dispatched_writes,
-                        turn_text=trigger_text,
+                        trace, emissions, satisfied, dispatched_writes, surfaced,
                     )
                 missing = _missing_required_tools(required, satisfied, emissions)
                 if missing:
@@ -932,14 +1027,10 @@ class WorkflowExecutor:
                                   toolsUsed=tools_used)
 
             messages.append(_assistant_turn(result))
-            # K-058: "this turn's own raw trigger/reply text" — the triggering
-            # user message plus whatever the model has already said this same
-            # turn (last_text, just updated above for this iteration).
-            turn_text = f"{trigger_text} {last_text}"
             for call in result.tool_calls:
                 content = self._handle_tool_call(
                     call, granted_set, required_by, ctx, tool_run, step, trace,
-                    emissions, satisfied, dispatched_writes, turn_text=turn_text,
+                    emissions, satisfied, dispatched_writes, surfaced,
                 )
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": content}
@@ -967,8 +1058,8 @@ class WorkflowExecutor:
         self, call: Any, granted_set: set[str],
         required_by: dict[str, list[str]], ctx: CallContext, run: dict[str, Any],
         step: dict[str, Any], trace: list[tuple[str, str]], emissions: list[str],
-        satisfied: set[str], dispatched_writes: set[tuple[str, str]], *,
-        turn_text: str = "",
+        satisfied: set[str], dispatched_writes: set[tuple[str, str]],
+        surfaced: dict[str, set[str]],
     ) -> str:
         """Validate + dispatch one tool call; return the message content fed back to the
         model. Enforces AC-6 (ungranted → reject) and arg-schema validity (malformed →
@@ -981,17 +1072,25 @@ class WorkflowExecutor:
         message (a `"posted"` key in the returned JSON envelope) has its msgId buffered
         onto `emissions` for post-record PRODUCED linking (Option B, K-023).
 
-        K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.4): immediately before
-        dispatch, a write-mutating call named in `_WRITE_TARGET_ARG` is held (never
-        dispatched) rather than run when its own resolved target argument's value is not
-        mentioned anywhere in `turn_text` (the current turn's own trigger/reply text,
-        `_run_agent_node`'s `trigger_text`/`last_text`) — this runs *after* the AC-6/
-        malformed-arg checks (both structural, not this text-grounding concern) but
-        *before* `self._tools.dispatch`, so a held call never reaches the tool at all.
+        K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.4), grounded on
+        provenance since K-078 (`docs/plans/salesperson-cart-product-id.md` D3):
+        immediately before dispatch, a write-mutating call named in `_WRITE_TARGET_ARG` is
+        held (never dispatched) unless `normalize_product_id` of its target argument is in
+        `surfaced[call.name]` — the IDs a tool in that write tool's `_GROUNDING_SOURCES`
+        row returned on a **successful** dispatch earlier in this same node execution
+        (`_collect_target_values`, run on the success path below). A missing-from-the-set,
+        empty, non-string, hallucinated, translated-slug or previous-turn ID is held alike;
+        there is **no fail-open** (the old text check failed open on an empty turn text —
+        provenance has no missing-data case). The held result carries the conditional
+        per-tool `_HELD_REASON`. This runs *after* the AC-6/malformed-arg checks (both
+        structural) but *before* `self._tools.dispatch`, so a held call never reaches the
+        tool at all. The guard is one decision deep, not a wall: a held re-fire passes if
+        the model ignores the reason, looks the product up and retries (plan §8 R3,
+        accepted).
 
         K-061 (`docs/reviews/salesperson-tool-reliability-ml.md` §12): immediately after
-        the K-058 check (so it only ever sees a call whose target IS mentioned in this
-        turn's own text — K-058 already held everything else), a call named in
+        the K-058 check (so it only ever sees a call whose target was surfaced this turn —
+        K-058 already held everything else), a call named in
         `_WRITE_TARGET_ARG` is held when it is an **exact repeat** — same tool name, same
         RESOLVED argument set (`_resolve_dedup_arguments`, not the raw `call.arguments` —
         see its own docstring for why: §15.2's rep-20 loophole showed the raw JSON alone
@@ -1018,7 +1117,8 @@ class WorkflowExecutor:
         `_missing_required_tools` to know which declared `config.requiredTools` were
         actually dispatched this node execution. A held call (K-058) never reaches this
         success path either, by design — it is exactly as "not dispatched" as a rejected
-        or malformed one."""
+        or malformed one, and so it neither satisfies a required tool nor surfaces an ID
+        into `surfaced`."""
         if call.name not in granted_set:  # AC-6 defensive rejection
             trace.append(("tool_call", f"REJECTED ungranted tool {call.name!r} (AC-6)"))
             return (f"error: tool {call.name!r} is not granted to this node "
@@ -1032,22 +1132,16 @@ class WorkflowExecutor:
         dispatch_key: tuple[str, str] | None = None
         if target_arg:
             target_value = call.arguments.get(target_arg)
-            if (isinstance(target_value, str) and target_value
-                    and not _target_mentioned_in_turn_text(target_value, turn_text)):
+            if normalize_product_id(target_value) not in surfaced[call.name]:
                 trace.append((
                     "tool_call",
                     f"HELD {call.name}({_short(call.arguments)}) — {target_arg} not "
-                    f"mentioned in this turn's own text (K-058)",
+                    f"returned by a grounding tool this turn (K-058)",
                 ))
                 self._note_off_turn_write_held(call.name, target_value, run, step, trace)
                 return json.dumps({
                     "held": True,
-                    "reason": (
-                        f"{target_arg} {target_value!r} was not mentioned anywhere in "
-                        f"this turn's own message; the call was not run — only call "
-                        f"this tool for something the customer actually asked for in "
-                        f"their current message"
-                    ),
+                    "reason": _HELD_REASON[call.name].format(value=repr(target_value)),
                 })
             dispatch_key = (
                 call.name,
@@ -1109,6 +1203,10 @@ class WorkflowExecutor:
         if dispatch_key is not None:
             dispatched_writes.add(dispatch_key)
         content = out if isinstance(out, str) else str(out)
+        # K-058 provenance (K-078 D3): only a successful dispatch surfaces IDs.
+        for write_tool, target in _WRITE_TARGET_ARG.items():
+            if call.name in _GROUNDING_SOURCES[write_tool]:
+                surfaced[write_tool] |= _collect_target_values(content, target)
         self._buffer_emission(content, emissions)
         return content
 
@@ -1167,18 +1265,20 @@ class WorkflowExecutor:
 
     @staticmethod
     def _note_off_turn_write_held(
-        tool_name: str, target_value: str, run: dict[str, Any], step: dict[str, Any],
+        tool_name: str, target_value: Any, run: dict[str, Any], step: dict[str, Any],
         trace: list[tuple[str, str]],
     ) -> None:
         """K-058 observability signal (`docs/reviews/salesperson-tool-reliability-ml.md`
         §9.2/§9.4): make a *held* off-turn write visible — a write-mutating call whose own
-        resolved target was not mentioned anywhere in the current turn's own text, so it was
-        never dispatched. Deliberately a **distinct** signal from `_note_possible_
-        fabrication`, not a reuse of it: that one means "a fact-bearing reply with no
-        grounding tool dispatched at all" (a K-056-class concern), and this one means "a
-        real, otherwise-well-formed write was about to run ungrounded in this turn's text"
-        (the K-058-class concern, ml note §9.3 — every occurrence here is honestly grounded
-        right up to the point this guard holds it; overloading the K-056 signal would blur
+        target ID no grounding tool returned in this node execution (K-078 provenance,
+        `_GROUNDING_SOURCES`), so it was never dispatched. The name, the
+        `off_turn_write_held` trace kind and the `off-turn write held` WARNING prefix are
+        kept for continuity with the U3/K-058 log analyses; only the suffix changed.
+        Deliberately a **distinct** signal from `_note_possible_fabrication`, not a reuse
+        of it: that one means "a fact-bearing reply with no grounding tool dispatched at
+        all" (a K-056-class concern), and this one means "a real, otherwise-well-formed
+        write was about to run on an ID this turn never surfaced" (the K-058-class concern,
+        ml note §9.3; overloading the K-056 signal would blur
         two failure classes with different causes and different fixes). Same posture as
         both siblings: **always** logged (never gated on debug/trace-run status), plus an
         `off_turn_write_held` trace entry `_trace_step` forwards verbatim on a debug run.
@@ -1186,14 +1286,14 @@ class WorkflowExecutor:
         like a rejected or malformed one."""
         _log.warning(
             "off-turn write held: run %s step %s did not dispatch %s(%s=%r) — target "
-            "not mentioned in this turn's own text",
+            "not returned by a grounding tool this turn",
             run.get("runId"), step.get("key"), tool_name,
             _WRITE_TARGET_ARG.get(tool_name, "target"), target_value,
         )
         trace.append((
             "off_turn_write_held",
             f"{tool_name}({_WRITE_TARGET_ARG.get(tool_name, 'target')}={target_value!r}) "
-            f"held — not mentioned in this turn's own text",
+            f"held — not returned by a grounding tool this turn",
         ))
 
     @staticmethod
@@ -1205,11 +1305,11 @@ class WorkflowExecutor:
         §12): make a *same-turn* held write visible — an exact repeat (same tool name,
         same full argument set) of a call that already succeeded earlier in this same
         node execution's own multi-iteration loop. Deliberately a **distinct** signal from
-        `_note_off_turn_write_held`, not a reuse of it: that one means "this turn's own
-        text never mentioned the target anywhere" (an off-turn re-fire of a *previous*
-        turn's already-completed write, K-058); this one means "the target genuinely IS
-        mentioned in this turn's own text — the model re-issued its own already-completed
-        *current*-turn write" (K-061), a different mechanism with a different fix —
+        `_note_off_turn_write_held`, not a reuse of it: that one means "no grounding tool
+        returned the target this turn" (an off-turn re-fire of a *previous* turn's
+        already-completed write, K-058); this one means "the target genuinely WAS surfaced
+        this turn — the model re-issued its own already-completed *current*-turn write"
+        (K-061), a different mechanism with a different fix —
         overloading K-058's signal would blur two failure classes together the same way
         `_note_possible_fabrication` and `_note_off_turn_write_held` are deliberately kept
         apart. Same posture as both siblings: **always** logged (never gated on debug/

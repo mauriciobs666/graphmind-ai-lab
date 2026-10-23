@@ -17,11 +17,17 @@ import json
 
 import pytest
 
+from falkorchat import executor as executor_mod
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
 from falkorchat.llm import ChatResult, ToolCall
 from falkorchat.services import UnknownActorError, UnknownMemberError
-from falkorchat.tools import AddToCartTool, HumanHandoffSignal, ToolRegistry
+from falkorchat.tools import (
+    AddToCartTool,
+    HumanHandoffSignal,
+    LookupProductFactTool,
+    ToolRegistry,
+)
 
 CTX = CallContext(ws="test", actor="u1")
 RUN = {"runId": "r1", "defKey": "triage", "defVersion": "1"}
@@ -1536,66 +1542,77 @@ def test_workspace_override_naming_a_role_that_falls_back_reports_workspace_and_
 
 
 class FakeCartServices:
-    """The one method `AddToCartTool.run` calls — no LLM client anywhere in
-    reach, mirroring the real `Services.add_cart_item`'s LLM-free contract."""
+    """The two methods the real `LookupProductFactTool`/`AddToCartTool` call —
+    no LLM client anywhere in reach, mirroring the real `Services`' LLM-free
+    contract for both."""
 
     def __init__(self):
         self.calls: list[dict] = []
 
-    def add_cart_item(self, ctx, *, product_name, quantity):
-        self.calls.append({"product_name": product_name, "quantity": quantity})
+    def lookup_product(self, ctx, *, name):
+        return {"productId": "widget", "name": name, "category": "misc",
+                "price": 9.99}
+
+    def add_cart_item(self, ctx, *, product_id, quantity):
+        self.calls.append({"product_id": product_id, "quantity": quantity})
         return {
-            "productId": "p1", "name": product_name, "price": 9.99,
+            "productId": product_id, "name": "Widget", "price": 9.99,
             "quantity": quantity,
         }
 
 
 def test_cart_tool_dispatch_emits_no_extra_llm_call_between_tool_call_and_result():
+    # K-078: the add must be grounded first (K-058 provenance), so the model
+    # looks the product up, then adds the `productId` that lookup returned.
     llm = StubChatLLM([
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart", {"productName": "Widget", "quantity": 2})]),
+            ToolCall("c0", "lookup_product_fact", {"name": "Widget"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": "widget", "quantity": 2})]),
         ChatResult(text="Added 2 Widgets to your cart."),
     ])
     services = FakeCartServices()
-    reg = ToolRegistry([AddToCartTool(services)])
+    reg = ToolRegistry([LookupProductFactTool(services), AddToCartTool(services)])
     ex = _executor(llm=llm, registry=reg)
 
-    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["add_to_cart"]), {})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _config(tools=["lookup_product_fact", "add_to_cart"]), {},
+    )
 
     assert result.output == "Added 2 Widgets to your cart."
-    assert services.calls == [{"product_name": "Widget", "quantity": 2}]
+    assert services.calls == [{"product_id": "widget", "quantity": 2}]
 
     kinds = [k for k, _ in result.trace]
-    # exactly the two routing turns' own llm_prompt/llm_response pairs (one
-    # iteration dispatches the tool, the next produces the final text) —
-    # never more than one pair per iteration.
-    assert kinds.count("llm_prompt") == 2
-    assert kinds.count("llm_response") == 2
-    tool_call_i = kinds.index("tool_call")
-    tool_result_i = kinds.index("tool_result")
-    between = kinds[tool_call_i + 1:tool_result_i]
-    assert "llm_prompt" not in between
-    assert "llm_response" not in between
+    # exactly the three routing turns' own llm_prompt/llm_response pairs (two
+    # iterations dispatch a tool, the last produces the final text) — never
+    # more than one pair per iteration.
+    assert kinds.count("llm_prompt") == 3
+    assert kinds.count("llm_response") == 3
+    call_idx = [i for i, k in enumerate(kinds) if k == "tool_call"]
+    result_idx = [i for i, k in enumerate(kinds) if k == "tool_result"]
+    assert len(call_idx) == len(result_idx) == 2
+    for start, end in zip(call_idx, result_idx):
+        between = kinds[start + 1:end]
+        assert "llm_prompt" not in between
+        assert "llm_response" not in between
 
 
-# ── K-058 (`docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4) ────────
+# ── K-058 under provenance grounding (K-078) ─────────────────────────────────
 #
-# `mistralai/ministral-3-3b` sometimes re-issues an earlier, already-completed
+# `docs/reviews/salesperson-tool-reliability-ml.md` §9.2/§9.4: `mistralai/
+# ministral-3-3b` sometimes re-issues an earlier, already-completed
 # write-mutating tool call (e.g. `add_to_cart`) within a *later* turn's own
-# multi-iteration tool loop, even though that turn's own text never mentions the
-# re-issued call's target. The dispatch-time guard: immediately before executing
-# a write-mutating call whose schema names a resolved single-string target
-# argument (`add_to_cart`/`remove_from_cart`'s `productName`), check whether that
-# argument's value appears — case/whitespace-insensitive, `extraction.
-# normalize_name`, the same shared helper `nameNormalized`/`categoryNormalized`
-# are built with — in the *current turn's own* raw text (its triggering user
-# message plus whatever the model has already said this same turn). If not,
-# hold the call (never dispatch) and surface it via a dedicated observability
-# signal, `_note_off_turn_write_held` — deliberately distinct from `_note_
-# possible_fabrication`, since that signal targets a different failure class
-# (a fact-bearing reply with no domain tool dispatched at all) and must keep
-# meaning "no grounding tool ran" rather than being overloaded for "a tool ran
-# but its target was ungrounded in this turn's text".
+# multi-iteration tool loop. Since K-078 (`docs/plans/salesperson-cart-product-
+# id.md` D3) the cart write tools take a catalog `productId`, and the
+# dispatch-time guard asks a language-independent question: did a grounding
+# tool (`_GROUNDING_SOURCES`) dispatched successfully in THIS node execution
+# return that ID? If not, the call is held (never dispatched), fed back with a
+# conditional reason, and surfaced via `_note_off_turn_write_held` —
+# deliberately distinct from `_note_possible_fabrication`. There is no
+# fail-open: with nothing surfaced, every cart write is held.
+
+MOUSE = "wireless-mouse-pro"
+KEYBOARD = "mechanical-keyboard-k200"
 
 ADD_TO_CART_SCHEMA = {
     "type": "function",
@@ -1605,10 +1622,10 @@ ADD_TO_CART_SCHEMA = {
         "parameters": {
             "type": "object",
             "properties": {
-                "productName": {"type": "string"},
+                "productId": {"type": "string"},
                 "quantity": {"type": "integer"},
             },
-            "required": ["productName"],
+            "required": ["productId"],
         },
     },
 }
@@ -1621,34 +1638,105 @@ REMOVE_FROM_CART_SCHEMA = {
         "parameters": {
             "type": "object",
             "properties": {
-                "productName": {"type": "string"},
+                "productId": {"type": "string"},
                 "quantity": {"type": "integer"},
             },
-            "required": ["productName"],
+            "required": ["productId"],
         },
     },
 }
 
 
+def _plain_schema(name, *, required=()):
+    return {
+        "type": "function",
+        "function": {"name": name, "parameters": {
+            "type": "object",
+            "properties": {p: {"type": "string"} for p in required},
+            "required": list(required),
+        }},
+    }
+
+
+LOOKUP_SCHEMA = _plain_schema("lookup_product_fact", required=("name",))
+FILTER_SCHEMA = _plain_schema("filter_products")
+VIEW_CART_SCHEMA = _plain_schema("view_cart")
+QUERY_GRAPH_DATA_SCHEMA = _plain_schema("query_graph_data")
+
+CART_SCHEMAS = {
+    "add_to_cart": ADD_TO_CART_SCHEMA,
+    "remove_from_cart": REMOVE_FROM_CART_SCHEMA,
+    "lookup_product_fact": LOOKUP_SCHEMA,
+    "filter_products": FILTER_SCHEMA,
+    "view_cart": VIEW_CART_SCHEMA,
+    "query_graph_data": QUERY_GRAPH_DATA_SCHEMA,
+}
+
+
+def _found(product_id, name="X"):
+    return json.dumps({"found": True, "productId": product_id, "name": name,
+                       "category": "accessories", "price": 49.99})
+
+
+def _catalog_listing(*ids):
+    return json.dumps({"items": [{"productId": i, "name": i, "price": 1.0}
+                                 for i in ids]})
+
+
+class _SequencedRegistry(StubRegistry):
+    """Like `StubRegistry`, but a tool's scripted result may be a list, handed
+    out one per dispatch in order (the last one repeats) — so two lookups in
+    one turn can return two different products."""
+
+    def dispatch(self, name, arguments, *, ctx, run):
+        self.dispatched.append((name, arguments))
+        self.dispatched_runs.append(run)
+        result = self._results.get(name, f"result:{name}")
+        if isinstance(result, list):
+            return result.pop(0) if len(result) > 1 else result[0]
+        return result
+
+
+def _cart_registry(results):
+    return _SequencedRegistry(CART_SCHEMAS, results=results)
+
+
+def _cart_config(*tools, max_iter=8):
+    return _config(tools=list(tools), maxIterations=max_iter)
+
+
+def _thread(text):
+    return StubThreadServices(thread_msgs=[
+        {"role": "user", "text": text, "authorId": "u1", "displayName": "Alice"},
+    ])
+
+
+def _writes(reg):
+    return [(n, a) for n, a in reg.dispatched if n in ("add_to_cart", "remove_from_cart")]
+
+
+def _tool_content(llm, call_id):
+    tool_msgs = [m for m in llm.calls[-1]["messages"] if m["role"] == "tool"]
+    return next(m for m in tool_msgs if m["tool_call_id"] == call_id)["content"]
+
+
 def test_off_turn_write_is_held_not_dispatched_on_confirmed_repro_shape(caplog):
-    # ml note §9.2's exact confirmed reproduction: turn 2 ("Also add 1 Mechanical
-    # Keyboard K200") correctly adds the keyboard on its first tool-calling
-    # iteration, then spontaneously re-issues add_to_cart for the mouse — a
-    # product turn 2's own text never mentions — on its very next iteration.
+    # ml note §9.2's confirmed reproduction, ID form (plan §6.1 #12): turn 2
+    # ("Also add 1 Mechanical Keyboard K200") looks the keyboard up, adds it,
+    # then spontaneously re-issues add_to_cart for the mouse — an ID no tool
+    # returned this turn.
     llm = StubChatLLM([
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+            ToolCall("c0", "lookup_product_fact", {"name": "Mechanical Keyboard K200"})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c1", "add_to_cart", {"productId": KEYBOARD, "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="Your cart now includes: Wireless Mouse Pro x2, "
                         "Mechanical Keyboard K200 x1. Total: $149.97"),
     ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
-    )
+    reg = _cart_registry({"lookup_product_fact": _found(KEYBOARD),
+                          "add_to_cart": '{"found": true}'})
     services = StubThreadServices(thread_msgs=[
         {"role": "assistant", "text": "Added 1 Wireless Mouse Pro to your cart.",
          "authorId": "assistant", "displayName": "Bot"},
@@ -1656,118 +1744,437 @@ def test_off_turn_write_is_held_not_dispatched_on_confirmed_repro_shape(caplog):
          "authorId": "u1", "displayName": "Alice"},
     ])
     ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
+    config = _cart_config("lookup_product_fact", "add_to_cart")
 
     with caplog.at_level("WARNING", logger="falkorchat.executor"):
         result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
 
-    # only the legitimately-requested keyboard reaches dispatch — the mouse
-    # (mentioned nowhere in turn 2's own text) is held, not dispatched
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Mechanical Keyboard K200", "quantity": 1}),
-    ]
+    # only the legitimately-requested keyboard reaches dispatch
+    assert _writes(reg) == [("add_to_cart", {"productId": KEYBOARD, "quantity": 1})]
     assert any(k == "off_turn_write_held" for k, _ in result.trace)
     assert any("off-turn write held" in r.getMessage() for r in caplog.records)
 
-    # the held call is fed back to the model as a clean rejection, not a crash —
-    # the same "never crash, never fabricate" posture as QueryGraphDataTool's
-    # abstention shape, just for this different failure class
-    tool_msgs = [m for m in llm.calls[-1]["messages"] if m["role"] == "tool"]
-    held_msg = next(m for m in tool_msgs if m["tool_call_id"] == "c2")
-    assert "held" in held_msg["content"].lower()
-    assert "Wireless Mouse Pro" not in "".join(
-        f"{k}{v}" for k, v in reg.dispatched
+    # the held call is fed back as a clean, conditional rejection — never the
+    # unconditional "look it up and retry" a re-fire could follow (review F1)
+    held = json.loads(_tool_content(llm, "c2"))
+    assert held["held"] is True
+    assert repr(MOUSE) in held["reason"]
+    assert "current message" in held["reason"]
+    assert "do not add it" in held["reason"]
+    # plan-gate F3 / review F1: the add hold points only at the two lookups —
+    # never at view_cart, which cannot ground an add (a model told otherwise
+    # would view the cart, retry, and be held again)
+    assert "lookup_product_fact" in held["reason"]
+    assert "filter_products" in held["reason"]
+    assert "view_cart" not in held["reason"]
+
+
+def test_view_cart_does_not_ground_an_add():
+    # plan §6.1 #13 / D3: the cart's contents are exactly the previous turn's
+    # writes — "it was in the cart I just viewed" is the re-fire shape itself.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c0", "view_cart", {})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({
+        "view_cart": json.dumps({"items": [{"productId": MOUSE, "quantity": 1}],
+                                 "total": 49.99}),
+        "add_to_cart": '{"found": true}',
+    })
+    ex = _executor(llm=llm, registry=reg, services=_thread("one more please"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("view_cart", "add_to_cart"), {"threadId": "t1"},
     )
 
+    assert _writes(reg) == []
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
 
-def test_legitimate_repeat_mentioned_in_turn_text_still_dispatches():
-    # Explicitly NOT the ruled-out fix (§9.4): a genuine later repeat of the same
-    # product, when THIS turn's own text names it, must still dispatch normally —
-    # "add another mouse" three turns later is a real, intended repeat.
+
+def test_view_cart_grounds_a_remove():
+    # plan §6.1 #14: a remove naturally targets what is in the cart.
     llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c0", "view_cart", {})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
-        ChatResult(text="Added another Wireless Mouse Pro."),
-    ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
-    )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Add another Wireless Mouse Pro please",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
-
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
-
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
-    ]
-    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
-    assert result.output == "Added another Wireless Mouse Pro."
-
-
-def test_target_mention_matching_is_case_and_whitespace_insensitive():
-    # Mirrors the nameNormalized/categoryNormalized precedent (extraction.
-    # normalize_name): casefold + whitespace-collapse, not a byte-exact match.
-    llm = StubChatLLM([
-        ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
-        ChatResult(text="Added."),
-    ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
-    )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "please add 1   wireless MOUSE   pro",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
-
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
-
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
-    ]
-    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
-
-
-def test_off_turn_remove_from_cart_is_also_held():
-    # The same guard applies to remove_from_cart (both take a resolved
-    # productName target) — ml note §9's remove-retrigger condition names the
-    # same mechanism for removal, even though it wasn't observed at n=4.
-    llm = StubChatLLM([
-        ChatResult(text="", tool_calls=[
-            ToolCall("c1", "remove_from_cart",
-                     {"productName": "Mechanical Keyboard K200"})]),
+            ToolCall("c1", "remove_from_cart", {"productId": MOUSE})]),
         ChatResult(text="Removed."),
     ])
-    reg = StubRegistry(
-        {"remove_from_cart": REMOVE_FROM_CART_SCHEMA},
-        results={"remove_from_cart": '{"found": true, "removed": true}'},
-    )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Remove the Wireless Mouse Pro",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["remove_from_cart"])
+    reg = _cart_registry({
+        "view_cart": json.dumps({"items": [{"productId": MOUSE, "quantity": 1}],
+                                 "total": 49.99}),
+        "remove_from_cart": '{"found": true, "removed": true}',
+    })
+    ex = _executor(llm=llm, registry=reg, services=_thread("remove the mouse"))
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("view_cart", "remove_from_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("remove_from_cart", {"productId": MOUSE})]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+@pytest.mark.parametrize("with_thread", [True, False])
+def test_write_with_nothing_surfaced_is_held_no_fail_open(with_thread):
+    # plan §6.1 #15: replaces the old fail-open tests — provenance has no
+    # missing-data case, so a first-call add is held with or without thread
+    # context (the old text guard let it through on an empty turn text).
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 2})]),
+        ChatResult(text="Added."),
+    ])
+    reg = _cart_registry({"add_to_cart": _found(MOUSE)})
+    services = _thread("Add 2 Wireless Mouse Pro") if with_thread else None
+    ex = _executor(llm=llm, registry=reg, services=services)
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("add_to_cart"),
+        {"threadId": "t1"} if with_thread else {},
+    )
 
     assert reg.dispatched == []
     assert any(k == "off_turn_write_held" for k, _ in result.trace)
 
 
+def test_off_turn_remove_from_cart_is_also_held():
+    # The same guard applies to remove_from_cart — ml note §9's remove-retrigger
+    # condition names the same mechanism for removal.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "remove_from_cart", {"productId": KEYBOARD})]),
+        ChatResult(text="Removed."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "remove_from_cart": '{"found": true, "removed": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("Remove the Wireless Mouse Pro"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "remove_from_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == []
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
+    held = json.loads(_tool_content(llm, "c1"))
+    assert held["held"] is True
+    assert repr(KEYBOARD) in held["reason"]
+    assert "current message" in held["reason"]
+    assert "do not remove it" in held["reason"]
+    for source in ("lookup_product_fact", "filter_products", "view_cart"):
+        assert source in held["reason"]
+
+
+@pytest.mark.parametrize("lookup_first", [True, False])
+def test_grounding_within_one_response_follows_call_order(lookup_first):
+    # review F2 / D3 ("dispatched earlier in this node execution"): the calls in
+    # one model response run in order against live grounding state, so a lookup
+    # earlier in the same response grounds a later add, and a lookup after it
+    # does not — the path a parallel-calling model takes.
+    lookup = ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})
+    add = ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[lookup, add] if lookup_first else [add, lookup]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("Add a Wireless Mouse Pro"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    held = any(k == "off_turn_write_held" for k, _ in result.trace)
+    if lookup_first:
+        assert _writes(reg) == [("add_to_cart", {"productId": MOUSE, "quantity": 1})]
+        assert not held
+    else:
+        assert _writes(reg) == []
+        assert held
+
+
+def test_guard_tables_cover_the_same_write_tools():
+    # review F3: the success path reads `_GROUNDING_SOURCES[w]` for every `w` in
+    # `_WRITE_TARGET_ARG` on every successful dispatch of any tool, so a write
+    # tool missing a row would fault every agent node at runtime.
+    assert (set(executor_mod._WRITE_TARGET_ARG)
+            == set(executor_mod._GROUNDING_SOURCES)
+            == set(executor_mod._HELD_REASON))
+
+
+def test_legitimate_repeat_after_a_lookup_still_dispatches():
+    # Explicitly NOT the ruled-out fix (§9.4): a genuine later repeat of the
+    # same product ("add another mouse") dispatches once the model looks it up
+    # in this turn — the guard asks where the ID came from, not whether the
+    # product is already in the cart.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
+        ChatResult(text="Added another Wireless Mouse Pro."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Add another Wireless Mouse Pro please"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("add_to_cart", {"productId": MOUSE, "quantity": 1})]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+    assert result.output == "Added another Wireless Mouse Pro."
+
+
+def test_hallucinated_or_translated_slug_is_held_after_a_catalog_listing():
+    # plan §6.1 #16: `filter_products` surfaced the catalog; a translated slug
+    # the model built itself is not in it and is held, the real one dispatches.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c0", "filter_products", {})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": "mouse-sem-fio-pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE})]),
+        ChatResult(text="Adicionado."),
+    ])
+    reg = _cart_registry({"filter_products": _catalog_listing(MOUSE, KEYBOARD),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("Adicione o mouse sem fio"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("filter_products", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("add_to_cart", {"productId": MOUSE})]
+    assert [k for k, _ in result.trace].count("off_turn_write_held") == 1
+
+
+def test_grounding_is_language_independent_via_the_lookup_miss_catalog():
+    # plan §6.1 #17 / D2: the pt-BR trigger never names the English product; a
+    # translated-name lookup misses, its `catalog` list carries the real ID,
+    # and the add of that ID dispatches.
+    miss = json.dumps({
+        "found": False, "hint": "no exact match",
+        "catalog": [{"productId": KEYBOARD, "name": "Mechanical Keyboard K200"},
+                    {"productId": MOUSE, "name": "Wireless Mouse Pro"}],
+    })
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Mouse sem fio Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
+        ChatResult(text="Adicionei o Wireless Mouse Pro ao seu carrinho."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": miss, "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Adicione o mouse sem fio, por favor"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("add_to_cart", {"productId": MOUSE, "quantity": 1})]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_target_id_matching_normalizes_both_sides():
+    # plan §6.1 #18: `normalize_product_id` on the surfaced value AND the call's
+    # argument — a surfaced `Wireless-Mouse-Pro ` and a called
+    # `wireless-mouse-pro` (and vice versa) compare equal.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": "Wireless-Mouse-Pro ",
+                                           "quantity": 1})]),
+        ChatResult(text="Added."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(" WIRELESS-mouse-pro"),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("add the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [
+        ("add_to_cart", {"productId": "Wireless-Mouse-Pro ", "quantity": 1}),
+    ]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+class _RaiseOnToolRegistry(_SequencedRegistry):
+    """Raises `exc` on every dispatch of `raise_on`; everything else as
+    `_SequencedRegistry`."""
+
+    def __init__(self, schemas, results, *, raise_on, exc):
+        super().__init__(schemas, results)
+        self._raise_on = raise_on
+        self._exc = exc
+
+    def dispatch(self, name, arguments, *, ctx, run):
+        if name == self._raise_on:
+            self.dispatched.append((name, arguments))
+            raise self._exc
+        return super().dispatch(name, arguments, ctx=ctx, run=run)
+
+
+def test_a_failed_grounding_dispatch_surfaces_nothing():
+    # plan §6.1 #19: only a successful dispatch surfaces IDs. The lookup's
+    # model-correctable `ServiceError` is absorbed as a re-prompt and grounds
+    # nothing, so the following add is held.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE})]),
+        ChatResult(text="Sorry."),
+    ])
+    reg = _RaiseOnToolRegistry(
+        CART_SCHEMAS, {"lookup_product_fact": _found(MOUSE),
+                       "add_to_cart": '{"found": true}'},
+        raise_on="lookup_product_fact", exc=UnknownMemberError(["n/a"]),
+    )
+    ex = _executor(llm=llm, registry=reg, services=_thread("add the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == []
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_a_held_write_and_a_non_json_result_surface_nothing_and_do_not_raise():
+    # plan §6.1 #19: a write never grounds itself (no self-source rows in
+    # `_GROUNDING_SOURCES`), so a HELD add retried is held again; a
+    # grounding tool's non-JSON result (e.g. a plain string) contributes
+    # nothing and does not crash the collector.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "add_to_cart", {"productId": MOUSE})]),
+        ChatResult(text="", tool_calls=[ToolCall("c1", "query_graph_data", {})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE})]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({
+        "add_to_cart": _found(MOUSE),
+        "query_graph_data": f"Your cart is empty; {MOUSE} is not in it.",
+    })
+    ex = _executor(llm=llm, registry=reg, services=_thread("add the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("add_to_cart", "query_graph_data"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == []
+    assert [k for k, _ in result.trace].count("off_turn_write_held") == 2
+
+
+def test_dotted_and_nested_product_id_keys_ground_an_add():
+    # plan §6.1 #20 / §4: a `query_graph_data` row shaped `{"p.productId": …}`
+    # (K-079 F2) grounds an add with no further change; nested dicts/lists are
+    # walked.
+    rows = json.dumps({"items": [{"p.productId": MOUSE, "p.name": "Wireless Mouse Pro"}],
+                       "meta": {"related": [{"deep": {"productId": KEYBOARD}}]}})
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall("c0", "query_graph_data", {})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE}),
+            ToolCall("c2", "add_to_cart", {"productId": KEYBOARD})]),
+        ChatResult(text="Added both."),
+    ])
+    reg = _cart_registry({"query_graph_data": rows, "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("add both"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("query_graph_data", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("add_to_cart", {"productId": MOUSE}),
+                            ("add_to_cart", {"productId": KEYBOARD})]
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_collect_target_values_contract():
+    # `_collect_target_values` directly: exact and dotted keys, nested walk,
+    # normalization, blank and non-string values dropped, non-JSON → empty.
+    collect = executor_mod._collect_target_values
+    content = json.dumps({
+        "productId": " A ", "x.productId": "b", "productIdish": "no",
+        "nested": [{"productId": ""}, {"productId": 5}, [{"q.productId": "C"}]],
+    })
+    assert collect(content, "productId") == {"a", "b", "c"}
+    assert collect("not json at all", "productId") == set()
+    assert collect("", "productId") == set()
+    assert collect(json.dumps(["productId"]), "productId") == set()
+
+
+@pytest.mark.parametrize("bad_value", ["", "   ", 5, None])
+def test_empty_or_non_string_product_id_is_held(bad_value):
+    # plan §6.1 #21: no fail-open on an empty/non-string ID (the old guard
+    # skipped a non-string or empty target entirely), even after a lookup.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": bad_value})]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("add the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == []
+    assert any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def test_missing_product_id_takes_the_required_argument_reprompt():
+    # plan §6.1 #21 / D1: a call sending only the retired `productName` fails
+    # the existing required-argument check — re-prompted, never held.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productName": "Wireless Mouse Pro"})]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({"add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("add the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("add_to_cart"), {"threadId": "t1"},
+    )
+
+    assert reg.dispatched == []
+    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+    content = _tool_content(llm, "c1")
+    assert "missing required argument(s) ['productId']" in content
+
+
 def test_write_tool_with_no_resolved_target_argument_is_unaffected():
-    # place_order/clear_cart carry no product-name-shaped target argument, so
-    # the guard has nothing to check and never holds them regardless of turn text.
+    # place_order/clear_cart carry no catalog-target argument, so the guard has
+    # nothing to check and never holds them, with nothing surfaced at all.
     schema = {
         "type": "function",
         "function": {"name": "place_order", "parameters": {
@@ -1780,166 +2187,176 @@ def test_write_tool_with_no_resolved_target_argument_is_unaffected():
     ])
     reg = StubRegistry({"place_order": schema},
                        results={"place_order": '{"orderId": "o1"}'})
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "that's everything, thanks",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["place_order"])
+    ex = _executor(llm=llm, registry=reg, services=_thread("that's everything, thanks"))
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _config(tools=["place_order"]), {"threadId": "t1"},
+    )
 
     assert reg.dispatched == [("place_order", {})]
     assert not any(k == "off_turn_write_held" for k, _ in result.trace)
 
 
-def test_no_thread_context_available_does_not_hold_write_calls():
-    # Backward compatibility: when no thread text is obtainable at all (the
-    # offline-stub path several pre-existing tests use — no `services` wired,
-    # or no `threadId` in run_ctx), the guard has no information to act on and
-    # must not block — failing open on missing data, not closed. Mirrors
-    # `test_cart_tool_dispatch_emits_no_extra_llm_call_between_tool_call_and_
-    # result` above, which relies on exactly this default.
+def test_held_refire_passes_after_a_fresh_lookup_accepted_depth():
+    # plan §6.1 #26 — ACCEPTED behaviour, pinned, not a bug test: K-058 under ID
+    # grounding is one decision deep (plan §8 R3, accepted by the stakeholder
+    # with the conditional hold message and the C2 live measure). After the
+    # mouse re-fire is held, a model that ignores the conditional reason, looks
+    # the mouse up and re-adds it gets through.
     llm = StubChatLLM([
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Widget", "quantity": 2})]),
-        ChatResult(text="Added."),
+            ToolCall("c0", "lookup_product_fact", {"name": "Mechanical Keyboard K200"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": KEYBOARD, "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c3", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c4", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
+        ChatResult(text="Done."),
     ])
-    reg = StubRegistry({"add_to_cart": ADD_TO_CART_SCHEMA},
-                       results={"add_to_cart": '{"found": true}'})
-    ex = _executor(llm=llm, registry=reg)  # no services — no thread context
+    reg = _cart_registry({"lookup_product_fact": [_found(KEYBOARD), _found(MOUSE)],
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Also add 1 Mechanical Keyboard K200"))
 
-    result = ex._run_agent_node(CTX, RUN, STEP, _config(tools=["add_to_cart"]), {})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
 
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Widget", "quantity": 2}),
+    assert _writes(reg) == [
+        ("add_to_cart", {"productId": KEYBOARD, "quantity": 1}),
+        ("add_to_cart", {"productId": MOUSE, "quantity": 1}),
     ]
-    assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+    kinds = [k for k, _ in result.trace]
+    assert kinds.count("off_turn_write_held") == 1
+    assert "same_turn_write_held" not in kinds  # the held add never seeded K-061
+
+
+def test_surfaced_ids_do_not_outlive_the_node_execution():
+    # plan §6.1 #27 (review F4/M10): grounding is per node execution, never on
+    # the process-wide singleton executor — an ID surfaced in one turn does not
+    # ground the next turn's add.
+    llm = StubChatLLM([
+        # turn 1
+        ChatResult(text="", tool_calls=[
+            ToolCall("c0", "lookup_product_fact", {"name": "Wireless Mouse Pro"})]),
+        ChatResult(text="It's $49.99."),
+        # turn 2
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE})]),
+        ChatResult(text="Done."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("how much is the mouse?"))
+    config = _cart_config("lookup_product_fact", "add_to_cart")
+
+    first = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+    second = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+
+    assert first.output == "It's $49.99."
+    assert _writes(reg) == []
+    assert any(k == "off_turn_write_held" for k, _ in second.trace)
 
 
 # ── K-061 (`docs/reviews/salesperson-tool-reliability-ml.md` §12) ─────────────
 #
 # Distinct from K-058 above by design, not an oversight: K-058 holds an *off-turn*
-# re-fire of a *previous* turn's already-completed write, checked by asking
-# whether the target is mentioned anywhere in *this* turn's own text. This is a
+# re-fire of a *previous* turn's already-completed write, by asking whether a
+# grounding tool returned the target ID in *this* node execution. This is a
 # *same-turn* re-fire of the model's *own current-turn* successful write, on a
-# target genuinely mentioned in this turn's text — exactly the case K-058's
-# check does not (and structurally cannot) hold. §12.3's confirmed repro shape:
-# the model's own multi-iteration tool loop dispatches `add_to_cart` for a
-# product once, successfully, then re-issues the identical call again later in
-# that same loop, doubling the cart quantity the customer never asked to double.
+# target genuinely surfaced this turn — exactly the case K-058's check does not
+# (and structurally cannot) hold. §12.3's confirmed repro shape: the model's own
+# multi-iteration tool loop dispatches `add_to_cart` for a product once,
+# successfully, then re-issues the identical call again later in that same
+# loop, doubling the cart quantity the customer never asked to double. Every
+# test here surfaces its IDs first (a `lookup_product_fact` call), since K-058
+# runs before K-061 and would otherwise hold everything.
+
+
+def _lookup_first(*product_ids):
+    """One iteration whose lookups surface each of `product_ids`."""
+    return ChatResult(text="", tool_calls=[
+        ToolCall(f"l{i}", "lookup_product_fact", {"name": pid})
+        for i, pid in enumerate(product_ids)
+    ])
+
 
 def test_same_turn_exact_repeat_of_own_successful_write_is_held(caplog):
-    # ml.md §12.3's confirmed shape: turn 2's own loop dispatches
-    # add_to_cart(Mechanical Keyboard K200, qty=1) successfully on iteration 1,
-    # then re-issues the IDENTICAL call again on iteration 2. The target is
-    # genuinely mentioned in this turn's own text, so K-058's guard would not
-    # (and should not) hold it — this is a different mechanism.
+    # ml.md §12.3's confirmed shape, ID form: the keyboard is surfaced, added
+    # on one iteration, then the IDENTICAL call is re-issued on the next.
     llm = StubChatLLM([
+        _lookup_first(KEYBOARD),
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+            ToolCall("c1", "add_to_cart", {"productId": KEYBOARD, "quantity": 1})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+            ToolCall("c2", "add_to_cart", {"productId": KEYBOARD, "quantity": 1})]),
         ChatResult(text="Mechanical Keyboard K200 x2 added. Total: $179.98"),
     ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
-    )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Also add 1 Mechanical Keyboard K200",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
+    reg = _cart_registry({"lookup_product_fact": _found(KEYBOARD),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Also add 1 Mechanical Keyboard K200"))
+    config = _cart_config("lookup_product_fact", "add_to_cart")
 
     with caplog.at_level("WARNING", logger="falkorchat.executor"):
         result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
 
-    # only the first dispatch reaches the tool — the identical repeat is held,
-    # not dispatched, so the cart quantity is never doubled
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Mechanical Keyboard K200", "quantity": 1}),
-    ]
+    assert _writes(reg) == [("add_to_cart", {"productId": KEYBOARD, "quantity": 1})]
     assert any(k == "same_turn_write_held" for k, _ in result.trace)
     assert not any(k == "off_turn_write_held" for k, _ in result.trace)
     assert any("same-turn write held" in r.getMessage() for r in caplog.records)
-
-    # the held repeat is fed back to the model as a clean rejection, not a
-    # crash and not a second dispatch
-    tool_msgs = [m for m in llm.calls[-1]["messages"] if m["role"] == "tool"]
-    held_msg = next(m for m in tool_msgs if m["tool_call_id"] == "c2")
-    assert "held" in held_msg["content"].lower()
+    assert "held" in _tool_content(llm, "c2").lower()
 
 
-def test_same_turn_different_args_for_same_target_still_dispatches_both():
-    # A customer who says "add 1 wireless mouse, then actually make that 2" in
-    # one message can legitimately produce two add_to_cart calls for the same
-    # product with DIFFERENT quantities in the same turn — the guard must key
-    # on the full argument set, not just the resolved target, so both go
-    # through rather than the second being wrongly held.
+def test_same_turn_different_quantity_for_same_target_still_dispatches_both():
+    # "add 1 wireless mouse, then actually make that 2": two calls for the same
+    # product with DIFFERENT quantities — both dispatch.
     llm = StubChatLLM([
+        _lookup_first(MOUSE),
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 2})]),
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE, "quantity": 2})]),
         ChatResult(text="Updated to 2 Wireless Mouse Pro."),
     ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("add 1 wireless mouse pro, actually make that 2"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
     )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "add 1 wireless mouse pro, actually make that 2",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
-
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 2}),
+    assert _writes(reg) == [
+        ("add_to_cart", {"productId": MOUSE, "quantity": 1}),
+        ("add_to_cart", {"productId": MOUSE, "quantity": 2}),
     ]
     assert not any(k == "same_turn_write_held" for k, _ in result.trace)
 
 
 def test_same_turn_dedup_does_not_hold_an_off_turn_held_call():
-    # A call that was itself HELD by K-058 (off-turn) must not be treated as
-    # "already successfully dispatched" — only a genuinely successful dispatch
-    # seeds the same-turn dedup set. Turn text never mentions the mouse at
-    # all, so both mouse calls are off-turn holds (K-058), not K-061 holds.
-    # (This covers only the K-058-held branch, which returns before
-    # `dispatch_key` is even computed; the sibling test below covers the
-    # separate "a failed dispatch attempt must not poison the set either"
-    # branch, per `docs/reviews/salesperson-tool-reliability2-impl.md` MAJOR 1.)
+    # A call HELD by K-058 must not seed the K-061 set — nothing surfaced the
+    # mouse, so both mouse calls are K-058 holds, not K-061 holds.
     llm = StubChatLLM([
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="Done."),
     ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
-    )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Also add 1 Mechanical Keyboard K200",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
+    reg = _cart_registry({"add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Also add 1 Mechanical Keyboard K200"))
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("add_to_cart"), {"threadId": "t1"},
+    )
 
     assert reg.dispatched == []
     kinds = [k for k, _ in result.trace]
@@ -1947,8 +2364,8 @@ def test_same_turn_dedup_does_not_hold_an_off_turn_held_call():
     assert "same_turn_write_held" not in kinds
 
 
-class _FailOnceThenSucceedRegistry(StubRegistry):
-    """`add_to_cart`'s FIRST dispatch attempt raises a model-correctable
+class _FailOnceThenSucceedRegistry(_SequencedRegistry):
+    """The FIRST dispatch of `fail_tool` raises a model-correctable
     `ServiceError` (a transient dispatch failure, e.g. `UnknownMemberError`);
     every dispatch after that succeeds normally, mirroring the model's own
     bounded re-prompt-and-retry convention (`_handle_tool_call`'s
@@ -1957,13 +2374,14 @@ class _FailOnceThenSucceedRegistry(StubRegistry):
     successful one may (MAJOR 1, `docs/reviews/
     salesperson-tool-reliability2-impl.md`)."""
 
-    def __init__(self, schemas, results, *, exc):
+    def __init__(self, schemas, results, *, fail_tool, exc):
         super().__init__(schemas, results)
+        self._fail_tool = fail_tool
         self._exc = exc
         self._raised = False
 
     def dispatch(self, name, arguments, *, ctx, run):
-        if not self._raised:
+        if name == self._fail_tool and not self._raised:
             self._raised = True
             self.dispatched.append((name, arguments))
             raise self._exc
@@ -1971,129 +2389,118 @@ class _FailOnceThenSucceedRegistry(StubRegistry):
 
 
 def test_same_turn_dedup_is_not_seeded_by_a_failed_dispatch_attempt():
-    # MAJOR 1 (`docs/reviews/salesperson-tool-reliability2-impl.md`): the code
-    # is already correct — `dispatched_writes.add(dispatch_key)` sits strictly
-    # after the try/except around `self._tools.dispatch`, so a call that RAISES
-    # a model-correctable `ServiceError` must not seed the same-turn dedup set.
-    # This pins that down: the model's own bounded re-prompt has it retry with
-    # the IDENTICAL arguments after the first attempt fails, and that retry
-    # must actually reach the tool — not be wrongly held as "already
-    # dispatched this turn" just because an earlier, failed attempt used the
-    # same arguments.
+    # MAJOR 1 (`docs/reviews/salesperson-tool-reliability2-impl.md`):
+    # `dispatched_writes.add(dispatch_key)` sits strictly after the try/except
+    # around `self._tools.dispatch`, so a call that RAISES a model-correctable
+    # `ServiceError` must not seed the same-turn dedup set — the identical
+    # retry must reach the tool.
     llm = StubChatLLM([
+        _lookup_first(MOUSE),
         ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c1", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
+            ToolCall("c2", "add_to_cart", {"productId": MOUSE, "quantity": 1})]),
         ChatResult(text="Added 1 Wireless Mouse Pro to your cart."),
     ])
     reg = _FailOnceThenSucceedRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        {"add_to_cart": '{"found": true}'},
-        exc=UnknownMemberError(["n/a"]),
+        CART_SCHEMAS,
+        {"lookup_product_fact": _found(MOUSE), "add_to_cart": '{"found": true}'},
+        fail_tool="add_to_cart", exc=UnknownMemberError(["n/a"]),
     )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Add 1 Wireless Mouse Pro please",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Add 1 Wireless Mouse Pro please"))
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
+    )
 
-    # the failed first attempt, then the identical-argument retry — BOTH
-    # reach the tool; the retry is not wrongly held as an already-dispatched
-    # same-turn repeat
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
-        ("add_to_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
+    assert _writes(reg) == [
+        ("add_to_cart", {"productId": MOUSE, "quantity": 1}),
+        ("add_to_cart", {"productId": MOUSE, "quantity": 1}),
     ]
     assert not any(k == "same_turn_write_held" for k, _ in result.trace)
     assert result.output == "Added 1 Wireless Mouse Pro to your cart."
 
 
-def test_same_turn_omitted_and_explicit_default_quantity_are_the_same_key():
-    # `ml.md` §15.2's ground-truth rep-20 loophole: `add_to_cart`'s `quantity`
-    # is optional and defaults to 1 INSIDE THE TOOL WRAPPER
-    # (`tools.py` `AddToCartTool.run`, `arguments.get("quantity") or 1`) —
-    # after the K-061 guard's own dedup key was computed from the raw,
-    # pre-default arguments. The model's own two calls here are semantically
-    # identical ("add 1 keyboard") but syntactically distinct as raw JSON —
-    # one omits `quantity` entirely, the other supplies `1` explicitly — so
-    # the pre-fix guard keyed them differently and let both dispatch,
-    # doubling the cart line the customer never asked to double. This is NOT
-    # the deliberate "different quantity, both must dispatch" carve-out
-    # (`test_same_turn_different_args_for_same_target_still_dispatches_both`
-    # above) — both calls request quantity 1; the difference is purely the
-    # model's own inconsistent tool-call formatting.
+@pytest.mark.parametrize("first, second", [
+    # ml.md §15.2's rep-20 loophole: omitted vs explicit default quantity
+    ({"productId": KEYBOARD}, {"productId": KEYBOARD, "quantity": 1}),
+    # K-078 D4: the ID's letter case/whitespace is normalized in the key
+    ({"productId": KEYBOARD}, {"productId": " Mechanical-Keyboard-K200", "quantity": 1}),
+    # K-078 D4: an ignored extra argument (the retired `productName`) is dropped
+    ({"productId": KEYBOARD, "productName": "x"}, {"productId": KEYBOARD}),
+])
+def test_same_turn_semantically_identical_adds_share_one_key(first, second):
+    # plan §6.1 #22: the key projects onto exactly what `AddToCartTool.run`
+    # honours, so these pairs are one request and the second is held.
     llm = StubChatLLM([
-        ChatResult(text="", tool_calls=[
-            ToolCall("c1", "add_to_cart",
-                     {"productName": "Mechanical Keyboard K200"})]),
-        ChatResult(text="", tool_calls=[
-            ToolCall("c2", "add_to_cart",
-                     {"productName": "Mechanical Keyboard K200", "quantity": 1})]),
+        _lookup_first(KEYBOARD),
+        ChatResult(text="", tool_calls=[ToolCall("c1", "add_to_cart", first)]),
+        ChatResult(text="", tool_calls=[ToolCall("c2", "add_to_cart", second)]),
         ChatResult(text="Mechanical Keyboard K200 added. Total: $89.99"),
     ])
-    reg = StubRegistry(
-        {"add_to_cart": ADD_TO_CART_SCHEMA},
-        results={"add_to_cart": '{"found": true}'},
+    reg = _cart_registry({"lookup_product_fact": _found(KEYBOARD),
+                          "add_to_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("Also add a Mechanical Keyboard K200"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "add_to_cart"),
+        {"threadId": "t1"},
     )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "Also add a Mechanical Keyboard K200",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["add_to_cart"])
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
-
-    # only the first (omitted-quantity) call reaches the tool — the second,
-    # semantically-identical explicit-quantity-1 repeat is held, not
-    # dispatched, so the cart quantity is never doubled
-    assert reg.dispatched == [
-        ("add_to_cart", {"productName": "Mechanical Keyboard K200"}),
-    ]
+    assert _writes(reg) == [("add_to_cart", first)]
     assert any(k == "same_turn_write_held" for k, _ in result.trace)
 
 
-def test_same_turn_remove_omitted_quantity_and_explicit_quantity_are_different_keys():
-    # Correctness case this fix must NOT regress: `remove_from_cart`'s
-    # `quantity` has NO wrapper-level default at all — an omitted `quantity`
-    # is passed through unchanged as `None` (`tools.py`
-    # `RemoveFromCartTool.run`, `arguments.get("quantity")`), and `None`
-    # means "remove the whole line" downstream, a semantically DISTINCT
-    # request from any specific quantity number. A resolved-argument fix
-    # that collapsed every optional argument to some canonical default would
-    # wrongly conflate these two calls into one dedup key; they must stay
-    # two different keys, and both must dispatch.
+@pytest.mark.parametrize("first, second", [
+    ({"productId": MOUSE, "quantity": 1}, {"productId": MOUSE}),
+    ({"productId": MOUSE, "quantity": 0}, {"productId": MOUSE}),
+])
+def test_same_turn_remove_omitted_and_explicit_quantity_are_different_keys(first, second):
+    # plan §6.1 #23 / D4 (review F8): `remove_from_cart`'s `quantity` has NO
+    # wrapper-level default — omitted means "remove the whole line", a distinct
+    # request from any explicit value (including 0). Both dispatch.
     llm = StubChatLLM([
-        ChatResult(text="", tool_calls=[
-            ToolCall("c1", "remove_from_cart",
-                     {"productName": "Wireless Mouse Pro", "quantity": 1})]),
-        ChatResult(text="", tool_calls=[
-            ToolCall("c2", "remove_from_cart",
-                     {"productName": "Wireless Mouse Pro"})]),
+        _lookup_first(MOUSE),
+        ChatResult(text="", tool_calls=[ToolCall("c1", "remove_from_cart", first)]),
+        ChatResult(text="", tool_calls=[ToolCall("c2", "remove_from_cart", second)]),
         ChatResult(text="Removed 1, then removed the rest of the line."),
     ])
-    reg = StubRegistry(
-        {"remove_from_cart": REMOVE_FROM_CART_SCHEMA},
-        results={"remove_from_cart": '{"found": true}'},
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "remove_from_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("remove 1 wireless mouse pro, then the rest"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "remove_from_cart"),
+        {"threadId": "t1"},
     )
-    services = StubThreadServices(thread_msgs=[
-        {"role": "user", "text": "remove 1 wireless mouse pro, actually remove "
-                                  "the rest of it too",
-         "authorId": "u1", "displayName": "Alice"},
-    ])
-    ex = _executor(llm=llm, registry=reg, services=services)
-    config = _config(tools=["remove_from_cart"])
 
-    result = ex._run_agent_node(CTX, RUN, STEP, config, {"threadId": "t1"})
-
-    assert reg.dispatched == [
-        ("remove_from_cart", {"productName": "Wireless Mouse Pro", "quantity": 1}),
-        ("remove_from_cart", {"productName": "Wireless Mouse Pro"}),
-    ]
+    assert _writes(reg) == [("remove_from_cart", first), ("remove_from_cart", second)]
     assert not any(k == "same_turn_write_held" for k, _ in result.trace)
+
+
+def test_same_turn_remove_identical_repeat_with_differently_cased_id_is_held():
+    # D4: the remove key normalizes the ID too, so a case-only variant of an
+    # already-dispatched remove is the same request.
+    llm = StubChatLLM([
+        _lookup_first(MOUSE),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", "remove_from_cart", {"productId": MOUSE})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", "remove_from_cart", {"productId": "WIRELESS-MOUSE-PRO"})]),
+        ChatResult(text="Removed."),
+    ])
+    reg = _cart_registry({"lookup_product_fact": _found(MOUSE),
+                          "remove_from_cart": '{"found": true}'})
+    ex = _executor(llm=llm, registry=reg, services=_thread("remove the mouse"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("lookup_product_fact", "remove_from_cart"),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [("remove_from_cart", {"productId": MOUSE})]
+    assert any(k == "same_turn_write_held" for k, _ in result.trace)

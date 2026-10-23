@@ -3455,7 +3455,10 @@ class Repository:
         product to the `productId` a `CartItem` is keyed on (`workflow-cart-
         and-totals-graph.md` §2). K-052's original shape never needed it (pure
         fact lookup, no cart concept yet); the `Product` node always carried
-        the property, it just wasn't selected.
+        the property, it just wasn't selected. Since K-078 the cart writes
+        resolve by `productId` (`lookup_products_by_id`), not through this
+        lookup; the projected `productId` is now what `lookup_product_fact`
+        hands the model to copy into `add_to_cart`/`remove_from_cart`.
         """
         res = self._reference().ro_query(
             "MATCH (p:Product {nameNormalized: $nameNormalized}) "
