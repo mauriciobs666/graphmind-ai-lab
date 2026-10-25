@@ -2706,8 +2706,15 @@ that normalizes to `""` to `NULL`, and `FilterProductsTool` (`_coerce_price_boun
 `minPrice`/`maxPrice` to `None` and a numeric string (`"50"`) to that `float`; any other string is
 passed through unchanged. A non-null string would survive `coalesce` and match nothing
 (`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1: the model sent `{"category": ""}` for
-"any category"). Zero rows back means "nothing matches" (AC-3 abstention);
-the service maps that to `{"items": [], "finding": "no matching products found"}`. Ordered by price
+"any category"). Zero rows back means "nothing matches" (AC-3 abstention), and the **tool**
+(`FilterProductsTool`) builds the result. When a `category` was given, it first asks whether that
+category exists at all by re-running this same query with that `category` only (no price bounds) and
+`$limit = 1` (`Services.has_category`, `docs/plans/salesperson-cart-product-id2.md` D8). An unknown
+category returns `{"items": [], "finding": "no catalog category has that name", "hint": …,
+"catalog": […]}`, where `catalog` is the price-free `{productId, name}` list a
+`lookup_product_fact` miss carries. Every other empty result, whether a known category emptied by
+its price range or a blank or omitted category, is `{"items": [], "finding": "no matching products
+found"}`. The query is unchanged. Ordered by price
 ascending — a stable, predictable order for a listing shape, cheap once index-backed.
 
 **Case/whitespace-insensitive `category` (live-discovered fix, 2026-08-28).** The original shape

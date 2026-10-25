@@ -4313,6 +4313,40 @@ def test_catalog_index_is_id_and_name_only_sorted_by_name():
     ]
 
 
+# ── K-078 id2 D8.1: has_category ──────────────────────────────────────────────
+
+
+def test_has_category_is_one_bound_free_repository_read_with_limit_one():
+    """id2 §6.1 #28: one `repository.filter_products` call, `category` raw,
+    no price bounds, `limit=1`; `True` iff that call returned a row. The
+    call shape is a contract pin (N1): it is how "unknown category" stays
+    distinguishable from "known category, nothing in this price range"."""
+    repo = FakeRepo()
+    repo.products = [{"productId": "wireless-mouse", "name": "Wireless Mouse",
+                      "category": "Peripherals", "price": 25.0}]
+    svc = make_service(repo)
+
+    assert svc.has_category(CTX, category="Peripherals") is True
+    assert repo.calls == [("filter_products", "Peripherals", None, None, 1)]
+
+    repo.products = []
+    repo.calls.clear()
+    assert svc.has_category(CTX, category="Peripherals") is False
+    assert repo.calls == [("filter_products", "Peripherals", None, None, 1)]
+
+
+def test_has_category_passes_the_raw_category_through_unnormalized():
+    """id2 §6.1 #29: the repository owns category normalization (K-058's
+    "no second normalizer"); the service never normalizes. The repository
+    side is pinned by `test_repository.py`'s `wf_repo` tests, not here."""
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    svc.has_category(CTX, category="  peripherals ")
+
+    assert repo.calls == [("filter_products", "  peripherals ", None, None, 1)]
+
+
 # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────────
 #
 # `docs/plans/workflow-cart-and-totals.md` §3.3 — the explicit `ensure_customer`/

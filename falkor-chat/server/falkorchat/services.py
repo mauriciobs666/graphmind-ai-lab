@@ -2906,6 +2906,22 @@ class Services:
             limit=limit,
         )
 
+    def has_category(self, ctx: CallContext, *, category: str) -> bool:
+        """Whether any catalog product is in `category` (K-078 id2 D8.1) — how
+        `filter_products`' tool tells an unknown category from a known one
+        emptied by its price range.
+
+        One `repository.filter_products` read with the raw `category`, **no**
+        price bounds and `limit=1` (no new Cypher). The repository owns the
+        match (`normalize_name` against `Product.categoryNormalized`); this
+        method never normalizes, so there is no second normalizer (K-058). A
+        blank category is treated as omitted there, so `""` answers `True` on
+        a non-empty catalog.
+        """
+        return bool(self._repo.filter_products(
+            category=category, min_price=None, max_price=None, limit=1,
+        ))
+
     def lookup_product_by_id(
         self, ctx: CallContext, *, product_id: Any,
     ) -> dict[str, Any] | None:

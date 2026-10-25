@@ -62,7 +62,8 @@ class StubServices:
                  products_by_name=None, filter_result=None,
                  add_result=_UNSET, remove_result=_UNSET,
                  cart_result=None, order_result=_UNSET,
-                 profile_result=None, structured_query_rows=None, catalog=None):
+                 profile_result=None, structured_query_rows=None, catalog=None,
+                 has_category=True):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -77,6 +78,9 @@ class StubServices:
         # K-078 D2: what `catalog_index` returns on a `lookup_product_fact` miss
         self._catalog = catalog or []
         self.catalog_reads: int = 0
+        # K-078 id2 D8.1: what `has_category` answers (default: a known category)
+        self._has_category = has_category
+        self.category_checks: list = []
         # §16 Cart / Order (K-053 M6) — set the *_result kwargs to script a
         # call's return value; every call is recorded so the tool's
         # argument-mapping into the service (productId/quantity keyword
@@ -134,6 +138,10 @@ class StubServices:
     def catalog_index(self, ctx):
         self.catalog_reads += 1
         return list(self._catalog)
+
+    def has_category(self, ctx, *, category):
+        self.category_checks.append(category)
+        return self._has_category
 
     def add_cart_item(self, ctx, *, product_id, quantity):
         self.added.append({"product_id": product_id, "quantity": quantity})
@@ -548,15 +556,106 @@ def test_filter_products_returns_items():
         {"category": "audio", "min_price": 50.0, "max_price": 150.0,
          "limit": DEFAULT_FILTER_LIMIT}
     ]
+    # id2 plan §8 R-E: a non-empty result never pays the category re-check
+    # or the catalog listing (impl review m1)
+    assert svc.category_checks == []
+    assert svc.catalog_reads == 0
 
 
-def test_filter_products_abstains_when_nothing_matches():
-    svc = StubServices(filter_result=[])
+# K-078 id2 D8.2: an empty result whose `category` the catalog doesn't know
+# carries D2's recovery (a filter-specific hint and the price-free catalog).
+# This pair replaces the old `test_filter_products_abstains_when_nothing_matches`,
+# whose `"nonexistent"` category is now the miss branch.
+
+_MISS_CATALOG = [
+    {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker"},
+    {"productId": "wireless-mouse-pro", "name": "Wireless Mouse Pro"},
+]
+
+
+def _assert_category_miss(out, svc):
+    assert out == {
+        "items": [],
+        "finding": tools.FILTER_CATEGORY_MISS_FINDING,
+        "hint": tools.FILTER_CATEGORY_MISS_HINT,
+        "catalog": _MISS_CATALOG,
+    }
+    assert all(set(row) == {"productId", "name"} for row in out["catalog"])
+    assert svc.catalog_reads == 1
+
+
+def test_filter_products_unknown_category_lists_the_catalog_with_a_hint():
+    """id2 §6.1 #30, the DEF-2 reproduction: S7's pt-BR call shape — a
+    translated product name sent as `category`, with price bounds."""
+    svc = StubServices(filter_result=[], has_category=False, catalog=_MISS_CATALOG)
     tool = FilterProductsTool(svc)
 
-    out = json.loads(tool.run({"category": "nonexistent"}, ctx=CTX, run={}))
+    out = json.loads(tool.run(
+        {"category": "Mouse sem fio Pro", "minPrice": 0, "maxPrice": 100},
+        ctx=CTX, run={},
+    ))
+
+    _assert_category_miss(out, svc)
+    assert svc.category_checks == ["Mouse sem fio Pro"]
+
+
+def test_filter_products_unknown_category_without_price_bounds_is_a_miss_too():
+    """id2 §6.1 #31."""
+    svc = StubServices(filter_result=[], has_category=False, catalog=_MISS_CATALOG)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run({"category": "Mouse sem fio"}, ctx=CTX, run={}))
+
+    _assert_category_miss(out, svc)
+    assert svc.category_checks == ["Mouse sem fio"]
+
+
+def test_filter_products_known_category_emptied_by_price_keeps_the_old_abstention():
+    """id2 §6.1 #32 (the rewritten half of the old abstention test): a known
+    category with nothing in range is byte-identical to the pre-id2 result."""
+    svc = StubServices(filter_result=[], has_category=True, catalog=_MISS_CATALOG)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run(
+        {"category": "Peripherals", "maxPrice": 1}, ctx=CTX, run={},
+    ))
 
     assert out == {"items": [], "finding": "no matching products found"}
+    assert svc.category_checks == ["Peripherals"]
+    assert svc.catalog_reads == 0
+
+
+def test_filter_products_no_or_blank_category_keeps_the_old_abstention():
+    """id2 §6.1 #33: a price-only miss never asks `has_category` (contract
+    pin, N6); a blank category reaches it raw, the repository answers it as
+    omitted (`True`), and the old shape stays."""
+    svc = StubServices(filter_result=[], has_category=False, catalog=_MISS_CATALOG)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run({"maxPrice": 1}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching products found"}
+    assert svc.category_checks == []
+
+    svc = StubServices(filter_result=[], has_category=True, catalog=_MISS_CATALOG)
+    tool = FilterProductsTool(svc)
+
+    out = json.loads(tool.run({"category": ""}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching products found"}
+    assert svc.category_checks == [""]
+
+
+def test_filter_category_miss_hint_is_written_for_filter_products():
+    """id2 §6.1 #34: names the pick (`productId`) and the price route
+    (`lookup_product_fact`), never says "again" (no lookup preceded it), and
+    carries no price (K-079)."""
+    hint = tools.FILTER_CATEGORY_MISS_HINT
+
+    assert "lookup_product_fact" in hint and "productId" in hint
+    assert "again" not in hint
+    assert "$" not in hint and not any(c.isdigit() for c in hint)
+    assert hint != tools.LOOKUP_MISS_HINT
 
 
 def test_filter_products_all_arguments_optional():

@@ -18,6 +18,7 @@ import json
 import pytest
 
 from falkorchat import executor as executor_mod
+from falkorchat import tools as tools_mod
 from falkorchat.config import CallContext
 from falkorchat.executor import WorkflowExecutor
 from falkorchat.llm import ChatResult, ToolCall
@@ -1987,6 +1988,57 @@ def test_grounding_is_language_independent_via_the_lookup_miss_catalog():
 
     assert _writes(reg) == [("add_to_cart", {"productId": MOUSE, "quantity": 1})]
     assert not any(k == "off_turn_write_held" for k, _ in result.trace)
+
+
+def _filter_category_miss():
+    # the shape `FilterProductsTool` returns for an unknown category (id2 D8.2),
+    # built from the shipped constants so the pin tracks what the model receives
+    return json.dumps({
+        "items": [], "finding": tools_mod.FILTER_CATEGORY_MISS_FINDING,
+        "hint": tools_mod.FILTER_CATEGORY_MISS_HINT,
+        "catalog": [{"productId": KEYBOARD, "name": "Mechanical Keyboard K200"},
+                    {"productId": MOUSE, "name": "Wireless Mouse Pro"}],
+    })
+
+
+@pytest.mark.parametrize("write_tool, write_result", [
+    ("add_to_cart", '{"found": true}'),
+    ("remove_from_cart", '{"found": true, "removed": true}'),
+])
+def test_a_filter_category_miss_catalog_grounds_a_write_but_not_a_made_up_slug(
+    write_tool, write_result,
+):
+    # id2 §6.1 #35 / D8.3 (remove half: impl review m2): a `filter_products`
+    # category miss carries the `catalog` list, which grounds its IDs for adds
+    # AND removes through the existing `_GROUNDING_SOURCES` rows with no
+    # executor change — original D3's accepted residual, deliberately extended
+    # to this path. A slug the model builds itself is still held.
+    llm = StubChatLLM([
+        ChatResult(text="", tool_calls=[ToolCall(
+            "c0", "filter_products",
+            {"category": "Mouse sem fio Pro", "minPrice": 0, "maxPrice": 100})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c1", write_tool, {"productId": MOUSE})]),
+        ChatResult(text="", tool_calls=[
+            ToolCall("c2", write_tool, {"productId": "mouse-sem-fio-pro"})]),
+        ChatResult(text="Pronto."),
+    ])
+    reg = _cart_registry({"filter_products": _filter_category_miss(),
+                          write_tool: write_result})
+    ex = _executor(llm=llm, registry=reg,
+                   services=_thread("O mouse sem fio pro, por favor"))
+
+    result = ex._run_agent_node(
+        CTX, RUN, STEP, _cart_config("filter_products", write_tool),
+        {"threadId": "t1"},
+    )
+
+    assert _writes(reg) == [(write_tool, {"productId": MOUSE})]
+    held = json.loads(_tool_content(llm, "c2"))
+    assert held["held"] is True
+    assert held["reason"] == executor_mod._HELD_REASON[write_tool].format(
+        value=repr("mouse-sem-fio-pro"))
+    assert [k for k, _ in result.trace].count("off_turn_write_held") == 1
 
 
 def test_target_id_matching_normalizes_both_sides():

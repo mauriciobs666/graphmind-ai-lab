@@ -399,6 +399,19 @@ LOOKUP_MISS_HINT = (
     "again with its exact catalog name from this list"
 )
 
+#: `filter_products`' result when its `category` names no catalog category
+#: (K-078 id2 D8.2). Its own hint, not `LOOKUP_MISS_HINT`: no lookup preceded
+#: it, so "again" would be false, and the frozen `v9` prompt only says to pick
+#: from a list after a lookup miss, so the pick instruction rides here. The
+#: price half keeps D2's K-079 purpose: the list carries no prices.
+FILTER_CATEGORY_MISS_FINDING = "no catalog category has that name"
+FILTER_CATEGORY_MISS_HINT = (
+    "that is not a catalog category, so this is every product in the catalog "
+    "instead; if the customer named a product, pick it from this list and use its "
+    "productId; to get a product's price or category, call lookup_product_fact "
+    "with its exact catalog name from this list"
+)
+
 
 def _product_not_found(product_id: Any) -> str:
     """The cart tools' abstention result for a `productId` that doesn't resolve
@@ -498,8 +511,19 @@ class FilterProductsTool:
     Thin dispatch onto `services.filter_products` (`docs/QUERIES.md` §15.2). Every filter
     argument is optional; an all-omitted call lists the whole catalog up to
     `DEFAULT_FILTER_LIMIT` — acceptable at this catalog's demo scale (~15 products, plan
-    §3.5). Abstention shape mirrors `LookupProductFactTool`'s: `{"items": [], "finding":
-    "no matching products found"}` when nothing matches (AC-3).
+    §3.5). Every result carries an `items` key. When nothing matches (AC-3) the tool asks
+    `services.has_category` — the repository's own category match, without the price
+    bounds — whether the `category` exists (K-078 id2 D8):
+    - an unknown category (e.g. a translated product name sent as one) returns
+      `{"items": [], "finding": FILTER_CATEGORY_MISS_FINDING, "hint":
+      FILTER_CATEGORY_MISS_HINT, "catalog": […]}`, where `catalog` is
+      `services.catalog_index` — `{productId, name}` only, no price (D2, K-079) — so the
+      model can pick the real product's `productId`, as after a `lookup_product_fact` miss;
+      the list grounds cart writes through the executor's existing `_GROUNDING_SOURCES`;
+    - every other empty result — a known category emptied by its price range, a blank or
+      omitted category — is `{"items": [], "finding": "no matching products found"}`. A
+      blank category reaches `has_category` raw and the repository answers it as omitted;
+      an omitted one is never checked.
     """
 
     name = "filter_products"
@@ -550,16 +574,25 @@ class FilterProductsTool:
 
     def run(self, arguments: dict[str, Any], *, ctx: CallContext,
             run: dict[str, Any]) -> str:
+        category = arguments.get("category")
         rows = self._services.filter_products(
             ctx,
-            category=arguments.get("category"),
+            category=category,
             min_price=_coerce_price_bound(arguments.get("minPrice")),
             max_price=_coerce_price_bound(arguments.get("maxPrice")),
             limit=DEFAULT_FILTER_LIMIT,
         )
-        if not rows:
-            return json.dumps({"items": [], "finding": "no matching products found"})
-        return json.dumps({"items": rows})
+        if rows:
+            return json.dumps({"items": rows})
+        if category is not None and not self._services.has_category(
+            ctx, category=category,
+        ):
+            return json.dumps({
+                "items": [], "finding": FILTER_CATEGORY_MISS_FINDING,
+                "hint": FILTER_CATEGORY_MISS_HINT,
+                "catalog": self._services.catalog_index(ctx),
+            })
+        return json.dumps({"items": [], "finding": "no matching products found"})
 
 
 class ViewCartTool:
