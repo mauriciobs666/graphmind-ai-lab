@@ -543,6 +543,11 @@ class WorkflowExecutor:
         for a non-debug run regardless (AC-5).
       * `step_budget` — the default `maxSteps` a run starts with (the run carries its
         own `maxSteps`, which the executor enforces).
+      * `human_speaker_label` — when set, the speaker every non-assistant thread turn is
+        rendered under in the model's transcript, instead of its `displayName` (K-078 id2
+        D9: the storefront passes `storefront.CUSTOMER_SPEAKER_LABEL`, so a participant's
+        display name never reaches the model as a speaker prefix). `None`, the default,
+        keeps display names, which a multi-human dev thread needs.
 
     `id_gen`/`clock` mint `stepRunId`s and monotonic `startedAt`/`endedAt` stamps;
     the clock is wrapped monotonic (like the message clock) so same-ms StepRun ties
@@ -563,8 +568,10 @@ class WorkflowExecutor:
         id_gen: Callable[[], str] = _default_id,
         clock: Callable[[], int] = _default_clock,
         models: Any = None,
+        human_speaker_label: str | None = None,
     ) -> None:
         self._services = services
+        self._human_speaker_label = human_speaker_label
         self._repo = repo
         # FR-4 sugar (§3): a directly-injected `llm=` wraps into a `StaticModelGateway`
         # — dependency injection for tests, never a configuration route. Keeps every
@@ -944,7 +951,9 @@ class WorkflowExecutor:
         required = set(_str_list(config.get("requiredTools", []))) & granted_set
 
         thread_msgs = self._read_thread_context(ctx, run_ctx)
-        messages = self._assemble_messages(config, run_ctx, thread_msgs)
+        messages = self._assemble_messages(
+            config, run_ctx, thread_msgs, human_speaker_label=self._human_speaker_label,
+        )
         trace: list[tuple[str, str]] = []
         emissions: list[str] = []
         satisfied: set[str] = set()
@@ -1349,12 +1358,16 @@ class WorkflowExecutor:
     @staticmethod
     def _assemble_messages(
         config: dict[str, Any], run_ctx: dict[str, Any],
-        thread_msgs: list[dict[str, Any]],
+        thread_msgs: list[dict[str, Any]], *, human_speaker_label: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build the node's opening message list (§2.2): the node `systemPrompt`, then the
-        recent thread turns as conversation messages (role-mapped, speaker-named so the
-        model sees who spoke), then a compact `CONTEXT` block carrying the run's serialized
-        state (the prior nodes' output). Thread turns come pre-capped by
+        recent thread turns as conversation messages (role-mapped, each `"{speaker}:
+        {text}"` so the model sees who spoke), then a compact `CONTEXT` block carrying the
+        run's serialized state (the prior nodes' output). The speaker is the row's
+        `displayName` (else `authorId`, else `"member"`); with `human_speaker_label` set
+        (K-078 id2 D9, the storefront's `"Customer"`), every non-assistant row uses that
+        label instead, and assistant rows keep their own name. Unset, the output is
+        exactly what it was before the label existed. Thread turns come pre-capped by
         `_read_thread_context`; an empty list (offline stub path) leaves only system+CONTEXT.
         Every `user`/`assistant` append routes through `_append_turn` (K-048), which merges
         into the previous message instead of adding a new one whenever that would produce two
@@ -1378,7 +1391,10 @@ class WorkflowExecutor:
             messages.append({"role": "system", "content": system})
         for m in thread_msgs:
             role = "assistant" if m.get("role") == "assistant" else "user"
-            speaker = m.get("displayName") or m.get("authorId") or "member"
+            if human_speaker_label is not None and role != "assistant":
+                speaker = human_speaker_label
+            else:
+                speaker = m.get("displayName") or m.get("authorId") or "member"
             _append_turn(messages, role, f"{speaker}: {m.get('text', '')}")
         context = json.dumps(run_ctx, separators=(",", ":"), sort_keys=True)
         _append_turn(messages, "user", f"CONTEXT:\n{context}")

@@ -79,6 +79,13 @@ TURN_IDLE = "idle"
 TURN_QUEUED = "queued"
 TURN_THINKING = "thinking"
 
+# K-078 id2 D9: the speaker every participant line is rendered under in the
+# model's transcript (`WorkflowExecutor(human_speaker_label=…)`, wired by
+# `app._build_default_app`), never the participant's display name. A storefront
+# thread has exactly one human author, so the label loses nothing; it matches
+# the system prompt's "chatting with a customer".
+CUSTOMER_SPEAKER_LABEL = "Customer"
+
 # `list_catalog`'s **explicit** row bound (S7). `services.filter_products`
 # defaults `limit=20`, which is correct for the seeded 15-product catalog and
 # silently wrong at 21 — a truncated catalog with no error anywhere. The bound

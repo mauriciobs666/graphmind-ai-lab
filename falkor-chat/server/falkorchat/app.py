@@ -57,7 +57,7 @@ from .services import (
     WorkflowRunNotFoundError,
     WorkflowRunNotWaitingError,
 )
-from .storefront import Storefront
+from .storefront import CUSTOMER_SPEAKER_LABEL, Storefront
 
 _log = logging.getLogger(__name__)
 
@@ -637,6 +637,11 @@ def _build_default_app() -> FastAPI:
         executor = WorkflowExecutor(
             services, repo, models=models, guard_judge=judge,
             tool_registry=registry, tracer=GraphTracer(repo),
+            # K-078 id2 D9: storefront customer lines reach the model as
+            # `Customer: …`, never under the participant's display name.
+            human_speaker_label=(
+                CUSTOMER_SPEAKER_LABEL if config.STOREFRONT_ENABLED else None
+            ),
         )
         services.set_executor(executor)  # late-bind (breaks the services↔executor cycle)
         trigger = WorkflowTrigger(

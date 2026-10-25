@@ -640,6 +640,93 @@ def test_assemble_messages_coalesces_consecutive_same_role_thread_turns():
     assert f"CONTEXT:\n{context}" in merged
 
 
+# ── K-078 id2 D9 — a fixed customer speaker label (storefront) ───────────────
+#
+# `docs/plans/salesperson-cart-product-id2.md` D9 / RCA DEF-4: in the storefront
+# the participant's display name (`LSP-358e50-t003-es`) reached the model as the
+# speaker prefix and was copied into `productId`. With `human_speaker_label` set,
+# every non-assistant row is labelled with it; assistant rows, and every caller
+# that leaves the label unset, are byte-identical to before.
+
+_LABEL_CONFIG = {"systemPrompt": "You are the salesperson."}
+_LABEL_CTX = {"language": "es", "threadId": "t1"}
+_LABEL_ROWS = [
+    {"role": "user", "text": "Hola", "authorId": "p-1",
+     "displayName": "LSP-358e50-t003-es"},
+    {"role": "assistant", "text": "¡Hola! ¿En qué te ayudo?", "authorId": "assistant",
+     "displayName": "Assistant"},
+    {"role": "user", "text": "Agrega el mouse", "authorId": "p-1",
+     "displayName": "LSP-358e50-t003-es"},
+]
+_LABEL_CONTEXT = "CONTEXT:\n" + json.dumps(_LABEL_CTX, separators=(",", ":"),
+                                          sort_keys=True)
+
+
+def test_assemble_messages_customer_label_hides_the_display_name():
+    # id2 §6.1 #36
+    messages = WorkflowExecutor._assemble_messages(
+        _LABEL_CONFIG, _LABEL_CTX, _LABEL_ROWS, human_speaker_label="Customer",
+    )
+
+    assert messages == [
+        {"role": "system", "content": "You are the salesperson."},
+        {"role": "user", "content": "Customer: Hola"},
+        {"role": "assistant", "content": "Assistant: ¡Hola! ¿En qué te ayudo?"},
+        {"role": "user", "content": f"Customer: Agrega el mouse\n\n{_LABEL_CONTEXT}"},
+    ]
+    assert "LSP-358e50-t003-es" not in "".join(m["content"] for m in messages)
+
+
+def test_assemble_messages_without_a_label_is_byte_identical_to_before():
+    # id2 §6.1 #37: the pre-id2 output, as a literal
+    messages = WorkflowExecutor._assemble_messages(_LABEL_CONFIG, _LABEL_CTX, _LABEL_ROWS)
+
+    assert messages == [
+        {"role": "system", "content": "You are the salesperson."},
+        {"role": "user", "content": "LSP-358e50-t003-es: Hola"},
+        {"role": "assistant", "content": "Assistant: ¡Hola! ¿En qué te ayudo?"},
+        {"role": "user",
+         "content": f"LSP-358e50-t003-es: Agrega el mouse\n\n{_LABEL_CONTEXT}"},
+    ]
+
+
+def test_assemble_messages_label_still_coalesces_same_role_turns():
+    # id2 §6.1 #38: K-048 alternation holds under the label
+    rows = [
+        {"role": "user", "text": "Hola", "authorId": "p-1",
+         "displayName": "LSP-358e50-t003-es"},
+        {"role": "user", "text": "¿Hay mouse?", "authorId": "p-1",
+         "displayName": "LSP-358e50-t003-es"},
+    ]
+
+    messages = WorkflowExecutor._assemble_messages(
+        _LABEL_CONFIG, _LABEL_CTX, rows, human_speaker_label="Customer",
+    )
+
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert messages[1]["content"] == (
+        f"Customer: Hola\n\nCustomer: ¿Hay mouse?\n\n{_LABEL_CONTEXT}"
+    )
+
+
+def test_executor_threads_the_speaker_label_into_the_agent_prompt():
+    # id2 §6.1 #39: the constructor keyword reaches `_run_agent_node`'s one call site
+    svc = StubThreadServices([
+        {"role": "user", "text": "reset my password", "authorId": "u1",
+         "displayName": "Alice"},
+    ])
+    llm = StubChatLLM([ChatResult(text="ok")])
+    reg = StubRegistry({"graphrag_retrieve": RETRIEVE_SCHEMA})
+    ex = WorkflowExecutor(svc, None, llm=llm, tool_registry=reg, guard_judge=None,
+                          human_speaker_label="Customer")
+
+    ex._run_agent_node(CTX, RUN, STEP, _config(), {"threadId": "t1"})
+
+    contents = "".join(m["content"] for m in llm.calls[0]["messages"])
+    assert "Customer: reset my password" in contents
+    assert "Alice" not in contents
+
+
 # ── K-056 — tool-use breadcrumb reverted (analyst review, MAJOR 1) ────────────
 #
 # An earlier pass attempted D-1's mitigation (docs/reviews/salesperson-tool-reliability-ml.md

@@ -549,6 +549,11 @@ def _recent_turns(thread: Any, n: int = RECENT_TURNS_N) -> list[dict[str, str]]:
     rows in the tail shrink the usable evidence window exactly when the judge is on
     this degraded fallback tier (recall this function only runs when no `understanding`
     was emitted).
+
+    `speaker` is the row's `displayName`, even in the storefront, whose agent transcript
+    labels customers `Customer` instead (K-078 id2 D9). Unreachable there today, since the
+    salesperson guard is `cmp`, but a storefront def with an `llm` guard would put display
+    names in front of the judge.
     """
     if not isinstance(thread, list):
         return []

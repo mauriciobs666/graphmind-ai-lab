@@ -280,6 +280,35 @@ def test_workflow_wiring_is_gated_on_workflow_enabled(monkeypatch):
     assert captured.get("sweep_interval_s") == 45.0
 
 
+def test_storefront_executor_labels_customer_lines(monkeypatch):
+    """K-078 id2 §6.1 #40 / D9: only the storefront deployment hands the executor
+    the fixed customer speaker label; the dev app keeps display names (`None`).
+    Offline: `create_app` is faked and the executor is read back off `services`."""
+    from falkorchat import app as app_mod
+    from falkorchat import storefront
+
+    captured: dict = {}
+
+    def fake_create_app(services=None, **kwargs):
+        captured.clear()
+        captured["services"] = services
+        return object()
+
+    monkeypatch.setattr(app_mod, "create_app", fake_create_app)
+    monkeypatch.setattr(app_mod.config, "ENABLE_AGENT", True)
+    monkeypatch.setattr(app_mod.config, "AGENT_ID", "assistant")
+    monkeypatch.setattr(app_mod.config, "WORKFLOW_ENABLED", True)
+
+    monkeypatch.setattr(app_mod.config, "STOREFRONT_ENABLED", True)
+    app_mod._build_default_app()
+    assert (captured["services"]._executor._human_speaker_label
+            == storefront.CUSTOMER_SPEAKER_LABEL == "Customer")
+
+    monkeypatch.setattr(app_mod.config, "STOREFRONT_ENABLED", False)
+    app_mod._build_default_app()
+    assert captured["services"]._executor._human_speaker_label is None
+
+
 def test_build_llm_judge_parses_a_json_verdict():
     """The production judge matches the injected shape `(condition, *, understanding,
     recent_turns, ctx, step_output) -> {decision, rationale}` and parses the JSON verdict."""

@@ -279,8 +279,9 @@ class PostMessageTool:
                 agent_ctx, thread_id=thread_id, text=text, mentions=mentions
             )
         except UnknownMemberError as exc:
-            # The node's prompt carries the thread transcript as `"{displayName}: {text}"`
-            # (executor `_assemble_messages`), so a model reliably reaches for the *name*
+            # The node's prompt carries the thread transcript as `"{displayName}: {text}"`,
+            # or `"Customer: {text}"` in the storefront (executor `_assemble_messages`,
+            # K-078 id2 D9), so a model reliably reaches for the *name*
             # it can see — `mentions:["alice"]` — while §4 resolves **member ids**. Turn
             # that into an actionable refusal in the tool's own error dialect (like the
             # no-thread case above) so the re-prompt is a correction, not a blind retry.

@@ -180,3 +180,141 @@ grounded real: {'mechanical-keyboard-k200', 'wireless-mouse-pro'}
 grounded hand: {'mechanical-keyboard-k200', 'wireless-mouse-pro'}
 default stub: {"items": [], "finding": "no matching products found"}
 ```
+
+## Pass 2 — S3–S5
+
+**Reviewed:** the uncommitted working-tree diff against `64a75019`, limited to `falkor-chat/server`
+and `falkor-chat/docs/SERVER.md`:
+- `executor.py`: `WorkflowExecutor.__init__`, `_assemble_messages`, and the `_run_agent_node` call site;
+- `app.py` `_build_default_app`;
+- `storefront.py` `CUSTOMER_SPEAKER_LABEL`;
+- the `guards.py` `_recent_turns` docstring and the `tools.py` `PostMessageTool` comment;
+- the `SERVER.md` §1.3 `FALKORCHAT_STOREFRONT_ENABLED` row;
+- tests 36–39 (`test_executor_agent.py`) and test 40 (`test_app.py`).
+
+The coordination doc was out of scope.
+
+**Spec:** `falkor-chat/docs/plans/salesperson-cart-product-id2.md` v2: D9, D10, §5 S3–S5, tests
+36–40, mutants N8–N12, and the §2 DEF-4 vector table.
+
+**Verdict: approve.** There are no blockers, no majors, and no minors. The code is D9 as
+specified.
+- All four focus questions came back clean.
+- Every name path left in the storefront is one D10 already accepts.
+
+CPG: considered, not relevant — the change is one keyword threaded through three functions, plus
+one wiring line. I read the full span directly: every `WorkflowExecutor(` construction, every
+`config.STOREFRONT_ENABLED` read, and every `displayName`/`speaker` use under `falkorchat/`.
+
+**Pass 1 dispositions** (in `64a75019`):
+- **m1:** fixed. `test_filter_products_returns_items` asserts `category_checks == []` and
+  `catalog_reads == 0` (`test_tools.py:561-562`).
+- **m2:** fixed. I re-ran mutant X2 (`filter_products` removed from remove grounding): it now
+  turns 1 test red in `test_executor_agent.py`, the parametrized
+  `test_a_filter_category_miss_catalog_grounds_a_write_but_not_a_made_up_slug`. The file was
+  restored and confirmed with `cmp`.
+- **n1:** fixed. Test 35 now builds the miss from `tools_mod.FILTER_CATEGORY_MISS_FINDING`/`_HINT`.
+
+### What I ran
+
+- **Tests.** The three stub files with `-k 'not _live'` gave 479 passed, 4 deselected. The two
+  `test_app.py` nodes (`test_storefront_executor_labels_customer_lines`,
+  `test_workflow_wiring_is_gated_on_workflow_enabled`) gave 2 passed.
+  `git diff -U0 64a75019 -- server/tests/` removes 0 lines.
+- **Mutants,** each run on a copy, then restored and confirmed with `cmp`:
+
+| Mutant | Result |
+|---|---|
+| N8: the label also replaces assistant rows | killed (1 red) |
+| N9: `displayName or label` | killed (3 red) |
+| N11: the call site drops the label | killed (1 red) |
+| N12: the wiring is inverted | killed (test 40 red) |
+
+- **The real env path, outside pytest.** I ran `FALKORCHAT_STOREFRONT_ENABLED=1|0` with
+  `ENABLE_AGENT`/`WORKFLOW_ENABLED=1`, the example opencode config, and a dummy key. Only
+  `create_app` was replaced, with a capture. Results:
+
+| `FALKORCHAT_STOREFRONT_ENABLED` | executor label | `storefront` kwarg |
+|---|---|---|
+| `1` | `'Customer'` | `True` |
+| `0` | `None` | `False` |
+
+  This used `LazyFalkorDB` and made no network call. The import-time `app = _build_default_app()`
+  built an app object only; nothing was served.
+
+### Answers to the four check points
+
+**1. Where a customer's display name still reaches the agent model in the storefront.**
+
+| Path | After D9 | Covered by |
+|---|---|---|
+| Speaker prefix on customer lines | **gone.** Every non-assistant row renders as `Customer:` (`executor.py:1394-1397`) | D9 (tests 36, 39) |
+| `CONTEXT` block | **no name.** The storefront run ctx is `{language, threadId}` (`storefront.py:1404`, the trigger's `run_ctx`); §2 measured 0 requests carrying a name | — |
+| `get_profile` result | **yes.** `Storefront.join` seeds `save_profile(name=display_name)` (`storefront.py:849`), and the presenter reset re-seeds it (`:1840`) | D10 |
+| `save_profile` result | echoes the name the model passed, or the seeded one | D10 (same profile vector) |
+| The agent's own replayed greetings ("Olá, LSP-…!") | **yes**, as assistant history | D10 |
+| Join `welcome` line (`storefront_api.py:237`) | **no.** It goes in the HTTP response only and is never posted to the thread | — |
+| `query_graph_data` | **no.** Its datasets are `catalog` and `knowledge_base` (`Entity` only, `querygen.py:214-216`); `User` and `Customer` are not queryable | — |
+| `place_order` and `view_cart` results | **no.** Order and cart rows carry product fields only (`repository.py:3797-3803`) | — |
+| Held-write `reason` (`_HELD_REASON`) | echoes only a `{value}` the model already produced, so it is never a source | — |
+| Guard judge (`guards.py:567`, `app.py:718`) | `displayName`, but unreachable: the salesperson guard is `cmp`. The new docstring records this | D9 out-of-reach note |
+| `_note_*` log lines and trace | not model-visible | — |
+
+**What is left outside D10:** only a name the customer types into their own message, which is
+inherent and out of scope.
+
+**2. Nothing other than the model read the old `displayName:` prefix (verified by reading).**
+- **The probe classifier.** `salesperson/scripts/language_salience_probe.py` classifies the
+  *reply* text with word and suffix lists (`:134-137`). It sets the name only in the join body
+  (`:383-385`).
+- **The QA analysis script.** `salesperson/scripts/cart_outcome_analysis.py` `_trigger` (`:174-193`)
+  gets `threadId` and `language` from `CONTEXT` and the prompt from `split(": ", 1)`. That split
+  works the same on `Customer: …` as on `LSP-…: …`. Turns are keyed by
+  `th-{participantId}` (`:527`), never by name. The `_HOLD`/`_DEDUP` regexes (`:145-146`) parse
+  `_note_*` lines, which carry run, tool and value only, with no speaker.
+- **Other scripts.** `refire_probe.py` has no parser. `load_demo.py` checks only the join
+  response's `displayName`.
+- **The server.** A grep for `speaker`, `split(": "` and `partition(": "` under `falkorchat/`
+  finds only the guard path and the D9 code itself.
+- **K-065.** Its language handling reads `CONTEXT.language` plus the prompt, with no code
+  dependency on the prefix. Losing the prefix as an *incidental* language cue is the plan gate's
+  M1, already placed in §6.2's pre-check. It is not a code finding.
+
+**3. `config.STOREFRONT_ENABLED` is read when `_build_default_app` is called, and the
+monkeypatch is faithful.**
+- `config.py:164` parses the env once, at import. `app.py` imports the module (`from . import
+  config`, `:34`) and reads the attribute when `_build_default_app` is called (`:580`, `:585`,
+  `:643`).
+- So monkeypatching `config.STOREFRONT_ENABLED` is exactly the value the env path produces, and
+  the env run above confirms it end to end.
+- The same attribute drives `storefront=`, `dev_surface=` and the label. A storefront deployment
+  therefore cannot get `None`, and a dev one cannot get `Customer`.
+
+**4. Test 40 checks the real construction, not a parallel one.**
+- Only `create_app` is faked. `_build_default_app`, `WorkflowExecutor(…)` and
+  `services.set_executor` are the production code.
+- There is exactly one `WorkflowExecutor(` in `falkorchat/` (`app.py:637`), and every run goes
+  through `services._require_executor()`. So the object the test reads is the object production
+  uses.
+- `create_app` builds no executor of its own. The `storefront.py` `_executor` is a
+  `ThreadPoolExecutor`, a different object.
+- The env-path run shows the faked `create_app` receives the same `services`.
+
+### Findings
+
+None.
+
+### What's solid
+
+- The rendering branch is three lines.
+- Assistant rows and the `None` default stay byte-identical. Test 37 pins the pre-id2 output as a
+  literal, and no existing test was edited.
+- K-048 coalescing holds under the label (test 38).
+- Test 39 drives the real `_run_agent_node` call site, not just the static helper.
+- The SERVER.md row and the `guards.py`/`tools.py` notes are rewritten in place and stay accurate.
+- No env var, def, or `start_demo.sh` change, as the plan requires.
+
+### Open questions
+
+None.
+
