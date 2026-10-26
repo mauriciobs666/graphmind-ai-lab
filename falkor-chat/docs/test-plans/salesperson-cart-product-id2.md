@@ -1,6 +1,6 @@
 # Cart writes by product ID — live re-run after the S7 fixes (id2 S6)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-078 · **Extends:** `falkor-chat/docs/test-plans/salesperson-cart-product-id.md`
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-078 · **Extends:** `falkor-chat/docs/test-plans/salesperson-cart-product-id.md`
 
 ## Scope & objective
 

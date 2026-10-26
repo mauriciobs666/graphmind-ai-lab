@@ -1,6 +1,6 @@
 # Review: cart writes keyed by product ID (plan gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-078
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-078
 
 ## Pass 1
 

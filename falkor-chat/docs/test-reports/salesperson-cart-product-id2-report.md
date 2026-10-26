@@ -1,6 +1,6 @@
 # Cart writes by product ID — live re-run after the S7 fixes (id2 S6)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-078
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-078
 
 ## Summary
 

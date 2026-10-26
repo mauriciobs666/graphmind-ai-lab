@@ -1,6 +1,6 @@
 # RCA — K-078 S7 live-check failures (KV overflow, pt-BR filter miss, es re-fire)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-078
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-078
 
 CPG: considered, not relevant — the defects are runtime-capacity and model-behaviour failures, and
 the causal links run through recorded model traffic and LM Studio's slot log, not through call

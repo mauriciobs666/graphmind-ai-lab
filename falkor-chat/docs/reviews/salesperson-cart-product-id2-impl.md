@@ -1,6 +1,6 @@
 # Review — cart writes by product ID, S7 fixes: S1+S2 implementation (filter category-miss recovery)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-078
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-078
 
 ## Pass 1
 

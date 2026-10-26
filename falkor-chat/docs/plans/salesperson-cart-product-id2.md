@@ -1,6 +1,6 @@
 # Cart writes by product ID: filter-miss recovery and customer speaker label (S7 fixes)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-078 · **Extends:** `falkor-chat/docs/plans/salesperson-cart-product-id.md` · **Version:** 2 · **Reviews:** `falkor-chat/docs/reviews/salesperson-cart-product-id2.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-078 · **Extends:** `falkor-chat/docs/plans/salesperson-cart-product-id.md` · **Version:** 2 · **Reviews:** `falkor-chat/docs/reviews/salesperson-cart-product-id2.md`
 
 *2026-10-23 v2: revised per analyst Pass 1 (M1, m1–m4, n1–n3): turn 0–1 language pre-check with a stop rule, D8 measured in C1 not C2, pt-BR latency risk, contract-pin mutants, a category-browse variant, D8 size ≈ +445–457, test-40 capture, the `_recent_turns` note. Wrong-language gate ≤ 3/375 confirmed by `teco`.*
 

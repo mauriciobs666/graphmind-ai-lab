@@ -1,6 +1,6 @@
 # Review — F1 fix: `filter_products` treats blank arguments as omitted
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-079
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-079
 
 ## Pass 1
 

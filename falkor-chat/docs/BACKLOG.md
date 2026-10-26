@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-084
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-087
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -40,15 +40,17 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-082 — Storefront demo: optional load-robustness reruns (long-conversation KV stress; clean `TURN_WORKERS` rerun) (🔵 proposed — carried from K-066, closed 2026-10-22)
+### K-082 — Storefront demo: optional long-conversation KV stress rerun (🔵 proposed — carried from K-066, closed 2026-10-22)
 
 > The demo runs on `ministral-3-3b` (`-c 8192 --gpu max`) plus the 0.6B embedder, and
 > `start_demo.sh` now ensures exactly that set is resident (`docs/HISTORY.md` 2026-10-22). Two
 > optional measurements remain. (1) A long-conversation stress variant of the TP-007 probe: the
 > n=75 run saw 0 context overflows, but U0's three concurrent ~3.1k-token requests still exceed the
 > shared 8,192-token KV pool (`docs/test-reports/salesperson-single-model-fit-report.md`). (2) A
-> clean rerun of the `TURN_WORKERS` lever: Q4 was contaminated by a host suspend; keep 4 until then
-> (`docs/test-reports/salesperson-single-model-report.md`).
+> clean `TURN_WORKERS` measurement: `start_demo.sh` now defaults to 2 concurrent turns, because a
+> 3-way overlap overflows the pool (`docs/reviews/salesperson-cart-product-id-rca.md` DEF-1); at 2
+> the worst in-flight total was 5,871 of 8,192 (`docs/test-reports/salesperson-cart-product-id2-report.md`).
+> Raising it needs a bigger pool, not a rerun.
 - **Owner:** `qa-engineer`.
 - **Test strategy:** TP-007 protocol with `salesperson/scripts/language_salience_probe.py`; residency
   via `salesperson/scripts/qwen_watch.sh` and `lms ps`.
@@ -64,23 +66,50 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
 - **Owner:** stakeholder decision, then `devops`.
 
-### K-078 — es/pt-BR carts end up empty: the agent translates product names, so `add_to_cart` is held by the off-turn guard (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
+### K-079 — Storefront replies sometimes state fabricated or scrambled prices: remaining fixes F2, F4, F5 (🟡 in-progress — F1 delivered 2026-10-22, F3 2026-10-23, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 
-> In the n=75 run, the demo log held 146 `off-turn write held … add_to_cart(productName=…)`
-> warnings, every one with a Portuguese or Spanish rendering of an English catalog name (e.g.
-> `Mouse sem fio Pro` 70, `Ratón inalámbrico profesional` 23). The K-058 guard requires the product
-> name to appear in the turn's text, and the catalog lookup needs the canonical name, so non-English
-> carts mostly stay empty. Agent behaviour that predates K-066 (ministral was already the agent model).
-> Serious for an es/pt-BR demo.
-- **Owner:** `architect` (prompt vs. canonical-name resolution vs. guard matching), then an implementer.
+> Root cause RC-1: `query_graph_data` can return names and prices as separate unlabelled lists,
+> and the model pairs them by position. Remaining, per the RCA's fix list: **F2** — `query_graph_data`
+> never returns non-aggregate attributes without the label's identity column (needs a short design
+> note: it amends the NLQ eval's Layer 1 contract, done-condition a Layer 1 re-run on ministral with
+> no regression; same `QueryGraphDataTool.run` → `querygen` hand-off as K-086, so design them
+> together). **F4** — the K-056 grounding signal counts only price-grounding tools. **F5** — a
+> catalog name→price consistency metric and a non-`$` symbol count in the probe analysis (S7's
+> hand sweep found 0 wrong of 126 pairs; the re-run saw 2 pt-BR `R$` replies with correct amounts).
+- **Owner:** `architect` (F2 with K-086), `coder` (F4), `qa-engineer` (F5).
 
-### K-079 — Storefront replies sometimes state fabricated or scrambled prices (🔵 proposed — `docs/test-reports/salesperson-single-model-report.md` Q3, 2026-10-22)
+### K-085 — es storefront doubles an item already in the cart when the next message adds a different one (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-3, 2026-10-26)
 
-> Two `en` replies to "What products do you have?" (#156, #286) listed invented prices, e.g. Wireless
-> Mouse Pro at $349.99, and some replies quote € instead of $. Agent behaviour, not attributed to
-> K-066. `query_graph_data` now abstains rather than return a bare name for a single-item lookup
-> with no projection (`querygen.default_returns`), which removes one fabrication-shaped hand-off.
-- **Owner:** `analyst` (RCA: prompt vs. tool-result rendering), then an implementer.
+> On "Agrega 1 Wireless Mouse Pro" → "También agrega 1 Portable SSD 1TB", es re-added the mouse in
+> 8/24 conversations (en and pt-BR 0/24). The off-turn guard holds the re-add, which is a slug guessed
+> from history; then the model's own `lookup_product_fact` grounds the id and the add dispatches.
+> The guard is working as designed: this is the residual risk the stakeholder accepted when K-078
+> chose provenance grounding. The model rebuilds the cart from conversation history it can't
+> check. Rejected in the K-078 review: hold an id already in the cart unless the message names
+> it (text grounding again, which fails for es/pt-BR) and keep an id held for the rest of the turn
+> (breaks the guess → held → lookup → add recovery that en and confirmation turns depend on). Lead
+> candidate: show the previous turn's cart in the `CONTEXT` block (~30–60 tokens per call, grounds
+> no ids, no def bump, effect unmeasured). The customer does see the doubled quantity.
+- **Owner:** `architect`, then an implementer; live re-measure (C1 + C2) by `qa-engineer`.
+
+### K-086 — Browsing a category by its translated name gets "we have none" (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-C, 2026-10-26)
+
+> "Do you have any periféricos?" went to `query_graph_data` on every turn. The internal NLQ
+> filtered `category = "periféricos"` (es) or `name = "periféricos"` (pt-BR), got
+> `{"items": [], "finding": "no matching data found"}`, and the reply said the store has no
+> peripherals: es 12/12, pt-BR 7/12 (4 listed them correctly). K-078's recovery hint plus price-free
+> catalog on an unknown category exists only in `filter_products`, which the model never called.
+- **Owner:** `architect` (with K-079 F2), then an implementer.
+
+### K-087 — Side effects of the storefront `Customer:` speaker label: `Assistant:` leaks into replies; the en greeting claims the profile name (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-A/DEF-B, 2026-10-26)
+
+> 266 of 1,125 replies (23.6%) begin with a visible `Assistant:`/`Assistente:`, all on turns 2–4,
+> and none in 2-turn runs, so it grows with history depth. The model likely continues the
+> `Customer: …` / `Assistant: …` transcript pattern. There is no baseline: S7's raw replies are gone.
+> Separately, 66/75 en turn-0 replies say "My name is LSP-…": with the name gone from the
+> customer's lines, the bare profile name from `get_profile` has no owner. Probe names are
+> slug-shaped; a real name may fare differently.
+- **Owner:** `architect` (transcript rendering), then an implementer.
 
 ### K-080 — Model kind `extraction` sits outside `modelconfig.KINDS`, so a workspace override can't reach it (🔵 proposed — `docs/reviews/salesperson-single-model.md` Pass 4 R5, 2026-10-22)
 

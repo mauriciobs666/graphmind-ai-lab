@@ -5,6 +5,46 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-26 — K-078 closed: es/pt-BR carts fill, because cart writes are keyed by product ID; K-079 F1 and F3 delivered
+
+- **What (K-078).** Stakeholder mandate: cart writes use a stable product ID, not a translated name.
+  `add_to_cart`/`remove_from_cart` take `productId` (`extraction.normalize_product_id`,
+  `Services.lookup_product_by_id`). A `lookup_product_fact` miss returns a hint plus a price-free
+  `catalog` of up to 50 id+name rows (`Services.catalog_index`). The K-058 off-turn guard is now
+  provenance-grounded: a write is held unless a grounding tool returned that `productId` earlier in
+  the same node execution (`_GROUNDING_SOURCES`: add ← `lookup_product_fact`/`filter_products`/
+  `query_graph_data`, remove ← those plus `view_cart`; no self-source rows, as recorded in
+  `docs/plans/salesperson-cart-product-id2.md` D12). K-061 dedup keys on normalized ids.
+  `salesperson@v9` (productId guidance per tool, a US-dollar sentence) pinned in `start_demo.sh`,
+  `seed_salesperson.sh` and `verify_salesperson.sh`. After the first live check failed: `start_demo.sh`
+  defaults `FALKORCHAT_STOREFRONT_TURN_WORKERS` to 2 (env override wins; `config` default stays 4);
+  `filter_products` on an unknown category returns a hint plus the catalog (`Services.has_category`);
+  the storefront labels customer lines `Customer:` in the model's transcript instead of the display
+  name (`WorkflowExecutor(human_speaker_label=…)`, only when the storefront is enabled).
+- **What (K-079).** F1: a blank `filter_products` `category` means "not given", and a numeric-string
+  price bound is coerced (`_coerce_price_bound`). The tool description now reaches the model with
+  "(an empty value counts as omitted)": no measurement sits behind that wording, so it is the first
+  suspect for any later shift in `filter_products` calls. F3: the US-dollar sentence in `v9`. F2, F4
+  and F5 stay open as K-079.
+- **Found.** LM Studio's 8,192-token KV pool is shared across concurrent requests: one 3-way
+  overlap overflowing it kills every in-flight call (258/1,125 dead turns in the first live check).
+  `v9`'s +227 tokens per call tipped a 245-token margin. The `displayName:` speaker prefix baited
+  the model into using a display name as a `productId`.
+- **Verified.** First live check FAIL (`docs/test-reports/salesperson-cart-product-id-report.md`),
+  RCA `docs/reviews/salesperson-cart-product-id-rca.md`. Re-run (`docs/test-reports/salesperson-cart-product-id2-report.md`):
+  carts filled in 75/75 conversations in en, pt-BR and es (bar: en ≥65, es/pt-BR ≥60), 0 other-product
+  lines, 0 doubled mouse, 0/1,125 dead turns, 0 wrong-language replies, p95 14.05 s, worst KV 5,871
+  of 8,192. teco recounted against `c1.jsonl` and `ws:demo`; they match. `analyst` gated the plan,
+  the design note and every implementation unit
+  (`docs/reviews/salesperson-cart-product-id.md`, `-impl.md`, `-id2.md`, `-id2-impl.md`;
+  `docs/reviews/salesperson-fabricated-prices-impl.md`); every implementer and teco mutant went red.
+  Commits `ac39345d`, `4dac501e`, `8a72f08d`, `e4cdba9f`, `64a75019`, `a5d8e807`, `f04cbfd5`.
+  Coordination: `docs/plans/salesperson-cart-product-id-coordination.md`.
+- **Follow-ups.** Stakeholder 2026-10-26: close on C1 and file the rest. K-085 (es doubles an
+  item already in the cart, 8/24: the accepted residual risk of provenance grounding), K-086
+  (translated category browse via `query_graph_data` says "none"), K-087 (`Assistant:` label leak
+  23.6%; the en greeting claims the profile name), K-079 (F2/F4/F5).
+
 ## 2026-10-22 — K-083 closed: demo bring-up finds a reachable LM Studio config by itself
 
 - **What.** New sourced helper `scripts/shlib/opencode_config.sh` (`resolve_opencode_config`), used
