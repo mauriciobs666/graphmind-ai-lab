@@ -13,6 +13,9 @@ script, a fresh participant each time:
   confirm                  "Do you have the Wireless Mouse Pro?"  → "Yes, add it to my cart."
                            (impl review Pass 3: a confirmation-turn add, which neither
                            TP-007 nor the two C2 scripts contain; reported, not gated)
+  browse                   "Do you have any periféricos?"  (one turn; id2 design note §6.2,
+                           review m4: D8's category-miss `catalog` on a browse request;
+                           reported, not gated — classify each reply by hand)
 
 The schedule interleaves the scripts (`--schedule`, default 12 × the two C2 scripts,
 alternating), so trial `t` always runs the same script and `--resume` continues at the next
@@ -54,8 +57,11 @@ SCRIPTS: dict[str, list[str]] = {
         "Do you have the Wireless Mouse Pro?",
         "Yes, add it to my cart.",
     ],
+    "browse": [
+        "Do you have any periféricos?",
+    ],
 }
-HARNESS_VERSION = "1"
+HARNESS_VERSION = "2"
 
 
 class TaggingWriter:

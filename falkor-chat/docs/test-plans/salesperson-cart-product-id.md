@@ -1,6 +1,6 @@
 # Cart writes keyed by product ID — live acceptance check (S7)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-078 (+ K-079 F3)
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-078 (+ K-079 F3) · **Extended by:** `falkor-chat/docs/test-plans/salesperson-cart-product-id2.md`
 
 ## Scope & objective
 
