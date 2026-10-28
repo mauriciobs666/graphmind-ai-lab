@@ -861,7 +861,13 @@ def _probe_requests(dataset_name: str, schema, label: str, var: str = "v"):
     """§6.1's axes: every non-empty projection subset (bare, and with each of
     five aggregates appended), each aggregate alone; × no order or each
     property; × no filter, every property × every op, and every
-    `[= non-identity, = identity]` pair (lookup in second position)."""
+    `[= non-identity, = identity]` pair (lookup in second position).
+
+    Every odd-indexed filter list also carries a non-default `order_dir` and
+    `limit` (review M1): a rewrite that dropped either would fall back to the
+    default, which only a non-default request can expose. Neither moves the
+    compiled `RETURN` columns, so the case count and A1's red count are
+    unchanged."""
     props = sorted(schema.labels[label])
     identity = schema.identity[label]
     p0 = props[0]
@@ -892,12 +898,14 @@ def _probe_requests(dataset_name: str, schema, label: str, var: str = "v"):
     )
     for returns in returns_axis:
         for order_by in order_axis:
-            for filters in filters_axis:
+            for i, filters in enumerate(filters_axis):
                 yield QueryRequest(
                     dataset=dataset_name,
                     matches=[QueryMatch(var=var, label=label, filters=filters)],
                     returns=returns,
                     order_by=order_by,
+                    order_dir="DESC" if i % 2 else "ASC",
+                    limit=7 if i % 2 else 20,
                 )
 
 
@@ -930,8 +938,16 @@ def test_every_attribute_projection_carries_row_identity(dataset_name, label):
     total, failures = 0, []
     for request in _probe_requests(dataset_name, schema, label):
         total += 1
-        compiled = qg_compile(ensure_row_identity(request, schema), schema)
+        rewritten = ensure_row_identity(request, schema)
+        compiled = qg_compile(rewritten, schema)
         cols = _returned_columns(compiled.cypher)
+        # Review M1: the rewrite changes `returns` and nothing else — D7
+        # (plan §4.2) reads `filters` from the rewritten request. JSON, not
+        # `model_dump() ==`, because Python equality is type-blind
+        # (`True == 1`, `2 == 2.0`) and a value-coercing rebuild would
+        # change the bound `$pN` parameter types unseen.
+        unchanged_rest = (rewritten.model_dump_json(exclude={"returns"})
+                          == request.model_dump_json(exclude={"returns"}))
         if _expect_prepend(request, schema):
             ok = cols == [f"v.{identity[0]}", *request.returns]
         else:
@@ -946,6 +962,7 @@ def test_every_attribute_projection_carries_row_identity(dataset_name, label):
             plain and all(r.split(".", 1)[1] in facets for r in request.returns)
         )):
             ok = ok and any(c in {f"v.{p}" for p in identity} for c in cols)
+        ok = ok and unchanged_rest
         if not ok:
             failures.append((request.returns, request.order_by,
                              [(f.property, f.op) for f in request.matches[0].filters],
@@ -954,3 +971,33 @@ def test_every_attribute_projection_carries_row_identity(dataset_name, label):
         f"{dataset_name}/{label}: {len(failures)} of {total} cases lack row identity; "
         f"first 10: {failures[:10]}"
     )
+
+
+def test_ensure_row_identity_changes_returns_and_nothing_else():
+    # Review M1, at the value types the probe's axes do not carry: a `bool`
+    # value and an `int` on a float property must reach `compile()` as they
+    # were validated, alongside every other non-`returns` field.
+    request = QueryRequest(
+        dataset="catalog",
+        matches=[QueryMatch(var="p", label="Product", filters=[
+            QueryFilter(property="category", op="=", value=True),
+            QueryFilter(property="price", op="<", value=2),
+            QueryFilter(property="name", op="<>", value="x"),
+        ])],
+        returns=["p.price"],
+        order_by="p.price",
+        order_dir="DESC",
+        limit=7,
+    )
+
+    rewritten = ensure_row_identity(request, CATALOG_SCHEMA)
+
+    assert rewritten.returns == ["p.name", "p.price"]
+    assert (rewritten.model_dump_json(exclude={"returns"})
+            == request.model_dump_json(exclude={"returns"}))
+    assert qg_compile(rewritten, CATALOG_SCHEMA).params == {
+        "p0": True, "p1": 2, "p2": "x", "limit": 7,
+    }
+    assert [type(v) for v in qg_compile(rewritten, CATALOG_SCHEMA).params.values()] == [
+        bool, int, str, int,
+    ]
