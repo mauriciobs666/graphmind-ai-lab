@@ -10,17 +10,21 @@ reproduced verbatim per the coordination brief.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from pydantic import ValidationError
 
 from falkorchat.querygen import (
     CATALOG_SCHEMA,
+    DATASET_REGISTRY,
     KNOWLEDGE_BASE_SCHEMA,
     CompiledQuery,
     QueryFilter,
     QueryMatch,
     QueryRequest,
     compile as qg_compile,
+    ensure_row_identity,
 )
 
 
@@ -811,3 +815,142 @@ def test_compile_never_emits_forbidden_tokens_for_any_valid_request():
     compiled = qg_compile(request, CATALOG_SCHEMA)
     for token in forbidden:
         assert token not in compiled.cypher.upper()
+
+
+# ── K-079 F2: row identity (`docs/plans/salesperson-query-graph-data.md` §3.1, §6.1) ──
+
+
+def test_every_registered_label_declares_an_identity_and_allowlisted_identity_and_facets():
+    # D2's invariant: a label added to the registry without an identity would
+    # silently opt out of `ensure_row_identity`; an identity or facet property
+    # outside the label's allowlist could never compile.
+    for dataset_name, schema in DATASET_REGISTRY.items():
+        for label, props in schema.labels.items():
+            identity = schema.identity.get(label, ())
+            assert identity, f"{dataset_name}/{label} declares no identity"
+            assert set(identity) <= set(props), f"{dataset_name}/{label} identity"
+            assert set(schema.facets.get(label, ())) <= set(props), (
+                f"{dataset_name}/{label} facets"
+            )
+
+
+def _returned_columns(cypher: str) -> list[str]:
+    """The column names a compiled query returns, read from its text (the
+    RCA's "every *compiled* multi-row shape"): the items after the last
+    `RETURN `, with the tuple-distinct branch's `cN AS \\`expr\\`` mapped back
+    to `expr`."""
+    tail = cypher.rsplit("RETURN ", 1)[1].removeprefix("DISTINCT ")
+    for stop in (" ORDER BY ", " LIMIT "):
+        tail = tail.split(stop, 1)[0]
+    return [
+        item.split(" AS `", 1)[1].removesuffix("`") if " AS `" in item else item
+        for item in tail.split(", ")
+    ]
+
+
+_PROBE_OPS = ("=", "<>", "<", "<=", ">", ">=")
+_PROBE_VALUES = {str: "x", float: 1.5, int: 2}
+_PROBE_CASES = [
+    (dataset_name, label)
+    for dataset_name, schema in DATASET_REGISTRY.items()
+    for label in schema.labels
+]
+
+
+def _probe_requests(dataset_name: str, schema, label: str, var: str = "v"):
+    """§6.1's axes: every non-empty projection subset (bare, and with each of
+    five aggregates appended), each aggregate alone; × no order or each
+    property; × no filter, every property × every op, and every
+    `[= non-identity, = identity]` pair (lookup in second position)."""
+    props = sorted(schema.labels[label])
+    identity = schema.identity[label]
+    p0 = props[0]
+    aggs = [f"count({var})", f"count({var}.{p0})", f"avg({var}.{p0})",
+            f"min({var}.{p0})", f"max({var}.{p0})"]
+    subsets = [
+        [f"{var}.{p}" for p in combo]
+        for n in range(1, len(props) + 1)
+        for combo in itertools.combinations(props, n)
+    ]
+    returns_axis = (
+        subsets
+        + [s + [agg] for s in subsets for agg in aggs]
+        + [[agg] for agg in aggs]
+    )
+    order_axis = [None] + [f"{var}.{p}" for p in props]
+
+    def value(p):
+        return _PROBE_VALUES[schema.labels[label][p]]
+
+    filters_axis = (
+        [[]]
+        + [[QueryFilter(property=p, op=op, value=value(p))]
+           for p in props for op in _PROBE_OPS]
+        + [[QueryFilter(property=p, op="=", value=value(p)),
+            QueryFilter(property=q, op="=", value=value(q))]
+           for p in props if p not in identity for q in identity]
+    )
+    for returns in returns_axis:
+        for order_by in order_axis:
+            for filters in filters_axis:
+                yield QueryRequest(
+                    dataset=dataset_name,
+                    matches=[QueryMatch(var=var, label=label, filters=filters)],
+                    returns=returns,
+                    order_by=order_by,
+                )
+
+
+def _expect_prepend(request: QueryRequest, schema) -> bool:
+    """§3.1's rule, restated from the compiled shape — deliberately not a call
+    into the implementation, and not a copy of its exemption list (review B1:
+    the v1 oracle copied the facet exemption and certified its hole)."""
+    match = request.matches[0]
+    identity = schema.identity[match.label]
+    facets = schema.facets.get(match.label, frozenset())
+    if any("(" in r for r in request.returns):
+        return False  # an aggregate, alone or grouped
+    projected = [r.split(".", 1)[1] for r in request.returns]
+    if any(p in identity for p in projected):
+        return False  # already identified
+    plain = request.order_by is None or request.order_by in request.returns
+    if plain and all(p in facets for p in projected):
+        return False  # a value enumeration: `RETURN DISTINCT` over the facet domain
+    return not any(f.op == "=" and f.property in identity for f in match.filters)
+
+
+@pytest.mark.parametrize(("dataset_name", "label"), _PROBE_CASES)
+def test_every_attribute_projection_carries_row_identity(dataset_name, label):
+    """RCA §5 "Prevention test": every compiled per-row attribute projection
+    names the row it is about. Reads the registry live, so a label added
+    later is covered with no test change."""
+    schema = DATASET_REGISTRY[dataset_name]
+    identity = schema.identity[label]
+    facets = schema.facets.get(label, frozenset())
+    total, failures = 0, []
+    for request in _probe_requests(dataset_name, schema, label):
+        total += 1
+        compiled = qg_compile(ensure_row_identity(request, schema), schema)
+        cols = _returned_columns(compiled.cypher)
+        if _expect_prepend(request, schema):
+            ok = cols == [f"v.{identity[0]}", *request.returns]
+        else:
+            ok = (cols == request.returns
+                  and compiled.cypher == qg_compile(request, schema).cypher)
+        # The RCA's own invariant, independent of the branch above.
+        aggregate = any("(" in r for r in request.returns)
+        lookup = any(f.op == "=" and f.property in identity
+                     for f in request.matches[0].filters)
+        plain = request.order_by is None or request.order_by in request.returns
+        if not (aggregate or lookup or (
+            plain and all(r.split(".", 1)[1] in facets for r in request.returns)
+        )):
+            ok = ok and any(c in {f"v.{p}" for p in identity} for c in cols)
+        if not ok:
+            failures.append((request.returns, request.order_by,
+                             [(f.property, f.op) for f in request.matches[0].filters],
+                             cols))
+    assert not failures, (
+        f"{dataset_name}/{label}: {len(failures)} of {total} cases lack row identity; "
+        f"first 10: {failures[:10]}"
+    )

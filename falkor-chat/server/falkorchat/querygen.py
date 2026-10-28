@@ -22,6 +22,9 @@ has no way to parameterize those) — each is checked against `DatasetSchema` (o
 for `var`, an enforced Pydantic field pattern) with an **exact-match allowlist**,
 a hard reject on anything unknown, never a sanitizer or an escape function.
 
+Row identity (K-079 F2) is not a `compile()` rule: it lives in
+`ensure_row_identity`, a normalisation the caller applies before `compile()`.
+
 This is Layer 1 of the plan's two-layer design. Layer 2 — every execution goes
 through FalkorDB's `GRAPH.RO_QUERY`, which the engine itself refuses to run if it
 is ever, somehow, a write (§2.2) — is independent of this module's correctness
@@ -38,6 +41,7 @@ query will be aborted at exactly this many milliseconds.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -176,7 +180,19 @@ class DatasetSchema:
     through and silently matches zero rows. Low-risk today because no
     property in `CATALOG_SCHEMA`/`KNOWLEDGE_BASE_SCHEMA` is bool-typed, but a
     future schema that adds one (or a stricter fix — a `type(value) is
-    declared_type` identity check) should close this."""
+    declared_type` identity check) should close this.
+
+    `identity` and `facets` (K-079 F2,
+    `docs/plans/salesperson-query-graph-data.md` §3.1 D2) are read by
+    `ensure_row_identity` and `_is_identity_lookup`, never by `compile()`.
+    `identity[label]` lists the properties that say which entity a row is
+    about; its first entry is the column prepended to an unidentified per-row
+    projection, and an `=` filter on any of them marks a single-entity lookup.
+    Every registered label declares one (a registry test pins it).
+    `facets[label]` lists small-domain classifier properties (`category`,
+    `type`) whose plain `RETURN DISTINCT` projection enumerates a value domain
+    rather than listing rows, so it needs no identity. Both default empty, so
+    a hand-built schema in a test keeps working."""
 
     graph_key: str | None  # "reference", or None when resolved per-call to
     # f"ws:{ws}" (a workspace-scoped dataset, e.g. the knowledge base).
@@ -184,6 +200,10 @@ class DatasetSchema:
     aggregates: frozenset[str] = field(
         default_factory=lambda: frozenset({"count", "avg", "min", "max"})
     )
+    # label -> identity properties; [0] is the column `ensure_row_identity` prepends.
+    identity: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # label -> small-domain classifier properties (a facet enumeration is exempt).
+    facets: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 # Matches the actual shipped `Product` node shape (K-052,
@@ -201,6 +221,8 @@ CATALOG_SCHEMA = DatasetSchema(
             "price": float,
         },
     },
+    identity={"Product": ("name", "nameNormalized")},
+    facets={"Product": frozenset({"category"})},
 )
 
 # Matches the actual shipped document-ingestion schema
@@ -216,6 +238,17 @@ KNOWLEDGE_BASE_SCHEMA = DatasetSchema(
         "Entity": {"entityId": str, "name": str, "nameNormalized": str, "type": str},
         "Document": {"documentId": str, "title": str, "sourceFormat": str},
         "Chunk": {"chunkId": str, "text": str, "seq": int, "documentId": str},
+    },
+    identity={
+        "Entity": ("name", "nameNormalized", "entityId"),
+        "Document": ("title", "documentId"),
+        # `chunkId` is the only unique key (UNIQUE constraint,
+        # `bootstrap_schema.sh`): `seq` alone identifies no row.
+        "Chunk": ("chunkId",),
+    },
+    facets={
+        "Entity": frozenset({"type"}),
+        "Document": frozenset({"sourceFormat"}),
     },
 )
 
@@ -269,9 +302,22 @@ def merge_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return merged
 
 
-# An equality filter on one of these marks a single-entity lookup
-# (`default_returns`).
-_NAME_LOOKUP_PROPERTIES = frozenset({"name", "nameNormalized"})
+def _is_identity_lookup(
+    label: str, filters: Iterable[tuple[Any, Any]], schema: DatasetSchema,
+) -> bool:
+    """True iff some `(property, op)` pair is an `=` on one of `label`'s
+    declared identity properties — a single-entity lookup ("How much is X?").
+    The one definition `default_returns` and `ensure_row_identity` share
+    (`docs/plans/salesperson-query-graph-data.md` §3.1 D3), so their two
+    exemptions cannot drift apart. `default_returns` passes raw, unvalidated
+    pairs: the `isinstance` guard keeps a malformed (e.g. unhashable list)
+    `property` from raising past the tool's `(ValidationError, ValueError)`
+    net — it is simply not a lookup, and validation rejects it later."""
+    identity = schema.identity.get(label, ())
+    return any(
+        op == "=" and isinstance(prop, str) and prop in identity
+        for prop, op in filters
+    )
 
 
 def default_returns(payload: dict[str, Any], schema: DatasetSchema) -> dict[str, Any]:
@@ -287,11 +333,13 @@ def default_returns(payload: dict[str, Any], schema: DatasetSchema) -> dict[str,
     reject.
 
     **Not filled for a single-entity lookup** — an *equality* (`=`) filter on
-    `name` or `nameNormalized` ("How much does X cost?"): the answer there is a fact
-    *about* X, and handing back X's bare name invites the caller to fabricate
-    that fact, so the request stays invalid and the tool abstains. Any other
-    op on the name (`name <> X`, "everything except X") is list-shaped, so
-    the default applies.
+    one of the label's `schema.identity` properties (`_is_identity_lookup`;
+    for `Product`, `name` or `nameNormalized`; for `Entity`, also `entityId`)
+    ("How much does X cost?"): the answer there is a fact *about* X, and
+    handing back X's bare name invites the caller to fabricate that fact, so
+    the request stays invalid and the tool abstains. Any other op on the name
+    (`name <> X`, "everything except X") is list-shaped, so the default
+    applies.
 
     Known limit: an aggregate question whose completion omits `returns` gets a
     name list (capped by `limit`), not a count.
@@ -307,13 +355,65 @@ def default_returns(payload: dict[str, Any], schema: DatasetSchema) -> dict[str,
     if "name" not in schema.labels.get(label, {}):
         return payload
     filters = matches[0].get("filters")
-    if isinstance(filters, list) and any(
-        isinstance(f, dict) and f.get("op") == "="
-        and f.get("property") in _NAME_LOOKUP_PROPERTIES
-        for f in filters
+    if isinstance(filters, list) and _is_identity_lookup(
+        label,
+        ((f.get("property"), f.get("op")) for f in filters if isinstance(f, dict)),
+        schema,
     ):
         return payload
     return {**payload, "returns": [f"{var}.name"]}
+
+
+def ensure_row_identity(request: QueryRequest, schema: DatasetSchema) -> QueryRequest:
+    """K-079 F2 (`docs/plans/salesperson-query-graph-data.md` §3.1 D1): a
+    per-row attribute projection always carries the row's identity.
+
+    Returns `request` unchanged unless **all four** hold, in which case it
+    returns a re-validated copy whose `returns` is
+    `[<var>.<identity[0]>, *returns]` — prepended, so identity is each row's
+    first key:
+
+    1. the match's label declares an identity (`schema.identity`);
+    2. no `returns` entry is an aggregate — a mixed list is a grouped
+       aggregate whose non-aggregate columns *are* the grouping key, and an
+       extra identity column would regroup it per entity;
+    3. no projected property is already an identity property, and the request
+       is not a facet enumeration: every projected property in
+       `schema.facets` **and** the compiled shape is `compile()`'s plain
+       `RETURN DISTINCT` branch (`order_by` absent or in `returns`). With
+       `order_by` outside `returns`, `compile()` de-duplicates on
+       `(facet, order key)` — one unkeyed row per entity, RC-1's shape;
+    4. not a single-entity lookup (`_is_identity_lookup`).
+
+    Separate from `compile()` on purpose: `compile()` stays "compile exactly
+    this request"; this is a normalisation the caller applies first. The
+    re-validation can fail only on `returns`' `max_length`, which surfaces as
+    the caller's existing `ValidationError` abstention, never a crash.
+    """
+    match = request.matches[0]
+    identity = schema.identity.get(match.label, ())
+    if not identity:
+        return request
+    projected: list[str] = []
+    for expr in request.returns:
+        proj = _PROJECTION_RE.fullmatch(expr)
+        if proj is None:
+            return request  # an aggregate (alone or grouped)
+        projected.append(proj.group(2))
+    if any(prop in identity for prop in projected):
+        return request
+    plain = request.order_by is None or request.order_by in request.returns
+    facets = schema.facets.get(match.label, frozenset())
+    if plain and all(prop in facets for prop in projected):
+        return request
+    if _is_identity_lookup(
+        match.label, ((f.property, f.op) for f in match.filters), schema,
+    ):
+        return request
+    return QueryRequest.model_validate({
+        **request.model_dump(),
+        "returns": [f"{match.var}.{identity[0]}", *request.returns],
+    })
 
 
 def _require(condition: bool, message: str) -> None:

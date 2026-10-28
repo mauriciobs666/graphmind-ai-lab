@@ -348,9 +348,12 @@ _WRITE_TARGET_ARG: dict[str, str] = {
 # target ID this node execution. `view_cart` deliberately does NOT ground an
 # add: the cart's contents are exactly the previous turn's writes, so "it was
 # in the cart I just viewed" is the re-fire shape itself. A remove, by
-# contrast, naturally targets what is in the cart. `query_graph_data` is here
-# so a future row carrying `p.productId` (K-079 F2) grounds with no further
-# change. A write tool is deliberately not a source for itself (plan D3 listed
+# contrast, naturally targets what is in the cart. `query_graph_data` is here,
+# but surfaces no `productId` today: K-079 F2 chose `name` as a catalog row's
+# identity column, not `productId` (`docs/plans/salesperson-query-graph-data.md`
+# §3.2). The dotted-key match in `_collect_target_values` (`p.productId`) is
+# kept for that section's reversal trigger, which would ground such a row with
+# no change here. A write tool is deliberately not a source for itself (plan D3 listed
 # it; dropped on review n1): a write dispatches only when its normalized ID is
 # already in its own set, and its result echoes that same ID, so the row could
 # never add anything — it only suggested that a write grounds itself.

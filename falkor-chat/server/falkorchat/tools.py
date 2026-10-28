@@ -1037,10 +1037,27 @@ class QueryGraphDataTool:
     duplicating a condition or `returns` expression; a conflicting repeated
     scalar, or two different `matches`, abstains), and
     `querygen.default_returns` fills an absent `returns` with `<var>.name`
-    — except for a single-entity lookup (an `=` filter on `name` or
-    `nameNormalized`; see `default_returns`), which abstains.
+    — except for a single-entity lookup (an `=` filter on one of the label's
+    identity properties, e.g. `name`/`nameNormalized`; see `default_returns`),
+    which abstains.
     The shared parser's default (last-wins) is unchanged for every other
     caller.
+
+    **Row identity (K-079 F2, `docs/plans/salesperson-query-graph-data.md`
+    §3.1 D1).** After validation and before `compile()`,
+    `querygen.ensure_row_identity` prepends the label's identity column
+    (`p.name` for `Product`) to any per-row attribute projection that lacks
+    one, so every row names the entity it is about and a price list can no
+    longer be zipped by position against a separate name list (RC-1,
+    `docs/reviews/salesperson-fabricated-prices-rca.md`). Left unchanged: an
+    aggregate (alone or grouped — its non-aggregate columns are the grouping
+    key), a projection that already carries an identity property, a facet
+    enumeration (`RETURN DISTINCT p.category` with no `order_by` outside
+    `returns` — such an ordering makes it per-row, so it is identified too),
+    and a single-entity lookup ("How much is X?" — an `=` filter on an
+    identity property). `compile()` itself is unchanged, and the prepended
+    column is `name`, never `productId`: this tool surfaces no cart-write ID
+    (§3.2).
 
     Every failure short of a genuine infrastructure fault — an unparseable or
     schema-invalid structured completion, or a `querygen.compile` rejection
@@ -1120,8 +1137,11 @@ class QueryGraphDataTool:
             return json.dumps({"items": [], "finding": "no matching data found"})
 
         try:
-            request = querygen.QueryRequest.model_validate(
-                {**querygen.default_returns(parsed, schema), "dataset": arguments["dataset"]}
+            request = querygen.ensure_row_identity(
+                querygen.QueryRequest.model_validate(
+                    {**querygen.default_returns(parsed, schema), "dataset": arguments["dataset"]}
+                ),
+                schema,
             )
             compiled = querygen.compile(request, schema)
         except (ValidationError, ValueError):

@@ -1370,6 +1370,155 @@ def test_query_graph_data_does_not_default_returns_for_a_single_entity_name_look
     assert svc.structured_query_calls == []
 
 
+def test_query_graph_data_does_not_default_returns_for_an_entity_id_lookup():
+    # K-079 F2 D3 (`docs/plans/salesperson-query-graph-data.md` §3.1): the
+    # single-entity-lookup test is the label's declared `identity`, so an `=`
+    # on `Entity.entityId` is a lookup too — echoing back the looked-up
+    # entity's bare name is the fabrication bait `default_returns` excludes.
+    reply = (
+        '{"matches": [{"var": "e", "label": "Entity", "filters": '
+        '[{"property": "entityId", "op": "=", "value": "ent-1"}]}]}'
+    )
+    svc = StubServices(structured_query_rows=[{"e.name": "Acme Corp"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "knowledge_base"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+def test_query_graph_data_abstains_not_crashes_on_an_unhashable_lookup_property():
+    # Review m5: an `=` filter whose `property` is a list, with `returns`
+    # absent, reaches `default_returns`' lookup test before validation. It
+    # must abstain like any other malformed completion, never raise
+    # `TypeError` past `run`'s `(ValidationError, ValueError)` net.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", '
+        '"filters": [{"property": ["name"], "op": "=", "value": "x"}]}]}'
+    )
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}])
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+
+    out = json.loads(tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={}))
+
+    assert out == {"items": [], "finding": "no matching data found"}
+    assert svc.structured_query_calls == []
+
+
+# ── K-079 F2: row identity (`docs/plans/salesperson-query-graph-data.md` §3.1, §6.2) ──
+
+
+def _compiled_cypher(reply: str, dataset: str = "catalog") -> str:
+    svc = StubServices(structured_query_rows=[{"x": 1}])
+    QueryGraphDataTool(svc, llm=StubQueryLLM(reply)).run(
+        {"question": "q", "dataset": dataset}, ctx=CTX, run={},
+    )
+    [call] = svc.structured_query_calls
+    return call["compiled"].cypher
+
+
+def test_query_graph_data_prepends_name_to_the_rcas_ordered_price_list():
+    # T-A1: the RCA's verbatim second completion
+    # (`docs/reviews/salesperson-fabricated-prices-rca.md` §3). Once `p.name`
+    # is projected, the order key is too, so the plain branch is taken.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product"}], '
+        '"returns": ["p.price"], "order_by": "p.name"}'
+    )
+
+    assert _compiled_cypher(reply) == (
+        "MATCH (p:Product) RETURN DISTINCT p.name, p.price ORDER BY p.name ASC LIMIT $limit"
+    )
+
+
+def test_query_graph_data_prepends_name_to_an_unordered_price_list():
+    # T-A2: the t36/t45 shape — `DISTINCT p.price` alone collapsed the two
+    # $89.99 products into one row.
+    reply = '{"matches": [{"var": "p", "label": "Product"}], "returns": ["p.price"]}'
+
+    assert _compiled_cypher(reply) == (
+        "MATCH (p:Product) RETURN DISTINCT p.name, p.price LIMIT $limit"
+    )
+
+
+@pytest.mark.parametrize("group_key", [
+    "p.category",
+    # A non-facet grouping key: with the aggregate exemption gone, the facet
+    # exemption would still cover `p.category` alone, so only this case pins
+    # the aggregate exemption itself at the tool level (mutant MA1).
+    "p.price",
+])
+def test_query_graph_data_leaves_a_grouped_aggregate_unchanged(group_key):
+    # T-A3: the non-aggregate column of a grouped aggregate is its grouping
+    # key — prepending `p.name` would regroup per product and change every count.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product"}], '
+        f'"returns": ["{group_key}", "count(p)"]}}'
+    )
+
+    assert _compiled_cypher(reply) == (
+        f"MATCH (p:Product) RETURN {group_key}, count(p) LIMIT $limit"
+    )
+
+
+@pytest.mark.parametrize("name_prop", ["name", "nameNormalized"])
+def test_query_graph_data_leaves_a_single_entity_lookup_unchanged(name_prop):
+    # T-A4: the `nlq-01` shape — one fact about an entity the question names.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product", "filters": '
+        f'[{{"property": "{name_prop}", "op": "=", "value": "usb-c hub"}}]}}], '
+        '"returns": ["p.price"]}'
+    )
+
+    assert _compiled_cypher(reply) == (
+        f"MATCH (p:Product) WHERE p.{name_prop} = $p0 RETURN DISTINCT p.price LIMIT $limit"
+    )
+
+
+@pytest.mark.parametrize(("reply", "expected"), [
+    pytest.param(
+        '{"matches": [{"var": "e", "label": "Entity", "filters": '
+        '[{"property": "nameNormalized", "op": "=", "value": "acme corp"}]}], '
+        '"returns": ["e.type"]}',
+        "MATCH (e:Entity) WHERE e.nameNormalized = $p0 RETURN DISTINCT e.type LIMIT $limit",
+        id="name-lookup",
+    ),
+    pytest.param(
+        '{"matches": [{"var": "e", "label": "Entity"}], "returns": ["e.type"]}',
+        "MATCH (e:Entity) RETURN DISTINCT e.type LIMIT $limit",
+        id="facet-enumeration",
+    ),
+])
+def test_query_graph_data_leaves_kb_entity_lookup_and_facet_enumeration_unchanged(reply, expected):
+    # T-A5.
+    assert _compiled_cypher(reply, dataset="knowledge_base") == expected
+
+
+@pytest.mark.parametrize(("order_by", "expected"), [
+    pytest.param(
+        "p.name",
+        "MATCH (p:Product) RETURN DISTINCT p.name, p.category ORDER BY p.name ASC LIMIT $limit",
+        id="ordered-outside-returns-is-per-row",
+    ),
+    pytest.param(
+        "p.category",
+        "MATCH (p:Product) RETURN DISTINCT p.category ORDER BY p.category ASC LIMIT $limit",
+        id="ordered-by-the-facet-enumerates",
+    ),
+])
+def test_query_graph_data_identifies_a_facet_list_only_when_ordered_per_row(order_by, expected):
+    # T-A6 (review B1): `order_by` outside `returns` takes compile()'s
+    # tuple-distinct branch, which yields one unkeyed category row per
+    # product — RC-1's shape with `category` in place of `price`.
+    reply = (
+        '{"matches": [{"var": "p", "label": "Product"}], "returns": ["p.category"], '
+        f'"order_by": "{order_by}"}}'
+    )
+
+    assert _compiled_cypher(reply) == expected
+
+
 def test_query_graph_data_ands_repeated_filters_in_a_prose_wrapped_own_line_reply():
     # P5-3: the verbatim nlq-12 reply is fenced, so it parses whole; this one
     # is prose-wrapped and only the own-line scan can find it — the hook must

@@ -39,7 +39,23 @@ e.g. `"p.name"`, `"count(p)"` — `repository.run_readonly_query`'s own
 docstring), and it does mean a query that returned an extra, unrequested
 column would inflate the actual set and fail an exact-match comparison against
 the golden set — the correct outcome, not a scoring bug: FR-2's contract is to
-return exactly what was asked, not "a superset that happens to contain it."
+return exactly what was asked (as qualified by the row-identity rule below),
+not "a superset that happens to contain it."
+
+**Row identity (K-079 F2, `docs/plans/salesperson-query-graph-data.md` §3.1).**
+The mechanism returns exactly the requested columns, **plus the label's
+identity column, prepended, whenever the request projects per-row attributes
+without one** (D1's four conditions, `querygen.ensure_row_identity`). A
+projection of facet properties only, such as `category` or `type`, is a value
+enumeration and stays exempt, but only without an `order_by` outside
+`returns`: that ordering makes it per-row. A golden pair whose question asks
+for a per-row attribute list ("prices of the Audio products") must therefore
+list the identity values (names) in `expected.values` as well. A scalar pair
+must be a single-entity lookup (an `=` filter on an identity property), an
+aggregate, or a superlative that projects the identity itself, because any
+other single-attribute shape now returns two columns. This restores the ml
+note's own definition of a set answer as a set of identifiers
+(`docs/plans/workflow-nl-query-generation-ml.md` §3).
 """
 
 from __future__ import annotations
