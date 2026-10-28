@@ -1,6 +1,10 @@
 # Connected code graph — ML & evaluation method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 2
+
+_Revision 2026-10-26 (v2): added §8 (stakeholder decisions S1–S38 and the re-checked use cases:
+statistical meaning of the new and changed ACs, AC-24 and RCA-baseline designs, untested-code risk
+ranking, new stakeholder questions); §1–§7 are v1 and still hold except where §8.1 supersedes them._
 
 ## 0. Question, decision at stake, verdict
 
@@ -813,3 +817,286 @@ first measurements (P1 for noise, P4 for interpretation, P5 for RCA).
 3. Which roles produce ground truth in this lab? Recommendation: census and question sets by an
    agent instance with repo-read-only access and no view of the system (for example a
    `qa-engineer` brief that withholds packs and output), spot-checked by the stakeholder.
+
+## 8. Pass 2 — stakeholder decisions and the re-checked use cases (2026-10-26)
+
+Inputs: plan v2 (`docs/plans/connected-code-graph.md`, which adopted M1–M5 and m1–m8, §2.7);
+`analyst`'s review (`docs/reviews/connected-code-graph.md`); and the requirements as of
+`c98c3578`, which carry decisions S1–S38 plus the re-checked use cases (FR-11–FR-15, AC-12–AC-15,
+new AC-24 and AC-25).
+
+### 8.1 What the decisions settle or supersede in §1–§7
+
+- **Settled as recommended:** RQ1→S8, RQ2→S9, RQ3→S3 (fixed order), RQ4→S10, RQ5→S11, RQ6→S12,
+  RQ7→S14, RQ8→S2, RQ9→S15/AC-24, RQ11→S16. **RQ10's exchange rate is 4:1**, provisional; its
+  denominator still needs pinning (§8.5 SQ2).
+- **§7 open questions closed.** (1) Portuguese: **yes** (S37), so §4.4's set becomes bilingual
+  (§8.3). (2) Workplace statistics: **declined** (S38), so the "any provider of the kind" burden
+  is checked only on this repo and the OpenTelemetry demo, and the risk is accepted. (3) Ground-
+  truth producer: **an isolated read-only agent, spot-checked by the stakeholder** (S36). §8.2
+  adds how to check that agent's *completeness*, which a spot-check cannot.
+- **Plain language moves into P1 (S35).** Part of §4.4's set must exist at P1, but only the impact
+  use case is built then. AC-24 can be gated in full only after P5. Until then, the impact cells
+  are gated and the rest are reported as "not yet built".
+- **Per-test runtime coverage is required (S29).** That makes runtime coverage a usable RCA
+  feature (Q2 feature 5) and gives the AC-14 "tests a change reaches" question a runtime ground
+  truth (§8.2).
+- **`analyst` findings on this note:**
+  - m3 (θ vs "no score cut-off"): **accepted.** θ and the symptom-anchor score floor are a
+    deliberate, frozen, recall-calibrated exception. They are applied by the engine over the
+    *complete* full-text result set, never as an index `LIMIT`.
+  - m1 (resolved-call precision): **accepted.** The P0 spike measures **resolved-call precision**
+    next to fallback recall (§3.6), because a wrong resolution is both a silent miss and a false
+    *confirmed*. Gate it with AC-5's confirmed-precision bar (≥ 0.95 observed) on the sample.
+  - B5.4 (fixture and ground-truth strata in no phase): **agreed.** The held-out strata that P1
+    gates on are P0 deliverables.
+  - B5.1: AC-7 pre-registration is **per stratum**: each stratum's first contact is the first build
+    that includes support for it. That is the one coherent form of "first contact" given that SQL
+    arrives in P3.
+- **New: impact through data flow and control dependencies (FR-11, AC-25).** Control-dependency
+  fan-out is the largest new noise source in the design. AC-5's noise labeling needs a rubric for
+  indirect items. *Proposal:* an indirect item is **real** if some execution exists in which a
+  change at the anchor changes the item's inputs or whether it runs. The labeler records distance,
+  so possible-precision can be reported by distance band. The provisional 4:1 cap should be
+  checked per band too. A pooled ratio that passes only because direct items dilute a noisy
+  distance-3 band misleads.
+
+### 8.2 (a) Are the new and changed criteria statistically meaningful at their sizes?
+
+Intervals are Wilson 95%. "P(pass)" is the binomial probability that a system with the stated
+*true* rate meets the gate on one first-run attempt. It is the number that tells the stakeholder
+how much luck a gate contains.
+
+| Criterion | Size | Meaningful? | What I'd change |
+|---|---|---|---|
+| AC-5 recall: every item of ≥ 75 | 75 | **Yes, and very strict.** 0 misses gives a lower bound of 0.951. But a zero-miss gate on 75 first-run items passes a system with true recall 0.99 only **47%** of the time (0.995 → 69%; 0.999 → 93%; 0.98 → 22%) | Keep it, since it is the stakeholder's stated priority, but write down the **fail procedure** now: each miss gets a root cause and a fix; the failed items move to dev; the gate reruns on **fresh** held-out items. Otherwise the first failure invites quiet re-runs on the same list (§8.5 SQ1) |
+| AC-5 key completeness | — | **Not measured by any criterion.** The stakeholder's spot-check verifies that the key's items are *correct*. It cannot show the key is *complete*, and an incomplete key overstates recall | **Two isolated key-writing agents** with different strategies (provider-first vs consumer-first), different instances, and if possible different models. Estimate the true total with **capture–recapture**: N̂ = n₁·n₂ / m, where m is the overlap. Report key completeness ≈ \|union\| / N̂. Both agents share LLM blind spots, so N̂ is itself an underestimate; label it a lower bound on incompleteness. The runtime oracle (§4.1) stays the independent check |
+| AC-5 confirmed ≥ 95% real | All confirmed items in the held-out answers (likely hundreds) | **Yes.** Every confirmed item is labeled (a census of that set, not a sample) | State that it is an observed rate over all confirmed items, with the interval reported |
+| AC-5 false alarms ≤ 4 per real impact | ≥ 100 sampled possible items | **Yes as a provisional ratio, but its denominator is ambiguous.** "Per real impact" (all real items, confirmed included) is much looser than "per real *possible* item" (§4.2's 0.20 precision floor) when most real items are confirmed | Pin the denominator (§8.5 SQ2). Estimate it as a ratio of sums pooled over held-out answers, with a bootstrap-over-answers interval (resample answers, not items; items within an answer are correlated). Also report per distance band (§8.1) and p90 per-answer burden |
+| AC-6 planted unprovable kinds | ≥ 1 per kind as written | Deterministic property. **One instance per kind is a coincidence-level test** | ≥ 3 planted instances per named kind, in different syntactic shapes |
+| AC-7 first contact | Per stratum | Meaningful only if pre-registration is per stratum (B5.1, §8.1) | — |
+| AC-12 top-5 ≥ 70% (structured) | 40 bugs | **Coarse.** 28/40 has interval [0.55, 0.82]. A system with true top-5 of 0.70 passes 58% of the time; 0.80 passes 96%; 0.60 passes 13% | Acceptable for a provisional bar. Read it as "true rate is probably ≥ ~0.65". Do not compare models or versions on this gate alone; use paired tests (§8.3). Define the per-bug unit for the three structured forms (§8.3) |
+| AC-12 top-5 ≥ 50% (symptom) | 40 bugs | **Coarse.** 20/40 is [0.35, 0.65]. True 0.50 passes 56%; 0.60 passes 93% | Same reading; the symptom form is also where the blind-writer protocol (§4.3 step 3) matters most |
+| AC-12 beats baseline | 40 bugs, paired | **Yes if the test is defined.** As written, "beats" is undefined, and BFS order has heavy ties that make a naive baseline arbitrary | §8.3 defines the baseline (exact tie expectation) and the test (paired sign test over bugs) |
+| AC-12 single planted cases (config, schema, wiring, data-flow-only, recent change, outside branch, no-match, ruled-out re-rank) | 1 each | Functional checks, deterministic; fine as such. **They say nothing about ranking those cause kinds** | Make config, schema-mismatch and wiring causes **strata of the 40** (≥ 5 each), so their top-5 rates are at least reported. Add ≥ 5 infrastructure-caused failures where the correct top hypothesis is the "outside the mapped code" branch, and ≥ 20 negative-control inputs for "no match" (§8.3) |
+| AC-12 recent-change feature | — | **Leak risk.** In a mutation-generated set, *every* true cause is the most recent change. The recent-change feature then scores the answer for free, and weight tuning learns "recent = cause" | Place the mutation **outside** the recency window in ~half the bugs (commit it behind realistic distractor commits, or back-date it relative to the snapshot's window). Report held-out hit@5 **with and without** the feature (ablation). Tune weights with the same mix. The six real RCA cases give the realistic check |
+| AC-12 "trace + log reinforce each other" | Bugs that yield both | **Not sound as a universal "at least as high as either alone".** See below | Two-part version (§8.5 SQ3) |
+| AC-14 risk ranking | — | No ground truth for "risk". It can be checked for being stated and deterministic, but not for being *right* | §8.4: stated score; optional retrospective check |
+| AC-14 "exactly the tests" a change reaches | Per planted change | **Conflicts with FR-8.** Static reach over-lists by design (possible links), so "exactly" fails on any possible hop | Reword (§8.5 SQ5): every exercising test listed (zero misses); per-test runtime data, where supplied, separates confirmed from possible |
+| AC-15 10 real + 10 look-alike per kind, 5 kinds | 10 / 10 | **Smoke-level per kind.** 10/10 detected gives a recall lower bound of 0.72; 0/10 false alarms gives an upper bound of 0.28. Pooled over 5 kinds (50/50) gives 0.93 and 0.07 | Fine as provisional. Report per kind *and* pooled, and never claim per-kind precision from 10 negatives. The **never-unreachable** clause is the real gate (zero tolerance, by design) |
+| AC-15 secret values never appear | — | Deterministic, but needs a test design | **Canary secrets**: plant unique high-entropy canaries, then search every stored view, answer, report and log for each canary and for every substring of ≥ 8 characters. Zero hits. Also: the "fingerprint" must be a **keyed** hash (HMAC with a local key), not a plain hash. A plain SHA of a short or low-entropy secret can be brute-forced, which amounts to storing the value (route to `security-expert`) |
+| AC-24 ≥ 92% of ~100, EN + PT | ~100 | **Pooled yes; per language marginal.** 92/100 has interval [0.85, 0.96]. 46/50 per language is [0.81, 0.97] | Gate pooled; report per language with a **per-language floor** (proposal: ≥ 0.85 observed), so a collapse in one language cannot hide in the pool. Details in §8.3 |
+| AC-24 "every ambiguous one" | ~15 | Zero tolerance on ~15: 15/15 gives a lower bound of 0.80 | Fine, but it must be paired with an **over-asking** check, or "always answer with options" passes it (§8.3) |
+| AC-25 data-flow + control effect | 1 each | Functional | ≥ 3 each; noise by distance band (§8.1) |
+
+**"Reinforce each other" (FR-12, AC-12): judgment.** The draft criterion, that a trace and a log
+together rank the true cause at least as high as either alone, read as rank(combined) ≤
+min(rank(trace), rank(log)) for every bug, is **not sound as a universal rule**:
+
+- Evidence can legitimately conflict. A log line from another service adds anchors whose backward
+  reach brings in strong competitors. Under any additive score (Q2), the true cause can drop below
+  its trace-only rank while the ranking still behaves correctly. A universal monotonicity demand
+  would push the design toward hacks, such as forcing the trace-only order to dominate, that make
+  combination pointless.
+- It also says nothing about the case the stakeholder actually means by "reinforce": two weak
+  pieces of evidence that *each* rank the cause around 8th should rank it near the top
+  *together*. The draft criterion is satisfied by a ranker that ignores the second piece
+  entirely.
+
+**Recommended testable version** (for the stakeholder; §8.5 SQ3), over the bugs that yield both a
+trace and a log (a stratum of ≥ 20 of the 40):
+1. **Helps on aggregate:** combined top-5 rate ≥ the better single form's top-5 rate (observed),
+   and combined MRR ≥ the better single form's MRR.
+2. **Never degenerates:** in every bug, rank(combined) ≤ max(rank(trace), rank(log)). The combined
+   evidence is never worse than the *worse* single piece. This is a deterministic guard that an
+   agreement-weighted score can reasonably meet, and a failure of it signals a real defect.
+3. **Actually combines:** in at least some bugs, rank(combined) < min(rank(trace), rank(log)).
+   This is reported as a count. If it is zero across the stratum, the system is not combining
+   evidence, whatever (1) says.
+The same three apply to symptom + trace.
+
+### 8.3 (b) Evaluation designs: AC-24 and the RCA baseline (plus RCA feedback, "no match", outside branch)
+
+#### AC-24 — understanding plain-language questions (supersedes §4.4 where they differ)
+
+**Set.** The grid is still 5 use cases × 4 starting-point groups = 20 cells. **Held-out ≈ 100 =
+50 English + 50 Portuguese, 2–3 per cell per language**, plus the ambiguity stratum (≥ 15, split
+across both languages) and a dev set of ~40 (20 + 20) for prompt work.
+- **Native, not translated.** Each language's questions are written natively by the key-writing
+  agent, prompted to write as a developer asks: partial names, wrong case, pasted fragments,
+  code-switching (Portuguese prose around English identifiers is the realistic Portuguese case).
+  Translations would understate the difficulty.
+- **One small paired probe, reported only:** 10 dev questions written in both languages, to see
+  whether a language gap exists (McNemar on 10 pairs cannot reach significance, so it is a
+  descriptive signal, not a test).
+- **Gold** is the resolved structured request against a pinned snapshot: use case, the resolved
+  anchor IDs, scope and direction (the latter now includes the reverse "what does this depend
+  on?", FR-11). **Ambiguity is labeled by two independent annotators.** An item is in the
+  ambiguity stratum only if both mark it ambiguous; disagreements are dropped from the gate and
+  reported. The stakeholder, a native Portuguese speaker, spot-checks the Portuguese gold in
+  particular.
+- **Phasing (S35):** at P1 only the impact column is buildable. Gate on the impact cells (~25
+  questions, 12–13 per language), with the bar reported but treated as provisional. With n ≈ 25,
+  23/25 = 0.92 has interval [0.75, 0.98], so it is a smoke gate. The full AC-24 gate runs when all
+  five use cases exist.
+
+**Scoring rule (deterministic, against gold):**
+
+| System output | Unambiguous item | Ambiguous item |
+|---|---|---|
+| Single interpretation = gold | understood | **fail** (a silent guess, even if lucky) |
+| Single interpretation ≠ gold | not understood | fail |
+| Options, gold among them | **not understood** (over-asking) | understood |
+| Options, gold not among them | not understood | fail |
+
+The "options on an unambiguous item" cell is what stops "always answer with options" from passing
+both clauses. Report the **over-asking rate** separately, because a model that hedges a lot is a
+different failure from one that misreads.
+
+**Gate (provisional):** pooled understood ≥ 0.92 over the ~100 unambiguous held-out items; each
+language ≥ 0.85 observed; every ambiguity-stratum item answered with options containing the gold.
+Report the item flip rate over 5 uncached repeats (§4.4). Run per configured interpreter model;
+§8.5 SQ7 asks which models the 92% binds.
+
+**Leakage:** held-out questions never appear as few-shot examples. Only dev questions may. The
+OpenTelemetry demo is not a source of questions (contamination, §4.5).
+
+#### RCA baseline — "closest to the error first"
+
+**Definition.** Same candidate set as the system (so the comparison isolates ranking, not
+retrieval). Order by **hop distance from the nearest anchor** (over all anchors, when several
+pieces of evidence are given).
+
+**Ties: score the baseline's expectation exactly, never break ties arbitrarily.** Hop distance
+produces large tie blocks. Breaking them by symbol ID would make the baseline's hit@5 depend on
+alphabetical accident, in either direction. For a bug whose true cause sits in a tie block of size
+b with a candidates strictly closer: expected hit@5 = min(1, max(0, 5 − a) / b), and expected
+rank = a + (b + 1)/2. Both are exact; no random draw, no seed.
+
+**A second, stronger reference (reported, not gated):** "closest first, recently changed first"
+(sort by in-window change, then distance). It is roughly what a developer does with `git log`. A
+ranker that beats the agreed baseline but not this one is not yet earning its complexity, and the
+stakeholder should know.
+
+**The test.**
+- **Analysis unit is the bug.** For the three structured forms, per-bug score s = number of forms
+  (0–3) with the true cause in the top 5; the baseline's s is the sum of its exact expectations.
+- **Paired sign test** over bugs on sign(s_system − s_baseline), ties dropped, one-sided
+  α = 0.05. The symptom form is tested the same way, separately.
+- "Beats the baseline" = the structured-form test is significant. The symptom-form result is
+  reported, plus Holm across the two tests if both are to be claimed.
+- Resolving power: an exact sign test needs **≥ 5 net wins with no losses** (one-sided) to reach
+  α = 0.05, and more as losses appear. With 40 bugs, a ranker that wins about 12 bugs and loses
+  about 2 is detectable; a few-point average gain is not. Report MRR difference with a paired
+  bootstrap-over-bugs interval as the effect size.
+
+#### RCA feedback (ruled out / confirmed), "no match", and the outside branch
+
+- **Feedback re-ranking.** A *simulated investigator*: starting from the tree, repeatedly mark the
+  top hypothesis ruled out if it is not the true cause. **Metric: rule-outs needed to reach the
+  true cause.** With feedback that only deletes, this equals rank − 1; a feedback model that also
+  down-weights hypotheses sharing the ruled-out chain should do **better**. Report the median over
+  held-out bugs against rank − 1 (paired). Marks are part of the echoed request, so FR-19 holds
+  per session.
+- **"No match" vs never-miss.** Q5's recall-calibrated tier-3 θ means an unrelated error string
+  will often weakly match *something*, so a literal "matches nothing" rarely fires. Proposed
+  definition (§8.5 SQ4): **no match = no stack frame, no exact or full-template match**. Weak
+  tier-3 matches are still listed under "weak matches only". Evaluation: ≥ 20 **negative
+  controls** (error strings from the OpenTelemetry demo or other code fed to the proving repo, and
+  vice versa) must yield "no match". Every held-out bug × form must **not** yield it. A false "no
+  match" is a miss.
+- **Outside the mapped code.** The branch needs a score like any hypothesis, or it is decorative.
+  Feature: an **infrastructure-signature pack** (connection refused, DNS failure, timeout, OOM
+  kill, TLS errors, third-party exception classes) matched against the evidence. Evaluation:
+  ≥ 5 recorded infrastructure failures (stop the database container, kill the broker, block
+  a network route). A wrong port in a mapped config file is *not* one of these: FR-12 makes it a
+  wiring hypothesis traced to its entry. The outside branch should rank first; report its rank.
+
+### 8.4 (c) Risk ranking for untested code (FR-14, AC-14)
+
+**Recommendation: a stated, additive points score per untested function, deterministic per
+snapshot, with each factor's points shown as the reason.** Same philosophy as the RCA ranker:
+transparent and repeatable, with weights that are a policy statement rather than a fitted model.
+There is no labeled "risk" data to fit against.
+
+| Factor (FR-14 names the first three) | Measure | Points (proposal) |
+|---|---|---|
+| **Reach** | Number of distinct **entry points** (routes, RPC methods, topic consumers, MCP tools, CLI mains) whose forward reach contains the function, over confirmed links; cross-boundary entry points counted separately | 0 / 1 / 2 / 3 at 0, 1–2, 3–9, ≥ 10 entry points; +1 if any reaching entry point is in another component |
+| **Security relevance** | On a source→sink chain, on a path to a sensitive entity, an `auth-check` itself, or carrying a security finding | 0 or 3 (3 = any of these) |
+| **Recent change** | Changed within the codebase's recent-change window (the same per-codebase setting as RCA, FR-12) | 0 / 1 / 2 by number of in-window changes (0, 1, ≥ 2) |
+| **Complexity** (suggested addition, §8.5 SQ6) | Cyclomatic complexity from Joern's control-flow graph | 0 / 1 / 2 at < 5, 5–14, ≥ 15 |
+
+**Ordering:** total points descending; ties broken by reach, then by stable symbol ID. Why counts
+of **entry points** rather than raw callers: raw caller counts reward utility functions called
+from many places within one path, while entry-point reach measures how much user-visible
+behavior depends on the function. Possible-only reach is shown but **not scored**, so FR-8
+over-listing does not inflate risk. Code reachable only through possible links is listed in its
+own tier, "reachability uncertain".
+
+**Statically "reached but runtime-unexecuted"** functions (FR-14's disagreements) are a distinct
+class: listed alongside, flagged "statically reached, never executed by any test". They are a
+coverage gap even though static analysis counts them reached.
+
+**Evaluation: what can and cannot be claimed.**
+- **Checkable now (the AC-14 gate):** the score is stated per item; the order is deterministic
+  (same snapshot, same order); and planted functions with known factor values land in the
+  expected order (a fixture with, say, a high-reach security-relevant untested function, which
+  must outrank an unreachable helper).
+- **Predictive validity: not claimable without data, and not required by AC-14.** If wanted
+  later, a **retrospective check**: for each bug-fix commit in history (identified by the
+  `-rca`/`HISTORY.md` defect trail in this repo, or "fix" commits in the OpenTelemetry demo),
+  compute the ranking on the snapshot *before* the fix and record whether the fixed function was
+  in the top decile of untested code. Report the **lift** over random (top-decile hit rate ÷
+  0.10) with its interval. With the handful of fixes in this repo's history this is anecdote,
+  not evidence. Say so in any report, and do **not** re-weight the factors on it (that fits the
+  score to this repo's few bugs).
+- **Test-kind labels** (unit / integration / end-to-end, AC-14): deterministic rules (framework
+  markers, directory conventions, plus whether the test's reach crosses a boundary or drives an
+  external interface). Check accuracy on ~50 tests labeled by the blind key agent and report the
+  confusion matrix. A misclassified kind is cosmetic for the map but matters for "which tests
+  does this change reach?" filters.
+
+### 8.5 (d) Requirement questions for the stakeholder
+
+Each is one decision, followed by the recommended answer. None blocks P0 planning. SQ2–SQ5 change
+how an AC is scored, so they should be settled before P0 freezes the evaluation protocol.
+
+- **SQ1 — AC-5: what happens when the zero-miss gate fails?** At 75 items, a system that truly
+  finds 99% of impacts still fails about half the time on a first run. *Recommend:* keep zero
+  misses as the bar, and add "each miss is root-caused and fixed, and the gate is re-run on
+  **new** blind items, never on the same list". Alternative: allow at most one miss with a
+  recorded root cause. That is less strict, and I recommend against it given "missing a real
+  impact is worse than a false alarm".
+- **SQ2 — AC-5's 4:1 cap: four wrong *possible* items per what?** (a) Per real impact listed
+  (confirmed included), pooled over all test answers; or (b) per real *possible* item. (a) is the
+  user's view ("for each real thing I see, at most four false alarms") and is looser. (b) is
+  stricter. *Recommend (a)*, as the AC's wording reads, pooled over answers, with the 90th-
+  percentile answer's count and the per-distance figures also reported (indirect, data-flow and
+  control-dependency items are the noisiest).
+- **SQ3 — FR-12/AC-12 "reinforce each other": confirm the testable form.** The current reading
+  ("together ranks the true cause at least as high as either alone, every time") can fail for a
+  correctly behaving system, and is passed by one that ignores the second piece of evidence.
+  *Recommend:* over bugs with both a trace and a log, (1) together finds the cause in the top 5 at
+  least as often as the better single piece; (2) together is never worse than the *worse* single
+  piece for any bug; (3) at least some bugs rank higher together than with either alone (§8.2).
+- **SQ4 — "No match" vs never miss.** To avoid misses, weak text matches are kept, so a strict
+  "matches nothing" would almost never be said. *Recommend:* "no match" means no stack frame and
+  no exact or full-template match; weak matches are still shown, labelled "weak matches only",
+  together with what was tried and what to provide next.
+- **SQ5 — AC-14 "exactly the tests a change reaches" conflicts with over-listing (FR-8).**
+  *Recommend:* "lists every test that exercises the changed functions, with none missing; tests
+  reached only through unproven links are marked possible; where per-test runtime data is
+  supplied, it confirms which tests actually ran the changed code".
+- **SQ6 — AC-14 risk ranking: "ranked by a stated risk score", like RCA?** Nobody can show yet
+  that the ranking predicts where bugs will be; there is no data for it. *Recommend:* yes, word it
+  as a stated score with its reasons, and add **complexity** (how branchy the function is) as a
+  fourth factor next to callers, security relevance and recent change.
+- **SQ7 — AC-24: which model must reach 92%?** FR-9 accepts that a weaker local model "may need
+  more rephrasing". *Recommend:* the 92% binds **each codebase's configured default model**, so a
+  local-only codebase must have a local model that passes. Any other configured model has its
+  score shown, not gated. If no local model reaches 92%, local-only codebases get a stated lower
+  local target rather than a silent pass. Decide that number after P1 measures it.
+- **SQ8 — AC-12: ≥ 40 planted bugs, of which ≥ 20 yield both a stack trace and a log, ≥ 5 each
+  are config, schema-mismatch and wiring causes, and ≥ 5 infrastructure failures test the
+  "outside the mapped code" branch.** *Recommend yes.* This is scope (more planted bugs of specific
+  kinds), not a new bar; without it, the RCA additions are checked once each and never ranked.

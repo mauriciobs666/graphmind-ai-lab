@@ -383,3 +383,261 @@ decisions**, grouped for batching.
 | Prefix comes from module constant `API_PREFIX` | The storefront `/health` is `storefront_api.py:937` inside `build_storefront_router()` (`:857`); the prefix is applied by `app.include_router(..., prefix=storefront_api.API_PREFIX)` at `app.py:521-524` |
 | Client: `apiFetch({ path: \`${API_PREFIX}/health\` })` | Correct (`endpoints.ts:8,17-19`), but `apiFetch` (`client.ts:107`) → `buildUrl(opts.path, opts.query)` (`:73,108`) → `fetch(url, {method: opts.method…})` (`:118`): field-sensitive, two-level (B2) |
 | AC-2 callers: Kiro JSON, `mcp-monitor` TOML, `.mcp.json` → `docker-run.sh` | Kiro and `mcp-monitor` bind falkor-chat by URL `http://localhost:8000/mcp`; `.mcp.json`'s falkor-chat entry is `falkor-chat-agent-team` → `http://localhost:8200/mcp` (port set by `falkor-chat/scripts/start_agent_team.sh:137`); the `docker-run.sh` chain is the `cypher` entry (AC-4) |
+
+## Pass 2
+
+*2026-10-26.* **Reviewed:**
+- `docs/requirements/connected-code-graph.md`, working tree (S1–S38, use-case re-check, SQ1–SQ8,
+  Q-R7–Q-R11, V3-Q1–V3-Q5);
+- plan v3;
+- graph note v2 §6;
+- ML note v2 §8.
+
+I re-ran the source spot-checks for v3's new citations.
+
+**Verdict: approve with changes.** v3 resolves every Pass 1 major in design, and the phase table
+now closes all 28 ACs. Every S/SQ/Q-R id and AC id is referenced in v3 (scripted grep). Two new
+majors remain:
+- AC-8 is closed before most of the outbound paths it governs exist;
+- four ACs no longer match their FRs, or the plan, after today's edits.
+
+There are 7 new stakeholder questions and 1 wording fix for `tico` (below).
+
+CPG: considered, not relevant — Pass 2 rechecks documents and shell/config line citations outside `cpg_falkorchat`'s scope; Pass 1's CPG checks stand.
+
+### Pass 1 dispositions
+
+- **B1 — fixed.** Graph §6.1–§6.2 adds a per-state traversal table. Its `READS`/`WRITES` rows give
+  writer→reader, RCA→writer, and both sides for a contract walk, without W→W2. Plan rule 8, §3.7
+  and §5.1 carry the four fixture assertions. Rejecting my mirror-edge remedy is justified
+  (graph §6.1).
+- **B2 — fixed (design).** `Param`/`Ret`/`Cond` points, `DATA {fromPath,toPath}`, `LIFTED_VIA` and
+  the P0(b) vertical slice gate the schema freeze. The §6.3 AC-1 chain matches `client.ts:73,107-118`.
+- **B3 — fixed.** Re-checked `storefront_api.py:937`, `app.py:483-497,521-524`, `kiro …json:7`,
+  `config.example.toml:34`, `start_agent_team.sh:137,157` and `Dockerfile:42`. One citation slip,
+  P2-n1.
+- **B4 — fixed in design; residual P2-1.** Broker scope is now every connection, with an offline
+  sandbox and fetch flags off (§3.2 table, §3.12).
+- **B5 — fixed.**
+  - AC-7: per-stratum first contact, ✓ at P3.
+  - AC-22: ✓ at P5.
+  - `teco` review/QA stages: P3.
+  - Fixture system and P1 strata: P0(g).
+- **B6 — fixed in design; residual P2-4.** Offset stamp, shared lock, replay before `RENAME`,
+  self-healing replay, and a §5.1 test.
+- **m1 — fixed; residual P2-5.** Compound `Name` hop with the anti-join. Resolved sites also carry
+  `CALLS_NAME`.
+- **m2 — fixed, but it now conflicts with decided FR-29/AC-21a** (P2-2c).
+- **m3 — fixed** (plan §3.6 step 1, ML §8.1, graph §6.4).
+- **m4 — fixed** (synthetic `script`/`document` Symbols, graph §6.3).
+- **m5 — fixed.** The rule count is gone; there are no v1 edge names (grep finds no `LINKS`,
+  `FLOWS`, `BINDS`, `COVERS` or `ARG_FLOWS`). Python is 198 = 197 + 1, matching my recount. The
+  freshness recipe is kept.
+- **m6 — fixed.** No `GRAPH.LIST`, `+info` added, `TIMEOUT_MAX`, live-verified V16–V18.
+- **m7 — superseded.** `tico` batched S1–S38.
+- **n1 — fixed** (§3.6 step 1 test-name anchor).
+- **n2 — fixed in the requirements** (2026-10-26 housekeeping entry). v3 §2.5's hygiene note is now
+  stale (P2-6).
+
+**Tally:** 14 fixed (4 with a residual below), 1 superseded, 0 not fixed.
+
+### New findings
+
+**P2-1 (major) — AC-8 is marked ✓ at P1, but most of the egress surfaces it governs arrive
+later.** *Verified against v3 §4 table rows P1–P5.*
+- At P1 only the Python/TS frontends exist, and they need no fetch flags. The frontends B4 was
+  about (Java/Kotlin/C#/Go fetch flags) land in P2, along with the hosted-default "controlled
+  path" for dependency downloads.
+- The PR adapter lands in P3. The IdP/access-provider adapter lands in P4. The git-history scan
+  and the separate OSV-refresh job land in P5.
+- §5.3's assertion that "every frontend is invoked with its fetch flags off" therefore covers
+  none of the four flagged frontends when AC-8 closes.
+
+*Change:* gate AC-8 per part, like AC-5 and AC-13. Re-run the sandboxed full-refresh test at the
+exit of every phase that adds an outbound path (P2, P3, P4, P5), and close it at P5. The assertion
+that catches a regression is the existing logging-proxy check: zero connections outside the
+allow-list, run against the phase's full feature set.
+
+**P2-2 (major) — four ACs no longer match their FR, or the plan, after today's edits.** *Verified
+by reading the requirements against v3.* Each makes a correct system fail, or lets a wrong one
+pass.
+- **(a) AC-8 vs FR-9.**
+  - FR-9 now says that in a system containing any local-only repository, *every* model call is
+    local, interpretation included. AC-8 only checks "an answer touching it alongside a hosted
+    repository". A question that touches only hosted repositories in a mixed system, interpreted
+    by a hosted model, passes AC-8 and violates FR-9.
+  - AC-8 also tests none of these: no dependency downloads under local-only, the
+    two-permitted-fetches rule, or the hosted-default controlled path with no import-name
+    service. → Stakeholder question SQ-A.
+- **(b) AC-24 vs FR-9.** AC-24 binds "each codebase's configured default model". Under FR-9's
+  system-wide rule, a hosted-default codebase in a mixed system is interpreted by the *local*
+  model, so the gate binds a model that is never used there. → SQ-B.
+- **(c) FR-29/AC-21a vs plan §3.3.** The requirement says a *signature change* returns the link
+  without the earlier-verdict note. v3 adopted my m2:
+  `symbolId = h(lang, repoId, qname[, signature only for overloading languages])`. So in Python,
+  TS, Go and C, a signature change keeps the id, and the link returns *with* the note. That is
+  better behaviour, but it fails AC-21a's signature leg as written. "Moved" is also
+  language-dependent: a Java class moved within its package keeps its qname. → SQ-C.
+- **(d) FR-14 vs AC-14** (wording only; SQ6 already decided this). FR-14 says risk is "how many
+  callers reach it, security-relevant, changed recently". AC-14 and ML §8.4 say *entry points*
+  and add *complexity*. → `tico` aligns FR-14 to AC-14. No decision needed.
+
+**P2-3 (minor) — the B6 lock is not grantable as specified, and its expiry can reopen B6.**
+*Inferred; nothing was run.*
+- `SET ccg_<system>:verdict_lock NX PX` is a plain Redis key command. `ccg_verdict` is specified
+  as "`GRAPH.QUERY` on the live key only" (plan §3.5), so it cannot take the lock.
+- `ccg_build`'s pattern `~ccg_<system>*` matches the key but lists no `set`/`del`.
+- If PX expires during replay plus `RENAME`, a verdict can patch the old live key after the replay
+  read the tail. The verdict is then lost until the next verdict or swap self-heals it.
+
+*Change:*
+- add `+set +del` (or `+eval` for a compare-and-delete release) on that one key to both users;
+- size PX well above the worst replay-plus-swap time;
+- after `RENAME`, under the lock, compare the live offset with the log length and replay any
+  remainder.
+
+Extend §5.1's B6 test with a lock that expires mid-swap.
+
+**P2-4 (minor) — two ACs are closed before the features they exercise exist.**
+- AC-18 ("every item in every answer" carries a chain) is ✓ at P1, but review, test-map, RCA and
+  security answers arrive at P3/P5.
+- AC-9's decision-state stamp is ✓ at P1, but verdicts arrive at P4, so the stamp is trivially
+  "empty".
+
+*Change:* re-assert AC-18 at P5 exit and AC-9 at P4 exit, as v3 already does for AC-22.
+
+**P2-5 (minor) — the m1 residual: one measurement leads to two different consequences.**
+- Graph §6.1 item 6 says what the *operator* does with name candidates at a resolved site:
+  suppress the resolved target and list the others as *possible* `resolution-unverified`, unless
+  P0's resolved-call precision clears a threshold.
+- v3 §3.2 and §2.2 use the same 0.95 measurement only as an *indexer-adoption* trigger. §3.6 and
+  §3.7 never state the operator rule.
+
+*Change:* state both consequences in §3.7, with one threshold.
+
+**P2-6 (minor) — v3 is not updated for the late decisions.**
+- V3-Q1–V3-Q5 are still described as open in §2.3 (S19 row), §2.5, §3.7, §3.9, §3.11, §3.12,
+  §6.2 and §7.
+- §2.2's B4 row cites "V3-Q4/Q5" for git and the vulnerability DB; Q5 is hosted dependencies.
+- §2.5's hygiene note is already closed in the requirements.
+
+The *content* matches the final wording of FR-9, FR-13 and FR-15 for all five, with one gap: the
+missing-authorization kind (SQ-D). *Change:* rewrite the five references as decided, citing FR-9,
+FR-13 and FR-15.
+
+**P2-7 (minor) — `findingId`'s canonical tuple is undefined.** Graph §6.4 says only "hashes", and
+plan §3.8 says "hashes of canonical tuples". If the tuple includes intermediate `STEP` hops, an
+edit anywhere along a taint chain orphans the finding's verdict. The link would then return
+without the note, contrary to FR-15's rule that a verdict expires only when "the code at the
+finding" changes. *Change:* define `findingId = h(kind, end tuple per FR-15's list)` and keep the
+chain out of the identity.
+
+**P2-n1 (nit) — one citation is off.** v3 §1 cites `falkor-chat/scripts/start_server.sh:228-233`
+as the uvicorn launch. Those lines are `echo` banners. The launch is `:251`
+(`exec … uvicorn falkorchat.app:app $UVICORN_ARGS`, default `--reload`, no `--port`), so the
+"uvicorn default 8000" conclusion holds.
+
+### Stakeholder questions (Pass 2)
+
+Each is one decision, with the recommended answer.
+- **SQ-A (AC-8 ↔ FR-9).** Should AC-8 also check four things?
+  1. In a mixed system, a question touching only hosted repositories is still interpreted locally.
+  2. A local-only build makes no dependency download.
+  3. Only the repository's own git remote and the separate vulnerability-database job connect
+     out.
+  4. A hosted-default build downloads only through the controlled path, with no import-name
+     service.
+
+  *Recommend yes.*
+- **SQ-B (AC-24 ↔ FR-9).** Should AC-24's 92% bind the model that actually interprets that
+  codebase's questions, which is local in any system containing a local-only repository, rather
+  than the codebase's configured default? *Recommend yes.*
+- **SQ-C (FR-29/AC-21a).** Should "renamed, moved or signature changed → returns without the
+  note" apply only where the system cannot prove it is the same code? In languages without
+  overloading (Python, TS, Go, C), a signature change would then keep the identity and return the
+  link *with* the earlier-verdict note. *Recommend yes.* It keeps more history and matches the
+  design.
+- **SQ-D (FR-15 × FR-29).** FR-15's expiry list covers injection, risky configuration, secrets and
+  dependencies, but not **missing authorization**. For that kind, which code's change expires the
+  verdict? *Recommend:* the entry point's function and the sensitive operation's function,
+  mirroring injection-type.
+- **SQ-E (FR-9 vs FR-24/FR-28/FR-17).** Under local-only, FR-9 permits only two outbound fetches.
+  May the company identity provider, the hosted access check and the optional PR add-on also be
+  called? Each receives repository names and the asker's identity. *Recommend:* allow each only
+  if it is a company-internal service named explicitly on the allow-list, receiving nothing beyond
+  repository name and identity. Otherwise local-only uses the local designation file and access
+  file, and no PR add-on.
+- **SQ-F (FR-21 vs raw queries).** Protecting the shared instance needs an instance-wide time cap
+  (`TIMEOUT_MAX`, graph V18), which is a fixed time budget for power users' raw queries. Accept a
+  configurable cap for raw queries only, with built-in answers still unbounded (they are run in
+  pieces)? *Recommend yes.*
+- **SQ-G (FR-15 severity).** A vulnerability advisory with no score still needs one of the four
+  levels. *Recommend:* use the advisory's own stated severity if it gives one; otherwise "high",
+  with the reason "advisory unscored". Inferred, not checked against the OSV schema: many
+  advisories carry no CVSS score.
+
+**Wording fix for `tico`, no decision:** align FR-14's risk factors with AC-14 (entry points,
+plus complexity), per SQ6 (P2-2d).
+
+## Pass 3
+
+*2026-10-28.* **Reviewed:** plan v3.1 (re-read in full for the Pass 2 targets); the requirements
+working tree (FR-9, FR-14, FR-15, FR-21, FR-29, AC-8, AC-21a and AC-24, plus the decision-log
+entries for SQ-A–SQ-G and the 2026-10-28 "moved" entry). Graph note v2 and ML note v2 are
+unchanged since Pass 2 and were rechecked only where v3.1 cites them.
+
+**Verdict: approve.** Every Pass 2 finding is fixed, and v3.1 matches the final requirement
+wording. One new minor and one nit remain; neither needs a stakeholder decision. The plan is fit to
+go forward once requirements reach `Ready for design`.
+
+CPG: considered, not relevant — Pass 3 rechecks document consistency only; no new code-level claim.
+
+### Pass 2 dispositions
+
+- **P2-1 — fixed.** The §4 table gates AC-8 per part: part 1 at P1, re-runs at P2 (fetch-capable
+  frontends, controlled path), P3 (PR add-on) and P4 (IdP and access check), closed ✓ at P5. §5.3
+  re-runs the same scenario at every phase exit.
+- **P2-2 — fixed.**
+  - (a) AC-8 and §5.3 now assert every FR-9 rule: system-wide local interpretation, no
+    downloads, the permitted fetches, the controlled path.
+  - (b) AC-24 and plan §3.12 bind the model actually used.
+  - (c) FR-29/AC-21a now keep the note where sameness is provable, matching §3.8's per-language
+    rule. The "moved = qualified name changed" reading is in FR-29 (2026-10-28) and is consistent
+    with `symbolId = h(lang, repoId, qname[, signature])`.
+  - (d) FR-14 now names entry points and complexity, matching AC-14 and §3.7.
+- **P2-3 — fixed.** §3.5 grants `+set +del +eval` on the single lock key to both users. §3.8
+  covers the tokened lock, compare-and-delete release, a ttl sized from P0(c), and a post-`RENAME`
+  remainder replay. §5.1 has a mid-swap-expiry test.
+- **P2-4 — fixed.** AC-9 is ✓ at P4 and AC-18 ✓ at P5, with partial gates earlier. §4's ordering
+  notes say why.
+- **P2-5 — fixed.** §3.7 states both consequences of the single 0.95 threshold. One residual
+  appears as P3-1.
+- **P2-6 — fixed.** Every V3-Q reference reads as decided (§2.3, §2.5, §3.7, §3.12, §6.2 "none").
+  The hygiene note is gone, and the B4 row cites git/OSV correctly.
+- **P2-7 — fixed.** `findingId = h(kind, end tuple)` excludes the chain. The per-kind end table
+  (§3.8) matches FR-15, including missing authorization (SQ-D).
+- **P2-n1 — fixed** (`start_server.sh:251`).
+
+### New findings
+
+**P3-1 (minor) — at precision ≥ 0.95, suppressing a resolved call's other candidates turns every
+wrong resolution into a silent miss.** *Inferred from plan §3.7 "Resolved calls".*
+- A language that passes the gate may still mis-resolve up to ~5% of its resolved sites. Take a
+  site resolved to Y whose true callee is X. With the other candidates suppressed, impact from a
+  change to X never lists that caller.
+- FR-8 calls that the worse error.
+- AC-5's held-out set would catch it only if one of its items happens to sit on such a site.
+
+*Change (owner: `architect`, with `data-scientist` for the bar):* keep the other candidates as
+*possible* `resolution-unverified` in every language, collapsed in rendering so they don't add
+burden. Use the threshold only to choose between "collapsed" and "listed", and to trigger the
+indexer. Alternatively, state the accepted miss rate explicitly and add an AC-5 stratum of
+resolved-call sites. Design choice for the owner; I have not modelled the noise cost.
+
+**P3-n1 (nit) — graph note v2 still sizes for four previews.** Its §0 digest ("~30 GB peak with
+four previews"), the §6.4 table header and risk (4), and §5 Q-R5's "default about 4" all predate
+the stakeholder's choice of a default of 2. The note says §6 wins where it disagrees, so a reader
+taking its sizing as authoritative gets ~25–30 GB instead of the plan's ~18 GB. A one-line
+correction for `graph-dba`.
+
+**Stakeholder questions:** none.

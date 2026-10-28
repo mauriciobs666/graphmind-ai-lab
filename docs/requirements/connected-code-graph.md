@@ -1,6 +1,6 @@
 # Connected code graph — Feature Requirements
 
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (not yet filed) · **Last updated:** 2026-10-26
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (not yet filed) · **Last updated:** 2026-10-28
 
 ## Intent
 
@@ -128,9 +128,17 @@ actually benefits from each one:
   local-only applies, **nothing derived from the repositories** leaves the machine — source, names,
   paths, error messages, stack traces, dependency lists. "The machine" is an explicit, configured
   allow-list of local endpoints (e.g. LM Studio on the Windows host under WSL); anything not on it
-  counts as hosted. Building never downloads dependencies (it uses caches prepared in advance, or
-  accepts less precise analysis without them). Local-only is **sticky**: any answer that touches a
-  local-only repository is handled entirely locally. A weaker local model may need more rephrasing
+  counts as hosted. Building a local-only codebase never downloads dependencies (it uses caches
+  prepared in advance, or accepts less precise analysis without them). Only two outbound fetches are
+  allowed under local-only: fetching each repository from its own git remote, and refreshing the
+  vulnerability database as a separate, explicitly allowed job that never sees repository content.
+  Codebases not set to local-only may download dependencies during builds, but only through a
+  controlled outbound path, and no service that receives the code's import names is used unless
+  explicitly allowed. Under local-only, an identity provider, a hosted repository-access check, or
+  the optional PR add-on may be called only if each is named on the allow-list and receives nothing
+  beyond repository names and the asker's identity. Local-only is **sticky**: any answer that touches a local-only repository is
+  handled entirely locally; in a system containing any local-only repository, every model call,
+  including interpreting the question, is local. A weaker local model may need more rephrasing
   of questions, but never changes the facts returned.
 - FR-10 — For each use case, a person can ask in plain language and get a grouped answer
   (by component; confirmed vs. possible; the reason for each link). The answer can optionally be saved
@@ -161,14 +169,16 @@ actually benefits from each one:
 - FR-20 — Every reported item carries its **full chain of evidence**: each link from the starting
   point to the item, with file and line at every step, so anyone can verify it.
 - FR-21 — No fixed response-time budget: time may grow with the code's size and the depth of the
-  analysis. Correctness takes priority over speed (Guiding principles).
+  analysis. Correctness takes priority over speed (Guiding principles). The one exception: raw
+  queries (FR-16) run under a configurable time limit that protects the shared store; built-in
+  answers are not limited.
 - FR-22 — A system may consist of **many repositories** (e.g. a front end, several services and a
   shared library, each in its own repo). Links and answers cross repository boundaries exactly as they
   cross component boundaries.
 - FR-23 — Questions run against the latest refreshed snapshot, **or the latest snapshot with a
   proposed change (diff/PR) overlaid**, so un-merged work can be checked for impact and reviewed.
-  The number of concurrent change previews is capped (configurable, default about 4; the oldest
-  idle one is retired first).
+  The number of concurrent change previews is capped (configurable, default 2; the oldest idle one
+  is retired first).
 - FR-24 — Answers respect the asker's repository access: an answer includes only repositories the
   asker may read. An impact in a repository they cannot read is reported only as "affected, no
   access", with no code shown. When an agent or CI job asks, the access that applies is that of the
@@ -191,9 +201,12 @@ actually benefits from each one:
   dismissed"), with who dismissed it, when, and why. A verdict — dismissal **or confirmation** —
   **expires when the code at either end of the link changes** ("change" means the enclosing
   function or config entry): the link returns as *possible*, noting the earlier verdict, for a
-  fresh one. When code is renamed, moved, or its signature changes, the system cannot prove it is
-  the same code: the link returns as *possible* without that note, and the old verdict stays
-  listable.
+  fresh one. When code is renamed or moved, or its signature changes in a language where that
+  means the system cannot prove it is the same code (one that allows several functions with the
+  same name), the link returns as *possible* without that note, and the old verdict stays listable.
+  Where sameness is still provable, a signature change counts as an ordinary change and keeps the
+  note. "Moved" means the code's full (qualified) name changed; a file move that keeps the same full
+  name is an ordinary change.
 - FR-30 — Recording verdicts is separate from raw queries, which stay read-only (FR-25).
 
 **Extensibility:**
@@ -212,11 +225,16 @@ actually benefits from each one:
 
 - FR-11 — **Impact mapping:** given a code element or a change, list everything it affects.
   - Impact follows **calls, data flow and control dependencies** — e.g. a changed value flowing
-    into other code, or a changed condition guarding other code — not only who calls whom.
+    into other code, or a changed condition guarding other code — not only who calls whom. Where
+    data flow and control dependencies are not available (shell scripts, config, weakly supported
+    languages), impact falls back to who-calls-whom reach, every such item shown as *possible* with
+    the reason.
   - Each item is marked **direct or indirect** and shows its **distance** (number of links) from
-    the starting point.
+    the starting point. Distance counts only links between functions, components and data (tables,
+    topics, config keys and the like); steps inside one function count as zero.
   - The list is **grouped** by repository and component, then ordered by distance, with confirmed
-    items before possible ones.
+    items before possible ones. A component is a build unit (a package or service) by default; the
+    repository list may name larger groupings to use instead.
   - The **reverse question** is also answered: "what does this code depend on?", with the same
     marking and grouping.
 - FR-12 — **Root-cause analysis:** accepts any of an error message, a stack trace, a log excerpt
@@ -249,7 +267,10 @@ actually benefits from each one:
   - **config and wiring** — config, start-script and Compose entries that reference what changed.
 
   The answer focuses on what the change **introduces or makes worse**; issues already present in
-  the affected code before the change are available on request ("show existing").
+  the affected code before the change are available on request ("show existing"). A finding is
+  *worse* if its severity rises or a new source or entry point now reaches the same risky spot; test
+  impact is *worse* if code that tests reached before is no longer reached, or newly impacted code
+  is untested.
 - FR-14 — **Test coverage map:** show which code is reached by tests and which is not, from static
   analysis (following calls and links) **merged with runtime coverage data from test runs where
   available**. Places where the two disagree are shown. Runtime data must be **per test** (which
@@ -259,8 +280,8 @@ actually benefits from each one:
   - Each test is marked by **kind**: unit, integration, or end-to-end.
   - A direct question answers **"which tests does this change reach?"**, so the right tests can be
     run for a change outside a full review.
-  - Untested code is **ranked by risk** — how many callers reach it, whether it is
-    security-relevant, whether it changed recently — with the reason shown.
+  - Untested code is **ranked by a stated risk score** — how many entry points reach it, whether it
+    is security-relevant, whether it changed recently, and its complexity — with the reason shown.
   - Runtime coverage collected on a different commit from the snapshot is **flagged as stale**,
     never silently merged.
 - FR-15 — **Security:** findings that follow code across boundaries, covering: untrusted input
@@ -274,13 +295,18 @@ actually benefits from each one:
   months or since a date) — a secret committed and later removed is reported, with advice to rotate
   it.
   - Every finding carries a **severity** on a four-level scale (critical, high, medium, low) with
-    its reason: vulnerable dependencies map from their advisory score, other kinds follow stated
-    rules.
+    its reason: vulnerable dependencies map from their advisory score (or the advisory's own stated
+    severity when it has no score, otherwise *high*, with that reason shown); other kinds follow
+    stated rules.
   - A designated person can confirm a finding or dismiss it as a false alarm, under the same rules
     as links (FR-28, FR-29): shown with who/when/why, listable when dismissed, expiring when the
-    code at the finding changes.
+    code at the finding changes. For a finding, that code is: the functions holding the source and
+    the risky spot (injection-type), the config entry (risky configuration), the enclosing function
+    or entry (secret), the manifest entry (vulnerable dependency), and the functions holding the
+    entry point and the sensitive operation (missing authorization).
   - The system **never stores or shows a secret's value**: a secret is identified by its location
-    and a fingerprint only.
+    and a fingerprint only, from which the value cannot be recovered even for a weak secret.
+    Fingerprints need not be comparable with other secret-scanning tools'.
 
 ## Out of scope
 
@@ -310,7 +336,10 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   the proving repo (written before the system sees it, never used for development), every one
   appears in the answer **individually**, with its evidence, as confirmed or possible. At least 95%
   of items shown as *confirmed* are real, and wrong *possible* items stay at or under 4 per real
-  impact (provisional; ratified or adjusted once the first phase has measured the real ratio).
+  impact listed (confirmed ones included), pooled across all test answers and also reported by
+  distance (provisional; ratified or adjusted once the first phase has measured the real ratio). If
+  any item is missed, each miss is fixed and the test is re-run on a **new** blind list, never the
+  same one.
 - AC-6 (doubt flagged) — Given planted links of named unprovable kinds (e.g. an address built at
   runtime, a topic read from config), each is shown as *possible* with its reason, and none is
   shown as confirmed.
@@ -322,8 +351,15 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   is held back for a later final check.
 - AC-8 (configurable) — A local-only codebase sends nothing derived from its repositories to any
   endpoint outside the local allow-list, even when a run requests hosted services, and an answer
-  touching it alongside a hosted repository is handled entirely locally. A codebase defaulting to
-  hosted can be run locally by a per-run override.
+  touching it alongside a hosted repository is handled entirely locally. In a system containing a
+  local-only repository, every model call, including interpreting the question, goes to an
+  allow-listed local endpoint. Building a local-only codebase downloads no dependencies; its only
+  outbound traffic is fetching from its own git remotes, the separate vulnerability-database job,
+  and any identity, access-check or PR service named on the allow-list, which receives only
+  repository names and the asker's identity. A hosted-default codebase downloads dependencies only
+  through the controlled outbound path. A codebase defaulting to hosted can be run locally by a
+  per-run override. Re-checked as each phase adds outbound traffic; closed only when all of it is
+  built.
 - AC-9 (staleness) — Every answer states when the view was last refreshed and which decision state
   (recorded verdicts) it reflects (FR-7, FR-19).
 - AC-9a (refresh triggers) — A refresh starts from each of the four triggers in FR-7.
@@ -345,10 +381,15 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   code↔data schema mismatch, and in wiring each appears as a hypothesis traced to its file or entry;
   a planted cause reachable only by following a value backwards through data flow is found; a
   planted recent change in the window is marked as recently changed; every tree has an "outside the
-  mapped code" branch; giving a stack trace and a log together ranks the true cause at least as high
-  as either alone; marking the top hypothesis ruled out yields a re-ranked tree without it; and an
-  error message matching nothing returns an explicit "no match" with what was tried and what to
-  provide next (FR-12).
+  mapped code" branch; over the bugs that have both a stack trace and a log, giving them together
+  puts the true cause in the top 5 at least as often as the better single input does, never ranks it
+  below where the weaker single input ranks it for any bug, and ranks it higher than either single
+  input alone for at least some bugs; marking the top hypothesis ruled out yields a re-ranked tree without it; and an
+  error message matching nothing (no stack frame, and no exact or full-template match) returns an
+  explicit "no match" with what was tried and what to provide next, while any weak matches are
+  still shown, labelled "weak matches only" (FR-12). The 40 bugs include at least 20 that produce
+  both a stack trace and a log, at least 5 each with a config, a schema-mismatch and a wiring cause,
+  and at least 5 infrastructure failures outside the mapped code.
 - AC-13 (review) — Given one planted, un-merged change of each contract kind (an endpoint, a
   message topic, a table/column or graph label, an MCP tool, a shared-library signature), each
   review answer lists the consumers of the old contract in other components, the tests that
@@ -359,8 +400,11 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   reachable across a boundary. When per-test runtime coverage data is supplied, it is merged in and
   static/runtime disagreements are listed; otherwise the runtime half is marked unavailable. Every
   test is marked unit, integration, or end-to-end. Asking "which tests does this change reach?" for
-  a planted change lists exactly the tests that exercise the changed functions. Untested functions
-  are ranked by risk with the reason shown. Runtime coverage collected on a different commit is
+  a planted change lists every test that exercises the changed functions, with none missing;
+  tests reached only through unproven links are marked possible, and per-test runtime data confirms
+  them. Untested functions are ranked by a stated risk score with the reason shown, built from how
+  many entry points reach the code, its security relevance, whether it changed recently, and its
+  complexity. Runtime coverage collected on a different commit is
   shown as stale, not merged (FR-14).
 - AC-15 (security) — Given at least 10 real and 10 look-alike-safe seeded cases of each of the five
   finding kinds in FR-15, at least one spanning two components, the real ones are reported and the
@@ -390,8 +434,9 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   omit it immediately, "show dismissed" lists it with who, when and why, and it is still dismissed
   after a full refresh. After the code at one end changes and the view is refreshed, the link is
   back as possible, noting the earlier dismissal. A confirmation expires the same way. After code at
-  one end is renamed, moved, or has its signature changed, the link is back as possible without the
-  earlier-verdict note, and the old verdict is still listable. On a link between two repositories,
+  one end is renamed or moved, or has its signature changed in a language with same-name
+  functions, the link is back as possible without the earlier-verdict note, and the old verdict is
+  still listable; a signature change in a language without them keeps the note. On a link between two repositories,
   an owner of either side can record the verdict, and both sides see it. A person who is not
   designated for that repository cannot record a verdict (FR-28, FR-29).
 - AC-22 (extension) — Adding support for one more language or protocol, using only concepts already
@@ -402,7 +447,10 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
 - AC-24 (understanding) — Given about 100 realistic plain-language questions, in both English and
   Portuguese, at least 92% are understood correctly (the interpretation shown at the top of the
   answer is right), and every ambiguous one is answered with its possible readings rather than a
-  guess (FR-18, FR-19; provisional target).
+  guess (FR-18, FR-19; provisional target). The target applies to the model that actually
+  interprets that codebase's questions (local in any system containing a local-only repository),
+  so a local-only codebase needs a local model that reaches it; if none does, a lower local
+  target is set once the first phase has measured it.
 - AC-25 (impact shape) — Given a planted change whose effect travels through a data flow (a changed
   return value used two calls away) and through a control dependency (a changed condition guarding
   other code), both effects are listed. Every item is marked direct or indirect with its distance,
@@ -631,3 +679,45 @@ None.
   window), an explicit "outside the mapped code" branch, combined evidence, ruled-out/confirmed
   feedback with re-ranking (this investigation only, nothing persists), and an explicit "no match"
   answer (FR-12, AC-12, Out of scope).
+- 2026-10-26 — Expert round (`data-scientist`, `docs/plans/connected-code-graph-ml.md` §8) raised
+  SQ1–SQ8 → **all eight recommendations accepted**: a failed AC-5 is fixed and re-run on a new blind
+  list; the 4:1 ratio counts every real impact listed, pooled, also reported by distance; AC-12's
+  "reinforce each other" becomes the three-part test (replacing tico's earlier reading, which a
+  correct system could fail); "no match" means no stack frame and no exact or full-template match,
+  with weak matches still shown; AC-14 lists every exercising test, none missing, unproven-link ones
+  marked possible; untested-code risk is a stated score with complexity as a fourth factor; AC-24's
+  92% applies to each codebase's default model; AC-12's 40 bugs have a guaranteed mix.
+- 2026-10-26 — Expert round (`graph-dba`, `docs/plans/connected-code-graph-graph.md` §6.5) raised
+  Q-R7–Q-R11 → distance counts only links between functions, components and data (steps inside a
+  function are zero); preview default **lowered from about 4 to 2** (stakeholder chose the ~18 GB
+  peak over a ~32 GB machine; supersedes the earlier "default about 4"); where flow is unavailable,
+  impact falls back to call-level reach shown as possible; a component is the build unit by
+  default, with optional named groupings; secret fingerprints must not be reversible, even at the
+  cost of cross-tool comparison (FR-11, FR-15, FR-23).
+- 2026-10-26 — Expert round (`architect`, plan v3 §2.5) raised V3-Q1–V3-Q5 → **all five
+  recommendations accepted**: "worse" defined for findings and test impact (FR-13); a finding's
+  verdict expires when the code at its source/risky spot, config entry, enclosing function or
+  manifest entry changes (FR-15 × FR-29); in a system containing any local-only repository every
+  model call, interpretation included, is local; under local-only the only outbound fetches are
+  each repository's own git remote and a separate vulnerability-database job that never sees
+  repository content; non-local-only builds may download dependencies through a controlled path,
+  with no import-name service unless explicitly allowed (FR-9).
+- 2026-10-26 — Housekeeping (no new decision): the 2026-10-22 "Open question 1" (whether the target
+  widens beyond this repo) was closed the same day by the "Target codebases → any codebase" entry;
+  the "non-component code" edge case was closed by the "Borderline areas" entry (agent & skill
+  scripts and config & wiring files in, `deprecated/` out).
+- 2026-10-26 — Expert round (`analyst`, review Pass 2) raised SQ-A–SQ-G → **all seven
+  recommendations accepted**: AC-8 tests every FR-9 rule and is re-checked as each phase adds
+  outbound traffic; AC-24's target applies to the model actually used; a signature change drops the
+  earlier-verdict note only where sameness can't be proven (FR-29, AC-21a); a missing-authorization
+  finding's verdict expires on its entry-point or sensitive-operation function; under local-only an
+  identity provider, access check or PR add-on may be called only if named on the allow-list and
+  sent only repository names and identity (FR-9); raw queries get a configurable time limit, the
+  one exception to FR-21; an advisory without a score uses its own stated severity, otherwise
+  *high* (FR-15). Wording fix (no decision): FR-14's risk factors aligned with AC-14.
+- 2026-10-28 — FR-29 "moved" (architect's recorded reading, plan v3.1 §2.5) → **the full
+  (qualified) name changed**; a file move keeping the same full name is an ordinary change and keeps
+  the earlier-verdict note.
+- 2026-10-28 — Review Pass 3 P3-1: hide other same-name candidates of a resolved call when the
+  language's resolved-call precision is high? → **No: they stay listed as *possible*, folded away
+  in the answer** — nothing is silently dropped (FR-8).

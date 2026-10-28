@@ -1,6 +1,10 @@
 # Connected code graph — graph model, store design & sizing
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md`
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 2.1
+
+_Revision 2026-10-26: v2 adds §6 (B1 edge directions and traversal table, B2 graph side, per-requirement schema deltas after S1–S38 and the use-case re-check, new stakeholder questions); §3.1 rule 1, Q3 peak, Q7 edge list and Q10 ACL corrected in place to point at it._
+
+_Revision 2026-10-28 (v2.1): peak-memory figures in §0, Q3, §5 Q-R5, §6.4 and §6.5 restated for the decided default of **2** concurrent previews (FR-23, Q-R8; analyst Pass 3 nit P3-n1); four previews kept only as the stated alternative._
 
 Graph-side review of the architecture proposal `docs/plans/connected-code-graph.md` (v1): answers
 to its §6.2 questions (plus one relayed from the ML unit, `docs/plans/connected-code-graph-ml.md`
@@ -30,6 +34,13 @@ point:
   plus a full-text keyword tier (complete, deterministic result sets) cover it (Q9).
 - **Six requirement-level questions** for the stakeholder (§5), chiefly what FR-24 protects
   (content vs. structure) and when a verdict takes effect.
+
+**v2 (§6):** B1 is fixed by keeping storage as is and making traversal direction depend on the
+operator, the edge type and the arrival state (normative table, §6.2). B2's graph side is points
+plus field-path `DATA` edges, the same schema for shell and prompts (§6.3). Carrying data flow and
+control dependence for all use cases is feasible only as a per-method projection: ~0.3 MB per
+file, ~3–4 GB per 10k-file snapshot, ~18 GB peak at the decided default of two previews (§6.4). Five new stakeholder
+questions (§6.5).
 
 Nothing here requires a source, test or config change now. All findings are design input for the
 proposal's revision and P0.
@@ -106,9 +117,9 @@ materializing either brings back a quadratic term.
 **~26 GB**. Peak memory is not one snapshot, though:
 
 `peak ≈ snapshot × (1 live + 1 building + k concurrent overlays + s per-scope views)` (+ Redis
-overhead, ~20%).
+overhead, ~20%). *(v2: s = 0, since S5/S6 limit raw queries to all-repo readers and protect content only; the snapshot itself grows with FR-11's flow edges, §6.3.)*
 
-With k = 4 overlays and no per-scope views: ~1.5 GB × 6 × 1.2 ≈ **11 GB**. Run it on a
+With k = 2 previews (the decided default, FR-23) and no per-scope views: ~1.5 GB × 4 × 1.2 ≈ **7 GB** for the v1 model, **~18 GB** for the v2 flow-aware model (§6.4); with four previews, ~11 GB and ~30 GB. Run it on a
 **dedicated FalkorDB instance** (`maxmemory` set, `maxmemory-policy noeviction`), not on the shared
 `falkordb-dev`: §4 G8.
 
@@ -197,7 +208,7 @@ inside the snapshot don't already provide.
   paths). FalkorDB returns **every** path, not one per target, so the result is exponential in
   depth on any graph with fan-in and quickly hits the silent 10,000-row cap.
 - **Primary shape: level-synchronous BFS driven by the engine.** One parameterized read per depth
-  level, `UNWIND $frontier AS id MATCH (n {…id})<-[r:CALLS|RESOLVES_TO|CALLS_NAME|HAS_CALL|TO|VIA|READS|WRITES]-(m) …
+  level, `UNWIND $frontier AS id MATCH (n {…id})<-[r:<edge types and direction per §6.2's normative table>]-(m) …
   RETURN id, type(r), r.status, r.reason, m.<id>`, with dismissed pairs anti-joined. The engine
   keeps a visited set and the **best predecessor** per node: fewest possible hops first, then depth,
   then stable id. That predecessor map **is** the evidence chain, so no path is returned by the
@@ -262,7 +273,7 @@ least outside every operator's query set.
 
   ```
   ACL SETUSER ccg_raw_<system> on ><secret> resetkeys ~ccg_<system> ~ccg_<system>__ov_* \
-      -@all +graph.ro_query +graph.explain +graph.list
+      -@all +graph.ro_query +graph.explain +info
   ```
 
   Verified: `RO_QUERY` on the key works, every other key → `NOPERM`, `GRAPH.QUERY` / `PROFILE` →
@@ -300,7 +311,8 @@ FalkorDB OpenCypher only: no APOC/GDS, index before constraint.
 
 ### 3.1 Three design rules
 
-1. **Every dependency edge points from the dependent to the dependency.** Then *impact* ("what
+1. **Every dependency edge is stored from the dependent to the dependency** (superseded as a
+   *traversal* rule in v2: an edge's traversal direction comes from §6.2's normative table, B1). Then *impact* ("what
    breaks if X changes") is always **incoming** reach from X, and *depends-on* is always outgoing
    reach. One direction per question means one `relDirection` for a traversal, one weight scheme,
    and no per-edge-type direction logic in operators (§3.7 of the proposal).
@@ -511,14 +523,14 @@ refinement or a correction to a stated figure.
 
 | # | Sev. | Proposal § | Finding | Change recommended |
 |---|---|---|---|---|
-| G1 | **High** | §3.6 (Power users), §3.12 (`cypher-mcp` reused unchanged), §5.3 (AC-21) | `cypher-mcp` is **not read-only**: a write rejected by `RO_QUERY` that matches one of its six kaizen shapes is re-run through `GRAPH.QUERY` against **any** graph name (V6). AC-21 could be broken by a producer-write shape aimed at `ccg_<system>`. `GRAPH.PROFILE` is a second write path for any client that exposes it. | FR-25 enforced by the **engine credential**: the raw client connects as a per-system ACL user with only `graph.ro_query`/`graph.explain`/`graph.list` on `~ccg_<system>` (Q10, V5). Either `cypher-mcp` gains configurable connection credentials (an addition, consistent with "a future access gate would be an addition") or the `ccg` server ships its own raw tool. AC-21 is tested through that credential, not just through the tool. |
+| G1 | **High** | §3.6 (Power users), §3.12 (`cypher-mcp` reused unchanged), §5.3 (AC-21) | `cypher-mcp` is **not read-only**: a write rejected by `RO_QUERY` that matches one of its six kaizen shapes is re-run through `GRAPH.QUERY` against **any** graph name (V6). AC-21 could be broken by a producer-write shape aimed at `ccg_<system>`. `GRAPH.PROFILE` is a second write path for any client that exposes it. | FR-25 enforced by the **engine credential**: the raw client connects as a per-system ACL user with only `graph.ro_query`/`graph.explain` (+ `info`, §6.4) on `~ccg_<system>` (Q10, V5). Either `cypher-mcp` gains configurable connection credentials (an addition, consistent with "a future access gate would be an addition") or the `ccg` server ships its own raw tool. AC-21 is tested through that credential, not just through the tool. |
 | G2 | **High** | §3.3 (stable symbol ID = "language + unit + qualified name + signature"), §3.4 (contract keys), §3.8 | Any human-readable id under a `UNIQUE` constraint can crash the **whole FalkorDB instance** on this build: a value over 4,096 bytes, or one with leading/trailing whitespace, SIGSEGVs `redis-server` (quirks file). Arbitrary codebases produce such strings: long URLs, SQL, generated qualified names, sloppy config values. On a shared instance that takes `falkor-chat` down with it. | **Every constrained id is a fixed-length hash** of its canonical tuple (§3.4); readable keys go in unconstrained, stripped properties. Normalize (strip) at write and at lookup. Pair with G8 (dedicated instance). |
 | G3 | **High** | §3.3 (call sites with "callee targets each tagged resolved / name-matched"), §3.4 (tests: reach "computed at build time and stored as `COVERS`"), §3.5 (size estimate) | Two unbounded edge families. (a) One possible-call edge per (site, same-named candidate) is quadratic in common names: 6.8× the edges on `cpg_falkorchat`, 44,688 from `__init__` alone (V13), and worse in a 10k-file Java/C# system (`get`, `toString`, `execute`). (b) Static `COVERS` stored per (test, reached symbol) is a transitive closure, O(tests × reach), easily tens of millions of edges. Either one voids the "1–2 orders of magnitude smaller" claim and is the real path to K5. | (a) Route name matches through a language-scoped `Name` node (§3.2): linear, still two hops, every candidate still listed. (b) Store only direct facts; compute reach by traversal at query time (Q7). Keep per-symbol aggregates (`staticCovered`, `coverageState`) from one multi-source BFS at build. Per-test *runtime* `RAN` edges are direct facts and fine. State §3.1 rule 3 ("only direct facts stored") in the proposal. |
 | G4 | Medium | §3.7 (security: "the engine stitches them across `LINKS`"), §3.6 (published query, R1) | Cross-component taint is a **stateful** walk: argument position *i* at a call site has to match parameter *i* of the handler, which flows to argument *j* of the next call. A fixed Cypher variable-length pattern cannot express that per-hop constraint, so this operator (like the BFS of Q7) is an **engine algorithm**, not "a fixed set of parameterized Cypher queries". That also means R1's "every answer publishes the exact query it ran" cannot be one Cypher text for these operators. | Compose cross-component taint **at build time** (the linker already has the summaries) and store each chain as a `Finding` with ordered `STEP` edges (§3.2). Security answers then just read findings, which is deterministic and readable by raw queries. For BFS operators, the "published query" is the per-level parameterized query **plus** the algorithm id/version, and AC-16's raw leg needs that reading (§5 Q-R4). |
 | G5 | Medium | §3.5 (`ccg_<system>_verdicts` graph), §3.8 | A separate verdict graph cannot be joined in a query (Q1). The store with no traversal workload sits in the least durable place. And "application at link time" alone means a verdict shows only after the next refresh. A renamed symbol changes `linkId` and silently orphans its verdict. | File of record (append-only JSONL per system) applied at assembly. The `verdict` command also patches the live snapshot in one write, under its own ACL user. Fingerprint mismatch → expire, applied to confirmations too (R6a). Orphaned verdicts counted and listable (Q6). |
 | G6 | Medium | §3.9 (overlay), §3.5 | Unspecified mechanics with cost traps: `GRAPH.COPY` + patch stalls the instance (V3) and reintroduces incremental re-linking. A delta-graph merge is federation (Q1). | Build each overlay from bundles into its own key, exactly like a snapshot. TTL with `EXPIRE` renewed on use (V4). A configured cap on concurrent overlays sized from Q3's peak formula. Overlay keys covered by the raw ACL pattern (Q5). |
 | G7 | Medium | §3.5 (swap: "alias or rename mechanism is `graph-dba`'s call") | Settled: there is no alias. **`RENAME` over the live key** is atomic and reader-safe (V2). But it frees the old graph, and like `EXPIRE` it destroys data without the literal `GRAPH.DELETE` the lab's destructive-ops hook matches. | Swap by `RENAME`; keep zero old snapshots (rollback = re-assemble last-good bundles); key names only from the system manifest, prefix `ccg_`, never from caller input; the runner holds the only credential allowed to `RENAME`/`EXPIRE` (Q4, Q10). |
-| G8 | Medium | §3.5, §6.1 K5 | The proposal does not say which FalkorDB instance hosts `ccg_*`. On the shared `falkordb-dev`, a G2-class crash, a copy stall or a peak of ~11 GB (Q3) hits `falkor-chat` and every other component. Snapshots and overlays are rebuildable, so they need no persistence. Verdicts would (G5 moves them to a file). | A **dedicated FalkorDB instance** for the code graph, sized per Q3, `noeviction`, persistence off or infrequent RDB (a restart = re-assemble from bundles, minutes). Topology is mine to design; bring-up is `devops`'s. |
+| G8 | Medium | §3.5, §6.1 K5 | The proposal does not say which FalkorDB instance hosts `ccg_*`. On the shared `falkordb-dev`, a G2-class crash, a copy stall or a peak of ~18 GB at the default two previews (Q3, §6.4) hits `falkor-chat` and every other component. Snapshots and overlays are rebuildable, so they need no persistence. Verdicts would (G5 moves them to a file). | A **dedicated FalkorDB instance** for the code graph, sized per Q3, `noeviction`, persistence off or infrequent RDB (a restart = re-assemble from bundles, minutes). Topology is mine to design; bring-up is `devops`'s. |
 | G9 | Low | §3.11 (refresh), §3.5 | Build completion is underspecified. Full-text indexes backfill asynchronously at scale and silently return zero rows meanwhile (V9); constraints are async too. | Swap only when every index and constraint reads `OPERATIONAL`; a `FAILED` constraint fails the build (duplicates, V7) and the last good stays live (§3.5 load sequence). |
 | G10 | Low | §3.13 (federation fallback), §6.1 K5 | The fallback trigger is framed as "summary graph too big". Measured, a 10k-file system is ~1.5 GB (Q3), and the realistic blow-up is G3's edge families, not file count. | Reword K5 and §3.13: federation is warranted only past ~⅓ of a shard per snapshot (~150k files on 64 GB). The live risk is unbounded edge families, controlled by model rules. |
 | G11 | Low | §3.6 step 2, §6.2 Q7 | "Bounded variable-length reverse reach … path-returning queries" would enumerate every path (exponential). | Level-synchronous BFS in the engine with best-predecessor chains; `algo.SSpaths` benchmarked in P0 as an optimization only (Q7, V8). |
@@ -527,6 +539,8 @@ refinement or a correction to a stated figure.
 
 
 ## 5. Requirement-level findings for the stakeholder
+
+_v2: Q-R1–Q-R6 were decided as S6, S23, S24, S1, S33 and S7 (requirements decision log, 2026-10-26); new questions are in §6.5._
 
 None of these edits `docs/requirements/connected-code-graph.md`. Each is a question or a
 clarification for the AC review, routed through `tico`.
@@ -559,8 +573,8 @@ clarification for the AC review, routed through `tico`.
 - **Q-R5 — FR-23: how many overlays at once?** Each overlay is a full copy of the system's
   snapshot in memory (~1.5 GB for a 10,000-file system, Q3 and Q5). Unlimited concurrent overlays
   (for example one per in-flight `teco` change) multiply that. *Recommend:* the requirement accepts a
-  configurable cap (default about 4), with the oldest idle overlay retired first, and an answer
-  stating when its overlay had to be rebuilt.
+  configurable cap, with the oldest idle overlay retired first, and an answer
+  stating when its overlay had to be rebuilt. *(Decided: cap configurable, default 2 — FR-23, S33/Q-R8.)*
 - **Q-R6 — FR-25 / AC-21: say where read-only is guaranteed.** As written, AC-21 is satisfied by
   whichever tool is tested. *Recommend:* "rejected by the database for the raw-query credential",
   so the guarantee survives a client bug (G1).
@@ -568,3 +582,242 @@ clarification for the AC review, routed through `tico`.
   wants its own FalkorDB instance with on the order of 10 GB of RAM (one live snapshot, one being
   rebuilt, a few overlays). The full statement-level CPGs the team uses today would need ~26 GB for
   the snapshot alone, which is why the proposal's summary-level graph is the right call.
+
+## 6. Revision 2 — analyst B1/B2 and the re-checked requirements
+
+Inputs: `docs/reviews/connected-code-graph.md` (B1, B2, and the graph-side minors m1–m3 and m6,
+plus B6), and the stakeholder's decisions S1–S38 and use-case re-check in
+`docs/requirements/connected-code-graph.md` (decision log, 2026-10-26). Where this section and
+§2–§3 disagree, this section wins. AC-12's "stack trace and log together rank at least as high as
+either alone" is treated as an unconfirmed assumption and drives no graph design here.
+
+New live evidence for this revision (2026-10-26). `cpg_falkorchat` was read only; the ACL and
+timeout probes ran in throwaway `v4.18.11` containers on ports 6392/6393, stopped after:
+
+| # | Probe | Result |
+|---|---|---|
+| V15 | Statement-level flow layers in `cpg_falkorchat` (97 files) | `REACHING_DEF` 655,140 (~6,750/file), `CDG` 51,866 (~535/file), `CFG` 296,217, `ARGUMENT` 207,970. Condition nodes (distinct `CDG` sources) 3,219 (~33/file); `METHOD_PARAMETER_IN` 12,714 (~131/file); `RETURN` 3,024 (~31/file); `<operator>.fieldAccess` 16,898 (~174/file). Only 1,549 `REACHING_DEF` edges run directly param/call → call. The rest pass through identifiers and operators, so a summary needs a per-method **projection**, not a copy. |
+| V16 | `GRAPH.LIST` under a key-scoped ACL user | Lists **every** graph key on the instance (`ccg_a`, `other_sys`). Key patterns don't filter keyless commands. Confirms review m6. |
+| V17 | `falkordb-py` 1.6.x connecting as a restricted user | `FalkorDB(...)` calls `INFO server` (sentinel detection) in its constructor and fails with `NoPermissionError … 'info'` unless the user has `+info`. |
+| V18 | `GRAPH.CONFIG SET TIMEOUT_MAX 500`, then raw-user reads | A query asking for `timeout=60000` is **rejected** (*"cannot exceed the TIMEOUT_MAX"*), and one with no timeout is killed at 0.5 s. An instance-wide cap works for every credential. |
+
+### 6.1 B1 — fix
+
+**Agreed: B1 is real.** With one stored direction and "impact = incoming reach", a writer's change
+never reaches the readers of what it writes, and RCA never reaches the writer. The same flaw
+exists, unnoticed, on request payloads across a `Link`: the consumer's argument value flows **into**
+the provider, which is opposite to the contract dependence the `VIA`/`TO` edges encode.
+
+**Why flipping or mirroring edges is not enough.** A shared-state edge plays two roles in opposite
+directions:
+- **Contract:** reader *and* writer both depend on the entity's schema. Renaming a label (AC-3)
+  must list both.
+- **Value:** the reader depends on the writer.
+
+Store `WRITES` as entity → writer and AC-3's contract walk loses the writers. Add a mirrored
+`WRITTEN_BY` and a plain incoming walk from writer W reaches the entity, then **every other
+writer** W2. That is a false impact (W's value change does not affect W2), and it grows with every
+hot table or topic. Either way a rule about *how you arrived* at the entity is needed. Once that
+rule exists, mirror edges buy nothing but RAM.
+
+**Fix (graph + engine):**
+1. **Storage is unchanged.** Every edge stays stored dependent → dependency, as in §3.2, which
+   reads as the contract relation.
+2. **Traversal direction is per (operator, edge type, arrival state)**, from the normative table in
+   §6.2. It replaces §3.1 rule 1 as a traversal rule.
+3. **The BFS (Q7) carries a small state per frontier entry:** `value`, `contract`, or `arg(i, path)`
+   (a value entering a callee through argument *i*, field path *path*). Each level issues one
+   parameterized read per (edge type, direction) the table allows from that state. The state
+   machine is part of the algorithm whose name and version the answer publishes in its recipe
+   (FR-19, S1).
+4. **Shared state is one pattern** covering data entities, message topics, class fields, env
+   vars and config keys. Writer `−WRITES→` CP `←READS−` reader. A publisher `WRITES` a topic CP and
+   a subscriber `READS` it. Config `WRITES` an `env_var`/`config_key` CP and code `READS` it. B1's
+   fix therefore covers messaging and config-value causes (FR-12) with no extra edge type.
+5. **Request direction on links:** a consumer call site reached in state `arg(i, …)`
+   (its request argument changed) continues `VIA →`, `TO →`, then `HAS_PARAM →` to the handler
+   parameter the pack maps that argument to (`Link.paramMap`). This is the value path. The contract
+   path (provider changed → consumers) stays `TO ←`, `VIA ←`.
+6. **Name hop (review m1):** `CALLS_NAME` + `RESOLVES_TO` are expanded as **one compound hop** in a
+   single query that also anti-joins `DISMISSED`. `Name` is never a BFS node or in the visited set.
+   **Resolved call sites also carry `CALLS_NAME`**, at one extra edge per resolved site. The
+   operator suppresses the candidate equal to the resolved target and lists the others as
+   *possible* (`reason: resolution-unverified`) unless P0 measures Joern's resolved-call precision
+   above a threshold set by `data-scientist`. Otherwise a wrong Joern resolution is a silent miss
+   plus a false *confirmed*, the worse error under FR-8.
+
+**Fixture assertions** (P0/P1 test set, the analyst's two plus two that guard the fix):
+- (1) changing writer W lists reader R in another unit (impact, value);
+- (2) RCA from R's symptom lists W (backward, value);
+- (3) renaming the entity lists R **and** W (contract);
+- (4) changing W does **not** list another writer W2 of the same entity unless W2 also reads it.
+
+### 6.2 Normative edge-type × direction table
+
+`←` = traverse against the stored direction (from dependency to dependent), `→` = along it, `—` =
+not traversed. "Impact" answers FR-11's forward question. "Depends-on / RCA" answers FR-11's
+reverse question and RCA's backward tracing (FR-12): the same walk, with RCA adding ranking. A
+contract-mode impact starts at a `ContractPoint` anchor or at a change that alters a provider key,
+schema entry or library signature (FR-13). After the first shared-state hop it continues in
+`value`.
+
+| Edge (stored dependent → dependency) | Impact, `value` | Impact, `contract` (from a CP) | Depends-on / RCA backward |
+|---|---|---|---|
+| `CALLS` CS → Symbol | `←` (callee changed → call site). `→` only in `arg(i)` state, into the callee | — | `→` (call site → callee) |
+| `CALLS_NAME`+`RESOLVES_TO` (compound) | as `CALLS`, *possible*, `DISMISSED` anti-joined | — | as `CALLS` |
+| `HAS_CALL` / `HAS_PARAM` / `HAS_RETURN` / `HAS_COND` Symbol → point | `←` (point → enclosing function, which becomes a reported item). `HAS_PARAM →` only in `arg(i)` state, index-matched | — | `→`. From a `Param`, `←` then `CALLS ←` to callers' argument `i` |
+| `DATA {fromPath, toPath}` use → def | `←` (path-matched when the state carries a path) | — | `→` |
+| `CONTROLLED_BY` point → `Cond` | `←` (changed condition → guarded points) | — | `→` (which condition chose the branch) |
+| `VIA` consumer → `Link`, `TO` `Link` → provider | `←` (provider changed → consumers). `→` only in `arg(i)` state (request value → handler parameter via `paramMap`) | `←` from the provider's CP | `→` (bad response). From a handler `Param`: `←` to the consumer's arguments |
+| `READS` CS → CP | `←` only at a CP reached by `WRITES →` | `←` | `→` (reader → CP, state `value`) |
+| `WRITES` CS/`ConfigEntry` → CP | `→` (writer → CP), never `←` | `←` (all writers) | `←` only at a CP reached by `READS →` (who wrote the value) |
+| `DEFINED_BY` CP → `SchemaEntry` | — | `←` (schema/migration change → CP → `READS`/`WRITES ←`) | `→` (schema-mismatch hypothesis) |
+| `CONSUMES` CS/`ConfigEntry` → CP | — | `←` (every consumer of the old contract, matched or not) | `→` (a consumer whose CP has no provider: wiring-error hypothesis) |
+| `PROVIDES` provider → CP | `→` when the anchor is a provider whose key changed (switches to `contract`) | — | — |
+| `BOUND_BY` `Link` → `ConfigEntry` | `←` (config change → the links it binds → their consumers) | — | `→` (wiring hypothesis: wrong port/URL) |
+| `LAUNCHES` `ConfigEntry` → `File`/`Unit` | `←` (launched code changed → the entries that reference it, FR-13) | — | `→` |
+| `RAN` `Test` → Symbol | `←` ("which tests reach this change", runtime half) | — | — |
+| `DEPENDS_ON` `Unit` → `Dependency`, `FROM_DEP` external Symbol → `Dependency` | `←` (dependency bump → units) | — | `→` ("cause outside the mapped code" branch) |
+
+Containment edges (`IN_REPO`, `HAS_FILE`, `DEFINES`) are never traversed for reach. They render
+grouping and evidence only.
+
+**Distance and direct/indirect (FR-11, AC-25).** Distance counts **inter-function links** (call,
+link, shared-state, config hops). Intra-function hops (`DATA`, `CONTROLLED_BY`, `HAS_*`) count 0,
+otherwise a three-line function would look "farther" than a cross-service call. Direct = distance
+1. This is a definition, not a requirement, so it goes to the stakeholder (§6.5 Q-R7). The best path
+per item minimizes (possible hops, distance, length), tie-broken by stable ids, and stays
+deterministic.
+
+### 6.3 B2 — graph side
+
+**Agreed: positional `ARG_FLOWS {param, arg}` and `paramToReturn` are too weak.** AC-1's own
+wrapper needs field paths through two functions: `apiFetch(opts)` → `buildUrl(opts.path, …)` →
+`fetch(url, {method: opts.method})` (`salesperson/src/api/client.ts:73,107-118`). The v2 schema
+replaces both with **points and access-path data edges**:
+
+```
+(:Symbol)-[:HAS_PARAM]->(:Param {pointId, index, name, line})
+(:Symbol)-[:HAS_RETURN]->(:Ret {pointId, line})
+(:Symbol)-[:HAS_COND]->(:Cond {pointId, line, code})          code truncated to 200 chars, unconstrained
+(:CallSite) is itself a point; its result is fromPath 'r', its argument i is toPath 'a<i>'
+(point)-[:DATA {fromPath, toPath}]->(point)                   use → def, intra-function
+    fromPath ∈ 'p<i>[.f1.f2]' | 'r[.f…]' | ''   toPath ∈ 'a<i>[.f…]' | 'ret[.f…]' | ''
+(point)-[:CONTROLLED_BY]->(:Cond)
+(point)-[:READS|WRITES {status, reason, linkId}]->(:ContractPoint {kind:'field', key:'<type>.<field>'})
+```
+
+AC-1's chain in this schema:
+- `fetch` call site `−DATA{toPath:'a0', fromPath:'r'}→` the `buildUrl` call site;
+- the `buildUrl` call site `−DATA{toPath:'a0', fromPath:'p0.path'}→` `apiFetch`'s `Param p0`;
+- the `fetch` call site `−DATA{toPath:'a1.method', fromPath:'p0.method'}→` `Param p0`;
+- inside `buildUrl`, `Ret −DATA{fromPath:'p0'}→ Param p0`.
+
+**Field paths are capped at depth 3.** A longer path is truncated to its prefix and marked
+*possible* (`reason: field-truncated`). Matching paths across a hop is an engine-side BFS state
+(`arg(i, path)`, §6.1), the same stateful-walk argument as G4. Cypher cannot carry it in a
+variable-length pattern.
+
+**Role lifting happens at build time; the graph stores the result and its proof.** The linker
+lifts roles over bundles: `fetch` is an HTTP client on `a0`, so `buildUrl`'s `p0` is one, and so is
+`apiFetch`'s `p0.path`. The graph receives the outcome as `CONSUMES` from the `endpoints.ts` call
+sites, with `reason: lifted-role`, plus the lifting chain as ordered evidence on the `Link`:
+`(:Link)-[:LIFTED_VIA {ord}]->(:CallSite|:Symbol)`. That keeps FR-20's file + line at every step
+(endpoints.ts call → `apiFetch` → `buildUrl` → `fetch`) without a stateful walk at answer time.
+
+**Field-sensitive classes, without a heap model:** a class field is a shared-state CP of kind
+`field`, keyed by declaring type plus field name, with `READS`/`WRITES` from the accessing points.
+That is how `self.repo = …` in `__init__` reaches `self.repo.query(…)` in another method. Aliasing
+is not modelled, so field links are *possible* (`reason: field-name-match`) unless the receiver
+type is resolved.
+
+**Shell and prompts get the same schema (review m4):**
+- The `tree-sitter-bash` extractor emits a `Symbol` per shell function, plus one synthetic
+  per-file `Symbol {kind:'script', name:'<script>'}` that spans the file.
+- A `CallSite` per command invocation, with `calleeName` = the command or function.
+- `Param`s for `$1…$n` / `"$@"`, and `DATA` for assignment → use inside a function. `eval`,
+  indirect expansion and `source` of a computed path are *possible*, `reason: shell-dynamic`.
+- So `gquery() { redis-cli … GRAPH.QUERY "$GRAPH" "$1"; }` yields
+  `DATA{toPath:'a4', fromPath:'p0'}`. Lifting then carries the Cypher literal from each of
+  `bootstrap_schema.sh`'s 50 `gquery` calls into the embedded-Cypher parser, which emits
+  `WRITES` to the label CPs (AC-3).
+- Markdown prompts get a synthetic `Symbol {kind:'document'}` per file and a `CallSite` per tool
+  mention (`reason: prompt-mention`). Example configs carry `File.role = 'example'`
+  (`reason: example-config`, FR-5/S21).
+- Runtime-built labels (`falkor-chat/server/falkorchat/querygen.py:488`) produce *possible*
+  `READS`/`WRITES` to the bound store's label CPs (`reason: runtime-built`), collapsed in rendering
+  as the proposal already describes.
+
+**What this does to B2's cost concern.** Impact and RCA no longer need build-time whole-program
+`reachableBy`. They need a **per-method projection** of Joern's intraprocedural DDG/CDG onto the
+method's points: which points each point's value derives from, and which conditions guard it.
+That is a local graph search per method. Interprocedural composition then happens at answer time
+by traversal. Whole-program `reachableBy` stays only for security taint, materialized as `Finding`
+chains (G4). The analyst's P0 vertical-slice recommendation stands, and the projection's build
+cost is one of the things it must time.
+
+### 6.4 Per requirement: schema, constraint and index changes, and feasibility
+
+| Requirement (post-S1–S38) | Graph change | Index / constraint | Feasibility on FalkorDB |
+|---|---|---|---|
+| **FR-1, FR-4, FR-5** shell, structured config, prompts, example configs | Synthetic `script`/`document` Symbols, shell `CallSite`/`Param`/`DATA` (§6.3); `ConfigEntry` per structured key; `File.role ∈ {code, example, doc, config, script}` | none new | none |
+| **FR-7a** never-built part | `Unit.buildStatus = 'not-mapped'`; a link into it is `(:Link {status:'possible', reason:'target-not-mapped'})-[:TO_UNIT]->(:Unit)` | none | none |
+| **FR-11** data flow, control dependence, direct/indirect, distance, grouping, reverse question | `Param`/`Ret`/`Cond` points, `DATA {fromPath,toPath}`, `CONTROLLED_BY`, field CPs (§6.3); `Unit.componentId` for grouping; distance computed by the BFS (§6.2) | `Param/Ret/Cond.pointId` range index (edge-load anchors); UNIQUE after load | **Size, below.** Traversal is the BFS with state. Paging per level keeps every reply under `RESULTSET_SIZE` |
+| **FR-12** config/schema/wiring causes, backward flow, recent changes, outside-the-code branch, no-match | Shared-state pattern for config values (§6.1 item 4); column → table `(:ContractPoint)-[:PART_OF]->(:ContractPoint)`; `Symbol.lastChangedAt`/`lastChangedCommit` from `git blame` at build (window per codebase applied at query time); external Symbols `-[:FROM_DEP]->(:Dependency)`; `LogTemplate` unchanged. Ruled-out/confirmed marks are per investigation and engine-side only (nothing persists) | none new | none |
+| **FR-13** five contract kinds, contract delta, test/security/config impact, "show existing" | `ContractPoint.kind ∈ {http, rpc, topic, data_entity, mcp_tool, library_api, …}`. `library_api` key = qualified name + signature hash, so a signature change is "old removed + new added", paired by qname. **The delta is computed at overlay build** (the linker holds base and overlay bundles), because base and overlay are separate keys and cannot be joined (V1): `ContractPoint.overlayState ∈ {unchanged, added, removed, changed}`, removed CPs kept **with their consumers' `CONSUMES`**, `Finding.delta ∈ {new, worsened, existing}` | `ContractPoint.overlayState` range index (review listing anchor) | none, provided the delta is materialized; a query-time base↔overlay join is impossible |
+| **FR-14** per-test runtime, function level, test kind, tests-for-a-change, risk ranking, stale data | `Symbol:Test.testKind ∈ {unit, integration, e2e}`; `(:CoverageRun {runId, commit, collectedAt, tool, stale})`; `(:Test)-[:RAN {runId}]->(:Symbol)`. A stale run (commit ≠ unit's built commit) is loaded but never merged and is listed. Risk inputs as properties computed at build: `callerCount`, `securityRelevant`, `lastChangedAt` | `CoverageRun.runId` | **Size risk:** `RAN` edges = tests × functions each test runs. ~0.6M edges at 2k tests × 300 functions; ~10M (≈1 GB) at 20k tests × 500. Direct facts, so linear, but they are the next-biggest family after `DATA` |
+| **FR-15** risky config, five kinds, severity, git-history secrets, finding verdicts, values never stored | `Finding {kind incl. 'risky-config', severity, severityReason, fingerprint, verdict*}` with `STEP`s to `ConfigEntry` for config findings; `(:SecretSighting {sightingId, fingerprint, path, line, commit, committedAt, removedInCommit, presentAtHead})`. **`fingerprint` must be a keyed hash (HMAC with a per-system key kept outside the graph), never a plain hash**: secrets are often low-entropy or of a known format, so a plain SHA-256 can be brute-forced back to the value, which breaks "never stores a secret's value" | `Finding.findingId` and `SecretSighting.sightingId` UNIQUE (hashes) | none |
+| **FR-19** decision-state stamp, recipe, fixed RCA order | `:Snapshot {verdictLogOffset, verdictLogHash}`, advanced **in the same write query** as each verdict patch (one query is atomic, quirks file). The stamp = `snapshotId` + offset. The recipe (queries + algorithm name/version) is engine-side | none | none |
+| **FR-24** content-only protection, raw queries for all-repo readers only (S5, S6) | No per-scope views: Q3's `s = 0`, Q10's R3(b) is no longer needed. Redaction stays engine-side over denormalized `repoId` | none | none |
+| **FR-25** enforced by the database credential (S7) | Raw ACL user per system: `-@all +graph.ro_query +graph.explain +info ~ccg_<system> ~ccg_<system>__ov_*`. **`+info` is required** because `falkordb-py`'s constructor calls `INFO` (V17). **`GRAPH.LIST` is not granted**: it reveals every key on the instance (V16), so the engine passes graph names. A runaway raw read is bounded by an **instance-wide `TIMEOUT_MAX`** (V18; Redis ACLs have no per-user timeout). The engine's per-level BFS queries fit under the same cap, a second reason the engine never issues unbounded path queries | — | verified (V5, V16–V18) |
+| **FR-28/FR-29 + review B6, m2** immediate verdicts, either-side owner, expiry on change/rename/move/signature | Verdict fields on `Link`, `READS`/`WRITES` (by `linkId`) and `Finding`. **B6 fix (agree with the analyst, plus self-healing):** assembly stamps `verdictLogOffset` on the new key. Under a lock shared with the `verdict` command (a Redis `SET ccg_<system>:verdict_lock NX PX`), it replays log entries past that offset onto the new key, then `RENAME`s. The `verdict` command takes the same lock, appends and fsyncs the log, then patches the live key and advances its offset in one query. After a crash between append and patch, the next verdict or swap replays from the offset, so the store and graph re-converge. **m2:** `symbolId = h(lang, repoId, qname[, signature only for overloading languages: Java, Kotlin, C#, C++])`, with no `unitId`, so a moved build root or an added Python parameter doesn't orphan the id. S24 accepts orphaning on rename, move or signature change; orphans stay listable (Q6 item 4) | `READS`/`WRITES`/`DISMISSED` relationship indexes on `linkId` (§3.4) | none. The lock is the one cross-key coordination the design needs, and it lives outside FalkorDB's single-query atomicity |
+| **FR-23** preview cap (S33) | Cap is runner config. Sizing below | — | **RAM**, below |
+| **Review m3** θ / score floor | Agreed: a deliberate, frozen, recall-calibrated exception, applied **client-side over the complete full-text result set**, never as an index `LIMIT`. Q9's condition 1 stands for everything else | — | — |
+
+**Summary-graph size with data flow and control dependence carried for all use cases** (the
+stakeholder's Joern-CFG/DDG note). These are estimates extrapolated from V11 (synthetic, ~93 B
+per element plus indexes) and V15 (measured densities). P0 must measure the real projection.
+
+| Model, per source file | Nodes | Edges | RAM | 10k-file snapshot | Peak: 1 live + 1 building + 2 previews (default), +20% | Peak with 4 previews (alternative) |
+|---|---|---|---|---|---|---|
+| v1 summary (calls, links, data/config) | ~260 | ~580 | ~0.115 MB | ~1.2–1.5 GB | ~7 GB | ~11 GB |
+| **v2 summary + projected points** (params, returns, conditions; `DATA` ≈ 3 per point, `CONTROLLED_BY`, field CPs) | **~455** | **~2,400** | **~0.3–0.35 MB** | **~3–4 GB** | **~14–19 GB (≈18 GB)** | ~25–30 GB |
+| Statement-level DDG + CDG copied from Joern (`REACHING_DEF` + `CDG` plus their ~3k statement nodes) | ~3,300 | ~7,500 | ~1.2 MB (est.) | ~12 GB | ~58 GB | ~85 GB |
+| Full CPG (V12) | ~4,000 | ~27,000 | ~2.6 MB | ~26 GB | not viable | not viable |
+
+**Feasibility verdict:** carrying data flow and control dependence for all use cases is **feasible
+on FalkorDB only as the projected point graph**. It roughly triples the summary graph and keeps
+one system on one shard comfortably. Copying Joern's statement-level layers is not feasible at
+workplace scale with previews. Remaining risks, all P0-measurable:
+- (1) the projection's build time per method (B2);
+- (2) the BFS state space under field paths, bounded by the depth-3 cap;
+- (3) `RAN` volume (FR-14);
+- (4) peak RAM with the decided default of two previews (~18 GB), on the dedicated instance that
+  G8 already recommends (§6.5 Q-R8, decided).
+
+### 6.5 Questions for the stakeholder
+
+- **Q-R7 — Distance (FR-11, AC-25):** should "distance" count links **between** functions,
+  components and data (calls, endpoints, tables, config), with steps inside one function counted as
+  zero? *Recommend yes*, otherwise a long function looks farther away than a cross-service call.
+- **Q-R8 — Memory for flow-aware impact plus previews (FR-11 × FR-23) — decided: default cap of
+  2.** At about 10,000 source files, the view with data flow and control dependencies needs a
+  dedicated machine with roughly **18 GB of RAM** at peak for one live view, one rebuild and two
+  concurrent change previews. The cap stays configurable: four previews would need ~30 GB
+  (a ~32 GB host). Confirm the figure after P0 measures it.
+- **Q-R9 — Where there is no data/control flow (FR-11 × FR-1):** Joern has no shell or config
+  frontend, and the lab's shell extractor will give only approximate data flow. Some Joern
+  frontends may prove weak in P0. Should impact through such code fall back to call-level reach,
+  with affected items shown as *possible* and the reason "data/control flow not available for
+  <language>"? *Recommend yes.* That honours "never miss" without claiming precision the tool
+  doesn't have.
+- **Q-R10 — "Component" in FR-11's grouping:** is a component the same thing as a build unit (one
+  build root in one language), or a larger grouping you name, such as a top-level folder or a
+  service? *Recommend: the build unit by default, overridable by an optional grouping line in the
+  system's repository list* (S30 already accepts that list as input).
+- **Q-R11 — Secret fingerprints (FR-15):** to make a fingerprint unrecoverable, it must be a keyed
+  hash with a per-system key. The consequence is that fingerprints cannot be compared with another
+  tool's fingerprints or across systems. *Recommend accepting that.*
+
+Items the review raised that need **no** stakeholder decision and are folded in above: B1 (§6.1–6.2),
+B2 graph side (§6.3), B6 (§6.4 FR-28/29 row), m1 (§6.1 item 6), m2 and m3 (§6.4), m6 (V16–V18).
