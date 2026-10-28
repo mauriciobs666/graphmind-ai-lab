@@ -1,6 +1,6 @@
 # Small-LLM Benchmarking Tool — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-02
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-28
 
 ## Intent
 
@@ -355,3 +355,5 @@ intervals, paired design, in-session reference arm, golden-set honesty rules (FR
 headline trap — **benchmarking the model instead of the job** — written into AC-1 and the out-of-scope
 list. Also surfaced the pre-existing `falkor-chat/server/tests/eval/` harness and the "benchmark for
 a named role" framing, both now open questions for the stakeholder.
+
+2026-10-28 — Closeout check (stakeholder-requested) → feature delivered and closed S0–S8 (`model-bench/docs/HISTORY.md`, S8 closed 2026-09-17; every plan in the family already `archived`). Status flipped Ready for design → archived on stakeholder approval.
