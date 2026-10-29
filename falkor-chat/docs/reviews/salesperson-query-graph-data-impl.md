@@ -146,3 +146,92 @@ returns [p.category, count(p)]          -> RETURN p.category, count(p) (unchange
 returns [x.price]                       -> abstains (ValueError: unknown var)
 ```
 
+
+## Pass 2 — M1 recheck (`d5ba5728`) and code gate on Stage B (`9ba0d788`)
+
+**Scope.** Commits `d5ba5728` (test-only, the M1 fix) and `9ba0d788` (Stage B, plan §4 D6/D7 and §6
+B1–B3), read with `git show`. `falkor-chat/` at HEAD is identical to `9ba0d788`
+(`git diff --stat 9ba0d788 HEAD -- falkor-chat` is empty).
+
+**Verdict: approve with suggestions.** There are no blockers and no majors. D6 and D7 conform
+to §4.1 and §4.2: the D6 block is verbatim, and trigger (a) is raw list membership. I ran 20 live
+shapes through the real `Services` and `Repository` on a scratch graph and found no false-positive
+recovery. One minor coverage gap, m1, sits where Stage A meets Stage B; it is designed behaviour,
+but its size is unmeasured.
+
+CPG: considered, not relevant — `cpg_falkorchat` is stale (brief); callers found by grep.
+
+### Pass 1 dispositions
+
+- **M1 — fixed, and the fix is stronger than the one I suggested.** I ran my own type-coercing
+  mutant of the rewrite (every `int` filter value becomes a `float`). My Pass 1 `model_dump() ==`
+  check reports **0 of 44,323** violations; it misses the mutant because `2 == 2.0`. Under
+  `d5ba5728`, the probe's `knowledge_base-Chunk` case and the new
+  `test_ensure_row_identity_changes_returns_and_nothing_else` both go **red**. On
+  `Chunk seq = 2`: `dump == True`, `json == False`, and the bound parameter is `{'p0': 2.0}`. The
+  implementer was right that the `==` check was incomplete. `querygen.py` was restored, sha256
+  `2705b86e…17fe` before and after.
+- **n1 — not fixed, as intended** (no action was asked).
+
+### Findings
+
+#### m1 (minor) — a `name = <category word>` completion that omits `returns` never reaches D7
+
+*Evidence (executed, `live.py`, Appendix C).* Same scratch graph, same real tool, two completions:
+
+| Completion | Result |
+|---|---|
+| `name = "periféricos"`, `returns ["p.name","p.price"]` | recovery (`QUERY_CATALOG_MISS_FINDING` + `categories`) |
+| `name = "periféricos"`, `returns` **omitted** | `{"items": [], "finding": "no matching data found"}` |
+
+The two outcomes differ, which shows the second case never ran a query.
+`default_returns` treats an `=` on an identity property as a single-entity lookup and leaves
+`returns` unfilled (D3). Validation then fails, and `run()` abstains before D7's
+`if not rows:` branch.
+
+*Why it matters.* This is the pt-BR half of DEF-C (`name = "periféricos"`). The DEF-C evidence
+(`docs/test-reports/salesperson-cart-product-id2-report.md` DEF-C) does not say whether those
+completions carried `returns`, and small models do omit it (K-066 Q2, the reason `default_returns`
+exists). In the tool's output a validation abstention and an empty result are byte-identical,
+so the §8.3 browse re-measure cannot tell which path a miss took.
+
+This follows the plan, which lists "every parse, validation or compile abstention" as the old
+abstention (§4.2), and it is not a Stage A regression: `_NAME_LOOKUP_PROPERTIES` had the same
+exemption. But D7's reach on pt-BR is narrower than "every `name = <category word>`".
+
+*Suggested improvement.* No code change in this stage.
+- For `qa-engineer` (Stage C, §8.3): for each pt-BR browse miss, record whether the internal
+  completion carried `returns`. This needs the querygen completion, which `run_nlq_golden_set_eval.py`
+  records but the storefront probe may not.
+- If a material share omit it, this goes to `architect`: let the D3-abstention path run trigger
+  (b) as well, i.e. treat `lookup_product(name) is None` as a recovery. That needs no query and
+  stays inside D7's matcher rule.
+
+### Checks with no finding (all executed unless marked)
+
+| Check | Result |
+|---|---|
+| D6 text and placement | The rendered catalog prompt ends `…This dataset's schema:\nProduct (properties: …)\n\nProduct.category is exactly one of: …`. The block is §4.1's text verbatim and comes after the schema line, which is the template's last line, so `"\n\n"` puts it in the right place. `categories or None` keeps an empty catalog byte-identical. The KB prompt reads no categories |
+| D7 trigger (a) is raw | `filt.value not in categories` over the stored values (`tools.py`, `_names_unknown_value`). Live: `category = "peripherals"` → recovery, `" Audio"` → recovery, `"Peripherals"` + `price < 1` → old abstention. Plan-gate Pass 1 M1 holds |
+| D7 trigger (b) | `name`: `row is None or row["name"] != value`. `nameNormalized`: `row is None`. Live results: `name = "wireless mouse pro"` → recovery. Exact name + `price < 1` → abstention. `nameNormalized = "wireless mouse pro"` + `price < 1` → abstention. `nameNormalized = "Wireless Mouse PRO"` alone → 1 row. `_CATALOG_NAME_PROPERTIES` is a separate constant, not `schema.identity` |
+| False positives | Known category + `price < 1`, known category + known name in another category, known name or `nameNormalized` + `price < 1`, `category <> x`, range-only, a non-empty result: all give the old abstention or rows, never the hint |
+| es / pt-BR | `category = "periféricos"` (es) and `name = "periféricos"` (pt-BR, with `returns`) both recover. So does `name = "ratón inalámbrico"`, an R3-class absent-product case the plan accepts |
+| No `productId` grounding | `_collect_target_values(<recovery JSON>, "productId")` → `set()` |
+| F2 × D7 | D7 reads `request.matches[0].filters` from the rewritten request, and `d5ba5728` pins that the rewrite changes only `returns`. A prepend only splits `DISTINCT` rows and never empties a result. Live: unknown category + `returns ["p.category"]`, `order_by p.price` (prepended) → recovery |
+| MB2b equivalent? | **Yes, by construction.** `categories = … if is_catalog else []` (`tools.py:1197`), so whenever `is_catalog` is false, `categories` is `[]`. The guard at `:1235`, `is_catalog and categories and …`, is therefore the same as `categories and …`. The single-flag MB2 kills the real dataset dependency (2 tests) |
+| Own mutants | MY1 (trigger (b) compares `row["category"]` instead of `row["name"]`): killed by T-B10. MY2 (`catalog_categories` collects `r["name"]`): killed by T-B1. MY3 (the recovery's `categories` echoes the filter values): killed by 6 recovery tests. `tools.py`/`services.py` restored, sha256 `d12d2161…fe8d2`/`891b7771…9c75` identical before and after |
+| Tests | Pre-existing tests are unmodified apart from the `StubServices`/`StubQueryServices` additions (the only `-` lines in both test diffs are the two signatures). `pytest tests/test_querygen.py tests/test_tools.py tests/test_services.py tests/test_query_graph_data_routing.py tests/eval/test_nlq_scoring.py` → **501 passed**. `verify_catalog.sh` rc 0 afterwards |
+| Docs | The `QUERIES.md` §15.2 sentence matches the §7 row. The class docstring states D6, both triggers with their matchers, the recovery shape, "grounds no `productId`" and every old-abstention case, all accurate against `_names_unknown_value`. No other §7 surface is Stage B's: BACKLOG, HISTORY and the archived-plan pointers are `teco`'s, at close |
+
+### Open questions
+
+- m1's routing decision (above) depends on Stage C data. No action is needed before then.
+
+## Appendix (Pass 2)
+
+**C. Harness.** `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/impl/p2/live.py`,
+with its output in `live.out` next to it.
+- It subclasses `Repository` so that `_reference()`/`_graph_by_key("reference")` select
+  `scratch_analyst_f2b`. That graph was copied from `reference`'s 15 `Product` nodes, including
+  `categoryNormalized`, by a read-only read, and was deleted afterwards.
+- It runs the real `Services` and `QueryGraphDataTool.run`, with canned querygen replies.
