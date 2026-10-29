@@ -40,6 +40,8 @@ K-087.
 | U3a′ | `tdd-engineer` | `aff2487d2b206344d` (resumed) | accepted | review M1 fix, committed `d5ba5728`: invariant pinned as a JSON-typed comparison (departs from the review's `==`, which misses int→float and bool→int; MX3/MX4 shown), probe odd/even `DESC`/limit 7; MX1–MX4 killed; teco re-ran 162 passed | teco verified (test-only) | 195k tok / 8 tools (cumulative) |
 | U4b | `analyst` | `a66a86f93775f1e98` (resumed) | gated | same review, Pass 2: M1 fixed (the implementer's JSON compare confirmed stronger than the review's `==`, by an executed int→float mutant); new m1: a `name = <category word>` completion without `returns` stops at validation, before D7 (pre-existing, per plan §4.2) → U5 records the `returns` presence on each pt-BR browse miss; MB2b equivalent; own mutants MY1–MY3 killed | gate on U3b → **approve with suggestions** | 176k tok / 25 tools (cumulative) |
 | U5 | `qa-engineer` | `af4e5b34742ce3b56` | delivered | `docs/test-plans/salesperson-query-graph-data.md`, `docs/test-reports/salesperson-query-graph-data-report.md`, `salesperson/scripts/refire_probe.py` (`browse-type`). §8.2 PASS: Layer 1 catalog 21/21 and KB 12/19 in both runs, replay 0/40; §8.3 browse PASS: B2 21/24, B3 2/24, D6 alone did the fix (D7 fired 0). m1: 3/3 pt-BR misses carried `returns`. **DEF-2 (Major):** `browse-type` 4/12 replies say "4 mice" (D6 maps "mouse" → Peripherals; no pre-change `browse-type` baseline). DEF-1 (Minor, pre-existing): the reply step mistranslates product names. teco re-ran `nlq_compare` (diffs 0) and confirmed the DEF-2 turns t1/t4/t7/t10 in the raw data | — (QA is the gate) | 186k tok / 64 tools |
+| U6 | `architect` | `a073ffa3acd5dbd4f` | delivered | plan §11, appended only (0 removed lines): D6 explains the value, not clearly a regression; structural causes F4/F5/F7; Candidate B shape rule (even odds); recommends the §11.2 counterfactual probe, then close + backlog unless the old prompt returned names | — (assessment; stakeholder decides) | 73k tok / 22 tools |
+| U7 | `qa-engineer` | `af4e5b34742ce3b56` (resumed) | in-flight | §11.2 counterfactual probe (12 querygen calls), appended to the test report | — → — | — |
 
 ## Checkpoint — paused 2026-10-28 (stakeholder: session near limit)
 
@@ -59,3 +61,6 @@ in a new session, dispatch fresh with the plan, the review and this ledger as in
   are byte-identical to `03328dc1` (`git diff --quiet` rc 0); Stage A had not started.
 - Follow-up to file at close (plan §9 R7): two pre-existing `query_graph_data` shape classes that
   compile but fail at execution: aggregate with `order_by` outside `returns`, and `avg()` over a string.
+
+- Stakeholder decision (2026-10-28): DEF-2 is **fixed before close**. Revise D6's wording, re-gate, then re-run `browse` + `browse-type` live before K-086 closes.
+- Stakeholder decision (2026-10-28), after U6: **probe first, then decide** per plan §11.5's rule (old prompt returns usable names → fix now with Candidate B; 0/15 → close and backlog DEF-2).

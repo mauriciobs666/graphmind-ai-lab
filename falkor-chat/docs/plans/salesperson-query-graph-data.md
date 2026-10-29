@@ -951,3 +951,214 @@ then B (both edit `QueryGraphDataTool.run`, so they are serialised), then Stage 
   - `refire_probe.py --schedule browse` (pt-BR, es × 12, id2's load): "none" 0/24, lists-the-4
     ≥ 20/24.
   - `browse-type` reported only.
+
+## 11. DEF-2 assessment (2026-10-28)
+
+Post-Stage-C addendum; §1–§10 are unchanged. Input: test report
+`falkor-chat/docs/test-reports/salesperson-query-graph-data-report.md` (DEF-2, §8.3 B5/B6) and the
+raw joined turns `browse-type-joined.txt` / `browse-joined.txt` (QA scratchpad, `stageC/`). Code
+read at `HEAD`: `server/falkorchat/tools.py` (`_QUERY_REQUEST_INSTRUCTIONS`,
+`_CATALOG_CATEGORIES_INSTRUCTION`, `_build_query_request_system_prompt`, `QueryGraphDataTool.run`,
+`_names_unknown_value`), `server/falkorchat/querygen.py` (`QueryFilter.op`, `ensure_row_identity`),
+`config/models.json`, `server/tests/test_tools.py` (T-B3/T-B4). No live turns were run for this
+section.
+
+CPG: considered, not relevant — `cpg_falkorchat` is stale per the brief; the question is about
+prompt text and recorded completions, read directly by grep.
+
+### 11.1 Facts the assessment rests on (verified)
+
+- **F1 — the querygen call is deterministic per question string.** `config/models.json` sets
+  `temperature: 0` for `lmstudio/mistralai/ministral-3-3b`. The 4 DEF-2 turns (t1/t4/t7/t10) all
+  sent the *same* internal question, "quantos produtos de mouse estão disponíveis?", and got
+  byte-identical completions. The 2 other querygen turns (t5/t9) sent "tem algum mouse no
+  catálogo?" and also matched each other. So B5's "4 of 12" is **one** querygen decision, repeated
+  because the agent step chose that phrasing 4 times. It is not a 4/6 querygen error rate. The
+  12-turn run measures the agent's routing mix (6 `lookup_product_fact`, 4 + 2 `query_graph_data`),
+  and only **2 distinct querygen inputs**.
+- **F2 — the value `"Peripherals"` comes from D6.** The pre-K-086 prompt has no category values:
+  `_describe_dataset_schema` lists labels and property names only, and the examples in
+  `_QUERY_REQUEST_INSTRUCTIONS` name no category. The question says "mouse". Without the D6 block,
+  "Peripherals" can appear only if the model guesses it.
+- **F3 — D6 does not touch the agent's routing.** D6 lives only in the internal querygen system
+  prompt (`QueryGraphDataTool.run`). The outer tool descriptions are unchanged, and D7 fired 0
+  times. The `filter_products(category="mouse")` miss result seen in 10 of the 12 turns is D8's
+  hint (id2), which predates K-086. So the pre-change tree would have sent the same internal
+  questions at a comparable rate.
+- **F4 — the DSL has no correct query for "products that are a mouse".** `QueryFilter.op` is
+  `= <> < <= > >=`, with no `CONTAINS`/prefix operator. Querygen can answer "which products are
+  mice" only by knowing the product's exact name, and it doesn't. The best result available to it
+  is a superset that carries names, such as `category = "Peripherals"` with `returns ["p.name"]`.
+  Given those names, the reply step can pick out "Wireless Mouse Pro", which is how the `browse`
+  turns succeed.
+- **F5 — D7, and every abstention path, is blind to aggregate shapes.** `count(...)` over an empty
+  match returns one row (`[{"count(p)": 0}]`), not `[]`, so `if not rows:` never fires. A count
+  that misses on a category or name therefore reaches the reply as a confident 0, with no finding
+  and no hint. That was true before K-086 as well.
+- **F6 — F2 (Stage A) does not affect these completions.** `ensure_row_identity` skips any
+  `returns` list that contains an aggregate. With `categories=None`, `HEAD`'s querygen prompt is
+  byte-identical to the pre-change one, and T-B3's first half pins that.
+- **F7 — the golden set contains no product-type-word pair.** Every catalog pair that reaches a
+  `category` filter names the category literally: `nlq-06/07/09/10/11/12/19/20/40`, plus
+  `nlq-02/04/14`, which ask for a named product's category. Run 0 and Run 1 completions for those
+  pairs are identical, apart from `nlq-12`'s duplicate-`filters` repair. Layer 1 therefore guards
+  any D6 rewording against regressions on *category* words. It says nothing about *type* words, in
+  either direction.
+
+### 11.2 Q1 — Is DEF-2 caused by D6?
+
+**What D6 causes:** the filter value (F2). The completion `category = "Peripherals"`,
+`count(p)` → 4 is D6's doing.
+
+**What is not established:** that D6 made the *customer outcome* worse. There is no pre-change
+`browse-type` run. On the pre-change prompt, the most likely completions for "quantos produtos de
+mouse estão disponíveis?" are inferred, not observed:
+
+| Pre-change shape (inferred) | Result | Likely reply | Compared with DEF-2 |
+|---|---|---|---|
+| `name = "mouse"` or `category = "mouse"`, `count(p)` | `[{"count(p)": 0}]`, no D7 (F5) | "não temos mouse": DEF-C's own failure class, now for a type word | different wrong, arguably as bad (a lost sale against a false stock claim) |
+| `filters: []`, `count(p)` | 15 | "temos 15 modelos de mouse", or the t5/t9 hedge | worse in the first reading, equal in the second |
+| `filters: []` with `p.name`, or anything that carries names | names | can pick the mouse | better: the only case in which D6 is a regression |
+
+The id2 baseline makes the first row the most likely. id2 showed the pre-change model copying the
+customer's word into an `=` filter (`name = "periféricos"`). t5/t9 in this run show that
+`filters: []` with `count` is also in its repertoire. The questions use "quantos" and "tem algum",
+and both phrasings pull towards `count`, which is a property of the question rather than of D6.
+
+**Verdict:** D6 causes DEF-2's *specific* wrong answer ("4 mice"). Whether D6 caused a
+*regression* is unknown, and on the evidence it more likely replaced one wrong answer
+(none, or 15) with another (4). The wrong-answer *class*, a type word reaching querygen with a
+`count` phrasing, predates K-086. Its structural causes are F4 and F5, not D6's wording.
+
+**What would settle it cheaply (minutes, no conversations):** a one-off script modelled on the QA
+replay script (`stageC/scripts/replay.py`), run from `falkor-chat/server`. For each of the 2
+observed internal questions × {`categories=None`, `categories=<the 8>`}, × 3 repeats to confirm
+determinism:
+1. call the `step` model once with
+   `_build_query_request_system_prompt(querygen.CATALOG_SCHEMA, categories=…)` as the system
+   message and the question as the user message;
+2. parse, validate, `ensure_row_identity`, `compile`, and execute on `reference`;
+3. print the completion and the rows.
+
+That is 12 querygen calls. No `e8798351` checkout is needed (F6): `categories=None` *is* the
+pre-change prompt. The rows show directly whether pre-change was "0", "15", or names. If the names
+are useful, the reply step could still be shown it, but the tool rows alone decide whether a
+regression exists.
+
+### 11.3 Q2 — Is there a D6 wording revision, and where is the defect really?
+
+**Where the harm is.** Mapping "mouse" onto `Peripherals` is not wrong in itself. Under F4 it is
+the best superset the DSL can express, and with `returns ["p.name"]` the reply would see the 4
+names and could offer the mouse, as the `browse` turns do. The false claim needs **both** the
+mapping **and** a `count` projection, which strips the names. The reply step then attributes the
+bare number to the customer's noun. So the defect sits at the junction of the mapping and the
+`count` shape. A fix aimed only at the category mapping targets the wrong half.
+
+**Candidate A — narrow the mapping (R1's original framing). Rejected.** It appends: "A kind of
+product (e.g. "mouse") is not a category; never map it onto one of these values." This removes
+the "4 mice", but the likely fallback is `name = "mouse"` or `category = "mouse"` with `count` →
+`[{"count(p)": 0}]`. F5 means D7 cannot see that, so the reply says "não temos mouse". That is
+DEF-C's failure for a type word, and the plan exists to remove it. Candidate A also gives a 3B
+model a fuzzy category-word/type-word boundary to apply to the same words that must keep mapping
+(the browse 24/24), so the DEF-C gate itself is at risk. Confidence that it nets out better
+than today: low.
+
+**Candidate B — keep the mapping, fix the shape (preferred, if anything changes now).** Replace
+`_CATALOG_CATEGORIES_INSTRUCTION` with:
+
+> `Product.category is exactly one of: {categories}. When the question names one of these
+> categories, in any language, filter on category with the listed value exactly as written here,
+> never on name and never with the question's own word. When the question names a specific
+> product, keep filtering on its name. When the question asks about a kind of product that is not
+> itself one of these categories (for example "mouse"), filter on the category that contains it
+> and return p.name, never count(...): that category also holds other kinds of product.`
+
+The first three sentences are D6 v2 verbatim, so the category-word behaviour behind B6's 24/24 is
+not reworded. Only one sentence is added. It sets a *shape* rule for the type-word case and
+endorses the mapping the model already makes (F4). It does not forbid it. `nlq-19` ("How many
+products are in the Peripherals category?") names a category, so the new sentence's condition
+excludes it.
+
+**Confidence that ministral-3B honours B:** low to medium (my estimate, roughly even odds per
+question string).
+- Mapping the type word to its containing category is already observed in 1 of the 2 strings.
+- Overriding a "quantos"/"how many" pull towards `count` with a conditional instruction placed
+  last is the uncertain part. The m1 history and t1/t4 of `browse` (`count(p.name)` on a category
+  browse) show this model reaching for `count` readily.
+- Over-application is a second risk. A named but absent product (`nlq-13/14/15`) could be read as
+  "a kind of product" and mapped to `Audio`. That is R1's sharpest case, and Layer 1 L3 would
+  catch it.
+
+Because querygen is deterministic (F1), each question string is effectively pass/fail. An
+offline probe over a small string set says more than 12 conversations.
+
+**Candidate C — code, no prompt change (noted, not proposed now).** Two variants:
+- When the result is aggregate-only, echo the applied filters into the result, e.g.
+  `{"items": [{"count(p)": 4}], "matched": {"category": "Peripherals"}}`. The reply could then say
+  "4 periféricos" instead of "4 mice". That is still not "1 mouse", and it changes the tool's
+  result contract, which the reply prompts and the Layer 1 scorer read.
+- Close F5: an aggregate-only miss would get the same finding/hint treatment as `rows == []`.
+  This is the durable fix for the "confident 0" class, wherever it comes from, and it is what would
+  make Candidate A safe.
+
+Both are design items, not wording tweaks.
+
+### 11.4 Q3 — What would verifying a revision cost?
+
+For Candidate B, the cost in the existing harness. LM Studio time is small. The process loop is
+the cost.
+
+| Item | What | Size |
+|---|---|---|
+| Offline querygen probe (new, throwaway) | §11.2's script, run on the revised prompt over ~12–16 strings: the 2 observed mouse questions; 3–4 other type words, pt-BR/es/en, each phrased as "quantos/hay/how many" and "tem algum/do you have"; the 6 observed `browse` internal questions, as the category-word guard. × 2 repeats | ~30 querygen calls, ~2 min. **This is the real discriminator** (F1), and it runs before any conversation |
+| Code | one constant in `tools.py` | 1 edit |
+| Tests | `_categories_block` in `server/tests/test_tools.py` types D6's wording from the plan on purpose, and T-B3's second half (`…ends_with_the_category_block`) and T-B4 (`…lists_the_catalogs_categories_once`) assert against it. Update the helper; both go red, then green. T-B3's first half (no categories, byte-identical) is untouched. Optional: a mutant pinning the new sentence's presence | 1 helper edit, 0 new tests needed |
+| Layer 1 (R1 guard) | One ministral run against Run 1 (`nlq_compare.py`). The block is in every catalog querygen prompt, so `nlq-13/14/15/19` and the `category` pairs (F7) are the regression surface | 40 pairs, ~2–3 min |
+| `refire_probe.py --schedule browse` | pt-BR, es × 12; B1–B4 again. B2's margin is 1 turn and B3 sits at its limit, so this is not optional | 24 turns, ~1.5 min |
+| `refire_probe.py --schedule browse-type` | pt-BR × 12; B5 | 12 turns, ~1 min |
+| Mechanism capture | `refire_probe.py` records neither the tool chain nor the querygen completion. QA's ad-hoc proxy (`stageC/scripts/proxy.py`) has to be stood up again, or B6/B5 go unexplained | setup time |
+| Gates | implementer unit, `analyst` code gate, `qa-engineer` re-run plus report pass, plan v3 note | one more Stage B→C cycle |
+
+**Statistical caveat.** With F1, `browse-type` n = 12 yields about 2 distinct querygen inputs, and
+which ones appear depends on the agent's phrasing, not on the fix. A green `browse-type` after
+Candidate B is weak evidence, and an unchanged 4/12 could simply mean the agent never sent the
+fixed phrasing. The offline probe carries the verification. The live runs confirm only that
+nothing else moved.
+
+### 11.5 Q4 — Recommendation: close K-086 on its gates and backlog DEF-2, after the §11.2 counterfactual probe
+
+**Decision rule.**
+- **First, run the §11.2 counterfactual probe.** It is 12 querygen calls, minutes, and changes no
+  code.
+- **Pre-change completion gives 0 or 15** (the expected outcome): D6 did not regress this case.
+  It swapped one wrong answer for another. Close K-086 and backlog DEF-2.
+- **Pre-change completion returns names the reply could use:** D6 introduced a regression.
+  Fix it before close with Candidate B (§11.3), verified per §11.4.
+
+**Reasoning for close and backlog in the expected case:**
+1. **K-086's done-conditions passed.** DEF-C: B1 0/24 and B2 21/24. F2: no Layer 1 regression.
+   B5 was planned as reported-only because this risk was foreseen (R1).
+2. **The cause is structural, not D6's wording.**
+   - The DSL cannot express "products of a kind" (F4).
+   - Aggregate results bypass every abstention and D7 (F5).
+   - The golden set has no type-word pair (F7).
+
+   A wording patch addresses none of these three, and Candidate A would make F5 bite harder.
+3. **A fix now puts the DEF-C result at risk on thin margins.** B2 is 1 turn above its floor and B3
+   sits at its limit. Any change to the shared block re-opens both, for a confidence of roughly
+   even odds (§11.3).
+4. **The available live check is weak.** The 12-turn `browse-type` check is ~2 querygen inputs
+   (F1). A "fixed" verdict from it would not be trustworthy without the offline probe.
+
+**Proposed backlog item, for `teco` to word:** "A product-type question reaching
+`query_graph_data` gets a misleading count." It has three parts:
+- (a) Candidate B, or a better shape rule, validated by the offline string-set probe;
+- (b) close F5, so that an aggregate-only result over a filter that names an unknown category or
+  product gets D7's finding and hint;
+- (c) add 2–3 type-word pairs to the NLQ golden set, so that Layer 1 guards the class in future,
+  and record the step trace in `refire_probe.py`, as the report's feedback item 3 asks.
+
+**What would change this recommendation:** the stakeholder judging the "4 mice" stock claim
+materially worse than a "none" reply, for example as a customer-trust or legal exposure in the
+demo. In that case, fix now with Candidate B and budget the full §11.4 cycle. Candidate A is not
+the fix in either case.
