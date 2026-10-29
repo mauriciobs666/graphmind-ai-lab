@@ -1,10 +1,10 @@
 # Connected code graph — requirements review & architecture proposal
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.2 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.3 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
 
 **This is an architecture *proposal*.** The requirements it answers
-(`docs/requirements/connected-code-graph.md`) are still `Interviewing`, although their AC review
-is complete (decisions S1–S38 plus the use-case re-check, all in that document's decision log).
+(`docs/requirements/connected-code-graph.md`) are `Ready for design` (2026-10-28), and their AC
+review is complete (decisions S1–S38 plus the use-case re-check, all in that document's decision log).
 Nothing here is approved for implementation.
 
 Two notes extend this plan and are authoritative in their own domains:
@@ -26,6 +26,9 @@ folded in as decided (FR-9, FR-13, FR-14, FR-15, FR-21, FR-29, AC-8, AC-21a, AC-
 stakeholder questions.*
 *Revision 2026-10-28 (v3.2): review Pass 3 P3-1. A resolved call's other same-name candidates are
 never dropped. They stay *possible* and are folded away in rendering (decision log 2026-10-28).*
+*Revision 2026-10-28 (v3.3): Arduino `.ino` sketches added as C++ (FR-1, AC-26) — §3.2, an
+optional slot in §4 gating no phase, §5.1, K14–K15; opening paragraph now says the requirements are
+`Ready for design`.*
 
 ## 0. Goal & scope
 
@@ -240,6 +243,7 @@ item in it is now a decision.
 | SQ-F configurable raw-query time limit (FR-21 exception) | `TIMEOUT_MAX` | §3.5 |
 | SQ-G unscored advisory → own stated severity, else high | Severity rule | §3.7 security |
 | 2026-10-28 P3-1: other candidates of a resolved call stay *possible*, folded away | Rendering rule, never a facts filter | §3.7, §5.1 |
+| 2026-10-28: Arduino `.ino` sketches mapped as C++ only; device links (serial/USB, Bluetooth, device↔service) out, addable later as FR-26 units; AC-26 gates no phase | A sketch is one C++ unit via an in-house preprocessor; no new vocabulary; optional slot after P2 | §3.2, §4 |
 
 ### 2.4 New or changed FR/AC → where v3 handles them
 
@@ -264,6 +268,7 @@ item in it is now a decision.
 | FR-26 vocabulary bound; AC-22 | §3.3, §4 P2/P5 |
 | FR-28/29 owners, immediate, either side, confirmation expiry, rename/move/unprovable signature change; AC-21a | §3.8 |
 | AC-5, AC-6, AC-7, AC-24 (evaluation) | §5.2 |
+| FR-1 Arduino `.ino` sketches as one C++ program; AC-26 (not phase-blocking) | §3.2 Arduino sketches, §4 optional slot, §5.1 |
 
 ### 2.5 Questions v3 raised: all decided
 
@@ -346,7 +351,8 @@ It never describes how the parts talk.
 
 **Unit:** one buildable program (repository, root, language).
 - Units are discovered from build manifests (`pyproject.toml`, `package.json`/`tsconfig.json`,
-  `pom.xml`/`build.gradle*`, `*.csproj`/`*.sln`, `go.mod`, `CMakeLists.txt`/`compile_commands.json`),
+  `pom.xml`/`build.gradle*`, `*.csproj`/`*.sln`, `go.mod`, `CMakeLists.txt`/`compile_commands.json`,
+  and an Arduino sketch folder: a folder `<name>/` holding `<name>.ino`),
   with a directory-per-language fallback. Shell, structured config and Markdown are handled per
   file by the non-Joern extractors.
 - The unit is the granularity of build, failure and staleness (§3.11).
@@ -371,11 +377,61 @@ stays on disk for deep REPL work and for re-extraction without a re-parse.
 | C#/.NET | `csharpsrc2cpg` (dotnetastgen bundled) | Least proven | Cross-project types, attribute routing | **no** `--download-dependencies` | Roslyn-based indexer, offline |
 | Go | `gosrc2cpg` (goastgen bundled) | New in 2023 | Interface dispatch, generated stubs | **no** `--fetch-dependencies`; vendored modules only | Go indexer, offline |
 | C/C++ | `c2cpg` | Oldest; fuzzy parsing | Macros without build flags | none needed | `compile_commands.json`-aware parse |
+| C++ (Arduino `.ino`) | `c2cpg`, on the sketch preprocessor's output (below) | Measured in its own optional slot (§4), not in P0 | Core/library headers absent unless pre-provisioned; prototype generation on unusual signatures | none needed; **no** board-core or library download | pre-provisioned core include paths (`--include`); else unresolved calls *possible* |
 
 **Flow availability (FR-11, Q-R9).** `Unit.flowAvailable` is set per language from P0's
 measurements. It is false for shell, for structured config and for any frontend P0 rates too weak.
 Through such a unit, impact falls back to call-level reach, and every item is shown as *possible*,
 `reason: flow-unavailable:<language>`.
+
+**Arduino sketches (FR-1, AC-26).** A sketch is **one C++ unit** (`lang` = C++): its several
+`.ino` files are one program, and any `.cpp`/`.h` beside them are ordinary C++ files of the same
+unit. Device-specific links are out of scope (requirements, Out of scope); a later FR-26 unit adds
+them. `c2cpg` skips `.ino` files (observed on Joern v4.0.579: a two-file `.ino` sketch gave a
+CPG of baseline size, and the same files renamed `.cpp` gave one 70% larger). So a **sketch
+preprocessor** runs before it, inside the offline build sandbox (§3.12), and does what the
+Arduino build does:
+- **joins** the folder's `.ino` files into one generated `.cpp` translation unit, in Arduino's
+  order: `<name>.ino` first, then the others alphabetically;
+- **adds** `#include <Arduino.h>` at the top unless the sketch already includes it;
+- **generates a prototype** for every function defined in the `.ino` files without a declaration
+  before it, inserted ahead of the first function definition, so a call into a later file
+  resolves;
+- **writes a line map** from every generated line to its origin `(file.ino, line)`; the inserted
+  include and prototypes map to *generated*, not to any original line. It also emits `#line`
+  directives, but the plan does not rely on `c2cpg` honouring them.
+
+The generated file lives in the build's scratch area only. `c2cpg` parses it, plus the sketch's own
+`.cpp`/`.h`. **The C/C++ normalizer then rewrites every location through the line map**, before
+anything enters the bundle. Every `FILENAME`/line is replaced by the original `.ino` path and line,
+so symbols, call sites, points and evidence hops all carry the sketch's own file and line (FR-20).
+A symbol or point whose location maps to *generated* is dropped. A generated prototype is a
+declaration, never a definition: any method stub `c2cpg` emits for it maps to *generated* and is
+dropped, so it never becomes a second symbol. The symbol identity uses the
+original file. The generated file name never reaches the graph, so a rebuild does not change any
+id.
+
+**Headers under local-only (FR-9).** Nothing is downloaded: no board core, toolchain or library.
+- If a core and libraries are **pre-provisioned** on the build host (an Arduino data directory,
+  named per codebase in the manifest's policy), their include paths go to `c2cpg --include`, and
+  calls into them resolve like any other external library.
+- Without them, `Arduino.h` and library headers are missing. `c2cpg`'s fuzzy parse still maps the
+  sketch's own functions and the calls between its files, which is all AC-26 asks. Calls whose
+  resolution depends on missing declarations (overloads, types from library headers) become
+  name-match *possible*, `reason: headers-unavailable` (FR-8).
+
+**Why in-house, not `arduino-cli`'s preprocessing.** `arduino-cli` performs the same four steps (per
+its sketch-build-process documentation), but it finds `Arduino.h` in the selected board's core.
+So it needs a board choice and an installed core for every build, and its normal path installs
+cores and libraries from the network, which local-only forbids. The preprocessing is small and
+documented; owning it gives a dependency-free, deterministic build with the line map the
+normalizer needs. The cost is keeping its prototype rules close to Arduino's (K15). **Reversal
+trigger:** if AC-26's fixtures show prototype generation diverging from Arduino's on real sketches,
+run `arduino-cli`'s preprocessing against a pre-provisioned core where one exists. The line map is
+then built from its `#line` directives.
+
+The preprocessor is part of the C/C++ extractor unit plus one discovery rule. It adds no
+vocabulary and touches no core code, so it is an AC-22-shaped addition (FR-26).
 
 **Deviations from "Prefer Joern", stated:**
 - Non-Joern extractors cover what Joern has no frontend for: shell (tree-sitter-bash); structured
@@ -959,6 +1015,7 @@ needs (B5). An AC that spans phases is gated per part and closed at a named exit
 | **P3: Data, tests, change, review** | Embedded SQL/Cypher parsing, schema/migration extractors, NoSQL/cache packs, config-value shared state; test packs + kinds; per-test runtime importers, function-level `RAN`, stale-run handling, coverage aggregates; change anchors (diff, commit range, branch; optional PR adapter via the broker, allow-listed under local-only); overlays (cap 2) + **review delta**; review operator (contracts, test impact, config/wiring); test map, tests-for-a-change, risk score (security relevance from pack marks; finding-based relevance arrives in P5); schedule, staleness-threshold and CI triggers. **`teco` v2:** review answer at the analyst gate, test map at QA dispatch. **OpenTelemetry demo first contact for its SQL/cache stratum**, so **AC-7 is decided at P3 exit** (B5.1). | AC-3 ✓, AC-5 data stratum (proving repo), AC-7 ✓, AC-8 re-run (PR add-on), AC-9a ✓, AC-10 (review, QA stages), AC-11 (review, test map), AC-13 except its security element, AC-14 ✓, AC-17 (branch), AC-19 ✓ |
 | **P4: Trust & governance** | Verdict log, `verdict` command, lock + replay (B6), expiry incl. confirmations and orphans; owners file + identity (OS user / IdP adapter via broker, allow-listed under local-only); access provider, content-only redaction, agent/CI principals, raw access for all-repo readers. | AC-8 re-run (IdP and access-check adapters), AC-9 ✓ (decision-state stamp now non-trivial), AC-20 ✓, AC-21a ✓ |
 | **P5: RCA & security, and closure** | Failure-evidence anchors (per-language traces, log templates, tiered matching, symptom → lexical anchors), infrastructure-signature pack, RCA operator + deterministic ranker + feedback + "no match"; security packs (sources, sinks, sanitizers, auth checks, sensitive marks), build-time `reachableBy` findings, missing-auth, risky-config, git-history secret scan with HMAC fingerprints (local), local OSV matching with two-level reachability fed by the allow-listed OSV refresh job, severity rules, finding verdicts; security element of the review delta. **`teco` v3:** RCA and security stages. **Closure:** AC-22 re-asserted with all five use cases across a newly added unit; AC-24's full gate. | AC-8 ✓ (re-run with the full outbound surface), AC-10 ✓, AC-11 ✓ (RCA, security), AC-12 ✓, AC-13 ✓ (security element), AC-15 ✓, AC-17 ✓ (stack trace, test name), AC-18 ✓ (every answer kind), AC-22 ✓, AC-24 ✓, AC-5 ✓ (all strata re-run on fresh held-out items) |
+| **Optional slot (any time after P2): Arduino sketches** | Sketch-folder discovery rule; the sketch preprocessor (join, `Arduino.h` include, prototypes, line map); the C/C++ normalizer's line-map rewrite; optional pre-provisioned core include paths from the manifest's policy (§3.2). Measures parse success, line fidelity and fallback call recall on the AC-26 fixtures, with and without core headers. Builds on P2's C/C++ extractor; needs nothing from P3–P5. | AC-26 ✓ — **gates no phase** (decision log 2026-10-28); the AC-8 no-download assertion is re-run with this unit included |
 
 **Ordering notes:**
 - **Verdicts (P4) after P3.** Their ids and fingerprints are emitted from P1 (bundle schema v1),
@@ -974,6 +1031,8 @@ needs (B5). An AC that spans phases is gated per part and closed at a named exit
   states which inputs it used.
 - **The "outside the mapped code" branch** depends on the infrastructure-signature pack (P5).
   Nothing before P5 claims RCA.
+- **Arduino is optional and late on purpose.** It is a personal-project need. AC-26 blocks no
+  phase exit, and no other phase depends on the slot. It can land after P2, or after P5.
 
 ## 5. Test & evaluation strategy
 
@@ -1003,6 +1062,19 @@ The method is the ML note's (§4, §8). This section records only what binds the
   - a planted **mis-resolved call** (resolved to Y, true callee X, in a language at or above the
     0.95 threshold): impact from a change to X lists that call site as *possible*,
     `resolution-unverified`, inside the folded group, and the canonical answer contains it (P3-1).
+- **Arduino sketches (AC-26, optional slot).**
+  - Preprocessor golden tests: the join order, the include added only when absent, a prototype for
+    each undeclared definition and none for a declared one, and the line map for every generated
+    line. Edge cases: default arguments, templates, multi-line signatures, `#if`-guarded
+    functions, comments and string literals that look like code.
+  - AC-26 fixture: a sketch of three `.ino` files with no hand-written prototypes, where a function
+    is called from a file that comes before its definition in the join order. Impact on that
+    function lists its callers in the other files, each with its **original `.ino` file and line**;
+    no item, hop or symbol carries the generated file's name or a generated line.
+  - The fixture is run with and without a pre-provisioned core. Without one, the sketch's own
+    cross-file calls are still mapped, and core calls are external or *possible*,
+    `headers-unavailable`.
+  - Rebuilding the same commit gives identical symbol ids (determinism, as below).
 - **Determinism (FR-19, AC-16).** Kept separate from interpretation accuracy (ML m6):
   - the same structured request through every client → identical canonical facts;
   - two builds from the same commits and decision state → identical snapshots, minus timestamps;
@@ -1111,6 +1183,8 @@ The method is the ML note's (§4, §8). This section records only what binds the
 | K11 | **Offline local-only precision** (S18): no dependency downloads | More *possible* items for Java/Kotlin/C#/Go | Pre-provisioned caches documented per codebase; P0 measures the gap |
 | K12 | **A first-run AC-5 failure is likely even for a good system** (~47% pass at true recall 0.99, ML §8.2) | Repeated gate cycles | The decided fail procedure (new blind list); plan for it in P1's schedule |
 | K13 | **Scope** | Long road to workplace value | Impact with flow and plain language in P1; generality in P2 |
+| K14 | **Arduino core and library headers missing under local-only** (nothing downloaded) | `c2cpg` resolution degrades: overloads and library types unresolved, more *possible* items | Pre-provisioned core include paths per codebase; `headers-unavailable` reason; AC-26 needs only the sketch's own cross-file calls; measured with and without headers (§4 optional slot) |
+| K15 | **Sketch preprocessing drifts from Arduino's**, or the line map drifts (wrong prototypes, off-by-n lines after the inserted text) | Missed cross-file calls, or evidence pointing at the wrong `.ino` line (FR-20) | Golden line-map tests over every generated line; drop anything that maps to *generated*; never rely on `#line` in `c2cpg`; reversal trigger to `arduino-cli` preprocessing (§3.2) |
 
 ### 6.2 Open decisions
 
@@ -1162,4 +1236,5 @@ Digest (v3.1):
 - **The code lives in `cpg/`.**
 - **Phases:** P0 contracts, vertical slice and ground truth → P1 flow-aware impact with every
   client on this repo → P2 generality → P3 data, tests, change, review (AC-7 decided) → P4 trust
-  and governance → P5 RCA, security, closure.
+  and governance → P5 RCA, security, closure. Arduino sketches (AC-26) take an optional slot
+  after P2 and gate no phase.

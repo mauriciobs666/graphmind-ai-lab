@@ -32,6 +32,7 @@ remaining chain goes to `teco`.
 | U11 | `analyst` | `a7528783f26ffa234` (resumed) | gated | `docs/reviews/connected-code-graph.md` Pass 3 (tico checked 2026-10-28): all 8 Pass 2 findings fixed; P3-1 minor, P3-n1 nit | gate on U10 → **approve** | — |
 | U12 | `architect` | `afd672aabfb7c2986` (resumed) | accepted | plan v3.2: P3-1 (candidates kept as possible, folded) | tico check (stakeholder: no further review pass) | — |
 | U13 | `graph-dba` | `ab82775fc08487089` (resumed) | accepted | graph note: P3-n1 preview sizing at default 2 | tico check | — |
+| U14 | `architect` | `a785c7d812bd2b44a` (fresh; earlier id not resumable) | accepted | `docs/plans/connected-code-graph.md` amendment for Arduino `.ino` (FR-1, AC-26; later, not phase-blocking) | tico check | — |
 
 ## Notes
 
@@ -55,3 +56,4 @@ remaining chain goes to `teco`.
 - 2026-10-28: U11 approved. Stakeholder chose P3-1 → keep candidates as possible, folded; quick fixes U12 ∥ U13 with tico's check only, then one commit of the whole round.
 - 2026-10-28: U12 (v3.2) and U13 (graph note v2.1) checked by tico and accepted. Round closed; whole chain committed together. Requirements remain Interviewing until the stakeholder says to flip.
 - 2026-10-28: readback reopened for Arduino `.ino` support (FR-1, AC-26, later/not blocking), then confirmed; requirements flipped to **Ready for design**, filed as C-1001. Plan v3.2 predates the `.ino` addition and needs a small amendment (architect) before P0 goes to `teco`.
+- 2026-10-28: U14 (plan v3.3: Arduino `.ino` as C++ via an in-house sketch preprocessor and line map; optional slot after P2, gates no phase; K14–K15) checked by tico and accepted, plus the stale "requirements still Interviewing" opening line fixed. Graph and ML notes unchanged. Docs chain complete; P0 onward needs implementers → `teco`.
