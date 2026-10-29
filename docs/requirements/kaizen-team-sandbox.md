@@ -1,5 +1,5 @@
 # Agent-team graph sandbox — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-08-31
+> **Status:** superseded · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Superseded by:** `docs/requirements/agent-team-sandbox.md` · **Last updated:** 2026-10-28
 
 ## Intent
 
@@ -166,3 +166,4 @@ just the stakeholder.
 - 2026-08-30 — Responsibility split volunteered by the stakeholder → Specifying a piece of work's
   environment requirements is the requester's job; creating, deploying, and maintaining the
   actual environment(s) is devops's job. Adopted as FR-9.
+- 2026-10-28 — Designed (plan V5) but never built, and the protected `kaizen_team` graph has since been retired. The stakeholder chose to re-scope → superseded by `docs/requirements/agent-team-sandbox.md` (all live falkor-chat data, containerized whole-stack sandbox).
