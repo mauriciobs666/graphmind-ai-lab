@@ -60,10 +60,11 @@ bullet (rewritten at P1, not P0, per plan §3.13).
 | U23 | `architect` | `aa663dbdaf3c5ec8f` → v1.2/v1.3 `a7f4a5f6302a26b4e` | accepted | P0-03b (S04): `docs/plans/connected-code-graph-egress-spec.md` v1.0: escape axes A1–A7 (A7 AF_VSOCK added), AC-8 map 14 rows, 11 forbidden flags + launcher-option prefix refusal; findings 1–8 | `analyst` (`a82b9ea39a27bd7b3`, p0-impl §S04) → **needs changes** (no blocker; M1–M5, m1–m6, n1); fix round sent to `aa663dbdaf3c5ec8f` 2026-10-29. N1 placement: S08's brief cites S04 §7.1 N1 over the plan's literal path, per the reviewer. M5's git-tunnel residual risk is a stakeholder decision deferred to P1 | 148k tok / 47 tools |
 | U24 | `data-scientist` | `a24f61274678bd8b3` | accepted | P0-04 (S05): `docs/plans/connected-code-graph-p0-ml.md`: 150 in-corpus sites/language (cap 400), tree-sitter frame, scip/vta truth + blind label; 0.98 recall gate reworded as a screen; open Q1 (no step makes golden flow sets), Q2 (who adjudicates). teco spot-checked 4 headline figures | `analyst` (`a72f2b8992f574958`, p0-impl §S05) → Pass 3 **approve** (2026-10-29; v1.2). Earlier Pass 1 → needs changes (M1 labeller brief, M3 S24↔S25 circular, M4 flow criteria, m1–m4, n1 → data-scientist; M2 rule authority, M5 missing steps, m5 → architect v1.4) | 132k tok / 30 tools |
 | U25 | `graph-dba` | `aff0bb6064e845bdf` | accepted | P0-06 (S07): `claude/graph-dba/falkordb-quirks.md`, 7 entries re-verified on v4.18.11/41811 (V2, V5+V16, V9, V10, V17, V18); V9 old entry corrected, TIMEOUT entry scoped to `TIMEOUT_MAX=0` | `teco` doc check → **pass** (2026-10-29) | 116k tok / 36 tools |
-| U26 | `data-scientist` | `a52cf27f2474067d0` | in-flight | P0-05 (S06): `docs/plans/connected-code-graph-eval-protocol-ml.md` (also decides anonymous-scope anchors) | `analyst` → — | — |
+| U26 | `data-scientist` | `a52cf27f2474067d0` | gated | P0-05 (S06): `docs/plans/connected-code-graph-eval-protocol-ml.md` (also decides anonymous-scope anchors) | `analyst` → — | — |
 | U27 | `tdd-engineer` | `a8c1a8c7d98429ceb` | accepted | P0-08 (S09): `cpg/pyproject.toml`, `cpg/ccg/ids.py`, `cpg/tests/test_ids.py` + README/.gitignore; N6 tree-sitter in `spike`; 90 passed; 27-mutant table; teco re-ran the suite and 4 own argument-order mutants (all red) | `analyst` (`a582852f9344e3fae`) → **approve with suggestions** (M1: int positions accept strings; M2: `dependency` record id missing; m1–m5); fix round sent to `a8c1a8c7d98429ceb` 2026-10-29, including the pyproject edits before the §5.2 freeze | 122k tok / 34 tools |
 | U28 | `devops` | `a14c125c4e37e0554` | in-flight | P0-07 (S08): `cpg/sandbox/{offline-run.sh,forbidden-flags.txt,allowed-flags.txt,tests/test_sandbox.sh,README.md}`; S04 v1.3 controls over plan D6/§4.1; P3-m1/P3-n1 applied | `analyst` → — | — |
 | U29 | `architect` | `a2b40654a39c215eb` | in-flight | P0 plan successor (absorbs S05 §11, S24↔S25 ordering, S03/S04 downstream, ledger carry-forwards; S06 hand-offs pending) | `analyst` (after S06 is folded in) → — | — |
+| U30 | `tdd-engineer` | `a8d2f178bccfb2b7b` | in-flight | P0-09 (S10): `cpg/ccg/schemas/bundle-v1.schema.json`, `cpg/ccg/bundle.py`, `cpg/tests/test_bundle.py` | `analyst` → — | — |
 
 ## Notes
 
@@ -129,3 +130,23 @@ bullet (rewritten at P1, not P0, per plan §3.13).
 - 2026-10-29: U23 (S04) committed `df16b205` (with the review file and the proposal pointers). S08 dispatched (U28) and the plan successor dispatched (U29). S09 fix round delivered: 185 passed. teco re-ran it under `python -B`, plus its own `ecosystem↔package` swap mutant in `dependency_record_id` (red: 2 failed; restored, `cmp` ok). Pass 2 re-check sent to `a582852f9344e3fae`. The stale-`.pyc` mutation quirk is captured in `ws:agent-team`.
 - 2026-10-29: U27 (S09) Pass 2 by `a582852f9344e3fae` → **approve with suggestions**. M1, M2, m1–m5 and the nits are all fixed and were re-checked by execution (88/88 + 91/94 mutants killed). Two new test-only minors, P2-1 (the completeness check should compare `(tag, length)` pairs taken from the spec) and P2-2 (`symbol_id` without a signature has no type-check test), were sent to `a8c1a8c7d98429ceb`. teco will verify them by re-running the reviewer's two experiments (no further gate), then commit S09.
 - 2026-10-29: U27 (S09) accepted. P2-1/P2-2 closed (tests only): 189 passed. teco re-ran the suite under `python -B` and re-ran mutant B (drop `lang` from `symbol_id`'s `_strs`: 1 failed, restored, `cmp` ok). `SPEC_SHAPES` carries `(dependency,3/5)` and `(symbol,4/5)`. Committed. S10 is unblocked.
+- 2026-10-29: U26 (S06) delivered at v1.0: anonymous/duplicate/macro scopes are never anchors, five strata, 0.70 held-out split, a 0.95 completeness trigger. The ML note gained its Extended-by pointer. Gate sent to `analyst` `a9850295d7ceb795c` (p0-impl §S06). Q1–Q3 and the step changes were relayed to U29; Q4 was answered (pyyaml is already in `dev`). **Q5** (reading of AC-5's "new blind list", §12.1 step 4) → stakeholder, with the gate asked in parallel. Q6 (session count ~18–25 vs 16–22) → reported to the stakeholder. S10 dispatched (U30).
+- 2026-10-29: **Stakeholder decision (Q5):** AC-5's "re-run on a new blind list" is read as in S06 §12.1 step 4: passed held-out anchors stay, missed anchors move to dev, and fresh census items top the list up (≥ as many as moved, ≥75 pooled, ≥8 per stratum). Not relayed to the S06 gate before it delivers, so its own reading stays independent. Follow-up: `tico` records this decision line in `docs/requirements/connected-code-graph.md`.
+
+**2026-10-29 — PAUSED (stakeholder reprioritized to another feature).** The four in-flight delegates were asked to save their state to disk and stop:
+- U28 S08 `devops` `a14c125c4e37e0554` → `cpg/sandbox/S08-STATUS.md`
+- U30 S10 `tdd-engineer` `a8d2f178bccfb2b7b` → `cpg/tests/S10-STATUS.md`
+- U29 plan successor `architect` `a2b40654a39c215eb` → the `PARTIAL — paused` marker in `docs/plans/connected-code-graph-p0-2.md`
+- S06 gate `analyst` `a9850295d7ceb795c` → the `PARTIAL — paused` section `## S06 (P0-05)` in `docs/reviews/connected-code-graph-p0-impl.md`
+
+**Resume:**
+1. `SendMessage` "continue" to each id above (same session only).
+2. **Cold-start fallback** (after a session reboot the ids won't resolve): dispatch a fresh agent of the same type, with that unit's original brief inputs, and point it at the on-disk status file or partial named above. Each unit's inputs are listed in its ledger row and the dated notes above.
+3. Once all four land:
+   - gate S08 and S10 with `analyst`;
+   - fold the S06 gate's findings into S06 (`a52cf27f2474067d0`, or fresh `data-scientist`), then fold S06's final hand-offs into the successor;
+   - gate the successor with `analyst`.
+
+**Uncommitted and pending their gates** (do not commit before then): `cpg/sandbox/`, `cpg/ccg/bundle.py` + schema + tests (S10), `docs/plans/connected-code-graph-eval-protocol-ml.md`, the `docs/plans/connected-code-graph-ml.md` Extended-by pointer, `docs/plans/connected-code-graph-p0-2.md` (+ its pointer on the v1.3 plan), and the review file's S06 section.
+
+**Not ours, never touch:** `docs/requirements/document-size-discipline.md`, `docs/reviews/document-size-discipline.md`.
