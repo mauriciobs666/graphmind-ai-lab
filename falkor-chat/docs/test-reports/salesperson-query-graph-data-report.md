@@ -240,3 +240,84 @@ plan §8.1 calls structurally unanswerable.
      was not recorded, and that made B7 incomparable.
 4. **Run 0 guard:** when `<Stage-A-first-commit>^` equals the baseline sha, the guard is an
    empty-range no-op, as it was here. It is still correct, but a future plan could say so.
+
+## DEF-2 counterfactual probe (2026-10-28)
+
+- **Spec:** `docs/plans/salesperson-query-graph-data.md` §11.2, judged against §11.5's decision rule.
+- **Run:** 21:23:58–21:24:31 on `HEAD` `da469e47`, from `falkor-chat/server`.
+- **Script:** a one-off scratch script modelled on the Stage C replay. It is not committed.
+- **Raw output:**
+  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/def2-probe/`
+  (`probe.py`, `probe.log`, `probe.json`, `prompt_dump.py`, `prompt-*.txt`, `f6-check.txt`,
+  `verify.log`).
+
+**Method.**
+- For each question × prompt variant × 3 repeats, one `step` call on `lmstudio/mistralai/ministral-3-3b`
+  (`temperature: 0`, via the Stage C scratch overlay).
+- The system message is `_build_query_request_system_prompt(querygen.CATALOG_SCHEMA, categories=…)`;
+  the user message is the question.
+- Each completion was then:
+  1. parsed exactly as `QueryGraphDataTool.run` does (`extract_own_line_json_object` +
+     `merge_duplicate_keys` → `default_returns` → `model_validate`);
+  2. passed through `ensure_row_identity` and `compile`;
+  3. executed read-only on `reference` through `Services.run_structured_query`.
+- `categories` = the live `Services.catalog_categories` list: `Accessories, Audio, Cameras,
+  Displays, Peripherals, Smart Home, Storage, Wearables`.
+
+**F6 check (§11.1): verified.**
+- I built the prompt twice: from the `e8798351` export, whose builder has no `categories`
+  parameter, and from `HEAD` with `categories=None`.
+- The two are **byte-identical**: 2,503 characters each, the same sha256
+  `b49d612c…6ade6`, and `cmp` returned 0.
+- So `categories=None` *is* the pre-change prompt.
+- Separately, the `categories=<the 8>` prompt is byte-equal to the one querygen system prompt
+  recorded in Stage C's proxy log. The probe's D6 variant is therefore the prompt the storefront
+  actually sent.
+
+**What querygen actually received.**
+- In all 12 Stage C `browse-type` turns, the customer's text "Vocês têm algum mouse?" never reached
+  querygen.
+- The agent step either called `filter_products`/`lookup_product_fact`, or rephrased the text
+  before calling `query_graph_data`:
+  - "quantos produtos de mouse estão disponíveis?" (A, 4 turns);
+  - "tem algum mouse no catálogo?" (B, 2 turns).
+- A and B are taken verbatim from `browse-type-joined.txt`. The customer text was run as a
+  supplementary input (6 extra calls, 18 in all), labelled as such.
+
+**Results (18 calls).**
+
+| Question | Variant | Repeats | Completion shape | Tool outcome / rows |
+|---|---|---|---|---|
+| A "quantos produtos de mouse estão disponíveis?" | `None` (pre-change) | r1–r3 identical | `name LIKE "%mouse%"`, `returns ["count(p)"]` | **validation abstention** (`op` must be one of `= <> < <= > >=`) → `{"items": [], "finding": "no matching data found"}` |
+| A | `cats` (D6) | r1–r3 identical | `category = "Peripherals"`, `returns ["count(p)"]` | `[{"count(p)": 4}]`; byte-equal to the live Stage C completion |
+| B "tem algum mouse no catálogo?" | `None` | r1–r3 identical | `name = "mouse"`, `returns ["count(p.name)"]` | `[{"count(p.name)": 0}]` |
+| B | `cats` | r1–r3 identical | `filters: []`, `returns ["count(p.name)"]`, `limit 1` | `[{"count(p.name)": 15}]`; byte-equal to the live Stage C completion |
+| *Supplementary:* "Vocês têm algum mouse?" | `None` | r1–r3 identical | `name = "mouse"`, `returns ["count(p.name)"]` | `[{"count(p.name)": 0}]` |
+| *Supplementary* | `cats` | r1–r3 identical | `filters: []`, `returns ["count(p.name)"]`, `limit 1` | `[{"count(p.name)": 15}]` |
+
+**Determinism:** in all 6 question × variant cells, the 3 repeats gave exactly 1 distinct
+completion. Both D6-variant completions also match the live Stage C ones byte for byte.
+
+**Decision-rule outcome (§11.5): the pre-change prompt gives "none" or 0, never product names.**
+- **Question A, the DEF-2 turns:** the pre-change completion abstains, because the model reaches for
+  a `LIKE` the DSL doesn't have (§11.1 F4, observed). The tool returns "no matching data found".
+- **Question B:** the pre-change completion returns `count = 0`. That one row bypasses D7 and every
+  abstention path (§11.1 F5, observed).
+- **The supplementary customer text:** also 0.
+- No pre-change cell returned names a reply could use. So **D6 did not regress this case**:
+  - for A it replaced "none" with "4";
+  - for B it replaced "0" with "15".
+
+  Under §11.5 this is the expected branch: close K-086 on its gates and backlog DEF-2.
+
+**Limits.**
+- This probes the querygen step only. It does not show what the reply step would say given these
+  rows. "No matching data found" and `count = 0` are *likely* to read as "não temos mouse", but no
+  reply was generated.
+- The agent step's choice of internal phrasing, and its routing mix, are not re-measured.
+- During the probe, `qwen/qwen3-4b-2507` was also resident, idle with a 1 h TTL. It was not loaded
+  by this session, and it was loaded after Stage C ended, so it was left alone. The probe calls only
+  ministral, at `temperature: 0`, and both D6-variant completions reproduced Stage C's byte for
+  byte.
+- `:8200` logged 0 lines during the probe window. Both verify scripts exited 0 afterwards:
+  `verify_salesperson.sh demo` rc 0, `verify_catalog.sh` rc 0.
