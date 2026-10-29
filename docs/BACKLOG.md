@@ -93,13 +93,12 @@
 - **C-1001 — Connected code graph: code maps linked across languages, components and
   repositories, serving five use cases.** 🔵 The use cases are impact mapping, root-cause analysis,
   code review, test coverage map and security. Requirements: `docs/requirements/connected-code-graph.md`
-  (Ready for design). The architecture proposal `docs/plans/connected-code-graph.md` (v3.2, analyst
-  review approved), its `-graph`/`-ml` notes, and `docs/reviews/connected-code-graph.md` already
-  exist. The plan predates the requirements' Arduino `.ino` addition (FR-1, AC-26; later, not
-  phase-blocking), so it needs a small amendment before implementation starts. Next step: that
-  amendment, then phase P0, which needs implementers and so goes to `teco`
-  (`docs/plans/connected-code-graph-coordination.md` is the state of record). Owner: `architect`,
-  then `teco`.
+  (Ready for design). The architecture proposal `docs/plans/connected-code-graph.md` is v3.3: the
+  analyst approved v3.2 (`docs/reviews/connected-code-graph.md`), and v3.3 adds the Arduino `.ino`
+  sketches (FR-1, AC-26) as an optional slot after P2 that gates no phase. Its `-graph`/`-ml` notes
+  are current. The docs chain is complete. Next step: phase P0, which needs implementers and so
+  goes to `teco` (`docs/plans/connected-code-graph-coordination.md` is the state of record).
+  Owner: `teco`.
 
 ### Deferred ⚪
 
