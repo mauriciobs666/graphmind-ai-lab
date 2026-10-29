@@ -76,21 +76,30 @@ to the general fact here.
   actually created; don't infer "the index exists and this is a true empty result" from a clean
   zero-row response alone — confirm the index itself first (`CALL db.indexes()` or a bootstrap
   script's own idempotent creation) before trusting a fulltext-search miss.
-- **`db.idx.fulltext.createNodeIndex` run against an already-populated label backfills existing
-  nodes automatically, with no observed async delay at small scale** (verified 2026-09-20, module
-  `41811`, disposable `ws:gdba_kbftprobe` seeded with a read-only copy of `ws:agent-team`'s 558
-  real `Chunk` rows, deleted after — `claude/docs/plans/agent-knowledge-base-strategy-graph.md`
-  §4). Sequence: write all 558 nodes first, **then** `CALL
-  db.idx.fulltext.createNodeIndex('Chunk','text')` — `CALL db.indexes() YIELD status` read
-  immediately after (no sleep) already shows `OPERATIONAL`, and a full-text query for a term
-  known only in the pre-existing data returned all 31 correct matches in 1.16ms with zero settle
-  delay. This is a **different** lifecycle from `GRAPH.CONSTRAINT CREATE`'s documented async
-  `PENDING`→`OPERATIONAL` behavior (above) — at this scale (558 short, ~683-char-avg documents),
-  full-text index creation-plus-backfill behaved as effectively synchronous. Not tested: a much
-  larger backfill (tens of thousands of nodes) might behave differently — re-check `db.indexes()`
-  status immediately after `createNodeIndex` on a large populated label rather than assuming the
-  same instantaneous behavior holds. Also confirmed consistent with the vector-index entry below:
-  re-running `createNodeIndex` on an already-fulltext-indexed property is rejected outright
+- **`db.idx.fulltext.createNodeIndex` on an already-populated label backfills existing nodes
+  automatically — but asynchronously, at every scale, and a query during the backfill silently
+  returns ZERO rows, not a partial set** (re-verified 2026-10-29, `falkordb/falkordb:v4.18.11`,
+  module `41811`, throwaway container, scratch keys `ccg_quirk_probe_v9_*`; first seen 2026-10-25
+  at 25k nodes, `docs/plans/connected-code-graph-graph.md` §1 V9). `createNodeIndex` returns in
+  under 2 ms; a `queryNodes` issued over the same connection right after it returned `0` while
+  `CALL db.indexes() YIELD status` read `[Indexing] 0/25000: UNDER CONSTRUCTION`. Full results
+  arrived ~68 ms later at 25k nodes and ~317 ms at 100k; sampled through the 100k backfill, the
+  count stayed `0` at 13k/41k/89k indexed, then jumped straight to `100000` as status flipped to
+  `OPERATIONAL`. **Even 558 nodes is not synchronous** (`[Indexing] 172/558`, count `0`, full
+  2 ms later). That corrects an earlier reading of this entry (2026-09-20, 558 real `Chunk` rows,
+  `claude/docs/plans/agent-knowledge-base-strategy-graph.md` §4), which saw `OPERATIONAL`
+  immediately only because separate `redis-cli` invocations were slower than the backfill. Once
+  `OPERATIONAL`, `queryNodes` returns **every** match (count 25,000 / 100,000; no RediSearch
+  10-row default cap — row output is still bounded by `RESULTSET_SIZE`, below). So **after
+  creating a full-text index on populated data, poll `CALL db.indexes() YIELD label, status`
+  until the label reads `OPERATIONAL` before trusting any result**; a zero is otherwise
+  indistinguishable from a true miss (compare the no-index entry above). Note the in-progress
+  status string is `[Indexing] <done>/<total>: UNDER CONSTRUCTION`, not `PENDING`. Verify:
+  write N `:Doc {text}` nodes, then in one client session `CALL
+  db.idx.fulltext.createNodeIndex('Doc','text')` immediately followed by `CALL
+  db.idx.fulltext.queryNodes('Doc','alpha') YIELD node RETURN count(node)` and `CALL
+  db.indexes() YIELD status RETURN status`. Also confirmed consistent with the vector-index entry
+  below: re-running `createNodeIndex` on an already-fulltext-indexed property is rejected outright
   (`"Attribute 'text' is already indexed"`), never silently re-applied — same non-reapplying
   contract as `CREATE VECTOR INDEX`.
 - **A RediSearch `%token%` fuzzy term must not be escaped by stripping every non-word character
@@ -925,6 +934,82 @@ to the general fact here.
   lingering alias. **Prefer `RENAMENX`** — it returns `0` and refuses rather than clobbering when
   the target name is taken (`1` when free). The `GRAPH.COPY` + `GRAPH.DELETE` alternative is
   destructive and transiently doubles RAM for no benefit.
+  **The one deliberate exception to "prefer `RENAMENX`" is a snapshot swap — `RENAME next live`
+  over an existing `live`, with a read in flight on `live`, is safe** (re-verified 2026-10-29,
+  `falkordb/falkordb:v4.18.11`, module `41811`, throwaway container, scratch keys
+  `ccg_quirk_probe_v2_live<n>`/`_next<n>`; first seen 2026-10-25,
+  `docs/plans/connected-code-graph-graph.md` §1 V2). 4 trials, `live` = 200k nodes marked `old`,
+  `next` = 100k nodes marked `new`, each with a RANGE index; a ~16–20 s `GRAPH.RO_QUERY` on `live`
+  that reads the marker, burns time, then re-reads the marker and counts nodes; `RENAME` issued
+  2 s in. Every trial: `RENAME` returned in 0.4–0.8 ms; a new read right after saw `new`, 100,000
+  nodes, index `OPERATIONAL`; the in-flight read **finished normally on the old snapshot** — both
+  marker reads `old`, count 200,000, no error; `next` was gone; a concurrent `PING` loop never
+  exceeded 20.5 ms; and the overwritten graph's memory was released once the reader finished
+  (`used_memory` net growth per trial ≈ the new graph only, not old + new; the old graph was 41 MB
+  by `GRAPH.MEMORY USAGE`). So the swap is atomic for readers, and the old snapshot lives exactly
+  as long as its last reader. Verify: build `next`, start `GRAPH.RO_QUERY live "MATCH (m:Meta) WITH
+  m.marker AS mk0 UNWIND range(1,150000000) AS y WITH mk0, count(y) AS c MATCH (m2:Meta) WITH mk0,
+  c, m2.marker AS mk1 MATCH (a:N) RETURN mk0, mk1, c, count(a)" timeout 120000` in one client,
+  `RENAME next live` in another, compare. (Caution on that probe shape: `UNWIND range(1,150000000)`
+  materializes the whole list — `used_memory` peaked near 6 GB.)
+- **Every graph has a companion Redis STREAM `telemetry{<graph>}` that records recent queries
+  with their FULL parameter values** (re-verified 2026-10-29, `falkordb/falkordb:v4.18.11`, module
+  `41811`, throwaway container, scratch key `ccg_quirk_probe_v10`; first seen 2026-10-25,
+  `docs/plans/connected-code-graph-graph.md` §1 V10). Each entry carries `Received at`, `Query`,
+  `Query parameters` (the `CYPHER k=v` preamble verbatim, e.g. `CYPHER secret="s3cr3t-value"`),
+  `Total`/`Wait`/`Execution`/`Report duration`, `Utilized cache`, `Write`, `Timeout`. It is
+  created lazily on a graph's first query, written asynchronously (entries appeared ~1–3 s after
+  the query), trimmed to ~1,000 entries (`XLEN` exactly 1000 after 1,501 queries; 1004 seen on the
+  shared instance — approximate trimming) and has **no TTL** (`TTL` → `-1`). Present on the shared
+  `falkordb-dev` for every graph (`telemetry{cpg_falkorchat}`, `telemetry{ws:agent-team}`, …; as
+  many `telemetry{*}` keys as `GRAPH.LIST` entries). Consequences: (1) a parameter is **not**
+  private just because it was passed as a parameter — anything sent through `$param` (a token,
+  a user's text) sits in plain Redis keys, readable by any credential whose ACL key pattern
+  covers `telemetry{*}` (a `~ccg_<system>` pattern does not); (2) a key scan or `DBSIZE` sees
+  twice the keys `GRAPH.LIST` does; (3) **`RENAME` does not carry it — the old
+  `telemetry{<old>}` stream disappears** (`EXISTS` `0` right after `RENAME`), and
+  `telemetry{<new>}` only appears with the next query on the new name, so a snapshot swap resets
+  that graph's query history. Verify: `redis-cli --scan --pattern 'telemetry{*'`; `TYPE` / `XLEN`
+  / `TTL 'telemetry{<g>}'`; `XREVRANGE 'telemetry{<g>}' + - COUNT 1` after a parameterized
+  query; then `RENAME <g> <g2>` and `EXISTS 'telemetry{<g>}' 'telemetry{<g2>}'`.
+- **Redis ACLs work as a per-graph read-only credential — with `~key` plus a command allowlist,
+  never the read-only key selector `%R~key`** (re-verified 2026-10-29,
+  `falkordb/falkordb:v4.18.11`, module `41811`, Redis 8.6.3, throwaway container, scratch keys
+  `ccg_quirk_probe_acl`/`_other`; first seen 2026-10-25, `docs/plans/connected-code-graph-graph.md`
+  §1 V5). User `-@all +graph.ro_query +graph.explain ~ccg_quirk_probe_acl`: `GRAPH.RO_QUERY` and
+  `GRAPH.EXPLAIN` on that key work; `RO_QUERY` on another graph → `NOPERM No permissions to access
+  a key`; `GRAPH.QUERY` / `GRAPH.PROFILE` → `NOPERM … has no permissions to run the 'graph.QUERY'
+  command` (closing the `PROFILE`-executes-writes hole, below); a `CREATE` sent through `RO_QUERY`
+  → rejected by the engine (*"graph.RO_QUERY is to be executed only on read-only queries"*). The
+  same user with **`%R~ccg_quirk_probe_acl`** is refused even `GRAPH.RO_QUERY` on its own key
+  (`NOPERM No permissions to access a key`): `COMMAND INFO graph.ro_query` shows the module
+  declares its key spec `RW access update`, despite the command's `readonly` flag, so a
+  read-only key selector never matches. Such a user also cannot read the graph's
+  `telemetry{<graph>}` stream (above): `XLEN` → `NOPERM`. Verify: `ACL SETUSER <u> on '><pw>' -@all
+  +graph.ro_query +graph.explain '~<g>'`, then each command above via `redis-cli --user <u> --pass
+  <pw>`; repeat with `'%R~<g>'`; `COMMAND INFO graph.ro_query`.
+  **Key patterns do not filter keyless commands: `GRAPH.LIST` lists EVERY graph on the instance**
+  (re-verified same session; first seen 2026-10-26, graph note §6 V16). A user `-@all
+  +graph.ro_query +graph.list ~ccg_quirk_probe_acl` got all 7 graph keys, not its one. So a
+  scoped credential must **not** be granted `+graph.list` when graph names are themselves
+  sensitive; hand it the names out of band. Verify: `redis-cli --user <u> … GRAPH.LIST`.
+  **No per-user query timeout exists** — bound a restricted user's reads instance-wide with
+  `TIMEOUT_MAX` (the `TIMEOUT` entry, below).
+- **`falkordb-py`'s `FalkorDB(...)` constructor needs `+info` — a restricted ACL user without it
+  cannot even connect** (re-verified 2026-10-29 on falkordb-py **1.6.1** (`falkor-chat/server/.venv`)
+  and **1.6.2** (`cypher-mcp/.venv`), against `falkordb/falkordb:v4.18.11`, module `41811`,
+  throwaway container; first seen 2026-10-26, `docs/plans/connected-code-graph-graph.md` §6 V17).
+  The constructor issues `INFO server` twice — `MONITOR` shows both — from the package's
+  sentinel and cluster detection (`falkordb/sentinel.py` and `falkordb/cluster.py`, each
+  `conn.info(section="server")`). As user `-@all +graph.ro_query +graph.explain ~<g>` it raises
+  `NoPermissionError: User … has no permissions to run the 'info' command` on both versions;
+  adding `+info` makes the constructor and a following `ro_query` succeed. redis-py's
+  `CLIENT SETINFO` on connect is also denied (it shows in `ACL LOG`), but the driver tolerates
+  that, so `+client|setinfo` is optional. Raw `redis-cli` needs neither. So the minimal read-only
+  grant for a `falkordb-py` caller is `-@all +graph.ro_query +graph.explain +info ~<g>`, and
+  `+info` exposes instance-wide server and memory stats to that user. Verify: `FalkorDB(host=…,
+  port=…, username=<u>, password=<pw>)` with and without `+info` on `<u>`, and `redis-cli MONITOR`
+  alongside.
 - **Queue depth is directly observable: `GRAPH.INFO` reports a `# Waiting queries` section
   alongside `# Running queries`** (verified 2026-09-08, module `41811`, shared dev instance).
   Paired with `GRAPH.CONFIG GET MAX_QUEUED_QUERIES` (default `25` here), that gives an
@@ -1048,15 +1133,17 @@ to the general fact here.
   zero side effects. `GRAPH.PROFILE` isn't a substitute either — see the entry below (it
   silently *executes* writes rather than explaining them).
 - **Bolt port is `65535`** per `GRAPH.CONFIG` (not the Bolt default).
-- **Default `TIMEOUT` is 1000ms — and writes ignore it entirely**; a write runs to
-  completion regardless of clause or default. Reads enforce it batch-granularly
+- **Default `TIMEOUT` is 1000ms — and writes ignore it entirely while `TIMEOUT_MAX=0` (this lab's
+  default)**; a write then runs to completion regardless of clause or default. Setting
+  `TIMEOUT_MAX` changes that for writes too (sub-bullet below). Reads enforce it batch-granularly
   (slightly-over queries can slip through). The client `timeout=` pass-through
   (`g.ro_query(q, params=…, timeout=…)`) works and is **uncapped while
   `TIMEOUT_MAX=0`**. Re-measured 2026-09-08 on module `41811`
   (`TIMEOUT 1000`, `TIMEOUT_DEFAULT 0`, `TIMEOUT_MAX 0`): `UNWIND range(1,20000000) AS i WITH i
   WHERE i%5000000=0 CREATE (:Blob {i:i})` ran **1.75 s** untouched, while a 4-way cartesian
   `MATCH` over 400 nodes was killed with `Query timed out` at **exactly 1.00 s**.
-  - **So the only bound on a write is the client's `socket_timeout` — and it does not roll back.**
+  - **So, while `TIMEOUT_MAX=0`, the only bound on a write is the client's `socket_timeout` — and
+    it does not roll back.**
     Measured: a `redis.Redis(socket_timeout=0.5)` client with retries disabled raised
     `redis.exceptions.TimeoutError` at 0.50 s on that same write, and **all four nodes were
     committed** — the server had never stopped. There is no cancel path; a client-side timeout
@@ -1085,6 +1172,25 @@ to the general fact here.
     `FALKORDB_SOCKET_TIMEOUT` default 10 s) and `cypher-mcp` (`server.py:903`) both get one
     attempt. A helper script or test harness that reaches for bare `redis-py` instead does **not**
     inherit that, and is the shape to watch for.
+  - **`GRAPH.CONFIG SET TIMEOUT_MAX <ms>` is an instance-wide hard cap, for every credential and
+    for writes as well** (re-verified 2026-10-29, `falkordb/falkordb:v4.18.11`, module `41811`,
+    throwaway container, restricted ACL user + default user; first seen 2026-10-26,
+    `docs/plans/connected-code-graph-graph.md` §6 V18). With `TIMEOUT_MAX 500` (`TIMEOUT 1000`,
+    `TIMEOUT_DEFAULT 0` left as is): a query passing `timeout 60000` is **rejected before running**
+    — *"The query TIMEOUT parameter value cannot exceed the TIMEOUT_MAX configuration parameter
+    value"*; a read with no `timeout` is killed (`Query timed out`) for the restricted user and the
+    default user alike; a smaller per-query `timeout 200` still applies. The kill is batch-granular,
+    like `TIMEOUT`: a read needing ~560 ms uncapped **completed** under the 500 ms cap, a ~2.1 s
+    read was killed at ~780 ms, and `timeout 200` killed at 276–473 ms. **The write that runs 1.66 s
+    to completion with `TIMEOUT_MAX 0` was killed at ~900 ms under `TIMEOUT_MAX 500` with 0 of its 4
+    nodes committed** — so a nonzero `TIMEOUT_MAX` also caps writes, and a killed write left no
+    partial state in this probe. Consequence: it is the only lever that bounds a raw read-only
+    credential's runaway query (ACLs have no per-user timeout), but it caps every bulk load on the
+    instance too — size it above the longest legitimate write, or pass an explicit `timeout` up to
+    the cap. Verify: `GRAPH.CONFIG SET TIMEOUT_MAX 500`, then `GRAPH.RO_QUERY <g> "UNWIND
+    range(1,30000000) AS y RETURN count(y)"` with `timeout 60000`, with no timeout, and as a
+    restricted user; the `:Blob` write above followed by `MATCH (b:Blob) RETURN count(b)`; restore
+    `TIMEOUT_MAX 0`.
 - **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
   `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
   vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.
