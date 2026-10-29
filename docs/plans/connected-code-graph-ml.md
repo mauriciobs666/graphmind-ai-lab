@@ -1,6 +1,6 @@
 # Connected code graph — ML & evaluation method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 2
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Extended by:** `docs/plans/connected-code-graph-p0-ml.md` · **Version:** 2
 
 _Revision 2026-10-26 (v2): added §8 (stakeholder decisions S1–S38 and the re-checked use cases:
 statistical meaning of the new and changed ACs, AC-24 and RCA-baseline designs, untested-code risk
