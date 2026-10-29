@@ -1,6 +1,6 @@
 # Connected code graph — Feature Requirements
 
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (not yet filed) · **Last updated:** 2026-10-28
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** C-1001 (M10) · **Last updated:** 2026-10-28
 
 ## Intent
 
@@ -93,8 +93,9 @@ actually benefits from each one:
   form a system (plus exclusions) is acceptable input; describing how the parts talk to each other
   is not.
 - FR-1 — Every non-deprecated component's code is represented. Languages that must be supported:
-  Python, TypeScript/JavaScript, Java, Kotlin, C#/.NET, Go, C/C++, plus shell scripts and
-  structured config (JSON, YAML, TOML, Compose files).
+  Python, TypeScript/JavaScript, Java, Kotlin, C#/.NET, Go, C/C++ (including Arduino `.ino`
+  sketches, mapped as the C++ program they are, with a sketch's several `.ino` files treated as one
+  program), plus shell scripts and structured config (JSON, YAML, TOML, Compose files).
 - FR-2 — Wherever one component depends on another, the two sides are linked so a question can be
   followed across that boundary. Kinds that must be covered: REST/HTTP, gRPC/RPC, messaging/events
   (publisher ↔ consumer of the same queue/topic), shared libraries (library ↔ every consumer), and
@@ -317,6 +318,9 @@ actually benefits from each one:
   (FR-12).
 - Fixing what it finds: the system reports impacts, causes, gaps and risks. It does not change code
   or open tickets.
+- Device-specific links for Arduino sketches (serial/USB, Bluetooth), and any device-specific work to
+  link a sketch to the services it talks to. For now a sketch is mapped on its own (FR-1). These
+  links can be added later as new units (FR-26).
 
 ## Acceptance criteria
 
@@ -457,6 +461,9 @@ builds them has measured reality. AC-1 to AC-6 exercise impact mapping (FR-11)._
   grouped by repository and component, then by distance, confirmed before possible. Asking the
   reverse question, "what does this depend on?", for the same function lists its dependencies the
   same way (FR-11).
+- AC-26 (Arduino; later, not phase-blocking) — Given an Arduino sketch split across several `.ino` files, with no hand-written
+  function declarations, its functions and the calls between its files are mapped, and an impact
+  question about one of its functions lists its callers in the other files (FR-1, FR-11).
 
 ## Open questions
 
@@ -721,3 +728,12 @@ None.
 - 2026-10-28 — Review Pass 3 P3-1: hide other same-name candidates of a resolved call when the
   language's resolved-call precision is high? → **No: they stay listed as *possible*, folded away
   in the answer** — nothing is silently dropped (FR-8).
+- 2026-10-28 — Readback paused: support Arduino `.ino` files? → **Yes, for a personal project.**
+  Scope? → **Sketches mapped as C++ only** (FR-1, AC-26). Device-specific links (serial/USB,
+  Bluetooth, device↔service linking) are out for now and can be added later as new units (FR-26).
+  The plan (v3.2) predates this and needs a small amendment.
+- 2026-10-28 — Arduino priority? → **Later, not blocking**: AC-26 gates no delivery phase.
+- 2026-10-28 — Readback (2026-10-22 "confirm at readback" item): keep "every answer says how stale
+  its view is"? → **Yes** (FR-7). File a backlog item? → **Yes**, C-1001 in `docs/BACKLOG.md`.
+- 2026-10-28 — Readback **confirmed** by the stakeholder; no open questions. Status → **Ready for
+  design**.

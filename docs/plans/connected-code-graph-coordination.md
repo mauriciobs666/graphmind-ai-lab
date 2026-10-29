@@ -54,3 +54,4 @@ remaining chain goes to `teco`.
 - 2026-10-28: U11 stopped on an API usage limit before writing anything; same agent resumed via SendMessage. Stakeholder confirmed FR-29 "moved" = qualified name changed (folded into FR-29).
 - 2026-10-28: U11 approved. Stakeholder chose P3-1 → keep candidates as possible, folded; quick fixes U12 ∥ U13 with tico's check only, then one commit of the whole round.
 - 2026-10-28: U12 (v3.2) and U13 (graph note v2.1) checked by tico and accepted. Round closed; whole chain committed together. Requirements remain Interviewing until the stakeholder says to flip.
+- 2026-10-28: readback reopened for Arduino `.ino` support (FR-1, AC-26, later/not blocking), then confirmed; requirements flipped to **Ready for design**, filed as C-1001. Plan v3.2 predates the `.ino` addition and needs a small amendment (architect) before P0 goes to `teco`.
