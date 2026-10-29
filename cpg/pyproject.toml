@@ -1,0 +1,60 @@
+[project]
+name = "ccg"
+version = "0.0.1"
+description = "Connected code graph (C-1001) — P0 contract code: ids, bundle, schemas"
+requires-python = ">=3.12"
+# No base dependencies, by P0 plan §5.2's extras rule: every P0 dependency is declared
+# up front in the extras below so no later step edits this file. Runtime imports of
+# `ccg.bundle` and the pack loaders (`jsonschema`, `pyyaml`) live in `dev`: install
+# `.[dev]`. A step that finds a dependency missing stops and asks `teco`. Versions are exact pins,
+# each verified installable on 2026-10-29 (Python 3.12.3).
+dependencies = []
+
+[project.optional-dependencies]
+# Default (`-m "not live"`) suite plus the contract code it exercises:
+# bundle/schema validation (S10, S31, S34, S39) and YAML packs/manifests.
+dev = [
+    "pytest==9.2.0",
+    "jsonschema==4.26.0",
+    "pyyaml==6.0.3",
+]
+# `live` tests and the store spikes (S13, S17, S20–S22): falkordb-py 1.6.x (V17).
+# `redis` is pinned directly: S21/S22 probe Redis-level semantics (MULTI/RENAME, ACL).
+live = [
+    "falkordb==1.6.2",
+    "redis==8.1.0",
+]
+# Frontend-fitness spike (S25–S27): py-tree-sitter and the ten grammars of
+# `docs/plans/connected-code-graph-p0-ml.md` §5.2 (amendment §11 N6).
+spike = [
+    "tree-sitter==0.25.2",
+    "tree-sitter-python==0.25.0",
+    "tree-sitter-typescript==0.23.2",   # provides both `typescript` and `tsx`
+    "tree-sitter-javascript==0.25.0",
+    "tree-sitter-java==0.23.5",
+    "tree-sitter-kotlin==1.1.0",
+    "tree-sitter-c-sharp==0.23.5",
+    "tree-sitter-go==0.25.0",
+    "tree-sitter-c==0.24.2",
+    "tree-sitter-cpp==0.23.4",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ccg*"]
+
+# Non-package data dirs a normal (non-editable) install would otherwise drop (S10, S17, …).
+[tool.setuptools.package-data]
+ccg = ["schemas/*.json", "store/*.cypher"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `live` tests need Docker/FalkorDB/Joern; they are deselected by default and run
+# explicitly with `pytest -m live` (a command-line `-m` overrides this one).
+addopts = '-ra -m "not live"'
+markers = [
+    "live: needs Docker, the ccg-falkordb instance (port 6390) or Joern; deselected by default, run with `pytest -m live`",
+]

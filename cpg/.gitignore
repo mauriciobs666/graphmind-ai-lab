@@ -4,3 +4,6 @@
 
 # mcp/.venv (created by mcp/setup.sh) is untracked too — already covered by the
 # repo-root .gitignore's `.venv` rule, so no rule is repeated here.
+
+# C-1001 P0 scratch: corpora, bundles, exports (P0 plan §2 D2). Not source.
+.ccg-work/

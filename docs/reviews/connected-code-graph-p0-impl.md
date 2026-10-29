@@ -2611,3 +2611,83 @@ Every row was checked against the spec text (§3.2, then the §5 entry), and by 
 | `field_access_id` | `fieldAccess, pointId, path, mode, receiverType, field` | §5.13, GV-20/21 |
 | `import_id` | `import, fileId, ordinal(i)` | §5.14 |
 | `test_marker_id` | `testMarker, symbolId, framework` | §5.16 |
+
+### Pass 2
+
+**Re-checked (2026-10-29):** the fix round in `cpg/ccg/ids.py`, `cpg/tests/test_ids.py`,
+`cpg/pyproject.toml` and `cpg/README.md`, all uncommitted. Everything below was **run** against
+the tree. Mutants ran on scratch copies with `python -B` and `__pycache__` cleared before each
+run, and each copy was confirmed restored with `cmp`.
+
+**Verdict: approve with suggestions.** Every Pass 1 finding is fixed. There are two new minors,
+both test gaps in the new guards, and neither is a defect in the ids. The suite gives
+**185 passed** with `-m "not live"`.
+
+**Mutants:**
+- **Swap and tag:** 88 of 88 killed (the Pass 1 sweep, now also covering `dependency_record_id`).
+- **Guard mutants:** 91 of 94 killed. These drop each `_strs`/`_ints` call, drop each argument
+  from a `_strs` call, and disable the m3, m5 and m1 guards one at a time. The 3 survivors:
+  - `_ints` accepting `bool`: equivalent, because `_normalize` still raises on `bool`.
+  - Dropping `kind` from `point_id`'s `_strs`: equivalent, because `_token(kind)` raises first.
+  - Dropping `lang` from `symbol_id`'s `_strs`: **not** equivalent (P2-2).
+
+**Dispositions:**
+- **M1: fixed.** Every position is type-checked. The three Pass 1 cases now raise `TypeError`.
+  GV-18 still hashes as a raw tuple.
+- **M2: fixed.** `dependency_record_id` hashes the §5.15 5-tuple, with `line` as an integer.
+  Runtime and dev declarations of one package give two different ids.
+- **m1: fixed.** With the `from ccg.ids import test_marker_id` probe added, the suite gives
+  186 passed and no collection error.
+- **m2: fixed.** A wheel built from a copy with stub files contains
+  `ccg/schemas/bundle-v1.schema.json` and `ccg/store/ddl_v1.cypher`.
+- **m3: fixed.** A `str`, a `dict`, an empty list and a non-`str` tag are each rejected. A Python
+  `tuple` is still accepted (it gives GV-19).
+- **m4: fixed.** `redis==8.1.0` is in `live`.
+- **m5: fixed.** Empty, whitespace-only and non-`str` signatures are rejected. The README now
+  says that passing a signature only for function-like symbols is the caller's job.
+- **Nits: all fixed.** The pyproject comment, the `data_id` `toPath`/`fromPath` docstring, and
+  the spec tokens `PyPI`/`command` in the table.
+
+**teco's three questions:**
+1. **Is the spec side spec-derived?** Partly.
+   - `SPEC_TAGS` is a literal transcription. I extracted every backticked `["tag", …]` from
+     spec §3.2 and §5 by script, and its tag set equals `SPEC_TAGS` exactly.
+   - `test_table_covers_every_public_constructor` reads the module, which is the check the brief
+     asked for.
+   - The spec-side check is keyed by **tag only**, though. See P2-1.
+2. **Does the new strictness break a shape the spec allows?** No. I ran 12 shapes, and all
+   hashed:
+   - an empty `cond` `usePath`;
+   - receiver `-1`;
+   - `rootPath` `"."`;
+   - the signatures `String.()`, `static()` and `(out Order)`;
+   - `<dynamic>`;
+   - `receiverType` `"?"`;
+   - a quoted `keyPath`;
+   - a `line` of 10⁹;
+   - a raw `tuple`;
+   - GV-18 as a raw tuple.
+
+   `_strs` allows `""`, and `_ints` allows negative integers.
+3. **Do the M1 and m3 checks interact?** No. Every constructor builds a `list` with a literal
+   `str` tag, so the m3 checks never fire on a constructor path. The M1 checks run before
+   `tuple_id`, and `tuple_id` itself stays untyped per position, which keeps GV-18.
+
+**P2-1 — minor (new). The spec-completeness check cannot detect the M2 defect class: a second
+tuple shape under an existing tag.**
+- **Evidence (run):** on a copy, I removed `dependency_record_id`, its table row and its two
+  tests, recreating Pass 1's state. Result: **177 passed.** `"dependency"` is still covered by
+  `dep_id`, so `test_table_covers_every_spec_record_type` stays green.
+- **Fix:** key the spec side by `(tag, length including the tag)`, transcribed from §3.2 and §5.
+  It should include both `("dependency", 3)` and `("dependency", 5)`, and both `("symbol", 4)`
+  and `("symbol", 5)`. Compare it to `{(tag, 1 + len(positions))}` from the table, plus
+  `("symbol", 4)` for the optional signature. My script-extracted set has exactly these shapes,
+  so the check would have gone red on the Pass 1 tree.
+
+**P2-2 — minor (new). `symbol_id`'s 4-element path is never type-probed.**
+- **Evidence (run):** with `lang` removed from `_strs`, the suite stays at 185 passed, yet
+  `symbol_id(7, "r", "q")` returns `d71a2f1b…`. The table's `symbol_id` row always passes a
+  signature, so a wrong-typed `lang` is caught by `_token(lang)` in the signature branch instead.
+- **Current state:** the shipped code is correct.
+- **Fix:** add a second table row (or one test) for `symbol_id` without a signature, so the
+  every-position probe covers the 4-element path too.
