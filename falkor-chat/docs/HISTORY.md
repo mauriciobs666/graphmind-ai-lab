@@ -5,6 +5,34 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-28 — K-086 closed: a translated category browse lists the category; K-079 F2 delivered
+
+- **What (K-079 F2).** A `query_graph_data` row always carries its label's identity column
+  (`querygen.ensure_row_identity`, prepended before `compile()`; `DatasetSchema.identity`/`facets`).
+  The NLQ Layer 1 contract is amended to match (`nlq_scoring.py` docstring, D5). Design:
+  `docs/plans/salesperson-query-graph-data.md` §3.
+- **What (K-086).** D6: a catalog `query_graph_data` call lists the stored categories in the
+  internal querygen prompt (`Services.catalog_categories`, no new Cypher). D7: an empty catalog
+  result that names an unknown category or product gets a recovery finding, hint and category list.
+  No def bump. Design: same plan, §4. `docs/QUERIES.md` §15.2 updated.
+- **Verified** (`docs/test-reports/salesperson-query-graph-data-report.md`). On ministral, Layer 1
+  shows no regression: Run 0 and Run 1 are both catalog 21/21, knowledge_base 12/19 and not-found
+  0/6, with 0 per-pair differences, and the replay gives 0/40 F2-caused flips. `browse` gives B1
+  0/24 and B2 21/24. The first querygen completion filtered `category = "Peripherals"` in 24 of 24
+  turns, so D6 did the work and D7 never fired. `analyst` gated the plan and the code
+  (`docs/reviews/salesperson-query-graph-data.md`, `-impl.md`). Test plan:
+  `docs/test-plans/salesperson-query-graph-data.md`. Commits `6286de44` (Stage A), `d5ba5728`
+  (M1 test fix), `9ba0d788` (Stage B), `8e42344c` (Stage C), `5857a61a` (DEF-2 probe).
+  Coordination: `docs/plans/salesperson-query-graph-data-coordination.md`.
+- **Found.** DEF-2: in 4/12 `browse-type` turns, D6 maps the product-type word "mouse" onto
+  `Peripherals`, querygen returns `count(p)` = 4, and the reply claims "4 modelos de mouse". The
+  counterfactual probe (report, "DEF-2 counterfactual probe"; plan §11) shows the pre-change prompt
+  was also wrong ("no matching data found", or a count of 0). So this is not a regression, and per
+  the decision rule in plan §11.5 it is backlogged. DEF-1: browse replies mistranslate product
+  names.
+- **Follow-ups.** K-088 (DEF-2), K-089 (DEF-1), K-090 (plan §9 R7: two shape classes compile but
+  fail at execution). K-079 narrows to F4/F5.
+
 ## 2026-10-26 — K-078 closed: es/pt-BR carts fill, because cart writes are keyed by product ID; K-079 F1 and F3 delivered
 
 - **What (K-078).** Stakeholder mandate: cart writes use a stable product ID, not a translated name.

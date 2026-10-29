@@ -1,6 +1,6 @@
 # `query_graph_data` row identity and category-miss recovery
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** K-079 (F2), K-086 · **Version:** 3 · **Reviews:** `docs/reviews/salesperson-query-graph-data.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** K-079 (F2), K-086 · **Version:** 3 · **Extends:** `docs/plans/workflow-nl-query-generation.md`, `docs/plans/workflow-nl-query-generation-ml.md` · **Reviews:** `docs/reviews/salesperson-query-graph-data.md`
 
 ## 1. Goal & scope
 

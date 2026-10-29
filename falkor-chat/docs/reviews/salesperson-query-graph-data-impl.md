@@ -1,6 +1,6 @@
 # `query_graph_data` row identity and category-miss recovery — implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-079 (F2), K-086
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-079 (F2), K-086
 
 ## Pass 1 — code gate on Stage A (`6286de44`)
 

@@ -1,6 +1,6 @@
 # `query_graph_data` row identity and category-miss recovery — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-079 (F2), K-086
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-079 (F2), K-086
 
 ## Goal
 
@@ -42,7 +42,7 @@ K-087.
 | U5 | `qa-engineer` | `af4e5b34742ce3b56` | delivered | `docs/test-plans/salesperson-query-graph-data.md`, `docs/test-reports/salesperson-query-graph-data-report.md`, `salesperson/scripts/refire_probe.py` (`browse-type`). §8.2 PASS: Layer 1 catalog 21/21 and KB 12/19 in both runs, replay 0/40; §8.3 browse PASS: B2 21/24, B3 2/24, D6 alone did the fix (D7 fired 0). m1: 3/3 pt-BR misses carried `returns`. **DEF-2 (Major):** `browse-type` 4/12 replies say "4 mice" (D6 maps "mouse" → Peripherals; no pre-change `browse-type` baseline). DEF-1 (Minor, pre-existing): the reply step mistranslates product names. teco re-ran `nlq_compare` (diffs 0) and confirmed the DEF-2 turns t1/t4/t7/t10 in the raw data | — (QA is the gate) | 186k tok / 64 tools |
 | U6 | `architect` | `a073ffa3acd5dbd4f` | delivered | plan §11, appended only (0 removed lines): D6 explains the value, not clearly a regression; structural causes F4/F5/F7; Candidate B shape rule (even odds); recommends the §11.2 counterfactual probe, then close + backlog unless the old prompt returned names | — (assessment; stakeholder decides) | 73k tok / 22 tools |
 | U7 | `qa-engineer` | `af4e5b34742ce3b56` (resumed) | accepted | test report §"DEF-2 counterfactual probe": F6 confirmed (pre-change prompt byte-identical to `categories=None`); pre-change gave "no matching data found" (A, `LIKE` rejected) and count 0 (B), never names; deterministic over 3 repeats; 18 calls (customer text added). teco checked `cmp` and the 18 `probe.json` rows. §11.5 → **close + backlog DEF-2** | — | 210k tok / 10 tools (cumulative) |
-| U8 | `architect` | `a073ffa3acd5dbd4f` (resumed) | in-flight | close-out: `HISTORY.md` entry, `BACKLOG.md` (K-079 narrowed, K-086 removed, DEF-2/DEF-1/R7 filed) | teco verifies | — |
+| U8 | `architect` | `a073ffa3acd5dbd4f` (resumed) | accepted | `HISTORY.md` entry; `BACKLOG.md`: K-086 removed, K-079 → F4/F5, K-088 (DEF-2), K-089 (DEF-1), K-090 (R7) filed, K-081 one sentence (plan §7). teco checked the K-090/K-089 figures against the review and report | teco verified | 107k tok / 12 tools (cumulative) |
 
 ## Checkpoint — paused 2026-10-28 (stakeholder: session near limit)
 
@@ -65,3 +65,4 @@ in a new session, dispatch fresh with the plan, the review and this ledger as in
 
 - Stakeholder decision (2026-10-28): DEF-2 is **fixed before close**. Revise D6's wording, re-gate, then re-run `browse` + `browse-type` live before K-086 closes.
 - Stakeholder decision (2026-10-28), after U6: **probe first, then decide** per plan §11.5's rule (old prompt returns usable names → fix now with Candidate B; 0/15 → close and backlog DEF-2).
+- **Closed 2026-10-28.** Family archived (plan, this doc, both reviews, test plan, test report); no requirements doc for this slug. `Extended by:` pointers added on `workflow-nl-query-generation{,-ml}.md` (plan §7).

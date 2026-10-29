@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-087
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-090
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -66,17 +66,16 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
 - **Owner:** stakeholder decision, then `devops`.
 
-### K-079 — Storefront replies sometimes state fabricated or scrambled prices: remaining fixes F2, F4, F5 (🟡 in-progress — F1 delivered 2026-10-22, F3 2026-10-23, `docs/reviews/salesperson-fabricated-prices-rca.md`)
+### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 
-> Root cause RC-1: `query_graph_data` can return names and prices as separate unlabelled lists,
-> and the model pairs them by position. Remaining, per the RCA's fix list: **F2** — `query_graph_data`
-> never returns non-aggregate attributes without the label's identity column (needs a short design
-> note: it amends the NLQ eval's Layer 1 contract, done-condition a Layer 1 re-run on ministral with
-> no regression; same `QueryGraphDataTool.run` → `querygen` hand-off as K-086, so design them
-> together). **F4** — the K-056 grounding signal counts only price-grounding tools. **F5** — a
-> catalog name→price consistency metric and a non-`$` symbol count in the probe analysis (S7's
-> hand sweep found 0 wrong of 126 pairs; the re-run saw 2 pt-BR `R$` replies with correct amounts).
-- **Owner:** `architect` (F2 with K-086), `coder` (F4), `qa-engineer` (F5).
+> RC-1's direct cause, names and prices returned as separate unlabelled lists, is removed: F2 makes
+> every `query_graph_data` row carry its identity column (`HISTORY.md` 2026-10-28). What remains
+> is the RCA's detection work, numbered as in the RCA's fix list. **F4:** the K-056 grounding
+> signal counts only price-grounding tools, so it misses a reply that is grounded on an unrelated
+> tool call. **F5:** the probe analysis needs a catalog name→price consistency metric and a
+> non-`$` symbol count. S7's hand sweep found 0 wrong of 126 pairs; the re-run saw 2 pt-BR `R$`
+> replies with correct amounts.
+- **Owner:** `coder` (F4), `qa-engineer` (F5).
 
 ### K-085 — es storefront doubles an item already in the cart when the next message adds a different one (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-3, 2026-10-26)
 
@@ -92,14 +91,71 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > no ids, no def bump, effect unmeasured). The customer does see the doubled quantity.
 - **Owner:** `architect`, then an implementer; live re-measure (C1 + C2) by `qa-engineer`.
 
-### K-086 — Browsing a category by its translated name gets "we have none" (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-C, 2026-10-26)
+### K-088 — A product-type question that reaches `query_graph_data` gets a misleading count (🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-2 and "DEF-2 counterfactual probe", 2026-10-28)
 
-> "Do you have any periféricos?" went to `query_graph_data` on every turn. The internal NLQ
-> filtered `category = "periféricos"` (es) or `name = "periféricos"` (pt-BR), got
-> `{"items": [], "finding": "no matching data found"}`, and the reply said the store has no
-> peripherals: es 12/12, pt-BR 7/12 (4 listed them correctly). K-078's recovery hint plus price-free
-> catalog on an unknown category exists only in `filter_products`, which the model never called.
-- **Owner:** `architect` (with K-079 F2), then an implementer.
+> **The failure.** On "Vocês têm algum mouse?", the agent sometimes rephrases the question and
+> sends it to `query_graph_data` rather than looking the product up.
+> - In 4/12 turns, querygen mapped "mouse" onto `category = "Peripherals"` with `count(p)` and got
+>   4. The reply then said "temos 4 modelos de mouse"; the catalog has one mouse.
+> - Another phrasing gets `filters: []` and a count of 15.
+>
+> **Not a regression.** The probe shows the pre-K-086 prompt was also wrong on the same inputs,
+> returning "no matching data found" (the model reached for an unsupported `LIKE`) or a count of
+> 0. It never returned product names. Querygen is deterministic at `temperature: 0`, so each
+> internal phrasing is effectively pass/fail.
+>
+> **Three structural causes** (`docs/plans/salesperson-query-graph-data.md` §11.1, facts F4, F5
+> and F7; these are not the RCA's F4/F5 in K-079):
+> - the querygen DSL has no substring operator, so "products that are a mouse" is
+>   inexpressible;
+> - a `count` over an empty match returns one row, so D7 and every abstention path miss it;
+> - the NLQ golden set has no product-type-word pair.
+>
+> **Remaining work** (plan §11.5):
+> - (a) a shape rule appended to D6's block, "a kind of product that is not itself a category →
+>   its containing category, return `p.name`, never `count`" (§11.3 Candidate B). Validate it with
+>   an offline querygen string-set probe before any live run. Narrowing the mapping instead
+>   (Candidate A) is rejected.
+> - (b) give an aggregate-only result over an unknown category or name D7's finding and hint;
+> - (c) add 2–3 type-word golden pairs, and have `refire_probe.py` record the step trace.
+>
+> The cost of verifying this is in §11.4. The `browse` B2/B3 margins are thin (21/24, 2/24), so
+> any D6 change re-runs `browse`.
+- **Owner:** `architect` (the shape of (a) + (b)), then an implementer; `qa-engineer` for the
+  probes and the live re-measure.
+
+### K-089 — Storefront replies mistranslate exact catalog product names (🔵 proposed — `docs/test-reports/salesperson-query-graph-data-report.md` DEF-1, 2026-10-28)
+
+> **The failure.** `query_graph_data` returns the exact English names, but the `assistant` step on
+> ministral renders them as different products. "Gaming Mouse Pad XL" becomes
+> "Pantalla para juegos XL" (a gaming screen) in es, 10/12, and "Mouse de Gaming XL" in pt-BR,
+> 7/12. So in most browse lists the mouse pad reads as another item.
+>
+> **Scope.** This is a reply-layer issue that predates K-086; K-086 only made the lists appear.
+> Under a strict reading of "lists the 4", it would fail that run's B2.
+>
+> **Remaining.** Decide whether the reply keeps catalog names verbatim, for example through an
+> instruction in the `salesperson` prompt, which needs a def bump. Then re-measure with
+> `refire_probe.py --schedule browse`. The mitigation is untested.
+- **Owner:** `architect` (prompt vs other lever), then an implementer; `qa-engineer` to re-measure.
+
+### K-090 — Two `query_graph_data` shape classes compile but fail at execution and kill the turn (🔵 proposed — `docs/plans/salesperson-query-graph-data.md` §9 R7, `docs/reviews/salesperson-query-graph-data.md` Pass 2, 2026-10-28)
+
+> **The failure.** `querygen.compile()` accepts two shape classes that FalkorDB rejects:
+> - an aggregate with an `order_by` outside `returns` ("ORDER BY cannot reference variables not
+>   projected or grouped");
+> - `avg()` over a string property, e.g. `avg(v.category)` ("Type mismatch").
+>
+> The error is not a `ServiceError`, so `QueryGraphDataTool.run` lets it escape. The executor's
+> fault net then kills the turn.
+>
+> **Evidence.** The review's execution sweep found 14,860 + 2,072 of 44,323 probe cases failing.
+> The failures are identical before and after F2, so they predate it.
+>
+> **Remaining.** Choose one of two fixes:
+> - `run` abstains on an execution error, with "no matching data found";
+> - `compile()` rejects both shapes.
+- **Owner:** `architect` (pick the seam), then `tdd-engineer`.
 
 ### K-087 — Side effects of the storefront `Customer:` speaker label: `Assistant:` leaks into replies; the en greeting claims the profile name (🔵 proposed — `docs/test-reports/salesperson-cart-product-id2-report.md` DEF-A/DEF-B, 2026-10-26)
 
@@ -124,7 +180,9 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > ministral emits `label: "Product"`, gets the catalog, and finds nothing. qwen passes it, so the
 > knowledge_base subset is 12/19 vs 13/19. Catalog is 21/21 on both. Not on the storefront path
 > (the shop asks catalog questions only). A tool-prompt fix would follow R3 in
-> `docs/plans/salesperson-single-model.md`.
+> `docs/plans/salesperson-single-model.md`. The candidate mechanism is K-086's category listing
+> (D6), generalised through `schema.facets` to list `Entity.type`
+> (`docs/plans/salesperson-query-graph-data.md` §4.1).
 - **Owner:** `data-scientist` (whether to fix by prompt), then an implementer.
 
 ### K-077 — Language-salience probe harness: classifier false negatives, a blind trial-level table, and untested `run_participant` (🔵 proposed — `docs/reviews/salesperson-language-salience.md` Pass 2, F1–F7, 2026-10-20)

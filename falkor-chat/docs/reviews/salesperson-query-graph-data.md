@@ -1,6 +1,6 @@
 # Review — `query_graph_data` row identity and category-miss recovery (plan gate)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-079 (F2), K-086
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-079 (F2), K-086
 
 ## Pass 1
 

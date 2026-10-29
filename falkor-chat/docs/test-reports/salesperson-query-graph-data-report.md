@@ -1,6 +1,6 @@
 # `query_graph_data` row identity and category-miss recovery — Stage C test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-079 (F2), K-086
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-079 (F2), K-086
 
 Plan: `docs/test-plans/salesperson-query-graph-data.md`. Spec: `docs/plans/salesperson-query-graph-data.md`
 §8.2/§8.3, plus review `docs/reviews/salesperson-query-graph-data-impl.md` Pass 2 m1.

@@ -1,6 +1,6 @@
 # `query_graph_data` row identity and category-miss recovery — Stage C test plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** K-079 (F2), K-086
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** K-079 (F2), K-086
 
 ## Scope & objective
 
