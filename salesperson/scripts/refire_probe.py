@@ -16,6 +16,9 @@ script, a fresh participant each time:
   browse                   "Do you have any periféricos?"  (one turn; id2 design note §6.2,
                            review m4: D8's category-miss `catalog` on a browse request;
                            reported, not gated — classify each reply by hand)
+  browse-type              "Vocês têm algum mouse?"  (one turn; K-086 plan
+                           `falkor-chat/docs/plans/salesperson-query-graph-data.md` §8.3 B5:
+                           a product-type word, not a category; run with --languages pt-BR only)
 
 The schedule interleaves the scripts (`--schedule`, default 12 × the two C2 scripts,
 alternating), so trial `t` always runs the same script and `--resume` continues at the next
@@ -59,6 +62,9 @@ SCRIPTS: dict[str, list[str]] = {
     ],
     "browse": [
         "Do you have any periféricos?",
+    ],
+    "browse-type": [
+        "Vocês têm algum mouse?",
     ],
 }
 HARNESS_VERSION = "2"
