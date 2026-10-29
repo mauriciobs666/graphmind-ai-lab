@@ -1,6 +1,6 @@
 # Connected code graph — requirements review & architecture proposal
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.3 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.3 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md`, `docs/plans/connected-code-graph-p0.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
 
 **This is an architecture *proposal*.** The requirements it answers
 (`docs/requirements/connected-code-graph.md`) are `Ready for design` (2026-10-28), and their AC

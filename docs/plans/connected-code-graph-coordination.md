@@ -1,6 +1,6 @@
 # Connected code graph — expert review & architecture proposal — Coordination
 
-> **Status:** active · **Owner:** `tico` · **Tracks:** — (`docs/requirements/connected-code-graph.md`)
+> **Status:** active · **Owner:** `teco` · **Tracks:** — (`docs/requirements/connected-code-graph.md`)
 
 ## Goal & definition of done
 
@@ -14,6 +14,22 @@ Done when: an architecture proposal (`docs/plans/connected-code-graph.md`), a gr
 exist and have been checked, with every finding that touches requirements surfaced back to the
 stakeholder. This is a docs-only chain: if any unit would need source, tests, or config changed, the
 remaining chain goes to `teco`.
+
+## Phase P0 — goal & definition of done (`teco`, from 2026-10-29)
+
+Docs chain U1–U14 (owned by `tico`) is complete; the stakeholder asked `teco` (2026-10-29) to run
+phase P0 of `docs/plans/connected-code-graph.md` §4. The plan is a proposal and states each phase
+gets its own implementation plan, so P0 starts with one.
+
+Done when: every P0 deliverable (a)–(h) of plan §4 exists and is gated; every §6.2 "for P0 to
+settle" decision is recorded with its measurement; bundle schema v1 and the graph model are frozen
+(or explicitly left provisional per §4 P0(b)); `docs/HISTORY.md` and the C-1001 entry of
+`docs/BACKLOG.md` reflect it. Further units (U17+) are drawn from the P0 plan's step table once it
+is gated.
+
+Documentation-impact scan: `docs/BACKLOG.md` (C-1001), `docs/HISTORY.md` (entry per delivered
+unit), `claude/graph-dba/falkordb-quirks.md` (plan §6.2 graph-dba item), root `AGENTS.md` `cpg/`
+bullet (rewritten at P1, not P0, per plan §3.13).
 
 ## Ledger
 
@@ -33,6 +49,11 @@ remaining chain goes to `teco`.
 | U12 | `architect` | `afd672aabfb7c2986` (resumed) | accepted | plan v3.2: P3-1 (candidates kept as possible, folded) | tico check (stakeholder: no further review pass) | — |
 | U13 | `graph-dba` | `ab82775fc08487089` (resumed) | accepted | graph note: P3-n1 preview sizing at default 2 | tico check | — |
 | U14 | `architect` | `a785c7d812bd2b44a` (fresh; earlier id not resumable) | accepted | `docs/plans/connected-code-graph.md` amendment for Arduino `.ino` (FR-1, AC-26; later, not phase-blocking) | tico check | — |
+| U15 | `architect` | `a5c76dc11e6c767df` | delivered | `docs/plans/connected-code-graph-p0.md`: §0–§14, ~46 steps S01–S51, findings F1–F13, conditional SQ-P0-1/2, K-P0-1 (RAM cap) (teco checked 2026-10-29) | U16 → — | 282k tok / 39 tools |
+| U16 | `analyst` | `a3b6193fa11b2bc2a` | gated | `docs/reviews/connected-code-graph-p0.md` Pass 1: B1 blocker (ground-truth isolation, §6), M1–M6, m1–m8, 3 nits | gate on U15 → **needs changes** | 222k tok / 55 tools |
+| U17 | `architect` | `a5c76dc11e6c767df` (resumed) | delivered | plan v1.2 (§15 dispositions): Pass 1 all dispositioned; B1 → headless sessions, new S52 (`cobb` defs + guard hook), S53 (`devops` launcher), S54 (planted-breach rehearsal) (teco checked 2026-10-29) | U18 → — | 405k tok / 20 tools (B1 run) |
+| U18 | `analyst` | `a3b6193fa11b2bc2a` (resumed) | gated | review Pass 2: P2-1, P2-2, P2-5 major; P2-3, P2-4, P2-6 minor (all fix-induced); six-item stopping condition for v1.3 | gate on U17 → **approve with suggestions** (S52–S54 held for v1.3; rest dispatchable) | 286k tok / 19 tools |
+| U19 | `architect` | `a5c76dc11e6c767df` (resumed) | accepted | plan v1.3: P2-1–P2-4, P2-6, nits; no encryption (decision); new S55 (headless capture) | teco mechanical check of stopping items 1–6 → **met** (2026-10-29; items 1–3 are S53 done-conditions, verified at S53) | 444k tok / 27 tools (cumulative) |
 
 ## Notes
 
@@ -57,3 +78,8 @@ remaining chain goes to `teco`.
 - 2026-10-28: U12 (v3.2) and U13 (graph note v2.1) checked by tico and accepted. Round closed; whole chain committed together. Requirements remain Interviewing until the stakeholder says to flip.
 - 2026-10-28: readback reopened for Arduino `.ino` support (FR-1, AC-26, later/not blocking), then confirmed; requirements flipped to **Ready for design**, filed as C-1001. Plan v3.2 predates the `.ino` addition and needs a small amendment (architect) before P0 goes to `teco`.
 - 2026-10-28: U14 (plan v3.3: Arduino `.ino` as C++ via an in-house sketch preprocessor and line map; optional slot after P2, gates no phase; K14–K15) checked by tico and accepted, plus the stale "requirements still Interviewing" opening line fixed. Graph and ML notes unchanged. Docs chain complete; P0 onward needs implementers → `teco`.
+- 2026-10-29: handed to `teco` for P0 (stakeholder). U15 (P0 phase plan) → U16 (analyst gate) before any implementer. `cpg_falkorchat` is stale (21 server commits since 2026-10-15); U15 proceeds on it — planning leans on it only lightly, and the P0 slice builds its own bundles.
+- 2026-10-29: U15 delivered. teco's check found step ids S01–S51 share a namespace with stakeholder decisions S1–S38 (e.g. step S36 vs decision S36); put to U16 as a question, not a premise.
+- 2026-10-29: U16 needs changes. Isolation design for B1 (separate headless key-writer session launched by teco vs. a tool-restricted agent definition with path hooks by cobb) put to the stakeholder; U17 revises everything else meanwhile. U16's two learning captures were denied by the auto-mode classifier; surfaced to the stakeholder, not re-written by teco.
+- 2026-10-29: stakeholder chose a **separate headless session** for the key writers (B1, option a); relayed to U17. Note for U18: v1.1 removed the passphrase-custody decision point (n3) on the architect's own call; the gate should re-check it.
+- 2026-10-29: U18 approve-with-suggestions. Stakeholder rejected encrypting the held-out set ("too much"): no gpg, no passphrase. Held-out keys stay plaintext outside the repo (`~/.local/share/ccg-eval/`), off every builder brief, with a hash manifest in the repo for tamper evidence; hiding is by convention only. This supersedes P2-5 and the n3 thread. Relayed to U19.
