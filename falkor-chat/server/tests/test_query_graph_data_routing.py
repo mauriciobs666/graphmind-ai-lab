@@ -117,7 +117,8 @@ class RoutingGateway:
 
 
 class StubQueryServices:
-    """Only the `run_structured_query` seam `QueryGraphDataTool` needs."""
+    """Only the `run_structured_query`/`catalog_categories` seams
+    `QueryGraphDataTool` needs."""
 
     def __init__(self, rows) -> None:
         self._rows = rows
@@ -126,6 +127,10 @@ class StubQueryServices:
     def run_structured_query(self, ctx, graph_key, compiled, *, timeout=None):
         self.structured_query_calls.append({"graph_key": graph_key, "compiled": compiled})
         return list(self._rows)
+
+    def catalog_categories(self, ctx):
+        # K-086 D6: a catalog call reads the category list first; none here.
+        return []
 
 
 # ── T7 ───────────────────────────────────────────────────────────────────────

@@ -63,7 +63,7 @@ class StubServices:
                  add_result=_UNSET, remove_result=_UNSET,
                  cart_result=None, order_result=_UNSET,
                  profile_result=None, structured_query_rows=None, catalog=None,
-                 has_category=True):
+                 has_category=True, categories=None):
         self._search_rows = search_rows or []
         self._link_ok = link_ok
         self.posted: list[dict] = []
@@ -81,6 +81,11 @@ class StubServices:
         # K-078 id2 D8.1: what `has_category` answers (default: a known category)
         self._has_category = has_category
         self.category_checks: list = []
+        # K-086 D6: what `catalog_categories` answers (default: none, so the
+        # querygen prompt and every pre-existing query_graph_data result are
+        # unchanged)
+        self._categories = [] if categories is None else categories
+        self.categories_reads: int = 0
         # §16 Cart / Order (K-053 M6) — set the *_result kwargs to script a
         # call's return value; every call is recorded so the tool's
         # argument-mapping into the service (productId/quantity keyword
@@ -142,6 +147,10 @@ class StubServices:
     def has_category(self, ctx, *, category):
         self.category_checks.append(category)
         return self._has_category
+
+    def catalog_categories(self, ctx):
+        self.categories_reads += 1
+        return list(self._categories)
 
     def add_cart_item(self, ctx, *, product_id, quantity):
         self.added.append({"product_id": product_id, "quantity": quantity})
@@ -1682,6 +1691,267 @@ def test_query_request_instructions_still_formats_with_dataset_schema():
     assert "{dataset_schema}" not in prompt
     assert "Product" in prompt
     assert "price" in prompt
+
+
+# ── K-086 D6: the catalog's categories in the querygen prompt (plan §4.1) ────
+
+_DEMO_CATEGORIES = [
+    "Accessories", "Audio", "Cameras", "Displays",
+    "Peripherals", "Smart Home", "Storage", "Wearables",
+]
+
+
+def _categories_block(categories):
+    # D6's wording, typed here from the plan rather than imported, so a
+    # drifted module constant cannot certify itself.
+    return (
+        f"Product.category is exactly one of: {', '.join(categories)}. When the "
+        "question names one of these categories, in any language, filter on "
+        "category with the listed value exactly as written here, never on name "
+        "and never with the question's own word. When the question names a "
+        "specific product, keep filtering on its name."
+    )
+
+
+def _no_categories_prompt(schema):
+    return tools._QUERY_REQUEST_INSTRUCTIONS.format(
+        dataset_schema=tools._describe_dataset_schema(schema)
+    )
+
+
+def test_query_request_prompt_without_categories_is_byte_identical_to_before():
+    # T-B3, first half: the knowledge_base path's pin.
+    assert (tools._build_query_request_system_prompt(querygen.CATALOG_SCHEMA)
+            == _no_categories_prompt(querygen.CATALOG_SCHEMA))
+
+
+def test_query_request_prompt_with_categories_ends_with_the_category_block():
+    # T-B3, second half.
+    prompt = tools._build_query_request_system_prompt(
+        querygen.CATALOG_SCHEMA, categories=["Audio", "Peripherals"],
+    )
+
+    assert prompt.startswith(_no_categories_prompt(querygen.CATALOG_SCHEMA))
+    assert prompt.endswith(_categories_block(["Audio", "Peripherals"]))
+
+
+def test_query_graph_data_catalog_prompt_lists_the_catalogs_categories_once():
+    # T-B4.
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}], categories=_DEMO_CATEGORIES)
+    llm = StubQueryLLM(_CATALOG_FILTER_REPLY)
+    tool = QueryGraphDataTool(svc, llm=llm)
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    system = llm.calls[0][0]
+    assert system["role"] == "system"
+    assert system["content"].endswith(_categories_block(_DEMO_CATEGORIES))
+    assert svc.categories_reads == 1
+
+
+def test_query_graph_data_knowledge_base_prompt_never_reads_categories():
+    # T-B5: listing `Entity.type` would move KB Layer 1 for a dataset no
+    # DEF-C customer touches (§4.1).
+    svc = StubServices(structured_query_rows=[{"e.name": "x"}], categories=_DEMO_CATEGORIES)
+    llm = StubQueryLLM('{"matches": [{"var": "e", "label": "Entity"}], "returns": ["e.name"]}')
+    tool = QueryGraphDataTool(svc, llm=llm)
+
+    tool.run({"question": "q", "dataset": "knowledge_base"}, ctx=CTX, run={})
+
+    assert svc.categories_reads == 0
+    assert llm.calls[0][0]["content"] == _no_categories_prompt(querygen.KNOWLEDGE_BASE_SCHEMA)
+
+
+def test_query_graph_data_empty_catalog_categories_leave_the_prompt_unchanged():
+    # §4.1 call site: an empty list (empty catalog) passes `None`, never a
+    # "exactly one of: ." block.
+    svc = StubServices(structured_query_rows=[{"p.name": "x"}], categories=[])
+    llm = StubQueryLLM(_CATALOG_FILTER_REPLY)
+    tool = QueryGraphDataTool(svc, llm=llm)
+
+    tool.run({"question": "q", "dataset": "catalog"}, ctx=CTX, run={})
+
+    assert llm.calls[0][0]["content"] == _no_categories_prompt(querygen.CATALOG_SCHEMA)
+
+
+# ── K-086 D7: an empty catalog result naming an unknown category or product ──
+# (plan §4.2). The stub's `lookup_product` is an exact-key `dict.get`; a test
+# that needs the repository's normalising lookup keys BOTH the raw and the
+# normalised name to one row whose `name` is the real one (review Pass 2 N2).
+
+_MOUSE_ROW = {"productId": "wireless-mouse-pro", "name": "Wireless Mouse Pro",
+              "category": "Peripherals", "price": 29.99}
+_MOUSE_BOTH_KEYS = {"Wireless Mouse Pro": _MOUSE_ROW, "wireless mouse pro": _MOUSE_ROW}
+_ABSTAIN = {"items": [], "finding": "no matching data found"}
+
+
+def _catalog_reply(*filters):
+    return json.dumps({
+        "matches": [{"var": "p", "label": "Product", "filters": [
+            {"property": p, "op": op, "value": v} for p, op, v in filters
+        ]}],
+        "returns": ["p.name"],
+    })
+
+
+def _recovery(categories=_DEMO_CATEGORIES):
+    return {"items": [], "finding": tools.QUERY_CATALOG_MISS_FINDING,
+            "hint": tools.QUERY_CATALOG_MISS_HINT, "categories": categories}
+
+
+def _run(svc, reply, dataset="catalog"):
+    tool = QueryGraphDataTool(svc, llm=StubQueryLLM(reply))
+    return json.loads(tool.run({"question": "q", "dataset": dataset}, ctx=CTX, run={}))
+
+
+def test_query_graph_data_recovers_on_the_es_translated_category():
+    # T-B6: DEF-C's es completion, verbatim shape.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("category", "=", "periféricos")))
+
+    assert out == _recovery()
+    assert svc.categories_reads == 1  # D6's read, reused — never a second one
+    assert svc.category_checks == []  # never `has_category` (review M1)
+
+
+def test_query_graph_data_recovers_on_an_unknown_category_in_any_filter_position():
+    # T-B6b (not in §6.2): the miss is the second filter, so a trigger that
+    # read only `filters[0]` would fall through to the dead end.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("price", "<", 100), ("category", "=", "periféricos")))
+
+    assert out == _recovery()
+
+
+def test_query_graph_data_recovers_on_a_category_word_sent_as_a_name():
+    # T-B7: DEF-C's pt-BR completion.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("name", "=", "periféricos")))
+
+    assert out == _recovery()
+    assert svc.looked_up == ["periféricos"]
+
+
+def test_query_graph_data_recovers_on_an_unknown_normalized_name():
+    # T-B8.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("nameNormalized", "=", "periféricos")))
+
+    assert out == _recovery()
+
+
+def test_query_graph_data_keeps_the_abstention_for_a_known_category_emptied_by_price():
+    # T-B9.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("category", "=", "Peripherals"), ("price", "<", 1)))
+
+    assert out == _ABSTAIN
+
+
+def test_query_graph_data_keeps_the_abstention_for_a_known_exact_name_emptied_by_price():
+    # T-B10: the raw key hits and `row["name"] == value`.
+    svc = StubServices(categories=_DEMO_CATEGORIES, products_by_name=_MOUSE_BOTH_KEYS)
+
+    out = _run(svc, _catalog_reply(("name", "=", "Wireless Mouse Pro"), ("price", "<", 1)))
+
+    assert out == _ABSTAIN
+    assert svc.looked_up == ["Wireless Mouse Pro"]
+
+
+@pytest.mark.parametrize("filters", [(), (("price", "<", 1),)], ids=["no-filter", "range-only"])
+def test_query_graph_data_keeps_the_abstention_with_no_category_or_name_filter(filters):
+    # T-B11.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(*filters))
+
+    assert out == _ABSTAIN
+    assert svc.looked_up == []
+
+
+def test_query_graph_data_unparseable_reply_runs_no_recovery_check():
+    # T-B12.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, "sorry, no idea")
+
+    assert out == _ABSTAIN
+    assert svc.looked_up == [] and svc.category_checks == []
+
+
+def test_query_graph_data_knowledge_base_gets_no_recovery():
+    # T-B13: the KB dataset gets F2, not K-086 (§1).
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+    reply = json.dumps({"matches": [{"var": "e", "label": "Entity", "filters": [
+        {"property": "name", "op": "=", "value": "periféricos"}]}], "returns": ["e.type"]})
+
+    out = _run(svc, reply, dataset="knowledge_base")
+
+    assert out == _ABSTAIN
+    assert svc.looked_up == [] and svc.category_checks == []
+
+
+def test_query_graph_data_non_empty_result_runs_no_recovery_check():
+    # T-B14.
+    rows = [{"p.name": "Wireless Mouse Pro"}]
+    svc = StubServices(structured_query_rows=rows, categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("name", "=", "periféricos")))
+
+    assert out == {"items": rows}
+    assert svc.looked_up == [] and svc.category_checks == []
+
+
+def test_query_catalog_miss_text_avoids_the_none_phrase_and_routes_to_both_tools():
+    # T-B15: "no matching" is the phrase models turn into "we have none"
+    # (K-078 R2).
+    assert "no matching" not in tools.QUERY_CATALOG_MISS_FINDING
+    assert "filter_products" in tools.QUERY_CATALOG_MISS_HINT
+    assert "lookup_product_fact" in tools.QUERY_CATALOG_MISS_HINT
+
+
+def test_query_graph_data_recovers_on_a_case_variant_of_a_real_category():
+    # T-B16 (review M1): `compile()` matched `category` raw, so a normalising
+    # check would call "peripherals" known and recreate DEF-C.
+    svc = StubServices(categories=_DEMO_CATEGORIES)
+
+    out = _run(svc, _catalog_reply(("category", "=", "peripherals")))
+
+    assert out == _recovery()
+
+
+def test_query_graph_data_recovers_on_a_case_variant_of_a_real_name():
+    # T-B17 (review M1): the normalising lookup hits, but the raw `=` failed.
+    svc = StubServices(categories=_DEMO_CATEGORIES, products_by_name=_MOUSE_BOTH_KEYS)
+
+    out = _run(svc, _catalog_reply(("name", "=", "wireless mouse pro")))
+
+    assert out == _recovery()
+
+
+def test_query_graph_data_keeps_the_abstention_for_a_known_normalized_name_emptied_by_price():
+    # T-B18 (review m6): both matchers normalise, so the product exists and
+    # another filter emptied the result.
+    svc = StubServices(categories=_DEMO_CATEGORIES, products_by_name=_MOUSE_BOTH_KEYS)
+
+    out = _run(svc, _catalog_reply(("nameNormalized", "=", "wireless mouse pro"),
+                                   ("price", "<", 1)))
+
+    assert out == _ABSTAIN
+
+
+def test_query_graph_data_empty_catalog_gets_no_recovery():
+    # T-B19 (review n3): "these are all the catalog's categories" over [] is false.
+    svc = StubServices(categories=[])
+
+    out = _run(svc, _catalog_reply(("category", "=", "periféricos")))
+
+    assert out == _ABSTAIN
 
 
 def test_query_request_instructions_includes_a_name_projection_example():

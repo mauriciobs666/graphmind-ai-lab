@@ -4313,6 +4313,43 @@ def test_catalog_index_is_id_and_name_only_sorted_by_name():
     ]
 
 
+def test_catalog_categories_are_the_sorted_distinct_stored_values():
+    """K-086 D6 T-B1 (`docs/plans/salesperson-query-graph-data.md` §4.1): the
+    raw stored `category` values, deduplicated and sorted — what the querygen
+    prompt lists and what `query_graph_data`'s recovery tests membership in."""
+    repo = FakeRepo()
+    repo.products = [
+        {"productId": "wireless-mouse", "name": "Wireless Mouse",
+         "category": "Peripherals", "price": 25.0},
+        {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker",
+         "category": "Audio", "price": 89.99},
+        {"productId": "webcam", "name": "Webcam",
+         "category": "Peripherals", "price": 59.0},
+        {"productId": "smart-plug", "name": "Smart Plug",
+         "category": "Smart Home", "price": 19.0},
+    ]
+    svc = make_service(repo)
+
+    assert svc.catalog_categories(CTX) == ["Audio", "Peripherals", "Smart Home"]
+
+
+def test_catalog_categories_reads_the_whole_catalog_once_with_no_new_query():
+    """K-086 D6 T-B2: one unfiltered `filter_products` read at
+    `CATALOG_INDEX_LIMIT`, the same read and truncation posture as
+    `catalog_index` — no new Cypher."""
+    repo = FakeRepo()
+    repo.products = [
+        {"productId": "a", "name": "A", "category": "Audio", "price": 1.0},
+    ]
+    svc = make_service(repo)
+
+    svc.catalog_categories(CTX)
+
+    assert repo.calls == [
+        ("filter_products", None, None, None, CATALOG_INDEX_LIMIT)
+    ]
+
+
 # ── K-078 id2 D8.1: has_category ──────────────────────────────────────────────
 
 

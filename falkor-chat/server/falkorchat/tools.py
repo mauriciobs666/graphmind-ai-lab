@@ -413,6 +413,27 @@ FILTER_CATEGORY_MISS_HINT = (
     "with its exact catalog name from this list"
 )
 
+#: `query_graph_data`'s result when an empty `catalog` result names a category
+#: or product that does not exist exactly as written (K-086 D7,
+#: `docs/plans/salesperson-query-graph-data.md` §4.2). The finding avoids
+#: "no matching", the phrase models turn into "we have none" (K-078 R2). The
+#: hint routes to the deterministic `filter_products` rather than a second
+#: `query_graph_data` translation, and to `lookup_product_fact` for one
+#: product; both are granted in `salesperson@v9`, which never mentions this
+#: result, so the instruction rides here, as with `FILTER_CATEGORY_MISS_HINT`.
+QUERY_CATALOG_MISS_FINDING = "no catalog category or product has that exact name"
+QUERY_CATALOG_MISS_HINT = (
+    "these are all the catalog's categories; if the customer meant one of them, in any "
+    "language, call filter_products with that exact category; to find one "
+    "product, call lookup_product_fact with its name"
+)
+#: The filter properties D7's trigger (b) resolves through `lookup_product` —
+#: bound to the name properties explicitly, not to `schema.identity`: F2 asks
+#: which column labels a row, (b) asks whether the value is a product name
+#: (review m6), so a future `productId` identity must never reach
+#: `lookup_product(name=…)`.
+_CATALOG_NAME_PROPERTIES = frozenset({"name", "nameNormalized"})
+
 
 def _product_not_found(product_id: Any) -> str:
     """The cart tools' abstention result for a `productId` that doesn't resolve
@@ -1007,8 +1028,32 @@ _QUERY_REQUEST_INSTRUCTIONS = (
 )
 
 
-def _build_query_request_system_prompt(schema: querygen.DatasetSchema) -> str:
-    return _QUERY_REQUEST_INSTRUCTIONS.format(dataset_schema=_describe_dataset_schema(schema))
+# K-086 D6 (`docs/plans/salesperson-query-graph-data.md` §4.1): the catalog's
+# stored categories, appended for a `catalog` call only. Without them the
+# querygen model can only copy the customer's own word ("periféricos") into a
+# raw, case-sensitive `category =` filter. "Exactly as written" because
+# `querygen.compile` binds `category` raw; the last sentence keeps the
+# "a named item filters on `name`" rule above in force.
+_CATALOG_CATEGORIES_INSTRUCTION = (
+    "Product.category is exactly one of: {categories}. When the question names "
+    "one of these categories, in any language, filter on category with the "
+    "listed value exactly as written here, never on name and never with the "
+    "question's own word. When the question names a specific product, keep "
+    "filtering on its name."
+)
+
+
+def _build_query_request_system_prompt(
+    schema: querygen.DatasetSchema, *, categories: list[str] | None = None,
+) -> str:
+    """The internal querygen call's system prompt. With `categories=None` it is
+    byte-identical to the pre-K-086 prompt (the `knowledge_base` path)."""
+    prompt = _QUERY_REQUEST_INSTRUCTIONS.format(dataset_schema=_describe_dataset_schema(schema))
+    if categories:
+        prompt += "\n\n" + _CATALOG_CATEGORIES_INSTRUCTION.format(
+            categories=", ".join(categories)
+        )
+    return prompt
 
 
 class QueryGraphDataTool:
@@ -1058,6 +1103,28 @@ class QueryGraphDataTool:
     identity property). `compile()` itself is unchanged, and the prepended
     column is `name`, never `productId`: this tool surfaces no cart-write ID
     (§3.2).
+
+    **Catalog categories (K-086 D6/D7, same plan §4).** For the `catalog`
+    dataset only, `services.catalog_categories` — the stored `category`
+    values, read once per call — is listed in the querygen prompt, so a
+    category the customer names in another language maps onto a stored value
+    instead of being copied into the filter. When that catalog query comes
+    back empty and the list is non-empty, `_names_unknown_value` asks whether
+    an `=` filter names something that does not exist exactly as the query
+    matched it (raw and case-sensitive for `category`/`name`; normalised for
+    `nameNormalized`):
+    - a `category` not in the list, a `name` that `services.lookup_product`
+      misses or resolves to a differently-spelled product, or a
+      `nameNormalized` it misses, returns `{"items": [], "finding":
+      QUERY_CATALOG_MISS_FINDING, "hint": QUERY_CATALOG_MISS_HINT,
+      "categories": […]}` — the same list, no `catalog` index, so the result
+      itself grounds no `productId`; the hint routes to `filter_products`
+      (deterministic, its rows carry `name` and `price` together) and
+      `lookup_product_fact`;
+    - every other empty result — a known category or exact name emptied by
+      another filter, no category/name filter, an empty catalog, the
+      `knowledge_base` dataset, and every parse/validation/compile abstention
+      — is `{"items": [], "finding": "no matching data found"}`.
 
     Every failure short of a genuine infrastructure fault — an unparseable or
     schema-invalid structured completion, or a `querygen.compile` rejection
@@ -1121,12 +1188,21 @@ class QueryGraphDataTool:
             return json.dumps({"items": [], "finding": "unknown dataset"})
 
         question = arguments.get("question", "")
+        # K-086 D6: only the catalog lists its categories. Deliberately keyed
+        # on the dataset name, not on `schema.facets` (whose `Product` entry,
+        # `category`, is the same property): the values come from a
+        # catalog-specific service, and listing `Entity.type` would move KB
+        # Layer 1 (plan §4.1, §5 item 3).
+        is_catalog = arguments.get("dataset") == "catalog"
+        categories = self._services.catalog_categories(ctx) if is_catalog else []
         llm = self._models.llm(
             "step", requested=run.get("stepModel"), ws=ctx.ws,
             overrides=run.get("modelOverrides"),
         )
         reply = llm.complete([
-            {"role": "system", "content": _build_query_request_system_prompt(schema)},
+            {"role": "system", "content": _build_query_request_system_prompt(
+                schema, categories=categories or None,
+            )},
             {"role": "user", "content": question},
         ])
         parsed = extract_own_line_json_object(
@@ -1152,8 +1228,45 @@ class QueryGraphDataTool:
             ctx, graph_key, compiled, timeout=querygen.DEFAULT_QUERY_TIMEOUT_MS,
         )
         if not rows:
+            # K-086 D7: only on an empty catalog result, and never over an
+            # empty category list ("these are all the categories" would be
+            # false). `request` is the post-F2 one; F2 never changes filters
+            # (pinned in `test_querygen.py`).
+            if is_catalog and categories and self._names_unknown_value(
+                ctx, request.matches[0].filters, categories,
+            ):
+                return json.dumps({
+                    "items": [], "finding": QUERY_CATALOG_MISS_FINDING,
+                    "hint": QUERY_CATALOG_MISS_HINT, "categories": categories,
+                })
             return json.dumps({"items": [], "finding": "no matching data found"})
         return json.dumps({"items": rows})
+
+    def _names_unknown_value(
+        self, ctx: CallContext, filters: list[querygen.QueryFilter], categories: list[str],
+    ) -> bool:
+        """Whether an `=` filter names a category or product that does not exist
+        **exactly as the empty query matched it** (K-086 D7, plan §4.2).
+
+        Each check uses the matcher the query used, nothing looser:
+        `querygen.compile` binds `category`/`name` raw and case-sensitively and
+        normalises only `nameNormalized`. (a) `category`: raw membership in the
+        stored list, never `has_category`, which normalises and would call
+        "peripherals" known. (b) `name`: `lookup_product` normalises, so a hit
+        counts as known only when the row's stored `name` equals the raw value;
+        `nameNormalized`: any hit, since both sides normalised. A known value
+        means another filter emptied the result, so the old abstention stands.
+        """
+        for filt in filters:
+            if filt.op != "=":
+                continue
+            if filt.property == "category" and filt.value not in categories:
+                return True
+            if filt.property in _CATALOG_NAME_PROPERTIES:
+                row = self._services.lookup_product(ctx, name=str(filt.value))
+                if row is None or (filt.property == "name" and row["name"] != filt.value):
+                    return True
+        return False
 
 
 class HumanHandoffSignal(Exception):

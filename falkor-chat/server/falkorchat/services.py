@@ -2961,6 +2961,24 @@ class Services:
         index = [{"productId": r["productId"], "name": r["name"]} for r in rows]
         return sorted(index, key=lambda r: r["name"])
 
+    def catalog_categories(self, ctx: CallContext) -> list[str]:
+        """The catalog's distinct `category` values, raw as stored and sorted
+        (K-086 D6, `docs/plans/salesperson-query-graph-data.md` §4.1).
+
+        `query_graph_data` lists them in its internal querygen prompt, so a
+        category named in another language maps onto a stored value, and its
+        empty-catalog-result recovery tests a `category = …` filter for exact
+        membership here, the same raw `=` match `querygen.compile` ran (§4.2).
+        Values are **not** normalised, for that reason. Built from the same
+        whole-catalog `repository.filter_products` read as `catalog_index` (no
+        new Cypher), with the same `CATALOG_INDEX_LIMIT` truncation posture.
+        """
+        rows = self._repo.filter_products(
+            category=None, min_price=None, max_price=None,
+            limit=CATALOG_INDEX_LIMIT,
+        )
+        return sorted({r["category"] for r in rows})
+
     # ── §16 Cart / Order (K-053 M6) ────────────────────────────────────────────
     #
     # `docs/plans/workflow-cart-and-totals.md` §3.3, with the explicit

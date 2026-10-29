@@ -2714,7 +2714,11 @@ category returns `{"items": [], "finding": "no catalog category has that name", 
 "catalog": […]}`, where `catalog` is the price-free `{productId, name}` list a
 `lookup_product_fact` miss carries. Every other empty result, whether a known category emptied by
 its price range or a blank or omitted category, is `{"items": [], "finding": "no matching products
-found"}`. The query is unchanged. Ordered by price
+found"}`. `Services.catalog_categories` is built from this same unfiltered query (the distinct
+stored `category` values, no new Cypher), and `query_graph_data`'s catalog recovery tests a
+`category` against that list exactly, as `querygen.compile`'s raw `=` does, and a name through
+§15.1's lookup plus a raw `name` comparison (`docs/plans/salesperson-query-graph-data.md` §4.2,
+K-086). The query is unchanged. Ordered by price
 ascending — a stable, predictable order for a listing shape, cheap once index-backed.
 
 **Case/whitespace-insensitive `category` (live-discovered fix, 2026-08-28).** The original shape
