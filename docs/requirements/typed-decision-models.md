@@ -19,7 +19,8 @@ is the experimentation vehicle.
   of free text. Stored model-bench runs show a median of ~650–810 ms per decision on this hardware.
 - A decision model answers typed questions (predicate / choice / score) with probabilities in one
   forward pass, and it cannot produce malformed output. Laya measured locally through LM Studio's
-  `/v1/decisions`: ~20 ms warm and deterministic across repeats.
+  `/v1/decisions`: ~20 ms warm and identical across repeats within one load. Two separate loads gave slightly
+  different results on the same items (false-suspend 14/30 vs. 12/30).
 - **Off-the-shelf Laya is not a drop-in replacement.** An informal run (not a model-bench run) over
   the 85 guard-judge golden items, counted the way model-bench counts them: Laya at a 0.5 cut-off
   falsely advanced 14/40 clear-suspend items (plus 9/15 boundary items) and falsely suspended
