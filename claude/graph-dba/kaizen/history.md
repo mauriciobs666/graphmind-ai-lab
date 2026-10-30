@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
+
+- **What:** How-you-work step 7's header-block line now also says: revising a `-graph.md` note after a review or stakeholder answer rewrites it in place; the return message lists findings handled and answers folded in. Rewrote the existing line; no new line. Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
+- **Why:** plan §4 U2 of `docs/plans/document-size-discipline.md` (unit I2 of `docs/plans/document-size-discipline-coordination.md`) — not-yet-archived `requirements/`/`plans/`/`reviews/` documents stop growing across revisions; the rule lives once in root `AGENTS.md` and each prompt carries only its own action.
+- **Plan items:** parking-lot note added (first-live-use check).
+
 ## 2026-10-14 — `joern-cpg` skill: a rebuild's done-condition includes refreshing `cpg/.cpg-artifacts/` (edited by `cobb`)
 
 - **What:** a short paragraph under "Reloading is deliberate" in `skills/joern-cpg/SKILL.md`. A

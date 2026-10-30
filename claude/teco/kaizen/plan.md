@@ -134,6 +134,7 @@
   the post-extraction text, not before it.
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 - **A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste
   Stage D).** The plan (`claude/docs/plans/prompt-waste-reduction.md`) specified this rule for
   `architect.md`, but `architect` authors no delegation-summary table — the unit/step ledger in

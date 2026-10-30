@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
+
+- **What:** Five in-place rewrites, no new lines: Traceability (a consult is one entry appended once it concludes, `Consult: <agent> on <question> → <result>`, per plan D5); Write as you go (template shape, no narrative, FR/AC rework replaces its text); decision-log template line (adds FR/AC affected + reversal names the overturned entry); Close with a readback (flip also needs an `analyst` review covering the growth-stops check, requested as a consult; per the 2026-10-30 stakeholder decision mirrored in root `AGENTS.md` E4, its latest verdict must not be "needs changes"); isolated-context Mode 1 (returns "ready pending the `analyst` gate", never a bare ready-for-design confirmation). After the I3 gate (`docs/reviews/document-size-discipline-impl.md`, M1/m2/nit): the consult entry gained `(FR/AC affected)` and Mode 2/3 now state "the same entry's three parts"; the terminology-reversal bullet no longer narrates log changes (an earlier entry is never edited, a reversal is a new template-shaped entry); the close-out step logs "the closing decision-log entry in the template's shape". Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
+- **Why:** plan §4 U2 of `docs/plans/document-size-discipline.md` (unit I2 of `docs/plans/document-size-discipline-coordination.md`) — not-yet-archived `requirements/`/`plans/`/`reviews/` documents stop growing across revisions; the rule lives once in root `AGENTS.md` and each prompt carries only its own action.
+- **Plan items:** parking-lot note added (first-live-use check).
+
 ## 2026-10-17 — Write guard becomes repository-bounded (`guard-tico-repo-writes.sh`)
 
 - **What:** replaced `hooks/guard-tico-doc-writes.sh` (allowlist `docs/requirements/*`,

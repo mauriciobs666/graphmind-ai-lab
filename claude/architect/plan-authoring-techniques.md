@@ -48,7 +48,7 @@ language means one substitution is wrong for some of them.
 ## Reconciling a diverging delegated note: rewrite in place, then sweep every downstream reference by grep, not recall
 
 When a delegated `-graph.md`/`-ml.md` note diverges from a premise the plan left open pending live
-verification, reconcile by rewriting the design section in place with a short revision note, then
+verification, reconcile by rewriting the design section in place, updating the header's one-line revision note, then
 sweep every downstream reference for the old premise — delegation table, stage file lists, AC test
 table, risks section, and every other structurally-identical enumeration, including a routing or
 authority table your revision note never reasoned through. A partial find-and-replace leaves the

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
+
+- **What:** "Your deliverable: the review" opening paragraph gained one sentence: a review of a document the growth-stops bullet covers also runs that check. Rewrite of an existing line. Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
+- **Why:** plan §4 U2 of `docs/plans/document-size-discipline.md` (unit I2 of `docs/plans/document-size-discipline-coordination.md`) — not-yet-archived `requirements/`/`plans/`/`reviews/` documents stop growing across revisions; the rule lives once in root `AGENTS.md` and each prompt carries only its own action.
+- **Plan items:** parking-lot note added (first-live-use check).
+
 ## 2026-09-20 — standing distillation pass, `cobb`, U7 of `claude/docs/plans/kaizen-distillation3-coordination.md`: 1 `kaizen_team` entry — PROMOTED (via cobb's own remit, resolving the source review's own open question), not discarded outright despite prior deeper publication — `security-expert` closes at 0 produced / 0 mentioned
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`

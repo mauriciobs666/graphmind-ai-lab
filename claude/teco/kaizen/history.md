@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
+
+- **What:** Workflow step-5 bullet on re-gating several same-revision fixes gained one sentence, at the bullet's end (moved there after the I3 gate's n1, `docs/reviews/document-size-discipline-impl.md`): for an in-scope document the revision brief says rewrite in place and the re-gate brief asks for the growth-stops check. Rewrite of an existing line (teco is far over budget). Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
+- **Why:** plan §4 U2 of `docs/plans/document-size-discipline.md` (unit I2 of `docs/plans/document-size-discipline-coordination.md`) — not-yet-archived `requirements/`/`plans/`/`reviews/` documents stop growing across revisions; the rule lives once in root `AGENTS.md` and each prompt carries only its own action.
+- **Plan items:** parking-lot note added (first-live-use check).
+
 ## 2026-10-17 — Write guard logic moves to the shared `scripts/guard-repo-writes.sh` core
 
 - **What:** `hooks/guard-repo-writes.sh` is now a thin wrapper (passes `teco`) over

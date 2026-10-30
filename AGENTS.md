@@ -160,14 +160,29 @@ engineering** (Claude Code and OpenCode artifacts).
   - **A living document is compacted at milestone close, not only appended to.** A document read
     **whole** to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md` — can never
     freeze, so it never sheds weight on its own; one read **by lookup** — `HISTORY.md`,
-    `QUERIES.md`, `reviews/`, closed `plans/`, `test-reports/` — may grow without bound, and that
-    is correct. So at milestone close, in the same pass that flips that milestone's documents to
+    `QUERIES.md`, `test-reports/`, `-coordination` ledgers, and any `archived` document — may grow
+    without bound, and that is correct. A not-yet-`archived` `requirements/`, `plans/` or
+    `reviews/` document also counts as read whole, but the next bullet bounds it, not the closeout
+    below. So at milestone close, in the same pass that flips that milestone's documents to
     `archived`, **`teco` lists what should go** — every delivered item, plus each section of a
     living document that tracks **work status** rather than the system itself: a "currently in
     progress" header, a plan-doc row for a document that now exists, a delivered-ticket
     annotation. **The human applies the list** — the by-kind owner table below routes none of
     these document kinds, and deleting a delivered item is a judgment call, not a mechanical edit.
     **Verify it is in `HISTORY.md` before deleting** — a closeout is a move, not a discard.
+  - **A not-yet-`archived` `requirements/`, `plans/` (not `-coordination`) or `reviews/` document
+    stops growing across revisions** (`docs/requirements/document-size-discipline.md`). Only new
+    scope adds words. Rework replaces the affected text in place: answering findings, folding in
+    answers, fixing errors. A plan or specialist note states the current design only. Its reasons
+    are stated as design, findings are cited by ID at most, and it has no finding→resolution
+    table or disposition list. An open stakeholder question stays until it is answered, then it is
+    folded in and removed. The review's next `## Pass N` records outcomes (collision rule 5). A
+    requirements decision log is append-only: each entry is one question → one answer, plus the
+    FR/AC it affects. A reversing entry names the entry it overturns. A fact has one home, and
+    other documents cite it. Every review gate checks a revision against this bullet. For any
+    growth it says whether it is new scope or rework, and it reports rework growth, restated
+    history and restated facts as findings; there is no numeric threshold. An existing document
+    complies at its next ordinary revision.
   - **`BACKLOG.md` is forward-looking only — a delivered item does not stay in it, not even as an
     index row.** Its record is `HISTORY.md`, which indexes every delivered item by milestone; the
     exception is a fact that is a **live constraint on the system** rather than a record of work
@@ -212,7 +227,8 @@ engineering** (Claude Code and OpenCode artifacts).
     2 and 4 are a matched pair: adopt both or neither. (5) For a second document of the same
     kind, topic, **and role**, the selector is one question — **has the earlier document been
     approved, gated, or executed against?** **No** → revise it in place (bump the optional
-    `Version:` and add a dated revision note — **one dated line, not a narrative**; a review gets
+    `Version:` and add a dated revision note — **one dated line, not a narrative** — under the
+    growth-stops bullet it replaces the previous line; a review gets
     a dated `## Pass N` section). **Yes** → it stays
     intact and you write a successor with the **ordinal on the slug** (`executor2.md`,
     `executor2-coordination.md`), *even while the earlier one is still `active`*. **A `reviews/`
@@ -220,7 +236,8 @@ engineering** (Claude Code and OpenCode artifacts).
     re-review's value is pass 1 and pass 2 read together. **A later `## Pass N` is compact
     by rule:** the verdict and genuinely new findings in full, while a finding already reported
     gets **one disposition line** — fixed / not fixed / superseded, plus the evidence you
-    rechecked — never re-argued prose. Two pointer
+    rechecked — never re-argued prose; so does each stakeholder answer folded into the artifact
+    since the last pass (question → answer). Two pointer
     pairs, never mixed: a successor that **replaces** carries `Supersedes:` and the earlier
     document gains `Superseded by:` and flips to `superseded`; a successor that **adds to** an
     earlier document that stays authoritative carries `Extends:` and the earlier one gains
@@ -243,13 +260,14 @@ engineering** (Claude Code and OpenCode artifacts).
     else needs it), `Reviews:`.
   - **The closed `Status:` set — five values, and who flips each:** `Interviewing` and
     `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
-    stakeholder confirmation) · `active` (the producing agent, at creation; amendable in place
-    until the document has been approved, gated, or executed against) · `superseded` (whoever
-    writes the successor) · `archived` (**`teco`, at milestone close** — `teco` performs the
-    mechanical flips itself: its write guard allows any in-repo edit). For any
-    `archived` flip that is **more than** that mechanical one-token edit — bundled with other
-    changes, disputed, or needing judgment about what freezes — the flip still routes to the
-    by-kind owner:
+    stakeholder confirmation, after an `analyst` review of the document that includes the
+    growth-stops check and whose latest verdict is not "needs changes") · `active` (the producing
+    agent, at creation; amendable in place until the document has been approved, gated, or
+    executed against) · `superseded` (whoever writes the successor) · `archived` (**`teco`, at
+    milestone close** — `teco` performs the mechanical flips itself: its write guard allows any
+    in-repo edit). For any `archived` flip that is **more than** that mechanical one-token edit —
+    bundled with other changes, disputed, or needing judgment about what freezes — the flip still
+    routes to the by-kind owner:
     `plans/<slug>.md` → `architect` · `plans/<slug>-coordination.md` → `teco` ·
     `plans/`+`reviews/<slug>-ml.md` → `data-scientist` · `plans/<slug>-graph.md` → `graph-dba` ·
     `reviews/*` → `analyst` · `requirements/*` and `manuals/*` → `tico` · `test-plans/*` and

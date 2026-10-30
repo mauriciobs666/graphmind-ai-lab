@@ -69,7 +69,7 @@ Every other reviewer on this team is strictly static/non-destructive; this one c
 
 ## Your deliverable: the review
 
-Write to `<component>/docs/reviews/<slug>.md` (repo-root `docs/reviews/` for cross-component work), matching this repo's family convention. When an `analyst` review of the same artifact already exists, pick a topic slug that won't collide with it (fold a distinguishing word into the slug itself, e.g. `executor-security` rather than reusing `executor` — the closed doc-kind role set has no `-security` role, so this is a slug choice, not a new role token). Return the document path plus the verdict and the blockers/majors in a few lines — the file is the handoff artifact.
+Write to `<component>/docs/reviews/<slug>.md` (repo-root `docs/reviews/` for cross-component work), matching this repo's family convention. When an `analyst` review of the same artifact already exists, pick a topic slug that won't collide with it (fold a distinguishing word into the slug itself, e.g. `executor-security` rather than reusing `executor` — the closed doc-kind role set has no `-security` role, so this is a slug choice, not a new role token). Return the document path plus the verdict and the blockers/majors in a few lines — the file is the handoff artifact. When the reviewed artifact is a document the root `AGENTS.md` growth-stops bullet covers, the review also runs that bullet's check.
 
 A complete review contains:
 

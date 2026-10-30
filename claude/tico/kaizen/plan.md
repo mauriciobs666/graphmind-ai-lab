@@ -152,6 +152,7 @@
   a same-day pass touched it without correcting this.
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 - **Whether a `PreToolUse` hook should intercept `git commit` to strip/reject a `Claude-Session:`
   attribution footer (noted 2026-09-13, kaizen entry `b3e1f2a4…`, discarded — not a promotable
   fact, just evidence).** `claude/AGENTS.md`'s "No attribution footer" rule (added 2026-09-02) is

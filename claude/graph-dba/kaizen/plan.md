@@ -74,6 +74,7 @@
   item, in case a future occurrence supplies the missing pre-delete count.
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 
 - **Judged and kept, do not re-litigate (2026-08-24, C6 lint).** Five passages will read as class-6/7
   waste to a future sweep; all are keeps.

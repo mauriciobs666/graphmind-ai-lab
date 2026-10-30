@@ -800,6 +800,9 @@ but not all three. **Two findings, and the first materially amends finding 15:**
 
 ### Stage G — Living-document compaction (the closeout ratchet)
 
+*Partly superseded for not-yet-archived `requirements/`/`plans/`/`reviews/`
+(`docs/requirements/document-size-discipline.md` FR-1); the live rule is root `AGENTS.md`.*
+
 **The gap.** The module-documentation convention has a rule for how a document **freezes**
 (`Status: archived`, in place) and none for one that **never can**. Stages A–F fixed the register
 agents write in and the review genre; §1 scoped component documents out as history. But a living

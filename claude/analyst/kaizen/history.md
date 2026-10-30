@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
+
+- **What:** Deliverable item 2 (Findings) gained one sentence: gating an in-scope revision means running the growth-stops check, stating new scope vs. rework, giving `## Pass N` one-line outcomes for prior findings and folded-in answers, and always running it on a requirements document before its Ready-for-design flip. Appended to the existing item rather than a new list item (keeps the numbered skeleton intact). Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
+- **Why:** plan §4 U2 of `docs/plans/document-size-discipline.md` (unit I2 of `docs/plans/document-size-discipline-coordination.md`) — not-yet-archived `requirements/`/`plans/`/`reviews/` documents stop growing across revisions; the rule lives once in root `AGENTS.md` and each prompt carries only its own action.
+- **Plan items:** parking-lot note added (first-live-use check).
+
 ## 2026-09-20 — standing distillation pass, `cobb`, U1 of `docs/plans/kaizen-distillation3-coordination.md`: all 16 remaining `analyst` current-shape entries — 7 promoted, 9 discarded, 0 kept open
 
 - **What:** `cobb` distilled every `analyst`-produced current-shape `:KaizenEntry` still in

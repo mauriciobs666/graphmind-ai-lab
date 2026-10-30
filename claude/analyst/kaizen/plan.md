@@ -36,6 +36,7 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 - **No `analyst` backlog item opened by the 2026-09-20 sweep (U1 of
   `docs/plans/kaizen-distillation3-coordination.md`, all 16 remaining `analyst` `kaizen_team`
   entries).** 7 promoted, 9 discarded as already documented elsewhere (verified, not just cited);

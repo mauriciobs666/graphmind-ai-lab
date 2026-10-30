@@ -16,10 +16,10 @@ source of every edit is `docs/plans/document-size-discipline.md` §4 (v2, gated 
 | P2 | `analyst` | `a9a645c20926e70c0` | gated | review Pass 3 | gate on P1 → approve with suggestions | 89k tok / 13 tools (cumulative) |
 | P3 | `architect` | `aeb8328b14298b10a` (resumed) | accepted | plan v2 (2,225 w) | P4 | 108k tok / 4 tools (cumulative) |
 | P4 | `analyst` | `a9a645c20926e70c0` (resumed) | gated | review Pass 4 | gate on P3 → **approve** (nits n2, n3 open) | 98k tok / 4 tools (cumulative) |
-| I1 | `teco` (or `cobb`, at `teco`'s discretion) | — | pending | Plan §4 U1: E1–E4 in root `AGENTS.md`, E5 in `claude/docs/plans/prompt-waste-reduction.md`, applied **verbatim** as written in §4 | I3 | — |
-| I2 | `cobb` | — | pending | Plan §4 U2 table: pointer edits (≤ ~50 w net each, rewrite an existing line where possible) + each edited agent's `kaizen/plan.md` and `kaizen/history.md`; `claude/scripts/audit-team.sh` run | I3 | — |
-| I3 | `analyst` | — | pending | `docs/reviews/document-size-discipline-impl.md`: static review of the I1+I2 diffs per plan §4 U3 and §5 | gate on I1+I2 → — | — |
-| I4 | `tico` | — | pending | Plan §4 U4: `claude/docs/manuals/agent-team.md` l.115 mentions the analyst gate before Ready for design | `teco` doc check | — |
+| I1 | `teco` (or `cobb`, at `teco`'s discretion) | — (applied by `teco` directly) | accepted | Plan §4 U1: E1–E4 in root `AGENTS.md`, E5 in `claude/docs/plans/prompt-waste-reduction.md`, applied **verbatim** as written in §4 | I3 | — |
+| I2 | `cobb` | `aa8a460d8867ed2ee` | accepted | Plan §4 U2 table: pointer edits (≤ ~50 w net each, rewrite an existing line where possible) + each edited agent's `kaizen/plan.md` and `kaizen/history.md`; `claude/scripts/audit-team.sh` run | I3 → approve with suggestions (Pass 2) | 118k tok / 41 tools (cumulative) |
+| I3 | `analyst` | `a368e00f02a628c8c` | accepted | `docs/reviews/document-size-discipline-impl.md`: static review of the I1+I2 diffs per plan §4 U3 and §5 | gate on I1+I2 → Pass 2 **approve with suggestions** (p2-m1, p2-n2 → `tico`; p2-n1 fixed by teco) | 131k tok / 36 tools (cumulative) |
+| I4 | `tico` | `a353b0ba91c450262` | accepted | Plan §4 U4: `claude/docs/manuals/agent-team.md` l.115 mentions the analyst gate before Ready for design | `teco` doc check → ok (l.115 edge, walkthrough step 4; l.292 state edge by teco) | 62k tok / 5 tools (incl. FR-9/AC-9 round) |
 
 ## Done-conditions
 
@@ -41,5 +41,10 @@ source of every edit is `docs/plans/document-size-discipline.md` §4 (v2, gated 
 
 ## Notes
 
+- 2026-10-30: I1–I4 accepted and committed. Docs stay `active`: behavioural ACs (AC-2..AC-7, AC-9) are only evidenced at the first live cycle (plan §5); archive at that close. Plan §4 E4 wording predates the verdict condition. Follow-up: `audit-team.sh` check 7 identifier leaks in pre-existing files (not this coordination's).
+
 - 2026-10-29: stakeholder: Plan Q1 → yes (review Pass 3); M3 → accept ~+230 w on root `AGENTS.md`, no offset (Pass 4).
+- 2026-10-30: stakeholder: flip to Ready for design also needs the analyst review's latest verdict ≠ needs changes → root `AGENTS.md` E4 (teco), `tico.md` l.110 (`cobb`), FR-9/AC-9 + decision log (`tico`, agent `a353b0ba91c450262`, 47k tok / 4 tools). Plan §4 E4 text is superseded on this point by the requirements doc. I3 Pass 2 dispatched.
+- 2026-10-30: I3 AC-1 grep = 20 hits (19 at baseline + E1's new line), teco re-ran: 20. m3 skipped: root bullet is always loaded; `tico`/`teco` over budget.
+- 2026-10-30: I2 `audit-team.sh` RESULT FAIL is check 7 only (personal identifiers in pre-existing files outside this unit, none touched by I1/I2) → follow-up, not an I2 gate.
 - 2026-10-29: stakeholder: hand-applying U1 is too much effort → `teco` orchestrates I1–I4, I1 applied by an agent instead of the human. Overrides the plan's "U1 applied by the human"; the wording is unchanged.

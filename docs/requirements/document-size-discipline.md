@@ -1,6 +1,6 @@
 # Document size discipline — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-29
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-30
 
 ## Intent
 
@@ -81,7 +81,8 @@ not classified. During a live chain, reviews and active plans are in practice re
   is no numeric growth threshold: the reviewer judges whether any growth comes from new scope or
   from rework.
 - FR-9 — A requirements document gets an `analyst` review gate before it is flipped to Ready for
-  design; that gate includes the FR-8 check.
+  design; that gate includes the FR-8 check, and the flip requires the review's latest verdict to
+  be approve or approve with suggestions, never needs changes.
 
 ## Out of scope
 
@@ -119,8 +120,8 @@ not classified. During a live chain, reviews and active plans are in practice re
 - AC-8 (archived untouched; existing docs at next revision) — No archived document is edited for
   this feature; a non-archived existing document meets AC-2–AC-6 after its next ordinary revision.
 - AC-9 (requirements gated) — Given a requirements document about to be flipped to Ready for
-  design, then an `analyst` review of it exists and covers the FR-8 check; the flip happens only
-  after that review.
+  design, then an `analyst` review of it exists and covers the FR-8 check, and that review's latest
+  verdict is approve or approve with suggestions; otherwise the flip does not happen.
 
 ## Open questions
 
@@ -169,3 +170,4 @@ not classified. During a live chain, reviews and active plans are in practice re
 - 2026-10-29 — Correction (Pass 2 m5): the "FR-1's reach? → Only the FR-2 kinds" entry overturns, by narrowing, the "Bound while active … of any kind" entry.
 - 2026-10-29 — Where is a stakeholder ruling on a plan question recorded once folded in? → **The reviewer's next pass logs it**, one line (FR-4, AC-4; resolves Pass 2 m6).
 - 2026-10-29 — Analyst Pass 2 → approve with suggestions; m5, m6 folded. Status → **Ready for design** per the stakeholder's "Pass 2 first, then flip" decision.
+- 2026-10-30 — Does the Ready-for-design flip need only an existing `analyst` review, or also its verdict? → **Latest verdict must be approve or approve with suggestions**, not needs changes (FR-9, AC-9). Refines the "Who checks requirements documents? → Analyst gate added" entry.

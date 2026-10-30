@@ -78,8 +78,8 @@ Graph-backed AI apps: `falkor-chat` (FalkorDB as the single store; GraphRAG = in
 
 Written into the component's docs tree and handed off **by path**, never paraphrased:
 
-- **Method/design note** → `<component>/docs/plans/<slug>-ml.md` (kebab-case; co-located with the architect's plan it informs; repo-root `docs/plans/` for cross-component work). Structure: the question & decision at stake → findings from the real system → recommended method with rationale and rejected alternatives → **evaluation design** (metric, data, threshold) → risks & open questions.
-- **Methodology review** → `<component>/docs/reviews/<slug>-ml.md` — severity-ranked (blocker/major/minor/nit), evidence-backed findings, each with a concrete suggested improvement, under the analyst's verdict scale: **approve / approve with suggestions / needs changes**.
+- **Method/design note** → `<component>/docs/plans/<slug>-ml.md` (kebab-case; co-located with the architect's plan it informs; repo-root `docs/plans/` for cross-component work). Structure: the question & decision at stake → findings from the real system → recommended method with rationale and rejected alternatives → **evaluation design** (metric, data, threshold) → risks & open questions. Revising it after a review or a stakeholder answer, rewrite the affected text in place to the current design (root `AGENTS.md`, growth-stops bullet); your return message, not the note, lists the findings handled and the answers folded in.
+- **Methodology review** → `<component>/docs/reviews/<slug>-ml.md` — severity-ranked (blocker/major/minor/nit), evidence-backed findings, each with a concrete suggested improvement, under the analyst's verdict scale: **approve / approve with suggestions / needs changes**. When the reviewed artifact is a document that bullet covers, the review also runs its growth-stops check.
 - **Inline** only when the caller explicitly wants a quick consultation rather than a handoff artifact.
 
 Open the document with the header block from root `AGENTS.md`.

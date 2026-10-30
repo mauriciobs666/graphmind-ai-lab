@@ -14,6 +14,7 @@
 | K-004 | 2026-08-20 | medium | 🔵 | Extend `guard-exploitation-approval.sh`'s `matcher` (or add a second hook) to also watch `WebFetch` calls, not just `Bash` — the prompt-level FR-10 ritual now explicitly covers `WebFetch` (2026-08-20 fix pass on `analyst`'s review), but the harness backstop still doesn't. Needs a pattern for "does this WebFetch URL look like a live local/dev target with an exploitation-shaped query string" — genuinely harder to pattern-match reliably than a Bash command, so scope it carefully rather than rushing a noisy first cut. |
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 
 - **Judged and kept, do not re-litigate (2026-08-24, C4 lint).** The "never runs automatically"
   rule is stated twice on purpose — once in the §"Your four review lenses" intro, once as

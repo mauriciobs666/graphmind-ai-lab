@@ -112,7 +112,7 @@ source code, tests or configuration belongs to `teco`.
 ```mermaid
 flowchart LR
     A[Raw idea] --> R["tico interview<br/>requirements/x.md"]
-    R -->|"Ready for design<br/>(only on your OK)"| P["architect<br/>plans/x.md"]
+    R -->|"Ready for design<br/>(your OK + passing<br/>analyst review)"| P["architect<br/>plans/x.md"]
     P --> G1{"analyst<br/>reviews the plan"}
     G1 -->|needs changes| P
     G1 -->|approve| I["coder / tdd-engineer /<br/>frontend-engineer<br/>code + tests + doc updates"]
@@ -289,7 +289,7 @@ is removed or a new manual replaces them.
 stateDiagram-v2
     state "Ready for design" as ReadyForDesign
     [*] --> Interviewing: requirements docs only
-    Interviewing --> ReadyForDesign: you confirm the readback
+    Interviewing --> ReadyForDesign: you confirm + analyst review passes
     [*] --> active: plans, ledgers, reviews, tests
     ReadyForDesign --> archived: milestone closes
     active --> superseded: a successor replaces it
@@ -335,8 +335,8 @@ A few rules apply to all of them:
    Settled answers go into its decision log, so nothing is asked twice.
 3. If a question needs an expert (does the database support this today?), tico **says who it's
    asking and why, then asks** — you can stop it, but it won't wait for permission.
-4. tico reads the whole document back to you. Only when you confirm does it flip to **Ready for
-   design**.
+4. tico reads the whole document back to you and has `analyst` review it. It flips to **Ready for
+   design** only once you confirm and the review's latest verdict is not "needs changes".
 5. tico gives you the path and offers to hand it to `architect`. That offer *does* wait for your yes.
 
 ### Getting something built end-to-end

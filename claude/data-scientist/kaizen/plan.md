@@ -81,6 +81,7 @@
   next pass through that component.
 
 ## Parking lot / ideas
+- **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
 
 - **`lm-studio-model-notes.md`'s provenance section now carries two topics (noted 2026-09-07,
   U13 distillation).** The "A live-run report's provenance … verify live" section's habit (2) has
