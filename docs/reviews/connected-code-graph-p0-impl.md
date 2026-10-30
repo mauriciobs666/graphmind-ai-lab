@@ -4127,3 +4127,181 @@ benign.
 | c5, c6, c11 | the same with NEL / U+2028 / U+2029 | compile error, no download: none splits |
 | c7 | `\x7f//> using dep …` | compile error, no download (DEL not trimmed) |
 | c9, c10 | `//>␠␠using` / `//>\tusing` | rc 0, no download |
+
+## Spec amendments — graph-dba check (bundle-spec2 §1.4/§1.5/§1.6/§1.7.5/§1.11)
+
+**Complete (2026-10-29).** Reviewer `graph-dba`. I checked `docs/plans/connected-code-graph-bundle-spec2.md`
+v1.0 ("BS2") §1.4, §1.5, §1.6, §1.7.5 and §1.11, plus its §2–§4 rows for S11 and S17 and F-2. I
+checked them against `docs/plans/connected-code-graph-bundle-spec.md` v1.3 ("BS") §5.5, §5.10–§5.11,
+§5.17–§5.18 and §9, and against the graph note `docs/plans/connected-code-graph-graph.md` §3.2–§3.5,
+Q6, Q7 and §6.1–§6.4. I also read `docs/plans/connected-code-graph-p0-2.md`'s S11, S17 and S33
+rows and its §4.5 S17 prose, proposal §3.4 (linking and bindings), FR-15, and
+`docs/reviews/connected-code-graph-bindvalue.md` SA-11 and open question 3. The rest of BS2 is
+`analyst`'s.
+
+**What I ran.** I used only `ccg-falkordb` on 127.0.0.1:6390, with graph module `41811`, and one
+scratch key, `gdba_bs2_scratch_20261029`, which I created and then deleted with `GRAPH.DELETE`
+(`EXISTS` → 0 afterwards). I touched no other key and no instance config. On that key:
+- `GRAPH.EXPLAIN` of S17's load shape for the new edge group;
+- the same shape with a label-less source;
+- a cyclic `CONTROLLED_BY` fixture: a loop header with break conditions;
+- `RO_QUERY` var-length reach over that fixture.
+Anything not run is marked *inferred*.
+
+**Verdict: approve with suggestions.** Nothing here blocks S10's follow-up round or S15 from the
+graph side. No ruling below needs a bundle change before the freeze: every fact the graph needs
+is already in the bundle, so each remaining decision is S17's (the timing rule of § S03 graph-dba
+check). There are four minor findings and two suggestions, and no blocker or major.
+
+### Rulings on the four questions
+
+1. **`controlledBy.point` may be a `cond` (§1.4, §1.11): accept.**
+   - **Mapping is consistent with the graph note.** Note §6.3 already writes the edge as
+     `(point)-[:CONTROLLED_BY]->(:Cond)`, with `point` untyped. `Cond` is a point (§6.3), so
+     `(:Cond)-[:CONTROLLED_BY]->(:Cond)` needs no new edge type, no new label and no property.
+   - **The direction table (§6.2) is unchanged.** Impact goes `←`, from a changed condition to
+     the guarded points, now including the nested conditions and, through them, their guarded
+     points. RCA goes `→`, from a point up the nesting chain to the conditions that chose its
+     branch. The rationale holds: Joern's CDG (post-dominance frontier) records only the
+     *immediate* controlling condition, so without cond→cond the outer guard is unreachable at
+     point level.
+   - **What S17's loader changes.** One edge group is added: (`Cond`, `CONTROLLED_BY`, `Cond`).
+     Nothing else changes. The source label comes from the referenced record's type, as ruled at
+     § S03 graph-dba check "Edge-load anchors", which already allowed for up to 4×4 label pairs.
+     Run, on 41811:
+     - `UNWIND $rows AS r MATCH (s:Cond {pointId:r.point}), (t:Cond {pointId:r.cond}) CREATE
+       (s)-[:CONTROLLED_BY]->(t)` plans as `Cartesian Product` over **two** `Node By Index
+       Scan`s, which is 1×1 per row;
+     - the same query with a label-less source plans as `All Node Scan` + `Filter`, which is a
+       full scan per row.
+     A self-loop cannot reach the loader, because the validator rejects `point == cond`.
+   - **Cycles: yes, and they are real.** See G-3.
+   - **Blow-up: no.** See G-3.
+2. **`ordinal` required on `import`/`launchFact` (§1.5, §1.6): no graph change.**
+   - `import` has no node.
+   - For `launchFact`, `ordinal` lives only inside `entryId`, which the S10 validator now
+     recomputes from the field. That makes the id more trustworthy, and its graph form is
+     unchanged.
+   - Nothing changes for the `ConfigEntry.entryId` index, the load, or dedup. Nodes are
+     `CREATE`d per record, not `MERGE`d, and uniqueness is the validator's.
+   - The type tags still keep the `launchFact` and `configEntry` id spaces disjoint on the shared
+     label.
+   - The optional post-load `UNIQUE NODE ConfigEntry PROPERTIES 1 entryId` gate from § S03 still
+     stands. It is a hash, so it is crash-safe.
+   - One pre-existing property, not new: an inserted launch line of the same `kind` above others
+     re-ids the facts below it. The tuple already had `ordinal`. Verdicts key on `linkId`, so they
+     are unaffected (note Q6). It matters only to a P1/P5 finding that cites a launch-fact entry
+     (see the observations).
+3. **SA-11 per-entry domain separation (§1.7.5), and F-2: rule "no cross-entry equality". F-2
+   closes at S17 with that default.** No planned graph query and no P1 linker compares two
+   entries' `valueHash`:
+   - **Graph note.** `valueHash` appears only as "stored instead of the value" (§3.2) and on the
+     `BOUND_BY` target's property list. No Q7 query shape and no §6.2 hop joins on it.
+   - **Linker and bindings (proposal §3.4).** URL, env/Compose and launch binding match ports,
+     mount paths, hosts and env-var *names*, from clear fields: `launchFact.port`, `default` and
+     `envVar`, and `configEntry.bindValue`. They never use hashes. A withheld value is not
+     recoverable by equality either. Example: a consumer URL `http://h:9000` and a port `9000` are
+     different texts, so their hashes would differ even without per-entry domains.
+   - **Change detection and verdict expiry** are per entry. `entryId` is stable across snapshots,
+     because the `configEntry` tuple has no line, so `HMAC(entryId ‖ 0x00 ‖ value)` compares
+     like-for-like. The 32-hex id is fixed-length, so the `0x00` separator is unambiguous.
+   - **FR-15's risky-config examples** are single-entry predicates: a public port, debug on, a
+     privileged container.
+
+   **The only plausible future consumers** are a "production reuses the example/default secret"
+   finding (SA-11's own graph-side oracle) or a "credential pair mismatch" wiring hypothesis.
+   Either is an assembly-time `Finding`, fed by the optional cross-entry field §1.7.5 reserves (a
+   minor bump). If that field is ever added, **it must stay bundle-only and never become a graph
+   property.** On the graph, every `GRAPH.RO_QUERY` reader (FR-25) would hold the oracle.
+4. **`defaultHash` not carried (§1.6, §1.11): correct.**
+   - No traversal, query shape or render path reads it, and §1.6.2 forbids rendering it.
+   - The FR-25 read-only raw query exposes every stored property to any reader. Carrying a value
+     fingerprint that no one consumes is pure exposure, and it costs RAM.
+   - Its one job, per-record change detection, runs at assembly against the bundle, where verdict
+     fingerprints are computed (note Q6, step 2).
+   - The resulting asymmetry is consistent with BS §9.1, and S17 should state it. A
+     `configEntry`-origin `ConfigEntry` carries `keyPath` and `valueHash`. A `launchFact`-origin
+     one carries neither, only `entryId`, `path` and `line`.
+   - Carrying `defaultHash` later would be a graph-only decision with no bundle bump.
+
+### Findings (severity-ranked)
+
+- **G-1 (minor; S17 + S33).** §1.6.2 and §1.11 say that every emitted `launchFact` field "may be
+  rendered as binding evidence". BS §9.1, which §1.11 leaves "otherwise unchanged", carries only
+  `path`/`line` and lists `kind`, `command`/`args`, `port`, `envVar`/`default` and `mountPath` as
+  **not carried**. Read together, the graph cannot back the permission: an answer built from the
+  graph has nothing to render beyond file and line. **Recommendation:** S17 carries the gated
+  fields on the `launchFact`-origin `ConfigEntry`:
+  - `launchKind`, so it does not shadow any future `kind`;
+  - `command`, `args` (a string array, in argv order), `port`, `protocol`, `envVar`, `default`,
+    `mountPath` and `service`.
+
+  The cost is negligible, because launch facts per system number in the hundreds at most. The gates
+  (§1.6.1, §1.7.2–§1.7.3) are what make carrying them safe, and that is newly true in BS2. The
+  `args` value is source free text, so F-3's fencing applies to it at S33. The alternative is to
+  keep them out and have S33 state that binding evidence renders as file and line only. Either
+  way, the decision belongs in S17's §9 disposition. It is not a bundle change.
+- **G-2 (minor; wording, BS2 §1.6 `defaultHash` row).** "so env binding and change detection
+  work when `default` is withheld" overstates the hash's role. Under §1.7.5 the hash is
+  domain-separated by the `launchFact`'s own id, so it can be compared with nothing else, and env
+  binding cannot use it. Env binding works by `envVar` *name* (an `env_var` CP), whether or not
+  `default` is present. Suggested text: "so per-record change detection works when `default` is
+  withheld; env binding uses `envVar`."
+- **G-3 (minor; P1 BFS, S20/S33 note).** **cond→cond creates cycles, and the traversal must carry
+  a visited set.**
+  - **Cycles are real** (*inferred* from CDG theory, with the shape verified on the engine). A loop
+    header controls the conditions in its body, and an `if c: break` (or `continue`, or a `return`
+    in the loop) controls the header back, because the header does not post-dominate `c`. That is a
+    2-cycle, and every exiting condition in a loop forms one.
+  - **The anchor re-enters its own reach set.** Run: in the fixture `A↔C`, `B→A`, `D→C`,
+    `s1→B`, `s2→D`, `MATCH (a:Cond {pointId:'A'})<-[:CONTROLLED_BY*]-(x)` returned `A` itself
+    among its 6 results.
+  - **No blow-up observed.** On a hub with 6 break conditions (12 edges), the unbounded var-length
+    pattern returned 12 paths over 7 distinct nodes. This build's var-length expansion did not
+    enumerate permutations of the cycle. I have not characterized the semantics, so nothing should
+    rely on them, and I am not filing this as a quirk.
+  - **Required of the P1 BFS:** the per-level BFS with a visited set the note already prescribes
+    (Q7, §6.1), seeded with the anchor.
+  - **Size is bounded.** Every cond→cond edge is intra-function, at distance 0 (§6.2), so reach is
+    bounded by one function's points. The new edges add at most about one immediate controller per
+    `Cond`, plus one per loop-exiting condition. That is small beside `DATA` at ≈3 per point, and
+    within the note's FR-11 sizing row.
+- **G-4 (minor; S11, *inferred*).** Joern's CDG can record a loop condition as control-dependent
+  on itself, since the post-dominance frontier of a loop header includes the header. The
+  validator rejects `point == cond`, so one unfiltered self-edge fails the **whole bundle**. Add to
+  BS2 §4.1's S11 bullet: "drop CDG self-edges, and deduplicate (`point`, `cond`) pairs before
+  writing". A self-loop adds no reach, so dropping it loses nothing. Verify against the slice CPG at
+  S11.
+
+### Suggestions
+
+- **S-1 (S17 DDL).** Note §3.4's step-1 index block has no `Param`/`Ret`/`Cond` `pointId`
+  indexes, although §6.4's FR-11 row requires them, "range index (edge-load anchors); UNIQUE
+  after load". `Cond` is now both ends of an edge group, and it was already a `DATA` source. So
+  `ddl_v1.cypher` must create all three **before** the load. Without them, the plan above drops
+  from an index seek to a label scan per row. The post-load gate should then add
+  `UNIQUE NODE Param|Ret|Cond PROPERTIES 1 pointId`, which are hashes and so crash-safe.
+- **S-2 (BS2 §4.1/§4.2 completeness).** S17's row should carry, besides §1.11's two items and F-2:
+  - G-1's disposition;
+  - S-1;
+  - the ruling "F-2 closed: no equality; any future cross-entry hash stays bundle-only".
+
+  S11's row should carry G-4, and S33's row G-1's rendering consequence.
+
+### Observations (no action now)
+
+- **The recall gain from cond→cond depends on the BFS's granularity.** Suppose P1's impact BFS
+  promotes any reached point to its enclosing function and then to all its callers (§6.2's
+  `HAS_* ←` plus `CALLS ←`). Then the function is already an item once any of its `Cond`s is
+  reached, and cond→cond changes evidence chains and RCA's "which condition chose the branch",
+  but not item sets. The edge adds impact recall only if the BFS leaves a function through
+  specific points: `Ret`, `WRITES`, or an argument in `arg(i)` state. Do not count it as an
+  impact-recall fix until S20 fixes that granularity.
+- **P5 fingerprints are a separate decision.** `SecretSighting.fingerprint` and
+  `Finding.fingerprint` (note §6.4 FR-15) are not `valueHash`. Deduplicating a secret across
+  commits may *want* equality across snapshots at one location. Do not copy SA-11's per-entry
+  rule to them by reflex.
+- **A launch-fact finding re-ids when lines shift.** A P1/P5 risky-config finding that cites a
+  `launchFact` entry gets a new id, and a new `defaultHash`, when a same-`kind` line is inserted
+  above it (see question 2). The finding design should key on something stable, or accept the
+  expiry.
