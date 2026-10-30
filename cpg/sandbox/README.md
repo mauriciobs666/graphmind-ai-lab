@@ -14,7 +14,7 @@ Where that spec and the P0 plan's §2 D6 disagree, the spec controls. The two re
 |---|---|
 | `offline-run.sh` | The runner. Sourced, it only defines functions; the tests use those. |
 | `forbidden-flags.txt`, `allowed-flags.txt` | The §7.3.3 flag lists: 13 forbidden, 3 allowed, for Joern v4.0.579 |
-| `tests/test_sandbox.sh` | §10 tests 1–10 on both backends |
+| `tests/test_sandbox.sh` | §10 tests 1–10 on both backends, plus tests 11–15 (below) |
 | `tests/probe.pl` | The escape-axis probe, axes A1–A7. It is Perl because the image has no Python. |
 | `tests/mutants.sh` | The mutation harness: each mutant must turn its test red |
 | `scripts/cpg-content-check.sc` | **The** CPG content check (plan `docs/plans/connected-code-graph-p0-2.md` §2 D15, P3-7). S11, S25, S28 and S39 run it through the runner; only S08 edits it (plan §5.2). |
@@ -34,8 +34,9 @@ cpg/sandbox/offline-run.sh --backend container --mode offline --frontend joern \
 - `64`: refused before launch (argv, frontend, mode, directive or usage).
 - `69`: the backend refused or is unavailable, or the runner's Docker-config directory failed
   its check (see **Environment**).
-- `128+n`: the runner got signal *n* (INT, TERM or HUP) while the sandbox ran. It removed its own
-  container `ccg-sbx-<auditId>` and wrote no record (§5.3: a killed runner leaves none).
+- `128+n`: the runner got signal *n* (INT, TERM or HUP) while the sandbox ran. It removed every
+  container and volume labelled with its `auditId` and wrote no record (§5.3: a killed runner
+  leaves none).
 
 **Audit record.** Every invocation, refusals included, appends one `sandbox` record (§5.3) to
 `$CCG_AUDIT_DIR/sandbox.jsonl`. The default is `cpg/.audit/`, which is gitignored.
@@ -46,7 +47,9 @@ two caller variables are inputs: `CCG_AUDIT_DIR` and `CCG_TOOLCHAIN_IMAGE` (defa
 - **The shebang is `#!/bin/bash -p`.** bash then ignores `BASH_ENV`, `ENV`, `SHELLOPTS` and
   exported functions at startup.
 - **`sbx_main` re-execs itself under `env -i`** unless its environment is exactly these
-  variables:
+  variables. The keys are read from `/proc/$$/environ`, not `compgen -e`, which lists only
+  identifier names: an entry such as `A-B=1` or `BASH_FUNC_f%%` forces the re-exec too
+  (review S08 p3-n1). The allowed set is:
   - `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
   - `DOCKER_HOST=unix:///var/run/docker.sock`, which is pinned: a different daemon is a runner
     edit, not an input;
@@ -115,11 +118,24 @@ exited 0 (S08 review m2). On this 5.15 kernel overlayfs only warns about a share
 the result is undefined. The lock lives outside the upperdir, as §1.3 requires, so a tool cannot
 unlink it.
 
-**Signals** (S08 review p2-n1). The runner waits on the launcher as a child. On INT, TERM or HUP
-it runs `docker rm -f -v ccg-sbx-<auditId>`, which matters because the Docker client dying does
-not stop a container. It then cleans its scratch and exits `128+n`, so the lock is never free
-while our container still writes. A `SIGKILL` cannot be trapped: the container then runs to its
-end under `--rm`, and the lock is free meanwhile.
+**Signals** (S08 review p2-n1, p3-m1). The runner waits on the launcher as a child. On INT, TERM
+or HUP, `sbx_on_signal` does three things, in this order:
+1. **It kills the Docker client (`SIGKILL`) and waits for it.** A TERMed `docker run` proxies the
+   signal to the container and stays up. The client is found with `jobs -p`, so a signal that
+   lands just after the fork still finds it.
+2. **It removes every container and volume labelled `ccg.sandbox.auditId=<auditId>`**, and
+   repeats until three checks 0.2 s apart find none (`sbx_remove_own`, capped at about 10 s). A
+   create request the dead client already sent can still complete on the daemon, and `--rm`
+   never fires for a container that never started. So removing first (the p2-n1 shape), or
+   killing first with one removal pass, both leak a `Created` container and its volumes. Test 13
+   measured that: 11 of 20 and 17 of 40 trials.
+3. **It cleans its scratch and exits `128+n`.** The `--output` lock is held throughout, so it is
+   never free while our container still writes.
+
+A `SIGKILL` to the runner cannot be trapped: the container then runs to its end under `--rm`,
+and the lock is free meanwhile. The launch stays one `docker run`. Splitting it into `docker
+create` + `docker start -a` would make the container's existence known without polling, but it
+changes the launcher that §7.1 and the record's `launcherArgv` specify, which is a spec change.
 
 **Container launch.** The shape is §7.1's: `docker run --rm --pull=never --network none
 --hostname localhost --read-only --cap-drop ALL --security-opt no-new-privileges --user
@@ -213,7 +229,7 @@ the flags only when `ro` is present: moby re-mounts a bind only for `MS_RDONLY` 
 ## Tests
 
 ```bash
-bash cpg/sandbox/tests/test_sandbox.sh               # all tests (1-12), ~3 min
+bash cpg/sandbox/tests/test_sandbox.sh               # all tests (1-15), ~3 min
 cpg/sandbox/tests/test_sandbox.sh --only 2,10        # a subset
 cpg/sandbox/tests/mutants.sh                         # all mutants, each must be killed
 ```
@@ -253,7 +269,9 @@ Two tests were added beyond §10's numbering:
   - replaced by a symlink → 69;
   - absent → recreated `0700` and empty.
 
-  The suite's EXIT trap restores the directory.
+  The suite's EXIT trap restores the directory. **Don't run the suite while a production run
+  (S11) parses on the same host:** for test 11's duration, every concurrent run there refuses 69
+  (review S08 p3-n2).
 - **Test 12, signals and the live environment.** A `joern --script` that sleeps 60 s is started
   under a polluted environment (an extra variable, `TMPDIR`, a caller `DOCKER_CONFIG` whose
   `config.json` sets `proxies`). While it runs, the test asserts two things:
@@ -265,24 +283,58 @@ Two tests were added beyond §10's numbering:
   sent SIGTERM while its container runs. The runner must exit 143 within 10 s. Its container, volumes and overlay scratch must be
   gone, it must write no record, and the `--output` lock must be free.
 
-**Hygiene** (S08 review p2-m1, p2-n2). The suite fails if any of the following is left at the end:
-- a container or volume carrying one of this run's `auditId`s;
-- any `ccg-sbx-*` container or `ccg.sandbox` volume that `docker events --since <suite start>`
-  shows created during the run and that still exists;
-- a new `/tmp/ccg-sbx.*` directory.
+- **Test 13, an early SIGTERM** (review S08 p3-m1). Twenty trials (`S08_EARLY_TERM_TRIALS`
+  overrides the count) each start the sleeping script and send SIGTERM 0–0.10 s after the overlay
+  scratch appears, while `docker run` may be between its create and start calls. After a 2 s
+  settle, no container or volume may carry any trial's `auditId`; every trial must exit 143,
+  write no record and leave no overlay scratch. Today's runner before the fix leaked in 11 of 20
+  trials; the fix is green over 40.
+- **Test 14, `sbx_dcfg_check`'s tree rules, in library mode** (review S08 p3-m3). The runner is
+  sourced, `sbx_home` is redefined to return a fixture home, and `sbx_dcfg_check` is called, so
+  the real config directory is never touched. There are four fixtures: a home under `/tmp`
+  (refused, "temporary tree"); `.local/state/ccg` as a symlink to a `0700` dir under `/tmp`
+  (refused, "temporary tree": the check resolves the path, so an ancestor symlink cannot hide
+  it); a world-writable (`0777`) ancestor **outside** `/tmp` (refused, naming it); and a clean
+  control (accepted, config dir created `0700` and empty). The world-writable fixture lives at
+  `<passwd home>/.ccg-s08-ww-<pid>`, which the EXIT trap removes. Under `/tmp` the `/tmp` rule
+  would fire first and hide the other one.
+- **Test 15, the closed environment's key list, in library mode** (review S08 p3-n1).
+  `sbx_clean_env` is called with `SBX_SELF` pointed at a stub that prints `REEXEC`, under an
+  environment that is exactly the closed set: no re-exec. With `A-B=1` or an exported function
+  added, it must re-exec.
+
+**Hygiene** (S08 review p2-m1, p2-n2, p3-m2). The suite fails if any of the following is left at
+the end. Each check counts only what this run made, so another session's sandbox work cannot
+turn it red:
+- a container or volume carrying one of this run's `auditId`s: those in its records, plus those
+  of the signalled runs in tests 12 and 13, which write none;
+- a `ccg-sbx-*` container or `ccg.sandbox` volume that `docker events --since <suite start>`
+  shows created during the run, that still exists, and that is attributably this run's. It counts
+  if its `inspect` JSON names a path under the suite's `$T`, since every launch mounts paths
+  there, or, for a volume, if its `auditId` is one of this run's. A `/scripts` volume's device is
+  the runner's own scratch, not a `$T` path. Others are counted as foreign and ignored. Checked:
+  a foreign, never-started `ccg-sbx-*` container and a foreign `ccg.sandbox` volume created
+  mid-run leave the suite green;
+- for `--help`, the one path that exits before `sbx_main` sets its EXIT trap, a
+  `/tmp/ccg-sbx.*` scratch dir. Test 2 runs it under a private `/tmp` (bwrap, with `$T` and
+  the runner's directory bound back), so a leak lands in the suite's own `$T` and is attributable
+  to that invocation alone. A runner's scratch names no caller path, so a host-wide
+  `/tmp/ccg-sbx.*` diff cannot tell this run's from a concurrent one's. It is printed for
+  information only.
 
 Test 5 also pins the labels the scoped check relies on: `--label ccg.sandbox.auditId=<auditId>`,
 `--name ccg-sbx-<auditId>`, and the label on each volume.
 
 ### Mutants
 
-`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. Mutants that break cleanup on purpose (M42) leak a scratch dir; the harness removes only new, empty `/tmp/ccg-sbx.*` dirs created during that mutant's run. Last full run 2026-10-30: **51 of 51 killed**. That covers:
+`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. M42 breaks cleanup on purpose; its scratch lands in the suite's private `/tmp` under `$T`, which the suite removes. The harness never removes anything else: a new `/tmp/ccg-sbx.*` seen during a mutant is reported, not deleted, because it may be another session's. Last full run 2026-10-30: **57 of 57 killed**. That covers:
 - the first-round mutants M01–M21;
 - the S08-gate round: M22–M31, X1–X6, X8–X10 and M32–M35;
 - the ES2 v1.2 / Pass 2 follow-up: M37–M42 (`-p` dropped is M30, now also run against test 11);
-- P3-7's M43.
+- P3-7's M43;
+- the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM.
 
-Outside the harness, because it leaves residue by design: **M36**, which drops `--rm`, was run once by hand (S08 fix round). The scoped hygiene checks went red, and its containers were removed.
+Outside the harness, because it leaves residue by design: **M36**, which drops `--rm`, was run once by hand (S08 fix round). The scoped hygiene checks went red, and its containers were removed. Re-run by hand after p3-m2, against test 5: the scoped hygiene still went red (4 checks, 0 foreign), and its 3 containers were removed.
 
 | Mutant | Break | Tests run | Result | First failing check |
 |---|---|---|---|---|
@@ -337,3 +389,9 @@ Outside the harness, because it leaves residue by design: **M36**, which drops `
 | M42 | p2-n2: scratch made before --help, with no trap at the mktemp | 2 | killed | no new /tmp/ccg-sbx.* scratch dir left behind |
 | M43 | P3-7: the content check accepts an empty CPG | 3 | killed | P3-7: the empty CPG is CONTENT=EMPTY, the real one ok, and the check exits non-zero (rc 0) |
 | M35 | M4: the reviewed allowed list swapped (one out, one look-alike in) | 2 | killed | M4: reviewed allowed flag jimple2cpg --full-resolver is accepted and recorded (hits=0 allowed=) |
+| YA | p3-m3: the /tmp\|/var/tmp\|/dev/shm tree rule deleted | 14 | killed | home under /tmp -> refused, 'under a temporary tree' (rc=1 fail=/tmp/ccg-s08-test.rXzIbQ/h-tmp/.local/state/cc |
+| YB | p3-m3: the world-writable ancestor test disabled | 14 | killed | world-writable ancestor outside /tmp -> refused, names it (rc=0 fail=) |
+| YC | p3-n1: env keys from compgen -e (non-identifier entries unseen) | 15 | killed | closed set plus 'A-B=1' -> re-exec (NO-REEXEC) |
+| YD | p3-m1: the rejected design -- rm the container by name, then kill the client | 13 | killed | every trial exited 143 and left no container or volume (20 auditIds) |
+| YE | p3-m1: client killed first, but one removal pass (no settle loop) | 13 | killed | every trial exited 143 and left no container or volume (20 auditIds) |
+| YF | p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up) | 12 | killed | runner still alive 10 s after SIGTERM |

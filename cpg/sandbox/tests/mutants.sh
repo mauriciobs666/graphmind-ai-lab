@@ -86,6 +86,13 @@ M = [
     (R, '  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n  sbx_init\n', '  sbx_init\n  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n')]),
  ("M43", "3", "P3-7: the content check accepts an empty CPG", [(S, "    val ok = ms.nonEmpty\n", "    val ok = true\n")]),
  ("M35", "2", "M4: the reviewed allowed list swapped (one out, one look-alike in)", [(A, "jimple2cpg\t--full-resolver\t", "jimple2cpg\t--full-resolverx\t")]),
+ # --- S08 Pass 3 follow-up (p3-m1, p3-m3, p3-n1) ---
+ ("YA", "14", "p3-m3: the /tmp|/var/tmp|/dev/shm tree rule deleted", [(R, '  case "$real/" in /tmp/*|/var/tmp/*|/dev/shm/*) SBX_DCFG_FAIL="$real is under a temporary tree"; return 1 ;; esac\n', "")]),
+ ("YB", "14", "p3-m3: the world-writable ancestor test disabled", [(R, """    if (( 0$(stat -c '%a' "$p") & 02 )); then SBX_DCFG_FAIL="$real sits under world-writable $p"; return 1; fi\n""", "    :\n")]),
+ ("YC", "15", "p3-n1: env keys from compgen -e (non-identifier entries unseen)", [(R, """  while IFS= read -r -d '' k; do\n    case "${k%%=*}" in""", """  for k in $(compgen -e); do\n    case "$k" in"""), (R, '  done < "/proc/$$/environ" 2>/dev/null\n', "  done\n")]),
+ ("YD", "13", "p3-m1: the rejected design -- rm the container by name, then kill the client", [(R, '  local j\n  for j in $(jobs -p); do kill -KILL "$j" 2>/dev/null; done\n  wait 2>/dev/null\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n', '  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi\n  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi\n')]),
+ ("YE", "13", "p3-m1: client killed first, but one removal pass (no settle loop)", [(R, "  while ((quiet < 3 && n < 50)); do", "  while ((quiet < 1 && n < 1)); do")]),
+ ("YF", "12", "p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up)", [(R, 'kill -KILL "$j"', 'kill -TERM "$j"')]),
 ]
 for mid, tests, desc, edits in M:
     if sel and mid not in sel: continue
@@ -113,9 +120,11 @@ while IFS=$'\t' read -r -u 3 id tests desc; do
   if [ -n "${MUTANT_DRY:-}" ]; then echo "$id applies"; continue; fi
   tmp_before=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
   "$HERE/test_sandbox.sh" --runner "$d/offline-run.sh" --only "$tests" > "$d/test.out" 2>&1; rc=$?
-  # A mutant that breaks cleanup (e.g. M42) leaks its scratch by design; remove only NEW, EMPTY ones.
+  # M42 leaks its scratch by design, into the suite's private /tmp under its own $T, which the
+  # suite removes. A new /tmp/ccg-sbx.* here cannot be attributed (another session's runner may
+  # own it), so it is reported and never removed (review S08 p3-m2).
   for t in $(comm -13 <(printf '%s\n' $tmp_before) <(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)); do
-    rmdir "$t" 2>/dev/null && echo "$id: removed leaked empty $t" >&2
+    echo "$id: note: new $t appeared during this mutant (not removed; may be another session's)" >&2
   done
   first=$(grep -m1 '^  FAIL ' "$d/test.out" | sed 's/^  FAIL //; s/|/\\|/g' | cut -c1-110)
   if [ "$rc" != 0 ] && [ -n "$first" ]; then res=killed; killed=$((killed + 1)); else res=SURVIVED; survived=$((survived + 1)); fi

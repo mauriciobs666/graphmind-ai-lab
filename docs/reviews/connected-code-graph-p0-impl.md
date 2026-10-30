@@ -4086,6 +4086,93 @@ against a real empty CPG rather than a synthetic one.
 A world-writable fixture under the scratchpad (itself under `/tmp`) gave the `/tmp` message
 instead, which is why p3-m3's world-writable fixture must live outside `/tmp`.
 
+### Pass 4
+
+**Re-checked (2026-10-30)** against `tdd-engineer`'s fix round, `git diff 0d783811 -- cpg/sandbox/`
+(uncommitted). Each Pass 3 stopping condition was **run**. Mutants were copies in the scratchpad,
+and nothing on the real config-dir path was symlinked.
+
+**Verdict: approve with suggestions.** All five Pass 3 findings are fixed, and each stopping
+condition holds. One new minor, p4-m1, comes from the p3-m2 fix: no check catches a scratch
+leak on a normal run any more. It is not a blocker for S11, but it should land before the gate
+closes.
+
+CPG: considered, not relevant — no CPG covers `cpg/sandbox/`; re-checked by execution.
+
+**What I ran:**
+- **Mutants:** `mutants.sh YA YB YC YD YE YF M40 M42 M34` gave **killed=9 survived=0** in 1 min 37 s.
+- **Test 13 on the real runner:** `S08_EARLY_TERM_TRIALS=40 --only 13` gave **10 passed, 0
+  failed**. That is 40 trials and 41 auditIds checked; 22 containers were created and 65 volumes.
+- **M36 by hand** (drops `--rm`): `--only 99` gave **3 passed, 4 failed**, all four hygiene checks red.
+- **The foreign-container demo,** repeated during `--only 12`, gave **18 passed, 0 failed**
+  ("3 created; 1 foreign ignored").
+- **Mutant YG,** one of mine (described under p4-m1).
+- **Two direct probes:** `jobs -p` scope, and `KILL` on bwrap.
+
+I did not re-run the full suite. The coordinator's solo run gave 449 passed, 0 failed.
+
+**Dispositions:**
+- **p3-m1 — fixed.** The condition holds:
+  - YD, the pre-fix design, is red on test 13. I did not re-count the engineer's "11 of 20" red trials.
+  - YE (one removal pass) is red too, and YF (TERM instead of KILL) is red on test 12.
+  - The real runner is green over 40 trials. Nothing was left afterwards.
+- **p3-m2 — fixed for containers and volumes.** The condition holds: the foreign-container demo is
+  green, and M40 and M36 are both red. The scratch-dir half is p4-m1.
+- **p3-m3 — fixed.** Test 14 runs in library mode, with the world-writable fixture under
+  `<home>/.ccg-s08-ww-$$`; the suite removed it afterwards. YA and YB are killed.
+- **p3-n1 — fixed.** `sbx_clean_env` now reads `/proc/$$/environ`, and an unreadable file
+  forces the re-exec. Test 15 checks a control and two cases: `A-B=1` and `BASH_FUNC_f%%`.
+  YC is killed.
+- **p3-n2 — not addressed.** It was a README sentence about test 11 holding the live config dir.
+  Still optional.
+
+**The interactions (question 3): no conflict found.**
+- **auditId attribution vs. signal cleanup.** A signalled run writes no record. Tests 12 and 13
+  therefore add their auditIds by hand (`SIGNAL_AIDS`). They feed the per-auditId hygiene check
+  and the volume branch of the attribution check. A signalled run's container mounts `$T`
+  paths, so the path rule also attributes it.
+  - `sbx_remove_own` filters on the run's own `ccg.sandbox.auditId=<auditId>` label only. So it
+    cannot remove another session's resources.
+  - If the daemon is unreachable, its loop ends after three empty checks, about 0.6 s. That is
+    *inferred* from the code.
+- **What `jobs -p` can hit.**
+  - In production, the only background job in `offline-run.sh` is the launcher. A grep finds one
+    `&` in the file, the one in `sbx_launch`.
+  - In library mode, `lib_launch` runs in a `( … )` subshell. A subshell does not see its
+    parent's jobs: `sleep 30 & ( jobs -p )` printed nothing. So the suite's own background
+    processes cannot be killed.
+  - On the bwrap backend I ran `bwrap --unshare-all --die-with-parent --new-session … sleep` and
+    sent `KILL` to bwrap. It returned 137, and 0.5 s later 0 sandbox processes remained (3
+    before). So `KILL` on `jobs -p` reaps bwrap's sandbox.
+
+#### p4-m1 (minor, from the p3-m2 fix) — a scratch leak on any normal run is no longer caught
+- **Question 2, answered: the cases M34 and M42 cover are still caught; a real leak path is not.**
+  - M42 and M34 are still killed. Test 2's bwrap-private `/tmp` attributes the `--help` leak exactly.
+  - But that was the only leak the private `/tmp` covers. The host-wide diff, which used to
+    cover every other invocation, is now an info line.
+- **Run:** mutant YG adds `[ "$d" = "$SBX_SCRATCH" ] && continue` to `sbx_cleanup`, so every
+  invocation leaks its scratch. `--only 2` gave **186 passed, 0 failed**. The info line said
+  **121** new dirs, all mine, all from that run; I removed them.
+- **Fix (`devops` or `tdd-engineer`):** put the auditId in the scratch name,
+  `mktemp -d "/tmp/ccg-sbx.$SBX_AUDIT_ID.XXXXXX"`. The end-of-suite check then counts only names
+  whose auditId is in `ids`, which already includes `SIGNAL_AIDS`. That is the same attribution
+  the container check uses.
+- **Stopping condition:**
+  - YG is in `mutants.sh` and killed;
+  - M42 and M34 are still killed;
+  - a foreign `/tmp/ccg-sbx.<uuid>.XXXXXX` created during a run is ignored, so the suite stays green.
+
+**Containers and leftovers.**
+- **Mine:**
+  - the `--rm` containers from the mutant and test-13 runs;
+  - one `ccg-sbx-analyst-foreign-demo4`, never started, removed;
+  - M36's exited container, removed by name with its volumes by auditId;
+  - YG's 121 scratch dirs, removed from the before/after list.
+- **At the end:** 0 `ccg.sandbox` containers and 0 volumes; no `/tmp/ccg-sbx.*`, `/tmp/ccg-s08-*`
+  or `~/.ccg-s08-ww-*`; the runner's config dir was empty.
+- **Not mine, not touched:** `falkordb-dev`, `ccg-falkordb`, `boring_kilby`, and the
+  `exciting_meitner`/`mystifying_cray` containers that appeared during the run.
+
 ## Spec amendments (bundle-spec2, egress-spec2)
 
 **Reviewed (2026-10-29):** `docs/plans/connected-code-graph-bundle-spec2.md` v1.0 ("BS2") against

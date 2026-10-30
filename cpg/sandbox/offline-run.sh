@@ -625,9 +625,8 @@ sbx_launch() {
   PRE_NETNS=true
   # Run the launcher as a waited-on child, so a signal to the runner reaches our trap while the
   # sandbox runs (bash defers traps while a foreground child runs). On INT/TERM/HUP the runner
-  # removes its own container ccg-sbx-<auditId> (the docker client dying would not stop it, and
-  # the --output lock would be free while it still wrote; review S08 p2-n1), then exits 128+n.
-  # No record is written: a killed runner leaves none (§5.3).
+  # stops the client, then removes everything labelled with its auditId (sbx_on_signal), then
+  # exits 128+n. No record is written: a killed runner leaves none (§5.3).
   trap 'sbx_on_signal 2' INT; trap 'sbx_on_signal 15' TERM; trap 'sbx_on_signal 1' HUP
   rc=0
   "${SBX_LAUNCHER[@]}" < /dev/null &
@@ -640,10 +639,37 @@ sbx_launch() {
 sbx_on_signal() { # <signal number>
   trap - INT TERM HUP
   sbx_log "signal $1: stopping the sandbox (no record is written)"
-  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi
-  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi
+  # The client goes first (review S08 p3-m1). Removing the container while `docker run` may still
+  # be between its create and start calls misses a container the daemon completes afterwards, and
+  # `--rm` never fires for one that never started. KILL, not TERM: a TERMed `docker run` proxies
+  # the signal to the container and keeps running. `jobs -p`, not $SBX_CHILD: the trap can run
+  # after the `&` but before SBX_CHILD is assigned. bwrap (--die-with-parent) dies the same way.
+  local j
+  for j in $(jobs -p); do kill -KILL "$j" 2>/dev/null; done
+  wait 2>/dev/null
+  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi
   sbx_cleanup
   exit $((128 + $1))
+}
+# sbx_remove_own: remove every container and volume labelled with this auditId, repeating until
+# three consecutive checks 0.2 s apart find none. A request the dead client already sent can still
+# complete on the daemon, so a single pass is not enough. The loop is capped (about 10 s).
+sbx_remove_own() {
+  local f="label=$SBX_LABEL.auditId=$SBX_AUDIT_ID" c v quiet=0 n=0
+  while ((quiet < 3 && n < 50)); do
+    n=$((n + 1))
+    c=$(docker ps -aq --filter "$f" 2>/dev/null); v=$(docker volume ls -q --filter "$f" 2>/dev/null)
+    if [ -z "$c$v" ]; then
+      quiet=$((quiet + 1))
+    else
+      quiet=0
+      # shellcheck disable=SC2086
+      [ -n "$c" ] && docker rm -f -v $c >/dev/null 2>&1
+      # shellcheck disable=SC2086
+      [ -n "$v" ] && docker volume rm -f $v >/dev/null 2>&1
+    fi
+    ((quiet < 3)) && sleep 0.2
+  done
 }
 
 # ------------------------------------------------------------------ main
@@ -668,9 +694,13 @@ sbx_clean_env() {
   home=$(sbx_home)
   [ "${PATH:-}" = "$SBX_PATH" ] && [ "${HOME:-}" = "$home" ] || ok=0
   [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}" = "$home/$SBX_DCFG_REL" ] || ok=0
-  for k in $(compgen -e); do
-    case "$k" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|DOCKER_HOST|DOCKER_CONFIG|PWD|OLDPWD|SHLVL|_) ;; *) ok=0 ;; esac
-  done
+  # The keys come from the environment block we were exec'd with, not `compgen -e`: that lists
+  # only identifier names, so an entry like `A-B=1` or `BASH_FUNC_f%%` would pass unseen yet
+  # reach every child (review S08 p3-n1). Unreadable -> re-exec (fail closed).
+  [ -r "/proc/$$/environ" ] || ok=0
+  while IFS= read -r -d '' k; do
+    case "${k%%=*}" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|DOCKER_HOST|DOCKER_CONFIG|PWD|OLDPWD|SHLVL|_) ;; *) ok=0 ;; esac
+  done < "/proc/$$/environ" 2>/dev/null
   ((ok)) && return 0
   local -a keep=()
   [ -n "${CCG_AUDIT_DIR+x}" ] && keep+=("CCG_AUDIT_DIR=$CCG_AUDIT_DIR")

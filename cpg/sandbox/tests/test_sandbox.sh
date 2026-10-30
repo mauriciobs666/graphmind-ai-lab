@@ -45,7 +45,8 @@ MARKER_PID=""
 SUITE_T0=$(date +%s)
 TMP_BEFORE=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
 DCFG="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/state/ccg/docker-config"
-DCFG_TOUCHED=0; SIG_CONTAINER=""
+DCFG_TOUCHED=0; SIG_CONTAINER=""; SIGNAL_AIDS=()
+WW_BASE="$(getent passwd "$(id -u)" | cut -d: -f6)/.ccg-s08-ww-$$"   # test 14, outside /tmp
 cleanup() {
   [ -n "$MARKER_PID" ] && kill "$MARKER_PID" 2>/dev/null
   # Restore the runner's Docker-config dir (only what this suite planted; it was verified empty).
@@ -55,7 +56,14 @@ cleanup() {
   fi
   # Our own container from the signal test, if a mutant left it running.
   [ -n "$SIG_CONTAINER" ] && docker rm -f -v "$SIG_CONTAINER" >/dev/null 2>&1
+  # Test 13's trials: whatever a defective runner leaked under one of their own auditIds.
+  local aid x
+  for aid in "${SIGNAL_AIDS[@]}"; do
+    for x in $(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid"); do docker rm -f -v "$x" >/dev/null 2>&1; done
+    for x in $(docker volume ls -q --filter "label=ccg.sandbox.auditId=$aid"); do docker volume rm -f "$x" >/dev/null 2>&1; done
+  done
   rm -f "$HOME_SENTINEL"
+  if [ -d "$WW_BASE" ]; then chmod -R u+w "$WW_BASE" 2>/dev/null; rm -rf "$WW_BASE"; fi
   chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"
 }
 trap cleanup EXIT
@@ -287,8 +295,15 @@ if want 2; then
   expect_refusal "refused toolArgv is the caller's argv verbatim (@AUDIT_ID@ unsubstituted)" 64 forbidden-flag \
     "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$OUTD" -- /src '-Dx=@AUDIT_ID@'
   # egress-spec2 §1.5: --help exits 0 and is the one invocation that writes no record.
-  before=$(nrec); "$RUNNER" --help > /dev/null 2>&1; hrc=$?; after=$(nrec)
+  # p2-n2 / p3-m2: run under a private /tmp (bwrap; $T and the runner's dir bound back), so any
+  # /tmp/ccg-sbx.* scratch this invocation leaks lands in $PTMP and is attributable to it alone.
+  PTMP="$T/private-tmp"; mkdir -p "$PTMP"
+  before=$(nrec)
+  bwrap --dev-bind / / --bind "$PTMP" /tmp --bind "$T" "$T" --ro-bind "$(dirname "$RUNNER")" "$(dirname "$RUNNER")" -- "$RUNNER" --help > /dev/null 2>&1; hrc=$?
+  after=$(nrec)
   chk "--help exits 0 and writes no record (rc $hrc, $((after - before)) new)" test "$hrc" = 0 -a "$after" = "$before"
+  leaked=$(cd "$PTMP" && ls -d ccg-sbx.* 2>/dev/null)
+  chk "--help leaves no /tmp/ccg-sbx.* scratch (private /tmp: ${leaked:-none})" test -z "$leaked"
   ev_none "test 2"
   # M4 (pinned by name): the three gate-reviewed allowed flags must stay accepted, whatever the files say.
   for pair in "c2cpg --compilation-database" "javasrc2cpg --delombok-mode" "jimple2cpg --full-resolver"; do
@@ -783,7 +798,7 @@ if want 12; then
   sid=""; for i in $(seq 1 80); do
     o=$(ls -d "$T"/.ccg-ovl-* 2>/dev/null | head -1); [ -n "$o" ] && sid=$(basename "$o" | sed -n 's/^\.ccg-ovl-\([0-9a-f-]\{36\}\)\..*/\1/p')
     [ -n "$sid" ] && [ -n "$(docker ps -q --filter "name=^/ccg-sbx-$sid\$")" ] && break; sleep 0.25; done
-  SIG_CONTAINER="ccg-sbx-$sid"
+  SIG_CONTAINER="ccg-sbx-$sid"; [ -n "$sid" ] && SIGNAL_AIDS+=("$sid")
   chk "the sandbox container is running ($SIG_CONTAINER)" test -n "$sid" -a -n "$(docker ps -q --filter "name=^/$SIG_CONTAINER\$")"
   # §1.7: the live runner's own environment is exactly the closed set, with the pinned values.
   renv=$(tr '\0' '\n' < "/proc/$sp/environ" 2>/dev/null | sort)
@@ -805,6 +820,73 @@ if want 12; then
   chk "a killed runner writes no record (§5.3)" test "$(nrec)" = "$before"
   chk "the --output is free again (a new run takes the lock)" bash -c "exec 9<'$SIGOUT'; flock -n 9"
   SIG_CONTAINER=""
+fi
+
+# ================================================================== test 13: an early SIGTERM leaks nothing (review S08 p3-m1)
+# Test 12's TERM lands seconds into the run. Here it lands 0-0.10 s after the overlay scratch
+# appears, i.e. while `docker run` may be between its create and start calls. Every trial must
+# leave no container and no volume carrying its auditId (checked after a settle pause).
+if want 13; then
+  ET_TRIALS=${S08_EARLY_TERM_TRIALS:-20}
+  section "test 13: SIGTERM 0-0.10 s after the overlay scratch appears ($ET_TRIALS trials)"
+  printf '@main def main() = { println("SLEEPING"); Thread.sleep(60000) }\n' > "$T/sleep.sc"
+  before=$(nrec); et_fail=""; et_aids=()
+  for i in $(seq 1 "$ET_TRIALS"); do
+    d="$T/et$i"; mkdir -p "$d/out"; delay=$(printf '0.%02d' $(( (i - 1) % 11 )))
+    "$RUNNER" "${C[@]}" --frontend joern --script-file "$T/sleep.sc" --source "$SRC" --output "$d/out" -- --script /scripts/sleep.sc > "$d/log" 2>&1 & p=$!
+    o=(); for _ in $(seq 1 4000); do o=("$d"/.ccg-ovl-*); [ -e "${o[0]}" ] && break; kill -0 "$p" 2>/dev/null || break; sleep 0.005; done
+    sleep "$delay"; kill -TERM "$p" 2>/dev/null; wait "$p"; rc=$?
+    aid=$(basename "${o[0]}" | sed -n 's/^\.ccg-ovl-\([0-9a-f-]\{36\}\)\..*/\1/p')
+    [ -n "$aid" ] && SIGNAL_AIDS+=("$aid") && et_aids+=("$aid")
+    [ -n "$aid" ] && [ "$rc" = 143 ] || et_fail+=" trial $i (delay $delay): rc=$rc aid=${aid:-none};"
+  done
+  sleep 2
+  for aid in "${et_aids[@]}"; do
+    c=$(docker ps -a --filter "label=ccg.sandbox.auditId=$aid" --format '{{.Names}}:{{.State}}')
+    v=$(docker volume ls -q --filter "label=ccg.sandbox.auditId=$aid" | grep -c .)
+    [ -z "$c" ] && [ "$v" = 0 ] || et_fail+=" $aid left container [${c:-none}] and $v volumes;"
+  done
+  chk "every trial exited 143 and left no container or volume (${#et_aids[@]} auditIds)" test -z "$et_fail"
+  [ -n "$et_fail" ] && printf '       %s\n' "${et_fail//;/$'\n'      }"
+  chk "no early-signalled runner wrote a record (§5.3)" test "$(nrec)" = "$before"
+  chk "no overlay scratch left by any trial" test -z "$(ls -d "$T"/et*/.ccg-ovl-* 2>/dev/null)"
+fi
+
+# ================================================================== test 14: sbx_dcfg_check's tree rules (review S08 p3-m3)
+# Library mode: source the runner, redefine sbx_home to return a fixture home, call
+# sbx_dcfg_check. The real config dir is never touched. The world-writable fixture lives under the
+# passwd home, outside /tmp: under $T (itself under /tmp) the /tmp rule would fire first.
+if want 14; then
+  section "test 14: sbx_dcfg_check refuses a temporary tree and a world-writable ancestor (library mode)"
+  # dcfg_lib <fixture home>: prints "rc=<n> fail=<SBX_DCFG_FAIL>"
+  dcfg_lib() { ( FH=$1; . "$RUNNER"; sbx_home() { echo "$FH"; }; sbx_dcfg_check; echo "rc=$? fail=$SBX_DCFG_FAIL" ) 2>&1; }
+  mkdir -m 0755 "$WW_BASE"
+  mkdir -p "$T/h-tmp"; got=$(dcfg_lib "$T/h-tmp")
+  chk "home under /tmp -> refused, 'under a temporary tree' ($got)" bash -c '[[ $1 == "rc=1 fail="*"/docker-config is under a temporary tree" ]]' _ "$got"
+  mkdir -p "$WW_BASE/sym/home/.local/state"; mkdir -m 0700 "$T/sym-target"; ln -s "$T/sym-target" "$WW_BASE/sym/home/.local/state/ccg"
+  got=$(dcfg_lib "$WW_BASE/sym/home")
+  chk "ancestor symlink (.local/state/ccg -> a 0700 dir under /tmp) -> refused, temporary tree ($got)" bash -c '[[ $1 == "rc=1 fail=$2/docker-config is under a temporary tree" ]]' _ "$got" "$T/sym-target"
+  mkdir -p "$WW_BASE/ww/home"; chmod 0777 "$WW_BASE/ww"; got=$(dcfg_lib "$WW_BASE/ww/home")
+  chk "world-writable ancestor outside /tmp -> refused, names it ($got)" bash -c '[[ $1 == "rc=1 fail="*"/docker-config sits under world-writable $2" ]]' _ "$got" "$WW_BASE/ww"
+  mkdir -p "$WW_BASE/clean/home"; chmod 0755 "$WW_BASE/clean" "$WW_BASE/clean/home"; got=$(dcfg_lib "$WW_BASE/clean/home")
+  chk "clean control (same base, mode 0755) -> accepted ($got)" test "$got" = "rc=0 fail="
+  chk "  and its config dir was created 0700 and empty" test "$(stat -c %a "$WW_BASE/clean/home/.local/state/ccg/docker-config")" = 700 -a -z "$(ls -A "$WW_BASE/clean/home/.local/state/ccg/docker-config")"
+fi
+
+# ================================================================== test 15: env keys read from /proc/$$/environ (review S08 p3-n1)
+# `compgen -e` lists only identifier-named variables; an entry such as `A-B=1` is invisible to it
+# yet reaches every child. Library mode: sbx_clean_env with SBX_SELF pointed at a stub that
+# prints REEXEC, under an environment that is exactly the closed set, with and without `A-B=1`.
+if want 15; then
+  section "test 15: a non-identifier environment entry forces the env -i re-exec (library mode)"
+  printf '#!/bin/bash -p\necho REEXEC\n' > "$T/reexec-stub"; chmod +x "$T/reexec-stub"
+  PH=$(getent passwd "$(id -u)" | cut -d: -f6)
+  CLOSED=("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "HOME=$PH" DOCKER_HOST=unix:///var/run/docker.sock
+    "DOCKER_CONFIG=$PH/.local/state/ccg/docker-config" "CCG_AUDIT_DIR=$CCG_AUDIT_DIR")
+  ce() { env -i "$@" /bin/bash -p -c '. "$1"; SBX_SELF=$2; sbx_clean_env && echo NO-REEXEC' _ "$RUNNER" "$T/reexec-stub" 2>&1; }
+  got=$(ce "${CLOSED[@]}"); chk "control: exactly the closed set -> no re-exec ($got)" test "$got" = NO-REEXEC
+  got=$(ce "${CLOSED[@]}" 'A-B=1'); chk "closed set plus 'A-B=1' -> re-exec ($got)" test "$got" = REEXEC
+  got=$(ce "${CLOSED[@]}" 'BASH_FUNC_f%%=() { echo hi; }'); chk "closed set plus an exported function -> re-exec ($got)" test "$got" = REEXEC
 fi
 
 # ================================================================== test 4: every invocation, one valid record
@@ -907,7 +989,9 @@ sleep 1
 # Scoped to this run: every container and volume the runner creates carries
 # ccg.sandbox.auditId=<auditId>; only this run's ids count (other agents may hold ccg.sandbox
 # containers of their own concurrently). A label-wide count is printed for information.
-ids=$(cat "$CCG_AUDIT_DIR/sandbox.jsonl" "$PROBE_AUDIT/sandbox.jsonl" 2>/dev/null | sed -n 's/.*"auditId":"\([0-9a-f-]*\)".*/\1/p' | sort -u)
+# The signalled runs of tests 12 and 13 write no record; their auditIds are added by hand.
+ids=$( { cat "$CCG_AUDIT_DIR/sandbox.jsonl" "$PROBE_AUDIT/sandbox.jsonl" 2>/dev/null | sed -n 's/.*"auditId":"\([0-9a-f-]*\)".*/\1/p'
+  printf '%s\n' "${SIGNAL_AIDS[@]}"; } | grep . | sort -u)
 mine() { grep -xF -f <(printf '%s\n' $ids) || true; }
 left_v=$(docker volume ls --filter label=ccg.sandbox.auditId --format '{{.Label "ccg.sandbox.auditId"}}' 2>/dev/null | mine)
 left_c=$(docker ps -a --filter label=ccg.sandbox.auditId --format '{{.Label "ccg.sandbox.auditId"}}' 2>/dev/null | mine)
@@ -917,17 +1001,34 @@ printf '  info any ccg.sandbox-labelled containers/volumes on the host now: %s /
   "$(docker ps -aq --filter label=ccg.sandbox | grep -c .)" "$(docker volume ls -q --filter label=ccg.sandbox | grep -c .)"
 # p2-m1: anything named ccg-sbx-* or labelled ccg.sandbox that was CREATED during this run (docker
 # events since the suite started) and still exists now -- no record needed to attribute it.
+# p3-m2: attributed by path, not by time alone. Every launch this suite makes mounts paths under
+# $T (source, overlay upper/work dirs), so a candidate counts only if its inspect JSON names $T/.
+# Another session's sandbox work in the same window is reported, never counted.
 NOW=$(date +%s)
+names_t() { grep -qF "$T/" <<< "$1"; }
 ev_c=$(docker events --since "$SUITE_T0" --until "$NOW" --filter type=container --filter event=create --format '{{.Actor.Attributes.name}}' 2>/dev/null | grep '^ccg-sbx-' | sort -u)
-alive_c=$(for n in $ev_c; do docker ps -aq --filter "name=^/$n\$"; done)
+alive_c=""; foreign_c=0
+for n in $ev_c; do
+  j=$(docker inspect "$n" 2>/dev/null) || continue
+  if names_t "$j"; then alive_c+=" $n"; else foreign_c=$((foreign_c + 1)); fi
+done
 ev_v=$(docker events --since "$SUITE_T0" --until "$NOW" --filter type=volume --filter event=create --format '{{.Actor.ID}}' 2>/dev/null | sort -u)
-alive_v=$(for v in $ev_v; do docker volume inspect --format '{{index .Labels "ccg.sandbox"}}' "$v" 2>/dev/null | grep -q . && echo "$v"; done)
-chk "no ccg-sbx-* container created during this run still exists ($(printf '%s\n' $ev_c | grep -c .) created)" test -z "$alive_c"
-chk "no ccg.sandbox volume created during this run still exists ($(printf '%s\n' $ev_v | grep -c .) volumes created)" test -z "$alive_v"
-# p2-n2: no new runner scratch dir under /tmp.
+alive_v=""; foreign_v=0
+for v in $ev_v; do
+  j=$(docker volume inspect "$v" 2>/dev/null) || continue
+  grep -q '"ccg.sandbox"' <<< "$j" || continue
+  # A /scripts volume's device is the runner's own /tmp/ccg-sbx.* scratch, not a $T path; it is
+  # ours if its auditId label is one of this run's.
+  vaid=$(docker volume inspect --format '{{index .Labels "ccg.sandbox.auditId"}}' "$v" 2>/dev/null)
+  if names_t "$j" || { [ -n "$vaid" ] && grep -qxF "$vaid" <<< "$ids"; }; then alive_v+=" $v"; else foreign_v=$((foreign_v + 1)); fi
+done
+chk "no ccg-sbx-* container this run created still exists ($(printf '%s\n' $ev_c | grep -c .) created; $foreign_c foreign ignored)" test -z "$alive_c"
+chk "no ccg.sandbox volume this run created still exists ($(printf '%s\n' $ev_v | grep -c .) volumes created; $foreign_v foreign ignored)" test -z "$alive_v"
+# p2-n2: a runner's /tmp/ccg-sbx.* scratch names no caller path, so it cannot be attributed here;
+# test 2 checks the leak path exactly, under a private /tmp. The host-wide count is information.
 TMP_AFTER=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
-new_tmp=$(comm -13 <(printf '%s\n' $TMP_BEFORE) <(printf '%s\n' $TMP_AFTER) | grep . || true)
-chk "no new /tmp/ccg-sbx.* scratch dir left behind" test -z "$new_tmp"
+new_tmp=$(comm -13 <(printf '%s\n' $TMP_BEFORE) <(printf '%s\n' $TMP_AFTER) | grep -c . || true)
+printf '  info new /tmp/ccg-sbx.* dirs on the host during this run (any session): %s\n' "$new_tmp"
 left_o=$(find "$T" -maxdepth 2 -name '.ccg-ovl-*' 2>/dev/null)
 chk "no overlay scratch left beside an output dir" test -z "$left_o"
 
