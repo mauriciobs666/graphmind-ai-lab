@@ -1,6 +1,6 @@
 # Connected code graph — egress broker and offline-build sandbox spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§ S04)
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 · **Extended by:** `docs/plans/connected-code-graph-egress-spec2.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§ S04)
 
 *Revision 2026-10-29 (v1.1): S04 gate findings M1–M5, m1–m6 and n1 addressed; dispositions in §12.*
 

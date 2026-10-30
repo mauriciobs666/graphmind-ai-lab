@@ -4128,6 +4128,298 @@ benign.
 | c7 | `\x7f//> using dep …` | compile error, no download (DEL not trimmed) |
 | c9, c10 | `//>␠␠using` / `//>\tusing` | rc 0, no download |
 
+### Pass 2
+
+**Re-gate (2026-10-30):** `docs/plans/connected-code-graph-bundle-spec2.md` v1.1 (§1, §3, §4, the
+§5 checklist) and `docs/plans/connected-code-graph-egress-spec2.md` v1.1 (§1, §3, the §4
+checklist), against my Pass 1 findings.
+
+**What I ran.**
+- A fresh emulation of v1.1 §1.6.1 and §1.7.1–§1.7.4, written from the spec text. I did not open
+  the architect's emulation, and I did not reuse my Pass 1 code.
+- The tables: all of AV-1–AV-24 and BV-1–BV-26 agree with the spec.
+- The two-axis probe: the spec's 2,592 cells reproduce, with no value in clear.
+- Adversarial and interaction probes (below).
+- I tested every candidate fix I propose here on the same emulation.
+- `ids.py` is unchanged, so GV-1–GV-22 stand.
+
+**Verdicts.**
+- **BS2 v1.1: needs changes.** There is **one new major**, BS-P2-M1, in the argv rule. The
+  rule's own two new mechanisms cause it: class 4 and the post-secret cascade.
+- **ES2 v1.1: approve with suggestions.** One new minor.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; the questions are spec-rule behaviour, answered by emulation.
+
+#### Prior findings — dispositions
+
+| Finding | Status | Evidence rechecked |
+|---|---|---|
+| BS-M1 userinfo / capability URLs in argv | **fixed** | AV-9, AV-10, AV-15, AV-16, AV-23 reproduce. A token userinfo (`https://ghp_…@github.com/…`) fails (v5). `--dsn admin:hunter2@db/app` fails (v4). |
+| BS-M2 `NAME=V`, dotted flags | **fixed for the placements the spec lists; not fixed for `-W v`** | AV-11–AV-14 reproduce, and so do the 2,592 cells. The `-W v` placement I asked for in Pass 1 was dropped from the probe. All 432 of its cells come out in clear: BS-P2-M1. |
+| BS-m1 `defaultHash` and env binding | fixed | §1.6 row, §1.7.5. |
+| BS-m2 `host:port`, schemes, bare IPv6 | fixed | BV-21–BV-23 bind. `postgres://u:p@db/app` still fails. Argv side: BS-P2-m2. |
+| BS-m3 §1.6.2 gated vs ungated | fixed | §1.6.2; F-4 widened. |
+| BS-m4 digit suffixes, `PRİVATE` | fixed | `ADMIN_PIN1`, `GithubPat2` and bare `PRİVATE` fail, and BV-26 holds. |
+| BS-m5 (g3) undefined cases | **superseded by BS-P2-M1** | Flag-after-flag is defined, and AV-17/AV-18/AV-20 reproduce. But "the emitted sequence decides" breaks wherever a flag is emitted as a plain `<redacted>`. |
+| BS-m6 S16 bullet unnamed | fixed | §0, §1.10. |
+| BS-m7 provider `{}` wildcard | fixed | §1.8 `{#}` matches only `{?}`. The "a passing literal never matches" argument holds, because the screen is a pure function of the segment. |
+| BS-m8 `bundle.py` normative | fixed | §1.12. |
+| BS-m9 follow-up gaps | fixed | §4.1 items 2, 3 and 7; F-10; §4.2 rows for §4.0, §5.3 and §9.2. |
+| BS-n1, BS-n2 | fixed | AV-1 uses a full key. The column is headed "at least", with the extra rules listed. |
+| Open question 1 (rule 5) | fixed here; routed for the convention | `-spec3` is a P0-exit item (§0, F-5, §4.2 §9.2). |
+| ES-m1 `\r` inferred | fixed | §1.1 cites c2–c11 correctly. |
+| ES-m2 H15 row | fixed | §1.1 heading names the H15 clause. |
+| ES-m3 environment list | **fixed, with one gap** | §1.7 closed rule, `env -i`, `DOCKER_HOST`, `DOCKER_CONFIG`. The scope sentence is new: ES-P2-m1. |
+| ES-m4 lock in `upperdir` | fixed | §1.3. |
+| ES-m5 fold-in table | fixed | §3: §4.2, §5.3 and §9.1 rows. |
+| ES-n1 | fixed | §1.1. |
+
+**The two partial declines.** Both are sound.
+- **"No `:` before `@`" instead of "no `@` after the first character": sound.** Every password
+  in userinfo needs the `:`. A token in the user part fails the screen or (v5): `ghp_…@github.com`
+  fails both. The stricter rule would redact `some-mcp@latest`, `@scope/pkg@1`, `git@host:o/r`
+  and `user@registry`. The residual is `hunter2@github.com:o/r`, a user name and not a credential.
+- **Validator-checked rather than writer-only W5: sound.** The rule is strictly stronger, and
+  §1.10 makes loosening and tightening equally major. The cost is that v1 freezes its
+  over-redaction with it: AV-19's `some-mcp`, `-e FALKORDB_HOST=falkordb`, and every value after
+  a `conn`/`cert`/`key`-named flag (`curl --connect-timeout 5`). Writer-only would have frozen the
+  same cost, since a writer-only rule binds no reader, and it would have lost enforcement. Record
+  these as accepted over-redactions next to AV-19.
+
+#### New findings
+
+##### BS-P2-M1 (major) — a redacted flag-shaped element written as a plain `<redacted>` drops its successor's context
+- **Evidence (run, spec as written):**
+  - **Class 4 swallows single-dash long options.** `server -password hunter2`, `-db-password
+    hunter2`, `-token abc123`, `-pin 4821` and `java … -keystorePassword changeit` each give
+    `<redacted>`, then the value **in clear**. The element is class 4: `-p` plus `assword` fails
+    (v6). It is emitted as a plain `<redacted>`, which supplies no context and does not trigger
+    the cascade. Go's `flag` package uses `-name value` throughout.
+  - **The forced redaction breaks the chain.** `redis-server --no-auth --requirepass hunter2`,
+    `--auth-enabled --password hunter2` and `--log4jConfigurationFile1 --password hunter2` each
+    give `<redacted>`, then `hunter2` in clear. The post-secret rule writes the forced flag as a
+    plain `<redacted>`, so the value after it has no context.
+  - **A writer that withholds a flag** (§1.10) and writes a plain `<redacted>` causes the same
+    leak, and the validator cannot see it.
+- **Why major:** these are low-entropy secrets on the answer path (§1.6.2). The rule is
+  validator-checked, so a fix after S15 is a major bump. Both mechanisms are new in v1.1, and the
+  probe misses them because its placement axis lacks `-W v` and "after a redacted flag".
+- **Fix (run on my emulation):** a redacted element that is flag-shaped (class 2 or 4), for any
+  reason (screen, (v6), forced, or withheld), is written as its flag sentinel, `--<redacted>` or
+  `-<redacted>`. A flag sentinel forces the next element. That also makes `-<redacted>`
+  reachable; today it is dead, because a two-character flag cannot fail the screen.
+  - **Result:** 3,888 cells, the spec's six placements plus `-W v`, `--auth-enabled --W v` and
+    `--no-auth -W v`, with no value in clear.
+  - **Rows that change:** AV-6 becomes `-<redacted>`, `-<redacted>`, and AV-18 writes
+    `-<redacted>`. AV-21 also loses `app.jar` (`-<redacted>`, `-<redacted>`, `<redacted>`). That
+    trade-off is the architect's to make. A short allow-list of exact single-dash long options
+    (`-jar`, `-cp`, `-m`) is the over-redaction-only way to keep it.
+  - **Tests:** add both placements to S10's probe.
+
+##### BS-P2-m1 (minor) — the screen's scope in `bindValue` is unstated, and T6 is defined across dots
+- **The scope question:** T6 takes "a maximal substring of `[A-Za-z0-9._-]`", which spans a
+  dotted host. But §1.7.2 attaches the screen to `label` and `seg`.
+- **Evidence (run):** the result depends on which reading applies.
+  - **Per production:** `https://x7k2.q9w4.m1p8.z3v6.example.com/` **binds**, a chunked token
+    split across labels.
+  - **Whole string:** it fails. This is also what argv (v2) does to the same text.
+- **The interaction with the stakeholder ruling:** whole-string T6 also redacts real AWS endpoints
+  such as `mydb.c9akciq32.us-east-1.rds.amazonaws.com:5432`. The random label plus the region's
+  digits reach 6 transitions, and that is an internal hostname the stakeholder allowed in clear.
+- **Fix:** state the scope in §1.7.2. Either screen the whole emitted `bindValue` as well, and
+  accept the RDS over-redaction in both places, or define T6 per `.`-separated label, in the
+  screen and in argv. Then add a BV row for the dotted case.
+
+##### BS-P2-m2 (minor) — argv's (v1) cannot carry the bracketed `hostport` the grammar now admits
+`--host [::1]:8000` is redacted in argv, because `[` and `]` are not in (v1)'s class. As a
+`bindValue`, the same value binds. This fails closed, but `[::1]:8000` is the IPv6 form of
+`localhost:8000`. **Fix:** admit `[`/`]` in (v1) only when the whole value matches `hostport` or
+`url`, or record the case as an accepted over-redaction.
+
+##### BS-P2-m3 (minor) — (v6) is ambiguous for an assignment after a one-letter flag
+- **The ambiguity:** an assignment's context is "its own name, plus the preceding flag's". (v6)
+  fires "if its context is a single-character name". Does `-e K=V` trigger (v6) through `e`?
+- **What depends on it:** under the "any context name" reading, `-e FALKORDB_HOST=falkordb` and
+  `-e LOG_LEVEL=debug` are redacted, and `-e FALKORDB_PORT=6379` passes. The writer and the
+  validator must agree.
+- **Fix:** say which reading applies. Add an AV row for `-e FALKORDB_HOST=falkordb`.
+
+##### ES-P2-m1 (minor) — §1.7's scope sentence holds only because the shebang carries `-p`
+- **Evidence (run):** a plain `#!/bin/bash` script, executed directly, still runs a hostile
+  `BASH_ENV` before its first line. `#!/bin/bash -p` does not. So "the contract covers the runner
+  launched through its own `#!` line" is true only with `-p`, and §1.7 does not require it. The
+  current runner has it (`offline-run.sh:1`).
+- **The polluted-environment test omits `BASH_ENV`/`ENV`**, so removing `-p` would survive it.
+- **Runner drift (S08, not the spec):** the re-exec also passes `HOME`
+  (`offline-run.sh:615`), which §1.7's list does not name.
+- **Fix:**
+  - require the shebang's `-p`, or an equivalent, in §1.7;
+  - add `BASH_ENV` and `ENV` to the polluted test, run through the `#!` line;
+  - either name `HOME` in the list or drop it from the re-exec.
+
+#### Stopping condition
+
+This pass's marginal findings come from the fixes themselves, so the stop is defined by the probe,
+not by another full pass.
+- **§1.6.1 is done when S10's probe passes.** The probe crosses:
+  - the 36 words × 3 cases × 4 suffixes;
+  - the placements `--W v`, `--W=v`, `-W v`, `-W=v`, `-e W=v`, `W=v`, `--x.W v`, `--x.W=v`;
+  - the same placements preceded by:
+    - a passing secret-named flag (`--auth-enabled`);
+    - a screen-failing flag (`--log4jConfigurationFile1`);
+    - a failing class-4 element (`-Xmx2g`).
+
+  With `v = hunter2`, it must give **zero values in clear**, and the AV table must reproduce.
+  That is 13,824 cells. On my emulation, the spec as written leaves 3,456 in clear, and
+  BS-P2-M1's fix leaves none.
+- **The check that remains:** that S10 encodes the probe as a test. An analyst re-gate of §1.6.1
+  is then needed only if a cell goes red, or a new element class or sentinel is added.
+- **BS-P2-m1 to m3 and ES-P2-m1** are one-line decisions, each with a vector or a test. They can
+  be verified at S10's gate and S08's gate, without a Pass 3 here.
+
+### Pass 3
+
+**Narrow re-gate (2026-10-30)** of BS2 v1.2 §1.6.1/§1.6.3 (forcing sentinels, context-word values,
+the dual reading of single-dash elements, propagation, (v7), the allow-list, the 11 whole-token
+words), §1.7.1's per-production screen scope and T6's widened class, and ES2 v1.2 §1.7.
+
+**What I ran.**
+- My emulation is fresh, written from the v1.2 text (`p3/v12.py` in the session scratchpad). I did
+  not use the architect's.
+- The AV and BV tables were parsed from the spec file itself, so the expected outputs are the
+  spec's and not mine.
+
+**Verdicts.**
+- **BS2 v1.2: needs changes.** There is one new major, BS-P3-M1. It comes from a probe axis
+  (`:` inside a value) that the §1.6.3 grid does not vary. One AV row is stale (BS-P3-m1).
+- **ES2 v1.2: approve.**
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; the questions are spec-rule behaviour, answered by emulation.
+
+**Observed counts (my emulation).**
+
+| Run | Cells | In clear |
+|---|---|---|
+| §1.6.3 as defined (5 prefixes, `"my"+Cap` case) | 17,280 | **0** |
+| §1.6.3, first four prefixes | 13,824 | **0** |
+| My Pass 2 grid (`Cap` case, four prefixes) | 13,824 | **0** |
+| BS-M1 transplant (15 must-redact BV values × 9 placements × 5 prefixes) | 675 | 2: BV-11 `4821` as a bare positional, the accepted residual |
+| AV-1–AV-48 | 48 | 47 agree; **AV-21 disagrees** (BS-P3-m1) |
+| BV-1–BV-28 | 28 | all agree |
+| **`:` separator inside a value** (`W:v`, `--header W:v`, `--header=W:v`; same words, cases, suffixes, prefixes) | 6,480 | **2,592**, every cell not forced (BS-P3-M1) |
+
+**Security P3-1's forms** are all redacted:
+- `keytool -list -storepass hunter2` gives `-<redacted>`, `-<redacted>`, `<redacted>`;
+- `openssl pkcs12 -passout pass:hunter2` gives `pkcs12`, `-<redacted>`, `-<redacted>`;
+- `curl --user admin:hunter2` gives `<redacted>` under (v7);
+- `mysqladmin password hunter2`, `redis-cli AUTH hunter2` and `redis-server requirepass hunter2`
+  each give the word, then `<redacted>`;
+- `--no-auth --token abc123` gives `--<redacted>`, `<redacted>`.
+
+#### Prior findings — dispositions
+
+| Finding | Status | Evidence rechecked |
+|---|---|---|
+| BS-P2-M1 context loss after a redacted flag-shaped element | **fixed** | The probe counts above. AV-25–AV-39 reproduce. Propagation stops one element after a non-supplier, so no unbounded cascade. |
+| BS-P2-m1 screen scope in `bindValue` | fixed | BV-27 (RDS) binds. BV-28 binds as the named residual. |
+| BS-P2-m2 `[::1]:8000` in argv | fixed | AV-42. |
+| BS-P2-m3 (v6) for `-e K=V` | fixed | AV-40, AV-41. |
+| Pass 2 accepted over-redactions | fixed | Recorded in §1.6.1. |
+| ES-P2-m1 `-p`, `BASH_ENV`/`ENV`, `HOME` | fixed | §1.7 requires `-p` and a test through `#!` with a marker file. `HOME` comes from passwd, and `DOCKER_CONFIG`'s directory invariant is verified each run. |
+
+**Interaction checks asked for (run).**
+- **The allow-list does not reopen anything forcing closed.**
+  - `java -Xmx2g --password hunter2` gives `--password`, `<redacted>`.
+  - `--auth-enabled -Xmx2g hunter2` and `--auth-enabled -cp hunter2` give `-<redacted>`,
+    `<redacted>`. An allow-listed flag is still flag-shaped, so it forces when it is itself forced.
+  - `-cp hunter2`, `-jar hunter2` and `-Xmx2g hunter2` stay in clear. Their names carry no secret
+    context, so these are the existing unflagged-positional residual, not a reopening.
+- **The 11 whole-token words as flag or assignment names all fail:** `--vault`, `-vault`,
+  `VAULT=`, `--pin`, `--seed`. Only the bare word (`vault hunter2`, `pin 4821`) stays in clear,
+  which matches the named residual.
+- **Per-label screening opens two things in argv:**
+  - **Dot-chunked tokens with an alphabetic last label.** `3f2a9c1e.5b7d4a6f.8e0c2b4d.ab` passes
+    as a positional or after `--opt`. The named "chunked token spread over host labels" residual
+    covers it in substance.
+  - **A hex token written as canonical IPv6.** `3f2a:9c1e:5b7d:4a6f:8e0c:2b4d:6a8f:e1c` passes,
+    because `ipv6` has no labels, so nothing is screened. It is not named (BS-P3-m3).
+- **Propagation over-redacts internal addresses**, which fails closed. Examples:
+  - `--keycloak keycloak.corp.internal:8443` gives `-<redacted>`;
+  - `--auth-url http://auth-svc:8000` gives `-<redacted>`;
+  - `kubectl port-forward svc/session-db 5432:5432` loses the port mapping, after a
+    context-word value.
+
+  The stakeholder allowed these hostnames, and the "Accepted over-redaction" list does not name
+  this class yet (BS-P3-m3).
+
+#### New findings
+
+##### BS-P3-M1 (major) — a context-word value is itself written in clear, so a `NAME:secret` value leaks
+- **Evidence (run):**
+  - `curl --header X-Api-Key:hunter2 http://svc/x` gives `--header`, **`X-Api-Key:hunter2`**,
+    `<redacted>`. The secret is in clear, and the harmless URL after it is redacted.
+  - `curl --header=X-Api-Key:hunter2`, `x pass:hunter2` and `x Authorization:Bearer-hunter2` are
+    also in clear.
+- **Why:** class 3 catches `NAME=secret`, but no rule judges the name part of `NAME:secret`. A
+  value containing a context word only supplies context *forward* (§1.6.1 "Context"). Its own
+  text passes (v1)–(v7).
+- **The probe misses it** because its placements never vary the separator inside a value.
+- **Why major:** it is the same class as BS-M2, a missing name/value separator form. It is
+  validator-checked and pre-freeze, and the value is a low-entropy secret on the argv path.
+  (S17's G-1, if it never carries `args`, would downgrade this to the bundle only.)
+- **Fix (run on my emulation):** add **(v8)**. A value that is not address-shaped, has no `://`,
+  and contains `:` fails when its text before the first `:` fails §1.7.3. As a context-word value
+  it is then written as a forcing sentinel.
+  - **Result:** 0 of 6,480 cells in clear on the separator axis, and 0 of 17,280 on §1.6.3's
+    grid.
+  - **Rows unchanged:** every AV row other than the stale AV-21. `keycloak:8443`,
+    `falkorchat.app:app` and `X-Request-Id:abc` still pass.
+  - **Tests:** add `W+":"+v`, `["--header", W+":"+v]` and `["--header="+W+":"+v]` to §1.6.3's
+    placements.
+
+##### BS-P3-m1 (minor) — AV-21's row contradicts the allow-list it motivates
+- **Conflict:** §1.6.1 makes `-Xmx2g` and `-jar` class-2 flags that pass the screen. So `java
+  -Xmx2g -jar app.jar` is **unchanged** (my emulation). §1.6.3's own prefix note agrees: "`-Xmx2g`
+  is allow-listed in v1.2, so it passes". But the table row still reads `<redacted>`,
+  `<redacted>`, `app.jar`.
+- **Why it matters:** S10 cannot encode both. The claim that "AV-1 to AV-48 reproduce" cannot
+  hold for this row under the stated rule.
+- **Fix:** correct the row to "unchanged", then re-check the architect's emulation on class 2's
+  allow-list branch.
+
+##### BS-P3-m2 (minor) — the allow-list is sized to AV-21 alone; Go role flags and common JVM flags still cascade, and widening it later is major
+- **Evidence (run):** each of these loses its binding input:
+  - `server -port 8080` and `go run . -addr :8080`: the port is redacted;
+  - `java -XX:+UseContainerSupport -jar app.jar`, `java -ea -jar app.jar`, `java -server -jar
+    app.jar` and `java -verbose:gc -jar app.jar`: each loses `app.jar`.
+- **Why it matters:** Go is an FR-1 language whose `flag` package is single-dash. `-port` is
+  exactly the explicit launch flag the proposal's §3.4 binds on.
+- **Fix:** decide before S15. Either extend the closed list with exact strings and digit-free
+  shapes: `-port`, `-addr`, `-host`, `-listen`, `-bind`, `-XX:[+-]Name`, `-ea`, `-da`, `-server`,
+  `-client`, `-verbose:<word>`. None of these can carry a secret. Or record the loss in §1.6.1's
+  accepted over-redactions, with P2's Go recall in mind.
+
+##### BS-P3-m3 (minor) — leaks the named-residual list omits, and one over-redaction class it omits
+- **`user:pass` after a neutral flag:** `--account admin:hunter2` is in clear, because (v7)'s
+  token set is only `user`, `login` and `basic`. `--creds` is caught by `cred`.
+- **A hex token written as canonical IPv6:** this is not a label, so the host-label residual does
+  not name it.
+- **Fix:** name both residuals in §1.6.1, or widen (v7) to `account`, `principal` and `identity`.
+  Also add "an internal address under an auth/key/session-named flag, or after a context-word
+  value" to "Accepted over-redaction". The stakeholder allowed these hostnames in clear.
+
+#### Stopping verdict
+- **The S10 probe stands as the closing condition**, provided **§1.6.3 gains the separator axis**
+  (BS-P3-M1's three placements). With it, the condition is:
+  - §1.6.3's 17,280 cells plus the separator axis's 6,480 cells, with 0 in clear;
+  - the transplant leaving only the bare-positional residual;
+  - AV-1–AV-48 reproducing, with AV-21 corrected.
+- **This pass's major came from an axis the grid did not vary**, not from a new mechanism failing
+  inside the grid. The rule for any further re-gate is narrower than before: re-gate only when a
+  new element class, sentinel kind or **separator** is added, or a probe cell goes red.
+- **BS-P3-m1 to m3** are table and list edits, and S10's gate can check them. No Pass 4 is needed
+  for them.
+
 ## Spec amendments — graph-dba check (bundle-spec2 §1.4/§1.5/§1.6/§1.7.5/§1.11)
 
 **Complete (2026-10-29).** Reviewer `graph-dba`. I checked `docs/plans/connected-code-graph-bundle-spec2.md`

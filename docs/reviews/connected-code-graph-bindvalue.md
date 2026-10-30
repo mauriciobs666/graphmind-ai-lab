@@ -671,3 +671,129 @@ This covers raw queries, which F-4's render-time masking does not.
   - P2-2's T6 needs a decision **before S15**, for step 8a only.
   - P2-4 and P2-6 are wording.
 - **For `graph-dba`:** P2-8, at S17.
+
+## Pass 3 — v1.1 check
+
+**2026-10-30.** This pass checks these documents:
+- `docs/plans/connected-code-graph-bundle-spec2.md` v1.1 ("BS2"): §1.6.1, §1.6.2, §1.7.1–§1.7.4, §1.11 and §5;
+- `docs/plans/connected-code-graph-egress-spec2.md` v1.1 ("ES2"): §1.7 and §4.
+
+**Method.** Static only.
+- I wrote a new emulation of BS2 v1.1's rule text in the session scratchpad. It is independent of `architect`'s 2,592-cell probe.
+- Before trusting it, I calibrated it: it reproduces all 24 AV rows and all 26 BV rows with zero mismatches.
+- I then ran adversarial argv, token and grammar inputs through it.
+- For ES2 I also read `cpg/sandbox/offline-run.sh` (lines 25–29 and 602–615) to see what the current runner does. It is not yet updated to ES2 v1.1.
+
+### Scope and verdict
+
+**Verdict: approve with suggestions.** No blocker remains.
+- P2-1's own seven lines are now redacted.
+- The new argv bypasses (P3-1) are majors. They reach an answer only if S17 decides to carry `launchFact.args` into the graph (G-1). Until then, BS2 §1.6.2 renders `path`/`line` only.
+- The fixes proposed below change none of AV-1–AV-24 in my emulation. They can therefore land before S15 as validator rules, or after S15 as writer rules (BS2 §1.10: a writer may always redact more).
+
+### Prior findings (one line each)
+
+| Finding | Status | Evidence rechecked |
+|---|---|---|
+| P2-1 argv credential forms | **Fixed for every vector it named; not closed.** New bypasses are listed in P3-1. | AV-6–AV-12 redact in my emulation |
+| P2-1 decline (a): writer-only W5 became validator-checked | **Accepted.** It is stricter than what I asked for. Post-freeze tightening stays possible as a writer rule (§1.10), so making it validator-checked costs nothing. | §1.6.1, §1.10 |
+| P2-1 decline (b): "no `:` before `@`" | **Accepted.** It still fails `user:pass@…` in every position, and `user@host` is not a secret. The cost is that a password-only userinfo with no scheme, `hunter2@db:6379`, passes. That shape is rare, and recorded here as accepted residual risk. My original rule ("no `@` after the first character") would not have caught `admin:hunter2` either. That gap is P3-1(b). | emulation |
+| P2-2 T6 | **Fixed.** BV-24 and the chunked Lambda host now redact. Two narrow residuals remain (P3-3). | emulation |
+| P2-3 `default` skips W2 | **Fixed** for bare and URL hosts. `hostport` is not named in W2 (P3-4, nit). | §1.6, §1.7.4 |
+| P2-4 `defaultHash` claim | **Fixed.** It is now change-detection only, and env binding goes by name. | §1.6, §1.7.5 |
+| P2-5 name-rule edges | **Fixed.** `cfg.adminpw`, `PRİVATE` and `x.ADMIN_PIN1` redact. `rootpin` and `githubpat` are accepted residuals. | BV-25, BV-26 |
+| P2-6 `bindValue` never rendered | **Fixed.** | §1.11 |
+| P2-7 slash-split base64 | **Fixed** as an accepted residual. | §1.7.6 |
+| P2-8 store-time `keyPath` masking | **Routed** to `graph-dba` (S17). Acceptable. | §1.11 |
+| New grammar: `hostport`, bare `ipv6`, non-web schemes | **No new credential class found.** | See below |
+
+Probes of the new grammar:
+- These redact: `redis://hunter2@localhost:6379`, any `?…` query, and `postgres://u:p@db/app`.
+- These bind, and none carries a credential by protocol: `redis://localhost:6379/hunter2` (the Redis db index position), `postgres://db.internal:5432/prod` (a dbname) and `amqp://mq/x7k2q9w4` (a vhost).
+- A 128-bit value written as a canonical IPv6 address also binds, because `ipv6` is not screened. That is theoretical only.
+
+### New findings
+
+#### P3-1 (major, conditional on S17 carrying `args`) — four argv forms still pass a credential in clear
+
+*Confirmed by emulation against §1.6.1 as written.*
+
+```text
+keytool -storepass hunter2                  → <redacted> hunter2        (a) single-dash long option
+openssl pkcs12 -passout pass:hunter2        → <redacted> pass:hunter2   (a)
+consul-server -password hunter2             → <redacted> hunter2        (a) Go `flag` style
+curl --user admin:hunter2 http://svc/x      → --user admin:hunter2      (b) long-form user:pass
+mysqladmin -uroot password hunter2          → <redacted> password hunter2   (c) secret-named bare word
+redis-cli AUTH hunter2                      → AUTH hunter2              (c)
+redis-cli CONFIG SET requirepass hunter2    → … requirepass hunter2     (c)
+server --no-auth --token abc123             → --no-auth <redacted> abc123   (d) secret flag after secret flag
+```
+
+Why each one passes:
+- **(a)** A single-dash long option is class 4 (an "attached short flag"). It is written as plain `<redacted>`, a sentinel that supplies no context, so the value after it is judged with no name.
+- **(b)** v4 tests for `:`…`@`, and v6 applies only to single-letter flags. So `--user` and `--proxy-user` with `u:p` pass.
+- **(c)** Only flags supply context. A bare secret-named word (`password`, `AUTH`, `requirepass`) supplies none.
+- **(d)** The forced `<redacted>` consumes the next element, here `--token`. The element after that has no context.
+
+Single-dash long options (Java tools, OpenSSL, Go binaries) and Redis/MySQL positional forms are routine in Dockerfiles, Compose `command` and healthchecks.
+
+**Recommendation.** I checked each fix in my emulation: it closes every line above and changes none of AV-1–AV-24. Adopt pre-freeze as validator rules, or later as writer rules.
+- **(a)** For a class-4 element, also judge `NAME` = the text after the single `-` by §1.7.3. If it fails, write `-<redacted>` and redact the next element. AV-21's `-jar app.jar` is unchanged, because `jar` passes the name rule.
+- **(b)** A value containing `:`, whose flag context folds to `user`, `u`, `proxy-user`, `login` or `basic`, is `<redacted>`. `docker --user 1000:1000` is over-redacted, which is acceptable because it is not a binding input.
+- **(c)** A bare value element that contains one of the **25 substring words** supplies context to the next element. The 11 whole-token words do not, so AV-8's `ssh h` is unchanged.
+- **(d)** When the forced element is itself a secret-named flag or long option, the forcing extends to the next element.
+
+**The robust fix lies outside the gate.** Positional secrets with no hint at all (`rabbitmqctl add_user admin hunter2`, `htpasswd -b f admin hunter2`) are beyond any argv rule. So for S17's G-1 decision, recommend carrying `port`, `mountPath`, `service` and the role-relevant pairs only. Those pairs are `--port`/`--host`/`--bind`/`-m`/`--directory`/`--root-path` and argv[0]. **Never** carry all of `args`. This closes P3-1 regardless of the gate, and I'm routing it to `graph-dba` alongside G-1.
+
+#### P3-2 (minor) — T6's character class leaves `:`, `+` and `,` chunking open
+
+*Confirmed by emulation.* T6 considers only maximal `[A-Za-z0-9._-]` substrings. So a token chunked by characters that v1 allows in argv passes every rule from T1 to T6:
+- `app --opt x7k2:q9w4:m1p8:z3v6` → in clear;
+- `app --opt x7k2+q9w4+m1p8+z3v6` → in clear.
+
+This affects argv only: the grammar admits none of `:+,` inside a label or a segment.
+
+**Recommendation.** For the argv screen, widen T6's class to `[A-Za-z0-9._:+,-]`. Exempt a value that matches §1.7.2's `ipv6` or `hostport`, so that `falkorchat.app:app` (0 transitions) and IPv6 literals still pass. Step 8a is unaffected, so this does not re-id anything. It can be a writer rule after the freeze.
+
+#### P3-3 (minor) — letters-only random tokens of 16–23 characters pass
+
+*Confirmed by emulation.*
+- `https://ntfy.sh/kxqzmwvptryhbnjdlc` binds;
+- `app --id kxqzmwvptryhbnjdlcqp` stays in clear.
+
+T1 needs a digit, T2 needs ≥ 24 characters, and T6 needs digits for its transitions. A random token over letters only has no digit about 3 % of the time at 20 characters over base62, and always for lowercase-letter capability names.
+
+**Recommendation.** Record this next to the word-only capability residual in §1.7.6. SA-4(b) `bindParts` removes it for `bindValue`. P3-1's G-1 recommendation removes it for argv.
+
+#### P3-4 (nit) — W2 does not name `hostport`
+
+W2 covers a single-label host "bare or inside a `url`". It says nothing about `hostport`, so the validator-admitted `hunter2:6379` is not explicitly governed when it appears as a `default`. `default` is renderable.
+
+**Recommendation.** Change W2 to read "bare, inside a `url`, or inside a `hostport`".
+
+### ES2 §1.7 (runner environment)
+
+**Verdict: the closure is sound as specified.**
+- `env -i` with a fixed `PATH`, a set `DOCKER_HOST` and a pinned `DOCKER_CONFIG` removes every input path named in ES-m3:
+  - caller `PATH`;
+  - `SHELLOPTS`/`BASHOPTS`;
+  - exported functions;
+  - `DOCKER_CONTEXT`;
+  - `config.json` (`currentContext`, credential helpers, `proxies`).
+- The polluted-environment test is the right acceptance check.
+
+**The scoped-out hostile `BASH_ENV` is acceptable.**
+- On a direct exec, the shebang `#!/bin/bash -p` already ignores `BASH_ENV`/`ENV` and exported functions (`cpg/sandbox/offline-run.sh:1`, `:25–29`).
+- Under `bash offline-run.sh`, a **benign** polluting `BASH_ENV` that only exports variables (CI systems use `BASH_ENV` this way) is neutralised anyway. `sbx_clean_env` re-execs under `env -i` whenever any extra variable is present (`:603–615`).
+- Only a **hostile** file can subvert the runner before the re-exec, for example one that defines functions named `exec`, `env` or `compgen`. That needs a caller who already runs arbitrary code, as ES2 says.
+
+Two minors and one observation:
+- **E3-1 (minor) — `HOME` is kept by the code but not listed by the spec.** ES2's list is `PATH`, `DOCKER_HOST`, `DOCKER_CONFIG` and `CCG_*`. The current runner also passes `HOME` from the passwd database (`:615`). With `DOCKER_CONFIG` pinned, the Docker client no longer reads `$HOME/.docker`, so this is harmless. But the closed rule and the code should say the same thing: either list `HOME`, or drop it.
+- **E3-2 (minor) — the pinned `DOCKER_CONFIG` directory needs a stated invariant.** Specify it as runner-owned, mode `0700`, outside any shared or world-writable tree such as `/tmp`, and verified empty or absent at each run. If it is not empty, refuse with exit 69. Otherwise a planted `config.json` reintroduces exactly what §1.7 removes: `credsStore`, `proxies` and `currentContext`. The polluted test should include a pre-populated `DOCKER_CONFIG` target.
+- **Observation, not a finding.** The runner on disk does not yet set `DOCKER_HOST` or `DOCKER_CONFIG`; it only drops caller variables. This is the expected S08 implementation follow-up to ES2 v1.1, and the polluted-environment test will show it.
+
+### Routing
+
+- **`architect`:** P3-1(a)–(d), P3-2, P3-3 and P3-4 (BS2). E3-1 and E3-2 (ES2).
+- **`graph-dba` (S17, G-1):** P3-1's recommendation to carry only the role-relevant `launchFact` fields and never the whole of `args`.
+- **Agent/prompt safety:** nothing new. F-3 (free text from source reaching LLM context) stays with `architect` (S33) and `cobb`, as already routed in BS2 §3.

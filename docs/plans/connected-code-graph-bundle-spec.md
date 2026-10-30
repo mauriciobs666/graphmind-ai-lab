@@ -1,6 +1,6 @@
 # Connected code graph — fact-bundle spec (v1 candidate)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 (v1 candidate) · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 (v1 candidate) · **Extended by:** `docs/plans/connected-code-graph-bundle-spec2.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
 
 *Revision 2026-10-29 (v1.1): S03 gate fixes (analyst F1–F8, graph-dba suggestions and rulings); dispositions in §13.1.*
 *Revision 2026-10-29 (v1.2): S03 Pass 2 (N1–N5, P2-n1, P2-n2) and the S05 vendored-code question; dispositions in §13.2.*
