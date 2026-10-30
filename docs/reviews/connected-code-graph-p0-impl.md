@@ -1046,7 +1046,7 @@ checks hold. The figures that move under a different reasonable definition:
 ### Appendix (S05 computations)
 
 Wilson z = 1.959964, exact binomial. Script:
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/s05.py`
+`/tmp/claude-<uid>/-home-<user>-<repo>/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/s05.py`
 (and `flow.py` for A6).
 
 **A1. Wilson table at n = 150.** All five rows match §4.3:
@@ -1582,10 +1582,10 @@ with three exceptions:
 ### Appendix S03-A1 — probes
 
 - **Golden vectors:** recomputed with
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/gv.py`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/gv.py`.
   Fourteen rows `True`.
 - **Python AST probe (whole repo):**
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/pyq.py`
+  `/tmp/claude-<uid>/-home-<user>-<repo>/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/pyq.py`
   found 0 same-scope duplicates, 393 lambdas, 7 decorator or default-value lambdas, and 13
   `Protocol` classes (5 in `falkor-chat/server/falkorchat`).
 - **F1 probe:** calls in `falkor-chat/server` where the same `self.<attr>` is read in two distinct
@@ -1775,7 +1775,7 @@ list. Then rule 8's criterion needs a stated Go exception, because as written it
 #### Appendix S03-A2 — Pass 2 probes
 
 All scripts are in
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/`:
+`/tmp/claude-<uid>/-home-<user>-<repo>/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/`:
 - `gv.py`: GV-1–GV-21, with embedded ids recomputed from their own tuples. 21 rows `True`. The
   v1.0 `fieldAccess` tuple collides on `recv`/`a0` (`True`).
 - `pyq2.py`: Python `qname` derivation under v1.1's §4.1 rules 2, 5, 7 and 8.

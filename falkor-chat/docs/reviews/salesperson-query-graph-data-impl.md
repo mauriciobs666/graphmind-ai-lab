@@ -122,7 +122,7 @@ None.
 ## Appendix
 
 **A. Scratch harnesses.** All are under
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/impl/`:
+`/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/impl/`:
 - `shapes.py` / `shapes.out` run 18 shapes through `default_returns` → `model_validate` →
   `ensure_row_identity` → `compile`, the `run()` sequence, and execute them on graph
   `scratch_analyst_f2`. That graph was copied from `reference`'s 15 `Product` nodes by a read-only
@@ -229,7 +229,7 @@ exemption. But D7's reach on pt-BR is narrower than "every `name = <category wor
 
 ## Appendix (Pass 2)
 
-**C. Harness.** `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/impl/p2/live.py`,
+**C. Harness.** `/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/impl/p2/live.py`,
 with its output in `live.out` next to it.
 - It subclasses `Repository` so that `_reference()`/`_graph_by_key("reference")` select
   `scratch_analyst_f2b`. That graph was copied from `reference`'s 15 `Product` nodes, including

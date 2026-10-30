@@ -2865,7 +2865,7 @@ Streamlit rejection quotes.
 
 ## 9. Ready to implement
 
-Plan: **`/home/mauricio/prg/graphmind-ai-lab/docs/plans/salesperson-ui.md`** (v1.19) — **21 steps**
+Plan: **`$HOME/prg/graphmind-ai-lab/docs/plans/salesperson-ui.md`** (v1.19) — **21 steps**
 (S0–S16, with S12 split into S12a/S12b/S12c/S12d and Ruling 1 carried as its own **S7c**): one
 `graph-dba` design note (S0, dispatch first, blocks S4), a ten-step falkor-chat server track
 (S1–S4, S6–S10 and S7c), one bring-up script (S11), a seven-step SPA track (S5, S12a–S12d, S13,

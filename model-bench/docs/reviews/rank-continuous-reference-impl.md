@@ -161,7 +161,7 @@ question).
 
 Performed in an isolated copy under the session scratchpad (`/tmp/.../scratchpad/mb_mutant`), a
 full copy of `modelbench/`, `tests/`, `packs/`, `results/`, `pyproject.toml` — the tracked working
-tree in `/home/mauricio/prg/graphmind-ai-lab/model-bench` was never modified (`diff` against a
+tree in `$HOME/prg/graphmind-ai-lab/model-bench` was never modified (`diff` against a
 pre-mutation backup confirmed identical afterward).
 
 ```

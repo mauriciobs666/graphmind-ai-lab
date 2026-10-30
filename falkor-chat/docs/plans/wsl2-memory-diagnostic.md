@@ -25,7 +25,7 @@ recommended `.wslconfig` + apply procedure. **Nothing was mutated this run.**
 | RAM visible to WSL2 VM | **MemTotal 7,973,228 kB ≈ 7.6 GiB** | `/proc/meminfo` |
 | WSL2 swap | 2.0 GiB (`/dev/sdb`, default) | `free -h`, `swapon --show` |
 | Current WSL usage | 1.1 GiB used / 6.2 GiB free / 489 MiB cache | `free -h` |
-| `.wslconfig` | **PRESENT** at `/mnt/c/Users/mauri/.wslconfig` (323 B) | direct read |
+| `.wslconfig` | **PRESENT** at `/mnt/c/Users/<winuser>/.wslconfig` (323 B) | direct read |
 | `.wslconfig` memory cap | **NONE** — file has only `[wsl2] networkingMode=mirrored` | direct read |
 | Docker engine | **Native Docker Engine inside WSL2** (`default` context = `unix:///var/run/docker.sock`, active). Docker Desktop context (`desktop-linux`) exists but is **not** selected. | `docker context ls`, `docker info` |
 | Docker `MemTotal` | 8,164,585,472 B ≈ 7.6 GiB — **same pool as the WSL2 VM** (native engine, no separate utility VM) | `docker info` |
@@ -71,7 +71,7 @@ that must also host LM Studio are sufficient on their own to reproduce the overl
 
 ## Recommended `.wslconfig` (proposed — NOT applied this run)
 
-Full file for `C:\Users\mauri\.wslconfig`. **Preserves the load-bearing `networkingMode=mirrored`
+Full file for `C:\Users\<winuser>\.wslconfig`. **Preserves the load-bearing `networkingMode=mirrored`
 line** (LM Studio reachability from WSL over localhost depends on it — see Severino notes).
 
 ```ini
@@ -131,9 +131,9 @@ sparseVhd=true
 ## Apply procedure (for the user to run — do NOT run this diagnostic session)
 
 1. **Back up the current file** (it is tiny; keep the original in case):
-   - From Windows: copy `C:\Users\mauri\.wslconfig` to `C:\Users\mauri\.wslconfig.bak`.
-   - Or from WSL: `cp /mnt/c/Users/mauri/.wslconfig /mnt/c/Users/mauri/.wslconfig.bak`
-2. **Edit `C:\Users\mauri\.wslconfig`** to match the recommended contents above (Notepad, VS Code,
+   - From Windows: copy `C:\Users\<winuser>\.wslconfig` to `C:\Users\<winuser>\.wslconfig.bak`.
+   - Or from WSL: `cp /mnt/c/Users/<winuser>/.wslconfig /mnt/c/Users/<winuser>/.wslconfig.bak`
+2. **Edit `C:\Users\<winuser>\.wslconfig`** to match the recommended contents above (Notepad, VS Code,
    or any editor). Ensure `networkingMode=mirrored` stays.
 3. **Stop anything important first** — this restarts *all* WSL distros and any Docker containers in
    them (FalkorDB included). Save work; note the `falkordb-data` volume persists across the restart.

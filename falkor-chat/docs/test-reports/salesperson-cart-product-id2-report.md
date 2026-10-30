@@ -55,7 +55,7 @@ CPG: considered, not relevant — this is live behavioural measurement of LLM to
   baseline); `cart_outcome_analysis.py` `0fc008f9…dd6c` (identical to S7); `refire_probe.py`
   `62baa763…e3ae2` (S7's plus the `browse` script, `HARNESS_VERSION` 2).
 - **Raw data** (session scratchpad, not durable):
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/k078-id2-rerun/`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/k078-id2-rerun/`.
 
 ## Warm-up (TP-100)
 

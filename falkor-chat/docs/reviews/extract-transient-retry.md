@@ -778,7 +778,7 @@ commit, at `teco`'s discretion.
 ### Appendix — Pass 4 probes
 
 **A. Real `urlopen` through `make_http_transport`** (script:
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/probe_live.py`):
+`/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/probe_live.py`):
 
 | scenario | kind | status | transient | `__cause__` |
 |---|---|---|---|---|
@@ -791,7 +791,7 @@ commit, at `teco`'s discretion.
 | 200 `{"error":{"message":"Failed to load model x"}}` | `body_error` | — | True | — |
 | closed port | `connection` | — | True | `URLError` |
 
-**B. Mutants** (script: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut.py`;
+**B. Mutants** (script: `/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut.py`;
 all restored, `filecmp` byte-identical):
 
 | mutant | result |
@@ -974,7 +974,7 @@ None.
 ### Appendix C — Pass 5 mutants
 
 Script:
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut2.py`.
+`/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut2.py`.
 Run over `test_ingestion.py`, `test_background.py` and `test_repository.py -k
 chunk_document_is_processing` (66 tests).
 
@@ -1168,7 +1168,7 @@ None. P6-1's test comment can ride along with this step's commit; the plan line 
 ### Appendix D: Pass 6 mutants and flip probe
 
 Script:
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut3.py`.
+`/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u4a/mut3.py`.
 It runs over `test_embedding`, `test_retry`, `test_background` and `test_responder` (143 tests).
 
 | mutant | result |

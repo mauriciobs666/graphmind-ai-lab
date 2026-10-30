@@ -20,7 +20,7 @@ The baseline is K-068 as written at `3d91f750`, plus the implementer's scratchpa
   edited.
 
 My scripts and outputs are in
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/k068-review/`.
+`/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/k068-review/`.
 
 **Verdict: needs changes.** The fix removes the crash, and the split approach is right for ASCII
 punctuation. But `[^\w]+` also splits on non-ASCII punctuation and symbols, and the index does

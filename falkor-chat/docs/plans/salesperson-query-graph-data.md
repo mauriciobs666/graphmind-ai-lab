@@ -549,7 +549,7 @@ internally, collects failures, and asserts the list is empty, printing the first
   **Product 299, Entity 66, Document 34, Chunk 840 = 1,239**. If A1's count differs, stop: the
   oracle, the axes or the registry table disagrees with §3.1.
   - *Recomputed* by my own enumeration with a prototype of the v2 D1. The scratch script is
-    `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/probe/probe2.py`,
+    `/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/probe/probe2.py`,
     output in `probe2.out` next to it.
   - It agrees with the review's 1,239. The review's Document **total** (3,276) differs from mine
     (3,948) because its aggregate axis differs. The red count does not, since aggregate cases are

@@ -2,6 +2,99 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-10-30 — `audit-team.sh` check 7 amended to the identifier policy (identifier-leak cleanup U1)
+
+- **What:** I rewrote check 7 in `claude/scripts/audit-team.sh`. It now FAILs only on two things.
+- **The home path, Linux side.** `$HOME` is normalised first (`${HOME%/}`), because a trailing
+  slash silently narrowed every form (U3 m1). Four forms are matched:
+  - absolute;
+  - Claude Code's slug, `${h//[^A-Za-z0-9]/-}`, which covers `/tmp/claude-<uid>/-home-<user>-…`
+    and `~/.claude/projects/-home-<user>-…`;
+  - JSON-escaped, `\/home\/<user>`;
+  - URL-encoded, `%2Fhome%2F<user>`.
+- **The home path, Windows side, under WSL (U3 M1; stakeholder decision 2026-10-30).**
+  - The profile name is derived from the filesystem. It is every directory under `/mnt/c/Users/`
+    that holds `NTUSER.DAT`, excluding symlinks and the `Default` template. Public and
+    service-account directories have no `NTUSER.DAT`; verified live, two profiles carry it.
+  - Matched as `Users<sep><winuser>`, with `<sep>` one of `/`, `\`, `\\`, `\/` or `%2F`.
+    That covers `/mnt/c/Users/…`, `C:\Users\…`, `C:/Users/…`, the JSON- and doubly-escaped
+    forms, and URL-encoding.
+  - Two forms need the name rewritten as well (U3 Pass 2, P2-m1):
+    - **The slug** is matched as `Users-${w//[^A-Za-z0-9]/-}`. Claude Code's slug also turns the
+      name's own dots and spaces into `-`, so `Jo.Ana` becomes `C--Users-Jo-Ana-…`.
+    - **A space in a URL-encoded name** becomes `%20`. That variant was my own addition beyond the
+      review's suggested fix.
+    - The Linux slug already slugified the whole `$HOME`, so it needed no change.
+  - I rejected `cmd.exe` and `wslvar`. Both spawn an interop process, which is slow and can stall
+    on this host (`claude/devops/ops-quirks.md`), and `wslvar` is not installed by default.
+  - Off WSL the directory does not exist, so no pattern is built and nothing errors.
+  - `AUDIT_WIN_USERS_DIR` is a test seam only.
+- **The hostname**, as a whole word.
+- **Every match is case-insensitive and derived at runtime. Nothing is hardcoded.**
+- **Home-path patterns are bounded EREs over regex-escaped literals, not `grep -F -w`.**
+  - They are end-bounded, so `/home/<user>2` and `Users/<winuser>x` do not hit.
+  - The slug is start-bounded too, so `HOME=/root`'s `-root` does not hit `pre-root`.
+  - `-w` was tried first and failed. It also demands a non-word character *before* the match, which
+    an encoded form like `…c%2FUsers%2F<winuser>` never has.
+- **Not caught, and stated in the script comment:** `/home//<user>` and `~<user>/` (U3 m2). The
+  old comment claimed the home-path forms "still catch" a username inside a path; that overclaim
+  is gone.
+- **The username is not scanned.** It *is* a leak, but a bare-word check is dropped because the
+  username coincides with the stakeholder's real name. Genuine mentions of that name (like the git
+  user.name/email, which are acceptable) must never be flagged or removed (stakeholder
+  clarification, 2026-10-30; U3 m3).
+  - It took four steps to get here: a username check with a git-name/email exemption, then a
+    case-sensitive one, then removal. All in this session.
+  - **Do not restore a bare-word username check.** The policy forbids flagging genuine name
+    mentions.
+- **Git user.name and user.email are not scanned either.** They are acceptable, and a NOTE would
+  fire on every author credit and teach readers to skip check 7.
+- **Two side changes:**
+  - **Hits print as `path:line` plus file and line counts, never the matched text.** The old check
+    echoed the identifier, and that output gets pasted into reviews and kaizen, which re-leaks it.
+  - **`grep -H`.** When xargs's last batch held a single file, grep printed no filename. That bug
+    predates this change.
+- **Why:** stakeholder policy, `claude/docs/plans/identifier-leak-cleanup-coordination.md`, and the
+  U3 review, `claude/docs/reviews/identifier-leak-cleanup.md` (Pass 1: M1, m1, m2, m3; Pass 2: P2-m1).
+- **Verified by mutation.** Each form went, one at a time, into an untracked, non-ignored scratch
+  file under `claude/`. Each hit was attributed to the FAIL label that follows it. The scratch file
+  was deleted afterwards.
+  - **FAIL as expected, Linux home path:**
+    - absolute, including at end of line and in uppercase;
+    - the slug, in both its scratch-path and projects-path shapes;
+    - JSON-escaped;
+    - URL-encoded, upper- and lowercase, including after a word character;
+    - with a trailing-slash `HOME`, both the absolute form at end of line and the slug.
+  - **FAIL as expected, Windows home path:**
+    - `/mnt/c/Users/…`, including at end of line;
+    - `C:\Users\…`, and its doubled-backslash and forward-slash forms;
+    - JSON-escaped;
+    - the slug;
+    - URL-encoded, upper- and lowercase;
+    - uppercase.
+  - **FAIL as expected, fixture profiles `Jo.Ana` and `Ana Lu`** (via `AUDIT_WIN_USERS_DIR`):
+    - both slug shapes, `C--Users-…` and `-mnt-c-Users-…`;
+    - the raw `/mnt/c/Users/…` and `C:\Users\…` forms;
+    - URL-encoded, `%20` included.
+  - **FAIL as expected, Linux slug of a dotted `HOME`:** `/home/m.a.r` → `-home-m-a-r`.
+  - **FAIL as expected, hostname:** lowercase and all-caps.
+  - **No FAIL, as expected:**
+    - home path with a suffix (`/home/<user>zz`) or a prefix (`pre-home-<user>`);
+    - `HOME=/root` against `pre-root`;
+    - `/home//<user>` (documented as not caught);
+    - Windows placeholders, `Public` and `Default` (live and fixture), and a profile name with a
+      suffix, in raw and slug form;
+    - the off-WSL degrade (no patterns, no error);
+    - a bare username;
+    - git name plus email;
+    - an empty file.
+  - **Negative-control mutants:**
+    - With the Windows patterns removed, the `/mnt/c/Users/…` row stops failing.
+    - With the trailing-slash normalisation removed, its row stops failing.
+    - With the `NTUSER.DAT` filter removed and `Public` fed in, `Public` FAILs.
+    - With the slug row built from the raw name, both fixture slug rows stop failing (P2-m1).
+- **Plan items:** K-056 rewritten (U1 delivered, U2/U3 pending); K-059 added (checks 2/3 echo `$HOME`).
+
 ## 2026-10-14 — K-054 revision: analyst Pass 1 and Pass 2 findings addressed, CPG freshness report (U4), tracked test
 
 Inputs:

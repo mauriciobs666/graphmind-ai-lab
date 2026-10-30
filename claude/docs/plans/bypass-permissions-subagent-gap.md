@@ -302,7 +302,7 @@ upstream report (§4).
 
 ## 3. Live empirical test (this session, `cobb`, 2026-09-01)
 
-Per the brief's constraint 2 — the human (`mauricio`) was at the terminal, actively watching for
+Per the brief's constraint 2 — the human was at the terminal, actively watching for
 and approving permission popups, the same setup that produced today's fresh evidence.
 
 **Test 1 (uninformative by construction, kept for the record):** dispatched a `tdd-engineer`

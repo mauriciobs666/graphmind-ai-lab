@@ -66,16 +66,16 @@ process gap is itself worth naming, not just the technical one.
   subagent JSONL transcript** — read them directly, they're the same shape of evidence
   `write-guard-classifier-gap.md` §1 used (a `"type":"permission-mode"` record in a transcript
   showed the parent stayed in literal `auto` despite frontmatter claiming otherwise):
-  - `architect` run: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a32e8f024ac9dde46.output` — 1 user-observed prompt (a `Write` on the new plan doc).
-  - `tdd-engineer` run: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a900b002b6a314590.output` — **6** user-observed prompts, in order: `Edit server/tests/test_llm.py`, `Edit server/falkorchat/llm.py` (×4, i.e. it re-prompted on the *same file* repeatedly, not just once per file), `Edit docs/HISTORY.md`. No approval carried over to a later call, not even on the same file.
-  - `analyst` run: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a2a4f368a40dc9fb6.output` — 1 user-observed prompt (a `Write` creating the new review doc).
+  - `architect` run: `/tmp/claude-<uid>/-home-<user>-<repo>/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a32e8f024ac9dde46.output` — 1 user-observed prompt (a `Write` on the new plan doc).
+  - `tdd-engineer` run: `/tmp/claude-<uid>/-home-<user>-<repo>/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a900b002b6a314590.output` — **6** user-observed prompts, in order: `Edit server/tests/test_llm.py`, `Edit server/falkorchat/llm.py` (×4, i.e. it re-prompted on the *same file* repeatedly, not just once per file), `Edit docs/HISTORY.md`. No approval carried over to a later call, not even on the same file.
+  - `analyst` run: `/tmp/claude-<uid>/-home-<user>-<repo>/bff1000c-396b-4d6c-9de3-5d441baae4c7/tasks/a2a4f368a40dc9fb6.output` — 1 user-observed prompt (a `Write` creating the new review doc).
   - Search each for `permission-mode`, `permissionDecision`, `tool_use`/`toolUseResult` gaps
     around the `Write`/`Edit` calls that prompted, the same method Gen 1/2 used. Confirm what
     mode each subagent's transcript actually shows as ambient at the moment of each prompt —
     this is the single most direct way to test whether `bypassPermissions` inheritance is
     actually happening or silently not.
 - **`teco`'s own (this) session transcript**, for the parent-side record:
-  `/home/mauricio/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/bff1000c-396b-4d6c-9de3-5d441baae4c7.jsonl`
+  `~/.claude/projects/-home-<user>-<repo>/bff1000c-396b-4d6c-9de3-5d441baae4c7.jsonl`
   (session id `bff1000c-396b-4d6c-9de3-5d441baae4c7`) — find its own
   `"type":"permission-mode"` record(s) to confirm what the actual parent-session mode was during
   today's three dispatches, the same check Gen 2/3 ran.
@@ -99,7 +99,7 @@ process gap is itself worth naming, not just the technical one.
    nested `claude -p` subprocess spawned from Bash) was blocked by the classifier governing the
    investigating session itself. **That blocker does not apply to you the way it applied there**:
    you can dispatch a real `Agent`/`Task` call yourself (e.g., a trivial one-file `Edit` via
-   `tdd-engineer` or a throwaway agent, on a scratch file) — the human (`mauricio`) is at the
+   `tdd-engineer` or a throwaway agent, on a scratch file) — the human is at the
    terminal right now, actively watching for and approving permission popups (that's how today's
    evidence was collected), so a live dispatch from you will surface the same way today's three
    did. Use this to test a specific hypothesis, not just to reproduce the existing symptom (we

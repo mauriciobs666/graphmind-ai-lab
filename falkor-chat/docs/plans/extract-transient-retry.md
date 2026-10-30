@@ -1087,7 +1087,7 @@ directory, never in `server/`.
   to be unreachable from WSL (ws:agent-team KB), so always use a scratch copy pointing at
   `localhost`.
 - **The `lms` CLI is reachable from WSL.** It is not on `PATH`, but it runs at
-  `/mnt/c/Users/mauri/.lmstudio/bin/lms.exe`, at about 0.3 s per call. I verified on 2026-10-15
+  `/mnt/c/Users/<winuser>/.lmstudio/bin/lms.exe`, at about 0.3 s per call. I verified on 2026-10-15
   that these subcommands exist: `lms unload [id] / --all`, `lms load`, `lms ps`,
   `lms server start|stop|status`, and `lms log stream`. So legs (e)–(g) need **no human at the
   Windows side**, provided the LM Studio app or daemon is running.

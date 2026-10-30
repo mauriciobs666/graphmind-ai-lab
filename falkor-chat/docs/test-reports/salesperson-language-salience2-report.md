@@ -53,7 +53,7 @@ failures. The one code question (which models the demo calls) was answered by re
   `verify_catalog` → `RESULT: OK — product catalog in sync (15 products)`,
   `verify_salesperson` → `RESULT: OK — 2 defs in sync between reference and ws:demo`, and the
   storefront preflight `ws=demo agent=assistant def=salesperson@v8 products=15 images=14`.
-  Server log kept on disk: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/demo-u6.log`.
+  Server log kept on disk: `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/demo-u6.log`.
 - **Models the demo calls** (`falkor-chat/config/models.json` + `ws:demo`'s `WorkspaceConfig`,
   which carries only `embeddingModelOverride: lmstudio/text-embedding-qwen3-embedding-0.6b`, no
   `agentModelOverride`): `mistralai/ministral-3-3b` (the `assistant` step's pinned
@@ -107,7 +107,7 @@ turns, 1,119 with a reply. Window 21:09:53 → 22:16:24 (run_start → run_end).
 **Authoritative count: the hand-read.** Every one of the 1,119 replied turns, in all three
 languages, including every reply the classifier passed, was read in full from
 `aggregate --dump-replies`-equivalent output. One judgment per reply is recorded at
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/salience2-handread.jsonl`,
+`/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/salience2-handread.jsonl`,
 next to the run file `salience2.jsonl`. It has 1,119 lines, one per replied turn, no duplicates and
 no replied turn missing (checked by script). **Hand-read result: 0 wrong-language replies in any
 language.** The v2 classifier agrees with the hand-read on all 1,119 turns, with 0 disagreements

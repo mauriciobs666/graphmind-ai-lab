@@ -890,7 +890,7 @@ added-not-committed dir             rc=0 commit=[c61947b] tree=[] dirty=[true]  
 cpg_falkorchat:
 (:CpgBuildInfo{BUILT_AT:"2026-09-07T22:25:45Z", SOURCE_COMMIT:"b795f4c",
                SOURCE_DIRTY:False,
-               SOURCE_PATH:"/home/mauricio/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server"})
+               SOURCE_PATH:"$HOME/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server"})
   → no PROVENANCE / PARSED_AT / SOURCE_ORIGIN / SOURCE_TREE  (M3)
 
 cpg_deprecated_salesperson:
@@ -926,7 +926,7 @@ cpg_falkorchat:
   keys = ['BUILT_AT', 'SOURCE_PATH', 'SOURCE_COMMIT', 'SOURCE_DIRTY']
   builtAt=2026-09-07T22:25:45Z  commit=b795f4c  dirty=false
   parsedAt=null  provenance=null  origin=null  tree=null
-  path=/home/mauricio/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
+  path=$HOME/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
   -> exactly the four fields the manual names.  (question 2: confirmed)
 
 cpg_deprecated_salesperson:
@@ -948,7 +948,7 @@ cpg/.gitignore:3:.cpg-artifacts/	cpg/.cpg-artifacts
 $ git log --oneline -- cpg/.cpg-artifacts/src/falkor-chat-server
 $ echo "exit=$? commits=0"
 exit=0 commits=0                                  # no output, no warning
-$ git log --oneline -- /home/mauricio/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
+$ git log --oneline -- $HOME/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
 $ echo $?
 0                                                 # same for the absolute form stored in SOURCE_PATH
 $ git log --oneline -- /tmp/cpg-src/falkor-chat-server

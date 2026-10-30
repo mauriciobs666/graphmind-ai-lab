@@ -1051,7 +1051,7 @@ returning **verbatim** after being fixed once, which is precisely what a deferre
 
 I briefed U13 with the premise *"`lms` is not on PATH, so `residentModelsAtStart` cannot come from
 `lms ps --json`."* The architect re-probed instead of accepting it, and **half of it was wrong**:
-`command -v lms` does exit 1, but `/mnt/c/Users/mauri/.lmstudio/bin/lms.exe ps --json` runs fine and
+`command -v lms` does exit 1, but `/mnt/c/Users/<winuser>/.lmstudio/bin/lms.exe ps --json` runs fine and
 returns `[]`. **I verified both myself**, along with the timing that actually decides it — **0.307 s**
 for the CLI against **under 10 ms** for the HTTP call returning the same fact.
 

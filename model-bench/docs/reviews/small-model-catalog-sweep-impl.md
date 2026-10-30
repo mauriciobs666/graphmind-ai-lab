@@ -148,11 +148,12 @@ gating.
 ## Appendix — independent mutation-test script
 
 ```python
+import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/home/mauricio/prg/graphmind-ai-lab/model-bench/scripts")
-sys.path.insert(0, "/home/mauricio/prg/graphmind-ai-lab/model-bench/tests")
+sys.path.insert(0, os.path.expanduser("~/prg/graphmind-ai-lab/model-bench/scripts"))
+sys.path.insert(0, os.path.expanduser("~/prg/graphmind-ai-lab/model-bench/tests"))
 import consolidate_sweep_reports as csr
 import test_consolidate_sweep_reports as t
 

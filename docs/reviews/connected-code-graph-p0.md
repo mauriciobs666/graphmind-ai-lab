@@ -47,7 +47,7 @@ builders. In that setting:
 4. **The guards fight the writes.** The analyst guard escalates every write outside `docs/reviews/`
    to the human (`claude/analyst/hooks/guard-review-doc-writes.sh`), so every KB and AN1 key write
    stops for approval.
-5. **The audit is wrong in both directions.** Every transcript line carries `"cwd":"/home/mauricio/prg/graphmind-ai-lab"`
+5. **The audit is wrong in both directions.** Every transcript line carries `"cwd":"$HOME/prg/graphmind-ai-lab"`
    (169 of 247 lines in U15's transcript; see the appendix). A grep for the repo prefix therefore
    hits every agent. A relative-path read of the repo (`grep -r X .`) contains no prefix at all and
    is missed.
@@ -267,8 +267,8 @@ out" (M1). That changes S04 and S08, not the choice of the container as the prim
 
 **A. Probes run for this pass (2026-10-29).**
 - Transcript format.
-  - `~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/13504717-…/subagents/agent-a5c76dc11e6c767df.jsonl`
-    has 247 lines. 201 contain the repo path, and 169 of them through `"cwd":"/home/mauricio/prg/graphmind-ai-lab"`.
+  - `~/.claude/projects/-home-<user>-<repo>/13504717-…/subagents/agent-a5c76dc11e6c767df.jsonl`
+    has 247 lines. 201 contain the repo path, and 169 of them through `"cwd":"$HOME/prg/graphmind-ai-lab"`.
   - `.meta.json` shows `agentType: architect`.
 - Interop inside the namespace.
   - `unshare -rn bash -c '/mnt/c/Windows/System32/cmd.exe /c ver'` printed the CMD banner, with a

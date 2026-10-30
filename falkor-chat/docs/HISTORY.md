@@ -6241,7 +6241,7 @@ Read-only devops diagnostic of the WSL2 memory-overload crashes on the downgrade
 persisted at `docs/plans/wsl2-memory-diagnostic.md`. **Verdict: ballooning confirmed by defaults** —
 WSL2 runs uncapped at its 8GB default (50% of the host) with `autoMemoryReclaim` off, overcommitting
 host RAM alongside Windows-side LM Studio (not reproduced live — FalkorDB was down during the run).
-Recommended fix (`memory=6GB` + `swap=4GB` + `autoMemoryReclaim=gradual` in `C:\Users\mauri\.wslconfig`,
+Recommended fix (`memory=6GB` + `swap=4GB` + `autoMemoryReclaim=gradual` in `C:\Users\<winuser>\.wslconfig`,
 keeping `networkingMode=mirrored`; needs `wsl --shutdown`) was **parked, not applied, per the user's
 decision** — un-park if the crashes recur. Tracked as a Parking-lot bullet in
 [`BACKLOG.md`](./BACKLOG.md) (`## Parking lot / ideas`). Docs-only; no config or code changed.

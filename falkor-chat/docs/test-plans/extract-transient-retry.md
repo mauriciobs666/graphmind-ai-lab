@@ -79,7 +79,7 @@ run"):
 - **Text**: every leg-run's text starts `Probe run <nonce>.` (`uuid4().hex[:8]`); in a
   multi-chunk document **every chunk** carries the nonce (review Pass 3 N-3 nit).
 - **Scratch**: proxy, driver, per-leg logs, `nonce → documentId → body hashes` records under
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5/`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5/`.
 
 ## 5. Half A test items (executed)
 
@@ -141,7 +141,7 @@ re-run.** Any miss → do not start; wait and re-check, or ask the coordinator.
    > - Still unverified: whether a `POST` completion request logs under `server`. QA records that
    >   on the first real request.
 
-   Concretely: start `/mnt/c/Users/mauri/.lmstudio/bin/lms.exe log stream --source server --json`
+   Concretely: start `/mnt/c/Users/<winuser>/.lmstudio/bin/lms.exe log stream --source server --json`
    ≥ 60 s before the leg, run the positive-control `curl -s localhost:1234/v1/models`, confirm a
    `{"type":"server.log",…}` line appears, then require **no request line for the last 60 s**.
 

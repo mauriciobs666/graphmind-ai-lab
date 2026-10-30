@@ -60,7 +60,7 @@
   `POST`s, 3 were forwarded `GET /v1/models`, and the remaining 30 were faults the proxy served
   itself, which LM Studio never saw.
 - **Scratch evidence**, all under
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5/`:
+  `/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5/`:
   - `proxy.py`, `driver.py`, `commands.log` (every driver invocation);
   - `runs/TP-0NN.json` and `.out` (per leg-run: timeline, proxy lines, server lines, graph state);
   - `proxy.log.final.jsonl`, `server.log`, `records.md`.
@@ -365,7 +365,7 @@ a graph query (code-level gap analysis was done at the U4 gates on `cpg_falkorch
 ### B.3 Per-leg evidence
 
 Scratch evidence for every Half B leg is under
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5b/`:
+`/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/u5b/`:
 `driver_b.py`, `precheck.py`, `commands.log`, `runs/TP-1NN.{json,out}` and
 `runs/TP-1NN-{pre,post}check.json`, `server.log`, `lms-server-stream.jsonl` (`lms log stream
 --source server --json`) and `lms-model-stream.jsonl` (`--source model`).

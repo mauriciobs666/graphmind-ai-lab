@@ -29,7 +29,7 @@ wrong symbol. Three mechanisms, ranked by impact in §4.
 ## 2. Reproduction & evidence
 
 **The run's artifacts are still on disk** (the report's "not durable" scratchpad survived):
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/u3/`
+`/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/u3/`
 — `single-model.jsonl` (probe, 1,125 turns), `lms-server-q3.log` (LM Studio server log, which logs
 every **generated** completion including tool calls and `query_graph_data`'s internal JSON — but not
 request bodies, so tool *results* are reconstructed, see below), `demo-q3-window.log`. A parser that

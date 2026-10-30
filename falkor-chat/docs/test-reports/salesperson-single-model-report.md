@@ -56,7 +56,7 @@ already settled. `cpg_falkorchat` is stale per the plan and review.
 
   Hashes are as of this run. None of these scripts is committed; `teco` commits.
 - Raw data (session scratchpad, not durable; this report is meant to stand alone):
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/u3/`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/u3/`.
   - Probe runs: `single-model.jsonl` (Q3), `q4-workers2.jsonl` (Q4).
   - NLQ results: `nlq-qwen-current.json`, `nlq-ministral.json`.
   - Q1: `q1.jsonl`.

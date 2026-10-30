@@ -284,7 +284,7 @@ full lines, plus startup and shutdown lines present. It passes `run1`, `run2`, `
 `uniq -d` catches only the `falkorchat.propagate` duplicate: the `uvicorn`/access duplicates
 differ textually. That is why the structural probe, not the log grep, has to be the guard.
 
-`…/scratchpad/` = `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/cc651677-ac22-4370-9988-76881753007e/scratchpad/`.
+`…/scratchpad/` = `/tmp/claude-<uid>/-home-<user>-<repo>/cc651677-ac22-4370-9988-76881753007e/scratchpad/`.
 
 ## Pass 2
 

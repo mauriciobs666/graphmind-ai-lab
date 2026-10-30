@@ -314,7 +314,7 @@ worth a fast follow given how ordinary the triggering titles are.
 - Test plan: `falkor-chat/docs/test-plans/document-ingestion2.md`
 - This report: `falkor-chat/docs/test-reports/document-ingestion2-report.md`
 - Scratch harness (not part of the permanent test suite, kept for reference):
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/8a99d39c-05e5-4728-9683-42324e138a1e/scratchpad/di2-qa/`
+  `/tmp/claude-<uid>/-home-<user>-<repo>/8a99d39c-05e5-4728-9683-42324e138a1e/scratchpad/di2-qa/`
   (`mcp_call.py` — generic real MCP Streamable-HTTP tool caller; `opencode-local.json` — corrected
   LM Studio `baseURL` copy; `server-run1.log`/`server-run2.log` — full server logs for both actor
   runs).

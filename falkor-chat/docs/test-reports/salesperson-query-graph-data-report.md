@@ -46,7 +46,7 @@ Plan: `docs/test-plans/salesperson-query-graph-data.md`. Spec: `docs/plans/sales
   `qa-engineer`. The run used sha256 `e3855959…9b03`. A docstring line for the new entry was added
   after the run. `language_salience_probe.py` is `5949774a…0787`, identical to id2's.
 - **Raw data** (session scratchpad, not durable):
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/`.
   It holds `run0.log`, `run1.log`, `nlq-ministral-{before,after}.json`, `compare.txt`,
   `completion-diff.txt`, `replay.{log,json}`, `browse.jsonl`, `browse-type.jsonl`, `proxy.jsonl`,
   `*-joined.{txt,json}`, `lms-server.log` and `scripts/`.
@@ -247,7 +247,7 @@ plan §8.1 calls structurally unanswerable.
 - **Run:** 21:23:58–21:24:31 on `HEAD` `da469e47`, from `falkor-chat/server`.
 - **Script:** a one-off scratch script modelled on the Stage C replay. It is not committed.
 - **Raw output:**
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/def2-probe/`
+  `/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/def2-probe/`
   (`probe.py`, `probe.log`, `probe.json`, `prompt_dump.py`, `prompt-*.txt`, `f6-check.txt`,
   `verify.log`).
 

@@ -337,19 +337,19 @@ U3 deliverable: `falkor-chat/docs/test-reports/salesperson-single-model-report.m
   6/1,125 dead = 0.5% Wilson [0.2%, 1.2%], all ministral `Context size has been exceeded`, in
   two simultaneous bursts.
   **Turn latency** over its 1,119 replied turns, computed by the architect from the raw
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/salience2.jsonl`: `turn_ms` p50 **6.0 s**, p95 **24.1 s**, max 62.3 s. This uses
+  `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/salience2.jsonl`: `turn_ms` p50 **6.0 s**, p95 **24.1 s**, max 62.3 s. This uses
   nearest-rank on sorted `turn_ms` of replied records, quantized by the probe's 2 s poll; Q5
   uses the same computation.
 - **NLQ:** Q0's fresh qwen run. The tracked `falkor-chat/server/tests/eval/nlq_eval_results.json`
   (qwen, 2026-08-30, 33/39, catalog 20/20) stays the fallback comparator.
 
-**Instruments** (`LMS=/mnt/c/Users/mauri/.lmstudio/bin/lms.exe`):
+**Instruments** (`LMS=/mnt/c/Users/<winuser>/.lmstudio/bin/lms.exe`):
 - `nvidia-smi --query-gpu=memory.used,memory.total --format=csv`.
 - U0's Windows counters `\GPU Process Memory(*)\Dedicated Usage` / `Shared Usage` for the
   NVIDIA adapter (LUID `0x00011343`, re-check it), read via `powershell.exe Get-Counter` for
   **both** `llama-server` and the LM Studio process, plus the adapter total. Sample every 5 s
-  across Q3 into the scratchpad. U0's script was `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/gpumem.ps1`.
-- U0's throughput/swap harness, `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/bench.py`.
+  across Q3 into the scratchpad. U0's script was `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/gpumem.ps1`.
+- U0's throughput/swap harness, `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/bench.py`.
 - `$LMS log stream -s runtime` kept to a file for the whole window.
 
 **Steps, in order:**

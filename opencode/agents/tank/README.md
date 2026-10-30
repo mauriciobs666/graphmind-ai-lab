@@ -95,7 +95,9 @@ edit to `devops-persona.md` takes effect the next time `tank` runs.
 `tank`'s `permission.bash` allow-list never matches a raw `docker compose` invocation — the only
 compose-facing commands it allows are the three inner wrapper scripts
 (`scripts/compose-status.sh`, `compose-up.sh`, `compose-down.sh`), each anchored to its exact,
-absolute path. Each allow pattern ends in a trailing `*` (e.g. `.../compose-down.sh *`), which
+absolute path, written as `{env:HOME}/prg/graphmind-ai-lab/opencode/agents/tank/scripts/…` —
+OpenCode substitutes `{env:VAR}` in keys too (an unset variable becomes empty, silently), so a
+clone at any other location must edit those three keys to match. Each allow pattern ends in a trailing `*` (e.g. `.../compose-down.sh *`), which
 looks broad, but is safe *only* because the pattern's one job is "can this script be reached at
 all" — the script itself is what validates the argument: exactly one token, looked up against
 `environments.json` by true key equality, never substring/prefix/glob. Anything else (extra

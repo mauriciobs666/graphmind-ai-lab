@@ -29,10 +29,20 @@
 #      routing contract every router sees). Pairs declared in BOUNDARY_PAIRS.
 #   7. personal-info leak — no tracked *or untracked-but-not-gitignored* file
 #      anywhere in the repo may contain the maintainer's personal identifiers:
-#      home path, username, git user.name, git user.email, or hostname.
-#      Patterns are derived at runtime (never hardcoded here — that would
-#      itself be the leak), so the check protects whoever runs it. Committed
-#      artifacts must be machine- and identity-portable
+#      home path — Linux side ($HOME absolute, its Claude Code `-home-<user>-…`
+#      slug, JSON-escaped `\/home\/<user>` and URL-encoded `%2Fhome%2F<user>`)
+#      and, under WSL, the Windows side (`/mnt/c/Users/<winuser>`,
+#      `C:\Users\<winuser>`, `C:/…`, JSON-escaped, doubled-backslash, URL-
+#      encoded incl. %20 for a space, and the slug with the name's own
+#      non-alphanumerics as '-') — or hostname. Not caught:
+#      `/home//<user>`, `~<user>/`. The bare username is not scanned: it can
+#      coincide with the maintainer's real name, whose genuine mentions (like
+#      git user.name/user.email) must not be flagged (stakeholder, 2026-10-30)
+#      — it is still a leak, just not one a bare-word grep can tell apart.
+#      Hits print as path:line only, never the matched text. Patterns are
+#      derived at runtime (never hardcoded here — that would itself be the
+#      leak), so the check protects whoever runs it. Committed artifacts must
+#      be machine- and identity-portable
 #      ($HOME/.claude/agents/<name>/… resolves via the deployment symlink on
 #      any machine). Origin: 2026-07-10, six agents' hook commands were
 #      committed with the absolute /home/<user>/… path. Widened 2026-08-08
@@ -178,35 +188,67 @@ for p in "${BOUNDARY_PAIRS[@]}"; do
 done
 
 # 7. personal-info leak — committed artifacts must be machine- and identity-portable
+#    Policy (stakeholder, 2026-10-30, claude/docs/plans/identifier-leak-cleanup-coordination.md):
+#    home path (Linux and, under WSL, Windows side) and hostname are leaks. The username is
+#    a leak too, but a bare-word scan is dropped: it can coincide with the maintainer's name,
+#    whose genuine mentions (like git name/email) must never be flagged or removed.
 echo
-declare -A pii=()                                  # label → pattern (runtime-derived, never hardcoded)
-[ -n "${HOME:-}" ]  && pii["home path"]="$HOME"
-u="$(id -un 2>/dev/null || true)"
-[ -n "$u" ]         && pii["username"]="$u"
-gn="$(git -C "$ROOT" config user.name 2>/dev/null || true)"
-[ -n "$gn" ]        && pii["git user.name"]="$gn"
-ge="$(git -C "$ROOT" config user.email 2>/dev/null || true)"
-[ -n "$ge" ]        && pii["git user.email"]="$ge"
-hn="$(hostname 2>/dev/null || true)"
-[ -n "$hn" ]        && pii["hostname"]="$hn"
-leaked=0
-for label in "${!pii[@]}"; do
-  wordflag=()                                      # short bare tokens get word bounds to avoid substring noise
-  case "$label" in username|hostname) wordflag=(-w) ;; esac
-  # Tracked + untracked-but-not-gitignored, so a brand-new file leaking an
-  # identifier can't pass this gate silently just because it hasn't been
-  # `git add`ed yet (C-309b, 2026-08-08 — plain `git grep` only sees tracked
-  # content). Check output emptiness rather than exit code so an empty file
-  # list (xargs -r skips the run) and a clean grep (exit 1) both fall through
-  # to "no hits" instead of one of them misfiring as a false FAIL.
-  hits="$(cd "$ROOT" && git ls-files -z --cached --others --exclude-standard \
-            | xargs -0 -r grep -I -n -i "${wordflag[@]}" -F -e "${pii[$label]}" -- 2>/dev/null)"
-  [ -n "$hits" ] || continue
-  printf '%s\n' "$hits" | sed 's/^/      /'
-  failmsg "repo: $label leaked into a tracked or untracked (non-ignored) file — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
+scan_files() {                                     # tracked + untracked-but-not-ignored (C-309b)
+  (cd "$ROOT" && git ls-files -z --cached --others --exclude-standard)
+}
+# Report locations only (path:line), never the matched text: this output gets
+# pasted into reviews/kaizen, and echoing the identifier would re-leak it.
+leakfail() {                                       # $1 label, $2 hits (path:line:...), one per line
+  [ -n "$2" ] || return 0
+  printf '%s\n' "$2" | cut -d: -f1,2 | sed 's/^/      /'
+  failmsg "repo: $1 leaked into $(printf '%s\n' "$2" | cut -d: -f1 | sort -u | wc -l) tracked or untracked (non-ignored) file(s), $(printf '%s\n' "$2" | wc -l) line(s) — genericize it (paths: \$HOME/.claude/agents/<name>/…, prose: /home/<user>/…)"
   leaked=1
+}
+# grep over the scan set (caller picks -F or -E); empty output means no hits whether the
+# file list was empty (xargs -r) or grep found nothing (exit 1).
+pii_grep() { scan_files | (cd "$ROOT" && xargs -0 -r grep -I -H -n "$@" -- 2>/dev/null); }
+leaked=0
+hn="$(hostname 2>/dev/null || true)"
+# Home-path patterns are EREs over regex-escaped literals, bounded at the END
+# (so /home/<user>2 or Users/<winuser>x don't hit) and, for the slug, also at
+# the START (so HOME=/root's "-root" doesn't hit "pre-root"). grep -w is not
+# usable here: it also demands a non-word char BEFORE the match, which an
+# encoded form like "…c%2FUsers%2F<winuser>" never has.
+ere_lit() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|/]/\\&/g'; }
+B='([^[:alnum:]_]|$)'
+hpats=()
+# Linux home path, normalised (a trailing '/' would silently narrow every
+# form). Forms: absolute, Claude Code's slug (non-alphanumerics → '-', as in
+# /tmp/claude-<uid>/-home-<user>-…/ and ~/.claude/projects/-home-<user>-…/),
+# JSON-escaped and URL-encoded.
+hp="${HOME:-}"; hp="${hp%/}"
+if [ -n "$hp" ]; then
+  hpats+=(-e "$(ere_lit "$hp")$B" -e "(^|[^[:alnum:]_])$(ere_lit "${hp//[^A-Za-z0-9]/-}")$B"
+          -e "$(ere_lit "${hp//\//\\/}")$B" -e "$(ere_lit "${hp//\//%2F}")$B")
+fi
+# Windows-side home path (WSL). The profile name differs from the Linux user,
+# so derive it: every real profile directory under the C: mount — one holding
+# NTUSER.DAT, which Public/service-account dirs lack — minus the Default
+# template. Filesystem-only on purpose: no cmd.exe/wslvar interop spawn (slow,
+# and stall-prone on this host per claude/devops/ops-quirks.md). Off WSL the
+# directory is absent, so no pattern is built and this half is silent.
+# AUDIT_WIN_USERS_DIR is a test seam only.
+for d in "${AUDIT_WIN_USERS_DIR:-/mnt/c/Users}"/*/; do
+  [ -e "${d}NTUSER.DAT" ] && [ ! -L "${d%/}" ] || continue
+  w="$(basename "$d")"
+  case "$w" in Default|"Default User") continue ;; esac
+  for sep in '/' '\' '\\' '\/' '%2F'; do hpats+=(-e "$(ere_lit "Users${sep}${w}")$B"); done
+  # Claude Code's slug turns the name's own dots/spaces into '-' too; URL-encoding a space gives %20.
+  hpats+=(-e "$(ere_lit "Users-${w//[^A-Za-z0-9]/-}")$B" -e "$(ere_lit "Users%2F${w// /%20}")$B")
 done
-[ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path, username, git name/email, hostname) in any tracked or untracked (non-ignored) file"
+hits=""
+[ "${#hpats[@]}" -gt 0 ] && hits="$(pii_grep -i -E "${hpats[@]}")"
+leakfail "home path" "$hits"
+[ -n "$hn" ] && leakfail "hostname" "$(pii_grep -i -w -F -e "$hn")"
+# bare username, git user.name/user.email: deliberately not scanned — a username equal to the
+# maintainer's name can't be told apart from a genuine name mention (2026-10-30 policy); a NOTE
+# would fire on every author credit and teach readers to ignore it.
+[ "$leaked" -eq 0 ] && pass "repo: no personal identifiers (home path — Linux and Windows-side forms — or hostname) in any tracked or untracked (non-ignored) file"
 
 # 8. git-commit-authority scoping — every agent claims it, and correctly
 #    carves out delegated-subagent mode (2026-08-21 universal grant); tico/teco

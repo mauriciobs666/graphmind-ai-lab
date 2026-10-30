@@ -29,7 +29,7 @@
   `skills/agent-standards/*`, `cypher-mcp/README.md`, `docs/BACKLOG.md`), so this repo's own hook
   cannot be the mechanism — consistent with the entry's own framing (an unexplained *harness*
   denial, not a hook `"ask"` escalation, which would have surfaced reason text). Then searched this
-  machine's session transcripts (`~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/*.jsonl`)
+  machine's session transcripts (`~/.claude/projects/-home-<user>-<repo>/*.jsonl`)
   for the exact denial text ("Permission for this tool use was denied") co-occurring with
   `salesperson/README.md`, across every 2026-09-18-dated file and every file mentioning
   `salesperson/README.md` at all (57 files checked) — **no matching transcript found.** Delegated

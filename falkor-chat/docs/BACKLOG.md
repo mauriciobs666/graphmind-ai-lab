@@ -886,6 +886,6 @@ Every other plan named by a delivered item now exists; this is what is left.
 - **WSL2 memory cap for the 16GB host** (parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
   default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
   likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +
-  `autoMemoryReclaim=gradual` in `C:\Users\mauri\.wslconfig` (keep `networkingMode=mirrored`), then `wsl --shutdown`.
+  `autoMemoryReclaim=gradual` in `C:\Users\<winuser>\.wslconfig` (keep `networkingMode=mirrored`), then `wsl --shutdown`.
   Full diagnostic + apply procedure: `docs/plans/wsl2-memory-diagnostic.md`. Un-park (apply) if the crashes recur —
   verdict was confirmed-by-defaults, not reproduced live (FalkorDB was down during the diagnostic).

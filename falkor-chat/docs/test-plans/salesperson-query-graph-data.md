@@ -40,7 +40,7 @@ Code under test: Stage A `6286de44`, tests `d5ba5728`, Stage B `9ba0d788`. Run 0
 - `reference` seeded with the catalog; `ws:nlq-eval` seeded. `verify_salesperson.sh demo` and
   `verify_catalog.sh` rc 0 before and after.
 - `:8200` agent-team server: up, left untouched, idle (log watched).
-- Scratch: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/`
+- Scratch: `/tmp/claude-<uid>/-home-<user>-<repo>/c6bf0232-c1ae-4f33-8aa9-de25f4a9b94a/scratchpad/stageC/`
   (models json copy, Run 0 export, results, probe JSONL, proxy log).
 - Mechanism capture for §8.3: an observe-only proxy (`:1235 → :1234`, request + response bodies
   per line, as id2 did), with the demo pointed at it through a scratch copy of

@@ -347,5 +347,5 @@ SURVIVED unknown counted adherent
 KILLED   next_trial_index off by one (reuses last)
 ```
 
-Scratch scripts: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/`
+Scratch scripts: `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/`
 (`cls.py`, `cls2.py`, `overlap.py`, `names.py`, `fix.py`, `mut/mut.py`).

@@ -59,7 +59,7 @@ CPG. Reconfirmed again on this re-run pass, same result.
    --pack chat-responder-grounded-answers --model qwen/qwen3-4b-2507 --session s7-live` first
    refused: *"LM Studio changed since you last attested host.json — re-check the app version and
    KV cache setting, then `model-bench attest`."* Checked LM Studio's own on-disk state directly
-   (WSL2 mount `/mnt/c/Users/mauri/.lmstudio/.internal/`): `backend-preferences-v1.json` showed the
+   (WSL2 mount `/mnt/c/Users/<winuser>/.lmstudio/.internal/`): `backend-preferences-v1.json` showed the
    CUDA llama.cpp runtime engine had advanced `2.39.0` → `2.40.0` since S6's own same-day
    attestation; `historical-version-info.json` confirmed the LM Studio app version itself was
    unchanged (`0.4.24`). Re-attested with the same, evidence-confirmed operator fields — no field

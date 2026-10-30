@@ -64,7 +64,7 @@ running demo; the code paths were settled at the code gate, and `cpg_falkorchat`
       `WorkflowRun.ctx`;
     - turn-2 p95 en 20.1 s, pt-BR 10.1 s, es 10.1 s.
 - **Raw data** (session scratchpad, not durable):
-  `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/k078-s7/`.
+  `/tmp/claude-<uid>/-home-<user>-<repo>/01483502-06e5-42ad-9b05-36efaa8d1ff1/scratchpad/k078-s7/`.
   - Probe runs: `k078.jsonl` (C1), `c2.jsonl`, `c2-confirm.jsonl`.
   - Logs: `proxy.jsonl` (every request and response), `demo.log`, `lms-server.log`, `lms-runtime.log`,
     `models-watch.log`.

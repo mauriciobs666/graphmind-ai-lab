@@ -206,7 +206,7 @@ is an in-place edit per the repo's document-lifecycle convention, not a new docu
 
 ## Appendix — verification artifacts
 
-- Driver script: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/
+- Driver script: `/tmp/claude-<uid>/-home-<user>-<repo>/
   4d079957-75eb-4526-b48b-7ce25e57c4fe/scratchpad/precheck.py` (session scratchpad, not a repo
   artifact — drives all 12 scripts against the real `ShopEnvironment`, one fresh instance per
   script, and cross-checks prices/totals/abstentions).
