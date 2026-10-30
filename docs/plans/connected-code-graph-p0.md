@@ -1,6 +1,6 @@
 # Connected code graph — phase P0 implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
+> **Status:** superseded · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 · **Superseded by:** `docs/plans/connected-code-graph-p0-2.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
 
 *Revision 2026-10-29 (v1.1): review Pass 1 addressed except B1 (pending a stakeholder decision, §6). Dispositions, including the ones I disagree with, are in §15.*
 *Revision 2026-10-29 (v1.2): B1 resolved per the stakeholder's decision: the ground-truth writers run as separate headless sessions (§6 rewritten; S40–S48 revised; new S52–S54).*

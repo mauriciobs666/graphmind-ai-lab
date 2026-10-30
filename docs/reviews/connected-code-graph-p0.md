@@ -433,3 +433,270 @@ text.)
   held-out set, but §4.1 says oracle edges are "reported next to seeded recall, **never pooled**",
   because they over-represent exercised paths. No P0 step collects them either. S06 may adopt (e)
   only by explicitly revising that rule and naming a collection step.
+
+## Pass 3
+
+### Scope & verdict
+
+**Scope:** first gate of the successor `docs/plans/connected-code-graph-p0-2.md` v1.1 (2026-10-30, read
+in full). I checked it against v1.3 (`docs/plans/connected-code-graph-p0.md`; §5, §6, §12–§14 and the
+step table diffed row by row), the proposal, and the upstream sources it says it folds:
+eval-protocol v1.2 §0 and §14–§16, `-spec2` v1.3 §0 and §3–§4, ES2 v1.2 §0 and §3, and the ledger
+notes from 2026-10-29 on. Static review. Read-only probes: `~/.local/share/claude/versions/`,
+`which shellcheck`, and greps of `cpg/sandbox/offline-run.sh`, `cpg/tests/test_bundle.py` and
+`cpg/ccg/ids.py`. No git write, no container, no FalkorDB write.
+
+**Verdict: approve with suggestions.** There is no blocker. The fold is thorough. My independent
+re-derivation found nothing load-bearing missing from the plan, though a few items have no
+traceability row (§ below). §6 carries v1.3's isolation design intact. The five majors are
+sequencing and verification seams, each fixable in place with a v1.2 edit: (1) the contact set has
+no dependency edges into S47; (2) nothing tests `-spec3` against the code; (3) F-8 now has an owner
+but no edge into S49 or S47; (4) S24 and S08's follow-up round would both edit `offline-run.sh`;
+(5) the CLI pin went stale overnight.
+
+**Dispatch:** S20 → S21, S35 and S52 may proceed now.
+- **Hold S24** until P3-4 is fixed, or until S08's follow-up round is accepted.
+- **Hold S53** until P3-5 is fixed.
+- P3-1, P3-2 and P3-3 must be fixed before S47, S16 and S49 respectively are dispatched. Nothing
+  dispatchable today depends on them.
+
+**Stopping condition for Pass 4.** No Pass 4 is needed if v1.2 makes the edits P3-1 to P3-5 name.
+`teco` can check each one mechanically, as the Deps cell, done-condition text or §5.2 row the
+finding names.
+
+CPG: considered, not relevant — the subject is plan documents. The code-level checks touch `cpg/`, which no loaded graph covers (`GRAPHS` lists `cpg_falkorchat` only), so they were greps of the files.
+
+### Prior-pass dispositions
+
+I re-checked these in p0-2, since it replaces v1.3.
+
+- **B1: fixed; carried.** §6 is v1.3 §6, compacted, with S06's numbers. The diff shows no dropped
+  control.
+- **M1: fixed; carried.** D6 → egress §7 / §7.1.1 controls.
+- **M2: fixed; carried.** D8 → bundle spec §3.2/§3.4/§3.5/§6.
+- **M3: fixed in rule.** The sequencing is incomplete: see P3-1.
+- **M4: fixed; carried.** S14 and S28 rows; §15's deferred list.
+- **M5: fixed; extended.** D13 applies the same split to the fitness chain.
+- **M6: fixed; carried.** S26 and S56 as seven dispatches each; S41/S42 per stratum.
+- **m1: fixed.** The legend now says "`S01`–`S58` plus `S43a`".
+- **m2: fixed** (S03 and S04 were dispatched separately).
+- **m3: fixed; carried** (§5.2/§5.3). There is a new collision: P3-4.
+- **m4: superseded** by egress §10's flag sweep.
+- **m5: fixed; carried** (§6.2 content check).
+- **m6: fixed.** §12 SQ-P0-1 is restored in full.
+- **m7: fixed** (eval-protocol §6.4).
+- **m8: fixed; carried** (S22).
+- **n1, n2: fixed.**
+- **n3, P2-5: superseded** by the stakeholder decision (D11).
+- **P2-1: fixed.** But the pinned version has since been displaced: see P3-5.
+- **P2-2: fixed; carried.**
+- **P2-3: fixed in mechanism.** v1.3's "moving to another build is a deliberate step" rule was
+  dropped from K-P0-12: see P3-5.
+- **P2-4: fixed** (S55 before S48).
+- **P2-6: fixed** (§12 (e)).
+
+### New findings
+
+#### Major
+
+**P3-1 — The contact set has no dependency edges into S47, so S47 can close it before contact
+happens.** (verified from the text)
+- **The rule.** Eval-protocol §8.2 says C is applied at S47 and "closed at S47 and never re-opened"
+  (§8.4).
+- **The sources.** Its members are S14's and S30's anchor lists, S56's methods, and
+  `cpg/tests/golden/*`, including S34's `answer-ac1.json`.
+- **The gap.** S47's Deps cell is **S46 only**. The §3 structure has no edge from S30 (which waits
+  on S15 and S27) or from S34 (which waits on S33 → S17 → S23) into the ground-truth chain. The plan
+  itself calls that chain "likely the longest", which is a guess, not a dependency.
+- **The failure.** If S47 runs first, S30's or S34's anchors are already held out when they are
+  walked. That is M3's leak, now silent, because C is closed.
+- v1.3 had the same Deps cell. My Pass 1 M3 fix missed it.
+
+**Fix:**
+- S47 Deps gains **S14, S30, S34 and S56**, plus the §3 structure line.
+- Alternatively, add a §5.3 rule that no P0 step may contact a proving-repo anchor after S47, with
+  S30 and S34 depending on S47 and checking their lists against it. The edge is simpler.
+
+**P3-2 — `-spec3` is a re-transcription of gated text that no test checks.** (verified)
+- **Where the tests point.** S10's spec-derived tests parse the spec files directly: `SPEC_TEXT`
+  and `SPEC2_TEXT` in `cpg/tests/test_bundle.py` read `connected-code-graph-bundle-spec.md` and
+  `-spec2.md`.
+- **What S16 covers.** It updates S10's files only "if any SL-7 delta changed them". In the
+  consolidation-only case, no step re-points the tests.
+- **The failure.** After `-spec3` `Supersedes:` both documents, the suite keeps checking superseded
+  text. A transcription slip in `-spec3`'s 22 golden vectors, AV-1–68 or BV-1–28 then goes
+  undetected, which is the exact cost `-spec2` §0 gave for not writing a replacing document.
+
+**Fix:** S16's done-condition, in both modes, gains this: `tdd-engineer` re-points
+`SPEC_TEXT`/`SPEC2_TEXT` (and the golden-vector source of `cpg/tests/test_ids.py`, if it parses
+one) at `-spec3`, and the suite passes. Add S16 → `cpg/tests/test_bundle.py` as a writer to §5.2.
+
+**P3-3 — F-8 now has an owner (the dispatched `data-scientist` unit), but no edge into the steps
+that encode it.** (verified)
+- Eval-protocol v1.2 §13.4's http `normalize` applies bundle spec §6 steps 1 and 4–7 only. There is
+  no step 8a.
+- §15 says "S49 encodes it then", but S49's row does not mention it. §3 makes S49 dispatchable "after
+  S48".
+- Step 8a changes id-bearing `keyNorm`s (`cpId = h(contractPoint, kind, keyNorm)`, eval-protocol §2).
+  Once S47 has hashed the held-out files into `heldout-manifest.json`, any later re-normalization is
+  a manifest mismatch that "stops the gate" (D11).
+
+**Fix:**
+- Record BS2-21 as **owned** (eval-protocol v1.3, `data-scientist`).
+- S49 gains a done item: `normalize` applies §13.4 as revised (step 8a, T6, `{#}`), with an oracle
+  case.
+- S49 gains a Deps entry on that revision. S45 and S47 inherit it.
+- The fallback, if the revision is late, is that S49 starts but does not close.
+
+**P3-4 — S24 and S08's in-flight follow-up round both edit `cpg/sandbox/offline-run.sh`.**
+(verified)
+- **Where the tag lives.** The runner's image-tag source is `sbx_default_image` in
+  `offline-run.sh`, with `CCG_TOOLCHAIN_IMAGE` as the one override, which ES2 §1.7's closed
+  environment keeps.
+- **S24.** It is "dispatchable now". Its item 5 re-points the runner at the new tag. Its Deps cell
+  is S02 and S05, with no S08.
+- **S08's follow-up.** It is rewriting the same file's environment handling (ES2 §1.7) right now.
+- **The §5.2 row.** "S24 edits it only after S08 is accepted" reads as satisfied, because S08's
+  state is `acc`.
+
+**Fix:**
+- S24 Deps gains **S08's follow-up round**.
+- The §5.2 row says "after S08's follow-up round is accepted".
+- Better still, item 5 uses `CCG_TOOLCHAIN_IMAGE` for the test re-run, and the default changes in
+  one serialized edit. That edit is cited by symbol (`sbx_default_image`), not by line.
+
+S24's items 1–4 and 6 touch only `cpg/infra/toolchain/` and can proceed.
+
+**P3-5 — The CLI pin went stale after the plan was written, and v1.3's rule for that case was
+dropped.** (verified)
+- **What the host shows.** `~/.local/share/claude/versions/` now holds 2.1.309, 2.1.310, 2.1.312
+  and **2.1.314** (written 2026-10-29 23:04), and `~/.local/bin/claude` → **2.1.314**.
+- **What the plan says.**
+  - §6.3 says the symlink points at 2.1.312.
+  - §7's CLI row says 2.1.312.
+  - S53's done item (1) hard-codes the 2.1.312 source path.
+  - All of §6.3's flag facts come from 2.1.312's `--help`.
+- **Why it matters.** 2.1.312 survives today, but the updater prunes, and the plan has no rule for
+  that. v1.3's K-P0-12 had one: "moving to another build is a deliberate step: a new `prepare-bin`,
+  then S55 and S54 re-run". p0-2's K-P0-12 dropped it.
+
+**Fix:**
+- Restore that sentence in K-P0-12.
+- Have S53 run `prepare-bin` **first**, while 2.1.312 exists. If it is gone, `prepare-bin` takes the
+  current build and §6.3's flag facts are re-read against that build's `--help` before S55.
+- Correct §6.3's symlink sentence and §7's row.
+
+#### Minor
+
+- **P3-6 — A v1.3 P1 handoff was dropped.** v1.3 §14 said the AC-5 gate harness "ratifies the
+  possible-precision thresholds after the first P1 measurement (ML §4.2)". p0-2 §15's harness list
+  omits it. `connected-code-graph-ml.md` still says the floor "cannot be fixed before P1 measures"
+  (its "Thresholds" paragraph). **Fix:** restore the clause in §15.
+- **P3-7 — The R11 content check has no file and no owner, and checks only at unit level.**
+  - D15 names a form, not an artifact. S11, S25, S28 and S39 would each write one.
+  - S39 is durable code and may not use a spike script (D1).
+  - The only existing implementation is inline in `test_sandbox.sh` (section "test 3").
+  - **Fix:** name one durable runner-staged script and its owner. The cheapest owner is S08's
+    round: promote test 3's script. That call is `architect`'s.
+  - Consider making the check per file (every non-empty source file has ≥ 1 non-external
+    `METHOD`). That catches a partial astgen failure, which "zero methods in the unit" does not.
+    Verify per frontend in S11 before adopting it.
+- **P3-8 — Contradictions about S16.** S16 is "Not optional", but two places still treat it as
+  optional:
+  - §9.2 exit item 1: "for S16, recorded as not needed";
+  - §3 structure: "S16 only if the schema changed".
+
+  **Fix:** split the cases. "S30/S33/S34 wait on S16 only in its change mode"; S16 always runs.
+- **P3-9 — The FR-15/hostnames decision has no recording owner.** §12 says `tico` records "them"
+  (all four decisions) in the requirements. §15 and L-5 list only Q5, E11 and E12, and §16.1 has no
+  row for `-spec2` §0's stakeholder decisions. **Fix:** add FR-15 to `tico`'s §15 follow-up and a
+  traceability row.
+- **P3-10 — Runner-consumer dependencies are uneven.**
+  - S11's stated reason for waiting on S08's round (`@AUDIT_ID@`) is already met:
+    `offline-run.sh` carries it today. The real reason is ES2 §1.7's environment change.
+  - S25, S28 and S39 do not wait on the round, so they would run on whichever runner is current.
+  - §3 also lists S11 as "now dispatchable" while its Deps cell has unmet in-flight rounds. §15 has
+    it right.
+  - **Fix:** one rule. Every runner consumer runs on the post-round runner.
+- **P3-11 — S53's "shellcheck-clean" cannot be checked here.** `which shellcheck` exits 1. Replace it
+  with `bash -n` plus S53's own tests, or make installing it a `devops` provisioning row in §7.
+
+#### Nit
+
+- **n-a.** §16.1's counts call "nothing to place" rows (BS2-23, EP-27) "placed". ES2-17's source is
+  egress spec v1.3 §11 Q1, not ES2.
+- **n-b.** Eval-protocol G5 cites "plan §12" for the 129-files observation. p0-2 §12 no longer holds
+  it. The dispatched `data-scientist` unit can drop or re-point the citation.
+- **n-c.** The S10 row could name `-spec2` §1.7.4's **W1** ([pre-freeze], validator-checked). Today
+  it is covered only implicitly, through BV-10.
+- **n-d.** S49 is one unit carrying three tools, their verbs and 16 named oracle cases: B1a, B1b,
+  M2, M6, reserve, m4, P2-1a–e, P2-2a–d and P2-3. Consider splitting it: `match_keys.py` alone,
+  then `capture.py` + `split_manifest.py`.
+
+### Traceability re-derivation (question 1)
+
+I built my own list from each source before reading §16.1, then diffed the two. I counted at the
+granularity of **one distinct obligation**: a §14 row with two version-tagged clauses counts as two
+items, an item repeated inside one source counts once, and items repeated across sources are kept
+per source.
+
+| Source | Mine | §16.1 rows | In the plan | Not traced in §16/§16.1 |
+|---|---|---|---|---|
+| EP v1.2 §0, §14–§16 | 44 (§14: 28; risks R1, R2, R6, R7, R9; Q1-depth and Q2–Q9; the M5 nit; E11/E12) | 35 | 43 | R1's P1 runtime oracle is not in §15; it lives in ML §4.1, and v1.3 omitted it too. These are placed but have no row: S46's 40 + 8, S33's base hit rule, S35's §12.2 minimums, R2, R6 |
+| `-spec2` v1.3 §0, §3–§4 | 44 (§4.1: 8 + 5 + 1 + 1 + 5 + 4 + "S08 nothing"; §4.2 rows; F-1, F-3 `cobb` half, F-6–F-10, F-12; rule-5; no GV change; the stakeholder decisions) | 25 | 41, plus 2 declined | The FR-15/hostnames decision is placed in §12 but has no recording owner (P3-9). W1 is implicit (n-c) |
+| ES2 v1.2 §0, §3 | 18 | 16, plus ES2-17, which is ES's Q1 | 18 | none |
+| Ledger 2026-10-29 → 30 | 31 hand-offs | 5 (L-1–L-5) | 31 | none. Every one also appears under EP/BS2/ES2 or in §16's v1.0 table (A1, A17, C1, C3–C5, D1–D4, D9) |
+
+**My count: 137 handed-onward items at this granularity, against the table's 82.** The gap is
+granularity, not missing work. Cross-source duplicates make up most of it: every ledger item
+recurs under another source, and many `-spec2` §4.1 items recur in its §4.2 rows. After that
+dedup:
+- **Placed in the plan with no traceability row:** the FR-15/hostnames decision, S46's sample
+  size, S33's and S35's base takes, EP R2 and R6, and W1.
+- **Not placed anywhere:** EP R1's runtime oracle (low; ML holds it).
+- **Placed, but whose v1.3 text p0-2 dropped:** P3-5's K-P0-12 rule, P3-6's possible-precision
+  ratification, and the §12 paragraph EP G5 cites (n-b).
+
+The table's own arithmetic holds: `grep` finds 35 EP, 25 BS2, 17 ES2 and 5 L rows, with 2
+"declined".
+
+**Placed rows sampled against their done-conditions:**
+- **Encoded in the step's Done-when cell:** EP-1, -2, -5, -8, -10, -12, -14, -17, -19, -20 and -21;
+  BS2-6, -7, -8, -12, -13, -14, -15 and -16; ES2-8 to ES2-14; L-1 and L-2. These are done-conditions,
+  not mentions.
+- **Two qualified:**
+  - EP-21 is in S56's and S47's text, but S47 lacks the edge (P3-1).
+  - BS2-4/BS2-11 are encoded, but §9.2 item 1 contradicts them (P3-8).
+
+**Seams (question 3).**
+- **Owned:** `-spec3` (S16 in both modes; exit item 5; §15), F-12 (S20 + S33 + P1), F-3's `cobb`
+  half (S52), G-1 (S17, or S33's rendering), P2-8 and S-1 (S17), F-1/F-6/F-7/F-9/F-10 (§15 P1).
+- **Owned by the dispatched `data-scientist` unit:** F-8, which needs its edges (P3-3).
+- **Gaps:** the R11 check script (P3-7) and the FR-15 recording (P3-9).
+
+**Concurrent change (question 5).** p0-2 cites no `cpg/ccg/` or `cpg/sandbox/` file by line number.
+A grep for `file:N`, `line N` and `#LN` patterns found none. All citations are by path, section,
+test number or step. My own citations above are by symbol.
+
+### What's solid
+
+- §0.1's collision-rule reasoning, the stable step ids, and "spec controls plan" for accepted steps.
+  An implementer reads one plan, and each spec controls in the clauses it names.
+- §6 survives compaction intact. I diffed it line by line against v1.3 and found only wording,
+  S06's numbers, and the stakeholder's §12.1 reading. §6.6's arithmetic checks: base 16–18, expected
+  18–25.
+- D13's "decides, someone else writes" for `data-scientist` closes the write-guard conflict
+  structurally, the way §6 did.
+- D15 places R11 correctly, in the pipeline and not in the schema, with the right reason (empty
+  `__init__.py` units).
+- S10's done-condition is the falsifiable probe "as written". The transplant's two accepted
+  residuals are in `-spec2` §1.6.3's own pass condition, so "as written" is right.
+- The restored SQ-P0-1 keeps v1.3's text and adds E11's `H`/`H_all` trigger.
+
+### Open questions
+
+- **CLI pin (P3-5), for `teco`/stakeholder.** Should S53 pin 2.1.312, whose `--help` §6.3 was
+  verified against and which is still on disk, or move to 2.1.314 now and re-read the flags?
+  *Recommendation:* pin 2.1.312 immediately, by dispatching S53's `prepare-bin` first. Treat any
+  move to another build as K-P0-12's deliberate step.
+- None of the findings changes P0 scope.
