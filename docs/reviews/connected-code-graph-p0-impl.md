@@ -3615,3 +3615,515 @@ failed only the `auto` check both times, because the run launched (see the answe
 | `\x1c` | admitted | rc 1 | yes |
 | BOM `EF BB BF` | admitted | rc 1, compile error | no (negative control) |
 | `\x01` + `using file /src/evil.sc` | admitted | rc 1; "given input files: …, /src/evil.sc" | — |
+
+### Pass 2
+
+**Re-checked (2026-10-29)** against devops's fix round. It is uncommitted under `cpg/sandbox/`.
+I diffed it against my Pass 1 copies of `offline-run.sh`, `test_sandbox.sh` and `probe.pl`, and
+every disposition below was **run** unless marked *inferred*.
+
+**Verdict: approve with suggestions.** Every Pass 1 finding is fixed, each with a test and a
+mutant pinning it. The three interactions hold. One new minor (p2-m1) and one nit remain.
+Neither blocks S11.
+
+CPG: considered, not relevant — no CPG covers `cpg/sandbox/`; re-checked by execution.
+
+**What I ran.**
+- **Suite:** run solo from the repo root, it gave **398 passed, 0 failed** (110 s). Afterwards, no
+  `ccg.sandbox` container or volume was left.
+- **Mutants:** the full `tests/mutants.sh` gave **killed=44 survived=0** (about 25 min). That includes every
+  Pass 1 X-mutant, now in the harness. I did not re-run M36, which leaves residue by design.
+- **Teco's list mutant again:** with `javasrc2cpg --fetch-dependencies` deleted, `--only 8` gave
+  33 passed. **The `auto` checks no longer depend on any list line.** Both pass, and that mutant
+  is now left to tests 2 and 6.
+- **Directed probes:** a `bash -x` trace of every refusal shape; three concurrent runs into one
+  `--output`; and a `--rm` hygiene demonstration container (p2-m1).
+
+**Dispositions.**
+- **M1 — fixed.**
+  - The check is now `^[[:cntrl:] ]*//>` with `\r`, `\f` and `\v` as line breaks. Test 10(b) is
+    a probe over the 34 leading bytes (0x00–0x20 plus 0x7f), which writes each fixture and
+    asserts it before use. There are also five negative controls (BOM, `///>`, mid-line).
+  - M22 (back to `[[:space:]]`) and M32 (no `\r` split) are killed.
+- **M2 — fixed.** No arguments, a missing `--backend`, an invalid one, `--backend` with no value,
+  and a missing `--` each give 64 `usage` and one record (test 2). M23 is killed.
+- **M3 — fixed.** The probe emits `ENVV k=v`. `check_env` compares all 13 values against
+  §7.3.4, and against the image's `Config.Env` for `PATH`/`JAVA_HOME`/`GOROOT`/`DOTNET_ROOT`.
+  A text-half check runs too. X5 and X6 are killed.
+- **M4 — fixed.** A loop over `allowed-flags.txt` checks three forms plus the `joern-parse
+  --frontend-args` form. The three reviewed flags are pinned by name, with an entry count of 3.
+  X1–X3 and M35 (a look-alike swap) are killed.
+- **m1 — fixed.** "Resolves to container" now uses `--frontend sh` (`unknown-frontend`). A real
+  fallback test with a nonexistent image asserts `backend: namespace` and 69. M31 is killed.
+- **m2 — fixed.**
+  - The fix is `flock -n` on the output directory's own fd, taken after every argv check and
+    before `sbx_launch`.
+  - Three concurrent runs into one `--output` gave **one exit 0 and two 64 `usage`**. The two
+    refusals have `launcherArgv: []`, and the dir holds only the one CPG. No lock file was left.
+  - The README claim is corrected. M26 is killed.
+- **m3 — fixed.**
+  - `aid.sc` writes `/out/@AUDIT_ID@.txt`, and the test asserts the file stem and the substituted
+    `toolArgv`.
+  - `expect_refusal` now asserts that a refused `toolArgv` equals the caller's argv after `--`,
+    verbatim (egress-spec2 §1.5).
+  - X8, X9, X10 and M33 are killed.
+- **m4 — fixed.**
+  - `PRE_NETNS=false` is set in `sbx_init`, and becomes `true` only once `sbx_launch` has built a
+    launcher. The setup-failure return happens before that, so it stays `false`.
+  - `egressMode` takes `--mode` only when the value is valid.
+  - Test 4 checks `netnsDistinct == bool(launcherArgv)` on every record. M24 and M25 are killed.
+- **m5 — fixed.** The library-mode records are now validated (the `lib` mode of `schema.py`).
+  `equiv.py` asserts that the probe's and production's `launcherArgv` are equal, modulo ids,
+  paths, `/scripts` and the tool tail. M28 is killed.
+- **m6 — fixed.** Every namespace bind goes through `sbx_nsb`, which records it. The test
+  cross-checks every `--ro-bind`/`--bind`/`--tmpfs` target against `mounts`. M27 is killed.
+- **n1 — fixed, with a stated residue.**
+  - The shebang is `#!/bin/bash -p`, and an `env -i` re-exec keeps only `CCG_AUDIT_DIR`,
+    `CCG_TOOLCHAIN_IMAGE`, a fixed `PATH` and the passwd `HOME`. The trace shows the re-exec
+    firing on a stray `FOO=1`.
+  - The test sets `DOCKER_HOST`, `DOCKER_CONTEXT` and similar variables, and `docker info` still
+    answers. M29 and M30 are killed.
+  - `bash offline-run.sh` still sources `BASH_ENV`, which no script can prevent, and the README
+    says so.
+- **n2 — fixed.** The tmpfs exemption is gone from probe A5(b) (`probe.pl:163-164`).
+- **n3 — fixed.** Direct `jssrc2cpg` and `pysrc2cpg` CPGs are read back for `f`.
+- **n4 — fixed.** The comment is at test 8's Host row.
+- **n5 — fixed.** The README explains `--frontend-args -J-Xmx<n>` and says that `joern-parse -J…`
+  sizes only its own JVM.
+
+**Interactions** (the brief's three questions).
+- **n1 re-exec vs M3 and the `CCG_*` pass-through: no conflict.**
+  - M3's expected values come from §7.3.4 constants and `docker image inspect`, never from the
+    runner's own environment, and the 13 value checks pass on both backends.
+  - The pass-through is proven by execution. The fallback test sets
+    `CCG_TOOLCHAIN_IMAGE=ccg-toolchain:nonexistent-s08` in a caller environment full of other
+    variables. That forces the re-exec, and the run still reaches the namespace refusal, so the
+    variable survived. `CCG_AUDIT_DIR` survives too, or test 4's record count would fail.
+  - *Inferred:* the re-exec cannot loop. After `env -i`, the environment is exactly
+    `PATH`/`HOME`/`CCG_*`, plus the `PWD`/`SHLVL`/`_` that bash adds, all of which are allowed.
+- **m4 scan in `sbx_init` vs Docker: no Docker for `--backend namespace`.** A `bash -x` trace
+  under a clean environment showed **no** `docker` call for `--backend namespace` with `--mode
+  foo`, with an unknown runner option, or with the 69 precondition refusal. `sbx_init` reads only
+  `binfmt_misc` and `/dev/vsock`. The only refusal that touches Docker is an invalid or missing
+  `--backend`, which runs `sbx_try_container` (`docker info` plus two `image inspect` calls, all
+  read-only) so that the usage record carries measured values. That is acceptable, and no
+  container is created.
+- **Scoped hygiene vs a leak from another path: partly.** This is p2-m1.
+
+#### p2-m1 (minor) — the scoped hygiene check sees only containers carrying a recorded `ccg.sandbox.auditId`
+- **What the check matches:** `docker ps -a --filter label=ccg.sandbox.auditId` intersected with
+  the auditIds in this run's records (`test_sandbox.sh:774-784`). It catches M36's leak because
+  that path keeps the label and still writes its record.
+- **What it misses:** a leak through a path that loses either one.
+  - I ran a `--rm`, `--network none` container named `ccg-sbx-…`, labelled `ccg.sandbox=s08`
+    with no auditId label. The label-wide count saw it (1), and the scoped query returned
+    nothing.
+  - A runner killed after `docker run` starts writes no record by design (§5.3), so its
+    container's auditId is never in the set.
+  - Production records are still cross-checked by count, but a library-mode launch that dies
+    mid-run has no count to fall back on.
+- **Fix (`devops`):** keep the scoped **fail**. Also fail on any `ccg-sbx-*` container or
+  `ccg.sandbox` volume that `docker events --since <suite start>` shows created during this run
+  and that still exists at the end. The `--since` window makes it this run's, with no record
+  needed. Add a harness mutant that drops the auditId label (with `--rm` kept, so it leaves no
+  residue), and assert that the record's `launcherArgv` carries `ccg.sandbox.auditId=<auditId>`.
+  That pins the label, which the scoped check depends on.
+
+#### p2-n1 (nit) — the lock is released if the runner dies while its container runs
+The `flock` is held by the runner and inherited by the `docker run` client. If that client is
+killed, the `--rm` container keeps writing to the overlay while the lock is free (*inferred*:
+Docker's foreground client does not stop the container when it dies). A README line is enough, or the
+runner can `docker rm -f ccg-sbx-<auditId>` from its EXIT trap.
+
+#### p2-n2 (nit) — mutant M34 leaks an empty `/tmp/ccg-sbx.*` on every harness run
+- **Cause:** M34's mutated runner calls `sbx_init`, which runs `mktemp -d /tmp/ccg-sbx.*`, and
+  then `exit 0` on `--help` before `sbx_main` sets `trap sbx_cleanup EXIT`.
+- **Reproduced:** `mutants.sh M35 M34` left `/tmp/ccg-sbx.p1H3rR`. A plain `--only 2` run of the
+  real runner, and M35 alone, left nothing. So this is harness residue, not a production
+  defect: the real runner handles `--help` before `sbx_init`.
+- **Fix (`devops`):** move the `trap` into `sbx_init`, right after the `mktemp`, which also
+  closes the narrow window in production. Make the suite's hygiene section also fail on a new
+  `/tmp/ccg-sbx.*` (diff a listing taken before and after), so the next leak of this kind is red.
+
+**Containers and leftovers.**
+- **Containers:** I created only `--rm` containers labelled `ccg.sandbox`: the suite's, the
+  mutants', the three concurrent parses, and the demonstration container, which exited by itself
+  after 25 s. At the end, `docker ps -a --filter label=ccg.sandbox` and `docker volume ls
+  --filter label=ccg.sandbox` were empty. `falkordb-dev`, `ccg-falkordb`, `boring_kilby` and
+  `friendly_keller` were untouched.
+- **My scratch dirs:** my mutant runs left `/tmp/ccg-sbx.GH6t4z` (22:43:25, inside M34's window)
+  and `/tmp/ccg-sbx.p1H3rR` (the reproduction). Both were empty, and I removed them with `rmdir`.
+- **`/tmp/ccg-sbx.W3v56w` (22:08):** **not mine** — it predates my Pass 2 (after 22:15), and my
+  Pass 1 files date from 21:06 at the latest. It is empty and matches p2-n2's signature, so it is
+  most likely devops's own harness run. I left it in place.
+
+## Spec amendments (bundle-spec2, egress-spec2)
+
+**Reviewed (2026-10-29):** `docs/plans/connected-code-graph-bundle-spec2.md` v1.0 ("BS2") against
+`docs/plans/connected-code-graph-bundle-spec.md` v1.3 ("BS"), and
+`docs/plans/connected-code-graph-egress-spec2.md` v1.0 ("ES2") against
+`docs/plans/connected-code-graph-egress-spec.md` v1.3 ("ES"). Inputs read in full:
+`docs/reviews/connected-code-graph-bindvalue.md` (SA-1–SA-13), this file's § S10 (P0-09) and § S08
+(P0-07), and `docs/plans/connected-code-graph-eval-protocol-ml.md` §15 Q2. The stakeholder
+decisions of 2026-10-29 (FR-15 covers graph and answers, not bundle files; internal hostnames in
+clear are acceptable) are taken as binding.
+
+**Out of my scope:** BS2 §1.4/§1.11 against the graph model (`graph-dba`), and whether each
+disposition closes its SA-n (the advisory's author). I judged BS2's security mechanics as rules in
+their own right.
+
+**What I ran.** Everything below was run unless marked *inferred*.
+- GV-1–GV-22 recomputed through the committed `cpg/ccg/ids.py` (`git diff --quiet HEAD` clean),
+  with the expected ids parsed from BS §3.6. `tests/test_ids.py`: 189 passed.
+- An independent implementation of BS2 §1.6.1 and §1.7.1–§1.7.4, written from the spec text
+  only. I did not open the architect's `gate.py`/`argv.py`. It was run on BV-1–BV-20, AV-1–AV-5
+  and the probes in the Appendix.
+- Two throwaway replpp containers (`--rm --pull=never --network none`, label
+  `ccg.sandbox=analyst-es2-review`, image `ccg-toolchain:d3184effb566`), each running 4–12
+  `joern --script` cases. I touched no other container. One caveat: S08's suite was cycling
+  `ccg-sbx-*` containers throughout. I launched each probe only when `docker ps --filter
+  label=ccg.sandbox` was empty, but a concurrent S08 hygiene check could still have seen mine for
+  a few minutes.
+
+**Verdicts.**
+- **BS2: needs changes.** The **two majors** are in the argv gate (§1.6.1). Both rules are
+  validator-checked, so by BS2's own §1.10 a fix after S15 is a major bump. Everything else is
+  minor. The grammar, the screen, the vectors and the id claims all hold.
+- **ES2: approve with suggestions.** The `//>` rule matches replpp exactly, and the `\r` claim
+  holds by execution. The findings are minor: text drift, one omitted base clause, the shape of
+  the environment rule, and the lock example.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/` (`ccg` Python, sandbox Bash/Perl); the questions were spec-text faithfulness and runtime behaviour, answered by reading and execution.
+
+### Answers to the brief's questions
+
+1. **Faithfulness.** I read each named base clause against its replacement. The rules that get
+   dropped or altered without being named are BS-m6 (BS §1's S16 bullet), BS-m2 (bare IPv6 hosts)
+   and ES-m2 (ES §9's H15 row). Every other replaced clause keeps all of its base rules. I checked
+   BS §4.1 r10, §5.1, §5.8, §5.11, §5.14, §5.17's two rows, §5.18, §6 step 8, §8.1, §9.1, and
+   ES §5.3, §7.1, §7.2, §7.3.1.
+2. **Structural choices.**
+   - **`Extends:` replacing clauses.** The premise is **not** what rule 5 says. Root `AGENTS.md`
+     gives `Extends:` to "a successor that **adds to** an earlier document that **stays
+     authoritative**". Replacing is the `Supersedes:` pair, and partial replacement is neither.
+   - **The choice is still the right one in practice.** A `Supersedes:` re-emission of
+     1,400 gated lines is the worse risk, as BS2 §0 argues. And the repo already does this:
+     ES over the proposal, and `p0-2.md` E1/E2 over ES, both gated without objection.
+   - **What follows.** The base's `Extended by:` pointer tells a reader that BS is authoritative,
+     and for about a dozen clauses it is not. So the consolidation (F-5, `-spec3`) is not
+     housekeeping. It is the step that restores conformance, and it needs a checkable trigger
+     (Open question 1).
+   - **"§8.6 is not an errata route, `bundleSchemaVersion` stays 1.0": sound.** BS §1 says
+     v1.0 is a *candidate* that freezes at S15, and §8.6 versions a frozen schema ("A freeze
+     covers [P-later] rules too … handled by §8.6"). No bundle exists outside test fixtures: I
+     found no `*.bundle.jsonl` in the tree. So re-meaning "1.0" before S15 orphans nothing.
+3. **"No golden vector changes": confirmed.**
+   - **22 of 22 reproduce** (Appendix A), and the canonical bytes of GV-10 are 5,032.
+   - **Input analysis:**
+     - **IDENT** touches only access paths. GV-20/21 use the bare heads `recv` and `a0`.
+     - **Step 8a** leaves GV-9's segments unmasked: `shop`, `api` and `health` pass. GV-10's
+       `a`×5000 segment *would* fail T2, but GV-10 is a hash vector of a given tuple, as BS2
+       says.
+     - **`nameNorm`** is in no tuple: `symbolId` hashes `qname`.
+     - **`valueHash`/`defaultHash`** are in no tuple, and the HMAC domain is the record's own id,
+       which is computed without them. So there is no circularity.
+     - **`ordinal`** is the same integer `ids.import_id`/`launch_fact_id` already take. Today's
+       `bundle.py` `_ordinals` recovers it by inversion over `0..k-1`, and the new field must
+       equal that value.
+   - **BS2 §1.2's figures** also reproduce: 26 code points (Unicode 15.0.0, U+01F0 and U+0390
+       among them), and the formula is idempotent over 200,000 random strings.
+4. **Vectors: no disagreement on any outcome.**
+   - All 20 BV rows and all 5 AV rows agree with my implementation (Appendix A).
+   - The "decided by" column is incomplete (BS-n2).
+   - AV-1's literal `…` makes the row fail (g1) by itself (BS-n1).
+5. **ES2 §1.1: the `\r` claim holds, by execution** (Appendix B).
+   - `println("CRSPLIT")\r//> using dep …` attempted the `github.com` download.
+   - `\f` mid-line does not split. Nor do NEL, U+2028 or U+2029: each one compiles or fails to
+     compile, with no download.
+   - A DEL-led directive is not honoured, and neither is `//>` followed by two spaces or a tab.
+   - So "split at `\n`, `\r`, `\r\n`" is exactly replpp's set, and stripping DEL fails closed as
+     stated.
+6. **Interactions.**
+   - **No cross-rule hole among SA-2's host shapes, SA-4's screen and SA-5's grammar.** The only
+     unscreened productions are `port`, `ipv4` and `ipv6`, and none can hold a token run.
+   - **Legitimate forms the composition refuses.** `http://db:5432` binds (W2 permitting). But
+     `localhost:8000`, `falkordb:6379`, `kafka:9092`, `redis://falkordb:6379` and bare `::1`
+     are refused (BS-m2). `falkordb:6379` is a form the advisory said its screen keeps.
+   - **The argv gate admits what the `bindValue` gate refuses** (BS-M1, BS-M2).
+   - **SA-11:** nothing in the graph note, the proposal or the eval protocol compares
+     `valueHash` across entries. The one claim that needs equality is BS2's own "env binding
+     works when `default` is withheld" (BS-m1).
+7. **Follow-ups.** The ones listed are executable, but the lists are not complete (BS-m9, ES-m5).
+
+### bundle-spec2 findings
+
+#### BS-M1 (major) — the argv gate admits URL userinfo and capability URLs that the `bindValue` gate refuses
+- **Evidence (run):** (g1)'s class `[A-Za-z0-9._/:@+=,-]` contains `:`, `/` and `@`. So these
+  elements pass (g1)–(g3) and are written in clear:
+  - `--database-url postgres://u:p@db/app`, which is BV-17's own value;
+  - `psql postgres://admin:hunter2@db:5432/app`;
+  - `--url https://hooks.slack.com/services/T0/B0/XXXX`, which is BV-6's value. It passes under
+    a neutral flag, and `-e webhook=…` passes too (BS-M2).
+
+  Appendix A transplants the must-redact BV values into five argv placements.
+- **Why major:**
+  - §1.6.2 makes every emitted `launchFact` field renderable as binding evidence. That is the
+    graph/answer path FR-15 covers.
+  - The validator re-checks these elements, so closing the gap after S15 is a major bump
+    (§1.10).
+  - Userinfo is the one URL credential class the advisory called "already excluded" for
+    `bindValue`.
+- **Fix:**
+  - Fail (g1) for any element containing `://` unless the URL part passes §1.7.2's `url`
+    production. That part is the whole element, or the text after `NAME=`.
+  - Fail (g1) for any `user:pass@` shape. Keep `@` for `some-mcp@latest`/`@scope/pkg`, which
+    pass today and should still pass.
+  - Add the coverage probe in BS-M2's fix.
+
+#### BS-M2 (major) — (g3)'s name context misses `NAME=VALUE` without a dash, and dotted flags
+- **Evidence (run):** these name contexts are never derived:
+  - `env DB_PASSWORD=hunter2 server` and `docker run -e PG_PASSWORD=s3cr3t-dev img`: no leading
+    `-`, so neither case of rule 1 applies. `s3cr3t-dev` is SA-1's own example value.
+  - `server --db.password hunter2`: rule 2's `NAME` class `[A-Za-z][A-Za-z0-9_-]*` excludes
+    `.`.
+
+  Each comes out in clear. A low-entropy secret passes (g1) and (g2) by construction, so (g3)
+  is its only defence. The `=` form with a dash works: `--db.password=hunter2` and
+  `-Dpassword=…` are redacted.
+- **Why major:** the same reason as BS-M1. Shell `exec` lines and Compose `command:` lists are
+  launchFact sources (§1.6), and `-e NAME=V`/`env NAME=V` are their common shapes.
+- **Fix:**
+  - An element containing `=` takes the text before the first `=`, minus leading `-`s, as its
+    context.
+  - Widen rule 2's `NAME` to admit `.`.
+  - Then require a **coverage probe over the two axes**, not a list of shapes:
+    - the 36 name words, each in UPPER, lower and camel case;
+    - each placement form: `--W v`, `--W=v`, `-W v`, `-e W=v`, `W=v`, `--x.W v`, `--x.W=v`.
+
+    Every cell must come out `<redacted>`. Run the BS-M1 transplant over the same placements.
+
+#### BS-m1 (minor) — `defaultHash` cannot support "env binding" as stated under per-entry HMAC
+- **The claim:** §1.6 says `defaultHash` "is always present, so env binding and change detection
+  work when `default` is withheld". §1.7.5 makes the hash domain-separated by the record's id.
+- **What is lost:** hash-to-hash equality is gone, so two withheld values can no longer be matched.
+- **What survives:** a binder that already holds a candidate in clear can recompute
+  `HMAC(key, launchFactId‖0x00‖candidate)`. An example candidate is a consumer URL's port. That
+  needs the key at assembly, and BS2 never says the assembler holds it. It says only that the
+  validator does not (§1.7.5).
+- **Fix:** state the matching procedure and the key holder in §1.7.5, or narrow the sentence to
+  change detection. Either way, F-2 should name env binding as the consumer that might want
+  cross-entry equality.
+
+#### BS-m2 (minor) — the grammar refuses `host:port`, non-web schemes and bare IPv6, and that is freeze-bearing
+- **Evidence (run):** `localhost:8000`, `127.0.0.1:6379`, `falkordb:6379`, `kafka:9092` and
+  `redis://falkordb:6379` are refused. So is `::1`: `ipv6` appears only inside `[…]`.
+- **Why it matters:**
+  - These forms are common env values for the binding the proposal's §3.4 describes.
+  - Advisory SA-4(a) says its screen "still keeps … `falkordb:6379`". BS2 lists only two
+    departures from SA-4(a).
+  - Today's schema has a bare-IPv6 branch, and BS2 does not list its removal for S10.
+  - Over-redaction is legitimate, but loosening a validator-checked grammar later is not
+    additive under BS §8.6. Old validators would reject new bundles, which makes it a major
+    change. §1.10 discusses only tightening.
+- **Fix:** decide before S15. Either:
+  - add `hostport = host ":" port` (it adds no exposure class, because both parts are already
+    bindable alone), and decide `redis`/`rediss`;
+  - or record the refusal as a third departure, name F-7 `bindParts` as the only way to admit
+    these forms later, and add one §1.10 sentence: loosening a validator-checked rule is also a
+    major change.
+
+  Add "bare IPv6 is refused" to §4.1 item 3 either way.
+
+#### BS-m3 (minor) — §1.6.2's "each one either passed a gate or is a port" is false
+`envVar`, `mountPath`, `service` and `protocol` are emitted ungated. They are names and paths from
+source, which is the same class as `keyPath`. **Fix:** restate §1.6.2 and add `mountPath`/`service` to F-4's
+render-through-the-screen list. F-3's list already names emitted `launchFact` args.
+
+#### BS-m4 (minor) — the whole-token match misses digit-suffixed names
+- **Evidence (run):** `DB_PW2`, `ADMIN_PIN1`, `PIN1` and `GithubPat2` pass. The split rule
+  breaks at `_ - .` and at letter-case boundaries, but not at letter↔digit boundaries.
+  Separately, `PRİVATE` alone passes. §1.7.3's U+0130 example holds only through `key`.
+- **Fix:** also split at letter↔digit boundaries, then rerun the BV vectors. Add the suffix axis
+  (`""`, `2`, `_2`, `1`) to the S10 probe over the 36 words. Leave the U+0130 case as is, but
+  reword the example so it does not imply NFKC plus `casefold` maps `İ` to `i`.
+
+#### BS-m5 (minor) — (g3) leaves two validator-visible cases undefined
+- **Flag after a flag.** In `--verbose --token abc`, is `--token` a flag with no context, or an
+  element with context `verbose`? The text supports both readings.
+- **The validator cannot see what the writer saw.** "The preceding element is judged as written,
+  before any redaction", but the validator sees only what was emitted. An example: in
+  `--log4jConfigurationFile x`, the flag fails T1 and is emitted as `<redacted>`.
+- **Why it matters:** a writer and the validator can then disagree on a bundle, in either
+  direction.
+- **Fix:** define both cases. One option: a flag element never takes a context, and an element
+  whose emitted predecessor is `<redacted>` must itself be `<redacted>` or a flag. Add an AV row
+  for each case.
+
+#### BS-m6 (minor) — BS §1's S16 bullet is amended without being named
+- **The base text:** BS §1 bullet 3 says S16 writes `connected-code-graph-bundle-spec2.md` "with
+  `Supersedes:` this document".
+- **The silent change:** BS2 takes that slug and moves S16 to `-spec3` (§0, §4.2). But §1 names
+  neither BS §1 nor §8.6's "who writes a change" bullet as a replaced clause.
+- **Why it matters:** a reader of BS §1 now lands on an `Extends` document.
+- **Fix:** add a §1 row, "replaces BS §1 bullet 3's successor name", and make §1.10 name the
+  §8.6 bullet it amends.
+
+#### BS-m7 (minor) — step 8a's provider mask makes the masked route a wildcard
+- **The mechanism:** a provider literal masked to `{}` is indistinguishable from a path
+  parameter.
+- **The effect:** every *other* consumer literal in that position now matches it. Under §6 and
+  the proposal's path-template matcher, that is presumably `confirmed` (*inferred*: I did not
+  trace the S12 matcher, which does not exist yet).
+- **So the claim holds only for the pair:** "a masked pair still links, as `possible`, never as
+  `confirmed`" is true for the masked pair only.
+- **Fix:** keep it pre-freeze, because 8a is id-bearing. Mask the provider side to a distinct
+  placeholder, for example `{#}`, that matches only `{?}`/`{#}` and always yields `possible`.
+
+#### BS-m8 (minor) — §1.12 makes the implementation normative, bugs included
+- **The rule:** "A bundle is valid iff `bundle.py`'s reader accepts it."
+- **Why it matters:** this freezes whatever `bundle.py` gets wrong. S10-M1 was exactly that
+  case: the validator accepted strings the spec forbade.
+- **Fix:** "valid iff it satisfies the spec as amended. `bundle.py` is the reference validator,
+  and a disagreement is a `bundle.py` defect. The schema must never reject a spec-valid bundle."
+
+#### BS-m9 (minor) — the follow-up lists have gaps
+- **S10 (§4.1):**
+  - item 3 omits SA-6's probe over all 36 words, which §2 promises;
+  - it also omits removing the bare IPv6 branch (BS-m2);
+  - item 7 is already done: the schema's `description` and `cpg/README.md:79` already say
+    "necessary but not sufficient".
+- **P1 writer.** §2 routes W2, W3, the writer side of SA-1 and the per-entry HMAC to the "P1
+  writer". But no F-row or §4.2 row carries them into the P1 plan, while F-6/F-7 do carry the
+  architect's items. **Fix:** add an F-10, "P1 writer obligations", owned by `architect` for the
+  P1 plan.
+- **W2's scope.** W2 should say whether it also governs `launchFact.default`. Today,
+  `${FALKORCHAT_WS_ID:-acme}` emits `acme` in clear.
+- **§4.2.** Its table misses `p0-2.md` §4.0's "bundle spec (+ `-spec2` if changed)" row (line
+  400). It also calls the S58 row in §5.3 (line 842) "§8's"; §8 has none.
+
+#### Nits
+- **BS-n1:** AV-1's literal `sk_live_51H…` contains U+2026, so the row fails (g1) by itself. Use a
+  full synthetic key, and keep the `…` form as a separate (g1) row if wanted.
+- **BS-n2:** several "decided by" cells are incomplete, and S10 will encode them as tests:
+  - BV-7 also fails T2/T3;
+  - BV-10 also T2/T3;
+  - BV-13 and BV-14 also T2;
+  - BV-16 also T5;
+  - BV-20 also T2/T3.
+
+  Either complete them or head the column "at least".
+
+### egress-spec2 findings
+
+#### ES-m1 (minor) — §1.1 still says the `\r` split is "inferred, not probed", and it is now confirmed
+- **Evidence:** Appendix B, case c2, attempted the download. The in-flight runner's own comment
+  says the same (`cpg/sandbox/offline-run.sh:235`).
+- **Fix:** restate the bullet as *confirmed*, and add the negative results as recorded
+  observations:
+  - `\f` mid-line, NEL, U+2028 and U+2029 do not split;
+  - `//>` followed by two spaces or a tab is inert.
+
+  The runner's extra split at `\f`/`\v` stays permitted (fail closed).
+
+#### ES-m2 (minor) — ES §9's H15 row still records "indented by two spaces: … inert"
+§1.1 corrects §7.3.1's sentence but leaves the §9 H15 observation that P3-m1 refuted (a
+two-space-led directive did attempt the download). **Fix:** name the H15 row's "two spaces …
+inert" clause as replaced too.
+
+#### ES-m3 (minor) — §1.7 turns a closed rule into a list, and "sets or clears" leaves inputs open
+- **Base vs ES2:** ES §7's rule is closed ("no input from its own environment"). §1.7 restates
+  it as two lists.
+- **"Clears" is not enough for Docker.** *Inferred from Docker's documented precedence, not
+  run:* with `DOCKER_HOST`/`DOCKER_CONTEXT` cleared, the client still takes `currentContext` from
+  `$HOME/.docker/config.json`. So `HOME` stays a daemon selector. Only **setting** `DOCKER_HOST`
+  pins the daemon.
+- **Inputs the lists omit:**
+  - `PATH`, which resolves `docker`, `bwrap` and `perl`;
+  - `TMPDIR`, which places the runner's scratch;
+  - `SHELLOPTS`/`BASHOPTS` and exported functions. `bash -p` covers these only when the
+    `#!/bin/bash -p` line is honoured, not under `bash offline-run.sh`.
+- **Fix:** state the rule closed. The runner re-execs under `env -i` with a fixed `PATH` and an
+  explicitly set `DOCKER_HOST`, passing only `CCG_AUDIT_DIR`/`CCG_TOOLCHAIN_IMAGE`. Test it with
+  a polluted-environment probe: the caller's full environment, plus a planted fake `docker` on
+  `PATH`, plus `DOCKER_*`, `BASH_ENV` and `SHELLOPTS`. The record and `launcherArgv` must equal a
+  clean run's, modulo ids.
+
+#### ES-m4 (minor) — §1.3's example lock lives inside the overlay `upperdir`
+- **The problem:** `<output>/.ccg-lock` is in the `upperdir`. So it appears in the tool's output
+  directory, and inside the sandbox at `/out/.ccg-lock`.
+- **The race:** a tool that unlinks it frees the path. A second invocation can then `flock` a
+  new inode while the first still runs (*inferred*).
+- **Fix:** give an example outside the `upperdir`: `flock` on an fd of the `--output` directory
+  itself, or a runner state file keyed by the directory's device and inode.
+
+#### ES-m5 (minor) — the plan fold-in table is incomplete
+- **Missing:** `p0-2.md` §4.2 (line 472) and §9.1 (line 1220) also say "with errata E1–E2". §3's
+  table lists neither.
+- **Mislabelled:** "§8's S04 row" does not exist. The S04 row meant is §5.3's (line 829).
+
+#### Nit
+- **ES-n1:** "compared case-insensitively" says nothing for the literal `//>`. Drop it, or say
+  "any directive, in any case, counts".
+
+### What's solid
+- **The `bindValue` core is sound.** The closed, anchored, case-sensitive grammar on the emitted
+  string, re-checked by the validator, removes the SA-5 parser-differential class completely.
+  The token screen's two false-positive departures are well judged: `release-2024-notes`,
+  `sk-SE`, `skus` and `pkg` pass, and every advisory token still fails.
+- **The id discipline holds.** No id-bearing rule changes a GV. `ordinal` is the tuple's own
+  integer. The HMAC domain is non-circular. And SA-10 was rejected for the right reason: locators
+  must stay writable from source.
+- **The dispositions table is complete.** Every SA, every S10 open item and EP Q2 has a row, a
+  decision, a landing clause and an implementer.
+- **ES2's `//>` rule is right.** It is the oracle "≤ U+0020", not a list. The leading-byte
+  coverage probe is the right test, and the `\r` split is exactly replpp's.
+- **ES2's netns rule is better than the base.** `network`/`netnsDistinct` "by construction from
+  `launcherArgv`" is a definition the runner can actually satisfy.
+
+### Open questions
+1. **For `teco` (convention owner: the human, or `cobb`):** root `AGENTS.md` rule 5 does not cover
+   an `Extends:` successor that replaces clauses, yet the repo now has several (ES over the proposal, the `p0-2.md` errata, BS2, ES2). Should the
+   rule gain a clause-override form, for example `Extends:` plus a mandatory "replaces §x"
+   index? Or should `-spec3`'s trigger become a checkable gate item, for example at S15 or P0
+   close?
+2. **For `architect`, BS-m2:** should `host:port` and `redis://` bind in v1, or wait for
+   `bindParts`?
+
+### Appendix A — GV recompute and gate vectors
+
+| Check | Result |
+|---|---|
+| GV-1…GV-22 via `cpg/ccg/ids.py` (HEAD) | **22/22 match** BS §3.6. Intermediates `3177d8d5…`, `e308e9b4…` and `79f8675f…` match too. |
+| BV-1–BV-5 | bind (all five) |
+| BV-6–BV-20 | redact (all fifteen). Mine adds, beyond the "decided by" cells: BV-7 T2/T3, BV-10 T2/T3, BV-13 T2, BV-14 T2, BV-15 T1/T5, BV-16 T5, BV-20 T2/T3 |
+| AV-1 (`…` literal and a full key), AV-2–AV-5 | all match BS2's outputs |
+| `nameNorm` | 26 non-NFC code points (Unicode 15.0.0), U+01F0 and U+0390 included; idempotent on 200,000 samples |
+
+**BV must-redact values transplanted into argv**, using the keyPath's last segment as the flag name
+("clear" means written unredacted):
+
+| BV | `--N v` | `--N=v` | `-e N=v` | `N=v` | positional |
+|---|---|---|---|---|---|
+| BV-6 (webhook URL) | red | red | **clear** | **clear** | **clear** |
+| BV-17 (`postgres://u:p@db/app`) | **clear** | **clear** | **clear** | **clear** | **clear** |
+| BV-11 (`ADMIN_PIN` 4821) | red | red | **clear** | **clear** | clear (no name; accepted) |
+| BV-9, BV-12, BV-13, BV-14 | red | red | red | red | red |
+
+### Appendix B — replpp line handling (container probes)
+
+Each case ran `joern --script` in a throwaway container. "Download" means
+`UnknownHostException: github.com` from `replpp.util.Cache.getOrDownload`. The hostname
+`UnknownHostException` in the c0/c8 output comes from not passing `--hostname localhost`, and is
+benign.
+
+| Case | Script bytes | Result |
+|---|---|---|
+| c0 | `println("NODIR-OK")` | rc 0, printed (control) |
+| c1 | `//> using dep …` on line 1 | rc 1 with one `UnknownHostException` (download, as c2/c4) |
+| c2 | `println("CRSPLIT")\r//> using dep …` | **download: `\r` splits** |
+| c3 | CRLF file, directive on line 2 | rc 1 with one `UnknownHostException` (download, as c2/c4) |
+| c4 | LF file, directive on line 2 | download (any line, not only the head) |
+| c8 | `println("FF")\f//> using dep …` | rc 0, printed, no download: `\f` does not split |
+| c5, c6, c11 | the same with NEL / U+2028 / U+2029 | compile error, no download: none splits |
+| c7 | `\x7f//> using dep …` | compile error, no download (DEL not trimmed) |
+| c9, c10 | `//>␠␠using` / `//>\tusing` | rc 0, no download |

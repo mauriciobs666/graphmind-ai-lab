@@ -1,0 +1,8 @@
+# cpg/sandbox/allowed-flags.txt — network-shaped --help flags reviewed as opening no network path.
+# Format (egress spec docs/plans/connected-code-graph-egress-spec.md §7.3.3): tab-separated,
+#   <frontend>\t<flag>\t<reason>
+# The reason is mandatory and states the evidence. An entry is "reviewed" once it has passed the
+# S08 analyst gate; a later addition needs the same gate. Initial set: Joern v4.0.579.
+c2cpg	--compilation-database	reads a local compile_commands.json; matched only on an https:// link in its --help description
+javasrc2cpg	--delombok-mode	runs delombok locally on the input; matched only on "lombok dependency" in its description; delombok is a child JVM inside the same sandbox
+jimple2cpg	--full-resolver	Soot's transitive resolution over classes in the input, per its --help (inferred, not probed); matched on "resolver"

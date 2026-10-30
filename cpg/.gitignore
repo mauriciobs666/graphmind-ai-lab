@@ -7,3 +7,6 @@
 
 # C-1001 P0 scratch: corpora, bundles, exports (P0 plan §2 D2). Not source.
 .ccg-work/
+
+# C-1001 P0 sandbox audit records (egress spec §5.1; S08). Local only, never committed.
+.audit/

@@ -1,0 +1,22 @@
+# cpg/sandbox/forbidden-flags.txt — flags the offline runner refuses before launch.
+# Format (egress spec docs/plans/connected-code-graph-egress-spec.md §7.3.3): tab-separated,
+#   <frontend>\t<flag>\t<forbiddenIn>\t<reason>
+# frontend: a name from §7.3.1, or *. forbiddenIn: offline (allowed in controlled mode, P2) or all.
+# Matching (§7.4 step 2): case-insensitive; an argv element hits when it equals the flag, starts
+# with "<flag>=", or contains the flag as a substring. Launcher-level options (-D, -J, -XX, ...)
+# are fixed in offline-run.sh, not here (§7.3.5).
+# Sweep: tests/test_sandbox.sh test 6 fails on any network-shaped --help flag in neither file,
+# on a stale entry here, and on a flag present in both files. Initial set: Joern v4.0.579.
+javasrc2cpg	--fetch-dependencies	offline	fetches dependency jars
+kotlin2cpg	--download-dependencies	offline	downloads dependencies
+kotlin2cpg	--jar4import-url	all	sends import names to a service (proposal §3.12); only an importNameServices entry lifts it (§7.4 step 5, P2)
+kotlin2cpg	--gradle-project-name	offline	--help: "used to download dependencies"
+kotlin2cpg	--gradle-configuration-name	offline	--help: "used to download dependencies"
+kotlin2cpg	--enable-dependency-resolver-v2	offline	experimental dependency resolver; environment twin ENABLE_DEPENDENCY_RESOLVER_V2 (§7.3.4)
+kotlin2cpg	--generate-nodes-for-dependencies	offline	no evidence that it stays offline; S25 may move it with evidence
+csharpsrc2cpg	--download-dependencies	offline	downloads from NuGet; the jar carries NUGET_BASE_API_V2/_V3
+gosrc2cpg	--fetch-dependencies	offline	fetches modules
+gosrc2cpg	--include-indirect-dependencies	offline	F11; works together with --fetch-dependencies
+joern	--dep	all	resolves Maven artifacts and their transitive dependencies; short form -d is refused by the §7.3.1 script-mode grammar
+joern	--repo	all	adds a Maven repository to resolve from; short form -r is refused by the §7.3.1 grammar
+joern	--verbose	all	matched only on "resolved dependency jars" in its description; harmless, but the §7.3.1 grammar refuses it anyway, listed for the sweep
