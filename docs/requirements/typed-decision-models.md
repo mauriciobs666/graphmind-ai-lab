@@ -89,12 +89,15 @@ is the experimentation vehicle.
   frontier labeler within each true answer** on its evaluation set: at least 90% of the items
   whose true answer is "yes" and at least 90% of those whose true answer is "no" (for pick-one,
   at least 90% within each type). This prevents a model from passing by always giving the most
-  common answer. Hand-off of uncertain cases to a local LLM is allowed exactly as in FR-3, and the
+  common answer. Message-type classification uses exactly six labels: `order`, `question`,
+  `complaint`, `chit-chat`, `escalation`, `other`. Hand-off of uncertain cases to a local LLM is allowed exactly as in FR-3, and the
   90% applies to the combined result. Its average decision time, hand-offs included, must be
   **350 ms or less**.
 - **FR-11 — Minimum evaluation-set size.** A parity or new-ability result counts only if its
   evaluation set has **at least 200 items** for that decision point as a whole (not per evidence
   kind or per answer).
+- **FR-11a — Bars are judged on the measured value.** FR-2's 2× and FR-10's 90% and 350 ms
+  thresholds are judged on the measured value, with its uncertainty range reported beside it.
 - **FR-12 — Joining in unmentioned supersedes the responder's locked trigger.** Today the
   responder replies only when @mentioned (the locked trigger in `falkor-chat/server/falkorchat/responder.py`).
   This new ability changes that rule. The rule that an agent-authored message never triggers a
@@ -114,7 +117,7 @@ is the experimentation vehicle.
 | Decision point | Kind | Question shape | Incumbent today | Hand-off target | Uses the decision | Labeled data today |
 |---|---|---|---|---|---|---|
 | Workflow guard judge | **speed-up** of an existing model decision | yes/no: is enough known to advance? | LLM `qwen/qwen3-4b-2507` | that LLM | workflow executor (advance vs. suspend) | 85 human-curated items (side check only, FR-5, FR-15) |
-| Message-type classification | **new ability** | pick one: order / question / complaint / chit-chat … | none | a local LLM | nothing yet: recorded as a label on the message | none |
+| Message-type classification | **new ability** | pick one: order / question / complaint / chit-chat / escalation / other | none | a local LLM | nothing yet: recorded as a label on the message | none |
 | Responder: join in unmentioned | **new ability** | yes/no: should the agent reply although not @mentioned? | none: today a fixed rule replies only when @mentioned | a local LLM | the responder | none |
 
 Speed-up points are governed by FR-1–FR-3. New-ability points have no incumbent to match, so FR-10
@@ -242,3 +245,7 @@ not affecting pass/fail.** (FR-15, AC-17)
 AC-16)
 2026-10-30 — Analyst review Pass 2 (`docs/reviews/typed-decision-models.md`): approve with
 suggestions; suggestions folded in. Status → **Ready for design** on stakeholder confirmation.
+2026-10-30 — (Architect question SQ-1) What is the message-type label set? → **order, question,
+complaint, chit-chat, escalation, other.** (FR-10, Scope table)
+2026-10-30 — (Architect question SQ-2) Are the bars judged on the measured value or the
+pessimistic end of its range? → **Measured value**, range reported beside it. (FR-11a)
