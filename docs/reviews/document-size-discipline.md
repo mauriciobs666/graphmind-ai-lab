@@ -177,3 +177,125 @@ dispositions? Or is the ledger, which is out of scope here, enough?
 **FR-8 self-check:** line 159 (consult result) and line 166 (process choice) are status lines, not
 decisions. AC-5 applies only after delivery, so this is acceptable. Line 165 sets the "regardless of
 wrap" reading. Nothing else is restated.
+
+## Pass 3 — implementation plan
+
+2026-10-29. This pass reviews `docs/plans/document-size-discipline.md` (`active`, uncommitted)
+against the requirements as approved in Pass 2. I spot-checked every edit target it cites and ran
+the AC-1 probes.
+
+**Verdict: approve with suggestions.** There are no blockers. Fix M1–M3 in place before U1 is applied.
+CPG: not applicable — convention and prompt text only.
+
+Plan Q1 (collision rule 5's one-line revision note replaces the previous one each round rather than
+stacking, for requirements/plans/reviews) → stakeholder: yes, per the architect's recommendation
+(2026-10-29).
+
+**Coverage.** Every FR and AC maps to an edit:
+- FR-1: E1 and E5. FR-2, FR-6, FR-7: E2.
+- FR-3: E2 and E3. FR-4: E2, E3 and the architect/graph-dba/data-scientist rows.
+- FR-5: E2 and `tico.md:47/66/100`. FR-8: E2 and the reviewer rows.
+- FR-9: E4 and `tico.md:110`, but see M2.
+
+E3's second clause records folded-in answers in Pass N, which also closes Pass 2 m6.
+
+**Targets.** I checked these against the files, and all match:
+- root `AGENTS.md` l.162–163 (lookup list), l.215 (rule 5), l.245 (Status set), and l.187, which is
+  the open-item bullet that depends on rule 5;
+- `tico.md` l.47, 66, 100 and 110, and `plan-authoring-techniques.md:51`;
+- `graph-dba.md:63`, `data-scientist.md:81–82` and `security-expert.md:72`;
+- the prompt word counts.
+
+The `qa-engineer` exclusion is correct: its guard (`guard-qa-doc-writes.sh:21`) allows only
+`test-plans/` and `test-reports/`.
+
+### Findings
+
+**M1 (major) — The AC-1 probe is too broad to run as written.** A git pathspec `*` also matches `/`,
+so `'claude/*/*.md'` sweeps every `kaizen/history.md`, `claude/docs/plans/*`, reviews and test
+reports. The first probe returns about 100 hits, mostly kaizen prose ("read whole before ruling").
+That makes "every hit must agree with E1" impossible to check. Today it does catch the real
+contradictions, `AGENTS.md:162–163` and `prompt-waste-reduction.md:821,845`, but buried among the
+rest. I ran a version with the `:(glob)` magic: `':(glob)**/AGENTS.md' ':(glob)claude/*/*.md'
+':(glob)skills/*/SKILL.md'` plus the plan path. It cuts the output to 18 hits. After E1 and E5 the
+remaining hits are prose about something else (`analyst.md:34`, `falkordb-quirks.md:892`, …).
+**Fix:** use the `:(glob)` pathspecs and list the expected non-conflicting hits, so U3 compares
+against a known residue.
+
+**M2 (major) — A second ready-for-design path in `tico` is missed (FR-9).** `tico.md:169`, the
+delegated Mode 1 path, returns "the ready-for-design confirmation" after one round. It never
+reaches the l.110 readback the plan edits. **Fix:** add a `tico.md:169` row to U2: report "ready
+pending analyst gate" rather than ready.
+
+**M3 (major) — E2 is over its own word cap, and the root growth figure is understated.** E2 as
+drafted is 176 words, against "at most ~130". E1 adds about 15 words (45 words in, about 30 out),
+and E3 plus E4 add about 40. Root `AGENTS.md` therefore grows by about 230 words, to about 3,180,
+not "~160 to ~3,110". The offset mitigation ("next candidate is the rationale prose") is not tied to
+any unit. **Fix:** cut E2 to 130 words or fewer. The reviewer-check sentence is repeated in the
+`analyst` row and can collapse to "every review gate checks a revision against this bullet". Then
+either make an offset edit part of U1 with a target, or have the human accept the growth
+explicitly.
+
+**m1 (minor) — U4 cites the wrong manual line.** `agent-team.md:335` is about the decision log, not
+the flip. The only "only on your OK" is at l.115.
+
+**m2 (minor) — D4 contradicts U2.** D4 says "no prompt edit is needed" for return messages, but the
+U2 `architect` row adds "the return message lists the findings handled". Drop one of the two.
+
+**m3 (minor) — The `teco.md:56` anchor is a weak fit.** l.56 is the analyst routing row. The
+re-gate brief guidance lives at l.144, which is the better host for "re-gate runs the growth-stops
+check".
+
+**m4 (minor) — The `cobb` bookkeeping misreads the agent edit rule.** `claude/AGENTS.md:308`
+requires `kaizen/{plan,history}.md`, but U2 lists only `history.md`.
+
+**n1 (nit) — The plan does not yet comply with FR-4 for Q1.** Q1 is now answered. FR-4 and AC-4
+mean the next revision should remove it from §6 and from "Ready to implement" ("Q1 is open"), and
+fold the answer into D3.
+
+**FR-8 self-check.** The plan is current-state only and cites FR and finding IDs without restating
+the requirements. §6's "Pass N rule" bullet paraphrases FR-3, which is acceptable as a risk note.
+
+### Ownership and sequencing
+
+U1→U2 is sound: U2's pointers cite E2's bold lead, so U2 cannot land before U1. Giving U1 to the
+human matches the convention's stakeholder ownership, U2 to `cobb` matches `claude/AGENTS.md:308`,
+and U3 runs after both. No stakeholder questions are open.
+
+## Pass 4
+
+2026-10-29. Re-read the plan (Version 2) and re-ran both AC-1 probes.
+
+**Verdict: approve.** Every Pass 3 finding is fixed or resolved by decision. The fixes add nothing
+above a nit.
+
+Pass 3 M3 (root `AGENTS.md` growth) → stakeholder: accept as is; E2 stays ~176 words, ~+230 words to
+~3,180 accepted, no offset unit (2026-10-29).
+
+### Dispositions
+
+- **M1 — fixed.** The §5 probe now uses `:(glob)` pathspecs. Re-run, it returns 19 hits, and the
+  plan's expected-residue list accounts for every one: `AGENTS.md:162–163`,
+  `prompt-waste-reduction.md` l.44, l.117 and l.806–914 (eight hits), `analyst.md:34`,
+  `falkordb-quirks.md:892`, `guard-testing-techniques.md:279/291` and `python-web-quirks/SKILL.md:8/758`.
+  No unexpected hit.
+- **M2 — fixed.** §2 (l.48–50) and a new U2 row (l.156) cover `tico.md:169`, and AC-9 now cites
+  `tico.md:110/169`.
+- **M3 — resolved by decision.** E2 is labelled "~176 words, accepted as is" (l.107). §2 (l.53) and
+  §6 (l.192–193) both state ~+230 w to ~3,180, with no offset unit. All three agree with the
+  stakeholder line above.
+- **m1 — fixed.** U4 now cites only line 115.
+- **m2 — fixed.** D4 (l.83–84) now assigns the return-message clause to the author rows in U2.
+- **m3 — fixed.** The U2 anchor is now `teco.md:144`.
+- **m4 — fixed.** U2 lists both `kaizen/plan.md` and `kaizen/history.md` (l.160).
+- **n1 — fixed.** D3 records the answer, and "No questions are open" (l.206).
+
+### New findings
+
+**n2 (nit) — The residue list has two stale numbers.** The plan says "18 hits today", but the probe
+returns 19. That was my Pass 3 miscount, which the plan inherited. Also, E5 inserts a line under
+`### Stage G` (l.801), which shifts l.806–914 down by one or two lines at U3 time. **Fix:** say "19",
+and cite the range as "Stage G section" rather than by line numbers, or note the shift.
+
+**n3 (nit) — D4 says the same thing twice.** l.82 "The orchestrator already relays that message" and
+l.83 "Orchestrators already relay" duplicate each other. Drop one.
