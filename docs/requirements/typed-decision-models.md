@@ -48,7 +48,9 @@ is the experimentation vehicle.
   that point's labeled set, it is **not measurably worse** than the incumbent on **either** error
   type: wrongly advancing/accepting (false positive) **and** wrongly suspending/rejecting (false
   negative). "Measurably" uses the benchmark's own resolving power at the evaluation set's size
-  (`docs/requirements/small-model-benchmarking.md`).
+  (`docs/requirements/small-model-benchmarking.md`). Every "not worse" result also prints the
+  smallest difference its evaluation set could have detected, so a pass that only means "too few
+  items to tell" is visible.
 - **FR-2 — Speed/cost win.** At parity (FR-1), the decision point must be **at least 2× faster on
   average across the whole mix of decisions** (hand-offs included, FR-3) than the incumbent
   LLM-only judge, both measured in the same session on the same hardware.
@@ -61,7 +63,9 @@ is the experimentation vehicle.
 - **FR-4 — Specialization is in scope.** A local decision model may be trained/recalibrated on
   this lab's own labeled decisions, one decision point at a time. Each decision point therefore
   needs its own labeled examples. A specialized model is always judged on labeled examples that
-  were **not** used to train it, calibrate it, or tune its hand-off cut-off (FR-3).
+  were **not** used to train it, calibrate it, or tune its hand-off cut-off (FR-3). Re-tuning
+  after seeing evaluation results is allowed without a fresh evaluation set, but every result
+  reports how many candidates have already been run on that same evaluation set.
 - **FR-5 — Labels come from an LLM, unreviewed.** This **amends**
   `docs/requirements/small-model-benchmarking.md` FR-19 for packs built under this feature only. Labeled examples for training **and** for
   evaluation may be produced by an LLM with no human review. Consequence, accepted by the
@@ -252,3 +256,7 @@ complaint, chit-chat, escalation, other.** (FR-10, Scope table)
 pessimistic end of its range? → **Measured value**, range reported beside it. (FR-11a)
 2026-10-30 — Are `chit-chat` and `other` redundant? → **Yes, merge into `other`**: five labels.
 Overturns the SQ-1 entry above. (FR-10, Scope table)
+2026-10-30 — (Plan review Pass 3, M3) After a re-tune informed by evaluation results, is a fresh
+evaluation set required? → **No; report the reuse count instead.** (FR-4)
+2026-10-30 — (Plan review Pass 3, M4) Must every parity result print its detection limit? →
+**Yes, always.** (FR-1)
