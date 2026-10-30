@@ -1,6 +1,6 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.2 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05))
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.2 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05))
 
 *Revision 2026-10-29 (v1.1): S06 gate (needs changes: B1, M1–M6, m1–m6, nits) addressed, with the stakeholder's two decisions of 2026-10-29 (AC-5 re-gate fresh-item floor; flow counts toward the 75 only across a unit boundary); dispositions in §16.*
 
