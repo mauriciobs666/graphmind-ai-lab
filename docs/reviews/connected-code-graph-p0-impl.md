@@ -3895,6 +3895,197 @@ runner can `docker rm -f ccg-sbx-<auditId>` from its EXIT trap.
   Pass 1 files date from 21:06 at the latest. It is empty and matches p2-n2's signature, so it is
   most likely devops's own harness run. I left it in place.
 
+### Pass 3 — ES2 v1.2 follow-up (code gate)
+
+**Re-checked (2026-10-30)** against devops's follow-up round: `git diff 46e1666c -- cpg/sandbox`
+(`offline-run.sh`, `tests/test_sandbox.sh`, `tests/mutants.sh`, `README.md`) plus the untracked
+`cpg/sandbox/scripts/cpg-content-check.sc`. Baseline: `docs/plans/connected-code-graph-egress-spec2.md`
+v1.2 §1.5, §1.7, §3, §4/§4.1; the base egress spec §5.3/§7; `docs/plans/connected-code-graph-p0-2.md`
+§3 S08 row and §5.2 (P3-7); Pass 2 above. Every claim below was **run** unless marked *inferred*.
+Mutants were copies in the session scratchpad; the tracked files were never edited.
+
+**Verdict: approve with suggestions.** No blocker, no major. Every Pass 2 leftover is fixed and
+pinned, and §1.7 is implemented as the closed set it names. Three minors and two nits remain; two
+of the minors (p3-m1, p3-m2) are defects *of this round's fixes*, not of the original.
+
+CPG: considered, not relevant — no CPG covers `cpg/sandbox/` (Bash/Scala/Perl); every question
+here is runtime behaviour, settled by execution.
+
+**What I ran.**
+- **Suite:** the caller's solo full run (438 passed, 0 failed) was not repeated as-is, but two
+  full runs against the mutants below each gave **438 passed, 0 failed** (about 2 min 8 s each),
+  and every check that does not touch `sbx_dcfg_check`'s tree rules is shared with the real
+  runner.
+- **Mutants:** `tests/mutants.sh M29 M30 M37 M38 M39 M40 M41 M42 M43` (every mutant this round
+  added or re-targeted) gave **killed=9 survived=0** in 3 min 6 s, with the first failing checks
+  the README's table names. I did not re-run the other 42; their code paths are untouched by this
+  diff except M23, whose edit was re-anchored to the new `*)` line and still applies. The
+  implementer's 51/51 is therefore partly confirmed (9/9 here). Plus my two mutants YA/YB
+  (p3-m3), both survived.
+- **Directed probes:** `sbx_dcfg_check` sourced in library mode against fake homes; the real
+  runner through an ancestor symlink; twelve early-SIGTERM trials; a foreign `ccg-sbx-*`
+  container during a suite run; `bash -p`'s pass-through of non-identifier environment entries.
+
+**Dispositions (Pass 2).**
+- **p2-m1 — fixed.** Test 5 asserts `--label ccg.sandbox.auditId=<auditId>`, `--name
+  ccg-sbx-<auditId>` and the volume label on every launched record; the hygiene section adds the
+  `docker events --since <suite start>` window for `ccg-sbx-*` containers and `ccg.sandbox`
+  volumes. M40 (label dropped) is killed. Residue: the window is not session-scoped (p3-m2).
+- **p2-n1 — fixed, with a residue.** The launcher is a waited-on child; INT/TERM/HUP remove
+  `ccg-sbx-<auditId>`, exit `128+n`, write no record. Test 12 (exit 143, container/volumes/overlay
+  gone, no record, lock free) passed; M41 (foreground launcher) is killed. Residue: an early
+  signal leaks a `Created` container (p3-m1).
+- **p2-n2 — fixed.** The EXIT trap is set right after the `mktemp` in `sbx_init`; the suite fails
+  on a new `/tmp/ccg-sbx.*`; M42 is killed and the harness `rmdir`s only new, empty scratch. I
+  confirmed bash runs that EXIT trap on an untrapped SIGTERM too (exit 143, trap ran), so the
+  pre-launch window does not leak either.
+
+**§1.7 against the code — exact.** The re-exec keeps exactly `PATH` (fixed), `DOCKER_HOST`
+(`unix:///var/run/docker.sock`), `DOCKER_CONFIG` (`<passwd home>/.local/state/ccg/docker-config`),
+`HOME` (passwd) and the two `CCG_*` names; bash adds only `PWD`/`SHLVL`/`_`. Nothing extra
+(`LANG`, `TERM`, `TMPDIR`, `TZ` are all dropped; the runner sets `LC_ALL=C` itself) and nothing
+missing. Test 12 reads the live runner's `/proc/<pid>/environ` after a forced re-exec, which is the
+right observable: M29 and M39 change no record field, only what the Docker client inherits
+(`proxies` from a caller `config.json` would reach the container's `Config.Env`). One gap at the
+edge of "exactly" is p3-n1. The `-p` shebang, the passwd `HOME` and E3-2's three run-time checks
+(empty, owner, `0700`) each have a test and a mutant (M30, M37–M39). The implementer's "the
+Docker CLI writes nothing into the config directory" held: after two full suites, a launched
+parse and test 11's own last check, `~/.local/state/ccg/docker-config` was still empty.
+
+**P3-7 — conforms.** The `METHODS <cpg>=` line is the old script's expression
+(`cpg.method.isExternal(false).name.l.distinct.sorted.mkString(",")`, now via `ms.map(_.name)`), so
+it is byte-identical; the new lines add `METHOD_COUNT`, per-`FILE` counts and `CONTENT ok|EMPTY`.
+The non-zero exit on `EMPTY` is accepted by the caller and is tested against a real exit-0 empty
+CPG (`jimple2cpg` on Java source); M43 is killed. *Note for S11, not a finding:* `FILE_METHODS` is
+keyed by the CPG's `FILE` nodes, so a source file the frontend skipped prints no line at all —
+S11's per-file measurement must diff against the source listing, not read absences as zero.
+
+**Line-number citations:** none in the change (README, runner comments, test text). The only one
+in this section's history is my own Pass 2 `test_sandbox.sh:774-784`, now stale; it is history,
+not guidance.
+
+#### p3-m1 (minor, from the p2-n1 fix) — an early SIGTERM leaks a `Created` container and its three volumes
+- **Run:** twelve runs of the real runner (`joern --script` that sleeps), SIGTERM sent 0–1.0 s
+  after the `.ccg-ovl-<auditId>` dir appeared. All twelve exited 143 with no record. **Three
+  (delays 0.02, 0.05, 0.05 s) left `ccg-sbx-<auditId>` in state `Created` with 3 volumes**; the
+  other nine left nothing. The README's "the lock is never free while our container still
+  writes" holds for those three only because a `Created` container never starts.
+- **Cause (traced, `sbx_on_signal`):** it runs `docker rm -f -v ccg-sbx-<auditId>` *before*
+  killing the client. When the signal lands while `docker run` is between its create and start
+  calls, the `rm` finds nothing, the client is then killed, and the daemon completes the create;
+  `--rm` (daemon-side AutoRemove) never fires for a container that never started. *Inferred, not
+  observed:* if the client gets both create and start through in the `rm`'s ~50 ms, the
+  container runs to its end with the lock free — the case p2-n1 was about.
+- **Fix (`devops`):** kill and `wait` the client first; then remove by label, not name, and
+  repeat until a settle check is empty (`docker ps -aq --filter label=ccg.sandbox.auditId=$AID`,
+  then `docker volume ls -q --filter label=…`). Or split launch into `docker create` + `docker
+  start -a`, so the runner knows when the container exists. That is a design call for devops.
+- **Test:** test 12's single TERM lands seconds into the run and cannot see this. Add a loop of
+  early TERMs (N trials at 0–0.1 s after the overlay dir appears; each asserts no container or
+  volume with its auditId). Stopping condition: **the loop is red against today's runner** (it
+  was 3/12 here) **and green after the fix over ≥ 20 trials**.
+
+#### p3-m2 (minor, from the p2-m1/p2-n2 fixes) — the window hygiene checks false-red on another session's sandbox work
+- **Run:** during `test_sandbox.sh --only 99` I created a foreign, never-started container
+  `ccg-sbx-analyst-foreign-demo` (label `ccg.sandbox=s08`). The suite went red: **7 passed, 1
+  failed** — "no ccg-sbx-* container created during this run still exists (2 created)". Removed
+  right after.
+- **Scope of the false red:** the named non-sandbox containers (`falkordb-dev`, `boring_kilby`,
+  `confident_sammet`, `friendly_keller`, `ccg-falkordb`) cannot trigger it — the container check
+  keeps only `ccg-sbx-*` names and the volume check only `ccg.sandbox`-labelled volumes. Any
+  *concurrent sandbox user* can: an S11 parse, a second suite, a mutant harness. The new
+  `/tmp/ccg-sbx.*` check has the same shape, since a live runner's scratch is a new dir in the
+  window; and `mutants.sh` `rmdir`s any new **empty** `/tmp/ccg-sbx.*`, which includes a
+  concurrent non-joern runner's live scratch (empty for its whole life). *Inferred:* harmless to
+  that runner, whose cleanup skips a missing dir.
+- **Fix (`devops`):** keep the window, but attribute by path, not by time alone: every suite
+  launch's mounts are under `$T` (source, overlay upper/work). Keep a candidate only if its
+  `HostConfig.Mounts[].VolumeOptions.DriverConfig.Options` (or a volume's `Options`) names a path
+  under `$T`; scope the `/tmp/ccg-sbx.*` diff the same way or drop it in favour of M42's own
+  assertion. Stopping condition: **the foreign-container demo above is green, and M40 and M36
+  are still red.**
+
+#### p3-m3 (minor) — `sbx_dcfg_check`'s two tree rules are reachable through the runner and untested
+The caller's open question; answered in full below.
+- **Run:** mutants YA (the `/tmp|/var/tmp|/dev/shm` case deleted) and YB (the world-writable
+  ancestor test replaced by `:`) **each passed the full suite, 438 passed, 0 failed**.
+- **Fix (`devops`):** test 11b in library mode — source the runner, redefine `sbx_home` to
+  return a fixture home, call `sbx_dcfg_check`, assert `rc=1` and the `SBX_DCFG_FAIL` text. Four
+  fixtures: home under `/tmp`; an ancestor symlink (`<home>/.local/state/ccg` → a `0700` dir under
+  `/tmp`); a world-writable ancestor **outside** `/tmp` (the suite's `$T` is under `/tmp`, so a
+  fixture there fires the `/tmp` rule first and YB survives — use a `$HOME/.ccg-s08-ww-$$` dir,
+  removed in `cleanup` like `HOME_SENTINEL`); and a clean positive control (`rc=0`). Add YA and
+  YB to `mutants.sh`. I ran exactly these four fixtures in library mode: the three refusals and
+  the control behaved as stated (Appendix C).
+
+#### Nits
+- **p3-n1 — `compgen -e` cannot see non-identifier environment entries.** `env -i 'A-B=1'
+  'BASH_FUNC_f%%=() { echo hi; }' PATH=… bash -p -c 'compgen -e; env'` listed only
+  `PATH PWD SHLVL`, yet its child `env` saw both entries. So a caller whose identifier-named
+  variables are exactly the closed set skips the re-exec, and such entries reach `docker` and
+  every other child. No consumer reads one (*inferred*: Docker reads only identifier names;
+  `bwrap --clearenv` and `docker run`'s explicit `-e` list stop them at the sandbox). Fix: take the
+  key list from `/proc/$$/environ` (`tr '\0' '\n' | cut -d= -f1`) instead of `compgen -e`; a
+  `test 12` variant with exactly-closed env plus `A-B=1` pins it.
+- **p3-n2 — test 11 mutates the live runner's config dir.** For its duration every concurrent
+  production run on the host refuses 69 (pre-populated, `0755`, symlink, absent). This is
+  inherent to testing a passwd-derived path through `#!`; one README sentence under test 11 is
+  enough ("don't run the suite while S11 parses").
+
+**The open question (`sbx_dcfg_check`'s tree rules).**
+1. **Premise: refuted.** The *lexical* path is fixed by the passwd home, but the check resolves it
+   with `realpath -e`, and the leaf-only `[ -L "$d" ]` does not look at ancestors. A symlink at
+   `~/.local`, `~/.local/state` or `~/.local/state/ccg` into `/tmp` reaches the `/tmp` rule through
+   the real runner: with `~/.local/state/ccg` → a `0700` dir under `/tmp`, the runner exited
+   **69 `backend-precondition`** ("…/docker-config is under a temporary tree"), one record,
+   `launcherArgv: []`. A world-writable ancestor is reachable the same way, or on a host whose home
+   sits in such a tree. Without these two rules, that ancestor symlink would make an owner-0700
+   leaf inside an attacker-renamable directory pass — exactly the TOCTOU E3-2 exists to exclude.
+2. **Does E3-2 require them tested?** Not literally. §1.7 states "never under `/tmp` or any other
+   shared or world-writable tree" as a property of the fixed path, and its run-time verify list is
+   empty, owner, `0700`; its test list names only the pre-populated dir. But the code enforces the
+   tree rules at run time with a 69 refusal, so they are runner behaviour, and this component's
+   standard is that every refusal branch is pinned by a mutant. Two branches that no test can turn
+   red are guards in name only. Hence p3-m3, minor.
+3. **Cheapest sound test:** library mode, as above. `. offline-run.sh` only defines functions (the
+   `BASH_SOURCE` guard), and `sbx_home` is a separate function precisely so it can be redefined in
+   a test without becoming a caller input. The one trap is the fixture location (see p3-m3).
+
+**What's solid.** The closed environment is implemented with no extra or missing name, and the
+two mutants that changed nothing observable in a record were made killable by a sound observable
+(the live `environ` and the container's `Config.Env`). The config-dir checks precede every `docker`
+call and keep 64-over-69 precedence (tested). The content check is a clean promotion, tested
+against a real empty CPG rather than a synthetic one.
+
+**Containers and leftovers.**
+- **Mine:** the suite and mutant runs' `--rm` containers; the twelve TERM trials, of which three
+  left `Created` containers (p3-m1) that I removed by name with `docker rm -f -v`; one
+  never-started `ccg-sbx-analyst-foreign-demo`, removed. At the end, `docker ps -a --filter
+  label=ccg.sandbox` and `docker volume ls --filter label=ccg.sandbox` were both empty, and no
+  `/tmp/ccg-sbx.*` existed.
+- **Not touched:** `falkordb-dev`, `ccg-falkordb`, `boring_kilby`, and `sharp_rubin` (running, not
+  on the brief's list, also not mine). `confident_sammet` and `friendly_keller` were not present.
+- **The runner's config dir — an incident, restored.** My first ancestor-symlink attempt had an
+  empty variable: the `ln` failed after `mv ~/.local/state/ccg ~/.local/state/ccg.analyst-bak`, the
+  runner recreated `~/.local/state/ccg/docker-config` and ran one real `pysrc2cpg` parse into my
+  scratchpad (rc 0, `--rm`), and my restore `mv` then nested the backup inside the new dir. I
+  removed the nested copy with `rmdir` (both levels empty). The end state matches the start: `ccg`
+  and `docker-config` `0700`, owned by `mauricio`, `docker-config` empty. Only the mtimes moved.
+  The corrected attempt restored cleanly. My fixture dirs under `$HOME` and `/tmp` are removed.
+
+#### Appendix C — `sbx_dcfg_check` in library mode (Pass 3)
+`. offline-run.sh; sbx_home() { echo "$FAKEHOME"; }; sbx_dcfg_check`, one fresh fixture home each:
+
+| Fixture home | rc | `SBX_DCFG_FAIL` |
+|---|---|---|
+| `mktemp -d /tmp/ccg-oq-home.*` | 1 | `…/docker-config is under a temporary tree` |
+| `$HOME/.ccg-oq-analyst.*/ww/home`, `ww` mode `0777` | 1 | `…/docker-config sits under world-writable …/ww` |
+| same base, `.local/state/ccg` → `0700` dir under `/tmp` | 1 | `/tmp/ccg-oq-tgt.*/docker-config is under a temporary tree` |
+| same base, `clean` mode `0755` (control) | 0 | (empty) |
+
+A world-writable fixture under the scratchpad (itself under `/tmp`) gave the `/tmp` message
+instead, which is why p3-m3's world-writable fixture must live outside `/tmp`.
+
 ## Spec amendments (bundle-spec2, egress-spec2)
 
 **Reviewed (2026-10-29):** `docs/plans/connected-code-graph-bundle-spec2.md` v1.0 ("BS2") against

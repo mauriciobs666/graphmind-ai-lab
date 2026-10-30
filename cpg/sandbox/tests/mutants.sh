@@ -19,7 +19,7 @@ W=$(mktemp -d /tmp/ccg-s08-mutants.XXXXXX); trap 'rm -rf "$W"' EXIT
 python3 -I - "$SBX" "$W" "$@" > "$W/manifest" <<'PY'
 import os, shutil, sys
 sbx, work, sel = sys.argv[1], sys.argv[2], set(sys.argv[3:])
-R, F, A = "offline-run.sh", "forbidden-flags.txt", "allowed-flags.txt"
+R, F, A, S = "offline-run.sh", "forbidden-flags.txt", "allowed-flags.txt", "scripts/cpg-content-check.sc"
 def move(fe, fl, why):  # allowed -> forbidden
     line = next(l for l in open(os.path.join(sbx, A)) if l.startswith(f"{fe}\t{fl}\t"))
     return [(A, line, ""), (F, "joern\t--dep\t", f"{fe}\t{fl}\toffline\t{why}\njoern\t--dep\t")]
@@ -48,7 +48,7 @@ M = [
  ("M21", "1,5", "add -e to docker run", [(R, "    --network none --hostname localhost", "    -e X=1 --network none --hostname localhost")]),
  # --- S08 gate fix round: one per finding, plus the reviewer's X mutants ---
  ("M22", "10", "M1: directive check strips only [[:space:]] (control bytes admitted)", [(R, "grep -a -E '^[[:cntrl:] ]*//>'", "grep -a -E '^[[:space:]]*//>'")]),
- ("M23", "2", "M2: SBX_BACKEND_REFUSAL not initialised (crash, no record)", [(R, '  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""\n', '  SBX_LAUNCH_SETUP_FAIL=""\n'), (R, "    *) sbx_try_container || true ;;", "    *) SBX_BACKEND=container ;;")]),
+ ("M23", "2", "M2: SBX_BACKEND_REFUSAL not initialised (crash, no record)", [(R, '  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""\n', '  SBX_LAUNCH_SETUP_FAIL=""\n'), (R, '    *) [ -n "${SBX_DCFG_FAIL:-}" ] || sbx_try_container || true ;;', "    *) SBX_BACKEND=container ;;")]),
  ("X1", "2,6", "M4: jimple2cpg --full-resolver moved allowed -> forbidden", move("jimple2cpg", "--full-resolver", "x1")),
  ("X2", "2,6", "M4: javasrc2cpg --delombok-mode moved allowed -> forbidden", move("javasrc2cpg", "--delombok-mode", "x2")),
  ("X3", "2,6", "M4: c2cpg --compilation-database moved allowed -> forbidden", move("c2cpg", "--compilation-database", "x3")),
@@ -63,19 +63,35 @@ M = [
  ("M26", "3", "m2: no lock on --output", [(R, '  flock -n "$SBX_LOCK_FD" || sbx_refuse', '  true || sbx_refuse')]),
  ("M27", "1", "m6: namespace ro binds not recorded in mounts", [(R, '    ro) SBX_LAUNCHER+=(--ro-bind "$2" "$3"); SBX_MOUNTS+=("$3|$2|ro") ;;', '    ro) SBX_LAUNCHER+=(--ro-bind "$2" "$3") ;;')]),
  ("M28", "1,5", "m5: production launches with a flag the probe template lacks", [(R, '    sbx_container_argv "$src" "$out" "$sdir" "$wd" -- "$@"\n', '    sbx_container_argv "$src" "$out" "$sdir" "$wd" -- "$@"\n    [ "$SBX_RECORD_FRONTEND" != lib-launch ] && SBX_LAUNCHER=("${SBX_LAUNCHER[@]:0:3}" --memory 3g "${SBX_LAUNCHER[@]:3}")\n')]),
- ("M29", "2", "n1: no env -i re-exec (DOCKER_HOST reaches docker)", [(R, '  ((ok)) && return 0\n', '  return 0\n')]),
- ("M30", "2", "n1: shebang without -p (BASH_ENV runs)", [(R, "#!/bin/bash -p\n", "#!/bin/bash\n")]),
+ ("M29", "2,12", "n1: no env -i re-exec (DOCKER_HOST reaches docker)", [(R, '  ((ok)) && return 0\n', '  return 0\n')]),
+ ("M30", "2,11", "n1 / §1.7: shebang without -p (BASH_ENV/ENV run)", [(R, "#!/bin/bash -p\n", "#!/bin/bash\n")]),
  ("M31", "8", "m1: auto never falls back to namespace", [(R, "    auto) sbx_try_container || sbx_try_namespace ;;", "    auto) sbx_try_container ;;")]),
  # --- egress-spec2 (ES2) additions ---
  ("M32", "10", "ES2 §1.1: no \\r line split (x\\r//> admitted)", [(R, "tr '\\r\\f\\v' '\\n\\n\\n'", "tr '\\f\\v' '\\n\\n'")]),
  ("M33", "2", "ES2 §1.5: refused toolArgv substituted, not the caller's argv", [(R, '  SBX_TOOL_ARGV=("${SBX_CALLER_ARGV[@]}")\n', "")]),
  ("M34", "2", "ES2 §1.5: --help writes a record", [(R, '  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n  sbx_init\n', '  sbx_init\n  case "${1:-}" in -h|--help) sbx_usage; sbx_write_record 0 ""; exit 0 ;; esac\n')]),
+ ("M37", "11", "§1.7: skip the Docker-config dir check", [(R, "  sbx_dcfg_check || true\n", '  SBX_DCFG="$(sbx_home)/$SBX_DCFG_REL"; SBX_DCFG_FAIL=""\n')]),
+ ("M38", "11", "§1.7: DOCKER_HOST left inherited (not pinned)", [
+    (R, '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}"', '  [ "${DOCKER_CONFIG:-}"'),
+    (R, 'exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" "DOCKER_HOST=$SBX_DOCKER_HOST" \\', 'exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" ${DOCKER_HOST:+"DOCKER_HOST=$DOCKER_HOST"} \\'),
+    (R, "  export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=", "  export DOCKER_CONFIG=")]),
+ ("M39", "11,12", "§1.7: DOCKER_CONFIG left inherited (caller config.json read)", [
+    (R, '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}" = "$home/$SBX_DCFG_REL" ] || ok=0', '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] || ok=0'),
+    (R, '    "DOCKER_CONFIG=$home/$SBX_DCFG_REL" "${keep[@]}"', '    ${DOCKER_CONFIG:+"DOCKER_CONFIG=$DOCKER_CONFIG"} "${keep[@]}"'),
+    (R, "  export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=${SBX_DCFG:-/nonexistent}", "  export DOCKER_HOST=$SBX_DOCKER_HOST")]),
+ ("M40", "5", "p2-m1: container launched without the auditId label", [(R, ' --label "$SBX_LABEL.auditId=$SBX_AUDIT_ID"', "")]),
+ ("M41", "12", "p2-n1: launcher in the foreground (signal trap deferred, container survives)", [(R, '  "${SBX_LAUNCHER[@]}" < /dev/null &\n  SBX_CHILD=$!\n  wait "$SBX_CHILD" || rc=$?\n', '  "${SBX_LAUNCHER[@]}" < /dev/null || rc=$?\n')]),
+ ("M42", "2", "p2-n2: scratch made before --help, with no trap at the mktemp", [
+    (R, "  trap 'sbx_cleanup' EXIT   # set with the mktemp", "  : # set with the mktemp"),
+    (R, '  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n  sbx_init\n', '  sbx_init\n  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n')]),
+ ("M43", "3", "P3-7: the content check accepts an empty CPG", [(S, "    val ok = ms.nonEmpty\n", "    val ok = true\n")]),
  ("M35", "2", "M4: the reviewed allowed list swapped (one out, one look-alike in)", [(A, "jimple2cpg\t--full-resolver\t", "jimple2cpg\t--full-resolverx\t")]),
 ]
 for mid, tests, desc, edits in M:
     if sel and mid not in sel: continue
     d = os.path.join(work, mid); os.makedirs(d)
     for f in (R, F, A): shutil.copy2(os.path.join(sbx, f), d)
+    shutil.copytree(os.path.join(sbx, "scripts"), os.path.join(d, "scripts"))
     ok = True
     for f, old, new in edits:
         p = os.path.join(d, f); s = open(p).read()
@@ -95,7 +111,12 @@ while IFS=$'\t' read -r -u 3 id tests desc; do
     printf '| %s | %s | — | **NOT APPLIED** | |\n' "$id" "$desc" >> "$W/table.md"; continue
   fi
   if [ -n "${MUTANT_DRY:-}" ]; then echo "$id applies"; continue; fi
+  tmp_before=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
   "$HERE/test_sandbox.sh" --runner "$d/offline-run.sh" --only "$tests" > "$d/test.out" 2>&1; rc=$?
+  # A mutant that breaks cleanup (e.g. M42) leaks its scratch by design; remove only NEW, EMPTY ones.
+  for t in $(comm -13 <(printf '%s\n' $tmp_before) <(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)); do
+    rmdir "$t" 2>/dev/null && echo "$id: removed leaked empty $t" >&2
+  done
   first=$(grep -m1 '^  FAIL ' "$d/test.out" | sed 's/^  FAIL //; s/|/\\|/g' | cut -c1-110)
   if [ "$rc" != 0 ] && [ -n "$first" ]; then res=killed; killed=$((killed + 1)); else res=SURVIVED; survived=$((survived + 1)); fi
   printf '%s %-8s tests=%-6s %s :: %s\n' "$id" "$res" "$tests" "$desc" "$first"

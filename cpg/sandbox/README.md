@@ -17,6 +17,7 @@ Where that spec and the P0 plan's §2 D6 disagree, the spec controls. The two re
 | `tests/test_sandbox.sh` | §10 tests 1–10 on both backends |
 | `tests/probe.pl` | The escape-axis probe, axes A1–A7. It is Perl because the image has no Python. |
 | `tests/mutants.sh` | The mutation harness: each mutant must turn its test red |
+| `scripts/cpg-content-check.sc` | **The** CPG content check (plan `docs/plans/connected-code-graph-p0-2.md` §2 D15, P3-7). S11, S25, S28 and S39 run it through the runner; only S08 edits it (plan §5.2). |
 
 ## Using the runner
 
@@ -31,21 +32,38 @@ cpg/sandbox/offline-run.sh --backend container --mode offline --frontend joern \
 **Exit codes.**
 - The tool's own exit code, when the tool ran.
 - `64`: refused before launch (argv, frontend, mode, directive or usage).
-- `69`: the backend refused or is unavailable.
+- `69`: the backend refused or is unavailable, or the runner's Docker-config directory failed
+  its check (see **Environment**).
+- `128+n`: the runner got signal *n* (INT, TERM or HUP) while the sandbox ran. It removed its own
+  container `ccg-sbx-<auditId>` and wrote no record (§5.3: a killed runner leaves none).
 
 **Audit record.** Every invocation, refusals included, appends one `sandbox` record (§5.3) to
 `$CCG_AUDIT_DIR/sandbox.jsonl`. The default is `cpg/.audit/`, which is gitignored.
 
-**Environment.** The runner reads only two variables: `CCG_AUDIT_DIR`, and
-`CCG_TOOLCHAIN_IMAGE` (default: `cpg/infra/toolchain/build.sh --print-tag`, run under `env -i`).
-It enforces that itself:
-- If the environment holds anything else, `sbx_main` re-execs under `env -i`. It keeps only
-  those two variables, a fixed `PATH`, and the `HOME` from the passwd database. So
-  `DOCKER_HOST`, `DOCKER_CONTEXT` and the like never reach `docker`; the daemon is the one your
-  default Docker context names.
-- The shebang `#!/bin/bash -p` makes bash ignore `BASH_ENV`, `ENV` and exported functions.
-- **Run the runner directly, not as `bash offline-run.sh`.** That form bypasses the shebang, and
-  `BASH_ENV` would run before line 1, which no script can prevent.
+**Environment** (`docs/plans/connected-code-graph-egress-spec2.md` §1.7, a closed rule). Only
+two caller variables are inputs: `CCG_AUDIT_DIR` and `CCG_TOOLCHAIN_IMAGE` (default:
+`cpg/infra/toolchain/build.sh --print-tag`, run under `env -i`). The runner enforces it:
+- **The shebang is `#!/bin/bash -p`.** bash then ignores `BASH_ENV`, `ENV`, `SHELLOPTS` and
+  exported functions at startup.
+- **`sbx_main` re-execs itself under `env -i`** unless its environment is exactly these
+  variables:
+  - `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
+  - `DOCKER_HOST=unix:///var/run/docker.sock`, which is pinned: a different daemon is a runner
+    edit, not an input;
+  - `DOCKER_CONFIG=<home>/.local/state/ccg/docker-config`, so no user `config.json` is read
+    (contexts, `proxies`, `credsStore`);
+  - `HOME` from the passwd entry of the runner's uid;
+  - the two `CCG_*` names.
+- **The Docker-config directory is checked at every run.** It is created if absent (mode
+  `0700`), and must then be a plain directory (not a symlink), owned by the runner's uid, mode
+  `0700`, **empty**, not under `/tmp`, `/var/tmp` or `/dev/shm`, and under no world-writable
+  ancestor. Any failure refuses with **69 `backend-precondition`** and one record, before any
+  `docker` call. A 64 still takes precedence. The Docker CLI writes nothing there during
+  `info`, `image inspect` or `run`, so the directory stays empty run after run (verified).
+- **Scope:** the contract covers the runner launched through its `#!` line, which is how S11 and
+  the tests call it. `bash offline-run.sh` starts bash explicitly, so a hostile `BASH_ENV` runs
+  before line 1. A caller doing that already executes arbitrary code, so the case is out of
+  scope (§1.7).
 
 **Conventions the runner owns.** §5.3 says only that the tool's output files carry the
 `auditId` as their stem; these two rules make that true:
@@ -59,6 +77,31 @@ It enforces that itself:
 - `--help` exits 0 and writes no record. It is the one invocation outside "exactly one per
   invocation".
 
+**Content check (`scripts/cpg-content-check.sc`).** `joern-parse` can exit 0 with an empty CPG
+(egress §9 H12, §11 R11), so a parse is certified by its content. Run the check in script mode:
+
+```bash
+cpg/sandbox/offline-run.sh --backend container --mode offline --frontend joern \
+    --script-file cpg/sandbox/scripts/cpg-content-check.sc --source <any dir> --output <cpg dir> \
+    -- --script /scripts/cpg-content-check.sc --param 'cpgFiles=/out/<a>.cpg.bin;/out/<b>.cpg.bin'
+```
+
+For each CPG (`;`-separated), it prints:
+- `METHODS <cpg>=<sorted distinct non-external METHOD names>`, the line test 3 always read,
+  unchanged;
+- `METHOD_COUNT <cpg>=<n>`;
+- one `FILE_METHODS <cpg>\t<file>=<n>` per `FILE` node;
+- `CONTENT <cpg>=ok|EMPTY`.
+
+The verdict is the unit-level floor, as before: `EMPTY` iff the CPG has no non-external
+`METHOD`. The check exits 1 if any CPG is `EMPTY`. The per-file counts are reported, not judged:
+whether a per-file rule holds is S11's to measure and adopt (D15).
+
+Test 3 runs the check on all seven FR-1 CPGs (all `ok`). It also runs it on a real exit-0 empty
+CPG, `jimple2cpg` (a bytecode frontend) on Java **source**, per §9 H13: 5.6 KB, 0 methods. That
+one must be `EMPTY`, with a non-zero exit. Mutant M43 (accept an empty CPG) is killed. The
+record's `script.sha256` ties each run to the reviewed bytes.
+
 **Heap.** `JAVA_OPTS` is fixed at `-Xmx2g`. To raise a frontend's heap, pass `--frontend-args
 -J-Xmx<n>` (or `-J-Xmx<n>` to a direct frontend): the frontend's own launcher consumes it. A
 `joern-parse -J-Xmx<n>` *before* `--frontend-args` sizes only the `joern-parse` JVM, never the
@@ -69,7 +112,14 @@ descriptor, so the lock creates no file. A second run into a directory that is i
 refused (exit 64, `usage`). Test 3 runs two invocations concurrently and expects exactly one
 refusal (egress-spec2 §1.3). Without the lock, three concurrent runs into one `--output` all
 exited 0 (S08 review m2). On this 5.15 kernel overlayfs only warns about a shared upperdir, and
-the result is undefined.
+the result is undefined. The lock lives outside the upperdir, as §1.3 requires, so a tool cannot
+unlink it.
+
+**Signals** (S08 review p2-n1). The runner waits on the launcher as a child. On INT, TERM or HUP
+it runs `docker rm -f -v ccg-sbx-<auditId>`, which matters because the Docker client dying does
+not stop a container. It then cleans its scratch and exits `128+n`, so the lock is never free
+while our container still writes. A `SIGKILL` cannot be trapped: the container then runs to its
+end under `--rm`, and the lock is free meanwhile.
 
 **Container launch.** The shape is §7.1's: `docker run --rm --pull=never --network none
 --hostname localhost --read-only --cap-drop ALL --security-opt no-new-privileges --user
@@ -163,7 +213,7 @@ the flags only when `ro` is present: moby re-mounts a bind only for `MS_RDONLY` 
 ## Tests
 
 ```bash
-cpg/sandbox/tests/test_sandbox.sh                    # all tests, ~80 s
+bash cpg/sandbox/tests/test_sandbox.sh               # all tests (1-12), ~3 min
 cpg/sandbox/tests/test_sandbox.sh --only 2,10        # a subset
 cpg/sandbox/tests/mutants.sh                         # all mutants, each must be killed
 ```
@@ -182,11 +232,57 @@ Test 2 and test 10(a, b) bracket their refusals with `docker events --filter eve
 count only `ccg-sbx-<auditId>` containers whose `auditId` belongs to this run's own records, so
 other agents' concurrent containers cannot fail them.
 
+Two tests were added beyond §10's numbering:
+- **Test 11, the polluted environment** (egress-spec2 §1.7). The runner is run through its `#!`
+  line with every polluting input at once:
+  - a fake `docker` first on `PATH`;
+  - `DOCKER_HOST`, `DOCKER_CONTEXT` and `DOCKER_CONFIG` pointed elsewhere, the last at a
+    `config.json` carrying `currentContext`, `credsStore` and `proxies`;
+  - `HOME` with the same `config.json`;
+  - `SHELLOPTS=xtrace`;
+  - exported functions (`docker`, `sbx_dcfg_check`);
+  - `BASH_ENV` and `ENV` naming marker-writing files.
+
+  The record and `launcherArgv` must equal a clean run's, modulo `auditId`, timings and paths. No
+  marker may be written, and no xtrace may appear. Then the runner's own config directory is
+  tested, but only after the test checks that it is empty:
+  - pre-populated with that `config.json` → 69, under both a polluted and a clean caller
+    environment;
+  - with a forbidden flag as well → 64 (precedence);
+  - mode `0755` → 69;
+  - replaced by a symlink → 69;
+  - absent → recreated `0700` and empty.
+
+  The suite's EXIT trap restores the directory.
+- **Test 12, signals and the live environment.** A `joern --script` that sleeps 60 s is started
+  under a polluted environment (an extra variable, `TMPDIR`, a caller `DOCKER_CONFIG` whose
+  `config.json` sets `proxies`). While it runs, the test asserts two things:
+  - the runner's own `/proc/<pid>/environ` is exactly the closed set, with the pinned values;
+  - the container's `Config.Env` carries no proxy variable. The Docker client would inject
+    them from a `config.json` it read.
+
+  This is what kills M29 (no re-exec) and M39 (`DOCKER_CONFIG` inherited). The runner is then
+  sent SIGTERM while its container runs. The runner must exit 143 within 10 s. Its container, volumes and overlay scratch must be
+  gone, it must write no record, and the `--output` lock must be free.
+
+**Hygiene** (S08 review p2-m1, p2-n2). The suite fails if any of the following is left at the end:
+- a container or volume carrying one of this run's `auditId`s;
+- any `ccg-sbx-*` container or `ccg.sandbox` volume that `docker events --since <suite start>`
+  shows created during the run and that still exists;
+- a new `/tmp/ccg-sbx.*` directory.
+
+Test 5 also pins the labels the scoped check relies on: `--label ccg.sandbox.auditId=<auditId>`,
+`--name ccg-sbx-<auditId>`, and the label on each volume.
+
 ### Mutants
 
-`tests/mutants.sh` runs each mutant on a copy of the runner and lists, never on the real files. Every edit must apply. Last run 2026-10-29: **44 of 44 killed**. That covers the 21 first-round mutants, one or more per S08-gate finding (M22–M31), the reviewer's X1–X6 and X8–X10, and the egress-spec2 additions (M32–M35). X7 is not re-run: the reviewer killed it, and its code path is unchanged.
+`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. Mutants that break cleanup on purpose (M42) leak a scratch dir; the harness removes only new, empty `/tmp/ccg-sbx.*` dirs created during that mutant's run. Last full run 2026-10-30: **51 of 51 killed**. That covers:
+- the first-round mutants M01–M21;
+- the S08-gate round: M22–M31, X1–X6, X8–X10 and M32–M35;
+- the ES2 v1.2 / Pass 2 follow-up: M37–M42 (`-p` dropped is M30, now also run against test 11);
+- P3-7's M43.
 
-Outside the harness, because it leaves residue by design: **M36**, which drops `--rm`, was run once by hand with `--only 9`. The scoped hygiene checks went red, and its two containers were removed afterwards.
+Outside the harness, because it leaves residue by design: **M36**, which drops `--rm`, was run once by hand (S08 fix round). The scoped hygiene checks went red, and its containers were removed.
 
 | Mutant | Break | Tests run | Result | First failing check |
 |---|---|---|---|---|
@@ -227,10 +323,17 @@ Outside the harness, because it leaves residue by design: **M36**, which drops `
 | M26 | m2: no lock on --output | 3 | killed | m2: --output held by a concurrent run is refused |
 | M27 | m6: namespace ro binds not recorded in mounts | 1 | killed | m6: namespace record mounts list every --ro-bind/--bind/--tmpfs target (90 binds, 87 unlisted ['/usr/bin', '/u |
 | M28 | m5: production launches with a flag the probe template lacks | 1,5 | killed | m5: probe and production templates differ |
-| M29 | n1: no env -i re-exec (DOCKER_HOST reaches docker) | 2 | killed |   docker info still answered (seccomp=builtin, backend container) |
-| M30 | n1: shebang without -p (BASH_ENV runs) | 2 | killed |   BASH_ENV file was not executed |
+| M29 | n1: no env -i re-exec (DOCKER_HOST reaches docker) | 2,12 | killed | §1.7: the running runner's environ keys are the closed set (AGENT_WORKDIR AI_AGENT CCG_AUDIT_DIR CCG_TOOLCHAI |
+| M30 | n1 / §1.7: shebang without -p (BASH_ENV/ENV run) | 2,11 | killed |   BASH_ENV file was not executed |
 | M31 | m1: auto never falls back to namespace | 8 | killed | auto falls back to namespace when the container image is missing (69) |
 | M32 | ES2 §1.1: no \r line split (x\r//> admitted) | 10 | killed | 10b: directive shape #6 $'println(1)\r//> using dep a:b' |
 | M33 | ES2 §1.5: refused toolArgv substituted, not the caller's argv | 2 | killed | javasrc2cpg --fetch-dependencies |
 | M34 | ES2 §1.5: --help writes a record | 2 | killed | --help exits 0 and writes no record (rc 0, 1 new) |
+| M37 | §1.7: skip the Docker-config dir check | 11 | killed | pre-populated Docker-config dir (credsStore/proxies/currentContext) -> 69, one record (rc 0) |
+| M38 | §1.7: DOCKER_HOST left inherited (not pinned) | 11 | killed | polluted run launches like the clean one (rc 69, 1 record) |
+| M39 | §1.7: DOCKER_CONFIG left inherited (caller config.json read) | 11,12 | killed | §1.7: pinned values (DOCKER_HOST, DOCKER_CONFIG, HOME, PATH) |
+| M40 | p2-m1: container launched without the auditId label | 5 | killed | launcher clause |
+| M41 | p2-n1: launcher in the foreground (signal trap deferred, container survives) | 12 | killed | runner still alive 10 s after SIGTERM |
+| M42 | p2-n2: scratch made before --help, with no trap at the mktemp | 2 | killed | no new /tmp/ccg-sbx.* scratch dir left behind |
+| M43 | P3-7: the content check accepts an empty CPG | 3 | killed | P3-7: the empty CPG is CONTENT=EMPTY, the real one ok, and the check exits non-zero (rc 0) |
 | M35 | M4: the reviewed allowed list swapped (one out, one look-alike in) | 2 | killed | M4: reviewed allowed flag jimple2cpg --full-resolver is accepted and recorded (hits=0 allowed=) |

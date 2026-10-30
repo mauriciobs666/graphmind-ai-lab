@@ -22,12 +22,14 @@
 #   * For a parse frontend (everything but `joern`) the runner appends
 #     `--output /out/<auditId>.cpg.bin` and refuses a caller-supplied -o/--output.
 #
-# Environment hygiene (review S08 n1): the shebang's -p makes bash ignore BASH_ENV/ENV and
-# environment functions on a direct exec, and sbx_main re-execs itself under `env -i` (keeping
-# only CCG_AUDIT_DIR, CCG_TOOLCHAIN_IMAGE, a fixed PATH and the passwd-db HOME) whenever the
-# environment holds anything else, so DOCKER_HOST, DOCKER_CONTEXT and the like never reach
-# `docker`. Invoking it as `bash offline-run.sh` bypasses the shebang: BASH_ENV would run before
-# line 1, which no script can prevent. Run it directly.
+# Closed environment (egress-spec2 §1.7): the shebang's -p makes bash ignore BASH_ENV, ENV,
+# SHELLOPTS and exported functions on a direct exec, and sbx_main re-execs itself under `env -i`
+# unless the environment is exactly: a fixed PATH, DOCKER_HOST=$SBX_DOCKER_HOST,
+# DOCKER_CONFIG=<the runner's own Docker-config dir>, HOME from the passwd entry, and the two
+# CCG_* names. The Docker-config dir (<home>/.local/state/ccg/docker-config) must be runner-owned,
+# mode 0700, empty, not a symlink and not under a world-writable tree, or the run is refused (69,
+# backend-precondition). The contract covers the runner launched through its #! line; a caller
+# that runs `bash offline-run.sh` with a hostile BASH_ENV executes it before line 1 (out of scope).
 #
 # Sourced (`. offline-run.sh`) it only defines functions: the test-only entry points
 # (fixture-injected precondition checks, the raw launch templates used by the escape-axis probe
@@ -41,6 +43,9 @@ SBX_JOERN_IMG_HOME=/opt/joern/joern-cli
 SBX_JAVA_OPTS='-Xmx2g'
 SBX_LABEL=ccg.sandbox
 SBX_LABEL_VALUE=s08
+SBX_DOCKER_HOST=unix:///var/run/docker.sock     # pinned daemon: a different socket is a runner edit
+SBX_DCFG_REL=.local/state/ccg/docker-config      # under the passwd HOME (egress-spec2 §1.7)
+sbx_home() { getent passwd "$(id -u)" | cut -d: -f6; }
 
 # The closed frontend set (§7.3.1) and the name -> executable map.
 SBX_FRONTENDS=(pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern)
@@ -293,6 +298,31 @@ sbx_host_jdk() {
 
 # Sets SBX_BACKEND, SBX_BACKEND_REFUSAL ("" | backend-precondition | backend-unavailable) and the
 # PRE_* precondition values. Read-only: creates no container, network, volume or namespace.
+# The runner's Docker-config directory (egress-spec2 §1.7, E3-2). Creates it if absent, then
+# verifies: a real directory (no symlink), owned by our uid, mode 0700, empty, and no ancestor
+# world-writable or under /tmp, /var/tmp, /dev/shm. Sets SBX_DCFG and SBX_DCFG_FAIL (detail or "").
+sbx_dcfg_check() {
+  local home d p real
+  SBX_DCFG_FAIL=""
+  home=$(sbx_home)
+  [ -n "$home" ] && [ -d "$home" ] || { SBX_DCFG=""; SBX_DCFG_FAIL="no passwd HOME"; return 1; }
+  d="$home/$SBX_DCFG_REL"; SBX_DCFG=$d
+  if [ ! -e "$d" ] && [ ! -L "$d" ]; then
+    (umask 077; mkdir -p "$(dirname "$d")" && mkdir -m 0700 "$d") 2>/dev/null || { SBX_DCFG_FAIL="cannot create $d"; return 1; }
+  fi
+  if [ -L "$d" ] || [ ! -d "$d" ]; then SBX_DCFG_FAIL="$d is not a plain directory"; return 1; fi
+  [ "$(stat -c '%u %a' "$d")" = "$(id -u) 700" ] || { SBX_DCFG_FAIL="$d is not owner $(id -u) mode 0700 ($(stat -c '%u %a' "$d"))"; return 1; }
+  [ -z "$(ls -A "$d" 2>/dev/null)" ] || { SBX_DCFG_FAIL="$d is not empty"; return 1; }
+  real=$(realpath -e "$d")
+  case "$real/" in /tmp/*|/var/tmp/*|/dev/shm/*) SBX_DCFG_FAIL="$real is under a temporary tree"; return 1 ;; esac
+  p=$real
+  while [ "$p" != / ]; do
+    p=$(dirname "$p")
+    if (( 0$(stat -c '%a' "$p") & 02 )); then SBX_DCFG_FAIL="$real sits under world-writable $p"; return 1; fi
+  done
+  return 0
+}
+
 sbx_try_container() {
   local secopts
   SBX_BACKEND=container; SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""
@@ -338,6 +368,11 @@ sbx_try_namespace() {
   return 0
 }
 sbx_resolve_backend() { # <container|namespace|auto>
+  # A failed Docker-config invariant refuses every backend before any `docker` call (§1.7).
+  if [ -n "${SBX_DCFG_FAIL:-}" ]; then
+    SBX_BACKEND=container; [ "$1" = namespace ] && SBX_BACKEND=namespace
+    SBX_BACKEND_REFUSAL=backend-precondition; SBX_REFUSAL_DETAIL="Docker config dir: $SBX_DCFG_FAIL"; return 1
+  fi
   case "$1" in
     container) sbx_try_container ;;
     namespace) sbx_try_namespace ;;
@@ -552,8 +587,15 @@ sbx_init() { # per-invocation state
   sbx_interop_scan /proc/sys/fs/binfmt_misc "$(uname -r)"
   PRE_INTEROP=$SBX_INTEROP_STATE; PRE_PINNED=$SBX_PE_PINNED; PRE_SECCOMP=""; PRE_NETNS=false
   PRE_VSOCK=absent; sbx_vsock_present /dev/vsock && PRE_VSOCK=present
+  # The Docker client sees only the pinned daemon and the runner's own config dir (§1.7). The
+  # re-exec already guarantees this in production; exporting it here covers library mode too.
+  sbx_dcfg_check || true
+  export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=${SBX_DCFG:-/nonexistent}
+  unset DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_API_VERSION
+  SBX_CHILD=""
   SBX_SCRATCH=$(mktemp -d /tmp/ccg-sbx.XXXXXX)
   SBX_CLEANUP+=("$SBX_SCRATCH")
+  trap 'sbx_cleanup' EXIT   # set with the mktemp, so no path leaks the scratch (review S08 p2-n2)
 }
 sbx_cleanup() {
   local d
@@ -581,9 +623,27 @@ sbx_launch() {
   # netnsDistinct holds by construction (--network none / --unshare-all); probe A1(c) verifies it.
   # It is claimed only once a launcher exists (review S08 m4).
   PRE_NETNS=true
+  # Run the launcher as a waited-on child, so a signal to the runner reaches our trap while the
+  # sandbox runs (bash defers traps while a foreground child runs). On INT/TERM/HUP the runner
+  # removes its own container ccg-sbx-<auditId> (the docker client dying would not stop it, and
+  # the --output lock would be free while it still wrote; review S08 p2-n1), then exits 128+n.
+  # No record is written: a killed runner leaves none (§5.3).
+  trap 'sbx_on_signal 2' INT; trap 'sbx_on_signal 15' TERM; trap 'sbx_on_signal 1' HUP
   rc=0
-  "${SBX_LAUNCHER[@]}" || rc=$?
+  "${SBX_LAUNCHER[@]}" < /dev/null &
+  SBX_CHILD=$!
+  wait "$SBX_CHILD" || rc=$?
+  SBX_CHILD=""
+  trap - INT TERM HUP
   return "$rc"
+}
+sbx_on_signal() { # <signal number>
+  trap - INT TERM HUP
+  sbx_log "signal $1: stopping the sandbox (no record is written)"
+  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi
+  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi
+  sbx_cleanup
+  exit $((128 + $1))
 }
 
 # ------------------------------------------------------------------ main
@@ -601,18 +661,22 @@ sbx_refuse() { # <exitCode> <reason> <message>
 
 SBX_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Re-exec under env -i unless the environment is already exactly the allowed set (review S08 n1).
+# Re-exec under env -i unless the environment is exactly the closed set (egress-spec2 §1.7):
+# PATH, DOCKER_HOST and DOCKER_CONFIG at the runner's own values, HOME from passwd, CCG_*.
 sbx_clean_env() {
   local home k ok=1
-  home=$(getent passwd "$(id -u)" | cut -d: -f6)
+  home=$(sbx_home)
   [ "${PATH:-}" = "$SBX_PATH" ] && [ "${HOME:-}" = "$home" ] || ok=0
+  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}" = "$home/$SBX_DCFG_REL" ] || ok=0
   for k in $(compgen -e); do
-    case "$k" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|PWD|OLDPWD|SHLVL|_) ;; *) ok=0 ;; esac
+    case "$k" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|DOCKER_HOST|DOCKER_CONFIG|PWD|OLDPWD|SHLVL|_) ;; *) ok=0 ;; esac
   done
   ((ok)) && return 0
   local -a keep=()
   [ -n "${CCG_AUDIT_DIR+x}" ] && keep+=("CCG_AUDIT_DIR=$CCG_AUDIT_DIR")
   [ -n "${CCG_TOOLCHAIN_IMAGE+x}" ] && keep+=("CCG_TOOLCHAIN_IMAGE=$CCG_TOOLCHAIN_IMAGE")
-  exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" "${keep[@]}" /bin/bash -p "$SBX_SELF" "$@"
+  exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" "DOCKER_HOST=$SBX_DOCKER_HOST" \
+    "DOCKER_CONFIG=$home/$SBX_DCFG_REL" "${keep[@]}" /bin/bash -p "$SBX_SELF" "$@"
 }
 
 sbx_main() {
@@ -658,7 +722,7 @@ sbx_main() {
   # its refusal is applied only after the argv checks (64 takes precedence over 69).
   case "$backend" in
     container|namespace|auto) sbx_resolve_backend "$backend" ;;
-    *) sbx_try_container || true ;;   # invalid/missing: refused below as usage; record measured values
+    *) [ -n "${SBX_DCFG_FAIL:-}" ] || sbx_try_container || true ;;   # invalid/missing: refused below as usage
   esac
   local backend_refusal=$SBX_BACKEND_REFUSAL backend_detail=$SBX_REFUSAL_DETAIL
 

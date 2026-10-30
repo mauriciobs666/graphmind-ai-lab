@@ -42,8 +42,19 @@ PROBE_AUDIT="$T/audit-probe"              # lib-mode launches (probe, sweep, tes
 MARKER="ccg-s08-marker-$$-$RANDOM"
 HOME_SENTINEL="$(getent passwd "$(id -u)" | cut -d: -f6)/.ccg-s08-sentinel-$$"
 MARKER_PID=""
+SUITE_T0=$(date +%s)
+TMP_BEFORE=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
+DCFG="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/state/ccg/docker-config"
+DCFG_TOUCHED=0; SIG_CONTAINER=""
 cleanup() {
   [ -n "$MARKER_PID" ] && kill "$MARKER_PID" 2>/dev/null
+  # Restore the runner's Docker-config dir (only what this suite planted; it was verified empty).
+  if [ "$DCFG_TOUCHED" = 1 ]; then
+    [ -L "$DCFG" ] && rm -f "$DCFG"
+    rm -f "$DCFG/config.json" 2>/dev/null; [ -d "$DCFG" ] || mkdir -m 0700 "$DCFG"; chmod 0700 "$DCFG"
+  fi
+  # Our own container from the signal test, if a mutant left it running.
+  [ -n "$SIG_CONTAINER" ] && docker rm -f -v "$SIG_CONTAINER" >/dev/null 2>&1
   rm -f "$HOME_SENTINEL"
   chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"
 }
@@ -387,23 +398,33 @@ if want 3 || want 10; then
     else bad "$l parse" "rc=$RC ${dt}s size=$sz UHE=$(grep -c UnknownHostException <<< "$OUT$ERR") ${ERR: -300}"; fi
     files+="${files:+;}/out/$id.cpg.bin"
   done
-  cat > "$T/methods.sc" <<'SC'
-@main def main(cpgFiles: String) = {
-  cpgFiles.split(";").foreach { f =>
-    importCpg(f)
-    println(s"METHODS $f=" + cpg.method.isExternal(false).name.l.distinct.sorted.mkString(","))
-  }
-}
-SC
-  run_r "${C[@]}" --frontend joern --script-file "$T/methods.sc" --source "$SRC" --output "$CPGS" -- --script /scripts/methods.sc --param "cpgFiles=$files"
-  chk "10c: the directive-free script runs through the runner (exit $RC)" test "$RC" = 0
+  # P3-7 / plan §2 D15: the durable content check, the one S11, S25, S28 and S39 reuse.
+  CHECK_SC="$(dirname "$RUNNER")/scripts/cpg-content-check.sc"
+  run_r "${C[@]}" --frontend joern --script-file "$CHECK_SC" --source "$SRC" --output "$CPGS" -- --script /scripts/cpg-content-check.sc --param "cpgFiles=$files"
+  chk "10c: cpg-content-check.sc runs through the runner, all 7 CPGs ok (exit $RC)" test "$RC" = 0 -a "$(grep -c '^CONTENT .*=ok$' <<< "$OUT")" = 7
+  CHECK_OUT=$OUT
   for l in pythonsrc jssrc javasrc kotlin csharpsrc golang newc; do
-    line=$(grep -F "METHODS /out/${ID_OF[$l]}.cpg.bin=" <<< "$OUT" || true)
+    n=$(sed -n "s#^METHOD_COUNT /out/${ID_OF[$l]}.cpg.bin=##p" <<< "$CHECK_OUT")
+    fm=$(grep -c "^FILE_METHODS /out/${ID_OF[$l]}.cpg.bin"$'\t' <<< "$CHECK_OUT")
+    chk "P3-7: $l METHOD_COUNT=$n (>=1) and per-file counts printed ($fm FILE lines)" test "${n:-0}" -ge 1 -a "$fm" -ge 1
+  done
+  # Negative: an exit-0 parse with no content (a bytecode frontend on Java SOURCE, §9 H13).
+  run_r "${C[@]}" --frontend jimple2cpg --source "$FXD/javasrc" --output "$CPGS" -- /src
+  eid=$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")
+  chk "the empty-CPG fixture is an exit-0 parse (rc $RC, $(stat -c %s "$CPGS/$eid.cpg.bin" 2>/dev/null) B)" test "$RC" = 0 -a -s "$CPGS/$eid.cpg.bin"
+  run_r "${C[@]}" --frontend joern --script-file "$CHECK_SC" --source "$SRC" --output "$CPGS" -- --script /scripts/cpg-content-check.sc --param "cpgFiles=/out/${ID_OF[pythonsrc]}.cpg.bin;/out/$eid.cpg.bin"
+  chk "P3-7: the empty CPG is CONTENT=EMPTY, the real one ok, and the check exits non-zero (rc $RC)" \
+    test "$RC" != 0 -a -n "$(grep -x "CONTENT /out/$eid.cpg.bin=EMPTY" <<< "$OUT")" -a -n "$(grep -x "CONTENT /out/${ID_OF[pythonsrc]}.cpg.bin=ok" <<< "$OUT")"
+  for l in pythonsrc jssrc javasrc kotlin csharpsrc golang newc; do
+    line=$(grep -F "METHODS /out/${ID_OF[$l]}.cpg.bin=" <<< "$CHECK_OUT" || true)
     names=${line#*=}
     if [[ ",$names," == *",${WANT[$l]},"* ]]; then ok "$l CPG contains method ${WANT[$l]} ($names)"; else bad "$l CPG content" "line='$line'"; fi
   done
-  sha=$(sha256sum < "$T/methods.sc" | cut -d' ' -f1)
-  chk "10c: record script = /scripts/methods.sc with the file's sha256" rec "r['script']=={'path':'/scripts/methods.sc','sha256':'$sha'} and r['frontend']=='joern'"
+  sha=$(sha256sum < "$CHECK_SC" | cut -d' ' -f1)
+  chk "10c: the check's record: script = /scripts/cpg-content-check.sc with the file's sha256" python3 -I -c '
+import json, sys
+rs = [json.loads(l) for l in open(sys.argv[1])]
+sys.exit(0 if any(r["script"] == {"path": "/scripts/cpg-content-check.sc", "sha256": sys.argv[2]} and r["frontend"] == "joern" and r["exitCode"] == 0 for r in rs) else 1)' "$CCG_AUDIT_DIR/sandbox.jsonl" "$sha"
   chk "10c: launcherArgv has --workdir /tmp and the /scripts dir bind (ro,noexec)" rec "'--workdir' in r['launcherArgv'] and r['launcherArgv'][r['launcherArgv'].index('--workdir')+1]=='/tmp' and any(m['target']=='/scripts' and 'noexec' in m['mode'] and m['mode'].startswith('ro') for m in r['mounts'])"
   # 10(c) literally: --param cpgFile=/out/<x>.bin, one file.
   cat > "$T/one.sc" <<'SC'
@@ -585,6 +606,10 @@ for r in launched:
     want = ["/out", "/scripts", "/src"] if r["frontend"] == "joern" else ["/out", "/src"]
     if dsts != want: errs.append(f"{r['auditId']} ({r['frontend']}): --mount targets {dsts}, want {want}")
     if r["frontend"] == "joern" and not has("--workdir", "/tmp"): errs.append("joern without --workdir /tmp")
+    # p2-m1: the scoped hygiene check depends on these labels.
+    if not has("--label", "ccg.sandbox.auditId=" + r["auditId"]): errs.append(f"{r['auditId']}: no --label ccg.sandbox.auditId=<auditId>")
+    if not has("--name", "ccg-sbx-" + r["auditId"]): errs.append(f"{r['auditId']}: container not named ccg-sbx-<auditId>")
+    if any(("volume-label=ccg.sandbox.auditId=" + r["auditId"]) not in m for m in mounts): errs.append(f"{r['auditId']}: a volume lacks the auditId label")
     keys = []
     for x in a[ei + 4:]:
         m = __import__("re").match(r"^([A-Za-z_][A-Za-z0-9_]*)=", x)
@@ -675,6 +700,113 @@ if want 9; then
   n=$(grep -c '^ABSENT ' "$T/t9.txt"); chk "all 5 absent, and the directory is really there ($(paste -sd' ' "$T/t9.txt"))" test "$n" = 5 -a -z "$(grep PRESENT "$T/t9.txt")" -a -n "$(grep JOERN-CLI-OK "$T/t9.txt")"
 fi
 
+# ================================================================== test 11: closed runner environment (egress-spec2 §1.7)
+if want 11; then
+  section "test 11: polluted environment through the #! line (egress-spec2 §1.7)"
+  PE="$T/pe"; mkdir -p "$PE/bin" "$PE/home/.docker" "$PE/dcfg"
+  printf '#!/bin/sh\ntouch %q\nexit 1\n' "$PE/fake-docker-ran" > "$PE/bin/docker"; chmod +x "$PE/bin/docker"
+  printf 'touch %q\n' "$PE/bash-env-ran" > "$PE/bash-env.sh"; printf 'touch %q\n' "$PE/env-ran" > "$PE/env.sh"
+  EVILCFG='{"currentContext":"evil-s08","credsStore":"evil-s08","proxies":{"default":{"httpProxy":"http://evil-s08:1","httpsProxy":"http://evil-s08:1"}}}'
+  printf '%s\n' "$EVILCFG" > "$PE/home/.docker/config.json"; printf '%s\n' "$EVILCFG" > "$PE/dcfg/config.json"
+  POLLUTED=("PATH=$PE/bin:$PATH" "HOME=$PE/home" DOCKER_HOST=unix:///nonexistent-s08.sock DOCKER_CONTEXT=evil-s08
+    "DOCKER_CONFIG=$PE/dcfg" SHELLOPTS=xtrace "BASH_ENV=$PE/bash-env.sh" "ENV=$PE/env.sh"
+    "BASH_FUNC_docker%%=() { touch $PE/fn-ran; }" "BASH_FUNC_sbx_dcfg_check%%=() { return 0; }")
+  # run_env <env assignments...> -- <runner args>: like run_r, under `env` (the runner's #! line).
+  run_env() {
+    local -a e=(); while [ "$1" != -- ]; do e+=("$1"); shift; done; shift
+    local before; before=$(nrec)
+    env "${e[@]}" "$RUNNER" "$@" > "$T/out.txt" 2> "$T/err.txt"; RC=$?
+    OUT=$(cat "$T/out.txt"); ERR=$(cat "$T/err.txt"); NREC_EXPECTED=$((NREC_EXPECTED + 1)); NEW_RECORDS=$(( $(nrec) - before ))
+  }
+  lastrec() { python3 -I -c 'import json,sys; print(open(sys.argv[1]).readlines()[-1].strip())' "$CCG_AUDIT_DIR/sandbox.jsonl"; }
+  run_r "${C[@]}" --frontend pysrc2cpg --codebase pe --source "$SRC" --output "$T/pe-clean" -- /src
+  chk "clean reference run (rc $RC)" test "$RC" = 0; lastrec > "$T/pe-clean.json"
+  run_env "${POLLUTED[@]}" -- "${C[@]}" --frontend pysrc2cpg --codebase pe --source "$SRC" --output "$T/pe-dirty" -- /src
+  chk "polluted run launches like the clean one (rc $RC, $NEW_RECORDS record)" test "$RC" = 0 -a "$NEW_RECORDS" = 1; lastrec > "$T/pe-dirty.json"
+  cat > "$T/pe-cmp.py" <<'PY'
+import json, sys
+a, b = (json.load(open(f)) for f in sys.argv[1:3])
+def norm(r, out):
+    s = json.dumps({k: v for k, v in r.items() if k not in ("auditId", "ts", "durationMs")}, sort_keys=True)
+    s = s.replace(r["auditId"], "AID").replace(out, "OUT")
+    s = __import__("re").sub(r"\.ccg-ovl-AID\.[A-Za-z0-9]{6}", ".ccg-ovl-AID.RND", s)  # mktemp suffix
+    return json.loads(s)
+na, nb = norm(a, sys.argv[3]), norm(b, sys.argv[4])
+diff = [k for k in sorted(set(na) | set(nb)) if na.get(k) != nb.get(k)]
+for k in diff:
+    if isinstance(na.get(k), list): print("  %s: %s" % (k, [(x, y) for x, y in zip(na[k], nb[k]) if x != y][:3]))
+print("fields differing: %s" % (diff or "none")); sys.exit(1 if diff else 0)
+PY
+  if out=$(python3 -I "$T/pe-cmp.py" "$T/pe-clean.json" "$T/pe-dirty.json" "$T/pe-clean" "$T/pe-dirty" 2>&1); then ok "record and launcherArgv equal the clean run's, modulo auditId/ts/paths ($out)"; else bad "polluted record differs from clean" "$out"; fi
+  for m in fake-docker-ran bash-env-ran env-ran fn-ran; do chk "marker $m never written" test ! -e "$PE/$m"; done
+  chk "SHELLOPTS=xtrace did not reach the runner (no trace lines on stderr)" test -z "$(grep -E '^\++ ' "$T/err.txt")"
+  # The runner's own Docker-config dir (§1.7, E3-2): pre-populated, wrong mode, or a symlink -> 69.
+  if [ -d "$DCFG" ] && [ ! -L "$DCFG" ] && [ -z "$(ls -A "$DCFG")" ]; then
+    DCFG_TOUCHED=1
+    printf '%s\n' "$EVILCFG" > "$DCFG/config.json"
+    run_env "${POLLUTED[@]}" -- "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/pe-x1" -- /src
+    chk "pre-populated Docker-config dir (credsStore/proxies/currentContext) -> 69, one record (rc $RC)" test "$RC" = 69 -a "$NEW_RECORDS" = 1
+    chk "  record: backend-precondition, nothing launched; stderr names it" bash -c "grep -q 'is not empty' '$T/err.txt'" 
+    chk "  record fields" rec "r['refusalReason']=='backend-precondition' and r['launcherArgv']==[] and r['preconditions']['netnsDistinct'] is False"
+    run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/pe-x2" -- /src
+    chk "  same refusal with a clean caller environment (rc $RC)" test "$RC" = 69
+    expect_refusal "  and 64 still takes precedence (forbidden flag + bad config dir)" 64 forbidden-flag "${C[@]}" --frontend javasrc2cpg --source "$SRC" --output "$T/pe-x3" -- /src --fetch-dependencies
+    rm -f "$DCFG/config.json"
+    chmod 0755 "$DCFG"
+    run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/pe-x4" -- /src
+    chk "Docker-config dir mode 0755 -> 69 (rc $RC)" test "$RC" = 69 -a -n "$(grep -o 'mode 0700' <<< "$ERR")"
+    chmod 0700 "$DCFG"
+    rmdir "$DCFG"; mkdir -m 0700 "$T/elsewhere-dcfg"; ln -s "$T/elsewhere-dcfg" "$DCFG"
+    run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/pe-x5" -- /src
+    chk "Docker-config dir replaced by a symlink -> 69 (rc $RC)" test "$RC" = 69 -a -n "$(grep -o 'not a plain directory' <<< "$ERR")"
+    rm -f "$DCFG"; mkdir -m 0700 "$DCFG"
+    rmdir "$DCFG"
+    run_r "${C[@]}" --frontend sh --source "$SRC" --output "$T/pe-x6" -- /src
+    chk "absent Docker-config dir is created 0700 and empty" test "$(stat -c '%a' "$DCFG" 2>/dev/null)" = 700 -a -z "$(ls -A "$DCFG" 2>/dev/null)"
+    DCFG_TOUCHED=0
+    run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/pe-x7" -- /src
+    chk "after restore, runs launch again and leave the config dir empty (rc $RC)" test "$RC" = 0 -a -z "$(ls -A "$DCFG")"
+  else
+    bad "runner Docker-config dir $DCFG is not an empty plain directory; refusing to plant fixtures in it"
+  fi
+fi
+
+# ================================================================== test 12: a signalled runner stops its own container (review S08 p2-n1)
+if want 12; then
+  section "test 12: SIGTERM while the sandbox runs"
+  printf '@main def main() = { println("SLEEPING"); Thread.sleep(60000) }\n' > "$T/sleep.sc"
+  SIGOUT="$T/sig-out"; mkdir -p "$SIGOUT" "$T/pe12/dcfg"; before=$(nrec)
+  printf '%s\n' '{"currentContext":"evil-s08","proxies":{"default":{"httpProxy":"http://evil-s08:1","httpsProxy":"http://evil-s08:1","noProxy":"x"}}}' > "$T/pe12/dcfg/config.json"
+  # Run it polluted, so the live runner and its container can be inspected for §1.7's closure.
+  env FOO_S08=1 "DOCKER_CONFIG=$T/pe12/dcfg" DOCKER_HOST=unix:///var/run/docker.sock "TMPDIR=$T/pe12" \
+  "$RUNNER" "${C[@]}" --frontend joern --script-file "$T/sleep.sc" --source "$SRC" --output "$SIGOUT" -- --script /scripts/sleep.sc > "$T/sig.txt" 2>&1 & sp=$!
+  sid=""; for i in $(seq 1 80); do
+    o=$(ls -d "$T"/.ccg-ovl-* 2>/dev/null | head -1); [ -n "$o" ] && sid=$(basename "$o" | sed -n 's/^\.ccg-ovl-\([0-9a-f-]\{36\}\)\..*/\1/p')
+    [ -n "$sid" ] && [ -n "$(docker ps -q --filter "name=^/ccg-sbx-$sid\$")" ] && break; sleep 0.25; done
+  SIG_CONTAINER="ccg-sbx-$sid"
+  chk "the sandbox container is running ($SIG_CONTAINER)" test -n "$sid" -a -n "$(docker ps -q --filter "name=^/$SIG_CONTAINER\$")"
+  # §1.7: the live runner's own environment is exactly the closed set, with the pinned values.
+  renv=$(tr '\0' '\n' < "/proc/$sp/environ" 2>/dev/null | sort)
+  rkeys=$(sed 's/=.*//' <<< "$renv" | grep -vxE 'PWD|OLDPWD|SHLVL|_' | paste -sd' ')
+  chk "§1.7: the running runner's environ keys are the closed set ($rkeys)" test "$rkeys" = "CCG_AUDIT_DIR CCG_TOOLCHAIN_IMAGE DOCKER_CONFIG DOCKER_HOST HOME PATH"
+  chk "§1.7: pinned values (DOCKER_HOST, DOCKER_CONFIG, HOME, PATH)" bash -c "grep -qx 'DOCKER_HOST=unix:///var/run/docker.sock' <<< \"\$1\" && grep -qx \"DOCKER_CONFIG=$DCFG\" <<< \"\$1\" && grep -qx \"HOME=\$(getent passwd \$(id -u) | cut -d: -f6)\" <<< \"\$1\" && grep -qx 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' <<< \"\$1\"" _ "$renv"
+  # A caller's config.json `proxies` would be injected by the Docker client into the container.
+  cenv=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$SIG_CONTAINER" 2>/dev/null)
+  chk "§1.7: no proxy variable injected into the container (caller config.json ignored)" test -n "$cenv" -a -z "$(grep -iE '^(https?|no|ftp|all)_proxy=' <<< "$cenv")"
+  kill -TERM "$sp"
+  for i in $(seq 1 40); do kill -0 "$sp" 2>/dev/null || break; sleep 0.25; done
+  if kill -0 "$sp" 2>/dev/null; then bad "runner still alive 10 s after SIGTERM"; docker rm -f -v "$SIG_CONTAINER" >/dev/null 2>&1; wait "$sp"; src_rc=$?
+  else wait "$sp"; src_rc=$?; ok "runner exited within 10 s of SIGTERM (rc $src_rc)"; fi
+  chk "exit code is 143" test "$src_rc" = 143
+  sleep 1
+  chk "its container is gone" test -z "$(docker ps -aq --filter "name=^/$SIG_CONTAINER\$")"
+  chk "its volumes are gone" test -z "$(docker volume ls -q --filter "label=ccg.sandbox.auditId=$sid")"
+  chk "no overlay scratch left beside the output" test -z "$(ls -d "$T"/.ccg-ovl-"$sid".* 2>/dev/null)"
+  chk "a killed runner writes no record (§5.3)" test "$(nrec)" = "$before"
+  chk "the --output is free again (a new run takes the lock)" bash -c "exec 9<'$SIGOUT'; flock -n 9"
+  SIG_CONTAINER=""
+fi
+
 # ================================================================== test 4: every invocation, one valid record
 section "test 4: audit records (one per invocation, every §5.3 field, valid types)"
 run_r "${C[@]}" --frontend pysrc2cpg --codebase t4 --source "$SRC" --output "$OUTD" -- /src
@@ -684,6 +816,7 @@ cat > "$T/schema.py" <<'PY'
 import json, re, sys, os
 path, expected, cpgdir = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 lib = len(sys.argv) > 4 and sys.argv[4] == "lib"
+CPGS = {f for d in (cpgdir.split(":") if cpgdir else []) for _, _, fs in os.walk(d) for f in fs if f.endswith(".cpg.bin")}
 lines = [l for l in open(path)] if os.path.exists(path) else []
 errs = []
 if len(lines) != expected: errs.append(f"{len(lines)} records for {expected} invocations")
@@ -731,12 +864,12 @@ for n, l in enumerate(lines, 1):
         continue
     if not r.get("refused") and r.get("frontend") not in ("joern",):
         if f"/out/{r['auditId']}.cpg.bin" not in r["toolArgv"]: errs.append(f"line {n}: tool output stem is not the auditId")
-        elif r["exitCode"] == 0 and cpgdir and not any(os.path.exists(os.path.join(d, r["auditId"] + ".cpg.bin")) for d in cpgdir.split(":")):
+        elif r["exitCode"] == 0 and cpgdir and (r["auditId"] + ".cpg.bin") not in CPGS:
             errs.append(f"line {n}: /out/{r['auditId']}.cpg.bin missing on the host")
 print(f"{len(lines)} records, {expected} invocations"); [print("  " + e) for e in errs[:20]]
 sys.exit(1 if errs else 0)
 PY
-if out=$(python3 -I "$T/schema.py" "$CCG_AUDIT_DIR/sandbox.jsonl" "$NREC_EXPECTED" "$T/cpgs:$OUTD:$T/locked-out:$T/conc-out" 2>&1); then ok "test 4: $out"; else bad "test 4" "$out"; fi
+if out=$(python3 -I "$T/schema.py" "$CCG_AUDIT_DIR/sandbox.jsonl" "$NREC_EXPECTED" "$T" 2>&1); then ok "test 4: $out"; else bad "test 4" "$out"; fi
 if [ -f "$PROBE_AUDIT/sandbox.jsonl" ]; then   # m5: library-mode records are validated too
   if out=$(python3 -I "$T/schema.py" "$PROBE_AUDIT/sandbox.jsonl" "$(wc -l < "$PROBE_AUDIT/sandbox.jsonl")" "" lib 2>&1); then ok "test 4 (library-mode records): $out"; else bad "test 4 (library-mode records)" "$out"; fi
 fi
@@ -782,6 +915,19 @@ chk "no volume of this run left behind ($(printf '%s\n' $ids | grep -c .) auditI
 chk "no container of this run left behind" test -z "$left_c"
 printf '  info any ccg.sandbox-labelled containers/volumes on the host now: %s / %s\n' \
   "$(docker ps -aq --filter label=ccg.sandbox | grep -c .)" "$(docker volume ls -q --filter label=ccg.sandbox | grep -c .)"
+# p2-m1: anything named ccg-sbx-* or labelled ccg.sandbox that was CREATED during this run (docker
+# events since the suite started) and still exists now -- no record needed to attribute it.
+NOW=$(date +%s)
+ev_c=$(docker events --since "$SUITE_T0" --until "$NOW" --filter type=container --filter event=create --format '{{.Actor.Attributes.name}}' 2>/dev/null | grep '^ccg-sbx-' | sort -u)
+alive_c=$(for n in $ev_c; do docker ps -aq --filter "name=^/$n\$"; done)
+ev_v=$(docker events --since "$SUITE_T0" --until "$NOW" --filter type=volume --filter event=create --format '{{.Actor.ID}}' 2>/dev/null | sort -u)
+alive_v=$(for v in $ev_v; do docker volume inspect --format '{{index .Labels "ccg.sandbox"}}' "$v" 2>/dev/null | grep -q . && echo "$v"; done)
+chk "no ccg-sbx-* container created during this run still exists ($(printf '%s\n' $ev_c | grep -c .) created)" test -z "$alive_c"
+chk "no ccg.sandbox volume created during this run still exists ($(printf '%s\n' $ev_v | grep -c .) volumes created)" test -z "$alive_v"
+# p2-n2: no new runner scratch dir under /tmp.
+TMP_AFTER=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
+new_tmp=$(comm -13 <(printf '%s\n' $TMP_BEFORE) <(printf '%s\n' $TMP_AFTER) | grep . || true)
+chk "no new /tmp/ccg-sbx.* scratch dir left behind" test -z "$new_tmp"
 left_o=$(find "$T" -maxdepth 2 -name '.ccg-ovl-*' 2>/dev/null)
 chk "no overlay scratch left beside an output dir" test -z "$left_o"
 
