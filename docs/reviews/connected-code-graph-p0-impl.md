@@ -3318,6 +3318,144 @@ goes unnoticed (teco's question 1).**
   parsed from the spec text,** not copied from the schema.
 - **R11 is handled exactly per D15,** and the README states it.
 
+### Pass 2 — BS2 v1.3 follow-up (code gate)
+
+**Reviewed (2026-10-30):** the uncommitted diff `git diff ae0b2103 -- cpg/ccg cpg/tests
+cpg/README.md` (`bundle.py`, `bundle-v1.schema.json`, `test_bundle.py`, `README.md`) against
+`docs/plans/connected-code-graph-bundle-spec2.md` v1.3 (§1.1–§1.7, §1.12, §4.1's S10 items).
+
+**What I ran.**
+- **The suite:** 1145 passed (`cd cpg && .venv/bin/python -B -m pytest`).
+- **Mutants:** I ran them on a scratch mirror (`ccg/`, `tests/`, `pyproject.toml`, with `docs/`
+  symlinked) imported through `PYTHONPATH`. The real files were never written. After every run,
+  `cmp` confirmed the mirror's `bundle.py` was restored and identical to the tree's.
+- **The oracle:** my own emulation, my Pass 3 `v12.py` with v1.3's deltas applied from the spec
+  text (allow-list, (v7)'s six tokens, (v8)). I did not use `teco13/v13.py`.
+
+**Verdict: approve with suggestions.** Conformance is clean by execution, with no disagreement
+that leaks. The one major is test strength: 10 non-equivalent mutants of rules that freeze at S15
+survive, and most of them loosen. Fix BS10-P2-M1 before S15.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; conformance was decided by differential execution against an independent emulation.
+
+**Conformance (run).**
+
+| Check | Result |
+|---|---|
+| AV-1–AV-68 and BV-1–BV-28, parsed from BS2's file | both `bundle.py` and my emulation: **0 mismatches** |
+| Differential fuzz of `gate_argv`, 3 seeds × 200,000 argvs | **0** disagreements on inputs without a sentinel. 1,906 per seed involve a sentinel in the input, and in every one `bundle.py` is the more redacted side, with no value it leaves in clear that mine redacts (BS10-P2-m1) |
+| Differential fuzz of `bind_value_allowed`, 3 × 100,000 | **0** disagreements |
+| `gate_argv` idempotence, 200,000 random argvs | **0** violations |
+| Schema ⊇ validator: values `bind_value_allowed` accepts that the schema's `bindValue` pattern rejects | **0** of 42,355 |
+| §1.6.3 grid / separator axis / transplant, through the suite's tests | 17,280 / 6,480 / 675 (2, BV-11 positional), as specified |
+
+**The implementer's 10 judgments.**
+1. **The §1.1 example is non-canonical: correct.** `kw.headers["a"]["b"]["c"]` quotes the IDENT
+   `a`, so it fails §1.1's own one-encoding rule. Route to `architect` (nit, BS10-P2-n1).
+2. **argv[0] supplies no context: defensible, but neither the spec nor a test pins it.** Mutant
+   M15, "argv[0] supplies context", survives. See BS10-P2-m2.
+3. **The validator is the gate's fixed point: sound, and necessary.**
+   - The plain-`<redacted>`-for-a-supplier case is **within the spec's accepted writer duty**,
+     not a hole. §1.6.1 itself says the validator reads only the emitted sequence, and that a
+     plain sentinel in place of a context supplier is a writer defect.
+   - **The fixed point is the only consistent reading.** Read literally, §1.6.1 re-writes a
+     forced input sentinel as a plain `<redacted>`, because a sentinel "supplies none". That
+     makes AV-32's own normative output non-idempotent: `--no-auth --<redacted> <redacted>`
+     re-gates to `--no-auth <redacted> <redacted>` (run). The implementation keeps sentinels as
+     written, which is right. The spec text needs that line (BS10-P2-m1).
+   - **The residual risk is P1 writers.** F-10 should require that `args` are produced only by
+     `ccg.bundle.gate_argv`, and that any extra withholding substitutes the element's own forcing
+     sentinel.
+4. **BV-20 made concrete as 32 hex digits: fine.** My emulation does the same.
+5. **The 512 cap is unreachable: correct.** A valid value is bounded by `dnsname` ≤ 253 plus a
+   scheme, a port and one 32-character segment. The cap is pinned in the schema's `maxLength`
+   511.
+6. **Lookaround stays in the schema: harmless.** `(?!\n)$` only guards Python's `$` before a
+   trailing newline. 0 of 42,355 validator-valid values are rejected by the schema. §1.12's
+   "without lookaround" describes what the schema need not express. It is not a prohibition.
+7. **T4 is near-redundant: correct, and pinned.** A UUID whose last group runs into non-hex
+   letters escapes T3 and T6, and `test_t4_uuid_shape_decides_alone` kills mutant M9.
+8. **Tests moved to the validator layer; `::ffff:192.0.2.1` is rejected:** both correct per
+   §1.7.2 (no `.`).
+9. **(v3) splits every name at `.`: an equivalent mutant.** Mutant M5 survives, as it should. No
+   substring word contains a `.`, and §1.7.3's tokenizer already splits at `.`.
+10. **The allow-list grid has 85,536 cells against the spec's 71,280: fine.** It is a superset:
+    18 representatives instead of 15 entries. But the representatives are hand-fixed, not
+    parsed (BS10-P2-M1).
+
+**Test quality.** The tables really are parsed.
+- `_av` maps "unchanged" to the **source** argv, not to the gate's output.
+- BV values, the 36 words, the T6 separator class and examples, and the probe's expected counts
+  all come from BS2's text, and the word lists are asserted equal to `bundle.SUBSTRING_WORDS`
+  and `bundle.WHOLE_TOKEN_WORDS`.
+- No expected value is computed by the implementation. The probe's oracle ("no emitted element
+  contains `hunter2`") is independent of the implementation.
+
+**Regressions: none found.**
+- The id recompute is pinned for the new `ordinal` fields: R1 (`kind` dropped from the
+  launchFact id) and R2 (ordinal ignored) are both killed.
+- So are the ordinal density and line order (R3, M20), `nameNorm` (M21), the `controlledBy`
+  self-edge (M22), the `bindValue` check (R4) and the argv check (R5).
+- The base-spec completeness tests pass unchanged.
+
+#### Findings
+
+##### BS10-P2-M1 (major) — freeze-bearing lists, shapes and thresholds survive loosening mutants
+- **Evidence (run): 10 non-equivalent survivors out of 35 mutants. M15 also survives (BS10-P2-m2).** Most of them widen what the
+  validator accepts.
+
+  | Mutant | Effect |
+  |---|---|
+  | M1 | adds `-debug` to the exact allow-list |
+  | M11 | `-XX:` name in any case |
+  | M10 | drops `-verbose:module` |
+  | M25 | drops the T5 prefix `AIza` (a 20-letter `AIza…` fails T5 only) |
+  | M13 | T6 threshold 6 → 7 transitions |
+  | M27 / M28 | the 128-character cap → 129, for a value / for a flag |
+  | M26 | `hostport` accepts an empty host, so `:8080` would bind |
+  | M30 | the assignment-name screen is dropped |
+  | M31 | class 4's whole-element screen is dropped (decisive for `-hx7k2.q9w4.m1p8.z3v6.io`) |
+
+  Three more survivors, M5, M16 and M18, are equivalent.
+- **Why major:**
+  - These rules are validator-checked and freeze at S15.
+  - Under BS2 §1.10, loosening one later is a major change, and a widening slipped in now goes
+    unnoticed.
+  - `ALLOW_LIST_ENTRIES` is hand-fixed, so the closed list is checked in only one direction.
+- **Fix:** coverage probes over the spec's own lists and boundaries, not more single cases:
+  - **The allow-list.** Parse §1.6.1's exact strings and assert set equality with
+    `_ALLOW_EXACT`. For each closed shape, test one passing instance and one near-miss per axis:
+    case, an extra character, an unknown `-verbose:` word.
+  - **T5's prefixes.** Parse all 23, and assert that each one plus a letters-only filler to 20
+    characters fails, while the filler alone passes.
+  - **Boundary pairs:**
+    - T6 at 5/6 transitions and at a 15/16-character core;
+    - the 128/129-character cap for a value, a flag and `command`;
+    - `:8080` refused as a `bindValue`;
+    - an assignment whose name fails only the screen;
+    - `-hx7k2.q9w4.m1p8.z3v6.io` redacted.
+
+##### BS10-P2-m1 (minor, to `architect`) — §1.6.1's text for a forced sentinel contradicts the fixed point the vectors need
+- **The spec text:** "Forced … written as a forcing sentinel when it would supply context,
+  otherwise as `<redacted>`", together with "a sentinel supplies none".
+- **The effect (run):** read that way, the rule rewrites a forced `--<redacted>` as a plain one,
+  so AV-32's output re-gates to something else.
+- **The implementation keeps every input sentinel as written,** which `test_gate_keeps_sentinels_
+  as_fixed_points` pins (M14 is killed). That accounts for all of the fuzz disagreements, each on
+  the more-redacted side.
+- **Fix:** one line in §1.6.1: "A sentinel is kept as written, and a forcing sentinel forces the
+  next element."
+
+##### BS10-P2-m2 (minor) — whether argv[0] supplies context is unspecified and untested
+- **Evidence (run):** mutant M15 survives.
+- **What depends on it:** `htpasswd admin hunter2`, where `htpasswd` contains `pass`. With
+  context from argv[0], `admin` would be redacted.
+- **Fix:** `architect` states the reading in §1.6.1 ("`args` is read left to right" leaves it
+  open), and a test pins it.
+
+##### BS10-P2-n1 (nit, to `architect`) — §1.1's depth example breaks §1.1's own one-encoding rule
+Replace `kw.headers["a"]["b"]["c"]` with `kw.headers.a.b.c`, or use non-IDENT keys, as the test
+already does.
 
 ## S08 (P0-07)
 

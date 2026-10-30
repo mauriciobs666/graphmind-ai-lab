@@ -48,8 +48,8 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 |---|---|
 | `pyproject.toml` | package `ccg`; pytest `testpaths=["tests"]`; marker `live` |
 | `ccg/ids.py` | canonical tuple → 32-hex id: the one place hashing is defined (bundle spec §3.1–§3.2) |
-| `ccg/bundle.py` | bundle JSONL read, validate and write with deterministic order (bundle spec §2, §5, §8) |
-| `ccg/schemas/bundle-v1.schema.json` | the per-record contract (JSON Schema 2020-12), one `$defs` entry per record type |
+| `ccg/bundle.py` | bundle JSONL read, validate and write with deterministic order; the reference validator, and the one implementation of the BS2 gates (bundle spec §2, §5, §8 as amended by BS2) |
+| `ccg/schemas/bundle-v1.schema.json` | per-record shapes (JSON Schema 2020-12), one `$defs` entry per record type: necessary, not sufficient |
 | `tests/` | durable-code tests |
 | `infra/` | `ccg-falkordb.sh`, the dedicated FalkorDB instance (`infra/README.md`), and `toolchain/` |
 | `.ccg-work/` | scratch for corpora, bundles and exports (gitignored) |
@@ -72,18 +72,39 @@ and always for those, is the caller's job (§4.3). The spec is
 
 ## Bundles, in one paragraph
 
+**The contract** is `docs/plans/connected-code-graph-bundle-spec.md` v1.3 as amended by
+`docs/plans/connected-code-graph-bundle-spec2.md` ("BS2") v1.3, read together until `-spec3`
+consolidates them (BS2 §0). **The spec is normative and `ccg/bundle.py` is the reference
+validator**: a disagreement between them is a `bundle.py` defect (BS2 §1.12).
+`bundle-v1.schema.json` is **necessary, not sufficient**: it never rejects a spec-valid record,
+and a consumer that runs only the schema is not a validator (it accepts, for example, a quoted
+identifier `a1["method"]`, which would give one fact two ids, or a non-canonical IPv6
+`bindValue`).
+
 A bundle is `<unitId>.bundle.jsonl`: the `header`, then the 19 record types in §8.3 order, each
-block sorted by `id`, one canonical-JSON line per record. `ccg.bundle.write_bundle(path,
-records)` sorts, validates and writes atomically, so records can be passed in any order; it
-refuses `secretSighting`, which v1 writers must not emit (§5.19). `read_bundle`/`loads` reject
-anything that is not byte-canonical, then validate. Validation has three layers, and **schema validity alone is necessary but not sufficient**:
-a consumer that runs only the schema accepts bundles `ccg.bundle` rejects (for example a quoted
-identifier field `a1["method"]`, which would give one fact two ids, or a non-IP `bindValue`).
-The layers are: the schema file
-(fields, types, tokens, per-record conditionals such as §4.3's signature rule and §5.17's
-`bindValue` limits); framing and order (§8.1, §8.3, duplicate ids); and cross-record rules — every
-id recomputed through `ccg.ids`, in-bundle references (§5.0), `header.counts`, `data` endpoint
-kinds by path head (§5.10), sorted arrays, vendored paths. The header's `counts` must match, but
-zero is legal, so a header-only bundle is valid: the empty-CPG guard (risk R11) is S11's content
-check, not the schema. Tests (`tests/test_bundle.py`) read the expected field sets and tokens from
-the spec text itself.
+block sorted by `id`, one canonical-JSON line per record. `write_bundle(path, records)` sorts,
+validates and writes atomically, so records can be passed in any order; it refuses
+`secretSighting`, which v1 writers must not emit (§5.19). `read_bundle`/`loads` reject anything
+that is not byte-canonical, then validate. Validation has three layers: the schema (fields,
+types, tokens, per-record conditionals); framing and order (§8.1, §8.3, duplicate ids); and the
+cross-record rules — every id recomputed through `ccg.ids` (`import`/`launchFact` from their
+`ordinal`), in-bundle references, `header.counts`, `data` endpoint kinds, sorted arrays, vendored
+paths, `nameNorm` (BS2 §1.2), `controlledBy` with `point ≠ cond` (§1.4), and ASCII-`IDENT` access
+paths with one encoding per key (§1.1). The header's `counts` must match, but zero is legal, so a
+header-only bundle is valid: the empty-CPG guard (risk R11) is S11's content check.
+
+**The BS2 gates, one implementation each, shared by writer and validator:**
+`screen_fails(text)` (§1.7.1, T1–T6), `name_fails(segment)` (§1.7.3, 25 substring and 11
+whole-token words over `fold`), `bind_value_allowed(keyPath, value)` (§1.7.2's grammar, screened
+per label and segment, plus the name rule and W1), and `gate_argv(argv)` (§1.6.1). A writer passes
+`[command, *args]` through `gate_argv`; the validator accepts a `launchFact` argv iff it is a fixed
+point of the gate (sentinels stay as written, and an element after a forcing sentinel must be
+redacted). `launchFact.default` is accepted only when it passes the value grammar and `envVar` the
+name rule; `defaultHash` is required for `env-default`. Writer-only rules (W2–W4, the per-entry
+HMAC) are not checked: the validator holds no key and sees only the emitted text.
+
+**Tests read the contract's text.** `tests/test_bundle.py` parses the field tables, enum tokens,
+reason registry and §8.3 order from the spec, the replaced tables (`import` §1.5, `launchFact`
+§1.6) from BS2, and every AV-1–AV-68 and BV-1–BV-28 row from BS2 mechanically; none is retyped.
+§1.6.3's probe runs verbatim: the 17,280-cell grid and the 6,480-cell separator axis (0 values in
+clear) and the 675-cell BS-M1 transplant (only BV-11's bare positional in clear).

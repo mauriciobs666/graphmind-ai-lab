@@ -202,10 +202,11 @@ def _check_order(records: list[dict]) -> None:
         prev = key
 
 
-# §5.1 access paths, parsed for the cross-record rules.
-_IDENT = r"(?:[^\W0-9][\w$]*|\$[\w$]*)"
+# Access paths (BS2 §1.1 replaces spec §5.1's grammar), parsed for the cross-record rules.
+#: ASCII only: the class on which Python's re and ECMA-262 agree (BS2 §1.1).
+_IDENT = r"[A-Za-z_$][A-Za-z0-9_$]*"
 # Alternation order matters: `recv`/`ret` are tried before `r`.
-_HEAD = re.compile(r"a(?:0|[1-9][0-9]*)|p(?:0|[1-9][0-9]*)|recv|ret|r|kw\." + _IDENT)
+_HEAD = re.compile(r"a(?:0|[1-9][0-9]*)|p(?:0|[1-9][0-9]*)|recv|ret|r|kw")
 _FIELD = re.compile(r"\." + _IDENT + r'|\[(?P<q>"(?:[^"\\]|\\.)*")\]')
 
 
@@ -218,6 +219,8 @@ def _path_head(n: int, path: str, what: str) -> str:
     if not m:
         raise BundleError(f"line {n}: {what}: not an access path: {path!r}")
     head, pos = m.group(0), m.end()
+    if head == "kw" and not _FIELD.match(path, pos):
+        raise BundleError(f"line {n}: {what}: the kw head is kw plus one field (BS2 §1.1)")
     while pos < len(path):
         f = _FIELD.match(path, pos)
         if not f:
@@ -228,7 +231,7 @@ def _path_head(n: int, path: str, what: str) -> str:
             if re.fullmatch(_IDENT, key) or json.dumps(key, ensure_ascii=False) != text:
                 raise BundleError(
                     f"line {n}: {what}: field {text} must be quoted only when it is not an "
-                    "identifier, with canonical JSON escaping (§5.1)")
+                    "ASCII identifier, with canonical JSON escaping (BS2 §1.1)")
         pos = f.end()
     return head
 
@@ -255,20 +258,338 @@ def _pep503(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _bind_ip_literal(value: str) -> str | None:
-    """The part of a ``bindValue`` the schema admitted by IPv6 *shape* only: a bare value with
-    a ``:`` (ports and DNS names have none), or a URL's ``[…]`` host. ``None`` otherwise."""
-    if "://" in value:
-        host = value.split("://", 1)[1]
-        return host[1:host.index("]")] if host.startswith("[") else None
-    return value if ":" in value else None
+# === BS2 v1.3 gates (docs/plans/connected-code-graph-bundle-spec2.md) ======================
+# One implementation each of the token screen (§1.7.1), the name rule (§1.7.3), the bindValue
+# value grammar (§1.7.2) and the argv gate (§1.6.1). The writer and the validator share them:
+# a record's argv is valid iff it is a fixed point of ``gate_argv`` (§1.6.1 "the emitted
+# sequence decides").
+
+# --- §1.7.1 the token screen ---------------------------------------------------------------
+_RUN = re.compile(r"[A-Za-z0-9]+")
+_HEXCH = frozenset("0123456789abcdefABCDEF")
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+_T5_PREFIXES = ("xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "ghp_", "gho_", "ghu_", "ghs_",
+                "ghr_", "github_pat_", "glpat-", "sk-", "sk_live_", "sk_test_", "rk_live_",
+                "pk_live_", "pk_test_", "AKIA", "ASIA", "AIza", "hvs.", "eyJ")
+_T6_SPAN = re.compile(r"[A-Za-z0-9._:+,-]+")
+_T6_SEPS = re.compile(r"[._:+,-]")
 
 
-def _is_ipv6(text: str) -> bool:
+def _transitions(core: str) -> int:
+    return sum(1 for a, b in zip(core, core[1:]) if a.isdigit() != b.isdigit())
+
+
+def screen_fails(text: str) -> bool:
+    """§1.7.1: True iff ``text`` fails the token screen (T1–T6), as one string."""
+    for run in _RUN.findall(text):
+        letters = any(c.isalpha() for c in run)
+        digits = any(c.isdigit() for c in run)
+        if len(run) >= 16 and letters and digits:                      # T1
+            return True
+        if len(run) >= 24:                                             # T2
+            return True
+        if len(run) >= 12 and all(c in _HEXCH for c in run):           # T3
+            return True
+    if _UUID.search(text):                                             # T4
+        return True
+    if len(text) >= 20:                                                # T5
+        starts = [0] + [i + 1 for i, c in enumerate(text) if c in "=/:@,"]
+        if any(text.startswith(p, i) for i in starts for p in _T5_PREFIXES):
+            return True
+    for span in _T6_SPAN.findall(text):                                # T6
+        core = _T6_SEPS.sub("", span)
+        if len(core) >= 16 and (all(c in _HEXCH for c in core) or _transitions(core) >= 6):
+            return True
+    return False
+
+
+# --- §1.7.3 the name rule ------------------------------------------------------------------
+#: 25 words matched as substrings of the folded segment: the spec's 15, then the 10 moved.
+SUBSTRING_WORDS = ("pass", "pwd", "secret", "token", "key", "cred", "auth", "cookie",
+                   "session", "private", "cert", "dsn", "conn", "hook", "sig", "pw", "psk",
+                   "jwt", "hmac", "totp", "mnemonic", "bearer", "gpg", "pgp", "kms")
+#: 11 words matched as whole folded tokens.
+WHOLE_TOKEN_WORDS = ("salt", "pepper", "seed", "pin", "otp", "pat", "license", "nonce",
+                     "encrypt", "ssh", "vault")
+
+
+def fold(text: str) -> str:
+    """NFKD, drop combining marks (Mn), NFKC, ``casefold`` (Python 3.12)."""
+    d = unicodedata.normalize("NFKD", text)
+    d = "".join(c for c in d if unicodedata.category(c) != "Mn")
+    return unicodedata.normalize("NFKC", d).casefold()
+
+
+def name_tokens(segment: str) -> list[str]:
+    """Split a segment before folding: on ``_ - .``; at lower→upper; before the last capital
+    of a capital run followed by a lowercase letter; at every letter↔digit boundary."""
+    out = []
+    for part in re.split(r"[_.-]", segment):
+        cur = ""
+        for i, c in enumerate(part):
+            if cur:
+                prev, nxt = part[i - 1], part[i + 1] if i + 1 < len(part) else ""
+                if ((prev.islower() and c.isupper())
+                        or (prev.isupper() and c.isupper() and nxt.islower())
+                        or (prev.isalpha() and c.isdigit())
+                        or (prev.isdigit() and c.isalpha())):
+                    out.append(cur)
+                    cur = ""
+            cur += c
+        if cur:
+            out.append(cur)
+    return out
+
+
+def name_fails(segment: str) -> bool:
+    """§1.7.3: True iff one segment fails the name rule."""
+    folded = fold(segment)
+    if any(w in folded for w in SUBSTRING_WORDS):
+        return True
+    return any(fold(t) in WHOLE_TOKEN_WORDS for t in name_tokens(segment))
+
+
+def _has_context_word(value: str) -> bool:
+    """§1.6.1 "Context": a bare value containing one of the 25 substring words."""
+    folded = fold(value)
+    return any(w in folded for w in SUBSTRING_WORDS)
+
+
+# --- §1.7.2 the value grammar --------------------------------------------------------------
+_SCHEMES = ("http", "https", "ws", "wss", "redis", "rediss", "postgres", "postgresql",
+            "mysql", "mongodb", "amqp", "amqps", "nats", "grpc")
+
+
+def _port(s: str) -> bool:
+    return bool(re.fullmatch(r"[1-9][0-9]{0,4}", s)) and int(s) <= 65535
+
+
+def _ipv4(s: str) -> bool:
+    parts = s.split(".")
+    return len(parts) == 4 and all(
+        re.fullmatch(r"0|[1-9][0-9]{0,2}", p) and int(p) <= 255 for p in parts)
+
+
+def _ipv6(s: str) -> bool:
+    """RFC 5952 canonical text, as Python 3.12 writes it: no '.', no '%' (§1.7.2)."""
+    if not (2 <= len(s) <= 39 and re.fullmatch(r"[0-9a-f:]+", s)):
+        return False
     try:
-        return isinstance(ipaddress.ip_address(text), ipaddress.IPv6Address)
+        return str(ipaddress.IPv6Address(s)) == s
     except ValueError:
         return False
+
+
+def _label(s: str, screen: bool) -> bool:
+    return (bool(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", s))
+            and not (screen and screen_fails(s)))
+
+
+def _dnsname(s: str, screen: bool) -> bool:
+    labels = s.split(".")
+    return (len(s) <= 253 and len(labels) >= 2 and all(_label(x, screen) for x in labels)
+            and bool(re.fullmatch(r"[a-z]{2,63}", labels[-1])))
+
+
+def _host(s: str, screen: bool) -> bool:
+    if s in ("localhost", "host.docker.internal") or _ipv4(s):
+        return True
+    if s.startswith("[") and s.endswith("]"):
+        return _ipv6(s[1:-1])
+    if _label(s, screen):
+        return any(c.isalpha() for c in s)  # a single-label host holds a letter
+    return _dnsname(s, screen)
+
+
+def _hostport(s: str, screen: bool) -> bool:
+    i = s.rfind(":")
+    return i > 0 and _host(s[:i], screen) and _port(s[i + 1:])
+
+
+def _url(s: str, screen: bool) -> bool:
+    m = re.fullmatch(r"([a-z]+)://([^/]*)(.*)", s, re.S)
+    if not m or m.group(1) not in _SCHEMES:
+        return False
+    auth, path = m.group(2), m.group(3)
+    if not (_host(auth, screen) or _hostport(auth, screen)):
+        return False
+    if path in ("", "/"):
+        return True
+    seg = re.fullmatch(r"/([a-z0-9_-]{1,32})/?", path)
+    return bool(seg) and not (screen and screen_fails(seg.group(1)))
+
+
+def _portmap(s: str) -> bool:
+    """§1.6.1 (v6): ``[ipv4 ":"] port [":" port] ["/" ("tcp" / "udp")]``."""
+    m = re.fullmatch(r"(?:([0-9.]+):)?([0-9]+)(?::([0-9]+))?(?:/(?:tcp|udp))?", s)
+    return bool(m) and (m.group(1) is None or _ipv4(m.group(1))) and _port(m.group(2)) and (
+        m.group(3) is None or _port(m.group(3)))
+
+
+def _bind_grammar(value: str) -> bool:
+    """§1.7.2 ``bindValue = port / host / ipv6 / hostport / url``, every label and segment
+    screened on its own (§1.7.1's scope rule), fewer than 512 characters."""
+    return len(value) < 512 and (_port(value) or _host(value, True) or _ipv6(value)
+                                 or _hostport(value, True) or _url(value, True))
+
+
+_KEYPATH_PART = re.compile(r'\[(?:(?P<i>0|[1-9][0-9]*)|(?P<q>"(?:[^"\\]|\\.)*"))\]'
+                           r"|(?P<n>[^.\[]+)|\.")
+
+
+def _keypath_segments(key_path: str) -> list[tuple[str, str]]:
+    """§5.17's ``keyPath`` as (kind, text) pairs, kind ``name`` or ``index``."""
+    out, pos = [], 0
+    while pos < len(key_path):
+        m = _KEYPATH_PART.match(key_path, pos)
+        if not m:
+            raise BundleError(f"keyPath {key_path!r} does not parse (§5.17)")
+        if m.group("i") is not None:
+            out.append(("index", m.group("i")))
+        elif m.group("q") is not None:
+            out.append(("name", json.loads(m.group("q"))))
+        elif m.group("n") is not None:
+            out.append(("name", m.group("n")))
+        pos = m.end()
+    return out
+
+
+def bind_value_allowed(key_path: str, value: str) -> bool:
+    """§1.7: the value grammar, the name rule on every named ``keyPath`` segment, and W1."""
+    segs = _keypath_segments(key_path)
+    if any(k == "name" and t in ("args", "command", "entrypoint") and i + 1 < len(segs)
+           and segs[i + 1][0] == "index" for i, (k, t) in enumerate(segs)):
+        return False                                                   # W1
+    if any(k == "name" and name_fails(t) for k, t in segs):
+        return False                                                   # §1.7.3
+    return _bind_grammar(value)
+
+
+# --- §1.6.1 the argv gate ------------------------------------------------------------------
+REDACTED = "<redacted>"
+_FORCING = ("-" + REDACTED, "--" + REDACTED)
+_SENTINELS = frozenset((REDACTED, *_FORCING))
+_VALUE_CHARS = re.compile(r"[A-Za-z0-9._/:@+=,\[\]-]+")
+_ALLOW_EXACT = frozenset(("-jar", "-cp", "-classpath", "-port", "-addr", "-host", "-listen",
+                          "-bind", "-ea", "-da", "-server", "-client"))
+_USER_TOKENS = frozenset(("user", "login", "basic", "account", "principal", "identity"))
+
+
+def _allow_listed_name(el: str) -> str | None:
+    """Class 2's closed single-dash allow-list: the entry's name, or None."""
+    if el in _ALLOW_EXACT or re.fullmatch(r"-X(?:mx|ms|ss)[0-9]+[kKmMgG]?", el):
+        name = el[1:]
+    elif m := re.fullmatch(r"-XX:[+-]([A-Z][A-Za-z0-9]{0,63})", el):
+        name = m.group(1)
+    elif re.fullmatch(r"-verbose:(?:gc|class|jni|module)", el):
+        name = "verbose"
+    else:
+        return None
+    if screen_fails(el) or any(name_fails(p) for p in re.split(r"[.:+-]", el)):
+        return None
+    return name
+
+
+def _classify(el: str) -> tuple[int, str]:
+    """§1.6.1's element classes 1–5, tested in order; with the flag's name for class 2."""
+    if el in _SENTINELS:
+        return 1, ""
+    if m := re.fullmatch(r"--([A-Za-z][A-Za-z0-9._-]*)", el):
+        return 2, m.group(1)
+    if re.fullmatch(r"-[A-Za-z0-9]", el):
+        return 2, el[1]
+    if (name := _allow_listed_name(el)) is not None:
+        return 2, name
+    if "=" in el:
+        return 3, ""
+    if el.startswith("-") and not el.startswith("--") and len(el) >= 3:
+        return 4, ""
+    return 5, ""
+
+
+def _address_shaped(v: str, screen: bool) -> bool:
+    return (_ipv4(v) or _ipv6(v) or _hostport(v, screen) or _dnsname(v, screen)
+            or _url(v, screen) or _portmap(v))
+
+
+def _plain_ok(v: str) -> bool:
+    """(v1) shape and (v2) screen: what ``command`` must meet, and every value's base."""
+    if not (1 <= len(v) <= 128 and _VALUE_CHARS.fullmatch(v)):
+        return False
+    if ("[" in v or "]" in v) and not (_hostport(v, False) or _url(v, False)):
+        return False
+    if _address_shaped(v, False):
+        return _address_shaped(v, True)
+    return not screen_fails(v)
+
+
+def _value_ok(v: str, context: list[str]) -> bool:
+    """(v1)–(v8) for a value, an assignment's value or an attached value."""
+    if not _plain_ok(v):
+        return False
+    if any(name_fails(seg) for n in context for seg in n.split(".")):   # (v3)
+        return False
+    if "@" in v and ":" in v[:v.rindex("@")]:                          # (v4)
+        return False
+    if "://" in v and not _url(v, True):                               # (v5)
+        return False
+    if any(len(n) == 1 for n in context) and not (                     # (v6)
+            _port(v) or _ipv4(v) or _dnsname(v, True) or _hostport(v, True) or _portmap(v)):
+        return False
+    if ":" in v and any(fold(t) in _USER_TOKENS                        # (v7)
+                        for n in context for t in name_tokens(n)):
+        return False
+    if ":" in v and "://" not in v and not _address_shaped(v, False):  # (v8)
+        if any(name_fails(seg) for seg in v.split(":", 1)[0].split(".")):
+            return False
+    return True
+
+
+def gate_argv(argv: list[str]) -> list[str]:
+    """§1.6.1: write ``argv`` (argv[0] then ``args``) through the argv gate.
+
+    A sentinel already in the input is kept as written, so the gate is idempotent on its own
+    output; the validator accepts an emitted argv iff it is a fixed point. argv[0] is gated by
+    (v1)/(v2) alone and supplies no context: context comes from the preceding ``args``
+    element."""
+    if not argv:
+        return []
+    out = [argv[0] if argv[0] in _SENTINELS or _plain_ok(argv[0]) else REDACTED]
+    context: list[str] = []
+    forced = False
+    for el in argv[1:]:
+        cls, name = _classify(el)
+        if cls == 1:
+            out.append(el)
+            context, forced = [], el in _FORCING
+            continue
+        supplier = cls in (2, 4) or (cls == 5 and _has_context_word(el))
+        sentinel = ("--" if el.startswith("--") else "-") + REDACTED if supplier else REDACTED
+        if forced:
+            ok = False
+        elif cls == 2:
+            ok = len(el) <= 128 and not screen_fails(el)
+        elif cls == 3:
+            n, v = el.split("=", 1)
+            n = n.lstrip("-")
+            ok = (bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*", n)) and not screen_fails(n)
+                  and _value_ok(v, [n, *context]))
+        elif cls == 4:
+            ok = (_value_ok(el[2:], [el[1]]) and not name_fails(el[1:])
+                  and not screen_fails(el))
+        else:
+            ok = _value_ok(el, context)
+        if ok:
+            out.append(el)
+            if cls == 2:
+                context, forced = [name], name_fails(name)
+            else:
+                context = [el] if cls == 5 and supplier else []
+                forced = False
+        else:
+            out.append(sentinel)
+            context, forced = [], sentinel in _FORCING
+    return out
 
 
 _POINT_TYPES = ("param", "ret", "cond", "callsite")
@@ -305,13 +626,11 @@ class _Semantics:
                     raise BundleError(
                         f"line {n}: {field} {r[field]!r} is vendored: a vendored file yields "
                         "no record (§5.0)")
-        self._ordinals("import", lambda r: r["fileId"],
-                       lambda key, k: ids.import_id(key, k))
-        self._ordinals("launchFact", lambda r: (r["path"], r["kind"]),
-                       lambda key, k: ids.launch_fact_id(self.repo, key[0], key[1], k))
+        self._ordinals("import", lambda r: r["fileId"])
+        self._ordinals("launchFact", lambda r: (r["path"], r["kind"]))
 
-    #: §3.2/§5 tuples, through ``ccg.ids``. ``constant`` needs its file's lang (pass 2);
-    #: ``import``/``launchFact`` hold an ordinal no field carries (``_ordinals``).
+    #: §3.2/§5 tuples, through ``ccg.ids``. ``constant`` needs its file's lang (pass 2).
+    #: ``import``/``launchFact`` carry their tuple's ``ordinal`` (BS2 §1.5, §1.6).
     _ID_FNS = {
         "file": lambda s, r: ids.file_id(r["repoId"], r["path"]),
         "symbol": lambda s, r: ids.symbol_id(r["lang"], r["repoId"], r["qname"],
@@ -331,6 +650,9 @@ class _Semantics:
         "testMarker": lambda s, r: ids.test_marker_id(r["symbolId"], r["framework"]),
         "configEntry": lambda s, r: ids.config_entry_id(r["repoId"], r["path"], r["keyPath"]),
         "schemaEntry": lambda s, r: ids.schema_entry_id(s.repo, r["path"], r["objectKey"]),
+        "import": lambda s, r: ids.import_id(r["fileId"], r["ordinal"]),
+        "launchFact": lambda s, r: ids.launch_fact_id(s.repo, r["path"], r["kind"],
+                                                      r["ordinal"]),
         "secretSighting": lambda s, r: ids.sighting_id(s.repo, r["path"], r["commit"],
                                                        r["fingerprint"]),
     }
@@ -379,23 +701,18 @@ class _Semantics:
             rel = path[len(self.root) + 1:]
         return any(seg in self.vendored for seg in rel.split("/")[:-1])
 
-    def _ordinals(self, rtype: str, group_key, id_fn) -> None:
-        """Ids whose tuple holds a source-order ordinal no field carries (§5.14, §5.18): each
-        group's ids must be exactly ordinals 0..k-1, in non-decreasing line order."""
+    def _ordinals(self, rtype: str, group_key) -> None:
+        """BS2 §1.5/§1.6: each group's ``ordinal``s are exactly 0..k-1, and their lines do not
+        decrease in ordinal order. (The id is recomputed from the field in pass 1.)"""
         groups: dict = {}
-        for i, (n, r) in self.by_type[rtype].items():
-            groups.setdefault(group_key(r), []).append((n, r))
-        for key, members in groups.items():
-            by_id = {id_fn(key, k): k for k in range(len(members))}
-            ranked = []
-            for n, r in members:
-                if r["id"] not in by_id:
-                    raise BundleError(
-                        f"line {n}: {rtype} id {r['id']} is not ordinal 0..{len(members) - 1} "
-                        "of its group (§3.2)")
-                ranked.append((by_id[r["id"]], r["line"], n))
-            ranked.sort()
-            for (_, a, _), (_, b, n) in zip(ranked, ranked[1:]):
+        for n, r in self.by_type[rtype].values():
+            groups.setdefault(group_key(r), []).append((r["ordinal"], r["line"], n))
+        for members in groups.values():
+            members.sort()
+            if [o for o, _, _ in members] != list(range(len(members))):
+                raise BundleError(f"line {members[0][2]}: {rtype} ordinals of a group must be "
+                                  f"exactly 0..{len(members) - 1} (BS2 §1.5)")
+            for (_, a, _), (_, b, n) in zip(members, members[1:]):
                 if b < a:
                     raise BundleError(f"line {n}: {rtype} ordinals must follow source order")
 
@@ -426,6 +743,10 @@ class _Semantics:
             raise BundleError(f"line {n}: path {r['path']!r} is not its file's {f['path']!r}")
         if f["lang"] != r["lang"]:
             raise BundleError(f"line {n}: lang {r['lang']!r} is not its file's {f['lang']!r}")
+        norm = unicodedata.normalize("NFC", unicodedata.normalize("NFC", r["name"]).casefold())
+        if r["nameNorm"] != norm.strip():
+            raise BundleError(f"line {n}: nameNorm must be NFC(casefold(NFC(name))).strip() "
+                              f"= {norm.strip()!r} (BS2 §1.2)")
         if not r["qname"].startswith(r["path"] + "::"):
             raise BundleError(f"line {n}: qname must start with path + '::' (§4.1)")
         if "parentId" in r:
@@ -485,6 +806,8 @@ class _Semantics:
     def _controlledBy(self, n, r):
         point = self._ref(n, r, "point", *_POINT_TYPES)
         cond = self._point(n, r, "cond", "cond")
+        if r["point"] == r["cond"]:
+            raise BundleError(f"line {n}: point equals cond, a CDG self-edge (BS2 §1.4)")
         if point["symbolId"] != cond["symbolId"]:
             raise BundleError(f"line {n}: point and cond must be in the same symbol (§5.11)")
 
@@ -526,16 +849,26 @@ class _Semantics:
         self._ref(n, r, "symbolId", "symbol")
 
     def _configEntry(self, n, r):
-        ip = _bind_ip_literal(r.get("bindValue", ""))
-        if ip is not None and not _is_ipv6(ip):
-            raise BundleError(f"line {n}: bindValue {r['bindValue']!r}: {ip!r} is not an IP "
-                              "literal (§5.17 (a))")
+        if "bindValue" in r and not bind_value_allowed(r["keyPath"], r["bindValue"]):
+            raise BundleError(f"line {n}: bindValue {r['bindValue']!r} under keyPath "
+                              f"{r['keyPath']!r} fails BS2 §1.7 (grammar, screen, name rule or "
+                              "W1)")
         f = self.by_type["file"].get(ids.file_id(self.repo, r["path"]))
         if f and r["example"] != (f[1]["role"] == "example"):
             raise BundleError(f"line {n}: example must be copied from its file's role (§5.17)")
 
     def _launchFact(self, n, r):
-        pass  # id checked by _ordinals
+        if r["kind"] == "command":
+            argv = [r["command"], *r["args"]]
+            written = gate_argv(argv)
+            for i, (got, want) in enumerate(zip(argv, written)):
+                if got != want:
+                    where = "command" if i == 0 else f"args[{i - 1}]"
+                    raise BundleError(f"line {n}: launchFact argv: {where} {got!r} must be "
+                                      f"written {want!r} (BS2 §1.6.1)")
+        if "default" in r and not (_bind_grammar(r["default"]) and not name_fails(r["envVar"])):
+            raise BundleError(f"line {n}: launchFact default is present only when it passes "
+                              "the value grammar and envVar the name rule (BS2 §1.6)")
 
     def _schemaEntry(self, n, r):
         pass  # id only (pass 1)
