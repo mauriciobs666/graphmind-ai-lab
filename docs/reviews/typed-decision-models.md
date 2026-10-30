@@ -1,4 +1,4 @@
-# Typed Decision Models — Requirements Review
+# Typed Decision Models — Requirements and Plan Review
 
 > **Status:** active · **Owner:** `analyst` · **Tracks:** —
 
@@ -282,3 +282,368 @@ model says. Or, if the model may also decline mentioned messages, state that.
   evaluated only on synthetic traffic (FR-8), and at the 90% bar can be wrong on up to about 1 in
   10 decisions. Its false joins are user-visible as unprompted agent replies. Combined with the
   "both mistakes equal" answer, this is an accepted exposure. Design should know it is there.
+
+## Pass 3
+
+**Scope.** First review of the implementation plan `docs/plans/typed-decision-models.md` (v1.1,
+`active`, Owner `architect`, uncommitted), checked against `docs/requirements/typed-decision-models.md`
+(Ready for design, read in full incl. FR-11a and FR-10's five labels). Grounding was checked by
+reading: `model-bench/AGENTS.md`, `README.md`, `modelbench/{fingerprint,lmstudio,packs,runner,results,roles,stats}.py`,
+`scoring/classification.py`, `packs/guard-judge-understanding/pack.json`, `results/index.csv`;
+`falkor-chat/server/falkorchat/{guards,app,responder,trigger,background,api,mcp,modelconfig,executor,repository}.py`,
+`config/models.json`, `docs/{DESIGN,QUERIES}.md`, `falkor-chat/AGENTS.md`; and SMB requirements
+out-of-scope. I also ran three read-only checks: an in-process probe that adds both new fingerprint
+profiles to `REQUIRED_BY_SCHEMA[1]` and re-validates all 95 stored `results/runs/*.json` records
+(0 invalid; `ARM_KINDS` stays `{deterministic, model}`); a `GET /api/v0/models` (the `laya` entry
+matches §2.3 verbatim); and a fetch of the LM Studio decisions doc page. I did not POST to
+`/v1/decisions` (that would load a model) and did not run any test suite (a plan review changes
+no code).
+
+**Verdict: needs changes.** No blockers. The architecture is sound and well grounded: separate
+components, data-defined decision points, a composite arm that counts as one candidate, and bars
+printed but never acted on. Seven majors need fixing before teco splits the work. Most are local
+spec edits: a trace-format crash on the fallback path, honesty refusals that can be skipped by
+leaving out a field, eval-set reuse across candidates, the Holm direction for a parity claim, the
+`stats.py` single-source invariant, copies of the renderer and policy left unpinned before
+measurement, and two oversized units.
+
+CPG: used cpg_falkorchat — confirmed `_build_llm_judge`'s 11 call sites (1 production, 10 tests/eval) and that `maybe_respond` has exactly two production callers (`trigger.maybe_trigger`, `background._safe_respond`), so join-in is self-contained.
+
+**Growth-stops check (root `AGENTS.md`).**
+- **Revision handling:** v1.1 was revised in place, which is correct because nothing gated
+  v1.0. It carries a one-line dated note and no stacked `Update:` text.
+- **New scope in v1.1:** none. **Rework:** SQ-1's five labels went into §3.2/Q1 (no stale
+  six-label text left), SQ-2 into §3.6, and the verified shape into §2.3.
+- **Restated content (nits):** the `/api/v0` probe question appears three times (§2.3, U1
+  step 1, R-1). R-1 could cite U1 instead. §8's "Stakeholder input" line repeats the v1.1 note.
+- **Prior findings and folded answers:** no prior plan findings. Both stakeholder answers are
+  folded in consistently with the requirements.
+- **Size:** no line is over 700 characters.
+
+**Traceability (§7) verified row by row.** Every FR (incl. FR-11a) and all 17 ACs have a row.
+Four rows are only partly satisfied by the design they cite: AC-13/AC-4/AC-7/AC-17 (M2), FR-3's
+observability (m5), FR-4/AC-3 under eval reuse (M3), and AC-7 for the side-check stratum (m1).
+
+### Findings
+
+**M1 (major) — The specified trace suffix raises `TypeError` on the `llm-fallback` path, and
+that turns a decision-model outage into failed runs.** Per §3.7, the trace appends
+` [{decided_by} p={probability:.3f}]` whenever `decided_by` is set. `llm-fallback`
+(decision error, timeout, or composite-mismatch bypass) has no probability, so `None:.3f`
+raises. `_trace_step` runs inside the drive loop, right after `_record` (`executor.py:725-726`),
+with no isolation. With `trace` on, every fallback would raise out of `_drive`, which is the
+opposite of the fail-safe the fallback exists for. (The payload kind is `guard_judgment`, not
+`node_rationale` as §2.2 says: `executor.py:1543-1550`.) *Fix:* print ` p=…` only when the
+probability is not `None`. Add a U10 test with "decision error, trace on → run advances or
+suspends normally, payload `[llm-fallback]`".
+
+**M2 (major) — The honesty refusals can be skipped by leaving out an optional field, and the
+bar kind is a declaration, not a derivation.** The §3.5 `validate_pack` axes (AC-13, AC-4, AC-7,
+AC-17) apply only to packs where `labels.source == "llm-unreviewed"`. A pack with a
+`decisionPoint` block but no `labels` block gets the bar section with none of the refusals. AC-13
+says *any* parity or new-ability result. Likewise, "bar kind is derived, never declared" from
+`incumbent` null/non-null: `incumbent` is itself pack data, so a guard pack with `incumbent: null`
+is scored on FR-10 instead of FR-1. *Fix:*
+- Key the refusals on `decisionPoint` being present, and require `labels` there.
+- Bind the bar kind to the role through a pinned table (`guard-judge` → speed-up; the two new
+  roles → new-ability). Refuse a mismatching `incumbent`.
+- Refuse `run --candidate` on a pack with no `decisionPoint`.
+- For a speed-up pack, refuse (or print) a candidate whose `handoffModel` ≠ `incumbent` (FR-3:
+  "hand the rest to the existing LLM judge").
+
+Mutation-test each axis: delete the key, and each refusal must still fire.
+
+**M3 (major) — Nothing accounts for reusing one eval split across candidates, so FR-4's "no
+cut-off tuning on eval items" can be broken by selection.** The fit-manifest check (§3.5) only
+proves that the *declared* fit inputs are disjoint from the eval set. But U7 → (fail) → U6
+re-fit or U8 retrain → U7 again, on the same pack version, lets a human pick the cut-off or
+instructions that pass the eval set. That is tuning on eval items, and R-2 makes it the likely
+path for the guard. *Fix:*
+- Have the report print `candidates previously run on this pack version: K (ids)`. This is a
+  within-pack `load_history(packId)` read, so FR-23-clean.
+- Add a plan rule: a candidate refitted after seeing an eval result makes its adoption claim on
+  a fresh eval split (a new `datasetVersion` → new `packVersion`). Ask U0 to set the budget
+  under Q2/Q3.
+- Name the closure record when a point misses its bar: a `HISTORY.md` entry plus a test report
+  stating "does not meet", so "stops there" leaves an artifact.
+
+**M4 (major) — "Built on the existing paired verdict machinery" with Holm makes parity *easier*
+to pass as the metric family grows.** FR-1 holds iff *no* per-kind metric is distinguishably
+worse. Holm lowers each test's α to control false claims of *difference*. For a claim that
+rests on the absence of a difference, that is anti-conservative: four metrics instead of two make
+"worse" harder to detect and "holds" easier to print. Rule 7 (`verdict()` never returns
+`distinguishable` below `observable_floor`) does the same at ~50 items per cell. Q3 asks for "verdict family and α" but not the direction. *Fix:* in
+U0 Q3, state the constraint that a multiplicity or floor rule must never make FR-1 easier to
+pass. Require every `holds` line to print the resolving power beside it, e.g. `holds (can only
+detect ≥ N pp at this n)`. Route to `data-scientist`.
+
+**M5 (major) — The new statistics have no home that respects `model-bench/AGENTS.md`'s "`stats.py`
+implements `docs/plans/small-model-benchmarking-ml.md` and no other source".** The FR-2 ratio of
+means and its interval (Q4), the per-answer Wilson family (Q5), and the FR-1 parity reading (Q3)
+come from a new `-ml` note. §3.3 calls the mean "a new report-level statistic" without naming the
+module. U3's AGENTS.md edit covers only "the new profiles and the bar constants". *Fix:* decide
+in the plan whether these go in `stats.py` (then amend the invariant to name both notes, by
+section) or in a new module that cites the new note exclusively. Either way, the estimator's
+`levels`/`clamp`/seed and `bar_holds`' `direction` take **no defaults** (AGENTS "nothing that
+shapes a decision carries a default").
+
+**M6 (major) — The three-copy contract (§3.2) is pinned only after measurement, and two of its
+copies are never pinned.**
+- The model-bench ↔ falkor-chat renderer cross-check lands in U9, after U7 has measured. U9
+  also builds no falkor-chat join-in or message-type renderer to check (§3.7/U9 lists the
+  client, config and `apply_policy` only).
+- The decision-models `render.py` ↔ model-bench check is never assigned. A divergence there
+  fits thresholds on a different input than the one measured, silently.
+- `apply_policy` also has three copies (model-bench, falkor-chat, `fit.py`) with no shared
+  vector. One `>=`/`>` flip changes which items hand off.
+
+*Fix:* treat §3.2.1 as the canonical text. Add shared golden vectors for both
+renderers and for `apply_policy` (incl. `p == l`, `p == h`, `l == h`) in U4/U5, before U6
+fits. Make U9 own the falkor-chat renderers and prompts so its cross-check has a subject.
+
+**M7 (major) — U1 and U3 are too large for gated delegation, and U3 mixes a refactor with
+behavior changes.**
+- **U1** spans six modules, incl. the invariant-dense `fingerprint.py`. Split it into: the
+  `lmstudio.decide` probe plus fixture; the fingerprint profiles (alone, with the
+  stored-records regression and the `ARM_KINDS`/`CALL_SURFACES` pins); the pure
+  `decisions.py`; then the packs/runner/cli wiring.
+- **U3** bundles the `classification` refactor, whose byte-identical regression only means
+  something if no behavior changes alongside it, with eight behavior changes. Land the
+  refactor first as its own gated unit, then the pack contract, the report bar section, and the
+  importer.
+- **Missing dependency:** Q6 (determinism → `basis`) has no consuming unit. U1's done-condition
+  stores a run, and `RunResult.basis`/`designEffect` are required with no default
+  (`results.py:695-701`). Name U1/U2 as Q6 consumers, or have U1 use a stated provisional basis
+  and block U7 on Q6.
+
+**m1 (minor) — AC-7's pack-level `labels.inputs: "synthetic"` is false for the guard pack's own
+side-check stratum.** The 85 copied items are human-curated, not synthetic. *Fix:* refuse any
+item whose `provenance.origin != synthetic` in stratum `eval`, and exempt `side-check` by
+stratum. Also have U0 Q1 forbid side-check items as generation seeds. A paraphrase of one would
+pass the exact-hash leakage check and contaminate FR-15.
+
+**m2 (minor) — Stratum and the per-kind verdict metrics need declared outcomes, not report
+filtering.** Today `score_item` declares exactly one scoreable metric per item and derives the
+by-path rates in `aggregate` from `detail.path` (`classification.py:232-276`). Paired verdicts
+need per-item `counts`. So: each eval item must declare its per-kind metric, side-check items
+must declare only `sideCheck*`, and `stratum` must be required, with no default, on
+decision-point packs. That way `report.py` "infers nothing" (AGENTS) and a stratum-less item can
+never count toward `MIN_EVAL_ITEMS`. Also print the *scored* n beside FR-11's 200 when items are
+withheld.
+
+**m3 (minor) — The `INPUT_FIELDS_BY_ROLE` pin's widen mutation is inert.** `input_hash` filters
+on `if k in item`, so widening the table with a key no item carries changes nothing. Widening
+with a label-like key (`tier`, `expected`) is the dangerous case: identical inputs with flipped
+labels then hash apart and escape the leakage check. *Fix:* the shared golden vector's item
+carries non-input fields (`itemId`, `tier`, label, `stratum`), so both shrink and widen redden.
+Also key the table one way (role vs. point: §3.5 says `role`, §3.4 says `point`).
+
+**m4 (minor) — The bar tests only probe the failing side.** §5 tests 351 ms → not met, but not
+350 ms → met, 0.90 → met, or ratio 2.0 → met, so a `<`/`<=` direction mutation stays green.
+FR-10 says "350 ms or less" and "at least 90%". Add the equality cases, plus a test that
+`bar_holds` ignores the interval (§3.6 claims one).
+
+**m5 (minor) — FR-3's "how often each point hands off must be observable" is designed only for
+the guard.** The INFO line is specified under "Guard front". Join-in records nothing, and
+message type has `messageTypeBy` only. R-6 relies on "the log line". *Fix:* emit the same line
+from all three points (or from `DecisionClient`'s caller in `decisions.py`).
+
+**m6 (minor) — The measured guard hand-off is not quite the runtime one.** The scorer parses
+with `bool(parsed.get("decision"))` and never applies `_coerce_verdict`'s strict-`True` and
+rationale-contradiction checks (`classification.py:253-261` vs `guards.py:488-506`). Both arms
+share the gap, so parity is fair, but §3.7's "the only composite that ever runs is the one that
+was measured" overstates it. Port the check into the hand-off parse, or state the divergence.
+
+**m7 (minor) — The AC-9 sweep has no mechanical done-condition, and its file list misses
+statements.** The prescribed grep returns 68 hits needing judgment, and "finds no '@mention
+only' statement" isn't a predicate. It also skips `app.py:564` ("`AgentResponder` replies to an
+`@mention`"), `config.py:85`, and `api.py`/`mcp.py`'s comments. U11 omits DESIGN §5's `Message
+{msgId, text, role, createdAt, threadId}` schema line. *Fix:* widen the file list to
+`server/falkorchat/*.py`, list the expected rewritten sites in the unit brief, and add DESIGN §5
+to U11.
+
+**Nits.**
+- §2.3 says "documented". The LM Studio page documents only a predicate request and
+  `answers`, not choice/score or the response fields. Cite tico's probe capture in
+  `ws:agent-team` (doc `316050e8…`), which corroborates the plan's shape (choices as
+  `{value, instructions}`, `output_tokens` always 0).
+- Q6 quotes the requirements as saying Laya "varied slightly across reloads". No version of
+  the requirements says that; they say "deterministic across repeats".
+- §3.7 cites "QUERIES.md §4" for the set-query, but §2.2 correctly cites §6.
+- `CallSurface` is also declared at `fingerprint.py:41`, not only `lmstudio.py:63`. `"handoff"`
+  is a composite, not an LM Studio surface, so `lmstudio.CallSurface` needn't gain it.
+- `timeoutSeconds: 5` and `_DEFAULT_KIND_TIMEOUTS["decision"] = 10.0` give the same call two
+  sources. Choose one.
+- The candidate's `handoffModel` (`qwen/…`) and falkor-chat's (`lmstudio/qwen/…`) differ in
+  form, so "copied from the candidate" needs a stated mapping.
+- §3.6 should cite SMB's out-of-scope "Hard pass/fail regression gating", the rule actually
+  being reconciled, not only the README.
+- FR-2's same-session check must read top-level `run.sessionId` (AGENTS invariant).
+- Join-in should take turns strictly before `msg_id` rather than "drop the new message",
+  because concurrent posts may follow it.
+- The KINDS rejection rationale is weaker than stated: `extraction` is already a non-`KINDS`
+  kind (`models.json`, `ingestion.py:137`). The measured-composite reason stands on its own.
+
+### What's solid
+
+- The component split: `decision-models/` holds the hosted labeler and fine-tuning, which keeps
+  model-bench zero-dependency and FR-23-clean. FR-8 is enforced by an import allowlist test.
+- Additive schema-1 profiles. Verified: all 95 stored records still validate, `ARM_KINDS` is
+  unchanged, and `temperature` is forbidden on `model:decisions`. Flat `handoff*` fields reuse
+  the forbidden-set machinery unchanged.
+- Join-in ordering: the loop guard is first, an @mention is handled before the decider runs,
+  `join_in=None` gives today's behavior, and both "decider never called" tests are specified.
+  Hand-offs and errors fail closed. `_build_llm_judge` and its 10 test callers stay untouched.
+- The measured-composite bypass. Recalibration as a monotone map for predicates, with the
+  correct caveat for choice confidence. Bars are printed, never gate an exit code, and adoption
+  stays a human config edit.
+- Message-type schema work is routed through `graph-dba` (U11), and the RAM line is assigned.
+
+### Open questions
+
+1. M3: does the stakeholder accept that a candidate refitted after seeing an eval result needs
+   a fresh eval split, i.e. more labeling cost, or is "report the reuse count" enough?
+2. M4: should FR-1 parity print the resolving power on every `holds` line? That is a
+   presentation choice for `data-scientist` and the stakeholder, since FR-1 has no margin.
+
+## Pass 4
+
+**Scope.** The plan `docs/plans/typed-decision-models.md` v1.2 (revised in place, still
+uncommitted), re-read in full against the requirements at `bf9eae77`. I re-ran the plan's AC-9
+grep verbatim and rechecked the cited code sites (`executor.py:725-726`, `:1543-1550`;
+`classification.py:232-276`; `results.py:695-701`; the guard pack's item shape). No suites were
+run.
+
+**Verdict: approve with suggestions.** Every Pass 3 major and minor is fixed. Two new majors,
+both one-paragraph edits, should be folded in before teco delegates U1. They are not blockers:
+- N1: the FR-4 reuse count can be undercounted.
+- N2: §8's "in parallel" contradicts the units' real dependencies.
+
+teco can verify those two edits with a line check. N3–N5 can be taken during implementation.
+
+CPG: considered, not relevant — a re-review of plan text. The code sites it cites were rechecked by direct reads, and the Pass 3 CPG results still apply.
+
+**Growth-stops check (v1.1 → v1.2, 839 → 1003 lines).**
+- **Rework, not new scope:** the growth is the Pass 3 answers (§3.2.2 vectors,
+  `decision_stats.py`, `BAR_KIND_BY_ROLE`, the reuse and scored-n lines, `record_decision`, the
+  U7 closure record, the unit split, R-5/R-6) plus the two stakeholder answers. None of it is
+  feature scope beyond the requirements.
+- **Revised in place:** a single dated line records the revision, the same in-place pattern this family used after requirements Pass 1. No
+  `Update:` text is stacked.
+- **Restated content:** the `/api/v0` question is now stated once (U1a), with R-1 citing it. Two
+  small duplicates remain (nits):
+  - §2.3's determinism bullet restates the requirements' Problem section instead of only citing
+    it.
+  - R-10 repeats §3.2.2's skip rule.
+- **Size:** no line is over 700 characters.
+
+**Stakeholder answers folded in (requirements `bf9eae77`).**
+- M3: is a fresh evaluation set required after a re-tune informed by evaluation results? → No.
+  Every result reports the reuse count instead. (FR-4)
+- M4: must every parity line print its detectable difference? → Yes, always. (FR-1)
+
+**Pass 3 dispositions.**
+- **Majors:**
+  - M1 — **fixed.** The ` p=` suffix prints only when the probability is non-`None` (§3.7). U10
+    tests "decision error with trace on → normal advance/suspend, `[llm-fallback]`". The kind is
+    corrected to `guard_judgment`, which matches `executor.py:1543-1550`.
+  - M2 — **fixed.** The refusals key on `decisionPoint`, `labels` is required, `BAR_KIND_BY_ROLE`
+    is pinned, `--candidate` is refused without `decisionPoint`, and `handoffModel ≠ incumbent`
+    is refused on speed-up packs. U3b deletes the key each refusal reads.
+  - M3 — **fixed per the stakeholder answer** (the reuse line in §3.5, R-5, the U7 closure
+    record). Its counting rule has a new defect, N1.
+  - M4 — **fixed.** Q3 carries the no-loosening constraint, and every `holds` prints its
+    detectable difference (§3.6).
+  - M5 — **fixed.** `decision_stats.py` implements the new note only. `stats.py`'s invariant is
+    unchanged, and there are no defaults on decision-shaping arguments.
+  - M6 — **fixed.** §3.2.2 sets up canonical vectors in model-bench, and the policy and hash
+    vectors land in U1c, before any fit. The new falkor-chat renderers are owned by U9. One
+    caveat is N3.
+  - M7 — **fixed.** U1 and U3 are split, U3a is a refactor only, and U1d records the provisional
+    basis with U7 blocked on Q6. The dependency order has a new problem, N2.
+- **Minors:**
+  - m1 — **fixed.** Per-item `origin` is checked in `eval`, `side-check` is exempt by stratum, and
+    side-check items are never used as seeds.
+  - m2 — **fixed.** Per-item declared per-kind and `sideCheck*` metrics, required `stratum`, and
+    the scored n is printed.
+  - m3 — **fixed.** The hash vector items carry non-input fields, and the table is keyed by role
+    in both components.
+  - m4 — **fixed.** U1c tests the equality boundaries, `direction` has no default, and
+    `bar_holds` has no interval parameter.
+  - m5 — **fixed.** `record_decision` is called at all three points.
+  - m6 — **fixed.** The decision-point guard parse ports `_coerce_verdict`.
+  - m7 — **partly fixed.** The site list is now explicit and DESIGN §5 is in U11, but the new
+    done-condition has the problems in N4.
+- **Nits:** all taken. Q6's "varied" wording is superseded, because the requirements now record
+  the two-load difference themselves.
+
+### New findings
+
+**N1 (major) — The reuse count can be undercounted in two ways.** §3.5 counts "distinct
+candidate `armKey`s … on the same `packId` and `packContentHash`":
+- **A re-tuned candidate that keeps its `candidateId`** (the file edited in place) has the same
+  `armKey`, so it counts once.
+- **A re-import under a new `packVersion`** with the same eval items, after a manifest, side-check
+  or provenance edit, changes `packContentHash` and resets K to 0.
+
+FR-4 asks how many candidates have run "on that same evaluation set". Two smaller problems:
+- "No later than this run's `startedAt`" includes the run itself, but U3c's test says "only
+  earlier".
+- In a `compare` with several arms, "this run" is undefined.
+
+*Fix:*
+- Key the evaluation set by a hash of the sorted `eval`-stratum `input_hash`es plus their labels,
+  and record that hash in the fingerprint.
+- Count distinct `candidateContentHash` values, not `armKey`s.
+- Define K per candidate arm as strictly earlier runs.
+- Test both undercounts: same id with new content counts twice, and a re-versioned pack with the
+  same eval set keeps K.
+
+**N2 (major) — §8 step 1 says "U1a–U1d, U2 and U3a in parallel", but the units depend on each
+other.**
+- U1d's decision-model-only arm scores through `score_answer`, and U2's step 5 parses through
+  `answer_from_chat`. Both are hooks that U3a creates.
+- No unit is assigned to add the three hooks to the `ItemScorer` Protocol in `runner.py`.
+- U2 extends U1d's `_drive_decision_items`, and both edit `runner.py`.
+- U1d's `_build_fingerprint` needs U1b's profiles.
+
+Run in parallel as written, these units collide on `runner.py` or block on missing hooks.
+*Fix:* state the order as a graph: U1a ∥ U1b ∥ U3a, then U1c, then U1d (which also adds the
+Protocol hooks), then U2. Serialize U1d → U2 on `runner.py`, as §4 already does for U3c/U4 on
+`report.py`.
+
+**N3 (minor) — The canonical vectors confirm themselves unless their expected outputs are
+written by hand.** U1c authors `apply-policy.jsonl` and `input-hash.jsonl` in the same unit as
+`apply_policy`/`input_hash`. If the expected values are produced by running the new function,
+a boundary bug becomes canonical and every copy agrees with it, and the same goes for the
+render vectors in U4. *Fix:* §3.2.2 should say expected outputs are derived from the spec, never
+from the code under test:
+- policy rows from §3.3's inequalities;
+- render strings from §3.2.1's canonical text;
+- `render-guard.jsonl` from falkor-chat's real `_render_judge_user`, the source of truth.
+
+Also note that U3b adds a falkor-chat test, so its gate must run that suite with
+`falkor-chat/server` as the working directory.
+
+**N4 (minor) — The AC-9 done-condition fails on a document the sweep may not edit, and it misses
+sites by construction.** Run verbatim now, the grep also hits
+`falkor-chat/docs/plans/demo-environment-bringup.md:100`, an `active` devops plan whose
+troubleshooting line stays true. So "no hits outside `HISTORY.md`" would force a cross-owner
+edit. The pattern only matches the four known strings, so it confirms the list rather than
+finding new sites. For example, `docs/manuals/llm-provider-config.md:24,230` ("the assistant
+that replies to @mentions") is not matched, and manuals are `tico`'s, not U12's implementer's.
+*Fix:*
+- Exclude `docs/plans`, `docs/reviews` and `docs/test-reports` (records), or list the expected
+  residual hits.
+- Route any `docs/manuals/` rewording to `tico`.
+- Keep the analyst read of each site as the actual check.
+
+**N5 (minor) — U1c names roles and input fields before they exist.** U1c lands
+`BAR_KIND_BY_ROLE` (three roles) and `INPUT_FIELDS_BY_ROLE`, but `join-in-judge` and
+`message-type-classifier` enter `roles.py` only in U4. A pin that binds these tables to `ROLES`,
+which is the AGENTS rule, either fails in U1c or has to be written loosely. The message-type
+hash fields and renderer also depend on U0 Q1 (`priorTurn`), which neither U1c nor U4 lists as a
+dependency. *Fix:*
+- U1c defines only the `guard-judge` rows.
+- U4 adds the two new roles' rows together with the role tables and their pins.
+- Mark U4 "needs U0 Q1".
