@@ -1,0 +1,2349 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "urn:ccg:bundle-v1",
+ "title": "ccg fact bundle v1: one record (one JSONL line)",
+ "description": "docs/plans/connected-code-graph-bundle-spec.md v1.3, sections 2, 5, 7 and 8. Validates ONE record. Schema validity is necessary but NOT sufficient: ccg/bundle.py adds the file framing and canonical bytes, record order and duplicate ids, every id recomputed through ccg.ids, in-bundle references and the cross-record rules, plus per-record rules this dialect cannot state portably (one encoding per access path: a quoted field segment must not be an identifier; an exact IPv6 test for bindValue). A consumer that validates with this schema alone accepts bundles ccg.bundle rejects.",
+ "type": "object",
+ "required": [
+  "type"
+ ],
+ "properties": {
+  "type": {
+   "enum": [
+    "header",
+    "file",
+    "symbol",
+    "param",
+    "ret",
+    "cond",
+    "callsite",
+    "valueSet",
+    "constant",
+    "data",
+    "controlledBy",
+    "decorator",
+    "fieldAccess",
+    "import",
+    "dependency",
+    "testMarker",
+    "configEntry",
+    "launchFact",
+    "schemaEntry",
+    "secretSighting"
+   ]
+  }
+ },
+ "allOf": [
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "header"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/header"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "file"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/file"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "symbol"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/symbol"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "param"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/param"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "ret"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/ret"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "cond"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/cond"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "callsite"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/callsite"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "valueSet"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/valueSet"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "constant"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/constant"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "data"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/data"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "controlledBy"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/controlledBy"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "decorator"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/decorator"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "fieldAccess"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/fieldAccess"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "import"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/import"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "dependency"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/dependency"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "testMarker"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/testMarker"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "configEntry"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/configEntry"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "launchFact"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/launchFact"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "schemaEntry"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/schemaEntry"
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "type": {
+      "const": "secretSighting"
+     }
+    },
+    "required": [
+     "type"
+    ]
+   },
+   "then": {
+    "$ref": "#/$defs/secretSighting"
+   }
+  }
+ ],
+ "$defs": {
+  "hex32": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{32}(?!\\n)$"
+  },
+  "hex40": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{40}(?!\\n)$"
+  },
+  "hex64": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}(?!\\n)$"
+  },
+  "utc": {
+   "type": "string",
+   "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?!\\n)$"
+  },
+  "line": {
+   "type": "integer",
+   "minimum": 1
+  },
+  "count": {
+   "type": "integer",
+   "minimum": 0
+  },
+  "repoId": {
+   "type": "string",
+   "pattern": "^[a-z0-9._](?:[a-z0-9._-]*[a-z0-9._])?(?!\\n)$"
+  },
+  "path": {
+   "type": "string",
+   "pattern": "^(?!/)(?!.*//)(?!.*/(?!\\n)$)(?!(?:.*/)?\\.{1,2}(?:/|(?!\\n)$)).+(?!\\n)$"
+  },
+  "qname": {
+   "type": "string",
+   "pattern": "^.+::.+(?!\\n)$"
+  },
+  "lang": {
+   "enum": [
+    "python",
+    "javascript",
+    "java",
+    "kotlin",
+    "csharp",
+    "go",
+    "c",
+    "cpp",
+    "shell",
+    "config",
+    "markdown"
+   ]
+  },
+  "symbolLang": {
+   "enum": [
+    "python",
+    "javascript",
+    "java",
+    "kotlin",
+    "csharp",
+    "go",
+    "c",
+    "cpp",
+    "shell",
+    "markdown"
+   ]
+  },
+  "status": {
+   "enum": [
+    "confirmed",
+    "possible"
+   ]
+  },
+  "argPath": {
+   "type": "string",
+   "pattern": "^(?:a(?:0|[1-9][0-9]*)|recv|kw\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*))(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3}(?!\\n)$"
+  },
+  "usePath": {
+   "type": "string",
+   "pattern": "^(?:(?:a(?:0|[1-9][0-9]*)|recv|kw\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*))(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3}|ret(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3}|)(?!\\n)$"
+  },
+  "defPath": {
+   "type": "string",
+   "pattern": "^(?:p(?:0|[1-9][0-9]*)|recv|r)(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3}(?!\\n)$"
+  },
+  "elementLeaf": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "const"
+     ],
+     "properties": {
+      "const": {
+       "type": [
+        "string",
+        "integer",
+        "boolean"
+       ]
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "ref"
+     ],
+     "properties": {
+      "ref": {
+       "$ref": "#/$defs/qname"
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "importRef"
+     ],
+     "properties": {
+      "importRef": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "module",
+        "name"
+       ],
+       "properties": {
+        "module": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "unknown"
+     ],
+     "properties": {
+      "unknown": {
+       "enum": [
+        "point-derived",
+        "runtime-built",
+        "unresolved-ref",
+        "spread-argument",
+        "value-set-cap"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "element1": {
+   "$ref": "#/$defs/elementLeaf"
+  },
+  "element2": {
+   "anyOf": [
+    {
+     "$ref": "#/$defs/elementLeaf"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "concat"
+     ],
+     "properties": {
+      "concat": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element1"
+       }
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "template"
+     ],
+     "properties": {
+      "template": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element1"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "element3": {
+   "anyOf": [
+    {
+     "$ref": "#/$defs/elementLeaf"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "concat"
+     ],
+     "properties": {
+      "concat": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element2"
+       }
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "template"
+     ],
+     "properties": {
+      "template": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element2"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "element4": {
+   "anyOf": [
+    {
+     "$ref": "#/$defs/elementLeaf"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "concat"
+     ],
+     "properties": {
+      "concat": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element3"
+       }
+      }
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "template"
+     ],
+     "properties": {
+      "template": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/element3"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "values": {
+   "type": "array",
+   "minItems": 1,
+   "maxItems": 16,
+   "items": {
+    "$ref": "#/$defs/element4"
+   }
+  },
+  "header": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "bundleSchemaVersion",
+    "unit",
+    "unitId",
+    "builtCommit",
+    "builtTree",
+    "builtAt",
+    "tools",
+    "sandboxAuditIds",
+    "egressMode",
+    "flowProjected",
+    "fieldDepthCap",
+    "vendoredDirs",
+    "history",
+    "counts"
+   ],
+   "properties": {
+    "type": {
+     "const": "header"
+    },
+    "bundleSchemaVersion": {
+     "const": "1.0"
+    },
+    "unit": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "repoId",
+      "rootPath",
+      "lang"
+     ],
+     "properties": {
+      "repoId": {
+       "$ref": "#/$defs/repoId"
+      },
+      "rootPath": {
+       "anyOf": [
+        {
+         "const": "."
+        },
+        {
+         "$ref": "#/$defs/path"
+        }
+       ]
+      },
+      "lang": {
+       "$ref": "#/$defs/lang"
+      }
+     }
+    },
+    "unitId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "builtCommit": {
+     "$ref": "#/$defs/hex40"
+    },
+    "builtTree": {
+     "$ref": "#/$defs/hex40"
+    },
+    "builtAt": {
+     "$ref": "#/$defs/utc"
+    },
+    "tools": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "joern",
+      "frontend",
+      "frontendVersion",
+      "normalizer",
+      "normalizerVersion",
+      "extractScript",
+      "extractScriptHash"
+     ],
+     "properties": {
+      "joern": {
+       "type": "string"
+      },
+      "frontend": {
+       "type": "string"
+      },
+      "frontendVersion": {
+       "type": "string"
+      },
+      "normalizer": {
+       "type": "string"
+      },
+      "normalizerVersion": {
+       "type": "string"
+      },
+      "extractScript": {
+       "type": "string"
+      },
+      "extractScriptHash": {
+       "$ref": "#/$defs/hex64"
+      }
+     }
+    },
+    "sandboxAuditIds": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?!\\n)$"
+     }
+    },
+    "egressMode": {
+     "enum": [
+      "offline",
+      "controlled"
+     ]
+    },
+    "flowProjected": {
+     "type": "boolean"
+    },
+    "fieldDepthCap": {
+     "const": 3
+    },
+    "vendoredDirs": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     }
+    },
+    "history": {
+     "enum": [
+      "available",
+      "unavailable"
+     ]
+    },
+    "counts": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "file",
+      "symbol",
+      "param",
+      "ret",
+      "cond",
+      "callsite",
+      "valueSet",
+      "constant",
+      "data",
+      "controlledBy",
+      "decorator",
+      "fieldAccess",
+      "import",
+      "dependency",
+      "testMarker",
+      "configEntry",
+      "launchFact",
+      "schemaEntry",
+      "secretSighting"
+     ],
+     "properties": {
+      "file": {
+       "$ref": "#/$defs/count"
+      },
+      "symbol": {
+       "$ref": "#/$defs/count"
+      },
+      "param": {
+       "$ref": "#/$defs/count"
+      },
+      "ret": {
+       "$ref": "#/$defs/count"
+      },
+      "cond": {
+       "$ref": "#/$defs/count"
+      },
+      "callsite": {
+       "$ref": "#/$defs/count"
+      },
+      "valueSet": {
+       "$ref": "#/$defs/count"
+      },
+      "constant": {
+       "$ref": "#/$defs/count"
+      },
+      "data": {
+       "$ref": "#/$defs/count"
+      },
+      "controlledBy": {
+       "$ref": "#/$defs/count"
+      },
+      "decorator": {
+       "$ref": "#/$defs/count"
+      },
+      "fieldAccess": {
+       "$ref": "#/$defs/count"
+      },
+      "import": {
+       "$ref": "#/$defs/count"
+      },
+      "dependency": {
+       "$ref": "#/$defs/count"
+      },
+      "testMarker": {
+       "$ref": "#/$defs/count"
+      },
+      "configEntry": {
+       "$ref": "#/$defs/count"
+      },
+      "launchFact": {
+       "$ref": "#/$defs/count"
+      },
+      "schemaEntry": {
+       "$ref": "#/$defs/count"
+      },
+      "secretSighting": {
+       "$ref": "#/$defs/count"
+      }
+     }
+    }
+   }
+  },
+  "file": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "repoId",
+    "unitId",
+    "path",
+    "lang",
+    "kind",
+    "role",
+    "contentHash",
+    "lineCount"
+   ],
+   "properties": {
+    "type": {
+     "const": "file"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "repoId": {
+     "$ref": "#/$defs/repoId"
+    },
+    "unitId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "lang": {
+     "$ref": "#/$defs/lang"
+    },
+    "kind": {
+     "enum": [
+      "code",
+      "config",
+      "schema",
+      "script",
+      "prompt"
+     ]
+    },
+    "role": {
+     "enum": [
+      "primary",
+      "example",
+      "doc"
+     ]
+    },
+    "contentHash": {
+     "$ref": "#/$defs/hex64"
+    },
+    "lineCount": {
+     "type": "integer",
+     "minimum": 0
+    }
+   }
+  },
+  "symbol": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "lang",
+    "repoId",
+    "qname",
+    "fileId",
+    "path",
+    "kind",
+    "name",
+    "nameNorm",
+    "lineStart",
+    "lineEnd",
+    "fingerprint",
+    "complexity"
+   ],
+   "properties": {
+    "type": {
+     "const": "symbol"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "lang": {
+     "$ref": "#/$defs/symbolLang"
+    },
+    "repoId": {
+     "$ref": "#/$defs/repoId"
+    },
+    "qname": {
+     "$ref": "#/$defs/qname"
+    },
+    "signature": {
+     "type": "string",
+     "minLength": 1
+    },
+    "fileId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "kind": {
+     "enum": [
+      "module",
+      "script",
+      "document",
+      "type",
+      "function",
+      "method",
+      "constructor",
+      "accessor",
+      "lambda"
+     ]
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "nameNorm": {
+     "type": "string",
+     "minLength": 1
+    },
+    "parentId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "lineStart": {
+     "$ref": "#/$defs/line"
+    },
+    "lineEnd": {
+     "$ref": "#/$defs/line"
+    },
+    "ownedRegions": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "array",
+      "prefixItems": [
+       {
+        "$ref": "#/$defs/line"
+       },
+       {
+        "$ref": "#/$defs/line"
+       }
+      ],
+      "minItems": 2,
+      "items": false
+     }
+    },
+    "fingerprint": {
+     "$ref": "#/$defs/hex64"
+    },
+    "complexity": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "lastChangedAt": {
+     "$ref": "#/$defs/utc"
+    },
+    "lastChangedCommit": {
+     "$ref": "#/$defs/hex40"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "lang": {
+        "enum": [
+         "java",
+         "kotlin",
+         "csharp",
+         "cpp"
+        ]
+       },
+       "kind": {
+        "enum": [
+         "function",
+         "method",
+         "constructor",
+         "accessor"
+        ]
+       }
+      },
+      "required": [
+       "lang",
+       "kind"
+      ]
+     },
+     "then": {
+      "required": [
+       "signature"
+      ]
+     },
+     "else": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "signature"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "enum": [
+         "module",
+         "script",
+         "document"
+        ]
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "parentId"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "dependentRequired": {
+    "lastChangedAt": [
+     "lastChangedCommit"
+    ],
+    "lastChangedCommit": [
+     "lastChangedAt"
+    ]
+   }
+  },
+  "param": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "symbolId",
+    "index",
+    "name",
+    "line"
+   ],
+   "properties": {
+    "type": {
+     "const": "param"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "index": {
+     "type": "integer",
+     "minimum": -1
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    }
+   }
+  },
+  "ret": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "symbolId",
+    "ordinal",
+    "line"
+   ],
+   "properties": {
+    "type": {
+     "const": "ret"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "ordinal": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    }
+   }
+  },
+  "cond": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "symbolId",
+    "ordinal",
+    "line",
+    "code"
+   ],
+   "properties": {
+    "type": {
+     "const": "cond"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "ordinal": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "code": {
+     "type": "string",
+     "maxLength": 200,
+     "not": {
+      "pattern": "\\s\\s|[^\\S ]"
+     }
+    }
+   }
+  },
+  "callsite": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "symbolId",
+    "calleeName",
+    "ordinal",
+    "callKind",
+    "line",
+    "resolution",
+    "targets",
+    "status",
+    "reason"
+   ],
+   "properties": {
+    "type": {
+     "const": "callsite"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "calleeName": {
+     "type": "string",
+     "minLength": 1
+    },
+    "ordinal": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "callKind": {
+     "enum": [
+      "call",
+      "new",
+      "super",
+      "tagged-template",
+      "command",
+      "mention"
+     ]
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "resolution": {
+     "enum": [
+      "resolved",
+      "unresolved",
+      "external"
+     ]
+    },
+    "targets": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "symbolId",
+       "qname"
+      ],
+      "properties": {
+       "symbolId": {
+        "$ref": "#/$defs/hex32"
+       },
+       "qname": {
+        "$ref": "#/$defs/qname"
+       },
+       "signature": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     }
+    },
+    "externalTarget": {
+     "type": "string",
+     "minLength": 1
+    },
+    "status": {
+     "$ref": "#/$defs/status"
+    },
+    "reason": {
+     "enum": [
+      "resolved-call",
+      "name-match",
+      "shell-dynamic",
+      "prompt-mention"
+     ]
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "resolution": {
+        "const": "external"
+       }
+      },
+      "required": [
+       "resolution"
+      ]
+     },
+     "then": {
+      "required": [
+       "externalTarget"
+      ]
+     },
+     "else": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "externalTarget"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "targets": {
+        "minItems": 1
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "status": {
+        "const": "confirmed"
+       },
+       "reason": {
+        "enum": [
+         "resolved-call"
+        ]
+       }
+      }
+     },
+     "else": {
+      "properties": {
+       "status": {
+        "const": "possible"
+       },
+       "reason": {
+        "enum": [
+         "name-match",
+         "shell-dynamic",
+         "prompt-mention"
+        ]
+       }
+      }
+     }
+    }
+   ]
+  },
+  "valueSet": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "callSiteId",
+    "arg",
+    "values"
+   ],
+   "properties": {
+    "type": {
+     "const": "valueSet"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "callSiteId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "arg": {
+     "$ref": "#/$defs/argPath"
+    },
+    "values": {
+     "$ref": "#/$defs/values"
+    }
+   }
+  },
+  "constant": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "qname",
+    "fileId",
+    "line",
+    "values"
+   ],
+   "properties": {
+    "type": {
+     "const": "constant"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "qname": {
+     "$ref": "#/$defs/qname"
+    },
+    "fileId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "values": {
+     "$ref": "#/$defs/values"
+    }
+   }
+  },
+  "data": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "use",
+    "def",
+    "toPath",
+    "fromPath",
+    "status",
+    "reason"
+   ],
+   "properties": {
+    "type": {
+     "const": "data"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "use": {
+     "$ref": "#/$defs/hex32"
+    },
+    "def": {
+     "$ref": "#/$defs/hex32"
+    },
+    "toPath": {
+     "$ref": "#/$defs/usePath"
+    },
+    "fromPath": {
+     "$ref": "#/$defs/defPath"
+    },
+    "status": {
+     "$ref": "#/$defs/status"
+    },
+    "reason": {
+     "enum": [
+      "intra-flow",
+      "field-truncated",
+      "shell-dynamic"
+     ]
+    }
+   },
+   "allOf": [
+    {
+     "anyOf": [
+      {
+       "properties": {
+        "status": {
+         "const": "confirmed"
+        },
+        "reason": {
+         "enum": [
+          "intra-flow"
+         ]
+        }
+       }
+      },
+      {
+       "properties": {
+        "status": {
+         "const": "possible"
+        },
+        "reason": {
+         "enum": [
+          "field-truncated",
+          "shell-dynamic"
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "controlledBy": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "point",
+    "cond"
+   ],
+   "properties": {
+    "type": {
+     "const": "controlledBy"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "point": {
+     "$ref": "#/$defs/hex32"
+    },
+    "cond": {
+     "$ref": "#/$defs/hex32"
+    }
+   }
+  },
+  "decorator": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "targetId",
+    "ordinal",
+    "form",
+    "name",
+    "line",
+    "args"
+   ],
+   "properties": {
+    "type": {
+     "const": "decorator"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "targetId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "ordinal": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "form": {
+     "enum": [
+      "decorator",
+      "annotation",
+      "attribute"
+     ]
+    },
+    "name": {
+     "type": "string",
+     "minLength": 1
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "args": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "arg",
+       "values"
+      ],
+      "properties": {
+       "arg": {
+        "$ref": "#/$defs/argPath"
+       },
+       "values": {
+        "$ref": "#/$defs/values"
+       }
+      }
+     }
+    }
+   }
+  },
+  "fieldAccess": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "pointId",
+    "path",
+    "mode",
+    "receiverType",
+    "field",
+    "line",
+    "status",
+    "reason"
+   ],
+   "properties": {
+    "type": {
+     "const": "fieldAccess"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "pointId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "path": {
+     "type": "string"
+    },
+    "mode": {
+     "enum": [
+      "read",
+      "write"
+     ]
+    },
+    "receiverType": {
+     "anyOf": [
+      {
+       "const": "?"
+      },
+      {
+       "$ref": "#/$defs/qname"
+      }
+     ]
+    },
+    "field": {
+     "type": "string",
+     "minLength": 1
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "status": {
+     "$ref": "#/$defs/status"
+    },
+    "reason": {
+     "enum": [
+      "resolved-receiver",
+      "field-name-match",
+      "field-truncated"
+     ]
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "mode": {
+        "const": "read"
+       }
+      },
+      "required": [
+       "mode"
+      ]
+     },
+     "then": {
+      "properties": {
+       "path": {
+        "type": "string",
+        "pattern": "^(?:(?:a(?:0|[1-9][0-9]*)|recv|kw\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*))(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3}|ret(?:\\.(?:[^\\W0-9][\\w$]*|\\$[\\w$]*)|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]){0,3})(?!\\n)$"
+       }
+      }
+     },
+     "else": {
+      "properties": {
+       "path": {
+        "$ref": "#/$defs/defPath"
+       }
+      }
+     }
+    },
+    {
+     "anyOf": [
+      {
+       "properties": {
+        "status": {
+         "const": "confirmed"
+        },
+        "reason": {
+         "const": "resolved-receiver"
+        },
+        "receiverType": {
+         "not": {
+          "const": "?"
+         }
+        }
+       }
+      },
+      {
+       "properties": {
+        "status": {
+         "const": "possible"
+        },
+        "reason": {
+         "const": "field-name-match"
+        },
+        "receiverType": {
+         "const": "?"
+        }
+       }
+      },
+      {
+       "properties": {
+        "status": {
+         "const": "possible"
+        },
+        "reason": {
+         "enum": [
+          "field-truncated"
+         ]
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "import": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "fileId",
+    "line",
+    "module",
+    "names",
+    "dynamic"
+   ],
+   "properties": {
+    "type": {
+     "const": "import"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "fileId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "module": {
+     "type": "string",
+     "minLength": 1
+    },
+    "names": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "name"
+      ],
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1
+       },
+       "alias": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     }
+    },
+    "resolvedPath": {
+     "$ref": "#/$defs/path"
+    },
+    "dynamic": {
+     "type": "boolean"
+    }
+   }
+  },
+  "dependency": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "depId",
+    "ecosystem",
+    "package",
+    "version",
+    "scope",
+    "manifestPath",
+    "line"
+   ],
+   "properties": {
+    "type": {
+     "const": "dependency"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "depId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "ecosystem": {
+     "enum": [
+      "PyPI",
+      "npm",
+      "Maven",
+      "Go",
+      "NuGet",
+      "crates.io",
+      "ConanCenter"
+     ]
+    },
+    "package": {
+     "type": "string",
+     "minLength": 1
+    },
+    "version": {
+     "type": "string"
+    },
+    "scope": {
+     "enum": [
+      "runtime",
+      "dev",
+      "test",
+      "build",
+      "optional"
+     ]
+    },
+    "manifestPath": {
+     "$ref": "#/$defs/path"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    }
+   }
+  },
+  "testMarker": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "symbolId",
+    "framework",
+    "kindHint",
+    "evidence"
+   ],
+   "properties": {
+    "type": {
+     "const": "testMarker"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "framework": {
+     "type": "string",
+     "minLength": 1
+    },
+    "kindHint": {
+     "enum": [
+      "unit",
+      "integration",
+      "e2e",
+      "unknown"
+     ]
+    },
+    "evidence": {
+     "enum": [
+      "decorator",
+      "name",
+      "path",
+      "base-class",
+      "config"
+     ]
+    }
+   }
+  },
+  "configEntry": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "repoId",
+    "path",
+    "line",
+    "format",
+    "keyPath",
+    "valueHash",
+    "example"
+   ],
+   "properties": {
+    "type": {
+     "const": "configEntry"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "repoId": {
+     "$ref": "#/$defs/repoId"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "format": {
+     "enum": [
+      "json",
+      "yaml",
+      "toml",
+      "compose",
+      "env",
+      "dockerfile",
+      "mcp-json",
+      "kiro-agent",
+      "ini"
+     ]
+    },
+    "keyPath": {
+     "type": "string",
+     "pattern": "^(?:[^.\\[]+|(?:\\[(?:0|[1-9][0-9]*)\\]|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]))(?:\\.[^.\\[]+|(?:\\[(?:0|[1-9][0-9]*)\\]|\\[\"(?:[^\"\\\\]|\\\\.)*\"\\]))*(?!\\n)$"
+    },
+    "valueHash": {
+     "$ref": "#/$defs/hex64"
+    },
+    "bindValue": {
+     "type": "string",
+     "maxLength": 511,
+     "pattern": "^(?:(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3})|(?=[0-9.-]*[a-z])[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|(?:[0-9a-f]{0,4}:){2,7}(?:[0-9a-f]{0,4}|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))|[a-z][a-z0-9+.-]*://(?:(?=[0-9.-]*[a-z])[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])|\\[(?:[0-9a-f]{0,4}:){2,7}(?:[0-9a-f]{0,4}|(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))\\])(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?(?:/(?:[a-z0-9_-]{1,32}/?)?)?)(?!\\n)$"
+    },
+    "example": {
+     "type": "boolean"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "required": [
+       "bindValue"
+      ]
+     },
+     "then": {
+      "properties": {
+       "keyPath": {
+        "not": {
+         "pattern": "[pP][aA][sS][sS]|[pP][wW][dD]|[sS][eE][cC][rR][eE][tT]|[tT][oO][kK][eE][nN]|[kK][eE][yY]|[cC][rR][eE][dD]|[aA][uU][tT][hH]|[cC][oO][oO][kK][iI][eE]|[sS][eE][sS][sS][iI][oO][nN]|[pP][rR][iI][vV][aA][tT][eE]|[cC][eE][rR][tT]|[dD][sS][nN]|[cC][oO][nN][nN]|[hH][oO][oO][kK]|[sS][iI][gG]"
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "launchFact": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "path",
+    "line",
+    "kind",
+    "origin"
+   ],
+   "properties": {
+    "type": {
+     "const": "launchFact"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "kind": {
+     "enum": [
+      "command",
+      "port",
+      "env-default",
+      "mount"
+     ]
+    },
+    "command": {
+     "type": "string",
+     "minLength": 1
+    },
+    "args": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "protocol": {
+     "type": "string",
+     "minLength": 1
+    },
+    "envVar": {
+     "type": "string",
+     "minLength": 1
+    },
+    "default": {
+     "type": "string"
+    },
+    "mountPath": {
+     "type": "string",
+     "minLength": 1
+    },
+    "service": {
+     "type": "string",
+     "minLength": 1
+    },
+    "origin": {
+     "enum": [
+      "explicit",
+      "env-default",
+      "compose"
+     ]
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "command"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "allOf": [
+       {
+        "required": [
+         "command",
+         "args"
+        ]
+       },
+       {
+        "not": {
+         "anyOf": [
+          {
+           "required": [
+            "port"
+           ]
+          },
+          {
+           "required": [
+            "protocol"
+           ]
+          },
+          {
+           "required": [
+            "envVar"
+           ]
+          },
+          {
+           "required": [
+            "default"
+           ]
+          },
+          {
+           "required": [
+            "mountPath"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "port"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "allOf": [
+       {
+        "required": [
+         "port",
+         "protocol"
+        ]
+       },
+       {
+        "not": {
+         "anyOf": [
+          {
+           "required": [
+            "command"
+           ]
+          },
+          {
+           "required": [
+            "args"
+           ]
+          },
+          {
+           "required": [
+            "envVar"
+           ]
+          },
+          {
+           "required": [
+            "default"
+           ]
+          },
+          {
+           "required": [
+            "mountPath"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "env-default"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "allOf": [
+       {
+        "required": [
+         "envVar",
+         "default"
+        ]
+       },
+       {
+        "not": {
+         "anyOf": [
+          {
+           "required": [
+            "command"
+           ]
+          },
+          {
+           "required": [
+            "args"
+           ]
+          },
+          {
+           "required": [
+            "port"
+           ]
+          },
+          {
+           "required": [
+            "protocol"
+           ]
+          },
+          {
+           "required": [
+            "mountPath"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "mount"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "allOf": [
+       {
+        "required": [
+         "mountPath"
+        ]
+       },
+       {
+        "not": {
+         "anyOf": [
+          {
+           "required": [
+            "command"
+           ]
+          },
+          {
+           "required": [
+            "args"
+           ]
+          },
+          {
+           "required": [
+            "port"
+           ]
+          },
+          {
+           "required": [
+            "protocol"
+           ]
+          },
+          {
+           "required": [
+            "envVar"
+           ]
+          },
+          {
+           "required": [
+            "default"
+           ]
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "schemaEntry": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "path",
+    "line",
+    "objectKey",
+    "op"
+   ],
+   "properties": {
+    "type": {
+     "const": "schemaEntry"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "objectKey": {
+     "type": "string",
+     "minLength": 1
+    },
+    "migration": {
+     "type": "string",
+     "minLength": 1
+    },
+    "op": {
+     "enum": [
+      "create",
+      "alter",
+      "drop",
+      "rename"
+     ]
+    }
+   }
+  },
+  "secretSighting": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "type",
+    "id",
+    "fingerprint",
+    "path",
+    "line",
+    "commit",
+    "committedAt",
+    "presentAtHead"
+   ],
+   "properties": {
+    "type": {
+     "const": "secretSighting"
+    },
+    "id": {
+     "$ref": "#/$defs/hex32"
+    },
+    "fingerprint": {
+     "$ref": "#/$defs/hex64"
+    },
+    "path": {
+     "$ref": "#/$defs/path"
+    },
+    "line": {
+     "$ref": "#/$defs/line"
+    },
+    "commit": {
+     "$ref": "#/$defs/hex40"
+    },
+    "committedAt": {
+     "$ref": "#/$defs/utc"
+    },
+    "removedInCommit": {
+     "$ref": "#/$defs/hex40"
+    },
+    "presentAtHead": {
+     "type": "boolean"
+    },
+    "symbolId": {
+     "$ref": "#/$defs/hex32"
+    },
+    "entryId": {
+     "$ref": "#/$defs/hex32"
+    }
+   },
+   "allOf": [
+    {
+     "oneOf": [
+      {
+       "required": [
+        "symbolId"
+       ]
+      },
+      {
+       "required": [
+        "entryId"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

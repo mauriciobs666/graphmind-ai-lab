@@ -2691,3 +2691,927 @@ tuple shape under an existing tag.**
 - **Current state:** the shipped code is correct.
 - **Fix:** add a second table row (or one test) for `symbol_id` without a signature, so the
   every-position probe covers the 4-element path too.
+
+## S06 (P0-05)
+
+**Reviewed (2026-10-29):** `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.0, read in
+full, Appendix A included. It is untracked in the working tree.
+
+**Baselines:**
+- `docs/requirements/connected-code-graph.md`: AC-5, AC-6, AC-7, AC-24, AC-25, and the 2026-10-26
+  SQ1–SQ8 line;
+- `docs/plans/connected-code-graph-ml.md`: §4.1, §4.2, §8;
+- `docs/plans/connected-code-graph-p0.md` v1.3: the S06 and S35–S52 rows, §4.3, §6, §12. The
+  working tree now marks it `superseded`;
+- its successor `docs/plans/connected-code-graph-p0-2.md` v1.0 (untracked): the rows of §3, §4.3,
+  §6.4–§6.6, §12–§15;
+- `docs/plans/connected-code-graph-bundle-spec.md`: §2.2, §3.1–§3.5, §5.17, §6.
+
+**Evidence.** Every claim below says **run**, **traced** (read end to end) or *inferred*. I wrote
+the scratch scripts in the session scratchpad and touched nothing in the repo except this section.
+
+**Stakeholder input.** On 2026-10-29 the stakeholder chose §12.1 step 4's reading of "a new blind
+list", as relayed by `teco`. Every fix below is tagged:
+- **[within]**: it works inside that decision;
+- **[reverses]**: it would reopen the decision, so it is for `teco` to take back to the
+  stakeholder.
+
+**Verdict: needs changes.** The method is sound, and every figure reproduces. One blocker remains:
+two paths let developed-against answers into the held-out list (B1). There are six majors. Every
+fix is small and local to the note. None reopens a design decision except the optional [reverses]
+alternative under M1.
+
+CPG: not applicable — the artifact is an evaluation-protocol method document, with no code under review.
+
+### Figures (run)
+
+**Appendix A.** I extracted the script verbatim to the scratchpad and ran `python3 -I ep.py` (0.15
+s). Every figure the note quotes matches the script's output exactly:
+- §5.3: 75/75 gives [0.951, 1.000], 8/8 gives [0.676, 1.000], and 0.99 gives 0.471;
+- the four §6.4 rows;
+- the three-list example: r = 45, n₁ = 41, n₂ = 31, m = 27, Chapman 47.0, f₁ = 12, f₂ = 13, Chao
+  48.1, completeness 0.935;
+- the mixture: 0.860 true, 0.975 estimated;
+- all 14 P(trigger) cells;
+- §7.3's 0.088, 0.129, 0.165 and 0.324;
+- §7.4's [0.071, 0.591];
+- §9.1's 6, 14, 21 and 28;
+- §10.5's 23 and 11, and the three Wilson intervals.
+
+**Independent checks** (a separate script, by different methods):
+
+| Figure | Method | Result |
+|---|---|---|
+| 0.99⁷⁵ | `exp(75·ln 0.99)` | 0.4706 ✓ |
+| The Wilson 0-miss bounds | closed form, `n/(n+z²)` and `z²/(n+z²)` | 75 gives 0.9513; 0/40 gives 0.0876; 0/8 gives 0.3244 ✓ |
+| Chapman row 1, with its log-normal interval | exact `Fraction` arithmetic | N̂c 49.897, Var 4.914, interval [47.77, 57.96] ✓. Completeness 0.941 because Chao (49.95) binds, not Chapman: 47/49.897 would be 0.942. That is correct as written. |
+| Chao, t = 3 | f₁/f₂ recounted from an item-level expansion of the histories | 12, 13, 48.14 ✓ |
+| "Missing 12% of a 40-item stratum escapes the extra pass 38% at 0.90, 5% at 0.95" | Monte Carlo, 10⁵ replicates, (0.7, 0.6) | P(trigger) is 0.621 at 0.90 and 0.954 at 0.95, so the escape rates are 37.9% and 4.6% ✓. (0.8, 0.7) at N = 40 gives 0.134 and 0.622 ✓ |
+| The heterogeneity mixture | Monte Carlo over samples, 2×10⁴ replicates, not expected counts | mean estimated completeness 0.974 against a true 0.860 ✓. The expected-count shortcut is not misleading. |
+
+**Estimator choices (checked against the literature I know; not looked up).**
+- Chapman's form and its Seber variance are standard.
+- `r + ((t−1)/t)·f₁(f₁−1)/(2(f₂+1))` is Chao's bias-corrected Mh estimator.
+- The log-normal interval on f₀ is Chao (1987).
+- Taking `max(N̂c, N̂h)` is a defensible conservative rule.
+
+The one gap is in which estimate the interval is built around (m2).
+
+**Load-bearing counts, under more than one definition.**
+- The ≥ 75 / ≥ 8 count. Held-out is counted by **derived stratum of items** (§9.1 step 4), while
+  the share step uses each anchor's **primary** stratum. The note applies the two consistently, and
+  the gate (§5.3) cites §9's count.
+- The ≥ 75 count is materially different if "cross-boundary" excludes intra-unit flow items (M6).
+- §3.4's file counts (32, 7 and 47) reproduce with `git ls-files`.
+- SL-1's line numbers (`endpoints.ts` 16–19 and 17; `storefront_api.py:946`) match the working tree.
+
+### Blocker
+
+**B1 — blocker. Two paths put items that sit in a developed-against answer into held-out. That
+breaks AC-5's "never used for development".**
+
+(a) **The unit probe straddles the split (traced: §3.5, §5.1, §9.1).**
+- A `unit` anchor is asked through its **probe**, the `serves[]` contract point with the smallest
+  `cpId` (§5.1).
+- That contract point is usually also a `contract` anchor with its own items, for example
+  falkor-chat's tools.
+- The split is by `anchorId` (§9.1 step 1), and `unitId ≠ cpId`. So a unit can land in held-out
+  while its probe tool is in dev.
+- The held-out server-binding items (the `.mcp.json` entry, Kiro's `mcpServers` entry, the Compose
+  service) are then scored on **exactly the answer pack authors debug**, since one question
+  answers every item of the anchor (§5.1).
+- This is the shared-answer leak that §3.5's own "written once per server" bullet warns about, one
+  level up.
+
+(b) **Fresh items on a dev anchor (traced: §12.1 step 4).**
+- Fresh items are discarded only on matching **`itemId`**.
+- A fresh census at the same commit will find new impacted elements for the missed, fixed anchors,
+  and for contacted anchors in C.
+- Those items join the new held-out list under an anchor whose answer was just debugged.
+
+**Fix [within]:**
+- (a) **One cluster per unit and probe.** In §9.1 step 1, make a unit anchor and its probe contract
+  anchor one cluster, so both go to the same side.
+- Equivalently, have §5.1 pick the probe from those `serves[]` points that share the unit's side.
+  Then state in §8.2 that contacting either one contacts both.
+- (b) **Discard or route fresh items by `anchorId`.** Add to step 4: "a fresh item whose `anchorId`
+  is in dev or in C goes to dev". Add the same for the probe relation in (a).
+- **S49's split oracle** needs one case for each of (a) and (b).
+
+### Major
+
+**M1 — major. §12.1 step 4: the premise holds in letter but not in purpose. A passing re-gate's
+"75/75" then overstates the evidence (run).**
+
+**The premise.**
+- The list is "new", because it is not the same list.
+- It is "blind" in the sense that builders never saw the passed items. ML §4.1's "replacement
+  held-out items" also reads the same way.
+- But the retained items are **selected on having passed**: they survived a gate at system
+  version v and are re-asked of v plus fixes.
+- Only the fresh items are unconditioned. AC-5's ≥ 75 is there so that the passing list
+  constrains recall, and under this reading it does not.
+
+**Simulation** (scratchpad `regate.py`):
+- Model: 76 items in 2-item anchors. Retained items are assumed to pass again. Each missed anchor
+  is replaced 1:1 by fresh items. Recall p stays constant, which means the fixes do not
+  generalize: the "measures the debugging effort" case of ML §4.1.
+
+| True recall p | P(pass by gate 1 / 2 / 3), step 4 as written | P(pass by gate 1 / 2 / 3), all-fresh list each gate |
+|---|---|---|
+| 0.99 | 0.465 / 0.985 / 1.000 | 0.466 / 0.715 / 0.848 |
+| 0.97 | 0.097 / 0.876 / 0.992 | 0.099 / 0.188 / 0.268 |
+| 0.95 | 0.021 / 0.694 / 0.965 | 0.020 / 0.040 / 0.060 |
+| 0.90 | 0.000 / 0.246 / 0.769 | 0.000 / 0.001 / 0.001 |
+
+A system with true recall 0.95, whose fixes do not generalize, passes AC-5 within three gates
+96.5% of the time. The pass is then reported as 75/75, Wilson ≥ 0.951. That is false as a
+statement about recall.
+
+**Fix [within], two parts:**
+1. Every re-gate reports **fresh-only recall** `k/n` with its Wilson interval, as its own figure.
+2. Every re-gate reports the **cumulative unconditioned record**: each item counted once, at its
+   first gate exposure, summed over gates. For example, "gate 1 73/75, gate 2 fresh 4/4, so 77/79
+   with Wilson [0.91, 0.99]".
+   - The note should state that the retained items are a **regression check, not recall
+     evidence**.
+   - The AC-5 pass is reported with the cumulative figure next to it. §5.3's 0.951 is claimed only
+     for a first gate.
+   - This keeps the decision intact and makes the guarantee honest.
+
+**Also [within]:**
+- Specify the case where a fresh census at the same `EVAL_COMMIT` cannot reach "≥ as many as
+  moved". That is likely: a ~0.95-complete census leaves few new items at the same commit (G6).
+- Either it must pin a new commit, or SQ-P0-1 fires. The note is silent on this.
+
+**Optional [reverses]:** a fresh-item floor, for example ≥ 75 cumulative unconditioned items
+before a pass counts.
+
+**M2 — major. §9.1 step 4's loop does not terminate once a stratum is marked "cannot reach 8"
+(run).**
+- The loop guard is "some `H_s < 8`", which the marked stratum keeps true. Each pass re-selects
+  that stratum as the smallest `H_s`, finds no anchor, marks it again and `continue`s.
+- So it never reaches the `H < 75` branch, and never moves an anchor that could fix another
+  short stratum.
+- A literal implementation (scratchpad `split.py`: `flow` stuck at 3 items, two dev anchors left)
+  ran 1,000 iterations with no move.
+- **Fix:** both the guard and the "smallest `H_s`" selection range over unmarked strata only. Add
+  this case to S49's split oracle.
+
+**M3 — major. The writer-facing text is not fixed, and the parts that would be copied contradict
+the note's own rules (traced: §3, §4, §14; `p0-2.md` S40 and S52).**
+- **Examples quoted to writers.** §4 says writers get "the field tables and hop kinds only", with
+  no JSON example, "so that no writer is anchored on SL-1".
+  - But §14 and `p0-2.md` S40 copy **§3's stratum definitions verbatim**, and §3.2 names SL-1's
+    `getHealth`.
+  - `p0-2.md` S52 says it quotes "§4.1/§4.2/§4.3 verbatim", JSON blocks included.
+  - §3 also carries rationale, counts, and mentions of "contact" and SQ-P0-1.
+- **The `config` grain contradicts itself.** §2.2 says a `config` locator "names the binding
+  object, not a leaf", such as `services.falkordb`. §3.5 lists "a Compose service's
+  `command`/`ports`/`environment`" as the impacted element.
+  - Neither rule is mechanical: what counts as the binding object of a `.env` variable, or of a
+    Kiro agent?
+  - Writers who pick different levels get different `itemId`s. N1 pairs them, but H1's
+    prefix-only credit then fails whenever the kept locator is the leaf and the system lists the
+    object.
+- **Fix:**
+  - Add a writer-facing appendix: the exact text S40 and S52 paste, stripped of SL-1, of
+    rationale, and of any mention of contact or flow sampling.
+  - Give a per-format `keyPath` grain rule: the Compose service object; the `.mcp.json` and Kiro
+    `mcpServers.<name>`; the whole `.env` variable; an `allowedTools[i]` element.
+  - Have `normalize` truncate `keyPath` to that grain mechanically.
+
+**M4 — major. E1 is sound for AC-5, but it penalizes a precise interpreter on AC-24 (traced:
+§2.3 point 3, §10.4).**
+- **AC-5, the "individually" question.** H1 still requires each item individually, at the grain
+  of the named element. §2.1 already chose that grain ("one element, not one site").
+  - E1 merges only sites inside one element, so it does not weaken "individually" beyond §2.1.
+  - The residual credit (another anonymous scope whose span holds the line) is a real impact by
+    the user's test.
+  - I agree with the decision.
+- **AC-24.** §10.4 compares interpreted anchors as **sets of ids**. A code-location question by
+  file and line inside an anonymous scope has gold `E(q)`.
+  - The claim that "a file and line resolve to the enclosing named element" describes P1's
+    interpreter, which is undesigned. If P1 resolves to the lambda, the item scores "not
+    understood".
+  - Two such items sink the 23/24 smoke gate.
+- **Fix:** in §10.4, apply `E` to the interpreted anchors before comparing sets, mirroring H1, and
+  add it to §15 Q1's list for `architect`. Or tell QW never to write file-and-line questions that
+  land in an anonymous scope.
+
+**M5 — major. Pre-registration freezes the packs but not the core (traced: §12.3; AC-7).**
+- AC-7 says "the system's configuration is frozen before first contact".
+- The harness refuses a build only on a `packSetHash` mismatch. `coreCommit` is recorded but never
+  compared.
+- So stratum-specific handling can be added to `cpg/` core after registration, and the
+  first-contact result still counts.
+- **Fix:** the harness also requires the build's `cpg/` tree, minus `cpg/eval/`, to equal the
+  recorded `coreCommit`'s tree, along with `defaultDepthBound` and `algorithm`. Any mismatch makes
+  it an "after adaptation" run.
+
+**M6 — major. AC-5 counts "cross-boundary impacts", but `flow` items count toward the ≥ 75 pool
+(traced: AC-5; §3.6; §9.1).**
+- A flow item is 2 hops within one unit, often within one file. Is that cross-boundary? The note
+  never says.
+- Flow in P1's pool is a proposal/plan choice (proposal §4 P0, the row "P1's held-out strata …
+  flow-shaped"), so this is not the note's invention.
+- But §9.1 can meet "≥ 75" mostly through flow on a small census, and that is exactly when it
+  matters.
+- **Fix [within]:**
+  - S47's report and every gate report H twice: pooled, and excluding flow.
+  - Define cross-boundary per stratum in §3.
+  - Route "does flow count toward AC-5's 75?" to `teco` as a requirement-level question if the
+    non-flow count is below 75.
+
+### Minor
+
+- **m1. Stratum and scope depend on the writer, not only on `itemId`.**
+  - Rule 3 classifies a cypher-mcp tool through the writer's free `provider` field. Its `keyNorm`
+    is the bare tool name (bundle spec §6), so `query` carries no server.
+  - V4 decides flow scope from **one writer's** chain (`hops`, ≥ 1 flow hop). Two records of one
+    `itemId` can therefore derive different strata, or be in and out of scope. That lowers `m`.
+  - **Fix:** take rule 3's tool list from source (the tools registered under `cypher-mcp/`,
+    recorded in `eval-manifest.yaml`). Decide V4 per **item** after matching, with the item in
+    scope if any member's chain qualifies.
+  - State which record's fields win when members disagree.
+- **m2. The interval and N̂\* disagree.**
+  - §6.4's log-normal interval is built on Chapman's f₀ even when Chao is the binding estimate,
+    as it is in the three-list example.
+  - No pooled interval is defined.
+  - **Fix:** build the interval on N̂\*'s f₀ with the variance of whichever estimate binds, or
+    label it "Chapman interval". Then specify the pooled interval, or say none is reported.
+- **m3. Unit anchors are under-specified for GC.**
+  - `rootPath`'s "build manifest (`pyproject.toml`, `package.json`, …)" is open-ended. `cypher-mcp/`
+    has only `requirements.txt` (checked), so writers may give `cypher-mcp` or `.`.
+  - N1/N2 have no rule for two unit anchors with the same `impactedId`.
+  - Classifying a per-tool entry as a "server binding" for re-anchoring (§3.5, §13.4) is a
+    judgment GC is not allowed to make (M5).
+  - **Fix:** list the units explicitly in `eval-manifest.yaml`. Add an N3 rule: same
+    `impactedId`, both anchors `unit`. Put the re-anchoring `keyPath` patterns in M3's grain
+    table.
+- **m4. §9.4's probe removal is ambiguous.** It removes a probe that "also occurs in some dev
+  item".
+  - Read as a substring test, a held-out `a.py::f` is removed whenever dev holds `a.py::f.g`.
+  - **Fix:** remove probes on exact field equality. Match `qname`s in the report as whole tokens
+    bounded by non-identifier characters.
+- **m5. Grounding.**
+  - §3.6 and §14 say tree-sitter is "already in the S02 image". `cpg/infra/toolchain/Dockerfile`
+    has no tree-sitter (checked); it is in `cpg/pyproject.toml`'s `spike` extra. `p0-2.md` S48
+    inherits the claim ("from the `spike` extra or S02's image").
+  - Q4 is already answered: `pyyaml==6.0.3` is in the `dev` extra, and `p0-2.md` S49 says so.
+  - §8.2's "S28 golden flow methods" are produced by **S56** in `p0-2.md`.
+- **m6. AC-25's shape is not owned.** §12.2 sets AC-25's counts. AC-25's presentation
+  properties have no owner: direct or indirect with distance; grouped by repository, then by
+  component, then by distance; confirmed before possible. Name S35's assertion column, or S33, as
+  their owner.
+
+### Nit
+
+- `p_trigger`'s docstring says "< 0.90" for every threshold.
+- §10.2 says "dev gets about 8". With no annotator drops, the rule gives 3 per cell, so 12.
+- §7.3's shortfall "next stratum" does not say whether it wraps after `flow`.
+
+### Downstream obligations (§14/§15 against `p0-2.md`)
+
+**Absorbed correctly:**
+- S14/S30 list anchors as locators with hops excluded;
+- S33 uses §5.2;
+- S35 uses §12.2;
+- S40 has five strata and `--draw-flow-anchors` with 16 anchors;
+- S41/S42 have five sessions each;
+- S43 has 48 questions;
+- S45/S47 cite §6–§10;
+- S46 samples 40 + 8;
+- S48 has the draw verb;
+- S49 has `validate` and `sample`, with `pyyaml`;
+- S52 omits the ancestor-plus-line rule;
+- §6.6 gives 16–18 base and 18–25 expected. I recomputed both.
+
+**Gaps:**
+- `p0-2.md` §12, §13, §14 and §15 are `_(pending)_` placeholders. E7, §9.1 step 5, §15 R2 and plan
+  §12 SQ-P0-1 therefore point at an empty section once v1.3 is superseded (`architect`).
+- S52's "§4.1/§4.2/§4.3 verbatim" conflicts with §4's no-JSON rule (M3).
+- S49's oracle list needs B1's and M2's cases.
+- Q2 (`config`/`unit` rows in bundle spec §3.5) is still open. Both conversions are correct as
+  claimed: the tuples are identical to §3.2's, and `ids.config_entry_id`/`ids.unit_id` exist.
+
+### What's solid
+
+- E1's reasoning (writer error, stability under BF16, how anchors are actually asked about).
+- The derived stratum kept out of the `itemId` (G2).
+- Strategy-collapsed Chapman, with Chao as a heterogeneity floor, and the honest "upper bound"
+  label (G6).
+- The exact P(trigger) tables behind the 0.95 choice.
+- Per-anchor forced-to-dev contact with the hop exclusion.
+- Bootstrap reproducibility pinned by sorting.
+- The hit rule on canonical JSON with folded groups expanded and an empty verdict log.
+- Every procedure is close to executable. Most fixes above are one sentence.
+
+### Open questions
+
+1. **For `teco`/stakeholder.** Does `flow` count toward AC-5's "75 cross-boundary"? This matters
+   only if the non-flow held-out count falls below 75 (M6).
+2. **For `teco`/stakeholder.** Is M1's [within] reporting enough, or is a fresh-item floor wanted?
+   That would be [reverses].
+
+### Pass 2
+
+**Re-checked (2026-10-29):** `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.1 against
+its §16 dispositions. I ran Appendix A again, plus my Pass 1 scripts (`regate.py`, `split.py`) and
+four new ones in the scratchpad (`regate2.py`, `split11.py`, `dups.py`, and a leak-check regex
+probe). Both stakeholder decisions are treated as binding: E11, which decides which flow items
+count, and E12, the fresh-item floor.
+
+**Verdict: approve with suggestions.** B1(b) and M1–M6 are fixed. B1(a) is fixed for the case it
+named, but one residual major remains (P2-1). My Pass 1 fix for B1(a) was incomplete. There are
+two new minors (P2-2, P2-3). No blocker remains.
+
+CPG: not applicable — the artifact is a method document, with no code under review.
+
+**Figures (run).**
+- Appendix A v1.1 runs in 0.16 s. It prints every figure the note cites, including the new ones:
+  - `9z² = 34.57`;
+  - Wilson lower bounds of 0.839, 0.901, 0.929 and 0.951 at F = 20, 35, 50 and 75;
+  - the five floor rows;
+  - `108/110: [0.936, 0.995]`;
+  - a yield of 7.9.
+- **The two reported figures, reproduced by Monte Carlo** (`regate2.py`: my Pass 1 model plus the
+  rule that fresh clusters number `max(missed, ⌈F/2⌉)`; 2×10⁵ replicates):
+  - at F = 35, P(pass by gate 1/2/3) is 0.465 / 0.838 / **0.951** at p = 0.99, and
+    0.021 / 0.174 / **0.304** at p = 0.95. That matches the note's 95.1% and 30.5% within
+    simulation error;
+  - at F = 0 the same model gives 0.985 and 0.695, which matches the note's DP (0.985, 0.696).
+
+**Pass 1 findings:**
+- **B1(a): fixed as stated, with a residual (P2-1).** Union-find joins each unit to its probe. The
+  probe is fixed before the split, and contacting either one contacts both (§5.1, §8.2, §9.1 step
+  1). The same-answer leak I named is closed.
+- **B1(b): fixed.** Fresh items are routed by cluster: an item on a cluster in dev or C goes to
+  dev. Treating an item on a **kept** cluster as non-fresh is sound: its anchor's answer was
+  exposed and passed, so the item is conditioned, as the author argues.
+- **M1: fixed.** All four parts are adopted: fresh-cluster recall, the cumulative first-exposure
+  record in `exposure.jsonl`, kept items labelled as a regression check, and 0.951 claimed only at
+  gate 1. The floor (F = 35), the four-source supply order and Q7 follow the stakeholder decision.
+- **M2: fixed (run).** `split.py` still loops on v1.0's text. A literal implementation of v1.1's
+  step 4 (`split11.py`) terminates on all three cases:
+  - v1.0's stuck case: 2 passes, with `flow` marked;
+  - `H` short with only non-counting dev items: stops, with `wiring` marked;
+  - only contacted dev clusters: stops at once.
+- **M3: fixed.** Appendix B names no proving-repo element and no SL-1. I checked that the
+  synthetic `loadItems` and `list_items` occur nowhere outside `docs/`. Appendix B's `keyPath`
+  table matches §2.4's. Every §2.4 row I re-checked against the tree holds:
+  - `.mcp.json` has `mcpServers`;
+  - the Kiro agent has `mcpServers`, `tools`, `allowedTools` and `toolAliases`;
+  - `.claude/settings.json` has `enabledMcpjsonServers` and `permissions`;
+  - `mcp-monitor` has `server.{falkor-chat,fake-test}` and `watch[]`;
+  - `falkor-chat/compose.yaml` and `falkor-chat/server/.env.example` exist.
+
+  Two residual nits are listed under P2-4.
+- **M4: fixed.** §10.4 applies `E` before comparing sets. The suffix change interacts with this,
+  see P2-2.
+- **M5: fixed.** `coreTreeHash` is compared alongside the other three fields. Nit: excluding
+  `**/*.md` assumes no Markdown under `cpg/` is ever a runtime input. Narrow it to `docs/`-style
+  paths if P1's interpreter keeps its prompt templates as `.md`.
+- **M6: fixed per E11.** The flow counting test uses endpoints and units, so it is a function of
+  `itemId` alone. The 75 is tested on `H`. The per-stratum 8 uses all items.
+- **m1, m2, m3, m5, m6 and the nits: fixed** as the §16 table says. I checked m1's
+  `cypherMcpTools`, V4 per item, field precedence, m3's N3 and `--list-units`, and m5's Q4
+  closure.
+- **m4: fixed, with a gap the fix introduced (P2-3).**
+
+**Interactions between the fixes (checked):**
+- **The reserve cannot starve gate 1.** Step 6 moves a cluster only if gate 1 keeps `H ≥ 75` and
+  every `H_s ≥ 8`, and it is skipped whenever step 5 triggers.
+- **The floor cannot count an item that `H` excludes.** Both count only counting items. Flow items
+  that do not cross a unit are scored but never counted.
+- **Kept clusters, routing and the reserve agree.** A census item on a reserve cluster is fresh
+  (never exposed). An item on a kept cluster is not fresh. Both follow from the four routing
+  rules in order.
+
+**P2-1 — major (residual of B1(a)). The server-binding items still leak through the unit's
+non-probe tools (traced: §3.5, §9.1; AC-2's text).**
+- AC-2 requires the wiring files to be listed for each tool, so the answer for **any** tool of a
+  server lists that server's binding entries.
+- Only the probe is clustered with the unit. So a held-out unit whose sibling tool T2 is in dev is
+  scored on an entry that pack authors make appear by debugging T2's answer.
+- §3.5's own rationale says exactly this: "fixing it on a dev tool would make every held-out tool
+  pass".
+- falkor-chat registers 25 tools (checked). At a 0.70 share, at least one of its tools is in dev
+  almost surely.
+- **Suggested direction, for the author to decide:**
+  - after step 3, a unit cluster goes to dev if any contract anchor in U whose `provider` lies
+    under its `rootPath` is in dev. The single-tool servers (`cypher`, the fake server) can still
+    be held out;
+  - the alternative is a whole-server cluster, which merges about 25 `mcp` anchors and breaks that
+    stratum's split.
+- I have not run either design. The assertion that would catch a wrong fix is an S49 oracle case:
+  "a unit with a dev non-probe tool ends in dev".
+
+**P2-2 — minor (new in v1.1). Removing `#k` suffixes collapses a duplicate onto its first
+definition. That gives three side effects (traced: §2.3, §5.2 H1, §5.4, §10.4).**
+- **Credit without the span test.** `E(C.x#2) = C.x` is the first definition's own id. H1's first
+  branch (`id(x) = symbolId(e)`) has no span test, so listing the getter credits an impact on the
+  setter.
+- **Ids that may not exist.** `E(C.x#2.check) = C.x.check` may name no symbol in the snapshot.
+  §5.4 then fires and "corrects" the item back to the ineligible `C.x#2.check`.
+- **Gold that cannot tell the two apart.** On AC-24, an interpreter that picks the wrong
+  definition scores as gold.
+- **Exposure is zero today.** An `ast` scan (`dups.py`) finds no same-scope duplicate definitions
+  in the proving repo's non-test Python. `git grep` finds no `@x.setter` and no `@overload`.
+- **Fix:** H1 becomes "`E(qname(x)) = qname(e)` **and** the span of x contains some ℓ ∈ L", which
+  subsumes the id branch. §5.4's trigger becomes "no snapshot symbol has `E(qname) = qname(e)`",
+  and its source comparison runs under `E`.
+
+**P2-3 — minor (from the m4 fix). The whole-token boundary gives false negatives on trailing
+punctuation (run).**
+- §9.4 puts `.` and `:` in the token character set, which is what keeps `a.py::f` from hitting
+  inside `a.py::f.g`. But it also means that `held-out item a.py::f.` and `a.py::f: missed` do
+  **not** hit, so a qname at the end of a sentence passes the leak check.
+- **Fix:** add a lookahead that allows trailing `[.:]*` before the boundary,
+  `(?=[.:]*(?:$|[^A-Za-z0-9_.:/#<>-]))`. Run on the cases above, it hits both sentence-final cases
+  and still does not hit inside `a.py::f.g`.
+- Add both sentence-final cases to S49's `--check-report` test.
+
+**P2-4 — nits.**
+- §2.4's `.env` class ("a URL or port of a listed unit") needs the unit's port. That is not
+  mechanical from `units`. Give each listed unit a `ports`/`urls` field in `eval-manifest.yaml`, or
+  route the case to the method owner.
+- A Kiro-agent key outside its row (`toolsSettings`, `includeMcpJson`) has no stated fallback. Is
+  it "any other JSON", or out of scope? `includeMcpJson` is a binding in effect.
+
+## S10 (P0-09)
+
+**Reviewed (2026-10-29):** `cpg/ccg/schemas/bundle-v1.schema.json`, `cpg/ccg/bundle.py`,
+`cpg/tests/test_bundle.py` and the S10 additions to `cpg/README.md`, all uncommitted. The contract
+is `docs/plans/connected-code-graph-bundle-spec.md` v1.3 (§2, §5, §7, §8, §11), which controls,
+plus the S10 row, §2 D15 and the S10 test-strategy row of `docs/plans/connected-code-graph-p0-2.md`.
+I did not have the implementer's report, so the self-resolved ambiguities below are the ones the
+brief lists plus the ones I found. Everything was **run** unless marked *inferred*. Mutants ran on
+a scratch copy with `python -B` and `__pycache__` cleared before every run. I confirmed the copy
+was restored with `cmp`.
+
+**Verdict: approve with suggestions.** The suite gives **711 passed** (522 in `test_bundle.py`),
+and all eight test-strategy rows exist.
+- My own data-plumbing mutants: **57 of 66 killed**. Every id-recompute mutant died, including
+  `data` `toPath`/`fromPath` swapped, the `symbol` signature dropped, `constant` taking the
+  unit's `lang`, `launchFact` grouped or ided without `kind`, and `depId` arguments swapped.
+- No blocker. Two majors:
+  - **S10-M1:** the `bindValue` IPv6 branch admits strings that are not IPs.
+  - **S10-M2:** the spec-independence guard is one-way for the seven prose-transcribed records.
+
+  Fix both before S15 freezes the schema.
+- Several self-resolved rules are not in the spec and should get an `architect` ruling. They are
+  listed in S10-m3.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; `bundle.py` (518 lines) was read in full and the schema inspected by script.
+
+### Findings
+
+**S10-M1 — major. The `bindValue` "IP literal" branch admits strings that are not IPs, and the
+limits of §5.17 are only partly tested.**
+- **Evidence (run against the schema's `bindValue` subschema):**
+  - The branch `[0-9a-f]*:[0-9a-f:.]*` accepts `":"`, `"abc:"`, `"a1b2c3d4e5:f6"` and
+    `"deadbeefcafe0123:9876543210abcdef"`.
+  - So a hex `user:secret` pair under a `keyPath` outside the secret-name list would be written
+    in clear. §5.17(a) admits "an IP literal", nothing wider.
+- **Untested limits.** Two schema mutants survive:
+  - `maxLength` 511 → 512, the "shorter than 512" limit of (c);
+  - `sig` removed from the 15-token secret list of (b).
+- **Why major:** `bindValue` is BF8's exposure guard, and the schema freezes into `bundle-v1` at
+  S15. In P0 nothing is exposed (`bindValue` is [P-later], and no slice emitter writes it). S58
+  may reshape the rule, but the widening is S10's own, not the spec's.
+- **Fix:**
+  - Check the IP form in `bundle.py` with `ipaddress.ip_address(v)`, or replace the branch with a
+    strict IPv6 grammar. Keep the URL `[…]` host to the same rule.
+  - Add one probe test that parses the 15 tokens from §5.17's text and checks, for each one, that
+    a `keyPath` containing it rejects `bindValue`.
+  - Add a boundary pair at 511 and 512 characters.
+  - Add a table of non-IP colon strings that must be rejected.
+
+**S10-M2 — major. The spec-independence check is independent for the 13 table records, but only
+one-way for the 7 prose records, so a field dropped from both the schema and the transcription
+goes unnoticed (teco's question 1).**
+- **Evidence (run):** in a copy, I removed `cond.code` from the schema, from `PROSE_RECORDS`
+  and from the fixtures that set it, and deleted `test_cond_code_is_collapsed_and_capped`.
+- **Result:** 519 passed, 1 failed. The failure is incidental:
+  `test_escaped_non_ascii_is_not_canonical` uses `code` to plant a non-ASCII string. Neither
+  `test_schema_fields_match_spec` nor `test_prose_transcriptions_appear_in_their_spec_sections`
+  went red. The second test checks only "every transcribed name appears in the section", never
+  "every field the section names is transcribed".
+- **For the 13 table records the check is truly spec-derived.** Each field set is parsed from
+  the markdown table. A field deleted from the schema alone is caught.
+- **The transcription is correct today.** I checked §5.5, §5.11, §5.16, §5.18 and §5.19 by
+  hand. The exposure is S16, which edits both sides.
+- **Fix:** for each prose record, take every backticked token in its section's
+  `Fields:`/bullet text. Assert that each one is in the transcription, or in an explicit
+  `NOT_FIELDS` set where every entry cites its reason. A dropped field then shows up as
+  unaccounted for.
+
+**S10-m1 — minor. The status↔reason pairing is not tested against §7.2's Status column.**
+- **Evidence (run):** two schema mutants survive:
+  - the confirmed branch of `callsite` also admitting `name-match`;
+  - the confirmed branch of `data` admitting `field-truncated`.
+- **Gap:** `test_status_reasons_match_spec_registry` checks which reasons each record admits,
+  not which status each reason is paired with.
+- **Fix (a coverage probe):** parse code → status from §7.2. For every record with a `reason`,
+  and every code it admits, validate a record with each status. Accept exactly the spec's
+  pairing, including `fieldAccess`'s `receiverType` condition.
+
+**S10-m2 — minor. Four rules hold in code but have no test.** In each case the mutant survives.
+- **`keyPath` stripping:** the rule works (I probed it: a leading space is rejected), but no test
+  pins it. The general fix is to probe every key in `_IDENTITY_KEYS` with an edge space. The
+  `*Id` arm is equivalent, because `hex32` rejects whitespace first.
+- **Signature agreement in `targets`:** comparing only `qname` survives. That loses the overload
+  case (Java/C#), the case the comparison exists for. Add a Java target whose signature
+  disagrees.
+- **`launchFact` per-kind exclusivity:** dropping "port excludes command" survives. Use a probe
+  over (kind × every foreign field), not one pair.
+- **Vendored basename:** checking the file's own segment survives. Add a file literally named
+  `vendor`.
+
+**S10-m3 — minor. Self-resolved rules that are not in the spec and will freeze into
+`bundle-v1`. Each needs an `architect` ruling (teco's question 2).**
+
+*To `architect`:*
+1. **Value-set nesting depth.**
+   - The schema admits 3 nested `concat`/`template` containers plus the leaf, and rejects 4. I
+     checked this with the subschema.
+   - §5.8's "nesting at most 4 deep" does not say whether the leaf counts.
+   - The ruling decides when `value-set-cap` fires.
+2. **`controlledBy.point` may be a `cond`.**
+   - The code accepts it: I validated a nested-`if` `cond`→`cond` record.
+   - §5.11 lists only "a call site, `ret` or `param`". Joern's CDG does produce cond→cond
+     dependences.
+   - The spec should either add `cond` to its list, or the code should reject it.
+3. **Repeated `import.names` entries are rejected,** because the sort is strict. But
+   `from m import a, a` is legal Python. The ruling: either the normalizer de-duplicates, or the
+   rule is non-strict.
+4. **`nameNorm` is not verified, and §4.1 rule 10's "NFC-casefolded" is underspecified.** Taken
+   as NFC followed by `casefold`, **26 code points** yield a non-NFC result, for example
+   U+01F0 → `j`+U+030C and U+0390. §8.1 then rejects the record. Ruling input:
+   `NFC(casefold(NFC(name))).strip()`. Then add the check (one line).
+5. **What `IDENT` in §5.1 means.**
+   - The code uses one cross-language class, `[^\W0-9][\w$]*`. In Python's `re`, `\w` is
+     Unicode.
+   - In ECMA-262 regex, the JSON Schema dialect, `\w` is ASCII. A non-Python validator would
+     disagree on `a1.café`.
+   - The spec should define `IDENT` precisely enough for the "quote only non-identifiers" rule to
+     have one answer.
+
+*Faithful to the spec, no ruling needed:*
+- `history: unavailable` is rejected (§2.2: "In P0 it must be `available` … a build error"). It
+  is correctly enforced in `bundle.py`, not in the schema enum.
+- Integral floats are rejected (§8.1: "No floats anywhere").
+- Strict sorting with no repeats in `values` (§5.8: "makes it a set"), `targets` and `args`.
+- `bindValue` hosts are lowercase-only (§5.17: `[a-z0-9.-]` labels). The spec itself admits
+  `hunter2` as a one-label DNS name; that question belongs to S58.
+
+**Nits.**
+- **The one-encoding rule lives only in `bundle.py`.** Quoting an identifier (`a1["method"]`) is
+  rejected there, but the schema accepts it. `argPath` feeds the `valueSet`, `data` and
+  `fieldAccess` id tuples, so a schema-only consumer would see two ids for one fact. Say in the
+  schema's `description` and in the README that schema validity is necessary but not sufficient.
+- **Vendored `targets`.** §5.6 says vendored code is never in `targets[]`. Validation checks
+  `path`, `manifestPath` and `resolvedPath`, but not the path prefix of `targets[].qname`.
+
+### Questions answered
+
+- **R11 (question 3): the spec really is silent. Confirmed.**
+  - §2.1 and §2.2 have no minimum-content rule.
+  - §2.2's `counts` row says "every §8.3 type present, **zero included**".
+  - The only "at least 1" clauses are `sandboxAuditIds` and `valueSet.values`.
+  - Successor plan §2 D15 rules the same way: S11 owns the guard.
+- **Open item 1 (the §5.1 quoting fork): ruling input is the no-dot form `a1["x"]`.**
+  - §5.1's own examples are `a1["content-type"]` and `kw.headers["a.b"]`.
+  - §5.1 says "This is §5.17's `keyPath` quoting", and §5.17's example `ports[0]` attaches the
+    bracket with no dot.
+  - §5.1 also says "one encoding per fact". The implementation already enforces exactly one
+    form: `a1.["x"]` is rejected by both the schema and `bundle.py` (run).
+  - The grammar line is the typo. It should read
+    `argPath = argHead *( "." IDENT | "[" JSONSTRING "]" )`, and the same for `defPath` and the
+    `ret` arm of `usePath`.
+  - The depth cap counts bracket segments as fields; it already does (run:
+    `a1["a"]["b"]["c"]["d"]` is rejected).
+- **Open item 2 (`import`/`launchFact` ids by inversion): sound.**
+  - Each group's ids must be exactly `0..k-1`, and lines must not decrease in ordinal order.
+  - Mutants pin both: grouping without `kind` and the line-order check removed are each killed.
+- **Open item 3 (`bindValue` after S58):** agreed. S10-M1's fix should land first anyway, because
+  the widening is S10's own and not the spec's.
+
+### What's solid
+
+- **Every id is recomputed through `ccg.ids`.** Every recompute mutant of mine is killed, and so
+  was teco's (70 failures).
+- **The reader is byte-strict:** BOM, `\r`, final newline, duplicate keys, non-canonical lines,
+  floats and NaN are all rejected. The writer sorts, validates, refuses `secretSighting` and
+  writes atomically.
+- **The cross-record rules are real and pinned:**
+  - `data`/`fieldAccess` endpoint kinds by path head, including `recv` → index -1;
+  - same-symbol checks;
+  - `counts`;
+  - `unitId`/`repoId`;
+  - `qname` prefix;
+  - `ownedRegions`;
+  - `example` copied from `role`;
+  - PEP 503/NuGet normalization.
+- **Tables for 13 record types, §8.3's order, §3.3's tokens and the §7.2/§7.3 reason sets are
+  parsed from the spec text,** not copied from the schema.
+- **R11 is handled exactly per D15,** and the README states it.
+
+
+## S08 (P0-07)
+
+**Reviewed (2026-10-29):** `cpg/sandbox/{offline-run.sh, forbidden-flags.txt, allowed-flags.txt,
+README.md, tests/test_sandbox.sh, tests/probe.pl, tests/mutants.sh}` and the `.audit/` line in
+`cpg/.gitignore`. All of it is uncommitted and was read in full. Baseline:
+- `docs/plans/connected-code-graph-egress-spec.md` v1.3: §5.3, §7 in full, §9, §10 and §11 R2/R5;
+- `docs/plans/connected-code-graph-p0-2.md`: the §3 S08 row and §4.1 errata E1/E2;
+- this file's § S04 Passes 1–3 (P3-m1, P3-n1).
+
+Every claim below was **run**, unless it says *inferred*. Mutants and probes ran on copies in the
+session scratchpad. The real runner and lists were never written to.
+
+**Verdict: needs changes.** There is no blocker. The sandbox holds on every escape axis I
+exercised, and the content checks are real. Four majors should land before S11 builds on the
+runner, and each is a small fix:
+- **M1:** the `//>` refusal misses control-byte-led directives, and replpp does honour them. A
+  download attempt was observed.
+- **M2:** a missing or invalid `--backend`, or a bare invocation, exits 1 and writes **no
+  record**.
+- **M3:** the pass-list *values* are unguarded. The `GOTOOLCHAIN=auto` and telemetry-on mutants
+  survive.
+- **M4:** the allowed list can be reclassified without any test turning red. Two of three
+  entries survive.
+
+CPG: considered, not relevant — no CPG covers `cpg/sandbox/` (Bash and Perl, about 1,600 lines,
+read in full); the questions here are runtime behaviour, answered by execution.
+
+**What I ran.**
+- **Suite:** `bash cpg/sandbox/tests/test_sandbox.sh` from the repo root gave **319 passed, 0
+  failed** in 77 s. A second run with `--only 1,5` kept its temp dir for inspection and gave 66
+  passed.
+  - The sweep was 16 hits (13 forbidden, 3 allowed, 0 unclassified) on both backends.
+  - Test 3's seven CPGs were 57–79 KB, and each held its fixture's method.
+  - Container probe: `PROBE-DONE checks=122 fail=0`. Namespace template: 114 checks, 0 failed.
+- **Hygiene:** after every run, `docker ps -a`/`docker volume ls --filter label=ccg.sandbox` were
+  empty. No `.ccg-ovl-*` scratch, `/tmp/ccg-s08-*` or `/tmp/ccg-sbx.*` dir was left, and
+  `cpg/.audit/` was never created. The five named non-sandbox containers were not touched.
+- **Mutants:** I re-ran M13 through `tests/mutants.sh` (killed) but not the other 20 shipped
+  mutants, and I added ten of my own (X1–X10, Appendix A). **Three were killed and seven
+  survived.**
+- **Directed probes, through the production runner:** the five deviation checks, control-byte
+  directives, three concurrent runs into one `--output`, the `auto` fallback, refusal-path
+  records, direct-frontend CPG content, and environment inputs.
+
+### Answers to the brief's questions
+
+- **Teco's failing `auto` check is deterministic and depends on the list.** It is not flaky, and
+  it does not depend on the sweep. It drives `--backend auto` with `javasrc2cpg
+  --fetch-dependencies` and expects a 64 refusal (`test_sandbox.sh:177`). With that line deleted
+  from `forbidden-flags.txt`, the runner **launches** the frontend instead: rc 0, and the stderr
+  shows `WARN AstCreationPass Could not fetch dependencies for project at path /src`, an attempt
+  contained by `--network none`. I ran it twice and got the same failure both times. The check
+  also never exercises a fallback (m1).
+- **Content, not exit codes (item 1):** satisfied wherever a test claims a tool ran.
+  - Test 3 requires a CPG over 20 KB that contains the fixture's method, read back by a runner
+    `joern --script`.
+  - 10(c) requires the printed methods. The probe requires `PROBE-DONE` with a check count of at
+    least 60 or 50, plus named check IDs.
+  - The sweep requires a `Usage:` line, and test 9 a positive `JOERN-CLI-OK`.
+  - Tests 4 and 5 assert only "launched" or "wrote a file", and claim no more. The gap is n3.
+- **Escape axes (item 2):** the container backend covers A1–A7 with every sub-property. That
+  includes A1(e)'s UDP procedure over 16 loopback targets, A4(a)'s `/tmp` leg (`ENOENT`, real
+  `whoami.exe` from `/mnt/c`), A4(a′) memfd (`ENOENT`), A6(e), and A7 (`EPERM`). The namespace
+  template is run directly per R5 for A1–A3, A5 and A6. The README's backend table states
+  honestly that A4 and A7 for the namespace backend stay unexercised.
+- **Library-mode bypass (item 5):** acceptable, and close to forced. §7.3.1's closed frontend set
+  makes "launch Perl through the runner" impossible without a bypass option, which R5 forbids.
+  - I compared a library-mode `launcherArgv` structurally with a production record's. Modulo ids,
+    paths, the tool and the `/scripts` mount, they are **identical**, including all 13 `env -i`
+    pairs. So the probe exercises the production template.
+  - The production-only paths are the argv parser, backend resolution and the record writer.
+    Tests 2, 4, 5 and 10 cover them through the real runner, but with three gaps: M2, m1 and m3.
+  - Nothing pins the equivalence I checked by hand (m5).
+
+### Findings
+
+#### M1 (major) — the directive refusal misses `[\x00-\x08\x0e-\x1f]`-led lines, and replpp honours them
+- **What replpp does:** `replpp.UsingDirectives.scanFor` is `line.trim().startsWith("//> using
+  …")` (javap of `scala-repl-pp_3.7.4-0.6.3.jar`, Appendix B). Java's `String.trim()` strips
+  **every** char ≤ U+0020.
+- **What the runner does:** it strips only `[[:space:]]`, which in the C locale is space, `\t`,
+  `\n`, `\v`, `\f` and `\r` (`offline-run.sh:230`).
+- **Observed:** scripts led by `\x01`, `\x1f`, `\x1c` and `\x00` and carrying `//> using dep
+  com.michaelpollmeier:versionsort:1.0.7` were all **admitted** (`refused: false`). Each run then
+  failed with `UnknownHostException: github.com` from `replpp.util.Cache.getOrDownload`. That is
+  a download attempt, the exact event §7.3.1 exists to prevent before launch. `--network none`
+  contained it.
+- **`using file`:** a `\x01//> using file /src/evil.sc` was also honoured. The error lists
+  `/src/evil.sc` among the "given input files", so **repository** code was pulled into the
+  compilation. Compilation then failed on the illegal `\u0001`. A `\x1a`-led line failed the same
+  way. I found no shape that compiles, so the impact is contained: the attempt happens, the run
+  does not succeed.
+- **Negative control:** a BOM-led line is not honoured.
+- **Fix (`devops`):** strip `[\x00-\x20]` (`LC_ALL=C grep -aE '^[[:cntrl:] ]*//>'` covers it,
+  plus `\x7f`). Replace test 10(b)'s list of shapes with a **coverage probe over the leading
+  byte**: for every byte 0x00–0x20, plus 0x7f and a BOM, assert that the runner refuses every
+  byte Java's `trim()` strips. The oracle is the rule "≤ 0x20", not the list.
+- **Spec (`architect`):** erratum E1's set `[ \t\r\n\f\v]` is itself incomplete. Restate it as
+  "every char ≤ U+0020 (Java `String.trim`)".
+
+#### M2 (major) — a missing or invalid `--backend`, or a bare invocation, crashes with no record
+`--backend xyz`, an omitted `--backend`, and a bare `offline-run.sh` each give:
+`offline-run.sh: line 609: SBX_BACKEND_REFUSAL: unbound variable`, **rc 1, zero new records**.
+- **Why:** the `*)` arm at `:608` sets only `SBX_BACKEND`, so `:609` dereferences unset
+  `SBX_BACKEND_REFUSAL`/`SBX_REFUSAL_DETAIL` under `set -u`.
+- **What it breaks:** §5.3 says "exactly one per invocation, refusals included", and the exit set
+  is 64/69. The failure is closed (nothing launches), but the audit trail AC-8 relies on has a
+  hole, and test 4's count cannot see it because no test takes this path.
+- **Fix (`devops`):** initialise both variables in `sbx_init`, or set them in the `*)` arm. Add
+  `expect_refusal … 64 usage` cases for a missing `--backend`, an invalid `--backend` and no
+  arguments.
+
+#### M3 (major) — §7.3.4's fixed values are never checked; only keys and `JAVA_OPTS` are
+- **Survivors:** mutant X5 (`GOTOOLCHAIN=auto`) and X6 (`DOTNET_CLI_TELEMETRY_OPTOUT=0`) both
+  survive `--only 1,7` (64 passed).
+- **Why it matters:** §7.3.4 marks both values **safety-positive**. `auto` lets Go try to download
+  a toolchain, and telemetry is egress once controlled mode exists. A6 and test 7 compare only
+  key sets, and A6(c) checks only `JAVA_OPTS`.
+- **Fix (`devops`):** have the probe emit `ENVV k=v` for the pass-list keys. Assert every value
+  against §7.3.4: `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `GOTOOLCHAIN` and the three `DOTNET_*=1`
+  literally; `PATH`, `JAVA_HOME`, `GOROOT` and `DOTNET_ROOT` against `docker image inspect`'s
+  `Config.Env`.
+- **Spec (`architect`):** A6 should state that values are checked, not just keys.
+
+#### M4 (major) — reclassifying an allowed flag as forbidden goes unnoticed
+- **Survivors:** moving `jimple2cpg --full-resolver` (X1) or `javasrc2cpg --delombok-mode` (X2)
+  into `forbidden-flags.txt` survives tests 2 and 6 (167 and 169 passed). Only `c2cpg
+  --compilation-database` (X3) is pinned, by the single positive control at
+  `test_sandbox.sh:242-245`.
+- **Why it matters:** this direction fails closed, but `allowed-flags.txt` is a **gated** artifact
+  (§7.3.3: "a later addition needs the same gate"). `allowedHits` is audit data, and a silent
+  reclassification degrades S25's parses with no signal.
+- **Fix (`devops`):** drive the positive control from the file, as test 2 already does for the
+  forbidden list. For each allowed entry, launch nothing: run `sbx_audit_elements` with that flag
+  (and `=v`, and after `--frontend-args`) and assert `hits=0` and that the flag is in
+  `allowedHits`.
+
+#### m1 (minor) — the "auto falls back" check is misnamed, depends on the list, and the fallback is untested
+`test_sandbox.sh:177` proves only that `auto` resolved to `container`. It leans on a list entry
+to avoid a launch, which is why teco's mutant broke it.
+- **Fallback, run by hand:** `CCG_TOOLCHAIN_IMAGE=nonexistent:zz … --backend auto` gave **69,
+  `backend-precondition`, `backend: namespace`**, one record. That behaviour is correct per §7,
+  but no test asserts it.
+- **Fix (`devops`):** use a list-independent refusal for the "picks container" check (for
+  example `--frontend sh` → `unknown-frontend`). Add the nonexistent-image run as the real
+  fallback test.
+
+#### m2 (minor) — the README's concurrency claim is false; concurrent runs into one `--output` succeed
+- **Claim:** the README says two concurrent runs into the same `--output` "are expected to fail:
+  overlayfs locks an upperdir that is in use".
+- **Observed:** I launched three concurrent `joern-parse` runs into one `--output`. All exited 0,
+  wrote three CPGs of about 96 KB, and recorded 2.9–3.2 s each. On this 5.15 kernel, with
+  `index` off, overlayfs only warns about a shared upperdir (*inferred* from kernel behaviour;
+  `dmesg` is not readable here) and documents the result as undefined.
+- **Fix (`devops`):** correct the README. Make the runner take `flock -n` on `<output>/.ccg-lock`,
+  or refuse (`usage`) an output dir with a live `.ccg-ovl-*` sibling, and test it.
+
+#### m3 (minor) — the runner's own argv conventions are untested
+- **`@AUDIT_ID@`:** dropping the substitution (X8), or recording the pre-substitution argv (X9),
+  survives `--only 3,10`. No test uses the token, though the README documents it for S11's
+  `--param out=/out/@AUDIT_ID@.json`.
+- **Refusal records:** recording `toolArgv=[]` on every refusal (X10) survives `--only 2,10`
+  (220 passed).
+- **Fix (`devops`):** add a 10(c) variant whose script writes `--param out=/out/@AUDIT_ID@.txt`.
+  Assert that the file stem equals the record's `auditId` and that `toolArgv` holds the
+  substituted value. In `expect_refusal`, assert `r['toolArgv']` equals the argv passed after
+  `--`.
+
+#### m4 (minor) — refusal records assert values nobody checked
+- **`netnsDistinct`:** `preconditions.netnsDistinct` is hard-coded `true` (`:290`, `:312`). It
+  says `true` on every refusal record too, including ones with `launcherArgv: []`, where no
+  namespace ever existed.
+- **`egressMode`:** `--mode foo` records `egressMode: "foo"`, which is outside the enum, because
+  `SBX_MODE` is set before validation at `:604`.
+- **Fix (`devops`):** write `netnsDistinct: false` when nothing launched. Record `egressMode` only
+  after validation (else `offline`). Add a test-4 case with a bad `--mode`.
+- **Spec (`architect`):** define `netnsDistinct` as "by construction from `launcherArgv`; A1(c)
+  verifies it", since the runner never sees inside.
+
+#### m5 (minor) — the library-mode records are never validated, and the template equivalence is not pinned
+- **Dead check:** `test_sandbox.sh:600-602` runs `schema.py` over `$PROBE_AUDIT` and throws the
+  result away (`then :; fi`).
+- **Unpinned equivalence:** my structural comparison of library-mode and production
+  `launcherArgv` (above) is not in the suite.
+- **Fix (`devops`):** either delete the dead block or assert on it. Add a check that a production
+  record's `launcherArgv` equals the probe launch's, modulo auditId, paths, the `/scripts` mount
+  and the tool tail. That makes "the probe runs the production template" a tested fact.
+
+#### m6 (minor) — the namespace record's `mounts` under-reports
+- **What it lists:** `/src`, `/out`, `/tmp`, `/home/ccg`, a single `/usr` entry and the Joern
+  bind (`:427-428`).
+- **What it omits:** the `/bin`/`/lib*` binds and the five `/etc` binds. The `/usr` entry also
+  hides the fact that `/usr` is bound entry by entry, with `/usr/lib/wsl` absent. §5.3 says
+  "every host path visible inside". This is moot on this host, where the backend refuses.
+- **Fix (`devops`):** append to `SBX_MOUNTS` wherever `SBX_LAUNCHER` gains a bind.
+
+#### Nits
+- **n1:** the runner's environment is an input beyond the two names §7 allows.
+  `DOCKER_HOST=unix:///nonexistent.sock` turned a run into `backend-unavailable`, and `BASH_ENV`
+  executed a file before `sbx_main` (both run). Fix (`devops`): set `DOCKER_HOST`/`DOCKER_CONTEXT`
+  explicitly, or record `docker context show` and document it. Use `#!/bin/bash -p` or an `env -i`
+  re-exec.
+- **n2:** probe A5(b) exempts `tmpfs` mounts under `/mnt`, `/usr/lib/wsl` and `/run/WSL`
+  (`probe.pl:163`), which is left over from the spec's mask design. Drop the exemption: no mount
+  point should exist there at all.
+- **n3:** no test checks content for the **direct** frontends (`--frontend pysrc2cpg` and the
+  like). They do work: by hand, `jssrc2cpg` gave `:program,f` and `pysrc2cpg` gave `<module>,f`.
+  `c2cpg` on a JS dir, though, exits 0 with only `<global>`. One direct-frontend content case
+  would cover S25's route.
+- **n4:** test 8's "Host row: container C1 passes" launches a real `pysrc2cpg` with
+  `--fetch-dependencies-x`, a near-miss with no list entry for `pysrc2cpg`. It reads like a
+  refusal, but it is a launch. A comment would help.
+- **n5:** `JAVA_OPTS=-Xmx2g` is fixed. For S11's corpora, the frontend heap is raised through
+  `--frontend-args -J-Xmx<n>`. `joern-parse -J…` does not reach the frontend (§7.3.5). The README
+  should say this.
+
+### Deviation rulings
+
+| # | Deviation | Ruling | Evidence | Routes to |
+|---|---|---|---|---|
+| 1 | Namespace `/usr` bound entry by entry, `/usr/lib/wsl` omitted, plus `--remount-ro /`, `/etc/group` and `/etc/nsswitch.conf` | **Acceptable.** Better than the spec. | Spec-literal template run directly: mountinfo still lists `9p /usr/lib/wsl/drivers` and `overlay /usr/lib/wsl/lib` under the tmpfs, so A5(b) fails. M13 is killed. Pass 1's "masks both" holds for path access only, not for mountinfo. | `architect`: erratum to the §7.1 namespace row and the §10 test 5 namespace set |
+| 2 | `/out` as a local-driver overlay volume; `/src` and `/scripts` as `bind,ro,noexec` volumes | **Acceptable.** R2 is achieved. | mountinfo shows `/src ro,…,noexec ext4`, `/out rw,…,noexec overlay`, `/scripts ro,…,noexec`. M08 and M09 are killed. The concurrency claim is wrong (m2). | `architect`: erratum to §7.1's `/out` row and to §11 R2 (resolved). `devops`: m2 |
+| 3 | `refusalReason: usage` | **Acceptable.** | The enum has no fitting value. M2 shows the usage path is incomplete. | `architect`: add `usage` (exit 64) to §5.3. `devops`: M2 |
+| 4 | `network` always `none` | **Acceptable for P0.** | No network is ever created, and controlled mode always refuses. | `architect`: a §5.3 line saying a refused record carries `none` |
+| 5 | `netnsDistinct` derived from the template | **Acceptable once fixed.** | It is `true` on refusal records where nothing launched (m4). | `devops`: m4. `architect`: the definition (m4) |
+| 6 | A1(b) ignores the `RTF_REJECT` `::/0` route | **Acceptable.** | Read in the sandbox: two `::/0` entries, flags `00200200`, metric `ffffffff`, dev `lo`. IPv4 has none. | `architect`: erratum to A1(b) |
+| 7 | Directive check stricter than P3-m1 | **Direction acceptable, set insufficient.** | M1 | `devops` + `architect` (E1), M1 |
+| 8 | Backend resolution first; 64 takes precedence over 69 | **Acceptable.** | It is read-only (`docker info`/`image inspect`), and test 2's `docker events` window shows no create. | `architect`: one line in §7 (the spec is silent on precedence) |
+| 9 | The probe, sweep and test 9 run in library mode | **Acceptable.** | Forced by §7.3.1's closed set plus R5. The template is identical (item 5 above). | `architect`: reword §7.2 "through the runner" as "through the runner's launch function". `devops`: m5 |
+| 10 | A6(e) reads `cat`'s environ under `sh -c` | **Acceptable.** | That is the descendant environment the spec cares about. | `architect` (optional precision line) |
+| 11 | `JAVA_OPTS` fixed at `-Xmx2g` | **Acceptable.** | It full-matches §7.3.4's pattern. | none (n5 is README only) |
+
+Errata E1 and E2 are carried, apart from M1's gap in E1. E2's `/scripts` is a directory volume
+(`ro,noexec`) and is in test 5's allowed set.
+
+### What's solid
+- **The isolation itself.**
+  - 51 A1(d)/(e) targets were checked, including `1.1.1.1:443`, `127.0.0.1:1234`, the host's
+    addresses, the bridge gateway, and every listening port.
+  - The netns inode differs from the host's, `/proc/net/unix` holds only its header, and
+    `/init` creation gives `EROFS`.
+  - `AF_VSOCK` gives `EPERM`. A host PID marker is invisible inside.
+- **The flag audit is structurally sound.** Test 2 is driven by the forbidden list, in four
+  forms plus upper case. The launcher options are full-match exceptions, and the near-misses are
+  refused. Every refusal is bracketed by `docker events`.
+- **Test 8 is complete.** It covers F1–F12, plus F13/F14, which isolate rules (d) and (b). The
+  C2 fixtures cover both `SecurityOptions` formats.
+- **The record writer is careful.** It escapes JSON, appends under `flock`, and derives
+  `envKeys` from `launcherArgv` as §5.3 requires. Test 4 checks every record against
+  invocations.
+- **Hygiene is good.** Containers are `--rm` and labelled. The overlay `work/work` cleanup is
+  handled, and the suite fails on any leftover.
+- **The README is honest.** It names the deviations, the untested namespace A4/A7, and its
+  inferences.
+
+### Open questions
+1. *For `teco`.* Should the M1 fix wait for `architect`'s E1 restatement, or land now with the
+   erratum following? I recommend landing it now. The strict set (≤ 0x20) fails closed, and
+   only the spec text lags.
+2. *For `teco`/`architect`.* M3 widens A6 from keys to values. Should that be a v1.4 erratum
+   line, or S08's own test addition with no spec change? Either works. The values are already
+   normative in §7.3.4's table.
+
+### Appendix A — added mutants (copies in the scratchpad; `test_sandbox.sh --runner <copy> --only <t>`)
+
+| Id | Break | Tests | Result |
+|---|---|---|---|
+| X1 | `jimple2cpg --full-resolver` moved allowed → forbidden | 2,6 | **survived** (167 passed) |
+| X2 | `javasrc2cpg --delombok-mode` moved allowed → forbidden | 2,6 | **survived** (169 passed) |
+| X3 | `c2cpg --compilation-database` moved allowed → forbidden | 2,6 | killed (test 2 positive control) |
+| X4 | `GOTOOLCHAIN` dropped from the `env -i` pass-list | 1,7 | killed (test 7 key list; namespace A6b) |
+| X5 | `GOTOOLCHAIN=auto` | 1,7 | **survived** (64 passed) |
+| X6 | `DOTNET_CLI_TELEMETRY_OPTOUT=0` | 1,7 | **survived** (64 passed) |
+| X7 | record `toolArgv` = the caller's raw argv (before audit, substitution and `--output` append) | 2 | killed (test 4 output-stem check) |
+| X8 | `@AUDIT_ID@` substitution removed | 3,10 | **survived** (70 passed) |
+| X9 | record the pre-substitution argv (with `--output` appended) | 3,10 | **survived** (70 passed) |
+| X10 | refusal records carry `toolArgv: []` | 2,10 | **survived** (220 passed) |
+
+Teco's mutant (`javasrc2cpg --fetch-dependencies` deleted) was re-run twice with `--only 8`. It
+failed only the `auto` check both times, because the run launched (see the answers above).
+
+### Appendix B — M1 evidence
+- **The parser:** `javap -c -p 'replpp.UsingDirectives$'`. `scanFor$$anonfun$1` is
+  `String.trim()`, `scanFor$$anonfun$2` is `String.startsWith`, and `linesFromFile` reads through
+  `scala.io.Source.fromFile`.
+- **Per leading byte**, through `offline-run.sh --backend container --mode offline --frontend
+  joern`:
+
+| Lead | Runner | Run | `UnknownHostException: github.com` |
+|---|---|---|---|
+| `\x01` | admitted | rc 1 | yes |
+| `\x1f` | admitted | rc 1 | yes |
+| `\x00` | admitted | rc 1 | yes |
+| `\x1c` | admitted | rc 1 | yes |
+| BOM `EF BB BF` | admitted | rc 1, compile error | no (negative control) |
+| `\x01` + `using file /src/evil.sc` | admitted | rc 1; "given input files: …, /src/evil.sc" | — |
