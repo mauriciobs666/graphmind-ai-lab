@@ -975,7 +975,12 @@ def _legal(answer, decided_by, probability, failed_call, reason, input_tokens, w
       guard's hand-off chat-call failure is withheld (`HANDOFF_FAILURE_BY_ROLE`), never scored;
     - architect ruling (2026-10-31, U2 seam): the one exception — no answer, no failed call, a
       `reason`, and a withheld timing is the guard's withheld over-limit item (plan3 §3.3's
-      `withhold` column), with no `decidedBy`, `failedCall` or `probability`;
+      `withhold` column), with no `decidedBy`, `failedCall` or `probability`. Its `withheldFor` is
+      `"timeout"` or `"no_response"` (the failed hand-off call), never `"load"`: a failing call
+      takes its own `withheldFor` and no load producer runs (impl review Pass 5, P5-m1);
+    - plan2 §3.3: every other item — answered, or a kept decision failure — has `withheldFor`
+      `None` or `"load"` (residency); a call-failure `withheldFor` there is the pre-plan2
+      "withheld, as today" shape the plan replaced;
     - plan3 §3.3's over-limit table: an over-limit item is handed off (`decidedBy="handoff"`) or a
       kept decision failure, and every such row has `probability = None` and `inputTokens = None`;
     - v1.3 §3.3: a decided item's `probability` is the predicate's p (or a choice's confidence),
@@ -986,9 +991,11 @@ def _legal(answer, decided_by, probability, failed_call, reason, input_tokens, w
         return False
     if answer is None and failed_call is None:
         return (
-            reason == "over-limit" and withheld is not None
+            reason == "over-limit" and withheld in ("timeout", "no_response")
             and decided_by is None and probability is None and input_tokens is None
         )
+    if withheld not in (None, "load"):
+        return False
     if (answer is None) != (failed_call is not None):
         return False
     if failed_call == "decision":
@@ -1008,22 +1015,24 @@ _COMBINATIONS = [
     for failed_call in (None, "decision", "handoff")
     for reason in (None, "over-limit")
     for input_tokens in (None, 113)
-    for withheld in (None, "timeout")
+    for withheld in (None, "load", "timeout", "no_response")
 ]
 
 
 def _combination_timing(withheld: str | None) -> ItemTiming:
     if withheld is None:
         return _timing()
+    if withheld == "load":  # a timed item the residency guard withholds
+        return ItemTiming(wallClockMs=5.0, calls=(), withheldFor="load")
     return ItemTiming(wallClockMs=None, calls=(), withheldFor=withheld)
 
 
 def test_score_answer_accepts_exactly_the_legal_keyword_combinations():
-    """Impl review Pass 4, P4-m1's stopping condition: the reviewer's 72 combinations of
-    `answer` × `decided_by` × `probability` × `failed_call` × `reason`, times `input_tokens` ∈
-    {None, int} and `timing.withheldFor` ∈ {None, "timeout"} (288), each accepted iff `_legal`
-    says so — a refusal is a `ValueError`."""
-    assert len(_COMBINATIONS) == 72 * 2 * 2
+    """Impl review Pass 4, P4-m1's (and Pass 5, P5-m1's) stopping condition: the reviewer's 72
+    combinations of `answer` × `decided_by` × `probability` × `failed_call` × `reason`, times
+    `input_tokens` ∈ {None, int} and `timing.withheldFor` ∈ {None, "load", "timeout",
+    "no_response"} (576), each accepted iff `_legal` says so — a refusal is a `ValueError`."""
+    assert len(_COMBINATIONS) == 72 * 2 * 4
     wrong = []
     for combo in _COMBINATIONS:
         answer, decided_by, probability, failed_call, reason, input_tokens, withheld = combo
@@ -1041,7 +1050,7 @@ def test_score_answer_accepts_exactly_the_legal_keyword_combinations():
     assert wrong == []
 
 
-@pytest.mark.parametrize("withheld", ["timeout", "no_response", "load"])
+@pytest.mark.parametrize("withheld", ["timeout", "no_response"])
 def test_a_withheld_over_limit_guard_item_carries_only_its_reason(withheld):
     """Architect ruling (plan3 §3.3's guard `withhold` column): no answer, no failed call, a
     reason and a withheld timing give the withheld outcome as passed, nothing scoreable, and
@@ -1061,8 +1070,9 @@ def test_a_withheld_over_limit_guard_item_carries_only_its_reason(withheld):
 
 
 @pytest.mark.parametrize(
-    ("reason", "withheld"), [(None, "timeout"), ("over-limit", None)],
-    ids=["withheld-without-reason", "reason-without-withheld"],
+    ("reason", "withheld"),
+    [(None, "timeout"), ("over-limit", None), ("over-limit", "load")],
+    ids=["withheld-without-reason", "reason-without-withheld", "reason-withheld-for-load"],
 )
 def test_no_answer_and_no_failed_call_needs_both_a_reason_and_a_withheld_timing(reason, withheld):
     with pytest.raises(ValueError, match="answer"):
@@ -1070,3 +1080,41 @@ def test_no_answer_and_no_failed_call_needs_both_a_reason_and_a_withheld_timing(
             _CS_ITEM, None, "fail", _combination_timing(withheld), pack=None,
             **_decision_keywords(reason=reason),
         )
+
+
+@pytest.mark.parametrize("withheld", ["timeout", "no_response"])
+@pytest.mark.parametrize(
+    ("answer", "keywords"),
+    [
+        (True, {}),
+        (True, {"decided_by": "decision-model", "probability": 0.9}),
+        (None, {"failed_call": "decision"}),
+    ],
+    ids=["old-pack", "decided", "kept-decision-failure"],
+)
+def test_a_call_failure_withholding_is_refused_outside_the_withheld_over_limit_item(
+    answer, keywords, withheld
+):
+    """Impl review Pass 5, P5-m1 / plan2 §3.3: a kept decision failure stores its wall clock with
+    `withheldFor=None` (or `"load"`), never the "withheld, as today" timing plan2 replaced — which
+    `runner` would also count in `latencyWithheldForNoResponse`."""
+    with pytest.raises(ValueError, match="withheldFor"):
+        classification.score_answer(
+            _CS_ITEM, answer, "fail", _combination_timing(withheld), pack=None,
+            **_decision_keywords(**keywords),
+        )
+
+
+@pytest.mark.parametrize(
+    ("answer", "keywords"),
+    [(True, {"decided_by": "decision-model", "probability": 0.9}),
+     (None, {"failed_call": "decision"})],
+    ids=["decided", "kept-decision-failure"],
+)
+def test_a_load_withholding_is_legal_on_a_decided_item_or_a_kept_failure(answer, keywords):
+    """Plan2 §3.3: "`withheldFor=None`, unless residency withholds it for `"load"`"."""
+    result = classification.score_answer(
+        _CS_ITEM, answer, "fail", _combination_timing("load"), pack=None,
+        **_decision_keywords(**keywords),
+    )
+    assert result.timing.withheldFor == "load"

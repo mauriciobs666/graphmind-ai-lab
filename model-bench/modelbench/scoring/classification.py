@@ -241,6 +241,9 @@ _DECIDED_BY = frozenset({"decision-model", "handoff"})
 _FAILED_CALLS = frozenset({"decision", "handoff"})
 #: Plan3 §3.3: why an item took the path it did, when that is not the policy.
 _REASONS = frozenset({"over-limit"})
+#: The two `withheldFor` values a failed call produces (`results.ItemTiming`); `"load"` is the
+#: residency guard's, never a call's.
+_CALL_FAILURE_WITHHELD = frozenset({"timeout", "no_response"})
 
 
 def _decision_detail(
@@ -276,7 +279,9 @@ def _decision_detail(
     if answer is None and failed_call is None:
         # Architect ruling (2026-10-31): the guard's withheld over-limit item (plan3 §3.3's
         # `withhold` column) — the one answer-less, failure-less state, carrying `reason` alone.
-        if reason is None or withheld_for is None:
+        # Its `withheldFor` is the failed hand-off call's — a failing call takes its own and no
+        # load producer runs — so never `"load"` (impl review Pass 5, P5-m1).
+        if reason is None or withheld_for not in _CALL_FAILURE_WITHHELD:
             raise ValueError(
                 "score_answer: answer is None iff a call failed, or the item is a withheld "
                 f"over-limit one (reason={reason!r}, withheldFor={withheld_for!r})"
@@ -287,6 +292,13 @@ def _decision_detail(
                 "input_tokens"
             )
         return {"reason": reason}
+    if withheld_for in _CALL_FAILURE_WITHHELD:
+        # Plan2 §3.3: an answered item or a kept decision failure has `withheldFor` `None` or
+        # `"load"`; a call-failure withholding is the "withheld, as today" shape plan2 replaced.
+        raise ValueError(
+            f"score_answer: withheldFor {withheld_for!r} belongs only to a withheld over-limit "
+            "item; an answered item or a kept failure has None or 'load'"
+        )
     if answer is not None and failed_call is not None:
         raise ValueError(
             f"score_answer: answer is None iff a call failed (answer={answer!r}, "
@@ -369,6 +381,8 @@ def score_answer(
     - the guard's **withheld over-limit item** (architect ruling, plan3 §3.3's `withhold`
       column): `answer=None`, no `failed_call`, `reason="over-limit"` and a `timing.withheldFor`
       give the passed (withheld) outcome, `scoreable={}`, and `detail = {path, tier, reason}`.
+      Its `withheldFor` is `"timeout"`/`"no_response"`; every other item takes `None` or
+      `"load"`.
     A guard hand-off chat-call failure is withheld by the runner, so `failed_call="handoff"` is
     refused here. Every other state the plans cannot produce is refused too, as `ValueError` —
     pinned over the whole keyword cross-product by

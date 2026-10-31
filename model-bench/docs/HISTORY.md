@@ -55,6 +55,8 @@ basis no longer being provisional.
 
 *2026-10-31 — impl review Pass 4, P4-m1 closed:* `score_answer` takes a fifth no-default keyword `input_tokens` (`detail.inputTokens`, plan2 §3.4) and refuses every keyword state the plans cannot produce. These are over-limit with `decision-model`, with a `probability`, or with no source; a decided item with no `probability` outside over-limit; and `input_tokens` without a returned decision call. Per the architect's ruling it accepts the guard's withheld over-limit item (`answer=None`, no `failed_call`, `reason`, `timing.withheldFor` set → `detail={path, tier, reason}`, `scoreable={}`). All 288 combinations are pinned against a legality function written from the plans, and each refusal was mutation-tested.
 
+*2026-10-31 — impl review Pass 5, P5-m1 closed:* `score_answer` now checks `timing.withheldFor` on every item. `"timeout"`/`"no_response"` are legal only on the withheld over-limit item, which is never `"load"`. An answered item or a kept decision failure takes `None` or `"load"` (plan2 §3.3). The legality probe now covers `withheldFor` ∈ {None, load, timeout, no_response} (576 combinations), and removing either clause reddens it.
+
 ## 2026-10-30 — typed-decision-models U1c — pure `decisions.py` and the first golden vectors
 
 **What:** `docs/plans/typed-decision-models.md` §4 U1c as amended by
