@@ -9,7 +9,9 @@ chat history, workspace data, reference data, workflow definitions and execution
 
 ## Decisions locked in — do not reopen without strong cause
 
-The single authoritative decision register is `falkor-chat/docs/DESIGN.md` §1 (§1.1 top-level axes, §1.2
+This component's **live spec** (root `AGENTS.md`, live-spec bullet) is `falkor-chat/docs/DESIGN.md`
+(graph), `falkor-chat/docs/SERVER.md` (server process) and `falkor-chat/docs/QUERIES.md` (canonical
+queries). The single authoritative decision register is `DESIGN.md` §1 (§1.1 top-level axes, §1.2
 detailed register, §1.3 M2 stack) — do not reopen any row there without strong cause. This file
 carries no copy of it; follow the link.
 
@@ -196,10 +198,10 @@ read the code, don't look for a copy here.
 
 | File | Contents |
 |---|---|
-| `falkor-chat/docs/DESIGN.md` | The **graph** blueprint — topology, data model, indexes, capacity, ops, roadmap. The *why*; queries live in QUERIES.md, DDL in `bootstrap_schema.sh`. Stops at the graph. |
-| `falkor-chat/docs/SERVER.md` | The **server process** — layering, auth/tenancy seam, REST + MCP front doors, `server/` layout, testing hazards, model-resolution seam. (DESIGN §14 redirects here.) |
+| `falkor-chat/docs/DESIGN.md` | Live spec, **graph** — topology, data model, indexes, capacity, ops. The *why*; queries live in QUERIES.md, DDL in `bootstrap_schema.sh`. Stops at the graph. |
+| `falkor-chat/docs/SERVER.md` | Live spec, **server process** — layering, auth/tenancy seam, REST + MCP front doors, `server/` layout, testing hazards, model-resolution seam. (DESIGN §14 redirects here.) |
 | `falkor-chat/docs/test-reports/capacity-report.md` | All capacity measurements — per-message RAM, append throughput, hot-read plans, shard packing. DESIGN §11 keeps only the design-shaping numbers. |
-| `falkor-chat/docs/QUERIES.md` | Canonical query library, verified against the live instance — source of truth for queries. |
+| `falkor-chat/docs/QUERIES.md` | Live spec, canonical query library, verified against the live instance — source of truth for queries. |
 | `falkor-chat/docs/BACKLOG.md` | Forward-looking backlog: open K-numbered items and the milestones still open. A delivered item is not kept there — its record is `HISTORY.md`. |
 | `falkor-chat/docs/HISTORY.md` | Dated change log, most recent first — one entry per delivered change. |
 | `falkor-chat/docs/archive/` | Frozen plans/test-plans/test-reports from closed milestones — **read-only history of the previous convention, not a destination.** Nothing moves here and nothing is un-archived; a document that freezes stays in place with `Status: archived` (root `AGENTS.md`). |

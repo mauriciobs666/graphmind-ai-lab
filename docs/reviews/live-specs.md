@@ -974,3 +974,579 @@ applier"), sourced from that recurrence.
   (`typed-decision-models-impl.md` P6-m1).
 - Sizes after P7-2–P7-4 and judgment call 1 stay well inside §3.3's targets. Each replacement
   changes a line by about ±25 words.
+
+## Pass 9
+
+**Scope.** Gate for unit L5b (`analyst`). It checks the uncommitted rewrite of
+`falkor-chat/docs/SERVER.md` (12,080 words; the baseline `git show c0eeb348:falkor-chat/docs/SERVER.md`
+has 9,806) against the shipped code at **pinned sha `c0eeb348`**. `git diff --quiet c0eeb348 -- server/ web/ config/ scripts/`
+is clean. Read: plan §3.5 and §5; requirements FR-3, AC-1 and AC-3; root and `falkor-chat/REVIEW.md`;
+and the writer's drift inventory. I built the inventory independently from `api.py`, `mcp.py`,
+`config.py`, `app.py`, `storefront_api.py`, `tools.py`, `querygen.py` and `modelconfig.py`, plus
+`services.py`, `background.py`, `trigger.py`, `responder.py`, `schemas.py` and `web/app.js`
+wherever a claim reaches into them. Mid-pass, the coordinator added three cross-reference items
+from L5c. They were checked against the current uncommitted `falkor-chat/docs/QUERIES.md`.
+
+CPG: used cpg_falkorchat — to confirm `_schedule_background`'s only caller (`mcp.send_message`, l.212) and that `AGENT_NAME` has no use besides its definition (`AGENT_ID` has 6 field accesses).
+
+**Verdict: needs changes.** The coverage is complete, and the four writer claims hold. Four
+statements contradict or omit an externally observable contract. Root `REVIEW.md` ranks each of
+those as a blocker, and AC-1 at L5s would report each one. Every fix is a sentence or less.
+
+### Inventory vs. document (verified)
+
+| Surface | Code | `SERVER.md` | Result |
+|---|---|---|---|
+| Dev REST routes (`api.py`) | 44 decorators | 44 paths in §1.4's three tables (11 chat + 18 documents + 15 workflow) | complete. The writer's "~35" counts table rows, where confirm/reject/recheck share a row |
+| `/health` re-registration (`app.py:497`) | 1 | §1.3, §1.4 | match |
+| `/shop/api` (`storefront_api.py`) | 11 routes, cred deps at l.1083–1474 | 11 rows with matching paths, creds and body bounds | match |
+| MCP tools (`mcp.py`) | 25 `@mcp.tool()` (27 grep hits, 2 in docstrings) | 25 in §2.2 | match |
+| Config keys (`config.py`) | 26 env vars + 4 legacy | all in §1.3 | complete. Only `modelconfig.py:291` reads other env vars, for `{env:NAME}` substitution, as §1.3 says |
+| Agent tools (`tools.build_builtin_registry`, l.1340–1354) | 13 | 13 in §1.11 | match. Checked: retrieve τ/cap/k = 0.5/5/10, filter cap 20, `querygen` filter ≤4 / returns 1–6 / limit 1–50 (default 20), both dataset allowlists, finding strings |
+| Error envelope (`app._register_error_handlers`) | 404/400 split, def and run maps, `SearchNotAvailableError` 503 | §1.4 | match |
+| Mounts and lifespan (`app.py:403–551`) | `/mcp` + alias, `/shop` `_SPAStaticFiles`, `/` last | §1.3, §1.4, §1.5, §2.1 | match |
+| Trigger rule and responder (`trigger.py:52–95`, `responder.py`) | 4-step rule, `channel_id=None` | §1.12 | match |
+
+**AC-3:** the plan's §5 grep, run verbatim on `SERVER.md`, returns 0 hits. The `K-` references
+(K-016, K-018, K-074, K-080) are all open headings in `BACKLOG.md`. A wider sweep for `M<n>`, `S<n>`,
+`U<n>`, "as of", "now", "delivered", "previously", plan/review paths, `FR-`/`AC-`/`D-` tags finds no
+history. The two "legacy" hits name a live guard. **Numbering:** §1–§1.10 and §2–§2.3 keep their
+numbers. Two titles lost their history suffixes ("locked for M1", "(as built, M1)"). §1.11 and §1.12
+are appended. The inbound `§1.6` citations (`DESIGN.md` l.949, `falkor-chat/docs/plans/workflow-catalog-lookup.md`
+l.359) now land on the one-line pointer, which is acceptable. **Growth** (+2,274 words) is new
+scope: the catch-up's missing surfaces (document REST, 18 MCP tools, 16 config keys, §1.11, §1.12).
+`SERVER.md` is a live spec, not a growth-stops kind. Restated facts are M2.
+
+### Writer claims
+
+1. **MCP `send_message` schedules the trigger: confirmed, by execution.** I wrote a probe in a
+   scratch directory. It configures `mcp` with a fake `Services` and an inline `_schedule`, then calls
+   `send_message`. It scheduled `['_safe_embed', '_safe_run_workflow']` with a trigger wired,
+   `['_safe_embed', '_safe_respond']` with only a responder, and `['_safe_embed']` with neither.
+   `app.py:403–410` passes the same `trigger`/`responder` to `mcp.configure`. The old §1.7 bullet
+   (baseline l.548) has been stale since `17c2fa03` (K-041).
+2. **Step-budget exhaustion on `/input`: confirmed.** A probe of `Services.submit_workflow_input`
+   used a stub executor whose `resume` returns `"failed"`, as `executor._fail_budget`
+   (`executor.py:1495–1501`) does without raising. It returned
+   `{'runId','status':'failed','ctx':<submitted merge>}` with no `error`. The graph `ctx` held the
+   note, and the envelope did not carry it. `services.py:2439` (`merged if fault_ctx is None`) is
+   the cause. `tests/test_process_input.py:686` pins the no-`error` half for `POST /workflow-runs`.
+   §1.4 l.422–425 states this correctly.
+3. **`FALKORCHAT_AGENT_NAME` is parsed but unread: confirmed.** The CPG has one identifier, at
+   `config.py:87`, and no field access. `grep` finds no reader in `falkorchat/`. See n2 for how the
+   row reads.
+4. **`RAG_QUERY_TIMEOUT_MS` is not configuration: confirmed.** It is the module constant
+   `services.py:156` (`= 5000`), read from no environment variable. Keeping it out of §1.3 is
+   correct.
+
+### Coordinator's L5c items
+
+1. **Confirmed** (Q-L5c-1). `services.ingest_document` calls
+   `repository.create_document_with_auto_supersede` (`services.py:1222`). The current `QUERIES.md`
+   §14.1 says `create_document` "has no server caller", and §14.9 is the ingest write. `SERVER.md`
+   l.279, l.280, l.1025 and l.1026 cite §14.1. See m1.
+2. **Confirmed.** `QUERIES.md` §14.7 (delete/deletion/list) and §14.8 (`SUPERSEDES` review and
+   history) exist. Their "—" cells in `SERVER.md` are m1.
+3. **Stated in `SERVER.md`.** §1.12 l.967–971 covers one daemon thread per job, unbounded, inside
+   the tool call, a thread-start failure being logged and skipped, and threads untracked by
+   `_lifespan`. It is restated in §1.7 l.654–659 (M2). The posture survives L5c's removal. Its size
+   is understated (n1).
+
+### Findings
+
+**B1 (blocker): §1.7 l.627–628 says `FALKORCHAT_WORKFLOW_ENABLED=1` alone builds a
+`ModelGateway`.** Verified: `app._build_default_app` returns at `app.py:588–592` when
+`ENABLE_AGENT` is off. `WORKFLOW_ENABLED` is read only at l.630, inside the agent branch. This
+contradicts the code and §1.3's own row (l.172, "With `ENABLE_AGENT` off it changes nothing"). The
+sentence was carried over unchanged from the baseline (l.520) and drifted against the new table.
+**Fix:** "`FALKORCHAT_ENABLE_AGENT=1` builds a `ModelGateway.from_env()`…", or cut the bullet's
+first sentence and cite §1.3/§1.8 (M2).
+
+**B2 (blocker): §1.3 l.172 says that with the engine unwired "every workflow-run route answers
+`503 WorkflowEngineDisabledError`".** Verified: `_require_executor` is called only by
+`start_workflow_run`, `submit_workflow_input`, `resume_workflow_run` and `sweep_due_workflow_runs`
+(`services.py:2288/2385/2620/2697`). With the engine unwired, `GET /workflow-runs/{id}`,
+`/step-runs`, `/trace` and `GET /threads/{tid}/workflow-runs` serve normally (`services.py:2817–2860`).
+**Fix:** "…`POST /workflow-runs`, `POST /workflow-runs/{runId}/input` and `POST /workflow-runs/due`
+answer `503 …`; the run reads still serve." §1.4's error-map row (l.406) is already scoped
+correctly.
+
+**B3 (blocker): §1.4 l.341 says "path ids ≤ 200".** Verified in `api.py`. `Path(max_length=…)` is
+declared only on `document_id` (delete/deletion/history), `match_id`, `run_id`, and the
+structure/materialize/snapshot `key`/`version`. The following are plain `str`, so a 300-character
+id reaches the service instead of answering `422`: `channel_id` (l.80, l.87), `thread_id`
+(l.95, l.130, l.395, l.405), `msg_id` (l.149), `GET /documents/{document_id}` (l.251),
+`GET /workflow-defs/{key}` (l.436) and every `{ws}`. This sentence is new, not from the baseline.
+**Fix:** name the bounded parameters ("document, match and run ids and def/snapshot key/version
+path segments ≤ 200; other path ids are unbounded"), or drop the clause.
+
+**B4 (blocker): §1.12 omits ingestion with nothing wired, which is the default configuration.**
+Verified. With `FALKORCHAT_ENABLE_AGENT` off, `embed_worker`, `ingestion_pipeline` and
+`repo_for_detection` are all `None` (`app.py:399–401`). Then `_schedule_chunk_processing` never
+calls `start_document_progress` (`background.py:213`), so a document created with
+`status:'processing'` (`repository.py:1080`) stays `processing` permanently. `_schedule_update_detection`
+returns early (`background.py:317`), so no `SUPERSEDES` suggestion is ever made. The l.964–965
+detection sentence reads as unconditional. **Fix:** one sentence. "With neither wired, nothing is
+scheduled: the document stays `processing` and no update detection runs." Make the detection
+sentence conditional on the same wiring.
+
+**M1 (major): §1.4's run error map understates two producers.** Verified. (a) The "fault during the
+drive" row (l.407) gives two examples. `_drive_or_fault` (`services.py:2594–2597`) catches four:
+`ModelResolutionError` and `ProviderCallError` too. Those reach `POST /workflow-runs` for any def
+with an agent node or an LLM guard. (b) `404 WorkflowRunNotFoundError` is listed as "unknown run
+id". `POST /workflow-runs` also returns it when the snapshot has no START or is not materialized
+(`services.py:2339–2343`). (c) Neither body is stated: `POST /workflow-runs` answers
+`{runId, status, defKey, defVersion, trace[, error]}` with **no** `ctx`, and `/input` answers
+`{runId, status, ctx[, error]}`. Without that, the "status **and** ctx" paragraph (l.413) reads as
+if it applies to both. **Fix:** list the four fault types, add "or a start whose snapshot is
+missing" to the 404 row, and give the two bodies in one line.
+
+**M2 (major): facts restated across sections, one of which has already drifted (B1).** The step
+budget is stated at §1.4 l.422–425 and §1.7 l.651–653. MCP vs REST schedulers are stated at
+§1.12 l.967–972 and §1.7 l.654–659. The legacy-env refusal is stated at §1.3 l.185–187 and §1.8
+l.744–745. The two config files are stated at §1.7 l.627–636 and §1.8 l.737–743. Each pair
+currently agrees except the last, which is B1. **Fix:** each §1.7 hazard keeps its testing
+consequence and cites the home section for the fact. Delete §1.3 l.185–187, because §1.8 is its
+home.
+
+**M3 (major): §1.11 omits `query_graph_data`'s default projection.** Verified:
+`querygen.default_returns` (`querygen.py:323–360`, applied at `tools.py:1218`) fills an
+**absent** `returns` with `["<var>.name"]` when the label has a `name`. The exception is an
+identity `=` lookup, which stays invalid and abstains with "no matching data found". So a
+completion that omits `returns` produces a name list, where §1.11's "1–6 `returns`" implies
+rejection. Per `falkor-chat/REVIEW.md`, the tool result is behavior. **Fix:** one sentence after
+the request-shape paragraph.
+
+**m1 (minor): `QUERIES.md` cross-references are stale after L5c.** Ingest cites §14.1 at
+l.279/280/1025/1026; it should be §14.9 `create_document_with_auto_supersede`. The "—" cells for
+list/delete/deletion (l.282, l.284–285, l.1029–1031) should be §14.7. History and the
+document-update review (l.286–289, l.1032–1035) should be §14.8. Also update l.257's note, which
+says "—" means the query lives only in `repository.py`. This holds only if L5c's `QUERIES.md` lands
+as drafted; serialize with it.
+
+**m2 (minor): §1.5 l.579–582's list of dev-UI calls omits the workflow-def reads.**
+`web/app.js:288` calls `GET /workflow-defs`, and l.307 calls
+`GET /workflow-defs/{key}/versions/{version}` (def list and structure view).
+
+**n1 (nit):** §1.12 l.969 says "a max-size batch ingest can spawn thousands". The bound is about
+20 × ⌈500,000 / 850⌉ × 2 ≈ 23,500 threads per call (`chunking.split_into_chunks` size
+1000/overlap 150, `MAX_BATCH_SIZE` 20, two jobs per chunk). State the arithmetic, or say "tens of
+thousands".
+
+**n2 (nit):** the §1.3 l.170 row "Parsed but read by nothing in the server" is accurate. But
+`scripts/seed_demo.sh:47` and `start_server.sh:116/202` read the same variable directly as the
+seeded `Agent`'s display name. Add that clause so nobody drops it from the scripts.
+
+### §1.9 placement ruling (for L5s)
+
+§1.9 describes `executor._assemble_messages`/`_append_turn` (`executor.py:233`, l.1362). That is
+**executor semantics**, which the §3.5 home table assigns to `DESIGN.md`. `DESIGN.md` §6.1's "The
+`agent` node loop → Prompt" bullet (current l.413–418) already states the order and the same-role
+merge. **Ruling:** home it in `DESIGN.md` §6.1. Fold §1.9's two non-duplicate facts into that
+bullet: the system message is resent on every tool-loop `chat` call, and the `CONTEXT` block gets
+no fresh turn per iteration, so standing constraints belong in `systemPrompt`. Then reduce
+`SERVER.md` §1.9 to a one-line pointer, keeping its number for the inbound citation
+(`claude/analyst/kaizen/history.md` l.75). This is not a defect of L5b. The behavior §1.9 states
+matches the code.
+
+### What's solid
+
+The tenancy, storefront-credential and cross-cutting-error prose matches the code line for line.
+§1.11's 13-tool table and dataset allowlists match the code exactly. The §1.3 config table is
+complete and its defaults are right. The four disputed claims were all right.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: this Pass, B1 and M2. A restated fact drifted
+inside one live-spec document while the writer edited the other copy.
+
+```markdown
+- In a live-spec check, a fact stated in two sections of the spec set is a finding, and every
+  copy is checked against the code, not only the one the change edited.
+```
+
+## Pass 8
+
+**Scope.** Unit L5a gate (`analyst`): the uncommitted rewrite of `falkor-chat/docs/DESIGN.md`,
+checked against the shipped code at **`c0eeb348`**. `git diff --quiet c0eeb348 -- falkor-chat/server
+falkor-chat/scripts falkor-chat/config falkor-chat/web` exits 0, so the working tree is that code.
+Read: plan §3.5 and §5; requirements FR-3, AC-1 and AC-3; root and `falkor-chat/REVIEW.md`; the
+pre-edit original; the rewritten `SERVER.md` section list; `BACKLOG.md`. The contract inventory
+was built from the code first (`cpg_falkorchat`, plus source reads of `repository.py`,
+`executor.py`, `services.py`, `guards.py`, `background.py`, `retry.py` and
+`scripts/bootstrap_schema.sh`). I read the writer's `drift.md` only afterwards. I did not run the
+pytest suite or `test_queries.sh`: no code changed, and both wipe `reference`.
+
+CPG: used cpg_falkorchat — independent writer/reader inventory for `lshBand*`, `MENTIONS`,
+`REPLY_TO` and the banding call sites; the rest came from source reads (`scripts/` is not in the
+graph).
+
+**Verdict: needs changes.** The schema, DDL, write-path table, executor agent loop, run model, AC-3
+history removal, numbering and §14 map all hold against the code. Two statements of workflow
+semantics remain that the code contradicts or that omit something. Both were carried over from the
+original text, and AC-1 counts each one against the catch-up. Both fixes are one or two sentences.
+
+### Writer claims (rulings)
+
+1. **Lock value**: confirmed by running the recipe. The §6.2 recipe, run verbatim, gives
+   `6cd35d650b5d` at the worktree, at `c0eeb348` and at `15a9749b`. It gives `71055f756280` at
+   `15a9749b~1`, so the old value has been stale since K-056 (`15a9749b`). Positive control: adding
+   a trailing space to line 5 of the extracted body gives `c62ed522d75b`. The awk bound captures
+   exactly one `def` (`_drive_loop`, l.695–758, ending at `# ── seams`, l.759).
+2. **`MENTIONS` and `REPLY_TO` have no writer**: confirmed. The CPG, over non-test methods, finds
+   one literal for each, and both are reads: `Repository.hybrid_search` l.891 and
+   `Repository.get_message` l.2414. A grep of `scripts/` and `web/` (not in the CPG) finds the only
+   `CREATE (m)-[:REPLY_TO]` in `test_queries.sh` l.212, which is test seeding. That hit is the
+   positive control for the pattern.
+3. **`Document.lshBand0..7` are never written**: confirmed by the CPG. In production code the only
+   nodes whose `CODE` contains `lshBand` sit in `find_update_shortlist` (the read-side f-string
+   `d.lshBand{i} = $band{i}`, l.1985) and in the `lsh_bands` docstring. `lsh_bands` and
+   `minhash_signature` have one production caller, `background._safe_detect_update` (l.272–273).
+   It passes the bands to the shortlist read and stores nothing. Positive control: the same query
+   finds the test-only writer `tests/test_repository.py::_document_with_lsh` (l.1781–1802).
+   `create_document_with_auto_supersede` (l.1889) writes no band property.
+4. **§7.1/§7.2 match `bootstrap_schema.sh`**: confirmed, line by line. All 20 constraint-backed
+   `ws:` labels match, as do the 4 relationship indexes, all 17 hot-filter indexes (including
+   `lshBand0..7` from the l.207 loop), the 3 full-text indexes, 2 vector indexes with default dim
+   `1536`, and the `reference` table (`WorkflowDef` composite, `Entity`, `Step`, `Product` plus 3
+   filter indexes). `grep -n OrderLine scripts/bootstrap_schema.sh` returns nothing, while `Order`
+   matches (l.287/l.354). So "`OrderLine` has no index" is true.
+
+### Mechanical checks
+
+- **AC-3**: the verbatim §5 grep on `DESIGN.md` gives 0 hits. `K-` references: K-016, K-018,
+  K-029 and K-033. Each has an open `### K-0NN … (🔵 proposed …)` heading in `BACKLOG.md`.
+- **AC-9 sweep** (DESIGN.md only): 0 hits.
+- **Numbering**: the original and the rewrite have identical heading-number sequences. Only the H1
+  text differs ("Design Document & Blueprint" became "Design"). §12 is a pointer. §14 is a
+  present-tense map.
+- **§14 map**: all 13 rows resolve to existing `SERVER.md` headings (§1, §1.1–§1.8, §2,
+  §2.1–§2.3). The inbound source citations use only §14, §14.1–§14.8, §15 and §15.1–§15.3, all
+  covered.
+- **QUERIES citations**: every `QUERIES §x.y` cited in DESIGN exists in the rewritten
+  `QUERIES.md`.
+- **Growth-stops**: not applicable. `DESIGN.md` is a living spec, not a `requirements/`, `plans/`
+  or `reviews/` document. The growth from 818 to 955 lines is new scope: previously omitted
+  contracts (commerce, documents, `WorkspaceConfig`, the agent loop).
+
+### Findings
+
+**P8-B1 (blocker, verified): §4 and §9 say a def is materialized automatically. The code never
+does that.** §4 l.165–167: "When a workspace first uses `defKey@v`, we **materialize** …". §9
+publish row l.819: "write to `reference`; materialize snapshot into consuming `ws:{id}` graphs".
+In the code, publish (`services.publish_workflow_def`, l.1906) writes only `reference`.
+Materialization is a separate explicit operation (`services.materialize_def` l.1977;
+`POST /workflow-defs/{key}/versions/{version}/materialize`, `api.py` l.471), and the seed scripts
+call it. No run-start path materializes: `materialize_snapshot` has no caller in `app.py`,
+`trigger.py`, `executor.py` or `start_workflow_run`. A start against a version that was never
+materialized raises `WorkflowRunNotFoundError` (`services.py` l.2340, "snapshot … has no START")
+and returns 404 (`app.py` l.175). A def author who follows §4 gets a 404.
+*Fix:* in §4, "A version is materialized into a workspace by an explicit materialize call
+(`SERVER.md` §1.4) before any run can start there; a run against an unmaterialized version is
+refused (404) and nothing is written." In §9 split the row: "Publish workflow def: write to
+`reference`" and "Materialize def: copy one published version into `ws:{id}`". Keep the topology
+409 on both.
+
+**P8-B2 (blocker, verified): the publish-invariant list is presented as complete but omits four
+timer rejections.** §6.1 l.447–454 lists the invariants as complete ("any violation rejects the
+publish"). It is missing these rejections from `services._validate_def_spec` (l.1799–1860):
+(a) only a `wait`/`human` step may declare `waitForSeconds`/`waitUntil`; (b) a step may declare at
+most one of the two; (c) `waitForSeconds` must be a positive number ≤ `MAX_WAIT_FOR_SECONDS`
+(180 days, l.193); (d) `waitUntil` must be a positive epoch-ms. The marker guard is also exact:
+`{kind:'cmp', path:'ctx.timerFired', op:'eq', value:<own key>}`. A def author reading §6.1 cannot
+predict these 400s. The current pointer to `docs/plans/workflow-timers.md` is not the spec (FR-3).
+*Fix:* replace the timer clause at l.451–453 with (a)–(d) plus the exact guard shape. That adds
+about two lines.
+
+**P8-m1 (minor, verified): §5.4 names an edge and a cap that do not exist.** l.338–339 says "Entity
+fan-out (`MENTIONS`) … mitigate by capping entity extraction per message". §5.1 and §8 of the same
+file say `MENTIONS` has no writer. Entity fan-out actually comes from `ABOUT` (Chunk→Entity),
+`RELATES_TO` and `SAME_AS`. Extraction is already capped at 20 entities and 20 relationships per
+**chunk** (`extraction.py` l.61–62). *Fix:* restate §5.4 with those edges and the per-chunk cap.
+
+**P8-m2 (minor, verified): the guard semantics omit three facts.** (a) An `llm` guard may carry
+its own `model`. It is resolved as the `guard` kind and checked at publish
+(`services._declared_model_refs` l.633–664). §6.1 shows `{kind:'llm', text}` only, and l.453–454
+says only "a step naming a model". (b) A guard whose kind is unknown or missing, or that is a
+non-JSON string, passes publish (`_validate_def_spec` l.1740–1747 validates only the cmp family).
+It then raises `NotImplementedError` at drive time and fails the run (`guards.evaluate_guard`
+l.271). "The guard string is one of …" together with "strict at publish" implies such a guard would
+be rejected at publish. (c) The sort key is `(guard == "", order, to)` (`executor.py` l.1448), not
+`(guard == "", order)`. *Fix:* add `model` to the llm form and "or a guard naming one" to the
+publish line. State that only `cmp` guards are validated at publish, and that any other unknown
+kind fails the run when reached. Add `to` to the sort key.
+
+**P8-m3 (minor, verified): the §6.2 engine-loop sentence lists three outcomes. The code has four.**
+At l.577–580, when no guard fired, the step has outgoing transitions and does not declare
+`waitsForHuman`, `_drive_loop` re-executes the same step ("OUTCOME C — re-loop", l.749–753), within
+the `maxSteps` budget. This is stated only for `decision` steps (the K-029 note), but it applies
+to every step type, `agent` included. *Fix:* add "or re-run the same step (no guard fired,
+transitions exist, no park declared; bounded by `maxSteps`)".
+
+**P8-m4 (minor, verified): the §9 reset row understates what is deleted.**
+`_RESET_PARTICIPANT_CYPHER` (`repository.py` l.4006ff.) also deletes the participant's `Customer`
+node, which holds the profile `name` and `deliveryAddress`. It also deletes `OrderLine`s and
+re-points `User.threadId` to the new thread. A reset therefore erases the saved profile, and the row
+does not say so. *Fix:* name `Customer` (profile) and `OrderLine` in the row, and add "and
+re-points `User.threadId`".
+
+**P8-m5 (minor, verified, depends on `teco`): §13 l.924–929 says the open items are "tracked in
+`BACKLOG.md`".** Retention and cross-workspace analytics are tracked (`BACKLOG.md` l.882–883), and
+so is K-018. The pre-production `GRAPH.CONFIG` review has no item. The writer listed it as an
+orphan for `teco` to file (plan §3.5). The text becomes true when that item is filed. If it is not
+filed, drop that clause.
+
+**Nits.** (n1) The following references point at QUERIES sections or a plan's section but carry no
+document prefix, so they read as references to DESIGN sections that do not exist: l.55 and
+l.264–265 (`§9.2/§5`, `§9.1`), l.328 and l.703 (`§9`), and l.625 (`§4.3`, which is
+`m3-process-flow.md`'s). (n2) Some lines still carry history residue: l.173 "…stays a silent
+no-op, unchanged", l.523 "New node type → new DDL", and l.632–633 "The executor's drive loop is
+**not modified** to support any of it". Each reads relative to a past change. (n3) The §14 row for
+`§14.6` has lost its label. That is harmless if L5b reduces `SERVER.md` §1.6 to a pointer. (n4)
+`CartItem.productId` appears in both §7.1 tables.
+
+**Outside this file, for `teco`.** `BACKLOG.md` K-033 (l.540–548) still quotes `71055f756280`,
+which claim 1 shows is stale.
+
+### What's solid
+
+The §5.1 arrow schema matches every label and relationship type the server code writes or reads:
+23 labels and 32 relationship types from an inventory of `CREATE`/`MERGE`/`MATCH` patterns. It
+also matches the property sets of every `CREATE`/`MERGE` map I checked, the storefront participant
+included. The agent-loop section matches `executor.py` exactly: `THREAD_CONTEXT_WINDOW = 20`,
+`DEFAULT_MAX_ITERATIONS = 4`, `_GROUNDING_SOURCES`, `MODEL_CORRECTABLE_TOOL_ERRORS`, the four signal
+names, and the implicit `post_message` fallback. So do the `maxSteps` semantics
+(`DEFAULT_STEP_BUDGET = 12`, `>` checked only on outcomes A and C, `"step budget exceeded"`), the
+§9 retry policy (`retry.py` l.122) and the 0.1 noise floor (`background.py` l.33). The dormant-edge
+and `lshBand` notes are accurate, and they are welcome.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: P8-B1 and P8-m1. Both are contradictions carried
+over unchanged from the pre-edit text. A check of the rewritten lines alone would have passed them.
+
+- Addition: "In a spec-update check, read the lines the update left unchanged too. A contradiction
+  carried over from the previous text is a finding, the same as a new one."
+
+No prune: no test, CI job or hook checks spec prose.
+
+## Pass 11
+
+**Scope.** Unit L2c gate (`analyst`): `cobb`'s uncommitted edits to root `AGENTS.md`,
+`falkor-chat/AGENTS.md` and `falkor-chat/README.md` (`git diff -- AGENTS.md falkor-chat/AGENTS.md
+falkor-chat/README.md`). Baseline: plan v1.2 §3.1, §3.2, §3.4, §4 (L2c row), §5 (AC-7, AC-9);
+requirements FR-2, FR-3, FR-4, FR-7, FR-8, FR-11, FR-12, FR-13, AC-2, AC-7, AC-9; Pass 7 P7-2,
+P7-4, P7-5; root `REVIEW.md`; ledger `docs/plans/live-specs-coordination.md` l.14, l.35, l.39.
+Prompt files (L3a–L3c) and the spec documents themselves (L5a–c) are out of scope.
+
+CPG: not applicable — the artifact is convention prose in context files, no code change.
+
+**Verdict: approve with suggestions.** The five §3.4 steps are all present and in order, and so
+are "no close on needs changes" and the `REVIEW.md` upkeep rule. The live-spec bullet matches
+FR-3, FR-4, FR-12 and FR-13. Both `REVIEW.md` citations resolve, and P7-2, P7-4 and P7-5 are
+satisfied. Size is within the cap. M1 has to land before L3c's gate, because AC-7's prescribed
+check fails as written. Applied together, M1 and m1 change no word count (verified below).
+
+### Checks run
+
+- **Size** — verified. `wc -w AGENTS.md` gives 3,347, and `git show HEAD:AGENTS.md | wc -w` gives
+  3,198: +149, within the +150 cap. `falkor-chat/AGENTS.md` grows by 20 words (2,768 → 2,788).
+  The `awk 'length($0)>700'` bar shows no hit in any line L2c touched. Its only hits are
+  `falkor-chat/AGENTS.md` l.87 and l.88, which were also over the bar at HEAD (l.85 and l.86
+  there). See i1 for the bar command's line numbers.
+- **Context-file rule (rewrite, not append)** — verified. Each pre-existing entry L2c touched was
+  replaced in place: the table row, the growth-stops tail, the `BACKLOG.md` surface and the
+  `Status:` citation. Nothing was appended after an earlier author's text. The two new bullets
+  are new scope (FR-2–FR-4, FR-7, FR-8, FR-11–FR-13) and carry no history, dates or transitional
+  text. No rework growth: the moved growth-stops sentences (38 words) became a 7-word citation,
+  the `BACKLOG.md` surface shrank by 1 word, and the table label and `Status:` citation add 4. The file was over its ~2,500-word smell before L2c,
+  and the plan accepted that.
+- **Citations** — verified. Root `REVIEW.md`'s "root `AGENTS.md`, live-spec bullet" resolves to
+  the bold lead **A live spec is a component's current behavior** (l.160), as P7-5 requires.
+  "Reviews run the growth-stops check (root `REVIEW.md`)" (l.196) and the `Status:`-set citation
+  (l.276) both resolve to `REVIEW.md`'s bold **Growth-stops check.**, as P7-2 requires. The
+  growth-stops bullet's own bold lead is unchanged, so `REVIEW.md`'s "root `AGENTS.md`'s
+  growth-stops bullet" still resolves. "The next bullet bounds it" (l.179) still points at the
+  growth-stops bullet, because the new bullets were inserted above l.174.
+- **Review-only rules left in root `AGENTS.md`** — read in full and ruled. The moved sentence is
+  gone, and `REVIEW.md` *Always check* 1 holds it. The remaining review-related lines are
+  document conventions, not review judgment: "The review's next `## Pass N` records outcomes"
+  (l.193), the compact-`## Pass N` rule in collision rule 5 (l.248–251), the `reviews/*` → `analyst`
+  flip owner and the Ready-for-design condition. None belongs in `REVIEW.md`. P7-4's clause now
+  has its home in step (3).
+- **AC-9 sweep** — run verbatim from the repo root: 90 hits. That is fewer than §5's 107 because
+  concurrent L5 edits have landed. Each hit in the three L2c files has an owner:
+  - Edited by L2c: root l.90; `falkor-chat/AGENTS.md` l.12 and l.201;
+    `falkor-chat/README.md` l.23 and l.237. Root l.190 (now the `BACKLOG.md` line, l.202) no
+    longer matches.
+  - No change: root l.52 and l.96 (`kiro/DESIGN.md`), and root l.175, the living-document
+    bullet. That bullet lists `DESIGN.md` as a document read whole and never frozen, which agrees
+    with a live spec. `falkor-chat/AGENTS.md` l.14, l.27, l.61 and l.192, and
+    `falkor-chat/README.md` l.193, cite sections only.
+  - `grep -i 'clos(e|es|ed|ing)|done|deliver'` over the three files finds no line that lets a
+    feature close without the spec update.
+- **AC-2 (falkor-chat half)** — `grep -n 'live spec' falkor-chat/AGENTS.md` hits l.12, which names
+  all three documents. The "Key documents" rows were also checked against `DESIGN.md`:
+  dropping "roadmap" is correct, because §12 is already a pointer.
+
+### Findings
+
+**M1 (major, verified) — The close bullet never names pruning, so AC-7's check fails.** §5 AC-7
+reads "root `AGENTS.md`'s close bullet names applying and pruning". Step (4) at l.169–171 says
+"applies the reviews' proposed `REVIEW.md` lines". `grep -n -i prune AGENTS.md` finds nothing.
+FR-9 makes removal a duty of whoever adds a rule. The always-loaded text gives `teco` no cue that
+a proposal can delete a line, and only root `REVIEW.md` *Always check* 6 says so, which `teco`
+reads only for line checks. Replace "proposed `REVIEW.md` lines verbatim" with "proposed
+`REVIEW.md` additions and prunes verbatim" (+2 words, offset by m1).
+
+**m1 (minor, verified) — The bullet loses FR-2's "the spec update happens once, at that close",
+and its lead reads as a trigger.** In "A feature closes once the live spec states what it
+shipped", "once" can mean "as soon as". That reading makes a spec edit close the feature, which
+inverts step (5). The bullet also never says that the close is the *only* time the spec is
+updated. That is the half of FR-2 that AC-9's "same change" clause depends on, and for
+implementers it is otherwise stated only in L3c's `teco.md`. Rewrite the lead and offset the
+words in the live-spec bullet (this also fixes the dangling "Never `archived`, they carry"):
+
+```markdown
+  - **A live spec is a component's current behavior** — the documents its `AGENTS.md` names:
+    externally observable contracts, no change history. They are never `archived`, carry no
+    `Version:` or revision note and keep their numbering (an emptied section keeps its heading
+    and a pointer). A plan against it states only the change, citing the affected sections and
+    any open feature's plan it relies on.
+  - **The live spec is updated once, at a feature's close.** A feature is one backlog item,
+    else one requirements document, or a `HISTORY.md`-recorded spec-contract change. `teco`'s
+    close: (1) every build unit is gated; (2) a delegated writer updates the cited sections and
+    any contract the diff changed; (3) `analyst` checks that against the shipped diff
+    (`reviews/<slug>-impl.md`); no close on "needs changes"; (4) `teco` applies the reviews'
+    proposed `REVIEW.md` additions and prunes verbatim, their only source; `cobb` gates a
+    narrowing one (`analyst` if `cobb` proposed it); (5) the `HISTORY.md` entry, last, cites the
+    updated sections and the check. A spec-less component gets a whole-component spec, checked
+    as in (3), before its first close.
+```
+
+Verified on a scratch copy with M1 applied: `wc -w` = 3,347, unchanged from L2c's figure (+149). No
+inbound citation quotes the old lead (`grep -rn 'closes once'` matches only l.165). If "plan it
+relies on" reads too loose for FR-13, keep "whose changes it relies on" and accept +151. That
+call belongs to `teco`.
+
+**m2 (minor, inferred) — "Narrowing" is undefined in every always-loaded or review file.** Step
+(4) gates "a narrowing one", but only plan §3.4 defines the term: "a prune or a *Do not report*
+addition". Neither root `REVIEW.md` nor root `AGENTS.md` defines it. Defining it inline costs +4
+words, which the cap does not allow. Add it to ledger carry-forward (b) (l.39) for L3c's
+`teco.md` close step, with this text: "A narrowing change is a prune or a *Do not report*
+addition."
+
+**n1 (nit) — The root table row's "live spec:" prefix reads as labeling `DESIGN.md` alone.**
+L2c kept the ` · ` separators, so `SERVER.md` and `QUERIES.md` look like separate entries. This
+is word-neutral. Replacement for l.90:
+
+```markdown
+| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · live spec: `falkor-chat/docs/DESIGN.md` (graph), `falkor-chat/docs/SERVER.md` (server process), `falkor-chat/docs/QUERIES.md` |
+```
+
+**n2 (nit) — l.277 is 114 characters.** The `Status:`-set repoint pushed it past the file's ~100
+wrap. Rewrap l.274–281 with no change to content.
+
+**i1 (info, verified; outside L2c's brief) — The context-file bar command reports the wrong line
+numbers.** `awk 'length($0)>700{print FILENAME": "NR}' $(git ls-files '*AGENTS.md')` prints `NR`,
+which counts lines across all the files read so far. Today it reports `falkor-chat/AGENTS.md: 770,
+771` for the lines that are actually l.87 and l.88. Replacing `NR` with `FNR` fixes it. This is a
+separate one-token edit to root `AGENTS.md` ("Context-file convention", "The bar"), for `teco`
+to route. It is not an L2c defect.
+
+### Rulings on `cobb`'s three judgment calls
+
+1. **model-bench left out of the root Component-docs table until L6: upheld.** A row naming
+   `model-bench/docs/DESIGN.md` and `FORMATS.md` before they exist would be a dangling citation in
+   an always-loaded file. Ledger l.39(a) already moves that row to L6. Plan §4's L6 Files column
+   still omits root `AGENTS.md`, so the L6 brief must carry the row, and L6 joins the
+   shared-file serialization for root `AGENTS.md` (§4 "Shared files").
+2. **Close-step details deferred to L3c's `teco.md`: upheld.** §3.1 makes `teco.md` the home of
+   "how `teco` runs the close (delegation, line check)". The root bullet keeps the sequence and
+   the gate assignments, which FR-2/FR-7/FR-8 need, and the ledger records the hand-off
+   (l.39(b)). Add m2's definition of "narrowing" to that carry-forward.
+3. **`BACKLOG.md` bullet names only "the component's live spec": accepted, no change.** The
+   bullet's exception applies when an item leaves the backlog. A delivered item leaves through a
+   feature close, and FR-11 (step "A spec-less component gets a whole-component spec … before its
+   first close") guarantees that the spec exists by then. The remaining case is a rejected option
+   in a spec-less component that is never delivered. The bullet's "or the requirements doc for a
+   scope decision" mostly covers that case, and what is left is rare. A fallback ("`README.md`
+   while it has none", +6 words) would break the cap for little gain. If the case recurs, revisit
+   it then.
+
+### What's solid
+
+The growth-stops move is clean. The review-only half went to `REVIEW.md` as P7-2 asked, and the
+authoring half stays. The new bullets state rules, not history. `falkor-chat/AGENTS.md` l.12 names
+the set and cites its home instead of restating it. The README and "Key documents" rewordings drop
+"blueprint" and "Cypher patterns" without any claim that the current `DESIGN.md` contradicts.
+
+## Pass 12
+
+**Scope.** Re-check of the L5b fix round on the uncommitted `falkor-chat/docs/SERVER.md` (12,201
+words, up from 12,080). It is checked against code at **pinned sha `c0eeb348`**; `git diff --quiet c0eeb348 -- server/ web/ config/ scripts/`
+is clean. Each Pass 9 finding was re-executed with network-free probes in the session scratchpad,
+each paired with a positive control. Also checked: the fixes against each other, the two changes
+beyond the findings, and every `QUERIES.md` citation against the current headings. §1.9 is out of
+scope, per the ruling being applied in `DESIGN.md` §6.1.
+
+CPG: considered, not relevant — this pass re-executed probes against unchanged code; the Pass 9 CPG facts (callers of `_schedule_background`, uses of `AGENT_NAME`) are untouched.
+
+**Verdict: approve.** All 11 findings are fixed. No pointer dangles, and nothing new was found.
+The AC-3 grep returns 0 (re-run). Numbering is unchanged (§1–§1.12, §2–§2.3).
+
+### Dispositions
+
+- **B1 — fixed.** §1.7 l.627 now reads "the two config files of §1.8", with no
+  `WORKFLOW_ENABLED` claim. Re-executed by importing `falkorchat.app` with
+  `FALKORCHAT_OPENCODE_CONFIG` unset. With `ENABLE_AGENT=0 WORKFLOW_ENABLED=1` the app builds, so
+  `from_env` is never reached. The control, `ENABLE_AGENT=1`, raises `ModelConfigError`.
+- **B2 — fixed.** §1.3 l.172 points to §1.4's error map. Its 503 row names exactly start, `/input`
+  and `/due`, and says the reads still serve. Re-executed with `create_app` over a stub repo and
+  the engine unwired: `POST /workflow-runs` returns 503, while `GET /workflow-runs/r1` returns 404
+  and is served.
+- **B3 — fixed.** §1.4 Bounds names the bounded path segments. Re-executed with 300-character ids:
+  `GET /workflow-runs/{id}` and `DELETE /documents/{id}` return 422, while `GET /messages/{id}` and
+  `GET /documents/{id}` are served (404). That matches the new text in both directions.
+- **B4 — fixed.** §1.12 l.966–969 covers the unwired case and makes update detection conditional.
+  Re-executed `background._schedule_chunk_processing` and `_schedule_update_detection` with
+  nothing wired: `[]`. The control, with a worker and repo wired, schedules
+  `['progress', '_safe_embed_chunk', '_safe_detect_update']`.
+- **M1 — fixed.** The error map lists all four drive-fault types and the
+  `"<type>: <message>"` error format, which matches `services.py:2607`. It also has the
+  missing-snapshot 404. "Response bodies" gives both shapes, and the ctx paragraph is now scoped to
+  `/input`. Re-ran the Pass 9 `/input` probe: `{'status': 'failed', 'ctx': <merge>}`, no `error`.
+- **M2 — fixed. Every new pointer resolves to a section that still states the fact:**
+
+  | Pointer | Target |
+  |---|---|
+  | §1.3 legacy-env line | §1.8 l.741–743 |
+  | §1.7 two config files | §1.8 l.734 |
+  | §1.7 step budget | §1.4 Response bodies / step-budget paragraph |
+  | §1.7 MCP restart | §1.12, "die silently with the process" |
+  | §1.3 B2 pointer | §1.4's 503 row |
+
+  None of these targets was rewritten away.
+- **M3 — fixed.** The paragraph after the request shape matches `querygen.default_returns`
+  (`querygen.py:323–360`), including the identity-lookup abstention and the explicit-`[]` rejection.
+- **m1 — fixed.** Ingest cites §14.9; list/delete/deletion cite §14.7; history and
+  document-updates cite §14.8, in both §1.4 and §2.2. The "—" note at l.257 is gone, and no "—"
+  query cell remains. All 43 `§` citations in the §1.4 and §2.2 query columns were looped against
+  `QUERIES.md`'s `##`/`###` headings. Every one resolves, except `§1.3`/`§1.8`, which are
+  `SERVER.md`'s own sections. A planted `§14.10` is reported missing, as a positive control.
+- **m2 — fixed.** §1.5 now lists "the def list and def structure" (`web/app.js:288`, l.307).
+- **n1 — fixed.** §1.12 states about 23,500, with the arithmetic (20 × ⌈500,000/850⌉ × 2).
+- **n2 — fixed.** The `AGENT_NAME` row names `seed_demo.sh`, reached via `start_server.sh`.
+
+### Changes beyond the findings
+
+- **§1.7 `options.baseURL` reduced to a pointer — correct.** §1.8 l.744 still states "every
+  provider needs an explicit `options.baseURL` — there is no per-npm-package default". §1.7 keeps
+  only the testing consequence: re-resolve, don't just parse.
+- **Readiness query cell §11.2/§11.5/§12.15 — correct.** `services.check_demo_readiness`
+  (`services.py:2140`) reaches `read_def_structure` (§11.2), `read_snapshot_structure` (§11.5) and
+  `diff_def_snapshot`, which uses both. It reads `postSuccess` through `read_recent_post_success`
+  (§12.15). All three headings exist.
+
+**Growth** is +121 words. B4, M1(c) and M3 are new scope: contracts that were missing. M2 is a
+net cut. `SERVER.md` is not a growth-stops kind.

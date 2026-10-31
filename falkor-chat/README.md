@@ -20,7 +20,7 @@ executed inside the same graph.
 | **Retrieval** | In-graph vector index + traversal (GraphRAG hybrid) |
 | **Workflows** | Graph state machine — one model for agent flows and business processes |
 
-→ Full rationale, data model, Cypher patterns, index strategy, and ops blueprint: [`docs/DESIGN.md`](docs/DESIGN.md)
+→ Rationale, data model, index strategy and ops — the graph part of the live spec: [`docs/DESIGN.md`](docs/DESIGN.md) (with `docs/SERVER.md` and `docs/QUERIES.md`)
 
 ---
 
@@ -234,8 +234,9 @@ route table. Delivery record and open items: `docs/HISTORY.md`/`docs/BACKLOG.md`
 ```
 falkor-chat/
 ├── docs/
-│   ├── DESIGN.md          # full blueprint (data model, Cypher, ops, §14 M1 app architecture)
-│   ├── QUERIES.md         # canonical query library — verified against live instance
+│   ├── DESIGN.md          # live spec: graph (data model, indexes, workflow engine, ops)
+│   ├── SERVER.md          # live spec: server process (layering, REST + MCP, model seam)
+│   ├── QUERIES.md         # live spec: canonical query library — verified against live instance
 │   ├── BACKLOG.md         # forward-looking backlog (K-numbered items + parking lot)
 │   ├── HISTORY.md         # dated change log
 │   ├── requirements/      # product requirements (tico)

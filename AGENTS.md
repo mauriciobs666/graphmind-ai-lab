@@ -87,7 +87,7 @@ engineering** (Claude Code and OpenCode artifacts).
 
 | Component | Entry doc(s) |
 |---|---|
-| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
+| `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · live spec: `falkor-chat/docs/DESIGN.md` (graph), `falkor-chat/docs/SERVER.md` (server process), `falkor-chat/docs/QUERIES.md` |
 | `salesperson/` | `salesperson/README.md` · `salesperson/AGENTS.md` · `docs/requirements/salesperson-ui.md` · `docs/plans/salesperson-ui.md` |
 | `opencode/` | `opencode/AGENTS.md` · `opencode/docs/manuals/local-llm.md` · `opencode/agents/tank/README.md` |
 | `cpg/` | `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
@@ -138,7 +138,7 @@ engineering** (Claude Code and OpenCode artifacts).
     `<module>/docs/HISTORY.md`, the design doc, or the docstring concerned; a context file
     **cites** that home in a clause. Duplicated prose drifts, and the always-loaded copy is the
     one that drifts unnoticed.
-  - **The bar:** `awk 'length($0)>700{print FILENAME": "NR}' $(git ls-files '*AGENTS.md')` —
+  - **The bar:** `awk 'length($0)>700{print FILENAME": "FNR}' $(git ls-files '*AGENTS.md')` —
     a line past ~700 chars is a cell being used as a changelog. Whole file: **~2,500 words**.
     Smells, not gates.
 - **Module documentation convention** — a module's documentation lives under `<module>/docs/`:
@@ -157,6 +157,20 @@ engineering** (Claude Code and OpenCode artifacts).
     family rule below.
   - **A document that freezes does not move.** It gets `Status: archived` in its own header
     block and stays exactly where it is.
+  - **A live spec is a component's current behavior** — the documents its `AGENTS.md` names:
+    externally observable contracts, no change history. They are never `archived`, carry no
+    `Version:` or revision note and keep their numbering (an emptied section keeps its heading
+    and a pointer). A plan against it states only the change, citing the affected sections and
+    any open feature's plan it relies on.
+  - **The live spec is updated once, at a feature's close.** A feature is one backlog item,
+    else one requirements document, or a `HISTORY.md`-recorded spec-contract change. `teco`'s
+    close: (1) every build unit is gated; (2) a delegated writer updates the cited sections and
+    any contract the diff changed; (3) `analyst` checks that against the shipped diff
+    (`reviews/<slug>-impl.md`); no close on "needs changes"; (4) `teco` applies the reviews'
+    proposed `REVIEW.md` additions and prunes verbatim, their only source; `cobb` gates a
+    narrowing one (`analyst` if `cobb` proposed it); (5) the `HISTORY.md` entry, last, cites the
+    updated sections and the check. A spec-less component gets a whole-component spec, checked
+    as in (3), before its first close.
   - **A living document is compacted at milestone close, not only appended to.** A document read
     **whole** to be used — `BACKLOG.md`, `DESIGN.md`, `AGENTS.md`, `README.md` — can never
     freeze, so it never sheds weight on its own; one read **by lookup** — `HISTORY.md`,
@@ -179,15 +193,13 @@ engineering** (Claude Code and OpenCode artifacts).
     folded in and removed. The review's next `## Pass N` records outcomes (collision rule 5). A
     requirements decision log is append-only: each entry is one question → one answer, plus the
     FR/AC it affects. A reversing entry names the entry it overturns. A fact has one home, and
-    other documents cite it. Every review gate checks a revision against this bullet. For any
-    growth it says whether it is new scope or rework, and it reports rework growth, restated
-    history and restated facts as findings; there is no numeric threshold. An existing document
-    complies at its next ordinary revision.
+    other documents cite it. Reviews run the growth-stops check (root `REVIEW.md`). An existing
+    document complies at its next ordinary revision.
   - **`BACKLOG.md` is forward-looking only — a delivered item does not stay in it, not even as an
     index row.** Its record is `HISTORY.md`, which indexes every delivered item by milestone; the
     exception is a fact that is a **live constraint on the system** rather than a record of work
     (an interface limit, a rejected option with a reversal trigger), which belongs to the design
-    surface that owns it — the component's `DESIGN.md` or `README.md`, or the requirements doc for
+    surface that owns it — the component's live spec, or the requirements doc for
     a scope decision. Backlogs are headed for the graph, the way team kaizen already is; keeping
     finished work out of them is what makes that move a migration rather than a cleanup.
   - **An open item is rewritten, not appended to.** Revisiting one produces a *replacement* body:
@@ -261,9 +273,9 @@ engineering** (Claude Code and OpenCode artifacts).
   - **The closed `Status:` set — five values, and who flips each:** `Interviewing` and
     `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
     stakeholder confirmation, after an `analyst` review of the document that includes the
-    growth-stops check and whose latest verdict is not "needs changes") · `active` (the producing
-    agent, at creation; amendable in place until the document has been approved, gated, or
-    executed against) · `superseded` (whoever writes the successor) · `archived` (**`teco`, at
+    growth-stops check (root `REVIEW.md`) and whose latest verdict is not "needs changes") ·
+    `active` (the producing agent, at creation; amendable in place until the document has been
+    approved, gated, or executed against) · `superseded` (whoever writes the successor) · `archived` (**`teco`, at
     milestone close** — `teco` performs the mechanical flips itself: its write guard allows any
     in-repo edit). For any `archived` flip that is **more than** that mechanical one-token edit —
     bundled with other changes, disputed, or needing judgment about what freezes — the flip still
