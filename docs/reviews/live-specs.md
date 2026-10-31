@@ -2399,3 +2399,147 @@ kaizen entries are accurate, and the `teco` plan note mirrors P16-2's repoint.
 ### Proposed REVIEW.md lines
 
 None. P18-1 is a one-off ledger omission, and P18-n1 is catalog wording.
+
+## Pass 19
+
+**Scope.** This pass re-checks the Pass 17 findings against the three writers' uncommitted
+revisions (`git diff -- falkor-chat/docs falkor-chat/scripts` against `HEAD` `9d240859`), with code
+pinned at **`c0eeb348`**. `git diff --quiet c0eeb348 -- falkor-chat/server falkor-chat/config
+falkor-chat/web` exits 0, and the only script changes are the two comment lines. Every writer
+claim was checked against the tree: source reads of `guards.py`, `app.py`, `llm.py`,
+`modelconfig.py`, `services.py`, `ingestion.py`, `repository.py` and `scripts/embedding_migration.py`,
+plus the Pass 17 scripts re-run unchanged. Growth-stops does not apply because these are live
+specs. DESIGN grew by 758 words and SERVER by 319, all of it new scope from the Pass 17 findings.
+QUERIES shrank by 292 words, because restatements became citations. Out of scope here: P8-m5,
+which `teco` verifies, and `proof_defs.py`, which the stakeholder ruled is not spec surface.
+
+CPG: considered, not relevant — no code changed since Pass 17's CPG inventory at the same sha; the re-checks are reads of the cited functions plus text and citation scripts.
+
+**Verdict: approve with suggestions. AC-1 is met.** Every Pass 17 finding is fixed and matches
+the code. None of the fixes contradicts another, and every new citation resolves to a section
+that states the fact. One minor finding and three nits remain. None of them omits or contradicts
+an externally observable contract.
+
+### Pass 17 dispositions
+
+- **B1: fixed.** I checked each statement in the revision against `embedding_migration.migrate`:
+  - the traffic-stopped precondition raises before any repo or gateway use;
+  - an undeclared `dim` aborts with no call and no write;
+  - re-embedding runs `Message`, then `Chunk`, keyed on `coalesce(embeddingModel,'') <> target`;
+  - a vanished row is skipped and logged;
+  - a count check aborts before any index change;
+  - both vector indexes are dropped and recreated, the override moves read-before-write, and a
+    restart is printed.
+
+  I also checked the rest of the revision:
+  - `embeddingModel` has no writer in `server/` (grep).
+  - `create_workspace.sh`'s pin is a no-op when the override is already set, and only warns when
+    no model config resolves (`pin()` docstring and l.101).
+  - `start_server.sh:197` and `start_demo.sh:270` call it.
+  - The "never after" wording in §1.3, §7.1 and §11 is gone.
+- **B2: fixed.** Both DESIGN §9 rows now give "when it is scheduled" as `SERVER.md` §1.12, and
+  that section states the wiring conditions.
+- **M1: fixed.** Every clause matches the code:
+  - `_OPS` and `_VALUE_OPS` (l.146–161);
+  - the caps (l.337–339);
+  - `_validate_path` and `_resolve_path`;
+  - `_extract_understanding`, including the "`understanding` member if an object, else the whole
+    object, else `ctx.understanding`" order;
+  - `RECENT_TURNS_N`/`TURN_TEXT_MAX`, and `JUDGE_USER_MAX_CHARS = 6000` with the oldest turns
+    dropped first;
+  - `_coerce_verdict` and `_NEGATION_CUES` (the three cues DESIGN quotes are all in the tuple);
+  - the null-guard and no-judge paths (`evaluate_guard` l.222, l.229);
+  - publish rejection: `WorkflowConfigError` → 400 (`app.py:185`), which agrees with SERVER
+    l.405.
+- **M2: fixed.** The "Cart pricing" paragraph matches the Pass 17 probe outputs, including the
+  integer `0` and the delete-all `place_order` Cypher. The `view_cart` cell now reads `0`, and the
+  `/shop/api/state` row cites the paragraph.
+- **M3: fixed.** These match the code:
+  - endpoint and body: `llm.py:134–170`;
+  - the reserved keys `{timeout, dim, protocol}` and the camelCase-to-snake_case conversion:
+    `modelconfig.py:115`, l.671–679;
+  - the Bearer header: l.569;
+  - `response_shape`;
+  - native-call parsing, with nameless entries skipped and string-or-object arguments:
+    `_parse_native_tool_calls`;
+  - the content probe order and the call-shaped suppression;
+  - non-object arguments becoming `{}`.
+
+  The one precision gap is P19-m1.
+- **M4: fixed.**
+  - `Entity.type`, its `Other` fallback and the stub-entity behaviour match `extraction.py`.
+  - SHA-256 matches `content_hash`.
+  - Chunking matches `split_into_chunks`, including the 1150 maximum.
+  - Fuzzy matching: the type filter applies before `LIMIT 5` (`find_fuzzy_candidates` Cypher), and
+    the `fuzzy_fulltext` and `exact_normalized_name_type` techniques match the code.
+  - Update detection's technique, ratio-as-confidence and 5-word shingles match. See P19-n3.
+- **m1: fixed.** QUERIES §1 is now a pointer to DESIGN §7.1, which states creation.
+- **m2: fixed.** §12.5, §12.1, §12.12, the §14 intro, §14.6 and §16 now cite DESIGN, and each
+  target holds the fact. DESIGN §7.1 rows: `Customer`, `Cart`, `CartItem`, `Order`,
+  `WorkspaceConfig`, `SAME_AS`, "`OrderLine` has no index or constraint". The §6.2 note on
+  `maxSteps` is unchanged.
+- **m3: fixed.** `bootstrap_schema.sh:378` and `test_queries.sh:346` now cite DESIGN §7.1. That
+  section states the 1536-default caveat and "score is cosine distance".
+- **n1: fixed.** The §9 retry clause now says "a timeout is not retried" (`retry_timeouts=False`).
+- **n2: fixed.** The `add_to_cart`/`remove_from_cart` cells cite DESIGN §6.1.
+- **Changes beyond the Pass 17 list, all confirmed:**
+  - §13.3 now cites DESIGN §5.1 (`WorkspaceConfig`) and §7.1 (its UNIQUE row).
+  - §17 cites DESIGN §5.1, whose `Customer` carries `name`, `deliveryAddress` and
+    `profileUpdatedAt`, and §7.1.
+  - §15 cites **§7.2** for the `Product` indexes. That is correct: `Product` lives in `reference`,
+    and the `productId` UNIQUE row and the `nameNormalized`/`categoryNormalized`/`price` row both
+    sit in §7.2, not §7.1.
+
+### Set checks (re-run)
+
+| Check | Result |
+|---|---|
+| Cross-document `§` citations | 103 checked, up from 85. The only misses are the 12 map keys in DESIGN §14, which is the positive control. |
+| SERVER query cells → QUERIES (§1.4 l.251–547, §2.2 l.1033–1081) | 105 checked. Every QUERIES reference resolves; the only misses are SERVER's own §1.3/§1.8/§1.12. |
+| AC-3 (§5 grep, verbatim) | DESIGN 0 hits, SERVER 0 hits. QUERIES has 8 hits, all the property names `defVersion:`/`currentVersion:`, which are not history. The same 10 K-refs remain, each still open in `BACKLOG.md`. |
+| New citations, read for meaning | DESIGN §6.1 → SERVER §1.8 "provider wire contract" (exists). DESIGN §5.1 → SERVER §1.11 facet table. DESIGN §9 → SERVER §1.12. SERVER cells → DESIGN §6.1 grounding bullet. QUERIES §12.5 → DESIGN §6.2 `maxSteps` note. Each target states the fact. |
+| Same-revision interactions | DESIGN §6.1's judge text covers only the judge's evidence and verdict (`complete` + `extract_own_line_json_object`). SERVER §1.8 covers the chat request and the `chat` tool-call parse. The two do not overlap, and DESIGN cites SERVER for the provider call. I found no contradiction. The only duplicate is P19-n2. |
+
+### New findings
+
+**P19-m1 (minor, verified by reading `llm.py`; `SERVER.md` §1.8 provider wire contract):
+the two content probes differ in strictness in opposite directions, and the text states neither
+difference.** If a model writes a call inside prose, the reader cannot tell whether it is
+dispatched.
+- The JSON probe is permissive. `extract_json_object` strips one code fence and otherwise takes
+  the first `{` … last `}` anywhere in the text, so an object quoted inside a sentence is
+  dispatched if the tool is granted.
+- The bare-call probe is strict (`_parse_bare_call_syntax`, rules 1–3). It strips one fence. From
+  the first call onward the content must hold nothing but such calls; any other text discards
+  every call. Identical repeats collapse to one.
+
+*Replacement* for "(2) bare call syntax `name({...})` that opens a line and ends it, with an empty
+or single-JSON-object argument":
+
+> (2) bare call syntax `name({...})`, after stripping one code fence: each call opens and ends its
+> own line with an empty or single-JSON-object argument, and from the first call onward the
+> content holds nothing else — any other text discards every call, and identical repeats collapse
+> to one. Probe (1) is permissive by contrast: it takes the whole (fence-stripped) content, else
+> the first `{` … last `}`, so an object quoted inside prose still counts.
+
+**Nits.**
+- **(P19-n1) DESIGN §7.1 migration bullet.**
+  - "the only way to change a workspace's embedding model" holds only for a pinned workspace. An
+    unpinned one (`bootstrap_schema.sh` directly) follows the `embedding` default in
+    `config/models.json`.
+  - A re-run on a completed workspace re-embeds nothing, but it still drops and recreates both
+    vector indexes (`_rebuild_vector_index` is guarded only against a missing index).
+  - *Replacement:* "the only way to change a pinned workspace's embedding model or dimension" and
+    "…a re-run re-embeds nothing but rebuilds both indexes again."
+- **(P19-n2) SERVER §1.12 l.992 restates DESIGN §9's chunk parameters** ("size 1000, overlap 150")
+  inside the thread arithmetic. The two copies agree. *Replacement:* "(20 documents × ⌈500,000 /
+  850⌉ chunks, `DESIGN.md` §9 × 2 jobs)".
+- **(P19-n3) DESIGN §9 "Extract entities".** The ≤ 5 full-text candidates include the newly
+  created entity itself, which `fuse_entity` then drops (`ingestion.py` l.213–214), so at most 4
+  other entities compete. *Replacement:* "the top-ranked other entity among at most 5 same-`type`
+  full-text candidates".
+
+### Proposed REVIEW.md lines
+
+None new. P19-m1 is a precision gap in text written for this unit, not a recurring class. The two
+Pass 17 proposals stand as written.

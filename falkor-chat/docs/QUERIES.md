@@ -14,9 +14,8 @@ Notation: `$param` = query parameter supplied by the caller.
 
 ## 1. Workspace setup
 
-Bootstrap is handled by `scripts/bootstrap_schema.sh`. The app calls it (or its
-equivalent) once when a new workspace is created. All subsequent queries assume
-indexes and constraints are OPERATIONAL.
+Schema bootstrap and workspace creation: `DESIGN.md` §7.1. Every query below assumes the indexes
+and constraints are OPERATIONAL.
 
 ---
 
@@ -1258,9 +1257,7 @@ A returned row = the move committed.
 //        {"threadId": …, …caller keys}. Reserved keys (threadId/error/timerFired) are
 //        rejected service-side before this write ever runs, same rule as §12.12.
 // $trace = bool (debug instance?);
-// $maxSteps = run-level step budget (default 12). A tripwire checked AFTER each
-//             recorded step, not a hard cap: a run executes at most maxSteps + 1 steps
-//             (see the §12.5 note).
+// $maxSteps = run-level step budget (default 12; semantics: DESIGN.md §6.2).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
 MATCH (trigger:Message {msgId: $triggerMsgId})
 CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
@@ -1389,13 +1386,7 @@ no `AT_STEP` does not error). **Step-budget fail:** the executor compares `stepC
 §12.2) to `maxSteps` app-side; on `stepCount > maxSteps` it calls `fail_run` — verified `failed` +
 `AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).*
 
-> **`maxSteps` is a tripwire checked *after* each recorded step, not a hard cap.** Because
-> the comparison is `stepCount > maxSteps`, a run executes at most **`maxSteps + 1`** steps before
-> failing with `"step budget exceeded"`. The check runs only on the two driving outcomes in
-> `executor._drive_loop` — a guard fired and a legitimate self-loop — and is
-> **deliberately not applied on the park path** (OUTCOME B; a parked run cannot self-drive) **or on
-> the terminal path**. Treat it as a safety bound, not an SLA or a cost budget. Making it exact
-> (`>` → `>=`) is open as **K-033**.
+> What `maxSteps` bounds, and on which executor paths it is checked: `DESIGN.md` §6.2.
 
 ### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message`
 
@@ -1521,8 +1512,8 @@ empty-row-collapse class of bug entirely.
 // $ctx = opaque serialized state ("{}" or the caller's initial run ctx — reserved keys
 //        threadId/error/timerFired are rejected service-side, the same check that guards
 //        the §12.1 chat path)
-// $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24).
-//                A tripwire checked AFTER each step ⇒ at most maxSteps + 1 (§12.5 note).
+// $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24;
+//                semantics: DESIGN.md §6.2).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
 CREATE (r:WorkflowRun {runId: $runId, defKey: $defKey, defVersion: $defVersion,
                        status: 'running', startedAt: $startedAt, ctx: $ctx,
@@ -1805,18 +1796,15 @@ No label scan (rule 3) — the same `WorkspaceConfig.workspaceConfigId` index th
 
 ### 13.3 DDL
 
-The `WorkspaceConfig.workspaceConfigId` range index and its `UNIQUE` constraint are created by
-`scripts/bootstrap_schema.sh` (`bootstrap_workspace()`, index before constraint); the schema is
-documented in `DESIGN.md`. **RAM (rule 6): effectively zero** — one node per workspace, six scalar
+`WorkspaceConfig` schema: `DESIGN.md` §5.1; its index and `UNIQUE` constraint: `DESIGN.md` §7.1. **RAM (rule 6): effectively zero** — one node per workspace, six scalar
 properties, no relationship type.
 
 ---
 
 ## 14. Documents & Chunks
 
-`Document`/`Chunk` node indexes+constraints and the `Chunk.embedding` vector index are bootstrapped
-DDL (`scripts/bootstrap_schema.sh`, schema in `DESIGN.md`); `Chunk.seq`/`Chunk.documentId` are plain
-unindexed properties (read-time ordering / navigation metadata, the same posture as
+Schema: `DESIGN.md` §5.1; indexes, constraints and the `Chunk.embedding` vector index: `DESIGN.md`
+§7.1. `Chunk.seq`/`Chunk.documentId` are plain unindexed properties (read-time ordering / navigation metadata, the same posture as
 `Message.threadId`).
 
 `Document.text` stores the full original source verbatim; `Chunk`s are pre-split app-side
@@ -1827,10 +1815,9 @@ the caller, the same posture as `Message.role`. There is no `dup` guard: like ch
 creation, a retried call mints a second `Document` (the §14.9 auto tier then supersedes the earlier
 copy when its normalized text is identical).
 
-**Versioning flags.** Every new `Document` is written `currentVersion: true` and every new `Chunk`
-`documentCurrent: true`. Superseding a document (§14.8 confirm, §14.9 auto tier) flips the old
-document's `currentVersion` to `false` and bulk-flips its chunks' `documentCurrent` to `false`;
-chunk search (§14.3) and the update-detection lookups (§14.9) read current versions only.
+**Versioning flags** (`currentVersion`/`documentCurrent`, the version-lifecycle axis: `DESIGN.md`
+§5.1). The flips are written by §14.8 confirm and the §14.9 auto tier; chunk search (§14.3) and the
+update-detection lookups (§14.9) read current versions only.
 
 ### 14.1 `create_document` — Document + Chunks + HAS_CHUNK, one guarded write
 
@@ -2275,9 +2262,8 @@ ORDER BY r.createdAt
 LIMIT $limit
 ```
 
-**Indexes.** `SAME_AS.matchId` and `SAME_AS.status` carry relationship-scoped RANGE indexes plus a
-`UNIQUE RELATIONSHIP SAME_AS {matchId}` constraint (`bootstrap_schema.sh`, schema in `DESIGN.md`).
-A property-filtered `SAME_AS` query profiles as `Edge By Index Scan`.
+**Indexes:** `DESIGN.md` §7.1 (relationship-scoped). A property-filtered `SAME_AS` query profiles
+as `Edge By Index Scan`.
 
 `background._safe_fuse` isolates failure per entity and runs inline from `extract_chunk`'s loop,
 since a fuzzy lookup needs its entity to exist first.
@@ -2607,14 +2593,10 @@ per-workspace materialization. It backs the `salesperson` agent's tools: an exac
 is no full-text index on `Product`; wording tolerance is the calling model's argument extraction,
 not fuzzy matching in the database.
 
-**Schema:** `(:Product {productId, name, nameNormalized, category, categoryNormalized, price})`.
-`nameNormalized`/`categoryNormalized` are computed with `extraction.normalize_name`, the one shared
-normalization helper (also behind `Entity.nameNormalized`, §14.5) — a real `=` comparison,
-decoupled from RediSearch tokenization and from any runtime `toLower()`.
-
-**Indexes** (`scripts/bootstrap_schema.sh`'s `bootstrap_reference`, schema in `DESIGN.md`):
-`productId` (range + UNIQUE constraint), and plain range indexes on `nameNormalized`,
-`categoryNormalized` and `price`. The raw `name`/`category` are returned, never filtered on.
+**Schema:** `DESIGN.md` §5.1; **indexes:** `DESIGN.md` §7.2. The `$nameNormalized`/
+`$categoryNormalized` parameters are computed with `extraction.normalize_name`, the helper behind
+`Entity.nameNormalized` (§14.5), so the lookups are a real `=` comparison, never a runtime
+`toLower()`. The raw `name`/`category` are returned, never filtered on.
 
 ### 15.1 `lookup_product` — exact-name fact lookup
 
@@ -2757,15 +2739,7 @@ execution are open as **K-090**.
 Every query below is live-verified on the pinned build. Workspace-scoped (`ws:{workspaceId}`), unlike §15's global catalog — a cart/order
 belongs to one customer inside one workspace, never shared across workspaces.
 
-**Schema:**
-```
-(:Customer {customerId, createdAt})
-(:Customer)-[:HAS_CART]->(:Cart {customerId, createdAt, updatedAt})
-(:Cart)-[:HAS_ITEM]->(:CartItem {customerId, productId, quantity, addedAt, updatedAt})
-(:Customer)-[:PLACED]->(:Order {orderId, status, placedAt, updatedAt})
-(:Order)-[:HAS_LINE]->(:OrderLine {productId, name, unitPrice, quantity, lineTotal})
-```
-`customerId = User.userId` — the workspace-local `Customer` anchor is a
+**Schema:** `DESIGN.md` §5.1. `customerId = User.userId` — the workspace-local `Customer` anchor is a
 distinct node from `User` (keeps `ensure_user`'s create-once contract untouched; `Customer` is
 freely mutable) but reuses the same member-id namespace. `Cart`/`CartItem` are keyed on natural
 keys (`customerId`, and the composite `(customerId, productId)`) — no synthetic `cartId`/
@@ -2777,16 +2751,10 @@ read this forces. **`Order`/`OrderLine` carry a full frozen snapshot** (`name`, 
 atomically, and nothing ever re-derives it from a live catalog read again. `Order.total` is
 deliberately **not stored** — computed as `sum(OrderLine.lineTotal)` on read (§16.8): per-order
 line count is tiny, so this avoids a write-time-only derived field that could drift from its own
-source lines. `status ∈ {'placed', 'fulfilled', 'delivered', 'cancelled'}` is a **property**, not
-a label, mirroring `WorkflowRun.status`/`StepRun.status` (DESIGN §1.2). `OrderLine` carries no
-independent identity/index/constraint — a pure value-object always reached via `HAS_LINE`.
+source lines. `OrderLine` is a pure value-object always reached via `HAS_LINE`.
 
-**Indexes** (`scripts/bootstrap_schema.sh`'s `bootstrap_workspace`, schema in `DESIGN.md`):
-`Customer.customerId`, `Cart.customerId`, `CartItem.customerId`, `CartItem.productId`,
-`Order.orderId`, with UNIQUE constraints on `Customer {customerId}`, `Cart {customerId}`,
-`CartItem {customerId, productId}` and `Order {orderId}`. Nothing on `OrderLine` (always reached via
-`HAS_LINE`) or `Order.status` — so the lifecycle CAS queries (§16.10) profile with a residual
-`Filter` above `Node By Index Scan | (o:Order)`, functionally identical (zero rows on a mismatch).
+**Indexes:** `DESIGN.md` §7.1. `Order.status` is unindexed, so the lifecycle CAS queries (§16.10)
+profile with a residual `Filter` above `Node By Index Scan | (o:Order)`, functionally identical (zero rows on a mismatch).
 
 ### 16.1 `ensure_customer` — get-or-create the `Customer` anchor (idempotent)
 
@@ -2988,14 +2956,10 @@ separate graph writes from one request, never one query doing both).
 
 Both queries below are live-verified on the pinned build. Workspace-scoped (`ws:{workspaceId}`), same anchor §16 uses.
 
-**Schema — two more nullable properties on the existing `Customer` node, no new label:**
-```
-(:Customer {customerId, createdAt,
-             name, deliveryAddress, profileUpdatedAt})   // name/deliveryAddress: NULLable
-```
-`name`/`deliveryAddress` are independently nullable (a customer may give one before the other).
-No index of their own — `Customer.customerId`'s uniqueness constraint (§16) backs the `MERGE`
-below. **This is not a second identity mechanism** — the profile lives on the same `Customer` node
+**Schema:** `DESIGN.md` §5.1 — the profile is `name`, `deliveryAddress` and `profileUpdatedAt` on the
+existing `Customer` node, no new label. `name`/`deliveryAddress` are independently nullable (a
+customer may give one before the other). `Customer.customerId`'s uniqueness constraint
+(`DESIGN.md` §7.1) backs the `MERGE` below. **This is not a second identity mechanism** — the profile lives on the same `Customer` node
 §16's cart/order queries write to.
 
 ### 17.1 `upsert_profile` — `MERGE` + per-field `coalesce()`-guarded `SET`, update-in-place

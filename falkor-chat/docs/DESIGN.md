@@ -66,7 +66,8 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 > restart**, never a code or env change. How a model reference resolves (roles, fallback chains,
 > the per-workspace override) is `SERVER.md` §1.8. The one exception is `EMBEDDING_DIM`
 > (`FALKORCHAT_EMBEDDING_DIM`), which stays an env var because it is DDL-time/write-path input,
-> not a model choice — and it is fixed at workspace creation (§11). RAM numbers: §11.
+> not a model choice — it is set at workspace creation and changed only by the embedding migration
+> (§7.1). RAM numbers: §11.
 
 | Component | Decision | Rationale | Detailed in |
 |---|---|---|---|
@@ -76,7 +77,7 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 | Storefront agent LLM | **Ministral-3-3B**, pinned in the `salesperson` def's `assistant` step `config.model` (`proof_defs.py`); `query_graph_data` inherits the calling step's model (§6.1) | Fits the storefront demo's single-model GPU budget | §6.1 |
 | Runtime | **LM Studio** on the Windows host (OpenAI-compatible), reached from WSL2 (mirrored networking → localhost) | Zero new moving parts | §10 |
 | VRAM budget | **6 GB dedicated** (RTX 4050) — embedder + one chat LLM co-resident | Do not plan around shared-RAM spill | §11 |
-| Upgrade path | **`qwen3-embedding:4b`** — same family, same 1024-dim MRL | Re-embed only; no schema change | §11 |
+| Upgrade path | **`qwen3-embedding:4b`** — same family, same 1024-dim MRL | Re-embed through the embedding migration (§7.1); the dimension stays 1024 | §7.1, §11 |
 
 ---
 
@@ -203,7 +204,7 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   // channel without it (every non-storefront channel) is structurally unreachable.
 (:Thread)-[:HEAD]->(:Message)                          // first message in thread (set once)
 (:Thread)-[:TAIL]->(:Message)                          // last message (moved on each append)
-(:Message {msgId, text, role, createdAt, threadId, embedding: vecf32, toolsUsed})
+(:Message {msgId, text, role, createdAt, threadId, embedding: vecf32, embeddingModel, toolsUsed})
 (:Message)-[:NEXT]->(:Message)                         // thread-scoped linked list
 
 // Authorship, mentions, provenance, read state
@@ -221,7 +222,8 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
   // status ∈ processing|ready|failed; sourceKind ∈ document|agent, derived from the
   // ingesting member's label, never trusted from the caller
 (:Document)-[:INGESTED_BY]->(:User|:Agent)
-(:Document)-[:HAS_CHUNK]->(:Chunk {chunkId, text, seq, documentId, documentCurrent, embedding: vecf32})
+(:Document)-[:HAS_CHUNK]->(:Chunk {chunkId, text, seq, documentId, documentCurrent, embedding: vecf32,
+                                   embeddingModel})
 (:Document)-[:SUPERSEDES {matchId, status, confidence, technique, createdAt,
                           decidedAt, decidedBy, resuggestCount, lastResuggestedAt}]->(:Document)
   // new → old version; status ∈ pending|confirmed|rejected
@@ -275,13 +277,23 @@ Everything below lives in `ws:{workspaceId}` unless marked `reference`.
 - `Thread.updatedAt` — bumped on every new message; drives "recent threads" listing
 - `Message.embedding` / `Chunk.embedding` — inline `vecf32`, written out-of-band (§9); no separate
   node
+- `Message.embeddingModel` / `Chunk.embeddingModel` — the model reference a row was re-embedded
+  with, written only by the embedding migration (§7.1). The normal embed path does not set it, so
+  it is absent on every row that has never been migrated.
+- `Entity.type` — the closed set `Person`, `Organization`, `Location`, `Product`, `Event`,
+  `Concept`, `Other`. An out-of-set or missing extracted type is stored as `Other`, as is every
+  stub entity synthesized for a relationship endpoint the extractor did not list. This is the value
+  set of `query_graph_data`'s `Entity.type` facet (`SERVER.md` §1.11).
 - `Entity.nameNormalized` — case-folded, whitespace-collapsed `name`, computed app-side by the
   shared `extraction.normalize_name` helper. Backs the exact-tier fusion lookup with a real `=`
   comparison, decoupled from RediSearch tokenizer/stemmer behavior (§7.1).
 - `Document.currentVersion` / `Chunk.documentCurrent` — the version-lifecycle axis: `true` at
   creation, flipped `false` (with `supersededAt`/`supersededBy` on the `Document`) when a
-  `SUPERSEDES` edge to it is confirmed. Default chunk search returns current chunks only (§8).
-- `Document.textNormalizedHash` — a hash of the case-folded, whitespace-collapsed full text; the
+  `SUPERSEDES` edge to it is confirmed. Default chunk search returns current chunks only (§8), and
+  a row with the property **absent** counts as not current: `scripts/backfill_document_current.sh
+  <wsId>` sets it to `true` wherever it is absent (idempotent; an explicit `false` is left alone).
+- `Document.textNormalizedHash` — the SHA-256 hex digest of the case-folded, whitespace-collapsed
+  full text; the
   exact-identity key of automatic supersede (§9). A content fingerprint, not an identity, so it
   carries no constraint.
 - `Document.lshBand0..7` — indexed (§7.1) and read by update detection's candidate shortlist, but
@@ -474,16 +486,36 @@ at publish: a guard of any other or missing `kind`, or a string that is not a JS
 publishes and then fails the run when a drive evaluates it.
 
 **`TRANSITION.guard` is LLM-native *and* deterministic.** The guard string is one of:
-- **empty `""`** — an unconditional/default transition (**lowest** priority; fires whenever reached);
-- a `{kind:'llm', text, model?}` discriminator — judged in natural language against run context (a
-  structured boolean verdict + traced rationale); an optional `model` is resolved as the `guard`
-  kind;
-- a **`cmp`-family** discriminator — `{kind:'cmp', path, op, value}` plus the combinators
-  `all` / `any` / `not`. A closed comparator, **not** an expression language: whitelisted ops, two
-  whitelisted path roots (`ctx.` / `output.`), depth/width/node caps, no parser and no `eval`.
-  It is **total at drive** (a missing path ⇒ `False`, never a raised error) and **strict at
-  publish** (a typo'd `op` or an unwhitelisted path root is a `WorkflowConfigError` at seed time, not
-  a run that parks forever). This is what makes an LLM-free `kind:'process'` flow possible.
+- **empty `""`** — an unconditional/default transition (**lowest** priority; fires whenever
+  reached). A null guard behaves the same;
+- a `{kind:'llm', text, model?}` discriminator — judged in natural language; an optional `model` is
+  resolved as the `guard` kind. The judge sees the condition `text` plus one evidence tier: the
+  node's `understanding` object (the step output parsed as a JSON object — its `understanding`
+  member if that is an object, else the whole object — else `ctx.understanding`), or, only when
+  that is empty, the node's last 6 thread turns at ≤ 400 chars each. The judge's message is capped
+  at 6000 chars, dropping the oldest turns first. The provider call itself follows `SERVER.md`
+  §1.8's provider wire contract. The reply must be one JSON object `{decision, rationale}` — the
+  whole reply (bare or fenced) or exactly one `decision`-carrying object on its own lines. **Only a
+  literal boolean `true` advances**: an unparseable reply, a non-boolean `decision`, or a
+  `rationale` that asserts an un-negated deficiency ("not enough", "still missing", "unclear", …)
+  is `false` (bias to suspend). With no judge wired, reaching an `llm` guard fails the run;
+- a **`cmp`-family** discriminator — a closed comparator, **not** an expression language: no
+  parser and no `eval`. This is what makes an LLM-free `kind:'process'` flow possible.
+  - **Leaf** `{kind:'cmp', path, op, value}`. Ops: `eq ne lt le gt ge in contains exists truthy`.
+    `exists`/`truthy` take no `value`; every other op requires one. `eq`/`ne` are plain JSON
+    equality with no coercion (`"1"` ≠ `1`); an ordering op on incomparable types is `false`; `in`
+    tests the path's value against a list `value`, `contains` tests `value` in a list or string at
+    the path.
+  - **Combinators** `{kind:'all'|'any'|'not', of:[…]}`: `not` takes exactly one child; `all([])`
+    is `true`, `any([])` is `false`. A nested child carrying `op` may omit `kind`. Caps: depth 5
+    (a bare leaf is depth 1), 32 nodes, 8 children per combinator.
+  - **Paths**: `ctx.<k>[.<k>…]` reads the run `ctx`; a bare `output` is the raw step output;
+    `output.<k>…` reads the step output parsed as a JSON object. Segments are dict keys only (no
+    list indexing); a bare `ctx` and empty segments are rejected.
+  - It is **strict at publish** (an unknown `op`, a bad path, a missing `value`, a bad arity or a
+    cap breach is a `WorkflowConfigError`, 400, nothing written) and **total at drive**: a missing
+    path is `false` for every op, never an error. So on a missing path `ne` is `false` while
+    `not(eq)` is `true` — use `ne` for "present and different".
 
 A would-be **`expr`** kind is a deliberate `NotImplementedError` seam — no expression library is
 built here (the deterministic family is deliberately named `cmp` to keep that literally true).
@@ -666,7 +698,11 @@ yet — the executor's existing "no transition fired" outcome parks it; writing 
 > `test_queries.sh`. This section describes *what* is indexed/constrained and *why*, not
 > the runnable statements, so the two can't drift (the same discipline §5.3/§8 apply to queries).
 > `bootstrap_schema.sh <wsId>` is idempotent; `EMBEDDING_DIM` (default `1536`) sets the vector
-> dimension per workspace.
+> dimension per workspace. **A served workspace is created with `scripts/create_workspace.sh
+> <wsId>`** (the start scripts call it): it runs `bootstrap_schema.sh`, then pins
+> `WorkspaceConfig.embeddingModelOverride` to the current default embedding model — a no-op when
+> the override is already set, and skipped with a warning when no model config resolves. Throwaway
+> test workspaces call `bootstrap_schema.sh` directly and stay unpinned.
 
 **Critical ordering rules (live-verified):**
 1. `GRAPH.CONSTRAINT CREATE` requires an existing range index on the same property — always index
@@ -762,13 +798,26 @@ would cost several times the raw text in RAM.
   — the DDL form is mandatory (§1.2).
 - Dimension **must** match the embedding model exactly (`EMBEDDING_DIM`; `1024` for this
   system's model, §1.3 — the script's own default of `1536` is wrong for every workspace here) and
-  is fixed per workspace at bootstrap. A wrong-length `vecf32` write is accepted silently and the
+  is set per workspace at creation. A wrong-length `vecf32` write is accepted silently and the
   node then drops out of ANN results, so the embedding worker checks the vector's length against
   the index dimension before writing.
 - Vectors stored as `vecf32`; **score is cosine distance** (`0` = identical, lower = more similar).
   Write `SET n.embedding = vecf32([...])`; read `CALL db.idx.vector.queryNodes('Message','embedding',
   $k, vecf32($vec)) YIELD node, score` → `ORDER BY score ASC`. Canonical read: `QUERIES.md` §6/§8.
 - Vector indexes are usually the biggest per-workspace RAM line (`dim × 4 bytes × #vectors`, §10/§11).
+- **Embedding migration — the only way to change a pinned workspace's embedding model or dimension.**
+  `scripts/migrate_embeddings.sh <wsId> <targetModelRef> [--batch-size N] [--i-have-stopped-traffic]`
+  (`scripts/embedding_migration.py migrate`). Preconditions: the server process serving that
+  workspace is stopped (the flag, or an interactive confirmation, asserts it; otherwise nothing
+  runs), and the model config declares the target's `dim` (otherwise it refuses before any call or
+  write). It re-embeds every `Message`, then every `Chunk`, whose `embeddingModel` is not the
+  target, writing the new vector and `embeddingModel` per row (a row deleted mid-run is skipped
+  and logged). It then recounts, and aborts before touching the indexes if any row is still
+  unmigrated. Otherwise it drops and recreates both vector indexes at the target dimension, and
+  sets `embeddingModelOverride` to the target while keeping the other overrides. Re-running after
+  any interruption resumes from graph state; on a completed workspace a re-run re-embeds nothing but rebuilds both indexes again.
+  The served process must be **restarted** afterwards: the embedding worker caches the index
+  dimension for its process lifetime.
 
 ### 7.2 `reference` graph
 
@@ -832,12 +881,12 @@ traversal — read-only queries, routable to a replica.
 | Advance read cursor | `MERGE` on `HAS_CURSOR`→`ReadCursor {cursorId}` + composite monotonic guard | Never moves backward on a stale or tie-smaller replay. |
 | Backfill / import | `UNWIND $rows AS row …` in chunks, or `falkordb-py` bulk loader | Never one giant CREATE — bound transaction memory; size batches (writes ignore TIMEOUT — §10) |
 | Embed message / chunk | background job: compute embedding → `SET n.embedding = vecf32($v)` | Decoupled from the post/ingest path; a failure is logged, never surfaced to the caller. |
-| Ingest document | one guarded `CREATE` of `Document` + `INGESTED_BY` + every `Chunk`/`HAS_CHUNK` (chunks split app-side) | Non-idempotent like channel creation. If a current `Document` has the same `textNormalizedHash`, the same query supersedes it (`SUPERSEDES` `confirmed`, technique `exact_normalized_text_hash`). |
-| Document background jobs | per chunk, one embed job and one extract job, scheduled independently | `pendingJobs` is set to the job count before any job starts; each job decrements it once with its **final** outcome. `status` becomes `failed` at the first failed job, `ready` when the count reaches 0 with none failed; both flips guard on `processing`, so the first terminal write wins. A job retries a transient provider error (connection kinds; HTTP 408, 429, 5xx; known LM Studio error text) up to 4 attempts with 2 s / 8 s / 30 s nominal back-off, and stops retrying once its document is no longer `processing`. |
-| Update detection | background job after a non-auto-superseded ingest | Shortlists current documents (LSH bands, title full-text fuzzy), scores each by shingled Jaccard in Python, and records a `pending` `SUPERSEDES` suggestion for the best candidate at or above 0.1. A rejected suggestion that recurs is reopened (`resuggestCount` +1), never duplicated. |
+| Ingest document | one guarded `CREATE` of `Document` + `INGESTED_BY` + every `Chunk`/`HAS_CHUNK` (chunks split app-side) | Chunking splits on paragraph breaks, then sentence ends (`. `, `! `, `? ` or a newline), then a hard cut at 1000 chars; every chunk after the first is prefixed with the previous chunk's last 150 chars, so a chunk can reach 1150 chars. Non-idempotent like channel creation. If a current `Document` has the same `textNormalizedHash`, the same query supersedes it (`SUPERSEDES` `confirmed`, technique `exact_normalized_text_hash`). |
+| Document background jobs | per chunk, one embed job and one extract job, each scheduled independently; when they are scheduled is `SERVER.md` §1.12 | `pendingJobs` is set to the job count before any job starts; each job decrements it once with its **final** outcome. `status` becomes `failed` at the first failed job, `ready` when the count reaches 0 with none failed; both flips guard on `processing`, so the first terminal write wins. A job retries a transient provider error (connection kinds; HTTP 408, 429, 5xx; known LM Studio error text) up to 4 attempts with 2 s / 8 s / 30 s nominal back-off, and stops retrying once its document is no longer `processing`; a timeout is not retried. |
+| Update detection | background job per ingested document; when it is scheduled is `SERVER.md` §1.12 | Shortlists current documents (LSH bands, title full-text fuzzy), scores each by shingled Jaccard in Python, and records a `pending` `SUPERSEDES` suggestion (technique `shingled_jaccard_overlap`, `confidence` = the ratio) for the best candidate at or above 0.1. Shingles are 5-word windows of the same normalized text `textNormalizedHash` hashes. A rejected suggestion that recurs is reopened (`resuggestCount` +1), never duplicated. |
 | Confirm / reject a supersede | `SET` on the edge by `matchId` | Confirming sets the old `Document`'s `currentVersion` and its chunks' `documentCurrent` to `false` in the same query. |
 | Delete document | `DETACH DELETE` of the `Document` and its chunks + `CREATE` of a `DocumentDeletion` audit node, one query | A missing document is a no-op with no audit node. |
-| Extract entities | plain `CREATE` per extracted `Entity`, `ABOUT`, `RELATES_TO` | Every mention becomes a new `Entity`; fusion only links. An exact `(nameNormalized, type)` match is linked `SAME_AS` `confirmed` in the creating query; otherwise a full-text fuzzy candidate yields a `pending` `SAME_AS` (reopened, never duplicated, like supersede suggestions). Entities are never merged. |
+| Extract entities | plain `CREATE` per extracted `Entity`, `ABOUT`, `RELATES_TO` | Every mention becomes a new `Entity`; fusion only links. An exact `(nameNormalized, type)` match is linked `SAME_AS` `confirmed` (technique `exact_normalized_name_type`) to the oldest such entity in the creating query; otherwise the top-ranked other entity among at most 5 same-`type` full-text candidates yields a `pending` `SAME_AS` (technique `fuzzy_fulltext`, `confidence` = the full-text score; reopened, never duplicated, like supersede suggestions). Entities are never merged. |
 | Advance workflow | create `StepRun`, append `NEXT`, move `AT_STEP` | All local to `ws:{id}`; fully transactional within the graph (§6.2) |
 | Publish workflow def | write to `reference` only | Topology-immutable per version (a differing re-publish is rejected `409`); properties stay create-only. Bump version to change either. |
 | Materialize workflow def | copy one published version into one `ws:{id}` as a `WorkflowDefSnapshot` (explicit call, §4) | Same topology `409` against the existing snapshot; an unpublished version is `404`. A run can start only against a materialized version. |
@@ -916,7 +965,7 @@ Three numbers, all measured live on this deployment:
 |---|---|---|
 | Per-message RAM at 1024 dims | **~12.4 KB** → ~1.25 GB per 100k-message workspace | Per-workspace sizing; **~85% of it is vector + HNSW, not chat** — the chat-core floor alone is ~1.06 KB/message |
 | Sustained append throughput | **~614 msg/s**, p99 40.7 ms (16 clients, one graph) | The ceiling is **per-graph-key write serialisation**, so per-thread fan-out does not raise it |
-| Vector-index dimension | Fixed **at workspace creation**, never after | `EMBEDDING_DIM` must match the embedding model *before* bootstrap (§7.1) |
+| Vector-index dimension | Set **at workspace creation**; changed only by the embedding migration, with the workspace's server stopped (§7.1) | `EMBEDDING_DIM` must match the embedding model *before* bootstrap; a later change costs a full re-embed of every `Message`/`Chunk` (§7.1) |
 
 Two consequences the rest of this document depends on:
 

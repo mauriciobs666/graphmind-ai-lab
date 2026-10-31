@@ -470,7 +470,7 @@ the table's `Cred` column is where the four shapes separate:
 |---|---|---|---|
 | `GET /shop/api/health` | — | nothing — liveness plus the locale list the join screen's chooser reads | *(no query)* |
 | `POST /shop/api/session` | — | `Storefront.join` → `ensure_participant`, `set_participant_record`, `services.save_profile` | §18.1, §18.3, §17.1 |
-| `GET /shop/api/state` | P | `Storefront.get_state` → `get_profile` / `get_cart` / `get_current_order`, plus the in-process turn state. `get_cart` is **two** reads: `read_cart` in `ws:{WS_ID}`, then `lookup_products_by_id` against the **global `reference`** graph to price the lines — the only cross-graph read on the 2 s poll path | §17.2, §16.5 **+ §16.9**, §18.8 |
+| `GET /shop/api/state` | P | `Storefront.get_state` → `get_profile` / `get_cart` / `get_current_order`, plus the in-process turn state. `get_cart` is **two** reads: `read_cart` in `ws:{WS_ID}`, then `lookup_products_by_id` against the **global `reference`** graph to price the lines (pricing: §1.11) — the only cross-graph read on the 2 s poll path | §17.2, §16.5 **+ §16.9**, §18.8 |
 | `GET /shop/api/messages` | P | `services.read_messages` with an **explicit** `since` | §9.1 |
 | `POST /shop/api/messages` | P | `services.post_message`, mentioning the demo agent — `thread_exists` + `resolve_member_kinds` **before** the write, which is where this route's `ServiceError` re-shapes come from — then `Storefront.enqueue_turn`, which books the turn and **submits** it. No further query runs on the request thread: the agent turn (`trigger.maybe_trigger` → `services.start_workflow_run`, §12.1) runs on a turn-executor worker (`storefront-turn_*`) after the `200` has been sent. **No message embedding** is scheduled | §2, then §4 (the turn's own §12.1 is off the request thread) |
 | `GET /shop/api/catalog` | P | `Storefront.list_catalog` → `services.filter_products` + the startup image manifest | §15.2 |
@@ -775,6 +775,21 @@ the answering model and whether it came from a fallback travel on the `ChatResul
 `.model` (the answering ref) and `.fallback` (`True` iff a later element answered, `None` — never
 `False` — for a one-element chain or a direct non-role ref).
 
+**The provider wire contract.** Every chat call is one `POST {base}/chat/completions` with JSON
+`{model, messages, tools, …params}`: `tools` (the granted tool schemas) only on a tool-calling
+`chat` turn, never on a plain `complete`; `params` are the overlay's per-model settings other than
+`timeout`, `dim` and `protocol`, camelCase keys sent snake_case (`maxTokens` → `max_tokens`). The
+request carries `Authorization: Bearer <key>` when the provider declares a key. The reply is read
+from `choices[0].message`; a reply with no `choices[0].message` is
+`ProviderCallError(kind="response_shape")`. A plain call returns its `content`. A `chat` turn's
+tool calls come from `message.tool_calls` (each `{id, function: {name, arguments}}`, `arguments`
+a JSON string or an object; a nameless entry is skipped). When that field yields no call, the
+server checks `content`, in order: (1) a JSON object `{name|action|tool, arguments|args}`, a
+`{function: {…}}` wrapper or a `{tool_calls: [...]}` envelope, the first two only when `content`
+is not itself call-shaped; (2) bare call syntax `name({...})`, after stripping one code fence: each call opens and ends its own line with an empty or single-JSON-object argument, and from the first call onward the content holds nothing else — any other text discards every call, and identical repeats collapse to one. Probe (1) is permissive by contrast: it takes the whole (fence-stripped) content, else the first `{` … last `}`, so an object quoted inside prose still counts. Anything else is plain text, and arguments that are not a JSON
+object become `{}`. Whether the named tool is granted and its arguments valid is the executor's
+check, not the parser's.
+
 **The resolved-model trace.** Each `StepRun` carries `resolvedModel`, `modelSource`
 (`workspace`/`step`/`default` — the precedence rung that won) and `modelFallback` (nullable bool,
 orthogonal to `modelSource` — a workspace override can itself resolve to a role with its own
@@ -874,14 +889,24 @@ participant as actor); `post_message` posts as the agent.
 | `human_handoff` | `reason` | Raises a suspend signal; registered, granted by no shipped def. |
 | `lookup_product_fact` | `name` (required) | Exact catalog lookup (normalized name) → `{"found": true, …product row}`, or `{"found": false, "hint", "catalog": [{productId, name}]}` — the whole catalog by name, no prices or categories. |
 | `filter_products` | `category`, `minPrice`, `maxPrice` (all optional, inclusive bounds; blank counts as omitted, numeric strings are coerced) | `{"items": [...]}` (at most 20). Empty: an unknown `category` → `{"items": [], "finding": "no catalog category has that name", "hint", "catalog": [{productId, name}]}`; any other empty result → `{"items": [], "finding": "no matching products found"}`. |
-| `view_cart` | — | `services.get_cart` → `{"items": [...], "total": …}`, prices resolved live from the catalog; an empty cart is `{"items": [], "total": 0.0}`. |
-| `add_to_cart` | `productId` (required), `quantity` (≥ 1, default 1) | Quantities accumulate → `{"found": true, …line}`, or `{"found": false, "reason": …}` for an id that does not resolve. The executor holds a `productId` no grounding tool returned this turn before the tool runs. |
-| `remove_from_cart` | `productId` (required), `quantity` (omit to remove the whole line) | `{"found": true, "removed": …, …}` (`removed: false` when the product was not in the cart), or `{"found": false, "reason": …}`. |
+| `view_cart` | — | `services.get_cart` → `{"items": [...], "total": …}`, priced per the cart-pricing paragraph below; an empty cart is `{"items": [], "total": 0}`. |
+| `add_to_cart` | `productId` (required), `quantity` (≥ 1, default 1) | Quantities accumulate → `{"found": true, …line}`, or `{"found": false, "reason": …}` for an id that does not resolve. Subject to the executor's write-target grounding hold (`DESIGN.md` §6.1). |
+| `remove_from_cart` | `productId` (required), `quantity` (omit to remove the whole line) | `{"found": true, "removed": …, …}` (`removed: false` when the product was not in the cart), or `{"found": false, "reason": …}`. Subject to the same grounding hold (`DESIGN.md` §6.1). |
 | `clear_cart` | — | `{"cleared": true}` (also for an already-empty cart). |
 | `place_order` | — | Snapshots the cart at current catalog prices with a computed total and clears the cart → the order as JSON; on an empty cart, the plain string `The cart is empty — add an item before placing an order.` |
 | `get_profile` | — | `{"name", "deliveryAddress"}`, absent fields `null` — never a not-found shape. |
 | `save_profile` | `name`, `deliveryAddress` (both optional) | Upserts; an omitted field keeps its stored value, never clears it → the saved profile. |
 | `query_graph_data` | `question`, `dataset` (both required; `dataset` ∈ `catalog`, `knowledge_base`) | Below. |
+
+**Cart pricing** (`view_cart`, `place_order`, and the `cart` of `GET /shop/api/state`). Every
+read prices the cart live: the `CartItem` lines in `ws:{ws}`, then one batch lookup of their
+`productId`s in `reference`. Each priced line carries `name`, `price` and `lineTotal` =
+`price × quantity`, unrounded (3 × `0.1` → `0.30000000000000004`); `total` is the sum of the line
+totals, and `0` (an integer) when there are no priced lines. A line whose `productId` no longer
+resolves in `reference` is omitted from `items` and `total`, and `place_order` does not snapshot
+it, yet the order write deletes every `CartItem`, so that line disappears with the order. A cart
+holding only such lines reads as empty, and `place_order` answers the empty-cart string and
+writes no order.
 
 **`query_graph_data`'s contract.** The tool's own arguments are not the answer: it makes a
 second, internal LLM call (`step` kind, on the invoking node's model, §1.8) whose only accepted
@@ -963,7 +988,7 @@ scheduled: the document stays `processing` and no update detection runs.
 **Schedulers differ by transport.** REST schedules on FastAPI `BackgroundTasks`, which run after
 the response on anyio's thread limiter (`FALKORCHAT_THREAD_LIMIT`). MCP spawns one daemon thread
 per job, unbounded, inside the tool call before it returns — a max-size batch ingest can spawn
-about 23,500 (20 documents × ⌈500,000 / 850⌉ chunks at size 1000, overlap 150 × 2 jobs) — and a failure to start a thread is logged and that one job skipped. MCP threads are
+about 23,500 (20 documents × ⌈500,000 / 850⌉ chunks, `DESIGN.md` §9 × 2 jobs) — and a failure to start a thread is logged and that one job skipped. MCP threads are
 not tracked by `_lifespan` and die silently with the process. A storefront post schedules none of
 this: its turn runs on the storefront's turn executor (§1.4) and its message is not embedded.
 

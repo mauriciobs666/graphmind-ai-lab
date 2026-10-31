@@ -375,8 +375,8 @@ bootstrap_workspace() {
   # ── vector indexes ───────────────────────────────────────────
   # Dimension must match the embedding model and is FIXED at index creation —
   # it cannot be altered in place, so choose it per model BEFORE creating the
-  # workspace. Default kept at 1536 (text-embedding-ada-002; still the DESIGN §13
-  # open question) so the default is model-neutral.
+  # workspace. Default kept at 1536 (text-embedding-ada-002; see DESIGN §7.1)
+  # so the default is model-neutral.
   #
   # M2 GraphRAG (K-008): the locked M2 stack is Qwen3-Embedding-0.6B, cosine,
   # EMBEDDING_DIM=1024 (DESIGN §1.3). Any workspace that will run §6 hybrid
