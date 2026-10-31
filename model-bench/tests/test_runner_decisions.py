@@ -112,12 +112,24 @@ def test_the_decisions_token_is_additive_to_the_call_surface_never_one_itself():
     assert derive_call_surface(["lmstudio-decisions"]) is None
 
 
-def test_the_fixture_decision_point_pack_validates_and_declares_both_surfaces():
+def test_the_fixture_decision_point_pack_fails_only_the_two_size_refusals_and_its_pad_validates(
+    tmp_path,
+):
+    """The 4-item fixture is below v1.3 §3.5's contract on size alone — 4 `eval` items under
+    `MIN_EVAL_ITEMS`, and no guard side check — so every other axis, and every other decision-
+    point refusal, is clean. `run_pack` never validates, so its tests keep the 4 items; a `cli run`
+    test, which validates first, pads its copy (`_pad_to_the_contract`) and that copy is clean."""
     from modelbench.packs import derive_decision_support, load_pack, validate_pack
 
     pack = load_pack(_FIXTURE_PACK)
-    assert validate_pack(pack) == []
+    problems = validate_pack(pack)
+    assert len(problems) == 2, problems
+    assert "4 item(s) in stratum 'eval', fewer than MIN_EVAL_ITEMS = 200" in problems[0]
+    assert "needs its 'side-check' stratum" in problems[1]
     assert derive_decision_support(pack.manifest["environment"]["requires"]) is True
+
+    padded = load_pack(_workspace(tmp_path, contract_valid=True))
+    assert validate_pack(padded) == []
 
 
 def _predicate_question() -> dict:
@@ -483,13 +495,44 @@ def _host_json(root: Path) -> None:
     )
 
 
+def _pad_to_the_contract(pack_dir: Path) -> None:
+    """U3b.1: `cli run` validates first, and v1.3 §3.5 refuses the 4-item fixture (fewer than
+    `MIN_EVAL_ITEMS` `eval` items, no guard side check). Appends synthetic `eval` items, each with
+    its own condition so no input hash repeats, up to the floor, then one human-curated
+    `side-check` item. The fixture's own four items stay first, in order."""
+    from modelbench.decisions import MIN_EVAL_ITEMS
+
+    path = pack_dir / "items.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    evals = sum(1 for row in rows if row.get("stratum") == "eval")
+    for n in range(MIN_EVAL_ITEMS - evals):
+        rows.append({
+            "itemId": f"pad-{n:03d}", "tier": "clear_suspend", "path": "understanding",
+            "stratum": "eval", "origin": "synthetic", "condition": f"padding condition {n}",
+            "understanding": {"request": "pad"}, "turns": [], "expected": False,
+        })
+    rows.append({
+        "itemId": "sc-01", "tier": "clear_advance", "path": "understanding",
+        "stratum": "side-check", "origin": "human", "condition": "the side check's condition",
+        "understanding": {"request": "checkout returns 502"}, "turns": [], "expected": True,
+    })
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
 def _workspace(
-    root: Path, *, manifest_edit=None, items_edit=None, fit_manifest_bytes=None, **candidate
+    root: Path,
+    *,
+    manifest_edit=None,
+    items_edit=None,
+    fit_manifest_bytes=None,
+    contract_valid: bool = False,
+    **candidate,
 ) -> Path:
     """`root` laid out as a model-bench root: the fixture pack under `packs/`, `host.json`, and
     the candidate and its fit manifest under `candidates/`. Never the shipped `model-bench/`
     root. `fit_manifest_bytes` replaces the default manifest file's content (its declaration is
-    the candidate body's, so a test that changes one decides about the other)."""
+    the candidate body's, so a test that changes one decides about the other). `contract_valid`
+    pads the pack copy to v1.3 §3.5's contract (`_pad_to_the_contract`), for a `cli run` test."""
     pack_dir = root / "packs" / _PACK_ID
     shutil.copytree(_FIXTURE_PACK, pack_dir)
     if manifest_edit is not None:
@@ -500,6 +543,8 @@ def _workspace(
         rows = [json.loads(line) for line in (pack_dir / "items.jsonl").read_text().splitlines()]
         rows = [items_edit(row) for row in rows]
         (pack_dir / "items.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    if contract_valid:
+        _pad_to_the_contract(pack_dir)
     _host_json(root)
     (root / "candidates").mkdir()
     (root / "candidates" / f"{_CANDIDATE_ID}.json").write_text(
@@ -651,11 +696,12 @@ def test_the_policy_decides_each_item_not_a_raw_half_threshold(tmp_path):
     _workspace(tmp_path)
     run, _ = _run(tmp_path, DecisionStub(decide_responses=_four(0.95, 0.7, 0.85, 0.1)))
     counts = {i.itemId: i.counts for i in run.items}
+    # U3b.1: each eval item declares its per-kind verdict metric and the pooled one (v1.3 §3.5).
     assert counts == {
-        "fx-cs-01": {"falseAdvanceRate": 1},
-        "fx-cs-02": {"falseAdvanceRate": 0},
-        "fx-ca-01": {"falseSuspendRate": 0},
-        "fx-ca-02": {"falseSuspendRate": 1},
+        "fx-cs-01": {"falseAdvanceRateByUnderstanding": 1, "falseAdvanceRate": 1},
+        "fx-cs-02": {"falseAdvanceRateByTurns": 0, "falseAdvanceRate": 0},
+        "fx-ca-01": {"falseSuspendRateByUnderstanding": 0, "falseSuspendRate": 0},
+        "fx-ca-02": {"falseSuspendRateByTurns": 1, "falseSuspendRate": 1},
     }
 
 
@@ -941,7 +987,7 @@ def test_run_refuses_candidate_and_model_together_and_neither(tmp_path, capsys):
 
 
 def test_run_candidate_builds_a_candidate_config_with_no_model_key(tmp_path, monkeypatch):
-    _workspace(tmp_path)
+    _workspace(tmp_path, contract_valid=True)
     seen: list[RunConfig] = []
 
     def fake_run_pack(pack, cfg, *, lmstudio, root):
@@ -965,7 +1011,7 @@ def test_cli_run_candidate_end_to_end_stores_indexes_and_lists_the_candidate(
     """The done-condition through the CLI: `run --candidate` against a fake LM Studio stores a
     valid `model:decisions` record under `tmp_path`, `index rebuild` fills the candidate column,
     and `models --tested` lists the candidate by its `armKey`."""
-    _workspace(tmp_path)
+    _workspace(tmp_path, contract_valid=True)
     stub = DecisionStub(decide_responses=_four(0.95, 0.1, 0.85, 0.9))
     monkeypatch.setattr(cli, "LMStudio", lambda base_url: stub)
     code = cli.main(
@@ -1144,12 +1190,16 @@ def test_an_explicit_request_timeout_other_than_180_refuses_a_decision_point_run
         assert lms.warm_up_calls == [] and lms.decide_calls == [], "refused after a model call"
 
 
-def test_cli_run_request_timeout_120_on_a_decision_point_pack_exits_4(tmp_path, monkeypatch):
-    _workspace(tmp_path)
+def test_cli_run_request_timeout_120_on_a_decision_point_pack_exits_4(
+    tmp_path, monkeypatch, capsys
+):
+    """On a contract-valid pack, so the exit 4 is the timeout refusal's, not `validate_pack`'s."""
+    _workspace(tmp_path, contract_valid=True)
     stub = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
     monkeypatch.setattr(cli, "LMStudio", lambda base_url: stub)
     base = ["run", "--root", str(tmp_path), "--pack", _PACK_ID, "--candidate", _CANDIDATE_ID]
     assert cli.main([*base, "--request-timeout", "120"]) == 4
+    assert "--request-timeout" in capsys.readouterr().err
     assert stub.warm_up_calls == [] and stub.decide_calls == []
     assert not (tmp_path / "results").exists()
 
@@ -1769,14 +1819,18 @@ def test_the_leakage_and_manifest_refusals_come_before_the_load_step(tmp_path):
     assert caught.value.exitCode == 4 and lms.load_calls == [] and lms.order == []
 
 
-def test_cli_run_with_an_overlapping_manifest_exits_4_and_writes_nothing(tmp_path, monkeypatch):
-    _overlapping_workspace(tmp_path, 1)
+def test_cli_run_with_an_overlapping_manifest_exits_4_and_writes_nothing(
+    tmp_path, monkeypatch, capsys
+):
+    """On a contract-valid pack, so the exit 4 is the leakage refusal's, not `validate_pack`'s."""
+    _overlapping_workspace(tmp_path, 1, contract_valid=True)
     stub = DecisionStub()
     monkeypatch.setattr(cli, "LMStudio", lambda base_url: stub)
     code = cli.main(
         ["run", "--root", str(tmp_path), "--pack", _PACK_ID, "--candidate", _CANDIDATE_ID]
     )
     assert code == 4 and stub.decide_calls == []
+    assert "AC-3" in capsys.readouterr().err
     assert not (tmp_path / "results").exists()
 
 

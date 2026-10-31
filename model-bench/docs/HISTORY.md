@@ -2,6 +2,76 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U3b.1 — the decision-point pack contract: `validate_pack` refusals, required `stratum`, declared per-kind and side-check metrics, the guard's four verdict metrics
+
+**What:** the first half of v1.3 §4 U3b (plan2 §4.1 U3b adds only the declared metrics; the
+`failed_call` branch stays U1d's), plus impl review Pass 12's P12-m1 and the architect's P12-m2
+ruling (`docs/plans/typed-decision-models-coordination.md`). U3b.2 — the guard hand-off parse
+mode, `render-guard.jsonl`, `handoff-parse-guard.jsonl` and the falkor-chat equality test — is
+not in this entry.
+
+- **`packs._decision_point_problems`**, a ninth `validate_pack` axis (v1.3 §3.5), keyed on the
+  `decisionPoint` **key's presence** (an empty or non-object block still keys it). It refuses:
+  `labels` absent, `labels.source != "llm-unreviewed"`; `labels.labeler.model` absent or equal to
+  `decisionPoint.incumbent` (AC-4); `labels.inputs != "synthetic"`, or an `eval` item whose
+  `origin != "synthetic"`, `side-check` exempt by stratum (AC-7); an item with no `stratum` or one
+  outside `packs.STRATA` (`eval`, `side-check`), never defaulted; fewer than
+  `decisions.MIN_EVAL_ITEMS` `eval` items, side-check items not counted (AC-13); a role outside
+  `BAR_KIND_BY_ROLE`, an absent `incumbent`, or one disagreeing with the bar kind; a guard pack
+  with no `side-check` stratum, or one on any other role (`packs.SIDE_CHECK_ROLE`, AC-17). A
+  deleted key is refused, never read as a default. Every shipped pack still validates `[]` (none
+  has the key).
+- **Items the scorer cannot score (P12-m1).** On a pack declaring `scorer: classification`,
+  `_classification_item_problems` also refuses an `eval` item without a bool `expected` or with a
+  `path` outside the evidence kinds, and a `side-check` item with a missing or unknown `tier` or
+  no `path` (the last one beyond the review's probe: `score_answer` reads `path` unconditionally).
+  The key sets are `classification`'s own tables, imported at call time as `_scorer_problems`
+  resolves scorers. Each case is tested to be refused alone **and** to make the scorer raise.
+- **The guard's verdict metrics (P12-m2).** A decision-point `guard-judge` pack's
+  `metrics.verdictMetrics` must be exactly `classification.PER_KIND_VERDICT_METRICS` (the four
+  per-kind rates, `_PER_KIND_METRIC`'s values) as a set, each once, in any order
+  (`packs._guard_verdict_metrics_problems`); the four join `report._LOWER_IS_BETTER` by the same
+  constant. The `decision_point_guard` fixture now declares the four, so the `handoff` surface's
+  per-path diagnostics are `<per-kind>DecidedByModel`/`…HandedOff`; their eight `(k, n)` pairs in
+  `test_per_path_diagnostics_split_each_verdict_metric_by_who_decided` are recomputed from the
+  fixture's one-item-per-cell table. The new-ability rule is U4's.
+- **`classification.score_answer`/`aggregate`** on a decision-point pack: an `eval` item declares
+  its per-kind verdict metric (`_PER_KIND_METRIC`, from its `expected` label and `path`) plus the
+  pooled `falseAdvanceRate`/`falseSuspendRate`, now exploratory; a `side-check` item declares only
+  its `sideCheck*` metric (`_SIDE_CHECK_METRIC_BY_TIER`, the old tier mapping). `aggregate` reads
+  every figure off those declarations (no boundary metric, no `detail.path` split); `detail`
+  writes `tier` only when the item has one. The old pack is byte-identical (U3a's rescore test
+  and the stored-records test unchanged and green).
+- **Fixture consequence.** `cli run` validates first, and the 4-item `decision_point_guard`
+  fixture fails exactly two refusals (size, no side check). `run_pack` tests keep it; the five
+  `cli run` tests pad their copy (`test_runner_decisions._pad_to_the_contract`, `_workspace(...,
+  contract_valid=True)`), and the two exit-4 ones assert their own refusal's text, since
+  `EXIT_BAD_PACK` is also 4. The U1d/U2 count assertions expect the per-kind declarations.
+- **Tests:** `tests/test_decision_point_pack.py` (84) — each refusal alone, each key deletion, the
+  keying, the 200 + 85 accepted shape, the `new-ability` branches via a test-only
+  `BAR_KIND_BY_ROLE` row, the declared metrics, the scorer-precondition items, and the
+  verdict-metrics set.
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`; full suite each on a fresh
+`PYTHONPYCACHEPREFIX`): 57 mutants, all red.
+- **Contract (40):** the keying dropped, keyed on the block's truthiness or on `incumbent`
+  inside it (plan-rejected), in both `packs` and `classification`; each refusal dropped, flipped,
+  or made to tolerate its deleted key; the floor at `<=`, at 199, and counting the side check; the
+  stratum defaulted to `eval` (plan-rejected) at validate and score time; the side-check exemption
+  dropped; `STRATA` shrunk and widened; `SIDE_CHECK_ROLE` moved; the per-kind table's paths
+  swapped; eval polarity flipped; the side check declaring the old tier metric; the side-check
+  table widened; the old aggregate layout on a decision-point pack. The scorer's truthiness mutant
+  first survived and is killed by
+  `test_the_scorer_keys_on_the_decision_point_key_even_when_its_block_is_empty`.
+- **P12-m1 (9):** each of the four item checks dropped; the label and tier checks tolerating a
+  deleted key; `mixed` added to the path set; the checks never called; keyed on role, not scorer.
+- **P12-m2 (8):** a pooled name substituted (only length and uniqueness checked), a subset
+  accepted, a superset accepted, a duplicate accepted, the rule unwired, the rule on every role,
+  the four missing from `_LOWER_IS_BETTER`, the constant reordered.
+
+Suite `2715 passed, 5 deselected, 2 xfailed` (was `2631 passed, 5 deselected, 2 xfailed`);
+`ruff` clean. No `model:decisions`/`model:handoff` record under `results/runs/`.
+
 ## 2026-10-31 — typed-decision-models U1e — probe follow-up: the raw decisions fixture, the over-limit fixture and its offline test, Laya's per-question limit
 
 **What:** plan2 §4.2 U1e as amended by plan3 §4.1 U1e and §5 U1e. Offline only; the `/api/v0`

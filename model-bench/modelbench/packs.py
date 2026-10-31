@@ -43,6 +43,7 @@ from types import MappingProxyType, ModuleType
 from typing import Any, Iterator, Mapping, NamedTuple
 
 from modelbench.convo import _HISTORY_REPLAY_MODES, Conversation, PromptConfig, Turn
+from modelbench.decisions import BAR_KIND_BY_ROLE, MIN_EVAL_ITEMS
 from modelbench.roles import MULTI_CALL_TURN_BY_ROLE, analysis_unit_field
 from modelbench.stats import ALPHA_FAMILY
 
@@ -564,7 +565,7 @@ def answer_space_problem(decision_point: Any, question: Mapping[str, Any]) -> st
 
     `decision_point` is the pack's `decisionPoint` block as read; a block that is absent or has
     no well-formed `answer` is reported here rather than defaulted. The block's other refusals
-    (`labels`, strata, `incumbent`, …) are `validate_pack`'s, U3b."""
+    (`labels`, strata, `incumbent`, …) are `validate_pack`'s (`_decision_point_problems`)."""
     kind = question.get("type")
     if kind == "score":
         return "a 'score' question is refused: no answer space accepts one"
@@ -998,10 +999,214 @@ def _clean_through_turn_h_problems(pack: Pack) -> list[str]:
     ]
 
 
+#: typed-decision-models v1.3 §3.5: the two strata a decision-point item may declare. No default.
+STRATA: frozenset[str] = frozenset({"eval", "side-check"})
+#: v1.3 §3.5 (FR-15): the one role whose pack carries the human-curated side check, and must.
+SIDE_CHECK_ROLE = "guard-judge"
+#: How many offending item ids one refusal message names before eliding the rest.
+_ITEM_IDS_SHOWN = 5
+
+
+def _item_ids(rows: list[Mapping[str, Any]]) -> str:
+    ids = [repr(row.get("itemId", "<unknown>")) for row in rows[:_ITEM_IDS_SHOWN]]
+    more = f", … ({len(rows)} in all)" if len(rows) > _ITEM_IDS_SHOWN else ""
+    return ", ".join(ids) + more
+
+
+def _decision_point_problems(pack: Pack) -> list[str]:
+    """typed-decision-models plan v1.3 §3.5's `validate_pack` refusals, on a **decision-point
+    pack** only — a pack is one iff its manifest has a `decisionPoint` key, whatever its value, so
+    every refusal keys on that key's presence and never on an optional field inside it; a pack
+    without one returns `[]` here, unchanged. Each refusal also fires when the key it reads is
+    deleted (v1.3 §5's U3b row) — nothing is defaulted:
+
+    * `labels` absent or not an object, or `labels.source != "llm-unreviewed"` (FR-5);
+    * `labels.labeler.model` absent, or equal to `decisionPoint.incumbent` (FR-5, AC-4);
+    * `labels.inputs != "synthetic"`, or an `eval` item whose `origin != "synthetic"` — the
+      `side-check` stratum is exempt by stratum (FR-8, AC-7);
+    * an item with no `stratum`, or one outside `STRATA` (no default);
+    * fewer than `decisions.MIN_EVAL_ITEMS` items in stratum `eval` (FR-11, AC-13);
+    * a role not in `decisions.BAR_KIND_BY_ROLE`, an absent `incumbent`, or one that disagrees
+      with the role's bar kind: non-null on `speed-up`, null on `new-ability`;
+    * a `SIDE_CHECK_ROLE` pack with no `side-check` item, or a `side-check` item on any other role
+      (FR-15, AC-17)."""
+    if "decisionPoint" not in pack.manifest:
+        return []
+    pid = pack.packId
+    problems: list[str] = []
+    decision_point = pack.manifest["decisionPoint"]
+    if not isinstance(decision_point, Mapping):
+        problems.append(f"{pid}: decisionPoint must be an object, got {decision_point!r}")
+        decision_point = {}
+
+    bar_kind = BAR_KIND_BY_ROLE.get(pack.role)
+    if bar_kind is None:
+        problems.append(
+            f"{pid}: role {pack.role!r} is not a decision point (BAR_KIND_BY_ROLE: "
+            f"{sorted(BAR_KIND_BY_ROLE)}; plan v1.3 §3.5)"
+        )
+    elif "incumbent" not in decision_point:
+        problems.append(
+            f"{pid}: decisionPoint.incumbent is absent; a {bar_kind} role needs it stated "
+            "(plan v1.3 §3.5)"
+        )
+    else:
+        incumbent = decision_point["incumbent"]
+        if bar_kind == "speed-up" and not (isinstance(incumbent, str) and incumbent):
+            problems.append(
+                f"{pid}: decisionPoint.incumbent is {incumbent!r}; role {pack.role!r} is a "
+                "speed-up point and needs its incumbent model id (BAR_KIND_BY_ROLE, plan v1.3 §3.5)"
+            )
+        elif bar_kind == "new-ability" and incumbent is not None:
+            problems.append(
+                f"{pid}: decisionPoint.incumbent is {incumbent!r}; role {pack.role!r} is a "
+                "new-ability point and has none (BAR_KIND_BY_ROLE, plan v1.3 §3.5)"
+            )
+
+    problems.extend(_labels_problems(pack, decision_point))
+    problems.extend(_strata_problems(pack))
+    if pack.role == SIDE_CHECK_ROLE:
+        problems.extend(_guard_verdict_metrics_problems(pack))
+    return problems
+
+
+def _guard_verdict_metrics_problems(pack: Pack) -> list[str]:
+    """A decision-point guard pack's `verdictMetrics` are exactly the four per-kind rates (FR-13;
+    architect ruling on impl review P12-m2): the same set, in any order, with no duplicate — a
+    pooled, missing, extra or repeated name changes `k` and the AC-2 per-path diagnostics. The
+    names are `classification`'s own constant, imported at call time (`classification` imports
+    this module)."""
+    from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
+
+    declared = (pack.manifest.get("metrics") or {}).get("verdictMetrics")
+    names = list(declared) if isinstance(declared, (list, tuple)) else None
+    if names is not None and len(names) == len(set(names)) and set(names) == set(
+        PER_KIND_VERDICT_METRICS
+    ):
+        return []
+    return [
+        f"{pack.packId}: a decision-point {SIDE_CHECK_ROLE} pack's metrics.verdictMetrics must be "
+        f"exactly {sorted(PER_KIND_VERDICT_METRICS)}, each once; got {declared!r} (FR-13)"
+    ]
+
+
+def _labels_problems(pack: Pack, decision_point: Mapping[str, Any]) -> list[str]:
+    pid = pack.packId
+    labels = pack.manifest.get("labels")
+    if not isinstance(labels, Mapping):
+        return [
+            f"{pid}: a decision-point pack needs a labels block, got {labels!r} (FR-5, plan "
+            "v1.3 §3.5)"
+        ]
+    problems: list[str] = []
+    if labels.get("source") != "llm-unreviewed":
+        problems.append(
+            f"{pid}: labels.source is {labels.get('source')!r}, not 'llm-unreviewed' (FR-5)"
+        )
+    labeler = labels.get("labeler")
+    model = labeler.get("model") if isinstance(labeler, Mapping) else None
+    if not (isinstance(model, str) and model):
+        problems.append(f"{pid}: labels.labeler.model is absent or empty, got {model!r} (FR-5)")
+    elif model == decision_point.get("incumbent"):
+        problems.append(
+            f"{pid}: the labeler {model!r} is the incumbent judge; the incumbent is never graded "
+            "against itself (FR-5, AC-4)"
+        )
+    if labels.get("inputs") != "synthetic":
+        problems.append(
+            f"{pid}: labels.inputs is {labels.get('inputs')!r}, not 'synthetic' (FR-8, AC-7)"
+        )
+    return problems
+
+
+def _strata_problems(pack: Pack) -> list[str]:
+    pid = pack.packId
+    try:
+        rows = list(pack.iter_items())
+    except (OSError, KeyError, PackConfigError, json.JSONDecodeError) as exc:
+        return [f"{pid}: cannot read data.items to check the decision-point strata ({exc})"]
+    no_stratum = [row for row in rows if "stratum" not in row]
+    unknown = [row for row in rows if "stratum" in row and row["stratum"] not in STRATA]
+    evals = [row for row in rows if row.get("stratum") == "eval"]
+    side_checks = [row for row in rows if row.get("stratum") == "side-check"]
+    not_synthetic = [row for row in evals if row.get("origin") != "synthetic"]
+
+    problems: list[str] = []
+    if no_stratum:
+        problems.append(
+            f"{pid}: {len(no_stratum)} item(s) have no stratum, which is never defaulted: "
+            f"{_item_ids(no_stratum)} (plan v1.3 §3.5)"
+        )
+    if unknown:
+        problems.append(
+            f"{pid}: {len(unknown)} item(s) have a stratum outside {sorted(STRATA)}: "
+            f"{_item_ids(unknown)} (plan v1.3 §3.5)"
+        )
+    if len(evals) < MIN_EVAL_ITEMS:
+        problems.append(
+            f"{pid}: {len(evals)} item(s) in stratum 'eval', fewer than MIN_EVAL_ITEMS = "
+            f"{MIN_EVAL_ITEMS} (FR-11, AC-13)"
+        )
+    if not_synthetic:
+        problems.append(
+            f"{pid}: {len(not_synthetic)} 'eval' item(s) have an origin other than 'synthetic': "
+            f"{_item_ids(not_synthetic)} (FR-8, AC-7)"
+        )
+    if pack.role == SIDE_CHECK_ROLE and not side_checks:
+        problems.append(
+            f"{pid}: a {SIDE_CHECK_ROLE} decision-point pack needs its 'side-check' stratum "
+            "(FR-15, AC-17)"
+        )
+    if pack.role != SIDE_CHECK_ROLE and side_checks:
+        problems.append(
+            f"{pid}: a 'side-check' stratum belongs to {SIDE_CHECK_ROLE} only, not "
+            f"{pack.role!r}: {_item_ids(side_checks)} (FR-15)"
+        )
+    if pack.manifest.get("scorer") == "classification":
+        problems.extend(_classification_item_problems(pid, evals, side_checks))
+    return problems
+
+
+def _classification_item_problems(
+    pid: str, evals: list[Mapping[str, Any]], side_checks: list[Mapping[str, Any]]
+) -> list[str]:
+    """The item fields the `classification` scorer reads on a decision-point pack, refused here so
+    a run never raises on them mid-way (impl review P12-m1): an `eval` item's `expected` must be a
+    bool and its `path` an evidence kind; a `side-check` item needs a `path` and a tier the side
+    check maps. The key sets are the scorer's own tables, imported at call time like
+    `_scorer_problems`'s resolution (`classification` imports this module)."""
+    from modelbench.scoring.classification import _PER_KIND_METRIC, _SIDE_CHECK_METRIC_BY_TIER
+
+    paths = {path for _, path in _PER_KIND_METRIC}
+    checks = [
+        (
+            [row for row in evals if not isinstance(row.get("expected"), bool)],
+            "'eval' item(s) have no bool label in 'expected'",
+        ),
+        (
+            [row for row in evals if row.get("path") not in paths],
+            f"'eval' item(s) have a path outside {sorted(paths)}",
+        ),
+        (
+            [row for row in side_checks if row.get("tier") not in _SIDE_CHECK_METRIC_BY_TIER],
+            f"'side-check' item(s) have a tier outside {sorted(_SIDE_CHECK_METRIC_BY_TIER)}",
+        ),
+        (
+            [row for row in side_checks if "path" not in row],
+            "'side-check' item(s) have no path",
+        ),
+    ]
+    return [
+        f"{pid}: {len(rows)} {what}: {_item_ids(rows)} (plan v1.3 §3.5)"
+        for rows, what in checks
+        if rows
+    ]
+
+
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Eight independent axes — a fixture can fail one, several, or none:
+    Nine independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
@@ -1029,6 +1234,9 @@ def validate_pack(pack: Pack) -> list[str]:
       declaring both `sampling.scripts` and `metrics.cleanThroughTurnH.H` — closes the gap
       `report.py:126`'s own comment names as "the only place" this invariant would otherwise
       surface, and only at report time.
+    * (typed-decision-models v1.3 §3.5) the decision-point contract — `labels`, strata, the
+      `MIN_EVAL_ITEMS` floor, `origin`, `incumbent` against `BAR_KIND_BY_ROLE`, and the side
+      check — keyed on the `decisionPoint` key's presence (`_decision_point_problems`).
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -1043,4 +1251,5 @@ def validate_pack(pack: Pack) -> list[str]:
     problems.extend(_scorer_problems(pack))
     problems.extend(_answerability_stamp_problems(pack))
     problems.extend(_clean_through_turn_h_problems(pack))
+    problems.extend(_decision_point_problems(pack))
     return problems

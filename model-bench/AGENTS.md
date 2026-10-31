@@ -21,7 +21,8 @@ this pack's sample size on any configuration tried, and ships flagged "not repro
 massaged into one; `chat-responder`'s `groundingRate` metric had a real abstention-detection defect
 found on its own required live run, fixed over a five-round gated chain, and confirmed fixed on a
 fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
-(the loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist), `lmstudio`,
+(the loader: `load_pack`/`validate_pack` with the decision-point contract, keyed on a
+`decisionPoint` key alone; content hashing, the AST import allowlist), `lmstudio`,
 `hostinfo`, `tooling`, `convo` (turn assembly and driving), `runner` (`RunConfig`, the
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
@@ -98,7 +99,8 @@ it demotes-and-names on the substitute one.
 - **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome` has
   three answers only: a metric absent from `scoreable`, or declared `False`, is no outcome; declared
   `True` **must** carry a `counts` entry, and one that doesn't is refused (`IncompleteItemRecord`),
-  never read as zero. `report.py` infers nothing.
+  never read as zero. `report.py` infers nothing. A decision-point item's metrics follow its own
+  `stratum`, which is never defaulted.
 - **S2's scorers owe two things, both enforced at S1 so the net exists before the first real scorer
   does:** emit a `counts` entry for every metric you declare scoreable, and derive `aggregates` from
   the same `items` in one pass. A mismatch is **excluded from the comparison and named**

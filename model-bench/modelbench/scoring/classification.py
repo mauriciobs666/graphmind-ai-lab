@@ -223,6 +223,74 @@ _METRIC_BY_TIER: Mapping[str, str] = {
 }
 
 
+#: typed-decision-models v1.3 §3.5 (FR-13, AC-10): a decision-point `eval` item's per-kind verdict
+#: metric, chosen from its own label (`expected`) and evidence `path` — a `False` label's error is
+#: a false advance, a `True` label's a false suspend.
+_PER_KIND_METRIC: Mapping[tuple[bool, str], str] = {
+    (False, "understanding"): "falseAdvanceRateByUnderstanding",
+    (False, "turns"): "falseAdvanceRateByTurns",
+    (True, "understanding"): "falseSuspendRateByUnderstanding",
+    (True, "turns"): "falseSuspendRateByTurns",
+}
+#: The four per-kind rates in `_PER_KIND_METRIC`'s order — the one declaration of a decision-point
+#: guard pack's `verdictMetrics` (architect ruling on impl review P12-m2): `validate_pack` refuses
+#: any other set, and `report._LOWER_IS_BETTER` carries these names.
+PER_KIND_VERDICT_METRICS: tuple[str, ...] = tuple(_PER_KIND_METRIC.values())
+#: v1.3 §3.5: the pooled exploratory metric a decision-point `eval` item also declares, by label.
+_POOLED_METRIC: Mapping[bool, str] = {False: "falseAdvanceRate", True: "falseSuspendRate"}
+#: v1.3 §3.5 (FR-15, AC-17): a `side-check` item declares only its `sideCheck*` metric, keeping the
+#: old pack's tier mapping (`_METRIC_BY_TIER`). Exploratory, never a verdict metric.
+_SIDE_CHECK_METRIC_BY_TIER: Mapping[str, str] = {
+    "clear_suspend": "sideCheckFalseAdvanceRate",
+    "clear_advance": "sideCheckFalseSuspendRate",
+    "boundary": "sideCheckFalseAdvanceRateBoundary",
+}
+
+
+def _is_decision_point(pack: Pack | None) -> bool:
+    """v1.3 §3.5: a decision-point pack is one whose manifest has a `decisionPoint` key. A `None`
+    pack — the old scorer tests' call — is not one."""
+    return pack is not None and "decisionPoint" in pack.manifest
+
+
+def _declared_metrics(
+    item_input: Mapping[str, Any], *, pack: Pack | None
+) -> tuple[tuple[str, ...], bool]:
+    """`(metric names the item declares, whether an error on it is a false suspend)`.
+
+    The old pack: its tier's one metric (`_METRIC_BY_TIER`). A decision-point pack (v1.3 §3.5),
+    by the item's own `stratum`, never defaulted: an `eval` item declares its per-kind verdict
+    metric and the pooled one; a `side-check` item only its `sideCheck*` metric. Anything else
+    raises. `validate_pack` refuses each such item before a run
+    (`packs._classification_item_problems` reads these same tables), so a raise here is a run of
+    an unvalidated pack."""
+    if not _is_decision_point(pack):
+        metric = _METRIC_BY_TIER[item_input["tier"]]
+        return (metric,), metric == "falseSuspendRate"
+    stratum = item_input.get("stratum")
+    if stratum == "eval":
+        label = item_input.get("expected")
+        if not isinstance(label, bool):
+            raise ValueError(
+                f"item {item_input.get('itemId')!r}: an eval item's label must be a bool, got "
+                f"{label!r}"
+            )
+        per_kind = _PER_KIND_METRIC.get((label, item_input.get("path")))
+        if per_kind is None:
+            raise ValueError(
+                f"item {item_input.get('itemId')!r}: path {item_input.get('path')!r} is not an "
+                "evidence kind (understanding, turns)"
+            )
+        return (per_kind, _POOLED_METRIC[label]), label
+    if stratum == "side-check":
+        tier = item_input["tier"]
+        return (_SIDE_CHECK_METRIC_BY_TIER[tier],), _METRIC_BY_TIER[tier] == "falseSuspendRate"
+    raise ValueError(
+        f"item {item_input.get('itemId')!r}: stratum {stratum!r} is not 'eval' or 'side-check' "
+        "(v1.3 §3.5, never defaulted)"
+    )
+
+
 def answer_from_chat(result: ChatResult, *, pack: Pack) -> tuple[bool, str]:
     """The role's chat parse, alone (typed-decision-models plan §3.3 "Scorer seam"): `(advanced,
     outcome)` for one judge reply.
@@ -372,13 +440,17 @@ def score_answer(
 ) -> ItemResult:
     """The tier's metric and count for one answer, wherever the answer came from (plan §3.3).
 
-    Exactly one metric name is scoreable per item (`_METRIC_BY_TIER[item_input["tier"]]`), with
-    `counts[metric] = int(advanced)` for `clear_suspend`/`boundary` (expected=False, verified) —
-    `advanced=True` IS the false-advance event; for `clear_advance` (expected=True), `advanced=
-    False` IS the false-suspend event, so `counts["falseSuspendRate"] = int(not advanced)`.
+    On the old pack exactly one metric name is scoreable per item
+    (`_METRIC_BY_TIER[item_input["tier"]]`), with `counts[metric] = int(advanced)` for
+    `clear_suspend`/`boundary` (expected=False, verified) — `advanced=True` IS the false-advance
+    event; for `clear_advance` (expected=True), `advanced=False` IS the false-suspend event, so
+    `counts["falseSuspendRate"] = int(not advanced)`. On a **decision-point pack** (v1.3 §3.5)
+    the item's `stratum` decides (`_declared_metrics`): an `eval` item declares its per-kind
+    verdict metric and the pooled one, both from its label and `path`; a `side-check` item only
+    its `sideCheck*` metric by tier. Every declared metric carries the same event count.
     `outcome` is carried through, never recomputed. `detail` carries `{"path":
-    item_input["path"], "tier": item_input["tier"]}` for the aggregate's path-split diagnostic —
-    never anything answer-adjacent.
+    item_input["path"], "tier": item_input["tier"]}` (`tier` only when the item has one) for the
+    aggregate's path-split diagnostic — never anything answer-adjacent.
 
     **Decision surfaces** (typed-decision-models plan2 §3.3, plan3 §3.3). The four keywords have
     no default; the old pack passes `None` for each and its `detail` is byte-identical to before
@@ -403,8 +475,10 @@ def score_answer(
     pinned over the whole keyword cross-product by
     `test_score_answer_accepts_exactly_the_legal_keyword_combinations`."""
     item_id = item_input["itemId"]
-    metric = _METRIC_BY_TIER[item_input["tier"]]
-    detail: dict[str, Any] = {"path": item_input["path"], "tier": item_input["tier"]}
+    metrics, false_suspend = _declared_metrics(item_input, pack=pack)
+    detail: dict[str, Any] = {"path": item_input["path"]}
+    if "tier" in item_input:
+        detail["tier"] = item_input["tier"]
     detail.update(
         _decision_detail(
             answer,
@@ -420,8 +494,9 @@ def score_answer(
         scoreable: dict[str, bool] = {}
         counts: dict[str, int] = {}
     else:
-        scoreable = {metric: True}
-        counts = {metric: int(not answer) if metric == "falseSuspendRate" else int(answer)}
+        event = int(not answer) if false_suspend else int(answer)
+        scoreable = dict.fromkeys(metrics, True)
+        counts = dict.fromkeys(metrics, event)
     return ItemResult(
         itemId=item_id,
         pairingKey=(item_id,),
@@ -508,7 +583,14 @@ def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ClassificationAggre
 
     **No metric here is a pooled figure across tiers or paths — every `BinaryMetric`'s `n` is its
     own named subset's count**, never the whole run's `n` (plan §3.8.2: "no pooled 85-item figure
-    anywhere")."""
+    anywhere").
+
+    **A decision-point pack** (typed-decision-models v1.3 §3.5) reads every figure off the items'
+    declarations: the pooled `falseAdvanceRate`/`falseSuspendRate` and `advanceRecall` over the
+    `eval` stratum, the four per-kind verdict metrics (`_PER_KIND_METRIC`), then the three
+    exploratory `sideCheck*` metrics (`_SIDE_CHECK_METRIC_BY_TIER`). It has no
+    `falseAdvanceRateBoundary`: the side check's boundary tier is
+    `sideCheckFalseAdvanceRateBoundary`."""
 
     def declaring(name: str) -> list[ItemResult]:
         return [it for it in items if it.scoreable.get(name)]
@@ -536,14 +618,29 @@ def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ClassificationAggre
             for path in _PATHS
         ]
 
-    per_class = (
-        false_advance,
-        false_suspend,
-        advance_recall,
-        false_advance_boundary,
-        *by_path("falseAdvanceRate"),
-        *by_path("falseSuspendRate"),
-    )
+    if _is_decision_point(pack):
+        # v1.3 §3.5: every figure from the items' own declarations — the four per-kind verdict
+        # metrics (eval stratum), then the three exploratory `sideCheck*` ones. Nothing is split
+        # off `detail`, and no item declares the old pack's boundary metric.
+        per_class = (
+            false_advance,
+            false_suspend,
+            advance_recall,
+            *(_binary_metric(name, declaring(name)) for name in _PER_KIND_METRIC.values()),
+            *(
+                _binary_metric(name, declaring(name))
+                for name in _SIDE_CHECK_METRIC_BY_TIER.values()
+            ),
+        )
+    else:
+        per_class = (
+            false_advance,
+            false_suspend,
+            advance_recall,
+            false_advance_boundary,
+            *by_path("falseAdvanceRate"),
+            *by_path("falseSuspendRate"),
+        )
     parse_failures = sum(1 for it in items if it.outcome == "parse_failure")
 
     return ClassificationAggregates(perClass=per_class, parseFailures=parse_failures, n=len(items))

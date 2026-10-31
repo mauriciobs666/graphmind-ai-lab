@@ -40,6 +40,7 @@ from modelbench.results import (
     ToolCallAggregates,
 )
 from modelbench.roles import unit_kind as unit_kind_for_role
+from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
 
 _DESCRIPTIVE_NOTE = (
     "_Per-arm intervals are Wilson score intervals over the arm's own items: **descriptive, not "
@@ -120,7 +121,11 @@ class DuplicateModelInReport(ValueError):
 #: `falseAdvanceRateBoundary` (currently exploratory-only, `classification.py::_METRIC_BY_TIER`) is
 #: ever promoted into a pack's `verdictMetrics`, this set must gain it in the same change** — same
 #: undesired-event polarity, confirmed by the same review.
-_LOWER_IS_BETTER: frozenset[str] = frozenset({"falseAdvanceRate", "falseSuspendRate"})
+#: A decision-point guard pack's four per-kind rates are its `verdictMetrics` (architect ruling on
+#: impl review P12-m2), so they join here in that change, by `classification`'s own constant.
+_LOWER_IS_BETTER: frozenset[str] = frozenset(
+    {"falseAdvanceRate", "falseSuspendRate", *PER_KIND_VERDICT_METRICS}
+)
 
 
 def _metric_value(run: RunResult, metric: str) -> float | None:

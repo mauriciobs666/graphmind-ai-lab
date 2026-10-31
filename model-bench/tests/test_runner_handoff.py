@@ -370,11 +370,15 @@ def test_a_mixed_run_decides_two_items_and_hands_off_two(tmp_path):
     ]
     assert all("failedCall" not in i.detail and "reason" not in i.detail for i in run.items)
     counts = {i.itemId: i.counts for i in run.items}
+    # U3b.1: per-kind verdict metric plus the pooled one, per eval item (v1.3 §3.5).
     assert counts == {
-        "fx-cs-01": {"falseAdvanceRate": 1},  # decided yes on a clear suspend
-        "fx-cs-02": {"falseAdvanceRate": 0},
-        "fx-ca-01": {"falseSuspendRate": 0},  # the hand-off LLM advanced
-        "fx-ca-02": {"falseSuspendRate": 1},  # the hand-off LLM suspended
+        # decided yes on a clear suspend
+        "fx-cs-01": {"falseAdvanceRateByUnderstanding": 1, "falseAdvanceRate": 1},
+        "fx-cs-02": {"falseAdvanceRateByTurns": 0, "falseAdvanceRate": 0},
+        # the hand-off LLM advanced
+        "fx-ca-01": {"falseSuspendRateByUnderstanding": 0, "falseSuspendRate": 0},
+        # the hand-off LLM suspended
+        "fx-ca-02": {"falseSuspendRateByTurns": 1, "falseSuspendRate": 1},
     }
     assert [len(lms.decide_calls), len(lms.chat_calls)] == [4 + 1, 2]  # + the re-check
 
@@ -510,7 +514,9 @@ def test_over_limit_hand_off_succeeds_column(tmp_path):
     assert item.timing.wallClockMs == pytest.approx(_FAILED_DECIDE_MS + 3000.0)
     assert item.timing.unexplainedMs == pytest.approx(2300.0)  # a gap check would withhold it
     assert item.timing.withheldFor is None
-    assert (item.outcome, item.counts) == ("pass", {"falseAdvanceRate": 1})  # the LLM advanced
+    assert (item.outcome, item.counts) == (  # the LLM advanced
+        "pass", {"falseAdvanceRateByTurns": 1, "falseAdvanceRate": 1}
+    )
     assert len(lms.chat_calls) == 1 and lms.chat_calls[0]["timeout_s"] == 180.0
     assert _counts(_metric(run, "handoffShare")) == (1, 4)
     assert _counts(_metric(run, "overLimit")) == (1, 4)
@@ -804,7 +810,7 @@ def test_cli_run_with_a_decision_model_evicted_by_the_chat_warm_up_exits_3_stori
     half of the eviction refusal is asserted through `cli.main` — exit 3 and no `results/`."""
     from modelbench import cli
 
-    _handoff_workspace(tmp_path)
+    _handoff_workspace(tmp_path, contract_valid=True)
     lms = HandoffStub(decide_responses=list(_MIXED), evict_on_chat_warm_up=True)
     monkeypatch.setattr(cli, "LMStudio", lambda base_url: lms)
     code = cli.main(
@@ -1077,20 +1083,33 @@ def test_a_fixture_hand_off_run_stores_a_valid_model_handoff_record_offline(tmp_
 
 
 def test_per_path_diagnostics_split_each_verdict_metric_by_who_decided(tmp_path):
-    """fx-cs-01 decided yes (a false advance), fx-cs-02 decided no; fx-ca-01 handed off and
-    advanced, fx-ca-02 handed off and suspended (a false suspend)."""
+    """The fixture's verdict metrics are the four per-kind rates (architect ruling on impl review
+    P12-m2), so each is split by who decided. Item table, one item per cell:
+    fx-cs-01 (understanding, label no) decided yes — a false advance; fx-cs-02 (turns, no) decided
+    no; fx-ca-01 (understanding, yes) handed off and advanced; fx-ca-02 (turns, yes) handed off and
+    suspended — a false suspend. Each cell's `(k, n)` is its one item on that path, or (0, 0)."""
     _handoff_workspace(tmp_path)
     lms = HandoffStub(decide_responses=list(_MIXED), chat_responses=[_reply(True), _reply(False)])
     run, _ = _run(tmp_path, lms)
-    assert _counts(_metric(run, "falseAdvanceRateDecidedByModel")) == (1, 2)
-    assert _counts(_metric(run, "falseAdvanceRateHandedOff")) == (0, 0)
-    assert _counts(_metric(run, "falseSuspendRateDecidedByModel")) == (0, 0)
-    assert _counts(_metric(run, "falseSuspendRateHandedOff")) == (1, 2)
+    expected = {
+        "falseAdvanceRateByUnderstandingDecidedByModel": (1, 1),
+        "falseAdvanceRateByUnderstandingHandedOff": (0, 0),
+        "falseAdvanceRateByTurnsDecidedByModel": (0, 1),
+        "falseAdvanceRateByTurnsHandedOff": (0, 0),
+        "falseSuspendRateByUnderstandingDecidedByModel": (0, 0),
+        "falseSuspendRateByUnderstandingHandedOff": (0, 1),
+        "falseSuspendRateByTurnsDecidedByModel": (0, 0),
+        "falseSuspendRateByTurnsHandedOff": (1, 1),
+    }
+    for name, pair in expected.items():
+        assert _counts(_metric(run, name)) == pair, name
     assert _counts(_metric(run, "handoffShare")) == (2, 4)
     pack = load_pack(tmp_path / "packs" / base._PACK_ID)
     verdict = set(pack.manifest["metrics"]["verdictMetrics"])
-    assert not verdict & {m.name for m in run.aggregates.perClass if "By" in m.name or
-                          "HandedOff" in m.name}
+    names = {m.name for m in run.aggregates.perClass}
+    split = {n for n in names if n.endswith(("DecidedByModel", "HandedOff"))}
+    assert split == set(expected)  # one pair per verdict metric, and no pooled split
+    assert verdict <= names and not verdict & split
 
 
 def test_a_decisions_surface_run_carries_no_hand_off_counts(tmp_path):
@@ -1098,7 +1117,9 @@ def test_a_decisions_surface_run_carries_no_hand_off_counts(tmp_path):
     base._workspace(tmp_path)
     run, _ = base._run(tmp_path, base.DecisionStub(decide_responses=base._four(0.9, 0.1, 0.9, 0.9)))
     assert run.fingerprint.armProfile == "model:decisions"
-    for name in ("handoffShare", "handoffCallFailures", "falseAdvanceRateHandedOff"):
+    for name in (
+        "handoffShare", "handoffCallFailures", "falseAdvanceRateByUnderstandingHandedOff"
+    ):
         assert not _has_metric(run, name), name
 
 

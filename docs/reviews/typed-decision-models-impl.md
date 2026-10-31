@@ -1302,3 +1302,219 @@ the over-limit fixture's 232 is pinned.
 
 None. P11-m1 is a single instance, already covered by root `REVIEW.md`'s "a check that cannot
 fail".
+
+## Pass 12
+
+*2026-10-31. U3b.1 (decision-point pack contract): the uncommitted `model-bench/` diff against
+`1aea5ca7`. Specs: v1.3 §3.5, §4 U3b, §5 U3b rows; plan2 §4.1 U3b; plan3 (no §3.5 amendment);
+method note §Q1.3; requirements FR-4/5/8/11/13/15 and AC-4/7/10/13/17. U3b.2 (guard parse
+port, render/hand-off-parse vectors, falkor-chat equality test) is out of scope.*
+
+**Verdict: approve with suggestions.** Every v1.3 §3.5 refusal is present, keyed on the key's
+presence, and refuses on a deleted key. The declared metrics match §3.5, and the old pack is
+unchanged. One minor is for the implementer: `validate_pack` passes items that the scorer then
+raises on mid-run (P12-m1). One minor goes to `architect`/`teco`: no unit's brief owns the
+guard pack's per-kind `verdictMetrics` (P12-m2). One nit (P12-n1).
+
+**Checks run** (from `model-bench/`, fresh `PYTHONPYCACHEPREFIX` each run):
+- **Suite and lint:** `2691 passed, 5 deselected, 2 xfailed`; `ruff` clean; the new file has
+  `60 passed`. `test_scoring_classification.py` and `test_results.py` are unchanged from
+  `1aea5ca7`, so U3a's rescore test and the stored-records test are the originals, and both pass.
+- **Mutants:** each was run against the full suite, then restored and `cmp`-checked. All went red.
+  - **C8**, the scorer keyed on `bool(manifest.get("decisionPoint"))`: 1 red
+    (`test_the_scorer_keys_on_the_decision_point_key_even_when_its_block_is_empty`).
+  - `validate_pack` keyed on truthiness: 3 red.
+  - The floor counting side-check items: 3 red.
+  - An absent `incumbent` accepted: 7 red.
+  - The side check declaring the old tier metric: 4 red.
+  - The timeout and leakage exit-4 tests reverted to the unpadded pack: 1 red each.
+- **Claim 1 (exit-4 tests): confirmed by execution.** Unpadded, both still exit 4, through
+  `validate_pack`'s two size refusals. They now fail only on their new stderr assertions:
+  `'--request-timeout'` and `'AC-3'` are not in the "4 item(s) in stratum 'eval' … / needs its
+  'side-check' stratum" text. The third padded exit-4 test (`…builds_a_candidate_config…`) is
+  protected by `seen[0]`. Every other exit-4 test in both files calls `run_pack` directly, which
+  never validates.
+- **Claim 6 (cleared set): confirmed.** I swept plan2 and plan3 whole for `refus|reject|validate|
+  never|must not|stratum|labels|side-check|MIN_EVAL`. Every hit belongs to `Candidate.load`, `run`,
+  `compare`/U3c, decision-models generation (plan2 §3.5, generator ≠ labeler), or U9 config. None
+  adds or removes a `validate_pack` refusal. The method note's per-cell sizes (§Q1.3) are
+  "printed and never refused" (plan2 §3.6), so the floor is `MIN_EVAL_ITEMS` alone.
+- **Claim 4 (old packs):** both `_is_decision_point` and `_decision_point_problems` test
+  `"decisionPoint" in pack.manifest`. Old-pack `detail` is still `{path, tier}` in that order;
+  the counts formula is unchanged; all 5 shipped packs validate `[]`.
+- **Claim 3 (names):** the four per-kind names are v1.3 §3.5's verbatim. No plan,
+  requirement or review names the `sideCheck*` metrics beyond the wildcard. The chosen three are
+  `_METRIC_BY_TIER` prefixed, bound by
+  `test_the_side_check_table_keeps_the_old_packs_tiers_one_to_one`. The decision-point aggregate
+  has no `falseAdvanceRateBoundary` (name list asserted; aggregate-layout mutant red).
+- **Docs:** `model-bench/AGENTS.md` is 2,484 words with no line over 700 characters. Both edits
+  replace in place. README's paragraph matches the code, rule for rule. The HISTORY entry is
+  new. None of these files falls under the growth-stops bullet.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **Claim 2 (absent `incumbent` refused on every role): consistent with §3.5.** §3.5's schema
+  always carries the key (`"qwen/…" | null`), and §3.5's deletion rule requires that deleting the
+  key a refusal reads still refuses. Reading absent as `null` on a new-ability role would be
+  exactly that default. U5/U6 packs pass through U3d's importer, and U5's done-condition is
+  "imported into a model-bench pack that validates". A manifest missing `incumbent: null` therefore
+  fails loudly at U5. Still, the U3d brief should say "write `incumbent` explicitly, `null` on
+  new-ability" (folded into P12-m2's routing).
+- **Claim 5, the three deferred gaps:**
+  - **`report._LOWER_IS_BETTER` lacks the new names: correctly deferred.** Its own comment requires
+    the set to gain a metric "in the same change" that promotes it into a pack's
+    `verdictMetrics`, and no pack does yet. The obligation, however, has no owner (P12-m2).
+  - **No pack declares the four per-kind rates as `verdictMetrics`: not a U3b.1 obligation.**
+    U3b ships no pack. The 4-item fixture is a test fixture. But see P12-m2: no brief owns it.
+  - **No refusal of a guard pack whose `verdictMetrics` differ from the four: a plan gap, not an
+    omission.** It is absent from §3.5's refusal list, which U3b.1 implements exactly. Route to
+    `architect` (P12-m2).
+
+### Findings
+
+**P12-m1 (minor). `validate_pack` passes items the decision-point scorer raises on, while the
+scorer's docstring says it does not.** `_declared_metrics` says "Anything else raises —
+`validate_pack` refuses such a pack before a run". A probe (Appendix P12) built the accepted
+200 + 85 pack and broke one field at a time:
+
+- an `eval` item with `path: "mixed"`, `expected: "false"` or no `expected`;
+- a side-check item with no `tier` or an unknown one.
+
+Each validates `[]`. Scoring then raises: `ValueError` for the `eval` cases, a bare `KeyError`
+for the side-check ones. `runner._drive_decision_items` does not catch either around
+`score_answer`, so `run` dies mid-pack after model calls instead of exiting 4 up front.
+
+**Fix (`packs._strata_problems`):** also refuse an `eval` item whose `expected` is not a bool or
+whose `path` is not in `{understanding, turns}`, and a side-check item whose `tier` is not a key
+of `classification._SIDE_CHECK_METRIC_BY_TIER`. Import the key sets from their homes, don't
+copy them. Test each alone and by key deletion. Alternatively, narrow the docstring. The refusal
+is the better choice because §3.5's ethos is "refused, never defaulted, before a run".
+
+**P12-m2 (minor; route to `architect`, then `teco`). The guard pack's per-kind `verdictMetrics`,
+and their `_LOWER_IS_BETTER` entries, belong to no unit.** v1.3 §3.5 says "the guard pack's
+`verdictMetrics` are the four per-kind rates". HISTORY assigns "the manifest" to U3d and "the
+bar" to U3c. But the U3d brief (v1.3 §4; plan2 §4.1) only copies a manifest. The U3c brief
+does not mention `verdictMetrics`. U5 authors the manifest, and its brief does not either.
+`report._LOWER_IS_BETTER`'s comment makes adding the four names a same-change obligation of
+whoever promotes them, and nothing enforces it. A guard manifest written with the pooled rates
+as `verdictMetrics` validates today: the contract fixture does exactly that, and the "accepted
+shape" test passes. The legacy report would then infer on pooled rates, against FR-13/AC-10.
+
+**Fix:** `architect` decides whether `validate_pack` refuses a decision-point guard pack whose
+`verdictMetrics` are not exactly the four per-kind names, as a ruling `teco` ledgers. The refusal
+is recommended: "a pack cannot pick its own bar". Whichever unit lands that refusal or the first
+real guard manifest also adds the four names to `_LOWER_IS_BETTER` and updates the fixture's
+`verdictMetrics`. `teco` writes that unit's name into its brief, with Disposition 1's
+`incumbent: null` line for U3d.
+
+**P12-n1 (nit; for the U3c brief). Side-check size.** FR-15/AC-17 name 85 items, and v1.3 §3.5's
+report header reads "Side check — 85 human-curated items". `validate_pack` requires only a
+non-empty side-check stratum, which matches §3.5's "no `side-check` stratum" wording; the padded
+`cli` pack carries 1. U3c should print the side check's actual n, not a literal 85. Otherwise a
+pack with a different count misprints.
+
+### Open questions
+
+1. **(`architect`)** P12-m2: is "decision-point guard `verdictMetrics` == the four per-kind
+   names" a `validate_pack` refusal? And which unit adds them to `_LOWER_IS_BETTER`?
+
+### Proposed REVIEW.md lines
+
+None. P12-m1 is one instance; root `REVIEW.md`'s evidence bar already asks for the probe that
+found it.
+
+### Appendix P12 — the validate-vs-score probe
+
+Script `scratchpad/probe/p.py`, run with `model-bench/.venv/bin/python` from `model-bench/`. It
+builds `test_decision_point_pack._contract_pack` with one `rows_edit` per case, then runs
+`validate_pack` and `_score` over every item:
+
+| Case | `validate_pack` | Scoring |
+|---|---|---|
+| eval `path: "mixed"` | `[]` | `ValueError` |
+| eval `expected: "false"` | `[]` | `ValueError` |
+| eval `expected` deleted | `[]` | `ValueError` |
+| side-check `tier` deleted | `[]` | `KeyError` |
+| side-check `tier: "weird"` | `[]` | `KeyError` |
+
+## Pass 13
+
+*2026-10-31. Re-gate of U3b.1 after its fix round: the uncommitted `model-bench/` diff against
+`1aea5ca7`, read against my Pass 12 snapshots of the touched files. Premise: the architect ruling
+on P12-m2 (decision-log entry, `docs/plans/typed-decision-models-coordination.md`, 2026-10-31).*
+
+**Verdict: approve.** P12-m1 and P12-m2 are fixed. The two fixes do not interfere with each other
+or with the rest of U3b.1. One new nit.
+
+**Checks run** (from `model-bench/`, fresh `PYTHONPYCACHEPREFIX` each run):
+- **Suite and lint:** `2715 passed, 5 deselected, 2 xfailed`; `ruff` clean.
+- **Pass 12 probe re-run** (`scratchpad/probe/p.py`): all five cases are now refused by
+  `validate_pack`, and each still makes the scorer raise.
+- **Mutants:** each was run against the full suite, then restored and `cmp`-checked. All went red.
+  - Item checks keyed on role instead of scorer (N9): 1 red.
+  - The verdict-metrics rule checking only length and uniqueness (V1): 1 red.
+  - `PER_KIND_VERDICT_METRICS` reordered (V7): 1 red.
+  - My own: `_classification_item_problems`' `evals`/`side_checks` arguments swapped: 47 red.
+  - My own: `_LOWER_IS_BETTER` dropping one of the four: 1 red.
+- **Import order:** `report → classification` adds an edge only. `classification` imports
+  `lmstudio`, `packs`, `results` and `runner`, and none of them imports `report`; `packs` reaches
+  `classification` only at call time. Each of `report`, `classification`, `packs`, `runner`, `cli`
+  and `results` imports cleanly on its own in a fresh interpreter.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **P12-m1: fixed.**
+  - `_classification_item_problems` refuses each probed shape. Each test case checks both
+    directions: the item is refused alone, and the scorer raises on it.
+  - The extra side-check `path` check is correct: `score_answer` reads `item_input["path"]` on
+    every item. Eval `path` absence was already covered by the path check.
+  - **Scorer keying is right.** I probed a contract-valid guard pack declaring `grounding`,
+    `extraction` or `retrieval`, with an eval item on `path: "mixed"`. It validates `[]`, but
+    `run --candidate` refuses (exit 4, "its scorer has no decision_input …") with 0 warm-ups and
+    0 decide calls. A chat arm on such a pack never reaches `classification`, so nothing escapes
+    to a mid-run raise. Role keying would wrongly hold U4's `agreement` packs to this scorer's
+    fields.
+- **P12-m2: fixed, and it matches the ruling.**
+  - `_guard_verdict_metrics_problems` requires exactly the four, as a set, with no duplicate,
+    using `classification.PER_KIND_VERDICT_METRICS`. It applies to the guard role only, and the
+    new-ability case is left to U4, both as ruled.
+  - `_LOWER_IS_BETTER` gains the four through the same constant, and the fixture declares the
+    four.
+  - **The eight pairs are independently confirmed.** Probe `scratchpad/probe/p3.py` printed the
+    item table and who decided each item:
+    - fx-cs-01 (understanding, `False`) decided by the model, event 1;
+    - fx-cs-02 (turns, `False`) decided by the model, event 0;
+    - fx-ca-01 (understanding, `True`) handed off, event 0;
+    - fx-ca-02 (turns, `True`) handed off, event 1.
+
+    That gives exactly the test's eight `(k, n)` pairs. Their sums reproduce the old pooled
+    pairs: false advances decided by the model (1, 2) and false suspends handed off (1, 2).
+  - **The set check is not weaker.** The old `"By" in name` filter would now match the verdict
+    metrics themselves, so it had to go. The new check asserts the split set is exactly the eight
+    names, which also excludes any pooled split. It also asserts `verdict ⊆ names` and
+    `verdict ∩ split = ∅`, so it keeps the old intent and is strictly tighter.
+- **Same-revision interaction: clean.**
+  - The key-alone test's 6 problems are for the right reasons. The real guard pack has no
+    stratum, so the item checks see no `eval` or side-check rows and add nothing. The sixth
+    problem is the pooled `verdictMetrics`.
+  - The padded CLI pack and the contract pack both copy the fixture's new four.
+  - The "two size refusals" fixture test still sees exactly two.
+  - The old pack's per-path diagnostic names now sit in `_LOWER_IS_BETTER` too. That is harmless:
+    `_better` and the flip run only on verdict and headline metrics, the old pack's are the pooled
+    pair, and the polarity would be the same anyway.
+  - README line 176 and `runner._handoff_metrics`' docstring say "each verdict metric", so both
+    still hold.
+
+### Findings
+
+**P13-n1 (nit). `_guard_verdict_metrics_problems` keys on `SIDE_CHECK_ROLE`.** The guard's
+verdict rule and its side-check rule are different facts that happen to share a role. A future
+edit to the side-check constant would silently move the verdict rule too. A
+`GUARD_ROLE = "guard-judge"` (or `BAR_KIND_BY_ROLE[role] == "speed-up"`) would keep them apart.
+Take it or leave it. No current mutant distinguishes the two.

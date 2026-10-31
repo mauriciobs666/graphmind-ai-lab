@@ -15,7 +15,12 @@
   "data": {"items": "items.jsonl"},
   "sampling": {"seed": 20261031, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
   "metrics": {
-    "verdictMetrics": ["falseAdvanceRate", "falseSuspendRate"],
+    "verdictMetrics": [
+      "falseAdvanceRateByUnderstanding",
+      "falseAdvanceRateByTurns",
+      "falseSuspendRateByUnderstanding",
+      "falseSuspendRateByTurns"
+    ],
     "headlineMetric": null
   },
   "decisionPoint": {"answer": {"type": "predicate"}, "incumbent": "qwen/qwen3-4b-2507"},

@@ -216,6 +216,23 @@ role's scorer protocol — `ItemScorer` for a single-call role, `ConversationSco
 multi-turn one (only `tool-caller` today); then run `./run.sh validate --pack packs/<new-id>
 --strict` — no LM Studio needed — before ever driving it live with `./run.sh run`.
 
+**A decision-point pack** is one whose `pack.json` has a `decisionPoint` key
+(`docs/plans/typed-decision-models.md` §3.5); no shipped pack has one, and a pack without it
+validates exactly as before. With it, `validate` (and so `run`) also requires: a `labels` block
+with `source: "llm-unreviewed"`, `inputs: "synthetic"` and a `labeler.model` that is not
+`decisionPoint.incumbent`; a role in the bar table, with `incumbent` stated (a model id on the
+guard's speed-up point, `null` on a new-ability one); a `stratum` on every item, `eval` or
+`side-check`, never defaulted; at least 200 `eval` items, each with `origin: "synthetic"`; and, on
+`guard-judge` only and there always, a `side-check` stratum (the human-curated items, exempt from
+`origin`). A deleted key is refused, never defaulted. On a pack scored by `classification` (the
+guard's), every `eval` item needs a bool `expected` and a `path` of `understanding` or `turns`,
+and every `side-check` item a `path` and a known `tier`, so a run never stops on a malformed item.
+A guard decision-point pack's `verdictMetrics` are exactly its four per-kind rates
+(`falseAdvanceRateByUnderstanding` … `falseSuspendRateByTurns`), each once, in any order. Each
+`eval` guard item scores its per-kind rate (from its label and `path`) plus the pooled
+`falseAdvanceRate`/`falseSuspendRate`, now exploratory; a `side-check` item scores only its
+exploratory `sideCheck*` metric.
+
 **Scope note — the `embedder` pack scores exact cosine, not the production ANN pipeline.**
 `embedder-graphrag-retrieval` embeds the pack's fixed corpus and queries, then ranks with
 brute-force exact cosine similarity in-process — no ANN index, no FalkorDB. That is deliberate:
