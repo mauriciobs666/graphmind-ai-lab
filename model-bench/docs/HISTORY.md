@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U1d.1 — the contracts half of U1d: over-limit recognition, `LMStudioCallFailed.body`, `score_answer`'s decision keywords, the fit fingerprint fields
+
+**What:** the parts of U1d (`docs/plans/typed-decision-models3.md` §4.1, §3.2, §3.3, §5;
+`docs/plans/typed-decision-models2.md` §4.1, §3.2, §3.3) that need no `runner`/`packs`/`cli`
+wiring. Nothing in a `run` path calls any of it yet; U1d.2/U1d.3 wire it.
+
+- **`decisions.py`.** `_policy_problem` applies plan3 §3.2's one-way rule: a policy that can hand
+  off (`l != h`, or `minConfidence > 0`) needs a hand-off model, and an empty band (or `c == 0`)
+  **with** a hand-off model now loads — the overflow-only composite. The two former refusal tests
+  (band and `c == 0`) are now acceptance tests. New `OVER_LIMIT_MARKER = "too large to process"`
+  and pure `is_over_limit(status, body)`: true iff `status == 500` and the marker is in `body`,
+  case-sensitively; `body=None` is never over-limit.
+- **`tests/fixtures/decision-contract/over-limit.jsonl`**, a new golden family (8 rows,
+  `{case, status, body, overLimit}`), expected values written by hand from plan3 §3.3: the
+  `ws:agent-team` body document's 232-byte LM Studio body at 500 (true) and 400; the same body
+  with the marker upper-cased; another 500 body; the probe document's `/api/v0` HTTP-200 body;
+  `""`; `null` at 500; and `null`/`null` (every non-HTTP raise site's shape). A test pins the
+  real body's UTF-8 length at 232 and the rows the plan names.
+- **`lmstudio.py`.** `LMStudioCallFailed.__init__(message, *, status, body)`: `body` is required,
+  like `status`. `_raw_post`'s HTTP-error rung passes the whole error body decoded as UTF-8 with
+  `errors="replace"` (`""` when the error-body read failed); the message stays truncated. Every
+  other raise site — `catalog`'s non-2xx GET included — passes `body=None`. The raise-site
+  completeness table now pins each site's `body` beside its `status`. Test doubles in
+  `test_convo.py`/`test_runner.py` construct it with an explicit `body`.
+- **`scoring/classification.py`.** `score_answer` gains keyword-only `decided_by`, `probability`,
+  `failed_call` and `reason`, none defaulted; `answer` is `bool | None`, `None` iff
+  `failed_call` is set. `decided_by` writes `decidedBy` and `probability`; `failed_call="decision"`
+  gives `scoreable={}`, `counts={}`, `failedCall` and `probability: None`; `reason="over-limit"`
+  writes `reason`. With all four `None` (`score_item`'s call) `detail` is unchanged — the U3a
+  golden re-score stays byte-identical, and a dedicated test checks no real-pack item writes any
+  of the four keys. Refused as `ValueError`: values outside each closed set, `answer`/`failed_call`
+  disagreeing, `decided_by` on a failed item, a `probability` with no `decided_by`, and
+  `failed_call="handoff"` (the guard withholds a hand-off failure, `HANDOFF_FAILURE_BY_ROLE`).
+- **`results.py`.** The `ItemTiming` docstring states plan2 §3.3's kept-item exception (elapsed
+  wall clock stored, `withheldFor=None`, `detail.failedCall` set). No field changes.
+- **`fingerprint.py`.** `_DECISIONS_ADD` gains `fitOutcome` and `fitQualityTarget`, both
+  `nonempty`: `model:decisions` is 35 fields, `model:handoff` 47. Still additive in schema 1;
+  `test_every_stored_run_record_still_validates_unchanged` stays green.
+
+**Mutation-tested**, each mutant red: the one-way rule reverted to "iff" and deleted; the marker
+case-folded (`body.lower()`, reddens the upper-case row), the status check dropped (reddens the
+400 row), the marker altered; `body` defaulted to `None`, truncated, `None` on rung 1, `None` on a
+failed read, leaked onto `catalog`'s GET, decoded with `errors="ignore"`; `score_answer` dropping
+`reason`, defaulting `reason`, writing `decidedBy`/`probability` on the old pack, scoring a failed
+decision; each fit field dropped or relaxed to `present`.
+
+**Left for U1d.2/U1d.3:** the `ItemScorer` Protocol hooks (`reason`/`failed_call` on the hook),
+the `decisions`-surface over-limit item in the runner, `overLimit`/`decisionCallFailures`,
+`LoadResult.decision` and the load rule, `requestTimeoutSeconds` and the timeout refusal, and the
+basis no longer being provisional.
+
 ## 2026-10-30 — typed-decision-models U1c — pure `decisions.py` and the first golden vectors
 
 **What:** `docs/plans/typed-decision-models.md` §4 U1c as amended by

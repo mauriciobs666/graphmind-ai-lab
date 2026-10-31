@@ -356,3 +356,111 @@ CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the c
 ### Open question
 
 1. **(architect / teco) Should U5 and U9 pin the bounds refusal in their own copies?** The options are each copy's own suite, or a shared `policy-bounds.jsonl` family. Either way, it needs to be named in those briefs so the refusal is transcribed rather than dropped.
+
+## Pass 4
+
+*2026-10-31. U1d.1, the contracts half of U1d, reviewed against the uncommitted `model-bench/` diff
+from `3f01faaa`. Baseline: plan3 v1.2 §3.2, §3.3, §4.1 U1d, §5 U1d; plan2 v1.1 §3.2, §3.3, §4.1
+U1d, §5 U1d. The runner, pack, CLI and Protocol-hook halves (U1d.2/U1d.3) are out of scope.*
+
+**Verdict: approve with suggestions.** One minor finding (P4-m1), no blocker or major. All five
+judgment calls hold; call 5 exposes a real plan3 seam, routed as an open question.
+
+**Checks run** (from `model-bench/`):
+- **Suite:** `2381 passed, 4 deselected, 2 xfailed`; `ruff` clean.
+  `test_every_stored_run_record_still_validates_unchanged` and the U3a golden
+  `test_score_item_rescores_the_real_pack_byte_identically_to_before_the_split` both pass.
+- **Body row:** `over-limit.jsonl`'s `body-document-at-500` body is byte-equal to the text between
+  the markers of `ws:agent-team` `a1d388f4…`: 232 UTF-8 bytes, sha256 `5a93988e…`. The `/api/v0`
+  row equals probe document `480ef825…`'s HTTP-200 body verbatim.
+- **Mutants**, each run on the file in place, then restored and checked with `cmp` (and the four
+  source files' md5 afterwards). Implementer's claims, all red: case-folded body (1), status check
+  dropped (1), one-way rule reverted to "iff" (4), `body=None` on a failed error-body read (1),
+  body truncated (1), `fitQualityTarget` relaxed to `present` (4), `reason` not written (2). My own
+  argument-level mutants, all red: the 2xx non-JSON site and the malformed-decisions site passing
+  a body instead of `None` (1 each, via the raise-site table), `errors="surrogateescape"` (1),
+  marker shortened to `"too large"` (1).
+- **HISTORY:** the U1d.1 entry's figures (8 rows, 232 bytes, 35/47 fields) match the fixture and
+  the pinned schemas; it states no suite count. Its mutant list matches what I ran.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the diff is 13 files read
+and executed directly.
+
+### Judgment calls
+
+1. **`c == 0` with a hand-off model now accepted: true to plan.** Plan3 §3.2 defines "can hand off"
+   as "a non-empty band, **or `minConfidence > 0`**", so `c == 0` cannot hand off on policy and is
+   the choice-side overflow-only composite. U9 applies "the same one-way rule", so no copy diverges.
+2. **Extra rows `{500, null}` and `{null, null}`: sound.** Plan3's "`null`" names no status; both
+   readings are covered, and `{null, null}` is every non-HTTP raise site's real shape. The plan
+   gives falkor-chat "the same signature" (`int | None`), so U9's copy can take both rows.
+3. **`score_answer`'s refusals: true, and they constrain nothing wrongly.** Only
+   `guard-judge-understanding` uses `classification`, and `HANDOFF_FAILURE_BY_ROLE["guard-judge"]`
+   is `withhold`, so `failed_call="handoff"` cannot legitimately reach it. U4's `agreement.py`
+   needs the opposite (a kept hand-off failure is legal there), so it must not copy
+   `_decision_detail` verbatim; that is U4's brief, not a defect here. The refusal set is
+   incomplete, though: P4-m1.
+4. **`probability: None` on failed items: consistent with plan3.** Plan3 §3.3's table says every
+   over-limit row, failed ones included, has `detail.probability = None`; writing it on every
+   failed item gives one decision-surface shape. U4 should write the same shape.
+5. **The guard "hand-off fails, withhold" row cannot go through `score_answer`: a correct reading,
+   and a real seam in plan3.** That column requires `detail.reason = "over-limit"` on a withheld
+   item. `score_answer` needs an answer or a `failed_call` (both absent there), and the withheld
+   path, `score_item(result=None)`, builds an `ItemResult` with an empty `detail` and has no
+   `reason` parameter. Plan3 §3.3's "Scorer hook delta" names only `score_answer`, so no vehicle is
+   specified. §3.6 counts this item in `overLimit` (k and n), so the counter will read a `reason`
+   no specified path writes. See Open question 1.
+
+### Findings
+
+**P4-m1 (minor). `score_answer` refuses some impossible keyword states but not the over-limit
+ones.**
+- **Evidence (executed):** over the 72 combinations of `answer` × `decided_by` × `probability` ×
+  `failed_call` × `reason`, against an independent legality predicate written from plan2 §3.3 and
+  plan3 §3.3's table, 6 illegal states are accepted. None is over-refused. Three contradict the
+  plan directly:
+  - `decided_by="decision-model"` with `reason="over-limit"` (an over-limit call has no decision);
+  - `decided_by="handoff"`, `reason="over-limit"`, `probability=0.5` (plan3: "Every row has
+    `detail.probability = None`");
+  - `reason="over-limit"` with neither `decided_by` nor `failed_call` (an answer with no source).
+  Three are my inference: a `decided_by` item with `probability=None` but no over-limit reason
+  (two states for `decision-model`, one for policy `handoff`). The guard's question is a
+  predicate, so a decided item always has a `p`.
+- **Why it matters:** these are exactly the states a U1d.2/U2 runner bug produces: a stale `p`
+  carried into the over-limit branch, or the wrong `decided_by`. `handoffShare`, `overLimit` and
+  `pair_items` would then disagree about the same item, silently. The implementer's own design
+  is to refuse impossible states at this seam; the over-limit axis is the one it misses.
+- **Fix (`model-bench/modelbench/scoring/classification.py` `_decision_detail`;
+  `model-bench/tests/test_scoring_classification.py`):** refuse `reason` without a `decided_by` or
+  `failed_call`, `reason` with `decided_by="decision-model"`, and `reason` with a non-`None`
+  `probability`. Decide the other three explicitly; I recommend refusing too. Pin them with a
+  **cross-product probe**, not a list of shapes: a test that enumerates all 72 combinations and
+  compares accept/refuse against a hand-written legality predicate. Land the fix before U1d.2 wires
+  the runner to it.
+
+**Stopping condition for P4-m1:** that probe exists, passes, and goes red when any one of the new
+refusals is removed.
+
+### What's solid
+
+- The one-way rule is a minimal condition change. Both former refusal tests became acceptance
+  tests, the band one at three edges.
+- `body` is required at all 13 raise sites, and the raise-site table pins every value, so a new
+  site cannot inherit a default.
+- The over-limit vectors were derived independently, and each named rule (status, case, marker)
+  has its own reddening row.
+- The old pack's `detail` stays byte-identical, proven by the golden re-score and a test over
+  every real item.
+
+### Open questions
+
+1. **(architect, before U2) What writes the guard's withheld over-limit record?** Plan3 §3.3's
+   withhold column needs `detail.reason` (and, for the per-cell `overLimit` prints of §3.6, likely
+   `path`/`tier`) on an item that never reaches `score_answer`. Two options:
+   - a `reason` parameter on the scorer's withheld branch;
+   - the runner rebuilding the frozen `ItemResult` with `dataclasses.replace`.
+   Name one in U2's brief; otherwise U2 has to invent it.
+2. **(U1d.2 heads-up, no finding) `detail.inputTokens` has no vehicle either.** `ItemResult` is
+   frozen, and `score_answer` builds `detail`. Adding a fifth no-default keyword, `input_tokens`,
+   keeps the "every decision-surface key passes through one seam" shape that P4-m1's probe relies
+   on.

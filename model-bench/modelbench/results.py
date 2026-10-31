@@ -226,7 +226,10 @@ class ItemTiming:
 
     `wallClockMs` is the ITEM's wall clock: on a `tool-caller` item, the whole turn — every
     iteration and the tool dispatches between them. `None` when the item is incomplete (it ended
-    on a raise or a failure); a partial item's wall clock is never stored as a measurement.
+    on a raise or a failure); a partial item's wall clock is never stored as a measurement — with
+    one exception (typed-decision-models plan2 §3.3): on the `decisions`/`handoff` surfaces, an
+    item whose failed call the runtime acts on (a *kept* item) stores its elapsed wall clock at
+    the raise, with `withheldFor=None` and `detail.failedCall` set. No field changes.
 
     `calls` holds one `CallTiming` per COMPLETED call, in order — empty only when the item's
     first/only call never returned.

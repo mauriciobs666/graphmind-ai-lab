@@ -767,13 +767,20 @@ class TestAnswerFromChat:
         assert classification.answer_from_chat(result, pack=None) == (True, "pass")
 
 
+#: The old pack's call: every decision-surface keyword `None` (plan2 §3.3, plan3 §3.3).
+_NO_DECISION = {"decided_by": None, "probability": None, "failed_call": None, "reason": None}
+
+
 class TestScoreAnswer:
-    """`score_answer(item_input, answer, outcome, timing, *, pack) -> ItemResult` — the tier's
-    metric and count for an answer, wherever the answer came from."""
+    """`score_answer(item_input, answer, outcome, timing, *, pack, decided_by, probability,
+    failed_call, reason) -> ItemResult` — the tier's metric and count for an answer, wherever the
+    answer came from."""
 
     def test_an_advance_on_a_clear_suspend_item_counts_a_false_advance(self):
         item_input = {"itemId": "cs-01", "tier": "clear_suspend", "path": "turns"}
-        result = classification.score_answer(item_input, True, "pass", _timing(), pack=None)
+        result = classification.score_answer(
+            item_input, True, "pass", _timing(), pack=None, **_NO_DECISION
+        )
         assert result.outcome == "pass"
         assert result.scoreable == {"falseAdvanceRate": True}
         assert result.counts == {"falseAdvanceRate": 1}
@@ -782,13 +789,164 @@ class TestScoreAnswer:
 
     def test_a_suspend_on_a_clear_advance_item_counts_a_false_suspend(self):
         item_input = {"itemId": "ca-01", "tier": "clear_advance", "path": "understanding"}
-        result = classification.score_answer(item_input, False, "pass", _timing(), pack=None)
+        result = classification.score_answer(
+            item_input, False, "pass", _timing(), pack=None, **_NO_DECISION
+        )
         assert result.counts == {"falseSuspendRate": 1}
 
     def test_the_outcome_is_carried_through_not_recomputed(self):
         item_input = {"itemId": "bd-01", "tier": "boundary", "path": "turns"}
         result = classification.score_answer(
-            item_input, False, "parse_failure", _timing(), pack=None
+            item_input, False, "parse_failure", _timing(), pack=None, **_NO_DECISION
         )
         assert result.outcome == "parse_failure"
         assert result.counts == {"falseAdvanceRateBoundary": 0}
+
+
+# ==================================================================================================
+# 8. typed-decision-models U1d — the `score_answer` delta (plan2 §3.3, plan3 §3.3)
+# ==================================================================================================
+
+_CS_ITEM = {"itemId": "cs-01", "tier": "clear_suspend", "path": "turns"}
+
+
+def _decision_keywords(**overrides: Any) -> dict[str, Any]:
+    return {**_NO_DECISION, **overrides}
+
+
+class TestScoreAnswerDecisionSurfaceDelta:
+    @pytest.mark.parametrize("name", ["decided_by", "probability", "failed_call", "reason"])
+    def test_each_new_keyword_is_keyword_only_with_no_default(self, name):
+        """Plan2 §3.3 / plan3 §3.3: no default — a call site that forgets one is a `TypeError`,
+        never an item silently scored as if the decision model had not been there."""
+        import inspect
+
+        param = inspect.signature(classification.score_answer).parameters[name]
+        assert param.kind is inspect.Parameter.KEYWORD_ONLY
+        assert param.default is inspect.Parameter.empty
+
+    def test_all_four_none_writes_exactly_todays_detail(self):
+        result = classification.score_answer(
+            _CS_ITEM, True, "pass", _timing(), pack=None, **_NO_DECISION
+        )
+        assert result.detail == {"path": "turns", "tier": "clear_suspend"}
+        assert list(result.detail) == ["path", "tier"]
+
+    def test_the_old_packs_score_item_writes_no_decision_surface_key(self, real_pack: Pack):
+        """Plan2 §5 U1d's dedicated test: across every real item and every reply branch, no
+        `decidedBy`, `probability`, `failedCall` or `reason` key appears in `detail`."""
+        decision_keys = {"decidedBy", "probability", "failedCall", "reason"}
+        for item in _load_real_items():
+            for _, content in SPLIT_REPLY_CORPUS:
+                result = classification.score_item(
+                    item, _split_chat_result(content), _split_timing(None), pack=real_pack
+                )
+                assert set(result.detail) == {"path", "tier"}
+                assert not decision_keys & set(result.detail)
+
+    @pytest.mark.parametrize(
+        ("decided_by", "probability"), [("decision-model", 0.931), ("handoff", 0.42)]
+    )
+    def test_a_decided_item_carries_decided_by_and_probability_and_scores_as_today(
+        self, decided_by, probability
+    ):
+        result = classification.score_answer(
+            _CS_ITEM, True, "pass", _timing(), pack=None,
+            **_decision_keywords(decided_by=decided_by, probability=probability),
+        )
+        assert result.detail == {
+            "path": "turns", "tier": "clear_suspend",
+            "decidedBy": decided_by, "probability": probability,
+        }
+        assert result.scoreable == {"falseAdvanceRate": True}
+        assert result.counts == {"falseAdvanceRate": 1}
+
+    def test_an_over_limit_hand_off_carries_reason_and_a_none_probability(self):
+        """Plan3 §3.3's table, "Hand-off succeeds": `decidedBy="handoff"`, `probability=None`,
+        `reason="over-limit"`; the hand-off LLM's answer is scored."""
+        result = classification.score_answer(
+            _CS_ITEM, False, "pass", _timing(), pack=None,
+            **_decision_keywords(decided_by="handoff", reason="over-limit"),
+        )
+        assert result.detail == {
+            "path": "turns", "tier": "clear_suspend",
+            "decidedBy": "handoff", "probability": None, "reason": "over-limit",
+        }
+        assert result.counts == {"falseAdvanceRate": 0}
+
+    def test_a_failed_decision_call_is_unscoreable_with_failed_call_and_no_decided_by(self):
+        """Plan2 §3.3: `failed_call="decision"` gives `scoreable={}` and `detail.failedCall` on
+        any pack; the item enters the bar only through `decision_stats.pair_items`."""
+        timing = ItemTiming(wallClockMs=2003.0, calls=(), withheldFor=None)
+        result = classification.score_answer(
+            _CS_ITEM, None, "fail", timing, pack=None,
+            **_decision_keywords(failed_call="decision"),
+        )
+        assert result.scoreable == {}
+        assert result.counts == {}
+        assert result.outcome == "fail"
+        assert result.timing == timing
+        assert result.detail == {
+            "path": "turns", "tier": "clear_suspend", "failedCall": "decision",
+            "probability": None,
+        }
+
+    def test_an_over_limit_decision_failure_also_carries_reason(self):
+        """Plan3 §3.3, `decisions` surface: the kept decision-call failure plus
+        `detail.reason = "over-limit"`."""
+        timing = ItemTiming(wallClockMs=40.0, calls=(), withheldFor=None)
+        result = classification.score_answer(
+            _CS_ITEM, None, "fail", timing, pack=None,
+            **_decision_keywords(failed_call="decision", reason="over-limit"),
+        )
+        assert result.scoreable == {}
+        assert result.detail["failedCall"] == "decision"
+        assert result.detail["reason"] == "over-limit"
+        assert "decidedBy" not in result.detail
+
+    @pytest.mark.parametrize(
+        ("answer", "failed_call"), [(None, None), (True, "decision"), (False, "decision")]
+    )
+    def test_answer_is_none_iff_a_call_failed(self, answer, failed_call):
+        with pytest.raises(ValueError, match="answer"):
+            classification.score_answer(
+                _CS_ITEM, answer, "pass", _timing(), pack=None,
+                **_decision_keywords(failed_call=failed_call),
+            )
+
+    def test_a_failed_item_has_no_decided_by(self):
+        with pytest.raises(ValueError, match="decided_by"):
+            classification.score_answer(
+                _CS_ITEM, None, "fail", _timing(), pack=None,
+                **_decision_keywords(failed_call="decision", decided_by="handoff"),
+            )
+
+    def test_a_probability_needs_a_decision_source(self):
+        """A probability with no `decided_by` would be dropped from `detail` (the old pack's
+        shape) or misattributed to a failed call; it is refused instead."""
+        with pytest.raises(ValueError, match="probability"):
+            classification.score_answer(
+                _CS_ITEM, True, "pass", _timing(), pack=None,
+                **_decision_keywords(probability=0.5),
+            )
+
+    def test_a_guard_hand_off_failure_is_never_scored_here(self):
+        """Plan2 §3.3: `HANDOFF_FAILURE_BY_ROLE["guard-judge"] == "withhold"` — a guard hand-off
+        chat-call failure is withheld by the runner, never kept and scored."""
+        with pytest.raises(ValueError, match="handoff"):
+            classification.score_answer(
+                _CS_ITEM, None, "fail", _timing(), pack=None,
+                **_decision_keywords(failed_call="handoff"),
+            )
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [{"decided_by": "llm-handoff"}, {"failed_call": "chat"}, {"reason": "too-long"}],
+        ids=["decided_by", "failed_call", "reason"],
+    )
+    def test_each_keyword_is_a_closed_set(self, overrides):
+        answer = None if "failed_call" in overrides else True
+        with pytest.raises(ValueError, match=next(iter(overrides))):
+            classification.score_answer(
+                _CS_ITEM, answer, "pass", _timing(), pack=None, **_decision_keywords(**overrides)
+            )

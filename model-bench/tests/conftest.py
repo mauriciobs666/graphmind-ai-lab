@@ -116,7 +116,8 @@ def embeddings_fields(**overrides: Any) -> dict[str, Any]:
 
 #: What a `model:decisions` record carries on top of the embeddings 26 (typed-decision-models plan
 #: §3.3, §3.5): the candidate's identity, the question spec, the policy object, the fit manifest's
-#: hash and size, and the evaluation set's content hash. Values are plausible, not real.
+#: hash and size, the evaluation set's content hash, and the fit's outcome and quality target
+#: (plan2 §3.2). Values are plausible, not real.
 DECISIONS_EXTRA_FIELDS: dict[str, Any] = {
     "candidateId": "guard-laya-band-v1",
     "candidateContentHash": "e" * 64,
@@ -125,6 +126,8 @@ DECISIONS_EXTRA_FIELDS: dict[str, Any] = {
     "fitManifestHash": "1" * 64,
     "fitManifestSize": 1400,
     "evalSetHash": "2" * 64,
+    "fitOutcome": "below-margin",
+    "fitQualityTarget": "mcnemar-nonreject",
 }
 
 #: The hand-off model's identity a `model:handoff` record adds, flat and `handoff`-prefixed

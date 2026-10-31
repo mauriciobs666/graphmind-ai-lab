@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import http.client
+import inspect
 import io
 import json
 import time
@@ -1549,60 +1550,78 @@ def _http_error(status: int) -> urllib.error.HTTPError:
     )
 
 
-#: scenario name -> (trigger, the `status` that scenario's raise site must carry). Two scenarios
-#: share `_raw_post`'s rung 1 on purpose, with different statuses: one status value alone cannot
-#: tell "read from the response" from "hardcoded".
-_STATUS_SCENARIOS: dict[str, tuple[Callable[[], Any], int | None]] = {
-    "_parse_json: a 2xx body that is not JSON": (_chat_over(lambda: (200, b"not json{")), None),
+#: scenario name -> (trigger, the `status` that scenario's raise site must carry, the `body` it
+#: must carry). Two scenarios share `_raw_post`'s rung 1 on purpose, with different statuses: one
+#: status value alone cannot tell "read from the response" from "hardcoded". `body` (plan3 §3.3)
+#: is the full HTTP error body on `_raw_post`'s rung 1 only — `None` at every other raise site,
+#: `catalog`'s non-2xx included (a GET, never a decision call).
+_STATUS_SCENARIOS: dict[str, tuple[Callable[[], Any], int | None, str | None]] = {
+    "_parse_json: a 2xx body that is not JSON": (
+        _chat_over(lambda: (200, b"not json{")),
+        None,
+        None,
+    ),
     "_model_info_from_raw: a catalog entry that is not an object": (
         _catalog_returning({"data": [42]}),
+        None,
         None,
     ),
     "_model_info_from_raw: a catalog entry missing a required key": (
         _catalog_returning({"data": [_MISSING_KEY_ENTRY]}),
         None,
+        None,
     ),
     "catalog: a non-2xx status — the server answered and refused": (
         lambda: client({"/api/v0/models": (500, b"<html>nope</html>")}).catalog(),
         500,
+        None,
     ),
-    "catalog: a 2xx body with no 'data' list": (_catalog_returning({"ok": True}), None),
+    "catalog: a 2xx body with no 'data' list": (_catalog_returning({"ok": True}), None, None),
     "_raw_post rung 1: HTTP 400 — `-ml` §4.1's own example, and §8.4's six lost conversations": (
         _chat_over(lambda: _http_error(400)),
         400,
+        "refused",
     ),
     "_raw_post rung 1: HTTP 503 — the same rung, a different status": (
         _chat_over(lambda: _http_error(503)),
         503,
+        "refused",
     ),
     "_raw_post rung 3: a dropped connection (URLError)": (
         _chat_over(lambda: urllib.error.URLError(ConnectionResetError("reset by peer"))),
+        None,
         None,
     ),
     "_raw_post rung 4: a truncated body (http.client.HTTPException)": (
         _chat_over(lambda: _ReadFailsResponse(200, http.client.IncompleteRead(b"partial"))),
         None,
+        None,
     ),
     "_raw_post rung 5: a bare socket error (OSError)": (
         _chat_over(lambda: OSError("host is unreachable")),
+        None,
         None,
     ),
     "chat: a 2xx body with no usable 'choices'": (
         _chat_over(lambda: (200, _json_bytes({"choices": []}))),
         None,
+        None,
     ),
     "chat: a choice with no 'message'": (
         _chat_over(lambda: (200, _json_bytes({"choices": [{"finish_reason": "stop"}]}))),
         None,
+        None,
     ),
     "decide: a 2xx body whose answers break the §2.3 contract": (
         lambda: _decide_over({"model": "laya", "answers": "nope", "usage": {}}),
+        None,
         None,
     ),
     "embed: a 2xx body with no 'data' list": (
         lambda: client({"/api/v0/embeddings": (200, _json_bytes({"ok": True}))}).embed(
             ["hi"], model="m", timeout_s=5.0
         ),
+        None,
         None,
     ),
 }
@@ -1621,10 +1640,20 @@ def _raise_line_of(trigger: Callable[[], Any]) -> int:
 
 @pytest.mark.parametrize("name", sorted(_STATUS_SCENARIOS))
 def test_lmstudio_call_failed_carries_the_refusal_status_and_nothing_else(name):
-    trigger, expected_status = _STATUS_SCENARIOS[name]
+    trigger, expected_status, _ = _STATUS_SCENARIOS[name]
     with pytest.raises(LMStudioCallFailed) as caught:
         trigger()
     assert caught.value.status == expected_status
+
+
+@pytest.mark.parametrize("name", sorted(_STATUS_SCENARIOS))
+def test_lmstudio_call_failed_carries_the_error_body_only_from_an_http_refusal(name):
+    """Plan3 §3.3: `body` is the decoded HTTP error body on `_raw_post`'s rung 1, and `None` at
+    every other raise site — so `is_over_limit(status, body)` can only ever fire on a refusal."""
+    trigger, _, expected_body = _STATUS_SCENARIOS[name]
+    with pytest.raises(LMStudioCallFailed) as caught:
+        trigger()
+    assert caught.value.body == expected_body
 
 
 def test_every_raise_site_of_lmstudio_call_failed_is_covered_here():
@@ -1642,8 +1671,57 @@ def test_every_raise_site_of_lmstudio_call_failed_is_covered_here():
         and isinstance(node.exc.func, ast.Name)
         and node.exc.func.id == "LMStudioCallFailed"
     }
-    covered = {_raise_line_of(trigger) for trigger, _ in _STATUS_SCENARIOS.values()}
+    covered = {_raise_line_of(trigger) for trigger, _, _ in _STATUS_SCENARIOS.values()}
     assert covered == raised_in_source
+
+
+def test_lmstudio_call_failed_body_is_a_required_keyword_with_no_default():
+    """Plan3 §3.3: `body` is required, like `status` — a new raise site must decide it rather
+    than inherit `None`, which would silently hide an over-limit body from `is_over_limit`."""
+    param = inspect.signature(LMStudioCallFailed.__init__).parameters["body"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+    with pytest.raises(TypeError):
+        LMStudioCallFailed("x", status=None)  # type: ignore[call-arg]
+
+
+def _decide_refused_with(error: urllib.error.HTTPError) -> LMStudioCallFailed:
+    c = client({"/v1/decisions": error})
+    with pytest.raises(LMStudioCallFailed) as caught:
+        c.decide("hi", _DECISION_QUESTIONS, model="laya", timeout_s=5.0)
+    return caught.value
+
+
+def test_raw_post_puts_the_full_http_500_body_on_body_untruncated():
+    """Plan3 §3.3/§5 U1d: the whole error body, not the 500-character message excerpt — the
+    marker sits past character 65 of LM Studio's body, and a longer body must not lose it."""
+    text = '{"error": {"message": "' + "é" * 600 + ' is too large to process"}}'
+    raw = text.encode("utf-8")
+    failed = _decide_refused_with(
+        urllib.error.HTTPError("http://localhost:1234/v1/decisions", 500, "err", None,
+                               io.BytesIO(raw))
+    )
+    assert (failed.status, failed.body) == (500, text)
+    assert failed.body.endswith("too large to process\"}}")
+    assert "too large to process" not in str(failed)  # the message stays truncated
+
+
+def test_raw_post_decodes_an_undecodable_error_body_with_replacement():
+    failed = _decide_refused_with(
+        urllib.error.HTTPError("http://localhost:1234/v1/decisions", 500, "err", None,
+                               io.BytesIO(b"bad \xff byte"))
+    )
+    assert failed.body == "bad \ufffd byte"
+
+
+def test_raw_post_gives_an_empty_body_when_the_error_body_read_fails():
+    """Plan3 §3.3: a failed error-body read gives `""` — the server did answer (a status is in
+    hand), so the body is empty, never `None` (which means "no HTTP answer at all")."""
+    failed = _decide_refused_with(
+        urllib.error.HTTPError("http://localhost:1234/v1/decisions", 500, "err", None,
+                               _RaisingFp(http.client.IncompleteRead(b"partial")))
+    )
+    assert (failed.status, failed.body) == (500, "")
 
 
 def test_lmstudio_call_failed_docstring_states_what_status_distinguishes():

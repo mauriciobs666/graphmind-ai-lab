@@ -128,11 +128,18 @@ class LMStudioCallFailed(LMStudioError):
     seen". `status` is a **required** keyword argument for the same reason: a new raise site must
     decide which side of that partition it is on rather than inheriting a default, which would
     silently record a refusal the server never made — or hide one it did.
+
+    **`body` is the full HTTP error body** (typed-decision-models plan3 §3.3), decoded as UTF-8
+    with `errors="replace"`, on `_raw_post`'s HTTP-error rung only — `""` when that error-body
+    read itself failed, and `None` at every other raise site. The message keeps only a truncated
+    excerpt; `decisions.is_over_limit(status, body)` reads this field, so it must hold the whole
+    body. Required, like `status`, for the same reason.
     """
 
-    def __init__(self, message: str, *, status: int | None) -> None:
+    def __init__(self, message: str, *, status: int | None, body: str | None) -> None:
         super().__init__(message)
         self.status = status
+        self.body = body
 
 
 class ToolCallingIneligible(LMStudioError):
@@ -427,7 +434,7 @@ def _parse_json(raw: bytes, *, context: str) -> Any:
         return json.loads(text)
     except (UnicodeDecodeError, ValueError) as exc:
         raise LMStudioCallFailed(
-            f"{context}: response body is not valid JSON: {exc}", status=None
+            f"{context}: response body is not valid JSON: {exc}", status=None, body=None
         ) from exc
 
 
@@ -447,7 +454,9 @@ _REQUIRED_MODEL_INFO_KEYS = (
 def _model_info_from_raw(raw: Any, *, index: int) -> ModelInfo:
     if not isinstance(raw, Mapping):
         raise LMStudioCallFailed(
-            f"GET /api/v0/models: catalog entry [{index}] is not a JSON object", status=None
+            f"GET /api/v0/models: catalog entry [{index}] is not a JSON object",
+            status=None,
+            body=None,
         )
     missing = [k for k in _REQUIRED_MODEL_INFO_KEYS if k not in raw]
     if missing:
@@ -455,6 +464,7 @@ def _model_info_from_raw(raw: Any, *, index: int) -> ModelInfo:
             f"GET /api/v0/models: catalog entry [{index}] (id={raw.get('id')!r}) "
             f"missing required key(s) {missing}",
             status=None,
+            body=None,
         )
     capabilities = raw.get("capabilities")
     return ModelInfo(
@@ -593,12 +603,14 @@ class LMStudio:
             # Checked before parsing (Pass 12 P12-10): an error body is often not JSON at all
             # (an HTML error page, a proxy's plain-text response), and parsing it first reported
             # "not valid JSON" instead of the real HTTP status the operator actually needs.
-            raise LMStudioCallFailed(f"GET /api/v0/models: HTTP {status}", status=status)
+            raise LMStudioCallFailed(
+                f"GET /api/v0/models: HTTP {status}", status=status, body=None
+            )
         body = _parse_json(raw, context="GET /api/v0/models")
         entries = body.get("data") if isinstance(body, Mapping) else None
         if not isinstance(entries, list):
             raise LMStudioCallFailed(
-                "GET /api/v0/models: response has no 'data' list", status=None
+                "GET /api/v0/models: response has no 'data' list", status=None, body=None
             )
         return [_model_info_from_raw(e, index=i) for i, e in enumerate(entries)]
 
@@ -659,7 +671,9 @@ class LMStudio:
             finally:
                 exc.close()
             raise LMStudioCallFailed(
-                f"POST {path}: HTTP {exc.code}: {_truncate(body)}", status=exc.code
+                f"POST {path}: HTTP {exc.code}: {_truncate(body)}",
+                status=exc.code,
+                body=body.decode("utf-8", errors="replace"),
             ) from exc
         except TimeoutError as exc:  # rung 2 — NOT a URLError; must be named explicitly. Covers
             # a connect-phase timeout and a read-phase one alike (`socket.timeout` has been an
@@ -669,16 +683,16 @@ class LMStudio:
             if isinstance(exc.reason, TimeoutError):
                 raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
             raise LMStudioCallFailed(
-                f"POST {path}: connection failed: {exc.reason}", status=None
+                f"POST {path}: connection failed: {exc.reason}", status=None, body=None
             ) from exc
         except http.client.HTTPException as exc:  # rung 4 — a dropped/truncated body, e.g.
             # `IncompleteRead`; not an `OSError`, so the socket rung below would not catch it.
             raise LMStudioCallFailed(
-                f"POST {path}: {type(exc).__name__}: {exc}", status=None
+                f"POST {path}: {type(exc).__name__}: {exc}", status=None, body=None
             ) from exc
         except OSError as exc:  # rung 5 — any other socket error, connect or read phase
             raise LMStudioCallFailed(
-                f"POST {path}: {type(exc).__name__}: {exc}", status=None
+                f"POST {path}: {type(exc).__name__}: {exc}", status=None, body=None
             ) from exc
         wall_clock_ms = (time.monotonic() - start) * 1000.0
         return wall_clock_ms, raw
@@ -708,12 +722,14 @@ class LMStudio:
         choices = body.get("choices") if isinstance(body, Mapping) else None
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
             raise LMStudioCallFailed(
-                "POST /api/v0/chat/completions: response has no usable 'choices'", status=None
+                "POST /api/v0/chat/completions: response has no usable 'choices'",
+                status=None,
+                body=None,
             )
         message = choices[0].get("message")
         if not isinstance(message, Mapping):
             raise LMStudioCallFailed(
-                "POST /api/v0/chat/completions: choice has no 'message'", status=None
+                "POST /api/v0/chat/completions: choice has no 'message'", status=None, body=None
             )
         raw_tool_calls = message.get("tool_calls")
         tool_calls = tuple(raw_tool_calls) if isinstance(raw_tool_calls, list) else ()
@@ -743,7 +759,7 @@ class LMStudio:
         data = body.get("data") if isinstance(body, Mapping) else None
         if not isinstance(data, list):
             raise LMStudioCallFailed(
-                "POST /api/v0/embeddings: response has no 'data' list", status=None
+                "POST /api/v0/embeddings: response has no 'data' list", status=None, body=None
             )
         vectors = tuple(
             tuple(entry["embedding"])
@@ -789,7 +805,9 @@ class LMStudio:
         try:
             answers = _parse_decision_answers(body, questions)
         except _MalformedDecisions as exc:
-            raise LMStudioCallFailed(f"POST {DECISIONS_ROUTE}: {exc}", status=None) from exc
+            raise LMStudioCallFailed(
+                f"POST {DECISIONS_ROUTE}: {exc}", status=None, body=None
+            ) from exc
         usage = body.get("usage")
         response_model = body.get("model")
         return DecisionResult(

@@ -1128,7 +1128,7 @@ def test_drive_iterations_equals_the_number_of_completed_chat_results() -> None:
             chat_result(content="done"),
             chat_result(content=None, tool_calls=(tool_call,)),
             chat_result(content=None, tool_calls=(tool_call,)),
-            LMStudioCallFailed("boom", status=None),
+            LMStudioCallFailed("boom", status=None, body=None),
         ]
     )
     trace = drive(StubEnvironment(), script, llm, make_cfg(toolSchemas=()))
@@ -1683,8 +1683,8 @@ def _five_turn_script(script_id: str) -> Conversation:
 @pytest.mark.parametrize(
     ("failure", "expected_disposition"),
     [
-        (LMStudioCallFailed("dropped", status=None), "no-response"),
-        (LMStudioCallFailed("refused", status=400), "server-rejected"),
+        (LMStudioCallFailed("dropped", status=None, body=None), "no-response"),
+        (LMStudioCallFailed("refused", status=400, body="refused"), "server-rejected"),
         (LMStudioCallTimeout("slow"), "timed-out"),
     ],
 )
@@ -1727,8 +1727,8 @@ def test_drive_final_reply_text_is_none_exactly_when_the_turn_did_not_reply() ->
             chat_result(content=None, tool_calls=(tool_call,)),  # turn 2 -> cap-hit
             chat_result(content=None, tool_calls=(tool_call,)),
             LMStudioCallTimeout("slow"),  # turn 3 -> timed-out
-            LMStudioCallFailed("dropped", status=None),  # turn 4 -> no-response
-            LMStudioCallFailed("refused", status=503),  # turn 5 -> server-rejected
+            LMStudioCallFailed("dropped", status=None, body=None),  # turn 4 -> no-response
+            LMStudioCallFailed("refused", status=503, body="refused"),  # turn 5 -> server-rejected
         ]
     )
     trace = drive(StubEnvironment(), script, llm, cfg)
@@ -1769,8 +1769,8 @@ class _SynthesizedFailure(Exception):
 @pytest.mark.parametrize(
     "raised",
     [
-        LMStudioCallFailed("dropped", status=None),
-        LMStudioCallFailed("refused", status=429),
+        LMStudioCallFailed("dropped", status=None, body=None),
+        LMStudioCallFailed("refused", status=429, body="refused"),
         LMStudioCallTimeout("slow"),
     ],
 )
@@ -1839,7 +1839,7 @@ def test_drive_replays_a_failed_prior_turn_into_the_next_turns_context() -> None
     llm = stub_llm(
         [
             chat_result(content="first reply"),
-            LMStudioCallFailed("dropped", status=None),
+            LMStudioCallFailed("dropped", status=None, body=None),
             chat_result(content="third reply"),
         ]
     )

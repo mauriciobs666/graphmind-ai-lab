@@ -865,7 +865,7 @@ def test_drive_single_call_items_no_response_scores_unrunnable_with_no_calls(mon
     monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
     pack = FakePack(role="guard-judge", items=[{"id": "a"}], prompt_cfg=make_prompt_cfg())
     lms = StubLMStudio(
-        chat_responses=[LMStudioCallFailed("HTTP 500", status=500)],
+        chat_responses=[LMStudioCallFailed("HTTP 500", status=500, body="refused")],
         residency_sequence=[resident()],
     )
     items, _, _ = _drive_single_call_items(
@@ -913,7 +913,7 @@ def test_drive_single_call_items_case_f_failing_call_wins_over_the_residency_gua
     monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
     pack = FakePack(role="guard-judge", items=[{"id": "a"}], prompt_cfg=make_prompt_cfg())
     lms = StubLMStudio(
-        chat_responses=[LMStudioCallFailed("HTTP 500", status=500)],
+        chat_responses=[LMStudioCallFailed("HTTP 500", status=500, body="refused")],
         residency_sequence=[[]],  # NOT resident
     )
     items, _, _ = _drive_single_call_items(
@@ -1597,7 +1597,8 @@ def test_drive_conversations_e4_censoring_differs_from_a_normal_scored_failure(m
     monkeypatch.setattr("modelbench.runner._load_conversation_scorer", lambda pack: scorer_b)
     pack_b = _tool_caller_pack(scripts=[script("b", n_turns=9)], tool_module=EnvironmentFactory())
     responses_b = [chat_result_with_stats(wall_clock_ms=50.0) for _ in range(3)]
-    responses_b.append(LMStudioCallFailed("HTTP 500", status=500))  # turn 4: fails, not censored
+    # turn 4: fails, not censored
+    responses_b.append(LMStudioCallFailed("HTTP 500", status=500, body="refused"))
     responses_b.extend(chat_result_with_stats(wall_clock_ms=50.0) for _ in range(5))  # turns 5-9
     lms_b = StubLMStudio(chat_responses=responses_b, residency_sequence=[resident()] * 9)
     _, disclosures_b, _, _, _ = _drive_conversations(

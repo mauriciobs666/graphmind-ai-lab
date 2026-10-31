@@ -1,10 +1,11 @@
 """`modelbench/decisions.py` — typed-decision-models U1c (plan v1.3 §3.3, §3.5, §3.6, §4 U1c;
-plan2 v1.1 §3.2, §3.3, §4.1 U1c, §5).
+plan2 v1.1 §3.2, §3.3, §4.1 U1c, §5; plan3 v1.2 §3.2, §3.3, §5 U1d).
 
 The golden vectors under `tests/fixtures/decision-contract/` are model-bench's canonical copy
 (v1.3 §3.2.2). Their expected outputs were derived **without** this module: the policy rows by
 hand from §3.3's inequalities, the `input_hash` rows by hand-writing each canonical JSON string and
-hashing its bytes with `sha256sum`.
+hashing its bytes with `sha256sum`, the `over-limit.jsonl` rows by hand from plan3 §3.3's rule
+(status `500` **and** the case-sensitive marker in the body).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from modelbench.decisions import (
     HANDOFF_FAILURE_BY_ROLE,
     INPUT_FIELDS_BY_ROLE,
     MIN_EVAL_ITEMS,
+    OVER_LIMIT_MARKER,
     QUALITY_TARGETS_BY_BAR_KIND,
     Candidate,
     CandidateError,
@@ -37,6 +39,7 @@ from modelbench.decisions import (
     bar_holds,
     eval_set_hash,
     input_hash,
+    is_over_limit,
 )
 from modelbench.lmstudio import DecisionAnswer
 
@@ -151,6 +154,41 @@ def test_policy_decision_refuses_a_state_that_cannot_exist(handoff, answer):
     """Impl review Pass 2, P2-n2: `answer is None` iff `handoff` — a rule the copies transcribe."""
     with pytest.raises(ValueError, match="handoff"):
         PolicyDecision(handoff=handoff, answer=answer)
+
+
+# --- is_over_limit against over-limit.jsonl (plan3 §3.3, §5 U1d) -------------------------------
+
+_OVER_LIMIT_ROWS = _rows("over-limit.jsonl")
+#: The `ws:agent-team` body document's (a1d388f4…) LM Studio 500 body: 232 bytes, verbatim.
+_BODY_DOCUMENT_BYTES = 232
+
+
+@pytest.mark.parametrize("row", _OVER_LIMIT_ROWS, ids=[r["case"] for r in _OVER_LIMIT_ROWS])
+def test_is_over_limit_matches_the_golden_vector(row):
+    assert is_over_limit(row["status"], row["body"]) is row["overLimit"]
+
+
+def test_the_over_limit_vectors_cover_the_rows_the_plan_names():
+    """Plan3 §3.3's list: the body document's body at 500 (true) and 400 (false), its marker
+    upper-cased at 500 (false), another 500 body, the `/api/v0` HTTP-200 body, `""` and `null`.
+    Without these rows a dropped status check or a case-folded body stays green."""
+    by_case = {r["case"]: r for r in _OVER_LIMIT_ROWS}
+    real = by_case["body-document-at-500"]
+    assert len(real["body"].encode("utf-8")) == _BODY_DOCUMENT_BYTES
+    assert (real["status"], real["overLimit"]) == (500, True)
+    at_400 = by_case["body-document-at-400"]
+    assert (at_400["body"], at_400["status"], at_400["overLimit"]) == (real["body"], 400, False)
+    upper = by_case["marker-upper-cased-at-500"]
+    assert upper["body"] == real["body"].replace("too large to process", "TOO LARGE TO PROCESS")
+    assert upper["body"] != real["body"] and (upper["status"], upper["overLimit"]) == (500, False)
+    assert {"another-500-body", "api-v0-http-200-error-body", "empty-body-at-500",
+            "null-body-at-500"} <= set(by_case)
+    assert all(r["overLimit"] is False for c, r in by_case.items() if c != "body-document-at-500")
+
+
+def test_the_over_limit_marker_is_the_plans_text():
+    """Plan3 §3.3, R-16: one LM Studio version's wording, pinned here and in each copy."""
+    assert OVER_LIMIT_MARKER == "too large to process"
 
 
 # --- input_hash / INPUT_FIELDS_BY_ROLE against input-hash.jsonl (v1.3 §3.5, §5 U1c) -------------
@@ -627,13 +665,16 @@ def test_candidate_load_accepts_an_empty_band_with_no_hand_off_model(tmp_path, e
     assert _load(tmp_path, _band(edge, edge, handoff=None)).handoffModel is None
 
 
-def test_candidate_load_refuses_an_empty_band_with_a_hand_off_model(tmp_path):
-    """Empty band iff no hand-off: a hand-off model the policy can never reach is a mistake."""
-    _refused(tmp_path, _band(0.5, 0.5), match="hand")
+@pytest.mark.parametrize("edge", [0.0, 0.5, 1.0])
+def test_candidate_load_accepts_an_empty_band_with_a_hand_off_model(tmp_path, edge):
+    """Plan3 §3.2, the one-way rule: an empty band with a hand-off model is an overflow-only
+    composite — its only hand-offs are over-limit items — and the runtime's own shape."""
+    assert _load(tmp_path, _band(edge, edge)).handoffModel == "qwen/qwen3-4b-2507"
 
 
 def test_candidate_load_refuses_a_band_with_no_hand_off_model(tmp_path):
-    """v1.3 §3.3: `l == h` is required when `handoffModel` is null."""
+    """Plan3 §3.2: a policy that can hand off needs a hand-off model — `handoffModel: null`
+    requires `l == h`."""
     _refused(tmp_path, _band(0.08, 0.92, handoff=None), match="hand")
 
 
@@ -663,8 +704,10 @@ def test_candidate_load_accepts_c_zero_with_no_hand_off_model(tmp_path):
     assert _load(tmp_path, _choice_candidate(0.0, handoff=None)).handoffModel is None
 
 
-def test_candidate_load_refuses_c_zero_with_a_hand_off_model(tmp_path):
-    _refused(tmp_path, _choice_candidate(0.0), match="hand")
+def test_candidate_load_accepts_c_zero_with_a_hand_off_model(tmp_path):
+    """Plan3 §3.2: `minConfidence == 0` never hands off on policy, so it is the choice-side
+    overflow-only composite."""
+    assert _load(tmp_path, _choice_candidate(0.0)).handoffModel == "qwen/qwen3-4b-2507"
 
 
 def test_candidate_load_refuses_a_positive_c_with_no_hand_off_model(tmp_path):

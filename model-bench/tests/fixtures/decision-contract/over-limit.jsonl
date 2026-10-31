@@ -1,0 +1,8 @@
+{"case": "body-document-at-500", "status": 500, "body": "{\n    \"error\": {\n        \"message\": \"laya: input (846 tokens) is too large to process. increase the physical batch size (current batch size: 512)\",\n        \"type\": \"server_error\",\n        \"param\": null,\n        \"code\": \"500\"\n    }\n}", "overLimit": true}
+{"case": "body-document-at-400", "status": 400, "body": "{\n    \"error\": {\n        \"message\": \"laya: input (846 tokens) is too large to process. increase the physical batch size (current batch size: 512)\",\n        \"type\": \"server_error\",\n        \"param\": null,\n        \"code\": \"500\"\n    }\n}", "overLimit": false}
+{"case": "marker-upper-cased-at-500", "status": 500, "body": "{\n    \"error\": {\n        \"message\": \"laya: input (846 tokens) is TOO LARGE TO PROCESS. increase the physical batch size (current batch size: 512)\",\n        \"type\": \"server_error\",\n        \"param\": null,\n        \"code\": \"500\"\n    }\n}", "overLimit": false}
+{"case": "another-500-body", "status": 500, "body": "{\n    \"error\": {\n        \"message\": \"laya: model crashed while processing the request\",\n        \"type\": \"server_error\",\n        \"param\": null,\n        \"code\": \"500\"\n    }\n}", "overLimit": false}
+{"case": "api-v0-http-200-error-body", "status": 200, "body": "{\"error\":\"Unexpected endpoint or method. (POST /api/v0/decisions)\"}", "overLimit": false}
+{"case": "empty-body-at-500", "status": 500, "body": "", "overLimit": false}
+{"case": "null-body-at-500", "status": 500, "body": null, "overLimit": false}
+{"case": "null-status-null-body", "status": null, "body": null, "overLimit": false}

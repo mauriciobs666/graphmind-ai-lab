@@ -41,7 +41,7 @@ PROFILE_FIXTURES = {
 
 MODEL_PROFILES = ("model:chat", "model:embeddings", "model:decisions", "model:handoff")
 
-#: `(profile, field)` for every required field of the four model profiles — 30 + 26 + 33 + 45.
+#: `(profile, field)` for every required field of the four model profiles — 30 + 26 + 35 + 47.
 MODEL_PROFILE_FIELDS = [
     (profile, field)
     for profile in MODEL_PROFILES
@@ -198,6 +198,21 @@ def test_a_decision_profile_record_carrying_a_chat_sampling_field_is_forbidden(
 def test_a_plain_decisions_record_carrying_a_handoff_field_is_forbidden(field: str) -> None:
     """A decision-model-only arm has no hand-off model, so naming one is refused (§3.3)."""
     problems = _profile_problems("model:decisions", **{field: HANDOFF_SAMPLE[field]})
+    assert FieldProblem(field=field, reason="forbidden") in problems
+
+
+@pytest.mark.parametrize("profile", ["model:decisions", "model:handoff"])
+@pytest.mark.parametrize("field", ["fitOutcome", "fitQualityTarget"])
+def test_an_empty_fit_field_is_named_empty(profile: str, field: str) -> None:
+    """Plan2 §3.2: both fit fields are `nonempty` — an empty string is no fit outcome."""
+    problems = _profile_problems(profile, **{field: ""})
+    assert FieldProblem(field=field, reason="empty") in problems
+
+
+@pytest.mark.parametrize("profile", ["model:chat", "model:embeddings", "deterministic"])
+@pytest.mark.parametrize("field", ["fitOutcome", "fitQualityTarget"])
+def test_an_older_profile_record_carrying_a_fit_field_is_forbidden(profile, field) -> None:
+    problems = _profile_problems(profile, **{field: DECISIONS_SAMPLE[field]})
     assert FieldProblem(field=field, reason="forbidden") in problems
 
 
@@ -614,9 +629,11 @@ EXPECTED_DETERMINISTIC_SCHEMA_1 = {
 
 
 #: typed-decision-models plan §3.3's `model:decisions` field set — the embeddings 26 plus
-#: §3.3/§3.5's seven candidate fields, 33 in total. **Transcribed by hand**, for the M-4 reason
-#: above; not built from `EXPECTED_EMBEDDINGS_SCHEMA_1`. `fitManifestSize` is `present`: it is
-#: a count, and a fit manifest of zero inputs is an answer.
+#: §3.3/§3.5's seven candidate fields and plan2 §3.2's two fit fields, 35 in total.
+#: **Transcribed by hand**, for the M-4 reason above; not built from
+#: `EXPECTED_EMBEDDINGS_SCHEMA_1`. `fitManifestSize` is `present`: it is a count, and a fit
+#: manifest of zero inputs is an answer. `fitOutcome`/`fitQualityTarget` are `nonempty`, so the
+#: report reads them from the run record and never from the candidate file (plan2 §3.2).
 EXPECTED_DECISIONS_SCHEMA_1 = {
     "modelKey": "nonempty",
     "modelPublisher": "nonempty",
@@ -651,10 +668,12 @@ EXPECTED_DECISIONS_SCHEMA_1 = {
     "fitManifestHash": "nonempty",
     "fitManifestSize": "present",
     "evalSetHash": "nonempty",
+    "fitOutcome": "nonempty",
+    "fitQualityTarget": "nonempty",
 }
 
-#: Plan §3.3's `model:handoff` field set — `model:decisions`' 33 plus the twelve flat `handoff*`
-#: fields, 45 in total. `handoffTemperature` is `present` for the reason `temperature` is (0.0 is
+#: Plan §3.3's `model:handoff` field set — `model:decisions`' 35 plus the twelve flat `handoff*`
+#: fields, 47 in total. `handoffTemperature` is `present` for the reason `temperature` is (0.0 is
 #: the pinned value); every other hand-off field is `nonempty`, as its chat counterpart is.
 EXPECTED_HANDOFF_SCHEMA_1 = {
     "modelKey": "nonempty",
@@ -690,6 +709,8 @@ EXPECTED_HANDOFF_SCHEMA_1 = {
     "fitManifestHash": "nonempty",
     "fitManifestSize": "present",
     "evalSetHash": "nonempty",
+    "fitOutcome": "nonempty",
+    "fitQualityTarget": "nonempty",
     "handoffModelKey": "nonempty",
     "handoffModelPublisher": "nonempty",
     "handoffArch": "nonempty",
@@ -705,8 +726,8 @@ EXPECTED_HANDOFF_SCHEMA_1 = {
 }
 
 
-#: The names only the two decision profiles carry, transcribed from plan §3.3 for the forbidden
-#: pins.
+#: The names only the two decision profiles carry, transcribed from plan §3.3 and plan2 §3.2 for
+#: the forbidden pins.
 DECISION_ONLY = frozenset(
     {
         "candidateId",
@@ -716,6 +737,8 @@ DECISION_ONLY = frozenset(
         "fitManifestHash",
         "fitManifestSize",
         "evalSetHash",
+        "fitOutcome",
+        "fitQualityTarget",
     }
 )
 HANDOFF_ONLY = frozenset(

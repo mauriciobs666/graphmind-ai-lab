@@ -1,11 +1,12 @@
 """Typed decision points: the pure half (typed-decision-models plan v1.3 §3.3, §3.5, §3.6, §4 U1c,
-as extended by plan2 v1.1 §3.2, §3.3).
+as extended by plan2 v1.1 §3.2, §3.3 and plan3 v1.2 §3.2, §3.3).
 
 Everything here is a pure function or a pinned table, so the same behaviour can be transcribed
 into falkor-chat and decision-models and held equal by golden vectors rather than a shared library
 (FR-23 forbids the dependency, v1.3 §3.2.2). `apply_policy` is pinned by
-`tests/fixtures/decision-contract/apply-policy.jsonl`, and `input_hash`/`INPUT_FIELDS_BY_ROLE` by
-`input-hash.jsonl`; those files are model-bench's canonical copies.
+`tests/fixtures/decision-contract/apply-policy.jsonl`, `input_hash`/`INPUT_FIELDS_BY_ROLE` by
+`input-hash.jsonl`, and `is_over_limit`/`OVER_LIMIT_MARKER` by `over-limit.jsonl`; those files
+are model-bench's canonical copies.
 
 The requirement constants are requirement values, cited by FR. A pack cannot lower them: they
 are code, not pack data (v1.3 §3.5).
@@ -147,6 +148,21 @@ def apply_policy(policy: Mapping[str, Any], answer: DecisionAnswer) -> PolicyDec
     raise ValueError(f"apply_policy: a {kind!r} policy cannot decide a {answer.type!r} answer")
 
 
+# --- over-limit recognition (plan3 §3.3) -------------------------------------------------------
+
+#: Plan3 §3.3: the text inside LM Studio's 500 body when one question's input exceeds the decision
+#: model's physical batch (`ws:agent-team` a1d388f4…). One LM Studio version's wording (R-16): a
+#: change turns over-limit into an ordinary decision failure, which fails safe.
+OVER_LIMIT_MARKER = "too large to process"
+
+
+def is_over_limit(status: int | None, body: str | None) -> bool:
+    """Plan3 §3.3: a decision call is over-limit iff its status is `500` **and** its error body
+    contains `OVER_LIMIT_MARKER`, case-sensitively. Any other 500 stays a failure; `body=None` (a
+    non-HTTP raise) never is. Pinned by `tests/fixtures/decision-contract/over-limit.jsonl`."""
+    return status == 500 and body is not None and OVER_LIMIT_MARKER in body
+
+
 # --- input_hash, eval_set_hash (v1.3 §3.5) ------------------------------------------------------
 
 
@@ -253,7 +269,7 @@ class Candidate:
         """Read `<root>/candidates/<candidate_id>.json` and refuse, as `CandidateError`, anything
         that is not a measurable candidate: a missing or ill-typed field, a `score` question (its
         answer shape is unprobed, so `decide` would refuse every item after the POST), a policy
-        outside its bounds or not matching the question, an empty band that disagrees with the
+        outside its bounds or not matching the question, a policy that can hand off with no
         hand-off model, a fit outcome or quality target outside its closed set."""
         if (
             not isinstance(candidate_id, str)
@@ -364,8 +380,11 @@ def _question_problem(question: Any) -> str | None:
 
 
 def _policy_problem(policy: Any, question_type: str, handoff: str | None) -> str | None:
-    """Band bounds `0 ≤ l ≤ h ≤ 1` (or `0 ≤ c ≤ 1`), the kind the question takes, and an empty
-    band iff there is no hand-off model (v1.3 §3.3)."""
+    """Band bounds `0 ≤ l ≤ h ≤ 1` (or `0 ≤ c ≤ 1`), the kind the question takes, and plan3
+    §3.2's one-way hand-off-model rule: a policy that can hand off (a non-empty band, or
+    `minConfidence > 0`) needs a hand-off model. The converse is **not** a rule — an empty band
+    with a hand-off model is an overflow-only composite, whose only hand-offs are over-limit
+    items, and the runtime's own shape."""
     if not isinstance(policy, Mapping):
         return "policy must be an object"
     kind = policy.get("kind")
@@ -376,14 +395,11 @@ def _policy_problem(policy: Any, question_type: str, handoff: str | None) -> str
     if problem is not None:
         return problem
     if kind == "predicate-band":
-        empty = policy["noBelow"] == policy["yesAtOrAbove"]
+        can_hand_off = policy["noBelow"] != policy["yesAtOrAbove"]
     else:
-        empty = policy["minConfidence"] == 0
-    if empty != (handoff is None):
-        return (
-            "a policy that never hands off needs handoffModel null, and one that can hand off "
-            f"needs a hand-off model (handoffModel={handoff!r})"
-        )
+        can_hand_off = policy["minConfidence"] > 0
+    if can_hand_off and handoff is None:
+        return "a policy that can hand off needs a hand-off model (handoffModel is null)"
     return None
 
 

@@ -234,8 +234,72 @@ def answer_from_chat(result: ChatResult, *, pack: Pack) -> tuple[bool, str]:
     return bool(parsed.get("decision")), "pass"
 
 
+#: v1.3 §3.3: who decided an item on a decision surface.
+_DECIDED_BY = frozenset({"decision-model", "handoff"})
+#: Plan2 §3.3: which call of a kept item failed. Only `"decision"` reaches this scorer: the guard's
+#: hand-off chat-call failure is withheld (`decisions.HANDOFF_FAILURE_BY_ROLE["guard-judge"]`).
+_FAILED_CALLS = frozenset({"decision", "handoff"})
+#: Plan3 §3.3: why an item took the path it did, when that is not the policy.
+_REASONS = frozenset({"over-limit"})
+
+
+def _decision_detail(
+    answer: bool | None,
+    *,
+    decided_by: str | None,
+    probability: float | None,
+    failed_call: str | None,
+    reason: str | None,
+) -> dict[str, Any]:
+    """The decision-surface `detail` keys (v1.3 §3.3, plan2 §3.3, plan3 §3.3), or `{}` when all
+    four keywords are `None` — the old pack's call, whose `detail` stays byte-identical."""
+    if decided_by is not None and decided_by not in _DECIDED_BY:
+        raise ValueError(
+            f"score_answer: decided_by {decided_by!r} is not one of {sorted(_DECIDED_BY)}"
+        )
+    if failed_call is not None and failed_call not in _FAILED_CALLS:
+        raise ValueError(
+            f"score_answer: failed_call {failed_call!r} is not one of {sorted(_FAILED_CALLS)}"
+        )
+    if reason is not None and reason not in _REASONS:
+        raise ValueError(f"score_answer: reason {reason!r} is not one of {sorted(_REASONS)}")
+    if (answer is None) != (failed_call is not None):
+        raise ValueError(
+            f"score_answer: answer is None iff a call failed (answer={answer!r}, "
+            f"failed_call={failed_call!r})"
+        )
+    if failed_call == "handoff":
+        raise ValueError(
+            "score_answer: a guard handoff chat-call failure is withheld, never kept and scored "
+            "(HANDOFF_FAILURE_BY_ROLE['guard-judge'] == 'withhold')"
+        )
+    if failed_call is not None and decided_by is not None:
+        raise ValueError("score_answer: a failed item has no decided_by")
+    if probability is not None and decided_by is None:
+        raise ValueError("score_answer: a probability needs a decided_by")
+    detail: dict[str, Any] = {}
+    if decided_by is not None:
+        detail["decidedBy"] = decided_by
+    if failed_call is not None:
+        detail["failedCall"] = failed_call
+    if detail:
+        detail["probability"] = probability
+    if reason is not None:
+        detail["reason"] = reason
+    return detail
+
+
 def score_answer(
-    item_input: Mapping[str, Any], answer: bool, outcome: str, timing: ItemTiming, *, pack: Pack,
+    item_input: Mapping[str, Any],
+    answer: bool | None,
+    outcome: str,
+    timing: ItemTiming,
+    *,
+    pack: Pack,
+    decided_by: str | None,
+    probability: float | None,
+    failed_call: str | None,
+    reason: str | None,
 ) -> ItemResult:
     """The tier's metric and count for one answer, wherever the answer came from (plan §3.3).
 
@@ -245,17 +309,43 @@ def score_answer(
     False` IS the false-suspend event, so `counts["falseSuspendRate"] = int(not advanced)`.
     `outcome` is carried through, never recomputed. `detail` carries `{"path":
     item_input["path"], "tier": item_input["tier"]}` for the aggregate's path-split diagnostic —
-    never anything answer-adjacent."""
+    never anything answer-adjacent.
+
+    **Decision surfaces** (typed-decision-models plan2 §3.3, plan3 §3.3). The four keywords have
+    no default; the old pack passes `None` for each and its `detail` is byte-identical to before
+    (no `decidedBy`/`probability`/`failedCall`/`reason` key). Otherwise:
+    - `decided_by` (`"decision-model"`/`"handoff"`) writes `decidedBy` and `probability` (`None`
+      on an over-limit hand-off);
+    - `failed_call="decision"` — `answer` is `None` iff a call failed — gives `scoreable={}`,
+      `counts={}`, `failedCall` and `probability: None`, and never a `decidedBy`: the item enters
+      the bar only through `decision_stats.pair_items`;
+    - `reason` (`"over-limit"`) writes `reason`; `None` writes no key.
+    A guard hand-off chat-call failure is withheld by the runner, so `failed_call="handoff"` is
+    refused here."""
     item_id = item_input["itemId"]
     metric = _METRIC_BY_TIER[item_input["tier"]]
-    detail = {"path": item_input["path"], "tier": item_input["tier"]}
-    count = int(not answer) if metric == "falseSuspendRate" else int(answer)
+    detail: dict[str, Any] = {"path": item_input["path"], "tier": item_input["tier"]}
+    detail.update(
+        _decision_detail(
+            answer,
+            decided_by=decided_by,
+            probability=probability,
+            failed_call=failed_call,
+            reason=reason,
+        )
+    )
+    if answer is None:
+        scoreable: dict[str, bool] = {}
+        counts: dict[str, int] = {}
+    else:
+        scoreable = {metric: True}
+        counts = {metric: int(not answer) if metric == "falseSuspendRate" else int(answer)}
     return ItemResult(
         itemId=item_id,
         pairingKey=(item_id,),
         outcome=outcome,
-        scoreable={metric: True},
-        counts={metric: count},
+        scoreable=scoreable,
+        counts=counts,
         timing=timing,
         detail=detail,
     )
@@ -283,7 +373,17 @@ def score_item(
             timing=timing,
         )
     advanced, outcome = answer_from_chat(result, pack=pack)
-    return score_answer(item_input, advanced, outcome, timing, pack=pack)
+    return score_answer(
+        item_input,
+        advanced,
+        outcome,
+        timing,
+        pack=pack,
+        decided_by=None,
+        probability=None,
+        failed_call=None,
+        reason=None,
+    )
 
 
 # --- aggregation ------------------------------------------------------------------------------

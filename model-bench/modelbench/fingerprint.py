@@ -139,6 +139,9 @@ _MODEL_EMBEDDINGS_SCHEMA_1: dict[str, FieldSpec] = {
 #: decisions response has no `runtime` object and the call takes no sampling parameters (§2.3) —
 #: so, by the set difference, those four are *forbidden* here exactly as on embeddings.
 #: `fitManifestSize` is a count, and zero inputs is an answer, so it is `present`.
+#: `fitOutcome`/`fitQualityTarget` (`docs/plans/typed-decision-models2.md` §3.2) are the
+#: candidate's fit rung and quality target, copied into the record so the report reads them from
+#: the run and never from the candidate file — 35 fields here, 47 on `model:handoff`.
 _DECISIONS_ADD: dict[str, FieldSpec] = {
     "candidateId": _NONEMPTY,
     "candidateContentHash": _NONEMPTY,
@@ -147,6 +150,8 @@ _DECISIONS_ADD: dict[str, FieldSpec] = {
     "fitManifestHash": _NONEMPTY,
     "fitManifestSize": _PRESENT,
     "evalSetHash": _NONEMPTY,
+    "fitOutcome": _NONEMPTY,
+    "fitQualityTarget": _NONEMPTY,
 }
 
 _MODEL_DECISIONS_SCHEMA_1: dict[str, FieldSpec] = {**_MODEL_EMBEDDINGS_SCHEMA_1, **_DECISIONS_ADD}
