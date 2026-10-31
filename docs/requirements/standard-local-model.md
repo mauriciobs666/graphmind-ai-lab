@@ -83,8 +83,8 @@ exception.
   `qwen/qwen3-4b-2507` with a context length of at least 16,384, and the `tank` run succeeds on
   it (FR-7). This holds when qwen was not loaded beforehand and gets loaded automatically by a
   `:8200` call. It also holds when the `tank` run starts while a `:8200` extraction is still in
-  progress: the `tank` run succeeds without losing context, and the document being ingested
-  still reaches `ready`.
+  progress, with qwen and the embedding model both staying loaded throughout: the `tank` run
+  succeeds with no context-length error, and the document being ingested still reaches `ready`.
 - **AC-2** — Given `tank` on qwen and on ministral, when each trial scenario (FR-4) is run 3
   times on each, then the trial's
   outcome (pass or fail) and its evidence are recorded. It passes only if every finding in every qwen
@@ -129,3 +129,5 @@ None.
 2026-10-31 — With one shared qwen copy at 16,384 tokens, LM Studio's 4 parallel slots share that context, so a `tank` run can overflow while `:8200` is extracting; how is that handled? → Set qwen's LM Studio per-model default to 1 parallel slot, so requests queue instead of sharing context (FR-7, AC-1).
 2026-10-31 — Keep 1 slot, given it also queues `:8200`'s own per-chunk extractions and an extraction timeout is not retried? → Only if the plan's S0 probe passes: a document as large as a typical learning capture, ingested at 1 slot, reaches `ready` with no timeout; on a fail, the measurements go back to the stakeholder before anything depends on the slot setting. Refines the previous entry (FR-7, AC-1).
 2026-10-31 — Should "no consumer's request shrinks another's context on the shared qwen copy" be a requirement rather than only a logged setting? → Yes (FR-7, AC-1, Out of scope).
+2026-10-31 — In ingest-event units, what load must 1 slot carry without a timeout? → 8 concurrent extraction calls in one ingest event, the largest everyday event since 2026-09-20, all reaching `ready`. Refines the 2026-10-31 "Keep 1 slot" entry (FR-7, AC-1).
+2026-10-31 — Keep AC-1's "the document being ingested still reaches `ready`" in the overlap case? → Yes, with qwen and the embedding model both kept loaded through the overlap (AC-1).

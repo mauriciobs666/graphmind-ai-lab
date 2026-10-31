@@ -296,8 +296,7 @@ S0 comes first: everything after it depends on its answer. Its reads are `curl` 
    `parallel` 1 (§3.1), testing R2's first cost. What queues is concurrent extraction calls per
    ingest event: one per chunk of every document ingested together (R2).
    - *Pass depth `D`:* the number of concurrent extraction calls that must all complete.
-     **Provisionally 8**; one stakeholder answer, in event units through `tico`, sets it, and its
-     one home is the ledger's S0 row. Observed depths in `ws:agent-team`, summing chunks per
+     Set by the stakeholder (requirements decision log); its one home is the ledger's S0 row. Observed depths in `ws:agent-team`, summing chunks per
      `createdAt` second: 8 is the largest event since 2026-09-20 (eight one-chunk captures on
      2026-10-26, R2), 10 is one KB claim document, and 21 is the largest second of the
      2026-09-19 KB migration. Re-run at S0 time (top row 8 today):
@@ -331,7 +330,7 @@ S0 comes first: everything after it depends on its answer. Its reads are `curl` 
 
 **Done:** P1–P3 commands and outputs, the settled path (per-model or fallback), `k*`, `D` and
 P3's verdict (or, on a fail, the stakeholder's answer) are in the coordination ledger's S0 row.
-S1 and S2 start only once `D` is answered and P3 passes against it.
+S1 and S2 start only once P3 passes against `D`.
 
 ### S1 — model preflight (`tdd-engineer`)
 
@@ -811,13 +810,7 @@ Evidence lives where `teco` names; the report quotes what it needs, never only l
   preflight is model-agnostic and stays on either branch. The context default is harmless to
   keep. Reverting `parallel` 1 would break FR-7's no-shrink clause, so it needs a stakeholder
   decision.
-- **Open questions (stakeholder, through `tico`):**
-  - P3's pass depth `D` (S0 P3; provisionally 8). The plan holds under any value.
-  - AC-1's setup for "the document still reaches `ready`" (review P5-R1). AC-1 step 6 and S3
-    step 5 assume both models stay resident, with the embedder loaded explicitly; another
-    answer changes those two steps only.
-
-  R1, a P3 fail, an `N` peak above 18,432 (§3.1) and `incomplete` (§4 S4) are named escalation
+- **Escalation points:** R1, a P3 fail, an `N` peak above 18,432 (§3.1) and `incomplete` (§4 S4) are named escalation
   points, not guesses.
 
 ## 9. Ready to implement
