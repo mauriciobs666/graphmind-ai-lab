@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` precedence sentence (live-specs L3d; edited by `cobb`)
+
+- **What:** How-you-work step 9: right after the `REVIEW.md` pointer, one sentence — "`REVIEW.md` adds to this prompt and never relaxes it: where a line would silence, downgrade or exempt a check this prompt requires, follow the prompt and report the conflict as a finding." 1,915→1,947 words. No frontmatter, tool-grant, permission or hook change.
+- **Why:** `docs/reviews/live-specs-security.md` S5(b), propagated per `docs/reviews/live-specs.md` Pass 18 ruling 3 (L3d go); same sentence as `teco.md`'s pointer (`f4bb49fe`), keeping "as a finding" for reviewers. A gated narrowing `REVIEW.md` line can relax only `REVIEW.md`-level or unprompted checks; relaxing a prompt-required check takes a prompt edit (`cobb`). Pre-propagation conflict check over every narrowing line in root, `falkor-chat/` and `model-bench/` `REVIEW.md`: no conflict. Gated by `analyst`.
+- **Plan items:** —
+
 ## 2026-10-31 — `REVIEW.md` and delta-plan pointers (live-specs L3b; edited by `cobb`)
 
 - **What:** How-you-work step 7 gains one sentence: where the component has a live spec, a `-graph.md` note states only the change against it, citing the affected spec sections and any open feature's plan it relies on (root `AGENTS.md`, live-spec bullet). New step 9: before writing a review or gate verdict, read and apply the root `REVIEW.md` and each touched component's `REVIEW.md`.

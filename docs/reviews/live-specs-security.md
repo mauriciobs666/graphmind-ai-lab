@@ -135,3 +135,127 @@ therefore ambiguous. Two suggestions, both for `cobb` to weigh:
 
 No `### Proposed REVIEW.md lines`: S1–S4 are prompt wording, and S5 is a coordination rule, not
 reviewer behavior.
+
+## Pass 2
+
+**Scope.** This pass covers lens 2 (agent/prompt safety) and a correctness check on unit L3d's
+uncommitted edit to `claude/analyst/analyst.md` and `claude/analyst/kaizen/history.md`, authored
+by `cobb`. The edit is the S5 precedence sentence, appended to the step-2 `REVIEW.md` pointer
+(l.45). Baseline: Pass 1 S5; `docs/reviews/live-specs.md` Pass 18 ruling 3; `claude/teco/teco.md`
+l.137 (`teco`'s copy of the sentence) and l.160 (the effect-based narrowing definition); and root,
+`falkor-chat/` and `model-bench/` `REVIEW.md`, all read and applied. The other six prompts are
+out of scope, because `analyst` gates them. This was a static review with no exploitation.
+
+**Verdict: approve with suggestions.** The sentence closes S5's ambiguity about which file wins,
+and it gives `REVIEW.md` no new authority. `cobb`'s conflict check holds for N1–N4 and N6. For N5
+I disagree with its reasoning: under the new sentence, the falkor-chat review-safe-subset line can
+be read as an exemption that `analyst` must override, and the override is the run that wipes
+`reference` (S6). The fix is one clause in the prompt, and it does not block this unit.
+
+### Prior findings
+
+- S1: fixed. l.84 carries the Pass 1 replacement verbatim.
+- S2: fixed. l.88 restores the imperative, the working directory and "before approving".
+- S3: fixed. l.86 matches.
+- S4: fixed. l.66 matches.
+- S5.1: fixed in a different home. `teco.md` l.160 defines narrowing by effect, under any heading,
+  with "when unsure, treat it as narrowing". Root `AGENTS.md` was at its cap (Pass 18 ruling 3a).
+- S5.2: fixed for `analyst` by this unit. This is verified textually: l.45 holds the Pass 1
+  wording verbatim, "as a finding" included.
+
+### Checks run
+
+- **Diff.** Verified. The diff is one hunk, at l.45 only. The frontmatter, `tools:`, hooks and the
+  Guardrails section are unchanged. `wc -w` gives 2,841 against 2,809 at `HEAD`, which is +32 and
+  equals the sentence's word count.
+- **Residual risk (question 1).** Inferred from the texts.
+  - *Does a poisoned prompt edit gain authority?* No. The prompt already loads as the system
+    prompt, so it always outranked a file it tells the agent to read. The sentence only removes
+    `REVIEW.md`'s ambiguous power to override it.
+  - *What moved?* To silence a check the prompt requires, an attacker now needs a prompt edit. That
+    path is `cobb`-owned and gated, which makes it harder than a `REVIEW.md` proposal, not easier.
+  - *What remains?* A `REVIEW.md`-only check can still be narrowed by a gated line. That is by
+    design, and `teco.md` l.160's effect test covers it.
+  - *Guardrails.* "never relaxes it" applies to the whole prompt, so it also stops an additive line
+    from pulling `analyst` past its Guardrails (no edits, no state mutation).
+  - *Can `analyst` refuse a legitimate gated narrowing line?* Yes, by design. It follows the prompt
+    and files a finding, which sends the case to `cobb` (Pass 18 3b). That costs visibility, not
+    review coverage.
+- **Conflict check (question 2).** I re-read every line of the three `REVIEW.md` files.
+  - Nothing outside N1–N6 narrows. Root *Always check* 1's "no numeric threshold" removes no check
+    that `analyst.md` states. The `model-bench` lines are all additive or severity floors.
+  - N1: agree. l.36 compares code to plan, while root *Do not report* 1 compares spec to plan.
+  - N2: agree. l.44 takes the baseline from the brief and does not require the plan as baseline.
+  - N3: agree. "At least major unless a measurement covers it" is a floor with an exit back to the
+    l.56 scale. It is not a cap.
+  - N4: agree. It names the evidence for one falkor-chat check and exempts nothing.
+  - N6: agree. It narrows proposals, not checks.
+  - N5: the conclusion holds only after a fix (S6).
+- **Kaizen (question 3).** Verified. It sits directly under "Most recent first." Its claims check
+  out: the word counts, the quoted sentence, `f4bb49fe` as the commit that added `teco.md`'s copy,
+  and Pass 18 ruling 3 as "L3d: go". "Kept 'as a finding' for reviewers" matches `teco.md` l.137,
+  which ends "report the conflict." The "S5(b)" label is Pass 18's name for Pass 1's suggestion 2.
+  Two claims are not yet true (S7).
+
+### Findings
+
+**S6 (minor, verified by reading; owner `cobb`). N5 is a real textual conflict under the new
+sentence, and following the prompt resolves it toward the run that wipes `reference`.**
+
+- *The prompt requires the full run.* l.31 says "Run the suite when the project has one". l.83
+  then lists "running existing test suites" among the things that are "always fine", and forbids
+  only "otherwise mutat[ing] state". The word *otherwise* puts a suite run outside the mutation
+  ban. So l.83 does not forbid the wiping run, which is what `cobb`'s N5 rationale relied on.
+- *The `REVIEW.md` line exempts part of it.* `falkor-chat/REVIEW.md`'s *Evidence bar* says: "When
+  shared state must survive, run the review-safe subset … and name what it left unrun". Measured
+  against l.31, that exempts the `wf_repo` tests. A default `pytest` run wipes `reference`
+  (`falkor-chat/AGENTS.md` l.129).
+- *The sentence picks the full run.* It says "follow the prompt", and the prompt asks for the
+  full run, which wipes `reference`. The `REVIEW.md` line was written to prevent exactly that.
+  After a wipe comes a re-seed, and a re-seed is the version-burn trap that `falkor-chat/REVIEW.md`
+  *Always check* 1 guards.
+
+A brief that says not to wipe still directs the work, because the sentence does not touch brief
+instructions. The gap is the case where the brief is silent. The finding the sentence requires
+would make the conflict visible, but only after the run. Fix: put the exception in the prompt so
+that the falkor-chat line adds to it. Replace l.31 with this text (+27 words):
+
+```markdown
+2. **Tests** — do they exist, do they test the new behavior (not just execute it), do they cover the failure paths? Run the suite when the project has one — a claimed-green suite is evidence, not decoration. Where a full run would wipe shared state that must survive, run the component's documented review-safe subset instead and name what it left unrun.
+```
+
+The words "documented" and "name what it left unrun" keep this from becoming a silent exemption
+that a future `REVIEW.md` line could stretch. Check whether the other six prompts have the same
+N5 conflict. `qa-engineer.md` is the likeliest, because it runs suites. That is for `analyst`'s
+gate of those prompts.
+
+**S7 (nit, verified; owner `cobb`). The kaizen entry states two outcomes before they exist.**
+"Pre-propagation conflict check … no conflict" needs S6's qualification. "Gated by
+`security-expert`" was written before this gate ran. Replace the last two sentences of **Why:**
+with:
+
+```markdown
+Pre-propagation conflict check over every narrowing line in root, `falkor-chat/` and `model-bench/` `REVIEW.md`: N1–N4, N6 no conflict; N5 (falkor-chat review-safe subset vs l.31) resolved by a l.31 clause (`docs/reviews/live-specs-security.md` S6). Gated by `security-expert` (Pass 2: approve with suggestions).
+```
+
+If S6 is not taken, write "N5 conflict open (S6)" in place of the resolution clause.
+
+### What's solid
+
+- The wording is exactly what Pass 1 proposed, and it sits where every review and gate verdict
+  passes through it.
+- "Report the conflict as a finding" makes each override visible instead of letting it pass
+  silently, and it sends the decision to the owner of prompt edits.
+- The edit does not touch the permission surface.
+- `teco.md` l.160's effect test, together with this sentence, covers all three bypass shapes S5
+  named: severity cap, scope limiter and evidence relaxation. Each is either gated or overridden.
+
+### Open questions
+
+- For `cobb`: should the narrowing gate check a proposed narrowing line against the seven
+  prompts, not only against `REVIEW.md`? A line that narrows a check one of those prompts requires
+  is now inert for that agent. It works only when a prompt edit goes with it, and today that rule
+  lives only in kaizen history and Pass 18.
+
+No `### Proposed REVIEW.md lines`: S6 and S7 are about prompt and kaizen wording, not reviewer
+behavior.

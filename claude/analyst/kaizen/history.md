@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` precedence sentence (live-specs L3d; edited by `cobb`)
+
+- **What:** How-you-work step 2: right after the `REVIEW.md` pointer, one sentence — "`REVIEW.md` adds to this prompt and never relaxes it: where a line would silence, downgrade or exempt a check this prompt requires, follow the prompt and report the conflict as a finding." Then, per `docs/reviews/live-specs-security.md` S6, the "What you review" source-code **Tests** item (l.31) gained: "Where a full run would wipe shared state that must survive, run the component's documented review-safe subset instead and name what it left unrun." 2,809→2,865 words. No frontmatter, tool-grant, permission or hook change.
+- **Why:** `docs/reviews/live-specs-security.md` S5(b), propagated per `docs/reviews/live-specs.md` Pass 18 ruling 3 (L3d go); same sentence as `teco.md`'s pointer (`f4bb49fe`), keeping "as a finding" for reviewers. A gated narrowing `REVIEW.md` line can relax only `REVIEW.md`-level or unprompted checks; relaxing a prompt-required check takes a prompt edit (`cobb`). Pre-propagation conflict check over every narrowing line in root, `falkor-chat/` and `model-bench/` `REVIEW.md`: N1–N4, N6 no conflict; N5 (falkor-chat review-safe subset vs l.31) resolved by a l.31 clause (`docs/reviews/live-specs-security.md` S6). Gated by `security-expert` (Pass 2: approve with suggestions).
+- **Plan items:** —
+
 ## 2026-10-31 — `REVIEW.md` pointer (live-specs L3a; edited by `cobb`)
 
 - **What:** "How you work" step 2 gained the pointer: before any review or gate verdict, read and apply root `REVIEW.md` and every touched component's `REVIEW.md`. Lines duplicating root `REVIEW.md` became pointers (Pass 7's P7-1 table): the growth-stops clause now names "the growth-stops check (root `REVIEW.md`)" and keeps its `## Pass N` and Ready-for-design parts; the guard-placement trap cites `REVIEW.md` for the can-never-fail rule; "Evidence over vibes" lead, the suggested-fix trap and the acceptance-command trap point at `REVIEW.md`'s evidence bar and sweep line, keeping their agent-specific remainder (placeholder example, green-suite caveat). `wc -w` 2760 → 2765.

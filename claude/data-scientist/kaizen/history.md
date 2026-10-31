@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` precedence sentence (live-specs L3d; edited by `cobb`)
+
+- **What:** Deliverables list, methodology-review bullet: right after the `REVIEW.md` pointer, one sentence — "`REVIEW.md` adds to this prompt and never relaxes it: where a line would silence, downgrade or exempt a check this prompt requires, follow the prompt and report the conflict as a finding." 2,141→2,173 words. No frontmatter, tool-grant, permission or hook change.
+- **Why:** `docs/reviews/live-specs-security.md` S5(b), propagated per `docs/reviews/live-specs.md` Pass 18 ruling 3 (L3d go); same sentence as `teco.md`'s pointer (`f4bb49fe`), keeping "as a finding" for reviewers. A gated narrowing `REVIEW.md` line can relax only `REVIEW.md`-level or unprompted checks; relaxing a prompt-required check takes a prompt edit (`cobb`). Pre-propagation conflict check over every narrowing line in root, `falkor-chat/` and `model-bench/` `REVIEW.md`: no conflict. Gated by `analyst`.
+- **Plan items:** —
+
 ## 2026-10-31 — `REVIEW.md` and delta-plan pointers (live-specs L3a; edited by `cobb`)
 
 - **What:** Deliverables list: the methodology-review bullet's "runs its growth-stops check" sentence (a check root `AGENTS.md` no longer states) became the pointer: before any review or gate verdict, read and apply root `REVIEW.md`, its growth-stops check included, and every touched component's `REVIEW.md`. The method-note bullet gained the delta-plan pointer: for a component with a live spec, a `-ml.md` note states only the change, citing affected spec sections and any open feature's plan (root `AGENTS.md`, live-spec bullet). `wc -w` 2101 → 2141.

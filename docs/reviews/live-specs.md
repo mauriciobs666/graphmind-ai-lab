@@ -2543,3 +2543,57 @@ or single-JSON-object argument":
 
 None new. P19-m1 is a precision gap in text written for this unit, not a recurring class. The two
 Pass 17 proposals stand as written.
+
+## Pass 20
+
+**Scope.** This pass gates L3d: the S5(b) precedence sentence in six prompts, uncommitted
+`git diff -- claude/{qa-engineer,security-expert,data-scientist,graph-dba,cobb,tico}/` (prompt plus
+`kaizen/history.md` each), producer `cobb`. Applied: root, `falkor-chat/` and `model-bench/`
+`REVIEW.md`, and `claude/teco/teco.md` l.160 (narrowing by effect). `analyst.md` is out of scope
+(it is `security-expert`'s gate) and was read only for context.
+
+CPG: not applicable — prompt and kaizen prose only, no code-level component.
+
+**Verdict: approve.** No blockers or majors, and nothing needs fixing before commit. Two nits.
+
+### Checks (all verified by run or read)
+
+1. **Narrowing inventory.** I re-read all 101 lines of the three `REVIEW.md` files against
+   `teco.md` l.160. N1–N6 are the narrowing lines, with one more by effect (P20-n1). `model-bench/`
+   has none: its two "at least major" lines only raise a floor, and the rest add checks. Every
+   no-conflict ruling holds for all six prompts. I grepped each prompt for threshold, deviation,
+   conformance, severity, measurement, subset and seed. No prompt requires spec-vs-plan comparison
+   (N1, N2), a severity floor for model-read text (N3; `security-expert.md` l.67's scale is
+   untouched by a conditional floor), a seed-order evidence form (N4), or a proposal rule (N6).
+   **`qa-engineer` vs N5 holds.** l.52 does not let N5's subset count as the full baseline. l.88
+   and l.55 already make a reference-wiping suite need a go-ahead, with the affected items marked
+   blocked and the request returned. N5 adds that the subset is run and the unrun part is named,
+   which is the same report. The sentence settles the one bad reading (a green subset passing as
+   the l.52 baseline): the prompt wins.
+2. **Placement.** In all six, the sentence comes directly after the pointer sentence, in the same
+   paragraph or bullet (`-U0` hunks: qa l.37, sec l.72, ds l.82, gdba l.66, cobb l.66, tico l.58).
+3. **Body-only.** `git diff --numstat` shows 1/1 for each prompt and 6/0 for each kaizen file.
+   Every hunk is below the frontmatter. Tools, permissions and hooks are untouched.
+4. **Word-identical.** `grep -cF` on the full sentence gives 1 in each of the six (and in
+   `analyst.md`). `teco.md`'s copy ends "report the conflict.", as Pass 18 ruled.
+5. **Kaizen.** Every entry is top-of-file and names the right section. `wc -w` at `HEAD` vs the
+   tree confirms +32 for each word count (qa 2,160→2,192, sec 2,541→2,573, ds 2,141→2,173,
+   gdba 1,915→1,947, cobb 1,995→2,027, tico 6,039→6,071). `f4bb49fe` is the L3c commit that
+   touches `teco.md`. Accurate apart from P20-n2.
+6. **AC-6.** The loop, run verbatim from the repo root, prints nothing.
+
+### Findings
+
+**P20-n1 (nit, verified; owner `teco`). The inventory misses one line that narrows by effect.**
+Root *Always check*, growth-stops: "There is no numeric threshold." It removes a numeric gate.
+No prompt among the seven requires one: "growth" appears only in `graph-dba.md`'s growth-stops
+pointer, and `tico.md` l.110 cites the root check. So the outcome, no conflict, stands. Fix: add
+it to the ledger's L3d row, "conflict check N1–N6 (+ root 'no numeric threshold'): none".
+
+**P20-n2 (nit). The kaizen "Why" leaves out half of Pass 18's consequence.** Pass 18 says a gated
+narrowing line can relax "`REVIEW.md`-level or unprompted checks". The entries keep only the first
+half. Take or leave. Replacement: "can relax only `REVIEW.md`-level or unprompted checks".
+
+### Proposed REVIEW.md lines
+
+None. Both nits are local to this unit.
