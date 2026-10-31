@@ -284,21 +284,27 @@ def _decision_detail(
             "(HANDOFF_FAILURE_BY_ROLE['guard-judge'] == 'withhold')"
         )
     if answer is None and failed_call is None:
-        # Architect ruling (2026-10-31): the guard's withheld over-limit item (plan3 §3.3's
-        # `withhold` column) — the one answer-less, failure-less state, carrying `reason` alone.
-        # Its `withheldFor` is the failed hand-off call's — a failing call takes its own and no
-        # load producer runs — so never `"load"` (impl review Pass 5, P5-m1).
-        if reason is None or withheld_for not in _CALL_FAILURE_WITHHELD:
+        # Architect rulings (2026-10-31): the guard's withheld hand-off — its chat call failed,
+        # and `HANDOFF_FAILURE_BY_ROLE["guard-judge"] == "withhold"`. The one answer-less,
+        # failure-less state, in exactly two variants: over-limit (plan3 §3.3's `withhold`
+        # column), carrying `reason` alone; and a policy hand-off, carrying its decision call's
+        # `inputTokens` (plan2 §3.4), the key always written. Its `withheldFor` is the failed
+        # hand-off call's — a failing call takes its own and no load producer runs — so never
+        # `"load"` (impl review Pass 5, P5-m1).
+        if withheld_for not in _CALL_FAILURE_WITHHELD:
             raise ValueError(
-                "score_answer: answer is None iff a call failed, or the item is a withheld "
-                f"over-limit one (reason={reason!r}, withheldFor={withheld_for!r})"
+                "score_answer: answer is None iff a call failed, or the item is a withheld guard "
+                f"hand-off (reason={reason!r}, withheldFor={withheld_for!r})"
             )
-        if decided_by is not None or probability is not None or input_tokens is not None:
+        if decided_by is not None or probability is not None:
             raise ValueError(
-                "score_answer: a withheld over-limit item has no decided_by, probability or "
-                "input_tokens"
+                "score_answer: a withheld guard hand-off has no decided_by or probability"
             )
-        return {"reason": reason}
+        if reason is not None:
+            if input_tokens is not None:
+                raise ValueError("score_answer: a withheld over-limit item has no input_tokens")
+            return {"reason": reason}
+        return {"inputTokens": input_tokens}
     if withheld_for in _CALL_FAILURE_WITHHELD:
         # Plan2 §3.3: an answered item or a kept decision failure has `withheldFor` `None` or
         # `"load"`; a call-failure withholding is the "withheld, as today" shape plan2 replaced.
@@ -385,11 +391,13 @@ def score_answer(
     - `reason` (`"over-limit"`) writes `reason`; `None` writes no key;
     - `input_tokens` (plan2 §3.4, the decision call's `usage["input_tokens"]` or `None`) writes
       `inputTokens` beside `probability`;
-    - the guard's **withheld over-limit item** (architect ruling, plan3 §3.3's `withhold`
-      column): `answer=None`, no `failed_call`, `reason="over-limit"` and a `timing.withheldFor`
-      give the passed (withheld) outcome, `scoreable={}`, and `detail = {path, tier, reason}`.
-      Its `withheldFor` is `"timeout"`/`"no_response"`; every other item takes `None` or
-      `"load"`.
+    - the guard's **withheld hand-off** (architect rulings, 2026-10-31): `answer=None`, no
+      `failed_call`, no `decided_by`/`probability` and a `timing.withheldFor` give the passed
+      (withheld) outcome and `scoreable={}`, in two variants: over-limit (plan3 §3.3's `withhold`
+      column, `reason="over-limit"`, `input_tokens=None`) gives `detail = {path, tier, reason}`;
+      a policy hand-off (`reason=None`) gives `detail = {path, tier, inputTokens}`, the key
+      always written. Its `withheldFor` is `"timeout"`/`"no_response"`; every other item takes
+      `None` or `"load"`.
     A guard hand-off chat-call failure is withheld by the runner, so `failed_call="handoff"` is
     refused here. Every other state the plans cannot produce is refused too, as `ValueError` —
     pinned over the whole keyword cross-product by

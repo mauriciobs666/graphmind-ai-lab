@@ -183,10 +183,11 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   pre-K-066 contract. Copy, don't import: the pack must not read from `falkor-chat/` at runtime.
 - **A failed between-item residency probe escapes `run_pack` uncaught.** `residency()` raises
   `LMStudioCallFailed` (non-200 or malformed catalog GET) or `LMStudioUnreachable`, and the
-  between-item probes in `runner._drive_single_call_items`, `runner._drive_decision_items` and
-  `runner._turn_timings` don't catch it, so a run loses every finished item to a traceback. It is
-  not a one-line catch, because no plan says what such an item becomes (`withheldFor="load"`, a
-  kept failure, or a refusal). That disposition is an `architect` decision (small-model-benchmarking
-  plan §3.6) and must land before typed-decision-models U7's live runs. The end-of-run capture and
-  the typed-decision-models load-rule probe already handle it (`docs/HISTORY.md`, U2.1;
+  between-item probes in `runner._drive_single_call_items`, `runner._drive_decision_items`,
+  `runner._drive_handoff_items` and `runner._turn_timings` don't catch it, so a run loses every
+  finished item to a traceback. It is not a one-line catch, because no plan says what such an
+  item becomes (`withheldFor="load"`, a kept failure, or a refusal). That disposition is an
+  `architect` decision (small-model-benchmarking plan §3.6) and must land before
+  typed-decision-models U7's live runs. The end-of-run capture and the typed-decision-models
+  load-rule probe already handle it (`docs/HISTORY.md`, U2.1;
   `docs/reviews/typed-decision-models-impl.md` Pass 8, P8-m2).

@@ -146,16 +146,33 @@ fingerprint, a dispatch-censored conversation).
 pack's answer space, and its decision model's catalog type must be `decision` — otherwise exit `4`
 before any call. The candidate's fit manifest, `candidates/<fitManifest.file>` (one sorted
 `input_hash` per line), must match the candidate's declared `sha256` and entry count, and must
-hold no input of any pack item — the leakage refusal (AC-3) — also exit `4` before any call. Only
-a candidate with no hand-off model runs today; the hand-off arm is not built yet. On a
-decision-point pack the runner loads every model the arm uses that is not resident at start
-(`POST /api/v1/models/load`) before the warm-up, so nothing it scores is JIT-loaded. An explicit
+hold no input of any pack item — the leakage refusal (AC-3) — also exit `4` before any call.
+
+A candidate **with** a `handoffModel` runs on the `handoff` surface: the decision model answers
+each item first, and an item its policy will not decide, or whose input is over the decision
+model's limit, goes to the hand-off chat model. The pack must also declare `lmstudio-chat`, the
+hand-off model's catalog type must be `llm` or `vlm`, and on a speed-up point (the guard) it must
+be the pack's `decisionPoint.incumbent` — otherwise exit `4` before any call. Both models are
+warmed up, the decision model first, and both must still be resident afterwards, or the run is
+exit `3` before any item. The record is a `model:handoff` fingerprint: the decision model under
+the usual names, the hand-off model under `handoff*` names.
+
+On a decision-point pack the runner loads every model the arm uses that is not resident at start
+(`POST /api/v1/models/load`) before the warm-ups, so nothing it scores is JIT-loaded. An explicit
 load has no TTL, so a model the runner loads **stays resident on the GPU after the run** until you
-unload it. A failed load, a candidate's decision model gone after its warm-up, or its loaded
-instance config unreadable, is exit `3`; the record carries that config verbatim
-(`decisionInstanceConfig`). A failed decision call (timeout, failure, or over-limit input) keeps
-its item in the run as a failure, counted in the exploratory `decisionCallFailures` or
-`overLimit` metric. After the last item a re-check decides the record's `basis`:
+unload it. A failed load, a candidate's model gone after the warm-ups, or the decision model's
+loaded instance config unreadable, is exit `3`; the record carries that config verbatim
+(`decisionInstanceConfig`). A failed decision call (a timeout, or any failure that is not the
+over-limit one) keeps its item in the run as a failure, counted in the exploratory
+`decisionCallFailures` metric, and is never handed off. An over-limit input is counted in
+`overLimit`; with a hand-off model it is handed off, without one it is kept as a failure. A failed
+hand-off chat call withholds the item on the guard (as a failed chat call always has). On the
+new-ability roles it is to be kept as a fail-closed answer, counted in `handoffCallFailures`;
+those roles cannot run on the `handoff` surface until typed-decision-models U4 adds them. The
+`handoff` surface also records `handoffShare` (items handed off, over every item not withheld by a
+failed hand-off call — an item withheld for a reload is in n) and each verdict metric split into
+`…DecidedByModel` and `…HandedOff`, all exploratory. After the last
+item a re-check decides the record's `basis`:
 `by-construction` if the run stayed on one load of the decision model, `assumed` otherwise. The
 record is keyed by its `armKey` — the candidate id — in `compare --models`, `rank`,
 `models --tested` and `index.csv`'s `candidateId` column.

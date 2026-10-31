@@ -587,16 +587,6 @@ def test_a_pack_without_the_decisions_token_refuses_a_candidate(tmp_path):
     assert exc.exitCode == 4 and "lmstudio-decisions" in str(exc)
 
 
-def test_a_candidate_with_a_hand_off_model_refuses_until_the_handoff_surface_exists(tmp_path):
-    _workspace(
-        tmp_path,
-        handoffModel="qwen/qwen3-4b-2507",
-        policy={"kind": "predicate-band", "yesAtOrAbove": 0.9, "noBelow": 0.1},
-    )
-    exc = _refused(tmp_path, DecisionStub())
-    assert exc.exitCode == 4 and "handoff surface" in str(exc)
-
-
 def test_a_candidate_outside_the_packs_answer_space_refuses(tmp_path):
     question = {
         "type": "choice",
@@ -1071,6 +1061,7 @@ def test_build_fingerprint_takes_decision_fields_iff_the_surface_is_decisions(tm
         runtime_version=None,
         catalog_after_load=[_laya(loaded=4096)],
         prompt_config=pack.prompt_config(),
+        handoff_fields=None,
     )
     with pytest.raises(ValueError, match="iff call_surface"):
         _build_fingerprint(call_surface="decisions", decision_fields=None, **common)

@@ -2,6 +2,86 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U2.2 — the `handoff` surface: a candidate with a hand-off chat model, its over-limit rows, hand-off failures and counts
+
+**What:** the rest of U2 (`docs/plans/typed-decision-models.md` §3.3, §4 U2; plan2 §3.3–§3.4,
+§4.1 U2; plan3 §3.2, §3.3's `handoff` rows, §3.6, §3.7, §5 U2), on U2.1's shared load and
+preparation. Offline only.
+
+- **Surface and refusals.** A candidate with a `handoffModel` now runs on the `handoff` surface
+  (U2.1's exit-4 "not built" refusal is gone). New exit-4 refusals before any call: no
+  `lmstudio-chat` token; a hand-off model absent from the catalog or of type outside `{llm, vlm}`;
+  on a speed-up point, a hand-off model that is not `decisionPoint.incumbent`; a scorer without
+  `answer_from_chat`.
+- **Step order (plan3 §3.7).** Load step (decision model, then hand-off model, each only if absent
+  at start), then both warm-ups in step 4 (decision model first, then the hand-off model's chat
+  warm-up), then step 6's trip-wire fed by that chat warm-up (`compared`), then step 7's
+  co-residency over both models, exit 3. A chat warm-up that evicts the decision model refuses
+  before any item. `decisionInstanceConfig` is still read under the decision model's id.
+- **Per item (`runner._drive_handoff_items`).** Residency probe over both models; `decide` at
+  `decisionTimeoutSeconds`; decided items as on `decisions`; a policy hand-off or an over-limit
+  decision call goes to the hand-off chat call at the run's chat budget (the 180 s pin, never
+  `decisionTimeoutSeconds`); any other decision failure (timeout, non-marker 500) is kept and not
+  handed off. No gap check runs on this surface. Plan3 §3.3's three columns:
+  success → `decidedBy=handoff`, `calls=(chat,)`, item clock; `fail-closed` →
+  `failedCall=handoff`, `calls=()`, item clock at the raise; `withhold` (guard) → the architect's
+  withheld over-limit record via `score_answer(answer=None, failed_call=None, reason="over-limit")`,
+  `wallClockMs=None`, `withheldFor` the failed call's, `detail` never patched by the runner.
+- **Hand-off chat failure (plan2 §3.3), per `HANDOFF_FAILURE_BY_ROLE`.** Guard policy hand-off:
+  withheld with today's timing and outcome, through `score_answer(answer=None, failed_call=None,
+  reason=None, input_tokens=<the decision call's>)`, so `detail = {path, tier, inputTokens}`
+  (architect ruling (a); `classification._decision_detail`'s withheld branch now has exactly two
+  legal variants, over-limit `{reason}` and policy `{inputTokens}`, the key always written).
+  `fail-closed`: kept with the completed decision call in `calls`, `failed_call="handoff"`,
+  `input_tokens` from that decision call (plan2 §3.4), `probability=None`.
+- **Counts (perClass, exploratory).** `decisionCallFailures` and `overLimit` as on `decisions`;
+  `handoffShare` = `decidedBy == "handoff"` over every item not withheld by a failed hand-off call
+  (plan3 §3.3: "not attempted"); `handoffCallFailures` (over-limit included, n = every item) on
+  `fail-closed` roles only; and v1.3 §3.5's per-path diagnostics, `<verdictMetric>DecidedByModel` /
+  `<verdictMetric>HandedOff`.
+- **Fingerprint.** All twelve `handoff*` fields of `model:handoff` are now populated: identity
+  from the hand-off model's catalog entry, `handoffLoadedContextLength` from the post-load
+  catalog, runtime from its chat warm-up, `handoffTemperature`/`handoffMaxTokens` from the pack.
+  `latency_block` treats `handoff` like `embeddings` for the stats-derived fields. The load rule
+  and re-check stay the decision model's.
+
+**Calls made here, stated once:** the new-ability rows are tested by patching the runner's table
+to `fail-closed` on the guard fixture with a scorer that accepts `failed_call="handoff"`; **U4's
+scorer must accept `failed_call="handoff"` per the architect's ruling (b) in `docs/plans/typed-decision-models-coordination.md`.** `--warmup N` extras
+apply to each model.
+
+- 2026-10-31: on the guard, `handoffShare` is biased downward by the withheld hand-off failures
+  (all hand-offs, all out of n); the true rate is recoverable as `(k + w)/(n + w)` from the
+  printed drops, and no bar reads it (architect ruling (c)).
+- 2026-10-31: the load rule also reads whether any between-item snapshot lacked a model
+  (`_within_load_basis(snapshot_lacked_a_model=…)`), since a withheld hand-off failure takes its
+  own `withheldFor` and hides it. This follows note §Q6 ("only if nothing shows a reload") and
+  goes beyond plan2 §3.4's narrower "withheld for load" (impl review P9-m1).
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`; full suite each), 39 mutants, all red
+(one survivor, the kept decision failure ignoring residency, killed by an added test): the
+over-limit routing condition, status-only marker check, the policy hand-off branch, the
+`HANDOFF_FAILURE_BY_ROLE` lookup (both hardcodings, and the table row flipped), the chat timeout
+taken from `decisionTimeoutSeconds` (always, and over-limit only), each count's k and n,
+`handoffCallFailures` on the guard, a hand-off failure counted in `decisionCallFailures`, the
+instance config read under the chat model's id, co-residency over the decision model only, the
+chat warm-up moved after the co-residency check, the withheld record's reason, outcome and
+`withheldFor`, the kept item's calls and `inputTokens`, a gap check added, one-model residency,
+the chat call sent to the decision model, runtime/trip-wire/loaded-context sources, swapped
+per-path suffixes, the load step omitting the hand-off model, each refusal dropped,
+`latency_block`, the re-check on the hand-off model, and the chat sampling.
+
+Fix round FX6 (impl review Pass 9): the hand-off stubs advance one shared fake clock by each
+call's own duration, and the tests assert exact item sums (P9-M1); tests pin the `fail-closed`
+kept item's load withholding and `handoffShare`'s n (P9-m2); the "stores nothing" claim moved to
+a `cli.main` test (P9-n1). 12 more mutants, all red, the review's three survivors among them.
+
+48 test functions (55 collected tests) in `tests/test_runner_handoff.py`, and 6 more collected
+tests in `tests/test_scoring_classification.py` (suite `2624 passed, 4 deselected, 2 xfailed`,
+`ruff` clean). Removed, its premise gone:
+`test_a_candidate_with_a_hand_off_model_refuses_until_the_handoff_surface_exists`. Nothing is
+written under `results/runs/`.
+
 ## 2026-10-31 — typed-decision-models U2.1 — shared load and preparation for the decision surfaces: explicit loading, `decisionInstanceConfig`, the fit manifest and AC-3, P7-n1
 
 **What:** the parts of U2 both the `decisions` and `handoff` surfaces share

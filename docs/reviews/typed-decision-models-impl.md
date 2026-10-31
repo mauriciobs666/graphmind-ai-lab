@@ -905,3 +905,287 @@ reading side.**
   status code alone.
 - **The load fakes come from the probe's own bodies,** and the `key`-versus-`id` mutant dies in 5
   tests.
+
+## Pass 9
+
+*2026-10-31. U2.2, the `handoff` surface, reviewed against the uncommitted `model-bench/` diff
+from `8ce1d874` plus the untracked `tests/test_runner_handoff.py`. Baseline: v1.3 §3.3, §3.5 and
+§4 U2; plan2 §3.3–§3.4, §4.1 U2 and §5 U2; plan3 §3.2, §3.3 (handoff rows), §3.6, §3.7, §4.1 U2
+and §5 U2; the method note v1.6 §Q4.3 and §Q6; the architect's ruling of 2026-10-31 on the
+guard's withheld over-limit record.*
+
+**Verdict: needs changes.** One major (P9-M1), three minors, two nits. The major is a test
+fixture that cannot see where the item clock starts. The code is right today, but FR-2's `y_i` is
+unpinned. Every carried item checks out.
+
+**Checks run** (from `model-bench/`):
+- **Suite and lint:** I re-ran both on the restored tree: `2614 passed, 4 deselected, 2 xfailed`,
+  and `ruff` is clean. `tests/test_runner_handoff.py` has 45 test functions and 51 collected tests,
+  as HISTORY says. `git status` shows nothing under `results/`. `modelbench/scoring/`,
+  `decisions.py` and `fingerprint.py` are not in the diff.
+- **Mutants:** each was run against the full suite on a copy, then restored and checked with `cmp`.
+  - **Mine, three survived** (P9-M1, P9-m2):
+    - `started = clock()` re-read at the top of `_hand_off`;
+    - the `fail-closed` kept item's `withheldFor` forced to `None`;
+    - `handoffShare`'s n dropping load-withheld items (`withheldFor is None`).
+  - **The implementer's 39:** I read the table at the scratchpad path the brief gives. It covers
+    the routing, the counts and the step order; I did not re-run them.
+- **Executed probe:** two runs with the same residency sequence (laya absent before item 3, which
+  hands off). If the hand-off succeeds, the item is `"load"` and the basis is `assumed` with no
+  re-check. If it times out, the item is `"timeout"` and the basis is `by-construction` after a
+  re-check (P9-m1).
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Carried items
+
+1. **The guard's withheld over-limit record: as ruled. Verified.**
+   - `_hand_off`'s `withhold` branch calls `score_answer` with no answer, `failed_call=None`,
+     `reason="over-limit"` and every other decision keyword `None`. The outcome is
+     `fail`/`unrunnable`, and the timing is `ItemTiming(None, (), "timeout"/"no_response")`.
+   - The runner never touches `detail`, and `classification.py` is not in the diff, so its
+     legality is not widened.
+   - `test_over_limit_hand_off_fails_withhold_column` asserts `detail == {path, tier, reason}`
+     after a snapshot without laya.
+2. **`decisionInstanceConfig` is read under the decision model's id. Verified.**
+   - `runner.py:1944` passes `decision_arm.model_info.id`.
+   - The test gives qwen a different config (`_QWEN_CONFIG`) and asserts one `loaded_instances`
+     call, for laya. Mutant M13 is red.
+3. **Step order. Verified.**
+   - `run_pack` goes load step, decision warm-up, chat warm-up, step 6's attestation, then step
+     7's `_refuse_unless_resident(arm_models, …)`, then the config read.
+   - The eviction test asserts the order, exit 3, and no scored `decide` or `chat` call.
+   - Its "stores nothing" assertion cannot fail (P9-n1). The guarantee itself holds:
+     `cli.py:546-551` returns the exit code before `store`.
+4. **No `decisionTimeoutSeconds` on the hand-off chat call. Verified.**
+   - Both hand-off paths chat at `cfg.requestTimeoutSeconds`.
+   - The test sets `decisionTimeoutSeconds=7.5` and asserts `[180.0, 180.0]`.
+   - Three non-marker cases (another 500 body, the marker at 400, the marker upper-cased) stay
+     kept decision failures with no chat call.
+
+### The implementer's calls
+
+- **(a) No `inputTokens` on a withheld guard policy hand-off: the premise is true.** Plan2 §3.4
+  covers this item ("every … hand-off item whose decision call returned"). Plan2 §3.3's "exactly
+  as today" is defined by its parenthesis, which lists the timing fields only, so the two texts do
+  not conflict.
+  - **Why the code cannot follow the plan alone:** following the text needs a state that
+    `classification.score_answer` refuses. That state is `answer=None`, no `decided_by`, no
+    `failed_call`, with `input_tokens` set, and the scorer is built U1d code.
+  - **The stakes are low:** the item is dropped pairwise, and no plan names a reader for its
+    `inputTokens`.
+  - **For the `architect`:** narrow plan2 §3.4 to "every item kept in the run". That matches the
+    ruled withheld over-limit record and needs no scorer change. HISTORY records the deviation,
+    so nothing is owed by the implementer meanwhile.
+- **(b) The `fail-closed` record: the shape is sound, but the stated contract is incomplete.**
+  - **The runner side is pinned:** `FailClosedScorer` records the keywords, and two tests assert
+    them exactly.
+  - **`probability=None` has no plan text either way.** It follows the scorer's convention that a
+    probability needs a `decidedBy`, and nothing reads it.
+  - **The gap is U4's side.** U4 must meet the whole shape, not only HISTORY's half of it (P9-m3).
+  - **Patching the table is the only option before U4.** U4's brief should require these two
+    tests to run against the real `agreement.py` scorer, with the stub removed.
+- **(c) `handoffShare` without withheld hand-offs: the analogy holds.**
+  - **The same state, read the same way:** a withheld guard policy hand-off is plan3's "not
+    attempted" over-limit state in every field the share reads.
+  - **It matches the bar:** n equals the candidate side of FR-2's paired set, which drops these
+    items from both arms.
+  - **One caveat:** every excluded item is a hand-off, so the share is low against the deployed
+    hand-off rate, by at most the withheld count over n. It is exploratory, and the count is
+    recoverable as `overLimit.n − handoffShare.n`.
+  - **The README misstates n** (P9-m3).
+- **(d) `<verdictMetric>DecidedByModel` / `<verdictMetric>HandedOff`: true to v1.3.** v1.3 §3.5
+  names both suffixes, and the U2 brief lists "per-path diagnostics (AC-2)".
+  - **Reading "…" as each verdict metric is the natural reading.** The outcomes come from
+    `scored_outcome`, so the denominators follow what each item declares.
+  - **A word clash, not a defect:** v1.3 §2.1 also uses "per-path" for `understanding`/`turns`.
+    The suffixes keep the two apart.
+- **(e) The decision model warms up first: sound.** No plan fixes the order.
+  - **Plan3 §5 U2 assumes it:** its row "a decision model absent after the chat warm-up" only
+    makes sense if the chat warm-up comes last.
+  - **The re-check does not depend on it:** it compares against the decision warm-up either way.
+
+### Findings
+
+**P9-M1 (major). The item clock's start point is unpinned, so FR-2's `y_i` can lose the decision
+call without any test noticing.**
+- **Evidence (executed):** re-reading `started = clock()` at the top of `_hand_off` leaves the
+  suite green, at 2614 passed. The cause is the fixture. `_Clock` advances `step` per read, and the
+  stubs' calls take no clock time. So every item measures exactly `step`, wherever the clock
+  starts. `wallClockMs >= sum(calls)` holds only because `step` is set large.
+- **Why it matters:** plan3 §3.3 says a hand-off's `wallClockMs` is the item clock over the
+  decision call (failed or not) and the hand-off. Note §Q4.3 makes that FR-2's `y_i`, and v1.3 §5
+  U2 asks for that test. The mutant drops the decision call from every hand-off's latency, and
+  the error runs in the candidate's favour.
+- **Fix (`tests/test_runner_handoff.py`):** make the stubs advance a shared fake clock by each
+  call's own duration: `decide` by its `wallClockMs` (12 ms), a raising `decide` by a fixed
+  elapsed time, and `chat` by its `wallClockMs` (3000 ms). Then assert exact sums: 3012 for a
+  policy hand-off, and the failed call's elapsed time plus 3000 for an over-limit one.
+- **Stopping condition:** the mutant above reddens both assertions.
+
+**P9-m1 (minor). A withheld guard hand-off hides the residency evidence that the load rule
+needs.**
+- **Evidence (executed):** see the probe under *Checks run*. A failing call takes its own
+  `withheldFor` (P15-3, and P5-m1 for the over-limit record). So `_within_load_basis`, which
+  reads only `withheldFor == "load"`, never sees that laya was absent.
+- **Why it matters:** note §Q6 says a run is one load "only if nothing shows a reload". Here the
+  residency probe did show one, and the run claims `by-construction`, which is the unsafe
+  direction. Only the fixed-input re-check stands behind it, and the note says that check misses
+  a reload that leaves `p` unchanged. The state needs an eviction and a failed hand-off on the
+  same item. Under JIT those two are correlated, because a cold chat load is slow.
+- **Fix (implementer, `runner.py`):** have `_drive_handoff_items` also return whether any item's
+  preceding snapshot lacked a model. Pass that to `_within_load_basis` as a third "assumed, no
+  call" condition. Leave the item record as it is, because its precedence is ruled.
+- **Test:** the probe's timeout case gives `assumed` with exactly 4 `decide` calls.
+- **Plan wording:** this follows note §Q6's governing sentence, but goes past plan2 §3.4's
+  narrower "withheld for load". Record that in the HISTORY calls; it needs the `architect` only if
+  disputed.
+
+**P9-m2 (minor). Two more per-path behaviours are unpinned.**
+- **Evidence (executed):** both mutants leave the suite green.
+  - The `fail-closed` kept item's `withheldFor` forced to `None`. This is the same class as the
+    implementer's M33, killed for the decision-failure path only.
+  - `handoffShare` counting only `withheldFor is None` items, which drops load-withheld ones from
+    n. A load-withheld item made its calls, and plan2 counts it as attempted.
+- **Fix:** add two tests to `tests/test_runner_handoff.py`.
+  - A `fail-closed` policy hand-off failure after a snapshot without qwen gives
+    `withheldFor == "load"`.
+  - `handoffShare` is asserted in
+    `test_an_item_after_a_snapshot_missing_either_model_is_withheld_for_load`. It should be
+    `(2, 4)`: item 2 is load-withheld and decided, and items 3 and 4 hand off. Under the mutant
+    it is `(2, 3)`.
+
+**P9-m3 (minor). Two documents misstate the shipped behaviour.**
+- **`model-bench/README.md`:**
+  - It says `handoffShare` is over "every item not withheld". Load-withheld items are in n, so
+    it should say "not withheld by a failed hand-off call", as HISTORY does.
+  - It describes the `fail-closed` roles in the present tense. `HANDOFF_FAILURE_BY_ROLE` and
+    `BAR_KIND_BY_ROLE` hold the guard only, so no such run exists until U4. Mark it as U4's.
+- **HISTORY's U4 contract states only half the shape.** It says only "with an `input_tokens`
+  value". The runner also sends:
+  - the over-limit case: `input_tokens=None`, `reason="over-limit"`, `calls=()`;
+  - and always `answer=None`, `outcome="fail"`, `decided_by=None`, `probability=None`, and
+    `withheldFor` `None` or `"load"`.
+- **Fix:** `teco` carries the whole shape into U4's brief. It is in `_hand_off`'s docstring and in
+  the two `FailClosedScorer` assertions. Fix the README wording in the next fix round.
+
+**P9-n1 (nit). One assertion cannot fail.** `assert not (tmp_path / "results").exists()` in the
+eviction test can never redden. `run_pack` never stores: only `cli` calls `store`, after `run_pack`
+returns. Drop the assertion, or move the "stores nothing" claim to a `cli.main` test that asserts
+exit 3 and an empty `results/`.
+
+**P9-n2 (nit). Formatting.**
+- HISTORY splits the removed test's name across a line inside backticks
+  (`…refuses_` / `until_…`), so a grep for the name misses it.
+- The edited BACKLOG line is 131 characters and was not reflowed.
+
+### Proposed REVIEW.md lines
+
+Target `model-bench/REVIEW.md`, `## Always check` (addition; source P9-M1):
+
+- A test of a measured duration (an item clock, a call clock) uses a fake clock that the stubbed
+  calls advance by their own durations, and asserts the exact sum, so a mutant that starts or
+  stops the clock at the wrong point changes the asserted value.
+
+### What's solid
+
+- **The routing matches plan3 exactly:** over-limit means a 500 with the marker, and it is the only
+  decision failure that hands off. A timeout or a non-marker 500 is kept, and makes no chat call.
+- **The `fail-closed` runner→scorer interface is pinned by keyword,** not by `detail`, so U4
+  inherits an exact contract rather than a shape.
+- **The fingerprint fixtures are distinct where it matters:** qwen's instance config, its runtime,
+  and its loaded context differ from laya's, so a field read from the wrong model reddens.
+- **The `handoff*` fields cannot leak:** `_build_fingerprint` refuses `handoff_fields` on any
+  surface but `handoff`, and refuses `decision_fields` off the two decision surfaces.
+- **The docs are maintained in place:** the `model-bench/AGENTS.md` sentence was replaced, not
+  appended to (2,432 words, no line over 700 characters). There is one HISTORY entry, and the
+  BACKLOG item was edited in place.
+- **Growth-stops:** no `requirements/`, `plans/` or `reviews/` document is in the unit's diff.
+
+## Pass 10
+
+*2026-10-31. FX6 on U2.2: the uncommitted `model-bench/` diff from `8ce1d874`. This pass reads
+FX6's delta against the Pass 9 tree, which I had saved as `runner.py.orig`; it is byte-identical
+to the implementer's `scratchpad/base/` copy. Premise change: architect ruling U2.2 (a) widens
+`_decision_detail`, as recorded in `docs/plans/typed-decision-models-coordination.md`, 2026-10-31.
+The ruling stands, and my narrowing alternative is recorded there as a dissent.*
+
+**Verdict: approve.** Every Pass 9 finding is fixed. The ruled shape matches exactly, and the
+fixes do not interfere with each other. One new nit (P10-n1).
+
+**Checks run** (from `model-bench/`):
+- **Suite and lint:** `2624 passed, 4 deselected, 2 xfailed`; `ruff` is clean; nothing is under
+  `results/`. The counts match HISTORY:
+  - `test_runner_handoff.py` has 48 functions and 55 collected tests;
+  - `test_scoring_classification.py` has 107 collected tests, against 101 in the Pass 9 copy;
+  - the oracle docstring still says 576.
+- **Mutants:** each was run against the full suite, then restored and checked with `cmp`. All
+  10 went red.
+  - **Pass 9's three survivors:**
+    - the item clock restarted in `_hand_off` (4 failed);
+    - the `fail-closed` kept item's `withheldFor` forced to `None` (1);
+    - `handoffShare`'s n dropping load-withheld items (2).
+  - **FX6's own changes:**
+    - the flag ignored in `_within_load_basis` (2);
+    - the flag never set (2);
+    - the withheld policy record sent with `input_tokens=None` (2);
+    - the scorer accepting over-limit with tokens (2);
+    - the scorer omitting the `inputTokens` key when the value is `None` (2);
+    - co-residency made a no-op (4).
+  - **One `cli` mutant:** `results/runs/` created before `run_pack` (1).
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **P9-M1: fixed.** `_StubClock` advances only when the stubs' calls advance it, each by its own
+  duration: 12, 3000, a failed decide 40, a failed chat 25. The tests assert exact sums
+  (`[12, 12, 3012, 3012]`, 40 + 3000, 40 + 25, 12 + 25), and the restart mutant fails 4 tests.
+- **P9-m1: fixed.** `snapshot_lacked_a_model` is a third no-call `assumed` condition. Pass 9's probe
+  is now a test with both failure kinds, asserting `assumed` and exactly 4 `decide` calls. HISTORY
+  records the step beyond plan2 §3.4's wording.
+- **P9-m2: fixed.** Two new assertions kill both mutants.
+- **P9-m3: fixed.**
+  - The README now gives `handoffShare`'s n correctly and marks the `fail-closed` roles as U4's.
+  - The U4 contract has its home in the coordination ledger, ruling (b).
+  - HISTORY's sentence is still the partial one (P10-n1).
+- **P9-n1: fixed.** `test_cli_run_with_a_decision_model_evicted_by_the_chat_warm_up_exits_3_storing_nothing`
+  can fail on every assertion.
+  - With co-residency made a no-op, the run still exits 3, through the instance-config read. It
+    fails on the `"co-residency"` message assertion.
+  - The `cli` mutant above reddens its `results/` assertion.
+- **P9-n2: fixed.** The removed test's name is on one line, and the BACKLOG item is reflowed.
+- **Ruling (a): implemented in its exact shape.**
+  - `_decision_detail`'s withheld branch has two variants: over-limit `{reason}`, and policy
+    `{inputTokens}` with the key written even when the value is `None`.
+  - Over-limit with tokens is refused, and `decided_by` and `probability` are refused on both
+    variants.
+  - The `_legal` oracle is extended in place, with no separate exception. Its
+    `withheld-without-reason` case was retired on purpose, and its replacement covers both
+    variants with `withheldFor` `None` or `"load"`.
+  - The runner sends the decision call's `input_tokens` only on the policy route; the over-limit
+    route's value is `None`.
+
+### Interactions
+
+- **The flag and ruling (a)'s record are independent.**
+  - The withheld policy record still takes `"timeout"`/`"no_response"`. The scorer refuses
+    `"load"` there (P5-m1), so the record cannot carry the reload evidence, and the flag is
+    exactly what restores it.
+  - In the P9-m2 load-withheld test, `assumed` now follows from both conditions; the flag mutant
+    fails only the two new P9-m1 rows.
+  - On the `decisions` surface the flag is `False`, and items keep their own `"load"`.
+- **The fake clock does not touch call counts.** It moves only on `decide`/`chat`, so the P9-m1
+  test's 4 `decide` calls are unaffected. Withheld items keep `wallClockMs=None`.
+- **The retired legality case is now exactly the policy variant.** It is the state with no answer,
+  no failed call, no reason and a call-failure withholding. Only `_hand_off` produces it. The old
+  pack's `score_item(result=None)` path never reaches `score_answer`, so its record is unchanged.
+
+### Findings
+
+**P10-n1 (nit). One HISTORY sentence still states half of U4's contract.** The "Calls made here"
+paragraph says U4's scorer "must accept `failed_call="handoff"` with an `input_tokens` value".
+Ruling (b) makes that `input_tokens` int or `None`, with `reason` in {`None`, `"over-limit"`}, and
+adds two refusals. Cite the ledger's ruling (b) in place of the clause.

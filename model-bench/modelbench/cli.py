@@ -162,7 +162,8 @@ def _build_parser() -> argparse.ArgumentParser:
     arm.add_argument(
         "--candidate",
         help="a candidate id under candidates/: a decision-model arm on the pack's decisions "
-        "surface (typed-decision-models plan v1.3 §3.3)",
+        "surface, or its handoff surface when the candidate has a handoffModel "
+        "(typed-decision-models plan v1.3 §3.3)",
     )
     run.add_argument("--session")
     run.add_argument("--reference")

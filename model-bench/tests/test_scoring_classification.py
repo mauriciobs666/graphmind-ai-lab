@@ -973,9 +973,11 @@ def _legal(answer, decided_by, probability, failed_call, reason, input_tokens, w
     """Written from the plans and the architect's ruling, not from `_decision_detail`:
     - plan2 §3.3: `answer` is `None` iff a call failed; a failed item has no `decidedBy`; the
       guard's hand-off chat-call failure is withheld (`HANDOFF_FAILURE_BY_ROLE`), never scored;
-    - architect ruling (2026-10-31, U2 seam): the one exception — no answer, no failed call, a
-      `reason`, and a withheld timing is the guard's withheld over-limit item (plan3 §3.3's
-      `withhold` column), with no `decidedBy`, `failedCall` or `probability`. Its `withheldFor` is
+    - architect rulings (2026-10-31, U2 seam and U2.2 (a)): the one exception — no answer, no
+      failed call and a withheld timing is the guard's withheld hand-off, with no `decidedBy`,
+      `failedCall` or `probability`, in two variants: over-limit (plan3 §3.3's `withhold`
+      column), `reason="over-limit"` and no `inputTokens`; or a policy hand-off, no `reason` and
+      the decision call's `inputTokens` (an int or `None`, plan2 §3.4). Its `withheldFor` is
       `"timeout"` or `"no_response"` (the failed hand-off call), never `"load"`: a failing call
       takes its own `withheldFor` and no load producer runs (impl review Pass 5, P5-m1);
     - plan2 §3.3: every other item — answered, or a kept decision failure — has `withheldFor`
@@ -990,9 +992,10 @@ def _legal(answer, decided_by, probability, failed_call, reason, input_tokens, w
     if failed_call == "handoff":
         return False
     if answer is None and failed_call is None:
+        over_limit = reason == "over-limit" and input_tokens is None
         return (
-            reason == "over-limit" and withheld in ("timeout", "no_response")
-            and decided_by is None and probability is None and input_tokens is None
+            (over_limit or reason is None) and withheld in ("timeout", "no_response")
+            and decided_by is None and probability is None
         )
     if withheld not in (None, "load"):
         return False
@@ -1069,12 +1072,41 @@ def test_a_withheld_over_limit_guard_item_carries_only_its_reason(withheld):
     assert result.detail == {"path": "turns", "tier": "clear_suspend", "reason": "over-limit"}
 
 
+@pytest.mark.parametrize("withheld", ["timeout", "no_response"])
+@pytest.mark.parametrize("input_tokens", [113, None])
+def test_a_withheld_guard_policy_hand_off_carries_only_its_input_tokens(withheld, input_tokens):
+    """Architect ruling U2.2 (a), the policy variant: no answer, no failed call, no reason and a
+    withheld timing give `detail = {path, tier, inputTokens}` — the decision call returned, so
+    its `inputTokens` is kept (plan2 §3.4), the key written even when `None`."""
+    timing = ItemTiming(wallClockMs=None, calls=(), withheldFor=withheld)
+    outcome = "fail" if withheld == "timeout" else "unrunnable"
+    result = classification.score_answer(
+        _CS_ITEM, None, outcome, timing, pack=None,
+        **_decision_keywords(input_tokens=input_tokens),
+    )
+    assert (result.outcome, result.scoreable, result.counts) == (outcome, {}, {})
+    assert result.timing == timing
+    assert result.detail == {
+        "path": "turns", "tier": "clear_suspend", "inputTokens": input_tokens,
+    }
+
+
+def test_a_withheld_over_limit_item_with_input_tokens_is_refused():
+    """Architect ruling U2.2 (a): the over-limit variant's decision call failed, so it has no
+    `inputTokens` (plan3 §3.3); only the policy variant carries one."""
+    timing = ItemTiming(wallClockMs=None, calls=(), withheldFor="timeout")
+    with pytest.raises(ValueError, match="input_tokens"):
+        classification.score_answer(
+            _CS_ITEM, None, "fail", timing, pack=None,
+            **_decision_keywords(reason="over-limit", input_tokens=113),
+        )
+
+
 @pytest.mark.parametrize(
-    ("reason", "withheld"),
-    [(None, "timeout"), ("over-limit", None), ("over-limit", "load")],
-    ids=["withheld-without-reason", "reason-without-withheld", "reason-withheld-for-load"],
+    "reason", [None, "over-limit"], ids=["policy-variant", "over-limit-variant"]
 )
-def test_no_answer_and_no_failed_call_needs_both_a_reason_and_a_withheld_timing(reason, withheld):
+@pytest.mark.parametrize("withheld", [None, "load"])
+def test_no_answer_and_no_failed_call_needs_a_call_failure_withholding(reason, withheld):
     with pytest.raises(ValueError, match="answer"):
         classification.score_answer(
             _CS_ITEM, None, "fail", _combination_timing(withheld), pack=None,

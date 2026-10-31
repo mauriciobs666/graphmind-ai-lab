@@ -26,9 +26,11 @@ fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `repor
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
 constants — pinned by `tests/fixtures/decision-contract/`). `run --candidate` drives a
-decision-only candidate on the `decisions` surface (`runner._drive_decision_items`, U1d.2/U1d.3
-in `docs/HISTORY.md`); the hand-off arm is not built (U2.2). On a decision-point pack the runner
-loads the arm's absent models itself before the warm-up (U2.1, `docs/HISTORY.md`). **Never store a
+candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
+the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
+the arm's absent models itself before the warm-ups (U1d–U2.2 in `docs/HISTORY.md`). A guard's
+withheld hand-off record is `classification.score_answer`'s to shape; the runner never patches
+`detail`. **Never store a
 `model:decisions`/`model:handoff` record under `results/runs/`** — not even a smoke run — before
 U1e (`docs/plans/typed-decision-models2.md` §4.2); offline tests write under `tmp_path`.
 The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,

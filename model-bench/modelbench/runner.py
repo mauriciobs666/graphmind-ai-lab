@@ -63,7 +63,9 @@ from modelbench.convo import (
     drive,
 )
 from modelbench.decisions import (
+    BAR_KIND_BY_ROLE,
     DECISION_POINT_CHAT_TIMEOUT_SECONDS,
+    HANDOFF_FAILURE_BY_ROLE,
     Candidate,
     CandidateError,
     FitManifest,
@@ -501,14 +503,16 @@ def _drive_single_call_items(
 
 
 #: The hooks a scorer needs on the `decisions` surface. `answer_from_chat` is the hand-off parse,
-#: so it is the `handoff` surface's (U2), not this one's.
+#: so only the `handoff` surface needs it (`build_messages` stays optional there, as on chat).
 _DECISIONS_SURFACE_HOOKS: tuple[str, ...] = ("decision_input", "score_answer", "aggregate")
+_HANDOFF_SURFACE_HOOKS: tuple[str, ...] = (*_DECISIONS_SURFACE_HOOKS, "answer_from_chat")
 
 
-def _decision_scorer_problem(scorer: ItemScorer) -> str | None:
-    """The `decisions`-surface hooks the scorer lacks, named, or `None` — checked before the
+def _decision_scorer_problem(scorer: ItemScorer, *, handoff: bool) -> str | None:
+    """The decision-surface hooks the scorer lacks, named, or `None` — checked before the
     warm-up, so a scorer without them refuses up front rather than after a call per item."""
-    missing = [hook for hook in _DECISIONS_SURFACE_HOOKS if getattr(scorer, hook, None) is None]
+    hooks = _HANDOFF_SURFACE_HOOKS if handoff else _DECISIONS_SURFACE_HOOKS
+    missing = [hook for hook in hooks if getattr(scorer, hook, None) is None]
     if not missing:
         return None
     return f"its scorer has no {', '.join(missing)} hook (plan v1.3 §3.3 'Scorer seam')"
@@ -661,18 +665,335 @@ def _decision_call_metrics(items: Sequence[ItemResult]) -> tuple[BinaryMetric, .
 
 
 def _with_decision_call_metrics(
-    aggregates: Aggregates, items: Sequence[ItemResult]
+    aggregates: Aggregates,
+    items: Sequence[ItemResult],
+    *,
+    extra: Sequence[BinaryMetric],
 ) -> Aggregates:
-    """The scorer's aggregates plus `_decision_call_metrics`, appended to `perClass`. Never in
-    `verdictMetrics`, so `report.py` renders them exploratory. A decision role's aggregates need a
-    `perClass` block to carry them; one without refuses rather than dropping the counts."""
+    """The scorer's aggregates plus `_decision_call_metrics` and `extra` (the `handoff` surface's
+    `_handoff_metrics`, `()` on `decisions`), appended to `perClass`. Never in `verdictMetrics`,
+    so `report.py` renders them exploratory. A decision role's aggregates need a `perClass` block
+    to carry them; one without refuses rather than dropping the counts."""
     per_class = getattr(aggregates, "perClass", None)
     if per_class is None:
         raise TypeError(
             f"{type(aggregates).__name__} has no perClass block for the decisions surface's "
             "decision-call counts (plan2 §3.3)"
         )
-    return replace(aggregates, perClass=(*per_class, *_decision_call_metrics(items)))
+    return replace(
+        aggregates, perClass=(*per_class, *_decision_call_metrics(items), *extra)
+    )
+
+
+# --- the `handoff` surface (typed-decision-models plan v1.3 §3.3, §4 U2; plan2 §3.3–§3.4; plan3
+# §3.3, §3.6) ----------------------------------------------------------------------------------
+
+
+def _models_withheld_for(
+    model_infos: Sequence[ModelInfo], resident_before: Sequence[ResidentModel]
+) -> Literal["load"] | None:
+    """The between-item residency probe over every model of the arm (v1.3 §3.3, "must show
+    **both** resident"): withheld for load iff the preceding snapshot lacks any of them."""
+    if all(_is_resident(m.id, resident_before) for m in model_infos):
+        return None
+    return "load"
+
+
+@dataclass(frozen=True)
+class _HandoffRoute:
+    """Why and with what an item goes to the hand-off chat model: the decision call it completed
+    (`()` on an over-limit item, whose decision call failed), that call's `probability` and
+    `inputTokens` (`None` on an over-limit item, plan3 §3.3), and `reason` (`"over-limit"` or
+    `None` for a policy hand-off)."""
+
+    decision_calls: tuple[CallTiming, ...]
+    probability: float | None
+    input_tokens: int | None
+    reason: Literal["over-limit"] | None
+
+
+def _hand_off(
+    pack: Pack,
+    item_input: Mapping[str, Any],
+    route: _HandoffRoute,
+    *,
+    scorer: ItemScorer,
+    lmstudio: LMStudio,
+    handoff_info: ModelInfo,
+    handoff_failure: Literal["withhold", "fail-closed"],
+    request_timeout_s: float,
+    load_withheld: Literal["load"] | None,
+    started: float,
+    clock: Callable[[], float],
+) -> ItemResult:
+    """Steps 4–6 of v1.3 §3.3's per-item flow for one handed-off item: the chat call with the
+    scorer's `build_messages` (else the generic `_item_chat_messages`), at the run's chat budget
+    `request_timeout_s` — the pinned 180 s on a decision-point pack, **never**
+    `decisionTimeoutSeconds` (plan3 §3.2), an over-limit item's included — then the scorer's
+    `answer_from_chat`, then the item clock stopped.
+
+    **A failed hand-off chat call** (timeout or failure) is decided by `handoff_failure`
+    (`HANDOFF_FAILURE_BY_ROLE`, plan2 §3.3):
+    - `withhold` (the guard): withheld exactly as a failed chat call is today — `wallClockMs=None`,
+      `calls=()`, `withheldFor="timeout"`/`"no_response"`; a failing call takes its own
+      `withheldFor` and no load producer runs. Both kinds go through `score_answer` with no
+      answer, no `failed_call`, no `decided_by` or `probability`, and the outcome `score_item`
+      would give (architect rulings, 2026-10-31): an over-limit one is the withheld over-limit
+      record (plan3 §3.3's `withhold` column, `reason="over-limit"`, no `input_tokens`); a policy
+      one carries `reason=None` and its decision call's `input_tokens` (plan2 §3.4). Its `detail`
+      is the scorer's, never patched here.
+    - `fail-closed` (the new abilities): kept — `ItemTiming(wallClockMs=<item clock at the raise>,
+      calls=<the completed decision call, if any>, withheldFor=<residency's>)` and
+      `failed_call="handoff"`, no `decided_by`; the scorer scores the fail-closed answer.
+    A successful one is `decided_by="handoff"` with the decision's `probability` (`None` when
+    over-limit). No gap check runs on this surface (plan3 §3.3): the decision call has no
+    `stats`, and an over-limit item's lone chat call would otherwise be gap-checked alone."""
+    build_messages = getattr(scorer, "build_messages", None)
+    messages = (
+        build_messages(item_input, pack=pack)
+        if build_messages is not None
+        else _item_chat_messages(pack, item_input)
+    )
+    prompt_config = pack.prompt_config()
+    try:
+        chat = lmstudio.chat(
+            messages,
+            model=handoff_info.id,
+            temperature=prompt_config.temperature,
+            max_tokens=prompt_config.maxTokens,
+            timeout_s=request_timeout_s,
+        )
+    except (LMStudioCallTimeout, LMStudioCallFailed) as exc:
+        if handoff_failure == "withhold":
+            timed_out = isinstance(exc, LMStudioCallTimeout)
+            withheld = ItemTiming(
+                wallClockMs=None, calls=(), withheldFor="timeout" if timed_out else "no_response"
+            )
+            return scorer.score_answer(
+                item_input,
+                None,
+                "fail" if timed_out else "unrunnable",
+                withheld,
+                pack=pack,
+                decided_by=None,
+                probability=None,
+                failed_call=None,
+                reason=route.reason,
+                input_tokens=route.input_tokens,
+            )
+        kept = ItemTiming(
+            wallClockMs=(clock() - started) * 1000.0,
+            calls=route.decision_calls,
+            withheldFor=load_withheld,
+        )
+        return scorer.score_answer(
+            item_input,
+            None,
+            "fail",
+            kept,
+            pack=pack,
+            decided_by=None,
+            probability=None,
+            failed_call="handoff",
+            reason=route.reason,
+            input_tokens=route.input_tokens,
+        )
+    answer, outcome = scorer.answer_from_chat(chat, pack=pack)
+    timing = ItemTiming(
+        wallClockMs=(clock() - started) * 1000.0,
+        calls=(*route.decision_calls, _call_timing_from_result(chat)),
+        withheldFor=load_withheld,
+    )
+    return scorer.score_answer(
+        item_input,
+        answer,
+        outcome,
+        timing,
+        pack=pack,
+        decided_by="handoff",
+        probability=route.probability,
+        failed_call=None,
+        reason=route.reason,
+        input_tokens=route.input_tokens,
+    )
+
+
+def _drive_handoff_items(
+    pack: Pack,
+    *,
+    candidate: Candidate,
+    scorer: ItemScorer,
+    lmstudio: LMStudio,
+    model_info: ModelInfo,
+    handoff_info: ModelInfo,
+    handoff_failure: Literal["withhold", "fail-closed"],
+    request_timeout_s: float,
+    clock: Callable[[], float],
+) -> tuple[tuple[ItemResult, ...], bool]:
+    """The `handoff` surface: a decision-model candidate with a hand-off chat model (v1.3 §3.3
+    "Per-item flow"). Per item: the between-item residency probe over **both** models; the
+    scorer's `decision_input`; the item clock started; one `decide` at `decisionTimeoutSeconds`;
+    then one of four paths.
+
+    - **Decided** (the policy answers): as on the `decisions` surface — `calls=(decision,)`,
+      `decided_by="decision-model"`, `probability`, `inputTokens`.
+    - **Policy hand-off** (the policy abstains): `_hand_off`, with the decision call completed —
+      `calls=(decision, chat)` on success.
+    - **Over-limit** (plan3 §3.3: `is_over_limit` on the `LMStudioCallFailed`'s `status`/`body`):
+      the stakeholder's rule hands it off as a policy hand-off, with `reason="over-limit"`, no
+      completed decision call, and no `probability` or `inputTokens`.
+    - **Any other decision-call failure** (a timeout, a non-marker 500): kept and **not** handed
+      off (plan2 §3.3), exactly as on the `decisions` surface.
+
+    `wallClockMs` is the item clock, end to end; `withheldFor` is `"load"` iff the preceding
+    snapshot lacked either model, except on a withheld hand-off failure (`_hand_off`).
+
+    Returns the items and whether any preceding snapshot lacked a model. The flag is what
+    `_within_load_basis` needs: a withheld hand-off failure takes its own `withheldFor`, so its
+    record alone cannot show the reload that note §Q6's rule ("only if nothing shows a reload")
+    must see."""
+    question = dict(candidate.question)
+    models = (model_info, handoff_info)
+    results: list[ItemResult] = []
+    snapshot_lacked_a_model = False
+    for item_input in pack.iter_items():
+        resident = lmstudio.residency()  # between-item probe — never during a timed call
+        load_withheld = _models_withheld_for(models, resident)
+        snapshot_lacked_a_model = snapshot_lacked_a_model or load_withheld is not None
+        text = scorer.decision_input(item_input, pack=pack)
+        started = clock()
+        try:
+            result = lmstudio.decide(
+                text,
+                [question],
+                model=model_info.id,
+                timeout_s=candidate.decisionTimeoutSeconds,
+            )
+        except (LMStudioCallTimeout, LMStudioCallFailed) as exc:
+            if not (isinstance(exc, LMStudioCallFailed) and is_over_limit(exc.status, exc.body)):
+                kept = ItemTiming(
+                    wallClockMs=(clock() - started) * 1000.0,
+                    calls=(),
+                    withheldFor=load_withheld,
+                )
+                results.append(
+                    scorer.score_answer(
+                        item_input,
+                        None,
+                        "fail",
+                        kept,
+                        pack=pack,
+                        decided_by=None,
+                        probability=None,
+                        failed_call="decision",
+                        reason=None,
+                        input_tokens=None,
+                    )
+                )
+                continue
+            route = _HandoffRoute(
+                decision_calls=(), probability=None, input_tokens=None, reason="over-limit"
+            )
+        else:
+            answer = _the_answer(result, question["name"])
+            decision = apply_policy(candidate.policy, answer)
+            probability = (
+                answer.probability if answer.type == "predicate" else answer.confidence
+            )
+            decision_call = _decision_call_timing(result)
+            if not decision.handoff:
+                timing = ItemTiming(
+                    wallClockMs=(clock() - started) * 1000.0,
+                    calls=(decision_call,),
+                    withheldFor=load_withheld,
+                )
+                results.append(
+                    scorer.score_answer(
+                        item_input,
+                        decision.answer,
+                        "pass",
+                        timing,
+                        pack=pack,
+                        decided_by="decision-model",
+                        probability=probability,
+                        failed_call=None,
+                        reason=None,
+                        input_tokens=_input_tokens(result.usage),
+                    )
+                )
+                continue
+            route = _HandoffRoute(
+                decision_calls=(decision_call,),
+                probability=probability,
+                input_tokens=_input_tokens(result.usage),
+                reason=None,
+            )
+        results.append(
+            _hand_off(
+                pack,
+                item_input,
+                route,
+                scorer=scorer,
+                lmstudio=lmstudio,
+                handoff_info=handoff_info,
+                handoff_failure=handoff_failure,
+                request_timeout_s=request_timeout_s,
+                load_withheld=load_withheld,
+                started=started,
+                clock=clock,
+            )
+        )
+    return tuple(results), snapshot_lacked_a_model
+
+
+_CALL_FAILURE_WITHHELD: frozenset[str] = frozenset({"timeout", "no_response"})
+
+
+def _handoff_metrics(
+    items: Sequence[ItemResult],
+    *,
+    handoff_failure: Literal["withhold", "fail-closed"],
+    verdict_metrics: Sequence[str],
+) -> tuple[BinaryMetric, ...]:
+    """What the `handoff` surface adds to `_decision_call_metrics` (v1.3 §3.5; plan2 §3.3; plan3
+    §3.3, §3.6), all exploratory and read from each item's `detail`/`timing`:
+    - `handoffShare`: `decidedBy == "handoff"` items over the attempted ones — every item except
+      one withheld by a failed hand-off call (plan3 §3.3's `withhold` column: "not attempted"). A
+      kept hand-off failure counts as not handed off;
+    - on `fail-closed` roles only, `handoffCallFailures`: `failedCall == "handoff"` items, an
+      over-limit one included, over every item (plan3 §3.3: "not applicable (guard)");
+    - the per-path diagnostics (v1.3 §3.5, AC-2): each verdict metric over the items the decision
+      model decided (`<metric>DecidedByModel`) and over the handed-off ones
+      (`<metric>HandedOff`)."""
+    attempted = [
+        i for i in items if i.timing is None or i.timing.withheldFor not in _CALL_FAILURE_WITHHELD
+    ]
+    handed_off = sum(1 for i in attempted if i.detail.get("decidedBy") == "handoff")
+    metrics = [
+        BinaryMetric(name="handoffShare", successes=handed_off, n=len(attempted), unit="item")
+    ]
+    if handoff_failure == "fail-closed":
+        failures = sum(1 for i in items if i.detail.get("failedCall") == "handoff")
+        metrics.append(
+            BinaryMetric(name="handoffCallFailures", successes=failures, n=len(items), unit="item")
+        )
+    for metric in verdict_metrics:
+        for decided_by, suffix in (("decision-model", "DecidedByModel"), ("handoff", "HandedOff")):
+            outcomes = [
+                outcome
+                for i in items
+                if i.detail.get("decidedBy") == decided_by
+                and (outcome := i.scored_outcome(metric)) is not None
+            ]
+            metrics.append(
+                BinaryMetric(
+                    name=f"{metric}{suffix}",
+                    successes=sum(outcomes),
+                    n=len(outcomes),
+                    unit="item",
+                )
+            )
+    return tuple(metrics)
 
 
 def _same_decision(a: DecisionAnswer, b: DecisionAnswer) -> bool:
@@ -692,12 +1013,16 @@ def _within_load_basis(
     lmstudio: LMStudio,
     model_info: ModelInfo,
     warm_up: DecisionResult | None,
+    snapshot_lacked_a_model: bool,
 ) -> Basis:
     """Plan2 §3.4's load rule (note §Q6), run after the last item and before
     `residentModelsAtEnd`: did every scored item come from the one load the warm-up made?
 
-    It probes residency first. If the decision model is absent, or any item was withheld for
-    `"load"`, it makes **no** call and the run is `"assumed"` (not one load). Otherwise it repeats
+    It probes residency first. If the decision model is absent, any item was withheld for
+    `"load"`, or `snapshot_lacked_a_model` (a between-item snapshot lacked a model of the arm —
+    on the `handoff` surface a withheld hand-off failure keeps its own `withheldFor`, hiding that
+    snapshot from the items; note §Q6: one load "only if nothing shows a reload"), it makes
+    **no** call and the run is `"assumed"` (not one load). Otherwise it repeats
     the mandatory warm-up's call — `decide(WARMUP_DECISION_INPUT, [question])` at
     `decisionTimeoutSeconds` — and the run is `"by-construction"` iff the answer is exactly the
     mandatory warm-up's (`_same_decision`; never a `--warmup N` extra's). A raise, an unequal
@@ -711,6 +1036,8 @@ def _within_load_basis(
     except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError):
         return "assumed"
     if not _is_resident(model_info.id, resident):
+        return "assumed"
+    if snapshot_lacked_a_model:
         return "assumed"
     if any(i.timing is not None and i.timing.withheldFor == "load" for i in items):
         return "assumed"
@@ -904,15 +1231,16 @@ def _wall_clock_trio(
 def latency_block(
     items: Sequence[ItemResult],
     *,
-    call_surface: Literal["chat", "embeddings", "decisions"] | None,
+    call_surface: Literal["chat", "embeddings", "decisions", "handoff"] | None,
 ) -> LatencyBlock | None:
     """One run's `LatencyBlock`, built in one pass over `items` and returning `None` iff every
     item's `timing is None` (spec §5 rule v). `call_surface` is required (module docstring, gap 2):
     rule (iv-a) needs to tell "this surface has no `stats`" from "this surface has `stats` and none
     arrived", which `items` alone cannot distinguish.
 
-    `"decisions"` is treated like `"embeddings"` for every stats-derived field
-    (typed-decision-models plan v1.3 §3.3): its response has no `stats` either, so
+    `"decisions"` and `"handoff"` are treated like `"embeddings"` for every stats-derived field
+    (typed-decision-models plan v1.3 §3.3): a decisions response has no `stats`, and a median of
+    the hand-off chat calls' stats alone over a mixed-surface arm would mislead, so
     `statsCoveredCount` and the three medians are `None`, never `0`. The wall-clock figures apply
     unchanged.
     """
@@ -950,7 +1278,7 @@ def latency_block(
     ]
     unexplained_ms_max = max(unexplained_readings) if unexplained_readings else None
 
-    if call_surface in ("embeddings", "decisions"):
+    if call_surface in ("embeddings", "decisions", "handoff"):
         # rule (iv-a): no `stats` on this surface at all — `None`, never `0`.
         stats_covered_count: int | None = None
         ttft_median = prefill_median = tps_median = None
@@ -1050,7 +1378,7 @@ def _build_fingerprint(
     *,
     pack: Pack,
     model_info: ModelInfo,
-    call_surface: Literal["chat", "embeddings", "decisions"],
+    call_surface: Literal["chat", "embeddings", "decisions", "handoff"],
     host: Mapping[str, Any],
     started_at: datetime,
     ended_at: datetime,
@@ -1062,15 +1390,23 @@ def _build_fingerprint(
     catalog_after_load: list[ModelInfo],
     prompt_config: PromptConfig,
     decision_fields: Mapping[str, Any] | None,
+    handoff_fields: Mapping[str, Any] | None,
 ) -> Fingerprint:
     """The run's fingerprint. Model identity is read from the LM Studio catalog entry of the
-    model the arm ran (`model_info`), never from a request string; `loadedContextLength` from
-    the catalog read after the load. `decision_fields` is `_decision_fingerprint_fields`' output
-    on the `decisions` surface and `None` on every other one — refused otherwise, so the
-    `model:decisions` additions can neither go missing nor leak onto another profile."""
-    if (decision_fields is not None) != (call_surface == "decisions"):
+    model the arm ran (`model_info` — the decision model on a candidate arm), never from a request
+    string; `loadedContextLength` from the catalog read after the load. `decision_fields` is
+    `_decision_fingerprint_fields`' output on the `decisions` and `handoff` surfaces and `None`
+    on every other one; `handoff_fields` is `_handoff_fingerprint_fields`' on `handoff` only —
+    each refused otherwise, so a profile's additions can neither go missing nor leak onto
+    another profile."""
+    if (decision_fields is not None) != (call_surface in ("decisions", "handoff")):
         raise ValueError(
-            f"_build_fingerprint: decision_fields are given iff call_surface == 'decisions' "
+            f"_build_fingerprint: decision_fields are given iff call_surface is 'decisions' or "
+            f"'handoff' (call_surface={call_surface!r})"
+        )
+    if (handoff_fields is not None) != (call_surface == "handoff"):
+        raise ValueError(
+            f"_build_fingerprint: handoff_fields are given iff call_surface == 'handoff' "
             f"(call_surface={call_surface!r})"
         )
     loaded = next((m for m in catalog_after_load if m.id == model_info.id), None)
@@ -1112,7 +1448,39 @@ def _build_fingerprint(
         fields["maxTokens"] = prompt_config.maxTokens
     if decision_fields is not None:
         fields.update(decision_fields)
+    if handoff_fields is not None:
+        fields.update(handoff_fields)
     return Fingerprint(armKind="model", callSurface=call_surface, fields=fields)
+
+
+def _handoff_fingerprint_fields(
+    handoff_info: ModelInfo,
+    *,
+    catalog_after_load: Sequence[ModelInfo],
+    chat_warm_up: LoadResult,
+    prompt_config: PromptConfig,
+) -> dict[str, Any]:
+    """What `model:handoff` adds to `model:decisions` (v1.3 §3.3, §4 U2): the hand-off model's
+    identity from its own catalog entry, `handoffLoadedContextLength` from the catalog read after
+    the load, its runtime from **its own** chat warm-up (the only chat call outside a scored
+    item), and the pack's sampling settings, which only the hand-off chat call obeys — flat and
+    `handoff`-prefixed, never under the bare chat names."""
+    loaded = next((m for m in catalog_after_load if m.id == handoff_info.id), None)
+    runtime_name, runtime_version = _runtime_identity(chat_warm_up)
+    return {
+        "handoffModelKey": handoff_info.id,
+        "handoffModelPublisher": handoff_info.publisher,
+        "handoffArch": handoff_info.arch,
+        "handoffQuantization": handoff_info.quantization,
+        "handoffCompatibilityType": handoff_info.compatibility_type,
+        "handoffMaxContextLength": handoff_info.max_context_length,
+        "handoffLoadedContextLength": loaded.loaded_context_length if loaded is not None else None,
+        "handoffModelType": handoff_info.type,
+        "handoffRuntimeName": runtime_name,
+        "handoffRuntimeVersion": runtime_version,
+        "handoffTemperature": prompt_config.temperature,
+        "handoffMaxTokens": prompt_config.maxTokens,
+    }
 
 
 def _decision_fingerprint_fields(
@@ -1143,11 +1511,13 @@ def _decision_fingerprint_fields(
 
 def _arm_model_ids(model_info: ModelInfo, decision_arm: _DecisionArm | None) -> tuple[str, ...]:
     """The models a run's arm uses (plan3 §3.7: "the chat model, the decision model, or both"):
-    the decision model on a candidate run, the chat/embeddings model otherwise. The hand-off
-    composite's second model joins this tuple with the `handoff` surface (U2.2)."""
-    if decision_arm is not None:
+    the decision model, then the hand-off model if any, on a candidate run; the chat/embeddings
+    model otherwise."""
+    if decision_arm is None:
+        return (model_info.id,)
+    if decision_arm.handoff_info is None:
         return (decision_arm.model_info.id,)
-    return (model_info.id,)
+    return (decision_arm.model_info.id, decision_arm.handoff_info.id)
 
 
 def _load_absent_models(
@@ -1233,28 +1603,41 @@ def _decision_instance_config(lmstudio: LMStudio, model_id: str) -> Mapping[str,
 class _DecisionArm:
     """A `run --candidate` arm that passed every pre-flight refusal: the loaded candidate, its
     decision model's catalog entry, the scorer, the pack's `evalSetHash`, and the verified fit
-    manifest."""
+    manifest. On the `handoff` surface also the hand-off model's catalog entry and what a failed
+    hand-off chat call does on this role (`HANDOFF_FAILURE_BY_ROLE`); both are `None` iff the
+    candidate has no hand-off model (the `decisions` surface)."""
 
     candidate: Candidate
     model_info: ModelInfo
     scorer: ItemScorer
     eval_set: str
     fit_manifest: FitManifest
+    handoff_info: ModelInfo | None
+    handoff_failure: Literal["withhold", "fail-closed"] | None
+
+    @property
+    def call_surface(self) -> Literal["decisions", "handoff"]:
+        return "decisions" if self.handoff_info is None else "handoff"
 
 
 def _prepare_decision_arm(
     pack: Pack, cfg: RunConfig, *, root: Path, catalog: list[ModelInfo]
 ) -> _DecisionArm:
     """v1.3 §3.3's refusals for `run --pack P --candidate ID` (exit 4 each), before any call:
-    an unloadable candidate (`Candidate.load`'s own refusals) or one for another role; a
-    candidate with a hand-off model (the `handoff` surface — U2, not built yet); a pack with no
-    `decisionPoint` block or no `lmstudio-decisions` token; a question outside the pack's answer
-    space (`packs.answer_space_problem`, a `score` question included); a pack whose items cannot
-    give an `evalSetHash` (an item with no `stratum`); a fit manifest that cannot be read or does
-    not match the candidate's declared `sha256`/`size` (`decisions.load_fit_manifest`); **AC-3's
-    leakage refusal** — any pack item, `eval` or `side-check`, whose `input_hash` is in the fit
-    manifest (v1.3 §3.5); a scorer without the decisions hooks; the decision model absent from
-    the catalog, or its catalog `type` not `"decision"`.
+    an unloadable candidate (`Candidate.load`'s own refusals) or one for another role; a pack
+    with no `decisionPoint` block or no `lmstudio-decisions` token; a question outside the
+    pack's answer space (`packs.answer_space_problem`, a `score` question included); a pack whose
+    items cannot give an `evalSetHash` (an item with no `stratum`); a fit manifest that cannot be
+    read or does not match the candidate's declared `sha256`/`size` (`decisions.load_fit_manifest`);
+    **AC-3's leakage refusal** — any pack item, `eval` or `side-check`, whose `input_hash` is in
+    the fit manifest (v1.3 §3.5); a scorer without the decisions hooks; the decision model absent
+    from the catalog, or its catalog `type` not `"decision"`.
+
+    **A candidate with a hand-off model runs on the `handoff` surface** (v1.3 §3.3's third row),
+    with three more refusals: a pack whose `environment.requires` does not declare
+    `lmstudio-chat`; a hand-off model absent from the catalog or of catalog `type` not in `{llm,
+    vlm}`; and, on a speed-up pack (`BAR_KIND_BY_ROLE`), a hand-off model that is not
+    `decisionPoint.incumbent` (FR-3). Its scorer also needs `answer_from_chat`, the hand-off parse.
 
     The manifest and leakage checks run for **every** candidate, with or without a hand-off model
     (impl review Pass 6, P6-m2): both surfaces share this function, and a decision-only candidate
@@ -1272,16 +1655,25 @@ def _prepare_decision_arm(
 
     if candidate.role != pack.role:
         raise refuse(f"it is a {candidate.role!r} candidate and the pack's role is {pack.role!r}")
-    if candidate.handoffModel is not None:
-        raise refuse(
-            f"it has a hand-off model ({candidate.handoffModel!r}), so it runs on the handoff "
-            "surface, which is not built yet (typed-decision-models U2)"
-        )
     if "decisionPoint" not in pack.manifest:
         raise refuse("the pack has no decisionPoint block (plan v1.3 §3.3)")
     environment = pack.manifest.get("environment") or {}
     if not derive_decision_support(environment.get("requires")):
         raise refuse("environment.requires does not declare 'lmstudio-decisions' (plan v1.3 §3.3)")
+    handoff_model = candidate.handoffModel
+    if handoff_model is not None:
+        if derive_call_surface(environment.get("requires")) != "chat":
+            raise refuse(
+                f"it has a hand-off model ({handoff_model!r}) and environment.requires does not "
+                "declare 'lmstudio-chat' (plan v1.3 §3.3)"
+            )
+        incumbent = pack.manifest["decisionPoint"].get("incumbent")
+        if BAR_KIND_BY_ROLE.get(pack.role) == "speed-up" and handoff_model != incumbent:
+            raise refuse(
+                f"its hand-off model {handoff_model!r} is not the speed-up point's incumbent "
+                f"{incumbent!r}; any other hand-off model goes to the existing judge (FR-3, plan "
+                "v1.3 §3.3)"
+            )
     problem = answer_space_problem(pack.manifest["decisionPoint"], candidate.question)
     if problem is not None:
         raise refuse(problem)
@@ -1301,7 +1693,7 @@ def _prepare_decision_arm(
             "input it would be measured on (AC-3, plan v1.3 §3.5)"
         )
     scorer = _load_item_scorer(pack)
-    problem = _decision_scorer_problem(scorer)
+    problem = _decision_scorer_problem(scorer, handoff=handoff_model is not None)
     if problem is not None:
         raise refuse(problem)
     model_info = _find_model(catalog, candidate.decisionModel)
@@ -1310,12 +1702,25 @@ def _prepare_decision_arm(
             f"its decision model {model_info.id!r} has catalog type {model_info.type!r}, not "
             "'decision' (plan v1.3 §3.3)"
         )
+    handoff_info: ModelInfo | None = None
+    handoff_failure: Literal["withhold", "fail-closed"] | None = None
+    if handoff_model is not None:
+        handoff_info = _find_model(catalog, handoff_model)
+        if handoff_info.type not in ("llm", "vlm"):
+            raise refuse(
+                f"its hand-off model {handoff_info.id!r} has catalog type {handoff_info.type!r}, "
+                "not 'llm' or 'vlm' (plan v1.3 §3.3)"
+            )
+        # Keyed exactly like `BAR_KIND_BY_ROLE`, which `Candidate.load` checked the role against.
+        handoff_failure = HANDOFF_FAILURE_BY_ROLE[pack.role]  # type: ignore[assignment]
     return _DecisionArm(
         candidate=candidate,
         model_info=model_info,
         scorer=scorer,
         eval_set=eval_set,
         fit_manifest=fit_manifest,
+        handoff_info=handoff_info,
+        handoff_failure=handoff_failure,
     )
 
 
@@ -1342,6 +1747,49 @@ def _resolve_request_timeout(pack: Pack, cfg: RunConfig) -> float:
     return pinned
 
 
+def _warm_up(
+    lmstudio: LMStudio,
+    model_id: str,
+    *,
+    call_surface: Literal["chat", "embeddings", "decisions"],
+    system_prompt: str | None,
+    was_resident_before: bool,
+    cfg: RunConfig,
+    **question: Any,
+) -> LoadResult:
+    """One model's mandatory warm-up at `firstCallTimeoutSeconds` (capture-order step 4), then
+    its `--warmup <n>` extras, additive and discarded. A failed mandatory warm-up refuses the run
+    with exit 3: nothing was scored. Returns the mandatory warm-up's `LoadResult` — never an
+    extra's (plan2 §3.4's re-check compares with it)."""
+    try:
+        load_result = lmstudio.warm_up(
+            model_id,
+            call_surface=call_surface,
+            system_prompt=system_prompt,
+            was_resident_before=was_resident_before,
+            timeout_s=cfg.firstCallTimeoutSeconds,
+            **question,
+        )
+    except LMStudioCallTimeout as exc:
+        raise RunRefused(
+            f"warm-up of {model_id!r} did not complete within --first-call-timeout "
+            f"({cfg.firstCallTimeoutSeconds}s); nothing was scored (plan §3.6)",
+            exitCode=3,
+        ) from exc
+    except LMStudioCallFailed as exc:
+        raise RunRefused(f"warm-up call failed: {exc}", exitCode=3) from exc
+    for _ in range(cfg.warmupExtra):
+        lmstudio.warm_up(
+            model_id,
+            call_surface=call_surface,
+            system_prompt=system_prompt,
+            was_resident_before=True,
+            timeout_s=cfg.firstCallTimeoutSeconds,
+            **question,
+        )
+    return load_result
+
+
 def run_pack(
     pack: Pack,
     cfg: RunConfig,
@@ -1363,6 +1811,12 @@ def run_pack(
     `_drive_decision_items`, timed by `clock` (seconds, monotonic — the item clock). Its
     `designEffect` is `1.0`; its `basis` is the load rule's (`_within_load_basis`, plan2 §3.4):
     `"by-construction"` for one load, otherwise `"assumed"`.
+
+    **A candidate with a hand-off model** runs on the `handoff` surface (v1.3 §3.3, §4 U2): step
+    4 warms up the decision model, then the hand-off model on the chat route; step 6's trip-wire
+    is fed by that chat warm-up (`"compared"`); step 9 is `_drive_handoff_items`; the fingerprint
+    is `model:handoff` (`_handoff_fingerprint_fields`), and the load rule is the decision
+    model's, as on `decisions`.
 
     **Every run records its chat-call budget** (`RunResult.requestTimeoutSeconds`), resolved up
     front by `_resolve_request_timeout` — pinned, with its exit-4 refusal, on a decision-point
@@ -1391,11 +1845,11 @@ def run_pack(
 
     catalog = lmstudio.catalog()  # step 3a
     decision_arm: _DecisionArm | None = None
-    call_surface: Literal["chat", "embeddings", "decisions"] | None
+    call_surface: Literal["chat", "embeddings", "decisions", "handoff"] | None
     if cfg.candidateId is not None:
         decision_arm = _prepare_decision_arm(pack, cfg, root=root, catalog=catalog)
         model_info = decision_arm.model_info
-        call_surface = "decisions"
+        call_surface = decision_arm.call_surface
     else:
         assert cfg.modelKey is not None  # RunConfig: exactly one of the two is set
         model_info = _find_model(catalog, cfg.modelKey)
@@ -1431,46 +1885,60 @@ def run_pack(
 
     prompt_config = pack.prompt_config()
     # The decisions warm-up is one `decide` with the candidate's own question (v1.3 §3.3); the
-    # keyword is passed on that surface only, where `warm_up` requires it.
+    # keyword is passed on that surface only, where `warm_up` requires it. A candidate arm's
+    # first warm-up is its decision model's, on LM Studio's `decisions` route, whichever
+    # surface the arm is.
+    warm_up_surface: Literal["chat", "embeddings", "decisions"] = (
+        "decisions" if decision_arm is not None else call_surface  # type: ignore[assignment]
+    )
     warm_up_question: dict[str, Any] = (
         {"question": dict(decision_arm.candidate.question)} if decision_arm is not None else {}
     )
-    try:
-        load_result = lmstudio.warm_up(  # step 4 — the mandatory, once-per-arm warm-up
-            model_info.id,
-            call_surface=call_surface,
-            system_prompt=prompt_config.systemPrompt if call_surface == "chat" else None,
+    # Step 4 — the mandatory, once-per-model warm-ups. On the `handoff` surface both models are
+    # warmed up here, the decision model first, and only then does step 7 check that both are
+    # still resident (plan3 §3.7: "After both warm-ups") — so a chat warm-up that evicts the
+    # decision model refuses the run before any item.
+    load_result = _warm_up(
+        lmstudio,
+        model_info.id,
+        call_surface=warm_up_surface,
+        system_prompt=prompt_config.systemPrompt if warm_up_surface == "chat" else None,
+        was_resident_before=(
+            _is_resident(model_info.id, resident_at_start) or model_info.id in loaded_now
+        ),
+        cfg=cfg,
+        **warm_up_question,
+    )
+    handoff_info = decision_arm.handoff_info if decision_arm is not None else None
+    chat_load_result: LoadResult | None = None
+    if handoff_info is not None:
+        chat_load_result = _warm_up(
+            lmstudio,
+            handoff_info.id,
+            call_surface="chat",
+            system_prompt=prompt_config.systemPrompt,
             was_resident_before=(
-                _is_resident(model_info.id, resident_at_start) or model_info.id in loaded_now
+                _is_resident(handoff_info.id, resident_at_start) or handoff_info.id in loaded_now
             ),
-            timeout_s=cfg.firstCallTimeoutSeconds,
-            **warm_up_question,
-        )
-    except LMStudioCallTimeout as exc:
-        raise RunRefused(
-            f"warm-up did not complete within --first-call-timeout "
-            f"({cfg.firstCallTimeoutSeconds}s); nothing was scored (plan §3.6)",
-            exitCode=3,
-        ) from exc
-    except LMStudioCallFailed as exc:
-        raise RunRefused(f"warm-up call failed: {exc}", exitCode=3) from exc
-    for _ in range(cfg.warmupExtra):  # --warmup <n>, additive, discarded
-        lmstudio.warm_up(
-            model_info.id,
-            call_surface=call_surface,
-            system_prompt=prompt_config.systemPrompt if call_surface == "chat" else None,
-            was_resident_before=True,
-            timeout_s=cfg.firstCallTimeoutSeconds,
-            **warm_up_question,
+            cfg=cfg,
         )
 
+    # The attestation trip-wire is fed by a chat warm-up: the arm's own on a chat arm, the
+    # hand-off model's on the `handoff` surface (`"compared"`, v1.3 §3.3); a surface with no chat
+    # warm-up (embeddings, decisions) has no runtime to compare (`"unavailable"`).
+    chat_warm_up = chat_load_result if handoff_info is not None else load_result
+    attestation_surface: Literal["chat", "embeddings", "decisions"] = (
+        "chat" if handoff_info is not None else warm_up_surface
+    )
     runtime_name, runtime_version = (
-        _runtime_identity(load_result) if call_surface == "chat" else (None, None)
+        _runtime_identity(chat_warm_up)  # type: ignore[arg-type]
+        if attestation_surface == "chat"
+        else (None, None)
     )
 
     check = hostinfo.check_attestation_staleness(  # step 6
         host,
-        call_surface=call_surface,
+        call_surface=attestation_surface,
         residency_source=residency_source,
         runtime_name=runtime_name,
         runtime_version=runtime_version,
@@ -1491,17 +1959,38 @@ def run_pack(
     )
 
     if decision_arm is not None:
-        items = _drive_decision_items(  # step 9
-            pack,
-            candidate=decision_arm.candidate,
-            scorer=decision_arm.scorer,
-            lmstudio=lmstudio,
-            model_info=model_info,
-            baseline_residency=baseline_residency,
-            clock=clock,
-        )
+        if handoff_info is not None:
+            items, snapshot_lacked_a_model = _drive_handoff_items(  # step 9
+                pack,
+                candidate=decision_arm.candidate,
+                scorer=decision_arm.scorer,
+                lmstudio=lmstudio,
+                model_info=model_info,
+                handoff_info=handoff_info,
+                handoff_failure=decision_arm.handoff_failure,  # type: ignore[arg-type]
+                request_timeout_s=cfg.requestTimeoutSeconds,  # type: ignore[arg-type]
+                clock=clock,
+            )
+            handoff_metrics = _handoff_metrics(
+                items,
+                handoff_failure=decision_arm.handoff_failure,  # type: ignore[arg-type]
+                verdict_metrics=pack.manifest["metrics"]["verdictMetrics"],
+            )
+        else:
+            items = _drive_decision_items(  # step 9
+                pack,
+                candidate=decision_arm.candidate,
+                scorer=decision_arm.scorer,
+                lmstudio=lmstudio,
+                model_info=model_info,
+                baseline_residency=baseline_residency,
+                clock=clock,
+            )
+            handoff_metrics = ()
+            snapshot_lacked_a_model = False  # every item records its own load withholding
         # Sampling unit == item (v1.3 §3.3); `by-construction` is final iff the run is one load
-        # (plan2 §3.4) — the load rule, before step 10's `residentModelsAtEnd`.
+        # of the decision model (plan2 §3.4) — the load rule, before step 10's
+        # `residentModelsAtEnd`, on both decision surfaces.
         design_effect = 1.0
         basis = _within_load_basis(
             items,
@@ -1509,10 +1998,11 @@ def run_pack(
             lmstudio=lmstudio,
             model_info=model_info,
             warm_up=load_result.decision,
+            snapshot_lacked_a_model=snapshot_lacked_a_model,
         )
         disclosures = ()
         aggregates = _with_decision_call_metrics(
-            decision_arm.scorer.aggregate(items, pack=pack), items
+            decision_arm.scorer.aggregate(items, pack=pack), items, extra=handoff_metrics
         )
     elif pack.role == "tool-caller":
         items, disclosures, basis, design_effect, aggregates = _drive_conversations(  # step 9
@@ -1573,6 +2063,16 @@ def run_pack(
                 instance_config=instance_config,
             )
             if decision_arm is not None
+            else None
+        ),
+        handoff_fields=(
+            _handoff_fingerprint_fields(
+                handoff_info,
+                catalog_after_load=catalog_after_load,
+                chat_warm_up=chat_load_result,  # type: ignore[arg-type]
+                prompt_config=prompt_config,
+            )
+            if handoff_info is not None
             else None
         ),
     )
