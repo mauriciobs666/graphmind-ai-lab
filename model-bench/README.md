@@ -144,12 +144,21 @@ fingerprint, a dispatch-censored conversation).
 (`docs/plans/typed-decision-models.md` §3.3): the pack must carry a `decisionPoint` block and the
 `lmstudio-decisions` token in `environment.requires`, the candidate's question must match the
 pack's answer space, and its decision model's catalog type must be `decision` — otherwise exit `4`
-before any call. Only a candidate with no hand-off model runs today; the hand-off arm is not built
-yet. A failed decision call (timeout, failure, or over-limit input) keeps its item in the run as a
-failure, counted in the exploratory `decisionCallFailures` or `overLimit` metric. After the last
-item a re-check decides the record's `basis`: `by-construction` if the run stayed on one load of
-the decision model, `assumed` otherwise. The record is keyed by its `armKey` — the candidate id —
-in `compare --models`, `rank`, `models --tested` and `index.csv`'s `candidateId` column.
+before any call. The candidate's fit manifest, `candidates/<fitManifest.file>` (one sorted
+`input_hash` per line), must match the candidate's declared `sha256` and entry count, and must
+hold no input of any pack item — the leakage refusal (AC-3) — also exit `4` before any call. Only
+a candidate with no hand-off model runs today; the hand-off arm is not built yet. On a
+decision-point pack the runner loads every model the arm uses that is not resident at start
+(`POST /api/v1/models/load`) before the warm-up, so nothing it scores is JIT-loaded. An explicit
+load has no TTL, so a model the runner loads **stays resident on the GPU after the run** until you
+unload it. A failed load, a candidate's decision model gone after its warm-up, or its loaded
+instance config unreadable, is exit `3`; the record carries that config verbatim
+(`decisionInstanceConfig`). A failed decision call (timeout, failure, or over-limit input) keeps
+its item in the run as a failure, counted in the exploratory `decisionCallFailures` or
+`overLimit` metric. After the last item a re-check decides the record's `basis`:
+`by-construction` if the run stayed on one load of the decision model, `assumed` otherwise. The
+record is keyed by its `armKey` — the candidate id — in `compare --models`, `rank`,
+`models --tested` and `index.csv`'s `candidateId` column.
 
 On a decision-point pack (any arm), chat calls run at a pinned 180 s: `--request-timeout` with
 any other value is refused, exit `4`. Every run records the request timeout it used.
@@ -159,12 +168,13 @@ any other value is refused, exit `4`. Every run records the request timeout it u
 `INVALID RESULTS EXCLUDED` and still exits `0`, because it is a report, not a failure). `2` bad
 arguments/usage. `3` LM Studio unreachable, reachable without its native `/api/v0` catalog, not
 answering the warm-up call within `--first-call-timeout`, or gone when re-probed after a scored
-call timed out. `4` an invalid pack — a `validate` failure, a load error, an unmet
-`environment.requires`, a `callSurface` the model's catalog type contradicts, or (after `run`'s
-artifacts are already written) a `tool-caller` conversation censored by a tool-dispatch failure — a
-data-quality finding discovered only once a partial record exists, not an aborted run. `5`
-fingerprint incomplete, or `host.json` stale/absent. Nothing else — there is no score-driven exit
-code, on purpose (see "Three things this tool deliberately is not," above).
+call timed out; on a decision-point pack also a failed explicit load or instance-config read.
+`4` an invalid pack — a `validate` failure, a load error, an unmet `environment.requires`, a
+`callSurface` the model's catalog type contradicts, or (after `run`'s artifacts are already
+written) a `tool-caller` conversation censored by a tool-dispatch failure — a data-quality finding
+discovered only once a partial record exists, not an aborted run. `5` fingerprint incomplete,
+or `host.json` stale/absent. Nothing else — there is no score-driven exit code, on purpose (see
+"Three things this tool deliberately is not," above).
 
 ## What a pack is, and how to add one
 

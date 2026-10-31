@@ -10,9 +10,13 @@ else (§2.5) while every fingerprint field and every `stats`/`runtime` object li
 surface. **One exception since typed-decision-models U1a:** `decide()` posts to `DECISIONS_ROUTE`,
 `/v1/decisions` — the only decisions route verified so far, whose response has no `stats` or
 `runtime` at all (that plan's §2.3); the `/api/v0` variant is an open live probe (see `decide`).
-**No `load`/`unload`/`ps`** — v1.7's three `lms.exe` operations are gone with the CLI
-(§2.5, §3.4.4a), and nothing on either HTTP surface can unload a model: the harness cannot force a
-cold state, by design, not by omission.
+**No `unload`/`ps`** — v1.7's three `lms.exe` operations are gone with the CLI (§2.5, §3.4.4a), and
+the harness cannot force a cold state, by design, not by omission. **One load since
+typed-decision-models U2.1:** `load_model` posts to `/api/v1/models/load`, and
+`loaded_instances` reads `GET /api/v1/models` (`models[].key`, `loaded_instances[]` — a different
+shape from the `/api/v0` catalog), both per that plan3 §3.7 and the U2p live probe
+(`ws:agent-team` a93905a6…). The runner loads a decision-point pack's absent models itself, so
+nothing it scores is JIT-loaded.
 
 **The unit boundary (§3.6, plan-gate P4-1) lives here and nowhere else.** LM Studio's `stats`
 object reports `time_to_first_token` and `generation_time` in **seconds**; every `...Ms` field
@@ -386,6 +390,25 @@ class LoadResult:
     decision: DecisionResult | None = None
 
 
+@dataclass(frozen=True)
+class LoadedInstance:
+    """`POST /api/v1/models/load`'s response (typed-decision-models plan3 §3.7), as the U2p probe
+    recorded it: `{type, instance_id, load_time_seconds, status, load_config}`. `instance_id`
+    equals the model key for a single instance; `load_config` is present only when the request
+    asked for `echo_load_config`, kept verbatim, `None` when absent. `type` and
+    `load_time_seconds` are `None` when absent or ill-typed — nothing reads them for a decision."""
+
+    instance_id: str
+    status: str
+    type: str | None
+    load_time_seconds: float | None
+    load_config: Mapping[str, Any] | None
+
+
+#: The one `status` a successful load reports (U2p probe, both loads).
+_LOADED_STATUS = "loaded"
+
+
 def _coerce_finite_float(value: Any) -> float | None:
     """The shared half of both `_seconds_to_ms` and `_as_float`: `None` when `value` is absent,
     a `bool`, not coercible to `float` at all, or coercible but non-finite (`nan`/`inf`/`-inf`) —
@@ -631,7 +654,41 @@ class LMStudio:
             if m.state != "not-loaded"
         ]
 
-    # --- POST: chat / embed / warm-up ---------------------------------------------------------
+    def loaded_instances(self, model_key: str) -> tuple[Mapping[str, Any], ...]:
+        """`GET /api/v1/models` — the instances of `model_key` currently loaded, each verbatim
+        (`{id, config{…}}`, typed-decision-models plan3 §3.7). The route lists `models[]`, each
+        keyed by `key` (not `/api/v0`'s `id`) with a `loaded_instances` list. A model the list does
+        not name, or one with no instance, gives `()`. No response raises `LMStudioUnreachable`; a
+        non-200 status, or a body without that shape, raises `LMStudioCallFailed` — never a guess
+        at an instance."""
+        path = "/api/v1/models"
+        result = self._raw_get(path, _DEFAULT_CATALOG_TIMEOUT_S)
+        if result is None:
+            raise LMStudioUnreachable(f"GET {path}: no response from {self._base_url}")
+        status, raw = result
+        if status != 200:
+            raise LMStudioCallFailed(f"GET {path}: HTTP {status}", status=status, body=None)
+        body = _parse_json(raw, context=f"GET {path}")
+        models = body.get("models") if isinstance(body, Mapping) else None
+        if not isinstance(models, list):
+            raise LMStudioCallFailed(f"GET {path}: response has no 'models' list", status=None,
+                                     body=None)
+        for entry in models:
+            if not isinstance(entry, Mapping) or entry.get("key") != model_key:
+                continue
+            instances = entry.get("loaded_instances")
+            if not isinstance(instances, list) or not all(
+                isinstance(i, Mapping) for i in instances
+            ):
+                raise LMStudioCallFailed(
+                    f"GET {path}: {model_key!r} has no 'loaded_instances' list of objects",
+                    status=None,
+                    body=None,
+                )
+            return tuple(instances)
+        return ()
+
+    # --- POST: chat / embed / warm-up / load ---------------------------------------------------
 
     def _raw_post(
         self, path: str, payload: Mapping[str, Any], timeout_s: float
@@ -822,6 +879,40 @@ class LMStudio:
             model=response_model if isinstance(response_model, str) else None,
             usage=usage if isinstance(usage, Mapping) else None,
             wallClockMs=wall_clock_ms,
+        )
+
+    def load_model(self, model: str, *, timeout_s: float) -> LoadedInstance:
+        """`POST /api/v1/models/load {"model": model, "echo_load_config": true}` — the runner's
+        explicit load (typed-decision-models plan3 §3.7; request and response shapes from the U2p
+        live probe). Through `_raw_post`, so a refusal is `LMStudioCallFailed` with its status and
+        an exhausted budget `LMStudioCallTimeout`. A 2xx body that is not a JSON object, names no
+        `instance_id`, or reports a `status` other than `"loaded"` is `LMStudioCallFailed(status=
+        None)`: the server did not refuse, but nothing says the model is loaded. `timeout_s` is
+        required — the runner passes `firstCallTimeoutSeconds`, the budget a load is sized by."""
+        path = "/api/v1/models/load"
+        payload = {"model": model, "echo_load_config": True}
+        _, raw = self._raw_post(path, payload, timeout_s)
+        body = _parse_json(raw, context=f"POST {path}")
+        if not isinstance(body, Mapping):
+            raise LMStudioCallFailed(f"POST {path}: response body is not a JSON object",
+                                     status=None, body=None)
+        instance_id, status = body.get("instance_id"), body.get("status")
+        if not isinstance(instance_id, str) or not instance_id:
+            raise LMStudioCallFailed(f"POST {path}: response names no instance_id", status=None,
+                                     body=None)
+        if status != _LOADED_STATUS:
+            raise LMStudioCallFailed(
+                f"POST {path}: {model!r} reported status {status!r}, not {_LOADED_STATUS!r}",
+                status=None,
+                body=None,
+            )
+        kind, config = body.get("type"), body.get("load_config")
+        return LoadedInstance(
+            instance_id=instance_id,
+            status=status,
+            type=kind if isinstance(kind, str) else None,
+            load_time_seconds=_coerce_finite_float(body.get("load_time_seconds")),
+            load_config=config if isinstance(config, Mapping) else None,
         )
 
     def warm_up(

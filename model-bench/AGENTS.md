@@ -27,7 +27,8 @@ fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `repor
 and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
 constants — pinned by `tests/fixtures/decision-contract/`). `run --candidate` drives a
 decision-only candidate on the `decisions` surface (`runner._drive_decision_items`, U1d.2/U1d.3
-in `docs/HISTORY.md`); the hand-off arm is not built (U2). **Never store a
+in `docs/HISTORY.md`); the hand-off arm is not built (U2.2). On a decision-point pack the runner
+loads the arm's absent models itself before the warm-up (U2.1, `docs/HISTORY.md`). **Never store a
 `model:decisions`/`model:handoff` record under `results/runs/`** — not even a smoke run — before
 U1e (`docs/plans/typed-decision-models2.md` §4.2); offline tests write under `tmp_path`.
 The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
@@ -53,9 +54,11 @@ mapping and a dead harness.
 `from_dict`'s missing-`callSurface` sentinel is `""` on a model record and `None` on a deterministic
 one, and collapsing that split is a real bug shape: it lets a surface something had and lost read as
 one that was never written, or a correct reference-arm record read as carrying a forbidden surface.
-Forbidden sets are a **set difference, never a list**. `validate()` checks each residency element's
-**whole key set** (`{id, state}`), never presence alone — the gap that let a retired fixture element
-validate and ship green.
+Forbidden sets are a **set difference, never a list**. `null` fails both the `nonempty` and
+`present` tiers, with no exception: a field the runner cannot capture refuses the run (as
+`decisionInstanceConfig`'s read does, exit 3), never records `None`. `validate()` checks each
+residency element's **whole key set** (`{id, state}`), never presence alone — the gap that let a
+retired fixture element validate and ship green.
 
 **`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` (`-ml`) and no other source** —
 every formula, constant, threshold and verdict string is that note's, cited by section; don't

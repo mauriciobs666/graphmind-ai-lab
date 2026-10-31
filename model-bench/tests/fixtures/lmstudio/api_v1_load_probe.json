@@ -1,0 +1,9 @@
+{
+  "_provenance": "typed-decision-models U2p load-route probe, 2026-10-31, against http://localhost:1234 (ws:agent-team document a93905a62ec949e3a25d7c59106824e1; docs/plans/typed-decision-models3.md §4.2). `load_laya` and `load_qwen` are the two POST /api/v1/models/load response bodies verbatim (steps 2 and 4). `laya_instance` is laya's loaded_instances[0] from step 3's GET /api/v1/models, verbatim: the same config as the load echo, with no remaining_ttl_seconds key (an explicit load has no TTL). The probe document records the per-model loaded_instances lists, not the whole GET body; the `models[].key` / `loaded_instances[]` wrapper is the route's shape as plan3 §2 and §3.7 state it, with every model entry trimmed to the two keys the adapter reads. lmStudioAppVersion was not captured at probe time.",
+  "load_laya_request": {"model": "laya", "echo_load_config": true},
+  "load_laya": {"type": "decision", "instance_id": "laya", "load_time_seconds": 1.56, "status": "loaded", "load_config": {"context_length": 8192, "eval_batch_size": 2048, "physical_batch_size": 512, "parallel": 4, "flash_attention": true, "offload_kv_cache_to_gpu": true}},
+  "load_qwen": {"type": "llm", "instance_id": "qwen/qwen3-4b-2507", "load_time_seconds": 3.174, "status": "loaded"},
+  "laya_instance": {"id": "laya", "config": {"context_length": 8192, "eval_batch_size": 2048, "physical_batch_size": 512, "parallel": 4, "flash_attention": true, "offload_kv_cache_to_gpu": true}},
+  "models_before_load": {"models": [{"key": "laya", "loaded_instances": []}, {"key": "qwen/qwen3-4b-2507", "loaded_instances": []}]},
+  "models_after_laya_load": {"models": [{"key": "laya", "loaded_instances": [{"id": "laya", "config": {"context_length": 8192, "eval_batch_size": 2048, "physical_batch_size": 512, "parallel": 4, "flash_attention": true, "offload_kv_cache_to_gpu": true}}]}, {"key": "qwen/qwen3-4b-2507", "loaded_instances": []}]}
+}

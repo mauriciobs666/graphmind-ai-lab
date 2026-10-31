@@ -41,7 +41,7 @@ PROFILE_FIXTURES = {
 
 MODEL_PROFILES = ("model:chat", "model:embeddings", "model:decisions", "model:handoff")
 
-#: `(profile, field)` for every required field of the four model profiles — 30 + 26 + 35 + 47.
+#: `(profile, field)` for every required field of the four model profiles — 30 + 26 + 36 + 48.
 MODEL_PROFILE_FIELDS = [
     (profile, field)
     for profile in MODEL_PROFILES
@@ -214,6 +214,28 @@ def test_an_empty_fit_field_is_named_empty(profile: str, field: str) -> None:
 def test_an_older_profile_record_carrying_a_fit_field_is_forbidden(profile, field) -> None:
     problems = _profile_problems(profile, **{field: DECISIONS_SAMPLE[field]})
     assert FieldProblem(field=field, reason="forbidden") in problems
+
+
+@pytest.mark.parametrize("profile", ["model:decisions", "model:handoff"])
+def test_a_decision_instance_config_is_present_tier_never_null(profile) -> None:
+    """Plan3 §3.7's `decisionInstanceConfig` is `present` (impl review Pass 8, P8-M1): any
+    verbatim config, an empty one included, is valid; `null` is `reason="null"` like every other
+    field, since the runner refuses a run that cannot read one; a record that never wrote it is
+    named `absent`."""
+    assert _profile_problems(profile, decisionInstanceConfig={}) == []
+    assert _profile_problems(profile, decisionInstanceConfig=None) == [
+        FieldProblem(field="decisionInstanceConfig", reason="null")
+    ]
+    assert _profile_problems(profile, decisionInstanceConfig=...) == [
+        FieldProblem(field="decisionInstanceConfig", reason="absent")
+    ]
+
+
+@pytest.mark.parametrize("profile", ["model:chat", "model:embeddings", "deterministic"])
+def test_an_older_profile_record_carrying_a_decision_instance_config_is_forbidden(profile) -> None:
+    config = DECISIONS_SAMPLE["decisionInstanceConfig"]
+    problems = _profile_problems(profile, decisionInstanceConfig=config)
+    assert FieldProblem(field="decisionInstanceConfig", reason="forbidden") in problems
 
 
 def test_a_fit_manifest_of_zero_inputs_is_a_valid_size() -> None:
@@ -629,7 +651,8 @@ EXPECTED_DETERMINISTIC_SCHEMA_1 = {
 
 
 #: typed-decision-models plan §3.3's `model:decisions` field set — the embeddings 26 plus
-#: §3.3/§3.5's seven candidate fields and plan2 §3.2's two fit fields, 35 in total.
+#: §3.3/§3.5's seven candidate fields, plan2 §3.2's two fit fields and plan3 §3.7's
+#: `decisionInstanceConfig` (`present`: verbatim, never `None`), 36 in total.
 #: **Transcribed by hand**, for the M-4 reason above; not built from
 #: `EXPECTED_EMBEDDINGS_SCHEMA_1`. `fitManifestSize` is `present`: it is a count, and a fit
 #: manifest of zero inputs is an answer. `fitOutcome`/`fitQualityTarget` are `nonempty`, so the
@@ -670,10 +693,11 @@ EXPECTED_DECISIONS_SCHEMA_1 = {
     "evalSetHash": "nonempty",
     "fitOutcome": "nonempty",
     "fitQualityTarget": "nonempty",
+    "decisionInstanceConfig": "present",
 }
 
-#: Plan §3.3's `model:handoff` field set — `model:decisions`' 35 plus the twelve flat `handoff*`
-#: fields, 47 in total. `handoffTemperature` is `present` for the reason `temperature` is (0.0 is
+#: Plan §3.3's `model:handoff` field set — `model:decisions`' 36 plus the twelve flat `handoff*`
+#: fields, 48 in total. `handoffTemperature` is `present` for the reason `temperature` is (0.0 is
 #: the pinned value); every other hand-off field is `nonempty`, as its chat counterpart is.
 EXPECTED_HANDOFF_SCHEMA_1 = {
     "modelKey": "nonempty",
@@ -711,6 +735,7 @@ EXPECTED_HANDOFF_SCHEMA_1 = {
     "evalSetHash": "nonempty",
     "fitOutcome": "nonempty",
     "fitQualityTarget": "nonempty",
+    "decisionInstanceConfig": "present",
     "handoffModelKey": "nonempty",
     "handoffModelPublisher": "nonempty",
     "handoffArch": "nonempty",
@@ -739,6 +764,7 @@ DECISION_ONLY = frozenset(
         "evalSetHash",
         "fitOutcome",
         "fitQualityTarget",
+        "decisionInstanceConfig",
     }
 )
 HANDOFF_ONLY = frozenset(

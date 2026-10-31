@@ -756,3 +756,152 @@ other errors `residency()` raises.**
   on a decision-point pack too.
 - **The counts are read from `detail`,** never re-derived from the call, so the counts and the
   per-item record cannot disagree.
+
+## Pass 8
+
+*2026-10-31. U2.1, the shared load and preparation infrastructure, reviewed against the uncommitted
+`model-bench/` diff from `763e95e4` plus the untracked `tests/fixtures/lmstudio/api_v1_load_probe.json`.
+Baseline: plan3 v1.2 §3.7, §4.1 U2 (load bullets), §5; v1.3 §3.4–§3.5 and §4 U2 (fit manifest,
+AC-3); plan2 v1.1 §3.5. The `handoff` surface (U2.2) and `model-bench/REVIEW.md` (`cfdaa1f3`) are
+out of scope.*
+
+**Verdict: needs changes.** One major (P8-M1), two minors, one nit. The major is small and is
+cheapest now, before U2.2 inherits the field and before any decision record is stored.
+
+**Checks run** (from `model-bench/`):
+- **Suite and lint:** `2549 passed, 4 deselected, 2 xfailed`; `ruff` clean. Both match HISTORY, as
+  does the new-test count (19 + 9 + 9 + 3 = 40, counted from the diff).
+  `test_every_stored_run_record_still_validates_unchanged` passes. `git status` shows nothing
+  under `results/`; the newest file in `results/runs/` dates from 2026-09-20.
+- **Fixture against `ws:agent-team` a93905a6:** `load_laya_request`, `load_laya`, `load_qwen` and
+  `laya_instance` are byte-identical to the probe document's bodies under compact
+  re-serialization (`separators=(",",":")`), with key order preserved. They are stored as JSON
+  objects, not raw strings, so the file's own bytes are re-spaced. The `models_*` wrappers are
+  synthesized, as `_provenance` says. LM Studio's REST docs confirm `models[].key` and
+  `loaded_instances[{id, config}]`.
+- **Mutants:** each was run on a copy that was then restored and checked with `cmp`, against the
+  full suite.
+  - **Claimed, all red:** leakage on the eval stratum only (2); manifest size unchecked (2);
+    `loaded_instances` matching `id` (5); `nullable` rejecting `None` (4); the load step without
+    `decisionPoint` (5).
+  - **Mine, argument-level, all red:** `echo_load_config: false` (1); the whole instance recorded
+    instead of its `config` (3); co-residency checked against a fabricated all-resident snapshot
+    (1); the load at `requestTimeoutSeconds` (2); `decisionInstanceConfig` taken from the load
+    echo instead of the GET (3).
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **P6-m2: fixed.** The manifest read and the leakage refusal are in `_prepare_decision_arm`, for
+  every candidate. `test_a_decision_only_candidate_with_an_overlapping_manifest_refuses_with_exit_4`
+  is the requested row, and refusals come before the load step.
+- **P7-n1: fixed.** `_within_load_basis` catches `LMStudioCallFailed`, with a test row. Step 10
+  gets the same fix (below).
+
+### The implementer's calls
+
+1. **The `nullable` tier: the premise is true, the resolution is the weaker one (P8-M1).** Plan3
+   §3.7 says "`_PRESENT`, `None` if absent", and `Fingerprint.validate` rejects `None` in
+   `present` (`reason="null"`). The plan contradicts itself, so a deviation was unavoidable.
+   `_PRESENT` plus an exit-3 refusal when there is no config is the stronger choice.
+2. **The manifest format: a real seam (P8-m1).** The plans say only "the sorted list of
+   `input_hash` values". The candidate example (`"file": "…fit.txt"`, `"size": 1400`) supports
+   one hash per line and an entry count. But `fitManifestHash` is sha256 over the file's raw
+   bytes, so every byte rule here (the trailing `\n`, LF only, lowercase) is stored data that U6
+   must reproduce.
+3. **Co-residency on a one-model arm: true, and harmless.** It is stricter than plan3, which
+   requires co-residency only on `handoff` runs. Its one effect is that item 1's
+   `"load"`-withholding can no longer happen on the `decisions` surface, because a non-resident
+   model now refuses first. That fails closed. The check sits at step 7, after every warm-up, so
+   U2.2 only has to put the chat warm-up before step 7 and extend `_arm_model_ids`.
+4. **The load step on chat arms: true to plan.** Plan3 §3.7 says "the chat model, the decision
+   model, or both". The co-residency refusal is plan3's for two-model runs only, and a chat arm
+   keeps its item-level withholding. One operator-visible effect is not documented (P8-n1).
+5. **Step 10 retried; between-item probes deferred: the right call, wrongly homed (P8-m2).** The
+   step-10 fix matches the existing ladder; I confirmed its exit is 5. A between-item probe
+   failure is a pre-existing gap: `LMStudioUnreachable` escaped there before this unit too.
+   Giving it a disposition (withhold the item, refuse the run, or treat residency as unknown)
+   changes what items mean, so it belongs to the plan owner, not to a one-line catch.
+6. **`was_resident_before`: verified, nothing reads it.** Outside tests, `wasResidentBefore`
+   appears only on `LoadResult` and at its construction sites; `runner.py` reads only
+   `load_result.runtime` and `.decision`, and `scripts/refresh_golden.py` only passes it. The
+   new value is also the honest one: a warm-up after an explicit load is not a cold load.
+
+### Findings
+
+**P8-M1 (major). A `None` `decisionInstanceConfig` can mean "not captured", and the `nullable`
+tier stores it as valid.**
+- **Evidence (executed):** a `DecisionStub` whose `loaded_instances` returns `()` while
+  `residency()` reports laya loaded runs to completion. It records
+  `decisionInstanceConfig=None`, `validate()` returns `[]`, and `store` → `load_history` gives one
+  valid record, zero invalid. That is what a `/api/v0` `id` ≠ `/api/v1` `key` mismatch, or an
+  eviction between steps 7 and 8, would produce.
+- **Why it matters:** every `None` the runner can produce is an anomaly, never an answer. The
+  co-residency refusal has just proven the model resident, and LM Studio's docs make
+  `config.context_length` required. So `_decision_instance_config`'s claim that "`None` is always
+  a captured answer" is false, and FR-7's one invariant gets a hole. U7 reads
+  `physical_batch_size` from this field. Once a record exists, tightening the tier would
+  quarantine it.
+- **Fix (`model-bench/modelbench/runner.py` `_decision_instance_config`):** refuse with exit 3
+  when `instances` is empty, or `instances[0]` has no `config` Mapping. Then make the field
+  `_PRESENT` in `fingerprint.py` and drop the `nullable` tier, the `Tier` literal entry, the
+  docstring paragraph and the `model-bench/AGENTS.md` sentence. Turn
+  `test_an_instance_with_no_config_records_none_and_the_record_stays_valid` and
+  `test_the_nullable_tier_holds_exactly_the_one_field_plan3_names` into refusal rows: no instance,
+  no `config` key, `config: null`. Record the deviation from plan3's "`None` if absent" in the
+  HISTORY entry's calls.
+- **Trialled on a scratch copy** (the refusal plus `_PRESENT`): exactly 7 tests redden, all of them
+  ones that pin the `nullable` behaviour, and the stub above refuses.
+- **Stopping condition:** the stub above refuses with exit 3 and stores nothing;
+  `null` on `decisionInstanceConfig` is `reason="null"` again
+  (`test_null_is_invalid_in_either_tier` with no exclusion list); no `nullable` occurs in
+  `modelbench/`.
+
+**P8-m1 (minor). The fit manifest's byte format is a cross-component contract pinned only on the
+reading side.**
+- **Evidence:** `decisions.load_fit_manifest`'s docstring is the only statement of the format.
+  `fitManifestHash` hashes the raw bytes, so a U6 writer that omits the last `\n` or writes CRLF
+  produces a manifest model-bench refuses, or a different hash for the same set.
+- **Why it matters:** this is the same kind of stored-data format as `eval_set_hash`'s, which
+  plan3 §3.8 made a plan-owned contract. Here, the format is defined only by whichever side was
+  written first.
+- **Fix:** pin it executably the way the repo already pins cross-component contracts. Add
+  `tests/fixtures/decision-contract/fit-manifest.jsonl`: rows of manifest text, `sha256`, `size`,
+  accept or refuse, covering an empty file, a missing final `\n`, CRLF, uppercase hex, unsorted
+  and duplicate. Drive `load_fit_manifest` over it. U6's `fit.py` byte-copies it, as it does
+  `input-hash.jsonl`.
+- **Home for the prose:** owned by `architect`. Plan3 has been executed against, so it is not
+  revised in place. Until a later typed-decision-models plan document states it, teco's U6 brief
+  cites the docstring and the fixture.
+
+**P8-m2 (minor). The deferred between-item probe gap has no forward-looking home.**
+- **Evidence:** it is recorded only under HISTORY's "Not fixed". `model-bench/docs/BACKLOG.md`
+  has no entry for it. A `residency()` raise at `runner.py:454`, `:577` or `:778` escapes
+  `run_pack`, and `cli` has no handler, so a run with scored items is lost to a traceback.
+- **Fix (`teco`):** add a `model-bench/docs/BACKLOG.md` item naming the three probe sites and the
+  open question. The disposition is `architect`'s: it is a withholding semantic under the SMB
+  plan's §3.6. It must be decided before U7's live runs, which are the first long runs that
+  depend on these probes.
+
+**P8-n1 (nit). An explicit load has no TTL, so runner-loaded models stay resident after the run.**
+- The probe document records that an explicit load shows no `remaining_ttl_seconds`; a JIT load
+  expired on its own. `model-bench/README.md`'s new paragraph does not say that the runner
+  leaves the models it loads resident on the shared GPU. Add one clause. U7 step 3's manual
+  unload already assumes this.
+- **For U2.2:** `_decision_instance_config(lmstudio, model_info.id)` relies on `model_info` being
+  the decision model. Pass `decision_arm.model_info.id` explicitly, so the handoff surface cannot
+  read the chat model's instance.
+
+### What's solid
+
+- **The refusal order is right:** every exit-4 check (manifest, leakage) runs before any load,
+  load failures run before any warm-up, and co-residency and the config read run before any
+  item. Each has a row asserting that nothing was called or stored.
+- **`load_fit_manifest` checks sha256 and count independently,** confines the file name, and its
+  sorted-and-unique rule makes the manifest canonical.
+- **`load_model` treats a 2xx without `status: "loaded"` as a failure:** it does not trust the
+  status code alone.
+- **The load fakes come from the probe's own bodies,** and the `key`-versus-`id` mutant dies in 5
+  tests.

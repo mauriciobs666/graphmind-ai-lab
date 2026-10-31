@@ -128,6 +128,16 @@ DECISIONS_EXTRA_FIELDS: dict[str, Any] = {
     "evalSetHash": "2" * 64,
     "fitOutcome": "below-margin",
     "fitQualityTarget": "mcnemar-nonreject",
+    # plan3 §3.7: laya's `loaded_instances[0].config` as the U2p probe read it
+    # (`tests/fixtures/lmstudio/api_v1_load_probe.json`)
+    "decisionInstanceConfig": {
+        "context_length": 8192,
+        "eval_batch_size": 2048,
+        "physical_batch_size": 512,
+        "parallel": 4,
+        "flash_attention": True,
+        "offload_kv_cache_to_gpu": True,
+    },
 }
 
 #: The hand-off model's identity a `model:handoff` record adds, flat and `handoff`-prefixed

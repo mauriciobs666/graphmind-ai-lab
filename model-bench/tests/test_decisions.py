@@ -6,7 +6,8 @@ The golden vectors under `tests/fixtures/decision-contract/` are model-bench's c
 hand from §3.3's inequalities, the `input_hash` rows by hand-writing each canonical JSON string and
 hashing its bytes with `sha256sum` (the `question_spec_hash` vectors below the same way), the
 `over-limit.jsonl` rows by hand from plan3 §3.3's rule
-(status `500` **and** the case-sensitive marker in the body).
+(status `500` **and** the case-sensitive marker in the body), the `fit-manifest.jsonl` rows by
+hand from the format its `_format` header row states, each `sha256` from `printf … | sha256sum`.
 """
 
 from __future__ import annotations
@@ -849,3 +850,140 @@ def test_question_spec_hash_matches_the_hand_derived_vectors(question, canonical
     assert question_spec_hash(question) == expected
     reordered = dict(reversed(list(question.items())))
     assert question_spec_hash(reordered) == expected
+
+
+# --- load_fit_manifest and leaked_items (v1.3 §3.4, §3.5, AC-3; U2.1) ---------------------------
+#
+# The manifest file is "the sorted list of `input_hash` values" (v1.3 §3.4): one lowercase-hex
+# sha256 per line, each `\n`-terminated, strictly ascending; `size` is the entry count.
+
+_H1, _H2, _H3 = sorted(hashlib.sha256(f"in-{n}".encode()).hexdigest() for n in (1, 2, 3))
+
+
+def _manifest(root: Path, content: bytes, **declared: Any):
+    (root / "candidates").mkdir(exist_ok=True)
+    (root / "candidates" / "m.fit.txt").write_bytes(content)
+    body = {"file": "m.fit.txt", "sha256": hashlib.sha256(content).hexdigest(), "size": None}
+    body.update(declared)
+    return decisions.load_fit_manifest(root, body)
+
+
+def test_a_well_formed_manifest_loads_with_its_measured_hash_and_entry_count(tmp_path):
+    content = f"{_H1}\n{_H2}\n{_H3}\n".encode()
+    manifest = _manifest(tmp_path, content, size=3)
+    assert manifest == decisions.FitManifest(
+        hashes=frozenset({_H1, _H2, _H3}),
+        sha256=hashlib.sha256(content).hexdigest(),
+        size=3,
+    )
+
+
+def test_an_empty_manifest_is_zero_inputs_not_a_refusal(tmp_path):
+    manifest = _manifest(tmp_path, b"", size=0)
+    assert (manifest.hashes, manifest.size) == (frozenset(), 0)
+
+
+def test_a_manifest_whose_bytes_do_not_match_the_declared_sha256_refuses(tmp_path):
+    with pytest.raises(CandidateError, match="declared fitManifest.sha256"):
+        _manifest(tmp_path, f"{_H1}\n".encode(), size=1, sha256="0" * 64)
+
+
+def test_a_manifest_whose_entry_count_is_not_the_declared_size_refuses(tmp_path):
+    """The count, never the byte length: 2 entries are 130 bytes."""
+    for size in (1, 3, 130):
+        with pytest.raises(CandidateError, match="declared fitManifest.size"):
+            _manifest(tmp_path, f"{_H1}\n{_H2}\n".encode(), size=size)
+
+
+@pytest.mark.parametrize(
+    "content,reason",
+    [
+        (f"{_H2}\n{_H1}\n", "strictly ascending"),
+        (f"{_H1}\n{_H1}\n", "strictly ascending"),
+        (f"{_H1}\n{_H2}", "terminating newline"),
+        (f"{_H1}\n\n{_H2}\n", "line 2"),
+        (f"{_H1.upper()}\n", "line 1"),
+        (f"{_H1} \n", "line 1"),
+        ("not-a-hash\n", "line 1"),
+    ],
+    ids=["unsorted", "repeated", "no-final-newline", "blank-line", "upper-case", "trailing-space",
+         "not-a-hash"],
+)
+def test_a_malformed_manifest_refuses(tmp_path, content, reason):
+    with pytest.raises(CandidateError, match=reason):
+        _manifest(tmp_path, content.encode(), size=content.count("\n"))
+
+
+_FIT_MANIFEST_VECTORS = _rows("fit-manifest.jsonl")
+_FIT_MANIFEST_ROWS = [r for r in _FIT_MANIFEST_VECTORS if "case" in r]
+
+
+def test_the_fit_manifest_vectors_state_their_format_and_cover_every_refusal_rule():
+    """P8-m1: the file is the cross-component contract U6's `fit.py` byte-copies, so its header
+    row states the format, and every refusal rule has a row (shrink-guard on the vector file)."""
+    assert "_format" in _FIT_MANIFEST_VECTORS[0] and "case" not in _FIT_MANIFEST_VECTORS[0]
+    assert len(_FIT_MANIFEST_ROWS) == len(_FIT_MANIFEST_VECTORS) - 1
+    assert {r["rule"] for r in _FIT_MANIFEST_ROWS if not r["accept"]} == {
+        "unsorted", "repeated", "uppercase", "no-final-newline", "crlf", "wrong-size",
+        "wrong-sha256",
+    }
+    assert any(r["accept"] and r["text"] == "" for r in _FIT_MANIFEST_ROWS)
+
+
+@pytest.mark.parametrize("row", _FIT_MANIFEST_ROWS, ids=[r["case"] for r in _FIT_MANIFEST_ROWS])
+def test_load_fit_manifest_against_the_vectors(tmp_path, row):
+    """`fit-manifest.jsonl` (P8-m1): the row's `text` is written as the file's exact UTF-8 bytes,
+    declared with the row's hand-computed `sha256` and `size`."""
+    (tmp_path / "candidates").mkdir()
+    (tmp_path / "candidates" / "m.fit.txt").write_bytes(row["text"].encode("utf-8"))
+    declared = {"file": "m.fit.txt", "sha256": row["sha256"], "size": row["size"]}
+    if row["accept"]:
+        assert decisions.load_fit_manifest(tmp_path, declared) == decisions.FitManifest(
+            hashes=frozenset(row["entries"]), sha256=row["sha256"], size=row["size"]
+        )
+        assert len(row["entries"]) == row["size"]
+    else:
+        with pytest.raises(CandidateError) as caught:
+            decisions.load_fit_manifest(tmp_path, declared)
+        assert row["refusal"] in str(caught.value)
+
+
+@pytest.mark.parametrize("name", ["../m.fit.txt", "sub/m.fit.txt", "..", "", None])
+def test_a_manifest_file_outside_candidates_is_refused_before_any_read(tmp_path, name):
+    with pytest.raises(CandidateError, match="plain file name"):
+        decisions.load_fit_manifest(tmp_path, {"file": name, "sha256": "0" * 64, "size": 0})
+
+
+def test_a_missing_manifest_file_refuses(tmp_path):
+    with pytest.raises(CandidateError, match="cannot read fit manifest"):
+        decisions.load_fit_manifest(tmp_path, {"file": "m.fit.txt", "sha256": "0" * 64, "size": 0})
+
+
+def _canonical_input_hash(item: dict[str, Any]) -> str:
+    """v1.3 §3.5's `input_hash` for `guard-judge`, transcribed here rather than imported."""
+    fields = {k: item[k] for k in ("condition", "understanding", "turns", "path") if k in item}
+    text = json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_leaked_items_names_every_overlapping_item_of_either_stratum_in_pack_order():
+    items = [
+        {"itemId": "e1", "stratum": "eval", "condition": "c", "turns": [], "path": "turns"},
+        {"itemId": "s1", "stratum": "side-check", "condition": "ç—x", "turns": [], "path": "turns"},
+        {"itemId": "e2", "stratum": "eval", "condition": "d", "turns": [], "path": "turns"},
+    ]
+    overlap = sorted(_canonical_input_hash(items[i]) for i in (1, 2))
+    manifest = decisions.FitManifest(hashes=frozenset(overlap), sha256="0" * 64, size=2)
+    assert decisions.leaked_items(items, "guard-judge", manifest) == ["s1", "e2"]
+    clean = decisions.FitManifest(hashes=frozenset({_H1}), sha256="0" * 64, size=1)
+    assert decisions.leaked_items(items, "guard-judge", clean) == []
+
+
+def test_leakage_is_keyed_on_input_fields_only_never_the_label_or_the_item_id():
+    """The same input under another id and label is the same input (v1.3 §3.5)."""
+    item = {"itemId": "a", "expected": True, "condition": "c", "turns": [], "path": "turns"}
+    twin = {**item, "itemId": "b", "expected": False, "stratum": "eval"}
+    manifest = decisions.FitManifest(
+        hashes=frozenset({_canonical_input_hash(item)}), sha256="0" * 64, size=1
+    )
+    assert decisions.leaked_items([twin], "guard-judge", manifest) == ["b"]

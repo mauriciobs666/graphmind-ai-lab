@@ -199,6 +199,8 @@ from modelbench.lmstudio import (  # noqa: E402
     DecisionResult,
     LMStudioCallFailed,
     LMStudioCallTimeout,
+    LMStudioUnreachable,
+    LoadedInstance,
     LoadResult,
     ModelInfo,
     ResidentModel,
@@ -230,7 +232,20 @@ _QUESTION_CANONICAL = (
 _ITEM_IDS = ("fx-cs-01", "fx-cs-02", "fx-ca-01", "fx-ca-02")
 
 
+#: The default fit manifest: two calibration inputs disjoint from the fixture pack's items, as
+#: the file format `decisions.load_fit_manifest` reads (sorted lowercase-hex lines, each ending
+#: in `\n`). `_workspace` writes it and declares its real sha256 and entry count.
+_MANIFEST_HASHES = tuple(
+    sorted(hashlib.sha256(f"calibration-{n}".encode()).hexdigest() for n in (1, 2))
+)
+
+
+def _manifest_bytes(hashes: tuple[str, ...]) -> bytes:
+    return "".join(h + "\n" for h in hashes).encode()
+
+
 def _candidate_body(**overrides: Any) -> dict[str, Any]:
+    manifest = _manifest_bytes(_MANIFEST_HASHES)
     body: dict[str, Any] = {
         "candidateId": _CANDIDATE_ID,
         "role": "guard-judge",
@@ -243,8 +258,8 @@ def _candidate_body(**overrides: Any) -> dict[str, Any]:
         "fit": {"outcome": "within-margin", "qualityTarget": "D_c<=0"},
         "fitManifest": {
             "file": f"{_CANDIDATE_ID}.fit.txt",
-            "sha256": "3" * 64,
-            "size": 120,
+            "sha256": hashlib.sha256(manifest).hexdigest(),
+            "size": len(_MANIFEST_HASHES),
             "purposes": ["question-tuning", "cutoff"],
         },
         "provenance": {"builtBy": "decision-models", "datasetVersion": "fx-1", "sourceSha": "abc"},
@@ -307,10 +322,28 @@ def _decided(p: float, *, usage: Any = None, wall_clock_ms: float = 12.0) -> Dec
     )
 
 
+#: A sentinel for `DecisionStub(instance_config=...)`: the instance carries no `config` key at all.
+_NO_CONFIG_KEY = object()
+
+#: laya's `loaded_instances[0].config` as the U2p probe read it after its explicit load
+#: (`tests/fixtures/lmstudio/api_v1_load_probe.json`, `ws:agent-team` a93905a6…).
+_U2P = json.loads(
+    (Path(__file__).resolve().parent / "fixtures" / "lmstudio" / "api_v1_load_probe.json")
+    .read_text()
+)
+_LAYA_CONFIG = _U2P["laya_instance"]["config"]
+
+
 class DecisionStub:
     """An `LMStudio`-shaped stub for the `decisions` surface: `decide` pops results in call order
     (an exception instance is raised), `residency` pops snapshots (default: laya resident),
     `catalog` returns the pre-load list once, then the post-load list.
+
+    The explicit load (plan3 §3.7): `load_model` records the call (or raises `load_failure`) and
+    marks the model loaded; `loaded_instances` answers `GET /api/v1/models` from that state —
+    one instance carrying `instance_config` for a loaded model, `()` otherwise — so a read made
+    before the load sees no instance. `loaded` starts as `initially_loaded` (default: laya, to
+    match the default residency). `order` logs loads, warm-ups and instance reads in sequence.
 
     The decisions `warm_up` returns `warm_up_decision` on `LoadResult.decision`, as the real one
     does (plan2 §3.4). Once `decide`'s queue is empty it answers with that same decision, so the
@@ -324,7 +357,16 @@ class DecisionStub:
         catalog_before: list[ModelInfo] | None = None,
         catalog_after: list[ModelInfo] | None = None,
         warm_up_decision: DecisionResult | None = None,
+        initially_loaded: tuple[str, ...] = ("laya",),
+        instance_config: Any = _LAYA_CONFIG,
+        load_failure: BaseException | None = None,
     ) -> None:
+        self.loaded = set(initially_loaded)
+        self.instance_config = instance_config
+        self.load_failure = load_failure
+        self.load_calls: list[dict[str, Any]] = []
+        self.was_resident_before: list[bool] = []
+        self.order: list[tuple[str, str]] = []
         self._decide = list(decide_responses or [])
         self.warm_up_decision = warm_up_decision if warm_up_decision is not None else _decided(0.5)
         #: Optional: one decision per warm-up call, in order (the mandatory one, then extras).
@@ -345,16 +387,42 @@ class DecisionStub:
         return "api-v0"
 
     def residency(self) -> list[ResidentModel]:
+        """Pops the next snapshot; an exception instance in the sequence is raised instead."""
         self.events.append("residency")
-        return self._residency.pop(0) if self._residency else list(_LAYA_RESIDENT)
+        snapshot = self._residency.pop(0) if self._residency else list(_LAYA_RESIDENT)
+        if isinstance(snapshot, BaseException):
+            raise snapshot
+        return snapshot
 
     def catalog(self) -> list[ModelInfo]:
         return list(self._catalogs.pop(0) if len(self._catalogs) > 1 else self._catalogs[0])
+
+    def load_model(self, model, *, timeout_s):
+        self.load_calls.append({"model": model, "timeout_s": timeout_s})
+        self.order.append(("load_model", model))
+        if self.load_failure is not None:
+            raise self.load_failure
+        self.loaded.add(model)
+        return LoadedInstance(
+            instance_id=model, status="loaded", type="decision", load_time_seconds=1.56,
+            load_config=self.instance_config,
+        )
+
+    def loaded_instances(self, model_key):
+        self.order.append(("loaded_instances", model_key))
+        if model_key not in self.loaded:
+            return ()
+        instance = {"id": model_key}
+        if self.instance_config is not _NO_CONFIG_KEY:
+            instance["config"] = self.instance_config
+        return (instance,)
 
     def warm_up(
         self, model_key, *, call_surface, system_prompt, was_resident_before, timeout_s,
         question=None,
     ):
+        self.order.append(("warm_up", model_key))
+        self.was_resident_before.append(was_resident_before)
         self.warm_up_calls.append(
             {"model": model_key, "call_surface": call_surface, "question": question,
              "timeout_s": timeout_s, "system_prompt": system_prompt}
@@ -416,9 +484,13 @@ def _host_json(root: Path) -> None:
     )
 
 
-def _workspace(root: Path, *, manifest_edit=None, items_edit=None, **candidate) -> Path:
+def _workspace(
+    root: Path, *, manifest_edit=None, items_edit=None, fit_manifest_bytes=None, **candidate
+) -> Path:
     """`root` laid out as a model-bench root: the fixture pack under `packs/`, `host.json`, and
-    the candidate under `candidates/`. Never the shipped `model-bench/` root."""
+    the candidate and its fit manifest under `candidates/`. Never the shipped `model-bench/`
+    root. `fit_manifest_bytes` replaces the default manifest file's content (its declaration is
+    the candidate body's, so a test that changes one decides about the other)."""
     pack_dir = root / "packs" / _PACK_ID
     shutil.copytree(_FIXTURE_PACK, pack_dir)
     if manifest_edit is not None:
@@ -433,6 +505,9 @@ def _workspace(root: Path, *, manifest_edit=None, items_edit=None, **candidate) 
     (root / "candidates").mkdir()
     (root / "candidates" / f"{_CANDIDATE_ID}.json").write_text(
         json.dumps(_candidate_body(**candidate), indent=2)
+    )
+    (root / "candidates" / f"{_CANDIDATE_ID}.fit.txt").write_bytes(
+        fit_manifest_bytes if fit_manifest_bytes is not None else _manifest_bytes(_MANIFEST_HASHES)
     )
     return pack_dir
 
@@ -807,8 +882,10 @@ def test_the_decisions_fingerprint_carries_the_candidate_and_the_catalogs_model_
         "candidateContentHash": hashlib.sha256(candidate_bytes).hexdigest(),
         "questionSpecHash": hashlib.sha256(_QUESTION_CANONICAL.encode()).hexdigest(),
         "decisionPolicy": {"kind": "predicate-band", "yesAtOrAbove": 0.8, "noBelow": 0.8},
-        "fitManifestHash": "3" * 64,
-        "fitManifestSize": 120,
+        # measured from the manifest file `_workspace` wrote: its two lines, hashed by hand with
+        # `printf '%s\n%s\n' <h1> <h2> | sha256sum`
+        "fitManifestHash": "3c334d5b1aa6b88abd917bde5d2c75d6c7a0bc11628a7be39ecf9cb02b0e47e7",
+        "fitManifestSize": 2,
         "evalSetHash": eval_set_hash(pack.iter_items(), "guard-judge"),
         "fitOutcome": "within-margin",
         "fitQualityTarget": "D_c<=0",
@@ -1421,3 +1498,347 @@ def test_rank_keeps_two_candidates_on_one_decision_model_and_dedupes_by_arm_key(
     )
     assert a1.modelKey == b.modelKey == a2.modelKey == "laya"
     assert cli._select_rank_arms([a1, b, a2], session=None) == [a2, b]
+
+
+# ==================================================================================================
+# 8. U2.1 — explicit loading (plan3 §3.7): the load step, co-residency, `decisionInstanceConfig`
+# ==================================================================================================
+
+_QWEN_RESIDENT = [ResidentModel(id="qwen/qwen3-4b-2507", state="loaded")]
+
+
+def _absent_at_start(**kw: Any) -> DecisionStub:
+    """laya absent from `residentModelsAtStart` and not loaded; resident from the baseline on."""
+    return DecisionStub(
+        decide_responses=_four(0.9, 0.1, 0.9, 0.9),
+        residency_sequence=[[], *[list(_LAYA_RESIDENT)] * 7],
+        initially_loaded=(),
+        **kw,
+    )
+
+
+def test_a_decision_model_absent_at_start_is_loaded_once_before_the_warm_up(tmp_path):
+    _workspace(tmp_path)
+    lms = _absent_at_start()
+    run, _ = _run(tmp_path, lms, firstCallTimeoutSeconds=240.0)
+    assert lms.load_calls == [{"model": "laya", "timeout_s": 240.0}]
+    assert lms.order[:2] == [("load_model", "laya"), ("warm_up", "laya")]
+    assert lms.was_resident_before == [True]  # the warm-up found it loaded, so it is no load
+    assert run.fingerprint.get("residentModelsAtStart") == []
+
+
+def test_a_decision_model_resident_at_start_is_used_as_found_with_no_load(tmp_path):
+    _workspace(tmp_path)
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
+    _run(tmp_path, lms)
+    assert lms.load_calls == []
+    assert ("load_model", "laya") not in lms.order
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        LMStudioCallTimeout("timed out"),
+        LMStudioCallFailed("HTTP 404", status=404, body='{"error": "model not found"}'),
+        LMStudioUnreachable("no response"),
+    ],
+    ids=["timeout", "refused", "unreachable"],
+)
+def test_a_failed_load_refuses_with_exit_3_before_any_warm_up(tmp_path, failure):
+    _workspace(tmp_path)
+    lms = _absent_at_start(load_failure=failure)
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 3 and "'laya'" in str(caught.value)
+    assert lms.warm_up_calls == [] and lms.decide_calls == []
+    assert not (tmp_path / "results").exists()
+
+
+def test_the_decision_instance_config_is_read_after_the_load_and_recorded_verbatim(tmp_path):
+    """The read before the load would find no instance (a refusal); after it, laya's config."""
+    _workspace(tmp_path)
+    lms = _absent_at_start()
+    run, _ = _run(tmp_path, lms)
+    assert run.fingerprint.get("decisionInstanceConfig") == _LAYA_CONFIG
+    assert run.fingerprint.get("decisionInstanceConfig")["physical_batch_size"] == 512
+    reads = [i for i, e in enumerate(lms.order) if e == ("loaded_instances", "laya")]
+    assert len(reads) == 1 and reads[0] > lms.order.index(("load_model", "laya"))
+    store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=_PACK_ID)
+    assert invalid == [] and valid[0].fingerprint.get("decisionInstanceConfig") == _LAYA_CONFIG
+
+
+def test_no_instance_listed_for_a_resident_decision_model_refuses_with_exit_3(tmp_path):
+    """Impl review Pass 8, P8-M1's stub: `residency()` shows laya loaded (so no load step runs and
+    co-residency passes) while `GET /api/v1/models` lists no instance under its key — an eviction
+    between steps 7 and 8, or an `/api/v0` id that is not the `/api/v1` key. That is "not
+    captured", never a `None` answer: the run refuses before any item and stores nothing."""
+    _workspace(tmp_path)
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), initially_loaded=())
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 3 and "no loaded instance" in str(caught.value)
+    assert ("loaded_instances", "laya") in lms.order
+    assert lms.decide_calls == []
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize(
+    "config", [_NO_CONFIG_KEY, None, ["context_length", 8192]],
+    ids=["no-config-key", "config-null", "config-not-an-object"],
+)
+def test_an_instance_with_no_config_object_refuses_with_exit_3(tmp_path, config):
+    """P8-M1: LM Studio's `config` is required on a loaded instance, so an instance without a
+    `config` mapping is an anomaly, refused before any item — never recorded as `None`."""
+    _workspace(tmp_path)
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), instance_config=config)
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 3 and "no 'config' object" in str(caught.value)
+    assert lms.decide_calls == []
+    assert not (tmp_path / "results").exists()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [LMStudioUnreachable("no response"), LMStudioCallFailed("HTTP 404", status=404, body=None)],
+    ids=["unreachable", "refused"],
+)
+def test_a_failed_instance_config_read_refuses_with_exit_3_before_any_item(
+    tmp_path, monkeypatch, failure
+):
+    _workspace(tmp_path)
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
+
+    def broken(model_key):
+        raise failure
+
+    monkeypatch.setattr(lms, "loaded_instances", broken)
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 3 and "instance config" in str(caught.value)
+    assert lms.decide_calls == []
+
+
+def test_a_decision_model_absent_after_its_warm_up_refuses_with_exit_3_before_any_item(tmp_path):
+    """Co-residency on the `decisions` surface: one model, so the rule reduces to the decision
+    model being resident after its warm-up (step 7's snapshot)."""
+    _workspace(tmp_path)
+    lms = DecisionStub(
+        decide_responses=_four(0.9, 0.1, 0.9, 0.9),
+        residency_sequence=[list(_LAYA_RESIDENT), list(_QWEN_RESIDENT)],  # start, baseline
+    )
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 3 and "co-residency" in str(caught.value)
+    assert lms.decide_calls == [] and len(lms.warm_up_calls) == 1
+    assert not (tmp_path / "results").exists()
+
+
+def _chat_arm_stub(residency: list[list[ResidentModel]]) -> DecisionStub:
+    lms = DecisionStub(residency_sequence=residency, initially_loaded=())
+    lms.chat_reply = ChatResult(
+        message={"content": '{"decision": false}'}, tool_calls=(), toolCallForm="prose",
+        stats=None, model_info=None, runtime=None, usage=None, wallClockMs=900.0,
+    )
+    return lms
+
+
+def test_a_chat_arm_on_a_decision_point_pack_loads_its_absent_model_too(tmp_path):
+    """Plan3 §3.7: "The arm's models are the chat model, the decision model, or both." The chat
+    arm records no `decisionInstanceConfig` (it is a decision-profile field only)."""
+    _workspace(tmp_path)
+    lms = _chat_arm_stub([[], *[list(_QWEN_RESIDENT)] * 7])
+    run, _ = _run(tmp_path, lms, candidateId=None, modelKey="qwen/qwen3-4b-2507")
+    assert lms.load_calls == [{"model": "qwen/qwen3-4b-2507", "timeout_s": 300.0}]
+    qwen = "qwen/qwen3-4b-2507"
+    assert lms.order[:2] == [("load_model", qwen), ("warm_up", qwen)]
+    assert run.fingerprint.get("decisionInstanceConfig", "ABSENT") == "ABSENT"
+    assert ("loaded_instances", "qwen/qwen3-4b-2507") not in lms.order
+
+    resident_root = tmp_path / "resident"
+    resident_root.mkdir()
+    _workspace(resident_root)
+    lms = _chat_arm_stub([list(_QWEN_RESIDENT) for _ in range(8)])
+    _run(resident_root, lms, candidateId=None, modelKey="qwen/qwen3-4b-2507")
+    assert lms.load_calls == []
+
+
+def test_a_pack_without_a_decision_point_block_never_loads(tmp_path, monkeypatch):
+    """The load step is a decision-point pack's only: an ordinary chat run, its model absent at
+    start, is JIT-loaded by its warm-up exactly as before (`StubLMStudio` has no `load_model`)."""
+    from test_runner import (
+        FakeItemScorer,
+        StubLMStudio,
+        _item_pack,
+        chat_result_with_stats,
+        model_info,
+        resident,
+    )
+    from test_runner import _host_json as chat_host_json
+
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: FakeItemScorer())
+    chat_host_json(tmp_path)
+    lms = StubLMStudio(
+        catalog_result=[model_info()],
+        chat_responses=[chat_result_with_stats(wall_clock_ms=100.0)],
+        residency_sequence=[[], resident(), resident(), resident()],
+    )
+    assert not hasattr(lms, "load_model")
+    cfg = RunConfig(modelKey="qwen/qwen3-4b-2507", sessionId=None, referenceKey=None)
+    run, _ = run_pack(_item_pack(), cfg, lmstudio=lms, root=tmp_path)
+    assert run.fingerprint.get("residentModelsAtStart") == []
+
+
+# ==================================================================================================
+# 9. U2.1 — the fit manifest and AC-3's leakage refusal, in `_prepare_decision_arm` (impl review
+#    Pass 6, P6-m2): every candidate, decision-only included, before any call
+# ==================================================================================================
+
+
+def _fixture_input_hash(item: dict[str, Any]) -> str:
+    """v1.3 §3.5's `input_hash` for `guard-judge`, transcribed rather than imported."""
+    fields = {k: item[k] for k in ("condition", "understanding", "turns", "path") if k in item}
+    text = json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _fixture_items() -> list[dict[str, Any]]:
+    return [json.loads(line) for line in (_FIXTURE_PACK / "items.jsonl").read_text().splitlines()]
+
+
+def _overlapping_workspace(root: Path, item_index: int, **kw: Any) -> None:
+    """A manifest of the default calibration inputs plus one fixture item's input hash, declared
+    with its real sha256 and size — a well-formed manifest that leaks exactly that item."""
+    hashes = tuple(sorted((*_MANIFEST_HASHES, _fixture_input_hash(_fixture_items()[item_index]))))
+    content = _manifest_bytes(hashes)
+    manifest = {
+        "file": f"{_CANDIDATE_ID}.fit.txt",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "size": len(hashes),
+        "purposes": ["question-tuning", "cutoff"],
+    }
+    _workspace(root, fit_manifest_bytes=content, fitManifest=manifest, **kw)
+
+
+def test_a_decision_only_candidate_with_an_overlapping_manifest_refuses_with_exit_4(tmp_path):
+    """P6-m2's case: `handoffModel: null`, so a hand-off-only check would have let it run."""
+    _overlapping_workspace(tmp_path, 2)
+    assert json.loads((tmp_path / "candidates" / f"{_CANDIDATE_ID}.json").read_text())[
+        "handoffModel"
+    ] is None
+    exc = _refused(tmp_path, DecisionStub())
+    assert exc.exitCode == 4 and "AC-3" in str(exc) and "fx-ca-01" in str(exc)
+    assert "1 of this pack's items" in str(exc)
+
+
+def test_an_overlap_with_a_side_check_item_refuses_too(tmp_path):
+    """v1.3 §3.5: the manifest is intersected with eval **and** side-check items."""
+
+    def side_check_last(row):
+        if row["itemId"] == "fx-ca-02":
+            row["stratum"] = "side-check"
+        return row
+
+    _overlapping_workspace(tmp_path, 3, items_edit=side_check_last)
+    exc = _refused(tmp_path, DecisionStub())
+    assert exc.exitCode == 4 and "fx-ca-02" in str(exc)
+
+
+def test_a_manifest_whose_bytes_differ_from_the_declared_sha256_refuses_with_exit_4(tmp_path):
+    """Same entry count as declared, different content: only the sha256 check can catch it."""
+    other = tuple(sorted(hashlib.sha256(f"other-{n}".encode()).hexdigest() for n in (1, 2)))
+    _workspace(tmp_path, fit_manifest_bytes=_manifest_bytes(other))
+    exc = _refused(tmp_path, DecisionStub())
+    assert exc.exitCode == 4 and "fitManifest.sha256" in str(exc)
+
+
+def test_a_manifest_whose_entry_count_differs_from_the_declared_size_refuses_with_exit_4(
+    tmp_path,
+):
+    """Right bytes, wrong declared size: only the size check can catch it."""
+    body = _candidate_body()
+    _workspace(tmp_path, fitManifest={**body["fitManifest"], "size": 3})
+    exc = _refused(tmp_path, DecisionStub())
+    assert exc.exitCode == 4 and "fitManifest.size" in str(exc)
+
+
+def test_a_missing_manifest_file_refuses_with_exit_4(tmp_path):
+    _workspace(tmp_path)
+    (tmp_path / "candidates" / f"{_CANDIDATE_ID}.fit.txt").unlink()
+    exc = _refused(tmp_path, DecisionStub())
+    assert exc.exitCode == 4 and "cannot read fit manifest" in str(exc)
+
+
+def test_the_leakage_and_manifest_refusals_come_before_the_load_step(tmp_path):
+    """An exit-4 refusal costs nothing: no model is loaded on the shared GPU to then refuse."""
+    _overlapping_workspace(tmp_path, 0)
+    lms = _absent_at_start()
+    with pytest.raises(RunRefused) as caught:
+        _run(tmp_path, lms)
+    assert caught.value.exitCode == 4 and lms.load_calls == [] and lms.order == []
+
+
+def test_cli_run_with_an_overlapping_manifest_exits_4_and_writes_nothing(tmp_path, monkeypatch):
+    _overlapping_workspace(tmp_path, 1)
+    stub = DecisionStub()
+    monkeypatch.setattr(cli, "LMStudio", lambda base_url: stub)
+    code = cli.main(
+        ["run", "--root", str(tmp_path), "--pack", _PACK_ID, "--candidate", _CANDIDATE_ID]
+    )
+    assert code == 4 and stub.decide_calls == []
+    assert not (tmp_path / "results").exists()
+
+
+# ==================================================================================================
+# 10. P7-n1 (impl review Pass 7): a residency probe failing with `LMStudioCallFailed` — a non-200
+#     GET or a malformed catalog body — at the load rule's probe and at step 10's end capture
+# ==================================================================================================
+
+
+def _probe_failure() -> LMStudioCallFailed:
+    return LMStudioCallFailed("GET /api/v0/models: HTTP 500", status=500, body=None)
+
+
+def test_a_load_rule_probe_that_fails_with_a_call_failure_records_assumed(tmp_path):
+    """P7-n1's row: the probe raises `LMStudioCallFailed`, the run is `assumed` with no re-check
+    call, and the run whose items all completed is kept rather than lost to a traceback."""
+    _workspace(tmp_path)
+    residency = [*[list(_LAYA_RESIDENT)] * 6, _probe_failure()]  # start, baseline, 4 items, rule
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    run, _ = _run(tmp_path, lms)
+    assert run.basis == "assumed" and len(lms.decide_calls) == 4
+    store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=_PACK_ID)
+    assert invalid == [] and [r.basis for r in valid] == ["assumed"]
+
+
+def _run_with_sleep(root: Path, lms: DecisionStub) -> tuple[Any, list[float]]:
+    slept: list[float] = []
+    pack = load_pack(root / "packs" / _PACK_ID)
+    run, _ = run_pack(
+        pack, _cfg(), lmstudio=lms, root=root, clock=_Clock(0.25), sleep=slept.append
+    )
+    return run, slept
+
+
+def test_step_10_retries_a_call_failure_and_records_the_snapshot_that_answers(tmp_path):
+    """Plan §3.4.4a step 10: a transient failure of the end-of-run GET is retried at 1 s, not
+    allowed to escape — a non-200 included (the same `residency()` failure class as P7-n1)."""
+    _workspace(tmp_path)
+    residency = [*[list(_LAYA_RESIDENT)] * 7, _probe_failure(), list(_QWEN_RESIDENT)]
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    run, slept = _run_with_sleep(tmp_path, lms)
+    assert slept == [1.0]
+    assert run.fingerprint.get("residentModelsAtEnd") == [
+        {"id": "qwen/qwen3-4b-2507", "state": "loaded"}
+    ]
+
+
+def test_step_10_refuses_with_exit_5_after_three_retries_of_a_call_failure(tmp_path):
+    _workspace(tmp_path)
+    residency = [*[list(_LAYA_RESIDENT)] * 7, *[_probe_failure() for _ in range(4)]]
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    with pytest.raises(RunRefused) as caught:
+        _run_with_sleep(tmp_path, lms)
+    assert caught.value.exitCode == 5 and "three retries" in str(caught.value)

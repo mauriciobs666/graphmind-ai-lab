@@ -141,7 +141,10 @@ _MODEL_EMBEDDINGS_SCHEMA_1: dict[str, FieldSpec] = {
 #: `fitManifestSize` is a count, and zero inputs is an answer, so it is `present`.
 #: `fitOutcome`/`fitQualityTarget` (`docs/plans/typed-decision-models2.md` §3.2) are the
 #: candidate's fit rung and quality target, copied into the record so the report reads them from
-#: the run and never from the candidate file — 35 fields here, 47 on `model:handoff`.
+#: the run and never from the candidate file. `decisionInstanceConfig` (plan3 §3.7) is the decision
+#: model's `loaded_instances[0].config` from `GET /api/v1/models` after the load step, verbatim;
+#: the runner refuses a run that cannot read one, so it is never `null`. 36 fields here, 48 on
+#: `model:handoff`.
 _DECISIONS_ADD: dict[str, FieldSpec] = {
     "candidateId": _NONEMPTY,
     "candidateContentHash": _NONEMPTY,
@@ -152,6 +155,7 @@ _DECISIONS_ADD: dict[str, FieldSpec] = {
     "evalSetHash": _NONEMPTY,
     "fitOutcome": _NONEMPTY,
     "fitQualityTarget": _NONEMPTY,
+    "decisionInstanceConfig": _PRESENT,
 }
 
 _MODEL_DECISIONS_SCHEMA_1: dict[str, FieldSpec] = {**_MODEL_EMBEDDINGS_SCHEMA_1, **_DECISIONS_ADD}

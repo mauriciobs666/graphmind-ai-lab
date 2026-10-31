@@ -2,6 +2,71 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U2.1 — shared load and preparation for the decision surfaces: explicit loading, `decisionInstanceConfig`, the fit manifest and AC-3, P7-n1
+
+**What:** the parts of U2 both the `decisions` and `handoff` surfaces share
+(`docs/plans/typed-decision-models3.md` §3.7, §4.1 U2; `docs/plans/typed-decision-models.md`
+§3.4–§3.5, §4 U2; review `docs/reviews/typed-decision-models-impl.md` P6-m2, P7-n1). The
+`handoff` surface itself is U2.2. Offline only; the load API's fakes use the U2p probe's bodies
+verbatim (`ws:agent-team` a93905a6…, `tests/fixtures/lmstudio/api_v1_load_probe.json`).
+
+- **Explicit loading (plan3 §3.7).** `LMStudio.load_model(model, *, timeout_s) -> LoadedInstance`
+  posts `{"model": id, "echo_load_config": true}` to `/api/v1/models/load`; a 2xx without an
+  `instance_id` or with a `status` other than `"loaded"` is `LMStudioCallFailed(status=None)`.
+  `LMStudio.loaded_instances(key)` reads `GET /api/v1/models` (`models[].key`,
+  `loaded_instances[]`). On a decision-point pack `run_pack` loads every model of the arm absent
+  from `residentModelsAtStart`, after the exit-4 refusals and before the warm-up, at
+  `firstCallTimeoutSeconds`; a resident model gets no call, and a failed load refuses with exit 3.
+  The arm's models are the decision model on a candidate run and the chat model on a chat arm
+  (plan3: "the chat model, the decision model, or both"); U2.2 adds the hand-off model.
+- **Co-residency on the `decisions` surface.** One model, so the rule reduces to: the decision
+  model must be resident in step 7's snapshot, after its warm-up, or the run refuses with exit 3
+  before any item. It applies to candidate arms only; a chat arm keeps the item-level `"load"`
+  withholding it always had.
+- **`decisionInstanceConfig`** joins both decision profiles (36 fields on `model:decisions`, 48 on
+  `model:handoff`): the decision model's `loaded_instances[0].config`, read after step 8, verbatim,
+  `present` tier. A failed read, no listed instance, or an instance with no `config` mapping
+  refuses with exit 3 (deviating from plan3 §3.7's "`None` if absent", impl review Pass 8 P8-M1:
+  the model was just shown resident, so each is "not captured", never an answer).
+- **Fit manifest and AC-3 (P6-m2), in `_prepare_decision_arm` for every candidate.**
+  `decisions.load_fit_manifest` reads `candidates/<fitManifest.file>` and refuses a non-plain file
+  name, an unreadable file, a sha256 that is not the declared one, a malformed, unsorted or
+  repeated line, and an entry count that is not the declared `size`. `decisions.leaked_items`
+  names every pack item, `eval` or `side-check`, whose `input_hash` is in the manifest; any refuses
+  with exit 4, before the load step. `fitManifestHash`/`fitManifestSize` come from the verified
+  file.
+- **P7-n1.** `_within_load_basis`'s probe catches `LMStudioCallFailed` too (`assumed`). Step 10's
+  end-of-run capture gets the same fix: a non-200 or malformed catalog read is retried three
+  times, then exit 5, as an unreachable one already was.
+
+**Calls made here, stated once:**
+- **The manifest file format.** v1.3 §3.4 says only "the sorted list of `input_hash` values".
+  This unit makes it one lowercase-hex sha256 per line, each line `\n`-terminated, strictly
+  ascending. `size` is the entry count, not the byte length (the report's "N inputs", and the
+  `present` tier's "0 is an answer"). U6's `fit.py` must write this format.
+- **`LMStudioClient`** in plan3 is this package's `LMStudio` class.
+- The warm-up's `was_resident_before` is now true for a model the load step just loaded, since
+  the warm-up no longer loads it. Nothing reads it.
+- **Not fixed:** the between-item residency probes (`_drive_single_call_items`,
+  `_drive_decision_items`, `_turn_timings`) still let a `residency()` failure escape. No plan gives
+  a failed between-item probe a disposition, so the fix is a design choice, not a one-line catch.
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`; full suite each), all red: a load for a
+model already resident; a failed load not refusing; `decisionInstanceConfig` recorded from a read
+before the load; the co-residency refusal dropped; the load step on a pack with no
+`decisionPoint`; the load timeout hardcoded; no-instance/no-`config` not refusing; `loaded_instances`
+matching an `/api/v0`-style `id`; `load_model` accepting any `status`; the manifest's sha256
+checked but not its size, and the reverse; the leakage check only when `handoffModel` is set; the
+leakage compared on `question_spec_hash`; the eval stratum only; the leakage refusal dropped; a
+manifest read failure swallowed; an unsorted manifest accepted; the file name not confined; the
+P7-n1 `except` clause removed; step 10 not retrying `LMStudioCallFailed`.
+
+Full suite `2549 passed, 4 deselected, 2 xfailed` (40 new test functions: 19 in
+`tests/test_runner_decisions.py`, 9 each in `tests/test_decisions.py` and `tests/test_lmstudio.py`,
+3 in `tests/test_fingerprint.py`); `ruff` clean. Nothing is written under `results/runs/`.
+
+*2026-10-31 — impl review Pass 8, P8-M1/P8-m1/P8-n1 closed:* the `decisionInstanceConfig` refusal above; the runner reads it by `decision_arm.model_info.id`; `tests/fixtures/decision-contract/fit-manifest.jsonl` pins the manifest format with hand-computed sha256 rows for U6 to byte-copy; README says runner-loaded models stay resident (no TTL). Suite `2564 passed, 4 deselected, 2 xfailed`.
+
 ## 2026-10-31 — typed-decision-models U1d.3 — the run-time deltas: kept decision failures, the load rule, the chat-timeout pin, the decision-call counts
 
 **What:** the last third of U1d (`docs/plans/typed-decision-models2.md` §4.1 U1d with §3.2–§3.4,

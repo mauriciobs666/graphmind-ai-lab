@@ -451,3 +451,84 @@ def _provenance_problem(provenance: Any) -> str | None:
         if not _nonempty_str(provenance.get(key)):
             return f"provenance.{key} must be a non-empty string"
     return None
+
+
+# --- the fit manifest and the AC-3 leakage check (v1.3 §3.4, §3.5) -----------------------------
+
+
+@dataclass(frozen=True)
+class FitManifest:
+    """A candidate's fit manifest, read and verified (`load_fit_manifest`): the `input_hash` of
+    every item used for training, calibration or question tuning (v1.3 §3.4). `sha256` and `size`
+    are measured from the file — they equal the candidate's declared `fitManifest.sha256`/`size`,
+    or the file was refused — and are what the fingerprint's `fitManifestHash`/`fitManifestSize`
+    record."""
+
+    hashes: frozenset[str]
+    sha256: str
+    size: int
+
+
+def load_fit_manifest(root: Path | str, declared: Mapping[str, Any]) -> FitManifest:
+    """Read `<root>/candidates/<declared["file"]>` — where the importer puts it beside the
+    candidate (v1.3 §3.4) — and refuse, as `CandidateError`, anything that cannot carry AC-3.
+
+    **The file format**, which v1.3 §3.4 states as "the sorted list of `input_hash` values":
+    UTF-8 text, one lowercase-hex sha256 per line, each line ending in `\\n` (the last included,
+    `eval_set_hash`'s line convention; never `\\r\\n`), strictly ascending, so sorted with no
+    duplicate. An empty file is a manifest of zero inputs. `size` is the number of entries — the
+    count the report prints as "N inputs" and the fingerprint's `present`-tier `fitManifestSize`,
+    where 0 is an answer — never the byte length. The format is a cross-component contract (the
+    fit side writes it), pinned by `tests/fixtures/decision-contract/fit-manifest.jsonl`, which
+    U6's `fit.py` byte-copies.
+
+    Refused, each on its own: a `file` that is not a plain name in `candidates/` (FR-23: nothing
+    is read outside the component); an unreadable file; bytes whose sha256 is not the declared
+    `sha256`; a malformed, unsorted or repeated line; an entry count that is not the declared
+    `size`. The sha256 and the count are checked independently, so neither stands in for the
+    other."""
+    name = declared.get("file")
+    if not isinstance(name, str) or not _CANDIDATE_ID_RE.fullmatch(name) or name in (".", ".."):
+        raise CandidateError(f"fitManifest.file {name!r} is not a plain file name")
+    path = Path(root) / "candidates" / name
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise CandidateError(f"cannot read fit manifest {path}: {exc}") from exc
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != declared.get("sha256"):
+        raise CandidateError(
+            f"{path}: sha256 {digest} is not the declared fitManifest.sha256 "
+            f"{declared.get('sha256')}"
+        )
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CandidateError(f"{path}: not UTF-8: {exc}") from exc
+    if text and not text.endswith("\n"):
+        raise CandidateError(f"{path}: the last line has no terminating newline")
+    lines = text.split("\n")[:-1] if text else []
+    for number, line in enumerate(lines, start=1):
+        if not _SHA256_RE.fullmatch(line):
+            raise CandidateError(f"{path}: line {number} is not a lowercase-hex sha256: {line!r}")
+    if any(a >= b for a, b in zip(lines, lines[1:])):
+        raise CandidateError(f"{path}: entries are not strictly ascending (unsorted or repeated)")
+    if len(lines) != declared.get("size"):
+        raise CandidateError(
+            f"{path}: {len(lines)} entries, not the declared fitManifest.size "
+            f"{declared.get('size')!r}"
+        )
+    return FitManifest(hashes=frozenset(lines), sha256=digest, size=len(lines))
+
+
+def leaked_items(
+    items: Iterable[Mapping[str, Any]], role: str, manifest: FitManifest
+) -> list[str]:
+    """AC-3 (v1.3 §3.5): the `itemId` of every pack item — `eval` and `side-check` strata alike —
+    whose `input_hash` is in the fit manifest, in pack order. Non-empty means the candidate was
+    fitted on an input this pack measures it on, and the run refuses."""
+    return [
+        str(item.get("itemId"))
+        for item in items
+        if input_hash(item, role) in manifest.hashes
+    ]

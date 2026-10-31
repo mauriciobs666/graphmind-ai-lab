@@ -66,9 +66,12 @@ from modelbench.decisions import (
     DECISION_POINT_CHAT_TIMEOUT_SECONDS,
     Candidate,
     CandidateError,
+    FitManifest,
     apply_policy,
     eval_set_hash,
     is_over_limit,
+    leaked_items,
+    load_fit_manifest,
     question_spec_hash,
 )
 from modelbench.fingerprint import Fingerprint
@@ -82,6 +85,7 @@ from modelbench.lmstudio import (
     LMStudioCallFailed,
     LMStudioCallTimeout,
     LMStudioUnreachable,
+    LoadedInstance,
     LoadResult,
     ModelInfo,
     ResidentModel,
@@ -698,10 +702,13 @@ def _within_load_basis(
     `decisionTimeoutSeconds` — and the run is `"by-construction"` iff the answer is exactly the
     mandatory warm-up's (`_same_decision`; never a `--warmup N` extra's). A raise, an unequal
     answer, a probe that could not run, or no warm-up answer to compare against is `"assumed"`:
-    the fail-safe value, which only ever weakens what the run may claim."""
+    the fail-safe value, which only ever weakens what the run may claim. "A probe that could not
+    run" is any of the three ways `residency()` fails: no response (`LMStudioUnreachable`), a
+    non-200 status or a malformed catalog body (`LMStudioCallFailed`, impl review P7-n1), or a
+    socket timeout."""
     try:
         resident = lmstudio.residency()
-    except (LMStudioUnreachable, TimeoutError):
+    except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError):
         return "assumed"
     if not _is_resident(model_info.id, resident):
         return "assumed"
@@ -1108,34 +1115,131 @@ def _build_fingerprint(
     return Fingerprint(armKind="model", callSurface=call_surface, fields=fields)
 
 
-def _decision_fingerprint_fields(candidate: Candidate, *, eval_set: str) -> dict[str, Any]:
-    """What `model:decisions` adds to the embeddings set (v1.3 §3.3, §3.5; plan2 §3.2), all read
-    from the loaded candidate and the pack — the report reads them from the run record, never
-    from the candidate file. `fitManifestHash`/`fitManifestSize` are the candidate's **declared**
-    `fitManifest.sha256`/`size`; reading the manifest file, checking it against them and the
-    leakage refusal against the pack's items are U2's (v1.3 §4 U2, AC-3)."""
+def _decision_fingerprint_fields(
+    candidate: Candidate, *, eval_set: str, fit_manifest: FitManifest, instance_config: Any
+) -> dict[str, Any]:
+    """What `model:decisions` adds to the embeddings set (v1.3 §3.3, §3.5; plan2 §3.2; plan3
+    §3.7), all read from the loaded candidate, the pack and the decision model's instance — the
+    report reads them from the run record, never from the candidate file. `fitManifestHash`/
+    `fitManifestSize` are measured from the manifest file `_prepare_decision_arm` verified
+    against the candidate's declaration (AC-3). `instance_config` is
+    `_decision_instance_config`'s, verbatim."""
     return {
         "candidateId": candidate.candidateId,
         "candidateContentHash": candidate.contentHash,
         "questionSpecHash": question_spec_hash(candidate.question),
         "decisionPolicy": dict(candidate.policy),
-        "fitManifestHash": candidate.fitManifest["sha256"],
-        "fitManifestSize": candidate.fitManifest["size"],
+        "fitManifestHash": fit_manifest.sha256,
+        "fitManifestSize": fit_manifest.size,
         "evalSetHash": eval_set,
         "fitOutcome": candidate.fit["outcome"],
         "fitQualityTarget": candidate.fit["qualityTarget"],
+        "decisionInstanceConfig": instance_config,
     }
+
+
+# --- explicit loading (typed-decision-models plan3 §3.7) ------------------------------------------
+
+
+def _arm_model_ids(model_info: ModelInfo, decision_arm: _DecisionArm | None) -> tuple[str, ...]:
+    """The models a run's arm uses (plan3 §3.7: "the chat model, the decision model, or both"):
+    the decision model on a candidate run, the chat/embeddings model otherwise. The hand-off
+    composite's second model joins this tuple with the `handoff` surface (U2.2)."""
+    if decision_arm is not None:
+        return (decision_arm.model_info.id,)
+    return (model_info.id,)
+
+
+def _load_absent_models(
+    lmstudio: LMStudio,
+    model_ids: Sequence[str],
+    *,
+    resident_at_start: Sequence[ResidentModel],
+    timeout_s: float,
+) -> dict[str, LoadedInstance]:
+    """Plan3 §3.7's load step, on a decision-point pack, before the warm-ups: every model of the
+    arm absent from `residentModelsAtStart` gets one `load_model` call, at `timeout_s`
+    (`firstCallTimeoutSeconds`); a model resident at start is used as found and gets none. LM
+    Studio exposes no load identity, so the runner's own load is the evidence that nothing it
+    scores was JIT-loaded. A load that times out, fails or finds no server refuses the run with
+    exit 3 (an environment state) before any warm-up. Returns what was loaded, by model id."""
+    loaded: dict[str, LoadedInstance] = {}
+    for model_id in model_ids:
+        if _is_resident(model_id, resident_at_start):
+            continue
+        try:
+            loaded[model_id] = lmstudio.load_model(model_id, timeout_s=timeout_s)
+        except (LMStudioCallTimeout, LMStudioCallFailed, LMStudioUnreachable) as exc:
+            raise RunRefused(
+                f"could not load {model_id!r} before the warm-up ({exc}); nothing was scored "
+                "(typed-decision-models plan3 §3.7)",
+                exitCode=3,
+            ) from exc
+    return loaded
+
+
+def _refuse_unless_resident(model_ids: Sequence[str], resident: Sequence[ResidentModel]) -> None:
+    """Plan3 §3.7's co-residency refusal: after the warm-ups, every model of a candidate arm must
+    be resident, or the run refuses with exit 3 before any item. On the `decisions` surface the
+    arm has one model, so co-residency reduces to the decision model being resident after its own
+    warm-up — the one-model case of the same rule, not a second one."""
+    absent = [model_id for model_id in model_ids if not _is_resident(model_id, resident)]
+    if absent:
+        raise RunRefused(
+            f"{', '.join(repr(m) for m in absent)} not resident after the warm-up; nothing was "
+            "scored (typed-decision-models plan3 §3.7, co-residency)",
+            exitCode=3,
+        )
+
+
+def _decision_instance_config(lmstudio: LMStudio, model_id: str) -> Mapping[str, Any]:
+    """Plan3 §3.7's `decisionInstanceConfig`: the decision model's `loaded_instances[0].config`
+    from `GET /api/v1/models`, read **after** the load step and the co-residency check, verbatim.
+
+    Every path that does not yield a `config` mapping refuses the run with exit 3 before any item:
+    a failed read, no instance listed under `model_id`, or an instance with no `config` mapping.
+    Co-residency has just shown the model resident and LM Studio's `config` is required, so each
+    of those is an anomaly — an eviction between steps 7 and 8, or an `/api/v0` `id` that is not
+    the `/api/v1` `key` (a pre-resident model under a custom identifier) — never a captured
+    answer. This deviates from plan3's "`None` if absent" (impl review Pass 8, P8-M1): a `None`
+    here could only ever mean "not captured", which FR-7 refuses."""
+    source = f"{model_id!r}'s instance config from GET /api/v1/models"
+    try:
+        instances = lmstudio.loaded_instances(model_id)
+    except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError) as exc:
+        raise RunRefused(
+            f"could not read {source} ({exc}); nothing was scored (typed-decision-models plan3 "
+            "§3.7)",
+            exitCode=3,
+        ) from exc
+    if not instances:
+        raise RunRefused(
+            f"could not read {source}: no loaded instance listed under that key, although the "
+            "model was resident (evicted, or its /api/v0 id is not its /api/v1 key); nothing "
+            "was scored (typed-decision-models plan3 §3.7)",
+            exitCode=3,
+        )
+    config = instances[0].get("config")
+    if not isinstance(config, Mapping):
+        raise RunRefused(
+            f"could not read {source}: its first instance has no 'config' object; nothing was "
+            "scored (typed-decision-models plan3 §3.7)",
+            exitCode=3,
+        )
+    return config
 
 
 @dataclass(frozen=True)
 class _DecisionArm:
     """A `run --candidate` arm that passed every pre-flight refusal: the loaded candidate, its
-    decision model's catalog entry, the scorer, and the pack's `evalSetHash`."""
+    decision model's catalog entry, the scorer, the pack's `evalSetHash`, and the verified fit
+    manifest."""
 
     candidate: Candidate
     model_info: ModelInfo
     scorer: ItemScorer
     eval_set: str
+    fit_manifest: FitManifest
 
 
 def _prepare_decision_arm(
@@ -1146,8 +1250,15 @@ def _prepare_decision_arm(
     candidate with a hand-off model (the `handoff` surface — U2, not built yet); a pack with no
     `decisionPoint` block or no `lmstudio-decisions` token; a question outside the pack's answer
     space (`packs.answer_space_problem`, a `score` question included); a pack whose items cannot
-    give an `evalSetHash` (an item with no `stratum`); a scorer without the decisions hooks; the
-    decision model absent from the catalog, or its catalog `type` not `"decision"`."""
+    give an `evalSetHash` (an item with no `stratum`); a fit manifest that cannot be read or does
+    not match the candidate's declared `sha256`/`size` (`decisions.load_fit_manifest`); **AC-3's
+    leakage refusal** — any pack item, `eval` or `side-check`, whose `input_hash` is in the fit
+    manifest (v1.3 §3.5); a scorer without the decisions hooks; the decision model absent from
+    the catalog, or its catalog `type` not `"decision"`.
+
+    The manifest and leakage checks run for **every** candidate, with or without a hand-off model
+    (impl review Pass 6, P6-m2): both surfaces share this function, and a decision-only candidate
+    is exactly the one a hand-off-only check would miss."""
     assert cfg.candidateId is not None
     try:
         candidate = Candidate.load(root, cfg.candidateId)
@@ -1178,6 +1289,17 @@ def _prepare_decision_arm(
         eval_set = eval_set_hash(pack.iter_items(), pack.role)
     except ValueError as exc:
         raise refuse(f"no evalSetHash: {exc}") from exc
+    try:
+        fit_manifest = load_fit_manifest(root, candidate.fitManifest)
+    except CandidateError as exc:
+        raise refuse(str(exc)) from exc
+    leaked = leaked_items(pack.iter_items(), pack.role, fit_manifest)
+    if leaked:
+        raise refuse(
+            f"its fit manifest holds the input of {len(leaked)} of this pack's items "
+            f"({', '.join(leaked[:5])}{', …' if len(leaked) > 5 else ''}): it was fitted on an "
+            "input it would be measured on (AC-3, plan v1.3 §3.5)"
+        )
     scorer = _load_item_scorer(pack)
     problem = _decision_scorer_problem(scorer)
     if problem is not None:
@@ -1189,7 +1311,11 @@ def _prepare_decision_arm(
             "'decision' (plan v1.3 §3.3)"
         )
     return _DecisionArm(
-        candidate=candidate, model_info=model_info, scorer=scorer, eval_set=eval_set
+        candidate=candidate,
+        model_info=model_info,
+        scorer=scorer,
+        eval_set=eval_set,
+        fit_manifest=fit_manifest,
     )
 
 
@@ -1240,7 +1366,13 @@ def run_pack(
 
     **Every run records its chat-call budget** (`RunResult.requestTimeoutSeconds`), resolved up
     front by `_resolve_request_timeout` — pinned, with its exit-4 refusal, on a decision-point
-    pack (plan2 §3.2)."""
+    pack (plan2 §3.2).
+
+    **On a decision-point pack the runner loads** (typed-decision-models plan3 §3.7): after step
+    3a, before the warm-up, every model of the arm absent from `residentModelsAtStart` gets one
+    `load_model` (`_load_absent_models`, exit 3 on failure). A candidate arm's models must then be
+    resident at step 7 (`_refuse_unless_resident`, exit 3), and after step 8 the decision model's
+    instance config is read for `decisionInstanceConfig` (`_decision_instance_config`)."""
     started_at = now()  # step 0
     # Up front, before any call: the chat-call budget, pinned on a decision-point pack.
     cfg = replace(cfg, requestTimeoutSeconds=_resolve_request_timeout(pack, cfg))
@@ -1283,6 +1415,20 @@ def run_pack(
             except Exception as exc:  # ToolCallingIneligible
                 raise RunRefused(str(exc), exitCode=4) from exc
 
+    # Plan3 §3.7's load step, on a decision-point pack only: the arm's absent models are loaded
+    # here, so the warm-ups find them loaded and nothing the run scores is JIT-loaded.
+    arm_models = _arm_model_ids(model_info, decision_arm)
+    loaded_now = (
+        _load_absent_models(
+            lmstudio,
+            arm_models,
+            resident_at_start=resident_at_start,
+            timeout_s=cfg.firstCallTimeoutSeconds,
+        )
+        if "decisionPoint" in pack.manifest
+        else {}
+    )
+
     prompt_config = pack.prompt_config()
     # The decisions warm-up is one `decide` with the candidate's own question (v1.3 §3.3); the
     # keyword is passed on that surface only, where `warm_up` requires it.
@@ -1294,7 +1440,9 @@ def run_pack(
             model_info.id,
             call_surface=call_surface,
             system_prompt=prompt_config.systemPrompt if call_surface == "chat" else None,
-            was_resident_before=model_info.id in {m.id for m in resident_at_start},
+            was_resident_before=(
+                _is_resident(model_info.id, resident_at_start) or model_info.id in loaded_now
+            ),
             timeout_s=cfg.firstCallTimeoutSeconds,
             **warm_up_question,
         )
@@ -1333,7 +1481,14 @@ def run_pack(
         hostinfo.write_host_info(root, check.updated_host)
 
     baseline_residency = lmstudio.residency()  # step 7 — item-1's baseline, never resident_at_start
+    if decision_arm is not None:
+        _refuse_unless_resident(arm_models, baseline_residency)  # plan3 §3.7, before any item
     catalog_after_load = lmstudio.catalog()  # step 8 — loadedContextLength
+    instance_config = (
+        _decision_instance_config(lmstudio, decision_arm.model_info.id)
+        if decision_arm is not None
+        else None
+    )
 
     if decision_arm is not None:
         items = _drive_decision_items(  # step 9
@@ -1386,7 +1541,7 @@ def run_pack(
         try:
             resident_at_end = lmstudio.residency()
             break
-        except (LMStudioUnreachable, TimeoutError):
+        except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError):  # P7-n1's class too
             if attempt == 3:
                 raise RunRefused(
                     "residentModelsAtEnd could not be captured after three retries; transcript "
@@ -1411,7 +1566,12 @@ def run_pack(
         catalog_after_load=catalog_after_load,
         prompt_config=prompt_config,
         decision_fields=(
-            _decision_fingerprint_fields(decision_arm.candidate, eval_set=decision_arm.eval_set)
+            _decision_fingerprint_fields(
+                decision_arm.candidate,
+                eval_set=decision_arm.eval_set,
+                fit_manifest=decision_arm.fit_manifest,
+                instance_config=instance_config,
+            )
             if decision_arm is not None
             else None
         ),

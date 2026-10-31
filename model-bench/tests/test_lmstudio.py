@@ -1492,6 +1492,22 @@ def test_warm_up_decisions_surface_lands_in_the_taxonomy_on_every_reachable_cell
         )
 
 
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_load_model_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    """`load_model` goes through `_raw_post` (typed-decision-models plan3 §3.7), so a failed load
+    is a timeout or a call failure — the two the runner refuses with exit 3 — and never escapes."""
+    c = client({"/api/v1/models/load": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.load_model("laya", timeout_s=5.0)
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_GET))
+def test_loaded_instances_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v1/models": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_GET[(phase, kind)]):
+        c.loaded_instances("laya")
+
+
 # --- `LMStudioCallFailed.status` — the partition plan §3.8.4's five-row table keys on ----------
 #
 # Two of §3.8.4's five rows are this class's: `server-rejected` (the server answered and refused
@@ -1513,7 +1529,7 @@ def test_warm_up_decisions_surface_lands_in_the_taxonomy_on_every_reachable_cell
 # not "the last status seen".
 #
 # The grid above pins which exception *class* each transport cell lands in; this table pins the
-# `status` of every `raise LMStudioCallFailed` in the module — all twelve, held to that by
+# `status` of every `raise LMStudioCallFailed` in the module — every one, held to that by
 # `test_every_raise_site_of_lmstudio_call_failed_is_covered_here` below, which compares the raise
 # lines these scenarios actually reach against the raise lines the source actually contains.
 
@@ -1619,6 +1635,46 @@ _STATUS_SCENARIOS: dict[str, tuple[Callable[[], Any], int | None, str | None]] =
     ),
     "decide: a 2xx body whose answers break the §2.3 contract": (
         lambda: _decide_over({"model": "laya", "answers": "nope", "usage": {}}),
+        None,
+        None,
+    ),
+    "loaded_instances: a non-2xx status": (
+        lambda: client({"/api/v1/models": (500, b"nope")}).loaded_instances("laya"),
+        500,
+        None,
+    ),
+    "loaded_instances: a 2xx body with no 'models' list": (
+        lambda: client({"/api/v1/models": (200, _json_bytes({"data": []}))}).loaded_instances(
+            "laya"
+        ),
+        None,
+        None,
+    ),
+    "loaded_instances: the model's entry has no 'loaded_instances' list": (
+        lambda: client(
+            {"/api/v1/models": (200, _json_bytes({"models": [{"key": "laya"}]}))}
+        ).loaded_instances("laya"),
+        None,
+        None,
+    ),
+    "load_model: a 2xx body that is not an object": (
+        lambda: client({"/api/v1/models/load": (200, _json_bytes([]))}).load_model(
+            "laya", timeout_s=5.0
+        ),
+        None,
+        None,
+    ),
+    "load_model: a 2xx body with no instance_id": (
+        lambda: client(
+            {"/api/v1/models/load": (200, _json_bytes({"status": "loaded"}))}
+        ).load_model("laya", timeout_s=5.0),
+        None,
+        None,
+    ),
+    "load_model: a 2xx body whose status is not 'loaded'": (
+        lambda: client(
+            {"/api/v1/models/load": (200, _json_bytes({"instance_id": "laya", "status": "x"}))}
+        ).load_model("laya", timeout_s=5.0),
         None,
         None,
     ),
@@ -1778,3 +1834,82 @@ def test_live_decide_predicate_and_choice_against_a_real_lm_studio():
     assert [a.name for a in result.answers] == ["advance", "messageType"]
     assert 0.0 <= result.answers[0].probability <= 1.0
     assert result.answers[1].choice in {"question", "request", "other"}
+
+
+# --- typed-decision-models U2.1: the explicit load (plan3 §3.7), from the U2p probe's bodies ----
+
+_U2P = _load("api_v1_load_probe.json")
+
+
+class _RecordingOpener:
+    """`make_opener` plus a record of every request: method, URL, decoded JSON body, timeout."""
+
+    def __init__(self, routes: dict[str, Any]) -> None:
+        self._inner = make_opener(routes)
+        self.requests: list[tuple[str, str, Any, float | None]] = []
+
+    def __call__(self, req: urllib.request.Request, timeout: float | None = None) -> Any:
+        body = json.loads(req.data) if req.data is not None else None
+        self.requests.append((req.get_method(), req.full_url, body, timeout))
+        return self._inner(req, timeout=timeout)
+
+
+def test_load_model_posts_the_probes_request_and_parses_its_response():
+    opener = _RecordingOpener({"/api/v1/models/load": (200, _json_bytes(_U2P["load_laya"]))})
+    loaded = LMStudio("http://localhost:1234", opener=opener).load_model("laya", timeout_s=300.0)
+    assert opener.requests == [
+        ("POST", "http://localhost:1234/api/v1/models/load", _U2P["load_laya_request"], 300.0)
+    ]
+    assert loaded == lmstudio.LoadedInstance(
+        instance_id="laya",
+        status="loaded",
+        type="decision",
+        load_time_seconds=1.56,
+        load_config=_U2P["load_laya"]["load_config"],
+    )
+
+
+def test_load_model_without_an_echoed_config_reads_it_as_none():
+    """The probe's qwen load carried no `load_config` (its request did not ask for one)."""
+    c = client({"/api/v1/models/load": (200, _json_bytes(_U2P["load_qwen"]))})
+    loaded = c.load_model("qwen/qwen3-4b-2507", timeout_s=300.0)
+    assert (loaded.instance_id, loaded.type, loaded.load_config) == (
+        "qwen/qwen3-4b-2507", "llm", None
+    )
+
+
+def test_load_model_requires_timeout_s_with_no_default():
+    param = inspect.signature(LMStudio.load_model).parameters["timeout_s"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+
+
+def test_load_model_refusal_carries_the_status_and_the_body():
+    c = client({"/api/v1/models/load": (404, b'{"error": "model not found"}')})
+    with pytest.raises(LMStudioCallFailed) as caught:
+        c.load_model("nope", timeout_s=5.0)
+    assert (caught.value.status, caught.value.body) == (404, '{"error": "model not found"}')
+
+
+def test_loaded_instances_reads_the_models_key_and_its_loaded_instances_verbatim():
+    opener = _RecordingOpener(
+        {"/api/v1/models": (200, _json_bytes(_U2P["models_after_laya_load"]))}
+    )
+    c = LMStudio("http://localhost:1234", opener=opener)
+    assert c.loaded_instances("laya") == (_U2P["laya_instance"],)
+    assert c.loaded_instances("qwen/qwen3-4b-2507") == ()
+    assert [(m, u) for m, u, _, _ in opener.requests] == [
+        ("GET", "http://localhost:1234/api/v1/models")
+    ] * 2
+
+
+def test_loaded_instances_is_empty_before_a_load_and_for_a_key_the_list_does_not_name():
+    c = client({"/api/v1/models": (200, _json_bytes(_U2P["models_before_load"]))})
+    assert c.loaded_instances("laya") == ()
+    assert c.loaded_instances("no-such-model") == ()
+
+
+def test_loaded_instances_matches_on_key_never_on_an_id_field():
+    """`/api/v1/models` keys a model by `key`; an `/api/v0`-shaped `id` must not match."""
+    body = {"models": [{"id": "laya", "loaded_instances": [_U2P["laya_instance"]]}]}
+    assert client({"/api/v1/models": (200, _json_bytes(body))}).loaded_instances("laya") == ()
