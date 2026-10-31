@@ -1,6 +1,6 @@
 # One standard local chat model (qwen) — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-30 · **Reviews:** `docs/reviews/standard-local-model.md`
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-31 · **Reviews:** `docs/reviews/standard-local-model.md`
 
 ## Intent
 Stop the dev machine (6 GB laptop GPU, LM Studio on Windows) from constantly juggling two local
@@ -64,15 +64,16 @@ exception.
 - **FR-7** — Everyday use needs exactly one loaded copy of qwen: `:8200` and `tank` (once it has
   passed the trial) both work against that same copy. That copy always has a context length of at
   least **16,384 tokens**, however it gets loaded: by hand, or automatically by LM Studio on an
-  app's request.
+  app's request. A request from one consumer never shrinks the context another consumer gets from
+  that copy, even when their requests overlap.
 
 ## Out of scope
 - Changing the salesperson demo's model or how the demo starts.
 - Evaluating any third model for any consumer, including nemotron for `tank` (FR-6).
 - Changing the embedding model.
 - LM Studio settings such as "Limit weight offload to dedicated GPU Memory" or JIT/TTL
-  behaviour. These are a separate operator choice. Whatever it takes to meet FR-7's context
-  length on every load is in scope.
+  behaviour. These are a separate operator choice. Whatever it takes to meet FR-7 is in scope:
+  its context length on every load, and no consumer shrinking another's context.
 - `model-bench` and the storefront test scripts. They load models by hand, on demand.
 
 ## Acceptance criteria
@@ -81,7 +82,9 @@ exception.
   are listed during and after the `tank` run, then exactly one chat model is loaded, one copy of
   `qwen/qwen3-4b-2507` with a context length of at least 16,384, and the `tank` run succeeds on
   it (FR-7). This holds when qwen was not loaded beforehand and gets loaded automatically by a
-  `:8200` call.
+  `:8200` call. It also holds when the `tank` run starts while a `:8200` extraction is still in
+  progress: the `tank` run succeeds without losing context, and the document being ingested
+  still reaches `ready`.
 - **AC-2** — Given `tank` on qwen and on ministral, when each trial scenario (FR-4) is run 3
   times on each, then the trial's
   outcome (pass or fail) and its evidence are recorded. It passes only if every finding in every qwen
@@ -123,3 +126,6 @@ None.
 2026-10-30 — Does nemotron stay listed in `tank`'s `opencode.json`? → No, remove it (FR-6, AC-7).
 2026-10-30 — Minimum context length for the one qwen copy? → 16,384 tokens, however it is loaded (FR-7, AC-1).
 2026-10-30 — Readback confirmed; ready for design? → Yes, after `analyst` Pass 2 approve with suggestions (all requirements).
+2026-10-31 — With one shared qwen copy at 16,384 tokens, LM Studio's 4 parallel slots share that context, so a `tank` run can overflow while `:8200` is extracting; how is that handled? → Set qwen's LM Studio per-model default to 1 parallel slot, so requests queue instead of sharing context (FR-7, AC-1).
+2026-10-31 — Keep 1 slot, given it also queues `:8200`'s own per-chunk extractions and an extraction timeout is not retried? → Only if the plan's S0 probe passes: a document as large as a typical learning capture, ingested at 1 slot, reaches `ready` with no timeout; on a fail, the measurements go back to the stakeholder before anything depends on the slot setting. Refines the previous entry (FR-7, AC-1).
+2026-10-31 — Should "no consumer's request shrinks another's context on the shared qwen copy" be a requirement rather than only a logged setting? → Yes (FR-7, AC-1, Out of scope).
