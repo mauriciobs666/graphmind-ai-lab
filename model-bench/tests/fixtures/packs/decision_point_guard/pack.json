@@ -1,0 +1,27 @@
+{
+  "packId": "decision-point-guard-fixture",
+  "packVersion": "0.1.0",
+  "role": "guard-judge",
+  "schemaVersion": 1,
+  "description": "typed-decision-models U1d.2 offline fixture: a guard decision-point pack runnable by a chat arm or a decision-model candidate. Not a measurement pack.",
+  "scorer": "classification",
+  "environment": {"requires": ["lmstudio-chat", "lmstudio-decisions"]},
+  "prompt": {
+    "systemPrompt": "prompts/judge.md",
+    "toolSchemas": null,
+    "temperature": 0.0,
+    "maxTokens": 256
+  },
+  "data": {"items": "items.jsonl"},
+  "sampling": {"seed": 20261031, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
+  "metrics": {
+    "verdictMetrics": ["falseAdvanceRate", "falseSuspendRate"],
+    "headlineMetric": null
+  },
+  "decisionPoint": {"answer": {"type": "predicate"}, "incumbent": "qwen/qwen3-4b-2507"},
+  "labels": {
+    "source": "llm-unreviewed",
+    "labeler": {"provider": "anthropic", "model": "fixture-labeler"},
+    "inputs": "synthetic"
+  }
+}

@@ -771,6 +771,16 @@ class RunResult:
             return str(self.fingerprint.get("armId", ""))
         return str(self.fingerprint.get("modelKey", ""))
 
+    @property
+    def armKey(self) -> str:
+        """The arm's identity (typed-decision-models plan v1.3 §3.3 "Arm identity"): the
+        fingerprint's `candidateId` when it has one, otherwise `modelKey`. A candidate's decision
+        model is shared by every candidate built on it, so `modelKey` cannot tell two candidates
+        apart; `compare --models`, `models --tested` and `index.csv` key on this instead. Equal to
+        `modelKey` on every chat, embeddings and deterministic arm."""
+        candidate_id = self.fingerprint.get("candidateId")
+        return str(candidate_id) if candidate_id else self.modelKey
+
 
 @dataclass(frozen=True)
 class InvalidRecord:
@@ -1132,6 +1142,10 @@ INDEX_COLUMNS = (
     "latencyMsP50",
     "latencyMsP95",
     "valid",
+    # typed-decision-models plan v1.3 §3.3: appended, so a positional reader of the first
+    # fourteen is unaffected. Empty on every arm that is not a candidate.
+    "candidateId",
+    "handoffModelKey",
 )
 
 
@@ -1173,6 +1187,8 @@ def _index_row(run: RunResult, valid: bool) -> dict[str, Any]:
         "latencyMsP50": percentile(latencies, level=LEVEL_P50) if latencies else None,
         "latencyMsP95": percentile(latencies, level=LEVEL_P95) if latencies else None,
         "valid": "yes" if valid else "no",
+        "candidateId": run.fingerprint.get("candidateId") or "",
+        "handoffModelKey": run.fingerprint.get("handoffModelKey") or "",
     }
 
 
@@ -1200,8 +1216,9 @@ def rebuild_index(root: Path) -> Path:
 def models_with_stored_results(
     root: Path, *, packId: str | None = None, role: str | None = None
 ) -> list[str]:
-    """FR-17a — models with stored results. Filters to `armKind == "model"` (§3.4.1), so a BM25
-    reference arm can never be offered as a reference *model*."""
+    """FR-17a — models with stored results, one entry per `armKey` (a candidate id, else the
+    model key; typed-decision-models plan v1.3 §3.3). Filters to `armKind == "model"` (§3.4.1),
+    so a BM25 reference arm can never be offered as a reference *model*."""
     seen: dict[str, None] = {}
     for path in sorted(runs_dir(root).glob("*.json")) if runs_dir(root).is_dir() else []:
         try:
@@ -1214,5 +1231,5 @@ def models_with_stored_results(
             continue
         if role is not None and run.role != role:
             continue
-        seen.setdefault(run.modelKey, None)
+        seen.setdefault(run.armKey, None)
     return list(seen)

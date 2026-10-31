@@ -2,6 +2,66 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U1d.2 — the plain `decisions` arm: `run --candidate`, offline
+
+**What:** the core wiring of `docs/plans/typed-decision-models.md` v1.3 §4 U1d (with plan2 §3.2,
+§3.4 and plan3 §3.2 where they amend it). A decision-only candidate now runs end to end on the
+`decisions` surface; the hand-off arm (U2) and U1d.3's parts are not built.
+
+- **Scorer seam (`runner.ItemScorer`).** Three optional hooks: `decision_input`,
+  `answer_from_chat`, and `score_answer` with U1d.1's five no-default keywords (`decided_by`,
+  `probability`, `failed_call`, `reason`, `input_tokens`). New `classification.decision_input`,
+  the guard's §3.2 renderer; `build_messages` now sends it as its user message, so the decision
+  model and the chat judge see the same text (checked on all 85 real items).
+- **`packs.py`.** `DECISIONS_TOKEN` (`lmstudio-decisions`, additive to the one chat/embeddings
+  token), `derive_decision_support`, and `answer_space_problem`: same question type as the pack's
+  `decisionPoint.answer`, the same value set as its `labels` on a choice, and a `score` question
+  refused whatever the pack says.
+- **`runner.py`.** `RunConfig.candidateId` (exactly one of it and `modelKey`, refused otherwise;
+  `armKey`). `_prepare_decision_arm` holds the §3.3 refusals, all exit 4 before any call: an
+  unloadable candidate or one for another role, a candidate with a hand-off model (U2), a pack
+  with no `decisionPoint` or no `lmstudio-decisions`, an answer-space mismatch, an item with no
+  `stratum` (no `evalSetHash`), a scorer without the hooks, and a decision model missing from the
+  catalog or not of type `decision`. The warm-up is one `decide` with the candidate's question.
+  `_drive_decision_items` runs, per item: residency probe, `decision_input`, item clock, one
+  `decide` at `decisionTimeoutSeconds` (plan2 §3.2), `apply_policy`. `score_answer` gets
+  `decided_by="decision-model"`, the probability (a choice's confidence) and
+  `usage["input_tokens"]`. `latency_block` treats `decisions` like `embeddings`.
+  `_build_fingerprint` adds the `model:decisions` fields, `fitOutcome`/`fitQualityTarget`
+  included, and refuses them on any other surface. The run id uses `armKey`.
+- **`decisions.question_spec_hash`**: sha256 over the question's canonical JSON (`input_hash`'s
+  form). The plans name `questionSpecHash` but give no formula; this one is stored data.
+- **`hostinfo`**: the attestation trip-wire is `"unavailable"` on `decisions`, as on embeddings
+  (v1.3 §3.3).
+- **`cli.py` / `results.py`.** `run --candidate` (argparse-exclusive with `--model`, one of them
+  required); `RunResult.armKey`; `compare --models` and `models --tested` key on it; `index.csv`
+  appends `candidateId` and `handoffModelKey` (sixteen columns; `results/index.csv` rebuilt, the
+  only change being the two appended empty cells per row).
+- **Fixture** `tests/fixtures/packs/decision_point_guard/` (4 synthetic guard items). The
+  done-condition test stores a valid `model:decisions` run under `tmp_path` and reads it back
+  through `load_history`, by `run_pack` and by `cli run --candidate`. Nothing is written under
+  `results/runs/` (plan2 §4.2).
+
+**Provisional, replaced by U1d.3** (marked in the code): a failed decision call (timeout,
+failure, over-limit) **refuses the run with exit 3 and stores nothing**. It is never routed
+through `score_answer` with a call-failure `withheldFor`. Candidate runs record
+`basis="by-construction"` until U1d.3's load rule can record `"assumed"`. **Left for U2:**
+`fitManifestHash`/`fitManifestSize` are the candidate's declared `fitManifest.sha256`/`size`, and
+reading the manifest file and the AC-3 leakage refusal are U2's.
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`), each red: `--candidate` and `--model`
+both accepted; `apply_policy` bypassed for a raw `p >= 0.5`; the hand-off guard removed, so a
+hand-off-band item is scored as decided by the model; `input_tokens` read from `total_tokens`,
+from `prompt_tokens`, or accepting a `bool`; `latency_block` treating `decisions` like chat; the
+fingerprint identity taken from the pre-load catalog entry, from the pack's incumbent, or keyed by
+the request's `cfg.modelKey`; every §3.3 refusal dropped one at a time; `armKey`, the run id,
+`models --tested`, `_select_arms` and both index columns reverted to `modelKey`/blank; the item
+clock replaced by the call's wall clock; the load probe dropped; the decide timeout taken from
+`--request-timeout`; a choice's probability read off `probability`.
+
+Full suite `2440 passed, 4 deselected, 2 xfailed` (`tests/test_runner_decisions.py`: 43, all
+new); `ruff` clean.
+
 ## 2026-10-31 — typed-decision-models U1d.1 — the contracts half of U1d: over-limit recognition, `LMStudioCallFailed.body`, `score_answer`'s decision keywords, the fit fingerprint fields
 
 **What:** the parts of U1d (`docs/plans/typed-decision-models3.md` §4.1, §3.2, §3.3, §5;

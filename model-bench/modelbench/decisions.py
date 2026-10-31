@@ -182,6 +182,17 @@ def input_hash(item: Mapping[str, Any], role: str) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def question_spec_hash(question: Mapping[str, Any]) -> str:
+    """The fingerprint's `questionSpecHash` (v1.3 §3.3): sha256 over the canonical JSON of the
+    candidate's whole question spec — `input_hash`'s canonical form (keys sorted at every level,
+    no whitespace, non-ASCII kept raw), so a changed instruction text, name or choice list changes
+    it. The plans name the field but not its formula; this one is U1d.2's and is stored data."""
+    canonical = json.dumps(
+        dict(question), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def eval_set_hash(items: Iterable[Mapping[str, Any]], role: str) -> str:
     """FR-4: the evaluation set's identity is its content, not the pack version (v1.3 §3.5).
 

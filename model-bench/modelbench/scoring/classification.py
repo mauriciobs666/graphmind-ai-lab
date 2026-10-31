@@ -193,12 +193,19 @@ def build_messages(item_input: Mapping[str, Any], *, pack: Pack) -> list[ChatMes
     (`_normalize_turns` — §2.3 finding 2's fix: production normalizes before rendering, and
     skipping that step silently renders every speaker as "member")."""
     system_prompt = pack.prompt_config().systemPrompt
-    turns = _normalize_turns(item_input.get("turns") or [])
-    user = _render_judge_user(item_input["condition"], item_input.get("understanding") or {}, turns)
     return [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user},
+        {"role": "user", "content": decision_input(item_input, pack=pack)},
     ]
+
+
+def decision_input(item_input: Mapping[str, Any], *, pack: Pack) -> str:
+    """The `ItemScorer.decision_input` hook (typed-decision-models plan v1.3 §3.2): the guard's
+    decision-model input is `_render_judge_user(condition, understanding, normalized_turns)`,
+    "exactly as today" — byte-for-byte the user message `build_messages` sends the chat judge, so
+    the decision model and the hand-off LLM see the same evidence. `pack` is unread here."""
+    turns = _normalize_turns(item_input.get("turns") or [])
+    return _render_judge_user(item_input["condition"], item_input.get("understanding") or {}, turns)
 
 
 # --- per-item metric assignment -------------------------------------------------------------------

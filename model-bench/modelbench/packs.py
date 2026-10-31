@@ -540,6 +540,58 @@ def derive_call_surface(requires: Any) -> str | None:
     return surfaces.pop()
 
 
+#: typed-decision-models plan v1.3 §3.3: the one extra `environment.requires` token. It is
+#: additive — a pack still declares exactly one of `lmstudio-chat`/`lmstudio-embeddings`
+#: (`derive_call_surface`, unchanged) and may add this one beside it. A run's surface is chosen by
+#: its arm (`run --candidate`), never by the pack alone.
+DECISIONS_TOKEN = "lmstudio-decisions"
+
+
+def derive_decision_support(requires: Any) -> bool:
+    """v1.3 §3.3: whether the pack may be run by a decision-model candidate — `True` iff
+    `requires` is a list (or tuple) naming `DECISIONS_TOKEN`. Anything else, including a bare
+    string that merely contains it, is `False`, as `derive_call_surface` reads it."""
+    tokens = requires if isinstance(requires, (list, tuple)) else []
+    return DECISIONS_TOKEN in tokens
+
+
+def answer_space_problem(decision_point: Any, question: Mapping[str, Any]) -> str | None:
+    """v1.3 §3.2: the pack fixes a decision point's **answer space**, the candidate carries the
+    question spec, and they must agree — the same `type`, and for a choice the same **set** of
+    values as the pack's `labels` (order is the candidate's own). A `score` question is refused
+    whatever the pack says: no probe has recorded a score answer's shape (impl review U1a-n1),
+    so it can never match an answer space. Returns the reason, or `None` when they agree.
+
+    `decision_point` is the pack's `decisionPoint` block as read; a block that is absent or has
+    no well-formed `answer` is reported here rather than defaulted. The block's other refusals
+    (`labels`, strata, `incumbent`, …) are `validate_pack`'s, U3b."""
+    kind = question.get("type")
+    if kind == "score":
+        return "a 'score' question is refused: no answer space accepts one"
+    if not isinstance(decision_point, Mapping):
+        return "the pack has no decisionPoint block"
+    answer = decision_point.get("answer")
+    if not isinstance(answer, Mapping) or answer.get("type") not in ("predicate", "choice"):
+        return f"decisionPoint.answer must be a predicate or choice answer space, got {answer!r}"
+    if kind != answer["type"]:
+        return (
+            f"the candidate asks a {kind!r} question; the pack's answer space is "
+            f"{answer['type']!r}"
+        )
+    if kind == "predicate":
+        return None
+    labels = answer.get("labels")
+    if not isinstance(labels, list) or not labels:
+        return "decisionPoint.answer.labels must be a non-empty list on a choice answer space"
+    values = [c.get("value") for c in question.get("choices") or () if isinstance(c, Mapping)]
+    if set(values) != set(labels):
+        return (
+            f"the candidate's choice values {sorted(map(str, values))} are not the pack's labels "
+            f"{sorted(map(str, labels))}"
+        )
+    return None
+
+
 def _call_surface_problems(pack: Pack) -> list[str]:
     environment = pack.manifest.get("environment") or {}
     requires = environment.get("requires") or []

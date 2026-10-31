@@ -157,7 +157,13 @@ def _build_parser() -> argparse.ArgumentParser:
         sub.add_parser("run", help="one model x one pack; validates first and fails closed")
     )
     run.add_argument("--pack", required=True, help="pack id under packs/ (plan §3.3 convention)")
-    run.add_argument("--model", required=True)
+    arm = run.add_mutually_exclusive_group(required=True)
+    arm.add_argument("--model", help="an LM Studio catalog id: a chat or embeddings arm")
+    arm.add_argument(
+        "--candidate",
+        help="a candidate id under candidates/: a decision-model arm on the pack's decisions "
+        "surface (typed-decision-models plan v1.3 §3.3)",
+    )
     run.add_argument("--session")
     run.add_argument("--reference")
     run.add_argument("--warmup", type=int, help="extra untimed warm-up calls, additive")
@@ -206,7 +212,9 @@ def _select_arms(
         candidates = [r for r in candidates if r.sessionId == session]
     if models:
         wanted = [m.strip() for m in models.split(",") if m.strip()]
-        by_key = {r.modelKey: r for r in candidates}
+        # Keyed on `armKey` (typed-decision-models plan v1.3 §3.3): a candidate id names a
+        # candidate arm, a model key a chat arm; the two are equal on every arm before it.
+        by_key = {r.armKey: r for r in candidates}
         # A key with no stored run was silently dropped, which is how a user reached a one-arm
         # comparison — `--models cand,incumbnet` rendered a report asserting a reason that is
         # untrue of it. A typo in a model key is a usage error, not a comparison (review M-6).
@@ -522,6 +530,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     lmstudio = LMStudio(host["apiBaseUrl"])
     cfg = RunConfig(
         modelKey=args.model,
+        candidateId=args.candidate,
         sessionId=args.session,
         referenceKey=args.reference,
         warmupExtra=args.warmup or 0,

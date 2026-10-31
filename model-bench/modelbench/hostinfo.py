@@ -274,7 +274,7 @@ class AttestationCheck:
 def check_attestation_staleness(
     host: Mapping[str, Any],
     *,
-    call_surface: Literal["chat", "embeddings"],
+    call_surface: Literal["chat", "embeddings", "decisions"],
     residency_source: str,
     runtime_name: str,
     runtime_version: str,
@@ -292,7 +292,9 @@ def check_attestation_staleness(
 
     - **`"unavailable"`** — `call_surface == "embeddings"`. An embeddings warm-up returns no
       `runtime` object at all (§3.4.4a), so the comparison "degenerates to a near-constant" and is
-      **not attempted** — unconditionally `"unavailable"`, whatever `host` holds.
+      **not attempted** — unconditionally `"unavailable"`, whatever `host` holds. The same holds
+      for `call_surface == "decisions"`: the decisions response has no `runtime` object either
+      (typed-decision-models plan v1.3 §2.3, §3.3 "For `decisions` alone it is unavailable").
     - **`"first-observation"`** — a `model:chat` arm whose `observedAtAttestation` has never
       recorded a `runtimeName` (checked by key, since `runtimeName`/`runtimeVersion`/
       `runtimeObservedAt` are always written together, §3.4.4). Back-fills those three keys into a
@@ -323,7 +325,7 @@ def check_attestation_staleness(
             "missing it"
         )
 
-    if call_surface == "embeddings":
+    if call_surface in ("embeddings", "decisions"):
         return AttestationCheck(outcome="unavailable", stale=False, message=None, updated_host=None)
 
     observed = dict(observed_at_attestation)

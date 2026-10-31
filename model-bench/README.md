@@ -99,11 +99,13 @@ other components' suites.
 ./run.sh rank --pack <pack-id> [--session <id>] [--reference <key>] [--footprints <path.json>]
     [--out <path>]   # ranked table across every in-scope model with a stored result, not two arms
 ./run.sh index rebuild            # regenerate results/index.csv from results/runs/
-./run.sh models --tested          # models with stored results (never a deterministic arm)
+./run.sh models --tested          # arms with stored results: model keys, candidate ids (never a
+                                  # deterministic arm)
 ./run.sh attest [--api-base-url <url>] [--set key=value ...]   # write host.json
 ./run.sh validate --pack <path> [--strict]   # structural pack check, no LM Studio needed
-./run.sh run --pack <id> --model <key> [--session <id>] [--reference <key>] [--warmup <n>]
-    [--first-call-timeout <s>] [--request-timeout <s>]   # one model x one pack, against live LM Studio
+./run.sh run --pack <id> (--model <key> | --candidate <id>) [--session <id>] [--reference <key>]
+    [--warmup <n>] [--first-call-timeout <s>] [--request-timeout <s>]
+    # one model (or one decision-model candidate) x one pack, against live LM Studio
 ```
 
 `compare` reads `results/runs/`, renders the markdown comparison to `reports/` **and** stdout, and
@@ -136,6 +138,16 @@ pack against a live LM Studio, following the fingerprint's capture order, and st
 success — every shipped pack has a concrete scorer, so `run` no longer refuses on that ground; it
 still refuses per §3.6a's closed exit-code set below (bad pack, unreachable LM Studio, stale
 fingerprint, a dispatch-censored conversation).
+
+`run --candidate <id>` (exclusive with `--model`) runs a typed decision-model candidate,
+`candidates/<id>.json`, on a decision-point pack's `decisions` surface
+(`docs/plans/typed-decision-models.md` §3.3): the pack must carry a `decisionPoint` block and the
+`lmstudio-decisions` token in `environment.requires`, the candidate's question must match the
+pack's answer space, and its decision model's catalog type must be `decision` — otherwise exit `4`
+before any call. Only a candidate with no hand-off model runs today; the hand-off arm is not built
+yet, and a failed decision call stops the run with exit `3` and stores nothing. The record is
+keyed by its `armKey` — the candidate id — in `compare --models`, `models --tested` and
+`index.csv`'s `candidateId` column.
 
 **Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints

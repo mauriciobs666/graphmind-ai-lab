@@ -540,3 +540,116 @@ function and its tests.
 reddens it.
 
 **Timing:** land P5-m1 before U1d.2 builds the kept decision-call failure on top of this seam.
+
+## Pass 6
+
+*2026-10-31. U1d.2, the plain `decisions` arm, reviewed against the uncommitted `model-bench/` diff
+from `c0eeb348`. Baseline: v1.3 §3.3 and §4 U1d, with plan2/plan3 where they amend them. U1d.3's
+parts and U2's are out of scope. The repo-root `live-specs*`/`standard-local-model*` files were not
+reviewed.*
+
+**Verdict: approve with suggestions.** Two minor findings, one nit; no blocker or major.
+
+**Checks run** (from `model-bench/`):
+- **Suite and lint:** `2440 passed, 4 deselected, 2 xfailed`; `ruff` clean. The done-condition
+  test, `test_a_fixture_candidate_run_stores_a_valid_model_decisions_record_offline`, passes.
+- **Mutants:** each was run on a copy that was then restored and checked with `cmp`.
+  - **Claimed, all red (1 test each):** the role check dropped; the `type != "decision"` check
+    dropped; the hand-off-model refusal dropped; the `decision.handoff` guard dropped; the decide
+    timeout hardcoded to `120.0`.
+  - **Mine, red:**
+    - `questionSpecHash` hashed over the name alone (1);
+    - the residency probe frozen at `baseline_residency` (1);
+    - the warm-up sent a substitute question (1).
+  - **Mine, survived:** `ensure_ascii=False` removed from `question_spec_hash`. All 2440 tests
+    stay green (P6-m1).
+- **The refusal-message-only kill is adequate, and necessary.** With the role check dropped, a
+  guard candidate on an `nlq-generator` pack still refuses with exit 4 before any call. It falls
+  through to `eval_set_hash` ("no input fields are defined for role 'nlq-generator'"), and only
+  the message match reddens the test.
+  - That fallback holds only because `INPUT_FIELDS_BY_ROLE` has a single row. Once U4 adds
+    `join-in-judge`, a guard candidate on a join-in pack would pass the hash, the
+    predicate-versus-predicate answer-space check and the hooks check, and then run.
+  - So the message pin is the only thing that tells which guard fired.
+  - When U4 lands, its brief should add a behavioural row: a guard candidate on a join-in pack
+    refuses.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Interim exit 3 on a failed decision call: safe
+
+- **It fails closed.** `RunRefused` is raised before `store`, so nothing is written and no partial
+  record can carry a verdict. It also cannot reach `score_answer` with a call-failure
+  `withheldFor` (illegal since P5-m1).
+- **The cost is availability only.** One transient failure, or one over-limit item, loses the
+  whole run. No live candidate run is due before U7, and U7 needs U1d.3 and U2.
+- **It is a clean seam for U1d.3.** The `except` block already has `started` and the over-limit
+  classification, so U1d.3 replaces one raise with a kept item and touches nothing else.
+
+### The implementer's calls
+
+1. **The `questionSpecHash` formula: a seam, and it is half-pinned.** v1.3 §3.3 names the field
+   but gives no formula, and the hash is stored data that U3c's replicate grouping will compare
+   across runs. Plan3 §3.8 is the natural home: it is where `eval_set_hash`'s line format went.
+   Only part of the formula is pinned (P6-m1).
+2. **Ignoring the response `model`: acceptable.** No surface reads it: chat and embeddings parse
+   `model` and never use it either. Identity comes from the catalog entry, the request names
+   `model_info.id`, and the residency probe withholds an item whose model is not resident. Plan3
+   §3.7's explicit load (U2) is where a served-model check would belong, if one is wanted.
+3. **Declared `fitManifest*` values: acceptable for now. U2's scope needs one sentence (P6-m2).**
+4. **`check_attestation_staleness` returns `"unavailable"` on `decisions`: true to plan.** v1.3
+   §3.3 says "For `decisions` alone it is `"unavailable"`, as for embeddings".
+5. **`compare --models` and `models --tested` on `armKey`: as the plan says.** `rank` on
+   `modelKey` is a nit (P6-n1).
+6. **`results/index.csv` rebuilt: right.** `INDEX_COLUMNS` changed, so a stale index would
+   disagree with its own header. `rebuild_index` derives it, and teco verified the diff is only
+   the appended cells.
+
+### Findings
+
+**P6-m1 (minor). Stored data: two of `question_spec_hash`'s stated rules are unpinned.**
+- **Evidence (executed):** removing `ensure_ascii=False` survives the whole suite. The only
+  external pin, `_QUESTION_CANONICAL` in `test_runner_decisions.py`, is a flat ASCII predicate.
+  So neither "non-ASCII kept raw" nor nested key order (a choice's `choices` objects) is
+  exercised, although the docstring claims both.
+- **Why it matters:** a guard or message-type instruction containing an em dash or a
+  Portuguese label would hash differently under a refactor nobody notices. Stored records would
+  then split one candidate's replicates by hash.
+- **Fix (`model-bench/tests/test_decisions.py`):** add hand-derived vectors, written as
+  canonical JSON and hashed with `sha256sum` the way `input-hash.jsonl` was. Use a choice question
+  whose `choices` objects have keys out of order, plus non-ASCII text in `instructions`.
+- **Fix (`architect`):** state the formula in plan3's next revision, beside §3.8.
+- **Stopping condition:** the `ensure_ascii` mutant and a nested `sort_keys` mutant each redden a
+  test.
+
+**P6-m2 (minor). The AC-3 leakage refusal is assigned to the hand-off arm's unit, but
+decision-only candidates need it too.**
+- **Evidence:** v1.3 §4 U2 ("hand-off arm") owns "the leakage refusal (AC-3) and the fingerprint
+  `fitManifest*` fields". `_decision_fingerprint_fields` writes the declared values unchecked, and
+  `_prepare_decision_arm` runs no leakage check.
+- **Why it matters:** a U2 built to its brief's title would add the refusal on the `handoff` path
+  only. Every `decisions`-surface record would then carry an unverified `fitManifestHash` and no
+  AC-3 check, and U6 emits decision-only candidates whenever `handoffModel` is null.
+- **Fix (U2 brief, `teco`):** have U2 put the manifest read, the hash/size check and the leakage
+  refusal in `_prepare_decision_arm`, which both surfaces already share. Add a test row: a
+  decision-only candidate with an overlapping manifest refuses with exit 4.
+
+**P6-n1 (nit). `rank` still deduplicates on `modelKey`.**
+- **The effect:** `_select_rank_arms` (`model-bench/modelbench/cli.py:248`) keeps one run per
+  `modelKey`. Two candidates on `laya` would collapse silently to the newer one, and
+  `rank_report`'s `DuplicateModelInReport` backstop cannot fire.
+- **Why it is only a nit:** plan2 §5 U3c makes `rank` refuse on decision-point packs, and no
+  real decision-point pack exists yet.
+- **Fix:** key the dedup on `armKey`. It equals `modelKey` on every existing arm, so the change is
+  free.
+
+### What's solid
+
+- **`RunConfig` refuses both and neither,** and argparse enforces the same exclusivity.
+- **`_build_fingerprint` refuses `decision_fields` on any other surface,** so the
+  `model:decisions` fields can neither go missing nor leak.
+- **Every §3.3 refusal is checked before any model call,** and the tests assert that directly.
+- **`decision_input` is a pure extraction:** byte-equal to the chat judge's user message on all
+  85 real items.
+- **The item clock and the load probe follow the existing single-call driver's pattern.**

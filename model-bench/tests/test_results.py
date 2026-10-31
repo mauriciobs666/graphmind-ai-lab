@@ -1484,23 +1484,26 @@ def test_each_metric_kind_decodes_back_to_its_own_class(metric) -> None:
     assert _metric_from_dict(_metric_to_dict(metric)) == metric
 
 
-#: Transcribed by hand, in order: the fourteen published columns of `results/index.csv` (plan
-#: §3.5). `index.csv` is a *consumed artifact* — regenerable, but read by anything pointed at the
-#: results directory — so its column names and their order are the contract, and the emitted
-#: header was only ever asserted against `INDEX_COLUMNS` itself, which is true of any tuple.
+#: Transcribed by hand, in order: the published columns of `results/index.csv` — plan §3.5's
+#: fourteen, then the two typed-decision-models plan v1.3 §3.3 appends (`candidateId`,
+#: `handoffModelKey`). `index.csv` is a *consumed artifact* — regenerable, but read by anything
+#: pointed at the results directory — so its column names and their order are the contract, and
+#: the emitted header was only ever asserted against `INDEX_COLUMNS` itself, which is true of any
+#: tuple.
 _INDEX_COLUMNS_PER_PLAN_3_5 = (
     "runId", "date", "role", "packId", "packVersion", "packContentHash8", "modelKey",
     "quantization", "armKind", "n", "headlineMetrics", "latencyMsP50", "latencyMsP95", "valid",
+    "candidateId", "handoffModelKey",
 )
 
 
-def test_the_index_columns_are_exactly_the_published_fourteen_in_order() -> None:
+def test_the_index_columns_are_exactly_the_published_sixteen_in_order() -> None:
     """Leg 1 — the declaration, against the transcript. Order is asserted, not just membership:
     a positional CSV reader is broken by a reordering that a set comparison calls identical."""
     assert INDEX_COLUMNS == _INDEX_COLUMNS_PER_PLAN_3_5
 
 
-def test_the_written_index_header_is_the_published_fourteen_and_every_cell_is_filled(
+def test_the_written_index_header_is_the_published_sixteen_and_every_cell_is_filled(
     tmp_root,
 ) -> None:
     """Leg 2 — the artifact on disk, against the same transcript rather than against the

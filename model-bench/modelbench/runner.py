@@ -62,9 +62,19 @@ from modelbench.convo import (
     ToolDispatchFailed,
     drive,
 )
+from modelbench.decisions import (
+    Candidate,
+    CandidateError,
+    apply_policy,
+    eval_set_hash,
+    is_over_limit,
+    question_spec_hash,
+)
 from modelbench.fingerprint import Fingerprint
 from modelbench.lmstudio import (
     ChatResult,
+    DecisionAnswer,
+    DecisionResult,
     EmbedResult,
     LMStudio,
     LMStudioCallFailed,
@@ -75,7 +85,12 @@ from modelbench.lmstudio import (
     ResidentModel,
     check_tool_calling_eligibility,
 )
-from modelbench.packs import Pack, derive_call_surface
+from modelbench.packs import (
+    Pack,
+    answer_space_problem,
+    derive_call_surface,
+    derive_decision_support,
+)
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
     Aggregates,
@@ -120,14 +135,36 @@ _PROBE_MESSAGES: dict[str, str] = {
 class RunConfig:
     """`run`'s flags (plan §3.6a `run --pack <id> --model <key>`) plus the two budgets §3.6 sizes
     for the runner to pass (never a pack/adapter default — both are required keyword args on
-    `LMStudio.chat`/`embed`/`warm_up` already)."""
+    `LMStudio.chat`/`embed`/`warm_up` already).
 
-    modelKey: str
+    **The arm is exactly one of `modelKey` (a chat/embeddings arm) and `candidateId` (a decision-
+    model candidate, `run --candidate`; typed-decision-models plan v1.3 §3.3)** — refused here
+    otherwise, so no path can build a run with both or neither. `candidateId` defaults to `None`
+    so every pre-existing chat/embeddings construction site is unchanged."""
+
+    modelKey: str | None
     sessionId: str | None
     referenceKey: str | None
     warmupExtra: int = 0
     firstCallTimeoutSeconds: float = 300.0
     requestTimeoutSeconds: float = 120.0
+    candidateId: str | None = None
+
+    def __post_init__(self) -> None:
+        if (self.modelKey is None) == (self.candidateId is None):
+            raise ValueError(
+                "RunConfig: exactly one of modelKey and candidateId is set "
+                f"(modelKey={self.modelKey!r}, candidateId={self.candidateId!r})"
+            )
+
+    @property
+    def armKey(self) -> str:
+        """The arm's identity (v1.3 §3.3 "Arm identity"): the candidate id on a candidate run,
+        else the model key — what the run id is built from."""
+        if self.candidateId is not None:
+            return self.candidateId
+        assert self.modelKey is not None  # __post_init__: exactly one is set
+        return self.modelKey
 
 
 class RunRefused(RuntimeError):
@@ -205,6 +242,40 @@ class ItemScorer(Protocol):
         render, `nlq-generator`'s is a schema-filled structured-completion instruction set — neither
         is a JSON dump of the item row. Falls back to `_item_chat_messages` when absent, so every
         existing S1/S2 test (`FakeItemScorer`, which defines neither) is untouched."""
+        ...
+
+    # --- typed-decision-models (plan v1.3 §3.3 "Scorer seam"; plan2 §3.3; plan3 §3.3) ---------
+    # Three optional hooks, needed only on the `decisions`/`handoff` surfaces. A chat or
+    # embeddings run never reaches them, so a scorer without them is untouched;
+    # `_decision_scorer_problem` refuses a decisions run whose scorer lacks one, up front.
+
+    def decision_input(self, item_input: Mapping[str, Any], *, pack: Pack) -> str:
+        """The decision model's `input` string for one item: the role's §3.2 renderer."""
+        ...
+
+    def answer_from_chat(self, result: ChatResult, *, pack: Pack) -> tuple[Any, str]:
+        """The role's hand-off chat parse alone (§3.2): `(answer, outcome)` for one reply."""
+        ...
+
+    def score_answer(
+        self,
+        item_input: Mapping[str, Any],
+        answer: Any,
+        outcome: str,
+        timing: ItemTiming,
+        *,
+        pack: Pack,
+        decided_by: str | None,
+        probability: float | None,
+        failed_call: str | None,
+        reason: str | None,
+        input_tokens: int | None,
+    ) -> ItemResult:
+        """One item's `ItemResult` from an answer, wherever it came from. The five keywords have
+        no default (plan2 §3.3, §3.4; plan3 §3.3): `decided_by` (`"decision-model"`/`"handoff"`),
+        the decision's `probability` (a predicate's p, a choice's confidence), `failed_call`,
+        `reason` (`"over-limit"`) and `input_tokens` (`usage["input_tokens"]`). Their legal
+        combinations are the scorer's to enforce (`classification.score_answer`)."""
         ...
 
 
@@ -410,6 +481,129 @@ def _drive_single_call_items(
     return tuple(results), 1.0, "by-construction"
 
 
+# --- the `decisions` surface (typed-decision-models plan v1.3 §3.3, §4 U1d) -------------------
+
+
+#: The hooks a scorer needs on the `decisions` surface. `answer_from_chat` is the hand-off parse,
+#: so it is the `handoff` surface's (U2), not this one's.
+_DECISIONS_SURFACE_HOOKS: tuple[str, ...] = ("decision_input", "score_answer", "aggregate")
+
+
+def _decision_scorer_problem(scorer: ItemScorer) -> str | None:
+    """The `decisions`-surface hooks the scorer lacks, named, or `None` — checked before the
+    warm-up, so a scorer without them refuses up front rather than after a call per item."""
+    missing = [hook for hook in _DECISIONS_SURFACE_HOOKS if getattr(scorer, hook, None) is None]
+    if not missing:
+        return None
+    return f"its scorer has no {', '.join(missing)} hook (plan v1.3 §3.3 'Scorer seam')"
+
+
+def _input_tokens(usage: Mapping[str, Any] | None) -> int | None:
+    """Plan2 §3.4: `usage["input_tokens"]` when it is an `int` (a `bool` is not), else `None` —
+    never another usage key, and never `0` for an absent one."""
+    value = usage.get("input_tokens") if isinstance(usage, Mapping) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _decision_call_timing(result: DecisionResult) -> CallTiming:
+    """A decisions call as a `CallTiming`: `wallClockMs` only — the response has no `stats`
+    (v1.3 §2.3), so the three sibling figures are `None`, as on embeddings."""
+    return CallTiming(
+        wallClockMs=result.wallClockMs,
+        ttftMs=None,
+        generationMs=None,
+        promptTokens=None,
+        tokensPerSecond=None,
+    )
+
+
+def _the_answer(result: DecisionResult, name: str) -> DecisionAnswer:
+    """The answer to the one question asked. `decide` has already refused a response that does
+    not answer every asked question exactly once (`lmstudio._parse_decision_answers`)."""
+    return next(a for a in result.answers if a.name == name)
+
+
+def _drive_decision_items(
+    pack: Pack,
+    *,
+    candidate: Candidate,
+    scorer: ItemScorer,
+    lmstudio: LMStudio,
+    model_info: ModelInfo,
+    baseline_residency: list[ResidentModel],
+    clock: Callable[[], float],
+) -> tuple[ItemResult, ...]:
+    """The `decisions` surface: a decision-model candidate with no hand-off model, alone (v1.3
+    §3.3 "Per-item flow", the decision-only subset). Per item: the between-item residency probe;
+    the scorer's `decision_input`; the item clock started; one `decide` call with the candidate's
+    question and `decisionTimeoutSeconds` (plan2 §3.2); `apply_policy`; the clock stopped. The
+    item's `wallClockMs` is the item clock, its `calls` the one decision call, and it is
+    `withheldFor="load"` iff the preceding snapshot did not show the model resident. No gap check
+    runs: a decisions call has no `stats`, so `unexplainedMs` is always `None`.
+
+    `score_answer` gets `decided_by="decision-model"`, the decision's `probability` (a
+    predicate's p, a choice's confidence) and `input_tokens` from `usage` (plan2 §3.4).
+
+    **A failed decision call refuses the run (exit 3), and nothing is stored** — provisional,
+    **replaced by U1d.3**, which keeps the item (`failedCall="decision"`, plan2 §3.3) and, when
+    the failure is over-limit, records `reason="over-limit"` (plan3 §3.3). Never routed through
+    `score_answer` with a call-failure `withheldFor`: that state is illegal there by design."""
+    question = dict(candidate.question)
+    results: list[ItemResult] = []
+    for item_input in pack.iter_items():
+        resident = lmstudio.residency()  # between-item probe — never during a timed call
+        text = scorer.decision_input(item_input, pack=pack)
+        started = clock()
+        try:
+            result = lmstudio.decide(
+                text,
+                [question],
+                model=model_info.id,
+                timeout_s=candidate.decisionTimeoutSeconds,
+            )
+        except (LMStudioCallTimeout, LMStudioCallFailed) as exc:
+            over_limit = isinstance(exc, LMStudioCallFailed) and is_over_limit(
+                exc.status, exc.body
+            )
+            raise RunRefused(
+                f"the decision call for item {item_input.get('itemId')!r} failed"
+                f"{' (over-limit, plan3 §3.3)' if over_limit else ''}: {exc}. Keeping a failed "
+                "decision call in the run is not built yet (typed-decision-models U1d.3); "
+                "nothing was stored",
+                exitCode=3,
+            ) from exc
+        answer = _the_answer(result, question["name"])
+        decision = apply_policy(candidate.policy, answer)
+        elapsed_ms = (clock() - started) * 1000.0
+        if decision.handoff:
+            # `Candidate.load`'s one-way rule makes this unreachable from a loaded candidate.
+            raise RunRefused(
+                f"candidate {candidate.candidateId!r}'s policy handed off item "
+                f"{item_input.get('itemId')!r}, but it has no hand-off model (plan3 §3.2)",
+                exitCode=4,
+            )
+        timing = ItemTiming(
+            wallClockMs=elapsed_ms,
+            calls=(_decision_call_timing(result),),
+            withheldFor=_load_withheld_for(model_info, resident),
+        )
+        results.append(
+            scorer.score_answer(
+                item_input,
+                decision.answer,
+                "pass",
+                timing,
+                pack=pack,
+                decided_by="decision-model",
+                probability=answer.probability if answer.type == "predicate" else answer.confidence,
+                failed_call=None,
+                reason=None,
+                input_tokens=_input_tokens(result.usage),
+            )
+        )
+    return tuple(results)
+
+
 #: The three failing `TurnDisposition` values, and the `ItemTiming.withheldFor` each maps to
 #: (§3.6/§3.8.4's disposition table) — a failing disposition wins over both load producers, and
 #: neither producer runs on these three (plan §3.6 `:1759-1796`, P15-3's ruling).
@@ -582,12 +776,19 @@ def _wall_clock_trio(
 
 
 def latency_block(
-    items: Sequence[ItemResult], *, call_surface: Literal["chat", "embeddings"] | None
+    items: Sequence[ItemResult],
+    *,
+    call_surface: Literal["chat", "embeddings", "decisions"] | None,
 ) -> LatencyBlock | None:
     """One run's `LatencyBlock`, built in one pass over `items` and returning `None` iff every
     item's `timing is None` (spec §5 rule v). `call_surface` is required (module docstring, gap 2):
     rule (iv-a) needs to tell "this surface has no `stats`" from "this surface has `stats` and none
     arrived", which `items` alone cannot distinguish.
+
+    `"decisions"` is treated like `"embeddings"` for every stats-derived field
+    (typed-decision-models plan v1.3 §3.3): its response has no `stats` either, so
+    `statsCoveredCount` and the three medians are `None`, never `0`. The wall-clock figures apply
+    unchanged.
     """
     if all(i.timing is None for i in items):
         return None
@@ -623,7 +824,7 @@ def latency_block(
     ]
     unexplained_ms_max = max(unexplained_readings) if unexplained_readings else None
 
-    if call_surface == "embeddings":
+    if call_surface in ("embeddings", "decisions"):
         # rule (iv-a): no `stats` on this surface at all — `None`, never `0`.
         stats_covered_count: int | None = None
         ttft_median = prefill_median = tps_median = None
@@ -723,7 +924,7 @@ def _build_fingerprint(
     *,
     pack: Pack,
     model_info: ModelInfo,
-    call_surface: Literal["chat", "embeddings"],
+    call_surface: Literal["chat", "embeddings", "decisions"],
     host: Mapping[str, Any],
     started_at: datetime,
     ended_at: datetime,
@@ -734,7 +935,18 @@ def _build_fingerprint(
     runtime_version: str | None,
     catalog_after_load: list[ModelInfo],
     prompt_config: PromptConfig,
+    decision_fields: Mapping[str, Any] | None,
 ) -> Fingerprint:
+    """The run's fingerprint. Model identity is read from the LM Studio catalog entry of the
+    model the arm ran (`model_info`), never from a request string; `loadedContextLength` from
+    the catalog read after the load. `decision_fields` is `_decision_fingerprint_fields`' output
+    on the `decisions` surface and `None` on every other one — refused otherwise, so the
+    `model:decisions` additions can neither go missing nor leak onto another profile."""
+    if (decision_fields is not None) != (call_surface == "decisions"):
+        raise ValueError(
+            f"_build_fingerprint: decision_fields are given iff call_surface == 'decisions' "
+            f"(call_surface={call_surface!r})"
+        )
     loaded = next((m for m in catalog_after_load if m.id == model_info.id), None)
     attested = host.get("attested") or {}
     fields: dict[str, Any] = {
@@ -772,7 +984,94 @@ def _build_fingerprint(
         fields["runtimeVersion"] = runtime_version
         fields["temperature"] = prompt_config.temperature
         fields["maxTokens"] = prompt_config.maxTokens
+    if decision_fields is not None:
+        fields.update(decision_fields)
     return Fingerprint(armKind="model", callSurface=call_surface, fields=fields)
+
+
+def _decision_fingerprint_fields(candidate: Candidate, *, eval_set: str) -> dict[str, Any]:
+    """What `model:decisions` adds to the embeddings set (v1.3 §3.3, §3.5; plan2 §3.2), all read
+    from the loaded candidate and the pack — the report reads them from the run record, never
+    from the candidate file. `fitManifestHash`/`fitManifestSize` are the candidate's **declared**
+    `fitManifest.sha256`/`size`; reading the manifest file, checking it against them and the
+    leakage refusal against the pack's items are U2's (v1.3 §4 U2, AC-3)."""
+    return {
+        "candidateId": candidate.candidateId,
+        "candidateContentHash": candidate.contentHash,
+        "questionSpecHash": question_spec_hash(candidate.question),
+        "decisionPolicy": dict(candidate.policy),
+        "fitManifestHash": candidate.fitManifest["sha256"],
+        "fitManifestSize": candidate.fitManifest["size"],
+        "evalSetHash": eval_set,
+        "fitOutcome": candidate.fit["outcome"],
+        "fitQualityTarget": candidate.fit["qualityTarget"],
+    }
+
+
+@dataclass(frozen=True)
+class _DecisionArm:
+    """A `run --candidate` arm that passed every pre-flight refusal: the loaded candidate, its
+    decision model's catalog entry, the scorer, and the pack's `evalSetHash`."""
+
+    candidate: Candidate
+    model_info: ModelInfo
+    scorer: ItemScorer
+    eval_set: str
+
+
+def _prepare_decision_arm(
+    pack: Pack, cfg: RunConfig, *, root: Path, catalog: list[ModelInfo]
+) -> _DecisionArm:
+    """v1.3 §3.3's refusals for `run --pack P --candidate ID` (exit 4 each), before any call:
+    an unloadable candidate (`Candidate.load`'s own refusals) or one for another role; a
+    candidate with a hand-off model (the `handoff` surface — U2, not built yet); a pack with no
+    `decisionPoint` block or no `lmstudio-decisions` token; a question outside the pack's answer
+    space (`packs.answer_space_problem`, a `score` question included); a pack whose items cannot
+    give an `evalSetHash` (an item with no `stratum`); a scorer without the decisions hooks; the
+    decision model absent from the catalog, or its catalog `type` not `"decision"`."""
+    assert cfg.candidateId is not None
+    try:
+        candidate = Candidate.load(root, cfg.candidateId)
+    except CandidateError as exc:
+        raise RunRefused(str(exc), exitCode=4) from exc
+
+    def refuse(reason: str) -> RunRefused:
+        return RunRefused(
+            f"{pack.packId}: cannot run candidate {candidate.candidateId!r}: {reason}", exitCode=4
+        )
+
+    if candidate.role != pack.role:
+        raise refuse(f"it is a {candidate.role!r} candidate and the pack's role is {pack.role!r}")
+    if candidate.handoffModel is not None:
+        raise refuse(
+            f"it has a hand-off model ({candidate.handoffModel!r}), so it runs on the handoff "
+            "surface, which is not built yet (typed-decision-models U2)"
+        )
+    if "decisionPoint" not in pack.manifest:
+        raise refuse("the pack has no decisionPoint block (plan v1.3 §3.3)")
+    environment = pack.manifest.get("environment") or {}
+    if not derive_decision_support(environment.get("requires")):
+        raise refuse("environment.requires does not declare 'lmstudio-decisions' (plan v1.3 §3.3)")
+    problem = answer_space_problem(pack.manifest["decisionPoint"], candidate.question)
+    if problem is not None:
+        raise refuse(problem)
+    try:
+        eval_set = eval_set_hash(pack.iter_items(), pack.role)
+    except ValueError as exc:
+        raise refuse(f"no evalSetHash: {exc}") from exc
+    scorer = _load_item_scorer(pack)
+    problem = _decision_scorer_problem(scorer)
+    if problem is not None:
+        raise refuse(problem)
+    model_info = _find_model(catalog, candidate.decisionModel)
+    if model_info.type != "decision":
+        raise refuse(
+            f"its decision model {model_info.id!r} has catalog type {model_info.type!r}, not "
+            "'decision' (plan v1.3 §3.3)"
+        )
+    return _DecisionArm(
+        candidate=candidate, model_info=model_info, scorer=scorer, eval_set=eval_set
+    )
 
 
 def run_pack(
@@ -783,10 +1082,19 @@ def run_pack(
     root: Path,
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.perf_counter,
 ) -> tuple[RunResult, tuple[DispatchFailureDisclosure, ...]]:
     """The CLI `run` command's one entry point (plan §3.6a). Raises `RunRefused` for every refusal
     in capture order (exit 3/4/5); returns the assembled `RunResult` plus zero or more dispatch-
-    failure disclosures otherwise. Sequencing is §3.4.4a's ten capture-order steps, verbatim."""
+    failure disclosures otherwise. Sequencing is §3.4.4a's ten capture-order steps, verbatim.
+
+    **A candidate run** (`cfg.candidateId`, typed-decision-models plan v1.3 §3.3) takes the
+    same steps on the `decisions` surface: step 3a runs `_prepare_decision_arm`'s refusals instead
+    of the chat/embeddings cross-check; step 4's warm-up is one `decide` with the candidate's own
+    question (attestation trip-wire `"unavailable"`, as for embeddings); step 9 is
+    `_drive_decision_items`, timed by `clock` (seconds, monotonic — the item clock). Its
+    `designEffect=1.0, basis="by-construction"` holds only until U1d.3's load rule, which can
+    record `"assumed"` (plan2 §3.4)."""
     started_at = now()  # step 0
 
     try:
@@ -802,29 +1110,45 @@ def run_pack(
     residency_source = _RESIDENCY_SOURCE
 
     catalog = lmstudio.catalog()  # step 3a
-    model_info = _find_model(catalog, cfg.modelKey)
-    call_surface = derive_call_surface(pack.manifest.get("environment", {}).get("requires"))
-    if call_surface is None:
-        raise RunRefused(
-            f"{pack.packId}: environment.requires does not declare exactly one call surface "
-            "(plan §3.4.4a)",
-            exitCode=4,
+    decision_arm: _DecisionArm | None = None
+    call_surface: Literal["chat", "embeddings", "decisions"] | None
+    if cfg.candidateId is not None:
+        decision_arm = _prepare_decision_arm(pack, cfg, root=root, catalog=catalog)
+        model_info = decision_arm.model_info
+        call_surface = "decisions"
+    else:
+        assert cfg.modelKey is not None  # RunConfig: exactly one of the two is set
+        model_info = _find_model(catalog, cfg.modelKey)
+        call_surface = derive_call_surface(  # type: ignore[assignment]
+            pack.manifest.get("environment", {}).get("requires")
         )
-    _check_call_surface_cross_check(call_surface, model_info)
-    if pack.role == "tool-caller":
-        try:
-            check_tool_calling_eligibility(pack.role, model_info)
-        except Exception as exc:  # ToolCallingIneligible
-            raise RunRefused(str(exc), exitCode=4) from exc
+        if call_surface is None:
+            raise RunRefused(
+                f"{pack.packId}: environment.requires does not declare exactly one call surface "
+                "(plan §3.4.4a)",
+                exitCode=4,
+            )
+        _check_call_surface_cross_check(call_surface, model_info)
+        if pack.role == "tool-caller":
+            try:
+                check_tool_calling_eligibility(pack.role, model_info)
+            except Exception as exc:  # ToolCallingIneligible
+                raise RunRefused(str(exc), exitCode=4) from exc
 
     prompt_config = pack.prompt_config()
+    # The decisions warm-up is one `decide` with the candidate's own question (v1.3 §3.3); the
+    # keyword is passed on that surface only, where `warm_up` requires it.
+    warm_up_question: dict[str, Any] = (
+        {"question": dict(decision_arm.candidate.question)} if decision_arm is not None else {}
+    )
     try:
         load_result = lmstudio.warm_up(  # step 4 — the mandatory, once-per-arm warm-up
-            cfg.modelKey,
+            model_info.id,
             call_surface=call_surface,
             system_prompt=prompt_config.systemPrompt if call_surface == "chat" else None,
             was_resident_before=model_info.id in {m.id for m in resident_at_start},
             timeout_s=cfg.firstCallTimeoutSeconds,
+            **warm_up_question,
         )
     except LMStudioCallTimeout as exc:
         raise RunRefused(
@@ -836,11 +1160,12 @@ def run_pack(
         raise RunRefused(f"warm-up call failed: {exc}", exitCode=3) from exc
     for _ in range(cfg.warmupExtra):  # --warmup <n>, additive, discarded
         lmstudio.warm_up(
-            cfg.modelKey,
+            model_info.id,
             call_surface=call_surface,
             system_prompt=prompt_config.systemPrompt if call_surface == "chat" else None,
             was_resident_before=True,
             timeout_s=cfg.firstCallTimeoutSeconds,
+            **warm_up_question,
         )
 
     runtime_name, runtime_version = (
@@ -862,7 +1187,22 @@ def run_pack(
     baseline_residency = lmstudio.residency()  # step 7 — item-1's baseline, never resident_at_start
     catalog_after_load = lmstudio.catalog()  # step 8 — loadedContextLength
 
-    if pack.role == "tool-caller":
+    if decision_arm is not None:
+        items = _drive_decision_items(  # step 9
+            pack,
+            candidate=decision_arm.candidate,
+            scorer=decision_arm.scorer,
+            lmstudio=lmstudio,
+            model_info=model_info,
+            baseline_residency=baseline_residency,
+            clock=clock,
+        )
+        # Sampling unit == item, one load (v1.3 §3.3). Replaced by U1d.3: its load rule and
+        # within-load re-check record `basis="assumed"` when the run may span two loads.
+        design_effect, basis = 1.0, "by-construction"
+        disclosures = ()
+        aggregates = decision_arm.scorer.aggregate(items, pack=pack)
+    elif pack.role == "tool-caller":
         items, disclosures, basis, design_effect, aggregates = _drive_conversations(  # step 9
             pack,
             cfg,
@@ -884,7 +1224,7 @@ def run_pack(
         aggregates = scorer.aggregate(items, pack=pack)
 
     resident_at_end: list[ResidentModel] | None = None
-    run_id = f"{pack.packId}-{cfg.modelKey}-{_utc_stamp(started_at)}".replace("/", "_")
+    run_id = f"{pack.packId}-{cfg.armKey}-{_utc_stamp(started_at)}".replace("/", "_")
     for attempt in range(4):  # step 10, 3 retries
         try:
             resident_at_end = lmstudio.residency()
@@ -913,6 +1253,11 @@ def run_pack(
         runtime_version=runtime_version,
         catalog_after_load=catalog_after_load,
         prompt_config=prompt_config,
+        decision_fields=(
+            _decision_fingerprint_fields(decision_arm.candidate, eval_set=decision_arm.eval_set)
+            if decision_arm is not None
+            else None
+        ),
     )
     latency = latency_block(items, call_surface=call_surface)
     run = RunResult(
