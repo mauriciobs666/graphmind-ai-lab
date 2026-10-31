@@ -464,3 +464,79 @@ refusals is removed.
    frozen, and `score_answer` builds `detail`. Adding a fifth no-default keyword, `input_tokens`,
    keeps the "every decision-surface key passes through one seam" shape that P4-m1's probe relies
    on.
+
+## Pass 5
+
+*2026-10-31. The P4-m1 fix, reviewed against the uncommitted `model-bench/` diff from `f3b853d2`
+(`classification.py`, `test_scoring_classification.py`, `HISTORY.md`).*
+
+**Verdict: approve with suggestions.** P4-m1 is fixed and its stopping condition is met. One new
+minor finding, P5-m1, sits on the axis the fix added.
+
+**Checks run** (from `model-bench/`): suite `2389 passed, 4 deselected, 2 xfailed`; `ruff` clean.
+The U3a golden re-score and `test_every_stored_run_record_still_validates_unchanged` pass.
+Mutants were run on the file, then restored and checked with `cmp`.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the change is one
+function and its tests.
+
+### Dispositions
+
+- **P4-m1: fixed.** I removed six of the 18 refusals one at a time, and each reddens
+  `test_score_answer_accepts_exactly_the_legal_keyword_combinations`:
+  - over-limit with `decision-model`;
+  - over-limit with a `probability`;
+  - over-limit with no source;
+  - a decided item with no `probability`;
+  - a failed item with `input_tokens`;
+  - a withheld item with no `withheldFor` (2 tests).
+  Writing `inputTokens` as `None` also reddens.
+- **`_legal` is not a mirror of the code.** Its branch order follows `_decision_detail`, but each
+  clause cites a plan rule, and it holds up two ways:
+  - **My Pass 4 predicate**, run unchanged over the original 72 combinations (with
+    `input_tokens`/`withheldFor` `None`), agrees with the code on all 72.
+  - **Six combinations I derived by hand** all come out as the plans require. Accepted: a policy
+    hand-off with `p` and tokens; a kept over-limit decision failure; a decided item withheld for
+    `"load"`. Refused: an over-limit hand-off with tokens; a kept failure with tokens; a withheld
+    over-limit item with `decided_by`.
+- **Open question 1 → the architect's ruling, one legal case added. Sound.** The withheld
+  over-limit record now passes through the one seam that writes decision keys, so the runner never
+  patches a frozen `ItemResult`. The other route was `dataclasses.replace` in the runner. Both
+  options I named in Pass 4 work; this one keeps the legality check in one place.
+- **Open question 2 → `input_tokens` is a fifth no-default keyword. Sound.** It is written beside
+  `probability`, and the old pack writes no `inputTokens` key, which the existing dedicated test
+  now checks.
+- **Pass 4's three inferred refusals were adopted, on good grounds.** v1.3 §3.3 defines
+  `probability` as "a predicate's p, or a choice's confidence", which every returned decision
+  carries. So only an over-limit hand-off is decided with no `p`.
+- **HISTORY:** one dated line, and its figures (288 combinations, 2389 tests) match.
+
+### Findings
+
+**P5-m1 (minor). The new `withheldFor` axis is checked for one state only.**
+- **Evidence (executed):** `score_answer` accepts all of these:
+  - `failed_call="decision"` with `withheldFor="timeout"` or `"no_response"`;
+  - an answered decided item, or the old pack's answer, with `"timeout"`/`"no_response"`;
+  - the withheld over-limit item with `withheldFor="load"`.
+- **What the plans allow:** plan2 §3.3 gives a kept item `withheldFor=None` unless residency
+  withholds it for `"load"`. Plan3 §3.3's withhold column gives `"timeout"` or `"no_response"`. A
+  failing call wins over the residency guard (`case_f`), so a no-answer item is never `"load"`.
+- **Why the probe misses it:** its withheld dimension is `{None, "timeout"}`, and `_legal` ignores
+  that dimension except in the withheld over-limit state.
+  `test_a_withheld_over_limit_guard_item_carries_only_its_reason[load]` pins a state that plan3
+  does not have.
+- **Why it matters:** "decision timeout → withheld, as today" is exactly the behaviour plan2 §3.3
+  changed. A U1d.2 runner that keeps the old timing would build a kept failure that
+  `runner.py:603` also counts in `latencyWithheldForNoResponse`, and nothing would refuse it.
+- **Fix (`model-bench/modelbench/scoring/classification.py` `_decision_detail`;
+  `model-bench/tests/test_scoring_classification.py`):**
+  - `"timeout"`/`"no_response"` are legal only in the withheld over-limit state;
+  - `"load"` is legal only with an answer or a kept decision failure;
+  - widen the probe's withheld dimension to `{None, "load", "timeout", "no_response"}` (576
+    combinations), with `_legal` encoding both rules;
+  - drop `"load"` from the dedicated test's parametrize.
+
+**Stopping condition:** the widened probe passes, and removing either new `withheldFor` clause
+reddens it.
+
+**Timing:** land P5-m1 before U1d.2 builds the kept decision-call failure on top of this seam.

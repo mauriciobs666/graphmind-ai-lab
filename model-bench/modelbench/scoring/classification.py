@@ -250,9 +250,14 @@ def _decision_detail(
     probability: float | None,
     failed_call: str | None,
     reason: str | None,
+    input_tokens: int | None,
+    withheld_for: str | None,
 ) -> dict[str, Any]:
-    """The decision-surface `detail` keys (v1.3 §3.3, plan2 §3.3, plan3 §3.3), or `{}` when all
-    four keywords are `None` — the old pack's call, whose `detail` stays byte-identical."""
+    """The decision-surface `detail` keys (v1.3 §3.3, plan2 §3.3–§3.4, plan3 §3.3), or `{}` when
+    every keyword is `None` — the old pack's call, whose `detail` stays byte-identical. Every
+    state the plans cannot produce is refused (impl review Pass 4, P4-m1), so a runner bug — a
+    stale `p` carried into the over-limit branch, the wrong `decided_by` — raises here instead of
+    making `handoffShare`, `overLimit` and `pair_items` disagree about one item."""
     if decided_by is not None and decided_by not in _DECIDED_BY:
         raise ValueError(
             f"score_answer: decided_by {decided_by!r} is not one of {sorted(_DECIDED_BY)}"
@@ -263,20 +268,57 @@ def _decision_detail(
         )
     if reason is not None and reason not in _REASONS:
         raise ValueError(f"score_answer: reason {reason!r} is not one of {sorted(_REASONS)}")
-    if (answer is None) != (failed_call is not None):
-        raise ValueError(
-            f"score_answer: answer is None iff a call failed (answer={answer!r}, "
-            f"failed_call={failed_call!r})"
-        )
     if failed_call == "handoff":
         raise ValueError(
             "score_answer: a guard handoff chat-call failure is withheld, never kept and scored "
             "(HANDOFF_FAILURE_BY_ROLE['guard-judge'] == 'withhold')"
         )
-    if failed_call is not None and decided_by is not None:
-        raise ValueError("score_answer: a failed item has no decided_by")
-    if probability is not None and decided_by is None:
-        raise ValueError("score_answer: a probability needs a decided_by")
+    if answer is None and failed_call is None:
+        # Architect ruling (2026-10-31): the guard's withheld over-limit item (plan3 §3.3's
+        # `withhold` column) — the one answer-less, failure-less state, carrying `reason` alone.
+        if reason is None or withheld_for is None:
+            raise ValueError(
+                "score_answer: answer is None iff a call failed, or the item is a withheld "
+                f"over-limit one (reason={reason!r}, withheldFor={withheld_for!r})"
+            )
+        if decided_by is not None or probability is not None or input_tokens is not None:
+            raise ValueError(
+                "score_answer: a withheld over-limit item has no decided_by, probability or "
+                "input_tokens"
+            )
+        return {"reason": reason}
+    if answer is not None and failed_call is not None:
+        raise ValueError(
+            f"score_answer: answer is None iff a call failed (answer={answer!r}, "
+            f"failed_call={failed_call!r})"
+        )
+    over_limit = reason is not None
+    if failed_call is not None:
+        if decided_by is not None:
+            raise ValueError("score_answer: a failed item has no decided_by")
+        if probability is not None:
+            raise ValueError("score_answer: a probability needs a decided_by")
+        if input_tokens is not None:
+            raise ValueError("score_answer: input_tokens needs a decision call that returned")
+    elif decided_by is None:
+        if probability is not None:
+            raise ValueError("score_answer: a probability needs a decided_by")
+        if over_limit:
+            raise ValueError("score_answer: an over-limit reason needs a decided_by or failed_call")
+        if input_tokens is not None:
+            raise ValueError("score_answer: input_tokens needs a decision call that returned")
+    elif over_limit:
+        if decided_by != "handoff":
+            raise ValueError("score_answer: an over-limit item is decided_by 'handoff' only")
+        if probability is not None:
+            raise ValueError("score_answer: an over-limit item has no probability")
+        if input_tokens is not None:
+            raise ValueError("score_answer: an over-limit item has no input_tokens")
+    elif probability is None:
+        raise ValueError(
+            "score_answer: a decided item has a probability (the decision call returned one); "
+            "only an over-limit hand-off has none"
+        )
     detail: dict[str, Any] = {}
     if decided_by is not None:
         detail["decidedBy"] = decided_by
@@ -284,6 +326,7 @@ def _decision_detail(
         detail["failedCall"] = failed_call
     if detail:
         detail["probability"] = probability
+        detail["inputTokens"] = input_tokens
     if reason is not None:
         detail["reason"] = reason
     return detail
@@ -300,6 +343,7 @@ def score_answer(
     probability: float | None,
     failed_call: str | None,
     reason: str | None,
+    input_tokens: int | None,
 ) -> ItemResult:
     """The tier's metric and count for one answer, wherever the answer came from (plan §3.3).
 
@@ -319,9 +363,16 @@ def score_answer(
     - `failed_call="decision"` — `answer` is `None` iff a call failed — gives `scoreable={}`,
       `counts={}`, `failedCall` and `probability: None`, and never a `decidedBy`: the item enters
       the bar only through `decision_stats.pair_items`;
-    - `reason` (`"over-limit"`) writes `reason`; `None` writes no key.
+    - `reason` (`"over-limit"`) writes `reason`; `None` writes no key;
+    - `input_tokens` (plan2 §3.4, the decision call's `usage["input_tokens"]` or `None`) writes
+      `inputTokens` beside `probability`;
+    - the guard's **withheld over-limit item** (architect ruling, plan3 §3.3's `withhold`
+      column): `answer=None`, no `failed_call`, `reason="over-limit"` and a `timing.withheldFor`
+      give the passed (withheld) outcome, `scoreable={}`, and `detail = {path, tier, reason}`.
     A guard hand-off chat-call failure is withheld by the runner, so `failed_call="handoff"` is
-    refused here."""
+    refused here. Every other state the plans cannot produce is refused too, as `ValueError` —
+    pinned over the whole keyword cross-product by
+    `test_score_answer_accepts_exactly_the_legal_keyword_combinations`."""
     item_id = item_input["itemId"]
     metric = _METRIC_BY_TIER[item_input["tier"]]
     detail: dict[str, Any] = {"path": item_input["path"], "tier": item_input["tier"]}
@@ -332,6 +383,8 @@ def score_answer(
             probability=probability,
             failed_call=failed_call,
             reason=reason,
+            input_tokens=input_tokens,
+            withheld_for=timing.withheldFor,
         )
     )
     if answer is None:
@@ -383,6 +436,7 @@ def score_item(
         probability=None,
         failed_call=None,
         reason=None,
+        input_tokens=None,
     )
 
 

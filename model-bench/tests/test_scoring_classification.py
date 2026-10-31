@@ -768,7 +768,10 @@ class TestAnswerFromChat:
 
 
 #: The old pack's call: every decision-surface keyword `None` (plan2 §3.3, plan3 §3.3).
-_NO_DECISION = {"decided_by": None, "probability": None, "failed_call": None, "reason": None}
+_NO_DECISION = {
+    "decided_by": None, "probability": None, "failed_call": None, "reason": None,
+    "input_tokens": None,
+}
 
 
 class TestScoreAnswer:
@@ -815,7 +818,9 @@ def _decision_keywords(**overrides: Any) -> dict[str, Any]:
 
 
 class TestScoreAnswerDecisionSurfaceDelta:
-    @pytest.mark.parametrize("name", ["decided_by", "probability", "failed_call", "reason"])
+    @pytest.mark.parametrize(
+        "name", ["decided_by", "probability", "failed_call", "reason", "input_tokens"]
+    )
     def test_each_new_keyword_is_keyword_only_with_no_default(self, name):
         """Plan2 §3.3 / plan3 §3.3: no default — a call site that forgets one is a `TypeError`,
         never an item silently scored as if the decision model had not been there."""
@@ -835,7 +840,7 @@ class TestScoreAnswerDecisionSurfaceDelta:
     def test_the_old_packs_score_item_writes_no_decision_surface_key(self, real_pack: Pack):
         """Plan2 §5 U1d's dedicated test: across every real item and every reply branch, no
         `decidedBy`, `probability`, `failedCall` or `reason` key appears in `detail`."""
-        decision_keys = {"decidedBy", "probability", "failedCall", "reason"}
+        decision_keys = {"decidedBy", "probability", "failedCall", "reason", "inputTokens"}
         for item in _load_real_items():
             for _, content in SPLIT_REPLY_CORPUS:
                 result = classification.score_item(
@@ -856,7 +861,7 @@ class TestScoreAnswerDecisionSurfaceDelta:
         )
         assert result.detail == {
             "path": "turns", "tier": "clear_suspend",
-            "decidedBy": decided_by, "probability": probability,
+            "decidedBy": decided_by, "probability": probability, "inputTokens": None,
         }
         assert result.scoreable == {"falseAdvanceRate": True}
         assert result.counts == {"falseAdvanceRate": 1}
@@ -870,7 +875,8 @@ class TestScoreAnswerDecisionSurfaceDelta:
         )
         assert result.detail == {
             "path": "turns", "tier": "clear_suspend",
-            "decidedBy": "handoff", "probability": None, "reason": "over-limit",
+            "decidedBy": "handoff", "probability": None, "inputTokens": None,
+            "reason": "over-limit",
         }
         assert result.counts == {"falseAdvanceRate": 0}
 
@@ -888,7 +894,7 @@ class TestScoreAnswerDecisionSurfaceDelta:
         assert result.timing == timing
         assert result.detail == {
             "path": "turns", "tier": "clear_suspend", "failedCall": "decision",
-            "probability": None,
+            "probability": None, "inputTokens": None,
         }
 
     def test_an_over_limit_decision_failure_also_carries_reason(self):
@@ -950,3 +956,117 @@ class TestScoreAnswerDecisionSurfaceDelta:
             classification.score_answer(
                 _CS_ITEM, answer, "pass", _timing(), pack=None, **_decision_keywords(**overrides)
             )
+
+    def test_a_decided_item_carries_the_decision_calls_input_tokens(self):
+        """Plan2 §3.4: `detail.inputTokens` is the decision call's `usage["input_tokens"]`."""
+        result = classification.score_answer(
+            _CS_ITEM, True, "pass", _timing(), pack=None,
+            **_decision_keywords(decided_by="decision-model", probability=0.9, input_tokens=113),
+        )
+        assert result.detail["inputTokens"] == 113
+
+
+# --- P4-m1: every keyword combination, against the plans' legality (impl review Pass 4) ----------
+
+
+def _legal(answer, decided_by, probability, failed_call, reason, input_tokens, withheld) -> bool:
+    """Written from the plans and the architect's ruling, not from `_decision_detail`:
+    - plan2 §3.3: `answer` is `None` iff a call failed; a failed item has no `decidedBy`; the
+      guard's hand-off chat-call failure is withheld (`HANDOFF_FAILURE_BY_ROLE`), never scored;
+    - architect ruling (2026-10-31, U2 seam): the one exception — no answer, no failed call, a
+      `reason`, and a withheld timing is the guard's withheld over-limit item (plan3 §3.3's
+      `withhold` column), with no `decidedBy`, `failedCall` or `probability`;
+    - plan3 §3.3's over-limit table: an over-limit item is handed off (`decidedBy="handoff"`) or a
+      kept decision failure, and every such row has `probability = None` and `inputTokens = None`;
+    - v1.3 §3.3: a decided item's `probability` is the predicate's p (or a choice's confidence),
+      which `decide` always returns — so only an over-limit hand-off is decided without one;
+    - plan2 §3.4: `inputTokens` comes from a decision call that returned;
+    - the old pack (all keywords `None`) scores an answer, as before."""
+    if failed_call == "handoff":
+        return False
+    if answer is None and failed_call is None:
+        return (
+            reason == "over-limit" and withheld is not None
+            and decided_by is None and probability is None and input_tokens is None
+        )
+    if (answer is None) != (failed_call is not None):
+        return False
+    if failed_call == "decision":
+        return decided_by is None and probability is None and input_tokens is None
+    if decided_by is None:  # an answer from no decision surface: the old pack's call
+        return probability is None and reason is None and input_tokens is None
+    if reason == "over-limit":
+        return decided_by == "handoff" and probability is None and input_tokens is None
+    return probability is not None
+
+
+_COMBINATIONS = [
+    (answer, decided_by, probability, failed_call, reason, input_tokens, withheld)
+    for answer in (True, None)
+    for decided_by in (None, "decision-model", "handoff")
+    for probability in (None, 0.5)
+    for failed_call in (None, "decision", "handoff")
+    for reason in (None, "over-limit")
+    for input_tokens in (None, 113)
+    for withheld in (None, "timeout")
+]
+
+
+def _combination_timing(withheld: str | None) -> ItemTiming:
+    if withheld is None:
+        return _timing()
+    return ItemTiming(wallClockMs=None, calls=(), withheldFor=withheld)
+
+
+def test_score_answer_accepts_exactly_the_legal_keyword_combinations():
+    """Impl review Pass 4, P4-m1's stopping condition: the reviewer's 72 combinations of
+    `answer` × `decided_by` × `probability` × `failed_call` × `reason`, times `input_tokens` ∈
+    {None, int} and `timing.withheldFor` ∈ {None, "timeout"} (288), each accepted iff `_legal`
+    says so — a refusal is a `ValueError`."""
+    assert len(_COMBINATIONS) == 72 * 2 * 2
+    wrong = []
+    for combo in _COMBINATIONS:
+        answer, decided_by, probability, failed_call, reason, input_tokens, withheld = combo
+        try:
+            classification.score_answer(
+                _CS_ITEM, answer, "pass", _combination_timing(withheld), pack=None,
+                decided_by=decided_by, probability=probability, failed_call=failed_call,
+                reason=reason, input_tokens=input_tokens,
+            )
+            accepted = True
+        except ValueError:
+            accepted = False
+        if accepted != _legal(*combo):
+            wrong.append((*combo, "accepted" if accepted else "refused"))
+    assert wrong == []
+
+
+@pytest.mark.parametrize("withheld", ["timeout", "no_response", "load"])
+def test_a_withheld_over_limit_guard_item_carries_only_its_reason(withheld):
+    """Architect ruling (plan3 §3.3's guard `withhold` column): no answer, no failed call, a
+    reason and a withheld timing give the withheld outcome as passed, nothing scoreable, and
+    `detail = {path, tier, reason}` — no `decidedBy`, `failedCall`, `probability`,
+    `inputTokens`."""
+    timing = ItemTiming(wallClockMs=None, calls=(), withheldFor=withheld)
+    outcome = "fail" if withheld == "timeout" else "unrunnable"
+    result = classification.score_answer(
+        _CS_ITEM, None, outcome, timing, pack=None,
+        **_decision_keywords(reason="over-limit"),
+    )
+    assert result.outcome == outcome
+    assert result.scoreable == {}
+    assert result.counts == {}
+    assert result.timing == timing
+    assert result.detail == {"path": "turns", "tier": "clear_suspend", "reason": "over-limit"}
+
+
+@pytest.mark.parametrize(
+    ("reason", "withheld"), [(None, "timeout"), ("over-limit", None)],
+    ids=["withheld-without-reason", "reason-without-withheld"],
+)
+def test_no_answer_and_no_failed_call_needs_both_a_reason_and_a_withheld_timing(reason, withheld):
+    with pytest.raises(ValueError, match="answer"):
+        classification.score_answer(
+            _CS_ITEM, None, "fail", _combination_timing(withheld), pack=None,
+            **_decision_keywords(reason=reason),
+        )
