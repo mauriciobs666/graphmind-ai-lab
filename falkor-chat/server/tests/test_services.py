@@ -22,6 +22,7 @@ from falkorchat.schemas import (
     MAX_CONFIG_LEN,
     MAX_DIFF_PREVIEW,
     MAX_KEY_LEN,
+    MAX_TEXT_LEN,
 )
 from falkorchat.services import (
     CATALOG_INDEX_LIMIT,
@@ -41,6 +42,7 @@ from falkorchat.services import (
     InvalidSearchQueryError,
     MatchNotFoundError,
     MemberIdCollisionError,
+    MessageTooLongError,
     SearchNotAvailableError,
     Services,
     ThreadNotFoundError,
@@ -1818,6 +1820,57 @@ def test_list_thread_participants_empty_when_no_members():
     repo.threads.add("t1")
 
     assert svc.list_thread_participants(CTX, thread_id="t1") == []
+
+
+class _UntouchableRepo:
+    """A repo stand-in that fails on ANY attribute access — read or write.
+
+    `FakeRepo.calls` records only some methods (not `thread_exists` or the
+    member lookup), so `calls == []` cannot pin "before any read". This can:
+    whatever repo access is moved ahead of the guard turns the test red."""
+
+    def __getattr__(self, name):
+        raise AssertionError(f"repo.{name} touched before the length check")
+
+
+def test_post_message_rejects_text_over_max_text_len_before_any_repo_call():
+    """K-099: `post_message` re-checks `MAX_TEXT_LEN` itself — an MCP
+    `send_message` has no pydantic layer, so REST's 422 never covered it.
+    Rejected before validation reads or writes: nothing touches the repo, so
+    an over-length post to a missing thread is `MessageTooLongError`, never
+    `ThreadNotFoundError`."""
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(MessageTooLongError, match=f"{MAX_TEXT_LEN + 1}.*{MAX_TEXT_LEN}.*split"):
+        svc.post_message(CTX, thread_id="t1", text="x" * (MAX_TEXT_LEN + 1))
+
+
+def test_post_message_at_exactly_max_text_len_is_accepted():
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    msg = svc.post_message(CTX, thread_id="t1", text="x" * MAX_TEXT_LEN)
+
+    assert repo.calls[-1][0] == "post_first_message"
+    assert len(msg["text"]) == MAX_TEXT_LEN
+
+
+def test_post_message_length_cap_reads_text_not_mentions_or_thread_id():
+    """The cap counts characters of `text` only: a short body with a long
+    mentions list and a long thread id is still written."""
+    repo = FakeRepo()
+    tid = "t" * (MAX_TEXT_LEN + 1)
+    repo.threads.add(tid)
+    repo.members.add("u1")
+    mentions = [f"m{i}" for i in range(50)]
+    repo.members.update(mentions)
+    svc = make_service(repo)
+
+    svc.post_message(CTX, thread_id=tid, text="hi", mentions=mentions)
+
+    assert repo.calls[-1][0] == "post_first_message"
 
 
 def test_post_message_first_uses_first_write_path():

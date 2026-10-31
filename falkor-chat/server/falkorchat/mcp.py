@@ -203,9 +203,13 @@ def send_message(
 ) -> dict[str, Any]:
     """Post `body` into thread `re`, optionally mentioning members.
 
-    `frm` is reserved/ignored in M1 — the author is the configured actor (Q#1).
-    Schedules the same out-of-band embed/trigger/responder work the REST route
-    does (K-041), off-band so the write itself is never delayed.
+    `body` may be at most 8000 characters (`schemas.MAX_TEXT_LEN`, the same
+    cap the REST route enforces); a longer body is rejected with an error
+    naming the limit, and nothing is posted or scheduled — split it into
+    several messages instead. `frm` is reserved/ignored in M1 — the author is
+    the configured actor (Q#1). Schedules the same out-of-band
+    embed/trigger/responder work the REST route does (K-041), off-band so the
+    write itself is never delayed.
     """
     ctx = _get_context()
     posted = _svc().post_message(ctx, thread_id=re, text=body, mentions=mentions)

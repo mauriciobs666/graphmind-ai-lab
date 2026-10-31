@@ -234,6 +234,69 @@ def test_send_message_unknown_mention_errors(repo):
         asyncio.run(scenario())
 
 
+def _thread_with_sync_schedule(repo, worker):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    svc = _configure(repo, embed_worker=worker)
+    ch = svc.create_channel(TEST_CTX, name="general")
+    return svc.create_thread(TEST_CTX, channel_id=ch["channelId"], title="hi")["threadId"]
+
+
+def test_send_message_over_max_text_len_is_rejected_naming_the_limit(repo):
+    """K-099: REST 422s an over-`MAX_TEXT_LEN` post via pydantic; MCP has no
+    schema layer, so `send_message` must refuse it too — loudly, with the
+    limit in the error, writing nothing and scheduling no embed job."""
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    from falkorchat.schemas import MAX_TEXT_LEN
+
+    worker = RecordingWorker()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        tid = _thread_with_sync_schedule(repo, worker)
+        with pytest.raises(ToolError, match=f"exceeding the {MAX_TEXT_LEN} limit"):
+            asyncio.run(mcp_mod.mcp.call_tool(
+                "send_message", {"body": "x" * (MAX_TEXT_LEN + 1), "re": tid}
+            ))
+        rows = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "read_messages", {"re": tid, "since": 0, "advance": False}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert rows == []
+    assert worker.calls == []
+
+
+def test_send_message_at_exactly_max_text_len_is_accepted_and_embedded(repo):
+    from falkorchat.schemas import MAX_TEXT_LEN
+
+    worker = RecordingWorker()
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        tid = _thread_with_sync_schedule(repo, worker)
+        posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "send_message", {"body": "x" * MAX_TEXT_LEN, "re": tid}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert len(posted["text"]) == MAX_TEXT_LEN
+    assert worker.calls == [("test", posted["msgId"], "x" * MAX_TEXT_LEN)]
+
+
+def test_send_message_tool_description_states_the_current_max_text_len(repo):
+    """The description is what an MCP client reads; its literal limit must
+    track `MAX_TEXT_LEN`, not drift from it."""
+    from falkorchat.schemas import MAX_TEXT_LEN
+
+    _configure(repo)
+    tools = asyncio.run(mcp_mod.mcp.list_tools())
+    desc = next(t.description for t in tools if t.name == "send_message")
+    assert f"at most {MAX_TEXT_LEN} characters" in desc
+
+
 # ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────
 
 

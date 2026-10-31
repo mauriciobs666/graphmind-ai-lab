@@ -67,6 +67,7 @@ from .schemas import (
     MAX_DIFF_PREVIEW,
     MAX_DOCUMENT_CHARS,
     MAX_KEY_LEN,
+    MAX_TEXT_LEN,
 )
 from .transport import ProviderCallError
 
@@ -236,6 +237,18 @@ class DocumentTooLargeError(ServiceError):
     Enforced in the service, not only at the REST pydantic boundary — an MCP
     caller has no schema layer, so this is the one place both transports are
     bound by the same cap.
+    """
+
+
+class MessageTooLongError(ServiceError):
+    """Raised when `post_message`'s text exceeds `MAX_TEXT_LEN` (K-099).
+
+    Same posture as `DocumentTooLargeError`: enforced in the service, not only
+    at the REST pydantic boundary (`PostMessageIn.text = Field(max_length=
+    MAX_TEXT_LEN)`, a 422 there) — an MCP `send_message` caller has no schema
+    layer, so this is the one place every front door into `post_message` is
+    bound by the same cap. The cap also bounds what reaches the embedder,
+    which is loaded at a context sized for a `MAX_TEXT_LEN` message.
     """
 
 
@@ -955,10 +968,24 @@ class Services:
     ) -> dict[str, Any]:
         """Post a message into an existing thread.
 
-        Validates the actor and mentions, derives `role` from the actor's node
-        label (`User → user`, `Agent → assistant` — agents can author), then
+        Rejects `text` longer than `MAX_TEXT_LEN` (`MessageTooLongError`, K-099)
+        before any read or write — REST's `PostMessageIn` already 422s it, but
+        an MCP `send_message` has no schema layer, so the cap is re-checked here
+        for every front door, the `DocumentTooLargeError` posture. Validates the
+        actor and mentions, derives `role` from the actor's node label
+        (`User → user`, `Agent → assistant` — agents can author), then
         dispatches on the §4 v2 status row via `_dispatch_write`.
+
+        Agent/LLM-generated replies do not come through here: the responder and
+        the workflow `post_message` tool write via `post_agent_answer`, which
+        this cap does not touch.
         """
+        if len(text) > MAX_TEXT_LEN:
+            raise MessageTooLongError(
+                f"message text is {len(text)} characters, "
+                f"exceeding the {MAX_TEXT_LEN} limit; "
+                f"split it into several messages"
+            )
         wanted, role = self._validate_and_derive_role(
             ctx, thread_id=thread_id, mentions=mentions
         )

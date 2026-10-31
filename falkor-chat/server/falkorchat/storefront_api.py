@@ -93,6 +93,7 @@ from .services import (
     EmptyDocumentError,
     InvalidSearchQueryError,
     MatchNotFoundError,
+    MessageTooLongError,
     SearchNotAvailableError,
     ServiceError,
     ThreadNotFoundError,
@@ -717,6 +718,12 @@ SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
     DocumentNotFoundError: "document deletion; no storefront route deletes documents",
     DocumentUpdateNotFoundError: (
         "document-update confirmation; no storefront route touches it"
+    ),
+    MessageTooLongError: (
+        "`services.post_message`'s `MAX_TEXT_LEN` re-check (K-099) — "
+        "`PostMessageIn.text` caps at `MAX_MESSAGE_TEXT_LEN` (2000), below "
+        "`MAX_TEXT_LEN`, so `422 validation_failed` answers first and this is "
+        "unreachable from any client"
     ),
     UnknownOrderTransitionError: (
         "`services.advance_order`'s guard on an unknown transition string — "

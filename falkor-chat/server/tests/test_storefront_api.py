@@ -2931,7 +2931,7 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     """
     family = _subclasses(ServiceError)
     mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
-    assert len(family) == 13, sorted(k.__name__ for k in family)
+    assert len(family) == 14, sorted(k.__name__ for k in family)
     assert family - (mapped | unreachable) == set()
     assert not mapped & unreachable
     assert (mapped | unreachable) - family == set()
@@ -2958,6 +2958,21 @@ def test_the_only_behavioural_unreachability_claim_is_pinned_to_its_producer():
     assert set(get_args(literal)) == set(Services._ORDER_TRANSITIONS)  # noqa: SLF001
 
 
+def test_the_message_length_unreachability_claim_is_pinned_to_its_producer():
+    """K-099 — `MessageTooLongError` is excused as unreachable because the
+    storefront's own `PostMessageIn.text` bound answers `422` first. That is a
+    claim about two declarations agreeing (the P11-6 shape): raising
+    `MAX_MESSAGE_TEXT_LEN` past `schemas.MAX_TEXT_LEN` would put an unmapped
+    `ServiceError` on `POST /shop/api/messages`.
+    """
+    from falkorchat.schemas import MAX_TEXT_LEN
+
+    field = storefront_api.PostMessageIn.model_fields["text"]
+    max_len = next(m.max_length for m in field.metadata if hasattr(m, "max_length"))
+    assert max_len == storefront_api.MAX_MESSAGE_TEXT_LEN
+    assert max_len <= MAX_TEXT_LEN
+
+
 def test_the_service_error_map_resolves_through_the_class_tree():
     """**P11-10** — `service_error_response` walks `type(exc).__mro__`, and
     replacing that with an exact-type lookup left the file green (mutation
@@ -2975,11 +2990,11 @@ def test_the_service_error_map_resolves_through_the_class_tree():
     assert service_error_response(derived("gone")) == (401, "invalid_token")
 
     # ...and minting it did not disturb the family the two partition tests
-    # assert is exactly thirteen. This used to need `del` + `gc.collect()` and so
+    # assert is exactly fourteen. This used to need `del` + `gc.collect()` and so
     # rested on reclaim timing; `_subclasses` now filters on the defining
     # package, which holds while the subclass is still alive (P12-4)
     assert derived in ThreadNotFoundError.__subclasses__()
-    assert len(_subclasses(ServiceError)) == 13
+    assert len(_subclasses(ServiceError)) == 14
     assert derived not in _subclasses(ServiceError)
 
     # ...and it agrees with the partition: nothing declared unreachable
@@ -4132,12 +4147,15 @@ STOREFRONT_RAISES_TODAY = frozenset({
 # unknown transition string, already in `SERVICE_ERRORS_UNREACHABLE` with a
 # behavioural reason (§5.3 C11: `AdvanceOrderIn.transition` is a `Literal` of
 # exactly the three it accepts, so `422 validation_failed` answers first) that
-# has its own producer test. So four of the five are exempted here by a
+# has its own producer test. `MessageTooLongError` (`post_message`'s K-099
+# `MAX_TEXT_LEN` re-check, added after that measurement — six now) is excused
+# the same way: `PostMessageIn.text`'s smaller bound answers `422` first, with
+# its own producer test. So five of the six are exempted here by a
 # mechanism rather than by appearing in a list; `RuntimeError` is not a
 # `ServiceError` at all and takes a written reason in `NON_FAMILY_RAISES`.
 SERVICE_RAISES_TODAY = frozenset({
-    "RuntimeError", "ThreadNotFoundError", "UnknownActorError",
-    "UnknownMemberError", "UnknownOrderTransitionError",
+    "MessageTooLongError", "RuntimeError", "ThreadNotFoundError",
+    "UnknownActorError", "UnknownMemberError", "UnknownOrderTransitionError",
 })
 
 # `Repository.ensure_participant`'s namespace refusal, reached from
