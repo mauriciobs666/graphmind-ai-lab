@@ -26,8 +26,8 @@ fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `repor
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
 constants — pinned by `tests/fixtures/decision-contract/`). `run --candidate` drives a
-decision-only candidate on the `decisions` surface (`runner._drive_decision_items`); the hand-off
-arm and the kept decision-call failure are not built (`docs/HISTORY.md`, U1d.2). **Never store a
+decision-only candidate on the `decisions` surface (`runner._drive_decision_items`, U1d.2/U1d.3
+in `docs/HISTORY.md`); the hand-off arm is not built (U2). **Never store a
 `model:decisions`/`model:handoff` record under `results/runs/`** — not even a smoke run — before
 U1e (`docs/plans/typed-decision-models2.md` §4.2); offline tests write under `tmp_path`.
 The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,

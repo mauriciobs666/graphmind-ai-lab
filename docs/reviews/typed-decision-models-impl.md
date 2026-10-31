@@ -653,3 +653,106 @@ decision-only candidates need it too.**
 - **`decision_input` is a pure extraction:** byte-equal to the chat judge's user message on all
   85 real items.
 - **The item clock and the load probe follow the existing single-call driver's pattern.**
+
+## Pass 7
+
+*2026-10-31. U1d.3, the run-time deltas, reviewed against the uncommitted `model-bench/` diff
+from `5bc5bf4b`. Baseline: plan2 §3.2–§3.4, §3.6 and §4.1 U1d; plan3 §3.3, §3.6 and §4.1 U1d; the
+method note's §Q6; Pass 6's P6-m1 and P6-n1.*
+
+**Verdict: approve with suggestions.** One nit (P7-n1) and one note for U4's brief. No blocker,
+major or minor.
+
+**Checks run** (from `model-bench/`):
+- **Suite:** run by teco; I re-ran `test_runner_decisions.py` and `test_decisions.py` under every
+  mutant.
+- **Mutants:** each was run on a copy that was then restored and checked with `cmp`.
+  - **Claimed, all red:** the re-check run after a load-withheld item (1); choice equality
+    ignoring `confidence` (1); an over-limit item counted in `decisionCallFailures` (2); the pin
+    replaced by 120 (5); `question_spec_hash` without `ensure_ascii=False` (2, so P6-m1's
+    surviving mutant now dies).
+  - **Mine, argument-level, all red:** the re-check's input changed to `"warm-up."` (2); the
+    re-check's timeout set to `300.0` instead of `decisionTimeoutSeconds` (2); the kept item's
+    load probe read from `baseline_residency` (1).
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **P6-m1: fixed.** The `ensure_ascii` mutant reddens 2 tests. teco reproduced both vectors with
+  `sha256sum`.
+- **P6-n1: fixed.** `_select_rank_arms` dedupes on `armKey`, and a test keeps two candidates on
+  one decision model.
+
+### Interaction check: the kept failure through `score_answer`
+
+**Every state the runner can now produce is legal. Executed, not inferred.** I ran a four-item
+run through `run_pack`: two decided items, then an over-limit 500 and a decide timeout, with
+the last two items' residency snapshots empty.
+- **Both kept failures came out legal.** Each had outcome `fail`, `withheldFor="load"` and
+  `failedCall="decision"`; the first also carried `reason="over-limit"`. `score_answer`
+  accepted both: P5-m1 allows `"load"` on a kept decision failure.
+- **The load rule then behaved as specified.** It recorded `basis="assumed"` with no re-check
+  call (exactly 4 `decide` calls).
+- **The record round-trips.** `store` then `load_history` gives zero invalid records,
+  `requestTimeoutSeconds=180.0`, and the `reason` survives.
+
+The runner never builds a call-failure `withheldFor`: `kept` takes its value only from
+`_load_withheld_for`, which returns `None` or `"load"`.
+
+### The implementer's calls
+
+1. **`requestTimeoutSeconds` defaults to `None`: true, and needed.** Without it an explicit 120
+   cannot be told from no flag.
+   - The only readers are the three drivers. They receive `cfg` after `run_pack` has replaced it
+     with the resolved value.
+   - Mapping `0` to `None` keeps the old `0 or 120` behaviour.
+   - Every stored value is a resolved float, which is what U3c's equality backstop compares.
+2. **Counts appended to `perClass`, with a `TypeError` when it is missing: acceptable.**
+   - They are named metrics outside `verdictMetrics`, so the report renders them exploratory.
+   - They are outside `_aggregate_item_mismatches`, which checks the verdict family only.
+   - U2 extends the same function with `handoffShare`/`handoffCallFailures`.
+   - **Constraint for U4:** `agreement.py`'s aggregates must carry a `perClass` tuple. That is a
+     shape requirement nothing states, so name it in U4's brief.
+3. **`n` is every item, load-withheld ones included: true to plan.** Plan2 §3.3 and plan3 §3.6
+   say `n` is "attempted", and a load-withheld item did make its decision call.
+4. **A kept failure's outcome is `"fail"`: sound.** Plan2 does not fix an outcome. `detail.failedCall`
+   is what U3c's `pair_items` reads, and classification's `aggregate` counts only
+   `parse_failure` outcomes.
+5. **`basis` falls back to `assumed` on a raise: true for the re-check, half-true for the probe.**
+   See P7-n1.
+6. **`_same_decision` uses exact equality: correct.**
+   - §Q6 says "a different `p`" gives `"assumed"`.
+   - Plan2 §3.4 says "not exactly equal" (predicate `probability`; choice `choice` and
+     `confidence`).
+   - v1.3 §2.3 says Laya "repeats exactly" within a load.
+   - A tolerance would hide the very reload the rule exists to detect. Leaving out
+     `probabilities[]` matches plan2's field list.
+
+### Findings
+
+**P7-n1 (nit). The load-rule probe catches only `LMStudioUnreachable`/`TimeoutError`, not the
+other errors `residency()` raises.**
+- **Evidence (executed):** `residency()` calls `catalog()`, which raises `LMStudioCallFailed`
+  on a non-200 GET or a malformed body. A stub raising it at the end probe escapes `run_pack`
+  uncaught (`ESCAPED LMStudioCallFailed GET /api/v0/models: HTTP 500`). `cli` has no handler for
+  it, so a run whose items all completed is lost to a traceback.
+- **The overclaim:** the docstring ("a probe that could not run … is `"assumed"`") and the HISTORY
+  entry ("a failed probe … give `assumed`") both claim more than the code does. The between-item
+  probes and step 10 share the gap; that is pre-existing and out of scope.
+- **Fix (`model-bench/modelbench/runner.py` `_within_load_basis`):** add `LMStudioCallFailed` to
+  the probe's `except`. `"assumed"` is the fail-safe answer. Add one test row; a stub probe
+  raising `LMStudioCallFailed` is enough. Otherwise narrow the docstring and HISTORY to the two
+  caught types.
+
+### What's solid
+
+- **The exit-3 interim was replaced in place,** with the over-limit classification reused, as
+  Pass 6 predicted.
+- **The load rule follows §Q6's order exactly:** probe, then load-withheld, then re-check against
+  the *mandatory* warm-up only.
+- **The pin and its refusal apply up front,** before host read or any call, and to the chat arm
+  on a decision-point pack too.
+- **The counts are read from `detail`,** never re-derived from the call, so the counts and the
+  per-item record cannot disagree.

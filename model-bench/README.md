@@ -145,9 +145,14 @@ fingerprint, a dispatch-censored conversation).
 `lmstudio-decisions` token in `environment.requires`, the candidate's question must match the
 pack's answer space, and its decision model's catalog type must be `decision` — otherwise exit `4`
 before any call. Only a candidate with no hand-off model runs today; the hand-off arm is not built
-yet, and a failed decision call stops the run with exit `3` and stores nothing. The record is
-keyed by its `armKey` — the candidate id — in `compare --models`, `models --tested` and
-`index.csv`'s `candidateId` column.
+yet. A failed decision call (timeout, failure, or over-limit input) keeps its item in the run as a
+failure, counted in the exploratory `decisionCallFailures` or `overLimit` metric. After the last
+item a re-check decides the record's `basis`: `by-construction` if the run stayed on one load of
+the decision model, `assumed` otherwise. The record is keyed by its `armKey` — the candidate id —
+in `compare --models`, `rank`, `models --tested` and `index.csv`'s `candidateId` column.
+
+On a decision-point pack (any arm), chat calls run at a pinned 180 s: `--request-timeout` with
+any other value is refused, exit `4`. Every run records the request timeout it used.
 
 **Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints

@@ -62,7 +62,9 @@ _DEFAULT_CATALOG_TIMEOUT_S = 10.0
 # only that the call be fixed and pack-independent, not what it says.
 _WARMUP_CHAT_MESSAGE = "Hello."
 _WARMUP_EMBED_TEXT = "warm-up"
-_WARMUP_DECISION_INPUT = "warm-up"
+#: Public: the runner's within-load re-check repeats the decisions warm-up with this same input
+#: (typed-decision-models plan2 §3.4).
+WARMUP_DECISION_INPUT = "warm-up"
 
 #: The decisions route (typed-decision-models plan §2.3). `/v1/decisions` is the one verified by a
 #: live probe (2026-10-30); whether an `/api/v0/decisions` variant exists — and whether it adds
@@ -371,12 +373,17 @@ class LoadResult:
     """The warm-up call's outcome (§3.6). `wasResidentBefore` is the fact that decides whether the
     runner may treat `wallClockMs` as `coldLoadSeconds`; `runtime`/`stats` are populated on the
     chat surface only — they are the sole source of `runtimeName`/`runtimeVersion` (§3.4.4a step
-    5) — and are `None` on an embeddings warm-up, which returns neither."""
+    5) — and are `None` on an embeddings warm-up, which returns neither.
+
+    `decision` is the decisions warm-up's own answer, set by that surface only (typed-decision-
+    models plan2 §3.4): the runner's within-load re-check compares against it. `None` elsewhere,
+    which is why it defaults — every other construction site is unchanged."""
 
     wallClockMs: float | None
     wasResidentBefore: bool
     runtime: Mapping[str, Any] | None
     stats: Mapping[str, Any] | None
+    decision: DecisionResult | None = None
 
 
 def _coerce_finite_float(value: Any) -> float | None:
@@ -845,7 +852,8 @@ class LMStudio:
         On the `decisions` surface the warm-up is one `decide` call with a fixed tiny input and
         the candidate's own `question` (typed-decision-models §3.3), **required** there and
         refused on every other surface — so its `None` default can never pick anything silently.
-        The decisions response has no `runtime`/`stats` (§2.3), so neither does the result.
+        The decisions response has no `runtime`/`stats` (§2.3), so neither does the result; its
+        answer is kept on `LoadResult.decision` for the runner's within-load re-check.
         """
         if (question is None) == (call_surface == "decisions"):
             raise ValueError(
@@ -854,13 +862,14 @@ class LMStudio:
             )
         if call_surface == "decisions":
             decision = self.decide(
-                _WARMUP_DECISION_INPUT, [question], model=model, timeout_s=timeout_s
+                WARMUP_DECISION_INPUT, [question], model=model, timeout_s=timeout_s
             )
             return LoadResult(
                 wallClockMs=decision.wallClockMs,
                 wasResidentBefore=was_resident_before,
                 runtime=None,
                 stats=None,
+                decision=decision,
             )
         if call_surface == "chat":
             messages: list[Mapping[str, Any]] = []

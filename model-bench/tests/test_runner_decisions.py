@@ -1,13 +1,14 @@
-"""typed-decision-models U1d.2 — the plain `decisions` arm (plan v1.3 §3.3, §4 U1d; plan2 §3.2,
-§3.4; plan3 §3.3).
+"""typed-decision-models U1d.2 and U1d.3 — the plain `decisions` arm and its run-time deltas
+(plan v1.3 §3.3, §4 U1d; plan2 §3.2–§3.4, §3.6; plan3 §3.3, §3.6).
 
 Offline throughout: a hand-built `LMStudio`-shaped stub, an on-disk fixture pack
 (`tests/fixtures/packs/decision_point_guard/`) and a candidate written under `tmp_path`. Nothing
 here writes under `model-bench/results/` (plan2 §4.2 / plan3 §4.1: no `model:decisions` record is
 stored there before U1e).
 
-Sections, in the unit's landing order: the scorer seam's three hooks; the packs half; the runner
-(refusals, the per-item flow, `latency_block`, the fingerprint); the done-condition run.
+Sections, in the units' landing order: the scorer seam's three hooks; the packs half; the runner
+(refusals, the per-item flow, `latency_block`, the fingerprint); the done-condition run; the CLI;
+U1d.3's chat-timeout pin, kept decision failures, load rule and decision-call counts.
 """
 
 from __future__ import annotations
@@ -309,7 +310,11 @@ def _decided(p: float, *, usage: Any = None, wall_clock_ms: float = 12.0) -> Dec
 class DecisionStub:
     """An `LMStudio`-shaped stub for the `decisions` surface: `decide` pops results in call order
     (an exception instance is raised), `residency` pops snapshots (default: laya resident),
-    `catalog` returns the pre-load list once, then the post-load list."""
+    `catalog` returns the pre-load list once, then the post-load list.
+
+    The decisions `warm_up` returns `warm_up_decision` on `LoadResult.decision`, as the real one
+    does (plan2 §3.4). Once `decide`'s queue is empty it answers with that same decision, so the
+    within-load re-check after the last item agrees unless a test queues a fifth response."""
 
     def __init__(
         self,
@@ -318,8 +323,14 @@ class DecisionStub:
         residency_sequence: list[list[ResidentModel]] | None = None,
         catalog_before: list[ModelInfo] | None = None,
         catalog_after: list[ModelInfo] | None = None,
+        warm_up_decision: DecisionResult | None = None,
     ) -> None:
         self._decide = list(decide_responses or [])
+        self.warm_up_decision = warm_up_decision if warm_up_decision is not None else _decided(0.5)
+        #: Optional: one decision per warm-up call, in order (the mandatory one, then extras).
+        self.warm_up_sequence: list[DecisionResult] = []
+        #: Every residency probe and decide call, in order.
+        self.events: list[Any] = []
         self._residency = list(residency_sequence or [])
         self._catalogs = [
             catalog_before if catalog_before is not None else [_laya(), _qwen()],
@@ -328,11 +339,13 @@ class DecisionStub:
         self.decide_calls: list[dict[str, Any]] = []
         self.warm_up_calls: list[dict[str, Any]] = []
         self.chat_calls: list[Any] = []
+        self.chat_reply: Any = None
 
     def probe(self) -> str:
         return "api-v0"
 
     def residency(self) -> list[ResidentModel]:
+        self.events.append("residency")
         return self._residency.pop(0) if self._residency else list(_LAYA_RESIDENT)
 
     def catalog(self) -> list[ModelInfo]:
@@ -346,22 +359,38 @@ class DecisionStub:
             {"model": model_key, "call_surface": call_surface, "question": question,
              "timeout_s": timeout_s, "system_prompt": system_prompt}
         )
+        runtime = (
+            {"name": "llama.cpp", "version": "1.52.0"} if call_surface == "chat" else None
+        )
         return LoadResult(
-            wallClockMs=2500.0, wasResidentBefore=was_resident_before, runtime=None, stats=None
+            wallClockMs=2500.0,
+            wasResidentBefore=was_resident_before,
+            runtime=runtime,
+            stats=None,
+            decision=(
+                (self.warm_up_sequence.pop(0) if self.warm_up_sequence else self.warm_up_decision)
+                if call_surface == "decisions"
+                else None
+            ),
         )
 
     def decide(self, input, questions, *, model, timeout_s):
         self.decide_calls.append(
             {"input": input, "questions": questions, "model": model, "timeout_s": timeout_s}
         )
-        response = self._decide.pop(0)
+        self.events.append(("decide", input))
+        response = self._decide.pop(0) if self._decide else self.warm_up_decision
         if isinstance(response, BaseException):
             raise response
         return response
 
-    def chat(self, *args, **kwargs):  # pragma: no cover - the decisions surface never chats
-        self.chat_calls.append((args, kwargs))
-        raise AssertionError("the decisions surface made a chat call")
+    def chat(self, messages, *, model, temperature, max_tokens, timeout_s, tools=None):
+        """Only a chat arm on the fixture pack reaches here (`chat_reply` set); the decisions
+        surface never chats."""
+        self.chat_calls.append({"model": model, "timeout_s": timeout_s})
+        if self.chat_reply is None:
+            raise AssertionError("the decisions surface made a chat call")
+        return self.chat_reply
 
 
 def _host_json(root: Path) -> None:
@@ -596,10 +625,11 @@ def test_each_decide_call_carries_the_rendered_input_question_model_and_decision
 
     pack_dir = _workspace(tmp_path, decisionTimeoutSeconds=1.5)
     lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
-    _run(tmp_path, lms, requestTimeoutSeconds=120.0, firstCallTimeoutSeconds=300.0)
+    _run(tmp_path, lms, requestTimeoutSeconds=180.0, firstCallTimeoutSeconds=300.0)
     pack = load_pack(pack_dir)
     expected_inputs = [classification.decision_input(i, pack=pack) for i in pack.iter_items()]
-    assert [c["input"] for c in lms.decide_calls] == expected_inputs
+    # Four items, then the within-load re-check (plan2 §3.4) with the warm-up's input.
+    assert [c["input"] for c in lms.decide_calls] == [*expected_inputs, "warm-up"]
     assert all(c["questions"] == [_QUESTION] for c in lms.decide_calls)
     assert {c["model"] for c in lms.decide_calls} == {"laya"}
     assert {c["timeout_s"] for c in lms.decide_calls} == {1.5}  # plan2 §3.2, not --request-timeout
@@ -639,22 +669,52 @@ def test_an_item_after_a_snapshot_without_the_decision_model_is_withheld_for_loa
     assert run.latency.latencyWithheldForLoad == 1
 
 
-def test_a_failed_decision_call_refuses_the_run_until_u1d3_keeps_it(tmp_path):
-    """U1d.2's choice: refuse loudly (exit 3), never a call-failure `withheldFor` through
-    `score_answer`. U1d.3 replaces this with the kept item (plan2 §3.3)."""
-    for failure, marker in (
-        (LMStudioCallTimeout("timed out"), "timed out"),
-        (LMStudioCallFailed("HTTP 500", status=500, body="too large to process"), "over-limit"),
-        (LMStudioCallFailed("HTTP 500", status=500, body="boom"), "boom"),
-    ):
-        root = tmp_path / marker.replace(" ", "-")
-        root.mkdir()
-        _workspace(root)
-        with pytest.raises(RunRefused) as caught:
-            _run(root, DecisionStub(decide_responses=[_decided(0.9), failure]))
-        assert caught.value.exitCode == 3
-        assert "U1d.3" in str(caught.value) and "'fx-cs-02'" in str(caught.value)
-        assert ("over-limit" in str(caught.value)) == (marker == "over-limit")
+def test_a_failed_decision_call_is_kept_timed_by_the_item_clock_and_scored_as_failed(tmp_path):
+    """Plan2 §3.3: a decision-call timeout or failure keeps the item — outcome `"fail"`, the item
+    clock at the raise (250 ms here; the failed call has no clock of its own), no completed call,
+    `withheldFor=None`, `failedCall="decision"`, nothing scoreable. The run is stored, not
+    refused."""
+    _workspace(tmp_path)
+    responses = [
+        _decided(0.9),
+        LMStudioCallTimeout("timed out"),
+        LMStudioCallFailed("HTTP 500", status=500, body="boom"),
+        _decided(0.1),
+    ]
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=responses), clock=_Clock(0.25))
+    kept = run.items[1:3]
+    for item in kept:
+        assert item.outcome == "fail"
+        assert item.timing.wallClockMs == pytest.approx(250.0)
+        assert (item.timing.calls, item.timing.withheldFor) == ((), None)
+        assert item.latencyMs == pytest.approx(250.0)
+        assert (item.scoreable, item.counts) == ({}, {})
+        assert item.detail == {
+            "path": item.detail["path"],
+            "tier": item.detail["tier"],
+            "failedCall": "decision",
+            "probability": None,
+            "inputTokens": None,
+        }
+    assert [i.detail.get("decidedBy") for i in run.items] == [
+        "decision-model", None, None, "decision-model"
+    ]
+    path = store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=_PACK_ID)
+    assert invalid == [] and [r.runId for r in valid] == [run.runId], path
+
+
+def test_a_kept_decision_failure_after_a_snapshot_without_the_model_is_withheld_for_load(tmp_path):
+    _workspace(tmp_path)
+    residency = [[], list(_LAYA_RESIDENT), list(_LAYA_RESIDENT), []]  # item 2's probe: gone
+    lms = DecisionStub(
+        decide_responses=[_decided(0.9), LMStudioCallTimeout("t"), _decided(0.9), _decided(0.9)],
+        residency_sequence=residency,
+    )
+    run, _ = _run(tmp_path, lms)
+    item = run.items[1]
+    assert (item.timing.withheldFor, item.detail["failedCall"]) == ("load", "decision")
+    assert item.timing.wallClockMs == pytest.approx(250.0) and item.latencyMs is None
 
 
 def test_a_policy_hand_off_on_the_decisions_surface_refuses_never_scores_as_decided(tmp_path):
@@ -990,3 +1050,374 @@ def test_a_choice_decision_scores_its_chosen_value_with_the_confidence_as_probab
         clock=_Clock(0.01),
     )
     assert seen == [("b", 0.64)] * 4
+
+
+# ==================================================================================================
+# 6. U1d.3 — the run-time deltas (plan2 §3.2–§3.4, §3.6; plan3 §3.3, §3.6)
+# ==================================================================================================
+
+from modelbench.lmstudio import ChatResult  # noqa: E402
+from modelbench.results import RunResult  # noqa: E402
+
+# --- the chat-call timeout pin (plan2 §3.2) -------------------------------------------------------
+
+
+def test_an_explicit_request_timeout_other_than_180_refuses_a_decision_point_run_up_front(
+    tmp_path,
+):
+    for explicit in (120.0, 179.9, 600.0):
+        root = tmp_path / f"t{explicit:g}"
+        root.mkdir()
+        _workspace(root)
+        lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
+        with pytest.raises(RunRefused) as caught:
+            _run(root, lms, requestTimeoutSeconds=explicit)
+        assert caught.value.exitCode == 4, explicit
+        assert "--request-timeout" in str(caught.value) and "180" in str(caught.value)
+        assert lms.warm_up_calls == [] and lms.decide_calls == [], "refused after a model call"
+
+
+def test_cli_run_request_timeout_120_on_a_decision_point_pack_exits_4(tmp_path, monkeypatch):
+    _workspace(tmp_path)
+    stub = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
+    monkeypatch.setattr(cli, "LMStudio", lambda base_url: stub)
+    base = ["run", "--root", str(tmp_path), "--pack", _PACK_ID, "--candidate", _CANDIDATE_ID]
+    assert cli.main([*base, "--request-timeout", "120"]) == 4
+    assert stub.warm_up_calls == [] and stub.decide_calls == []
+    assert not (tmp_path / "results").exists()
+
+
+def test_a_decision_point_run_with_no_flag_or_an_explicit_180_records_180(tmp_path):
+    for explicit in (None, 180.0):
+        root = tmp_path / str(explicit)
+        root.mkdir()
+        _workspace(root)
+        run, _ = _run(
+            root,
+            DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9)),
+            requestTimeoutSeconds=explicit,
+        )
+        assert run.requestTimeoutSeconds == 180.0
+        assert RunResult.from_dict(run.to_dict()).requestTimeoutSeconds == 180.0
+
+
+def test_a_chat_arm_on_a_decision_point_pack_with_no_flag_chats_at_180(tmp_path):
+    """The pin's point: the incumbent's chat calls on a decision-point pack run at 180 s, not at
+    the 120 s default, when no flag is given."""
+    _workspace(tmp_path)
+    qwen_resident = [ResidentModel(id="qwen/qwen3-4b-2507", state="loaded")]
+    lms = DecisionStub(residency_sequence=[list(qwen_resident) for _ in range(8)])
+    lms.chat_reply = ChatResult(
+        message={"content": '{"decision": false}'},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats=None,
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=900.0,
+    )
+    run, _ = _run(tmp_path, lms, candidateId=None, modelKey="qwen/qwen3-4b-2507")
+    assert [c["timeout_s"] for c in lms.chat_calls] == [180.0] * 4
+    assert run.requestTimeoutSeconds == 180.0
+
+
+def test_a_run_off_a_decision_point_pack_records_its_request_timeout(tmp_path, monkeypatch):
+    """Every run records it: the default 120 with no flag, the flag's value with one."""
+    from test_runner import (
+        FakeItemScorer,
+        StubLMStudio,
+        _item_pack,
+        chat_result_with_stats,
+        model_info,
+        resident,
+    )
+    from test_runner import _host_json as chat_host_json
+
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: FakeItemScorer())
+    chat_host_json(tmp_path)
+    for explicit, recorded in ((None, 120.0), (45.0, 45.0)):
+        lms = StubLMStudio(
+            catalog_result=[model_info()],
+            chat_responses=[chat_result_with_stats(wall_clock_ms=100.0)],
+            residency_sequence=[resident(), resident(), resident(), resident()],
+        )
+        cfg = RunConfig(
+            modelKey="qwen/qwen3-4b-2507", sessionId=None, referenceKey=None,
+            requestTimeoutSeconds=explicit,
+        )
+        run, _ = run_pack(_item_pack(), cfg, lmstudio=lms, root=tmp_path)
+        assert run.requestTimeoutSeconds == recorded, explicit
+
+
+def test_a_legacy_record_without_request_timeout_loads_it_as_none():
+    shipped = Path(__file__).resolve().parents[1]
+    records = sorted((shipped / "results" / "runs").glob("*.json"))
+    assert records
+    for path in records:
+        body = json.loads(path.read_text())
+        assert "requestTimeoutSeconds" not in body, path.name
+        assert RunResult.from_dict(body).requestTimeoutSeconds is None, path.name
+
+
+# --- the load rule, the within-load re-check and `basis` (plan2 §3.4) ----------------------------
+
+
+def _basis_run(root: Path, lms: DecisionStub, **cfg: Any):
+    _workspace(root, decisionTimeoutSeconds=1.5)
+    return _run(root, lms, **cfg)
+
+
+def test_an_equal_re_check_after_the_last_item_records_by_construction(tmp_path):
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9))
+    run, _ = _basis_run(tmp_path, lms)
+    assert (run.designEffect, run.basis) == (1.0, "by-construction")
+    recheck = lms.decide_calls[-1]
+    assert recheck == {
+        "input": "warm-up", "questions": [_QUESTION], "model": "laya", "timeout_s": 1.5
+    }
+    # After the last item: the load rule's probe, the re-check, then step 10's end capture.
+    assert lms.events[-4:] == [
+        ("decide", lms.decide_calls[3]["input"]), "residency", ("decide", "warm-up"), "residency"
+    ]
+
+
+def test_a_re_check_with_a_different_probability_records_assumed(tmp_path):
+    lms = DecisionStub(decide_responses=[*_four(0.9, 0.1, 0.9, 0.9), _decided(0.5000001)])
+    run, _ = _basis_run(tmp_path, lms)
+    assert run.basis == "assumed" and len(lms.decide_calls) == 5
+
+
+def test_a_re_check_that_raises_records_assumed(tmp_path):
+    for n, failure in enumerate((
+        LMStudioCallTimeout("timed out"),
+        LMStudioCallFailed("HTTP 500", status=500, body="boom"),
+        LMStudioCallFailed("HTTP 500", status=500, body="input is too large to process"),
+    )):
+        root = tmp_path / str(n)
+        root.mkdir()
+        lms = DecisionStub(decide_responses=[*_four(0.9, 0.1, 0.9, 0.9), failure])
+        run, _ = _basis_run(root, lms)
+        assert run.basis == "assumed", failure
+        assert len(run.items) == 4  # the run is stored, not refused
+
+
+def test_an_item_withheld_for_load_records_assumed_with_no_re_check_call(tmp_path):
+    residency = [[], list(_LAYA_RESIDENT), list(_LAYA_RESIDENT), []]  # item 2's probe: gone
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    run, _ = _basis_run(tmp_path, lms)
+    assert [i.timing.withheldFor for i in run.items] == [None, "load", None, None]
+    assert run.basis == "assumed"
+    assert [c["input"] for c in lms.decide_calls].count("warm-up") == 0
+    assert len(lms.decide_calls) == 4
+
+
+def test_the_model_absent_at_the_end_probe_records_assumed_with_no_re_check_call(tmp_path):
+    residency = [
+        [], list(_LAYA_RESIDENT),          # start, baseline
+        *[list(_LAYA_RESIDENT)] * 4,       # before each item
+        [],                                # the load rule's probe: laya gone
+    ]
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9), residency_sequence=residency)
+    run, _ = _basis_run(tmp_path, lms)
+    assert [i.timing.withheldFor for i in run.items] == [None] * 4
+    assert run.basis == "assumed"
+    assert len(lms.decide_calls) == 4
+
+
+def test_the_re_check_compares_with_the_mandatory_warm_up_never_a_warmup_extra(tmp_path):
+    """`--warmup 1`: the extra warm-up answers 0.7, the mandatory one 0.5. A re-check of 0.5 is
+    one load; a re-check of 0.7 is not."""
+    for recheck_p, basis in ((0.5, "by-construction"), (0.7, "assumed")):
+        root = tmp_path / str(recheck_p)
+        root.mkdir()
+        lms = DecisionStub(decide_responses=[*_four(0.9, 0.1, 0.9, 0.9), _decided(recheck_p)])
+        lms.warm_up_sequence = [_decided(0.5), _decided(0.7)]
+        run, _ = _basis_run(root, lms, warmupExtra=1)
+        assert len(lms.warm_up_calls) == 2
+        assert run.basis == basis, recheck_p
+
+
+def test_an_assumed_run_stores_and_reads_back_valid(tmp_path):
+    lms = DecisionStub(decide_responses=[*_four(0.9, 0.1, 0.9, 0.9), _decided(0.1)])
+    run, _ = _basis_run(tmp_path, lms)
+    store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=_PACK_ID)
+    assert invalid == [] and [r.basis for r in valid] == ["assumed"]
+
+
+def _choice(choice: str, confidence: float, probs=(("a", 0.3), ("b", 0.7))) -> DecisionAnswer:
+    return DecisionAnswer(
+        name="kind", type="choice", probability=None, choice=choice, probabilities=probs,
+        confidence=confidence,
+    )
+
+
+def test_re_check_equality_is_exact_on_the_fields_plan2_names():
+    from modelbench.runner import _same_decision
+
+    p = _decided(0.5).answers[0]
+    assert _same_decision(p, _decided(0.5).answers[0])
+    assert not _same_decision(p, _decided(0.5 + 1e-12).answers[0])
+    assert _same_decision(_choice("b", 0.64), _choice("b", 0.64))
+    # per-value probabilities are not compared; choice and confidence are
+    assert _same_decision(_choice("b", 0.64), _choice("b", 0.64, probs=(("a", 0.2), ("b", 0.8))))
+    assert not _same_decision(_choice("b", 0.64), _choice("a", 0.64))
+    assert not _same_decision(_choice("b", 0.64), _choice("b", 0.65))
+    assert not _same_decision(p, _choice("b", 0.5))
+
+
+# --- the decision-call counts (plan2 §3.3 "Counts"; plan3 §3.6) -----------------------------------
+
+
+def _metric(run, name: str):
+    found = [m for m in run.aggregates.perClass if m.name == name]
+    assert len(found) == 1, (name, [m.name for m in run.aggregates.perClass])
+    return found[0]
+
+
+def test_decision_call_failures_counts_the_injected_failures_over_every_item(tmp_path):
+    _workspace(tmp_path)
+    responses = [
+        LMStudioCallTimeout("t"),
+        _decided(0.9),
+        LMStudioCallFailed("HTTP 500", status=500, body="boom"),
+        _decided(0.1),
+    ]
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=responses))
+    m = _metric(run, "decisionCallFailures")
+    assert (m.successes, m.n, m.unit) == (2, 4, "item")
+    store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=_PACK_ID)
+    assert invalid == []
+    assert _metric(valid[0], "decisionCallFailures") == m
+
+
+def test_decision_call_failures_is_zero_on_a_clean_run_and_never_a_verdict_metric(tmp_path):
+    _workspace(tmp_path)
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9)))
+    m = _metric(run, "decisionCallFailures")
+    assert (m.successes, m.n) == (0, 4)
+    pack = load_pack(tmp_path / "packs" / _PACK_ID)
+    assert "decisionCallFailures" not in pack.manifest["metrics"]["verdictMetrics"]
+
+
+def test_a_chat_arm_on_a_decision_point_pack_carries_no_decision_call_counts(tmp_path):
+    _workspace(tmp_path)
+    qwen_resident = [ResidentModel(id="qwen/qwen3-4b-2507", state="loaded")]
+    lms = DecisionStub(residency_sequence=[list(qwen_resident) for _ in range(8)])
+    lms.chat_reply = ChatResult(
+        message={"content": '{"decision": false}'}, tool_calls=(), toolCallForm="prose",
+        stats=None, model_info=None, runtime=None, usage=None, wallClockMs=900.0,
+    )
+    run, _ = _run(tmp_path, lms, candidateId=None, modelKey="qwen/qwen3-4b-2507")
+    names = {m.name for m in run.aggregates.perClass}
+    assert not names & {"decisionCallFailures", "overLimit"}
+
+
+_OVER_LIMIT_ROWS = {
+    row["case"]: row
+    for row in map(
+        json.loads,
+        (Path(__file__).resolve().parent / "fixtures" / "decision-contract" / "over-limit.jsonl")
+        .read_text()
+        .splitlines(),
+    )
+}
+
+
+def _failure(case: str) -> LMStudioCallFailed:
+    row = _OVER_LIMIT_ROWS[case]
+    return LMStudioCallFailed(f"HTTP {row['status']}", status=row["status"], body=row["body"])
+
+
+def test_an_over_limit_decision_call_is_a_kept_failure_with_reason_over_limit(tmp_path):
+    """Plan3 §3.3, `decisions` surface: the kept decision failure plus `reason="over-limit"`; it
+    counts in `overLimit` and not in `decisionCallFailures` (plan3 §3.6). The body is the real
+    LM Studio over-limit body (`over-limit.jsonl`)."""
+    _workspace(tmp_path)
+    responses = [
+        _decided(0.9), _failure("body-document-at-500"), _decided(0.1), _decided(0.9)
+    ]
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=responses))
+    item = run.items[1]
+    assert item.outcome == "fail" and (item.scoreable, item.counts) == ({}, {})
+    assert item.timing.wallClockMs == pytest.approx(250.0)
+    assert (item.timing.calls, item.timing.withheldFor) == ((), None)
+    assert item.detail == {
+        "path": item.detail["path"],
+        "tier": item.detail["tier"],
+        "failedCall": "decision",
+        "probability": None,
+        "inputTokens": None,
+        "reason": "over-limit",
+    }
+    assert [i.detail.get("reason") for i in run.items] == [None, "over-limit", None, None]
+    over, failures = _metric(run, "overLimit"), _metric(run, "decisionCallFailures")
+    assert (over.successes, over.n, over.unit) == (1, 4, "item")
+    assert (failures.successes, failures.n) == (0, 4)
+
+
+def test_a_failure_that_is_not_over_limit_stays_a_plain_decision_failure(tmp_path):
+    """Plan3 §3.3: "Any other 500 stays a failure" — and so does the marker at 400, or
+    upper-cased. Each counts in `decisionCallFailures`, never in `overLimit`, and carries no
+    `reason`."""
+    for case in ("another-500-body", "body-document-at-400", "marker-upper-cased-at-500",
+                 "empty-body-at-500", "null-body-at-500"):
+        root = tmp_path / case
+        root.mkdir()
+        _workspace(root)
+        responses = [_decided(0.9), _failure(case), _decided(0.1), _decided(0.9)]
+        run, _ = _run(root, DecisionStub(decide_responses=responses))
+        item = run.items[1]
+        assert item.detail["failedCall"] == "decision" and "reason" not in item.detail, case
+        assert _metric(run, "overLimit").successes == 0, case
+        assert _metric(run, "decisionCallFailures").successes == 1, case
+
+
+def test_over_limit_and_decision_failures_count_apart_in_one_run(tmp_path):
+    _workspace(tmp_path)
+    responses = [
+        _failure("body-document-at-500"),
+        LMStudioCallTimeout("t"),
+        _failure("another-500-body"),
+        _failure("body-document-at-500"),
+    ]
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=responses))
+    assert (_metric(run, "overLimit").successes, _metric(run, "decisionCallFailures").successes) \
+        == (2, 2)
+    assert all(i.detail["failedCall"] == "decision" for i in run.items)
+
+
+def test_over_limit_is_zero_over_n_on_a_clean_run(tmp_path):
+    """Plan3 §3.6: `overLimit 0/n` is still recorded, so a report can print it."""
+    _workspace(tmp_path)
+    run, _ = _run(tmp_path, DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.9)))
+    m = _metric(run, "overLimit")
+    assert (m.successes, m.n, m.unit) == (0, 4, "item")
+    assert [m.name for m in run.aggregates.perClass][-2:] == ["decisionCallFailures", "overLimit"]
+
+
+# ==================================================================================================
+# 7. `rank`'s arm dedupe keys on `armKey` (impl review Pass 6, P6-n1)
+# ==================================================================================================
+
+
+def test_rank_keeps_two_candidates_on_one_decision_model_and_dedupes_by_arm_key():
+    """Two candidates built on `laya` share a `modelKey`; deduping on it would silently drop the
+    older one. Keyed on `armKey`, both stay, and a repeated candidate keeps its newest run."""
+    from conftest import decisions_fields
+    from conftest import run as stored_run
+
+    def candidate_run(run_id: str, candidate_id: str):
+        return stored_run(
+            run_id,
+            call_surface="decisions",
+            fingerprint_fields=decisions_fields(candidateId=candidate_id),
+        )
+
+    a1, b, a2 = candidate_run("r1", "cand-a"), candidate_run("r2", "cand-b"), candidate_run(
+        "r3", "cand-a"
+    )
+    assert a1.modelKey == b.modelKey == a2.modelKey == "laya"
+    assert cli._select_rank_arms([a1, b, a2], session=None) == [a2, b]

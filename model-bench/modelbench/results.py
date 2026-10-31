@@ -713,6 +713,11 @@ class RunResult:
     #: accumulation pass that builds one from `items` is `runner.py`'s (spec §7 Step 1), and every
     #: fixture built before that pass exists is entitled to omit it.
     latency: LatencyBlock | None = None
+    #: The chat-call budget the run resolved (typed-decision-models plan2 §3.2): `--request-
+    #: timeout`, or its default, or `decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS` on a decision-
+    #: point pack — recorded on every run `run_pack` builds, so a decision-point `compare` can
+    #: refuse arms that differ. `None` only on a record written before the field existed.
+    requestTimeoutSeconds: float | None = None
 
     def __post_init__(self) -> None:
         """`attestationTripWire is None` iff `armKind == "deterministic"` — refused here rather
@@ -737,6 +742,7 @@ class RunResult:
             "basis": self.basis,
             "attestationTripWire": self.attestationTripWire,
             "latency": self.latency.to_dict() if self.latency is not None else None,
+            "requestTimeoutSeconds": self.requestTimeoutSeconds,
         }
 
     @classmethod
@@ -762,6 +768,7 @@ class RunResult:
             # missing it is not a legacy record this module knows how to read back.
             attestationTripWire=d["attestationTripWire"],
             latency=LatencyBlock.from_dict(latency) if latency is not None else None,
+            requestTimeoutSeconds=d.get("requestTimeoutSeconds"),
         )
 
     @property

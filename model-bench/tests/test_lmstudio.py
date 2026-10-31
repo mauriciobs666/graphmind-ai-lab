@@ -1087,11 +1087,15 @@ def test_warm_up_on_decisions_surface_makes_one_decide_call_with_the_candidates_
     assert len(seen) == 1
     assert seen[0]["model"] == "laya"
     assert seen[0]["questions"] == [question]
-    assert isinstance(seen[0]["input"], str) and seen[0]["input"]
+    assert seen[0]["input"] == lmstudio.WARMUP_DECISION_INPUT == "warm-up"
     assert result.wasResidentBefore is True
     assert result.runtime is None
     assert result.stats is None
     assert result.wallClockMs is not None
+    # Plan2 §3.4: the warm-up's own answer is kept for the runner's within-load re-check.
+    assert result.decision is not None
+    assert [(a.name, a.probability) for a in result.decision.answers] == [("advance", 0.5)]
+    assert result.decision.wallClockMs == result.wallClockMs
 
 
 @pytest.mark.parametrize(
@@ -1196,7 +1200,7 @@ def test_warm_up_on_embeddings_surface_passes_its_budget_through():
         return _FakeResponse(200, body)
 
     c = LMStudio("http://localhost:1234", opener=opener)
-    c.warm_up(
+    result = c.warm_up(
         "m",
         call_surface="embeddings",
         system_prompt=None,
@@ -1204,6 +1208,7 @@ def test_warm_up_on_embeddings_surface_passes_its_budget_through():
         timeout_s=123.5,
     )
     assert timeouts == [123.5]
+    assert result.decision is None  # set by the decisions warm-up only (plan2 §3.4)
 
 
 def test_warm_up_on_decisions_surface_refuses_a_missing_question():

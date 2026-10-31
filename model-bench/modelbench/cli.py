@@ -235,9 +235,11 @@ def _select_arms(
 
 
 def _select_rank_arms(runs: Sequence[RunResult], *, session: str | None) -> list[RunResult]:
-    """Every distinct model with a stored run for this pack (and session, if given) — never a
+    """Every distinct arm with a stored run for this pack (and session, if given) — never a
     fixed arm count (catalog-sweep plan §3.3). `--session` filters exactly as `_select_arms`
-    does; dedup then keeps the newest-stored run per `modelKey` via the same last-value-wins
+    does; dedup then keeps the newest-stored run per `armKey` (equal to `modelKey` on every chat,
+    embeddings and deterministic arm; the candidate id on a candidate run, so two candidates on
+    one decision model stay two arms — impl review P6-n1) via the same last-value-wins
     dict-comprehension `_select_arms`'s own `--models` path already uses above — `load_history`
     returns records sorted oldest-first (`results.py`'s `sorted(directory.glob("*.json"))`), so
     the last occurrence of a key is the newest one. `rank_report` itself still refuses a
@@ -245,7 +247,7 @@ def _select_rank_arms(runs: Sequence[RunResult], *, session: str | None) -> list
     candidates = list(runs)
     if session is not None:
         candidates = [r for r in candidates if r.sessionId == session]
-    by_key = {r.modelKey: r for r in candidates}
+    by_key = {r.armKey: r for r in candidates}
     return list(by_key.values())
 
 
@@ -535,7 +537,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         referenceKey=args.reference,
         warmupExtra=args.warmup or 0,
         firstCallTimeoutSeconds=args.first_call_timeout or 300.0,
-        requestTimeoutSeconds=args.request_timeout or 120.0,
+        # `None` when absent (or 0, as before): `run_pack` resolves the default, or the decision-
+        # point pin and its refusal (typed-decision-models plan2 §3.2).
+        requestTimeoutSeconds=args.request_timeout or None,
     )
     try:
         run, disclosures = run_pack(pack, cfg, lmstudio=lmstudio, root=root)

@@ -4,7 +4,8 @@ plan2 v1.1 §3.2, §3.3, §4.1 U1c, §5; plan3 v1.2 §3.2, §3.3, §5 U1d).
 The golden vectors under `tests/fixtures/decision-contract/` are model-bench's canonical copy
 (v1.3 §3.2.2). Their expected outputs were derived **without** this module: the policy rows by
 hand from §3.3's inequalities, the `input_hash` rows by hand-writing each canonical JSON string and
-hashing its bytes with `sha256sum`, the `over-limit.jsonl` rows by hand from plan3 §3.3's rule
+hashing its bytes with `sha256sum` (the `question_spec_hash` vectors below the same way), the
+`over-limit.jsonl` rows by hand from plan3 §3.3's rule
 (status `500` **and** the case-sensitive marker in the body).
 """
 
@@ -40,6 +41,7 @@ from modelbench.decisions import (
     eval_set_hash,
     input_hash,
     is_over_limit,
+    question_spec_hash,
 )
 from modelbench.lmstudio import DecisionAnswer
 
@@ -793,3 +795,57 @@ def test_candidate_load_refuses_an_unhashable_value_as_a_candidate_error(tmp_pat
     """A JSON list or object where a closed-set string belongs is a refusal, never a `TypeError`
     escaping a membership test."""
     _refused(tmp_path, _with(path, value), match=path[0])
+
+
+# --- question_spec_hash: hand-derived vectors (impl review Pass 6, P6-m1) -----------------------
+
+#: `(question as a candidate file would hold it, its canonical JSON, the expected sha256)`.
+#: Each question's keys are deliberately out of order — top level and inside a `choices` object —
+#: and its text carries non-ASCII (an em dash, Portuguese accents). The canonical string is
+#: written by hand; the hash was derived from it with `printf '%s' '<canonical>' | sha256sum`,
+#: never by running `question_spec_hash`.
+_QUESTION_SPEC_VECTORS = [
+    (
+        {
+            "type": "choice",
+            "name": "tipo",
+            "instructions": "Qual é o tipo da mensagem — pedido ou dúvida?",
+            "choices": [
+                {"instructions": "o cliente quer comprar", "value": "pedido"},
+                {"value": "dúvida", "instructions": "pergunta sobre um produto"},
+            ],
+        },
+        '{"choices":[{"instructions":"o cliente quer comprar","value":"pedido"},'
+        '{"instructions":"pergunta sobre um produto","value":"dúvida"}],'
+        '"instructions":"Qual é o tipo da mensagem — pedido ou dúvida?","name":"tipo",'
+        '"type":"choice"}',
+        "13bbec5c87a3ffd2e371b88f06ec9bc3a0453401a53e16e8c02e4fbcddae4875",
+    ),
+    (
+        {
+            "type": "predicate",
+            "name": "ação",
+            "instructions": "O usuário nomeou o serviço — sim ou não?",
+        },
+        '{"instructions":"O usuário nomeou o serviço — sim ou não?","name":"ação",'
+        '"type":"predicate"}',
+        "73cc51e7ad0bb8679086e2034ba10b397e6f2bd3c2b53ad02885932c21f6bdb0",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("question", "canonical", "expected"), _QUESTION_SPEC_VECTORS, ids=["choice", "predicate"]
+)
+def test_question_spec_hash_matches_the_hand_derived_vectors(question, canonical, expected):
+    """These vectors are the formula's authoritative home until a plan states it (P6-m1).
+
+    **The formula:** `questionSpecHash = sha256(utf8(canonical_json(question))).hexdigest()`,
+    where `canonical_json` is JSON with **keys sorted at every level** (a `choices` object's keys
+    included; list order kept), **no whitespace** (`","` and `":"` separators) and **non-ASCII
+    kept raw** — encoded as UTF-8 bytes, never `\\uXXXX`-escaped. It is `input_hash`'s canonical
+    form, applied to the candidate's whole question spec."""
+    assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == expected  # the vector itself
+    assert question_spec_hash(question) == expected
+    reordered = dict(reversed(list(question.items())))
+    assert question_spec_hash(reordered) == expected

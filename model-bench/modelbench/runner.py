@@ -46,7 +46,7 @@ import json
 import platform
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from fractions import Fraction
 from pathlib import Path
@@ -63,6 +63,7 @@ from modelbench.convo import (
     drive,
 )
 from modelbench.decisions import (
+    DECISION_POINT_CHAT_TIMEOUT_SECONDS,
     Candidate,
     CandidateError,
     apply_policy,
@@ -72,6 +73,7 @@ from modelbench.decisions import (
 )
 from modelbench.fingerprint import Fingerprint
 from modelbench.lmstudio import (
+    WARMUP_DECISION_INPUT,
     ChatResult,
     DecisionAnswer,
     DecisionResult,
@@ -94,6 +96,7 @@ from modelbench.packs import (
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
     Aggregates,
+    BinaryMetric,
     CallTiming,
     ItemResult,
     ItemTiming,
@@ -118,6 +121,9 @@ _TAIL_FLOOR_PCT: int = 90
 #: would silently mark every run stale from the first `"compared"` run on.
 _RESIDENCY_SOURCE: str = "lmstudio-api-v0"
 
+#: The chat/embeddings call budget when `run` is given no `--request-timeout` (plan §3.6).
+DEFAULT_REQUEST_TIMEOUT_SECONDS: float = 120.0
+
 _PROBE_MESSAGES: dict[str, str] = {
     "v1-only": (
         "LM Studio serves an OpenAI-compatible API but not its native /api/v0 catalog. "
@@ -140,14 +146,20 @@ class RunConfig:
     **The arm is exactly one of `modelKey` (a chat/embeddings arm) and `candidateId` (a decision-
     model candidate, `run --candidate`; typed-decision-models plan v1.3 §3.3)** — refused here
     otherwise, so no path can build a run with both or neither. `candidateId` defaults to `None`
-    so every pre-existing chat/embeddings construction site is unchanged."""
+    so every pre-existing chat/embeddings construction site is unchanged.
+
+    **`requestTimeoutSeconds` is the explicit `--request-timeout`, or `None` when none was given**
+    — `run_pack` resolves it (`_resolve_request_timeout`): `DEFAULT_REQUEST_TIMEOUT_SECONDS`, or
+    the pinned `DECISION_POINT_CHAT_TIMEOUT_SECONDS` on a decision-point pack, where any other
+    explicit value refuses (typed-decision-models plan2 §3.2). The `None` is what tells "no flag"
+    from an explicit `--request-timeout 120`."""
 
     modelKey: str | None
     sessionId: str | None
     referenceKey: str | None
     warmupExtra: int = 0
     firstCallTimeoutSeconds: float = 300.0
-    requestTimeoutSeconds: float = 120.0
+    requestTimeoutSeconds: float | None = None
     candidateId: str | None = None
 
     def __post_init__(self) -> None:
@@ -544,10 +556,17 @@ def _drive_decision_items(
     `score_answer` gets `decided_by="decision-model"`, the decision's `probability` (a
     predicate's p, a choice's confidence) and `input_tokens` from `usage` (plan2 §3.4).
 
-    **A failed decision call refuses the run (exit 3), and nothing is stored** — provisional,
-    **replaced by U1d.3**, which keeps the item (`failedCall="decision"`, plan2 §3.3) and, when
-    the failure is over-limit, records `reason="over-limit"` (plan3 §3.3). Never routed through
-    `score_answer` with a call-failure `withheldFor`: that state is illegal there by design."""
+    **A failed decision call (timeout or failure) is kept** (plan2 §3.3): the runtime acts on it,
+    so the item stays in the run with outcome `"fail"`, `ItemTiming(wallClockMs=<the item clock at
+    the raise>, calls=(), withheldFor=None)` — or `"load"` when the residency probe withholds it —
+    and goes through `score_answer` with `failed_call="decision"` and every other decision keyword
+    `None`. Its `withheldFor` is never a call-failure value: that is the "withheld, as today"
+    shape plan2 §3.3 replaced, and `score_answer` refuses it.
+
+    **An over-limit call** (plan3 §3.3: `decisions.is_over_limit` on the `LMStudioCallFailed`'s
+    `status`/`body` — a 500 whose body carries the marker) is the same kept item plus
+    `reason="over-limit"`; any other 500 stays a plain decision failure. There is no hand-off
+    model on this surface, so nothing takes the item over (plan3 §3.3, `decisions` surface)."""
     question = dict(candidate.question)
     results: list[ItemResult] = []
     for item_input in pack.iter_items():
@@ -565,13 +584,26 @@ def _drive_decision_items(
             over_limit = isinstance(exc, LMStudioCallFailed) and is_over_limit(
                 exc.status, exc.body
             )
-            raise RunRefused(
-                f"the decision call for item {item_input.get('itemId')!r} failed"
-                f"{' (over-limit, plan3 §3.3)' if over_limit else ''}: {exc}. Keeping a failed "
-                "decision call in the run is not built yet (typed-decision-models U1d.3); "
-                "nothing was stored",
-                exitCode=3,
-            ) from exc
+            kept = ItemTiming(
+                wallClockMs=(clock() - started) * 1000.0,
+                calls=(),
+                withheldFor=_load_withheld_for(model_info, resident),
+            )
+            results.append(
+                scorer.score_answer(
+                    item_input,
+                    None,
+                    "fail",
+                    kept,
+                    pack=pack,
+                    decided_by=None,
+                    probability=None,
+                    failed_call="decision",
+                    reason="over-limit" if over_limit else None,
+                    input_tokens=None,
+                )
+            )
+            continue
         answer = _the_answer(result, question["name"])
         decision = apply_policy(candidate.policy, answer)
         elapsed_ms = (clock() - started) * 1000.0
@@ -602,6 +634,93 @@ def _drive_decision_items(
             )
         )
     return tuple(results)
+
+
+def _decision_call_metrics(items: Sequence[ItemResult]) -> tuple[BinaryMetric, ...]:
+    """The candidate arm's exploratory decision-call counts (plan2 §3.3 "Counts", plan3 §3.6), over
+    every item the surface attempted (`n` = all items: each made its decision call, a load-
+    withheld one included), read from the `detail` `score_answer` wrote — never re-derived from
+    the call:
+    - `decisionCallFailures`: kept `failedCall == "decision"` items **without**
+      `reason == "over-limit"`;
+    - `overLimit`: items with `reason == "over-limit"`."""
+    over_limit = sum(1 for i in items if i.detail.get("reason") == "over-limit")
+    failures = sum(
+        1
+        for i in items
+        if i.detail.get("failedCall") == "decision" and i.detail.get("reason") != "over-limit"
+    )
+    return (
+        BinaryMetric(name="decisionCallFailures", successes=failures, n=len(items), unit="item"),
+        BinaryMetric(name="overLimit", successes=over_limit, n=len(items), unit="item"),
+    )
+
+
+def _with_decision_call_metrics(
+    aggregates: Aggregates, items: Sequence[ItemResult]
+) -> Aggregates:
+    """The scorer's aggregates plus `_decision_call_metrics`, appended to `perClass`. Never in
+    `verdictMetrics`, so `report.py` renders them exploratory. A decision role's aggregates need a
+    `perClass` block to carry them; one without refuses rather than dropping the counts."""
+    per_class = getattr(aggregates, "perClass", None)
+    if per_class is None:
+        raise TypeError(
+            f"{type(aggregates).__name__} has no perClass block for the decisions surface's "
+            "decision-call counts (plan2 §3.3)"
+        )
+    return replace(aggregates, perClass=(*per_class, *_decision_call_metrics(items)))
+
+
+def _same_decision(a: DecisionAnswer, b: DecisionAnswer) -> bool:
+    """Plan2 §3.4's equality for the re-check, exact: a predicate's `probability`; a choice's
+    `choice` and `confidence`. Answers of different types are never equal."""
+    if a.type != b.type:
+        return False
+    if a.type == "predicate":
+        return a.probability == b.probability
+    return (a.choice, a.confidence) == (b.choice, b.confidence)
+
+
+def _within_load_basis(
+    items: Sequence[ItemResult],
+    *,
+    candidate: Candidate,
+    lmstudio: LMStudio,
+    model_info: ModelInfo,
+    warm_up: DecisionResult | None,
+) -> Basis:
+    """Plan2 §3.4's load rule (note §Q6), run after the last item and before
+    `residentModelsAtEnd`: did every scored item come from the one load the warm-up made?
+
+    It probes residency first. If the decision model is absent, or any item was withheld for
+    `"load"`, it makes **no** call and the run is `"assumed"` (not one load). Otherwise it repeats
+    the mandatory warm-up's call — `decide(WARMUP_DECISION_INPUT, [question])` at
+    `decisionTimeoutSeconds` — and the run is `"by-construction"` iff the answer is exactly the
+    mandatory warm-up's (`_same_decision`; never a `--warmup N` extra's). A raise, an unequal
+    answer, a probe that could not run, or no warm-up answer to compare against is `"assumed"`:
+    the fail-safe value, which only ever weakens what the run may claim."""
+    try:
+        resident = lmstudio.residency()
+    except (LMStudioUnreachable, TimeoutError):
+        return "assumed"
+    if not _is_resident(model_info.id, resident):
+        return "assumed"
+    if any(i.timing is not None and i.timing.withheldFor == "load" for i in items):
+        return "assumed"
+    if warm_up is None:
+        return "assumed"
+    name = candidate.question["name"]
+    try:
+        recheck = lmstudio.decide(
+            WARMUP_DECISION_INPUT,
+            [dict(candidate.question)],
+            model=model_info.id,
+            timeout_s=candidate.decisionTimeoutSeconds,
+        )
+    except (LMStudioCallTimeout, LMStudioCallFailed, LMStudioUnreachable):
+        return "assumed"
+    same = _same_decision(_the_answer(recheck, name), _the_answer(warm_up, name))
+    return "by-construction" if same else "assumed"
 
 
 #: The three failing `TurnDisposition` values, and the `ItemTiming.withheldFor` each maps to
@@ -1074,6 +1193,29 @@ def _prepare_decision_arm(
     )
 
 
+def _resolve_request_timeout(pack: Pack, cfg: RunConfig) -> float:
+    """The run's chat-call budget (typed-decision-models plan2 §3.2, note §Q4.3). On a decision-
+    point pack (a `decisionPoint` block) it is `DECISION_POINT_CHAT_TIMEOUT_SECONDS`, and an
+    explicit `--request-timeout` of any other value refuses up front (exit 4): a run at another
+    value can never carry a verdict. Elsewhere it is the explicit value, or
+    `DEFAULT_REQUEST_TIMEOUT_SECONDS`."""
+    if "decisionPoint" not in pack.manifest:
+        return (
+            cfg.requestTimeoutSeconds
+            if cfg.requestTimeoutSeconds is not None
+            else DEFAULT_REQUEST_TIMEOUT_SECONDS
+        )
+    pinned = float(DECISION_POINT_CHAT_TIMEOUT_SECONDS)
+    if cfg.requestTimeoutSeconds is not None and cfg.requestTimeoutSeconds != pinned:
+        raise RunRefused(
+            f"{pack.packId}: --request-timeout {cfg.requestTimeoutSeconds:g} on a decision-point "
+            f"pack; its chat calls run at {pinned:g} s and no other value can carry a verdict "
+            "(typed-decision-models plan2 §3.2) — drop the flag",
+            exitCode=4,
+        )
+    return pinned
+
+
 def run_pack(
     pack: Pack,
     cfg: RunConfig,
@@ -1093,9 +1235,15 @@ def run_pack(
     of the chat/embeddings cross-check; step 4's warm-up is one `decide` with the candidate's own
     question (attestation trip-wire `"unavailable"`, as for embeddings); step 9 is
     `_drive_decision_items`, timed by `clock` (seconds, monotonic — the item clock). Its
-    `designEffect=1.0, basis="by-construction"` holds only until U1d.3's load rule, which can
-    record `"assumed"` (plan2 §3.4)."""
+    `designEffect` is `1.0`; its `basis` is the load rule's (`_within_load_basis`, plan2 §3.4):
+    `"by-construction"` for one load, otherwise `"assumed"`.
+
+    **Every run records its chat-call budget** (`RunResult.requestTimeoutSeconds`), resolved up
+    front by `_resolve_request_timeout` — pinned, with its exit-4 refusal, on a decision-point
+    pack (plan2 §3.2)."""
     started_at = now()  # step 0
+    # Up front, before any call: the chat-call budget, pinned on a decision-point pack.
+    cfg = replace(cfg, requestTimeoutSeconds=_resolve_request_timeout(pack, cfg))
 
     try:
         host = hostinfo.read_host_info(root)  # step 1
@@ -1197,11 +1345,20 @@ def run_pack(
             baseline_residency=baseline_residency,
             clock=clock,
         )
-        # Sampling unit == item, one load (v1.3 §3.3). Replaced by U1d.3: its load rule and
-        # within-load re-check record `basis="assumed"` when the run may span two loads.
-        design_effect, basis = 1.0, "by-construction"
+        # Sampling unit == item (v1.3 §3.3); `by-construction` is final iff the run is one load
+        # (plan2 §3.4) — the load rule, before step 10's `residentModelsAtEnd`.
+        design_effect = 1.0
+        basis = _within_load_basis(
+            items,
+            candidate=decision_arm.candidate,
+            lmstudio=lmstudio,
+            model_info=model_info,
+            warm_up=load_result.decision,
+        )
         disclosures = ()
-        aggregates = decision_arm.scorer.aggregate(items, pack=pack)
+        aggregates = _with_decision_call_metrics(
+            decision_arm.scorer.aggregate(items, pack=pack), items
+        )
     elif pack.role == "tool-caller":
         items, disclosures, basis, design_effect, aggregates = _drive_conversations(  # step 9
             pack,
@@ -1272,5 +1429,6 @@ def run_pack(
         basis=basis,
         attestationTripWire=check.outcome,
         latency=latency,
+        requestTimeoutSeconds=cfg.requestTimeoutSeconds,
     )
     return run, disclosures

@@ -2,6 +2,65 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U1d.3 — the run-time deltas: kept decision failures, the load rule, the chat-timeout pin, the decision-call counts
+
+**What:** the last third of U1d (`docs/plans/typed-decision-models2.md` §4.1 U1d with §3.2–§3.4,
+§3.6; `docs/plans/typed-decision-models3.md` §4.1 U1d with §3.3, §3.6), plus two carried review
+items. It replaces everything U1d.2 marked "replaced by U1d.3". The `handoff` surface stays U2's.
+
+- **Chat-timeout pin (plan2 §3.2).** `RunConfig.requestTimeoutSeconds` is now the explicit
+  `--request-timeout`, or `None`. `runner._resolve_request_timeout` resolves it up front. On a
+  decision-point pack it is `decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS` (180) for every arm,
+  and any other explicit value refuses with exit 4 before any call. Elsewhere it is the flag's
+  value, or `DEFAULT_REQUEST_TIMEOUT_SECONDS` (120). `RunResult.requestTimeoutSeconds` records
+  the resolved value on every run; a record written before the field existed loads it as `None`.
+- **Kept decision-call failure (plan2 §3.3).** U1d.2's exit-3 refusal is gone. A decide timeout
+  or failure keeps its item: outcome `"fail"`, `ItemTiming(wallClockMs=<item clock at the
+  raise>, calls=(), withheldFor=None | "load")`, routed through `score_answer(failed_call=
+  "decision", …)` with every other keyword `None`. `score_answer`'s legality rules are unchanged.
+- **Over-limit on the `decisions` surface (plan3 §3.3).** A failure that `decisions.is_over_limit`
+  recognises on `LMStudioCallFailed.status`/`.body` is the same kept item plus
+  `reason="over-limit"`; any other 500, the marker at 400, and the upper-cased marker stay plain
+  failures.
+- **Load rule, re-check, basis (plan2 §3.4).** `LoadResult.decision` (default `None`) carries the
+  decisions warm-up's answer, and `lmstudio.WARMUP_DECISION_INPUT` is public. After the last
+  item and before `residentModelsAtEnd`, `runner._within_load_basis` probes residency. If the
+  decision model is absent, or any item was withheld for `"load"`, it makes no call. Otherwise it
+  repeats the warm-up `decide` at `decisionTimeoutSeconds` and compares exactly with the
+  mandatory warm-up (predicate `probability`; choice `choice` and `confidence`; never a
+  `--warmup N` extra). Equal gives `by-construction`. Unequal, a raise, a failed probe or no
+  warm-up answer give `assumed`. **The candidate run's `basis` is no longer provisional:**
+  `designEffect=1.0, basis="by-construction"` is final for a one-load run.
+- **Counts (plan2 §3.3, plan3 §3.6).** The candidate arm's `perClass` gains two exploratory
+  `BinaryMetric`s over every item (`unit="item"`). `decisionCallFailures` counts `failedCall ==
+  "decision"` items without `reason == "over-limit"`, and `overLimit` counts the over-limit ones.
+  Both are read from `detail`, and `overLimit 0/n` is recorded too. A chat arm carries neither.
+- **P6-m1 closed.** `tests/test_decisions.py` gains two hand-derived `question_spec_hash` vectors,
+  hashed with `printf '%s' … | sha256sum`. One is a choice question with keys out of order at the
+  top level and inside a `choices` object; both carry non-ASCII text (an em dash, Portuguese
+  accents). The test docstring states the formula, so it is the formula's home until a plan
+  states it.
+- **P6-n1 closed.** `cli._select_rank_arms` dedupes on `armKey`, so two candidates on one
+  decision model stay two arms.
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`), each red: a failed decision call still
+refusing the run; the kept item's `wallClockMs` taken from the call budget instead of the item
+clock; `inputTokens` taken from a stale call's `usage`; the kept item ignoring residency;
+`--request-timeout 120` accepted on a decision-point pack; the pin not applied (120 on a
+decision-point pack); `requestTimeoutSeconds` not recorded, or dropped by `to_dict`; `basis`
+hardcoded to `by-construction` (in the rule and in `run_pack`); the re-check run when the model
+was absent, or after a load-withheld item; the re-check compared with a `--warmup` extra; a
+re-check raise not caught; the warm-up dropping `LoadResult.decision`; choice equality ignoring
+`confidence`; an over-limit item counted in `decisionCallFailures`; `overLimit` counting
+non-marker 500s (status-only recognition) or every failed call; `reason` not passed; the counts
+not appended; `overLimit`'s `n` shrunk; `question_spec_hash` without `ensure_ascii=False`,
+sorting top-level keys only, or with default separators; `rank` deduping on `modelKey`.
+
+Full suite `2465 passed, 4 deselected, 2 xfailed` (24 new tests in `tests/test_runner_decisions.py`,
+one of them replacing U1d.2's exit-3 refusal test; 1 test with 2 vectors in
+`tests/test_decisions.py`);
+`ruff` clean. Nothing is written under `results/runs/`.
+
 ## 2026-10-31 — typed-decision-models U1d.2 — the plain `decisions` arm: `run --candidate`, offline
 
 **What:** the core wiring of `docs/plans/typed-decision-models.md` v1.3 §4 U1d (with plan2 §3.2,

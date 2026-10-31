@@ -806,7 +806,13 @@ class FakeItemScorer:
 def _cfg(**overrides):
     from modelbench.runner import RunConfig
 
-    base = dict(modelKey="qwen/qwen3-4b-2507", sessionId=None, referenceKey=None)
+    # The drivers are called directly here, past `run_pack`'s resolution of the budget.
+    base = dict(
+        modelKey="qwen/qwen3-4b-2507",
+        sessionId=None,
+        referenceKey=None,
+        requestTimeoutSeconds=120.0,
+    )
     base.update(overrides)
     return RunConfig(**base)
 
