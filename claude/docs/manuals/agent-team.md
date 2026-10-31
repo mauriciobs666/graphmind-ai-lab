@@ -115,13 +115,23 @@ flowchart LR
     R -->|"Ready for design<br/>(your OK + passing<br/>analyst review)"| P["architect<br/>plans/x.md"]
     P --> G1{"analyst<br/>reviews the plan"}
     G1 -->|needs changes| P
-    G1 -->|approve| I["coder / tdd-engineer /<br/>frontend-engineer<br/>code + tests + doc updates"]
+    G1 -->|approve| I["coder / tdd-engineer /<br/>frontend-engineer<br/>code + tests + doc updates<br/>(live spec left alone)"]
     I --> G2{"analyst<br/>reviews the diff"}
     G2 -->|needs changes| I
     G2 -->|approve| Q["qa-engineer<br/>test plan → run → report"]
     Q -->|defects| I
-    Q --> D["HISTORY.md entry<br/>+ tico updates the manual"]
+    Q --> S["feature close:<br/>implementer updates<br/>the live spec"]
+    S --> G3{"analyst checks the spec<br/>against the shipped code"}
+    G3 -->|needs changes| S
+    G3 -->|approve| RL["teco adds the reviews'<br/>proposed REVIEW.md lines"]
+    RL --> D["HISTORY.md entry, last<br/>+ tico updates the manual"]
 ```
+
+Two terms in that picture. A **live spec** is the set of documents that describe how a component
+behaves *right now* (for falkor-chat: its design, server and query docs). A **`REVIEW.md`** is a
+component's standing checklist for reviewers. Build work leaves the live spec alone; it is
+updated once, when the feature closes, and checked against what actually shipped. A component
+without a live spec skips the two spec steps.
 
 Side roles join as needed: `data-scientist` advises on, and reviews, anything involving model
 choice or evaluation; `graph-dba` designs graph-data changes; `devops` unblocks environments;
@@ -189,6 +199,8 @@ What's worth knowing about each step:
   restarts one that's running) and warns if a code graph it may need is stale.
 - **Decompose.** Each unit gets an owner, a "done" condition and a review gate. **Doc updates are
   written into the done condition** — code that works but leaves its README stale is unfinished.
+  The live spec is the exception: build units leave it alone, and teco lists the affected
+  sections for the feature close instead.
 - **Delegate.** Each specialist starts with an empty head, so its brief carries everything:
   the goal, the upstream document *by path*, constraints, and where to write its result.
 - **Integrate.** teco checks instead of trusting: it re-checks numbers a delegate reports, opens
