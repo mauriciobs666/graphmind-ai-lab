@@ -8,11 +8,13 @@ whole module:
   The `deterministic` kind *forbids* every model field: `{"modelKey": "bm25", "quantization":
   "n/a"}` is the shortcut a time-pressed implementer reaches for, and it must fail loudly on write
   rather than quietly become a sixth model in the history. `armKind` keeps its two values; a second
-  discriminator `callSurface` (`"chat"` / `"embeddings"`, `None` iff deterministic) joins it, and
-  the mapping key is the **derived** `armProfile` — `model:chat`, `model:embeddings` or
-  `deterministic`. An embeddings call has no `runtime` object to observe and no sampling parameters
-  to obey, so that profile is *forbidden* `runtimeName`, `runtimeVersion`, `temperature` and
-  `maxTokens` rather than merely excused from them. Both discriminators are members of no required
+  discriminator `callSurface` (`"chat"` / `"embeddings"` / `"decisions"` / `"handoff"`, `None` iff
+  deterministic) joins it, and the mapping key is the **derived** `armProfile` — `model:chat`,
+  `model:embeddings`, `model:decisions`, `model:handoff` or `deterministic` (the two decision
+  profiles: `docs/plans/typed-decision-models.md` §3.3). An embeddings call has no `runtime`
+  object to observe and no sampling parameters to obey, so that profile is *forbidden*
+  `runtimeName`, `runtimeVersion`, `temperature` and `maxTokens` rather than merely excused from
+  them. Both discriminators are members of no required
   set and are checked before any mapping is consulted.
 * **Absent is not empty** (§3.4.2). `residentModelsAtStart: []` is the correct value on a clean box
   and the catalog omits `capabilities` entirely for several models, so each required field declares
@@ -38,7 +40,7 @@ from types import MappingProxyType
 from typing import Any, Literal, NamedTuple
 
 ArmKind = Literal["model", "deterministic"]
-CallSurface = Literal["chat", "embeddings"]
+CallSurface = Literal["chat", "embeddings", "decisions", "handoff"]
 Tier = Literal["nonempty", "present"]
 
 #: Why a field failed. `unknown` covers a **value** this build cannot interpret, in three
@@ -125,6 +127,50 @@ _MODEL_EMBEDDINGS_SCHEMA_1: dict[str, FieldSpec] = {
     name: spec for name, spec in _MODEL_CHAT_SCHEMA_1.items() if name not in _EMBEDDINGS_HAVE_NO
 }
 
+# --- typed-decision-models (docs/plans/typed-decision-models.md §3.3, §3.5) -------------------
+# Two profiles added **to schema 1**: purely additive, since no existing profile's required set
+# changes and every name below is new, so the old profiles' derived forbidden sets grow only by
+# names no stored record carries. Both are `armKind == "model"`, which is why `ARM_KINDS` below is
+# unchanged and `CALL_SURFACES` gains their two suffixes.
+
+#: What a decision-model arm adds to the embeddings set: the candidate's identity and content hash,
+#: the question spec, the policy object, the fit manifest (§3.5's leakage check) and the evaluation
+#: set's content hash (FR-4's reuse count). It has no runtime or sampling field, because the
+#: decisions response has no `runtime` object and the call takes no sampling parameters (§2.3) —
+#: so, by the set difference, those four are *forbidden* here exactly as on embeddings.
+#: `fitManifestSize` is a count, and zero inputs is an answer, so it is `present`.
+_DECISIONS_ADD: dict[str, FieldSpec] = {
+    "candidateId": _NONEMPTY,
+    "candidateContentHash": _NONEMPTY,
+    "questionSpecHash": _NONEMPTY,
+    "decisionPolicy": _NONEMPTY,
+    "fitManifestHash": _NONEMPTY,
+    "fitManifestSize": _PRESENT,
+    "evalSetHash": _NONEMPTY,
+}
+
+_MODEL_DECISIONS_SCHEMA_1: dict[str, FieldSpec] = {**_MODEL_EMBEDDINGS_SCHEMA_1, **_DECISIONS_ADD}
+
+#: The hand-off composite's second model, flat and `handoff`-prefixed so the tier and forbidden
+#: machinery applies unchanged (§3.3). Its sampling settings live here and **not** under the bare
+#: chat names, which stay forbidden on this profile: the decision model obeys none of them.
+_HANDOFF_ADD: dict[str, FieldSpec] = {
+    "handoffModelKey": _NONEMPTY,
+    "handoffModelPublisher": _NONEMPTY,
+    "handoffArch": _NONEMPTY,
+    "handoffQuantization": _NONEMPTY,
+    "handoffCompatibilityType": _NONEMPTY,
+    "handoffMaxContextLength": _NONEMPTY,
+    "handoffLoadedContextLength": _NONEMPTY,
+    "handoffModelType": _NONEMPTY,
+    "handoffRuntimeName": _NONEMPTY,
+    "handoffRuntimeVersion": _NONEMPTY,
+    "handoffTemperature": _PRESENT,
+    "handoffMaxTokens": _NONEMPTY,
+}
+
+_MODEL_HANDOFF_SCHEMA_1: dict[str, FieldSpec] = {**_MODEL_DECISIONS_SCHEMA_1, **_HANDOFF_ADD}
+
 # A deterministic arm is reproducible from (packContentHash, armParametersHash, benchVersion)
 # alone, which is why host state is not merely optional for it but forbidden: recording a KV-cache
 # setting beside a BM25 score would imply the score depends on it (§3.4.1).
@@ -144,12 +190,15 @@ _DETERMINISTIC_SCHEMA_1: dict[str, FieldSpec] = {
 
 #: `{schemaVersion: {armProfile: {field: FieldSpec}}}` — plan §3.4.3. A record is validated against
 #: its own entry here, so an added field at a later version never invalidates an older record.
-#: The inner key is the *profile* (§3.4.1), not the arm kind: schema 1 has exactly three.
+#: The inner key is the *profile* (§3.4.1), not the arm kind: schema 1 has exactly five — the
+#: original three plus typed-decision-models' `model:decisions` and `model:handoff`.
 #: Mutable by design: `model-bench migrate` and the schema-2 regression test both key off it.
 REQUIRED_BY_SCHEMA: dict[int, dict[str, dict[str, FieldSpec]]] = {
     1: {
         "model:chat": _MODEL_CHAT_SCHEMA_1,
         "model:embeddings": _MODEL_EMBEDDINGS_SCHEMA_1,
+        "model:decisions": _MODEL_DECISIONS_SCHEMA_1,
+        "model:handoff": _MODEL_HANDOFF_SCHEMA_1,
         "deterministic": _DETERMINISTIC_SCHEMA_1,
     },
 }
@@ -186,7 +235,9 @@ FORBIDDEN_BY_ARM_PROFILE: Mapping[str, frozenset[str]] = MappingProxyType(_forbi
 #: `armKind` keeps its two values and its meaning; the profile is the mapping key alone.
 ARM_KINDS: frozenset[str] = frozenset(p.split(":", 1)[0] for p in REQUIRED_BY_SCHEMA[1])
 
-#: The `callSurface` values, from the same split — the profile suffix, `chat` or `embeddings`.
+#: The `callSurface` values, from the same split — the profile suffix: `chat`, `embeddings`,
+#: `decisions` or `handoff`. (`handoff` is a composite arm the runner drives, not an LM Studio
+#: route, so `lmstudio.CallSurface` never carries it.)
 CALL_SURFACES: frozenset[str] = frozenset(
     p.split(":", 1)[1] for p in REQUIRED_BY_SCHEMA[1] if ":" in p
 )

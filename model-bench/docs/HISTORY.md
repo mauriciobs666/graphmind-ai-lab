@@ -2,6 +2,96 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-30 — typed-decision-models U1a (offline) — `LMStudio.decide` on `/v1/decisions`; live probe pending
+
+**What:** `docs/plans/typed-decision-models.md` §4 U1a, **offline half only**. `lmstudio.py` gains
+`CallSurface` `"decisions"` (never `"handoff"`, a runner composite), `DecisionAnswer`,
+`DecisionResult`, `LMStudio.decide(input, questions, *, model, timeout_s)` and
+`warm_up(call_surface="decisions", question=...)`.
+
+- **Route: `DECISIONS_ROUTE = "/v1/decisions"`, provisional.** The plan's U1a live probe — one
+  predicate and one choice question POSTed to `/api/v0/decisions` with `laya` loaded — **has not
+  run**: it loads a model on a shared GPU and waits for human approval. If `/api/v0/decisions`
+  exists and returns `stats`/`runtime` that `/v1` lacks, `DECISIONS_ROUTE` switches to it and U1b's
+  `model:decisions` profile gains `runtimeName`/`runtimeVersion`; otherwise nothing changes. The
+  `decide` docstring says the same. Its result belongs in a follow-up entry here.
+- `decide` goes through `_raw_post`, so it has the POST failure taxonomy (asserted over all seven
+  grid cells, for `decide` and the decisions warm-up). A 2xx body that breaks the §2.3 contract is
+  one `LMStudioCallFailed(status=None)` raise site, added to the status-scenario completeness pin.
+  Refused: a non-object body, no `answers` list, an answer with no name, an unseen type (`score`,
+  named as such), a type that disagrees with its question, a probability or confidence that is not
+  a finite real in `[0, 1]` (bools, strings, `NaN`/`±Infinity`), a choice or probability value
+  the question did not declare, an unanswered, unasked or twice-answered question.
+- `warm_up`'s `question` is required on `decisions` and refused on `chat`/`embeddings`, so its
+  `None` default never picks anything; the runner's calls are untouched (wiring is U1d).
+- **Fixture caveat:** `tests/fixtures/lmstudio/decisions_response.json` is §2.3's recorded
+  shape with synthetic values. Neither the plan nor the probe document (`ws:agent-team`
+  `316050e8…`) kept a raw body, and no live call was made. Its `_provenance` says so; replace it
+  with a raw capture when the probe runs.
+- One `-m live` test (`test_live_decide_predicate_and_choice_against_a_real_lm_studio`),
+  deselected by default and **not run**.
+- Mutation-tested: silently accepting a malformed payload, timeouts mapped to
+  `LMStudioCallFailed` (in `decide` and in `_raw_post`'s `URLError(TimeoutError)` rung), every
+  individual contract check removed, the route switched, the warm-up question, residency and guard
+  broken, and the `Literal` shrunk — each reddens. A separate `isfinite` check was removed as dead
+  code (an equivalent mutant: the `[0, 1]` comparison already refuses `NaN`/`inf`).
+
+Full suite `2074 passed, 4 deselected, 2 xfailed`; `ruff` clean.
+
+## 2026-10-30 — typed-decision-models U3a — `classification.score_item` split, no behaviour change
+
+**What:** `docs/plans/typed-decision-models.md` §4 U3a, alone. `scoring/classification.py`'s
+`score_item` is now `answer_from_chat(result, *, pack) -> (advanced, outcome)` (this pack's parse,
+unchanged — including the loose `bool(parsed.get("decision"))`) then `score_answer(item_input,
+answer, outcome, timing, *, pack) -> ItemResult` (tier metric and count); the `result is None`
+withholding stays in `score_item`. These are the two hooks U1d's decisions arm will call.
+
+- **Proof of no change:**
+  `test_score_item_rescores_the_real_pack_byte_identically_to_before_the_split` re-scores all 85
+  items of `packs/guard-judge-understanding` against a 15-reply corpus (one per parse/count
+  branch; no stored record keeps reply text) plus both withholdings — 1445 cases — and compares the
+  SHA-256 of every `repr(ItemResult)` (`repr`, so a `True` count cannot pass for `1`), per variant
+  and overall, to `tests/fixtures/classification/score_item_before_split.json`, computed from the
+  pre-split module at `dc2f8884`. The full before/after text was also compared byte for byte.
+- Mutation-tested: a strict `is True` parse, a bool count, a dropped `detail.tier`, swapped
+  withholding outcomes, an advancing parse-failure fallback, a dropped `require_key` (survived the
+  first 14-reply corpus; the `keyless-beside-key` reply was added and the golden regenerated from
+  the pre-split module), and a rewritten timing — each reddens the golden test. The bool-count
+  mutant passes every pre-existing `score_item` unit test (`True == 1`).
+- **Deviation:** `score_answer` does not yet take plan §3.3's `decided_by`/`probability`. They
+  have no consumer until U1d/U2, and accepting them unused would be a no-op parameter; whichever
+  unit first writes `detail.decidedBy` adds them with its test.
+
+Full suite `2024 passed, 3 deselected, 2 xfailed`; `ruff` clean.
+
+## 2026-10-30 — typed-decision-models U1b — `model:decisions` and `model:handoff` fingerprint profiles
+
+**What:** First model-bench unit of `docs/plans/typed-decision-models.md` (v1.3, §3.3, §4 U1b),
+alone — no runner, CLI or adapter wiring.
+
+- `fingerprint.CallSurface` gains `"decisions"` and `"handoff"`; `REQUIRED_BY_SCHEMA[1]` gains two
+  profiles, **additive to schema 1** (no bump). `model:decisions` is the embeddings 26 plus
+  `candidateId`, `candidateContentHash`, `questionSpecHash`, `decisionPolicy`, `fitManifestHash`,
+  `fitManifestSize` (`present` — a count, 0 is an answer) and `evalSetHash`: 33. `model:handoff`
+  is those plus the twelve flat `handoff*` fields (`handoffTemperature` `present`): 45. By the set
+  difference, both forbid `runtimeName`/`runtimeVersion`/`temperature`/`maxTokens`, plain
+  `model:decisions` forbids every `handoff*`, and every old profile forbids all 19 new names.
+- `ARM_KINDS` stays `{model, deterministic}`; `CALL_SURFACES` is now the four suffixes. Both are
+  pinned by value and by consequence, and the `lmstudio.CallSurface` binding now reads "the record
+  vocabulary minus the `handoff` composite" (still `{chat, embeddings}` until U1a).
+- Regression test `test_results.py::test_every_stored_run_record_still_validates_unchanged` loads
+  every shipped `results/runs/*.json` (95) through `load_history`, per pack: no quarantine, every
+  `runId` read, no file byte changed.
+- Mutation-tested: widening `ARM_KINDS`, dropping either new `CALL_SURFACES` entry, widening it,
+  allowing `temperature` on `model:decisions` (forbidden-set carve-out, or adding it to the required
+  set), building `model:decisions` from the chat set, moving `handoffTemperature` into the decisions
+  table, relaxing the `fitManifestSize` tier, shrinking the decisions table, making an old profile
+  require a new field (caught by the stored-records test), and dropping `handoff` from the `Literal`
+  — each reddens at least one test.
+
+`model-bench/AGENTS.md`'s profile list was corrected in place. Full suite `2016 passed, 3
+deselected, 2 xfailed` (baseline `1817 passed, 3 deselected, 2 xfailed`); `ruff` clean.
+
 ## 2026-10-15 — FX1–FX2 — S4 code-gate follow-ups: scorer counters rendered, `exec.py` null-sort gap pinned
 
 **What:** Closed two of the S4 code-gate follow-ups (`docs/reviews/small-model-benchmarking-s4.md`)

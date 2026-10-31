@@ -837,6 +837,288 @@ def test_warm_up_on_embeddings_surface_has_no_runtime_or_stats():
     assert result.wallClockMs is not None
 
 
+# --- decide() — typed-decision-models U1a (plan §2.3, §3.3, §4 U1a) --------------------------
+
+#: The two questions the pinned response answers, in the request shape §2.3 records: choice
+#: options are `{value, instructions}` objects (bare strings are rejected by the server).
+_DECISION_QUESTIONS: list[dict[str, Any]] = [
+    {"type": "predicate", "name": "advance", "instructions": "Is the condition satisfied?"},
+    {
+        "type": "choice",
+        "name": "messageType",
+        "instructions": "What kind of message is this?",
+        "choices": [
+            {"value": "question", "instructions": "asks something"},
+            {"value": "request", "instructions": "asks for an action"},
+            {"value": "other", "instructions": "anything else"},
+        ],
+    },
+]
+
+
+def _decide_over(body: Any, *, questions: list[dict[str, Any]] | None = None):
+    raw = body if isinstance(body, bytes) else _json_bytes(body)
+    c = client({lmstudio.DECISIONS_ROUTE: (200, raw)})
+    return c.decide(
+        "hello there",
+        _DECISION_QUESTIONS if questions is None else questions,
+        model="laya",
+        timeout_s=5.0,
+    )
+
+
+def _pinned_decisions_body() -> dict[str, Any]:
+    body = _load("decisions_response.json")
+    body.pop("_provenance")
+    return body
+
+
+def test_the_decisions_route_is_the_verified_v1_route_pending_the_v0_probe():
+    """Plan §2.3: `/v1/decisions` is the verified route. Whether an `/api/v0/decisions` variant
+    exists (with `stats`/`runtime`) is the U1a live probe's question, still unrun; this pin is the
+    one line that probe may change."""
+    assert lmstudio.DECISIONS_ROUTE == "/v1/decisions"
+
+
+def test_decide_parses_the_pinned_predicate_and_choice_response():
+    """Plan §5 U1a, first behaviour: the §2.3 contract parses into typed answers."""
+    result = _decide_over(_pinned_decisions_body())
+    assert result.model == "laya"
+    assert result.answers == (
+        lmstudio.DecisionAnswer(
+            name="advance",
+            type="predicate",
+            probability=0.931,
+            choice=None,
+            probabilities=None,
+            confidence=None,
+        ),
+        lmstudio.DecisionAnswer(
+            name="messageType",
+            type="choice",
+            probability=None,
+            choice="question",
+            probabilities=(("question", 0.82), ("request", 0.11), ("other", 0.07)),
+            confidence=0.82,
+        ),
+    )
+    assert result.usage == _pinned_decisions_body()["usage"]
+    assert result.wallClockMs is not None and result.wallClockMs >= 0.0
+
+
+def test_decide_posts_model_input_and_questions_to_the_decisions_route():
+    seen: list[urllib.request.Request] = []
+    body = _json_bytes(_pinned_decisions_body())
+
+    def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
+        seen.append(req)
+        assert timeout == 7.5
+        return _FakeResponse(200, body)
+
+    c = LMStudio("http://localhost:1234/", opener=opener)
+    c.decide("hello there", _DECISION_QUESTIONS, model="laya", timeout_s=7.5)
+    (req,) = seen
+    assert req.full_url == "http://localhost:1234/v1/decisions"
+    assert req.get_method() == "POST"
+    assert json.loads(req.data) == {
+        "model": "laya",
+        "input": "hello there",
+        "questions": _DECISION_QUESTIONS,
+    }
+
+
+def test_decide_requires_timeout_s_with_no_default():
+    c = client({})
+    with pytest.raises(TypeError):
+        c.decide("x", _DECISION_QUESTIONS, model="laya")
+
+
+def _mutated(edit: Callable[[dict[str, Any]], Any]) -> dict[str, Any]:
+    body = _pinned_decisions_body()
+    edit(body)
+    return body
+
+
+def _set(path: tuple[Any, ...], value: Any) -> Callable[[dict[str, Any]], None]:
+    def edit(body: dict[str, Any]) -> None:
+        target: Any = body
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+
+    return edit
+
+
+def _drop(path: tuple[Any, ...]) -> Callable[[dict[str, Any]], None]:
+    def edit(body: dict[str, Any]) -> None:
+        target: Any = body
+        for key in path[:-1]:
+            target = target[key]
+        del target[path[-1]]
+
+    return edit
+
+
+#: Each a 2xx body that is **not** the §2.3 contract. Plan §6 R-1: the endpoint is new and partly
+#: documented, so a shape change must fail loudly in `decide`, never be read silently as an
+#: answer. Every one is `LMStudioCallFailed(status=None)` — the server did not refuse.
+_MALFORMED_DECISIONS: dict[str, Any] = {
+    "body is a list": [],
+    "no answers key": _mutated(_drop(("answers",))),
+    "answers is not a list": _mutated(_set(("answers",), {"advance": 0.9})),
+    "an answer is not an object": _mutated(_set(("answers", 0), 0.931)),
+    "an answer has no name": _mutated(_drop(("answers", 0, "name"))),
+    "an answer of an unseen type": _mutated(_set(("answers", 0, "type"), "score")),
+    "an answer's type disagrees with its question": _mutated(
+        _set(("answers", 0, "type"), "choice")
+    ),
+    "a predicate answer to a choice question": _mutated(
+        _set(("answers", 1), {"type": "predicate", "name": "messageType", "probability": 0.82})
+    ),
+    "a predicate with no probability": _mutated(_drop(("answers", 0, "probability"))),
+    "a predicate probability that is a string": _mutated(
+        _set(("answers", 0, "probability"), "0.931")
+    ),
+    "a predicate probability that is a bool": _mutated(
+        _set(("answers", 0, "probability"), True)
+    ),
+    "a predicate probability above 1": _mutated(_set(("answers", 0, "probability"), 1.5)),
+    "a predicate probability below 0": _mutated(_set(("answers", 0, "probability"), -0.01)),
+    "a choice with no confidence": _mutated(_drop(("answers", 1, "confidence"))),
+    "a choice outside the question's values": _mutated(
+        _set(("answers", 1, "choice"), "complaint")
+    ),
+    "a choice whose probabilities is not a list": _mutated(
+        _set(("answers", 1, "probabilities"), {"question": 0.82})
+    ),
+    "a choice probability entry with no value": _mutated(
+        _drop(("answers", 1, "probabilities", 0, "value"))
+    ),
+    "a choice probability entry naming an undeclared value": _mutated(
+        _set(("answers", 1, "probabilities", 2, "value"), "complaint")
+    ),
+    "a question left unanswered": _mutated(lambda b: b["answers"].pop(1)),
+    "an answer to a question never asked": _mutated(
+        lambda b: b["answers"].append({"type": "predicate", "name": "extra", "probability": 0.5})
+    ),
+    "a question answered twice": _mutated(
+        lambda b: b["answers"].append(dict(b["answers"][0]))
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(_MALFORMED_DECISIONS))
+def test_decide_raises_call_failed_on_a_malformed_answers_payload(name):
+    """Plan §5 U1a: malformed `answers` raises `LMStudioCallFailed`, never a partial result."""
+    with pytest.raises(LMStudioCallFailed) as caught:
+        _decide_over(_MALFORMED_DECISIONS[name])
+    assert caught.value.status is None
+
+
+def test_decide_refuses_a_score_answer_whose_shape_no_probe_has_seen():
+    """`score` is a valid request type (§2.3), but no probe recorded its answer shape, so even a
+    `score` answer to a `score` question is refused rather than guessed at (plan §6 R-1)."""
+    questions = [{"type": "score", "name": "urgency", "instructions": "How urgent?"}]
+    body = {"model": "laya", "answers": [{"type": "score", "name": "urgency", "score": 0.4}]}
+    with pytest.raises(LMStudioCallFailed) as caught:
+        _decide_over(body, questions=questions)
+    assert caught.value.status is None
+    # ...and refused **as** an unrecognized type: under R-1 the message is the operator's only
+    # clue that the endpoint's shape moved, so a refusal for some downstream reason misleads.
+    assert "unrecognized type 'score'" in str(caught.value)
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_decide_raises_call_failed_on_a_non_finite_probability_json_loads_lets_through(token):
+    """`json.loads` parses a bare `NaN` token (the `ChatResult` P13-3 lesson), so it reaches the
+    answer parse with no malformed transport; it must not survive as a probability."""
+    raw = json.dumps(_pinned_decisions_body()).replace("0.931", token).encode("utf-8")
+    with pytest.raises(LMStudioCallFailed):
+        _decide_over(raw)
+
+
+def test_decide_call_that_times_out_raises_lmstudio_call_timeout():
+    """Plan §5 U1a: timeout raises `LMStudioCallTimeout` — a censored observation, never the
+    `no_response` `LMStudioCallFailed` a dropped connection is."""
+    c = client({lmstudio.DECISIONS_ROUTE: TimeoutError("timed out")})
+    with pytest.raises(LMStudioCallTimeout):
+        c.decide("x", _DECISION_QUESTIONS, model="laya", timeout_s=0.01)
+    c = client(
+        {lmstudio.DECISIONS_ROUTE: urllib.error.URLError(TimeoutError("timed out"))}
+    )
+    with pytest.raises(LMStudioCallTimeout):
+        c.decide("x", _DECISION_QUESTIONS, model="laya", timeout_s=0.01)
+
+
+def test_decide_server_refusal_carries_the_status():
+    """A bare-string choice is a `400` from the server (§2.3): a refusal, with its status."""
+    c = client({lmstudio.DECISIONS_ROUTE: (400, b'{"error": "choices[0] must be an object"}')})
+    with pytest.raises(LMStudioCallFailed) as caught:
+        c.decide("x", _DECISION_QUESTIONS, model="laya", timeout_s=5.0)
+    assert caught.value.status == 400
+
+
+def test_warm_up_on_decisions_surface_makes_one_decide_call_with_the_candidates_question():
+    """Plan §3.3: the decisions warm-up is one `decide` call with a fixed tiny input and the
+    candidate's own question. The response has no `runtime`/`stats` (§2.3), so neither does the
+    `LoadResult`."""
+    seen: list[dict[str, Any]] = []
+    question = _DECISION_QUESTIONS[0]
+    body = _json_bytes(
+        {"model": "laya", "answers": [{"type": "predicate", "name": "advance",
+                                       "probability": 0.5}], "usage": {}}
+    )
+
+    def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
+        assert req.full_url.endswith(lmstudio.DECISIONS_ROUTE)
+        seen.append(json.loads(req.data))
+        return _FakeResponse(200, body)
+
+    c = LMStudio("http://localhost:1234", opener=opener)
+    result = c.warm_up(
+        "laya",
+        call_surface="decisions",
+        system_prompt=None,
+        was_resident_before=True,
+        timeout_s=300.0,
+        question=question,
+    )
+    assert len(seen) == 1
+    assert seen[0]["model"] == "laya"
+    assert seen[0]["questions"] == [question]
+    assert isinstance(seen[0]["input"], str) and seen[0]["input"]
+    assert result.wasResidentBefore is True
+    assert result.runtime is None
+    assert result.stats is None
+    assert result.wallClockMs is not None
+
+
+def test_warm_up_on_decisions_surface_refuses_a_missing_question():
+    c = client({})
+    with pytest.raises(ValueError, match="question"):
+        c.warm_up(
+            "laya",
+            call_surface="decisions",
+            system_prompt=None,
+            was_resident_before=False,
+            timeout_s=300.0,
+        )
+
+
+@pytest.mark.parametrize("call_surface", ["chat", "embeddings"])
+def test_warm_up_refuses_a_question_on_a_surface_that_cannot_ask_one(call_surface):
+    c = client({})
+    with pytest.raises(ValueError, match="question"):
+        c.warm_up(
+            "m",
+            call_surface=call_surface,
+            system_prompt=None,
+            was_resident_before=False,
+            timeout_s=300.0,
+            question=_DECISION_QUESTIONS[0],
+        )
+
+
 # --- §4B coverage probe (review Pass 12, `docs/reviews/small-model-benchmarking-impl.md`;
 #     extended at Pass 13, P13-1, to the phase the original grid could not express) -------------
 #
@@ -1069,6 +1351,29 @@ def test_warm_up_embeddings_surface_lands_in_the_taxonomy_on_every_reachable_cel
         )
 
 
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_decide_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    """`decide` goes through `_raw_post`, so it inherits the POST taxonomy cell for cell (§4
+    U1a: "with the same failure taxonomy")."""
+    c = client({lmstudio.DECISIONS_ROUTE: _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.decide("x", _DECISION_QUESTIONS, model="laya", timeout_s=5.0)
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_warm_up_decisions_surface_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({lmstudio.DECISIONS_ROUTE: _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.warm_up(
+            "laya",
+            call_surface="decisions",
+            system_prompt=None,
+            was_resident_before=False,
+            timeout_s=5.0,
+            question=_DECISION_QUESTIONS[0],
+        )
+
+
 # --- `LMStudioCallFailed.status` — the partition plan §3.8.4's five-row table keys on ----------
 #
 # Two of §3.8.4's five rows are this class's: `server-rejected` (the server answered and refused
@@ -1178,6 +1483,10 @@ _STATUS_SCENARIOS: dict[str, tuple[Callable[[], Any], int | None]] = {
         _chat_over(lambda: (200, _json_bytes({"choices": [{"finish_reason": "stop"}]}))),
         None,
     ),
+    "decide: a 2xx body whose answers break the §2.3 contract": (
+        lambda: _decide_over({"model": "laya", "answers": "nope", "usage": {}}),
+        None,
+    ),
     "embed: a 2xx body with no 'data' list": (
         lambda: client({"/api/v0/embeddings": (200, _json_bytes({"ok": True}))}).embed(
             ["hi"], model="m", timeout_s=5.0
@@ -1255,3 +1564,22 @@ def test_live_catalog_and_chat_stats_against_a_real_lm_studio():
     )
     assert result.stats is not None
     assert "time_to_first_token" in result.stats
+
+
+@pytest.mark.live
+def test_live_decide_predicate_and_choice_against_a_real_lm_studio():
+    """Plan §5 live verification: one `decide` call. Needs a `type: "decision"` model (e.g.
+    `laya`) in the catalog; JIT-loading it uses the shared GPU, so this runs only on a
+    human-approved `pytest -m live`, never by default."""
+    c = LMStudio("http://localhost:1234")
+    deciders = [m for m in c.catalog() if m.type == "decision"]
+    assert deciders, "no type 'decision' model in the LM Studio catalog"
+    result = c.decide(
+        "Can you tell me when the store opens?",
+        _DECISION_QUESTIONS,
+        model=deciders[0].id,
+        timeout_s=300.0,
+    )
+    assert [a.name for a in result.answers] == ["advance", "messageType"]
+    assert 0.0 <= result.answers[0].probability <= 1.0
+    assert result.answers[1].choice in {"question", "request", "other"}

@@ -9,6 +9,7 @@ from __future__ import annotations
 import inspect
 import json
 import re
+from pathlib import Path
 
 import pytest
 from conftest import deterministic_fields, embeddings_fields, model_fields, run
@@ -47,6 +48,7 @@ from modelbench.results import (
     load_history,
     models_with_stored_results,
     rebuild_index,
+    runs_dir,
     store,
 )
 
@@ -1515,3 +1517,33 @@ def test_the_written_index_header_is_the_published_fourteen_and_every_cell_is_fi
 
     emitted = _index_row(_run("r1"), valid=True)
     assert tuple(emitted) == _INDEX_COLUMNS_PER_PLAN_3_5
+
+
+# --- typed-decision-models U1b: the stored history survives the two new profiles -------------
+
+#: The real results root this component ships (`model-bench/results/runs/*.json`), read in place
+#: and never written. 95 records at the time the decision profiles were added (plan §3.3, "All 95
+#: stored records still validate"); a floor rather than an equality, so a later run does not
+#: redden this, while an emptied or relocated directory still does instead of passing vacuously.
+_SHIPPED_ROOT = Path(__file__).resolve().parents[1]
+_SHIPPED_RECORDS_AT_U1B = 95
+
+
+def test_every_stored_run_record_still_validates_unchanged() -> None:
+    """Plan §4 U1b / §5 — the profile additions are additive to schema 1, so **every** stored
+    record must still load valid, through the read path a `compare` uses (`load_history`, which
+    re-validates each record against its own schema and its items' declared counts), with no
+    migration and no byte of any file changed by the read."""
+    paths = sorted(runs_dir(_SHIPPED_ROOT).glob("*.json"))
+    assert len(paths) >= _SHIPPED_RECORDS_AT_U1B
+    before = {p: p.read_bytes() for p in paths}
+    pack_ids = {json.loads(b)["fingerprint"]["packId"] for b in before.values()}
+
+    loaded: set[str] = set()
+    for pack_id in sorted(pack_ids):
+        valid, invalid = load_history(_SHIPPED_ROOT, packId=pack_id)
+        assert invalid == [], [(r.path.name, r.reason, r.problems) for r in invalid]
+        loaded |= {r.runId for r in valid}
+
+    assert loaded == {json.loads(b)["runId"] for b in before.values()}
+    assert {p: p.read_bytes() for p in paths} == before

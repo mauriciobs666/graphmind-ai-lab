@@ -216,52 +216,40 @@ _METRIC_BY_TIER: Mapping[str, str] = {
 }
 
 
-def score_item(
-    item_input: Mapping[str, Any], result: ChatResult | None, timing: ItemTiming, *, pack: Pack,
-) -> ItemResult:
-    """One judge call. `result is None` -> outcome `"fail"` (timeout) / `"unrunnable"` (no
-    response), per `timing.withheldFor`, mirroring `retrieval.py`'s own precedent (S4 spec §2.1) —
-    `scoreable={}`, no contribution to any metric's denominator (a call that never happened cannot
-    be "the judge advanced/suspended").
+def answer_from_chat(result: ChatResult, *, pack: Pack) -> tuple[bool, str]:
+    """The role's chat parse, alone (typed-decision-models plan §3.3 "Scorer seam"): `(advanced,
+    outcome)` for one judge reply.
 
-    Otherwise: parses `result.message.get("content")` via `extract_own_line_json_object(...,
-    require_key="decision")`. `None` -> `advanced=False`, `outcome="parse_failure"` — the SAME
-    fallback the real judge applies (app.py:727-728), never a fabricated guess. Parsed -> `advanced
-    = bool(parsed.get("decision"))`, `outcome="pass"`.
+    Parses `result.message.get("content")` via `extract_own_line_json_object(...,
+    require_key="decision")`. `None` -> `(False, "parse_failure")` — the SAME fallback the real
+    judge applies (app.py:727-728), never a fabricated guess. Parsed -> `(bool(parsed.get(
+    "decision")), "pass")`: this pack's parse, looser than falkor-chat's `_coerce_verdict` (a
+    `"false"` string is an advance), kept as-is for this pack — the strict parse is a decision-point
+    pack's only (plan §4 U3b). `pack` is unread here; it is part of the seam's signature."""
+    parsed = extract_own_line_json_object(
+        result.message.get("content"), require_key="decision"
+    )
+    if parsed is None:
+        return False, "parse_failure"
+    return bool(parsed.get("decision")), "pass"
+
+
+def score_answer(
+    item_input: Mapping[str, Any], answer: bool, outcome: str, timing: ItemTiming, *, pack: Pack,
+) -> ItemResult:
+    """The tier's metric and count for one answer, wherever the answer came from (plan §3.3).
 
     Exactly one metric name is scoreable per item (`_METRIC_BY_TIER[item_input["tier"]]`), with
     `counts[metric] = int(advanced)` for `clear_suspend`/`boundary` (expected=False, verified) —
     `advanced=True` IS the false-advance event; for `clear_advance` (expected=True), `advanced=
     False` IS the false-suspend event, so `counts["falseSuspendRate"] = int(not advanced)`.
-    `detail` carries `{"path": item_input["path"], "tier": item_input["tier"]}` for the aggregate's
-    path-split diagnostic — never anything answer-adjacent."""
+    `outcome` is carried through, never recomputed. `detail` carries `{"path":
+    item_input["path"], "tier": item_input["tier"]}` for the aggregate's path-split diagnostic —
+    never anything answer-adjacent."""
     item_id = item_input["itemId"]
-    if result is None:
-        outcome = "fail" if timing.withheldFor == "timeout" else "unrunnable"
-        return ItemResult(
-            itemId=item_id,
-            pairingKey=(item_id,),
-            outcome=outcome,
-            scoreable={},
-            counts={},
-            timing=timing,
-        )
-
     metric = _METRIC_BY_TIER[item_input["tier"]]
     detail = {"path": item_input["path"], "tier": item_input["tier"]}
-
-    parsed = extract_own_line_json_object(
-        result.message.get("content"), require_key="decision"
-    )
-    if parsed is None:
-        advanced = False
-        outcome = "parse_failure"
-    else:
-        advanced = bool(parsed.get("decision"))
-        outcome = "pass"
-
-    count = int(not advanced) if metric == "falseSuspendRate" else int(advanced)
-
+    count = int(not answer) if metric == "falseSuspendRate" else int(answer)
     return ItemResult(
         itemId=item_id,
         pairingKey=(item_id,),
@@ -271,6 +259,31 @@ def score_item(
         timing=timing,
         detail=detail,
     )
+
+
+def score_item(
+    item_input: Mapping[str, Any], result: ChatResult | None, timing: ItemTiming, *, pack: Pack,
+) -> ItemResult:
+    """One judge call: `answer_from_chat` then `score_answer`. `result is None` -> outcome
+    `"fail"` (timeout) / `"unrunnable"` (no response), per `timing.withheldFor`, mirroring
+    `retrieval.py`'s own precedent (S4 spec §2.1) — `scoreable={}`, no contribution to any
+    metric's denominator (a call that never happened cannot be "the judge advanced/suspended").
+
+    Split into the two seams with no behaviour change (typed-decision-models plan §4 U3a), pinned
+    by `test_score_item_rescores_the_real_pack_byte_identically_to_before_the_split`."""
+    if result is None:
+        item_id = item_input["itemId"]
+        outcome = "fail" if timing.withheldFor == "timeout" else "unrunnable"
+        return ItemResult(
+            itemId=item_id,
+            pairingKey=(item_id,),
+            outcome=outcome,
+            scoreable={},
+            counts={},
+            timing=timing,
+        )
+    advanced, outcome = answer_from_chat(result, pack=pack)
+    return score_answer(item_input, advanced, outcome, timing, pack=pack)
 
 
 # --- aggregation ------------------------------------------------------------------------------

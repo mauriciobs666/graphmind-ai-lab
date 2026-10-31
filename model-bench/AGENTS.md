@@ -36,7 +36,8 @@ the story behind each; this section states only the rule.
 
 **The fingerprint has two discriminators and one derived key.** `REQUIRED_BY_SCHEMA[schema]` and
 `FORBIDDEN_BY_ARM_PROFILE[armProfile]` are keyed by `armProfile` (`model:chat` / `model:embeddings`
-/ `deterministic`), which `Fingerprint` derives from `armKind` (still two-valued — every
+/ `model:decisions` / `model:handoff` / `deterministic` — the two decision profiles are additive to
+schema 1, `docs/plans/typed-decision-models.md` §3.3), which `Fingerprint` derives from `armKind` (still two-valued — every
 `armKind == "model"` filter elsewhere is unaffected) and `callSurface` (required, no default,
 `None` **iff** deterministic) — both checked **before any mapping is consulted**, since without a
 surface there is no profile to report fields against. **`ARM_KINDS` must never be derived from the
@@ -200,7 +201,7 @@ from the repo root pytest ignores this component's `testpaths` and walks the who
 ./setup.sh                                       # create/refresh .venv (idempotent; --recreate)
 ./run.sh compare --pack <id>                     # the CLI (compare, index rebuild, models, attest)
 .venv/bin/python -m pytest -q                    # default suite, network-free
-.venv/bin/python -m pytest -m live               # real LM Studio, opt-in (3 exist: lmstudio, hostinfo)
+.venv/bin/python -m pytest -m live               # real LM Studio, opt-in (4 exist: lmstudio, hostinfo)
 .venv/bin/ruff check .
 ```
 

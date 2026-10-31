@@ -9,7 +9,15 @@ shape). This is the S1 done-condition 1 and 6 surface.
 from __future__ import annotations
 
 import pytest
-from conftest import deterministic_fields, embeddings_fields, model_fields
+from conftest import DECISIONS_EXTRA_FIELDS as DECISIONS_SAMPLE
+from conftest import HANDOFF_EXTRA_FIELDS as HANDOFF_SAMPLE
+from conftest import (
+    decisions_fields,
+    deterministic_fields,
+    embeddings_fields,
+    handoff_fields,
+    model_fields,
+)
 
 from modelbench.fingerprint import (
     ARM_KINDS,
@@ -20,18 +28,20 @@ from modelbench.fingerprint import (
     Fingerprint,
 )
 
-#: The three schema-1 profiles, paired with the fixture that builds a *valid* record for each.
+#: The five schema-1 profiles, paired with the fixture that builds a *valid* record for each.
 #: Written here rather than derived from `REQUIRED_BY_SCHEMA` so that a profile appearing or
 #: disappearing fails a test rather than silently changing how many run (review M-4).
 PROFILE_FIXTURES = {
     "model:chat": model_fields,
     "model:embeddings": embeddings_fields,
+    "model:decisions": decisions_fields,
+    "model:handoff": handoff_fields,
     "deterministic": deterministic_fields,
 }
 
-MODEL_PROFILES = ("model:chat", "model:embeddings")
+MODEL_PROFILES = ("model:chat", "model:embeddings", "model:decisions", "model:handoff")
 
-#: `(profile, field)` for every required field of both model profiles — 30 + 26 cases.
+#: `(profile, field)` for every required field of the four model profiles — 30 + 26 + 33 + 45.
 MODEL_PROFILE_FIELDS = [
     (profile, field)
     for profile in MODEL_PROFILES
@@ -151,6 +161,66 @@ def test_a_model_embeddings_record_carrying_a_chat_only_field_is_forbidden(field
     and no sampling parameters to obey, so a record carrying either is claiming something it
     cannot have measured. Nobody wrote these four names down — the set operation did."""
     problems = _profile_problems("model:embeddings", **{field: value})
+    assert FieldProblem(field=field, reason="forbidden") in problems
+
+
+# --- typed-decision-models U1b: the `model:decisions` and `model:handoff` profiles (plan §3.3) ---
+
+
+@pytest.mark.parametrize("profile", ["model:decisions", "model:handoff"])
+def test_a_complete_decision_profile_record_is_valid(profile: str) -> None:
+    """Plan §5 U1b — a `model:decisions` record validates, and so does its hand-off composite."""
+    assert _profile_problems(profile) == []
+
+
+@pytest.mark.parametrize("profile", ["model:decisions", "model:handoff"])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("runtimeName", "llama.cpp"),
+        ("runtimeVersion", "1.52.0"),
+        ("temperature", 0.0),
+        ("maxTokens", 1024),
+    ],
+)
+def test_a_decision_profile_record_carrying_a_chat_sampling_field_is_forbidden(
+    profile: str, field: str, value
+) -> None:
+    """Plan §5 U1b — carrying `temperature` is `forbidden`. The decisions response has no `runtime`
+    object and the call takes no sampling parameters (§2.3); a hand-off record names its chat
+    model's settings under `handoff*`, never under the bare chat names, so a bare one on either
+    profile claims a measurement nobody made."""
+    problems = _profile_problems(profile, **{field: value})
+    assert FieldProblem(field=field, reason="forbidden") in problems
+
+
+@pytest.mark.parametrize("field", ["handoffModelKey", "handoffTemperature"])
+def test_a_plain_decisions_record_carrying_a_handoff_field_is_forbidden(field: str) -> None:
+    """A decision-model-only arm has no hand-off model, so naming one is refused (§3.3)."""
+    problems = _profile_problems("model:decisions", **{field: HANDOFF_SAMPLE[field]})
+    assert FieldProblem(field=field, reason="forbidden") in problems
+
+
+def test_a_fit_manifest_of_zero_inputs_is_a_valid_size() -> None:
+    """`fitManifestSize` is a count, so 0 is an answer, not an absence (`present` tier)."""
+    assert _profile_problems("model:decisions", fitManifestSize=0) == []
+
+
+@pytest.mark.parametrize(
+    "profile,field",
+    [
+        ("model:chat", "candidateId"),
+        ("model:embeddings", "evalSetHash"),
+        ("model:chat", "handoffModelKey"),
+        ("deterministic", "decisionPolicy"),
+    ],
+)
+def test_an_older_profile_record_carrying_a_decision_field_is_forbidden(profile, field) -> None:
+    """The additions reach the old profiles' forbidden sets by the set difference alone (§3.3,
+    "the derived forbidden sets of the old profiles grow only by names that no stored record
+    carries")."""
+    sample = {**DECISIONS_SAMPLE, **HANDOFF_SAMPLE}
+    problems = _profile_problems(profile, **{field: sample[field]})
     assert FieldProblem(field=field, reason="forbidden") in problems
 
 
@@ -543,11 +613,136 @@ EXPECTED_DETERMINISTIC_SCHEMA_1 = {
 }
 
 
+#: typed-decision-models plan §3.3's `model:decisions` field set — the embeddings 26 plus
+#: §3.3/§3.5's seven candidate fields, 33 in total. **Transcribed by hand**, for the M-4 reason
+#: above; not built from `EXPECTED_EMBEDDINGS_SCHEMA_1`. `fitManifestSize` is `present`: it is
+#: a count, and a fit manifest of zero inputs is an answer.
+EXPECTED_DECISIONS_SCHEMA_1 = {
+    "modelKey": "nonempty",
+    "modelPublisher": "nonempty",
+    "arch": "nonempty",
+    "quantization": "nonempty",
+    "compatibilityType": "nonempty",
+    "maxContextLength": "nonempty",
+    "loadedContextLength": "nonempty",
+    "modelType": "nonempty",
+    "modelCapabilities": "present",
+    "modelCapabilitiesPresent": "present",
+    "residencySource": "nonempty",
+    "residentModelsAtStart": "present",
+    "residentModelsAtEnd": "present",
+    "packId": "nonempty",
+    "packVersion": "nonempty",
+    "packContentHash": "nonempty",
+    "benchVersion": "nonempty",
+    "benchSchemaVersion": "nonempty",
+    "pythonVersion": "nonempty",
+    "hostOs": "nonempty",
+    "startedAt": "nonempty",
+    "endedAt": "nonempty",
+    "lmStudioAppVersion": "nonempty",
+    "kvCacheSetting": "nonempty",
+    "hostRamGb": "nonempty",
+    "otherResidentWorkloads": "present",
+    "candidateId": "nonempty",
+    "candidateContentHash": "nonempty",
+    "questionSpecHash": "nonempty",
+    "decisionPolicy": "nonempty",
+    "fitManifestHash": "nonempty",
+    "fitManifestSize": "present",
+    "evalSetHash": "nonempty",
+}
+
+#: Plan §3.3's `model:handoff` field set — `model:decisions`' 33 plus the twelve flat `handoff*`
+#: fields, 45 in total. `handoffTemperature` is `present` for the reason `temperature` is (0.0 is
+#: the pinned value); every other hand-off field is `nonempty`, as its chat counterpart is.
+EXPECTED_HANDOFF_SCHEMA_1 = {
+    "modelKey": "nonempty",
+    "modelPublisher": "nonempty",
+    "arch": "nonempty",
+    "quantization": "nonempty",
+    "compatibilityType": "nonempty",
+    "maxContextLength": "nonempty",
+    "loadedContextLength": "nonempty",
+    "modelType": "nonempty",
+    "modelCapabilities": "present",
+    "modelCapabilitiesPresent": "present",
+    "residencySource": "nonempty",
+    "residentModelsAtStart": "present",
+    "residentModelsAtEnd": "present",
+    "packId": "nonempty",
+    "packVersion": "nonempty",
+    "packContentHash": "nonempty",
+    "benchVersion": "nonempty",
+    "benchSchemaVersion": "nonempty",
+    "pythonVersion": "nonempty",
+    "hostOs": "nonempty",
+    "startedAt": "nonempty",
+    "endedAt": "nonempty",
+    "lmStudioAppVersion": "nonempty",
+    "kvCacheSetting": "nonempty",
+    "hostRamGb": "nonempty",
+    "otherResidentWorkloads": "present",
+    "candidateId": "nonempty",
+    "candidateContentHash": "nonempty",
+    "questionSpecHash": "nonempty",
+    "decisionPolicy": "nonempty",
+    "fitManifestHash": "nonempty",
+    "fitManifestSize": "present",
+    "evalSetHash": "nonempty",
+    "handoffModelKey": "nonempty",
+    "handoffModelPublisher": "nonempty",
+    "handoffArch": "nonempty",
+    "handoffQuantization": "nonempty",
+    "handoffCompatibilityType": "nonempty",
+    "handoffMaxContextLength": "nonempty",
+    "handoffLoadedContextLength": "nonempty",
+    "handoffModelType": "nonempty",
+    "handoffRuntimeName": "nonempty",
+    "handoffRuntimeVersion": "nonempty",
+    "handoffTemperature": "present",
+    "handoffMaxTokens": "nonempty",
+}
+
+
+#: The names only the two decision profiles carry, transcribed from plan §3.3 for the forbidden
+#: pins.
+DECISION_ONLY = frozenset(
+    {
+        "candidateId",
+        "candidateContentHash",
+        "questionSpecHash",
+        "decisionPolicy",
+        "fitManifestHash",
+        "fitManifestSize",
+        "evalSetHash",
+    }
+)
+HANDOFF_ONLY = frozenset(
+    {
+        "handoffModelKey",
+        "handoffModelPublisher",
+        "handoffArch",
+        "handoffQuantization",
+        "handoffCompatibilityType",
+        "handoffMaxContextLength",
+        "handoffLoadedContextLength",
+        "handoffModelType",
+        "handoffRuntimeName",
+        "handoffRuntimeVersion",
+        "handoffTemperature",
+        "handoffMaxTokens",
+    }
+)
+
+
 @pytest.mark.parametrize(
     "profile,expected",
     [
         ("model:chat", EXPECTED_MODEL_SCHEMA_1),
         ("model:embeddings", EXPECTED_EMBEDDINGS_SCHEMA_1),
+        ("model:decisions", EXPECTED_DECISIONS_SCHEMA_1),
+        ("model:handoff", EXPECTED_HANDOFF_SCHEMA_1),
         ("deterministic", EXPECTED_DETERMINISTIC_SCHEMA_1),
     ],
 )
@@ -558,9 +753,18 @@ def test_the_required_field_contract_is_pinned_by_name_and_by_tier(profile, expe
     assert actual == expected
 
 
-def test_the_schema_map_declares_exactly_the_three_arm_profiles() -> None:
+def test_the_schema_map_declares_exactly_the_five_arm_profiles() -> None:
+    """typed-decision-models §3.3 adds two profiles **to schema 1** (purely additive), not a
+    schema 2: a bump would make the forbidden mapping, `ARM_KINDS` and `CALL_SURFACES` per-schema.
+    """
     assert set(REQUIRED_BY_SCHEMA) == {1}
-    assert set(REQUIRED_BY_SCHEMA[1]) == {"model:chat", "model:embeddings", "deterministic"}
+    assert set(REQUIRED_BY_SCHEMA[1]) == {
+        "model:chat",
+        "model:embeddings",
+        "model:decisions",
+        "model:handoff",
+        "deterministic",
+    }
 
 
 def test_the_arm_kinds_are_decoupled_from_the_profile_mapping() -> None:
@@ -573,8 +777,28 @@ def test_the_arm_kinds_are_decoupled_from_the_profile_mapping() -> None:
     harness. `armKind` keeps its two values; only the mapping key became a profile.
     """
     assert ARM_KINDS == frozenset({"model", "deterministic"})
-    assert CALL_SURFACES == frozenset({"chat", "embeddings"})
     assert _problems("model", model_fields()) == []
+
+
+def test_arm_kind_stays_two_valued_after_the_decision_profiles() -> None:
+    """typed-decision-models §3.3 — both new profiles are `armKind == "model"`, so `ARM_KINDS` is
+    unchanged. Pinned by value **and** by consequence: a widened set (a `candidate` or `handoff`
+    arm kind, the shape a hand-added exception takes) would accept a record no profile can read,
+    and that record must still come back `unknown`, never pass the membership check and raise out
+    of the profile lookup."""
+    assert ARM_KINDS == frozenset({"model", "deterministic"})
+    for bogus in ("candidate", "handoff", "decisions"):
+        fp = Fingerprint(armKind=bogus, callSurface="decisions", fields=decisions_fields())
+        assert fp.validate() == [FieldProblem(field="armKind", reason="unknown")]
+
+
+def test_the_call_surfaces_are_exactly_the_four_profile_suffixes() -> None:
+    """typed-decision-models §3.3 — `decisions` and `handoff` join `chat` and `embeddings`. Pinned
+    by value and per member by consequence: each surface's own valid record validates, so a
+    surface dropped from the set refuses its whole profile as `unknown`."""
+    assert CALL_SURFACES == frozenset({"chat", "embeddings", "decisions", "handoff"})
+    for profile in MODEL_PROFILES:
+        assert _profile_problems(profile) == [], profile
 
 
 def test_the_forbidden_sets_are_pinned_against_literals() -> None:
@@ -589,17 +813,37 @@ def test_the_forbidden_sets_are_pinned_against_literals() -> None:
     following the plan's literal enumeration would have reverted it silently.
     """
     assert FORBIDDEN_BY_ARM_PROFILE["deterministic"] == frozenset(
-        set(EXPECTED_MODEL_SCHEMA_1) - set(EXPECTED_DETERMINISTIC_SCHEMA_1)
-    )
+        set(EXPECTED_HANDOFF_SCHEMA_1) | set(EXPECTED_MODEL_SCHEMA_1)
+    ) - set(EXPECTED_DETERMINISTIC_SCHEMA_1)
     assert {"modelType", "modelCapabilities", "modelCapabilitiesPresent"} <= (
         FORBIDDEN_BY_ARM_PROFILE["deterministic"]
     )
-    assert FORBIDDEN_BY_ARM_PROFILE["model:chat"] == frozenset({"armId", "armParametersHash"})
+    assert FORBIDDEN_BY_ARM_PROFILE["model:chat"] == frozenset(
+        {"armId", "armParametersHash"} | DECISION_ONLY | HANDOFF_ONLY
+    )
     # The row the derivation earns its keep on (§3.4.1): nobody wrote these four names down.
     assert FORBIDDEN_BY_ARM_PROFILE["model:embeddings"] == frozenset(
         {"armId", "armParametersHash", "runtimeName", "runtimeVersion", "temperature", "maxTokens"}
+        | DECISION_ONLY
+        | HANDOFF_ONLY
     )
-    assert set(FORBIDDEN_BY_ARM_PROFILE) == {"model:chat", "model:embeddings", "deterministic"}
+    # typed-decision-models §3.3: neither decision profile may carry the chat runtime/sampling
+    # four, and a plain decisions record may not name a hand-off model.
+    assert FORBIDDEN_BY_ARM_PROFILE["model:decisions"] == frozenset(
+        {"armId", "armParametersHash", "runtimeName", "runtimeVersion", "temperature", "maxTokens"}
+        | HANDOFF_ONLY
+    )
+    assert FORBIDDEN_BY_ARM_PROFILE["model:handoff"] == frozenset(
+        {"armId", "armParametersHash", "runtimeName", "runtimeVersion", "temperature", "maxTokens"}
+    )
+    assert FORBIDDEN_BY_ARM_PROFILE["deterministic"] >= DECISION_ONLY | HANDOFF_ONLY
+    assert set(FORBIDDEN_BY_ARM_PROFILE) == {
+        "model:chat",
+        "model:embeddings",
+        "model:decisions",
+        "model:handoff",
+        "deterministic",
+    }
 
 
 # --- n-2: a frozen record whose hash ignores every value ----------------------------------------
@@ -704,7 +948,12 @@ def test_the_arm_kind_discriminator_keeps_absent_distinct_from_null() -> None:
 #: and the two call surfaces whose product (minus the deterministic arm's absent surface) is the
 #: three `armProfile` keys of schema 1.
 _ARM_KINDS_PER_PLAN = {"model", "deterministic"}
-_CALL_SURFACES_PER_PLAN = {"chat", "embeddings"}
+_CALL_SURFACES_PER_PLAN = {"chat", "embeddings", "decisions", "handoff"}
+
+#: typed-decision-models §3.3: `handoff` is a composite arm, not an LM Studio route, so the adapter
+#: never calls it. The adapter's vocabulary is the record's minus that one, transcribed separately
+#: rather than computed, so a drift in either is caught against the plan and not against the other.
+_ADAPTER_CALL_SURFACES_PER_PLAN = {"chat", "embeddings", "decisions"}
 
 
 def test_the_discriminator_literals_are_exactly_the_plans_two_vocabularies() -> None:
@@ -731,7 +980,11 @@ def test_the_adapters_call_surface_literal_is_the_same_vocabulary_as_the_records
 
     from modelbench.lmstudio import CallSurface as AdapterCallSurface
 
-    assert set(get_args(AdapterCallSurface)) == _CALL_SURFACES_PER_PLAN
+    assert set(get_args(AdapterCallSurface)) == _ADAPTER_CALL_SURFACES_PER_PLAN
+    # Every adapter surface is a surface a record can name; the converse fails exactly for the
+    # composite.
+    assert _ADAPTER_CALL_SURFACES_PER_PLAN <= _CALL_SURFACES_PER_PLAN
+    assert _CALL_SURFACES_PER_PLAN - _ADAPTER_CALL_SURFACES_PER_PLAN == {"handoff"}
 
 
 # --------------------------------------------------------------------------------------------

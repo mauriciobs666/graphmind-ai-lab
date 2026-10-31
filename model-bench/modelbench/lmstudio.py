@@ -7,7 +7,10 @@ Design: `docs/plans/small-model-benchmarking.md` §3.4.4a (source of truth, capt
 Four operations, all against `GET/POST {base_url}/api/v0/...` — never `/v1/...` for anything but
 `probe()`'s reachability check, because `/v1/models` returns `{id, object, owned_by}` and nothing
 else (§2.5) while every fingerprint field and every `stats`/`runtime` object lives on the `/api/v0`
-surface. **No `load`/`unload`/`ps`** — v1.7's three `lms.exe` operations are gone with the CLI
+surface. **One exception since typed-decision-models U1a:** `decide()` posts to `DECISIONS_ROUTE`,
+`/v1/decisions` — the only decisions route verified so far, whose response has no `stats` or
+`runtime` at all (that plan's §2.3); the `/api/v0` variant is an open live probe (see `decide`).
+**No `load`/`unload`/`ps`** — v1.7's three `lms.exe` operations are gone with the CLI
 (§2.5, §3.4.4a), and nothing on either HTTP surface can unload a model: the harness cannot force a
 cold state, by design, not by omission.
 
@@ -31,10 +34,10 @@ level up — a caller that constructs `ChatResult` directly gets the same promis
 P12-11). The raw `stats` value is kept beside the derived fields verbatim, exactly as given, for
 auditability only; nothing downstream may read a timing figure out of it.
 
-`timeout_s` is **required, with no default**, on `chat`/`embed`/`warm_up` — §3.6's two budgets
-(`firstCallTimeoutSeconds` for the warm-up, `requestTimeoutSeconds` for every scored call) are the
-runner's to size and pass; this module does not choose a default that would silently paper over a
-missing one.
+`timeout_s` is **required, with no default**, on `chat`/`embed`/`decide`/`warm_up` — §3.6's two
+budgets (`firstCallTimeoutSeconds` for the warm-up, `requestTimeoutSeconds` for every scored call)
+are the runner's to size and pass; this module does not choose a default that would silently paper
+over a missing one.
 """
 
 from __future__ import annotations
@@ -59,8 +62,21 @@ _DEFAULT_CATALOG_TIMEOUT_S = 10.0
 # only that the call be fixed and pack-independent, not what it says.
 _WARMUP_CHAT_MESSAGE = "Hello."
 _WARMUP_EMBED_TEXT = "warm-up"
+_WARMUP_DECISION_INPUT = "warm-up"
 
-CallSurface = Literal["chat", "embeddings"]
+#: The decisions route (typed-decision-models plan §2.3). `/v1/decisions` is the one verified by a
+#: live probe (2026-10-30); whether an `/api/v0/decisions` variant exists — and whether it adds
+#: `stats`/`runtime` the `/v1` response lacks — is plan §4 U1a's human-approved live probe, **not
+#: yet run**. This constant is the one line that probe may change.
+DECISIONS_ROUTE = "/v1/decisions"
+
+#: The answer types whose response shape §2.3 recorded. `score` is a valid *request* type, but no
+#: probe has seen its answer, so a `score` answer is refused rather than guessed at (plan §6 R-1).
+_DECISION_ANSWER_TYPES: frozenset[str] = frozenset({"predicate", "choice"})
+
+#: `"handoff"` is deliberately absent: it is a composite arm the runner drives (one `decisions`
+#: call, maybe one `chat` call), not a route this adapter calls (typed-decision-models §3.3).
+CallSurface = Literal["chat", "embeddings", "decisions"]
 ProbeResult = Literal["api-v0", "v1-only", "unreachable"]
 ToolCallForm = Literal["native", "prose"]
 
@@ -217,6 +233,130 @@ class EmbedResult:
     model: str | None
     usage: Mapping[str, Any] | None
     wallClockMs: float | None
+
+
+@dataclass(frozen=True)
+class DecisionAnswer:
+    """One element of a decisions response's `answers` (typed-decision-models plan §2.3).
+
+    A `predicate` answer carries `probability` only; a `choice` answer carries `choice`,
+    `probabilities` (`(value, probability)` pairs in the response's order) and `confidence`. The
+    fields the other type does not have are `None`, never `0` or `()`."""
+
+    name: str
+    type: str
+    probability: float | None
+    choice: str | None
+    probabilities: tuple[tuple[str, float], ...] | None
+    confidence: float | None
+
+
+@dataclass(frozen=True)
+class DecisionResult:
+    """A decisions call's response. There is no `stats`, `model_info` or `runtime` (§2.3), so
+    there is no derived timing beyond `wallClockMs`; `usage` is kept verbatim (its
+    `output_tokens` is always 0)."""
+
+    answers: tuple[DecisionAnswer, ...]
+    model: str | None
+    usage: Mapping[str, Any] | None
+    wallClockMs: float | None
+
+
+class _MalformedDecisions(ValueError):
+    """A 2xx decisions body that breaks the §2.3 contract. Private: `decide` turns every one into
+    a single `LMStudioCallFailed(status=None)` — the server did not refuse."""
+
+
+def _probability(raw: Any, *, where: str) -> float:
+    """A finite real in `[0, 1]`. A `bool`, a string, `NaN`/`inf` (`json.loads` parses the bare
+    tokens) or an out-of-range number is refused, never coerced. The range comparison is what
+    refuses the non-finite ones: every comparison with `NaN` is `False`, and `±inf` is out of
+    range — a separate `isfinite` check would be dead code (mutation-tested)."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise _MalformedDecisions(f"{where} is not a number: {raw!r}")
+    value = float(raw)
+    if not 0.0 <= value <= 1.0:
+        raise _MalformedDecisions(f"{where} is not a probability in [0, 1]: {raw!r}")
+    return value
+
+
+def _parse_decision_answers(
+    body: Any, questions: Sequence[Mapping[str, Any]]
+) -> tuple[DecisionAnswer, ...]:
+    """The §2.3 contract, checked strictly against the questions that were asked: every question
+    answered exactly once, by an answer of its own type, a choice naming one of its declared
+    values. Anything else raises `_MalformedDecisions` — a partial or reinterpreted answer would
+    be a decision nobody made."""
+    if not isinstance(body, Mapping):
+        raise _MalformedDecisions("response body is not a JSON object")
+    raw_answers = body.get("answers")
+    if not isinstance(raw_answers, list):
+        raise _MalformedDecisions("response has no 'answers' list")
+    asked = {q.get("name"): q for q in questions}
+    answers: list[DecisionAnswer] = []
+    for index, raw in enumerate(raw_answers):
+        where = f"answers[{index}]"
+        if not isinstance(raw, Mapping):
+            raise _MalformedDecisions(f"{where} is not a JSON object")
+        name, kind = raw.get("name"), raw.get("type")
+        if not isinstance(name, str) or not name:
+            raise _MalformedDecisions(f"{where} has no name")
+        if kind not in _DECISION_ANSWER_TYPES:
+            raise _MalformedDecisions(f"{where} ({name!r}) has an unrecognized type {kind!r}")
+        question = asked.get(name)
+        if question is None:
+            raise _MalformedDecisions(f"{where} answers {name!r}, which was not asked")
+        if question.get("type") != kind:
+            raise _MalformedDecisions(
+                f"{where} ({name!r}) is a {kind!r} answer to a {question.get('type')!r} question"
+            )
+        if kind == "predicate":
+            answers.append(
+                DecisionAnswer(
+                    name=name,
+                    type=kind,
+                    probability=_probability(raw.get("probability"), where=f"{where}.probability"),
+                    choice=None,
+                    probabilities=None,
+                    confidence=None,
+                )
+            )
+            continue
+        declared = {
+            c.get("value") for c in question.get("choices") or () if isinstance(c, Mapping)
+        }
+        choice = raw.get("choice")
+        if choice not in declared:
+            raise _MalformedDecisions(f"{where}.choice {choice!r} is not a declared value")
+        raw_probabilities = raw.get("probabilities")
+        if not isinstance(raw_probabilities, list):
+            raise _MalformedDecisions(f"{where}.probabilities is not a list")
+        probabilities: list[tuple[str, float]] = []
+        for j, entry in enumerate(raw_probabilities):
+            at = f"{where}.probabilities[{j}]"
+            value = entry.get("value") if isinstance(entry, Mapping) else None
+            if value not in declared:
+                raise _MalformedDecisions(f"{at}.value {value!r} is not a declared value")
+            probabilities.append((value, _probability(entry.get("probability"), where=at)))
+        answers.append(
+            DecisionAnswer(
+                name=name,
+                type=kind,
+                probability=None,
+                choice=choice,
+                probabilities=tuple(probabilities),
+                confidence=_probability(raw.get("confidence"), where=f"{where}.confidence"),
+            )
+        )
+    answered = [a.name for a in answers]
+    if len(answered) != len(set(answered)):
+        raise _MalformedDecisions(f"a question was answered more than once: {answered}")
+    if set(answered) != set(asked):
+        raise _MalformedDecisions(
+            f"unanswered question(s): {sorted(set(asked) - set(answered), key=str)}"
+        )
+    return tuple(answers)
 
 
 @dataclass(frozen=True)
@@ -621,6 +761,44 @@ class LMStudio:
             wallClockMs=wall_clock_ms,
         )
 
+    def decide(
+        self,
+        input: str,
+        questions: Sequence[Mapping[str, Any]],
+        *,
+        model: str,
+        timeout_s: float,
+    ) -> DecisionResult:
+        """`POST {DECISIONS_ROUTE}` — one typed-decision call (typed-decision-models plan §2.3,
+        §4 U1a), through `_raw_post`, so it has the chat/embed failure taxonomy cell for cell:
+        `LMStudioCallTimeout` on an exhausted budget, `LMStudioCallFailed` with the status on a
+        refusal (a bare-string choice is a `400`), and `LMStudioCallFailed(status=None)` on a 2xx
+        body that breaks the §2.3 contract — including any question left unanswered.
+
+        **Route: `/v1/decisions`, provisionally.** It is the route a live probe verified
+        (2026-10-30). The plan's U1a probe of `/api/v0/decisions` — one predicate and one choice
+        question, with `laya` loaded — has **not yet run** (it loads a model on a shared GPU, so it
+        waits for human approval). If that route exists and returns `stats`/`runtime` the `/v1`
+        response lacks, `DECISIONS_ROUTE` switches to it and U1b's `model:decisions` profile gains
+        `runtimeName`/`runtimeVersion`; otherwise this stays as it is.
+
+        `input` shadows the builtin deliberately: it is the request's own field name (§2.3)."""
+        payload: dict[str, Any] = {"model": model, "input": input, "questions": list(questions)}
+        wall_clock_ms, raw = self._raw_post(DECISIONS_ROUTE, payload, timeout_s)
+        body = _parse_json(raw, context=f"POST {DECISIONS_ROUTE}")
+        try:
+            answers = _parse_decision_answers(body, questions)
+        except _MalformedDecisions as exc:
+            raise LMStudioCallFailed(f"POST {DECISIONS_ROUTE}: {exc}", status=None) from exc
+        usage = body.get("usage")
+        response_model = body.get("model")
+        return DecisionResult(
+            answers=answers,
+            model=response_model if isinstance(response_model, str) else None,
+            usage=usage if isinstance(usage, Mapping) else None,
+            wallClockMs=wall_clock_ms,
+        )
+
     def warm_up(
         self,
         model: str,
@@ -629,6 +807,7 @@ class LMStudio:
         system_prompt: str | None,
         was_resident_before: bool,
         timeout_s: float,
+        question: Mapping[str, Any] | None = None,
     ) -> LoadResult:
         """The mandatory per-arm warm-up (§3.6). Under JIT auto-load this call **is** the load;
         its content is discarded (never an `ItemResult`, never written to a transcript) but its
@@ -644,7 +823,27 @@ class LMStudio:
         a misreport. An earlier version of this method re-probed `residency()` immediately
         before the timed call instead, and justified it by inverting that same fact; the
         substitution was undeclared and cost an unlisted extra catalog GET on every warm-up.
+
+        On the `decisions` surface the warm-up is one `decide` call with a fixed tiny input and
+        the candidate's own `question` (typed-decision-models §3.3), **required** there and
+        refused on every other surface — so its `None` default can never pick anything silently.
+        The decisions response has no `runtime`/`stats` (§2.3), so neither does the result.
         """
+        if (question is None) == (call_surface == "decisions"):
+            raise ValueError(
+                f"warm_up: a question is required on the decisions surface and only there "
+                f"(call_surface={call_surface!r}, question given: {question is not None})"
+            )
+        if call_surface == "decisions":
+            decision = self.decide(
+                _WARMUP_DECISION_INPUT, [question], model=model, timeout_s=timeout_s
+            )
+            return LoadResult(
+                wallClockMs=decision.wallClockMs,
+                wasResidentBefore=was_resident_before,
+                runtime=None,
+                stats=None,
+            )
         if call_surface == "chat":
             messages: list[Mapping[str, Any]] = []
             if system_prompt:

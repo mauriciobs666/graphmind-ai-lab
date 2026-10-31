@@ -633,3 +633,162 @@ def test_aggregate_over_the_real_85_item_pack_matches_the_specs_own_tier_ns(real
 def test_the_real_shipped_pack_validates_clean():
     pack = load_pack(_REAL_PACK_ROOT)
     assert validate_pack(pack) == []
+
+
+# ==================================================================================================
+# 7. typed-decision-models U3a — `score_item` split into `answer_from_chat` + `score_answer`
+#    (docs/plans/typed-decision-models.md §3.3 "Scorer seam", §4 U3a), with no behaviour change
+# ==================================================================================================
+
+#: The reply corpus the split is re-scored over. No stored record keeps a model's reply text
+#: (`model-bench/AGENTS.md`), so the "fixture replies" are written here: one per branch the parse
+#: and the count can take, including the loose ones the split must carry over unchanged — a
+#: `"decision": "false"` string is an advance today (`bool("false")`), and a whole-reply object
+#: with no `decision` key is a `pass` that suspends. Order and ids are part of the golden.
+SPLIT_REPLY_CORPUS: tuple[tuple[str, Any], ...] = (
+    ("true", '{"decision": true, "rationale": "looks satisfied"}'),
+    ("false", '{"decision": false, "rationale": "missing info"}'),
+    ("garbage", "not json at all"),
+    ("fenced-true", '```json\n{"decision": true}\n```'),
+    ("prose-own-line-true", 'Thinking it over.\n{"decision": true, "rationale": "x"}\n'),
+    ("mid-sentence-true", 'I would say {"decision": true} here.'),
+    ("string-true", '{"decision": "true"}'),
+    ("string-false", '{"decision": "false"}'),
+    ("zero", '{"decision": 0}'),
+    ("null", '{"decision": null}'),
+    ("no-key", '{"rationale": "no decision key"}'),
+    ("two-own-line", 'a\n{"decision": true}\n{"decision": false}\n'),
+    ("keyless-beside-key", 'Schema:\n{"rationale": "x"}\nAnswer:\n{"decision": true}\n'),
+    ("empty", ""),
+    ("non-string", None),
+)
+
+#: The two `result is None` withholdings, re-scored too: the split must not move them.
+SPLIT_WITHHELD = ("timeout", "no_response")
+
+#: Captured from the **unmodified** `score_item` (HEAD `dc2f8884`) before the split, by
+#: `split_rescore_lines()` below; see `docs/HISTORY.md` (U3a).
+_SPLIT_GOLDEN = (
+    Path(__file__).parent / "fixtures" / "classification" / "score_item_before_split.json"
+)
+
+
+def _split_timing(withheld: str | None) -> ItemTiming:
+    from modelbench.results import CallTiming
+
+    if withheld is not None:
+        return ItemTiming(wallClockMs=None, calls=(), withheldFor=withheld)
+    call = CallTiming(
+        wallClockMs=612.5, ttftMs=101.0, generationMs=480.25, promptTokens=812,
+        tokensPerSecond=41.5,
+    )
+    return ItemTiming(wallClockMs=640.0, calls=(call,), withheldFor=None)
+
+
+def _split_chat_result(content: Any) -> ChatResult:
+    return ChatResult(
+        message={"role": "assistant", "content": content},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats=None,
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=612.5,
+    )
+
+
+def split_rescore_lines(pack: Pack) -> dict[str, list[str]]:
+    """Every real pack item × every corpus reply (and both withholdings), scored through
+    `classification.score_item`, as `{variant: [repr(ItemResult), ...]}` in item order. `repr`,
+    not `to_dict`: it keeps a `True` count distinct from a `1`, which JSON would not."""
+    items = _load_real_items()
+    out: dict[str, list[str]] = {}
+    for reply_id, content in SPLIT_REPLY_CORPUS:
+        out[reply_id] = [
+            repr(
+                classification.score_item(
+                    item, _split_chat_result(content), _split_timing(None), pack=pack
+                )
+            )
+            for item in items
+        ]
+    for withheld in SPLIT_WITHHELD:
+        out[f"withheld-{withheld}"] = [
+            repr(classification.score_item(item, None, _split_timing(withheld), pack=pack))
+            for item in items
+        ]
+    return out
+
+
+def split_digests(lines: dict[str, list[str]]) -> dict[str, Any]:
+    import hashlib
+
+    def digest(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    return {
+        "cases": sum(len(v) for v in lines.values()),
+        "perVariant": {k: digest("\n".join(v)) for k, v in lines.items()},
+        "all": digest("\n".join(f"{k}\t{line}" for k, v in lines.items() for line in v)),
+    }
+
+
+def test_score_item_rescores_the_real_pack_byte_identically_to_before_the_split(real_pack: Pack):
+    """Plan §4 U3a's done-condition: the old pack, re-scored after the split, gives `ItemResult`s
+    byte-identical to the unmodified scorer's. 85 items × 17 variants = 1445 cases."""
+    golden = json.loads(_SPLIT_GOLDEN.read_text(encoding="utf-8"))
+    actual = split_digests(split_rescore_lines(real_pack))
+    assert actual["cases"] == golden["cases"] == 85 * (len(SPLIT_REPLY_CORPUS) + 2)
+    assert actual["perVariant"] == golden["perVariant"]
+    assert actual["all"] == golden["all"]
+
+
+class TestAnswerFromChat:
+    """`answer_from_chat(result, *, pack) -> (advanced, outcome)` — the role's chat parse, alone."""
+
+    def test_an_asserted_true_decision_is_an_advance(self):
+        result = _chat_result('{"decision": true, "rationale": "ok"}')
+        assert classification.answer_from_chat(result, pack=None) == (True, "pass")
+
+    def test_an_asserted_false_decision_is_a_suspend(self):
+        result = _chat_result('{"decision": false, "rationale": "no"}')
+        assert classification.answer_from_chat(result, pack=None) == (False, "pass")
+
+    def test_an_unparseable_reply_suspends_as_a_parse_failure(self):
+        result = _chat_result("not json at all")
+        assert classification.answer_from_chat(result, pack=None) == (False, "parse_failure")
+
+    def test_the_old_packs_loose_parse_is_kept_a_false_string_is_an_advance(self):
+        """Plan §2.1: this pack's parse is `bool(parsed.get("decision"))`, looser than
+        falkor-chat's `_coerce_verdict`. U3a changes nothing; the strict parse is U3b's, for
+        decision-point packs only."""
+        result = _chat_result('{"decision": "false"}')
+        assert classification.answer_from_chat(result, pack=None) == (True, "pass")
+
+
+class TestScoreAnswer:
+    """`score_answer(item_input, answer, outcome, timing, *, pack) -> ItemResult` — the tier's
+    metric and count for an answer, wherever the answer came from."""
+
+    def test_an_advance_on_a_clear_suspend_item_counts_a_false_advance(self):
+        item_input = {"itemId": "cs-01", "tier": "clear_suspend", "path": "turns"}
+        result = classification.score_answer(item_input, True, "pass", _timing(), pack=None)
+        assert result.outcome == "pass"
+        assert result.scoreable == {"falseAdvanceRate": True}
+        assert result.counts == {"falseAdvanceRate": 1}
+        assert result.detail == {"path": "turns", "tier": "clear_suspend"}
+        assert result.timing == _timing()
+
+    def test_a_suspend_on_a_clear_advance_item_counts_a_false_suspend(self):
+        item_input = {"itemId": "ca-01", "tier": "clear_advance", "path": "understanding"}
+        result = classification.score_answer(item_input, False, "pass", _timing(), pack=None)
+        assert result.counts == {"falseSuspendRate": 1}
+
+    def test_the_outcome_is_carried_through_not_recomputed(self):
+        item_input = {"itemId": "bd-01", "tier": "boundary", "path": "turns"}
+        result = classification.score_answer(
+            item_input, False, "parse_failure", _timing(), pack=None
+        )
+        assert result.outcome == "parse_failure"
+        assert result.counts == {"falseAdvanceRateBoundary": 0}

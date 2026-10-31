@@ -1,0 +1,25 @@
+{
+  "_provenance": "Shape-verbatim, values synthetic. Every key and nesting level is docs/plans/typed-decision-models.md §2.3's recorded response contract (tico's live probe of POST http://localhost:1234/v1/decisions, model laya, 2026-10-30; ws:agent-team document 316050e8f3ef4135a7fc0605e5d79689): top level {model, answers, usage} with NO stats/model_info/runtime; a predicate answer {type, name, probability}; a choice answer {type, name, choice, probabilities:[{value, probability}], confidence}; usage {input_tokens, output_tokens, input_tokens_details, output_tokens_details, total_tokens} with output_tokens always 0. Neither the plan nor the probe document kept a raw body, so the numbers, the question names/values and the two *_tokens_details objects' inner keys are this fixture's own invention. Replace with a raw capture when the human-approved U1a probe runs.",
+  "model": "laya",
+  "answers": [
+    {"type": "predicate", "name": "advance", "probability": 0.931},
+    {
+      "type": "choice",
+      "name": "messageType",
+      "choice": "question",
+      "probabilities": [
+        {"value": "question", "probability": 0.82},
+        {"value": "request", "probability": 0.11},
+        {"value": "other", "probability": 0.07}
+      ],
+      "confidence": 0.82
+    }
+  ],
+  "usage": {
+    "input_tokens": 57,
+    "output_tokens": 0,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens_details": {"reasoning_tokens": 0},
+    "total_tokens": 57
+  }
+}

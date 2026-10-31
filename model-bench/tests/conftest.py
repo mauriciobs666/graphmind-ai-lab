@@ -114,6 +114,71 @@ def embeddings_fields(**overrides: Any) -> dict[str, Any]:
     return fields
 
 
+#: What a `model:decisions` record carries on top of the embeddings 26 (typed-decision-models plan
+#: §3.3, §3.5): the candidate's identity, the question spec, the policy object, the fit manifest's
+#: hash and size, and the evaluation set's content hash. Values are plausible, not real.
+DECISIONS_EXTRA_FIELDS: dict[str, Any] = {
+    "candidateId": "guard-laya-band-v1",
+    "candidateContentHash": "e" * 64,
+    "questionSpecHash": "f" * 64,
+    "decisionPolicy": {"kind": "predicate-band", "yesAtOrAbove": 0.92, "noBelow": 0.08},
+    "fitManifestHash": "1" * 64,
+    "fitManifestSize": 1400,
+    "evalSetHash": "2" * 64,
+}
+
+#: The hand-off model's identity a `model:handoff` record adds, flat and `handoff`-prefixed
+#: (plan §3.3).
+HANDOFF_EXTRA_FIELDS: dict[str, Any] = {
+    "handoffModelKey": "qwen/qwen3-4b-2507",
+    "handoffModelPublisher": "qwen",
+    "handoffArch": "qwen3",
+    "handoffQuantization": "Q4_K_M",
+    "handoffCompatibilityType": "gguf",
+    "handoffMaxContextLength": 262144,
+    "handoffLoadedContextLength": 8192,
+    "handoffModelType": "llm",
+    "handoffRuntimeName": "llama.cpp",
+    "handoffRuntimeVersion": "1.52.0",
+    "handoffTemperature": 0.0,
+    "handoffMaxTokens": 1024,
+}
+
+
+def _with_overrides(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    fields = dict(base)
+    for key, value in overrides.items():
+        if value is ...:
+            fields.pop(key, None)
+        else:
+            fields[key] = value
+    return fields
+
+
+def decisions_fields(**overrides: Any) -> dict[str, Any]:
+    """A complete, valid `model:decisions` field set: the embeddings set plus
+    `DECISIONS_EXTRA_FIELDS`, with the decision model's catalog identity (`laya`, `type:
+    "decision"`, no `capabilities` key — plan §2.3). The hand-transcribed literal that pins the
+    contract lives in `test_fingerprint.py`, as for embeddings."""
+    base = embeddings_fields(
+        modelKey="laya",
+        modelPublisher="ggml-org",
+        arch="modern-bert",
+        quantization="Q8_0",
+        maxContextLength=8192,
+        modelType="decision",
+        modelCapabilities=[],
+        modelCapabilitiesPresent=False,
+        residentModelsAtEnd=[{"id": "laya", "state": "loaded"}],
+    )
+    return _with_overrides({**base, **DECISIONS_EXTRA_FIELDS}, overrides)
+
+
+def handoff_fields(**overrides: Any) -> dict[str, Any]:
+    """A complete, valid `model:handoff` field set: `model:decisions` plus the hand-off model."""
+    return _with_overrides({**decisions_fields(), **HANDOFF_EXTRA_FIELDS}, overrides)
+
+
 def deterministic_fields(**overrides: Any) -> dict[str, Any]:
     fields = dict(DETERMINISTIC_FIELDS)
     for key, value in overrides.items():
@@ -200,6 +265,8 @@ def run(
         fields = {
             "model:chat": model_fields,
             "model:embeddings": embeddings_fields,
+            "model:decisions": decisions_fields,
+            "model:handoff": handoff_fields,
             "deterministic": deterministic_fields,
         }[profile]()
     items = items if items is not None else []
@@ -265,10 +332,12 @@ __all__ = [
     "RunResult",
     "ToolCallAggregates",
     "classification_aggregates",
+    "decisions_fields",
     "deterministic_fields",
     "embeddings_fields",
     "falkor_chat_present",
     "guard_pack",
+    "handoff_fields",
     "item",
     "model_fields",
     "pack_fixture",
