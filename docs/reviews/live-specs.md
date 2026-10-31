@@ -1896,3 +1896,108 @@ If you take it, edit the matching words in the `tico` kaizen "What" line too.
 ### Proposed REVIEW.md lines
 
 None. Neither finding is a recurring class.
+
+## Pass 16
+
+**Scope.** Unit L3a gate (`analyst`), except `analyst.md`, which `security-expert` gates. The
+artifact is `cobb`'s uncommitted edits to `claude/qa-engineer/qa-engineer.md`,
+`claude/security-expert/security-expert.md`, `claude/data-scientist/data-scientist.md` and their
+three `kaizen/history.md` files. Read: plan §3.1, §3.3, §4 L3a row, §5 AC-6; requirements FR-6,
+FR-12, FR-13, AC-6; Pass 6's duplicate list; Pass 7 P7-1 and P7-2; root `REVIEW.md`; root
+`AGENTS.md` live-spec bullet (l.160–164); all of `qa-engineer.md`; the review-shaped parts of the
+other two prompts; the three agents' `kaizen/plan.md`.
+
+CPG: not applicable — the artifact is agent-prompt text, with no code change.
+
+**Verdict: approve with suggestions.** There are two minor findings and one nit, and no blocker
+or major. The growth-stops check does not apply: agent prompts and kaizen files are outside the
+bullet's `requirements/`/`plans/`/`reviews/` scope.
+
+### Checks run
+
+- **No frontmatter, hook or tool-grant change.** Verified. Each prompt's frontmatter block is
+  byte-identical to `HEAD` (`diff` of the extracted blocks gives no output). The only changed paths
+  in `claude/` and `.claude/` are prompt and `kaizen/history.md` files, none of them hooks.
+- **AC-6 loop, run verbatim from the repo root.** It prints only `claude/teco/teco.md`, which
+  belongs to L3c. Each of the three L3a prompts had 0 `REVIEW.md` matches at `HEAD` and has 1 now,
+  so the new pointer is what clears it, not some earlier mention. Positive control: `teco.md` is
+  listed, so the check can go red.
+- **Nothing lost in the merges.** The old `security-expert.md` l.72 and `data-scientist.md` l.82
+  lines ran the check "when the reviewed artifact is a document [the growth-stops bullet]
+  covers". Root `REVIEW.md` *Always check* 1 keeps that condition ("a revision of a document that
+  root `AGENTS.md`'s growth-stops bullet covers") and adds the action the old lines left to the
+  bullet: say whether growth is new scope or rework, and report rework growth, restated history
+  and restated facts. Narrowing to "a revision" is not a loss, because a first version has no
+  growth to check. Both merges match P7-1's "becomes the `REVIEW.md` pointer" ruling.
+- **Duplicates.** Verified against Pass 6's list and P7-1's table. `qa-engineer.md` l.73 ("Evidence
+  over assertion") and `security-expert.md` l.89 ("Evidence over vibes") are partial overlaps that
+  are lens-specific and stay. `data-scientist.md` has no other duplicate. The kaizen entries
+  say the same.
+- **Delta-plan pointer against FR-12/FR-13.** `data-scientist.md` l.81 matches its home, the root
+  `AGENTS.md` live-spec bullet (l.163–164): "states only the change … citing the affected
+  sections and any open feature's plan it relies on". The citation "root `AGENTS.md`, live-spec
+  bullet" resolves to the bold lead **A live spec is a component's current behavior**. FR-12's
+  review half reaches `data-scientist` through the `REVIEW.md` pointer on l.82. Whether "relies
+  on" fully renders FR-13's "behavior that an open feature changes" is a question about the home
+  sentence, which L2c gated, not about this pointer.
+- **Kaizen entries.** Verified. Each is newest-first under the H1/blurb, in the
+  What / Why / Plan items shape of the 2026-10-29 entries. The `wc -w` deltas are accurate
+  (2128→2150, 2536→2541, 2101→2141, re-counted against `HEAD`). The cited Pass 7 IDs and plan
+  sections exist. "Gated by `analyst`" becomes true when this pass approves.
+
+### Findings
+
+**P16-1 (minor) — `qa-engineer` reads `REVIEW.md` only after it has executed, so it cannot
+apply the execution-shaped checks.** Verified by reading the full prompt. The bullet is at
+`qa-engineer.md` l.61, in Phase 4 REPORT, which comes after Phase 3 EXECUTE. Unlike
+`graph-dba`'s How-you-work list (Pass 14), the four phases are a sequence. The bullet is read
+before the verdict, so FR-6's "reads" is met. Its "applies" is not. Several lines are things a
+tester does while running, not while writing:
+
+- root *Always check* 4: name the mutant or positive control that turns a check red;
+- *Always check* 5: run a prescribed check command verbatim, sweep unfiltered;
+- `falkor-chat/REVIEW.md`'s "green run after the last seed is the evidence".
+
+At Phase 4 these mean re-execution, or they get skipped. The bullet also sits in a list headed
+"covering:", which lists report contents, but it is an action. `analyst` places its own pointer
+in its read step (`analyst.md` l.45).
+
+Fix: delete l.61 and add this bullet after Phase 1's "Read the sources of truth" bullet
+(l.36):
+
+```markdown
+- **Read the review instructions** — root `REVIEW.md` and the `REVIEW.md` of every component the tested work touches; apply them while you execute and before you write any review or gate verdict.
+```
+
+The `qa-engineer` kaizen "What" line then reads "Phase 1 (REASON) gained one bullet: …" instead
+of "Phase 4 (REPORT) gained one bullet: …".
+
+**P16-2 (minor) — Two kaizen parking-lot notes still track a pointer that L3a removed, but the
+history entries say "Plan items: none".** Verified (`grep -n growth-stops
+claude/*/kaizen/plan.md`). `claude/security-expert/kaizen/plan.md` l.17 and
+`claude/data-scientist/kaizen/plan.md` l.84 each say "The U2 pointer … if not, sharpen the
+clause rather than restating the root bullet". L3a replaced that U2 sentence with the
+`REVIEW.md` pointer, and the check is no longer in the root bullet. The note still has a job,
+which is to confirm the check is run on first live use. Its target and remedy are now wrong, and
+`claude/AGENTS.md` l.308 puts `kaizen/{plan,history}.md` in the same change. Replace both
+notes, in place, with:
+
+```markdown
+- **Growth-stops check: confirm on first live use (2026-10-29).** This agent reaches the check through its root `REVIEW.md` pointer, and it is judgment-enforced (`docs/plans/document-size-discipline.md` D6). On the first in-scope revision or gate, check this agent actually ran it; if not, sharpen the pointer rather than restating `REVIEW.md`.
+```
+
+Then change each of the two history entries' "Plan items: none." to "Plan items: the
+growth-stops parking-lot note repointed at the `REVIEW.md` pointer." The `qa-engineer` plan has
+no such note.
+
+**P16-3 (nit) — The `security-expert` and `data-scientist` pointers sit in deliverable text, not
+in the read/investigate step.** Inferred: placement only. Both agents are static reviewers whose
+lists are not strict sequences, so reading at verdict time still lets them apply the checks. That
+is why this is a nit and P16-1 is minor. For the same consistency with `analyst.md` l.45, the
+pointer sentence could move. In `security-expert.md`, move it to the end of How-you-work step 2
+(l.65). In `data-scientist.md`, move it to the end of step 2 (l.72), changing "Before any review
+or gate verdict" to "Before any methodology review or gate verdict". Take or leave.
+
+### Proposed REVIEW.md lines
+
+None. P16-1 is a placement in one prompt, not a recurring review-finding class.

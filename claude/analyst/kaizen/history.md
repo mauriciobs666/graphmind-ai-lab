@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` pointer (live-specs L3a; edited by `cobb`)
+
+- **What:** "How you work" step 2 gained the pointer: before any review or gate verdict, read and apply root `REVIEW.md` and every touched component's `REVIEW.md`. Lines duplicating root `REVIEW.md` became pointers (Pass 7's P7-1 table): the growth-stops clause now names "the growth-stops check (root `REVIEW.md`)" and keeps its `## Pass N` and Ready-for-design parts; the guard-placement trap cites `REVIEW.md` for the can-never-fail rule; "Evidence over vibes" lead, the suggested-fix trap and the acceptance-command trap point at `REVIEW.md`'s evidence bar and sweep line, keeping their agent-specific remainder (placeholder example, green-suite caveat). `wc -w` 2760 → 2765.
+- **Why:** `docs/plans/live-specs.md` §3.3/§4 L3a (FR-6, AC-6); `docs/reviews/live-specs.md` Pass 7 P7-1/P7-2. Gated by `security-expert` (no agent gates its own prompt).
+- **Gate:** `security-expert` (`docs/reviews/live-specs-security.md`, approve with suggestions); its S1–S4 wording applied: the evidence bar covers every claim, not only findings; the acceptance-command trap stays an order (run verbatim, from its stated directory, before approving).
+- **Plan items:** none.
+
 ## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
 
 - **What:** Deliverable item 2 (Findings) gained one sentence: gating an in-scope revision means running the growth-stops check, stating new scope vs. rework, giving `## Pass N` one-line outcomes for prior findings and folded-in answers, and always running it on a requirements document before its Ready-for-design flip. Appended to the existing item rather than a new list item (keeps the numbered skeleton intact). Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.

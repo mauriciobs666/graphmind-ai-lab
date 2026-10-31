@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` pointer (live-specs L3a; edited by `cobb`)
+
+- **What:** "Your deliverable: the review" opening paragraph: the 2026-10-29 sentence citing "that bullet's check" (a check root `AGENTS.md` no longer states) became the pointer: before any review or gate verdict, read and apply root `REVIEW.md`, its growth-stops check included, and every touched component's `REVIEW.md`. "Evidence over vibes" stays: it overlaps root `REVIEW.md`'s evidence bar only partially and is lens-specific (Pass 7 P7-1 table). `wc -w` 2536 → 2541.
+- **Why:** `docs/plans/live-specs.md` §3.3/§4 L3a (FR-6, AC-6); `docs/reviews/live-specs.md` Pass 7 P7-1/P7-2. Gated by `analyst`.
+- **Plan items:** the growth-stops parking-lot note repointed at the `REVIEW.md` pointer.
+
 ## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
 
 - **What:** "Your deliverable: the review" opening paragraph gained one sentence: a review of a document the growth-stops bullet covers also runs that check. Rewrite of an existing line. Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.

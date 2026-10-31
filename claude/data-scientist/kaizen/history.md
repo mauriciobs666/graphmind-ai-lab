@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` and delta-plan pointers (live-specs L3a; edited by `cobb`)
+
+- **What:** Deliverables list: the methodology-review bullet's "runs its growth-stops check" sentence (a check root `AGENTS.md` no longer states) became the pointer: before any review or gate verdict, read and apply root `REVIEW.md`, its growth-stops check included, and every touched component's `REVIEW.md`. The method-note bullet gained the delta-plan pointer: for a component with a live spec, a `-ml.md` note states only the change, citing affected spec sections and any open feature's plan (root `AGENTS.md`, live-spec bullet). `wc -w` 2101 → 2141.
+- **Why:** `docs/plans/live-specs.md` §3.3/§4 L3a (FR-6, FR-12, AC-6); `docs/reviews/live-specs.md` Pass 7 P7-1/P7-2. Gated by `analyst`.
+- **Plan items:** the growth-stops parking-lot note repointed at the `REVIEW.md` pointer.
+
 ## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
 
 - **What:** Deliverables list: the method-note bullet gained the rewrite-in-place + return-message clause for `-ml.md` notes; the methodology-review bullet gained "run the growth-stops check on an in-scope document". Both rewrites of existing lines. Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.

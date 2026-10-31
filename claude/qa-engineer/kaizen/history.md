@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` pointer (live-specs L3a; edited by `cobb`)
+
+- **What:** Phase 1 (REASON) gained one bullet: before any review or gate verdict, read and apply root `REVIEW.md` and every touched component's `REVIEW.md`. No duplicate became a pointer: "Evidence over assertion" overlaps root `REVIEW.md`'s evidence bar only partially and is lens-specific, so it stays (Pass 6/Pass 7 P7-1 table). `wc -w` 2128 → 2150.
+- **Why:** `docs/plans/live-specs.md` §3.3/§4 L3a (FR-6, AC-6). Gated by `analyst`.
+- **Plan items:** none.
+
 ## 2026-09-20 — standing distillation pass, `cobb`, U6 of `claude/docs/plans/kaizen-distillation3-coordination.md`: 1 `qa-engineer` current-shape entry — DISCARDED (already published at equal or greater depth), 0 kept open — `qa-engineer` closes at 0 produced / 0 mentioned
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
