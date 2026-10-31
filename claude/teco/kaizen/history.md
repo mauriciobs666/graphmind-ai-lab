@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-31 — narrowing gate checks the prompts (live-specs L3e; edited by `cobb`)
+
+- **What:** `teco.md` 8,585→8,637 words. Feature close → **Narrowing** bullet gained one sentence: brief the gate to also check a proposed narrowing line against every prompt carrying the `REVIEW.md` precedence sentence (found by `grep -l 'never relaxes it' claude/*/*.md`, not a roster list); a line relaxing a check one of them requires has no effect for that agent, so the gate pairs it with that prompt edit (`cobb`'s) or rejects it. No frontmatter, tool-grant, permission or hook change.
+- **Why:** `docs/reviews/live-specs-security.md` Pass 2 open question, ruled yes by `cobb` and adopted as unit L3e. After L3d (`144234e9`) put the precedence sentence in the reviewer prompts, such a line would pass the gate and then only produce conflict findings; the rule lived only in Pass 18 and kaizen. A grep rather than a name list keeps it roster-proof. Gated by `analyst` (`teco` does not gate its own prompt).
+- **Plan items:** —
+
 ## 2026-10-31 — live-spec feature close and `REVIEW.md` pointer (live-specs L3c; edited by `cobb`)
 
 - **What:** `teco.md` 8,296→8,585 words. New "Feature close" bullet in Documentation curation: cites root `AGENTS.md`'s live-spec close bullet and carries only the how — step (2) delegation default (implementer type; `graph-dba` for canonical Cypher), step (3)'s slug-less review home, step (4)'s two-way integrity check plus enforcer-exists check, and an effect-based definition of narrowing (removes, caps severity, limits scope or relaxes evidence, under any heading; prune and *Do not report* addition always qualify; unsure → narrowing). Live-spec carve-outs in the frontmatter `description` (text only), step 2's doc-fold, step 5's "Documentation is part of done", the documentation scan (spec sections listed for the close) and "Docs ride in the brief". "You don't write the docs yourself" now names verbatim `REVIEW.md` application as curation. Step 5 "Fit & completeness" gained the `REVIEW.md` pointer plus the precedence sentence ("`REVIEW.md` adds to this prompt and never relaxes it…"). The re-gate growth-stops clause repointed to root `REVIEW.md` (P7-2). `claude/README.md` `teco` row matches.

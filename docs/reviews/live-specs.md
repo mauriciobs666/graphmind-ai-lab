@@ -2597,3 +2597,62 @@ half. Take or leave. Replacement: "can relax only `REVIEW.md`-level or unprompte
 ### Proposed REVIEW.md lines
 
 None. Both nits are local to this unit.
+
+## Pass 21
+
+**Scope.** This pass gates L3e: one sentence added to `claude/teco/teco.md`'s Feature close
+**Narrowing** bullet (l.160), plus its kaizen entry, uncommitted `git diff -- claude/teco/`,
+producer `cobb`. Baseline: `docs/reviews/live-specs-security.md` Pass 2 open question, root
+`AGENTS.md` close step (4), and root `REVIEW.md` (applied).
+
+CPG: not applicable — prompt and kaizen prose only, no code-level component.
+
+**Verdict: approve with suggestions.** One minor finding and one nit. Neither blocks the commit.
+
+### Checks (verified by run or read)
+
+1. **Soundness.** It answers the Pass 2 question as asked. It follows from the precedence
+   sentence: such a line loses to the prompt, so gating it without the paired prompt edit only
+   produces recurring conflict findings. See P21-m1 for the one gap.
+2. **The grep's set.** I ran `grep -l 'never relaxes it' claude/*/*.md` and got 8 files: the
+   seven reviewer prompts and `teco.md`.
+   - **The glob is the right depth.** It skips `kaizen/history.md` (a level deeper; those files
+     quote the sentence). There are no `.md` files directly under `claude/docs/` or
+     `claude/scripts/`.
+   - **The self-match is harmless.** `teco.md` matches twice (`grep -c` = 2). Its l.137 pointer
+     carries the precedence sentence, so it belongs in the set on its own merits. The grep-string
+     match can only over-include: if l.137 lost the sentence, `teco.md` would still be checked.
+     That costs one extra check and never drops a prompt.
+   - **The real risk is under-inclusion,** for a copy that is reworded or wrapped across lines
+     (`grep` matches per line). Today all eight copies sit on one line. Acceptable.
+3. **Consistent with root (4).** "The gate" is whichever agent root (4) names (`cobb`, or
+   `analyst` when `cobb` proposed the line). The sentence adds a brief item and an outcome, and
+   relaxes nothing in (4).
+4. **Kaizen entry: accurate.**
+   - `wc -w` gives 8,585 (`HEAD`) → 8,637.
+   - One hunk, at l.160. No frontmatter change: the hunk is below the `---` block, and numstat
+     is 1/1 for `teco.md` and 6/0 for the history file.
+   - `144234e9` is the L3d commit.
+   - "lived only in Pass 18 and kaizen" matches the wording of Pass 2's question.
+5. **AC-6.** The loop, run verbatim from the repo root, prints nothing.
+
+### Findings
+
+**P21-m1 (minor, inferred from reading; owner `cobb`). The paired prompt edit has no stated
+gate.** When `cobb` is the gate (someone else proposed the line), `cobb` both gates the line and
+writes the prompt edit that makes the line effective. That edit relaxes a reviewer prompt, which
+is exactly S5's payload. The only check on it is then `teco`'s general default of independent
+review, which the sentence does not invoke. In practice this chain gated each prompt edit
+independently (Pass 20; `security-expert` for `analyst.md`), but the rule does not say so.
+Replacement for the sentence's tail (+6 words): "…so the gate pairs it with that prompt edit
+(`cobb`'s, gated by an agent other than `cobb`) or rejects it." A prompt edit to `analyst.md`
+then naturally routes to `security-expert`, as in L3d.
+
+**P21-n1 (nit). "has no effect for that agent" understates the result.** Under the precedence
+sentence, the agent follows its prompt and reports the conflict as a finding, so the line keeps
+producing findings. Take or leave. Replacement: "is overridden for that agent and reported as a
+conflict".
+
+### Proposed REVIEW.md lines
+
+None.
