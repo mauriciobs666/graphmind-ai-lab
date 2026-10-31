@@ -8,6 +8,9 @@
 #
 # Usage: cpg/sandbox/tests/mutants.sh [mutant-id ...]   (MUTANT_DRY=1: only check the edits apply)
 #   MUTANT_TABLE_OUT=<file>: also write the markdown result table there.
+#   MUTANT_TIMEOUT=<seconds>: bound on each mutant's test run (default 900; the whole suite takes
+#   about 3 min). A mutant whose run hits it is "killed (timeout)": a hang is a red test, and it
+#   must not block the harness (YC's runner re-execs forever).
 set -uo pipefail
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -72,11 +75,11 @@ M = [
  ("M34", "2", "ES2 §1.5: --help writes a record", [(R, '  case "${1:-}" in -h|--help) sbx_usage; exit 0 ;; esac\n  sbx_init\n', '  sbx_init\n  case "${1:-}" in -h|--help) sbx_usage; sbx_write_record 0 ""; exit 0 ;; esac\n')]),
  ("M37", "11", "§1.7: skip the Docker-config dir check", [(R, "  sbx_dcfg_check || true\n", '  SBX_DCFG="$(sbx_home)/$SBX_DCFG_REL"; SBX_DCFG_FAIL=""\n')]),
  ("M38", "11", "§1.7: DOCKER_HOST left inherited (not pinned)", [
-    (R, '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}"', '  [ "${DOCKER_CONFIG:-}"'),
+    (R, '  [ "${blk[DOCKER_HOST]:-}" = "$SBX_DOCKER_HOST" ] && [ "${blk[DOCKER_CONFIG]:-}"', '  [ "${blk[DOCKER_CONFIG]:-}"'),
     (R, 'exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" "DOCKER_HOST=$SBX_DOCKER_HOST" \\', 'exec /usr/bin/env -i "PATH=$SBX_PATH" "HOME=$home" ${DOCKER_HOST:+"DOCKER_HOST=$DOCKER_HOST"} \\'),
     (R, "  export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=", "  export DOCKER_CONFIG=")]),
  ("M39", "11,12", "§1.7: DOCKER_CONFIG left inherited (caller config.json read)", [
-    (R, '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}" = "$home/$SBX_DCFG_REL" ] || ok=0', '  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] || ok=0'),
+    (R, '  [ "${blk[DOCKER_HOST]:-}" = "$SBX_DOCKER_HOST" ] && [ "${blk[DOCKER_CONFIG]:-}" = "$home/$SBX_DCFG_REL" ] || ok=0', '  [ "${blk[DOCKER_HOST]:-}" = "$SBX_DOCKER_HOST" ] || ok=0'),
     (R, '    "DOCKER_CONFIG=$home/$SBX_DCFG_REL" "${keep[@]}"', '    ${DOCKER_CONFIG:+"DOCKER_CONFIG=$DOCKER_CONFIG"} "${keep[@]}"'),
     (R, "  export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=${SBX_DCFG:-/nonexistent}", "  export DOCKER_HOST=$SBX_DOCKER_HOST")]),
  ("M40", "5", "p2-m1: container launched without the auditId label", [(R, ' --label "$SBX_LABEL.auditId=$SBX_AUDIT_ID"', "")]),
@@ -90,8 +93,10 @@ M = [
  ("YA", "14", "p3-m3: the /tmp|/var/tmp|/dev/shm tree rule deleted", [(R, '  case "$real/" in /tmp/*|/var/tmp/*|/dev/shm/*) SBX_DCFG_FAIL="$real is under a temporary tree"; return 1 ;; esac\n', "")]),
  ("YB", "14", "p3-m3: the world-writable ancestor test disabled", [(R, """    if (( 0$(stat -c '%a' "$p") & 02 )); then SBX_DCFG_FAIL="$real sits under world-writable $p"; return 1; fi\n""", "    :\n")]),
  ("YC", "15", "p3-n1: env keys from compgen -e (non-identifier entries unseen)", [(R, """  while IFS= read -r -d '' k; do\n    case "${k%%=*}" in""", """  for k in $(compgen -e); do\n    case "$k" in"""), (R, '  done < "/proc/$$/environ" 2>/dev/null\n', "  done\n")]),
+ ("YH", "15", "p4: closed-env values read from live shell variables, not the exec'd block", [(R, '  [ "${blk[PATH]:-}" = "$SBX_PATH" ] && [ "${blk[HOME]:-}" = "$home" ] || ok=0\n', '  [ "${PATH:-}" = "$SBX_PATH" ] && [ "${HOME:-}" = "$home" ] || ok=0\n')]),
  ("YD", "13", "p3-m1: the rejected design -- rm the container by name, then kill the client", [(R, '  local j\n  for j in $(jobs -p); do kill -KILL "$j" 2>/dev/null; done\n  wait 2>/dev/null\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n', '  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi\n  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi\n')]),
  ("YE", "13", "p3-m1: client killed first, but one removal pass (no settle loop)", [(R, "  while ((quiet < 3 && n < 50)); do", "  while ((quiet < 1 && n < 1)); do")]),
+ ("YG", "2", "p4-m1: sbx_cleanup stops removing SBX_SCRATCH (every invocation leaks it)", [(R, '    [ -n "$d" ] && [ -d "$d" ] || continue\n', '    [ -n "$d" ] && [ -d "$d" ] || continue\n    [ "$d" = "$SBX_SCRATCH" ] && continue\n')]),
  ("YF", "12", "p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up)", [(R, 'kill -KILL "$j"', 'kill -TERM "$j"')]),
 ]
 for mid, tests, desc, edits in M:
@@ -119,7 +124,7 @@ while IFS=$'\t' read -r -u 3 id tests desc; do
   fi
   if [ -n "${MUTANT_DRY:-}" ]; then echo "$id applies"; continue; fi
   tmp_before=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
-  "$HERE/test_sandbox.sh" --runner "$d/offline-run.sh" --only "$tests" > "$d/test.out" 2>&1; rc=$?
+  timeout -k 10 "${MUTANT_TIMEOUT:-900}" "$HERE/test_sandbox.sh" --runner "$d/offline-run.sh" --only "$tests" > "$d/test.out" 2>&1; rc=$?
   # M42 leaks its scratch by design, into the suite's private /tmp under its own $T, which the
   # suite removes. A new /tmp/ccg-sbx.* here cannot be attributed (another session's runner may
   # own it), so it is reported and never removed (review S08 p3-m2).
@@ -127,7 +132,9 @@ while IFS=$'\t' read -r -u 3 id tests desc; do
     echo "$id: note: new $t appeared during this mutant (not removed; may be another session's)" >&2
   done
   first=$(grep -m1 '^  FAIL ' "$d/test.out" | sed 's/^  FAIL //; s/|/\\|/g' | cut -c1-110)
-  if [ "$rc" != 0 ] && [ -n "$first" ]; then res=killed; killed=$((killed + 1)); else res=SURVIVED; survived=$((survived + 1)); fi
+  if [ "$rc" = 124 ] || [ "$rc" = 137 ]; then
+    res="killed (timeout)"; killed=$((killed + 1)); first="test run exceeded ${MUTANT_TIMEOUT:-900} s"
+  elif [ "$rc" != 0 ] && [ -n "$first" ]; then res=killed; killed=$((killed + 1)); else res=SURVIVED; survived=$((survived + 1)); fi
   printf '%s %-8s tests=%-6s %s :: %s\n' "$id" "$res" "$tests" "$desc" "$first"
   printf '| %s | %s | %s | %s | %s |\n' "$id" "${desc//|/\\|}" "$tests" "$res" "$first" >> "$W/table.md"
 done 3< "$W/manifest"

@@ -47,6 +47,21 @@ TMP_BEFORE=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
 DCFG="$(getent passwd "$(id -u)" | cut -d: -f6)/.local/state/ccg/docker-config"
 DCFG_TOUCHED=0; SIG_CONTAINER=""; SIGNAL_AIDS=()
 WW_BASE="$(getent passwd "$(id -u)" | cut -d: -f6)/.ccg-s08-ww-$$"   # test 14, outside /tmp
+# own_aids: every auditId this run's runners used -- those in its records (production and
+# library mode), plus the signalled runs of tests 12 and 13, which write none.
+own_aids() {
+  { cat "$CCG_AUDIT_DIR/sandbox.jsonl" "$PROBE_AUDIT/sandbox.jsonl" 2>/dev/null | sed -n 's/.*"auditId":"\([0-9a-f-]*\)".*/\1/p'
+    printf '%s\n' "${SIGNAL_AIDS[@]}"; } | grep . | sort -u
+}
+# own_scratch: the /tmp/ccg-sbx.<auditId>.XXXXXX dirs whose auditId is one of ours (p4-m1).
+own_scratch() {
+  local d a
+  for d in /tmp/ccg-sbx.*; do
+    [ -d "$d" ] || continue
+    a=$(basename "$d" | sed -n 's/^ccg-sbx\.\([0-9a-f-]\{36\}\)\.[A-Za-z0-9]*$/\1/p')
+    [ -n "$a" ] && grep -qxF "$a" <<< "$1" && echo "$d"
+  done
+}
 cleanup() {
   [ -n "$MARKER_PID" ] && kill "$MARKER_PID" 2>/dev/null
   # Restore the runner's Docker-config dir (only what this suite planted; it was verified empty).
@@ -62,6 +77,8 @@ cleanup() {
     for x in $(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid"); do docker rm -f -v "$x" >/dev/null 2>&1; done
     for x in $(docker volume ls -q --filter "label=ccg.sandbox.auditId=$aid"); do docker volume rm -f "$x" >/dev/null 2>&1; done
   done
+  # Scratch a defective runner leaked: removed only when its name carries one of our auditIds.
+  for x in $(own_scratch "$(own_aids)"); do chmod -R u+w "$x" 2>/dev/null; rm -rf "$x"; done
   rm -f "$HOME_SENTINEL"
   if [ -d "$WW_BASE" ]; then chmod -R u+w "$WW_BASE" 2>/dev/null; rm -rf "$WW_BASE"; fi
   chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"
@@ -887,6 +904,12 @@ if want 15; then
   got=$(ce "${CLOSED[@]}"); chk "control: exactly the closed set -> no re-exec ($got)" test "$got" = NO-REEXEC
   got=$(ce "${CLOSED[@]}" 'A-B=1'); chk "closed set plus 'A-B=1' -> re-exec ($got)" test "$got" = REEXEC
   got=$(ce "${CLOSED[@]}" 'BASH_FUNC_f%%=() { echo hi; }'); chk "closed set plus an exported function -> re-exec ($got)" test "$got" = REEXEC
+  # The decision reads the block the runner was exec'd with, values included: a shell variable
+  # changed after exec (as a host hook can append to PATH) is not caller input and must not
+  # force a re-exec (else a hook that does it in every bash would loop the re-exec).
+  got=$(env -i "${CLOSED[@]}" /bin/bash -p -c '. "$1"; SBX_SELF=$2; PATH=$PATH:/s08-post-exec; HOME=/s08-x; sbx_clean_env && echo NO-REEXEC' _ "$RUNNER" "$T/reexec-stub" 2>&1)
+  chk "closed block, shell PATH/HOME changed after exec -> no re-exec ($got)" test "$got" = NO-REEXEC
+  got=$(ce "${CLOSED[@]/#PATH=*/PATH=/usr/bin:/bin}"); chk "a different PATH value in the block -> re-exec ($got)" test "$got" = REEXEC
 fi
 
 # ================================================================== test 4: every invocation, one valid record
@@ -989,9 +1012,7 @@ sleep 1
 # Scoped to this run: every container and volume the runner creates carries
 # ccg.sandbox.auditId=<auditId>; only this run's ids count (other agents may hold ccg.sandbox
 # containers of their own concurrently). A label-wide count is printed for information.
-# The signalled runs of tests 12 and 13 write no record; their auditIds are added by hand.
-ids=$( { cat "$CCG_AUDIT_DIR/sandbox.jsonl" "$PROBE_AUDIT/sandbox.jsonl" 2>/dev/null | sed -n 's/.*"auditId":"\([0-9a-f-]*\)".*/\1/p'
-  printf '%s\n' "${SIGNAL_AIDS[@]}"; } | grep . | sort -u)
+ids=$(own_aids)
 mine() { grep -xF -f <(printf '%s\n' $ids) || true; }
 left_v=$(docker volume ls --filter label=ccg.sandbox.auditId --format '{{.Label "ccg.sandbox.auditId"}}' 2>/dev/null | mine)
 left_c=$(docker ps -a --filter label=ccg.sandbox.auditId --format '{{.Label "ccg.sandbox.auditId"}}' 2>/dev/null | mine)
@@ -1024,11 +1045,13 @@ for v in $ev_v; do
 done
 chk "no ccg-sbx-* container this run created still exists ($(printf '%s\n' $ev_c | grep -c .) created; $foreign_c foreign ignored)" test -z "$alive_c"
 chk "no ccg.sandbox volume this run created still exists ($(printf '%s\n' $ev_v | grep -c .) volumes created; $foreign_v foreign ignored)" test -z "$alive_v"
-# p2-n2: a runner's /tmp/ccg-sbx.* scratch names no caller path, so it cannot be attributed here;
-# test 2 checks the leak path exactly, under a private /tmp. The host-wide count is information.
+# p2-n2 / p4-m1: the runner names its scratch /tmp/ccg-sbx.<auditId>.XXXXXX, so a leaked one is
+# attributed by auditId, like a container; any other new /tmp/ccg-sbx.* is foreign and ignored.
+# (--help writes no record, so its leak path is checked in test 2, under a private /tmp.)
 TMP_AFTER=$(ls -d /tmp/ccg-sbx.* 2>/dev/null | sort)
 new_tmp=$(comm -13 <(printf '%s\n' $TMP_BEFORE) <(printf '%s\n' $TMP_AFTER) | grep -c . || true)
-printf '  info new /tmp/ccg-sbx.* dirs on the host during this run (any session): %s\n' "$new_tmp"
+left_s=$(own_scratch "$ids")
+chk "no /tmp/ccg-sbx.<auditId>.* scratch of this run left behind ($new_tmp new on the host; $(grep -c . <<< "$left_s") ours)" test -z "$left_s"
 left_o=$(find "$T" -maxdepth 2 -name '.ccg-ovl-*' 2>/dev/null)
 chk "no overlay scratch left beside an output dir" test -z "$left_o"
 

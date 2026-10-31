@@ -593,7 +593,8 @@ sbx_init() { # per-invocation state
   export DOCKER_HOST=$SBX_DOCKER_HOST DOCKER_CONFIG=${SBX_DCFG:-/nonexistent}
   unset DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_API_VERSION
   SBX_CHILD=""
-  SBX_SCRATCH=$(mktemp -d /tmp/ccg-sbx.XXXXXX)
+  # Named by auditId (set above), so a leaked scratch is attributable to its run (review S08 p4-m1).
+  SBX_SCRATCH=$(mktemp -d "/tmp/ccg-sbx.$SBX_AUDIT_ID.XXXXXX")
   SBX_CLEANUP+=("$SBX_SCRATCH")
   trap 'sbx_cleanup' EXIT   # set with the mktemp, so no path leaks the scratch (review S08 p2-n2)
 }
@@ -691,16 +692,20 @@ SBX_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # PATH, DOCKER_HOST and DOCKER_CONFIG at the runner's own values, HOME from passwd, CCG_*.
 sbx_clean_env() {
   local home k ok=1
+  local -A blk=()
   home=$(sbx_home)
-  [ "${PATH:-}" = "$SBX_PATH" ] && [ "${HOME:-}" = "$home" ] || ok=0
-  [ "${DOCKER_HOST:-}" = "$SBX_DOCKER_HOST" ] && [ "${DOCKER_CONFIG:-}" = "$home/$SBX_DCFG_REL" ] || ok=0
-  # The keys come from the environment block we were exec'd with, not `compgen -e`: that lists
-  # only identifier names, so an entry like `A-B=1` or `BASH_FUNC_f%%` would pass unseen yet
-  # reach every child (review S08 p3-n1). Unreadable -> re-exec (fail closed).
+  # Keys and values come from the environment block we were exec'd with, i.e. the caller's
+  # input. Not `compgen -e`: that lists only identifier names, so an entry like `A-B=1` or
+  # `BASH_FUNC_f%%` would pass unseen yet reach every child (review S08 p3-n1). Not the live shell
+  # variables either: a value changed after exec (a host hook appending to PATH was observed) is
+  # not caller input, and if it happened in every bash the re-exec would never settle.
+  # Unreadable -> re-exec (fail closed).
   [ -r "/proc/$$/environ" ] || ok=0
   while IFS= read -r -d '' k; do
-    case "${k%%=*}" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|DOCKER_HOST|DOCKER_CONFIG|PWD|OLDPWD|SHLVL|_) ;; *) ok=0 ;; esac
+    case "${k%%=*}" in CCG_AUDIT_DIR|CCG_TOOLCHAIN_IMAGE|PATH|HOME|DOCKER_HOST|DOCKER_CONFIG|PWD|OLDPWD|SHLVL|_) blk[${k%%=*}]=${k#*=} ;; *) ok=0 ;; esac
   done < "/proc/$$/environ" 2>/dev/null
+  [ "${blk[PATH]:-}" = "$SBX_PATH" ] && [ "${blk[HOME]:-}" = "$home" ] || ok=0
+  [ "${blk[DOCKER_HOST]:-}" = "$SBX_DOCKER_HOST" ] && [ "${blk[DOCKER_CONFIG]:-}" = "$home/$SBX_DCFG_REL" ] || ok=0
   ((ok)) && return 0
   local -a keep=()
   [ -n "${CCG_AUDIT_DIR+x}" ] && keep+=("CCG_AUDIT_DIR=$CCG_AUDIT_DIR")

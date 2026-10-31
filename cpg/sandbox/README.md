@@ -47,9 +47,13 @@ two caller variables are inputs: `CCG_AUDIT_DIR` and `CCG_TOOLCHAIN_IMAGE` (defa
 - **The shebang is `#!/bin/bash -p`.** bash then ignores `BASH_ENV`, `ENV`, `SHELLOPTS` and
   exported functions at startup.
 - **`sbx_main` re-execs itself under `env -i`** unless its environment is exactly these
-  variables. The keys are read from `/proc/$$/environ`, not `compgen -e`, which lists only
-  identifier names: an entry such as `A-B=1` or `BASH_FUNC_f%%` forces the re-exec too
-  (review S08 p3-n1). The allowed set is:
+  variables. Keys and values are read from `/proc/$$/environ`, the block the runner was exec'd
+  with, which is the caller's input. Two other sources are rejected. `compgen -e` lists only
+  identifier names, so an entry such as `A-B=1` or `BASH_FUNC_f%%` would slip past it; such
+  entries now force the re-exec (review S08 p3-n1). The live shell variables are rejected too:
+  on this host a hook was observed appending `~/.local/bin` to `PATH` inside an `env -i` bash
+  after exec. That is not caller input, and if it happened in every bash the re-exec would
+  never settle. The allowed set is:
   - `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
   - `DOCKER_HOST=unix:///var/run/docker.sock`, which is pinned: a different daemon is a runner
     edit, not an input;
@@ -301,7 +305,8 @@ Two tests were added beyond §10's numbering:
 - **Test 15, the closed environment's key list, in library mode** (review S08 p3-n1).
   `sbx_clean_env` is called with `SBX_SELF` pointed at a stub that prints `REEXEC`, under an
   environment that is exactly the closed set: no re-exec. With `A-B=1` or an exported function
-  added, it must re-exec.
+  added, or a different `PATH` value in the block, it must re-exec. With a closed block whose
+  shell `PATH`/`HOME` are changed after exec, it must not.
 
 **Hygiene** (S08 review p2-m1, p2-n2, p3-m2). The suite fails if any of the following is left at
 the end. Each check counts only what this run made, so another session's sandbox work cannot
@@ -315,24 +320,30 @@ turn it red:
   the runner's own scratch, not a `$T` path. Others are counted as foreign and ignored. Checked:
   a foreign, never-started `ccg-sbx-*` container and a foreign `ccg.sandbox` volume created
   mid-run leave the suite green;
-- for `--help`, the one path that exits before `sbx_main` sets its EXIT trap, a
-  `/tmp/ccg-sbx.*` scratch dir. Test 2 runs it under a private `/tmp` (bwrap, with `$T` and
-  the runner's directory bound back), so a leak lands in the suite's own `$T` and is attributable
-  to that invocation alone. A runner's scratch names no caller path, so a host-wide
-  `/tmp/ccg-sbx.*` diff cannot tell this run's from a concurrent one's. It is printed for
-  information only.
+- a `/tmp/ccg-sbx.<auditId>.XXXXXX` scratch dir whose `auditId` is one of this run's. The runner
+  names its scratch by `auditId` (review S08 p4-m1), so a leak is attributed the way a container
+  is; any other new `/tmp/ccg-sbx.*` is foreign and ignored (checked: a foreign
+  `/tmp/ccg-sbx.<uuid>.*` created mid-run leaves the suite green and untouched). The EXIT trap
+  removes scratch that carries one of this run's `auditId`s, and nothing else;
+- for `--help`, a `/tmp/ccg-sbx.*` scratch dir. `--help` writes no record, so its `auditId` is
+  unknown to the suite; test 2 runs it under a private `/tmp` (bwrap, with `$T` and the runner's
+  directory bound back), so a leak lands in the suite's own `$T` and is attributable to that
+  invocation alone.
 
 Test 5 also pins the labels the scoped check relies on: `--label ccg.sandbox.auditId=<auditId>`,
 `--name ccg-sbx-<auditId>`, and the label on each volume.
 
 ### Mutants
 
-`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. M42 breaks cleanup on purpose; its scratch lands in the suite's private `/tmp` under `$T`, which the suite removes. The harness never removes anything else: a new `/tmp/ccg-sbx.*` seen during a mutant is reported, not deleted, because it may be another session's. Last full run 2026-10-30: **57 of 57 killed**. That covers:
+`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. M42 breaks cleanup on purpose; its scratch lands in the suite's private `/tmp` under `$T`, which the suite removes. Each mutant's test run is bounded by `MUTANT_TIMEOUT` (default 900 s; the whole suite takes about 3 min). A run that hits it is reported as `killed (timeout)`: YC's runner re-execs forever, so it is killed that way. The harness never removes anything else: a new `/tmp/ccg-sbx.*` seen during a mutant is reported, not deleted, because it may be another session's. Last full run 2026-10-30: **57 of 57 killed**; YG and YH (added after it) were run with M42, M34 and the environment mutants. That covers:
 - the first-round mutants M01–M21;
 - the S08-gate round: M22–M31, X1–X6, X8–X10 and M32–M35;
 - the ES2 v1.2 / Pass 2 follow-up: M37–M42 (`-p` dropped is M30, now also run against test 11);
 - P3-7's M43;
-- the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM.
+- the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM;
+- the Pass 4 follow-up: YG (p4-m1, `sbx_cleanup` stops removing the scratch, test 2) and YH
+  (closed-env values read from live shell variables, test 15). M38 and M39 were re-anchored to
+  the values-from-block lines, with the same breaks.
 
 Outside the harness, because it leaves residue by design: **M36**, which drops `--rm`, was run once by hand (S08 fix round). The scoped hygiene checks went red, and its containers were removed. Re-run by hand after p3-m2, against test 5: the scoped hygiene still went red (4 checks, 0 foreign), and its 3 containers were removed.
 
@@ -386,12 +397,14 @@ Outside the harness, because it leaves residue by design: **M36**, which drops `
 | M39 | §1.7: DOCKER_CONFIG left inherited (caller config.json read) | 11,12 | killed | §1.7: pinned values (DOCKER_HOST, DOCKER_CONFIG, HOME, PATH) |
 | M40 | p2-m1: container launched without the auditId label | 5 | killed | launcher clause |
 | M41 | p2-n1: launcher in the foreground (signal trap deferred, container survives) | 12 | killed | runner still alive 10 s after SIGTERM |
-| M42 | p2-n2: scratch made before --help, with no trap at the mktemp | 2 | killed | no new /tmp/ccg-sbx.* scratch dir left behind |
+| M42 | p2-n2: scratch made before --help, with no trap at the mktemp | 2 | killed | --help leaves no /tmp/ccg-sbx.* scratch (private /tmp: ccg-sbx.74573e16-f376-4748-a9b4-630a8758d169.mUl7fw) |
 | M43 | P3-7: the content check accepts an empty CPG | 3 | killed | P3-7: the empty CPG is CONTENT=EMPTY, the real one ok, and the check exits non-zero (rc 0) |
 | M35 | M4: the reviewed allowed list swapped (one out, one look-alike in) | 2 | killed | M4: reviewed allowed flag jimple2cpg --full-resolver is accepted and recorded (hits=0 allowed=) |
 | YA | p3-m3: the /tmp\|/var/tmp\|/dev/shm tree rule deleted | 14 | killed | home under /tmp -> refused, 'under a temporary tree' (rc=1 fail=/tmp/ccg-s08-test.rXzIbQ/h-tmp/.local/state/cc |
 | YB | p3-m3: the world-writable ancestor test disabled | 14 | killed | world-writable ancestor outside /tmp -> refused, names it (rc=0 fail=) |
-| YC | p3-n1: env keys from compgen -e (non-identifier entries unseen) | 15 | killed | closed set plus 'A-B=1' -> re-exec (NO-REEXEC) |
+| YC | p3-n1: env keys from compgen -e (non-identifier entries unseen) | 15 | killed (timeout) | test run exceeded 60 s (`MUTANT_TIMEOUT=60`; its runner re-execs forever) |
 | YD | p3-m1: the rejected design -- rm the container by name, then kill the client | 13 | killed | every trial exited 143 and left no container or volume (20 auditIds) |
 | YE | p3-m1: client killed first, but one removal pass (no settle loop) | 13 | killed | every trial exited 143 and left no container or volume (20 auditIds) |
 | YF | p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up) | 12 | killed | runner still alive 10 s after SIGTERM |
+| YG | p4-m1: sbx_cleanup stops removing SBX_SCRATCH (every invocation leaks it) | 2 | killed | no /tmp/ccg-sbx.<auditId>.* scratch of this run left behind (121 new on the host; 121 ours) |
+| YH | p4: closed-env values read from live shell variables, not the exec'd block | 15 | killed | control: exactly the closed set -> no re-exec (REEXEC) |
