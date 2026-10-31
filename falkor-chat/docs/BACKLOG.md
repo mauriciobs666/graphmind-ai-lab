@@ -80,12 +80,14 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > fails the embed job silently (log only) and drops the message from search. **Why bother:** the
 > fit report (`docs/test-reports/salesperson-single-model-fit-report.md`) shows ~2.1 GiB dedicated
 > for the embedder process (~0.6 GB weights) and ~1.6 GiB of ministral paged out whenever it runs;
-> a smaller embedder context may shrink that, unmeasured. Remaining: (1) probe LM Studio's
-> over-context embed behavior; (2) stakeholder picks the embedder context (2048 vs 4096); (3) load
-> the embedder at it; (4) enforce `MAX_TEXT_LEN` on MCP `send_message` as REST does; (5) re-measure
-> VRAM and paging against the fit report.
-- **Owner:** stakeholder decision (context value), then `devops` (1, 3, 5) and `coder` (4).
-- **Test strategy:** `lms ps --json` shows the embedder's loaded context; an over-length MCP
+> a smaller embedder context may shrink that, unmeasured. **Decided (stakeholder, 2026-10-31):**
+> the embedder loads at **4096** — it covers every REST-capped message, not only document chunks;
+> the chat model stays at 8192. Remaining: (1) probe LM Studio's over-context embed behavior;
+> (2) load the embedder at 4096 (its own context in `ensure_demo_models.py`, not the chat model's);
+> (3) enforce `MAX_TEXT_LEN` on MCP `send_message` as REST does; (4) re-measure VRAM and paging
+> against the fit report.
+- **Owner:** `devops` (1, 2, 4) and `coder` (3).
+- **Test strategy:** `lms ps --json` shows the embedder at 4096 and ministral at 8192; an over-length MCP
   `send_message` is rejected like REST's 422; the fit report's VRAM/paging measurement repeated.
 
 ### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
