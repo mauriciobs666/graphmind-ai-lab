@@ -1,12 +1,9 @@
 # falkor-chat — Canonical Query Library
 
-Verified against `falkordb/falkordb:v4.18.11` (Redis 8.6.3, module `41811`) — full suite green
-**387/387, 2026-08-28** (`./scripts/test_queries.sh`; 346/346 immediately before the K-053 §16
-cart/order gate added 41 assertions; 343/343 immediately before U15b's `categoryNormalized`
-case-insensitivity fix added 3 assertions; 320/320 immediately before the K-052 §15
-product-catalog gate; 282/282, 2026-07-31, before that; 276/276 before the K-039 §12.15 gate;
-256/256 before that, before the K-036 §2/§12.14 gate; 241/241 before that, before the K-024
-§12.12/§12.13 gate).
+Verified against `falkordb/falkordb:v4.18.11` (module `41811`) by `./scripts/test_queries.sh`.
+The Cypher here is the text `server/falkorchat/repository.py` sends (the agent-generated
+read path is `querygen.py`, §15.3); where a section shows a library query no server path runs,
+it says so.
 
 All queries use **parameters** — never interpolate user input into Cypher strings.
 In `falkordb-py`: `g.query(cypher, params={"key": value})`.
@@ -26,6 +23,9 @@ indexes and constraints are OPERATIONAL.
 ## 2. Users & membership
 
 ### Create or update a user (global identity graph)
+
+*Library query: no server path runs it — the server never writes the `identity` graph; the
+workspace-local copy below is what chat reads.*
 ```cypher
 MERGE (u:User {userId: $userId})
 ON CREATE SET u.displayName = $displayName,
@@ -36,7 +36,7 @@ RETURN u
 ```
 *Graph: `identity`*
 
-### Add user to workspace — guarded ensure (v2, DEF-1 fix)
+### Add user to workspace — guarded ensure (`ensure_user`)
 
 > **Locked rule: member ids are namespace-unique across `User`/`Agent`.** Every
 > `coalesce(u, a)` lookup (role derivation, `POSTED_BY` author resolution, mentions,
@@ -63,9 +63,9 @@ query can never zero-row):
 | `created` | `existed` | `collided` | Meaning | Caller action |
 |---|---|---|---|---|
 | `true` | `false` | `false` | fresh node written | success |
-| `false` | `true` | `false` | id already a `User` — nothing written | idempotent success (matches the old `MERGE … ON CREATE`-only behavior: re-ensure never updates properties) |
+| `false` | `true` | `false` | id already a `User` — nothing written | idempotent success (re-ensure never updates properties) |
 | `false` | `false` | `true` | id held by an `Agent` — **nothing written** | refuse (member-id collision error) |
-| `false` | `true` | `true` | pre-guard shadow state: both labels hold the id | alarm — corrupted namespace, manual repair |
+| `false` | `true` | `true` | both labels hold the id | alarm — corrupted namespace, manual repair |
 
 Notes (live-verified on this build):
 - The write is a **guarded `CREATE` inside `FOREACH`** — `MERGE` inside `FOREACH` is not
@@ -82,6 +82,10 @@ Notes (live-verified on this build):
   no label scans.
 
 ### Add user to channel
+
+*Suite-only (`test_queries.sh`); `scripts/seed_demo.sh` writes a role-less variant (both
+`MEMBER_OF` edges in one statement, no `role`/`joinedAt`). The server's own membership write is §18.2
+`add_channel_member`.*
 ```cypher
 MATCH (u:User    {userId:    $userId})
 MATCH (c:Channel {channelId: $channelId})
@@ -91,6 +95,8 @@ RETURN r
 ```
 
 ### List channel members
+
+*Library query (suite-verified); the server reads the roster per thread (next query).*
 ```cypher
 MATCH (u)-[:MEMBER_OF]->(c:Channel {channelId: $channelId})
 RETURN coalesce(u.userId, u.agentId) AS memberId,
@@ -101,14 +107,12 @@ ORDER BY u.displayName
 *Returns both `User` and `Agent` members. `coalesce(u.userId, u.agentId)` gives a single
 stable identifier regardless of node type; `labels(u)` lets the caller distinguish.*
 
-### List thread participants (K-036 — web-api-coverage FR-8)
+### List thread participants (`list_thread_participants`)
 
 ```cypher
-// $threadId — a thread's participants = its parent channel's roster (design decision:
-// docs/plans/web-api-coverage.md §2.3 — MEMBER_OF is modeled only at Channel granularity;
-// there is no Thread-level membership edge, and this is a UI/visibility choice, not a
-// technically-derived "who can be @mentioned here" set — see that section's "Known,
-// accepted gap")
+// $threadId — a thread's participants = its parent channel's roster. MEMBER_OF exists only
+// at Channel granularity (no Thread-level membership edge); this is a visibility roster, not
+// a "who can be @mentioned here" set.
 MATCH (c:Channel)-[:HAS_THREAD]->(t:Thread {threadId: $threadId})
 MATCH (u)-[:MEMBER_OF]->(c)
 RETURN coalesce(u.userId, u.agentId) AS memberId,
@@ -121,11 +125,9 @@ ORDER BY u.displayName
 ← `Channel` → `MEMBER_OF` (forward) → member. Same `coalesce`/`labels()` shape, and the same
 pre-existing gap that query already has: `Agent` nodes carry `.name`, not `.displayName` —
 `displayName` comes back `null` for an `Agent` row (`labels(u)` still correctly reads
-`["Agent"]`, which is all the caller needs to derive `kind`). Not a new gap introduced here;
-not fixed here either — out of this query's scope.*
+`["Agent"]`, which is all the caller needs to derive `kind`).*
 
-**`GRAPH.PROFILE` (2026-07-28, v4.18.11 / module `41811`, isolated `ws:gdbtest`, 3-member
-roster — 2 `User` + 1 `Agent`)** — anchors on `Node By Index Scan | (t:Thread)`
+**`GRAPH.PROFILE`** (3-member roster — 2 `User` + 1 `Agent`) — anchors on `Node By Index Scan | (t:Thread)`
 (`Thread.threadId`), then two forward `Conditional Traverse` hops (`HAS_THREAD` backward to
 `Channel`, `MEMBER_OF` forward to each member) — **no label scan anywhere**:
 
@@ -137,13 +139,10 @@ Results | Records produced: 3
                 Node By Index Scan | (t:Thread) | Records produced: 1
 ```
 
-Also verified: a thread whose channel has zero members returns an empty result (not an error)
-— the demo-seed-timing edge case the plan's §5.2 calls out. No new index/constraint/RAM —
-reuses `Thread.threadId`, `Channel.channelId` is not even needed as an anchor (the traversal
-starts from `t`), and `MEMBER_OF` carries no index of its own (traversal-only, per the
-existing "List channel members" query).
+A thread whose channel has zero members returns an empty result, not an error. Uses only the
+`Thread.threadId` index; `MEMBER_OF` carries no index of its own (traversal-only).
 
-### Member-kind lookup (author/mention validation + role derivation)
+### Member-kind lookup (author/mention validation + role derivation) (`resolve_member_kinds`)
 ```cypher
 UNWIND $ids AS id
 OPTIONAL MATCH (u:User  {userId:  id})
@@ -165,12 +164,12 @@ service maps the kind to a message role — `User → 'user'`, `Agent → 'assis
 CREATE (c:Channel {channelId: $channelId, name: $name, createdAt: $createdAt})
 RETURN c
 ```
-*Plain `CREATE` (K-007 fold-in): `channelId` is a server-minted uuid, so a `MERGE` could never
-match — it was a CREATE wearing a MERGE costume. The `Channel.channelId` uniqueness constraint
+*Plain `CREATE` (`create_channel`): `channelId` is a server-minted uuid, so a `MERGE` could
+never match. The `Channel.channelId` uniqueness constraint
 stays as the backstop. Consequence: **creates are non-idempotent** — a retried create mints a
 new id (unlike message posts, which are retry-idempotent via `dupMsg`).*
 
-### List channels in a workspace
+### List channels in a workspace (`list_channels`)
 ```cypher
 MATCH (c:Channel)
 WHERE c.channelId > ''
@@ -188,7 +187,7 @@ time, newest first), which is free once the scan is index-backed. True activity-
 `Thread.updatedAt` for every channel — the Channel-level edge traversal §5.2 of `DESIGN.md`
 deliberately avoids — so it is intentionally **not** used here. Route via `GRAPH.RO_QUERY`.*
 
-### Create a thread
+### Create a thread (`create_thread`)
 ```cypher
 MATCH (c:Channel {channelId: $channelId})
 CREATE (t:Thread {threadId: $threadId, title: $title,
@@ -200,20 +199,33 @@ RETURN t
 non-idempotent). Zero rows back = the channel anchor missed and **nothing was written** — the
 repository raises (tripwire; the service pre-validates the channel).*
 
-### List recent threads in a channel
+### List recent threads in a channel (`list_threads`)
 ```cypher
 MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t:Thread)
-RETURN t.threadId, t.title, t.updatedAt
+RETURN t.threadId AS threadId, t.title AS title, t.updatedAt AS updatedAt
 ORDER BY t.updatedAt DESC
 LIMIT $limit
 ```
-*Uses the `Thread.updatedAt` range index — no edge scan.*
+*Anchored on `Channel.channelId`; sorted on `Thread.updatedAt`, which every message write
+bumps (§4).*
+
+### Existence checks (`channel_exists`, `thread_exists`)
+```cypher
+// channel_exists
+OPTIONAL MATCH (c:Channel {channelId: $channelId}) RETURN c IS NOT NULL
+```
+```cypher
+// thread_exists
+OPTIONAL MATCH (t:Thread {threadId: $threadId}) RETURN t IS NOT NULL
+```
+*One row always (the `OPTIONAL MATCH` never zero-rows), read-only, index point lookups. The
+service pre-validates with these before a write whose missing anchor would otherwise no-op.*
 
 ---
 
 ## 4. Messages
 
-### Post the first message in a thread (v2 — self-guarding)
+### Post the first message in a thread (`post_first_message` — self-guarding)
 *Use when the thread has no HEAD yet (first message ever).*
 ```cypher
 MATCH (t:Thread {threadId: $threadId})
@@ -243,7 +255,7 @@ RETURN ok                 AS written,
        author IS NOT NULL AS authorFound
 ```
 
-### Post a subsequent message in a thread (v2 — self-guarding)
+### Post a subsequent message in a thread (`post_subsequent_message` — self-guarding)
 *Use for every message after the first.*
 ```cypher
 MATCH (t:Thread {threadId: $threadId})-[tailRel:TAIL]->(prev:Message)
@@ -275,7 +287,7 @@ RETURN ok                 AS written,
 
 ### Status-row contract (service dispatch)
 
-Both v2 paths **always return a status row** when their anchor matches, so zero rows now
+Both paths **always return a status row** when their anchor matches, so zero rows
 unambiguously means "anchor missing":
 
 | Result | Meaning | Service action |
@@ -286,19 +298,19 @@ unambiguously means "anchor missing":
 | `hadHead=true` (first path) | lost the first-post race | re-dispatch as subsequent |
 | `authorFound=false` | unknown member | 4xx, nothing written |
 
-### v2 notes (live-verified — must survive future edits)
+### Write-path invariants (live-verified)
 
-- **Why v2 exists.** The old §4 paths `MERGE`d the message: a retry replay matched the existing
-  node and re-ran the unconditional `CREATE`/`DELETE` clauses — NEXT self-loops, duplicated
-  `POSTED_BY`, corrupted TAIL. And two racing first-posts both saw "no HEAD" and produced two
-  chains. v2 guards each path *inside its single `GRAPH.QUERY`* via
+- **Why a guard, not `MERGE`.** A `MERGE`d message lets a retry replay match the existing node
+  and re-run the unconditional `CREATE`/`DELETE` clauses — NEXT self-loops, duplicated
+  `POSTED_BY`, corrupted TAIL — and lets two racing first-posts both see "no HEAD" and build two
+  chains. Each path therefore guards its write *inside its single `GRAPH.QUERY`* via
   `FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | …)` — a guard on each path, never a
-  conditional merge of the two paths (locked decision). `MERGE` on the message is replaced by a
-  guarded `CREATE`; the `Message.msgId` uniqueness constraint stays as the concurrency backstop
-  (constraint-violation rollback is verified all-or-nothing).
-- **Author resolution is label-specific** (two indexed `OPTIONAL MATCH`es + `coalesce`) — the old
-  label-less `MATCH (author {userId: $authorId})` profiled as an `All Node Scan` **and** silently
-  no-opped Agent authors (Agents carry `agentId`). Agents can now author messages.
+  conditional merge of the two paths (locked decision). The message is a guarded `CREATE`; the
+  `Message.msgId` uniqueness constraint is the concurrency backstop (constraint-violation
+  rollback is verified all-or-nothing).
+- **Author resolution is label-specific** (two indexed `OPTIONAL MATCH`es + `coalesce`). A
+  label-less `MATCH (author {userId: $authorId})` profiles as an `All Node Scan` **and** misses
+  Agent authors (Agents carry `agentId`). Users and Agents both author messages.
 - **The `UNWIND (CASE WHEN $mentions = [] THEN [null] ELSE $mentions END)` guard is
   load-bearing for the write itself** — a bare empty `UNWIND` collapses the row stream *before*
   the `FOREACH` and the whole write silently no-ops. `$mentions = []` is a verified no-op.
@@ -351,32 +363,33 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
 RETURN …same status row…
 ```
 
-*Verified by `test_queries.sh` (§4 m4). Not yet exposed by the server API — fold into
-`repository.py` when reply support lands.*
+*Library query, suite-verified. No server write path creates `REPLY_TO`; the server
+only reads it (`get_message`, below).*
 
-### Read a full thread (in order)
+### Read a full thread (in order) (`read_thread`)
 ```cypher
 MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message)
 MATCH (first)-[:NEXT*0..]->(m:Message)
 MATCH (m)-[:POSTED_BY]->(author)
-RETURN m.msgId, m.text, m.role, m.createdAt,
-       author.userId, author.displayName, labels(author) AS authorType,
+RETURN m.msgId AS msgId, m.text AS text, m.role AS role, m.createdAt AS createdAt,
+       coalesce(author.userId, author.agentId) AS authorId,
+       author.displayName AS displayName, labels(author) AS authorType,
        coalesce(m.toolsUsed, []) AS toolsUsed
 ORDER BY m.createdAt
 ```
 *`length(path)` is not supported in ORDER BY on this build — use `m.createdAt`
 (indexed) instead. Bounded by thread length; paginate with cursor for long threads.*
 
-*`toolsUsed` (K-056, `docs/reviews/salesperson-tool-reliability-ml.md` §4.3) is the
-tool-use breadcrumb source: `link_step_emission` (§12.6) stamps it with the producing
-step's own non-`post_message` dispatched tool names; `coalesce(…, [])` degrades a
-pre-K-056 row (no property at all) and a step that dispatched nothing to the same empty
-list. `executor._assemble_messages` reads it back to tag a tool-backed `assistant` turn
-when this thread is replayed into a later turn's prompt — the fix for the diagnosed
-skip-and-fabricate mechanism (small local model, no visible tool-use precedent by turn
-3-4 of an extended conversation).*
+*`toolsUsed` is the tool-use breadcrumb: `link_step_emission` (§12.6) stamps it with the
+producing step's own non-`post_message` dispatched tool names; `coalesce(…, [])` reads a message
+that was never stamped (no property) and a step that dispatched nothing as the same empty list.
+`executor._assemble_messages` reads it back to tag a tool-backed `assistant` turn when the
+thread is replayed into a later turn's prompt, so a small model sees its own tool-use
+precedent.*
 
 ### Read a thread window (cursor-based pagination)
+
+*Library query (suite-verified); the server pages with the §9.1 since-read instead.*
 ```cypher
 // Page forward from a known message
 MATCH (cursor:Message {msgId: $afterMsgId})-[:NEXT*1..]->(m:Message)
@@ -388,18 +401,32 @@ ORDER BY m.createdAt
 LIMIT $limit
 ```
 
-### Get a single message
+### Get a single message (`get_message`)
 ```cypher
 MATCH (m:Message {msgId: $msgId})
 OPTIONAL MATCH (m)-[:POSTED_BY]->(author)
 OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message)
-RETURN m, author, m.threadId AS threadId, quoted.msgId AS quotedId
+RETURN m.msgId, m.text, m.role, m.createdAt,
+       coalesce(author.userId, author.agentId) AS authorId,
+       labels(author) AS authorType, m.threadId AS threadId,
+       quoted.msgId AS quotedId
 ```
+*Zero rows → the repository returns `None`.*
+
+### Has the thread a first message? (`thread_has_head`)
+```cypher
+MATCH (t:Thread {threadId: $threadId})
+OPTIONAL MATCH (t)-[:HEAD]->(h)
+RETURN h IS NOT NULL AS hasHead
+```
+*Picks the first-vs-subsequent write path. `exists((t)-[:HEAD]->())` returns true even with no
+HEAD edge on this build and `count{ }` is unsupported, so the `OPTIONAL MATCH` + `IS NOT NULL`
+form is the reliable existence check.*
 
 ### 4.x Backfill `threadId` (one-off, verified idempotent)
 
-The v2 write paths stamp `threadId` inline; messages written before K-007 lack it. Run once per
-existing workspace after deploying v2 (`scripts/backfill_thread_ids.sh`). Per-thread variant
+The write paths stamp `threadId` inline; older messages may lack it.
+`scripts/backfill_thread_ids.sh` runs this once per workspace. Per-thread variant
 (batchable — run per threadId to bound query time; **writes cannot be killed by TIMEOUT** on
 this build, so bound the work yourself):
 
@@ -415,82 +442,87 @@ Workspace-wide variant: drop the `{threadId: $threadId}` filter
 (`MATCH (t:Thread)-[:HEAD]->(first:Message) …`).
 
 *Idempotent — a second run returns `0`. **Orphan caveat:** the walk anchors on `HEAD`, so a
-message unreachable from a HEAD (residue of the pre-v2 defects) is not backfilled — acceptable,
-since such messages are already invisible to thread reads. Until backfilled, old rows return
+message unreachable from a HEAD is not backfilled — acceptable, since such messages are already invisible to thread
+reads. Until backfilled, such rows return
 `threadId: null` in §9.2/§5 — clients must tolerate null.*
 
 ---
 
 ## 5. Full-text search
 
-### Keyword search over message text (within a workspace)
+### Keyword search over message text (within a workspace) (`search_messages`)
 ```cypher
 CALL db.idx.fulltext.queryNodes('Message', $query)
 YIELD node AS m, score
-MATCH (t:Thread)-[:HEAD|NEXT*0..]->(m)
-MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)
-RETURN m.msgId, m.threadId AS threadId, m.text, m.createdAt, score
+RETURN m.msgId AS msgId, m.threadId AS threadId, m.text AS text,
+       m.createdAt AS createdAt, score
 ORDER BY score DESC
 LIMIT $limit
 ```
-*Scoped to a channel via traversal. Omit the channel MATCH to search workspace-wide.
-`m.threadId` (denormalized, K-007) lets clients jump from a hit to its thread without a
-traversal — `null` on pre-K-007 rows until the §4.x backfill runs.*
+*Workspace-wide — the server's search surface. A channel-scoped library variant inserts
+`MATCH (t:Thread)-[:HEAD|NEXT*0..]->(m) MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)`
+after the `YIELD`. `m.threadId` (denormalized) lets clients jump from a hit to its thread
+without a traversal — `null` on a row the §4.x backfill has not reached.*
 
 ---
 
 ## 6. GraphRAG hybrid retrieval
 
 The AI participant answers a question using vector similarity + graph traversal
-in a single read-only query. Route via `GRAPH.RO_QUERY` to a replica if available.
+in a single read-only query (`hybrid_search`, `GRAPH.RO_QUERY`).
 
 ```cypher
-// $qVec     = vecf32 of the query embedding (same dim as the vector index)
-// $k        = number of ANN neighbors to seed from (e.g. 10)
-// $channelId = scope results to a specific channel (omit MATCH on c to go workspace-wide)
-// score     = cosine distance: 0 = identical, lower = more similar → ORDER BY score ASC
+// $qVec      = the query embedding as a float list (same dim as the vector index)
+// $k         = number of ANN neighbors to seed from (default 10)
+// $channelId = present only in the channel-scoped variant; the workspace-wide
+//              variant drops the `MATCH (c:Channel …)` line
+// score      = cosine distance: 0 = identical, lower = more similar → ORDER BY score ASC
 
-CALL db.idx.vector.queryNodes('Message', 'embedding', $k, $qVec)
+CALL db.idx.vector.queryNodes('Message', 'embedding', $k, vecf32($qVec))
 YIELD node AS seed, score
 MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed)
 MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)
 OPTIONAL MATCH (seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)
 WITH seed, score, collect(DISTINCT related)[..5] AS expanded
-RETURN seed.msgId, seed.text, seed.role, score,
+RETURN seed.msgId AS msgId, seed.text AS text, seed.role AS role, score,
        [m IN expanded | m.text] AS relatedContext
 ORDER BY score ASC
 LIMIT $limit
 ```
+
+*Rows come back most-similar first — do not re-sort. ANN recall is approximate: kNN may return
+fewer than `$k` seeds. Nothing writes `(:Message)-[:MENTIONS]->(:Entity)`, so `relatedContext`
+is `[]` and the expansion no-ops. The service may pass a per-query `timeout` (ms). Document
+chunks are searched separately (§14.3).*
 
 ### Set a message embedding (async, after posting)
 ```cypher
 MATCH (m:Message {msgId: $msgId})
 SET m.embedding = vecf32($embedding)
 ```
-*Run from the embedding worker after the message is posted. Decoupled from the
-write path — the message is readable before the embedding lands.*
+*`set_embedding`, run from the embedding worker after the message is posted — the message is
+readable before the embedding lands. The repository checks `len($embedding)` against the
+expected dimension **before** the `SET` and raises `EmbeddingDimensionError` on a mismatch: a
+wrong-dimension `vecf32` write is accepted by the engine but drops the node out of the ANN
+index for good. Returns whether a property was set (no matching message → `False`).*
 
-### 6.1 Introspect a workspace's vector-index dimension (K-042 Landing 2, FR-19)
+### 6.1 Introspect a workspace's vector-index dimension (`read_index_dimension`)
 
-Design: `docs/plans/llm-provider-config-graph.md` §3.2 (edge behaviours), §3.4 (error
-surface). `EmbeddingWorker.embed_message` (`server/falkorchat/embedding.py`) runs this
-**before** calling the embedder at all — a mismatch raises `EmbeddingDimensionError`
-with no HTTP call made and no vector written. `Repository.read_index_dimension`
-(`server/falkorchat/repository.py`).
+`EmbeddingWorker` (`server/falkorchat/embedding.py`) runs this for the label it is about to
+write (`Message` or `Chunk`) **before** calling the embedder at all — a mismatch raises
+`EmbeddingDimensionError` with no HTTP call made and no vector written.
 
 ```cypher
 // [verified] GRAPH.RO_QUERY ws:{id} — replica-routable, zero write risk, never
 // creates the graph as a side effect (see the "graph key absent" row below).
-// $label = the label about to be written (only 'Message' is written anywhere in
-//          this codebase today — 'Chunk' is bootstrapped DDL, never populated);
-// $prop  = 'embedding' (parameterised, though this codebase only ever uses one).
+// $label = the label about to be written ('Message' or 'Chunk');
+// $prop  = 'embedding' (the only vector property).
 CALL db.indexes() YIELD label, types, options
 WHERE label = $label AND types[$prop] = ['VECTOR']
 RETURN options[$prop].dimension AS dim
 ```
 
-Four distinct edge behaviours, tabulated in `-graph.md` §3.2 — all four collapse to
-two outcomes at the repository layer (a real `int`, or `None` for every "no vector
+Four edge behaviours collapse to two outcomes at the repository layer (a real `int`, or `None` for every "no vector
 index to compare against" case):
 
 | Situation | Raw result | `read_index_dimension` returns |
@@ -507,17 +539,16 @@ the graph as a side effect (the same "empty key" `ResponseError` behaviour
 `services._read_or_absent` already relies on for the reference/snapshot cold-graph
 probe).
 
-**Caching** (`-graph.md` §3.3 layer 2): `EmbeddingWorker` caches the returned
+**Caching:** `EmbeddingWorker` caches the returned
 dimension per `(ws, label)` for the process lifetime — the index dimension
-provably cannot change in place (§3.1: only drop+recreate does, an out-of-band
-admin action) — but **never caches a `None`**, since an un-bootstrapped workspace
+cannot change in place (only an out-of-band drop+recreate changes it) — but **never caches a `None`**, since an un-bootstrapped workspace
 can become bootstrapped without a process restart.
 
 ---
 
 ## 7. Agents
 
-### Register an AI agent in a workspace — guarded ensure (v2, DEF-1 fix)
+### Register an AI agent in a workspace — guarded ensure (`ensure_agent`)
 
 Mirror of the §2 guarded user ensure — same locked rule (**member ids are
 namespace-unique across `User`/`Agent`**), same status-row contract with the labels
@@ -541,6 +572,9 @@ RETURN ok            AS created,
 constraint remains the same-label concurrency backstop.*
 
 ### Add agent to a channel
+
+*Suite-only (`test_queries.sh`); `scripts/seed_demo.sh` writes a role-less variant (see "Add user to
+channel"). The server uses §18.2 `add_channel_member`.*
 ```cypher
 MATCH (a:Agent   {agentId:   $agentId})
 MATCH (c:Channel {channelId: $channelId})
@@ -578,12 +612,19 @@ ORDER BY label
 ```
 GRAPH.PROFILE ws:acme "MATCH (m:Message {msgId:'abc'}) RETURN m"
 ```
-*Run in redis-cli. Look for NodeByLabelScan (bad) vs NodeIndexSeek (good).*
+*Run in redis-cli. Look for `Node By Label Scan` / `All Node Scan` (bad) vs `Node By Index Scan`
+(good).*
 
 ### Slow query log
 ```
 GRAPH.SLOWLOG ws:acme
 ```
+
+### Liveness probe (`ping`)
+```cypher
+RETURN 1
+```
+*`GRAPH.RO_QUERY` against the workspace graph; healthy when the single value is `1`.*
 
 ---
 
@@ -597,14 +638,14 @@ and results are **chronological**.
 
 > **Ordering is the pagination invariant.** Since-reads must return the *earliest* messages first
 > so that a `LIMIT`-truncated page is a contiguous prefix and the cursor can advance to the last
-> delivered row without skipping anything. The original mention-first sort
-> (`ORDER BY isMention DESC, …`) broke this: with more unread rows than `limit`, a late mention
-> crowded out earlier messages that the cursor then jumped past — silent message loss. Clients
-> that want mentions surfaced first should sort by the `isMention` flag locally.
+> delivered row without skipping anything. A mention-first sort (`ORDER BY isMention DESC, …`)
+> breaks this: with more unread rows than `limit`, a late mention crowds out earlier messages
+> that the cursor then jumps past — silent message loss. Clients that want mentions surfaced
+> first sort by the `isMention` flag locally.
 >
-> **The deterministic total order is `(createdAt, msgId)` (K-007).** A timestamp alone is not a
-> total order: two messages in the same millisecond made the old plain-`>` paging skip the tied
-> sibling at a page boundary — permanently (live-reproduced). Both since-reads now
+> **The deterministic total order is `(createdAt, msgId)`.** A timestamp alone is not a total
+> order: with plain-`>` paging, two messages in the same millisecond let the tied sibling be
+> skipped at a page boundary — permanently (live-reproduced). Both since-reads
 > `ORDER BY m.createdAt, m.msgId`, and the cursor advances to the newest **returned**
 > `(createdAt, msgId)` pair — never the server clock. Tie-break is *lexical* msgId: within one
 > millisecond, delivery order is id order, not arrival order — acceptable across writers (the
@@ -613,7 +654,7 @@ and results are **chronological**.
 
 Schema (bootstrap): `ReadCursor.cursorId` **range index + uniqueness constraint** (index before
 constraint). `cursorId = "{memberId}:{threadId}"` — deterministic, so `MERGE` is safe and unique.
-`lastReadMsgId` is a plain property — **no schema/bootstrap change** was needed for K-007.
+`lastReadMsgId` is a plain, unindexed property.
 
 **Reader-match convention.** The reader may be a `User` (`userId`) or an `Agent` (`agentId`), so the
 mention-flag and cursor queries match `me.userId = $meId OR me.agentId = $meId`. This `OR` is
@@ -622,12 +663,12 @@ acceptable **only** because `me`/`mem` is already bound by a traversal or the in
 above, where the same `OR` would force an `All Node Scan`). Author id is returned with
 `coalesce(author.userId, author.agentId)` for the same User-or-Agent reason.
 
-### 9.1 Read a thread since a cursor/timestamp (thread-scoped) — v2
+### 9.1 Read a thread since a cursor/timestamp (thread-scoped) (`read_thread_since`)
 
 Two predicate forms over one body. **Cursor-driven reads** use the composite keyset
 (formulation A — never skips or re-delivers, even across millisecond ties); **explicit-`since`
-reads** keep the plain `>` and may re-deliver or skip *within that exact millisecond* (OQ3
-contract — agents that need lossless catch-up use cursor mode).
+reads** keep the plain `>` and may re-deliver or skip *within that exact millisecond*, by contract —
+agents that need lossless catch-up use cursor mode.
 
 ```cypher
 MATCH (t:Thread {threadId: $threadId})-[:HEAD]->(first:Message)
@@ -651,9 +692,10 @@ LIMIT $limit
 BY. `$sinceMsgId` defaults to `''` when only a timestamp is known (empty string sorts before
 every id). Formulation A mirrors the ORDER BY 1:1; the fallback **formulation B**
 (`WHERE m.createdAt >= $since AND (m.createdAt > $since OR m.msgId > $sinceMsgId)`) plans
-identically today — re-profile on engine upgrades (edge build, moving target).*
+identically on this build — re-profile on engine upgrades. The repository picks the form by
+`since_msg_id`: `None` → plain `>`, a string (possibly `''`) → composite keyset.*
 
-### 9.2 Read workspace-wide since a timestamp (room-wide, no thread) — v2
+### 9.2 Read workspace-wide since a timestamp (room-wide, no thread) (`read_ws_since`)
 ```cypher
 MATCH (m:Message)
 WHERE m.createdAt > $since                        // Node By Index Scan on Message.createdAt
@@ -672,15 +714,15 @@ LIMIT $limit
 ```
 *`GRAPH.PROFILE`-confirmed: **both** predicate forms plan as a bare
 `Node By Index Scan | (m:Message)` on `Message.createdAt` with no residual `Filter` op (the OR
-folds into the scan). `m.threadId` rides along as navigation metadata — `null` on pre-K-007 rows
-until the §4.x backfill runs; clients must tolerate null. `author.displayName` rides along too
-(K-014): the polling web client renders it in place of the raw `authorId` and tolerates `null`
+folds into the scan). `m.threadId` rides along as navigation metadata — `null` on a row the §4.x
+backfill has not reached; clients must tolerate null. `author.displayName` rides along too: the
+polling web client renders it in place of the raw `authorId` and tolerates `null`
 (members seeded without a display name). Both since-reads carry the same column set. **TIMEOUT risk:** the live default is
 1000 ms; on a large workspace keep `$limit` modest and consider a bounded `$since` window. No
-room-wide cursor in M1 — this variant requires an explicit `$since` (service defaults it to
+room-wide cursor exists — this variant requires an explicit `$since` (service defaults it to
 `0`/epoch, plain `>`).*
 
-### 9.3 Advance a read-cursor (RW — only in `advance` mode) — v2 composite
+### 9.3 Advance a read-cursor (RW — only in `advance` mode) (`advance_cursor`)
 ```cypher
 MATCH (mem) WHERE mem.userId = $meId OR mem.agentId = $meId
 MERGE (mem)-[:HAS_CURSOR]->(rc:ReadCursor {cursorId: $cursorId})
@@ -697,7 +739,7 @@ constraint. The composite monotonic guard is computed **once** in the `WITH` so 
 the pre-write state. All five scenarios live-verified: create `(2000,'k2')` → tie-larger
 `(2000,'k3')` advances → tie-smaller `(2000,'k2')` refused (stale replay) → backward
 `(1500,'k9')` refused → forward `(3000,'k4')` advances. `coalesce(rc.lastReadMsgId, '')` covers
-pre-K-007 cursors — **no cursor backfill needed**. The service owns `($now, $nowMsgId)` — the
+a cursor with no `lastReadMsgId` — **no cursor backfill needed**. The service owns `($now, $nowMsgId)` — the
 newest `(createdAt, msgId)` pair it actually delivered, never the server clock and never
 client-supplied — and may short-circuit before writing (an empty page advances nothing). When
 the member node doesn't exist the anchor `MATCH` yields no rows and the query is a **no-op
@@ -711,27 +753,27 @@ returning no row** — callers must not index into an empty result (the reposito
 > shows this hurting, split into two label-specific `OPTIONAL MATCH`es + `coalesce` (the write-path
 > pattern) before the `MERGE`.
 
-### 9.4 Read a cursor (to compute the composite `since` when not supplied)
+### 9.4 Read a cursor (to compute the composite `since` when not supplied) (`get_cursor`)
 ```cypher
 MATCH (rc:ReadCursor {cursorId: $cursorId})
 RETURN rc.lastReadAt, rc.lastReadMsgId
 ```
 *Single `Node By Index Scan` point-lookup on `ReadCursor.cursorId`, returning the
 `(lastReadAt, lastReadMsgId)` pair. When no cursor exists, this returns no row and the service
-uses the epoch base `(0, '')`. A pre-K-007 cursor has no `lastReadMsgId` — the pair reads back
-`(ts, null)` and the service maps it to `''`.*
+uses the epoch base `(0, '')`. A cursor with no `lastReadMsgId` reads back `(ts, null)` and the service
+maps it to `''`.*
 
 ---
 
-## 10. Agent answer provenance — `EMITTED` (K-013, generalized K-050 M5 Stage 5)
+## 10. Agent answer provenance — `EMITTED`
 
-The server-side AI responder posts its answer **as the `Agent`** (role derived `assistant`, K-007)
+The server-side AI responder posts its answer **as the `Agent`** (role derived `assistant`)
 via the §4 write path, and records the retrieval seeds (§6 hybrid search, merged with the §14.3
-`Chunk` ANN pool app-side, K-050 M5 Stage 5 FR-2) that grounded the answer as
+`Chunk` ANN pool app-side) that grounded the answer as
 **`(answer:Message)-[:EMITTED {score, rank}]->(seed)`** provenance edges — `seed` is a `Message` or
 a `Chunk`.
 
-**Edge shape (locked, live-verified; generalized to a `Chunk` seed at K-050 M5 Stage 5).**
+**Edge shape (locked, live-verified).**
 
 - **Direction / endpoints:** `(:Message)-[:EMITTED]->(:Message|:Chunk)`, answer → seed. The answer
   is the subject; each cited seed is the object. Same convention as `REPLY_TO` (subject message
@@ -748,8 +790,7 @@ a `Chunk`.
   below), so no relationship constraint (which would also need a supporting index) is created.
 - **`EMITTED` is a third, distinct edge type.** `MENTIONS_MEMBER`→`User`/`Agent` (participants, §4)
   and `MENTIONS`→`Entity` (GraphRAG co-occurrence, §6) are unrelated — do not conflate any of them.
-- **Seed-id resolution: bare-id `coalesce`, not a namespaced id scheme
-  (`document-ingestion-graph.md` §3.1).** `$seedIds` resolves against both `Message.msgId` and
+- **Seed-id resolution: bare-id `coalesce`, not a namespaced id scheme.** `$seedIds` resolves against both `Message.msgId` and
   `Chunk.chunkId` directly via the same two-label `OPTIONAL MATCH` + `coalesce` idiom already used
   for author/mention resolution below — no `kind` field, no `msg:<uuid>`/`chunk:<uuid>` prefix
   scheme. Both id spaces are disjoint server-minted `uuid4` generators (the same "astronomically
@@ -766,9 +807,10 @@ on a crash between the two queries.)
 
 ### 10.1 Post an agent answer with provenance (subsequent path — self-guarding)
 
-*The realistic path: the agent answers into a thread that already has the triggering message, so a
-HEAD exists and the answer is always a subsequent-path write. The first-path variant is analogous —
-same seed block folded into the §4 first-message write; verified.*
+*`post_agent_answer`. The realistic path: the agent answers into a thread that already has the
+triggering message, so a HEAD exists and the answer is a subsequent-path write.
+`post_agent_answer_first` is the fallback for a headless thread: the §4 first-message write with
+the same seed block folded in (same `hadHead` guard and status row).*
 
 ```cypher
 // $seedIds = ranked list of seed ids (Message.msgId or Chunk.chunkId) from the merged
@@ -826,12 +868,11 @@ this same query serves non-provenance writes too.*
   per seed node, so `coalesce` always resolves the right key regardless of seed kind. Dynamic
   map-param indexing by a node property is verified working on this build.
 - **Two sequential guarded `UNWIND`s** (mentions, then seeds) each collapse via `collect` before the
-  next expands — no row multiplication. Verified, including with the seed block resolving against
-  two labels (`gdba_probe_emitted`: one `Message` seed and one `Chunk` seed in a single guarded
-  write — both edges created correctly, no row multiplication, no interference with the mention
-  block's own `UNWIND`).
+  next expands — no row multiplication. Verified with one `Message` seed and one `Chunk` seed in a
+  single guarded write: both edges created, no interference with the mention block's own
+  `UNWIND`.
 
-### 10.2 Read an answer's provenance (forward — the hot path)
+### 10.2 Read an answer's provenance (forward — the hot path) (`read_provenance`)
 
 ```cypher
 MATCH (a:Message {msgId: $msgId})-[e:EMITTED]->(s)
@@ -849,19 +890,18 @@ ORDER BY e.rank
 index-anchored `a`, not independently searched, so there's no `Node By Label Scan` risk (a plain
 traversal endpoint, the existing precedent this codebase already uses via `labels(coalesce(a,b))[0]`
 for author/mention resolution). The `OPTIONAL MATCH (s)<-[:HAS_CHUNK]-(d:Document)` only ever
-matches when `s` is a `Chunk` (a `Message` has no incoming `HAS_CHUNK` edge) — this is what satisfies
-AC-5's "traverses back through `(:Chunk)<-[:HAS_CHUNK]-(:Document)`" requirement, folded into the
-same read, one extra hop.*
+matches when `s` is a `Chunk` (a `Message` has no incoming `HAS_CHUNK` edge), so a chunk seed
+carries its document in the same read, one extra hop.*
 
-*`GRAPH.PROFILE` (`gdba_probe_emitted2`): `Node By Index Scan | (a:Message)` →
-`Conditional Traverse (a)-[:EMITTED]->(s)` → `Optional Conditional Traverse (d)` — clean, no label
-scan, matches the pre-generalization profile shape with one added hop. Data correctness verified: a
+*`GRAPH.PROFILE`: `Node By Index Scan | (a:Message)` →
+`Conditional Traverse (a)-[:EMITTED]->(s)` → `Optional Conditional Traverse (d)` — no label
+scan. Data correctness verified: a
 `Message`-seeded row returns `seedKind:'Message'`, `role:'user'`, `documentId:null`; a `Chunk`-seeded
 row returns `seedKind:'Chunk'`, `role:null`, `documentId`/`documentTitle` correctly populated from
 the extra hop. Ordered by `rank` (ascending = most influential seed first). Route via
 `GRAPH.RO_QUERY`.*
 
-### 10.3 Read which answers cited a seed (reverse)
+### 10.3 Read which answers cited a seed (reverse) (`read_citing_answers`)
 
 ```cypher
 OPTIONAL MATCH (sm:Message {msgId: $seedId})
@@ -873,11 +913,10 @@ ORDER BY a.createdAt DESC
 ```
 *Resolves the anchor via the same two-label `coalesce` as the write (§10.1) and forward-read
 (§10.2) — bare id, not a namespaced scheme, same locked-convention argument as §10's seed-resolution
-note. An answer is always a `Message`, so the row shape (`{answerMsgId, role, createdAt, score,
-rank}`) is unchanged from before generalization.*
+note. An answer is always a `Message`, so the row shape is `{answerMsgId, role, createdAt, score,
+rank}`.*
 
-*`GRAPH.PROFILE` (`gdba_probe_1103`), including the specific planner-trap question this needed
-checking: whether `a:Message`'s label triggers a `Node By Label Scan` here, now that `a` is the
+*`GRAPH.PROFILE`, including the planner-trap question: whether `a:Message`'s label triggers a `Node By Label Scan` here, now that `a` is the
 **unbound** endpoint (traversed *to*, not *from*) and `s` is the one resolved by the earlier
 `OPTIONAL MATCH` pair. Populated 1,000 candidate `Message` answer nodes all citing the same `Chunk`
 seed (the worst case for a label-scan risk on `a`) plus one citing a `Message` seed. Both profiled
@@ -891,13 +930,13 @@ citing answer. Route via `GRAPH.RO_QUERY`.*
 
 ---
 
-## 11. Workflow definitions & snapshots (M3 Slice 1 — K-020 / K-021)
+## 11. Workflow definitions & snapshots
 
 The workflow **definition model** lives canonically in the global **`reference`** graph as versioned
 `WorkflowDef` templates; publishing a def version and **materializing** it into a workspace
-graph (`ws:{id}`) as a local `WorkflowDefSnapshot` subgraph are the two write paths here. DESIGN §6.1;
-the executor (`WorkflowRun`/`StepRun`, K-022) and chat linkage (K-023) are **out of scope** for this
-slice — these queries only build and read the definition/snapshot structure.
+graph (`ws:{id}`) as a local `WorkflowDefSnapshot` subgraph are the two write paths here (DESIGN
+§6.1). These queries only build and read the definition/snapshot structure; the executor's run
+queries are §12.
 
 **Model (both graphs — structurally identical, only the root label differs):**
 
@@ -910,16 +949,16 @@ slice — these queries only build and read the definition/snapshot structure.
 (:Step)-[:TRANSITION {on,guard,order}]->(:Step)
 ```
 
-**The `Step.stepUid` identity (locked, K-020).** A step's `key` is unique only *within a def*, so it
+**The `Step.stepUid` identity (locked).** A step's `key` is unique only *within a def*, so it
 can never back a `MERGE` (AGENTS.md: "every `MERGE` must be backed by a uniqueness constraint"). Every
 Step therefore carries a synthetic **`stepUid = "{defKey}:{version}:{stepKey}"`** — globally unique
 within each graph — with a range index + `UNIQUE` constraint in **both** graphs (`bootstrap_schema.sh`).
 `stepUid` is the MERGE key; `key`/`type`/`config` are set on create. `Step.key` keeps its own index
 (display/traversal anchor) but **no** constraint.
 
-**`HAS_STEP` — the containment edge (locked, K-020; the §B8 resolution).** `(:WorkflowDef|
+**`HAS_STEP` — the containment edge (locked).** `(:WorkflowDef|
 :WorkflowDefSnapshot)-[:HAS_STEP]->(:Step)` gives every def/snapshot an **index-anchored** handle on
-*all* its steps. It exists because the plan's original scoping candidate — filtering transitions by
+*all* its steps. It exists because the alternative scoping filter —
 `from.stepUid STARTS WITH ($key + ':' + $version + ':')` — **live-profiles as a `Node By Label Scan`
 + `Filter` on this build, not an index range scan** (verified: a `STARTS WITH` on the indexed prefix
 does not plan as an index scan; and the `(:WorkflowDef)-[:START]->()-[:TRANSITION*]` walk alternative
@@ -930,12 +969,12 @@ the step read and the transition read anchor on `Node By Index Scan | (d:Workflo
 `(snap:WorkflowDefSnapshot)` and traverse outward — O(steps-in-this-def), verified below.
 
 **`config` and `guard` are opaque serialized strings (rule 8 / DESIGN §1.2).** They are stored and
-returned **verbatim** and **never** filtered inside. Guard *evaluation* is run-time (K-022); Slice 1
-does not force the §13 guard-language decision.
+returned **verbatim** and **never** filtered inside. Guard *evaluation* is run-time, in the
+executor (DESIGN §6.1).
 
-**Create-only on properties, topology-enforced by `services` (K-034).** Publish and materialize are
+**Create-only on properties, topology-enforced by `services`.** Publish and materialize are
 single-graph `MERGE` queries — a re-publish/re-materialize never updates a stored `name`/`kind`/step
-`config`/transition `guard`. It is **not** additive on **structure** as of K-034:
+`config`/transition `guard`. The queries themselves are additive on **structure**;
 `services.publish_workflow_def`/`materialize_def` reject a re-publish/re-materialize whose step set,
 transition set, or start key differs from what's stored (`409 WorkflowDefConflictError`), before any
 write. `Repository.publish_def`/`materialize_snapshot` themselves remain thin, non-validating
@@ -952,9 +991,9 @@ these matches always resolve for a valid spec.
 > `materialize_def` reads the def subgraph from `reference` (§11.2) then writes the snapshot into
 > `ws:{id}` (§11.4) — two separate `GRAPH.QUERY` calls (edges can't cross graphs). A failure between
 > them leaves `reference` untouched and the workspace `MERGE` idempotent, so a retry completes cleanly
-> — no torn state. Accepted, documented.
+> — no torn state.
 
-### 11.1 Publish a def version (reference — idempotent)
+### 11.1 Publish a def version (reference — idempotent) (`publish_def`)
 
 ```cypher
 // $key,$version,$name,$kind,$startKey
@@ -982,11 +1021,12 @@ RETURN d.key AS key, d.version AS version, stepCount, transitionCount
 
 *Every node `MERGE` is backed by a `UNIQUE` constraint (`WorkflowDef {key,version}`, `Step {stepUid}`).
 The `TRANSITION` MERGE-key is `(from, on, order, to)` so distinct outcomes/orders between the same two
-steps are distinct edges; `guard` is set-on-create only (may be empty, never a match key). Live-verified
-on `_probe`: run 1 → 5 nodes / 9 rels (4 `HAS_STEP` + 1 `START` + 4 `TRANSITION`) / 32 props, returns
+steps are distinct edges; `guard` is set-on-create only (may be empty, never a match key). The query
+text is one constant, `Repository._PUBLISH_CYPHER`, formatted with the root label. Live-verified:
+run 1 → 5 nodes / 9 rels (4 `HAS_STEP` + 1 `START` + 4 `TRANSITION`) / 32 props, returns
 one row `{key, version, stepCount:4, transitionCount:4}`; run 2 (same content) → 0 created (idempotent),
 same row. A re-publish with a **different** topology (§11 preamble) is rejected at the service layer
-before reaching this query — see K-034.*
+before reaching this query.*
 
 > **⚠️ `$transitions = []` poisons the version — this query is deliberately *un*guarded.** Unlike the
 > §4 mention block (which wraps its list in `UNWIND (CASE WHEN $x = [] THEN [null] ELSE $x END)`), the
@@ -997,20 +1037,18 @@ before reaching this query — see K-034.*
 > the corrected spec on the same `(key, version)` is a silent no-op: the version is permanently wrong and
 > unrepairable without deleting the subgraph. The guard is therefore **at the service layer**, not here:
 > `services._validate_def_spec` rejects a zero-transition spec with `WorkflowDefSpecError` → 400, nothing
-> written (K-024 U4b, O-6). Model a terminal outcome as a step with **no outgoing transition**, never as
+> written. Model a terminal outcome as a step with **no outgoing transition**, never as
 > a def with no transitions. Any *new* caller reaching `_PUBLISH_CYPHER` without going through
-> `services.publish_workflow_def` must re-do that validation itself — including `materialize_snapshot`
-> (`repository.py:1397`), which reuses this same query shape unguarded (see **K-030**,
-> `docs/BACKLOG.md`, for the proposed Cypher-level `CASE`-guard fix that would close this gap for both
-> callers). *(Verified 2026-07-24; discovered 2026-07-20 while writing `tests/test_executor_process.py`
-> — every pre-existing publish test carried ≥1 transition, so no test reached the real query with an
-> empty list.)* A second, independent service-layer guard sits beside this one — K-034's topology-
-> conflict gate (`services._check_no_structural_conflict`, 409) — see the preamble above.
+> `services.publish_workflow_def` must re-do that validation itself — including `materialize_snapshot`,
+> which reuses this same query unguarded (open: **K-030**, `docs/BACKLOG.md`, a Cypher-level
+> `CASE`-guard fix for both callers). A second, independent service-layer guard sits beside this one —
+> the topology-conflict gate (`services._check_no_structural_conflict`, 409) — see the preamble above.
 
-### 11.2 Read a def subgraph (reference — the materialize input, F6-safe)
+### 11.2 Read a def subgraph (reference — the materialize input) (`read_def_subgraph`, `read_def_structure`)
 
-Two focused, index-anchored reads (no `length(path)` ordering — unsupported on this build, F6; the app
-reconstructs step order from `TRANSITION.order`/topology).
+Two focused, index-anchored reads (`_READ_META_CYPHER`, `_READ_TRANSITIONS_CYPHER`, formatted with the
+root label). No `length(path)` ordering — unsupported on this build; the app reconstructs step order
+from `TRANSITION.order`/topology.
 
 **11.2a Meta + steps:**
 ```cypher
@@ -1032,24 +1070,23 @@ collapse is a cardinality **premise**, see the callout below. A def with no tran
 `GRAPH.RO_QUERY`.*
 
 > **⚠️ The one-row collapse is CONDITIONAL — it holds only while the root has exactly one `START`
-> edge (K-031).** `start.key` is a **non-aggregated grouping key** beside `collect(DISTINCT …)`, so
-> "constant across the fan-out" above is a *premise*, not a guarantee. **Verified live on
-> falkordb/falkordb:v4.18.11 (K-031 V-1, snapshot side, throwaway `ws:k031probe`):** two `START`
+> edge.** `start.key` is a **non-aggregated grouping key** beside `collect(DISTINCT …)`, so
+> "constant across the fan-out" above is a *premise*, not a guarantee. **Verified live:** two `START`
 > edges on one root ⇒ **11.2a returns two rows**, one per distinct `startKey`, each carrying the
 > full `steps` collection. Consumers that take `result_set[0]` therefore pick an **arbitrary** start
-> key. `repository._read_subgraph` (the materialize + executor input) still does exactly that —
-> unchanged, because it is on locked paths; the K-031 observability reader
-> `repository._read_structure` consumes **all** rows for precisely this reason.
+> key. `_read_subgraph` (`read_def_subgraph`/`get_snapshot` — the materialize and executor input)
+> does exactly that; the observability reader `_read_structure` (`read_def_structure`/
+> `read_snapshot_structure`, behind the structure/diff routes) consumes **all** rows.
 >
-> Two consequences worth stating plainly. First, `_read_structure` returns `start_keys: list[str]`
-> where this section documents a scalar `startKey` — a **deliberate, documented shape divergence**
-> from the "`repository.py` is a 1:1 mirror of QUERIES.md" rule (DESIGN §14.2); the query text is
-> untouched, only the Python row handling above it. The service layer renames it to
-> `startKey`/`startKeys` at the REST boundary. Second, **how a root acquires a second `START` edge
-> is not this section's subject — it is K-034's** (a re-publish is create-only on *properties* but
-> additive on *structure*).
+> `_read_structure` therefore returns `start_keys: list[str]` (deduplicated, in row order) and steps
+> deduplicated by `key` across rows, where this section documents a scalar `startKey` — the query
+> text is the same, only the Python row handling differs. The service layer renames it to
+> `startKey`/`startKeys` at the REST boundary. `_read_structure` also returns `None`, rather than
+> raising, when the graph key itself does not exist (`ResponseError` "empty key"). A second `START`
+> edge can only come from a direct `publish_def`/`materialize_snapshot` call with a different start
+> key, since both queries are additive on structure (§11 preamble).
 
-### 11.3 List defs / get a def (reference)
+### 11.3 List defs / get a def (reference) (`list_defs`, `get_def`)
 
 ```cypher
 // list all defs (every version), newest version first within each key
@@ -1076,62 +1113,62 @@ the list an index scan rather than a label scan). `version` is a string — orde
 caller uses zero-padded or monotonic version strings if numeric ordering matters. Route via
 `GRAPH.RO_QUERY`.*
 
-### 11.4 Materialize a snapshot (workspace — idempotent)
+### 11.4 Materialize a snapshot (workspace — idempotent) (`materialize_snapshot`)
 
-Same shape as §11.1 with the `WorkflowDefSnapshot` root label, run against `ws:{id}`. The
-`$name/$kind/$startKey/$steps/$transitions` parameters come from the §11.2 read of `reference`
-(two-phase, see the note above).
+The §11.1 constant `_PUBLISH_CYPHER` formatted with the `WorkflowDefSnapshot` root label (exact text
+below), run against `ws:{id}`. The `$name/$kind/$startKey/$steps/$transitions` parameters come from the
+§11.2 read of `reference` (two-phase, see the note above).
 
 ```cypher
-MERGE (snap:WorkflowDefSnapshot {key: $key, version: $version})
-  ON CREATE SET snap.name = $name, snap.kind = $kind
-WITH snap
+MERGE (d:WorkflowDefSnapshot {key: $key, version: $version})
+  ON CREATE SET d.name = $name, d.kind = $kind
+WITH d
 UNWIND $steps AS s
   MERGE (st:Step {stepUid: $key + ':' + $version + ':' + s.key})
     ON CREATE SET st.key = s.key, st.type = s.type, st.config = s.config
-  MERGE (snap)-[:HAS_STEP]->(st)
-WITH snap, count(st) AS stepCount
+  MERGE (d)-[:HAS_STEP]->(st)
+WITH d, count(st) AS stepCount
 MATCH (start:Step {stepUid: $key + ':' + $version + ':' + $startKey})
-MERGE (snap)-[:START]->(start)
-WITH snap, stepCount
+MERGE (d)-[:START]->(start)
+WITH d, stepCount
 UNWIND $transitions AS tr
   MATCH (from:Step {stepUid: $key + ':' + $version + ':' + tr.from})
   MATCH (to:Step   {stepUid: $key + ':' + $version + ':' + tr.to})
   MERGE (from)-[rel:TRANSITION {on: tr.on, order: tr.order}]->(to)
     ON CREATE SET rel.guard = tr.guard
-WITH snap, stepCount, count(rel) AS transitionCount
-RETURN snap.key AS key, snap.version AS version, stepCount, transitionCount
+WITH d, stepCount, count(rel) AS transitionCount
+RETURN d.key AS key, d.version AS version, stepCount, transitionCount
 ```
 
 *Node MERGEs backed by `WorkflowDefSnapshot {key,version}` + `Step {stepUid}` constraints (both
 workspace-local). Produces a snapshot subgraph **structurally identical** to the reference def.
 Live-verified idempotent (run 2, same content → 0 created). Re-materialize with unchanged topology is
 a no-op on write (properties are always create-only). A re-materialize whose topology differs from the
-stored snapshot is rejected (`409 WorkflowDefConflictError`) before this query runs — K-034.*
+stored snapshot is rejected (`409 WorkflowDefConflictError`) before this query runs.*
 
-### 11.5 Read a snapshot subgraph (workspace)
+### 11.5 Read a snapshot subgraph (workspace) (`get_snapshot`, `read_snapshot_structure`)
 
-Mirror of §11.2 with the `WorkflowDefSnapshot` root; anchors on `Node By Index Scan |
-(snap:WorkflowDefSnapshot)`.
+The §11.2 constants formatted with the `WorkflowDefSnapshot` root label (exact text below); anchors on
+`Node By Index Scan | (d:WorkflowDefSnapshot)`.
 
 ```cypher
 // meta + steps
-MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})
-OPTIONAL MATCH (snap)-[:START]->(start:Step)
-OPTIONAL MATCH (snap)-[:HAS_STEP]->(s:Step)
-RETURN snap.name AS name, snap.kind AS kind, start.key AS startKey,
+MATCH (d:WorkflowDefSnapshot {key: $key, version: $version})
+OPTIONAL MATCH (d)-[:START]->(start:Step)
+OPTIONAL MATCH (d)-[:HAS_STEP]->(s:Step)
+RETURN d.name AS name, d.kind AS kind, start.key AS startKey,
        collect(DISTINCT {key: s.key, type: s.type, config: s.config}) AS steps
 ```
 ```cypher
 // transitions
-MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step)
+MATCH (d:WorkflowDefSnapshot {key: $key, version: $version})-[:HAS_STEP]->(from:Step)-[tr:TRANSITION]->(to:Step)
 RETURN collect({from: from.key, to: to.key, on: tr.on, guard: tr.guard, order: tr.order}) AS transitions
 ```
 
-> Same conditional one-row collapse as §11.2 — this is the label the K-031 V-1 probe actually ran
-> against: **two `START` edges ⇒ two meta rows**. See the §11.2 note.
+> Same conditional one-row collapse as §11.2 (live-verified on this label): **two `START` edges ⇒
+> two meta rows**. See the §11.2 note.
 
-### 11.6 List / get snapshots (workspace)
+### 11.6 List / get snapshots (workspace) (`list_snapshots`)
 
 ```cypher
 // list snapshots in a workspace
@@ -1142,7 +1179,8 @@ ORDER BY snap.key, snap.version DESC
 LIMIT $limit
 ```
 ```cypher
-// get a specific snapshot (point lookup on the composite key)
+// get a specific snapshot (point lookup on the composite key) — library query; the server
+// reads a snapshot through §11.5 instead
 MATCH (snap:WorkflowDefSnapshot {key: $key, version: $version})
 RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS kind
 ```
@@ -1151,7 +1189,7 @@ RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS
 **Live-verified build quirks that shape §11:**
 - **`STARTS WITH` on an indexed string prefix does NOT plan as an index scan** on this build — it
   profiles as `Node By Label Scan` + `Filter`. Scope def/snapshot subgraph reads via the `HAS_STEP`
-  containment edge (index-anchored), never a `stepUid` prefix filter. (New — folds into the KB.)
+  containment edge (index-anchored), never a `stepUid` prefix filter.
 - **`STARTS WITH` with a concatenated prefix needs explicit parentheses:** `x STARTS WITH ($a + ':' +
   $b)` — without them the parser mis-associates (`STARTS WITH` binds tighter than `+`) and errors
   *"Type mismatch: expected Boolean but was String"*. Moot here (we use `HAS_STEP`) but noted.
@@ -1160,12 +1198,12 @@ RETURN snap.key AS key, snap.version AS version, snap.name AS name, snap.kind AS
 
 ---
 
-## 12. Workflow execution — runs, step-runs & traces (M3 executor — K-022)
+## 12. Workflow execution — runs, step-runs & traces
 
 The **executor** walks a materialized `WorkflowDefSnapshot` (§11) as a `WorkflowRun` that records each
 executed step as a `StepRun`. All of these live **workspace-local** in `ws:{id}` (the snapshot, the run,
 the trace are one connected subgraph — no cross-graph edge). DESIGN §6.2. These queries are the 1:1
-contract for `repository.py` (U3) — **method name = query name** below. Every state-move is a **single
+contract for `repository.py` — **method name = query name** below. Every state-move is a **single
 `GRAPH.QUERY`** (atomicity, rule 4); every read anchors on an index (PROFILE-verified, no label scan).
 
 **Model (ws:{id}) — additive to §11's snapshot:**
@@ -1175,25 +1213,26 @@ contract for `repository.py` (U3) — **method name = query name** below. Every 
                ctx, trace, maxSteps, stepCount, waitingThreadId})
 (:WorkflowRun)-[:OF_DEF]->(:WorkflowDefSnapshot)        // which materialized def (§11)
 (:WorkflowRun)-[:AT_STEP]->(:Step)                      // current position (cleared on terminal)
-(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)              // the @mention that started it (FR-7/AC-1)
+(:WorkflowRun)-[:TRIGGERED_BY]->(:Message)              // the @mention that started it (chat runs only)
 (:WorkflowRun)-[:HAS_STEP_RUN]->(:StepRun)              // membership (all step-runs of a run)
-(:WorkflowRun)-[:LAST_STEP_RUN]->(:StepRun)             // TAIL pointer — the NEXT anchor (M4)
-(:StepRun {stepRunId, stepKey, status, startedAt, endedAt, input, output})
+(:WorkflowRun)-[:LAST_STEP_RUN]->(:StepRun)             // TAIL pointer — the NEXT anchor
+(:StepRun {stepRunId, stepKey, status, startedAt, endedAt, input, output,
+           resolvedModel, modelSource, modelFallback})   // model fields: LLM steps only
 (:StepRun)-[:RAN]->(:Step)                              // which def step this run-step executed
 (:StepRun)-[:NEXT]->(:StepRun)                          // execution order (audit trail)
-(:StepRun)-[:PRODUCED]->(:Message)                      // step-emitted chat message (D2 — NOT EMITTED)
-(:StepRun)-[:TRACED]->(:TraceEvent)                     // debug-only trace record (FR-4)
+(:StepRun)-[:PRODUCED]->(:Message)                      // step-emitted chat message (NOT EMITTED)
+(:StepRun)-[:TRACED]->(:TraceEvent)                     // debug-only trace record
 (:TraceEvent {traceId, seq, kind, at, payload})         // debug runs only; payload = flat string
 ```
 
-**Locked shape decisions (this gate):**
+**Locked shape decisions:**
 
-- **`PRODUCED`, not `EMITTED` (D2, locked).** StepRun→Message emission is a **distinct** edge type.
-  `EMITTED` is already the K-013 **Message→Message** provenance edge (§10) — reusing it would conflate
+- **`PRODUCED`, not `EMITTED` (locked).** StepRun→Message emission is a **distinct** edge type.
+  `EMITTED` is the answer→seed provenance edge (§10) — reusing it would conflate
   "this answer cited that seed" with "this step produced that message." `PRODUCED` is
   `(:StepRun)-[:PRODUCED]->(:Message)`; endpoints carry their own `stepRunId`/`msgId` unique index, so
   no relationship index/constraint is needed (same reasoning as §10's `EMITTED`).
-- **`LAST_STEP_RUN` tail pointer anchors the atomic advance (M4).** Mirrors the `Thread` HEAD/TAIL
+- **`LAST_STEP_RUN` tail pointer anchors the atomic advance.** Mirrors the `Thread` HEAD/TAIL
   pattern (§4/§5.2): `record_step_and_advance` reads the tail to find the previous `StepRun`, hangs
   `NEXT` from it, and moves the tail — all in the **same** query. **No chain-walk, no label scan** —
   the previous step-run is reached by one `Optional Conditional Traverse` of the tail edge (O(1)).
@@ -1214,12 +1253,12 @@ A returned row = the move committed.
 ```cypher
 // $runId,$defKey,$defVersion,$startedAt,$triggerMsgId server-minted / caller-supplied
 // $ctx = opaque serialized state. On this chat path the service seeds the trigger
-//        message's thread as the §2.4 resume denorm anchor, MERGED with any caller
+//        message's thread as the resume anchor, MERGED with any caller
 //        `run_ctx` — {"threadId": …} alone when the caller supplies none, otherwise
 //        {"threadId": …, …caller keys}. Reserved keys (threadId/error/timerFired) are
 //        rejected service-side before this write ever runs, same rule as §12.12.
 // $trace = bool (debug instance?);
-// $maxSteps = run-level step budget (DS default 12, §7). A tripwire checked AFTER each
+// $maxSteps = run-level step budget (default 12). A tripwire checked AFTER each
 //             recorded step, not a hard cap: a run executes at most maxSteps + 1 steps
 //             (see the §12.5 note).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
@@ -1238,7 +1277,7 @@ No `LAST_STEP_RUN` yet; the first `record_step_and_advance` seeds the tail. `wai
 `''` (set only while parked, §12.4). Backed by the `WorkflowRun.runId` UNIQUE constraint. Zero rows =
 snapshot has no START, or the trigger message is missing.*
 
-### 12.2 `record_step_and_advance` — the M4 tail-anchored atomic advance
+### 12.2 `record_step_and_advance` — the tail-anchored atomic advance
 
 The engine's hot write: one query records the just-executed step as a `StepRun`, appends it to the
 `NEXT` audit trail via the tail pointer, moves the tail, relinks `AT_STEP` to the transition's `to`
@@ -1248,8 +1287,8 @@ step, and bumps `stepCount`. **All atomic (rule 4).**
 // $runId; $stepRunId (server-minted); $stepStatus (e.g. 'done'); $startedAt,$endedAt;
 // $input,$output (opaque strings); $toStepUid = the destination Step's stepUid (executor
 // resolves it app-side from the firing transition = "{defKey}:{version}:{toKey}");
-// $resolvedModel,$modelSource,$modelFallback (K-042 Landing 2, FR-8) — NULL for a
-// non-LLM step (decision/human/wait, the offline agent-without-LLM stub)
+// $resolvedModel,$modelSource,$modelFallback — NULL for a non-LLM step
+// (decision/human/wait, the offline agent-without-LLM stub)
 MATCH (r:WorkflowRun {runId: $runId})-[atRel:AT_STEP]->(cur:Step)
 MATCH (to:Step {stepUid: $toStepUid})
 OPTIONAL MATCH (r)-[lastRel:LAST_STEP_RUN]->(prevSR:StepRun)
@@ -1284,21 +1323,19 @@ one tail, two `HAS_STEP_RUN`, `RAN` edges to the correct def steps. Zero rows = 
 > append; tail-edge delete). `DELETE` inside `FOREACH` and top-level `DELETE atRel` + re-`CREATE` of the
 > same edge type are both live-verified on this build.
 
-**K-042 Landing 2 (FR-8, `docs/plans/llm-provider-config-graph.md` §1.4).**
-`resolvedModel`/`modelSource`/`modelFallback` ride the same `CREATE` as three additional,
-nullable `StepRun` properties, written by the executor's `_run_agent_node`/`_record` for
+**Model provenance.** `resolvedModel`/`modelSource`/`modelFallback` ride the same `CREATE` as
+three nullable `StepRun` properties, written by the executor's `_run_agent_node`/`_record` for
 an LLM-executing step and passed as `NULL` for every non-LLM step. **[verified]** A `NULL`
 parameter **omits** the property entirely — `CREATE (s:StepRun {..., resolvedModel: $rm})`
 with `rm=NULL` reports one fewer `Properties set` than a non-null case and `keys(s)` does
 not include `resolvedModel`. One query shape serves LLM and non-LLM steps alike: no
 branching, no extra bytes on a `decision`/`human`/`wait` StepRun. `modelSource ∈
-{'workspace', 'step', 'default'}` names the precedence rung that won (`'workspace'` is
-L2-3, not yet reachable); `modelFallback` is `true` only when `resolvedModel` is not the
+{'workspace', 'step', 'default'}` names the precedence rung that won (a workspace override,
+the step's own model, or the kind default); `modelFallback` is `true` only when `resolvedModel` is not the
 first model in the chain the winning rung named, and is **omitted** (never written `false`)
 on the common, non-fallback path — same "nullable, absent by default" contract as the other
-two. No backfill: a `StepRun` written before Landing 2 reads back `NULL` for all three,
-permanently — a historical run's model is genuinely unknown, never re-derived from today's
-config.
+two. A `StepRun` without these properties reads back `NULL` for all three — its model is
+unknown and is never re-derived from today's config.
 
 ### 12.3 `suspend_run` — guarded CAS `running → waiting`
 
@@ -1321,7 +1358,7 @@ WHERE r.status = 'waiting'
 SET r.status = 'running', r.waitingThreadId = ''
 RETURN r.runId AS runId, r.status AS status
 ```
-*The single-flight guard for concurrent human replies (§2.4/§6): two near-simultaneous replies both
+*The single-flight guard for concurrent human replies (DESIGN §6): two near-simultaneous replies both
 try to resume, but per-query atomicity means only the one that observes `status = 'waiting'` flips it;
 the loser sees `running` → `WHERE` fails → **zero rows** → does not re-enter the executor. **Verified:**
 first resume returns the row, an immediate second returns zero rows. Clears `waitingThreadId` so the run
@@ -1338,7 +1375,7 @@ SET r.status = 'done', r.endedAt = $endedAt
 RETURN r.runId AS runId, r.status AS status
 ```
 ```cypher
-// fail_run — $runId, $endedAt, $ctx (executor stamps a note, e.g. "step budget exceeded", §7)
+// fail_run — $runId, $endedAt, $ctx (executor stamps a note, e.g. "step budget exceeded")
 MATCH (r:WorkflowRun {runId: $runId})
 OPTIONAL MATCH (r)-[atRel:AT_STEP]->()
 DELETE atRel
@@ -1348,19 +1385,19 @@ RETURN r.runId AS runId, r.status AS status
 *`AT_STEP` ("current position") is cleared on terminal states — the audit trail is preserved by the
 `HAS_STEP_RUN` set + `NEXT` chain + `LAST_STEP_RUN` (the *last executed* step is `LAST_STEP_RUN`-[:RAN]->).
 `DELETE` of a **null** `OPTIONAL MATCH`ed edge is a verified no-op (re-completing a run that already has
-no `AT_STEP` does not error). **Step-budget fail (§7):** the executor compares `stepCount` (returned by
+no `AT_STEP` does not error). **Step-budget fail:** the executor compares `stepCount` (returned by
 §12.2) to `maxSteps` app-side; on `stepCount > maxSteps` it calls `fail_run` — verified `failed` +
 `AT_STEP` cleared + `StepRun`s retained. Zero rows = run not found (→ `WorkflowRunNotFoundError`).*
 
-> **`maxSteps` is a tripwire checked *after* each recorded step, not a hard cap (K-031).** Because
+> **`maxSteps` is a tripwire checked *after* each recorded step, not a hard cap.** Because
 > the comparison is `stepCount > maxSteps`, a run executes at most **`maxSteps + 1`** steps before
-> failing with `"step budget exceeded"`. The check runs only on the two driving outcomes — a guard
-> fired (OUTCOME A, `executor.py:410`) and a legitimate self-loop (OUTCOME C, `:427`) — and is
+> failing with `"step budget exceeded"`. The check runs only on the two driving outcomes in
+> `executor._drive_loop` — a guard fired and a legitimate self-loop — and is
 > **deliberately not applied on the park path** (OUTCOME B; a parked run cannot self-drive) **or on
 > the terminal path**. Treat it as a safety bound, not an SLA or a cost budget. Making it exact
-> (`>` → `>=`) lands inside the SHA-locked `_drive_loop`; filed as proposed **K-033**.
+> (`>` → `>=`) is open as **K-033**.
 
-### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message` (D2)
+### 12.6 `link_step_emission` — `StepRun -[:PRODUCED]-> Message`
 
 ```cypher
 // $stepRunId, $msgId, $toolsUsed — run AFTER the §4 chat write that created the message (two-step, accepted)
@@ -1374,10 +1411,10 @@ RETURN sr.stepRunId AS stepRunId, m.msgId AS msgId
 the link **idempotent** (a retry after a crash between the post and the link re-links exactly once — no
 duplicate `PRODUCED`, verified). This is the **second** query of the deliberately two-step emission (post
 the message via the guarded §4 write, then link) — the message is the durable artifact; a missing link is
-a diagnosable, retry-able gap, not a torn thread (§3/§9). **Distinct from `EMITTED`** (§10) — verified a
+a diagnosable, retry-able gap, not a torn thread. **Distinct from `EMITTED`** (§10) — verified a
 `PRODUCED` write adds zero `EMITTED` edges.*
 
-*`$toolsUsed` (K-056, `docs/reviews/salesperson-tool-reliability-ml.md` §4.3) is the producing step's
+*`$toolsUsed` is the producing step's
 own non-`post_message` dispatched tool names (`executor.StepResult.toolsUsed`, empty list when the step
 dispatched none) — the tool-use breadcrumb source `read_thread` (§4) surfaces on the next turn's replay.
 Live-verified: `SET`/round-trip of a list-of-strings property works on this build (`GRAPH.QUERY … SET
@@ -1418,17 +1455,13 @@ ORDER BY x.startedAt
 the executor's monotonic `startedAt` (same lock-guarded clock as messages — ties impossible at source),
 which coincides with `NEXT` order. Route via `GRAPH.RO_QUERY`.*
 
-**K-042 Landing 2 (FR-8, `docs/plans/llm-provider-config-graph.md` §1.7).** The three new
-columns project `null` for a `StepRun` that never had them written — a non-LLM step, or a
-pre-Landing-2 row; both read back identically (no backfill). This is the read surface behind
-`GET /workflow-runs/{id}/step-runs`, which serializes the returned dicts verbatim — no
-`schemas.py` pydantic model gates this route, so the three keys reach the client with no
-further code change once the repository projects them.
+The three model columns project `null` for a `StepRun` that never had them written (a non-LLM
+step). This is the read surface behind `GET /workflow-runs/{id}/step-runs` (`SERVER.md`).
 
 ### 12.9 `find_waiting_run_for_thread` — the resume lookup (index-anchored)
 
 ```cypher
-// $threadId — resume a parked run when a human replies in its thread (§2.4/§6)
+// $threadId — resume a parked run when a human replies in its thread (DESIGN §6)
 MATCH (r:WorkflowRun {status: 'waiting'})
 WHERE r.waitingThreadId = $threadId
 RETURN r.runId AS runId, r.status AS status
@@ -1438,13 +1471,13 @@ LIMIT 1
 (point lookup on value `'waiting'`), then a residual `Filter` on the denormed `waitingThreadId`.
 **No new index** — the `waiting` set is tiny (at most a handful of parked conversations per workspace;
 the value-index visits only `waiting` nodes, never the accumulating `done` runs), so the residual filter
-is trivial. **Decision (this gate):** the `TRIGGERED_BY`→`Message` traversal alternative also
+is trivial. The `TRIGGERED_BY`→`Message` traversal alternative also
 index-anchors on `status` but adds a `Conditional Traverse` and depends on the trigger edge surviving —
 the denorm is simpler and self-contained. RAM: **zero new index**; `waitingThreadId` is one short
 string property per run. Route via `GRAPH.RO_QUERY`. (A thread holds at most one `waiting` run at a time
 — `LIMIT 1` is belt-and-suspenders.)*
 
-### 12.10 `append_trace_event` — write one debug trace record (FR-4)
+### 12.10 `append_trace_event` — write one debug trace record
 
 ```cypher
 // $stepRunId, $traceId (server-minted), $seq (order within the StepRun), $kind, $at, $payload
@@ -1470,14 +1503,14 @@ RETURN sr.stepRunId AS stepRunId, sr.stepKey AS stepKey,
 ORDER BY sr.startedAt, te.seq
 ```
 *Anchors on `Node By Index Scan | (r:WorkflowRun)`, traverses to step-runs then their trace events,
-ordered by `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction (FR-4). A
-non-debug run has zero `TRACED` edges → empty result (AC-5's negative half, by construction). Route via
+ordered by `(StepRun.startedAt, TraceEvent.seq)` — the full cross-step reconstruction. A
+non-debug run has zero `TRACED` edges → empty result, by construction. Route via
 `GRAPH.RO_QUERY`.*
 
 ### 12.12 `start_run_untriggered` — begin a run with **no** chat trigger message
 
 Parent: **§12.1** (`start_run`). Identical, **minus** the `MATCH (trigger:Message …)` anchor and the
-`CREATE (r)-[:TRIGGERED_BY]->(trigger)` edge. A `kind:'process'` run (K-024) is started from
+`CREATE (r)-[:TRIGGERED_BY]->(trigger)` edge. A `kind:'process'` run is started from
 REST/API — there is no `Message`, no `Thread`, and therefore no trigger to link. Deliberately a
 **second, self-contained write path** rather than an `OPTIONAL MATCH` + `FOREACH` conditional inside
 §12.1: same doctrine as the §4 first/subsequent message paths, and it sidesteps the
@@ -1486,8 +1519,8 @@ empty-row-collapse class of bug entirely.
 ```cypher
 // $runId,$defKey,$defVersion,$startedAt server-minted / caller-supplied
 // $ctx = opaque serialized state ("{}" or the caller's initial run ctx — reserved keys
-//        threadId/error/timerFired are rejected service-side, see plan §3.4 M-2. The
-//        SAME check now guards the §12.1 chat path too, hoisted ahead of both branches.)
+//        threadId/error/timerFired are rejected service-side, the same check that guards
+//        the §12.1 chat path)
 // $trace = bool; $maxSteps = run-level step budget (a process def declares its own, e.g. 24).
 //                A tripwire checked AFTER each step ⇒ at most maxSteps + 1 (§12.5 note).
 MATCH (snap:WorkflowDefSnapshot {key: $defKey, version: $defVersion})-[:START]->(start:Step)
@@ -1505,9 +1538,9 @@ exist), and **nothing is written** — verified: the response carries no `Nodes 
 `WorkflowRun` is left behind. Backed by the `WorkflowRun.runId` UNIQUE constraint (server-minted id ⇒
 plain `CREATE`, constraint as the concurrency backstop). `waitingThreadId` starts `''` and stays `''`
 for a process run — it has no thread, which is exactly why §12.9's thread lookup must never be called
-with an empty `threadId` (plan F-5/F-6).*
+with an empty `threadId`.*
 
-**`GRAPH.PROFILE` (2026-07-20, v4.18.11 / module `41811`, `ws:test`)** — one `Node By Index Scan` on
+**`GRAPH.PROFILE`** — one `Node By Index Scan` on
 `WorkflowDefSnapshot.key`, **no label scan**:
 
 ```
@@ -1524,7 +1557,7 @@ Results | Records produced: 1
 
 Parent: **§12.4** (`resume_run`), which **remains in use unchanged** for the chat/trigger resume path
 (`trigger.py`, where no ctx is submitted). This variant is §12.4 **plus one `SET` term** and is the
-human/signal-input path for a `process` run (decision **D-F**): the submitted input, already merged
+human/signal-input path for a `process` run: the submitted input, already merged
 into the run ctx service-side, rides **inside** the CAS so the write and the flip cannot be split.
 
 ```cypher
@@ -1536,7 +1569,7 @@ SET r.status = 'running', r.waitingThreadId = '', r.ctx = $ctx
 RETURN r.runId AS runId, r.status AS status
 ```
 
-**Zero-row contract (live-verified — this is what D-F rests on, do not assume it):** a run that is not
+**Zero-row contract (live-verified — the input path rests on it):** a run that is not
 `waiting` matches the node but fails the `WHERE` ⇒ **zero rows and NOTHING is written — neither the
 status flip nor the ctx**. Verified by replaying the CAS with a marker ctx (`{"decision":"LOSER"}`)
 against an already-`running` run: zero rows returned and `r.ctx` still holds the winner's value. So
@@ -1545,7 +1578,7 @@ only the CAS **winner's** ctx is ever persisted — "which input advanced the ru
 cases with a prior `get_run`: `None` ⇒ 404, present-but-not-waiting ⇒ 409). The loser's input is
 **rejected, never silently lost**.
 
-**`GRAPH.PROFILE` (2026-07-20)** — point lookup on `WorkflowRun.runId`, **no label scan**; the
+**`GRAPH.PROFILE`** — point lookup on `WorkflowRun.runId`, **no label scan**; the
 `status` predicate is folded **into** the index scan (no residual `Filter` operator), so a
 non-matching run produces zero records at the scan itself:
 
@@ -1560,18 +1593,15 @@ Results | Records produced: 1                 Results | Records produced: 0
 *Anchoring confirmed on `runId`, not `status`: with five other `waiting` runs in the graph the scan
 still produced exactly 1 record. (`WorkflowRun` carries RANGE indexes on both `runId` and `status`.)*
 
-**No DDL, no new index, ≈ zero RAM (rule 6).** Both queries reuse what `bootstrap_schema.sh` already
-creates in every workspace: `WorkflowDefSnapshot.key` (:117), `.version` (:120), `WorkflowRun.runId`
-(:123) and the `WorkflowRun` UNIQUE `{runId}` constraint (:179). No new label, no new property, no new
-index — **`bootstrap_schema.sh` is not touched**. The only RAM delta is a longer `ctx` string on
-`WorkflowRun` (tens of bytes of merged human input per run), on a node type that is rare compared to
-`Message`; §12.12 in fact stores *less* than §12.1 (one fewer relationship — no `TRIGGERED_BY`).
+**Indexes (rule 6).** Both queries use only indexes `bootstrap_schema.sh` creates in every
+workspace: `WorkflowDefSnapshot.key`/`.version`, `WorkflowRun.runId` and the `WorkflowRun` UNIQUE
+`{runId}` constraint. The RAM cost is the merged `ctx` string; §12.12 stores one relationship fewer
+than §12.1 (no `TRIGGERED_BY`).
 
-**Live-verified build quirks that shape §12** (all confirmed on `falkordb:v4.18.11`, module `41811`,
-against an isolated `ws:gdbtest`):
+**Live-verified build quirks that shape §12** (`falkordb:v4.18.11`, module `41811`):
 - **The tail-pointer advance (§12.2) plans edge-anchored** — the previous `StepRun` is found by
   `Optional Conditional Traverse` of `LAST_STEP_RUN`, not a scan of the `NEXT` chain. This is what makes
-  the atomic advance O(1) regardless of trail length (M4).
+  the atomic advance O(1) regardless of trail length.
 - **`DELETE` of a null `OPTIONAL MATCH`ed relationship is a no-op** (§12.5) — no guard needed to
   re-complete an already-terminal run.
 - **Guarded CAS via `WHERE` on the current status value** (§12.3/§12.4) gives single-flight
@@ -1579,7 +1609,7 @@ against an isolated `ws:gdbtest`):
 - **`waitingThreadId` on `WorkflowRun` rides the `status` index** (§12.9) — a value-point index scan on
   `status:'waiting'` + a residual property filter, no dedicated `waitingThreadId` index.
 
-### 12.14 `find_runs_for_thread` — every run this thread has ever had (K-036 — web-api-coverage FR-2)
+### 12.14 `find_runs_for_thread` — every run this thread has ever had
 
 ```cypher
 // $threadId, $limit
@@ -1592,16 +1622,11 @@ LIMIT $limit
 ```
 
 *The `r.startedAt >= 0` conjunct is functionally a no-op — `startedAt` is always a non-negative
-epoch-ms timestamp (§12.1/§12.12) — but it is **load-bearing for the query plan**, not decoration.
-See the PROFILE findings below.*
+epoch-ms timestamp (§12.1/§12.12) — but it is **load-bearing for the query plan**.*
 
-**PROFILE finding — a genuinely new, previously-undocumented planner fact (verified 2026-07-28,
-v4.18.11 / module `41811`, isolated `ws:gdbtest`, 3 `WorkflowRun` vs up to 20,003 `Message`).**
-The plan's originally-proposed query shape (`docs/plans/web-api-coverage.md` §3.1a — no predicate
-on `r`, only `WHERE m.threadId = $threadId`) does **not** anchor on
-`Node By Label Scan | (r:WorkflowRun)` as that section expected. It anchors on
-`Node By Label Scan | (m:Message)` instead — scanning **every `Message` in the workspace**, not
-just the thread's, before filtering the unindexed `threadId` property and traversing back to `r`:
+**Why the vacuous predicate (live-verified, 3 `WorkflowRun` vs 20,003 `Message`).** With only
+`WHERE m.threadId = $threadId`, the planner anchors on `Node By Label Scan | (m:Message)` — every
+`Message` in the workspace — whatever the `MATCH` shape (single, split, or reversed direction):
 
 ```
 Conditional Traverse | (r)->(m) | Records produced: 3
@@ -1609,39 +1634,11 @@ Conditional Traverse | (r)->(m) | Records produced: 3
         Node By Label Scan | (m:Message) | Records produced: 20003
 ```
 
-This holds regardless of `MATCH` clause shape — tested single-`MATCH`, split two-`MATCH`
-(`MATCH (r:WorkflowRun) MATCH (r)-[:TRIGGERED_BY]->(m:Message) WHERE …`), and reversed direction
-(`MATCH (m:Message)<-[:TRIGGERED_BY]-(r:WorkflowRun) WHERE …`) — all four anchor on `m`. The
-mechanism: **a `WHERE` predicate on a pattern variable pulls the label-scan anchor onto that
-variable's label, even when a much smaller, filter-free label sits elsewhere in the same
-pattern** — relative cardinality does not decide the anchor here, "which variable carries a
-`WHERE` predicate" does. Confirmed the inverse too: the identical pattern with **no** `WHERE` at
-all correctly anchors on the smaller `WorkflowRun` label
-(`Node By Label Scan | (r:WorkflowRun) | Records produced: 3`). Promoted to the general quirks KB
-(`claude/graph-dba/falkordb-quirks.md`, "Query tuning" — this is an engine fact, not specific to
-this schema).
-
-**The plan's own proposed fallback — a bare `WorkflowRun.startedAt` range index, added with no
-query change — is confirmed a no-op**, exactly as the plan's v2 caveat (§3.1a) warned might
-happen: adding the index alone did not move the anchor off `Message` at all (identical profile,
-label scan still on `m`, index unused).
-
-**What actually redirects the anchor: a second, functionally-vacuous predicate on `r` —
-`WHERE r.startedAt >= 0`.** Verified in three configurations:
-- No index + the predicate → `Node By Label Scan | (r:WorkflowRun)` (small-label scan, 3
-  records, not the 20,003-record `Message` scan) → `Conditional Traverse` → `Filter` on
-  `threadId`.
-- `WorkflowRun.startedAt` range index present + the predicate →
-  **`Node By Index Scan | (r:WorkflowRun)`** — genuinely used, not a no-op once paired with the
-  predicate.
-- Predicate order in `WHERE` doesn't matter (`m.threadId = … AND r.startedAt >= 0` profiles
-  identically to the reverse order).
-
-**Decision (this gate): ship both** — the `WHERE r.startedAt >= 0` predicate (does the real work:
-moves the anchor off the workspace-wide `Message` scan) **and** the `WorkflowRun.startedAt` range
-index (upgrades that small-label scan to a small-label **index** scan, keeping this query
-consistent with this file's own "every read anchors on an index, no label scan" convention,
-line 1007). Full PROFILE with the index in place:
+A `WHERE` predicate on a pattern variable pulls the scan anchor onto that variable's label, even
+when a much smaller, filter-free label sits elsewhere in the pattern (an engine fact, recorded in
+`claude/graph-dba/falkordb-quirks.md`). A `WorkflowRun.startedAt` index alone does not move the
+anchor. The predicate on `r` does; with the index present it becomes an index scan, and predicate
+order inside `WHERE` does not matter:
 
 ```
 Results | Records produced: 3
@@ -1653,17 +1650,10 @@ Results | Records produced: 3
                         Node By Index Scan | (r:WorkflowRun) | Records produced: 3
 ```
 
-**RAM (rule 6): one new range index, `WorkflowRun.startedAt`, added to `bootstrap_schema.sh`.**
-`WorkflowRun` cardinality is tiny per workspace (same argument §12.9 already accepted for the
-`status` index) — cost is a few bytes per run, negligible next to `Message`-scale RAM.
+**Index (rule 6):** `WorkflowRun.startedAt` range index (`bootstrap_schema.sh`). `WorkflowRun`
+cardinality is tiny per workspace, so its cost is negligible.
 
-**General engine fact, not project-specific:** any FalkorDB two-hop pattern where one side is a
-small, unfiltered label and the other is a much larger label filtered by an **unindexed**
-property in `WHERE` can hit this same anchor trap — the fix (an extra, even-if-vacuous predicate
-on the variable you want as anchor) generalizes. See `claude/graph-dba/falkordb-quirks.md` for the
-schema-independent write-up.
-
-### 12.15 `read_recent_post_success` — last-N post-success sample for the `@mention` def (K-039 item 3)
+### 12.15 `read_recent_post_success` — last-N post-success sample for the `@mention` def
 
 ```cypher
 // $defKey, $defVersion, $limit
@@ -1678,36 +1668,17 @@ RETURN count(r) AS sampleSize,
        sum(CASE WHEN producedCount > 0 THEN 1 ELSE 0 END) AS postedCount
 ```
 
-Feeds the K-036 readiness route's new `postSuccess` field (`docs/plans/mention-reply-delivery.md`
-§3.3): of the last `$limit` **terminal** (`done`/`failed`) runs of the `@mention`-triggered def
-(`config.TRIGGER_DEF_KEY`@`config.TRIGGER_DEF_VERSION`, currently `triage`@`v1`), how many produced
-at least one reply (`StepRun -[:PRODUCED]-> Message`, D2, §12.6). `waiting`/`running` runs are
-excluded from the sample — they haven't reached a verdict yet. Verified live against `ws:test`
-(synthetic fixture) and read-only against `ws:acme` (real production data), pinned build
-`v4.18.11`/module `41811`.
+Feeds the readiness route's `postSuccess` field (`SERVER.md`): of the last `$limit` **terminal**
+(`done`/`failed`) runs of the `@mention`-triggered def (`config.TRIGGER_DEF_KEY`@
+`config.TRIGGER_DEF_VERSION`, default `triage`@`v1`), how many produced at least one reply
+(`StepRun -[:PRODUCED]-> Message`, §12.6). `waiting`/`running` runs are excluded — they have no
+verdict yet.
 
-**Result types (Python side, `falkordb-py` 1.6.x) — live-verified, both the zero-row and
-non-empty case:** `sampleSize` is a clean `int` (from `count(r)`); `postedCount` is always a
-**Python `float`** (`0.0`, `1.0`, …) — `sum()` over this `CASE` expression **never returns
-`NULL`/`None`** in either case. Confirmed via `g.query(...).result_set`:
+**Result types (`falkordb-py` 1.6.x, live-verified):** `sampleSize` is an `int`; `postedCount` is
+always a **`float`** (`0.0`, `1.0`, …) and never `None`, including on an empty sample
+(`[0, 0.0]`). The repository casts `postedCount` to `int`, so the response carries `1`, not `1.0`.
 
-```
-row: [3, 1.0]              # non-empty sample (3 terminal runs, 1 posted)
-zero-case row: [0, 0.0]     # unknown defKey/defVersion — "no data," not an exception
-```
-
-The repository layer must cast `postedCount` to `int` before returning it — left as a `float`, the
-JSON response carries `"postedCount": 1.0` and the readiness banner would render `"1.0/2 replied"`.
-
-**Which index the query actually lands on — not just "an index scan":** `r.defKey`/`r.defVersion`
-carry no index (none needed — `WorkflowRun` cardinality is tiny per workspace, §RAM below), so this
-query's index-anchor situation is **materially different from §12.14's** (there, the load-bearing
-`WHERE r.startedAt >= 0` conjunct exists purely to pull the label-scan anchor off a *different*
-pattern variable, `m:Message`; here every filter is on `r` itself and two of them — `startedAt` and
-`status` — are independently indexed).
-
-PROFILE against `ws:test` (dedicated fixture, defKey `post_success_probe`, 3 terminal + 1 waiting
-run):
+**Plan:** no label scan.
 
 ```
 Results | Records produced: 1
@@ -1721,55 +1692,21 @@ Results | Records produced: 1
                                 Node By Index Scan | (r:WorkflowRun) | Records produced: 3
 ```
 
-No `Node By Label Scan` anywhere (AGENTS.md rule 3) — but the interesting fact is *what the single
-`Node By Index Scan` step already excludes before `Filter` ever runs*. Isolated by testing three
-variants of the same fixture:
+Both indexed predicates (`startedAt` range and `status IN [...]`) fold into the single
+`Node By Index Scan` — a row failing either one is excluded at the scan itself — and only the
+unindexed `defKey`/`defVersion` surface in `Filter`. With neither indexed predicate, the plan falls
+back to `Node By Label Scan | (r:WorkflowRun)` (an engine fact, recorded in
+`claude/graph-dba/falkordb-quirks.md`).
 
-- Query with only `r.startedAt >= 0` (drop the `status` predicate): `Node By Index Scan` alone
-  produces all 4 fixture rows (the `waiting` run included) — `startedAt` anchors on its own.
-- Query with only `r.status IN [...]` (drop the `startedAt` predicate): `Node By Index Scan` alone
-  produces exactly the 3 terminal rows (the `waiting` run excluded) — `status` anchors on its own
-  too.
-- Both predicates dropped (only the unindexed `defKey`/`defVersion` left): the plan falls back to
-  **`Node By Label Scan | (r:WorkflowRun)`** — confirmed neither `defKey` nor `defVersion` can
-  anchor anything by themselves.
-- **The deciding test:** with the full query (both predicates present) plus one extra probe row
-  (`status:'done'`, `startedAt:-5`, `defKey` matching), the `Node By Index Scan` step still
-  produces only 3 — the probe row is excluded **at the index-scan step itself**, before `Filter`
-  ever runs. If the engine had picked only one of the two indexes as anchor and pushed the other
-  predicate into `Filter`, the probe row (which fails only the `startedAt` predicate) would have
-  survived to the `Filter` step and been visible in its input count. It wasn't.
+**Indexes (rule 6):** reuses `WorkflowRun.status` and `WorkflowRun.startedAt`; `defKey`/`defVersion`
+stay unindexed because `WorkflowRun` cardinality is tiny per workspace.
 
-**New planner fact, previously undocumented (verified 2026-07-31, v4.18.11/module `41811`):** when
-two independently-indexed properties on the same label both appear as `AND`-ed `WHERE` predicates
-(one a numeric range, one a `status IN [...]` list), FalkorDB's planner does not pick one as "the"
-anchor and filter the other — it folds **both indexed predicates into the single `Node By Index
-Scan` step**, and only the genuinely unindexed predicates (`defKey`, `defVersion` here) surface as
-a separate `Filter` operator above it. So the honest answer to "which index" is **both
-`WorkflowRun.startedAt` and `WorkflowRun.status`, combined** — not an either/or choice, and not
-"just an index scan." Cross-checked read-only against `ws:acme`'s real data (11 `WorkflowRun`s,
-mixed `triage@v1`/`access-request@v1`): `Node By Index Scan` produced exactly 7 (every `done`/
-`failed` row across *both* defs — the `status` half of the compound scan, `startedAt` doesn't
-additionally reduce there since every real timestamp is positive), then `Filter` narrowed to the
-2 `triage@v1` rows (`sampleSize=2, postedCount=1` — the RCA's own corroborating "1/2 degraded"
-case, §7 finding 4). Promoted to the general quirks KB (`claude/graph-dba/falkordb-quirks.md`,
-"Query tuning") — this is an engine fact, not specific to this schema.
-
-**RAM (rule 6): none.** No new index, no new label, no new property — the query reuses the
-existing `WorkflowRun.status` and `WorkflowRun.startedAt` indexes (`bootstrap_schema.sh:145-156`),
-confirmed live (`CALL db.indexes()` on both `ws:test` and `ws:acme` returns exactly
-`[runId, status, startedAt]` for `WorkflowRun`, no `defKey`). `WorkflowRun` cardinality is tiny per
-workspace (same argument §12.9/§12.14 already accepted), so an unindexed residual `Filter` on
-`defKey`/`defVersion` costs nothing worth adding an index for.
-
-### 12.16 `find_due_wait_candidates` — the K-028 sweep's read half (index-anchored)
+### 12.16 `find_due_wait_candidates` — the timer sweep's read half (index-anchored)
 
 ```cypher
-// $limit — every parked `wait`/`human` candidate, due-agnostic (K-028)
-// v3: RETURN gained `s.key AS stepKey` (additive projection off the already-bound `s`,
-// no new traversal) -- the sweep needs it to write the step-scoped `ctx.timerFired`
-// marker and to detect a candidate that moved to a DIFFERENT waiting step between the
-// scan and the sweep's per-candidate act (docs/plans/workflow-timers.md §3.4/§3.5 step 5.1).
+// $limit — every parked `wait`/`human` candidate, due-agnostic
+// stepKey lets the sweep write the step-scoped `ctx.timerFired` marker and detect a candidate
+// that has since parked on a different waiting step
 MATCH (r:WorkflowRun {status: 'waiting'})-[:AT_STEP]->(s:Step)
 OPTIONAL MATCH (r)-[:LAST_STEP_RUN]->(sr:StepRun)
 RETURN r.runId AS runId, s.key AS stepKey, s.type AS stepType, s.config AS stepConfig,
@@ -1777,73 +1714,50 @@ RETURN r.runId AS runId, s.key AS stepKey, s.type AS stepType, s.config AS stepC
 LIMIT $limit
 ```
 
-Feeds `Services.sweep_due_workflow_runs` (`docs/plans/workflow-timers.md` §3.4/§3.5): returns
-**every** `waiting` run, regardless of whether it is actually due or even whether its parked step
-declares a timer key at all — dueness is derived app-side (`services._wait_due_at`) from
-`stepConfig`/`parkedAt`, never filtered in Cypher (rule 8). Anchors on the **existing**
-`WorkflowRun.status` value index — the same anchor §12.9 already uses, on the same "waiting set is
-tiny" cardinality argument — then two `Conditional Traverse`s (`AT_STEP`, `LAST_STEP_RUN`), the
-identical traversal shape `get_run` (§12.7) already uses for the same two edges off an
-already-bound node.
-
-**PROFILE finding (live-verified against `ws:test`, one seeded `WorkflowRun {status:'waiting'}`
-with an `AT_STEP`/`LAST_STEP_RUN` pair) — re-confirmed after the v3 `stepKey` RETURN-clause
-addition, not assumed unchanged:**
+Feeds `Services.sweep_due_workflow_runs`: returns **every** `waiting` run, whether or not it is due
+and whether or not its parked step declares a timer key — dueness is derived app-side
+(`services._wait_due_at`) from `stepConfig`/`parkedAt`, never filtered in Cypher (rule 8). Anchors
+on the `WorkflowRun.status` value index (the same "waiting set is tiny" argument as §12.9), then two
+`Conditional Traverse`s (`AT_STEP`, `LAST_STEP_RUN`), the traversal shape `get_run` (§12.7) uses:
 
 ```
-Results | Records produced: 1, Execution time: 0.000219 ms
-    Limit | Records produced: 1, Execution time: 0.000254 ms
-        Project | Records produced: 1, Execution time: 0.003554 ms
-            Optional Conditional Traverse | (r)->(sr:StepRun) | Records produced: 1, Execution time: 0.080543 ms
-                Conditional Traverse | (r)->(s:Step) | Records produced: 1, Execution time: 0.109142 ms
-                    Node By Index Scan | (r:WorkflowRun) | Records produced: 1, Execution time: 0.015080 ms
+Results | Records produced: 1
+    Limit | Records produced: 1
+        Project | Records produced: 1
+            Optional Conditional Traverse | (r)->(sr:StepRun) | Records produced: 1
+                Conditional Traverse | (r)->(s:Step) | Records produced: 1
+                    Node By Index Scan | (r:WorkflowRun) | Records produced: 1
 ```
 
-`Node By Index Scan | (r:WorkflowRun)` — exactly as expected, no `Node By Label Scan` anywhere
-(rule 3), identical shape to the pre-v3 profile (the `s.key` addition is a free projection off the
-already-bound `s`, confirmed to add no traversal). The probe fixture was created and torn down
-directly against `ws:test` via `redis-cli` (not through the pytest suite), matching the shape
-`repository.find_due_wait_candidates` returns.
-
-**RAM (rule 6): zero new indexes, zero new node/relationship types.** The new bytes on the graph,
-v3: (1) `config.waitForSeconds`/`waitUntil` on a `wait`/`human` step's already-existing,
-already-opaque `config` string (plan §3.4); (2) the reserved `ctx.timerFired: "<stepKey>"` marker
-`Services.sweep_due_workflow_runs` writes into `WorkflowRun.ctx` on a genuine timer-triggered
-resume, via the existing `resume_run_with_ctx` (§12.13) — a short string, only ever written on the
-subset of runs a timer actually fires for. This query itself reuses the `WorkflowRun.status` index
-and the `AT_STEP`/`LAST_STEP_RUN` edges unchanged; `s.key` costs nothing extra to project since
-`Step.key` is already a stored property read by every other `Step`-touching query in this file.
+**RAM (rule 6): no new index or node/relationship type.** The timer keys
+(`config.waitForSeconds`/`waitUntil`) live inside a step's opaque `config` string; on a
+timer-triggered resume the sweep writes the reserved `ctx.timerFired: "<stepKey>"` marker into
+`WorkflowRun.ctx` via `resume_run_with_ctx` (§12.13).
 
 ---
 
-## 13. Workspace configuration — model overrides (K-042 Landing 2, FR-16/FR-17)
+## 13. Workspace configuration — model overrides
 
-A different topic from §12 above: this is workspace-level **configuration**, not an
-execution/trace record — a distinct topic gets its own top-level section rather than a strained
-§12.N slot. Design: `docs/plans/llm-provider-config-graph.md` §2 (schema §2.2, alternatives §2.3,
-write §2.4, read §2.5, placement/timing §2.6); resolver-facing contract §6.1/§6.3. DDL: §4 of the
-same document, `scripts/bootstrap_schema.sh` (`bootstrap_workspace()`, index-before-constraint).
+Workspace-level **configuration**, not an execution record. A singleton
+`(:WorkspaceConfig {workspaceConfigId: 'default'})` node per workspace carries one nullable scalar
+property per consumer kind (`agentModelOverride`, `guardModelOverride`, `embeddingModelOverride`,
+`responderModelOverride`) plus two provenance fields (`modelOverrideUpdatedAt`/`By`). No edges —
+it adds no adjacency matrix, and the graph key already *is* the workspace scope.
 
-A singleton `(:WorkspaceConfig {workspaceConfigId: 'default'})` node per workspace, one nullable
-scalar property per consumer kind (`agentModelOverride`, `guardModelOverride`,
-`embeddingModelOverride`, `responderModelOverride`) plus two provenance fields. No edges — a
-workspace-scoped singleton, not a traversal participant, so it adds no adjacency matrix (rule 7 is
-moot here: there is nothing to filter by `workspaceId`, the graph key already *is* the scope).
-
-**Property-name crosswalk, load-bearing and easy to get backwards:** `-graph.md` §8.4 names its
-four properties after the **workflow node type** ("agent") vs. the **chat responder class**
-("responder") — which does **not** match this server's own `kind` strings 1:1.
-`agentModelOverride` governs the executor's `kind="step"` consumer (the workflow's `type:'agent'`
-node); `responderModelOverride` governs `kind="agent"` (`AgentResponder`, the `@mention`
-responder). `guardModelOverride`/`embeddingModelOverride` match their kinds by name. The crosswalk
-lives once, in code, at `server/falkorchat/modelconfig.py`'s `_KIND_TO_OVERRIDE_KEY` — this
-section documents the graph's own property names only.
+**Property-name crosswalk, load-bearing and easy to get backwards:** the properties are named after
+the **workflow node type** ("agent") vs. the **chat responder class** ("responder"), which does
+**not** match the server's `kind` strings 1:1. `agentModelOverride` governs the executor's
+`kind="step"` consumer (the workflow's `type:'agent'` node); `responderModelOverride` governs
+`kind="agent"` (`AgentResponder`, the `@mention` responder). `guardModelOverride`/
+`embeddingModelOverride` match their kinds by name. The crosswalk lives once, in code:
+`modelconfig.py`'s `_KIND_TO_OVERRIDE_KEY`. Precedence is entirely the resolver's
+(`modelconfig.ModelGateway.resolve()`, `SERVER.md`); the graph only stores the values.
 
 ### 13.1 `write_model_overrides` — set/clear the per-kind overrides
 
 ```cypher
 // [verified] MERGE on the singleton, backed by the WorkspaceConfig.workspaceConfigId
-// UNIQUE constraint (§4 below / bootstrap_schema.sh). GRAPH.QUERY.
+// UNIQUE constraint (bootstrap_schema.sh). GRAPH.QUERY.
 // $agent/$guard/$embedding/$responder may each be a "<provider>/<model-id>" ref, a
 // role name, or NULL (= leave unset / CLEAR an existing override at that kind).
 MERGE (c:WorkspaceConfig {workspaceConfigId: 'default'})
@@ -1858,27 +1772,18 @@ RETURN c.agentModelOverride AS agent, c.guardModelOverride AS guard,
 ```
 
 **[verified] `NULL` in `SET` clears the property** (unlike `CREATE`, where a `NULL` param merely
-omits the key) — confirmed live against a throwaway probe workspace (`ws:u9probe`, torn down after):
-a first write set `agentModelOverride`/`guardModelOverride` only (`Properties set: 5` — the two
-overrides + the two provenance fields + `workspaceConfigId` from the `MERGE`/`CREATE`; the two
-`NULL` overrides cost nothing), `keys(c)` confirmed `guardModelOverride`/`embeddingModelOverride`/
-`responderModelOverride` absent. A **second** write then set `embeddingModelOverride` and passed
-`guardModelOverride = NULL` — `Properties removed: 3`, and the follow-up read's `keys(c)` no longer
-included `guardModelOverride` at all: the previously-set kind was genuinely cleared, not merely set
-to an empty value. `MATCH (c:WorkspaceConfig) RETURN count(c)` stayed `1` across both writes — the
-constraint-backed `MERGE` never duplicates the node.
+omits the key): a write passing `guardModelOverride = NULL` over a previously-set value removes the
+property — `keys(c)` no longer includes it. Every call writes all four kinds, so a caller that wants
+to keep a kind must pass its current value. The constraint-backed `MERGE` never duplicates the node.
 
 **Never write `''`** — an empty string is a *value* ("a model literally named empty"), never "no
-override"; that representation is `NULL`/property-absent alone (§2.4's own explicit warning). Not
-enforced in Cypher or in `repository.write_model_overrides` — a caller discipline, same as the
-"nullable, absent by default" contract §12.2's `resolvedModel`/`modelSource`/`modelFallback`
-already rely on.
+override"; "no override" is `NULL`/property-absent alone. Not enforced in Cypher or in
+`write_model_overrides` — a caller discipline.
 
 ### 13.2 `read_model_overrides` — the per-kind overrides, one code path for "unset"
 
 ```cypher
-// [verified] Node By Index Scan | (c:WorkspaceConfig) — 0.008ms (PROFILE, below).
-// GRAPH.RO_QUERY (replica-safe).
+// [verified] Node By Index Scan | (c:WorkspaceConfig). GRAPH.RO_QUERY (replica-safe).
 MATCH (c:WorkspaceConfig {workspaceConfigId: 'default'})
 RETURN c.agentModelOverride     AS agentModel,
        c.guardModelOverride     AS guardModel,
@@ -1886,66 +1791,52 @@ RETURN c.agentModelOverride     AS agentModel,
        c.responderModelOverride AS responderModel
 ```
 
-**[verified] zero rows and an all-`NULL` row are the same answer — "no override at any kind" —
-and `repository.read_model_overrides` returns the identical all-`None` dict for both, one code
-path, no branching on which case fired.** Confirmed live: before any write, the read returned zero
-rows (every existing workspace's starting state); after a write that set only two of the four
-kinds, the read returned exactly one row with the other two columns `NULL`. Either way the
-resolver's precedence (`modelconfig.ModelGateway.resolve()`, §6.1: "the graph never enforces
-precedence — precedence is entirely the resolver's, workspace → own choice → per-kind default")
-sees "no override" and falls through to the next rung.
-
-PROFILE (live, `ws:u9probe`):
+**[verified] zero rows and an all-`NULL` row are the same answer — "no override at any kind"** —
+and `read_model_overrides` returns the identical all-`None` dict for both. A workspace never written
+returns zero rows; one with two kinds set returns one row with the other two `NULL`.
 
 ```
-Results | Records produced: 1, Execution time: 0.000160 ms
-    Project | Records produced: 1, Execution time: 0.002256 ms
-        Node By Index Scan | (c:WorkspaceConfig) | Records produced: 1, Execution time: 0.008047 ms
+Results | Records produced: 1
+    Project | Records produced: 1
+        Node By Index Scan | (c:WorkspaceConfig) | Records produced: 1
 ```
 
-No label scan (rule 3) — anchors on the `WorkspaceConfig.workspaceConfigId` index (`bootstrap_schema.sh`,
-§4 below), the same index the write's `MERGE` uses to find its match.
+No label scan (rule 3) — the same `WorkspaceConfig.workspaceConfigId` index the write's `MERGE` uses.
 
 ### 13.3 DDL
 
-```bash
-# ── workspace-level configuration singleton (K-042 / FR-16), bootstrap_workspace() ──
-echo "[index] WorkspaceConfig.workspaceConfigId"
-gquery "$g" "CREATE INDEX FOR (n:WorkspaceConfig) ON (n.workspaceConfigId)"
-
-# … alongside the other constraints, after all indexes:
-echo "[constraint] WorkspaceConfig unique {workspaceConfigId}"
-gconstraint "$g" UNIQUE NODE WorkspaceConfig PROPERTIES 1 workspaceConfigId
-```
-
-**[verified]** on the same probe: the index creates (`Indices created: 1`), the constraint attaches
-with no error (index-before-constraint — the standing ordering rule), and the write/read above both
-behave exactly as documented against it.
-
-**RAM (rule 6): effectively zero.** One node per workspace, six scalar properties, one range index,
-one constraint over a single row — below `GRAPH.MEMORY USAGE`'s 1 MB resolution (`-graph.md` §5).
-No new relationship type, no new adjacency matrix. `reference` and `identity` are untouched — this
-is workspace-scoped state, per DESIGN §1/§3's single-store philosophy.
+The `WorkspaceConfig.workspaceConfigId` range index and its `UNIQUE` constraint are created by
+`scripts/bootstrap_schema.sh` (`bootstrap_workspace()`, index before constraint); the schema is
+documented in `DESIGN.md`. **RAM (rule 6): effectively zero** — one node per workspace, six scalar
+properties, no relationship type.
 
 ---
 
-## 14. Documents & Chunks (K-050 M5 Stage 1)
+## 14. Documents & Chunks
 
-Design: `docs/plans/document-ingestion.md` (architect, §3.2/§2.4/§3.5/§3.6, Stage 1) and
-`docs/plans/document-ingestion-graph.md` §2.1/§2.4 (graph-dba — the exact Cypher below, already
-live-verified there against a throwaway probe graph). `Document`/`Chunk` node indexes+constraints
-and the `Chunk.embedding` vector index are bootstrapped DDL since M2 (`scripts/bootstrap_schema.sh`)
-— no schema change for this stage; `Chunk.seq`/`Chunk.documentId` are plain unindexed properties
-(read-time ordering / navigation metadata, the same posture as `Message.threadId`).
+`Document`/`Chunk` node indexes+constraints and the `Chunk.embedding` vector index are bootstrapped
+DDL (`scripts/bootstrap_schema.sh`, schema in `DESIGN.md`); `Chunk.seq`/`Chunk.documentId` are plain
+unindexed properties (read-time ordering / navigation metadata, the same posture as
+`Message.threadId`).
 
-`Document.text` stores the full original source verbatim (FR-12/AC-9); `Chunk`s are pre-split
-app-side (`falkorchat.chunking.split_into_chunks`) and ride in as a `$chunks` list-of-maps
-parameter. `Document.sourceKind` is derived server-side from which label resolved the ingesting
-actor (`'document'` for `User`, `'agent'` for `Agent`) — never trusted from the caller, the same
-posture as `Message.role`. No `dup` guard: per §2.4's deliberate non-idempotent-on-retry posture
-(mirrors the channel/thread-creation precedent), a retried call mints a second `Document`.
+`Document.text` stores the full original source verbatim; `Chunk`s are pre-split app-side
+(`falkorchat.chunking.split_into_chunks`) and ride in as a `$chunks` list-of-maps parameter
+(`[{chunkId, text, seq}, …]`). `Document.sourceKind` is derived server-side from which label
+resolved the ingesting actor (`'document'` for `User`, `'agent'` for `Agent`) — never trusted from
+the caller, the same posture as `Message.role`. There is no `dup` guard: like channel/thread
+creation, a retried call mints a second `Document` (the §14.9 auto tier then supersedes the earlier
+copy when its normalized text is identical).
+
+**Versioning flags.** Every new `Document` is written `currentVersion: true` and every new `Chunk`
+`documentCurrent: true`. Superseding a document (§14.8 confirm, §14.9 auto tier) flips the old
+document's `currentVersion` to `false` and bulk-flips its chunks' `documentCurrent` to `false`;
+chunk search (§14.3) and the update-detection lookups (§14.9) read current versions only.
 
 ### 14.1 `create_document` — Document + Chunks + HAS_CHUNK, one guarded write
+
+*The base ingestion write. The server's ingest path runs the §14.9 superset,
+`create_document_with_auto_supersede`, which embeds this same create; `create_document` itself has
+no server caller.*
 
 ```cypher
 // $documentId/$chunkIds server-minted uuids. $chunks = [{chunkId, text, seq}, ...].
@@ -1957,33 +1848,31 @@ FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
     documentId: $documentId, title: $title, text: $text,
     sourceFormat: $sourceFormat,
     sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END,
-    status: 'processing', pendingJobs: 0, createdAt: $createdAt
+    status: 'processing', pendingJobs: 0, createdAt: $createdAt,
+    currentVersion: true
   })
   CREATE (d)-[:INGESTED_BY]->(ingestor)
   FOREACH (ch IN $chunks |
     CREATE (d)-[:HAS_CHUNK]->(:Chunk {
-      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId
+      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId,
+      documentCurrent: true
     })
   )
 )
 RETURN ok AS written, ingestor IS NOT NULL AS ingestorFound
 ```
 
-**[verified]** (`document-ingestion-graph.md` §2.1, `gdba_probe_docs`): a 3-chunk document with a
-known `User` actor writes 1 `Document` + 3 `Chunk` nodes, 1 `INGESTED_BY` + 3 `HAS_CHUNK` edges, all
-`seq`/`text`/`chunkId` correctly populated from the `$chunks` list-of-maps parameter. Unknown-actor
-case writes nothing (`written=false, ingestorFound=false`) — same "unknown actor ⇒ silent no-op,
-guarded by a status row" contract §4's message write paths use, so the service can distinguish it
-from a genuine fault and raise `UnknownActorError` rather than reporting false success.
+**[verified]** A 3-chunk document with a known `User` actor writes 1 `Document` + 3 `Chunk` nodes,
+1 `INGESTED_BY` + 3 `HAS_CHUNK` edges, all `seq`/`text`/`chunkId` populated from `$chunks`. An
+unknown actor writes nothing (`written=false, ingestorFound=false`) — the same "unknown actor ⇒
+no-op, reported by a status row" contract as §4's message writes, so the service raises
+`UnknownActorError` rather than reporting false success.
 
-### 14.1a `Document.status` background-completion tracking (K-051)
+### 14.1a `Document.status` background-completion tracking
 
-`create_document` (§14.1) seeds `pendingJobs: 0`, but never itself writes `'ready'`/`'failed'` —
-nothing did, before K-051 (`docs/test-reports/document-ingestion-report.md` Defect 1: a fully-
-processed document read back `status: "processing"` forever). These two queries, both on
-`repository.py`'s `Repository` (internal seam — `background._schedule_chunk_processing` and
-`background._safe_embed_chunk`/`_safe_extract` are the only callers, never a transport directly),
-are what closes that gap.
+`Document.status` starts `'processing'` and reaches `'ready'` or `'failed'` through these two
+writes. Both are internal: `background._schedule_chunk_processing` and
+`background._safe_embed_chunk`/`_safe_extract` are the only callers, never a transport.
 
 **`start_document_progress` — initialize the outstanding-job counter**
 ```cypher
@@ -1995,10 +1884,9 @@ FOREACH (_ IN CASE WHEN $totalJobs <= 0 AND d.status = 'processing'
 ```
 *Run from `background._schedule_chunk_processing`, synchronously, before scheduling any per-chunk
 job — `$totalJobs` is the number of `_safe_embed_chunk`/`_safe_extract` calls about to be scheduled
-(one per chunk per wired worker), so `report_document_job_done` below always has a real count to
-decrement against, never a race with the jobs themselves. `$totalJobs <= 0` (a zero-chunk document)
-flips `status` straight to `'ready'` in the same query instead of leaving it parked forever waiting
-for a completion report that will never come.*
+(one per chunk per wired worker), so `report_document_job_done` always has a real count to
+decrement against. `$totalJobs <= 0` (a zero-chunk document) flips `status` straight to `'ready'`
+in the same query.*
 
 **`report_document_job_done` — one job's outcome, first-terminal-write-wins**
 ```cypher
@@ -2010,29 +1898,24 @@ FOREACH (_ IN CASE WHEN NOT $success AND d.status = 'processing'
 FOREACH (_ IN CASE WHEN $success AND d.pendingJobs <= 0 AND d.status = 'processing'
   THEN [1] ELSE [] END | SET d.status = 'ready')
 ```
-*Run from `background._safe_embed_chunk`/`_safe_extract` after every chunk-level embed/extract job,
-success or failure (via their shared `_report_document_job` helper) — decrements the counter, then
-flips `status` to `'failed'` the instant any single job fails (regardless of how many others are
-still outstanding — one failed chunk fails the whole document), or to `'ready'` once every scheduled
-job has succeeded and none has failed. Both `FOREACH` guards check `status = 'processing'` first, so
-the first terminal write wins: a late success after a failure, or a stray failure after the document
-already reached `'ready'`, both no-op rather than flipping status back. One `GRAPH.QUERY` per call —
-decrement + both guarded flips in the same round trip, so no read-then-write race exists across
-separate calls either.*
+*Run after every chunk-level embed/extract job, success or failure — decrements the counter, then
+flips `status` to `'failed'` the instant any single job fails (one failed chunk fails the whole
+document), or to `'ready'` once every scheduled job has succeeded. Both guards check
+`status = 'processing'` first, so the first terminal write wins: a late success after a failure, or
+a stray failure after `'ready'`, no-ops. Decrement and both flips run in one `GRAPH.QUERY`, so no
+read-then-write race exists across calls.*
 
-**[verified]** (`tests/test_repository.py`, live against `falkordb-dev`): all-jobs-succeed reaches
-`'ready'` only once the counter is fully drained, not before; a single failure reaches `'failed'`
-immediately even with other jobs still outstanding; a late success after a failure does not revert
-`'failed'`; a late failure after `'ready'` does not revert it either; `total_jobs <= 0` reaches
-`'ready'` immediately and, same guard, does not resurrect an already-`'failed'` document.
+**[verified]** (`tests/test_repository.py`, live): all-jobs-succeed reaches `'ready'` only once the
+counter is drained; a single failure reaches `'failed'` immediately with other jobs outstanding;
+neither terminal state reverts; `total_jobs <= 0` reaches `'ready'` immediately and does not
+resurrect a `'failed'` document.
 
-A reported failure is **post-retry** (K-067): `IngestionPipeline.extract_chunk` and
+A reported failure is **post-retry**: `IngestionPipeline.extract_chunk` and
 `EmbeddingWorker.embed_chunk` retry a transient provider error in place, with bounded backoff
-(`retry.DEFAULT_PROVIDER_RETRY` / `retry.EMBED_CHUNK_RETRY`, plan
-`falkor-chat/docs/plans/extract-transient-retry.md` §3.2), so `success=False` means the job's final
-outcome, never one attempt. A retrying job stays outstanding in `pendingJobs` until it finishes.
+(`retry.DEFAULT_PROVIDER_RETRY` / `retry.EMBED_CHUNK_RETRY`), so `success=False` is the job's final
+outcome. A retrying job stays outstanding in `pendingJobs` until it finishes.
 
-**`chunk_document_is_processing` — the K-067 retry liveness gate (read-only)**
+**`chunk_document_is_processing` — the retry liveness gate (read-only)**
 ```cypher
 MATCH (c:Chunk {chunkId: $chunkId})<-[:HAS_CHUNK]-(d:Document)
 RETURN d.status = 'processing'
@@ -2040,12 +1923,8 @@ RETURN d.status = 'processing'
 *Run (`ro_query`) by `retry.call_with_retry`'s `keep_going` callback, from `extract_chunk` and
 `embed_chunk`, only on the failure path: once before and once after each backoff sleep. `False`
 (including no row: chunk or document deleted) stops the retry and re-raises the last transient
-error, so a document a sibling job already failed (first terminal write wins) or a deleted one
-costs no further attempts. EXPLAIN: `Node By Index Scan (c:Chunk)` → `Conditional Traverse
-(c)->(d:Document)` → `Project`.*
-
-**[verified]** (`tests/test_repository.py -k chunk_document_is_processing`, live against
-`falkordb-dev`; EXPLAIN re-checked on `ws:agent-team` and `ws:test`).
+error, so a document a sibling job already failed, or a deleted one, costs no further attempts.
+EXPLAIN: `Node By Index Scan (c:Chunk)` → `Conditional Traverse (c)->(d:Document)` → `Project`.*
 
 ### 14.2 `get_document` — read back the verbatim text + ingesting actor
 
@@ -2059,180 +1938,97 @@ RETURN d.documentId AS documentId, d.title AS title, d.text AS text,
        coalesce(actor.userId, actor.agentId) AS ingestedById
 ```
 
-Same shape as `document-ingestion-graph.md` §2.1's `get_document` note, projected as explicit
-properties (this repository's own convention throughout — e.g. `get_message` §4 — rather than
-returning a whole node, which the graph note's own illustrative Cypher does but no other query in
-this library relies on). `AC-9`: `text` round-trips byte-identical to the ingested input.
+Explicit properties, never a whole node (this library's convention throughout). `text` round-trips
+byte-identical to the ingested input. Zero rows → `None`.
 
-### 14.3 Chunk embeddings + `search_chunks` (K-050 M5 Stage 2, FR-3)
+### 14.3 Chunk embeddings + `search_chunks`
 
-Mirrors §6's `Message` embedding pattern exactly, `Chunk` in place of `Message` — same
-decoupled-from-the-write-path posture (a chunk is readable before its embedding lands, the same
-eventually-consistent posture already used for a posted message) and the same §6.1 FR-19
-pre-flight dimension guard, gated per-label: a `Chunk` embed consults only `Chunk`'s vector index,
-never `Message`'s, and vice versa. **No new DDL** — `Chunk.embedding`'s vector index has existed
-since M2 (§2.1 above), dormant until this stage populates it.
+Mirrors §6's `Message` embedding pattern, `Chunk` in place of `Message` — a chunk is readable before
+its embedding lands, and the same §6.1 pre-flight dimension guard applies per label: a `Chunk` embed
+consults only `Chunk`'s vector index, never `Message`'s.
 
-**Set a chunk's embedding (async, after ingestion)**
+**`set_chunk_embedding` (async, after ingestion)**
 ```cypher
 MATCH (c:Chunk {chunkId: $chunkId})
 SET c.embedding = vecf32($embedding)
 ```
-*Run from `EmbeddingWorker.embed_chunk` right after `ingest_document` returns — same
-decoupled-from-the-write-path posture as §6's message embed.*
+*Run from `EmbeddingWorker.embed_chunk`, scheduled per chunk after ingestion.*
 
-**`search_chunks` — the FR-3 standalone-KB-search read**
+**`search_chunks` — the standalone knowledge-base search read**
 ```cypher
 CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($qVec))
 YIELD node AS seed, score
-RETURN seed.chunkId, seed.text, seed.documentId, seed.seq, score
+WHERE seed.documentCurrent = true
+RETURN seed.chunkId AS chunkId, seed.text AS text,
+       seed.documentId AS documentId, seed.seq AS seq, score
 ORDER BY score ASC
 LIMIT $limit
 ```
-No scope traversal (a `Chunk` has no Thread/Channel to scope by, unlike §6's Message-seeded
-`hybrid_search`) and no Entity co-occurrence expansion: `(:Chunk)-[:ABOUT]->(:Entity)` is dormant
-until extraction lands (Stage 3), so an `OPTIONAL MATCH` on it here would just no-op today —
-deferred rather than added speculatively; wire it in when Stage 3 makes it meaningful.
-`documentId` rides denormalized on `Chunk` itself (plan §3.2), so a search hit reports its source
-document with no extra hop. `score` is cosine distance (0 = identical) — rows come back already
-`ORDER BY score ASC` (most similar first), same convention as §6; do not re-sort.
+*Only chunks of a current document version are returned — a superseded document's chunks stay in
+the vector index but are filtered after the ANN step, so a search can return fewer than `$k` rows.
+No scope traversal (a `Chunk` has no Thread/Channel) and no Entity expansion. `documentId` rides
+denormalized on `Chunk`, so a hit reports its source document with no extra hop. `score` is cosine
+distance, most similar first — do not re-sort. The service may pass a per-query `timeout` (ms).*
 
-`Repository.set_chunk_embedding`/`Repository.search_chunks`
-(`server/falkorchat/repository.py`); `EmbeddingWorker.embed_chunk`
-(`server/falkorchat/embedding.py`).
-
-**Chat-grounding merge (K-050 M5 Stage 5, FR-2).** `Services.hybrid_search` calls this query and
-§6's `hybrid_search` with the same `$qVec`/`$k`, then merges the two ranked result lists **app-side**
-by `score` ascending and truncates to `limit` — there is no combined-ANN Cypher shape for this (the
-`EMITTED` generalization above, §10, is the only graph-side change FR-2 needed). `channel_id` scopes
-only the `Message` pool (§6); a `Chunk` seed has no channel/thread to scope by, so a channel-scoped
-call still searches the full `Chunk` ANN index unscoped. Each merged item is tagged app-side
-`seedKind: 'Message'|'Chunk'` so `AgentResponder.maybe_respond` can resolve the right id generically
-before it flows into §10.1's `$seedIds`. Tie-break: `Message` pool concatenated first, `list.sort`
-stable, so an exactly-equal score keeps `Message` ahead of `Chunk`. The two RO queries run
-sequentially (this codebase's existing convention — no other RO-query pair here fires concurrently),
-roughly doubling worst-case retrieval latency; re-measure once real ingestion volume exists.
+**Chat-grounding merge.** `Services.hybrid_search` calls this query and §6's `hybrid_search` with
+the same `$qVec`/`$k`, then merges the two ranked lists **app-side** by `score` ascending and
+truncates to `limit` — there is no combined-ANN Cypher shape. `channel_id` scopes only the
+`Message` pool (§6); a channel-scoped call still searches the full `Chunk` index. Each merged item
+is tagged app-side `seedKind: 'Message'|'Chunk'` so `AgentResponder.maybe_respond` can pass the
+right id into §10.1's `$seedIds`. Tie-break: the `Message` pool is concatenated first and the sort
+is stable, so an exactly-equal score keeps `Message` ahead of `Chunk`. The two read-only queries run
+sequentially.
 
 **`list_document_chunks` — internal seam, not a public query**
 
 ```cypher
 MATCH (d:Document {documentId: $documentId})-[:HAS_CHUNK]->(c:Chunk)
-RETURN c.chunkId, c.text
+RETURN c.chunkId AS chunkId, c.text AS text
 ORDER BY c.seq
 ```
 
-Not part of the MCP/REST surface (§14.4) — `api.py`/`mcp.py` call it right after
-`services.ingest_document` returns, to fetch the just-created chunks and schedule each one for
-background embedding (`_safe_embed_chunk`). Kept out of `ingest_document`'s own return value
-deliberately: that receipt stays at the documented `{documentId, chunkCount, status}` shape
-(§14.4) rather than echoing up to ~500,000 characters of chunk text back into the response body.
-Always traversed from an already-anchored `Document`, never independently scanned — no new index
-needed, same posture as `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
+Called by the REST and MCP ingest handlers right after the ingest service returns, to fetch the
+just-created chunks and schedule each one's background embed/extract jobs — the ingest receipt
+itself does not echo chunk text. Always traversed from an anchored `Document`, never scanned.
 
-### 14.4 MCP / REST surface (Stages 1-2 slice of plan §3.5, bulk row added Stage 6a)
+### 14.4 MCP / REST surface
 
-| MCP tool | REST | Service method |
-|---|---|---|
-| `ingest_document(text, title=None, source_format="text", source_label=None)` | `POST /documents` | `services.ingest_document` |
-| `ingest_documents(items: list[dict])` | `POST /documents/batch` | `services.ingest_documents` |
-| `get_document(document_id)` | `GET /documents/{id}` | `services.get_document` |
-| `search_documents(query, limit=20)` | `GET /documents/search?q=` | `services.search_documents` |
+The document routes and tools, and the query each one runs: `SERVER.md` §1.4 (its `QUERIES.md` column).
 
-`ingest_document` stamps the ingesting actor from `get_context()` (FR-4) — MCP ignores any
-client-supplied actor, exactly the existing `send_message` posture. `MAX_DOCUMENT_CHARS = 500_000`
-is enforced in `services.ingest_document` itself (`DocumentTooLargeError`, maps to 400), not only at
-the REST pydantic boundary — an MCP caller has no schema layer, so this is the one place both
-transports are bound by the same cap.
+### 14.5 Entities & `RELATES_TO`
 
-`search_documents` embeds `query` through the injected `ModelGateway` (mirrors
-`GraphragRetrieveTool`/`AgentResponder`'s own text→vector step) then calls `search_chunks` (§14.3)
-above. Raises `SearchNotAvailableError` (maps to REST 503, mirroring `WorkflowEngineDisabledError`)
-when no `ModelGateway` is wired into this deployment — a configuration gap, not a caller mistake.
-`GET /documents/search` is registered **before** `GET /documents/{document_id}` in `api.py` —
-Starlette matches routes in registration order, and the dynamic path would otherwise swallow the
-literal `search` segment as a `document_id`.
-
-**`ingest_documents` (FR-11 bulk ingestion, K-050 M5 Stage 6a, plan §3.6).** Loops
-`services.ingest_document` per item and returns **one receipt per item**, in the same order as
-the input — no new Cypher, no batch-aware fusion logic: each item is written through the exact
-same §14.1 `create_document` write path, and cross-document fusion (AC-8) falls out naturally
-once each item's independent background extraction runs, because §1.5/§1.7's fuzzy/exact-match
-lookups always read the graph's *current* state (including sibling documents from the same
-batch, once their entities land), never a batch-local view. Capped at `MAX_BATCH_SIZE = 20`
-(`BatchTooLargeError`, maps to REST 400) — enforced in the service, not only at the REST
-`IngestDocumentsIn` pydantic boundary, mirroring `MAX_DOCUMENT_CHARS`'s posture above. **Per-item
-failure isolation:** one bad item (empty text, oversized text, unknown actor) does not abort the
-batch — it comes back as that item's own `{"status": "error", "error": ..., "errorType": ...}`
-receipt, and chunk embedding/extraction is scheduled only for the items that actually succeeded
-(`services.py`'s `ingest_documents` docstring has the full reasoning). `POST /documents/batch` is
-registered **before** `GET /documents/{document_id}` in `api.py`, same static-before-dynamic
-reason as `/documents/search` above. **A malformed item** (missing/non-string `text`, or a
-non-dict entry — only reachable via MCP, since `IngestDocumentIn` guarantees `text: str` at the
-REST boundary) is isolated the same way, not a bare `KeyError`/`TypeError` escaping the batch
-(Pass 6 review BLOCKER fix) — it comes back as `{"status": "error", "errorType":
-"MalformedItemError", ...}`.
-
-`ingest_document`'s and `ingest_documents`' identical per-chunk embed+extract scheduling block —
-previously duplicated inline between `api.py` and `mcp.py` — is now one shared helper,
-`background._schedule_chunk_processing(schedule, ws, document_id, chunks, *, embed_worker,
-ingestion_pipeline)`, parameterized over each transport's own scheduling primitive
-(`BackgroundTasks.add_task` for REST, `mcp._schedule` for MCP) so a third call site (the batch
-routes above) didn't triple the duplication.
-
-**MCP thread fan-out compounds by up to 20x on the batch path (Pass 6 review MAJOR).** REST's
-`BackgroundTasks` scheduling is unaffected (cheap, bounded via anyio's worker-pool limiter), but
-MCP's `ingest_documents` calls the shared helper once per successfully-ingested item in a plain
-sequential loop, so `_default_schedule`'s already-flagged per-document fan-out (`mcp.py`'s own
-docstring, Stage 3: ~1,000-1,200 raw OS threads for a max-size document) now multiplies by up to
-`MAX_BATCH_SIZE = 20` — **~23,000 threads** for a max-size batch, sequentially, synchronously,
-inside one tool call, before it returns. `MAX_BATCH_SIZE` bounds the multiplier but does not
-shrink the per-call number; every per-thread failure is still isolated (`_default_schedule`'s
-try/except). Not re-mitigated in Stage 6a beyond this documentation — a bounded thread pool is the
-real fix, deferred (see `mcp.py`'s `_default_schedule` docstring for the full reasoning) pending a
-coordinator scope decision.
-
-### 14.5 Entities & `RELATES_TO` (K-050 M5 Stage 3, FR-7a)
-
-Design: `docs/plans/document-ingestion.md` §3.3 (architect, extraction recommendation),
-`docs/plans/document-ingestion-ml.md` §3 (data-scientist, extraction technique/prompt/schema —
-adopted as-is) and `docs/plans/document-ingestion-graph.md` §2.2/§2.3 (graph-dba, the exact Cypher
-below, already live-verified there). One LLM call per chunk (`falkorchat.extraction.extract`)
-produces a `{entities: [{name, type}], relationships: [{subject, predicate, object}]}` payload —
-parsed via the same fence-tolerant `llm.extract_own_line_json_object` the K-027 guard judge uses,
-then independently schema-validated app-side (the parser's `require_key` alone does not reject a
-malformed top-level shape — ML note F1). `falkorchat.ingestion.IngestionPipeline` writes the result:
-a fresh `Entity` per mention (including any subject/object stub-repaired by `extraction.py`) plus
-its `ABOUT` edge, and one `RELATES_TO` edge per extracted relationship. **No fusion yet** (plan
-§3.1/§3.3) — every mention is a brand-new node, even a repeat of one already in the graph; that's a
-later stage, not a defect here.
+One LLM call per chunk (`falkorchat.extraction.extract`) produces a
+`{entities: [{name, type}], relationships: [{subject, predicate, object}]}` payload, parsed by the
+fence-tolerant `llm.extract_own_line_json_object` and then schema-validated app-side.
+`falkorchat.ingestion.IngestionPipeline.extract_chunk` writes the result: a fresh `Entity` per
+mention (including any subject/object stub-repaired by `extraction.py`) plus its `ABOUT` edge, and
+one `RELATES_TO` edge per extracted relationship. Every mention is a new node; fusion links them
+afterwards with `SAME_AS` edges (§14.6), never by merging nodes.
 
 **`create_entity` — always a NEW node**
 ```cypher
-// $nameNormalized = case-folded + whitespace-collapsed $name, computed app-side by the
-// SAME normalization helper (`extraction.normalize_name`) extraction's own subject/object
-// stub-repair uses — one shared function, not two independently-written normalizers.
+// $nameNormalized = case-folded + whitespace-collapsed $name, computed app-side by
+// `extraction.normalize_name` — the same helper extraction's stub-repair uses.
 CREATE (e:Entity {
   entityId: $entityId, name: $name, nameNormalized: $nameNormalized,
   type: $type, createdAt: $createdAt
 })
 RETURN e.entityId AS entityId
 ```
-Never looks up or reuses an existing entity — fusion (a future stage) never blocks creation, only
-decides *linking* after the fact. Plain `CREATE`, no guard-and-status-row contract: both the
-`Entity` id and every edge below are freshly minted moments apart by *this same pipeline run*, so a
-`MATCH` miss downstream would indicate a real bug, not routine caller input (same posture as
-`create_document`'s `HAS_CHUNK` writes, §14.1).
+*The base entity write. The ingestion pipeline runs its §14.6 superset,
+`create_entity_with_auto_match`, which embeds this same `CREATE`; `create_entity` itself has no
+server caller.* Plain `CREATE`, no status row: the `Entity` id and every edge below are minted
+moments apart by the same pipeline run, so a downstream `MATCH` miss would be a bug, not caller
+input.
 
-**`link_chunk_about_entity` — the dormant `ABOUT` edge, now populated**
+**`link_chunk_about_entity` — the `ABOUT` edge**
 ```cypher
 MATCH (c:Chunk {chunkId: $chunkId})
 MATCH (e:Entity {entityId: $entityId})
 CREATE (c)-[:ABOUT]->(e)
 ```
-Scaffolded since M2 (`docs/DESIGN.md` §5.1) and never written until this stage. Plain `CREATE`,
-never `MERGE` — a chunk is extracted exactly once per ingestion, so a duplicate `(chunk, entity)`
-pair shouldn't occur under normal operation; if it ever did, an extra co-occurrence edge is
-harmless (no properties to conflict), the same never-deduplicated posture `RELATES_TO` adopts below.
+Plain `CREATE`, never `MERGE` — a chunk is extracted once per ingestion; a duplicate
+`(chunk, entity)` pair would be a harmless extra co-occurrence edge (no properties to conflict).
 
 **`create_entity_relationship` — the `RELATES_TO` fact edge**
 ```cypher
@@ -2243,68 +2039,28 @@ CREATE (subj)-[:RELATES_TO {
   sourceDocumentId: $sourceDocumentId, createdAt: $createdAt
 }]->(obj)
 ```
-`label` is the LLM-extracted predicate, free text — **not** its own Cypher relationship type (plan
-§3.3/§3.1: an unbounded, LLM-controlled set of relationship types is a real risk this avoids, the
-same "opaque string, parsed app-side" convention `Step.config`/`TRANSITION.guard` already use).
-**Never deduplicated**: every extracted fact is independent provenance and is written even if an
-identical edge already exists between the same two entities (FR-6 — conflicting or repeated facts
-are always kept, never merged or overwritten). `sourceChunkId`/`sourceDocumentId` are what makes
-AC-10's traceability provable: every fact traces back to the exact chunk (and, transitively via
-`HAS_CHUNK`, the document) that produced it.
+`label` is the LLM-extracted predicate, free text — **not** its own relationship type (an
+unbounded, LLM-controlled set of relationship types is the risk this avoids; the same "opaque
+string, parsed app-side" convention as `Step.config`/`TRANSITION.guard`). **Never deduplicated**:
+every extracted fact is independent provenance and is written even if an identical edge exists;
+conflicting or repeated facts are kept. `sourceChunkId`/`sourceDocumentId` trace every fact to the
+chunk (and, via `HAS_CHUNK`, the document) that produced it.
 
-No DDL for `ABOUT` or `RELATES_TO` — both are always traversed *from* an already-anchored
-`Chunk`/`Entity`, never independently scanned by their own properties (the same `EMITTED`/
-`MENTIONS_MEMBER` precedent, §4/§10).
+`ABOUT` and `RELATES_TO` carry no index — both are always traversed *from* an anchored
+`Chunk`/`Entity`. `Entity.name` (full-text) and `Entity.nameNormalized` (RANGE, no uniqueness —
+distinct real entities can share a normalized name+type) back the two §14.6 fusion tiers:
+full-text for the fuzzy suggestion tier, the RANGE index for the exact tier, kept off RediSearch's
+tokenizer/stemmer entirely.
 
-**`Entity.name` full-text index + `Entity.nameNormalized` — new DDL, inert until Stage 4**
-```cypher
-CALL db.idx.fulltext.createNodeIndex('Entity', 'name')
-CREATE INDEX FOR (n:Entity) ON (n.nameNormalized)
-```
-`nameNormalized` is written starting this stage (`create_entity`, above) even though a future fusion
-stage is the first reader — this avoids a backfill migration once that stage lands. No uniqueness
-constraint: distinct real entities can and do share a normalized name+type before fusion runs. Two
-separate mechanisms, deliberately: the fulltext index exists for a future fuzzy-suggestion tier;
-`nameNormalized`'s plain RANGE index exists for a future deterministic exact-match tier, kept off
-RediSearch's tokenizer/stemmer behavior entirely. Neither is queried yet — bootstrapped-but-dormant,
-the same posture the original `Chunk` scaffolding demonstrated (§14 intro).
+`background._safe_extract` isolates failure per chunk (an extraction failure never corrupts the
+`Document` or blocks sibling chunks) and is scheduled per chunk next to, never chained to, that
+chunk's `_safe_embed_chunk`. Extraction resolves its model as `ModelGateway` kind `extraction`.
 
-`Repository.create_entity`/`link_chunk_about_entity`/`create_entity_relationship`
-(`server/falkorchat/repository.py`); `falkorchat.extraction.extract`, `falkorchat.ingestion.
-IngestionPipeline.extract_chunk` (new modules); `background._safe_extract` (mirrors
-`_safe_embed_chunk`'s failure isolation — an extraction failure for one chunk never corrupts the
-`Document` or blocks sibling chunks). Wired the same way as Stage 2's chunk-embed scheduling:
-`ingest_document` on both MCP and REST schedules one `_safe_extract` per chunk, alongside (never
-instead of, never chained to) that chunk's own `_safe_embed_chunk` schedule. `config/models.json`
-gains a fifth `ModelGateway` kind, `extraction` (`document-ingestion-graph.md` §4 — "zero graph
-cost," resolved through the existing per-kind config, no new resolution mechanism). No `test_queries.sh`
-additions for this stage, same precedent Stage 2 set: the new Cypher shapes are direct analogues of
-already-verified patterns in this library, covered by the pytest integration suite instead.
+### 14.6 Entity fusion — `SAME_AS`
 
-**Resource note (Pass 3 code-gate MAJOR 2, `docs/reviews/document-ingestion-impl.md`).** On the MCP
-transport, "scheduled independently, alongside" means a **second** raw `threading.Thread` per chunk
-(`mcp.py`'s `_default_schedule` — see its docstring): a max-size document (`MAX_DOCUMENT_CHARS =
-500_000`, ~1,000-char chunks) now spawns on the order of **~1,000-1,200 threads** per `ingest_document`
-call, up from Stage 2's ~500-600 — doubled, not incidental. `_default_schedule` now catches a
-thread-creation failure itself (`RuntimeError: can't start new thread`, a real ceiling once thread
-count nears a `ulimit -u`/cgroup limit) and logs+continues rather than letting it escape the tool
-handler mid-loop — fixed this stage, not deferred. The fuller fix (a bounded thread pool instead of
-one-thread-per-(chunk × job)) is still deferred to Stage 6, same disposition as Stage 2's original
-finding. REST is unaffected: `BackgroundTasks.add_task` is a cheap list append, not a thread spawn,
-so no equivalent amplification or failure mode exists on that transport.
-
-Stages 5–6 (chat-grounding, batch hardening) add the rest of `document-ingestion.md`'s MCP/REST
-table; not built here.
-
-### 14.6 Entity fusion — `SAME_AS` (K-050 M5 Stage 4, FR-6/7/8/9/10)
-
-Design: `docs/plans/document-ingestion.md` §3.4 ("Concurrency note" — why the exact tier is one
-atomic query, not a processing-order guarantee) and `docs/plans/document-ingestion-graph.md`
-§1.5-§1.8 (graph-dba, the exact Cypher below, already live-verified there — this section is a
-copy-and-cite against `server/falkorchat/repository.py`, not new verification work). Every fusion
-decision — auto or suggested — is a property-bearing `SAME_AS` edge, never a physical node merge
-(FalkorDB has no APOC-style refactor procedure, and this codebase avoids destructive graph surgery
-elsewhere too):
+Every fusion decision — auto or suggested — is a property-bearing `SAME_AS` edge, never a physical
+node merge (FalkorDB has no APOC-style refactor procedure, and this codebase avoids destructive
+graph surgery):
 
 ```
 (:Entity)-[:SAME_AS {
@@ -2316,24 +2072,19 @@ elsewhere too):
 
 `status ∈ {pending, confirmed, rejected}`. Write direction is a convention, not a semantic claim —
 always `(newlyExtractedEntity)-[:SAME_AS]->(existingCandidateEntity)`; reads that need to be
-direction-agnostic use an undirected pattern, reads that always know the direction (because they
-wrote it) use a directed one. **Every query below matches its `SAME_AS` endpoints UNLABELED
-(`(a)`/`(b)`, never `(a:Entity)`)** — a bare label on either endpoint of a relationship-index-
-anchored query forces a full `Node By Label Scan` on this build even though the relationship-
-property scan alone is fully selective (`document-ingestion-graph.md` §1.4,
-`claude/graph-dba/falkordb-quirks.md`) — the one exception is `create_or_reopen_match`'s two
-`MATCH` clauses that resolve `a`/`b` by `entityId` in the first place (real per-node predicates,
-not a bystander label next to a relationship filter, so the trap doesn't apply there).
+direction-agnostic use an undirected pattern, reads that know the direction use a directed one.
+**Every query below matches its `SAME_AS` endpoints UNLABELED (`(a)`/`(b)`, never `(a:Entity)`)**
+— a bare label on either endpoint of a relationship-index-anchored query forces a full
+`Node By Label Scan` on this build even though the relationship-property scan alone is fully
+selective (`claude/graph-dba/falkordb-quirks.md`). The exception is `create_or_reopen_match`'s two
+`MATCH` clauses that resolve `a`/`b` by `entityId` (real per-node predicates).
 
-**`create_entity_with_auto_match` — FR-8 exact tier, folded into entity creation itself**
+**`create_entity_with_auto_match` — the exact tier, folded into entity creation**
 
-The plan-gate review's BLOCKER fix (`document-ingestion.md` §3.4): the original design ran the
-exact-tier candidate lookup, the entity `CREATE`, and the conditional auto-link as three
-independent round trips — two entities extracted around the same wall-clock time could each miss
-the other's not-yet-committed sibling, silently defeating FR-8's "no confirmation required"
-guarantee. Closed by folding all three into one atomic `GRAPH.QUERY`; FalkorDB/Redis serializes
-command execution, so two concurrent calls against the same `(nameNormalized, type)` can never
-interleave.
+The exact-tier lookup, the entity `CREATE` and the conditional auto-link run as one atomic
+`GRAPH.QUERY`: as separate round trips, two entities extracted at about the same time could each
+miss the other's not-yet-committed sibling. FalkorDB/Redis serializes command execution, so two
+concurrent calls on the same `(nameNormalized, type)` cannot interleave.
 
 ```cypher
 // $matchId is server-minted; consumed only if a candidate is actually found.
@@ -2362,18 +2113,13 @@ RETURN e.entityId AS entityId,
        CASE WHEN candidate IS NOT NULL THEN $matchId ELSE null END AS matchId
 ```
 
-**[verified]** (`document-ingestion-graph.md` §1.8, `gdba_probe_atomic`, re-verified live against
-`repository.py`'s shipped shape during the Stage 4 code gate, `docs/reviews/document-ingestion-
-impl.md` Pass 4): a brand-new `(nameNormalized, type)` pair reports `exactMatched=false` on the
-first call (never self-matches its own `CREATE`); a second call with the same pair correctly
-reports `exactMatched=true` against the first call's entity; a third call with two eligible
-pre-existing candidates picks the **older** one. A concurrency regression test
-(`test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge`, real threads, a
-`threading.Barrier`, separate connections) proves the fix closes the race: exactly one `SAME_AS`
-edge, never zero, never duplicated. No reopen branch — a brand-new `Entity`, `CREATE`d fresh inside
-this same query, cannot structurally already carry a `SAME_AS` edge to reopen.
+**[verified]** A new `(nameNormalized, type)` pair reports `exactMatched=false` (never self-matches
+its own `CREATE`); a second call with the same pair reports `exactMatched=true` against the first;
+with two eligible candidates the **older** wins. A concurrency test (real threads, a
+`threading.Barrier`, separate connections) yields exactly one `SAME_AS` edge, never zero or two. No
+reopen branch — a freshly created `Entity` cannot already carry a `SAME_AS` edge.
 
-**`find_fuzzy_candidates` — FR-9 suggested tier, a genuinely separate read**
+**`find_fuzzy_candidates` — the suggested tier, a separate read**
 
 ```cypher
 // $fuzzyQuery is built app-side (falkorchat.fusion._fuzzy_query), one RediSearch
@@ -2387,37 +2133,31 @@ ORDER BY score DESC
 LIMIT $limit
 ```
 
-Unaffected by the exact tier's concurrency fix — a missed/duplicated fuzzy suggestion under
-concurrent timing still lands in the reviewed `pending` queue either way, never silently defeating
-a zero-review guarantee the way the exact tier's race did. The `type` filter is a routine
-implementation choice (avoids a fuzzy name hit surfacing a nonsensical cross-type suggestion), not
-plan-mandated. `falkorchat.fusion.find_fuzzy_candidates` builds `$fuzzyQuery` and calls this method;
-`IngestionPipeline.fuse_entity` excludes the just-created entity's own id from the results before
-classifying — **live-confirmed necessary**: a same-connection write is synchronously visible to the
-next RediSearch fulltext query on this build, so an entity's own fuzzy lookup against its own name
-can and does return itself as a hit.
+A missed or duplicated fuzzy suggestion under concurrent timing still lands in the reviewed
+`pending` queue, so this read needs no atomic folding. The `type` filter keeps a fuzzy name hit from
+surfacing a cross-type suggestion. `IngestionPipeline.fuse_entity` excludes the just-created
+entity's own id before classifying — **live-confirmed necessary**: a same-connection write is
+synchronously visible to the next full-text query, so an entity's own lookup returns itself.
 
 Between word characters, RediSearch's query parser rejects every ASCII punctuation and control
 character except `_` (`RediSearch: Syntax error`). So `_fuzzy_query` builds terms the way this index
-tokenizes `Entity.name`, which was measured live, one character at a time:
+tokenizes `Entity.name` (measured live, one character at a time):
 - it splits on ASCII space, tab and ASCII punctuation other than `_` and `\`;
 - it deletes `\` and the other ASCII control characters;
 - it keeps everything else inside a term, as the index does, including non-ASCII punctuation such
   as `–`, `→` and `∅`.
 
-Each term is therefore one the index can hold for the same name. Stripping (`%modelbench%`) and
-splitting on every non-word character (`%A1% %A15%`) would each produce terms it never holds. The
-builder also drops underscore-only tokens, because a lone `%_%` is a syntax error. A name left with
-no token produces an empty query, and no call is made. An emoji inside a word is a known miss under
-every query shape (K-068, `HISTORY.md` 2026-10-17). The `Document` title lookup
-(`Repository.find_update_shortlist`) still strips per token, which is a different, older choice;
-it also drops underscore-only tokens and skips the call when none is left (K-075, `HISTORY.md`
-2026-10-17).
+Each term is therefore one the index can hold for the same name; stripping (`%modelbench%`) or
+splitting on every non-word character (`%A1% %A15%`) would produce terms it never holds. The builder
+drops underscore-only tokens (a lone `%_%` is a syntax error); a name left with no token makes no
+call. An emoji inside a word is a known miss under every query shape. Symbol-only names and
+`\`-escaped punctuation have open issues (**K-076**). The `Document` title lookup (§14.9) strips per
+token instead.
 
-**`create_or_reopen_match` — the guarded find-or-create-or-reopen write (OQ-3)**
+**`create_or_reopen_match` — the guarded find-or-create-or-reopen write**
 
-Called for the suggested tier only (`status='pending'`) — the exact tier no longer calls this,
-folded into `create_entity_with_auto_match` above.
+Called for the suggested tier only (`status='pending'`); the exact tier is
+`create_entity_with_auto_match` above.
 
 ```cypher
 // $newEntityId, $candidateEntityId = the two Entity.entityId values (write
@@ -2448,18 +2188,16 @@ RETURN isNew AS created, reopen AS reopened,
        coalesce(existing.status, $status)   AS status
 ```
 
-**Why not a bare `MERGE (a)-[:SAME_AS]->(b)`**: `SAME_AS` is semantically symmetric, but a
-direction-fixed `MERGE` only matches an edge written in *that* direction — a suggestion already
-written as `(b)-[:SAME_AS]->(a)` on an earlier, opposite-order ingestion would be invisible to it
-and get duplicated. The `OPTIONAL MATCH ... undirected` lookup sidesteps that by construction.
+**Why not a bare `MERGE (a)-[:SAME_AS]->(b)`**: a direction-fixed `MERGE` only matches an edge
+written in *that* direction — a suggestion written as `(b)-[:SAME_AS]->(a)` on an earlier,
+opposite-order ingestion would be duplicated. The undirected `OPTIONAL MATCH` avoids that.
 
-**[verified]** (`document-ingestion-graph.md` §1.6, `gdba_probe_ingestion2`): call 1 on a fresh
-pair → `created=true`; call 2 (same pair) → `created=false, reopened=false` (idempotent no-op);
-manually reject, then re-derive the same pair → `created=false, reopened=true`, `resuggestCount`
-bumps on the **original** `matchId` (no duplicate edge); querying from the reversed argument order
-finds the same edge.
+**[verified]** Call 1 on a fresh pair → `created=true`; call 2 (same pair) → `created=false,
+reopened=false`; reject, then re-derive the pair → `created=false, reopened=true`, `resuggestCount`
+bumps on the **original** `matchId` (no duplicate edge); the reversed argument order finds the same
+edge.
 
-**`confirm_match` / `reject_match` / `recheck_match` — FR-10, OQ-3's manual reopen**
+**`confirm_match` / `reject_match` / `recheck_match` — review decisions and manual reopen**
 
 ```cypher
 // confirm_match(match_id, decided_by, decided_at)
@@ -2470,8 +2208,8 @@ RETURN r.matchId AS matchId, r.status AS status,
 ```
 
 ```cypher
-// reject_match(match_id, decided_by, decided_at) — never deletes the edge, the
-// rejected record is what makes OQ-3 answerable with no second mechanism.
+// reject_match(match_id, decided_by, decided_at) — never deletes the edge; the
+// rejected record is what makes reopen-on-corroboration possible.
 MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b)
 SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy
 RETURN r.matchId AS matchId, r.status AS status,
@@ -2480,8 +2218,7 @@ RETURN r.matchId AS matchId, r.status AS status,
 
 ```cypher
 // recheck_match(match_id, at) — rejected -> pending only; a no-op otherwise
-// (including "no such matchId" — the WHERE guard can't tell the two apart,
-// and both are equally "nothing to transition" to the caller).
+// (including "no such matchId" — the WHERE guard can't tell the two apart).
 MATCH (a)-[r:SAME_AS {matchId: $matchId}]->(b)
 WHERE r.status = 'rejected'
 SET r.status = 'pending',
@@ -2491,10 +2228,10 @@ RETURN r.matchId AS matchId, r.status AS status,
        a.entityId AS entityA, b.entityId AS entityB
 ```
 
-`decidedBy` is a real `User`/`Agent` id on this path, never `'system'` — an audit trail can always
-tell an automatic decision (`create_entity_with_auto_match`) from a human/agent one.
+Zero rows → `None`. `decidedBy` is a real `User`/`Agent` id on this path, never `'system'`, so an
+audit trail can always tell an automatic decision from a human/agent one.
 
-**`list_pending_matches` / `list_matches` — OQ-2's review surface**
+**`list_pending_matches` / `list_matches` — the review surface**
 
 ```cypher
 // list_pending_matches(limit) — directed, matches the canonical write direction.
@@ -2507,15 +2244,13 @@ ORDER BY r.createdAt
 LIMIT $limit
 ```
 
-`list_matches(status=None, limit)` is the plan-gate review's MAJOR-finding fix — the auto-merged
-tier (`status='confirmed', decidedBy='system'`) had no discovery surface at all before this.
-**Two separate query strings, not a `WHERE $status IS NULL OR r.status = $status` null-guard** —
-live-verified that idiom silently discards the `SAME_AS.status` index even when `$status` is bound
-to a real value (`document-ingestion-graph.md` §1.7, `claude/graph-dba/falkordb-quirks.md`):
+`list_matches(status=None, limit)` is the only discovery surface for the auto-merged tier
+(`status='confirmed', decidedBy='system'`). **Two separate query strings, not a
+`WHERE $status IS NULL OR r.status = $status` null-guard** — live-verified that idiom discards the
+`SAME_AS.status` index even when `$status` is bound (`claude/graph-dba/falkordb-quirks.md`):
 
 ```cypher
-// list_matches(status=<value>, limit) — filtered branch, same shape as
-// list_pending_matches with status parameterized instead of a literal.
+// list_matches(status=<value>, limit) — filtered branch.
 MATCH (a)-[r:SAME_AS {status: $status}]->(b)
 RETURN r.matchId AS matchId,
        a.entityId AS entityA, a.name AS nameA,
@@ -2528,9 +2263,8 @@ LIMIT $limit
 
 ```cypher
 // list_matches(status=None, limit) — unfiltered branch. A full scan is
-// genuinely unavoidable here (no relationship-type-only scan operator exists
-// on this build) — reasonable for an infrequent admin/audit call, not a hot
-// path; $limit bounds the result size, not the scan cost.
+// unavoidable (no relationship-type-only scan operator on this build) — fine for
+// an infrequent admin/audit call; $limit bounds the result size, not the scan cost.
 MATCH (a)-[r:SAME_AS]->(b)
 RETURN r.matchId AS matchId,
        a.entityId AS entityA, a.name AS nameA,
@@ -2541,123 +2275,377 @@ ORDER BY r.createdAt
 LIMIT $limit
 ```
 
-**DDL — `SAME_AS` relationship-scoped indexes + constraint (index-before-constraint)**
+**Indexes.** `SAME_AS.matchId` and `SAME_AS.status` carry relationship-scoped RANGE indexes plus a
+`UNIQUE RELATIONSHIP SAME_AS {matchId}` constraint (`bootstrap_schema.sh`, schema in `DESIGN.md`).
+A property-filtered `SAME_AS` query profiles as `Edge By Index Scan`.
+
+`background._safe_fuse` isolates failure per entity and runs inline from `extract_chunk`'s loop,
+since a fuzzy lookup needs its entity to exist first.
+
+### 14.7 `delete_document` / `get_document_deletion` / `list_documents`
+
+**`delete_document` — hard delete + audit record, one write**
 ```cypher
-CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.matchId)
-CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.status)
-GRAPH.CONSTRAINT CREATE <graph> UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId
+MATCH (d:Document {documentId: $documentId})
+WITH d, d.documentId AS did
+OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk)
+WITH d, did, collect(c) AS chunks
+FOREACH (ch IN chunks | DETACH DELETE ch)
+DETACH DELETE d
+CREATE (:DocumentDeletion {documentId: did, deletedBy: $deletedBy, deletedAt: $deletedAt})
+RETURN did AS documentId
 ```
-Relationship-property indexing is a proven, first-class capability on this build — live-verified
-(`document-ingestion-graph.md` §1.1): `db.indexes()` reports `RELATIONSHIP`-scoped indexes exactly
-like node ones, going `PENDING → OPERATIONAL` the same way, and a property-filtered `SAME_AS` query
-profiles as `Edge By Index Scan`. No new `Entity`-side DDL for this stage — `Entity.name`
-(fulltext) and `Entity.nameNormalized` (RANGE) already landed in Stage 3 (§14.5), dormant until
-this stage's reads.
+*`documentId` is captured into a plain scalar via `WITH` **before** the delete, since nothing can
+reference the node afterwards; the audit node is created off that scalar. A row → deleted and
+audited (`True`); zero rows → the document was already absent, nothing written, no audit node
+(`False`). `Entity`/`RELATES_TO` are untouched — only the chunks' own `ABOUT` edges go with them.
+`EMITTED` edges citing a deleted chunk, and any `SUPERSEDES` edge to or from the document, go with
+the same `DETACH`.*
 
-`Repository.create_entity_with_auto_match`/`find_fuzzy_candidates`/`create_or_reopen_match`/
-`confirm_match`/`reject_match`/`recheck_match`/`list_pending_matches`/`list_matches`
-(`server/falkorchat/repository.py`); `falkorchat.fusion.find_fuzzy_candidates`/`classify_fuzzy`
-(new module); `falkorchat.ingestion.IngestionPipeline.fuse_entity`; `background._safe_fuse`
-(per-ENTITY failure isolation, one level finer than `_safe_extract`'s per-chunk isolation — called
-inline from `extract_chunk`'s own loop, never scheduled separately by `api.py`/`mcp.py`, since a
-fuzzy lookup can only run once the entity it's for already exists). MCP tools `list_pending_matches`/
-`list_matches`/`confirm_match`/`reject_match`/`recheck_match`, mirrored as REST routes
-`GET /matches/pending`, `GET /matches?status=&limit=`, `POST /matches/{id}/confirm`,
-`POST /matches/{id}/reject`, `POST /matches/{id}/recheck` (`docs/plans/document-ingestion.md` §3.5).
+**`get_document_deletion` — the audit record**
+```cypher
+MATCH (dd:DocumentDeletion {documentId: $documentId})
+RETURN dd.documentId AS documentId, dd.deletedBy AS deletedBy, dd.deletedAt AS deletedAt
+```
+*Keyed by the deleted `documentId` value (indexed). Zero rows → `None`, whether the document still
+exists or never existed.*
 
-Stage 6 (batch hardening) is the rest of `document-ingestion.md`'s MCP/REST table; not built here.
+**`list_documents` — summaries, oldest first**
+```cypher
+// current_only=True (default)
+MATCH (d:Document {currentVersion: true})
+OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor)
+RETURN d.documentId AS documentId, d.title AS title,
+       d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind,
+       d.status AS status, d.currentVersion AS currentVersion,
+       d.createdAt AS createdAt,
+       labels(actor)[0] AS ingestedByKind,
+       coalesce(actor.userId, actor.agentId) AS ingestedById
+ORDER BY d.createdAt
+LIMIT $limit
+```
+*`current_only=False` is the same text with `MATCH (d:Document)`. **Two query strings, not a
+null-guarded `WHERE`** — the same index-preserving idiom as `list_matches` (§14.6): a
+`$currentOnly IS NULL OR d.currentVersion = true` guard drops the `Document.currentVersion` index
+even when bound.*
+
+### 14.8 `SUPERSEDES` — document versions, review decisions, history
+
+```
+(:Document)-[:SUPERSEDES {
+  matchId, status, confidence, technique,
+  createdAt, decidedAt, decidedBy,
+  resuggestCount, lastResuggestedAt
+}]->(:Document)                       // new -> old
+```
+
+The document-granularity mirror of §14.6's `SAME_AS`: same properties, same
+`pending`/`confirmed`/`rejected` lifecycle, same write direction convention (new → old), and the
+same **unlabeled-endpoint** discipline on every `SUPERSEDES`-anchored query (a bare `:Document`
+label beside the relationship-index filter forces a label scan). Unlike `SAME_AS`, **confirming has
+a graph side effect**: the old document flips `currentVersion: false` and its chunks
+`documentCurrent: false`. `SUPERSEDES.matchId`/`.status` are relationship-indexed
+(`bootstrap_schema.sh`); a `matchId` lookup profiles as `Edge By Index Scan`.
+
+**`create_or_reopen_supersede_suggestion` — find-or-create-or-reopen**
+```cypher
+MATCH (a:Document {documentId: $newDocumentId})
+MATCH (b:Document {documentId: $candidateDocumentId})
+OPTIONAL MATCH (a)-[existing:SUPERSEDES]-(b)
+WITH a, b, existing,
+     (existing IS NULL) AS isNew,
+     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen
+FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END |
+  CREATE (a)-[:SUPERSEDES {
+    matchId: $matchId, status: $status, confidence: $confidence,
+    technique: $technique, createdAt: $createdAt,
+    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END,
+    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END,
+    resuggestCount: 0, lastResuggestedAt: null
+  }]->(b)
+)
+FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END |
+  SET existing.status = 'pending',
+      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1,
+      existing.lastResuggestedAt = $createdAt
+)
+RETURN isNew AS created, reopen AS reopened,
+       coalesce(existing.matchId, $matchId) AS matchId,
+       coalesce(existing.status, $status)   AS status
+```
+*`create_or_reopen_match` (§14.6) at `Document` granularity, with the same undirected lookup and
+the same reopen semantics: a reopened edge keeps its original `matchId`. Called by the
+suggested-tier detector (§14.9) with `status='pending'`, `technique='shingled_jaccard_overlap'` and
+the Jaccard ratio as `confidence`.*
+
+**`confirm_document_update` — confirm, and supersede the old version**
+```cypher
+MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b)
+SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy
+SET b.currentVersion = false, b.supersededAt = $decidedAt,
+    b.supersededBy = $decidedBy
+WITH a, b, r
+OPTIONAL MATCH (b)-[:HAS_CHUNK]->(c:Chunk)
+WITH a, b, r, collect(c) AS chunks
+FOREACH (ch IN chunks | SET ch.documentCurrent = false)
+RETURN r.matchId AS matchId, r.status AS status,
+       a.documentId AS documentA, b.documentId AS documentB
+```
+*One `GRAPH.QUERY`. Leaves a confirmed suggestion indistinguishable from an auto-supersede (§14.9)
+except for `decidedBy`, which here is a real `User`/`Agent` id. No status guard: it confirms the
+edge whatever its current status.
+`documentA` = the new document, `documentB` = the superseded one. Zero rows → `None`.*
+
+**`reject_document_update` / `recheck_document_update`**
+```cypher
+// reject — never deletes the edge; both documents stay current and searchable
+MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b)
+SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy
+RETURN r.matchId AS matchId, r.status AS status,
+       a.documentId AS documentA, b.documentId AS documentB
+```
+```cypher
+// recheck — rejected -> pending only; a no-op (zero rows) for any other status or no such matchId
+MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b)
+WHERE r.status = 'rejected'
+SET r.status = 'pending',
+    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1,
+    r.lastResuggestedAt = $at
+RETURN r.matchId AS matchId, r.status AS status,
+       a.documentId AS documentA, b.documentId AS documentB
+```
+
+**`list_pending_document_updates` / `list_document_updates`**
+```cypher
+// list_pending_document_updates(limit)
+MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b)
+RETURN r.matchId AS matchId,
+       a.documentId AS documentA, a.title AS titleA,
+       b.documentId AS documentB, b.title AS titleB,
+       r.confidence AS confidence, r.technique AS technique,
+       r.createdAt AS createdAt
+ORDER BY r.createdAt
+LIMIT $limit
+```
+```cypher
+// list_document_updates(status=<value>, limit); status=None drops `{status: $status}`
+// (two query strings, the §14.6 list_matches idiom; the unfiltered branch is a full scan)
+MATCH (a)-[r:SUPERSEDES {status: $status}]->(b)
+RETURN r.matchId AS matchId,
+       a.documentId AS documentA, a.title AS titleA,
+       b.documentId AS documentB, b.title AS titleB,
+       r.status AS status, r.confidence AS confidence,
+       r.technique AS technique, r.createdAt AS createdAt
+ORDER BY r.createdAt
+LIMIT $limit
+```
+*`list_document_updates(status='confirmed')` is how the auto-superseded tier (`decidedBy='system'`)
+is discovered.*
+
+**`get_document_history` — the confirmed version chain, oldest to newest**
+```cypher
+// 1. the anchor itself (zero rows -> [])
+MATCH (d:Document {documentId: $documentId})
+RETURN d.documentId AS documentId, d.title AS title,
+       d.createdAt AS createdAt, d.currentVersion AS currentVersion,
+       d.supersededAt AS supersededAt, d.supersededBy AS supersededBy
+```
+```cypher
+// 2. one hop older, repeated from each result until no row
+MATCH (a:Document {documentId: $documentId})
+MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b)
+RETURN b.documentId AS documentId, b.title AS title,
+       b.createdAt AS createdAt, b.currentVersion AS currentVersion,
+       b.supersededAt AS supersededAt, b.supersededBy AS supersededBy
+ORDER BY r.createdAt ASC LIMIT 1
+```
+```cypher
+// 3. one hop newer, repeated likewise
+MATCH (b:Document {documentId: $documentId})
+MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b)
+RETURN a.documentId AS documentId, a.title AS title,
+       a.createdAt AS createdAt, a.currentVersion AS currentVersion,
+       a.supersededAt AS supersededAt, a.supersededBy AS supersededBy
+ORDER BY r.createdAt ASC LIMIT 1
+```
+*Works from any version's id. Only `confirmed` edges count — a `pending`/`rejected` suggestion is
+not history. Walked one hop at a time with single-hop, `documentId`-anchored queries rather than a
+variable-length `[:SUPERSEDES*]` with a relationship-property filter (whose plan on this build is
+unverified); chains are short. A `seen` set guards against a cycle; ties resolve to the oldest edge.*
+
+### 14.9 Update detection — `create_document_with_auto_supersede` and `find_update_shortlist`
+
+**`create_document_with_auto_supersede` — the ingest write, with the exact (auto) tier folded in**
+
+The server's document create. One atomic `GRAPH.QUERY` resolves the ingestor, looks up the oldest
+current document with the same normalized-text hash, creates the new document (§14.1's shape plus
+`textNormalizedHash`), and — only when the ingestor resolved and a candidate exists — supersedes the
+candidate with a `system`-confirmed `SUPERSEDES` edge. Folding lookup and create into one query
+closes the race where two concurrent ingests of the same content each miss the other.
+
+The query starts with one of two ingestor-resolution prefixes — two literal texts, because a single
+text with a possibly-`NULL` `$producedBy` plans `Node By Label Scan` + `Filter` when the parameter
+is `NULL`:
+
+```cypher
+// default: the caller's actor ($ingestedBy), User or Agent
+OPTIONAL MATCH (u:User  {userId:  $ingestedBy})
+OPTIONAL MATCH (a:Agent {agentId: $ingestedBy})
+WITH coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok,
+     (u IS NOT NULL) AS ingestorIsUser
+```
+```cypher
+// produced_by given: only that Agent; $ingestedBy is not sent
+OPTIONAL MATCH (pa:Agent {agentId: $producedBy})
+WITH pa AS ingestor, (pa IS NOT NULL) AS ok, false AS ingestorIsUser
+```
+
+followed by the shared body:
+
+```cypher
+OPTIONAL MATCH (candidate:Document {
+  textNormalizedHash: $textNormalizedHash, currentVersion: true
+})
+WITH ingestor, ok, ingestorIsUser, candidate
+ORDER BY candidate.createdAt ASC
+LIMIT 1
+FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
+  CREATE (d:Document {
+    documentId: $documentId, title: $title, text: $text,
+    sourceFormat: $sourceFormat,
+    sourceKind: CASE WHEN ingestorIsUser THEN 'document' ELSE 'agent' END,
+    status: 'processing', pendingJobs: 0, createdAt: $createdAt,
+    currentVersion: true, textNormalizedHash: $textNormalizedHash
+  })
+  CREATE (d)-[:INGESTED_BY]->(ingestor)
+  FOREACH (ch IN $chunks |
+    CREATE (d)-[:HAS_CHUNK]->(:Chunk {
+      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId,
+      documentCurrent: true
+    })
+  )
+)
+WITH ok, candidate
+OPTIONAL MATCH (d:Document {documentId: $documentId})
+WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede
+FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END |
+  SET candidate.currentVersion = false, candidate.supersededAt = $createdAt,
+      candidate.supersededBy = 'system'
+)
+WITH ok, d, candidate, doSupersede
+OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk)
+WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks
+FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END |
+  SET ch.documentCurrent = false
+)
+WITH ok, d, candidate, doSupersede
+FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END |
+  CREATE (d)-[:SUPERSEDES {
+    matchId: $matchId, status: 'confirmed', confidence: 1.0,
+    technique: 'exact_normalized_text_hash', createdAt: $createdAt,
+    decidedAt: $createdAt, decidedBy: 'system',
+    resuggestCount: 0, lastResuggestedAt: null
+  }]->(candidate)
+)
+RETURN ok AS ingestorFound, d.documentId AS documentId,
+       doSupersede AS autoSuperseded,
+       CASE WHEN doSupersede THEN candidate.documentId ELSE null END
+         AS supersededDocumentId,
+       CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId
+```
+*The candidate binds before the new `Document` is created, so a document is never its own
+candidate. A node created inside `FOREACH` is out of scope after it, hence the indexed re-`MATCH` of
+`d` by `documentId`. Every conditional step is guarded on `doSupersede`, so an unresolvable actor
+writes nothing and leaves every existing document untouched (`ingestorFound=false` → the service
+raises `UnknownActorError`). A resolved `produced_by` always yields `sourceKind: 'agent'`. The
+repository adds `chunkCount = len(chunks)` app-side.*
+
+**`find_update_shortlist` — the suggested tier's candidate read**
+
+Run by `background._safe_detect_update`, scheduled after an ingest the exact tier did not
+auto-supersede, and only when an embed worker or extraction pipeline is wired (`SERVER.md` §1.12). It
+computes MinHash LSH bands of the new document's normalized text
+(`update_detection.lsh_bands`, 8 bands) and a title, then unions two read-only lookups, both limited
+to current versions and de-duplicated by `documentId` in Python:
+
+```cypher
+// band signal — one OR term per band, generated for i in 0..len(bands)-1
+MATCH (d:Document {currentVersion: true})
+WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR … OR d.lshBand7 = $band7
+RETURN d.documentId AS documentId, d.title AS title, d.text AS text
+LIMIT $limit
+```
+```cypher
+// title signal — skipped when $fuzzyQuery would be empty
+CALL db.idx.fulltext.queryNodes('Document', $fuzzyQuery)
+YIELD node AS d
+WHERE d.currentVersion = true
+RETURN d.documentId AS documentId, d.title AS title, d.text AS text
+LIMIT $limit
+```
+*`$limit` defaults to 5 per lookup. `$fuzzyQuery` is one `%token%` term per whitespace token of the
+title, each token stripped of every non-word character (`_escape_fuzzy_token`); a token left empty
+or underscore-only is dropped (a lone `%_%` is a syntax error), and no call is made when none is
+left. Title-tokenization questions are open as **K-064**. The band `OR` across the indexed
+`Document.lshBand0..7` properties is live-verified to plan as a single `Node By Index Scan`.*
+
+**No server path writes `Document.lshBand0..7`.** The bands are computed only for this read, so the
+band lookup matches no document and the title lookup is the only signal that produces candidates.
+
+The detector then scores each candidate (excluding the document itself) by exact shingled Jaccard
+in Python and, for the best one at or above the noise floor of `0.1`, records a `pending`
+suggestion with `create_or_reopen_supersede_suggestion` (§14.8).
 
 ---
 
-## 15. Product catalog — structured lookup (K-052 M6)
+## 15. Product catalog — structured lookup
 
-Design: `docs/plans/workflow-catalog-lookup.md` §3.1/§3.5 (architect). A fixed-shape, seed-script-
-write-only electronics catalog in `reference` (FR-6: global, not scoped per workspace — `Product`
-is looked up by property key, never traversed from a workspace node, so it never needs
-per-workspace materialization, unlike `WorkflowDef`). Backs two fixed query shapes for the
-`salesperson` demo agent's tools: an exact-name fact lookup (FR-1) and a category/price-range
-filter (FR-2/FR-3) — not a free-text search (no full-text index is added; AC-4's wording tolerance
-is handled by the calling LLM's own argument extraction, not by fuzzy matching in the database).
+A fixed-shape, seed-script-write-only electronics catalog in the global `reference` graph —
+`Product` is looked up by property key, never traversed from a workspace node, so it needs no
+per-workspace materialization. It backs the `salesperson` agent's tools: an exact-name fact lookup
+(§15.1), a category/price-range filter (§15.2), and the constrained generated read (§15.3). There
+is no full-text index on `Product`; wording tolerance is the calling model's argument extraction,
+not fuzzy matching in the database.
 
 **Schema:** `(:Product {productId, name, nameNormalized, category, categoryNormalized, price})`.
-`nameNormalized`/`categoryNormalized` are both computed with `extraction.normalize_name`
-(`server/falkorchat/extraction.py:67-78`, "the ONE shared normalization helper" — reused, not
-reimplemented, the same tier-mechanics precedent already established for `Entity.nameNormalized`,
-§14.5) — a real `=` comparison, decoupled from RediSearch tokenizer/stemmer behavior and from any
-runtime `toLower()` call.
+`nameNormalized`/`categoryNormalized` are computed with `extraction.normalize_name`, the one shared
+normalization helper (also behind `Entity.nameNormalized`, §14.5) — a real `=` comparison,
+decoupled from RediSearch tokenization and from any runtime `toLower()`.
 
-**DDL — index-then-constraint (`scripts/bootstrap_schema.sh`'s `bootstrap_reference`)**
-```cypher
-CREATE INDEX FOR (n:Product) ON (n.productId)
-CREATE INDEX FOR (n:Product) ON (n.nameNormalized)
-CREATE INDEX FOR (n:Product) ON (n.categoryNormalized)
-CREATE INDEX FOR (n:Product) ON (n.price)
-GRAPH.CONSTRAINT CREATE reference UNIQUE NODE Product PROPERTIES 1 productId
-```
-`productId` is the standard `{label}Id` identity anchor (range index + UNIQUE constraint, index
-first — §7.1 rule 1). `nameNormalized`, `categoryNormalized`, `price` are plain range indexes with
-no constraint: two products could in principle share a normalized name in a different category (no
-constraint assumes otherwise), and categoryNormalized/price are hot-filter-only. The raw `category`
-property carries no index of its own — same convention as `name`/`nameNormalized`: only the
-normalized property is indexed/matched on; the raw property is returned in results, never filtered
-on directly.
+**Indexes** (`scripts/bootstrap_schema.sh`'s `bootstrap_reference`, schema in `DESIGN.md`):
+`productId` (range + UNIQUE constraint), and plain range indexes on `nameNormalized`,
+`categoryNormalized` and `price`. The raw `name`/`category` are returned, never filtered on.
 
-### 15.1 `lookup_product` — exact-name fact lookup (FR-1/AC-1/AC-4)
+### 15.1 `lookup_product` — exact-name fact lookup
 
 ```cypher
 // $nameNormalized = case-folded + whitespace-collapsed product name, computed by the
-// caller (services.lookup_product) via extraction.normalize_name — same convention as
-// $nameNormalized elsewhere in this file (§14.5's create_entity/find_fuzzy_candidates).
+// caller (services.lookup_product) via extraction.normalize_name.
 MATCH (p:Product {nameNormalized: $nameNormalized})
 RETURN p.productId AS productId, p.name AS name,
        p.category AS category, p.price AS price
 LIMIT 1
 ```
-Anchors on the `Product.nameNormalized` range index — a single `Node By Index Scan`, no label
-scan. Zero rows back means "no such product" (AC-3 abstention); the service maps that to `None`,
-never a fabricated row, and `LookupProductFactTool` answers `{"found": false, "hint": …,
-"catalog": [{productId, name}, …]}` — every product (up to `CATALOG_INDEX_LIMIT`, 50), sorted by
-name, ID and name only, no price (K-078, `Services.catalog_index`, built from §15.2's query with
-no filters; this query is unchanged), so a model that looked up a translated name can pick the
-real product's `productId`. `LIMIT 1` is belt-and-suspenders: `nameNormalized` carries no
-uniqueness constraint (see DDL note above), so a future data quirk that produced two same-named
-products in different categories still returns exactly one row rather than erroring.
+Anchors on the `Product.nameNormalized` range index — a single `Node By Index Scan`. Zero rows means
+"no such product"; the service returns `None`, never a fabricated row, and `LookupProductFactTool`
+answers `{"found": false, "hint": …, "catalog": [{productId, name}, …]}` — every product (up to
+`CATALOG_INDEX_LIMIT`, 50), sorted by name, ID and name only, no price (`Services.catalog_index`,
+built from §15.2's query with no filters) — so a model that looked up a translated name can pick the
+real product's `productId`. `LIMIT 1` guards against two same-named products (`nameNormalized`
+carries no uniqueness constraint).
 
-**`productId` in the projection (K-053 M6).** K-052's original shape projected
-`{name, category, price}` only — a pure fact lookup, with no cart concept yet to key on an id.
-K-053 added `p.productId` — the key a `CartItem` is keyed on
-(`docs/plans/workflow-cart-and-totals-graph.md` §2); additive and backward-compatible, since the
-`Product` node always carried the property and no caller reads the row positionally.
-`LookupProductFactTool` returns the row verbatim, so the slug reaches the model's context — the
-precedent §15.2's own widening was judged against. Since K-078 that is the projection's whole
-cart role: the cart tools take that `productId`, copied by the model from this turn's tool
-result, and `services.add_cart_item`/`remove_cart_item` resolve it with
-`Services.lookup_product_by_id` (`Repository.lookup_products_by_id`, §16.9's batched read), no
-longer from a customer-named product through this query
-(`docs/plans/salesperson-cart-product-id.md` D1/D5).
-*Transcribed here on 2026-09-03, and the gap it closes is checkable rather than approximate:*
-this block was written at **`14891c9`** (K-052, 2026-08-28 09:53) and the code widened at
-**`bcd2dcc`** (K-053, 2026-08-28 20:21) — ten hours later the same day — so §15.1 documented a
-projection `Repository.lookup_product` had already stopped using, until `8aaeca3` six days on.
-`scripts/test_queries.sh` reported **408/408 throughout**, and could not have done otherwise:
-its `LOOKUP` constant and its abstention header were both written at `14891c9` and stayed
-consistent **with each other**, which is the one state the gate cannot see — narrow either alone
-and it drops to 407/408. That is the lesson, not the six days: a transcription gate goes green on
-a wrong transcription, so the doc block and the shell constant have to be checked against the
-code, never against each other.
+`productId` is the key a `CartItem` is keyed on (§16). `LookupProductFactTool` returns the row
+verbatim, so the id reaches the model's context; the cart tools take that `productId` and the
+service resolves it with `lookup_products_by_id` (§16.9), not by name through this query.
 
-### 15.2 `filter_products` — category/price-range filter (FR-2/FR-3)
+### 15.2 `filter_products` — category/price-range filter
 
 ```cypher
 // $categoryNormalized, $minPrice, $maxPrice are each optional (NULL when the caller
-// omits that filter) — the WHERE clause is parameterized, never string-interpolated
-// (rule 1). $limit bounds the result size (services.py's DEFAULT_FILTER_LIMIT).
-// $categoryNormalized = case-folded + whitespace-collapsed category, computed by
-// Repository.filter_products via extraction.normalize_name from the caller's raw
-// `category` — same convention as $nameNormalized (§15.1) and Entity.nameNormalized
-// (§14.5): a precomputed normalized property + exact match, not a runtime toLower().
-// A category that normalizes to "" (empty/whitespace-only) is sent as NULL, never "" —
-// coalesce reads only NULL as "no filter"; "" would match no Product at all.
+// omits that filter). $limit bounds the result size (services.py's DEFAULT_FILTER_LIMIT).
+// $categoryNormalized = extraction.normalize_name(category), computed by
+// Repository.filter_products. A category that normalizes to "" (empty/whitespace-only)
+// is sent as NULL — coalesce reads only NULL as "no filter"; "" would match nothing.
 MATCH (p:Product)
 WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)
   AND p.price >= coalesce($minPrice, -1.0)
@@ -2668,108 +2656,105 @@ ORDER BY p.price ASC
 LIMIT $limit
 ```
 
-**Deviation from the plan's illustrative Cypher (§3.5), and why.** The plan's illustrative form
-wraps every predicate in a `$param IS NULL OR prop = $param` null-guard. Live-profiled on this
-build (`GRAPH.PROFILE`, throwaway probe graph, 20-row fixture) before finalizing: that shape
-degrades to a full `Node By Label Scan` in *every* call, including calls where a filter carries a
-real, selective value — the exact same live-verified quirk already documented for this codebase's
-`list_matches` (§14.6-adjacent note above, `claude/graph-dba/falkordb-quirks.md` "Query tuning" —
-"`$param IS NULL OR prop = $param` … defeats an otherwise-available index — even when `$param` is
-bound to a real, selective value"). That prior case branched into two separate query strings
-(filtered / unfiltered) as the fix — the established convention for a single optional predicate.
-`filter_products` has **three independent optional predicates**, so the same branching approach
-would require up to 8 query strings; instead:
-- `category`'s optional-equality is expressed as
-  `p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)` — a self-referential
-  coalesce that is tautologically true when `$categoryNormalized` is `NULL` (every seeded `Product`
-  always has a non-null `categoryNormalized`). This does **not** itself anchor an index scan
-  (verified — same degradation as the null-guard form when it's the only predicate), but it doesn't
-  need to, because:
-- `minPrice`/`maxPrice` use **literal numeric sentinels** via `coalesce($minPrice, -1.0)` /
-  `coalesce($maxPrice, 1000000000.0)` — effectively ±infinity for a consumer-electronics price
-  domain (no seeded product is ever priced at or below `$0`, or at/above `$1,000,000,000`). Unlike
-  the `IS NULL OR` form, a plain range comparison against a **literal** bound (even a
-  parameter-supplied one) is something the planner can still use to anchor an index scan — verified:
-  every combination of supplied/omitted `category`/`minPrice`/`maxPrice` (including the
-  fully-omitted "list everything" call) profiles as `Node By Index Scan | (p:Product)` on
-  `Product.price`, with `categoryNormalized`'s coalesce riding along as a cheap residual `Filter`
-  when supplied. This is strictly better than the plan's illustrative shape even for the "list
-  everything" case, which the plan explicitly accepted as an unavoidable full scan.
-- Result correctness confirmed identical to the null-guard form across every filter combination
-  (unfiltered; category-only; price-range-only; category+price; nonexistent category → zero rows)
-  before adopting this shape — same rows, same order, just index-anchored instead of a label scan.
+**Why `coalesce`, not `$param IS NULL OR prop = $param`.** The null-guard form degrades to a full
+`Node By Label Scan` on every call, even with a selective bound value
+(`claude/graph-dba/falkordb-quirks.md`); with three independent optional predicates, branching into
+separate query strings (the §14.6 `list_matches` fix) would need up to eight. Instead:
+- `category`'s optional equality is a self-referential `coalesce`, tautologically true when
+  `$categoryNormalized` is `NULL` (every `Product` has a non-null `categoryNormalized`). It does not
+  anchor an index scan on its own and does not need to, because
+- `minPrice`/`maxPrice` use **literal numeric sentinels** (effectively ±infinity for this price
+  domain), and a range comparison against them anchors the scan: every combination of
+  supplied/omitted filters, including the list-everything call and a differently-cased category,
+  profiles as `Node By Index Scan | (p:Product)` on `Product.price`, with the category comparison
+  as a residual `Filter`.
 
-An all-omitted call (`$categoryNormalized`/`$minPrice`/`$maxPrice` all `NULL`) lists the whole
-catalog, bounded by `$limit` — acceptable at this catalog's demo scale (~15 rows) and, per the
-profiling above, index-anchored anyway. **Blank means omitted:** `Repository.filter_products` maps a `category`
-that normalizes to `""` to `NULL`, and `FilterProductsTool` (`_coerce_price_bound`) maps a blank/whitespace-only string
-`minPrice`/`maxPrice` to `None` and a numeric string (`"50"`) to that `float`; any other string is
-passed through unchanged. A non-null string would survive `coalesce` and match nothing
-(`docs/reviews/salesperson-fabricated-prices-rca.md` CF-1: the model sent `{"category": ""}` for
-"any category"). Zero rows back means "nothing matches" (AC-3 abstention), and the **tool**
-(`FilterProductsTool`) builds the result. When a `category` was given, it first asks whether that
-category exists at all by re-running this same query with that `category` only (no price bounds) and
-`$limit = 1` (`Services.has_category`, `docs/plans/salesperson-cart-product-id2.md` D8). An unknown
-category returns `{"items": [], "finding": "no catalog category has that name", "hint": …,
-"catalog": […]}`, where `catalog` is the price-free `{productId, name}` list a
-`lookup_product_fact` miss carries. Every other empty result, whether a known category emptied by
-its price range or a blank or omitted category, is `{"items": [], "finding": "no matching products
-found"}`. `Services.catalog_categories` is built from this same unfiltered query (the distinct
-stored `category` values, no new Cypher), and `query_graph_data`'s catalog recovery tests a
-`category` against that list exactly, as `querygen.compile`'s raw `=` does, and a name through
-§15.1's lookup plus a raw `name` comparison (`docs/plans/salesperson-query-graph-data.md` §4.2,
-K-086). The query is unchanged. Ordered by price
-ascending — a stable, predictable order for a listing shape, cheap once index-backed.
+Results are identical to the null-guard form across every filter combination. An all-omitted call
+lists the whole catalog, bounded by `$limit`, ordered by price ascending.
 
-**Case/whitespace-insensitive `category` (live-discovered fix, 2026-08-28).** The original shape
-compared the raw `$category` argument against `p.category` with an exact, case-sensitive `=`. A
-live LLM-driven run lowercased a category when calling the `filter_products` tool (e.g. `"audio"`
-for the seeded `"Audio"`), and the exact-case comparison silently returned zero rows — re-asking
-with correct casing worked, so the def/tool/service wiring was sound; only this comparison was
-wrong. Fix: `Repository.filter_products` normalizes the caller's raw `category` with
-`extraction.normalize_name` (same helper as `nameNormalized`, §15.1) into `$categoryNormalized`,
-compared against a new precomputed `Product.categoryNormalized` property — **not** a runtime
-`toLower(p.category) = toLower($category)` in the `WHERE` clause. Two reasons: (1) this codebase's
-existing convention for case/whitespace-insensitive lookup is a precomputed normalized property +
-exact match, already established for `Entity.nameNormalized` (§14.5) and `Product.nameNormalized`
-(§15.1) — a second, ad-hoc `toLower()` comparison would be a second, differently-implemented
-normalization tier; (2) it costs nothing extra here: `category`/`categoryNormalized` was never this
-query's scan anchor (`Product.price` is, via the literal-sentinel bounds above) — a runtime
-`toLower()` on a non-anchor residual `Filter` predicate would not have reintroduced the label-scan
-regression documented above either, but the normalized-property form is free of that risk by
-construction and stays consistent with the rest of this file. Live-`GRAPH.PROFILE`-verified after
-the change: every filter combination, including a differently-cased `category` argument, still
-anchors on `Node By Index Scan | (p:Product)` via `Product.price` — the regression this section
-already documents once was not reintroduced.
+**Blank means omitted.** `Repository.filter_products` maps a `category` that normalizes to `""` to
+`NULL`; `FilterProductsTool` (`_coerce_price_bound`) maps a blank/whitespace-only `minPrice`/
+`maxPrice` string to `None` and a numeric string (`"50"`) to that `float`; any other string is passed
+through and would match nothing. Zero rows means "nothing matches", and the **tool** builds the
+result: when a `category` was given, it first checks whether that category exists by re-running
+this query with that `category` only and `$limit = 1` (`Services.has_category`). An unknown category
+returns `{"items": [], "finding": "no catalog category has that name", "hint": …, "catalog": […]}`
+(the same price-free list as a §15.1 miss); every other empty result is
+`{"items": [], "finding": "no matching products found"}`. `Services.catalog_categories` is the
+distinct stored `category` values of this query run unfiltered (no extra Cypher). `FilterProductsTool`
+returns the rows verbatim, including `productId`; the storefront catalog route keys on it too.
 
-**`productId` in the projection (`salesperson-ui` S7c, 2026-09-03).** The `RETURN` above
-originally projected `{name, category, price}` only. **This is §15.1's K-053 widening applied on
-the list side** — the same additive change, for the same reason, with the same consequence for the
-model's context (§15.1's note above): the `Product` node always carried the property, it just
-wasn't selected, and the scan anchor (`Product.price`) is untouched, so none of the
-`GRAPH.PROFILE` findings above change. What it buys: the storefront catalog route
-(`docs/plans/salesperson-ui.md` §5.2 `GET /shop/api/catalog`, §4.7's image manifest) is keyed on
-`productId`, and without it `Storefront._catalog_rows` had to resolve each listed row's id with a
-second `lookup_product` point read — a `1 + n` plus a silent-drop branch for a row that failed to
-re-resolve, both deleted by this projection. `FilterProductsTool` returns these rows verbatim to
-the model, exactly as `LookupProductFactTool` has since K-053, so the two sibling catalog tools
-now put the same kind of thing in front of the model rather than one of them a new kind.
+### 15.3 `query_graph_data` — the compiled read-only query (`querygen.compile`)
 
-**Fully implemented (K-052 M6, plan §4 steps 3-9):** `Repository.lookup_product`/
-`filter_products`, `Services.lookup_product`/`filter_products`,
-`LookupProductFactTool`/`FilterProductsTool`, seed/verify data
-(`scripts/seed_catalog.sh`/`verify_catalog.sh`), and the `salesperson@v1` demo
-`WorkflowDef` (`falkorchat.proof_defs.SALESPERSON_DEF`,
-`scripts/seed_salesperson.sh`/`verify_salesperson.sh`).
+The agent tool `query_graph_data` never sends model-written Cypher. The model's structured
+completion is validated into a `QueryRequest` and compiled by `querygen.compile` into one of the
+shapes below; `Repository.run_readonly_query` executes it with `GRAPH.RO_QUERY` and returns rows
+keyed by column name. The tool's result contract is in `SERVER.md`.
+
+**Datasets** (`querygen.DATASET_REGISTRY`, an allowlist, not schema introspection):
+
+| Dataset | Graph | Label → queryable properties |
+|---|---|---|
+| `catalog` | `reference` | `Product`: `name`, `nameNormalized`, `category`, `price` |
+| `knowledge_base` | `ws:{id}` of the caller | `Entity`: `entityId`, `name`, `nameNormalized`, `type` · `Document`: `documentId`, `title`, `sourceFormat` · `Chunk`: `chunkId`, `text`, `seq`, `documentId` |
+
+**Compiled shapes** (`$p0…$p3` are the filter values, `$limit` the row cap):
+
+```cypher
+// default
+MATCH (v:Label) [WHERE v.prop1 OP $p0 AND … AND v.prop4 OP $p3]
+RETURN [DISTINCT] <returns>
+[ORDER BY v.orderProp ASC|DESC]
+LIMIT $limit
+```
+```cypher
+// no aggregate in <returns>, and order_by is not one of <returns>
+MATCH (v:Label) [WHERE …]
+WITH DISTINCT <r1> AS c0, …, <rN> AS c(N-1), v.orderProp AS cN
+ORDER BY cN ASC|DESC
+LIMIT $limit
+RETURN c0 AS `<r1>`, …, c(N-1) AS `<rN>`
+```
+*`DISTINCT` applies only when no `returns` entry is an aggregate, so a `count(...)` counts raw rows.
+The second shape exists because `RETURN DISTINCT … ORDER BY <column not returned>` de-duplicates
+before sorting and keeps an arbitrary sort key per group — a wrong superlative answer on this build
+(`claude/graph-dba/falkordb-quirks.md`); de-duplicating on the full tuple, then re-aliasing, keeps
+the "column key = original expression text" contract of every shape.*
+
+**Guards** (Layer 1, `querygen`; each failure raises `ValueError`/`ValidationError`, and the tool
+abstains):
+- exactly one `MATCH (var:Label)`, no relationship traversal; `var` matches `[a-z][a-z0-9]{0,7}`;
+  `Label` and every property must be in the dataset's allowlist (exact match, no coercion);
+- at most 4 filters, each `var.property OP $pN` with `OP ∈ {=, <>, <, <=, >, >=}`; values are
+  always bound parameters, never spliced;
+- `returns`: 1–6 entries, each `var.property` or `count|avg|min|max(var[.property])`, no
+  duplicates (the engine rejects two same-named columns at execution); `order_by` is a bare
+  `var.property`; `limit` 1–50, default 20;
+- a string value compared with `=`/`<>` on a `*Normalized` property is normalized with
+  `extraction.normalize_name`; a string value on an `int`/`float` property is parsed as that type or
+  rejected. A `bool` value on a non-`bool` property is neither coerced nor rejected and matches
+  nothing.
+- the compiler's templates contain no `CREATE`, `MERGE`, `SET`, `DELETE`, `REMOVE`, `DROP`,
+  `FOREACH` or `CALL`.
+
+**Before compile** the tool normalizes the completion: repeated JSON keys merge
+(`merge_duplicate_keys` — identical values collapse, list values union, conflicting scalars
+reject); an absent `returns` defaults to `["<var>.name"]` unless the request is a single-entity
+lookup (an `=` filter on an identity property); and `ensure_row_identity` prepends the label's
+first identity property (`Product.name`, `Entity.name`, `Document.title`, `Chunk.chunkId`) to a
+per-row attribute projection that has none — not to aggregates, facet enumerations
+(`Product.category`, `Entity.type`, `Document.sourceFormat`) or single-entity lookups.
+
+**Layer 2:** `run_readonly_query` always uses `GRAPH.RO_QUERY`, which the engine refuses to run if
+the text is a write, with `timeout = DEFAULT_QUERY_TIMEOUT_MS` (2500 ms) — a safety margin, since
+this build enforces read `TIMEOUT` at batch granularity. Two shape classes that compile but fail at
+execution are open as **K-090**.
 
 ---
 
-## 16. Cart / Order — durable cart, deterministic totals, order lifecycle (K-053 M6)
+## 16. Cart / Order — durable cart, deterministic totals, order lifecycle
 
-Design: `docs/plans/workflow-cart-and-totals.md` §3.2/§3.3/§3.4 (architect) and
-`docs/plans/workflow-cart-and-totals-graph.md` (graph-dba, Version 2 — every query below is
-`[verified]` there against the live pinned instance; this section transcribes, it does not
-re-derive). Workspace-scoped (`ws:{workspaceId}`), unlike §15's global catalog — a cart/order
+Every query below is live-verified on the pinned build. Workspace-scoped (`ws:{workspaceId}`), unlike §15's global catalog — a cart/order
 belongs to one customer inside one workspace, never shared across workspaces.
 
 **Schema:**
@@ -2780,15 +2765,15 @@ belongs to one customer inside one workspace, never shared across workspaces.
 (:Customer)-[:PLACED]->(:Order {orderId, status, placedAt, updatedAt})
 (:Order)-[:HAS_LINE]->(:OrderLine {productId, name, unitPrice, quantity, lineTotal})
 ```
-`customerId = User.userId` (graph note §1.2) — the workspace-local `Customer` anchor is a
+`customerId = User.userId` — the workspace-local `Customer` anchor is a
 distinct node from `User` (keeps `ensure_user`'s create-once contract untouched; `Customer` is
 freely mutable) but reuses the same member-id namespace. `Cart`/`CartItem` are keyed on natural
 keys (`customerId`, and the composite `(customerId, productId)`) — no synthetic `cartId`/
 `cartItemId`, mirroring the `WorkflowDefSnapshot` natural-key precedent (DESIGN §7.1). **`Cart`/
-`CartItem` carry no price** — FR-3 requires the cart's displayed price to always be the catalog's
+`CartItem` carry no price** — the cart's displayed price is always the catalog's
 *current* price (`reference`), never a stored, staleable snapshot; §16.9 below is the two-graph
 read this forces. **`Order`/`OrderLine` carry a full frozen snapshot** (`name`, `unitPrice`,
-`quantity`, `lineTotal`) — AC-6's requirement, since `place_order` computes and persists it once,
+`quantity`, `lineTotal`): `place_order` computes and persists it once,
 atomically, and nothing ever re-derives it from a live catalog read again. `Order.total` is
 deliberately **not stored** — computed as `sum(OrderLine.lineTotal)` on read (§16.8): per-order
 line count is tiny, so this avoids a write-time-only derived field that could drift from its own
@@ -2796,24 +2781,12 @@ source lines. `status ∈ {'placed', 'fulfilled', 'delivered', 'cancelled'}` is 
 a label, mirroring `WorkflowRun.status`/`StepRun.status` (DESIGN §1.2). `OrderLine` carries no
 independent identity/index/constraint — a pure value-object always reached via `HAS_LINE`.
 
-**DDL — index-then-constraint (`scripts/bootstrap_schema.sh`'s `bootstrap_workspace`)**
-```cypher
-CREATE INDEX FOR (n:Customer) ON (n.customerId)
-CREATE INDEX FOR (n:Cart) ON (n.customerId)
-CREATE INDEX FOR (n:CartItem) ON (n.customerId)
-CREATE INDEX FOR (n:CartItem) ON (n.productId)
-CREATE INDEX FOR (n:Order) ON (n.orderId)
-GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Customer PROPERTIES 1 customerId
-GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Cart PROPERTIES 1 customerId
-GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE CartItem PROPERTIES 2 customerId productId
-GRAPH.CONSTRAINT CREATE ws:<id> UNIQUE NODE Order PROPERTIES 1 orderId
-```
-No index/constraint on `OrderLine` or `Order.status` — `OrderLine` has no independent lookup path
-(always reached via `HAS_LINE`), and no AC needs to scan/list orders *by* status across a
-workspace at this cardinality (orders per customer — never a supernode). A `GRAPH.PROFILE` on the
-lifecycle CAS queries (§16.9) shows a residual `Filter` above the `Node By Index Scan | (o:Order)`
-for this reason — functionally identical to a folded index scan (zero rows on a mismatch either
-way), just not folded into the scan itself (graph note §3.4).
+**Indexes** (`scripts/bootstrap_schema.sh`'s `bootstrap_workspace`, schema in `DESIGN.md`):
+`Customer.customerId`, `Cart.customerId`, `CartItem.customerId`, `CartItem.productId`,
+`Order.orderId`, with UNIQUE constraints on `Customer {customerId}`, `Cart {customerId}`,
+`CartItem {customerId, productId}` and `Order {orderId}`. Nothing on `OrderLine` (always reached via
+`HAS_LINE`) or `Order.status` — so the lifecycle CAS queries (§16.10) profile with a residual
+`Filter` above `Node By Index Scan | (o:Order)`, functionally identical (zero rows on a mismatch).
 
 ### 16.1 `ensure_customer` — get-or-create the `Customer` anchor (idempotent)
 
@@ -2824,7 +2797,7 @@ ON CREATE SET c.createdAt = $now
 RETURN c.customerId AS customerId, c.createdAt AS createdAt
 ```
 `ON CREATE` only — a re-call leaves `createdAt` at the first call's value. Backed by the
-`Customer.customerId` uniqueness constraint (every `MERGE` must be constraint-backed, rule 8).
+`Customer.customerId` uniqueness constraint (every `MERGE` is constraint-backed).
 
 ### 16.2 `ensure_cart` — get-or-create the `Cart` anchor (idempotent)
 
@@ -2835,8 +2808,7 @@ MERGE (cust)-[:HAS_CART]->(cart:Cart {customerId: $customerId})
 ON CREATE SET cart.createdAt = $now, cart.updatedAt = $now
 RETURN cart.customerId AS customerId, cart.createdAt AS createdAt
 ```
-The `MERGE` spans the whole `(Customer)-[:HAS_CART]->(Cart)` pattern — safe here (not the K-034
-changed-endpoint gotcha) because `Cart`'s matched property (`customerId`) is fully specified and
+The `MERGE` spans the whole `(Customer)-[:HAS_CART]->(Cart)` pattern — safe here because `Cart`'s matched property (`customerId`) is fully specified and
 constraint-backed on both ends. Zero rows (no such `Customer`) means the caller didn't call
 `ensure_customer` first.
 
@@ -2851,10 +2823,9 @@ ON MATCH  SET item.quantity = item.quantity + $qty, item.updatedAt = $now
 SET cart.updatedAt = $now
 RETURN item.productId AS productId, item.quantity AS quantity
 ```
-**"Add" means increment, not replace** — two calls with the same `productId` sum their `qty`,
-matching the FR-1 shopping-cart mental model. Zero rows means no `Cart` exists yet for
-`customerId` — the caller runs `ensure_customer` + `ensure_cart` first (`services.add_cart_item`'s
-own ordering; the closed MAJOR finding from `docs/reviews/workflow-cart-and-totals.md`).
+**"Add" means increment, not replace** — two calls with the same `productId` sum their `qty`.
+Zero rows means no `Cart` exists yet for `customerId` — `services.add_cart_item` runs
+`ensure_customer` + `ensure_cart` first.
 
 ### 16.4 `adjust_cart_item` — guarded decrement-or-remove, single query
 
@@ -2892,7 +2863,8 @@ here needs to distinguish "never touched" from "emptied."
 MATCH (cart:Cart {customerId: $customerId})-[:HAS_ITEM]->(item:CartItem)
 DETACH DELETE item
 ```
-Used standalone (FR-1) and inside `place_order` (§16.7) as part of checkout. A `MATCH` against
+Used by the clear-cart tool; `place_order` (§16.7) clears the cart itself, inside its own
+query. A `MATCH` against
 zero items is a plain no-op — no `UNWIND`-collapse risk (that quirk is about an empty **list
 parameter**, a different mechanism).
 
@@ -2922,7 +2894,7 @@ RETURN created, lineCount
 ```
 `$lines` is pre-resolved **app-side** before this query runs (`services._priced_cart_lines`): the
 current name/price per line is read from `reference` and `lineTotal = unitPrice × quantity` is
-computed via `pricing.compute_line_total` — no arithmetic happens in Cypher (FR-4/FR-8). Keyed on
+computed via `pricing.compute_line_total` — no arithmetic happens in Cypher. Keyed on
 a caller-minted `orderId` (the idempotency key): a **guarded `CREATE`, not a `MERGE`** — mirrors
 `Message`'s guarded-`CREATE` idiom (§4/§9), since placing an order is a one-time durable-record
 creation event, not a find-or-update concept like `Cart`/`Customer`. A retried call with the same
@@ -2950,17 +2922,24 @@ scalar beside an aggregate fan-out" caveat) because `orderId` is unique by const
 `o` value for the whole fan-out, never more than one row per distinct group. `total` is never
 stored (§3 above). `None` when no such `Order`. A zero-line order (not reachable via the intended
 tool path, but a valid direct repository call) yields one all-`null` placeholder entry from
-`collect()`, not `[]` — filtered client-side (`Repository.get_order`) rather than reshaping this
-`[verified]` query.
+`collect()`, not `[]` — `Repository.get_order` filters it out, so `lines` is `[]` there.
 
-### 16.9 The two-graph computation (FR-4/FR-8) — why a live cart/order total can't be one query
+### 16.9 The two-graph computation — why a live cart/order total can't be one query
 
 `CartItem`/`Order` live in `ws:{workspaceId}`; the catalog (§15) lives in `reference`. There is no
 single Cypher query that can join a cart line to its current catalog price — not a missing edge,
 but a structural fact: **`GRAPH.QUERY` operates on one named graph per call**, full stop (DESIGN §2
 constraint #3, "relationships cannot cross graphs"). The mechanism is necessarily: (1) **read**
 `ws:{workspaceId}` — §16.5's `read_cart` → `[{productId, quantity}, ...]`; (2) **read** `reference`
-— `Repository.lookup_products_by_id` (§15's `Product` schema, batched `UNWIND $productIds`);
+— `Repository.lookup_products_by_id`:
+
+```cypher
+// $productIds — an empty list short-circuits app-side with no query
+UNWIND $productIds AS pid
+MATCH (p:Product {productId: pid})
+RETURN p.productId AS productId, p.name AS name, p.price AS price
+```
+an unknown `productId` simply yields no row; then
 (3) **compute** (app/tool code, not Cypher, not an LLM call) — `pricing.compute_line_total`, plain
 Python. This is exactly the shape §16.7's `place_order` already uses: the app performs steps 1–3
 *before* calling the write, then passes the finished `$lines` in. Whatever step type or tool needs
@@ -2968,7 +2947,7 @@ Python. This is exactly the shape §16.7's `place_order` already uses: the app p
 `GRAPH.RO_QUERY` calls plus app-side arithmetic, a property of the topology, not an implementation
 shortcut.
 
-### 16.10 Order lifecycle — guarded CAS, one transition per call (FR-6/FR-7, AC-7/AC-8)
+### 16.10 Order lifecycle — guarded CAS, one transition per call (`fulfill_order`, `deliver_order`, `cancel_order`)
 
 Same compare-and-set idiom as `resume_run`/`suspend_run` (§12.3/§12.4): the write commits only if
 the order is currently in the expected prior state; a stale/duplicate/out-of-order transition
@@ -2988,15 +2967,14 @@ SET o.status = 'delivered', o.updatedAt = $now
 RETURN o.orderId AS orderId, o.status AS status
 ```
 ```cypher
-// cancel: $orderId, $now — only reachable from 'placed', enforcing AC-8
-// ("cannot cancel once fulfilled")
+// cancel: $orderId, $now — only reachable from 'placed' ("cannot cancel once fulfilled")
 MATCH (o:Order {orderId: $orderId})
 WHERE o.status = 'placed'
 SET o.status = 'cancelled', o.updatedAt = $now
 RETURN o.orderId AS orderId, o.status AS status
 ```
 Live-verified: `placed→fulfilled` succeeds; a `cancel` attempt on a `fulfilled` order returns zero
-rows and the status stays unchanged (AC-8 holds); `fulfilled→delivered` succeeds. These three
+rows and the status stays unchanged; `fulfilled→delivered` succeeds. These three
 queries drive the `order-fulfillment@v1` process def's lifecycle (`falkorchat.proof_defs.
 ORDER_FULFILLMENT_DEF`) via `services.advance_order` — called from whichever caller accepts the
 operator's fulfillment input **alongside** `submit_workflow_input`, the same "two-step, accepted"
@@ -3004,22 +2982,11 @@ pairing §12.6's `link_step_emission` uses (the def's own `human`/`decision` ste
 effect on `Order` — DESIGN §6.1 — so advancing the run and advancing the order are always two
 separate graph writes from one request, never one query doing both).
 
-**Fully implemented (K-053 M6, plan §4 steps 2-9):** `pricing.compute_line_total`,
-`Repository.ensure_customer`/`ensure_cart`/`add_to_cart`/`adjust_cart_item`/`read_cart`/
-`clear_cart`/`place_order`/`get_order`/`fulfill_order`/`deliver_order`/`cancel_order`,
-`Services.add_cart_item`/`get_cart`/`remove_cart_item`/`clear_cart`/`place_order`/
-`get_order_status`/`advance_order`, `ViewCartTool`/`AddToCartTool`/`RemoveFromCartTool`/
-`ClearCartTool`/`PlaceOrderTool`, the `salesperson@v2` version bump and the
-`order-fulfillment@v1` process def (`falkorchat.proof_defs.ORDER_FULFILLMENT_DEF`), and seed/
-verify data (`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, extended to publish/check
-both defs).
+---
 
-## 17. Durable customer profile (K-054 M6)
+## 17. Durable customer profile
 
-Design: `docs/plans/workflow-durable-profile.md` §3 (architect) and `docs/plans/
-workflow-durable-profile-graph.md` (graph-dba, Version 2 — both queries below are `[verified]`
-there against the live pinned instance, twice — v1 and the v2 `coalesce()` fix; this section
-transcribes, it does not re-derive). Workspace-scoped (`ws:{workspaceId}`), same anchor §16 uses.
+Both queries below are live-verified on the pinned build. Workspace-scoped (`ws:{workspaceId}`), same anchor §16 uses.
 
 **Schema — two more nullable properties on the existing `Customer` node, no new label:**
 ```
@@ -3027,10 +2994,9 @@ transcribes, it does not re-derive). Workspace-scoped (`ws:{workspaceId}`), same
              name, deliveryAddress, profileUpdatedAt})   // name/deliveryAddress: NULLable
 ```
 `name`/`deliveryAddress` are independently nullable (a customer may give one before the other).
-No new index, no new constraint — `Customer.customerId`'s existing uniqueness constraint (§16's
-DDL) already backs the `MERGE` below. **This is not a second identity mechanism** — it reuses,
-unchanged, the same `Customer` anchor §16's cart/order queries write to; both capabilities'
-writes land on one node, never two competing ones (graph note §0/§1).
+No index of their own — `Customer.customerId`'s uniqueness constraint (§16) backs the `MERGE`
+below. **This is not a second identity mechanism** — the profile lives on the same `Customer` node
+§16's cart/order queries write to.
 
 ### 17.1 `upsert_profile` — `MERGE` + per-field `coalesce()`-guarded `SET`, update-in-place
 
@@ -3044,52 +3010,43 @@ SET c.name             = coalesce($name, c.name),
 RETURN c.customerId AS customerId, c.name AS name, c.deliveryAddress AS deliveryAddress
 ```
 **Deliberately not** the `ensure_user`/`ensure_customer` "guarded create, never updates" shape
-(§16.1) — FR-3 requires the opposite: a later-supplied name/address updates the stored profile,
-never frozen after the first write. **Also deliberately not** an unconditional `SET` (the shape
-`write_model_overrides`, §13.1, uses) — that was v1's BLOCKER, caught at plan-gate: `SaveProfileTool`'s
-arguments are genuinely optional, so a partial update (the customer only gives an updated address)
-passes `$name = NULL` meaning "not provided," and an unconditional `SET` would silently null the
-already-stored name, defeating AC-2. The fix is `coalesce($field, c.field)` per data field, so a
+(§16.1): a later-supplied name/address updates the stored profile. **Also deliberately not** an
+unconditional `SET` (the §13.1 `write_model_overrides` shape): `SaveProfileTool`'s arguments are
+optional, so a partial update (only a new address) passes `$name = NULL` meaning "not provided,"
+and an unconditional `SET` would null the stored name. Hence `coalesce($field, c.field)` per data
+field, so a
 `NULL` argument means "leave this field as it is," never "clear it." `profileUpdatedAt` alone stays
 an unconditional `SET` — every call that reaches this query touched the profile, partial or full.
-**`NULL` has no way to *clear* a field through this query** — nothing in FR-1..FR-4 asks for
-clearing a previously-captured value, only updating one; a caller must never pass `''` to mean "no
-value" (an empty string is a value, not "not provided").
+**No value can be *cleared* through this query**, only updated; a caller must never pass `''` to
+mean "no value" (an empty string is a value, not "not provided").
 
-Live-verified in both partial-update directions (graph note §0/§3, `ws_cartprobe_profile_check2`,
-disposable, deleted after): full write (`name='Alice', deliveryAddress='123 Main St'`) → partial
+Live-verified in both partial-update directions: full write (`name='Alice', deliveryAddress='123 Main St'`) → partial
 call with `$name=NULL, $deliveryAddress='456 New Ave'` → `name='Alice'` (**preserved**),
 `deliveryAddress='456 New Ave'` (updated) → partial call with `$name='Bob', $deliveryAddress=NULL`
 → `name='Bob'` (updated), `deliveryAddress='456 New Ave'` (**preserved**). `count(Customer) = 1`
 throughout both partial calls — no duplicate node from either `MERGE`.
 
-### 17.2 `read_profile` — the one code path for "unset"
+### 17.2 `get_profile` — the one code path for "unset"
 
 ```cypher
 // $customerId
 MATCH (c:Customer {customerId: $customerId})
 RETURN c.name AS name, c.deliveryAddress AS deliveryAddress, c.profileUpdatedAt AS profileUpdatedAt
 ```
-Zero rows ⇒ no `Customer` node at all yet for this id (nobody has ever interacted with this
+Zero rows (`None`) ⇒ no `Customer` node at all yet for this id (nobody has ever interacted with this
 workspace as this customer — cart, order, or profile). A row with `name`/`deliveryAddress` both
 `NULL` ⇒ the customer exists (e.g. from cart activity) but has never given a name/address. Both
-cases mean "ask them" to the calling agent — the distinction is preserved here (never collapsed to
-one shape), per the note's own §4, even though nothing in this requirements doc currently needs
-"brand-new" told apart from "returning, no profile yet."
-
-**Fully implemented (K-054 M6, plan §4 steps 2-3):** `Repository.upsert_profile`/`get_profile`,
-`Services.get_profile`/`save_profile`, `GetProfileTool`/`SaveProfileTool`, the `salesperson@v3`
-version bump (`falkorchat.proof_defs.SALESPERSON_DEF`), and seed/verify data
-(`scripts/seed_salesperson.sh`/`verify_salesperson.sh`, default version bumped to `v3`).
+cases mean "ask them" to the calling agent; the distinction is kept (never collapsed to one
+shape).
 
 ---
 
-## 18. Storefront participants & resets (salesperson-ui S4)
+## 18. Storefront participants & resets
 
-Design: `docs/plans/salesperson-ui.md` §4.3/§4.6/§4.8 (architect) and
-`docs/plans/salesperson-ui-graph.md` **v1.2** (graph-dba — every query below is live-verified
-there, three review passes, §11 is its verification log). **This section transcribes that note
-verbatim; it does not re-derive it.** Workspace-scoped (`ws:{workspaceId}`); `reference` is never
+Every query below is live-verified on the pinned build, and the repository holds each as a
+multi-line constant identical to the block shown (`Repository._ENSURE_PARTICIPANT_CYPHER`,
+`_RESET_PARTICIPANT_CYPHER`, `_RESET_ALL_PARTICIPANTS_CYPHER`, `_CURRENT_ORDER_CYPHER`,
+`_ORDER_OWNERSHIP_CYPHER`). Workspace-scoped (`ws:{workspaceId}`); `reference` is never
 referenced by any query here, which is structural — `GRAPH.QUERY` operates on one named graph per
 call — not a convention.
 
@@ -3101,9 +3058,8 @@ parse (`Invalid input 'G': expected '>' or '('`).
 (:Channel {channelId, name, createdAt,
             participantId})    // NULLable; written ONLY by §18.1 ensure_participant
 ```
-No DDL: `bootstrap_schema.sh` is untouched and every existing workspace stays valid. A `UNIQUE`
-constraint on it was considered and declined on scope (§18.4 makes a duplicate marker fail loudly
-anyway); no new index either — the property is only ever a `Filter` on a `ch` already bound by a
+No index or constraint on it: a `UNIQUE` constraint is declined on scope (§18.4 makes a duplicate
+marker fail loudly anyway), and no index is needed either — the property is only ever a `Filter` on a `ch` already bound by a
 `MEMBER_OF` traversal from an index-anchored `u`.
 
 ### 18.0 The two guards — the whole safety argument
@@ -3128,7 +3084,7 @@ three-property map with no caller-controlled extras, so the marker cannot be for
 in the codebase deletes a `MEMBER_OF` edge, so a participant's own channel cannot be detached
 either.
 
-**The governing rule is a *scoping* rule, not a label list** (`salesperson-ui.md` §4.8):
+**The governing rule is a *scoping* rule, not a label list:**
 
 > Every `Channel`, `Thread` and `Message` **not reachable from a participant `User`** survives
 > both resets — `demo-general`/`demo-welcome` and every message in them included. A participant
@@ -3154,7 +3110,7 @@ changing. Stripping G1 **and** G2 reddens exactly five tests either way, all in
 **Two completeness dependencies this scoping inherits.** Neither is visible from the Cypher alone:
 
 1. **`WorkflowRun` completeness assumes the storefront deployment leaves `api.build_router`
-   unmounted** (`create_app(dev_surface=False)`, `salesperson-ui.md` §4.9). Runs are reached only
+   unmounted** (`create_app(dev_surface=False)`, `SERVER.md`). Runs are reached only
    through `TRIGGERED_BY` from a thread message — the storefront's only run-creation path
    (`trigger.maybe_trigger` → `start_workflow_run`). A run started through `api.py`'s untriggered
    path carries **no `TRIGGERED_BY` edge**, so it and its `StepRun`s/`TraceEvent`s are unreachable
@@ -3208,8 +3164,7 @@ Shape follows §2's `ensure_user` **guarded-`CREATE`-inside-`FOREACH`** idiom, e
 the whole join is **one query** (a partial join would leave an orphan `Channel` in a graph the
 presenter roster reads, and would create the unscoped shape §18.5 can only skip); the demo `Agent`
 is a **third precondition**; and the status row carries the resolved
-`channelId`/`threadId`/`language` so a replay is a read-through (restart survival,
-`salesperson-ui.md` §4.3).
+`channelId`/`threadId`/`language` so a replay is a read-through (restart survival).
 
 **Status-row contract** — exactly one row, always (three `OPTIONAL MATCH`es, no anchor `MATCH`, so
 it can never zero-row):
@@ -3271,7 +3226,7 @@ Zero rows ⇒ unknown id **or** a `User` that is not a participant. The two coll
 both mean "not a participant" to a token check, and an already-reset-away participant is
 indistinguishable from an id that never existed. This read is what makes the **graph** the
 authoritative registry — the storefront's in-process map is a read-through cache, so a server
-restart is invisible to participants (`salesperson-ui.md` §4.3).
+restart is invisible to participants.
 
 ```cypher
 // set_participant_record — $participantId $displayName $tokenHash $language
@@ -3294,7 +3249,7 @@ exactly the unscoped shape §18.5 can only skip, and one nothing else in the shi
 create.
 
 **Neither `channelId` nor `threadId` is settable here**, for the same reason. Together they are the
-server-resolved scope denorm the storefront reads from (`salesperson-ui.md` §4.3), and both are
+server-resolved scope denorm the storefront reads from, and both are
 decided **in-query**: the channel a participant owns is decided once, by §18.1, together with the
 marker G2 reads; the thread is decided by §18.1 at join and re-decided by §18.4 at every "reset
 mine", which mints the replacement thread and repoints `u.threadId` in the same atomic write. A
@@ -3410,7 +3365,7 @@ RETURN scoped, u.threadId AS threadId, size(victims) AS deletedCount,
 ```
 One atomic query: collect the victim set **structurally**, mint the replacement `Thread`, repoint
 `User.threadId`, then delete. The participant's `User` and `Channel` **survive**, so their token
-stays valid (`salesperson-ui.md` §4.8 — "reset mine" keeps the identity); their `Customer`, `Cart`,
+stays valid ("reset mine" keeps the identity); their `Customer`, `Cart`,
 `CartItem`s, `Order`s and `OrderLine`s do not.
 
 **Every write is gated on `ch IS NOT NULL`**, so a participant whose own channel does not resolve
@@ -3431,7 +3386,7 @@ constraint with **nothing written** (verified: old thread, messages and orders a
 thread absent). Propagate it as a `5xx`; **do not retry** — a retry re-raises forever and the graph
 needs repair. §18.5 still collects such a participant, because it never re-mints.
 
-**The delete is thread-scoped, not author-scoped** (`salesperson-ui.md` §4.8, locked). The
+**The delete is thread-scoped, not author-scoped** (locked). The
 `Agent`-authored reply living inside the participant's thread **is** deleted; the identical reply
 in another participant's thread is not. An author-scoped sweep would orphan those replies against a
 deleted `Thread` and, the moment the `Agent` is the author, cross participant boundaries.
@@ -3448,11 +3403,9 @@ being deleted now, or no longer exists.** Here the `User` survives, so a cursor 
 membership this operation was never asked to touch, and deleting it would silently reset their read
 position in a channel outside this reset's scope. §18.5 sweeps wide for the opposite reason.
 
-**One product consequence for the service layer, not a change here:** deleting the `Customer` also
-deletes the profile name the join wrote, while `User.displayName` survives — so after "reset mine"
-the profile panel shows an em-dash for a participant who typed their name at join. The service
-wrapper should re-call `services.save_profile(ctx, name=<User.displayName>)` immediately after the
-reset (no new Cypher).
+**Profile after the reset:** deleting the `Customer` also deletes the profile name the join wrote,
+while `User.displayName` survives; the storefront re-saves it with `services.save_profile(ctx,
+name=<User.displayName>)` (§17.1) right after the reset.
 
 ### 18.5 `reset_all_participants` — "reset everyone"
 
@@ -3556,10 +3509,10 @@ proposition from an unreachable one.
 deleted, so any cursor it owns that survived would be **unowned**: a real orphan, including one on
 a surviving non-participant thread. Verified: after `reset_all`,
 `MATCH (rc:ReadCursor) WHERE NOT ()-[:HAS_CURSOR]->(rc) RETURN count(rc)` is `0`.
-**Collapse the `ReadCursor` `collect` with its own `WITH` *before* the `users` `UNWIND`** — the
-first cut left the scan un-collapsed, the 50-row `UNWIND` multiplied it to ~5 000 rows and
-`reset_all` cost ~690 ms instead of ~240 ms. That is the "collapse each block before the next
-`UNWIND` expands" rule, and it bites at scale only.
+**The `ReadCursor` `collect` is collapsed with its own `WITH` *before* the `users` `UNWIND`** —
+left un-collapsed, the 50-row `UNWIND` multiplies the scan to ~5 000 rows and `reset_all` costs
+~690 ms instead of ~240 ms. That is the "collapse each block before the next `UNWIND` expands"
+rule, and it bites at scale only.
 
 **The `ReadCursor` orphan class, and the one residual deliberately left open.** `advance_cursor`
 (§9.3) `MERGE`s on the **member**, not the thread, so a turn racing a reset mints a `ReadCursor`
@@ -3602,7 +3555,7 @@ was observed live.
 | `WorkflowRun` / `StepRun` / `TraceEvent` | **deletes** | **deletes** | `TRIGGERED_BY` → `HAS_STEP_RUN` → `TRACED` (subject to §18.0 dependency 1) |
 | `Customer` / `Cart` / `CartItem` | **deletes** | **deletes** | `customerId = participantId`, exact by construction |
 | `Order` / `OrderLine` | **deletes** | **deletes** | `(Customer)-[:PLACED]->` → `HAS_LINE` |
-| **`WorkspaceConfig`** | **keeps** | **keeps** | never matched by either query. Taking it would silently undo K-056's Ministral re-point — the single most expensive mistake available here. Positively asserted alive after both resets |
+| **`WorkspaceConfig`** | **keeps** | **keeps** | never matched by either query. Taking it would silently drop the workspace's model overrides (§13) — the single most expensive mistake available here. Positively asserted alive after both resets |
 | `Document` / `Chunk` / `Entity` | **keeps** | **keeps** | survivors of *both*; never matched |
 | `WorkflowDefSnapshot` / `Step` | **keeps** | **keeps** | never matched — `verify_salesperson.sh <ws>` exits 0 after `reset_all` |
 | `Agent` | **keeps** | **keeps** | never matched; its `MEMBER_OF` edges into deleted channels go with `DETACH DELETE`, the node does not |
@@ -3682,9 +3635,3 @@ theirs / no such order) before the CAS without a second round trip.
 alone, so without this gate any participant who learned another's `orderId` could cancel their
 order. The storefront never exposes an `orderId` in a request body, so this is defence in depth —
 but it is the only thing standing between the two.
-
-**Implemented (salesperson-ui S4):** `Repository.ensure_participant`/`add_channel_member`/
-`get_participant_record`/`set_participant_record`/`list_participants`/`reset_participant`/
-`reset_all_participants`/`get_customer_current_order`/`order_belongs_to_customer`, plus the two
-thin service wrappers `Services.get_current_order`/`order_belongs_to_customer` (so `storefront.py`
-never holds Cypher). Integration tests: `server/tests/test_repository.py` §18.1–§18.6.

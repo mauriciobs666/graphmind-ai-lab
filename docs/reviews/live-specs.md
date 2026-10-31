@@ -1770,3 +1770,51 @@ loop l.956–1049:
   `@mention` start (`trigger.py` → `start_workflow_run`) raises the same error, but it is logged
   rather than returned as an HTTP 404. Suggested wording: "refused (`WorkflowRunNotFoundError`;
   404 over REST)".
+
+## Pass 15
+
+**Scope.** Re-gate of L5c's fix round on `falkor-chat/docs/QUERIES.md` (26,767 words, +5), at
+pinned **`c0eeb348`** (`git diff --quiet c0eeb348 -- server scripts` exits 0). Also checked: teco's
+four `SERVER.md` ingest cells (§1.4 REST l.277–278, §2.2 MCP rows) against `api.py:179/225`,
+`mcp.py:316/356` and `background.py:214`. Every check below was re-executed, not read from the
+fixer's report.
+
+CPG: considered, not relevant — no code changed since Pass 10's CPG inventory at the same sha. The re-checks are text matches against `repository.py` and reads of the four call sites.
+
+**Verdict: approve with suggestions.** All Pass 10 findings on `QUERIES.md` are fixed. One minor
+precision gap remains in teco's `SERVER.md` cells. It belongs to L5b's document and does not
+contradict an externally observable contract.
+
+### Dispositions
+
+- **B1 — fixed.** §14.9 (l.2565–2566) now says detection is scheduled after an ingest the exact
+  tier did not auto-supersede, and only when a worker is wired, citing `SERVER.md` §1.12. This
+  matches `api.py:191/232`, `mcp.py:323/363` and `app.py:399`.
+- **m1 — fixed.** I re-ran the Pass 10 substitution check. `_PUBLISH_CYPHER`, `_READ_META_CYPHER`
+  and `_READ_TRANSITIONS_CYPHER`, formatted with `WorkflowDefSnapshot`, are now each found
+  verbatim (whitespace-insensitive) in the doc: True ×3. In Pass 10 the same check gave False ×3,
+  so it has failed and passed on this text. §11.6 keeps `snap`, as `list_snapshots` itself does
+  (it matches in the code-to-doc run).
+- **m2 — fixed.** Both membership notes (l.86, l.576) now say "Suite-only (`test_queries.sh`);
+  `scripts/seed_demo.sh` writes a role-less variant". That matches `seed_demo.sh:110-117`.
+- **m3 — fixed.** §14.4 (l.1996) is a one-line pointer to the `SERVER.md` §1.4 `QUERIES.md`
+  column. The heading is kept.
+- **N1 — fixed.** `resolve_member_kinds` is in the §2 heading (l.145). "(§4 m4)" and "OQ3" no
+  longer occur.
+- **M1, M2 — not fixed.** They are out of `QUERIES.md`'s scope and routed to `teco` to file. A
+  backlog item for each is still owed.
+- **Regressions — none.** The code-to-doc match is still 117/123, with the same 6 explained
+  residues. §18's five constants are still exact-block equal. The AC-3 grep gives the same 9
+  property-name hits.
+
+### New finding
+
+**m4 (minor; L5b's document, `SERVER.md`) — the ingest cells mark only §14.1a as conditional, but
+§14.3 `list_document_chunks` is conditional too.** Verified. At all four call sites
+(`api.py:178-185`, `api.py:224-231`, `mcp.py:316-321`, `mcp.py:356-362`), `list_document_chunks`
+runs only inside `if embed_worker is not None or ingestion_pipeline is not None`. That is the same
+guard that leads to `start_document_progress` (`background.py:214-218`, which also needs a `repo`).
+The cells read "§14.9, §14.3 (+ §14.1a)", which implies §14.3 runs on every ingest. The pairings
+themselves are correct; the batch rows also correctly skip errored items (`receipt["status"] !=
+"processing"`). *Fix:* "§14.9; then, when a worker is wired (§1.12), §14.3 `list_document_chunks`
+and §14.1a `start_document_progress`" in each of the four cells.

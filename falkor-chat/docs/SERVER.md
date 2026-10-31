@@ -274,8 +274,8 @@ lives.
 
 | Endpoint | Service method | `QUERIES.md` |
 |---|---|---|
-| `POST /documents` | `ingest_document` (+ per-chunk embed/extract and update detection, §1.12) | §14.9 `create_document_with_auto_supersede` → **201** `{documentId, chunkCount, status: "processing", …}` |
-| `POST /documents/batch` | `ingest_documents` | §14.9 per item → **201**, one receipt per item in input order; a failing item comes back as its own `{"status":"error","error":…,"errorType":…}` receipt and is not scheduled |
+| `POST /documents` | `ingest_document` (+ per-chunk embed/extract and update detection, §1.12) | §14.9 `create_document_with_auto_supersede`; then, when a worker is wired (§1.12), §14.3 `list_document_chunks` and §14.1a `start_document_progress` → **201** `{documentId, chunkCount, status: "processing", …}` |
+| `POST /documents/batch` | `ingest_documents` | §14.9; then, when a worker is wired (§1.12), §14.3 and §14.1a — per item → **201**, one receipt per item in input order; a failing item comes back as its own `{"status":"error","error":…,"errorType":…}` receipt and is not scheduled |
 | `GET /documents/search?q=[&limit=]` | `search_documents` | §14.3 `search_chunks` — chunks most-similar first, `score` = cosine distance; `503 SearchNotAvailableError` when no `ModelGateway` is wired |
 | `GET /documents[?current_only=&limit=]` | `list_documents` | §14.7 (oldest first; `current_only=true` by default excludes superseded versions) |
 | `GET /documents/{id}` | `get_document` | §14.2; `404` when absent |
@@ -1018,8 +1018,8 @@ error.
 | `list_channels(limit=50)` | `list_channels` | §3 list channels in a workspace |
 | `list_threads(channel_id, limit=50)` | `list_threads` | §3 list recent threads in a channel |
 | `search_messages(query, limit=50)` | `search_messages` | §5 full-text keyword search |
-| `ingest_document(text, title=None, source_format="text", source_label=None, produced_by=None)` | `ingest_document` (+ §1.12) | §14.9 |
-| `ingest_documents(items)` | `ingest_documents` (+ §1.12) | §14.9 per item |
+| `ingest_document(text, title=None, source_format="text", source_label=None, produced_by=None)` | `ingest_document` (+ §1.12) | §14.9; then, when a worker is wired (§1.12), §14.3 and §14.1a |
+| `ingest_documents(items)` | `ingest_documents` (+ §1.12) | §14.9; then, when a worker is wired (§1.12), §14.3 and §14.1a — per item |
 | `get_document(document_id)` | `get_document` | §14.2 (`null` when absent) |
 | `search_documents(query, limit=20)` | `search_documents` | §14.3 |
 | `delete_document(document_id)` | `delete_document` | §14.7 |
