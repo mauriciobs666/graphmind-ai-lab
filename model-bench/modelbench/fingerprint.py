@@ -230,7 +230,7 @@ FORBIDDEN_BY_ARM_PROFILE: Mapping[str, frozenset[str]] = MappingProxyType(_forbi
 
 #: The two `armKind` values, **decoupled from the forbidden mapping** (§4 S1e Table B). Deriving
 #: this from `FORBIDDEN_BY_ARM_PROFILE` — which is what shipped before the re-key — would make its
-#: members the three *profiles*, so `armKind == "model"` would fail the membership test below and
+#: members the *profiles*, so `armKind == "model"` would fail the membership test below and
 #: every model record would return `FieldProblem("armKind", "unknown")` and refuse on write.
 #: `armKind` keeps its two values and its meaning; the profile is the mapping key alone.
 ARM_KINDS: frozenset[str] = frozenset(p.split(":", 1)[0] for p in REQUIRED_BY_SCHEMA[1])

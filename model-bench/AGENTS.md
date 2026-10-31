@@ -22,8 +22,10 @@ massaged into one; `chat-responder`'s `groundingRate` metric had a real abstenti
 found on its own required live run, fixed over a five-round gated chain, and confirmed fixed on a
 fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
 (the loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist), `lmstudio`,
-`hostinfo`, `tooling`, `convo` (turn assembly and driving), and `runner` (`RunConfig`, the
-`ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration).
+`hostinfo`, `tooling`, `convo` (turn assembly and driving), `runner` (`RunConfig`, the
+`ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
+and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
+constants — pinned by `tests/fixtures/decision-contract/`; no `run` path uses it yet).
 The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
 `run`). To run a pack: `README.md`'s Quick start and "What a pack is, and how to add one."
 **Every unit, defect, gate, and live-run result is in `docs/HISTORY.md`** — this section states only
@@ -37,12 +39,13 @@ the story behind each; this section states only the rule.
 **The fingerprint has two discriminators and one derived key.** `REQUIRED_BY_SCHEMA[schema]` and
 `FORBIDDEN_BY_ARM_PROFILE[armProfile]` are keyed by `armProfile` (`model:chat` / `model:embeddings`
 / `model:decisions` / `model:handoff` / `deterministic` — the two decision profiles are additive to
-schema 1, `docs/plans/typed-decision-models.md` §3.3), which `Fingerprint` derives from `armKind` (still two-valued — every
-`armKind == "model"` filter elsewhere is unaffected) and `callSurface` (required, no default,
-`None` **iff** deterministic) — both checked **before any mapping is consulted**, since without a
-surface there is no profile to report fields against. **`ARM_KINDS` must never be derived from the
-forbidden mapping** — its members would become the three profiles, `armKind == "model"` would fail
-membership, and every model record would refuse on write: a green mapping and a dead harness.
+schema 1, `docs/plans/typed-decision-models.md` §3.3), which `Fingerprint` derives from `armKind`
+(still two-valued — every `armKind == "model"` filter elsewhere is unaffected) and `callSurface`
+(required, no default, `None` **iff** deterministic) — both checked **before any mapping is
+consulted**, since without a surface there is no profile to report fields against. **`ARM_KINDS`
+must never be derived from the forbidden mapping** — its members would become the profiles,
+`armKind == "model"` would fail membership, and every model record would refuse on write: a green
+mapping and a dead harness.
 `from_dict`'s missing-`callSurface` sentinel is `""` on a model record and `None` on a deterministic
 one, and collapsing that split is a real bug shape: it lets a surface something had and lost read as
 one that was never written, or a correct reference-arm record read as carrying a forbidden surface.

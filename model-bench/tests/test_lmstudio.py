@@ -1093,6 +1093,116 @@ def test_warm_up_on_decisions_surface_makes_one_decide_call_with_the_candidates_
     assert result.wallClockMs is not None
 
 
+@pytest.mark.parametrize(
+    ("served", "expected"),
+    [("ggml-org/laya", "ggml-org/laya"), (None, None), (42, None)],
+    ids=["served-differs-from-requested", "no-model-key", "non-string-model"],
+)
+def test_decide_reports_the_model_the_response_names_never_the_one_requested(served, expected):
+    """Impl review U1a-m1: `DecisionResult.model` is the **served** model. The pinned body names
+    the requested one, so request and response could not be told apart; here they differ, and a
+    body with no usable `model` reads as `None` rather than falling back to the request."""
+    body = _pinned_decisions_body()
+    if served is None:
+        del body["model"]
+    else:
+        body["model"] = served
+    assert _decide_over(body).model == expected
+
+
+@pytest.mark.parametrize(
+    ("served", "expected"),
+    [("ggml-org/qwen3-embed", "ggml-org/qwen3-embed"), (None, None), (42, None)],
+    ids=["served-differs-from-requested", "no-model-key", "non-string-model"],
+)
+def test_embed_reports_the_model_the_response_names_never_the_one_requested(served, expected):
+    """The same provenance gap on `embed` (impl review U1a-m1, pre-existing)."""
+    body: dict[str, Any] = {"object": "list", "data": [{"embedding": [0.1]}], "usage": {}}
+    if served is not None:
+        body["model"] = served
+    c = client({"/api/v0/embeddings": (200, _json_bytes(body))})
+    assert c.embed(["a"], model="m", timeout_s=10.0).model == expected
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("answers", 0, "probability", 0.0),
+        ("answers", 0, "probability", 1.0),
+        ("answers", 0, "probability", 0),
+        ("answers", 0, "probability", 1),
+        ("answers", 1, "confidence", 1.0),
+        ("answers", 1, "confidence", 0.0),
+        ("answers", 1, "probabilities", 0, "probability", 1.0),
+        ("answers", 1, "probabilities", 2, "probability", 0.0),
+    ],
+    ids=lambda p: ".".join(map(str, p)),
+)
+def test_decide_accepts_a_probability_exactly_on_either_closed_bound(path):
+    """Impl review U1a-m2: `[0, 1]` is closed. A real `0.0`/`1.0` after float rounding is a valid
+    answer; refusing it would withhold the item and bias the scored set toward non-extreme ones.
+    JSON integers `0`/`1` are numbers too, and read back as floats."""
+    *where, value = path
+    result = _decide_over(_mutated(_set(tuple(where), value)))
+    answer = result.answers[where[1]]
+    if where[2] == "probabilities":
+        got = answer.probabilities[where[3]][1]
+    else:
+        got = getattr(answer, where[2])
+    assert got == float(value) and isinstance(got, float)
+
+
+@pytest.mark.parametrize("was_resident_before", [True, False])
+def test_warm_up_on_decisions_surface_passes_its_budget_and_residency_through(
+    was_resident_before,
+):
+    """Impl review U1a-m3: the warm-up is the call that carries the cold-load budget
+    (`firstCallTimeoutSeconds`, §3.6), so its `timeout_s` must reach the opener unchanged, and
+    `was_resident_before` must round-trip — a constant either way would misreport a cold load
+    as warm, or the reverse."""
+    timeouts: list[float | None] = []
+    body = _json_bytes(
+        {"model": "laya", "answers": [{"type": "predicate", "name": "advance",
+                                       "probability": 0.5}], "usage": {}}
+    )
+
+    def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        return _FakeResponse(200, body)
+
+    c = LMStudio("http://localhost:1234", opener=opener)
+    result = c.warm_up(
+        "laya",
+        call_surface="decisions",
+        system_prompt=None,
+        was_resident_before=was_resident_before,
+        timeout_s=300.0,
+        question=_DECISION_QUESTIONS[0],
+    )
+    assert timeouts == [300.0]
+    assert result.wasResidentBefore is was_resident_before
+
+
+def test_warm_up_on_embeddings_surface_passes_its_budget_through():
+    """The same pre-existing timeout gap on the embeddings warm-up (impl review U1a-m3)."""
+    timeouts: list[float | None] = []
+    body = _json_bytes(_load("embed_response.json"))
+
+    def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
+        timeouts.append(timeout)
+        return _FakeResponse(200, body)
+
+    c = LMStudio("http://localhost:1234", opener=opener)
+    c.warm_up(
+        "m",
+        call_surface="embeddings",
+        system_prompt=None,
+        was_resident_before=False,
+        timeout_s=300.0,
+    )
+    assert timeouts == [300.0]
+
+
 def test_warm_up_on_decisions_surface_refuses_a_missing_question():
     c = client({})
     with pytest.raises(ValueError, match="question"):

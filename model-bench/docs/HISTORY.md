@@ -2,6 +2,49 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-30 — typed-decision-models U1c — pure `decisions.py` and the first golden vectors
+
+**What:** `docs/plans/typed-decision-models.md` §4 U1c as amended by
+`docs/plans/typed-decision-models2.md` §4.1. New `modelbench/decisions.py`, pure and stdlib-only;
+nothing in `runner`/`cli`/`packs` calls it yet (U1d).
+
+- `apply_policy(policy, answer: DecisionAnswer) -> PolicyDecision(handoff, answer)`:
+  `predicate-band` (*yes* iff `p >= h`, *no* iff `p < l`, else hand-off) and `choice-confidence`
+  (the choice iff `confidence >= c`). A policy kind that does not fit the answer type raises.
+- `input_hash(item, role)` and `eval_set_hash(items, role)` per v1.3 §3.5, with
+  `INPUT_FIELDS_BY_ROLE`'s `guard-judge` row only. `eval_set_hash` joins the sorted lines with a
+  `\n` after each (the plan says "sorted lines" without fixing a separator) and refuses an item
+  with no `stratum` rather than defaulting it.
+- `MIN_EVAL_ITEMS`, `FR2_MIN_SPEEDUP`, `FR10_PER_ANSWER_AGREEMENT`, `FR10_MEAN_LATENCY_MS_MAX`,
+  `DECISION_POINT_CHAT_TIMEOUT_SECONDS = 180`; `bar_holds(measured, threshold, *, direction)` (no
+  interval parameter, no `direction` default; refuses an unknown direction and a non-finite or
+  `bool` value).
+- Tables, all read-only: `BAR_KIND_BY_ROLE` and `HANDOFF_FAILURE_BY_ROLE` (`guard-judge` row
+  only, keys pinned equal), `FIT_OUTCOMES` and `QUALITY_TARGETS_BY_BAR_KIND` (plan2 §3.2,
+  note §Q2.0–§Q2.2).
+- `Candidate.load(root, candidateId)` reads `<root>/candidates/<id>.json`; `contentHash` is the
+  sha256 of the file bytes. It refuses (`CandidateError`, a `ValueError`): any missing top-level
+  field (`handoffModel` must be explicit `null`); an id that is not a plain file name or disagrees
+  with the file; a role with no bar kind; a `score` question, up front (closes impl review
+  U1a-n1); `decisionTimeoutSeconds` not a finite number `> 0` (`bool` included); policy bounds
+  outside `0 <= l <= h <= 1` / `0 <= c <= 1`, a policy kind that does not fit the question, and a
+  never-hand-off policy (`l == h`, `c == 0`) iff `handoffModel` is not null; `fit.outcome` /
+  `fit.qualityTarget` outside their closed sets (the target per the role's bar kind); ill-formed
+  `choices`, `fitManifest` or `provenance`. Unknown extra keys are not refused.
+- Golden vectors `tests/fixtures/decision-contract/apply-policy.jsonl` (22 rows, derived by hand
+  from §3.3's inequalities) and `input-hash.jsonl` (4 `guard-judge` rows: each canonical JSON
+  string hand-written, then hashed with `sha256sum`; never by calling `input_hash`).
+  `eval_set_hash`'s expected value was built the same way.
+- Mutation-tested (each mutant on a copy, restored and `cmp`-verified): `HANDOFF_FAILURE_BY_ROLE`
+  key shrink/widen and value move; the 180 pin (181/179/120); `BAR_KIND_BY_ROLE`
+  shrink/widen/move; each requirement constant both ways; `INPUT_FIELDS_BY_ROLE` shrink of each
+  field, widen by `tier`/`itemId`/`expected`/`stratum`, move to another role; `FIT_OUTCOMES` and
+  `QUALITY_TARGETS_BY_BAR_KIND` shrink/widen/move; each `apply_policy`, `input_hash`,
+  `eval_set_hash`, `bar_holds` and `Candidate.load` check — all redden. One equivalent mutant:
+  swapping `apply_policy`'s yes/no branch order (with `l <= h`, `p < l` implies `p < h`).
+
+Full suite `2294 passed, 4 deselected, 2 xfailed` (`tests/test_decisions.py`: 203); `ruff` clean.
+
 ## 2026-10-30 — typed-decision-models U1a (offline) — `LMStudio.decide` on `/v1/decisions`; live probe pending
 
 **What:** `docs/plans/typed-decision-models.md` §4 U1a, **offline half only**. `lmstudio.py` gains
@@ -32,11 +75,19 @@
   deselected by default and **not run**.
 - Mutation-tested: silently accepting a malformed payload, timeouts mapped to
   `LMStudioCallFailed` (in `decide` and in `_raw_post`'s `URLError(TimeoutError)` rung), every
-  individual contract check removed, the route switched, the warm-up question, residency and guard
-  broken, and the `Literal` shrunk — each reddens. A separate `isfinite` check was removed as dead
-  code (an equivalent mutant: the `[0, 1]` comparison already refuses `NaN`/`inf`).
+  individual contract check removed, the route switched, the warm-up question and guard broken,
+  the warm-up's `wasResidentBefore` hardcoded to `True` or to `False`, its `timeout_s` hardcoded
+  (decisions and embeddings warm-ups), `DecisionResult.model`/`EmbedResult.model` set to the
+  *requested* model, either bound of `[0, 1]` made open, and the `Literal` shrunk — each reddens.
+  The residency, timeout, served-model and closed-bound pins came from the implementation
+  review's fix round (`docs/reviews/typed-decision-models-impl.md` Pass 1, U1a-m1–m4; two of the
+  gaps, on `embed` and the embeddings warm-up, predated this unit). A separate `isfinite` check
+  was removed as dead code (an equivalent mutant: the `[0, 1]` comparison already refuses
+  `NaN`/`inf`).
 
-Full suite `2074 passed, 4 deselected, 2 xfailed`; `ruff` clean.
+Full suite `2074 passed, 4 deselected, 2 xfailed` at delivery, `2091 passed, 4 deselected,
+2 xfailed` after the fix round (which also closed U1b-n1/n2's stale "three profiles" text); `ruff`
+clean.
 
 ## 2026-10-30 — typed-decision-models U3a — `classification.score_item` split, no behaviour change
 

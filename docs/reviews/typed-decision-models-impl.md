@@ -184,3 +184,131 @@ I reproduced it. Replacing the response's `model` with the requested `model` lea
 
 1. **Who adds `decided_by`/`probability` to `classification.score_answer`, U1d or U2?** Plan §4 U1d declares the Protocol hook and says U3a's functions satisfy it. HISTORY defers to "whichever unit first writes `detail.decidedBy`" (U2). My recommendation: put it in **U1d's brief**, together with a test that the old pack's path still writes no `decidedBy`. The U3a golden test already guards that.
 2. **Should a `score` question be refused at candidate load (U1c `Candidate.load`) or at the U1d answer-space check?** Either works. It just needs to be named in one brief so U1a-n1 doesn't fall between units.
+
+## Pass 2
+
+*2026-10-31. The Pass 1 fix round and U1c, reviewed against the uncommitted `model-bench/` diff from
+`825d5d93`.*
+
+### Verdict
+
+| Delivery | Verdict |
+|---|---|
+| Fix round (U1b-n1/n2, U1a-m1…m4) | **approve with suggestions**: one residual gap, P2-m1 |
+| U1c, `decisions.py` + vectors | **approve with suggestions**: P2-m2, P2-n1…n3; no blocker or major |
+
+**Suite (run from `model-bench/`):** `2294 passed, 4 deselected, 2 xfailed`, and `ruff` is clean.
+- The total is 2091 after the fix round plus the 203 tests in `test_decisions.py`. That matches HISTORY.
+- The fix round's 17 new `test_lmstudio` tests (3+3+8+2+1) account for the step from 2074 to 2091.
+
+**Mutants:** every mutant ran on a copy that was then restored. Each restore was checked with `cmp`.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the diff is small enough to read and execute directly.
+
+### Pass 1 dispositions
+
+- **U1b-n1: fixed.** "three profiles" became "the profiles" at both `model-bench/AGENTS.md:46` and `fingerprint.py:233`.
+- **U1b-n2: fixed.** The paragraph was rewrapped, and no line in it is longer than 100 characters any more.
+- **U1a-m1: fixed.**
+  - The requested-model mutant now reddens 3 tests on `decide` and 3 on `embed`.
+  - The embed twin, which I had not asked for, is also fixed. Its mutant reddens 3 tests.
+- **U1a-m2: fixed.** Making either bound of `[0, 1]` open reddens 4 tests each.
+  - The rows cover predicate `probability`, choice `confidence`, and `probabilities[]` at both bounds.
+  - JSON integers `0`/`1` are also covered, and they read back as `float`.
+- **U1a-m3: partly fixed (see P2-m1).**
+  - `wasResidentBefore=True` is now caught.
+  - A hardcoded `timeout_s=7.0` is caught on both the decisions warm-up and its embeddings twin.
+  - A hardcoded `timeout_s=300.0` survives on both.
+- **U1a-m4: not fixed as stated.** The rewritten HISTORY sentence now says that a warm-up's "`timeout_s` hardcoded … reddens". Per P2-m1, that is true for 7.0 and false for 300.0.
+- **U1a-m5:** deferred to U1e (plan2 §4.2), as ledgered. Not reviewed here.
+- **Open question 1 (who adds `decided_by`/`probability`):** answered by plan2 §3.3 / §4.1. U1d adds them, together with `failed_call`, with no defaults, and with the old-pack `decidedBy` test.
+- **Open question 2 (where `score` is refused):** answered by plan2 §3.2. `Candidate.load` refuses it, and U1c delivers that; see below.
+
+**P2-m1 (minor). The warm-up timeout pins use the default value, so they cannot catch the default being hardcoded.**
+- **The mutant:** `timeout_s=300.0` hardcoded in the decisions warm-up's `decide` call, or in the embeddings warm-up's `embed` call.
+- **It survives** all 177 `test_lmstudio.py` tests in both places.
+- **Why:** 300.0 is `RunConfig.firstCallTimeoutSeconds`'s default (`runner.py:129`, `cli.py:528`). Both new tests pass `timeout_s=300.0` and assert `timeouts == [300.0]`.
+- **Why it matters:** hardcoding the default is the realistic form of this regression. It would silently ignore an operator's `--first-call-timeout`.
+- **Fix (`model-bench/tests/test_lmstudio.py`):** use a value no code path defaults to, such as `123.5`, in `test_warm_up_on_decisions_surface_passes_its_budget_and_residency_through` and `test_warm_up_on_embeddings_surface_passes_its_budget_through`.
+- **Then fix the HISTORY claim:** the U1a entry's "`timeout_s` hardcoded … each reddens" in `model-bench/docs/HISTORY.md` becomes true once the test changes. Until then, narrow it.
+
+### U1c — `decisions.py` and the first golden vectors
+
+**Verdict: approve with suggestions.**
+
+**Spec coverage.** I checked v1.3 §4 U1c/§5 and plan2 §3.2/§4.1/§5 row by row. Everything is present:
+- `Candidate.load` with its content hash. It refuses a `score` question, an ill-typed `decisionTimeoutSeconds` (NaN, ±inf, `bool`, ≤ 0), an unknown `fit.outcome`, a `fit.qualityTarget` belonging to the other bar kind, and a missing `fit`.
+- `apply_policy`.
+- `input_hash` and `eval_set_hash`.
+- `INPUT_FIELDS_BY_ROLE`, `BAR_KIND_BY_ROLE` and `HANDOFF_FAILURE_BY_ROLE`, each with only the `guard-judge` row. The keys of `HANDOFF_FAILURE_BY_ROLE` are pinned to those of `BAR_KIND_BY_ROLE`.
+- `DECISION_POINT_CHAT_TIMEOUT_SECONDS = 180`.
+- `bar_holds` and the §5 boundary pairs.
+
+**The requirement constants match the requirements.** `docs/requirements/typed-decision-models.md` gives FR-2 "at least 2× faster", FR-10 "at least 90%" and "350 ms or less", and FR-11 "at least 200 items".
+
+**The golden vectors were derived independently of the code.** I recomputed them by hand, without importing `decisions`:
+- **`input-hash.jsonl`, 3 of the 4 rows.** I hand-wrote each row's canonical JSON (keys sorted, no whitespace, non-ASCII kept raw) and hashed it with `printf … | sha256sum`. The results equal the file's `expected` values for `876a4957…` (the understanding path, which the field-reorder row shares), `a479c6c6…` (turns, non-ASCII) and `cb0492ac…` (absent field omitted).
+- **`eval_set_hash`.** The test's `_EVAL_SET_HASH` `3af02801…` is reproduced by `sha256sum` over the three sorted lines, each ending in `\n`.
+- **`apply-policy.jsonl`, all 22 rows.** I checked each one against v1.3 §3.3's inequalities. The rows I read closely:
+  - `l==0, p==0` gives hand-off, because 0 is not below 0;
+  - an empty band at 0 gives *yes* for every p, because `p ≥ h = 0`;
+  - an empty band at 1 with `p=.999` gives *no*;
+  - `c == 0` with confidence 0 gives the choice.
+  All of them are correct. The plan's five named boundaries (`p == l`, `p == h`, `l == h`, `confidence == c`, `c == 0`) are present and asserted.
+- **Mutants of the vector-pinned code redden.** Removing `ensure_ascii=False` reddens 4 tests. Changing `>=` to `>` on confidence reddens 3. Dropping the trailing `\n` in `eval_set_hash` reddens 3. The value move in `HANDOFF_FAILURE_BY_ROLE` reddens 1. Making the empty-band rule one-way reddens 2.
+
+**The implementer's open calls**
+
+- **`eval_set_hash` separator, `\n` after every line: sound.** The plan's formula does not fix a separator. This one is pinned by a hand-derived value, and HISTORY records the choice.
+  - The hash is a **stored-data** format: it goes into every candidate fingerprint, and K counts compare it across runs. Its single home should be the plan (v1.3 §3.5 or plan2), not HISTORY alone; see Open question 2.
+  - It constrains no other component. Only model-bench computes `evalSetHash` (v1.3 §3.5), and decision-models copies only `input_hash`.
+- **`PolicyDecision(handoff, answer)` as the vector `expected` shape: acceptable.** U9 and U5/U6 can read it directly. A choice label can never be confused with a hand-off, because `handoff` is a separate field. The one weakness is P2-n2.
+- **The extra `Candidate.load` checks: sound.**
+  - Requiring every field, with `handoffModel` as an explicit `null`, matches plan2 §3.2's "a missing … field" and turns a typo in a required key into a refusal.
+  - Allowing unknown keys is safe: every key the code reads is required, a typo cannot be silently skipped, and `contentHash` covers any extra key anyway.
+  - **None of this constrains U1d/U2/U5 wrongly.** U6's `fit.py` must write `provenance` and `fitManifest` in full. That is what v1.3 §3.3's sample already shows.
+  - **One constraint may need revisiting because of the over-limit ruling.** See the 512-token paragraph below.
+- **`bar_holds` raising on non-finite or `bool` input: right.** It makes U3c handle an empty or undefined measurement as `not assessable` before it reaches a bar, instead of letting NaN compare `False` into a silent "not met". It does not constrain U3c wrongly, because plan2 §3.6 already routes those states to `not assessable`.
+- **The `HANDOFF_FAILURE_BY_ROLE` value pin ahead of U2: harmless.** It is a transcription now, and U2's withheld-versus-kept test adds the behavioural pin. U4 must update it when it adds the two `fail-closed` rows, which plan2 §4.1 U4 already lists.
+- **The claimed equivalent mutant (yes/no branch order): true only under a precondition the function does not check.** I ran it: all 203 tests stay green. The two orders differ only when `noBelow > yesAtOrAbove`, and `apply_policy` accepts that silently (P2-m2).
+
+**What the 512-token over-limit ruling means for U1c** (`ws:agent-team` `480ef825…`: HTTP 500 above 512 tokens per question; the stakeholder rules that over-limit inputs hand off):
+- **`apply_policy`'s contract does not need to change.** It maps an *answer* to a decision. An over-limit call has no answer, so routing it to hand-off happens before `apply_policy`: U1d/U2's call handling, and U9's client.
+  - If that routing must be byte-equal across the three copies, it needs its own vector family, for example an error-classification table.
+  - That vector family belongs to U1d/U9, not to a widened `apply_policy`.
+- **One U1c rule *is* affected: the "empty band iff `handoffModel` is null" rule in `_policy_problem`.**
+  - Under the ruling, a candidate whose policy never hands off on confidence still needs a hand-off model for over-limit inputs.
+  - Today that combination (empty band plus a non-null `handoffModel`) is refused (`test_candidate_load_refuses_an_empty_band_with_a_hand_off_model`).
+  - A decision-model-only candidate (`handoffModel: null`) cannot honour the ruling at all, so its over-limit items would have to stay kept failures or be withheld.
+- **This is a design decision for `architect` (Open question 1), not a U1c defect.** The code implements v1.3 §3.3 as written. If the rule relaxes to one direction (a non-empty band requires a hand-off model), the fix is a one-line change in `_policy_problem` plus a flip of that test.
+
+**Findings**
+
+- **P2-m2 (minor). `apply_policy` gives order-dependent results on a band it never validates.**
+  - With `yesAtOrAbove=0.4, noBelow=0.6` and `p=0.5`, it returns *yes*. The swapped branch order returns *no*. I executed both.
+  - `Candidate.load` refuses such a band, but three copies will exist: falkor-chat's U9 copy reads its own config, and decision-models' `fit.py` searches (l, h) pairs.
+  - So the "equivalent mutant" is equivalence by convention, and two correct-looking copies can disagree on input that no vector covers.
+  - **Fix (`model-bench/modelbench/decisions.py`, `model-bench/tests/test_decisions.py`):** have `apply_policy` raise `ValueError` itself unless `0 ≤ noBelow ≤ yesAtOrAbove ≤ 1` (and `0 ≤ minConfidence ≤ 1`), and add a refusal test. The branch-order mutant then becomes equivalent by construction.
+  - Whether the refusal also becomes a vector row (an `expected: {"error": …}` shape) is the implementer's call. Without it, the copies are held only by each one's own suite.
+- **P2-n1 (nit). Two validation regexes accept a trailing newline.**
+  - `_SHA256_RE` and `_CANDIDATE_ID_RE` use `$`, which matches before a trailing `\n`. I executed both: `"0"*64 + "\n"` passes as a sha256, and `"guard\n"` passes as a candidate id.
+  - **Fix (`model-bench/modelbench/decisions.py`, `model-bench/tests/test_decisions.py`):** use `.fullmatch` or `\Z`, and add one `"…\n"` row to each refusal test.
+- **P2-n2 (nit). `PolicyDecision` can represent a state that should not exist.** `PolicyDecision(handoff=False, answer=None)` can be constructed, so the invariant "`answer is None` iff `handoff`" lives only in a docstring.
+  - **Fix (`model-bench/modelbench/decisions.py`, `model-bench/tests/test_decisions.py`):** a `__post_init__` check. It would also give U9's and decision-models' copies a stated rule to transcribe.
+- **P2-n3 (nit). The fix-round result was written into the delivered U1a HISTORY entry.** The entry's figures and mutant list were rewritten in place, rather than recorded as a separate dated line. A by-lookup log reads more cleanly with an entry per change.
+  - **Fix (`model-bench/docs/HISTORY.md`):** this is optional, since the edit is accurate apart from P2-m1. Next time, record a fix round as its own dated line.
+
+**Docs.**
+- The HISTORY U1c entry is accurate: 22 and 4 rows, hand-derived vectors (which I confirmed), the mutant list (the equivalent-mutant claim is qualified by P2-m2), and `2294/4/2`.
+- The `model-bench/AGENTS.md` "Current state" sentence that adds `decisions` is a rewrite in place. "No `run` path uses it yet" is true now.
+
+**What's solid.**
+- The vectors really are independent of the code.
+- Each closed set is pinned by a transcription.
+- The JSON-type traps are guarded: NaN tokens, `bool` as a number, and a list or object where a closed-set string belongs (unhashable).
+- `CandidateError` is a `ValueError`, ready for exit 4.
+
+### Open questions
+
+1. **(architect) Over-limit hand-off versus "empty band iff no hand-off model".** Under the 512-token ruling, should `Candidate.load` accept an empty band with a hand-off model (an overflow-only hand-off)? And what is a decision-model-only candidate's over-limit item: kept failure, withheld, or refused? This is the one U1c contract the ruling touches. It should be settled before U1d builds on `_policy_problem`.
+2. **(architect) Which document owns the `eval_set_hash` line format?** It is now a stored-data format, and HISTORY is a record, not a spec. I recommend one sentence in plan2's next revision, citing the separator.
