@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-090
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-098
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -211,29 +211,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   `run_participant`, the F1 coverage probe, and aggregate fixtures with an `es` participant, an
   `unknown` reply, a multi-row reply and a 409/timeout record. Re-run the review's mutants
   (Appendix B) to confirm they are killed.
-
-### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
-
-> **Why it exists.** §1.5 lists 8 of the package's modules and omits `storefront.py` and
-> `storefront_api.py` along with everything else added since M1. Its title says "as built, M1",
-> but it sits in a section a reader reaches looking for the current layout, so the qualifier does
-> not do the work it looks like it does.
->
-> **The decision is which of two things it should be**, and that is the whole item: *refresh §1.5
-> to the current module set* — and accept that it must then be maintained on every module
-> addition — *or retitle it explicitly as a frozen M1 snapshot* and point to whatever should be
-> read instead. It is not obviously the former: a layout list is exactly the kind of prose that
-> goes stale silently, and the repo's own convention (root `AGENTS.md`) is that history belongs
-> in `HISTORY.md` rather than in a living document.
->
-> **Why it was not fixed in place.** `docs/plans/salesperson-ui.md` §5.0 rules §1.5 out of scope
-> for every step of that plan and says this item is to be filed instead. It had not been —
-> `teco`'s own action item, missed at the time and caught by the S7→S8g documentation unit.
->
-> Two smaller neighbours worth folding in when this is picked up, both found the same way:
-> **§1.2's layering diagram** (`api → services → repository → db`) has no storefront layer, and
-> **§1.6 "TDD build order"** is an M1 checklist with ✅ marks and a "when this code lands, update
-> `AGENTS.md`" note — frozen history sitting in a living document.
 
 ### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🟡 in-progress — root-caused at n=75, low base rate, no fix warranted yet, 2026-08-31)
 
@@ -524,30 +501,31 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 ### K-033 — Make `maxSteps` an exact cap (`>` → `>=` in `_drive_loop`) (🔵 proposed — filed out of K-031, stakeholder decision OQ-1 "document now, fix later", 2026-07-24)
 
 > **Why it exists.** `maxSteps` does not mean what its name says. `executor._drive_loop` records a
-> step and *then* checks `rec["stepCount"] > max_steps` — at `executor.py:410` (OUTCOME A, a guard
-> fired) and `:427` (OUTCOME C, a legitimate self-loop). With `maxSteps: 2`: step 1 → `1 > 2` false;
+> step and *then* checks `rec["stepCount"] > max_steps` — at `executor.py:734` (OUTCOME A, a guard
+> fired) and `:751` (OUTCOME C, a legitimate self-loop). With `maxSteps: 2`: step 1 → `1 > 2` false;
 > step 2 → `2 > 2` false; **step 3 runs**, `3 > 2` → fail. So the budget means *"at least N, then one
 > more"*, and a run executes at most **`maxSteps + 1`** steps. Confirmed by reading and **pinned by a
-> passing test** — `tests/test_executor.py:158`, `assert len(trail) == 4  # maxSteps=3 → the 4th
+> passing test** — `tests/test_executor.py:159`, `assert len(trail) == 4  # maxSteps=3 → the 4th
 > advance trips the guard`. Harmless for the two proof defs (8/6/6 steps against `maxSteps: 24`), but
 > it makes `maxSteps` unusable as an SLA or a cost budget, which is exactly what a caller reaches for
-> it for. K-031 shipped the **documentation** of the real semantics at six sites (DESIGN §6,
-> QUERIES §12.5 + the two `$maxSteps` comments, `schemas.py`, `AGENTS.md`'s executor-invariants
-> block) per the binding stakeholder decision; this item is the **fix**.
-- **The change is two characters, in two places** — `>` → `>=` at `executor.py:410` and `:427`.
+> it for. The real semantics are documented per the binding stakeholder decision: the rule in
+> DESIGN §6.2 ("What `maxSteps` actually means"), plus two restatements, QUERIES §12.5's italic
+> `stepCount > maxSteps` sentence and the `schemas.py:265-266` comment. This item is the **fix**.
+- **The change is two characters, in two places** — `>` → `>=` at `executor.py:734` and `:751`.
   Everything else about this item is ceremony, and the ceremony is the reason it was deferred out of
   an observability slice rather than the difficulty of the edit.
-- **Both sites are *inside* the SHA-locked `_drive_loop`** (`71055f756280`, still live on the
-  tree — recompute with the DESIGN §6.2 recipe). Landing it therefore costs:
+- **Both sites are *inside* the SHA-locked `_drive_loop`** (`6cd35d650b5d` at `c0eeb348` —
+  recompute with the DESIGN §6.2 recipe; earlier records quote `71055f756280`, the value before
+  K-056). Landing it therefore costs:
   - a lock break + **re-lock ceremony**: recompute the SHA, then re-quote it everywhere it is
-    asserted. Scope it with `grep -rn 71055f756280` rather than a count here — the number only
-    grows, and it is now well past forty sites across plans, reviews and test plans;
+    asserted. Scope it with `grep -rn 6cd35d650b5d` rather than a count here — the number only
+    grows;
   - **records that assert the SHA was unchanged during their own work must not be rewritten** —
     every `archived` plan/review that quotes it is a historical claim about its own delivery, true
     when written. The re-lock has to be expressed as *"as of K-033 the lock is `<new>`; earlier
-    records quote the pre-K-033 value"* — i.e. the lock stops being a single grep-able constant.
-    **Decide that framing before editing**; it is the item's only real design question.
-  - **test edits**: `tests/test_executor.py:142-158` (the pinned count 4 → 3, and its explanatory
+    records quote the pre-K-033 value"* — as K-056's re-lock already left two values in the
+    record. **Decide that framing before editing**; it is the item's only real design question.
+  - **test edits**: `tests/test_executor.py:143-159` (the pinned count 4 → 3, and its explanatory
     comment), plus a sweep of `tests/test_process_flow.py`'s step accounting and the
     `access-request@v1` `maxSteps: 24` headroom;
   - **behavioural blast radius**: every existing run's effective budget shrinks by one.
@@ -556,10 +534,10 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   terminal-node-must-post engine contract). K-027 closed 2026-08-21 and **item 2 shipped without
   breaking the lock** — it was implemented at `_run_agent_node`, outside it, exactly as this item's
   original scepticism predicted. K-033 now pays the full re-lock ceremony on its own, or the honest
-  `maxSteps + 1` prose stays in six documents indefinitely. That is the decision to make; nothing is
+  `maxSteps + 1` prose stays in its three places indefinitely. That is the decision to make; nothing is
   waiting on anything else.
 - **Also decide (part of the item, not a separate one):** whether the *park* path (OUTCOME B,
-  `executor.py:415-421`) and the terminal path stay deliberately unchecked. They are unchecked today
+  `executor.py:739-747`) and the terminal path stay deliberately unchecked. They are unchecked today
   by design — a parked run cannot self-drive — and K-031's documentation says so explicitly, so
   changing that is a second semantic decision, not a consequence of `>=`.
 - **Owner:** **`tdd-engineer`** (a behaviour change pinned by an existing passing test is the
@@ -569,11 +547,58 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** **none** — no new node type, label, property, index or vector dimension; no query
   changes. The risk is purely behavioural (every run's budget shrinks by one) and procedural (the
   lock/archive framing).
-- **Test strategy:** flip `tests/test_executor.py:142-158` to assert exactly `maxSteps` advances
+- **Test strategy:** flip `tests/test_executor.py:143-159` to assert exactly `maxSteps` advances
   (3, not 4) and watch it go red before the fix; add the boundary case at `maxSteps = 1`; assert the
   park path is still **not** budget-checked (a parked run at `stepCount == maxSteps` must stay
   `waiting`, not fail); re-run `tests/test_process_flow.py` and the `access-request@v1` acceptance
   flow to confirm the `maxSteps: 24` headroom still covers it.
+
+### K-096 — A step-budget failure answers `status: "failed"` with no `error`, and `/input` returns the submitted ctx instead of the graph's (🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 2, 2026-10-31)
+
+> **Why it exists.** `executor._fail_budget` (`executor.py:1495-1501`) stamps the run `failed` with
+> a `step budget exceeded` note in its graph `ctx` and *returns* `"failed"` without raising, so
+> `Services._drive_or_fault` treats it as the clean path: `error` and `fault_ctx` stay `None`.
+> `submit_workflow_input` then answers `{runId, status: "failed", ctx: <submitted merge>}`
+> (`services.py:2437-2441`). The response has no reason and a `ctx` that disagrees with the graph,
+> the exact half-applied state the fault path's own rule exists to prevent (the
+> `_drive_or_fault` docstring; SERVER.md §1.4). `POST /workflow-runs` has the same missing `error`,
+> pinned by `tests/test_process_input.py:686-711`. A caller finds out why only through
+> `GET /workflow-runs/{runId}`. SERVER.md §1.4 and §1.7 document this as current behaviour.
+- **The decision:** keep "budget is not a fault" (no exception; plan m-11) but report it, by having
+  the service read the run back whenever the drive returns `failed` and fill `error` and `ctx` from
+  that read, as the fault path does. Or leave it, and the SERVER.md text stands.
+- **Owner:** `tdd-engineer`. Outside the locked `_drive_loop`: the change is in `services.py`.
+- **Done-condition:** both routes return `error: "step budget exceeded"` and the graph's `ctx` on a
+  budget failure; the pinning test is deliberately rewritten, not deleted; SERVER.md §1.4/§1.7
+  updated at close.
+- **Risks/RAM:** none. One extra `get_run` on a failed drive only. The two REST routes are the
+  only consumers (no MCP tool wraps them); they gain a field and lose nothing.
+- **Test strategy:** flip `test_budget_exhaustion_reaches_the_same_envelope_without_raising` to
+  expect `error`, red first; add the `/input` case (a resume that exhausts the budget) asserting
+  the response `ctx` equals the graph `ctx`.
+
+### K-097 — Close the R-1 stale-merge window on `/input` with a `ctxVersion` CAS (🔵 proposed — DESIGN §6.2 "Residual window (R-1)"; `docs/reviews/live-specs.md` Pass 8, 2026-10-31)
+
+> **Why it exists.** `submit_workflow_input` reads the run, merges the input into its `ctx`
+> service-side, then writes the merge inside the resume CAS (`repository.resume_run_with_ctx`,
+> `repository.py:2929-2957`, QUERIES §12.13). The read is outside the CAS, and the CAS checks only
+> `status = 'waiting'`. DESIGN §6.2 states the residual (R-1): two submitters can merge onto the same
+> base, and the loser's input is reported as a 409, not applied. It names the fix, a `ctxVersion`
+> counter compared and bumped in the same CAS, as unbuilt. Nothing tracked it until now (the
+> archived `m3-process-flow.md` deferred it). The timer sweep is one more submitter on the same
+> CAS (DESIGN §6.2).
+- **Check first:** whether a status-only CAS also admits an ABA. If the winner's drive re-parks the
+  run before a slower submitter's CAS lands, that CAS matches `waiting` again and writes a merge
+  built on the pre-drive `ctx`, dropping what the drive wrote. That would be worse than R-1 as DESIGN
+  §6.2 states it. Not yet verified; a `ctxVersion` CAS closes both.
+- **Owner:** `graph-dba` (the CAS shape and a new `WorkflowRun` property) → `tdd-engineer`. Outside
+  the locked `_drive_loop`.
+- **Done-condition:** a resume whose `ctx` read is stale is refused with nothing written; DESIGN §6.2
+  R-1 and QUERIES §12.13 updated at close.
+- **Risks/RAM:** one integer per `WorkflowRun`; existing runs need a default (`coalesce`) or a
+  backfill.
+- **Test strategy:** an interleaving test that injects a second submitter between the read and the
+  CAS (and, if the ABA holds, a re-park between them) and asserts the stale writer gets 409.
 
 ### K-038 — `refreshRunPanel` has no mutex against overlapping poll-tick/submit-response invocations (🔵 proposed — filed out of K-036's Wave 3+4 analyst re-review gate, `docs/reviews/web-api-coverage-impl.md` Pass 3, findings m6/m7, 2026-07-29)
 
@@ -758,6 +783,30 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   for each are in the review's Pass 2.
 - **Risks/RAM:** none — query-construction change only.
 
+### K-091 — `Document.lshBand0..7` are never written, so `find_update_shortlist`'s band signal is dead (🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M2 and Pass 8 claim 3, 2026-10-31)
+
+> **Why it exists.** Suggested-tier update detection unions two lookups in
+> `repository.find_update_shortlist`: an LSH band lookup (`d.lshBand{i} = $band{i}` OR-ed,
+> `repository.py:1985`) and a title-fuzzy lookup. `background._safe_detect_update` computes the new
+> document's bands (`update_detection.minhash_signature`/`lsh_bands`, `background.py:272-273`) and
+> hands them to that read, but nothing stores them: `create_document_with_auto_supersede` writes no
+> band property, and the only writers in the tree are test fixtures (`test_queries.sh:1875-1876`,
+> `tests/test_repository.py::_document_with_lsh`). The band lookup therefore matches nothing, and the
+> narrow title lookup (K-064) is the only candidate source. A live read found 0 of 455 `Document`s in
+> `ws:acme`/`ws:agent-team` with `lshBand0`. The eight `Document.lshBand<i>` indexes
+> (`bootstrap_schema.sh:206-208`) index nothing. QUERIES §14.9 states the defect.
+- **Owner:** `tdd-engineer`, with a `graph-dba` look at the write if it lands in the ingest query.
+- **Scope:** store the bands for every new `Document`, plus a one-off per-workspace backfill. The
+  write site is the one design call. Detection is skipped for an auto-superseded ingest (QUERIES
+  §14.9), so a detection-time write would leave those current documents band-less; the ingest
+  write covers every document.
+- **Done-condition:** every ingested `Document` carries `lshBand0..7`; existing ones are backfilled;
+  a near-duplicate with an unrelated title is suggested through the band signal on a live instance;
+  QUERIES §14.9's defect sentence and K-064's premise are updated at close.
+- **Risks/RAM:** 8 short strings per `Document`, and one entry per band in indexes that exist today.
+- **Test strategy:** failing test first: ingest a document and assert its bands are stored, then
+  assert a near-duplicate ingest shortlists it with the title lookup disabled.
+
 ### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
 
 > **Why it exists.** `repository.find_update_shortlist`'s title-fuzzy RediSearch query joins one
@@ -771,16 +820,18 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > when non-empty," `repository.py:1863-1868`, plan §3.4) — a reasonable reader expects any shared
 > distinctive word to shortlist a candidate for the precise Jaccard check to then judge.
 >
-> **Not an AC violation** — the LSH/MinHash-banding signal is the primary, fingerprint-based net
-> (ML note §4.1); title-fuzzy is explicitly "complementary," not load-bearing, and AC-2 held in
-> Stage E's live fixture via the band signal. This narrows the secondary signal's real-world
-> recall, it does not remove suggested-tier detection.
+> **In production this is the only shortlist signal.** The design makes the LSH band lookup the
+> primary net and title-fuzzy the complement (ML note §4.1), but no path writes the bands (K-091),
+> so today title-fuzzy alone decides which candidates the Jaccard check ever sees, and its
+> narrowness limits suggested-tier recall directly. Stage E's live AC-2 passes (report TP-04,
+> TP-07) both reused the predecessor's title, so the title lookup found them; with no stored bands,
+> the band signal cannot have. Once K-091 lands, this narrows a secondary signal again.
 >
 > **The decision is a design call, not a mechanical fix**: explicit-OR the per-token fuzzy terms
 > (`%tok1%|%tok2%|...`) trades recall up against precision down (a title sharing just one common
-> word, e.g. "Report", would now shortlist against unrelated documents — bounded in practice by the
-> LSH signal already narrowing to true near-duplicates and the exact-Jaccard check downstream
-> re-filtering the shortlist, but not zero-cost); dropping to a smaller, more distinctive token
+> word, e.g. "Report", would now shortlist against unrelated documents; the exact-Jaccard check
+> downstream re-filters the shortlist, but it is not zero-cost, and the shortlist's `LIMIT` can
+> crowd out the true predecessor); dropping to a smaller, more distinctive token
 > subset is the other named option. Route to `data-scientist` for a method opinion (RAG/candidate-
 > generation recall/precision trade-off, squarely its lane) before `coder`/`tdd-engineer`
 > implements — this is exactly the "reviewer's suggested fix is a finding to judge, not an
@@ -803,6 +854,92 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   predecessor after the fix; a hard-negative case (two titles sharing only a common stopword-ish
   term) should not flood the shortlist — both belong in `test_repository.py` plus a
   `test_queries.sh` addition per the plan's own "every new Cypher shape raises the baseline" rule.
+
+### K-092 — `test_queries.sh`'s §14.8 `SUPERSEDES.matchId` plan assertion can never pass, so the suite is red (🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M1, 2026-10-31)
+
+> **Why it exists.** `scripts/test_queries.sh:1694-1695` profiles
+> `MATCH (a)-[r:SUPERSEDES {matchId: 'sm1'}]->(b) RETURN r.status` and checks it with
+> `assert_index_scan` (`:52-62`), which requires the substring `Node By Index Scan`. A
+> relationship-index lookup plans as `Edge By Index Scan | [r:SUPERSEDES]`, and QUERIES §14.8 says
+> exactly that, so the assertion fails on every run: the suite is 460/461 (Pass 10). The query is
+> right; the check is wrong. A suite that is known red gates nothing, and `falkor-chat/AGENTS.md`
+> requires it green before any schema or query change.
+- **Owner:** `tdd-engineer` (or `coder`); no `graph-dba` gate, since no query changes.
+- **Scope:** add a relationship-index helper (`assert_contains "Edge By Index Scan"` plus the
+  existing `assert_not_contains "Node By Label Scan"`) and use it at `:1695`. Check whether any other
+  relationship-indexed plan assertion uses `assert_index_scan`.
+- **Done-condition:** the suite passes in full; with `(a:Document)` labelled in the probed query
+  (the mutant), the new helper fails.
+- **Risks/RAM:** none. `test_queries.sh` deletes the `reference` graph at teardown, so re-seed
+  afterwards (`falkor-chat/AGENTS.md`, Key scripts).
+- **Test strategy:** run the suite before (461 cases, 1 failure) and after (461 passing), then the
+  labelled-endpoint mutant.
+
+### K-093 — `(:Message)-[:MENTIONS]->(:Entity)` has a reader and no writer (🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31)
+
+> **Why it exists.** `repository.hybrid_search` (`repository.py:891`) expands every ANN seed through
+> `(seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)` into a `relatedContext` field, but
+> nothing in `server/`, `scripts/` or `web/` creates `MENTIONS`. Entity extraction runs over
+> document chunks only (`ABOUT`, Chunk→Entity). So `relatedContext` is always empty, and every
+> message search pays for an `OPTIONAL MATCH` that cannot match. DESIGN §5.1 and §8 mark the edge
+> dormant.
+- **The decision:** build the writer (entity extraction over messages: per-message LLM calls and
+  entity fan-out RAM, so a `data-scientist` and `graph-dba` call first), or drop the expansion and
+  the edge from the schema and the response. Either is a change to a live-spec contract.
+- **Owner:** `architect` for the decision; then `tdd-engineer`.
+- **Done-condition:** `relatedContext` is either populated from real `MENTIONS` edges or removed,
+  with DESIGN §5.1/§8 and QUERIES §6 updated at close.
+- **Risks/RAM:** building it adds `MENTIONS` edges per message (RAM, DESIGN §11); dropping it
+  removes a response field a client might read.
+
+### K-094 — `(:Message)-[:REPLY_TO]->(:Message)` has a reader and no writer (🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31)
+
+> **Why it exists.** `repository.get_message` (`repository.py:2414`) returns `quotedId` from
+> `OPTIONAL MATCH (m)-[:REPLY_TO]->(quoted:Message)`, but no route, MCP tool or service writes
+> `REPLY_TO`: no request schema carries a quoted-message id. The only `CREATE (m)-[:REPLY_TO]` is
+> suite seeding (`test_queries.sh:212`), and QUERIES §4 marks its reply write as a library query.
+> So `quotedId` is always `null`. Separate from K-093: this one needs a request field, not a
+> model.
+- **The decision:** add quoting (an optional quoted-message id on the post paths, validated to be in
+  the same thread or workspace) or drop `quotedId` and the edge.
+- **Owner:** `architect` (small) → `tdd-engineer`.
+- **Done-condition:** `quotedId` is either written by a front door and read back, or removed; DESIGN
+  §5.1 and QUERIES §4 updated at close.
+- **Risks/RAM:** one edge per reply. The write joins the §4 message write paths, which must stay one
+  `GRAPH.QUERY` each.
+
+### K-095 — `config.AGENT_NAME` is parsed and never read (🔵 proposed — `docs/reviews/live-specs.md` Pass 9 claim 3, 2026-10-31)
+
+> **Why it exists.** `config.py:87` reads `FALKORCHAT_AGENT_NAME` into `AGENT_NAME`, and nothing in
+> `falkorchat/` reads it. The environment variable itself is live: `scripts/seed_demo.sh:47` reads it
+> directly as the seeded `Agent`'s display name, and `start_server.sh`/`start_demo.sh` pass it
+> there. What is dead is the server-side copy, and the exports to uvicorn
+> (`start_server.sh:242`, `start_demo.sh:369`) and `server/.env.example:43` imply the server uses
+> it. SERVER.md §1.3 states the truth.
+- **Owner:** `coder`.
+- **Scope:** remove `config.AGENT_NAME` and the server-facing mentions (the uvicorn exports and the
+  `.env.example` line), keeping the variable for `seed_demo.sh`; or, if the server should name its
+  agent, read it where the `Agent` is resolved. Removal is the default.
+- **Done-condition:** no unread config key; SERVER.md §1.3's row updated at close.
+- **Risks/RAM:** none.
+
+### K-098 — Review the live `GRAPH.CONFIG` defaults before production (🔵 proposed — DESIGN §13; `docs/reviews/live-specs.md` Pass 8 m5, 2026-10-31)
+
+> **Why it exists.** DESIGN §13 lists a pre-production review of the live `GRAPH.CONFIG` defaults
+> as open and tracked here: `THREAD_COUNT 4`, `OMP_THREAD_COUNT 4`, `CACHE_SIZE 25`,
+> `MAX_QUEUED_QUERIES 25`, `QUERY_MEM_CAPACITY 0` (unlimited) and `ASYNC_DELETE 1`. They are the
+> engine's defaults, never chosen for this workload. Unlimited query memory, for one, lets a single
+> runaway query take the RAM every in-memory workspace graph lives in. DESIGN §10's tuning bullet
+> names the knobs; `TIMEOUT` is already decided there.
+- **Owner:** `graph-dba` (sizing and recommended values) with `devops` (where they are set: compose,
+  `start_falkordb.sh`).
+- **Scope:** a recommended value per key with its reason, measured where it matters
+  (`QUERY_MEM_CAPACITY` against the heaviest GraphRAG read, `THREAD_COUNT` against host cores), and
+  the place it is set. No change to queries or schema.
+- **Done-condition:** each key has a decided value, set in the deployment config; DESIGN §10/§13
+  updated at close.
+- **Risks/RAM:** a too-low `QUERY_MEM_CAPACITY` fails legitimate reads; measure before capping.
+- **Not urgent:** nothing runs in production. Do it before the first production deployment.
 
 ## Deferred — M2.5 hardening track
 
@@ -879,10 +1016,12 @@ Every other plan named by a delivered item now exists; this is what is left.
   with `grep -rln k031-structure-read-impl docs/` rather than trusting that count. Fold it into a
   change that already opens them; it does not earn a change of its own, and renames in this repo are
   forward-only by ruling.
-- DESIGN §13 remaining open questions — resolve as their milestones arrive: real auth (K-016),
-  message/embedding retention, cross-workspace analytics, Bolt vs RESP for the gateway (K-018).
-  (The workflow guard expression language is **no longer** among them — resolved at DESIGN §6.1,
-  and §13 records it struck through.)
+- DESIGN §13 open questions — resolve as their milestones arrive: message/embedding retention
+  under the always-in-RAM constraint, and cross-workspace analytics (app-layer fan-out vs. an
+  `analytics` rollup graph). Both are homed here, not as items, because neither has a trigger or an
+  owner yet; promote one to a `K-` item when a workspace's size or a reporting need forces it. The
+  other two §13 questions have items: the push gateway's transport (K-018) and the `GRAPH.CONFIG`
+  review (K-098).
 - **WSL2 memory cap for the 16GB host** (parked, not applied per user 2026-07-18) — WSL2 runs uncapped at its 8GB
   default (50% of the 16GB host) with `autoMemoryReclaim` off, overcommitting host RAM alongside Windows-side LM Studio;
   likely root cause of the recent memory-overload crashes. Parked fix: set `memory=6GB` + `swap=4GB` +

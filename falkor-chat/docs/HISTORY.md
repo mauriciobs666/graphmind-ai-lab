@@ -5,6 +5,25 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-31 — Live spec caught up to shipped code; K-063 closed; K-091–K-098 filed
+
+- **What.** `docs/DESIGN.md`, `docs/SERVER.md` and `docs/QUERIES.md` are now the component's live
+  spec (root `AGENTS.md`, "A live spec is…"): rewritten to the externally observable contracts at
+  code `c0eeb348`, with history removed and section numbers kept. Commits `62e47dcc` (DESIGN),
+  `b1db5c90` (SERVER), `9d240859` (QUERIES), `9aa77dc4` (set-level fixes: embedding migration,
+  guard semantics, cart pricing, provider wire contract, ingestion parameters). From now on the
+  spec is updated once, at each feature's close.
+- **K-063 closed.** `SERVER.md` §1.5 now lists the current module set, §1.2 has the storefront
+  layer and §1.6 is a pointer, so the refresh-or-freeze question is settled as refresh.
+- **Filed.** K-091 (`lshBand` never written), K-092 (`test_queries.sh` §14.8 assertion can never
+  pass; suite red 460/461), K-093/K-094 (`MENTIONS`/`REPLY_TO` have no writer), K-095
+  (`config.AGENT_NAME` unused), K-096 (step-budget failure has no `error`), K-097 (R-1 `ctxVersion`
+  CAS), K-098 (`GRAPH.CONFIG` review). K-033 (lock value `6cd35d650b5d`, sites) and K-064 (band
+  signal not the primary net) rewritten.
+- **Checked.** `analyst` against code `c0eeb348`: per document Passes 8/13 (DESIGN), 9/12 (SERVER),
+  10/15 (QUERIES), set-level Pass 17 (needs changes) → Pass 19 (approve with suggestions, AC-1
+  met), in `docs/reviews/live-specs.md`. Coordination: `docs/plans/live-specs-coordination.md`.
+
 ## 2026-10-28 — K-086 closed: a translated category browse lists the category; K-079 F2 delivered
 
 - **What (K-079 F2).** A `query_graph_data` row always carries its label's identity column
