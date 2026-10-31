@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Method Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.1 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models2.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.1 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models2.md` · **Extended by:** `docs/plans/typed-decision-models3.md`
 
 *2026-10-30 — v1.1: answers review Pass 1, with the note v1.4's chat-timeout and load-rule rulings.*
 
