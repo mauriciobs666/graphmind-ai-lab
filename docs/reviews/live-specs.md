@@ -1550,3 +1550,223 @@ The AC-3 grep returns 0 (re-run). Numbering is unchanged (§1–§1.12, §2–§
 
 **Growth** is +121 words. B4, M1(c) and M3 are new scope: contracts that were missing. M2 is a
 net cut. `SERVER.md` is not a growth-stops kind.
+
+## Pass 10
+
+**Scope.** Gate for unit L5c (`analyst`). It checks the uncommitted rewrite of
+`falkor-chat/docs/QUERIES.md` (26,762 words; the baseline `git show c0eeb348:falkor-chat/docs/QUERIES.md`
+has 29,382) against the shipped code at **pinned sha `c0eeb348`**. `git status` shows no change under
+`falkor-chat/server/` or `falkor-chat/scripts/` since that commit. Read: plan §3.5 and §5;
+requirements FR-3, AC-1 and AC-3; root and `falkor-chat/REVIEW.md`; and the writer's inventory
+(`l5c.md`), but only after building my own. The inventory checks the text, not just that a query
+exists:
+
+- every string literal in `Repository`, compared to the doc's `cypher` blocks with whitespace and
+  `//` comments ignored;
+- the reverse direction, every doc block against the code literals;
+- a per-section word diff against the baseline, with every removed line read in the sections that
+  shrank by 60 words or more.
+
+I did not run `test_queries.sh` or pytest, because no code changed and both wipe `reference`. The
+only shared-instance commands were `GRAPH.EXPLAIN` and `GRAPH.RO_QUERY` on `falkordb-dev`.
+
+CPG: used cpg_falkorchat — it gives an independent list of the 111 non-test methods that call `query`/`ro_query` (all in `repository.py`), and call sites by `CALL.NAME` for the "no server caller" and library markings.
+
+**Verdict: needs changes.** Coverage is complete and the query text is exact. All four writer claims
+hold. History removal is clean, and the numbering is unchanged. No current contract was lost: every
+large cut is history, plan provenance or DDL that now lives in `DESIGN.md` (checked), or
+transport detail that now lives in `SERVER.md` (checked). One sentence in §14.9 contradicts
+observable behavior. Root `REVIEW.md` ranks that as a blocker, and AC-1 at L5s would report it. The
+fix is one clause.
+
+### Inventory vs. document (verified)
+
+| Check | Result |
+|---|---|
+| Query-sending methods (CPG, non-test) | 111. Each is named in the doc except `resolve_member_kinds`, whose query appears verbatim under §2 "Member-kind lookup" (nit N1) |
+| Code literals found in a doc block | 117 of 123 (the baseline doc matched 84). For the other 6: the unfiltered `list_documents`/`list_document_updates` branches are described as the same text with the filter dropped, which is exact. `post_agent_answer_first` is given as "the §4 first-message write plus the seed block", which is exact (nit N1). `_PUBLISH_CYPHER`/`_READ_META_CYPHER`/`_READ_TRANSITIONS_CYPHER` with `label=WorkflowDef` match exactly; the `WorkflowDefSnapshot` versions differ only by `d`→`snap` (m1) |
+| Doc blocks with no server literal | each one is marked as a library or suite query, a diagnostic, a §4.x backfill script, an elided `…` reply/band block, or a §15.3 template |
+| "Library query" / "no server caller" markings | each confirmed to have no non-test caller: the `identity` user MERGE (no server `identity` write), list channel members, the reply write (`REPLY_TO`'s only server literal is the `get_message` read, l.2414), the thread window (`NEXT*1..` appears nowhere in `server/`), the snapshot point lookup, the channel-scoped search, and `create_document`/`create_entity` (no `.create_document(`/`.create_entity(` outside `repository.py`). The seed attributions are wrong (m2) |
+| Numbering | the heading diff shows the only numbered additions are §14.7–§14.9 and §15.3. Three unnumbered subsections were added (existence checks, `thread_has_head`, `ping`), and these move no numbers |
+| AC-3 sweep, run verbatim | 9 hits, every one `defVersion:`/`currentVersion:` matching `Version:`, ruled not history. `K-030`, `K-033`, `K-064`, `K-076` and `K-090` are each open in `BACKLOG.md`. A wider sweep for "previously", "no longer", "Stage", "fixed" and similar finds only behavioral prose |
+| Growth-stops | not applicable: a live spec is outside the bullet. The new text is new scope, catch-up for shipped surfaces (§14.7–§14.9, §15.3), not rework |
+
+### Writer claims (rulings)
+
+1. **§18's five constants are byte-identical**: confirmed. Each `_ENSURE_PARTICIPANT_CYPHER`,
+   `_RESET_PARTICIPANT_CYPHER`, `_RESET_ALL_PARTICIPANTS_CYPHER`, `_CURRENT_ORDER_CYPHER` and
+   `_ORDER_OWNERSHIP_CYPHER` value (read with `ast.literal_eval`) equals one whole doc block
+   exactly. Positive control: changing `orderId`→`orderID` in a scratch copy of the doc makes
+   `_CURRENT_ORDER_CYPHER` report False.
+2. **`read_thread` returns `coalesce(author.userId, author.agentId) AS authorId`**: confirmed at
+   `repository.py:741`, and §4 now states it.
+3. **`list_threads` anchors on `Channel.channelId`**: confirmed at `repository.py:283`
+   (`MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t:Thread)`, then `ORDER BY t.updatedAt`).
+4. **The suite assertion is wrong, not the query**: confirmed with `GRAPH.EXPLAIN` on `ws:acme` and
+   `ws:test`, which both carry the `SUPERSEDES` `[matchId, status]` relationship index.
+   `MATCH (a)-[r:SUPERSEDES {matchId:'sm1'}]->(b) RETURN r.status` plans as
+   `Edge By Index Scan | [r:SUPERSEDES]` alone. `assert_index_scan` (`test_queries.sh:52-62`)
+   requires the substring "Node By Index Scan", so l.1695 can never pass. Positive control: the
+   labelled form `(a:Document)` adds `Node By Label Scan | (a:Document)`, which the helper's
+   `assert_not_contains` half does catch. The doc's §14.8 sentence ("profiles as `Edge By Index
+   Scan`") is correct. See M1.
+
+### Findings
+
+**B1 (blocker) — §14.9 says update detection runs after every ingest; the code skips it in two
+cases.** Verified. §14.9: "Run by `background._safe_detect_update`, scheduled once per ingested
+document after the create." The code schedules it only when `not receipt.get("autoSuperseded")`
+(`api.py:191`, `api.py:232`, `mcp.py:323`, `mcp.py:363`). Even then it is a no-op when neither
+embed worker nor extraction pipeline is wired: `app.py:399` `repo_for_detection` is `None`, and
+`background._schedule_update_detection` returns at l.317-318. You can observe this: an auto-superseded
+ingest never yields a `pending` `SUPERSEDES` suggestion (`list_document_updates`). `SERVER.md`
+§1.12 states the rule correctly, so §14.9's version is a restated fact that has drifted.
+*Fix:* "scheduled after an ingest that the exact tier did not auto-supersede (conditions:
+`SERVER.md` §1.12)".
+
+**M1 (major; route to `teco` to file, then `coder`/`tdd-engineer`) — `test_queries.sh` is red at
+`c0eeb348`, and no backlog item tracks it.** Verified (claim 4). The writer's isolated run gave
+460/461, and the failure is l.1695. A suite that is known red stops gating anything, and
+`falkor-chat/AGENTS.md` says to keep it green. `BACKLOG.md` has no "Edge By Index" entry.
+*Fix:* add a relationship-index helper (`assert_contains "Edge By Index Scan"` plus the existing
+`assert_not_contains "Node By Label Scan"`) and call it at l.1695. The mutant that must turn it red
+is the labelled-endpoint query above.
+
+**M2 (major; route to `teco` to file) — the LSH band signal is dead, and `K-064` rests on the
+opposite premise.** Verified. Nothing in `server/` or `scripts/` writes `Document.lshBand<i>`; the
+only writers are `test_queries.sh:1875-1876` fixtures. A live read finds 0 of 455 `Document`
+nodes in `ws:acme`/`ws:agent-team` with `lshBand0`. §14.9 states this correctly. However, the
+`K-064` body (`BACKLOG.md` ~l.774) calls the band signal "the primary, fingerprint-based net" and
+says "AC-2 held in Stage E's live fixture via the band signal". In production the title lookup is
+the only signal. This is outside `QUERIES.md`, so it does not count toward this verdict. It needs
+its own backlog item, and `K-064` must be rewritten to stop relying on the band signal.
+
+**m1 (minor) — §11.4 and §11.5 show text the server never sends.** Verified by substitution. The
+server formats `_PUBLISH_CYPHER`/`_READ_*_CYPHER` with the root variable `d`; the doc's snapshot
+blocks use `snap`. They are semantically identical, but the doc header says "The Cypher here is the
+text `repository.py` sends." *Fix:* render the snapshot blocks with `d`, or label them "§11.1/§11.2
+text with `WorkflowDefSnapshot` substituted".
+
+**m2 (minor) — "Add user to channel" and "Add agent to a channel" say "Run by
+`scripts/seed_demo.sh`".** Verified. `seed_demo.sh:110-117` runs a different query: both
+`MERGE (…)-[:MEMBER_OF]->(c)` writes in one statement, with no `role`/`joinedAt`. The documented
+text runs only in `test_queries.sh` (l.163, l.493). The server writes `role`/`joinedAt` only
+through §18.2. *Fix:* "Suite-only (`seed_demo.sh` writes a role-less variant); the server uses
+§18.2."
+
+**m3 (minor) — ruling on §14.4: it is an acceptable index, but it keeps a second copy of a
+mapping.** It restates none of `SERVER.md`'s surface (no signatures, caps, status codes or
+schedulers), so it does not count as a restatement under the home table. But the route→query
+mapping is also `SERVER.md` §1.4's `QUERIES.md` column, and the two drifted during this pass. When
+I first read `SERVER.md`, it mapped `POST /documents` to §14.1 and listed
+delete/list/history/updates as "—". L5b's concurrent revision has since aligned it with §14.4. A
+fact has one home. *Fix:* cut §14.4 to a pointer to the `SERVER.md` §1.4 table (the heading stays
+for inbound citations), or drop the column from `SERVER.md`. L5s should check whichever remains.
+
+**N1 (nit).** `resolve_member_kinds` is the only query method not named in its heading. "(§4 m4)"
+(a suite message id) and "(OQ3 contract …)" (§9.1, a plan question id) are opaque to a reader of
+the spec. Say what they mean, or drop them.
+
+### What's solid
+
+Every query text matches the code. The rewrite's own drift fixes hold: §4's `authorId`, the
+`get_message` columns, `search_chunks`' `documentCurrent` filter and aliases, the §14.1/§14.5
+"no server caller" notes, and the §14.9 band-signal statement, each checked against code. The cuts
+in §12.14–§12.16, §13, §14.1a, §14.3, §14.5, §14.6, §15.1, §15.2, §16 and §17 removed history and
+provenance and kept every contract I traced: the zero-row and CAS contracts, the `postedCount`
+`int` cast, the profile's "NULL never clears" rule, the timer sweep's due-agnostic read, the
+category fallback result shapes, and the cart's no-price lines. The DDL these sections dropped
+exists in `DESIGN.md` (§7.1 index table, `SAME_AS` constraint). The MCP thread fan-out note exists
+in `SERVER.md`.
+
+### Proposed REVIEW.md lines
+
+None. B1 is already covered by the "a fact has one home" rule and by root `REVIEW.md`'s
+contradiction rule. M1's lesson, that a plan-shape assertion must be checked against
+`GRAPH.EXPLAIN` of the exact query, is too narrow to change what a reviewer does in general.
+
+## Pass 13
+
+**Scope.** I re-checked the L5a fix round on the uncommitted `falkor-chat/docs/DESIGN.md`, which
+grew from 9,731 to 10,097 words, against the code at `c0eeb348`. The code tree is unchanged since
+Pass 8. I re-executed every check against the tree: source reads, the verbatim AC-3 grep, and one
+live probe on a throwaway graph. Growth-stops does not apply because this is a living spec. The
+growth comes from closing Pass 8's omissions and from content moved in from `SERVER.md` §1.9; none
+of it is rework padding.
+
+CPG: considered, not relevant — every item here was settled by reading the source and running a
+live probe; nothing needed call-graph reach.
+
+**Verdict: approve with suggestions.** Every Pass 8 blocker is fixed and matches the code. The
+fixes agree with each other and with `SERVER.md`. The one open item (P8-m5) belongs to `teco`.
+
+### Pass 8 dispositions
+
+- **P8-B1: fixed.** The rewritten §4 Decision paragraph and the new §9 rows ("Publish workflow def:
+  write to `reference` only" and "Materialize workflow def … explicit call, §4") agree with each
+  other. They also match the code:
+  - `materialize_def` raises `WorkflowDefNotFoundError` for an unpublished version, which returns
+    404 (`app.py` l.151–155).
+  - A run against an unmaterialized version raises `WorkflowRunNotFoundError` (404).
+  - `SERVER.md` agrees: §1.4 l.303 for the materialize route, l.331 for the not-found → 404
+    mapping, and l.402 for the run start.
+- **P8-B2: fixed.** §6.1 l.466–471 matches `_validate_def_spec` l.1799–1860 clause by clause:
+  - only a `human`/`wait` step may declare a timer key, and at most one of the two;
+  - `0 < waitForSeconds ≤ 15 552 000` (`180*24*3600`, l.193; bool rejected);
+  - `waitUntil` is a positive epoch-ms;
+  - the exact `ctx.timerFired` guard is required. "Extra fields allowed" is correct, since the
+    check reads four keys with `.get()`.
+- **P8-m1: fixed, and the overrule is confirmed by execution.**
+  - Code: `create_entity_with_auto_match` (l.2146–2148) links each new entity to
+    `ORDER BY candidate.createdAt ASC LIMIT 1`. `ingestion.py` l.147–163 creates one `Entity` and
+    one `ABOUT` edge per extracted mention, and its own comment says "every mention still gets its
+    own Entity node".
+  - Probe: calling `Repository.create_entity_with_auto_match` five times on `ws:l5a-probe` with
+    the same `("acme corp","Org")` and `createdAt` 1000–1004 gave 5 nodes. The first returned
+    `exactMatched=False` and the next four returned `candidateEntityId='e0'`. The only `SAME_AS`
+    target was `e0`, with in-degree 4, all `confirmed`. Afterwards the graph was deleted and
+    `EXISTS` returned 0.
+  - My Pass 8 reading named the right edges but no hub, which leaves the incorrect implication
+    that `ABOUT`/`RELATES_TO` degree grows. The new text is the correct one. The stub-repair bound
+    (`extraction.py` l.51–62, up to `20 + 2×20`) is correct.
+- **P8-m2: fixed.** `{kind:'llm', text, model?}`, the publish line naming the `llm` guard, and
+  "only `cmp` is validated at publish" all match the code: `_declared_model_refs`;
+  `_validate_def_spec` l.1740–1747; `guards._load_obj` l.591–599, which turns a non-JSON or
+  non-object string into `{}` and so reaches `NotImplementedError` at l.271. The sort key
+  `(guard == "", order, to)` matches `executor.py` l.1448.
+- **P8-m3: fixed.** The l.598–604 sentence matches `_drive_loop` l.724–758: re-run, `StepRun`
+  recorded before the branch, the `maxSteps` check, park before re-run, and `done` only with no
+  outgoing transition.
+- **P8-m4: fixed.** The reset row matches `_RESET_PARTICIPANT_CYPHER`. It names `Customer` (the
+  profile), carts, items, orders and `OrderLine`s, and says `User.threadId` is re-pointed.
+- **P8-m5: not fixed, and it depends on `teco`.**
+  `grep -n -i 'GRAPH.CONFIG' falkor-chat/docs/BACKLOG.md` returns nothing, so §13 l.948–953 still
+  calls an untracked item "tracked". Stop condition: that grep returns a K-item, or the clause is
+  dropped from §13.
+- **Nits: all four fixed.** The QUERIES/plan prefixes are added at l.55, 268–269, 332, 649 and
+  727. "unchanged", "New node type" and "not modified" are gone. The §14.6 row carries "TDD build
+  order". `CartItem` appears only in the constraint table.
+- **Outside this file: not fixed.** `BACKLOG.md` K-033 l.540/543 still quotes `71055f756280`.
+  This belongs to `teco`.
+- **AC-3:** the verbatim grep gives 0 hits. The K-refs are K-016, K-018, K-029 and K-033, all open.
+
+### New: folded `SERVER.md` §1.9 facts (§6.1 "Prompt", l.421–431)
+
+I verified this against `_assemble_messages` l.1362–1399, `_append_turn` l.233–250 and the tool
+loop l.956–1049:
+- the speaker is `displayName`, else `authorId`, else `"member"`;
+- `human_speaker_label` applies to non-assistant turns only;
+- `CONTEXT:` carries compact, sort-keyed JSON and is merged into a trailing user turn;
+- the list is built once per node execution and passed whole to each `llm.chat`;
+- only the `assistant` and `tool` turns are appended after it;
+- `llm.py` adds no messages of its own.
+
+### New nits
+
+- **P13-n1.** At l.428, "the single `system` message leads every call" holds only when
+  `systemPrompt` is non-empty: l.1393–1394 adds no system message otherwise. Suggested wording: "the
+  `systemPrompt`, when set, is the single leading `system` message".
+- **P13-n2.** At §4, "refused (`404 WorkflowRunNotFoundError`)" describes the REST start. An
+  `@mention` start (`trigger.py` → `start_workflow_run`) raises the same error, but it is logged
+  rather than returned as an HTTP 404. Suggested wording: "refused (`WorkflowRunNotFoundError`;
+  404 over REST)".
