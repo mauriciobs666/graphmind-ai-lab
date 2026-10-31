@@ -30,9 +30,12 @@ candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
 the arm's absent models itself before the warm-ups (U1d–U2.2 in `docs/HISTORY.md`). A guard's
 withheld hand-off record is `classification.score_answer`'s to shape; the runner never patches
-`detail`. **Never store a
-`model:decisions`/`model:handoff` record under `results/runs/`** — not even a smoke run — before
-U1e (`docs/plans/typed-decision-models2.md` §4.2); offline tests write under `tmp_path`.
+`detail`. **Never store a `model:decisions`/`model:handoff` record under `results/runs/` before
+typed-decision-models U7**, not even a smoke run:
+`test_every_stored_run_record_still_validates_unchanged` freezes every stored record while U3b–U4
+still change how such records are scored and read, so an early one would block those units or
+force a schema bump (2026-10-31 P11-m2 ruling,
+`docs/plans/typed-decision-models-coordination.md`). Offline tests write under `tmp_path`.
 The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
 `run`). To run a pack: `README.md`'s Quick start and "What a pack is, and how to add one."
 **Every unit, defect, gate, and live-run result is in `docs/HISTORY.md`** — this section states only

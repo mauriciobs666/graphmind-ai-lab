@@ -3,8 +3,7 @@
 
 Offline throughout: a hand-built `LMStudio`-shaped stub, an on-disk fixture pack
 (`tests/fixtures/packs/decision_point_guard/`) and a candidate written under `tmp_path`. Nothing
-here writes under `model-bench/results/` (plan2 §4.2 / plan3 §4.1: no `model:decisions` record is
-stored there before U1e).
+here writes under `model-bench/results/`.
 
 Sections, in the units' landing order: the scorer seam's three hooks; the packs half; the runner
 (refusals, the per-item flow, `latency_block`, the fingerprint); the done-condition run; the CLI;

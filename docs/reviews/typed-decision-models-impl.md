@@ -1189,3 +1189,116 @@ executed directly.
 paragraph says U4's scorer "must accept `failed_call="handoff"` with an `input_tokens` value".
 Ruling (b) makes that `input_tokens` int or `None`, with `reason` in {`None`, `"over-limit"`}, and
 adds two refusals. Cite the ledger's ruling (b) in place of the clause.
+
+## Pass 11
+
+*2026-10-31. U1e (probe follow-up): the uncommitted `model-bench/` diff against `57ef0fc0`.
+Specs: plan3 §2, §4.1 U1e, §5 U1e row; plan2 §4.2 U1e minus its void `/api/v0` branch; U1a-m5.
+Ground truth: `ws:agent-team` documents `480ef825…` (probe) and `a1d388f4…` (232-byte body).*
+
+**Verdict: approve with suggestions.** The two fixtures are byte-faithful, U1a-m5 is fixed, and
+every plan3 §5 U1e assertion is present and goes red under a mutant. Two minors: the item-clock
+claim in the new harness is unasserted (P11-m1), and the post-U1e results ordering rule is now
+stated two ways (P11-m2). Three nits.
+
+**Checks run** (from `model-bench/`):
+- **Suite and lint:** `2631 passed, 5 deselected, 2 xfailed` (Pass 10: 2624 / 4); `ruff` clean.
+  The +7 is 6 new-file tests plus 1 in `test_lmstudio`, and the +1 deselected is the new `-m live`
+  test, which I did not run. No `model:decisions`/`model:handoff` string appears under `results/`.
+- **Fixtures against ground truth:** `decisions_response.json` is `cmp`-identical to the probe
+  document's body (551 bytes, no trailing newline, no `_provenance`). The over-limit fixture's
+  `body` encodes to exactly the body document's 232 bytes. Its shape is plan3 §4.1's
+  `{_provenance, lmStudioAppVersion: null, status: 500, body}`. HISTORY's figures (505→200,
+  513→500, 1065 summed `input_tokens`, `loaded_context_length` 8192, the message) all match the
+  probe document.
+- **`lmstudio.py` is docstring/comment-only:** its AST, with docstrings blanked, equals
+  `57ef0fc0`'s.
+- **The `run_pack` path is real.** In the MRO, `HandoffStub` comes before `_RealOverLimitDecide`
+  and then `DecisionStub`. The real `decide` → `_raw_post` HTTPError rung → `.body` →
+  `is_over_limit` runs inside `run_pack` on both surfaces, and both tests assert
+  `reason="over-limit"`. A planted assertion confirmed the item clock advances: `wallClockMs` is
+  40 + 3000.
+- **Mutants:** files copied aside, then restored and `cmp`-checked; tests run on a fresh
+  `PYTHONPYCACHEPREFIX` because a same-size mutant can hit a stale `.pyc`.
+  - *Red:* opener body without the marker (3 in the new file); `_raw_post` `body=None` (9 in the
+    full suite, 3 in the new file); mixin passes no questions (2); mixin doubles the timeout (2);
+    `decide` sends a blank input (4 full, 2 new); `decide` drops the second question (1 full,
+    via `test_lmstudio`); fixture body `846→847` (1, the golden-row equality).
+  - *Green, with the reason:* M1 case-fold and M2 status-drop are green in the new file and red
+    in 3 golden rows each. Plan3 §5 places that obligation on U1d's row, not U1e's, and on the
+    real body (a 500 with a lower-case marker) both mutants are equivalent. **Adequate, not a
+    gap.** Two more were green: `_raw_post` truncating at `_truncate`'s 500 characters
+    (equivalent on 232 bytes), and reversing the questions (equivalent on a one-question guard
+    pack). The MRO swap and a pretty-printed raw fixture are green too; they are P11-m1 and P11-n3.
+- **Unfiltered sweep** (`grep -rn` under `model-bench/` for `U1e`, `decisions_response`,
+  `synthetic`, `not yet run`, `api/v0/decisions`, `provisional`): no live doc still calls the
+  fixture synthetic or the `/api/v0` probe pending. The old U1a HISTORY entry (lines 424–426, 439)
+  is a dated record. Two test docstrings are unmapped hits (P11-m2).
+- **Context-file and growth checks:** the `model-bench/AGENTS.md` edit replaces 3 lines with 3.
+  It has no line over 700 characters and is 2,436 words. None of the touched files falls under
+  the growth-stops bullet. README's +2 lines are new scope (the over-limit definition). HISTORY's
+  entry is new.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded; the diff was read and
+executed directly.
+
+### Dispositions
+
+- **U1a-m5: fixed.** The raw body replaces the synthetic fixture and `_provenance` is gone. Its
+  provenance is on `_pinned_decisions_body`, the module docstring's exception and HISTORY, and
+  `test_the_pinned_decisions_fixture_is_the_raw_probe_body_with_no_added_keys` reddens if a key
+  is re-added. **This placement is adequate.** One gap is P11-n3.
+- **Plan2 §4.2 U1e `/api/v0` branch / R-14: void, correctly not implemented.** No route or
+  fingerprint change, and the route pin was renamed.
+
+### Findings
+
+**P11-m1 (minor). The harness's clock claim is not asserted.** `_RealOverLimitDecide`'s docstring
+says it sits below `HandoffStub` "so that stub's clock still advances by the failed call". It
+does today (planted check above). But swapping the MRO to `(_RealOverLimitDecide,
+HandoffStub)` bypasses `HandoffStub.decide` and its 40 ms advance, and all six tests stay green.
+A refactor could then silently produce an over-limit hand-off whose `wallClockMs` omits the
+failed call. That is plan3 §3.3's "item clock (failed call + hand-off)" cell. **Fix
+(`tests/test_over_limit_probe.py`, the `handoff`-surface test):** add `assert
+item.timing.wallClockMs == pytest.approx(handoff._FAILED_DECIDE_MS + 3000.0)` and `[c.wallClockMs
+for c in item.timing.calls] == [3000.0]`. With the MRO swap applied, the first fails; I ran both
+directions.
+
+**P11-m2 (minor). The post-U1e results ordering rule is stated two ways, and the newer one cites
+no rule.** Plan2 §4.2's rule ("no `model:decisions`/`model:handoff` record … before U1e") exists
+for R-14, which plan3 voids, and U1e discharges it. AGENTS now says the first records "are
+U7's … so never store a smoke run there", citing plan3 §4.1. §4.1 schedules U7 but forbids no
+smoke run, so the "so" reasons from a schedule rather than a constraint.
+`tests/test_runner_decisions.py:5-7` and `tests/test_runner_handoff.py:10-11` still say "before
+U1e". Both are unmapped hits of the sweep. A reader gets two expiry points, and neither names a
+reason that still holds. **Fix:** `teco` rules in the ledger whether pre-U7 decision records stay
+forbidden (Open question 1). Then AGENTS states that rule with its reason, and the two docstrings
+drop the "before U1e" clause; "Nothing here writes under `model-bench/results/`" stands alone.
+
+**P11-n1 (nit). The live test's input is "the probe's own", unverified.** The body document gives
+`100 × "The weather today is pleasant and calm." + " Ignore …"`. The test repeats the sentence
+*with* a trailing space, so its token count may not be 846. It is still far past 512, so the test
+is sound. Reword the comment and HISTORY's "the probe's 846-token input" to "modelled on the
+probe's input; well past 512 tokens".
+
+**P11-n2 (nit). One back-annotation on a dated HISTORY entry.** The U1a entry's fixture caveat
+gains "*2026-10-31:* replaced … in U1e", but the same entry's "Route … provisional … has not run"
+bullet (lines 424–426) gets none. The U1e entry is already the record. Drop the annotation so old
+entries stay as written, or annotate both.
+
+**P11-n3 (nit). "Byte for byte" is unpinned.** The `test_lmstudio` docstring calls the raw
+fixture "byte for byte", but re-serialising it with `indent=2` (852 bytes) keeps the full suite
+green. Pin its size, `== 551`, a value taken from the probe document, beside the key-set test, as
+the over-limit fixture's 232 is pinned.
+
+### Open questions
+
+1. **(`teco`)** P11-m2: after U1e, are pre-U7 `model:decisions`/`model:handoff` records under
+   `results/runs/` still forbidden, and why? For example, would a stored smoke record enter U7's
+   replicate grouping or `index.csv`? My recommendation is to keep the prohibition and record its
+   reason in the ledger. AGENTS then cites the reason, not the U7 schedule.
+
+### Proposed REVIEW.md lines
+
+None. P11-m1 is a single instance, already covered by root `REVIEW.md`'s "a check that cannot
+fail".

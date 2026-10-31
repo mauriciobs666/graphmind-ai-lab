@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U1e — probe follow-up: the raw decisions fixture, the over-limit fixture and its offline test, Laya's per-question limit
+
+**What:** plan2 §4.2 U1e as amended by plan3 §4.1 U1e and §5 U1e. Offline only; the `/api/v0`
+branch and plan2's R-14 are void (the route does not exist, plan3 §2), so no route or fingerprint
+change.
+
+- **Laya's observed limit** (U1a live probe, 2026-10-30, `ws:agent-team`
+  `480ef825c67d4f9c8e177b16174791c7`): at most **512 tokens per question** — the model's physical
+  batch, not its 8192 `loaded_context_length`. Past it LM Studio **fails with HTTP 500, it does
+  not truncate**: one predicate question at `usage.input_tokens` 505 → 200, at 513 → 500. The
+  limit is per question: three predicate questions over one ~355-token input → 200 with
+  `usage.input_tokens` 1065, so `usage.input_tokens` sums across questions. The 500's body is
+  `"laya: input (N tokens) is too large to process. increase the physical batch size (current
+  batch size: 512)"` (`ws:agent-team` `a1d388f459b74c4db5c1d13b2a22e66a`).
+- **`tests/fixtures/lmstudio/decisions_response.json`** is now the probe's raw `/v1/decisions`
+  body, verbatim (551 bytes, pinned), and has no `_provenance` key (impl review U1a-m5): a key
+  added to a raw body is something the server never sent. Its provenance is on
+  `test_lmstudio._pinned_decisions_body` and here. `test_lmstudio`'s decide tests now ask the probe's own questions (`is_injection`;
+  `msg_type` over question/attack/chitchat) on the probe's input, and pin the real values; the
+  probe did not record its `instructions` strings, so those are the test file's.
+- **`tests/fixtures/lmstudio/decisions_over_limit_500.json`**: `{_provenance,
+  lmStudioAppVersion: null, status: 500, body}`, the body the 232-byte document as one string.
+  The app version was not captured at probe time; U7's confirm step records it.
+- **Tests** (`tests/test_over_limit_probe.py`): the body is 232 UTF-8 bytes and equals the
+  `body-document-at-500` row of `over-limit.jsonl` (`overLimit: true`); a fake opener raising
+  `HTTPError(500)` with it gives, through the real `decide`, `LMStudioCallFailed.body` equal to
+  it and `is_over_limit` true; through `run_pack` on the guard fixture pack, a kept decision
+  failure on `decisions` and a handed-off item on `handoff`, each `reason="over-limit"`, with the
+  real `decide` running inside the run; on `handoff` the item clock is the failed call plus the
+  hand-off. `test_live_over_limit_body_is_recognised` (`-m live`, an input modelled on the
+  probe's, well past 512 tokens) is written and **not run**. `test_lmstudio` also pins that the
+  decisions fixture has exactly `{model, answers, usage}` and is 551 bytes.
+- Stale "`/api/v0` probe not yet run" text removed from `lmstudio.py`'s module docstring,
+  `DECISIONS_ROUTE` comment and `decide` docstring; the route pin test renamed
+  `test_the_decisions_route_is_the_verified_v1_route`.
+- **Results rule (`model-bench/AGENTS.md`).** No `model:decisions`/`model:handoff` record is
+  stored under `results/runs/` before U7: `test_every_stored_run_record_still_validates_unchanged`
+  freezes every stored record while U3b–U4 still change how such records are scored and read
+  (teco's P11-m2 ruling, `docs/plans/typed-decision-models-coordination.md`). The "before U1e"
+  clauses in `test_runner_decisions`/`test_runner_handoff` docstrings are gone.
+
+**Mutation-tested** (copy aside, mutate, restore, `cmp`; full suite each). Red in the new file:
+the marker reworded, `_raw_post` truncating the error body, the `decisions`-surface routing
+dropping `reason`, the `handoff`-surface over-limit not handed off, `_RealOverLimitHandoff`'s
+two bases swapped (the failed call no longer advances the clock), and the raw fixture
+pretty-printed. The marker case-folded and the status check dropped do not redden the new file —
+on the real body (a 500, a lower-case marker) they are equivalent — and redden the
+`over-limit.jsonl` golden rows (3 tests each). Each mutant ran on a fresh `PYTHONPYCACHEPREFIX`.
+Gated by impl review Pass 11 (approve with suggestions); P11-m1/m2 and n1–n3 are folded in.
+
+Ordering precondition held: no `model:decisions`/`model:handoff` record exists under
+`results/runs/`. Suite `2631 passed, 5 deselected, 2 xfailed` (was `2624 passed, 4 deselected,
+2 xfailed`); `ruff` clean.
+
 ## 2026-10-31 — typed-decision-models U2.2 — the `handoff` surface: a candidate with a hand-off chat model, its over-limit rows, hand-off failures and counts
 
 **What:** the rest of U2 (`docs/plans/typed-decision-models.md` §3.3, §4 U2; plan2 §3.3–§3.4,

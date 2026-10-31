@@ -164,9 +164,11 @@ unload it. A failed load, a candidate's model gone after the warm-ups, or the de
 loaded instance config unreadable, is exit `3`; the record carries that config verbatim
 (`decisionInstanceConfig`). A failed decision call (a timeout, or any failure that is not the
 over-limit one) keeps its item in the run as a failure, counted in the exploratory
-`decisionCallFailures` metric, and is never handed off. An over-limit input is counted in
-`overLimit`; with a hand-off model it is handed off, without one it is kept as a failure. A failed
-hand-off chat call withholds the item on the guard (as a failed chat call always has). On the
+`decisionCallFailures` metric, and is never handed off. An over-limit input (one question over
+the decision model's physical batch, 512 tokens for laya, which LM Studio refuses with an HTTP 500
+rather than truncating) is counted in `overLimit`; with a hand-off model it is handed off,
+without one it is kept as a failure. A failed hand-off chat call withholds the item on the guard
+(as a failed chat call always has). On the
 new-ability roles it is to be kept as a fail-closed answer, counted in `handoffCallFailures`;
 those roles cannot run on the `handoff` surface until typed-decision-models U4 adds them. The
 `handoff` surface also records `handoffShare` (items handed off, over every item not withheld by a

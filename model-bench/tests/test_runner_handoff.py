@@ -8,7 +8,7 @@ its hand-off model). `HandoffStub` extends that module's `DecisionStub` with cha
 derived from what is loaded, and one instance config per model. Its `decide` and `chat` advance
 one shared fake clock (`_StubClock`) by each call's own duration, so an item's `wallClockMs` is
 exactly the calls the item clock spans (impl review P9-M1). Nothing here writes under
-`model-bench/results/` (plan2 §4.2: no `model:handoff` record is stored there before U1e).
+`model-bench/results/`.
 
 The new-ability (`fail-closed`) rows have no role to run on yet — `HANDOFF_FAILURE_BY_ROLE` holds
 the guard alone until U4 — so those tests patch the runner's copy of the table to make the guard

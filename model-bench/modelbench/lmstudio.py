@@ -8,8 +8,8 @@ Four operations, all against `GET/POST {base_url}/api/v0/...` — never `/v1/...
 `probe()`'s reachability check, because `/v1/models` returns `{id, object, owned_by}` and nothing
 else (§2.5) while every fingerprint field and every `stats`/`runtime` object lives on the `/api/v0`
 surface. **One exception since typed-decision-models U1a:** `decide()` posts to `DECISIONS_ROUTE`,
-`/v1/decisions` — the only decisions route verified so far, whose response has no `stats` or
-`runtime` at all (that plan's §2.3); the `/api/v0` variant is an open live probe (see `decide`).
+`/v1/decisions` — the only decisions route there is, whose response has no `stats` or
+`runtime` at all (that plan's §2.3); the U1a live probe found no `/api/v0` variant (plan3 §2).
 **No `unload`/`ps`** — v1.7's three `lms.exe` operations are gone with the CLI (§2.5, §3.4.4a), and
 the harness cannot force a cold state, by design, not by omission. **One load since
 typed-decision-models U2.1:** `load_model` posts to `/api/v1/models/load`, and
@@ -70,10 +70,9 @@ _WARMUP_EMBED_TEXT = "warm-up"
 #: (typed-decision-models plan2 §3.4).
 WARMUP_DECISION_INPUT = "warm-up"
 
-#: The decisions route (typed-decision-models plan §2.3). `/v1/decisions` is the one verified by a
-#: live probe (2026-10-30); whether an `/api/v0/decisions` variant exists — and whether it adds
-#: `stats`/`runtime` the `/v1` response lacks — is plan §4 U1a's human-approved live probe, **not
-#: yet run**. This constant is the one line that probe may change.
+#: The decisions route (typed-decision-models plan §2.3), verified by a live probe (2026-10-30).
+#: The U1a live probe found no `/api/v0/decisions` variant: it answers HTTP 200 with an
+#: "Unexpected endpoint" error body (plan3 §2), so there is no route to switch to.
 DECISIONS_ROUTE = "/v1/decisions"
 
 #: The answer types whose response shape §2.3 recorded. `score` is a valid *request* type, but no
@@ -855,12 +854,11 @@ class LMStudio:
         refusal (a bare-string choice is a `400`), and `LMStudioCallFailed(status=None)` on a 2xx
         body that breaks the §2.3 contract — including any question left unanswered.
 
-        **Route: `/v1/decisions`, provisionally.** It is the route a live probe verified
-        (2026-10-30). The plan's U1a probe of `/api/v0/decisions` — one predicate and one choice
-        question, with `laya` loaded — has **not yet run** (it loads a model on a shared GPU, so it
-        waits for human approval). If that route exists and returns `stats`/`runtime` the `/v1`
-        response lacks, `DECISIONS_ROUTE` switches to it and U1b's `model:decisions` profile gains
-        `runtimeName`/`runtimeVersion`; otherwise this stays as it is.
+        **Route: `/v1/decisions`.** It is the route a live probe verified (2026-10-30); the U1a
+        probe found no `/api/v0/decisions` (plan3 §2), so the decision profiles carry no
+        `runtimeName`/`runtimeVersion`. A single question over the model's physical batch (512
+        tokens for laya) is an HTTP 500 that `decisions.is_over_limit` recognises, not a
+        truncation.
 
         `input` shadows the builtin deliberately: it is the request's own field name (§2.3)."""
         payload: dict[str, Any] = {"model": model, "input": input, "questions": list(questions)}
