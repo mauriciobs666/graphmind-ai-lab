@@ -47,8 +47,8 @@ is the experimentation vehicle.
 - **FR-1 — Quality parity bar (speed-up points).** A decision model may take over a speed-up decision point only when, on
   that point's labeled set, it is **not measurably worse** than the incumbent on **either** error
   type: wrongly advancing/accepting (false positive) **and** wrongly suspending/rejecting (false
-  negative). "Measurably" uses the benchmark's own resolving power at the evaluation set's size
-  (`docs/requirements/small-model-benchmarking.md`). Every "not worse" result also prints the
+  negative), judged per FR-11a. "Measurably" uses the benchmark's own
+  resolving power at the evaluation set's size (`docs/requirements/small-model-benchmarking.md`). Every "not worse" result also prints the
   smallest difference its evaluation set could have detected, so a pass that only means "too few
   items to tell" is visible.
 - **FR-2 — Speed/cost win.** At parity (FR-1), the decision point must be **at least 2× faster on
@@ -65,7 +65,10 @@ is the experimentation vehicle.
   needs its own labeled examples. A specialized model is always judged on labeled examples that
   were **not** used to train it, calibrate it, or tune its hand-off cut-off (FR-3). Re-tuning
   after seeing evaluation results is allowed without a fresh evaluation set, but every result
-  reports how many candidates have already been run on that same evaluation set.
+  reports how many candidates have already been run on that same evaluation set. Every fitted
+  candidate is evaluated once (in both loads, FR-11a), even one that could not reach its fitting
+  margins on its calibration data, so "does not meet its bar" is always a measured verdict; that
+  pair of runs counts once toward the reuse count.
 - **FR-5 — Labels come from an LLM, unreviewed.** This **amends**
   `docs/requirements/small-model-benchmarking.md` FR-19 for packs built under this feature only. Labeled examples for training **and** for
   evaluation may be produced by an LLM with no human review. Consequence, accepted by the
@@ -82,8 +85,8 @@ is the experimentation vehicle.
   decision point's bar (FR-1 parity, or FR-10 for a new ability) is established there **before** a
   decision model is used at that point in falkor-chat.
 - **FR-8 — Synthetic inputs only.** Example inputs for training and evaluation are **generated**
-  (by the frontier labeler) per decision point. No real falkor-chat thread or trace leaves the
-  machine for labeling. (AC-7)
+  (by a hosted frontier model, which need not be the labeler) per decision point. No real
+  falkor-chat thread or trace leaves the machine for labeling. (AC-7)
 - **FR-9 — Local decision models first; hosted ones later.** This effort's runtime candidates are
   local decision models only (Laya and similar, served by LM Studio). "Cheaper" means less local
   compute per decision. A hosted decision model (e.g. TypeSafe's Jev) is **deferred, not
@@ -94,15 +97,18 @@ is the experimentation vehicle.
   frontier labeler within each true answer** on its evaluation set: at least 90% of the items
   whose true answer is "yes" and at least 90% of those whose true answer is "no" (for pick-one,
   at least 90% within each type). This prevents a model from passing by always giving the most
-  common answer. Message-type classification uses exactly five labels: `order`, `question`,
-  `complaint`, `escalation`, `other` (small talk is `other`). Hand-off of uncertain cases to a local LLM is allowed exactly as in FR-3, and the
-  90% applies to the combined result. Its average decision time, hand-offs included, must be
+  common answer. It is judged per FR-11a.
+  Message-type classification uses exactly five labels: `order`, `question`, `complaint`,
+  `escalation`, `other` (small talk is `other`). Hand-off of uncertain cases to a local LLM is
+  allowed exactly as in FR-3, and the 90% applies to the combined result. Its average decision time, hand-offs included, must be
   **350 ms or less**.
 - **FR-11 — Minimum evaluation-set size.** A parity or new-ability result counts only if its
   evaluation set has **at least 200 items** for that decision point as a whole (not per evidence
   kind or per answer).
-- **FR-11a — Bars are judged on the measured value.** FR-2's 2× and FR-10's 90% and 350 ms
-  thresholds are judged on the measured value, with its uncertainty range reported beside it.
+- **FR-11a — Bars are judged per load, on the measured value.** Each bar, whether a speed-up
+  point's (FR-1 parity, FR-2 speed) or a new-ability point's (FR-10), counts as met only if it is
+  met in **each of two separate loads** of the decision model. Within each load, FR-2's 2× and FR-10's 90% and 350 ms thresholds are judged on
+  the measured value, with its uncertainty range reported beside it.
 - **FR-12 — Joining in unmentioned supersedes the responder's locked trigger.** Today the
   responder replies only when @mentioned (the locked trigger in `falkor-chat/server/falkorchat/responder.py`).
   This new ability changes that rule. The rule that an agent-authored message never triggers a
@@ -145,8 +151,9 @@ governs them. "Message-type classification" is unrelated to the existing `triage
 ## Acceptance criteria
 
 - **AC-1** — Given the guard judge's labeled set, when the candidate and `qwen/qwen3-4b-2507` are
-  compared, then neither false-advance rate nor false-suspend rate is distinguishably worse for the
-  candidate, and the result is recorded with its interval (FR-1).
+  compared, then in each of two separate loads of the candidate neither false-advance rate nor
+  false-suspend rate is distinguishably worse for it, and each result is recorded with its interval
+  (FR-1, FR-11a).
 - **AC-2** — Given a decision point that runs with hand-off, when its decisions are reviewed,
   then the share decided by the decision model vs. handed to the LLM is reported, and the quality
   and latency figures cover both paths together (FR-3).
@@ -162,8 +169,8 @@ governs them. "Message-type classification" is unrelated to the existing `triage
   compared with the incumbent LLM's result for that role where one exists, or checked against
   FR-10's bar for a new ability (FR-7).
 - **AC-6** — Given a decision point running with hand-off, when its average decision time over
-  the evaluation set is compared with the incumbent's on the same machine, then it is at most half
-  (FR-2).
+  the evaluation set is compared with the incumbent's on the same machine, then it is at most half,
+  in each of two separate loads (FR-2, FR-11a).
 - **AC-7** — Given the labeled examples for any decision point, when their origin is checked, then
   every input is synthetic, with no real falkor-chat thread or trace among them (FR-8).
 - **AC-8** — Given an agent-authored message, when it reaches the responder with join-in enabled,
@@ -174,9 +181,9 @@ governs them. "Message-type classification" is unrelated to the existing `triage
   separately for "understanding" and "recent turns" evidence (FR-13).
 - **AC-11** — Given a guard decision taken by the decision model, when the run trace is read, then
   it shows the probability and which path decided (FR-14).
-- **AC-12** — Given a new-ability decision point, when its result is reported, then it shows at
-  least 90% agreement with the frontier labeler and an average decision time of 350 ms or less,
-  hand-offs included (FR-10).
+- **AC-12** — Given a new-ability decision point, when its result is reported, then it shows, in
+  each of two separate loads, at least 90% agreement with the frontier labeler and an average
+  decision time of 350 ms or less, hand-offs included (FR-10, FR-11a).
 - **AC-13** — Given any parity or new-ability result, when it is reported, then its evaluation set
   has at least 200 items, and a smaller set is refused (FR-11).
 - **AC-14** — Given a message classified while the ability is enabled, when the message is read
@@ -260,3 +267,14 @@ Overturns the SQ-1 entry above. (FR-10, Scope table)
 evaluation set required? → **No; report the reuse count instead.** (FR-4)
 2026-10-30 — (Plan review Pass 3, M4) Must every parity result print its detection limit? →
 **Yes, always.** (FR-1)
+2026-10-30 — (Method note review Pass 5, P5-M3a) Must a bar hold across separate model loads? →
+**Yes: a parity or new-ability bar is met only if met in each of two separate loads.** Extends the
+SQ-2 entry (measured value, now per load). (FR-11a, FR-1, FR-10, AC-1, AC-6, AC-12)
+2026-10-30 — (Method note review Pass 5, P5-M3b) Accept the labelling volume of the method note's
+design (about 14× the earlier reading: larger evaluation sets, a matching calibration set, three
+blind labeller votes per item)? → **Yes, full design size accepted.** (no FR change)
+2026-10-30 — (Method note review Pass 5, P5-M2) Is a candidate that cannot reach its fitting margins
+on calibration data still measured on the evaluation set? → **Yes, every fitted candidate is
+measured once; that run counts toward the reuse count.** (FR-4)
+2026-10-30 — (Method note review Pass 5, P5-m6, clarification) Must the input generator be the
+labeler? → **No: inputs come from a hosted frontier model, which need not be the labeler.** (FR-8)

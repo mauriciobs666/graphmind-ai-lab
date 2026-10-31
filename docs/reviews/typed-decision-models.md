@@ -647,3 +647,521 @@ dependency. *Fix:*
 - U1c defines only the `guard-judge` rows.
 - U4 adds the two new roles' rows together with the role tables and their pins.
 - Mark U4 "needs U0 Q1".
+
+## Pass 5 — U0 method note (typed-decision-models-ml.md)
+
+**Scope.** `docs/plans/typed-decision-models-ml.md` (first version, uncommitted, ~4,860 words),
+against plan v1.3 §4 U0 (Q1–Q7), §3.3–§3.6 and §6, the requirements, and `modelbench/stats.py`.
+I re-ran the note's three scratchpad scripts with `python3 -I` and recomputed the parity figures a
+second way (below). I read the code the note's failure handling depends on: `runner.py:376-410`,
+`scoring/classification.py:264-285`, `falkor-chat/server/falkorchat/app.py` (`_LlmGuardJudge`),
+`guards.py:262` and `executor.py:691-693, 1451-1462`. I did not re-check the §Q4.4 break-even figures,
+which teco already re-ran.
+
+**Verdict: needs changes.** The statistics are correct. Every figure I re-ran matches, and Q3
+meets its binding constraint. None of the findings below is a blocker. Three majors still need
+an edit or a stakeholder answer before U3c, U5 or U7 consume the note:
+- **P5-M1:** the failure-handling table (§Q4.3) misstates what the runtime does and changes the
+  chat arm without saying so.
+- **P5-M2:** the fitting margins act as gates and can close a point before its bar is measured.
+- **P5-M3:** two decisions are presented as method, but the stakeholder owns them: the
+  two-replicate rule and a labelling volume of about 9–14×.
+
+CPG: considered, not relevant — a statistics note. There is no `cpg_modelbench`. The code it
+depends on was checked by direct reads.
+
+**Figures re-run.**
+- `parity.py` matches every §Q3 figure:
+  - the MDD₈₀ table;
+  - the reuse-adjusted limits, 13.1→15.2→16.4→17.2 and 8.2→9.1→9.4→9.6;
+  - 1 − 0.8^{K+1} = 0.20/0.36/0.49/0.59;
+  - the null false-fail rates, 1.05%/4.86%/9.04%;
+  - the four §Q3.6 cells.
+- `p_worse(8, 2) = 56/1024 = 0.0547`.
+- `fr10.py` matches §Q5.3, §Q5.4, the half-widths 0.077/0.060 and the `T_fit` figures
+  0.08/0.71/0.93.
+- `latency.py` matches 0.476/0.471 and the worked ratios 3.02 [2.65, 3.51] and 2.10 [1.90, 2.35].
+- **Independent check of the power formula.** I enumerated the trinomial (b, c) outcomes
+  directly. The rejection region was evaluated in exact `Fraction`s rather than through
+  `crit(m)`. This reproduced all twelve MDD cells I tried, at n = 50/75/100/150 and several ψ̂,
+  including the 14.5 pp at ψ̂ = 0.16. Power is monotone in δ on the grid at n = 50, ψ̂ = 0.10 and
+  at n = 100, ψ̂ = 0.20, so "first grid point = ceiling" holds. A 40,000-draw Monte Carlo gives
+  power 0.7999 at δ = 13.1 pp, n = 50, against 0.8013 exact.
+- **One stated figure is wrong:** §Q1.3's "60 is the smallest size…". See P5-m1.
+
+**Q3's binding constraint: met.**
+- **No correction or floor.** Cells are unadjusted, with no Holm and no Rule 7. The test is
+  one-sided at 0.05, so the "worse" direction is tested at 0.05 rather than 0.025. That makes
+  rejection easier, which is the safe side.
+- **A bigger family never helps.** Combining cells and replicates as a conjunction means P(holds)
+  cannot rise when a member is added.
+- **Direction.** H₀ is "not worse". It is rejected on b_w in excess of c_w, so "worse" is
+  the rejection and `holds` is a failure to reject. That is the shape FR-1 and the stakeholder's
+  "no explicit margin" answer imply.
+- **Resolving power.** The printed MDD₈₀ and `U` together make a "too few items to tell" pass
+  visible, as FR-1 requires. §Q3.6 row 1 shows exactly that case.
+
+**Growth-stops check (first version, so no prior revision exists).** The length is mostly method.
+There is no debate-log prose and no finding→resolution table. Restated text is small:
+- §0's R-list;
+- the FR-2 quote in §Q4.1;
+- the same-session rationale in §Q4.4.
+
+Two sections are transient and should not stay in an `active` note. See P5-n2.
+
+### Findings
+
+**P5-M1 (major) — §Q4.3's chat-failure rows misstate the runtime and change existing behaviour
+that is not on the handed list.**
+- **Wrong runtime claim.** For a failed or timed-out hand-off or incumbent chat call, the table
+  scores the item as "§3.2's parse fallback (guard: suspend)" because that is "what the runtime
+  would have done". It is not.
+  - `_LlmGuardJudge.__call__` calls `llm.complete` with no `try`.
+  - `guards.py:262` and `executor.py:1453` do not catch the exception either.
+  - So a failed judge call reaches `_drive`'s `except Exception` → `_fail_with_note`
+    (`executor.py:691-693`). The run fails; it does not suspend. Only *unparseable* output becomes
+    `decision: False`.
+- **Unlisted change to the chat arm.** Today a failed chat call records `wallClockMs=None` and
+  `scoreable={}` (`runner.py:393-399`, `classification.py:275-284`). The rows "x_i = elapsed" and
+  "scored as the parse fallback" therefore change the existing chat arm, and they need
+  elapsed-on-failure capture that does not exist. Handed item 2 covers only the decision call.
+
+*Fix:*
+- Keep today's semantics for chat-call failures in both arms: withheld, counted, dropped
+  pairwise for FR-1, and printed beside FR-2/FR-10 as a count.
+- Alternatively, if the note keeps imputation, state it as a measurement convention rather than
+  runtime fidelity, and add elapsed capture plus chat-arm scoring to the handed list.
+
+**P5-M2 (major) — The fitting margins act as gates, so a point can close without its bar being
+measured.**
+- **Where the margins bite.** §Q2.2 sets `T_fit = 0.94`. It then marks a class infeasible if the
+  hand-off LLM's own calibration agreement is below `T_fit`. §Q2.1 marks a band infeasible when
+  `s > s_max − 0.05`, and an infeasible candidate "is not run on eval".
+- **Effect.** A hand-off LLM at 0.92 calibration agreement on one class would have to clear
+  FR-10's bar of 0.90 on eval. Instead it never reaches eval. In effect the bar became 0.94 at the
+  fitting stage. The note never says outright that 0.94 is a fitting target and that the eval bar
+  stays 0.90 (§Q5.1).
+- **Inconsistent margins.** FR-10's 350 ms fitting constraint carries no margin, unlike FR-2's.
+
+*Fix:*
+- **Fit to the margin, but fall back below it.** When the fit cannot reach 0.94, fit to the
+  highest attainable target ≥ 0.90. Record the target in the fit manifest, and run eval.
+- **Narrow "infeasible".** Reserve it for cases where even the requirement value is unattainable
+  on calibration: 0.90, `s_max` itself, or 350 ms.
+- **Say it once.** Add one sentence: "T_fit is a fitting target, never a bar (FR-10's bar is
+  0.90)."
+- **Pick one rule for the latency margin.** Either give the 350 ms constraint the same treatment
+  as FR-2's, or drop FR-2's −0.05.
+
+**P5-M3 (major) — Two of the note's rulings are stakeholder decisions, but it presents them as
+method.**
+- **(a) Q6's "met in both replicates".**
+  - The plan did delegate the replicate question to U0. But a bar that must hold in two separate
+    measurements is a more pessimistic reading than SQ-2's "judged on the measured value".
+  - It adds a candidate run per point.
+  - It roughly doubles the null false-fail rate the note prices in §Q3.2. With independent
+    replicates, 1.05/4.86/9.04% becomes at most 2.1/9.5/17.3%. Correlated replicates give
+    less.
+  - The evidence for it is sound: 14/30 vs 12/30 means at least 2 of 30 items flipped. But the
+    rule needs a yes.
+- **(b) §Q1.3's set sizes and §Q1.2's three blind votes multiply the paid labelling.** Against the
+  plan's prior of 200 eval items per point, labelled once (600 calls):
+  - **Kept items: 3.0×.** Eval is 400 + 200 + 300 = 900, and calibration matches it, for 1,800.
+  - **Labeller calls: 9×**, at three votes per item (5,400 calls).
+  - **About 14×** with the 1.6× over-generation for filling cells (≈ 2,880 items labelled, ≈ 8,640
+    calls).
+  - **U8, if triggered.** Its train split (≥ 3,500 kept items, ×1.6, ×3) adds about 16,800
+    calls, ≈ 42× in total.
+  - **Unpriced.** The variants per seed that calibration and train "may use" are unspecified.
+    If every variant is labelled, multiply again.
+
+*Fix:* mark both rulings "stakeholder decision", as handed item 6 is. Put the multiplier in the
+note's §Q1.3.
+
+**P5-m1 (minor) — §Q1.3's "60 is the smallest size at which…" is false.** P(pass | a = 0.85) is a
+sawtooth in n, because the bar is `10·k ≥ 9·n`.
+- Exact values: n = 44 gives 0.190, n = 49 gives 0.123, and n = 59 gives 0.106. Multiples of 10
+  are local worsts.
+- Every n ≥ 52 satisfies ≤ 0.20. n = 51 is the last that fails.
+
+The choice of 60 is defensible. The justification is not. *Fix:* "every n ≥ 52 keeps it ≤ 0.20,
+and 60 is the round size above that". This matters because withholding can leave a class at
+n < 60.
+
+**P5-m2 (minor) — §Q4.3 drops a failed decision call from FR-1, which contradicts the note's own
+governing principle.**
+- The runtime answer on such an item is the incumbent's, so it is a concordant pair. Dropping it
+  leaves `p_worse` unchanged, but it shrinks `n_c` and ψ̂, so the printed rates and MDD change.
+- Combined with the new "not assessable (scored n < 200)" rule, a candidate whose decision calls
+  often time out becomes unassessable, even though the runtime would serve it fine.
+- That rule is itself a new verdict state. Plan §3.5 only prints the scored n, and the rule is
+  not on the handed list.
+
+*Fix:* keep these items as concordant pairs. List "not assessable" for the architect to absorb.
+
+**P5-m3 (minor) — §Q4.3's "censoring" assumes the bench's decision-call timeout differs from the
+runtime's.**
+- If the bench used the point's `timeoutSeconds`, a timeout's elapsed time would be exactly what
+  the runtime spends, and nothing would be censored.
+- The candidate file carries no timeout today, and `RunConfig.requestTimeoutSeconds` is the chat
+  timeout.
+
+*Fix:* the candidate carries `decisionTimeoutSeconds`, which the bench uses and §3.7 copies
+verbatim, as it already copies `question`/`policy`. The "≤ R" then becomes unnecessary.
+
+**P5-m4 (minor) — §Q3.5's "upper bound" holds for non-adaptive tries only.** Re-tunes informed by
+eval results are adaptive (FR-4 allows them). Adaptive selection can exceed 1 − 0.8^{K+1}.
+*Fix:* add the qualifier. The printed figure stays as advice.
+
+**P5-m5 (minor) — Places an implementer must guess.**
+- `labelVotes` is a scalar (0, ⅓, ⅔, 1). That fits predicates, but for the 5-label choice the
+  §Q7 soft label needs a vote vector.
+- The "8-word span" for the shingle checks has no tokenization rule: case, punctuation and
+  whitespace.
+- §Q1.5 leaves the `{speaker}` value unstated: role, display name or agent name.
+- §Q3.3 does not say what prints when MDD is unattainable (`n_c < 5`; the script's `mdd` returns
+  `None`). `stats.UnattainablePower` is the precedent.
+
+**P5-m6 (minor) — FR-8 says inputs are generated "(by the frontier labeler)". §Q1.2 deliberately
+uses a different frontier model to generate them.** The intent survives, and R-4 asked for the
+separation. It is still a literal mismatch with a stakeholder-worded FR. *Fix:* `tico` rewords
+FR-8's parenthetical to "a hosted frontier model". That is a decision-log line, not a new
+question.
+
+**P5-n1 (nit)** — §Q3.3's "Not best case" is only partly true. Whenever ψ̂ < δ, ψ = δ and π_c = 0,
+which *is* the best case. All of the n = 50 ψ̂ ≤ 0.10 cells are best case. Reword: "never below
+best case, and equal to it when ψ̂ < MDD".
+
+**P5-n2 (nit)** — Two sections are transient:
+- **"Reproducing the figures"** describes scripts that live in a session scratchpad, and those
+  scripts do not print every cited figure. The slow-tier `s_max` column and 0.34–0.40 are hand
+  arithmetic. Commit the scripts or cut the section to one line.
+- **"Handed to architect"** is a routing list. Delete it once v1.4 absorbs it (growth-stops: no
+  disposition lists).
+
+**P5-n3 (nit)** — §Q2.3's arXiv 2609.26758 exists. Its abstract (alphaXiv) reports that only
+yes/no option names fell below chance, which is a reversed ranking that thresholds cannot fix.
+That bears directly on the guard's `advance` predicate. Replace "unverified" with this.
+
+### Handed-to-architect routing
+
+| # | Real plan gap? | Method the plan absorbs? | Stakeholder? |
+|---|---|---|---|
+| 1 Replicates in §3.6/U7 | Yes. Plan §3.3/U7 anticipated it ("if Q6 requires") | Yes: grouping, per-replicate lines, reload step | **Yes**, for the "met in both" rule and the extra run (P5-M3a) |
+| 2 Failed decision call not withheld | Yes. It reverses plan §3.3's explicit "withholds… not handed off" | Yes, it is runtime-faithful. **Extend** it with elapsed-on-failure capture and the chat-failure rows (P5-M1), and keep the pairs as concordant (P5-m2) | No |
+| 3 FR-1 line gains `U`, ψ̂ and the reuse-adjusted limit | Yes | Yes | No. Covered by the FR-1 detection-limit answer |
+| 4 `priorTurn` for message type | Anticipated (§3.5 "if U0 adds it"; U4 needs U0 Q1) | Yes. It touches U4 vectors and U11's preceding-row read | No |
+| 5 `decision-models/` additions | Yes | Yes. Also add the `labelVotes` shape for choice and the tokenization (P5-m5) | **Yes**, for the labelling cost (P5-M3b). FR-8 wording goes to `tico` (P5-m6) |
+| 6 Cell minimums: print, not refuse | Yes. §3.5 has only the 200 total | Yes, as **print** | Only if a refusal is wanted. I agree with printing |
+| 7 Within-load re-check; `inputTokens` | Yes, small | Yes | No |
+| 8 Per-label `minConfidence` policy | No, not yet. It is conditional on U6 | Defer. At most one contingent line in §3.3 | No |
+
+**Missing from the list** (the architect should add them):
+- the "not assessable (scored n < 200)" verdict state (P5-m2);
+- the decision-call timeout source (P5-m3);
+- what U7 records when a fit is infeasible: whether that is a closure record like a missed bar,
+  once P5-M2 narrows "infeasible".
+
+### What's solid
+
+- **Q3 is the right instrument.** The exact one-sided test with no correction is monotone by
+  construction. The note rejects Holm and Rule 7 for the right reason: they are absence-claim
+  hazards. The plug-in-ψ̂ MDD is more honest than `stats`' strict-dominance figure.
+- **Every figure reproduces.** Each one I re-ran matches, two ways for the power.
+- **Q4.1 uses a ratio of means.** That is the correct reading of "on average across the whole
+  mix". The bootstrap is deterministic and reuses `stats.percentile`.
+- **Q1's design protects the eval set.** One variant per cluster keeps `designEffect = 1.0` true.
+  Near-miss seeds, blind three-vote labelling and intent kept as a sampling variable (never a
+  filter) are sound defences against an easy set.
+- **Q2.5's argument is right.** A threshold needs a ranking, not calibrated probabilities, so no
+  calibration map is needed for choice confidence.
+- **Q7 has a go/no-go export test.** It also refits on the served GGUF.
+
+### Open questions
+
+1. **Stakeholder.** Does a bar claim require the bar to be met under two separate model loads?
+   The cost is one more candidate run per point, and an equal candidate's false-fail rate rises to
+   at most about 2×. (P5-M3a)
+2. **Stakeholder.** Labelling volume of about 9× the plan's prior reading in labeller calls (≈ 14×
+   with over-generation; ≈ 42× if U8 runs). Accept it, or trade it down? The levers are two votes
+   plus a tie-break, a calibration set smaller than eval, or 50 per guard cell at the cost of the
+   MDD rising from 6.7–14.1 to 13.1–19.9 pp. (P5-M3b)
+
+## Pass 6
+
+**Scope.** This pass re-gates the method note v1.1 (`docs/plans/typed-decision-models-ml.md`,
+~5,990 words, uncommitted) and the requirements diff (`git diff --
+docs/requirements/typed-decision-models.md`), against Pass 5 and plan v1.3. I re-ran the three
+scripts in `docs/plans/typed-decision-models-ml/` with `python3 -I`. I re-read the code that
+§Q4.3 now relies on:
+- `executor.py:691-693, 719`;
+- `runner.py:393-399`;
+- `guards.py:567`;
+- `background.py:358-369`.
+
+I also checked the §Q2.3 abstract figures against alphaXiv. The stakeholder answers are binding
+and are not findings here: both loads, the full labelling volume, and an infeasible fit still runs
+and counts toward K.
+
+**Verdict: the note needs changes; the requirements edits get approve with suggestions.**
+- **Note.** Every figure re-runs, and every Pass 5 finding is addressed. But three of the
+  revision's own fixes conflict with the note's governing principle or with each other (P6-M1 to
+  P6-M3). Each is a few-line edit that teco can verify by line check. A seventh pass is not
+  needed unless the fix changes the design.
+- **Requirements.** They agree with the note, including `tico`'s reading that FR-2's 2× also
+  needs both loads. The growth is new scope. One clarifying clause in FR-4 is needed (P6-M3), and
+  there are two small restatements (P6-r1). Nothing here is "needs changes", so **Ready for
+  design stands**.
+
+CPG: considered, not relevant — a re-review of a statistics note and a requirements diff. The
+code sites were checked by direct reads, and there is no model-bench CPG.
+
+**Figures re-run.**
+- `parity.py` matches every §Q3 figure. It also gives the two-replicate bounds 2.08/9.49/17.27%
+  and the unattainable-MDD rows at n = 3–4.
+- `fr10.py` gives the sawtooth (largest failing n = 51) and the labelling arithmetic: 1,800 kept
+  items, 5,400 calls (9×), 8,640 calls (14.4×), and 25,440 calls with U8 (42×).
+- `latency.py` now prints the slow-tier columns 0.405/0.393 and 0.338/0.404.
+- §Q2.3's abstract figures, 70.4 pp and 93.8% → 23.2% AUC, are verbatim on alphaXiv.
+
+**Pass 5 dispositions.**
+- P5-M1 — **fixed for the guard.** §Q4.3 now matches the guard path: `_drive`'s
+  `except Exception` → `_fail_with_note` (`executor.py:691-693`) and `wallClockMs=None`
+  withholding (`runner.py:393-399`). It is **not fixed for the new abilities**; see P6-M1.
+- P5-M2 — **fixed for FR-10.** §Q2.0 says margins are never bars, and the §Q2.2 ladder relaxes to
+  0.90 and then to `s_350`. It is **not fixed for FR-1's quality target**; see P6-M2.
+- P5-M3 — **answered by the stakeholder.** (a) Both loads → FR-11a, the decision log and §Q6.
+  (b) Volume accepted → the decision log and §Q1.3, with the figures re-run above.
+- P5-m1 — **fixed.** "Every n ≥ 52", floor 52, design size 60.
+- P5-m2 — **fixed.** A failed decision call is now a concordant pair, and "not assessable" is
+  handed item 4. A counting gap remains; see P6-m1.
+- P5-m3 — **fixed.** `decisionTimeoutSeconds` is handed item 3. P6-m3 covers the fit side.
+- P5-m4 — **fixed.** The non-adaptive qualifier is added. Its new phrase "a floor on the
+  inflation" is wrong; see P6-n1.
+- P5-m5 — **fixed.**
+  - `labelVotes` is a vote map.
+  - The tokenization is specified.
+  - The speaker rule matches `guards.py:567`.
+  - The unattainable form is printed by `parity.py`.
+- P5-m6 — **fixed.** FR-8 now says "a hosted frontier model, which need not be the labeler".
+- P5-n1 — **fixed** (§Q3.3 "never below best case").
+- P5-n2 — **fixed.** The scripts print every cited figure, and the handed list carries its
+  removal rule. A residual nit is in P6-n1.
+- P5-n3 — **fixed.** The figures are verified. The note's "a search summary lists" Laya is not
+  supported by the abstract, which names only Jev.
+
+**Stakeholder answers folded in since Pass 5.**
+- Must a bar hold across loads? → Yes, in each of two loads (FR-11a; FR-1, FR-10, AC-1/6/12).
+- Accept the labelling volume? → Yes, at full design size (no FR change).
+- Does an infeasible fit still run on eval? → Yes, once, and it counts toward K (FR-4).
+- Must the generator be the labeler? → No (FR-8).
+
+### New findings
+
+**P6-M1 (major) — §Q4.3 drops a new-ability hand-off chat failure, but the runtime fails closed on
+it. That makes FR-10 easier to meet.**
+- **The runtime.** A chat failure fails the run only on the guard. Join-in runs inside
+  `background._safe_respond`, whose `except Exception` logs and swallows
+  (`background.py:358-369`). So a hand-off LLM failure there produces **no reply**, which is a
+  decision of `no`. Plan §3.7 also has `_safe_classify` mirror `_safe_embed`, so the classifier
+  case produces **no label**.
+- **The note.** §Q4.3 row 2 drops these items from FR-10. That conflicts with its own first
+  governing principle, and with its third ("no rule may make a bar easier"). An item the
+  composite would get wrong (a `yes`-labelled join-in item, or any message type) leaves the
+  denominator.
+
+*Fix:*
+- Restrict row 2 to the guard and the incumbent arm.
+- For a new-ability hand-off chat failure, score the fail-closed answer, as row 3 does, with
+  `y_i` = elapsed.
+- That needs elapsed capture on the hand-off chat call as well. Amend handed item 2, which says
+  chat failures "keep today's withholding … in both arms".
+
+**P6-M2 (major) — The guard's quality target never relaxes, so §Q2.0's "one rule covers all three
+bars" is not true for FR-1.**
+- **What the note does.** §Q2.1 fits `D_c ≤ 0`, a point estimate stricter than FR-1's actual
+  test (one-sided exact McNemar at 0.05). §Q2.0 calls it "the requirement value", so it has no
+  ladder.
+- **What that loses.** The guard is the point R-2 says is bound by hand-off share. When
+  `D_c ≤ 0` needs `s > s_2`, a band with a small positive `D_c` that does not reject on
+  calibration could meet both bars. The fit never looks for one. It returns
+  `fit-infeasible: latency`, and the eval run (now mandatory) tests a band that is bound to fail
+  FR-2.
+
+*Fix:* add the missing rung. When `D_c ≤ 0` forces `s > s_2 − 0.05` (or `> s_2`), relax each
+cell to "the calibration cell's one-sided exact McNemar does not reject". Take the smallest `s`
+meeting `s_2`, and record it as `below-margin` with the target used. That is FR-1's requirement
+value, applied the same way §Q2.2 relaxes to 0.90.
+
+**P6-M3 (major) — "Runs once on eval" conflicts with "met in both loads".**
+- **Where it appears.** FR-4's new sentence, §Q2.0 and handed item 8 each say every candidate is
+  "run on the evaluation set once".
+- **The conflict.** FR-11a and §Q6 make "met" require two load replicates. Read literally, an
+  infeasible-fit candidate gets one run and can never be "met". If that run happens to meet the
+  bar, nobody is told to run replicate 2.
+
+*Fix:* "once" means one evaluation, and an evaluation is the two-replicate pair. Replicate 2 may
+be skipped when replicate 1 already fails, because the conjunction is decided. K counts the pair
+once, which §Q6's content-hash rule already gives.
+- `tico` adds "(in both loads, FR-11a)" to FR-4's sentence.
+- The note fixes §Q2.0 and item 8 to match.
+
+**P6-m1 (minor) — A failed decision call is kept but not counted.**
+- §Q4.3 counts "every dropped row". Concordant pairs from decision-call failures are kept rows,
+  so nothing prints them.
+- A candidate whose decision calls all time out prints FR-1 `holds` in every cell, at ψ̂ ≈ 0 and
+  with a tight MDD. Only FR-2 reveals it.
+
+*Fix:* print `decisionCallFailures k/n` per replicate beside `handoffShare`, and add it to handed
+item 2.
+
+**P6-m2 (minor) — Handed item 6 says the `priorTurn` rows land "before U4".** Plan v1.3 deliberately
+lands them **in** U4, with the role tables and their pins (the Pass 4 N5 fix). "Before U4" brings
+back N5's unbindable pins. *Fix:* "in U4". U4 already lists U0 Q1 as a dependency.
+
+**P6-m3 (minor) — Fit-side gaps an implementer would have to guess.**
+- `decisionTimeoutSeconds` is an **input** to `fit.py`, because the fit uses it before the
+  candidate file exists. It is not only a field of the candidate. Say where it comes from (handed
+  item 3).
+- `fitOutcome` is single-valued, but `ranking`, `latency` and `agreement` can be infeasible
+  together. Define the precedence, or make it a set.
+- Handed item 8 puts the per-instruction AUC "in the fit manifest". Plan §3.4 defines the manifest
+  as the sorted `input_hash` list, hashed for the leakage check, so the AUC there changes a pinned
+  format. Put it in the candidate's provenance or in a separate fit report.
+
+**P6-n1 (nits).**
+- §Q3.5's "the printed figure is a floor on the inflation" is wrong. Under adaptive re-tunes it is
+  no bound in either direction. Say so.
+- Duplicated facts. The equal-candidate false-fail rate appears twice in different roundings
+  (§Q3.2 1.1/4.9/9.0%, §Q6 1.05/4.86/9.04%). "Target, not a bar" is stated three times (§Q2.0
+  heading, §Q2.0 body, §Q5.3). Keep one home for each and cite it.
+- Handed item 7's "`tico` is rewording FR-8" is now stale.
+- §Q2.3's "a search summary lists" Laya: the abstract names only Jev. Mark it unverified.
+- `docs/plans/typed-decision-models-ml/` is a code directory inside a document kind. That falls
+  outside the filename grammar, and it is untracked. Commit it as the note's companion, or give it
+  a home in a component when U3c lands.
+
+**P6-r1 (minor, requirements) — Small restatements in the diff.**
+- FR-1's "in each of two separate loads (FR-11a)" and FR-10's "Like every bar, it must hold in
+  each of two separate loads (FR-11a)" restate FR-11a, which is the rule's home. The citation
+  alone suffices. The ACs restating it is normal.
+- FR-11a's "A parity bar (FR-1, FR-2)" calls FR-2 a parity bar. Say "a speed-up point's bars
+  (FR-1, FR-2)".
+
+**Growth-stops check.**
+- **Note: +~1,130 words, mostly legitimate.**
+  - *New scope* (stakeholder answers, plus one new diagnostic): §Q2.0 fit outcomes, the
+    infeasible-runs rule, §Q2.3's AUC diagnostic, the §Q1.3 labelling-volume block and §Q6's
+    cost.
+  - *Rework* that replaced text in place: §Q4.3, rebuilt rather than appended; §Q1.3's sawtooth;
+    the specs that P5-m5 asked for.
+  - The handed list grew from 8 to 11 items: the three I listed as missing in Pass 5.
+  - Restated facts are P6-n1's duplicates. §Q4.3's first bullet narrates the falkor-chat call
+    chain, but it is design evidence that is cited once, and it is acceptable.
+  - No history or debate prose.
+- **Requirements: new scope.** There are four decision-log entries, each one question → one
+  answer with its FR, and "extends SQ-2" is named. The two restatements are P6-r1. No line is
+  over 700 characters.
+
+### Handed-to-architect list (11 items) as plan v1.4 input
+
+The list is correct and almost complete. The `[settled]` markings on items 1, 7 and 8 are right,
+and no other item needs one.
+
+**Amend:**
+- **Item 2:** add the new-ability hand-off rows (P6-M1) and the failure count (P6-m1).
+- **Item 3:** `decisionTimeoutSeconds` is a fit input (P6-m3).
+- **Item 6:** "in U4", not "before U4" (P6-m2).
+- **Item 7:** drop the stale `tico` clause.
+- **Item 8:** "once" means the two-replicate pair (P6-M3), and the AUC goes outside the manifest
+  (P6-m3).
+
+**Add:** the guard's FR-1 relaxation rung (P6-M2) as a `fit.py` objective change under item 8.
+
+## Pass 7
+
+**Scope.** This pass checks the method note v1.2 and `tico`'s requirements edits for P6-M3 and
+P6-r1. Following the coordinator's brief, the design check covers only the four changes the
+author declared: P6-M1, P6-M2, P6-m1 and P6-m3. I computed `p_worse` over (b, c) grids myself to
+test §Q2.1's new selection rule.
+
+**Verdict: needs changes. There is one major, P7-M1, and the stopping condition is below.** Every
+Pass 6 finding is addressed. But the rule P6-M2 introduced for choosing a band rewards discordance,
+so it tends to pick bands that FR-1's eval test is least able to catch.
+
+**Stopping condition (falsifiable, line-checkable).** §Q2.1's selection at the McNemar rungs (2 and
+3) must use a key that never prefers a band with a larger worst-cell excess, and, at equal excess,
+never prefers a band with more discordance. One rule that passes: the lexicographic key
+`(max_c D_c ↑, max_c m_c ↑, s ↑)`, with McNemar non-rejection kept as the constraint.
+
+Check it on this case: two bands identical except in one cell. Band A has (b, c) = (2, 0). Band B
+has (19, 16). The rule must pick A, and A must also beat a band with (3, 1). If the next revision
+meets this and changes nothing else, no Pass 8 is needed.
+
+CPG: considered, not relevant — a statistics note and a requirements diff. No model-bench CPG
+exists.
+
+**Pass 6 dispositions.**
+- P6-M1 — **fixed.** §Q4.3 row 3 scores a new-ability hand-off failure fail-closed, with
+  `y_i` = elapsed. It cites `background.py:358-369`, which I rechecked. Item 2 is extended.
+- P6-M2 — **fixed in structure.** There is now a four-rung ladder with a McNemar relaxation rung.
+  The new selection key is P7-M1.
+- P6-M3 — **fixed.** §Q2.0 and item 8 define one evaluation as the replicate pair; replicate 2 is
+  skippable, and the pair counts once toward K. FR-4 now reads "(in both loads, FR-11a)".
+- P6-m1 — **fixed.** `decisionCallFailures` and `handoffCallFailures` print per replicate (§Q4.3,
+  item 2).
+- P6-m2 — **fixed.** Item 6 says "in U4".
+- P6-m3 — **fixed.** The timeout is a `fit.py` input (§Q2). There is a precedence order
+  (`ranking` > `agreement` > `latency`), and the fit report is separate from the manifest.
+- P6-n1 — **fixed except one nit.** These are fixed:
+  - §Q3.5 now says the bound holds "in neither direction";
+  - the false-fail rate has one home (§Q3.2), which §Q6 cites;
+  - "never bars" is stated once (§Q2.0);
+  - the stale clause is gone;
+  - Laya is marked unverified.
+
+  `docs/plans/typed-decision-models-ml/` is still untracked under a document kind. That is
+  teco's call at commit time.
+- P6-r1 — **fixed.** FR-1 and FR-10 say "judged per FR-11a". FR-11a reads "a speed-up point's
+  (FR-1 parity, FR-2 speed)".
+
+**Design check of the four declared changes.**
+- **P6-M1 (fail-closed scoring plus elapsed capture): sound.** It follows the runtime, which
+  swallows the error and gives no reply or label, and it is the conservative reading.
+  - *Nit:* a failed hand-off's elapsed time is bounded by the bench's chat timeout
+    (`requestTimeoutSeconds`), not by the runtime's provider timeout or retry chain. FR-10
+    latency for those rows is only approximate. Printing the counts makes that visible.
+- **P6-m1 (the two failure counts): sound.** An all-failing candidate is now visible beside its
+  FR-1 `holds` lines.
+- **P6-m3 (precedence and fit report): sound.** The precedence only selects which outcome is
+  named, and the fit report keeps every bar's value.
+  - *Nit:* item 8 does not say where the fit report lives or whether the importer copies it.
+    One clause in plan v1.4 settles it.
+- **P6-M2 (max-min `p_worse`): one defect, P7-M1.** Two parts of it are fine:
+  - **No leakage.** `fit.py` reads calibration only (plan §3.4). The rule is deterministic given
+    calibration. Eval items are seed-disjoint, hash-disjoint and shingle-checked, and refused at
+    run time if they overlap. So the selection cannot see eval.
+  - **No bad interaction with K or replicates.** K counts content hashes, so a re-fit under a
+    changed rule is K+1 and a rerun of the same fit is not. The replicate conjunction is
+    applied after selection and only makes the bar harder. I found no interaction.
+
+### New findings
+
+**P7-M1 (major) — The max-min `p_worse` selection rewards discordance, so it picks bands that the
+eval test is least able to catch. That conflicts with §0's "no rule may make a bar easier".**
+- **Why.** At fixed net excess D, `p_worse` rises with the discordant count:
+  - D = 2: (2,0) gives 0.25, (4,2) gives 0.344, (10,8) gives 0.407, (18,16) gives 0.432;
+  - D = 3: (3,0) gives 0.125, (19,16) gives 0.368, which beats (2,0)'s 0.25 at D = 2.
+- **Effect.** The rule prefers more disagreement with the LLM. It can even prefer a larger net
+  excess, as long as the band is noisier. On eval, that band has higher ψ, so the test has less
+  power and the printed MDD is larger. Its `holds` is therefore more likely for the same true
+  worsening.
+- **Why it slipped through.** The author's goal, keeping the band off the rejection edge, is
+  right. But `p_worse` is a test statistic, so it mixes up the size of the effect with how much
+  evidence there is for it.
+- **Mitigation.** The printed ψ̂ and MDD disclose it. But the fit should not optimise toward
+  weak tests.
+
+*Fix:* the stopping condition above. Rank first by worst-cell excess (`max_c D_c`, rung 1's own
+tie-break inverted), then by discordance, then by `s`. The edge is avoided because the least-excess
+band is chosen, and noise is never rewarded.

@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Reviews:** `docs/reviews/typed-decision-models.md` (requirements Passes 1–2; plan Passes 3–4)
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Extended by:** `docs/plans/typed-decision-models2.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (requirements Passes 1–2; plan Passes 3–4)
 
 *2026-10-30 — v1.3: answers plan review Passes 3–4 and folds the stakeholder's FR-4 reuse-count and FR-1 detectable-difference answers.*
 
