@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-098
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-099
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -65,6 +65,28 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > Also: `ensure_demo_models.py` assumes `/api/v0/models` lists an instance under its custom
 > `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
 - **Owner:** stakeholder decision, then `devops`.
+
+### K-099 — The embedder is loaded at the chat model's 8192 context, and MCP `send_message` has no length cap (🔵 proposed — `tico` explanation session, 2026-10-31)
+
+> `ensure_demo_models.py` loads every missing model with one `load_args` (`-c 8192 --gpu max`),
+> so `text-embedding-qwen3-embedding-0.6b` gets the 8192 sized for the chat model's shared KV pool.
+> The embedder sees one text at a time, so it needs only the longest single input. Inputs measured
+> 2026-10-31: `ws:agent-team` chunks max 1,139 chars (avg 694, ~300–400 tokens; the chunker caps
+> them at ~1,000 + 150 overlap), `ws:acme` messages max 1,817 chars; REST messages are capped at
+> `MAX_TEXT_LEN` = 8,000 chars (~2,000–2,700 tokens). So 2048 fits documents and 4096 fits
+> REST-capped messages. **The gap:** MCP `send_message` → `services.post_message` enforces no length
+> cap (unlike `ingest_document`, which re-checks `MAX_DOCUMENT_CHARS`), so an agent post can exceed
+> any context. Unverified: whether LM Studio truncates or rejects an over-context embed; a rejection
+> fails the embed job silently (log only) and drops the message from search. **Why bother:** the
+> fit report (`docs/test-reports/salesperson-single-model-fit-report.md`) shows ~2.1 GiB dedicated
+> for the embedder process (~0.6 GB weights) and ~1.6 GiB of ministral paged out whenever it runs;
+> a smaller embedder context may shrink that, unmeasured. Remaining: (1) probe LM Studio's
+> over-context embed behavior; (2) stakeholder picks the embedder context (2048 vs 4096); (3) load
+> the embedder at it; (4) enforce `MAX_TEXT_LEN` on MCP `send_message` as REST does; (5) re-measure
+> VRAM and paging against the fit report.
+- **Owner:** stakeholder decision (context value), then `devops` (1, 3, 5) and `coder` (4).
+- **Test strategy:** `lms ps --json` shows the embedder's loaded context; an over-length MCP
+  `send_message` is rejected like REST's 422; the fit report's VRAM/paging measurement repeated.
 
 ### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 
