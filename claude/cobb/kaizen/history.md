@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` pointer (live-specs L3b)
+
+- **What:** New How-you-work step 6: before writing a review or gate verdict, read and apply the root `REVIEW.md` and each touched component's `REVIEW.md`. One line; no frontmatter, hook or tool-grant change.
+- **Why:** unit L3b of `docs/plans/live-specs.md` (§3.3, §4; FR-6, AC-6) — `cobb` gates `REVIEW.md` files and agent/prompt work, so it is a gate-verdict writer. Review practice lives once in `REVIEW.md`; the prompt carries a pointer. No duplicate of a `REVIEW.md` line was found here (`docs/reviews/live-specs.md` Pass 7, P7-1). Self-authored; gated by `analyst`.
+- **Plan items:** —
+
 ## 2026-10-30 — `audit-team.sh` check 7 amended to the identifier policy (identifier-leak cleanup U1)
 
 - **What:** I rewrote check 7 in `claude/scripts/audit-team.sh`. It now FAILs only on two things.

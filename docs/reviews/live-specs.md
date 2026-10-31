@@ -1818,3 +1818,81 @@ The cells read "§14.9, §14.3 (+ §14.1a)", which implies §14.3 runs on every 
 themselves are correct; the batch rows also correctly skip errored items (`receipt["status"] !=
 "processing"`). *Fix:* "§14.9; then, when a worker is wired (§1.12), §14.3 `list_document_chunks`
 and §14.1a `start_document_progress`" in each of the four cells.
+
+## Pass 14
+
+**Scope.** Unit L3b gate (`analyst`; `cobb` wrote it, and `cobb.md` is `cobb`'s own prompt): the
+uncommitted edits to `claude/graph-dba/graph-dba.md`, `claude/cobb/cobb.md`,
+`claude/tico/tico.md` and their three `kaizen/history.md` files. Read: plan §3.1, §3.3, §4 L3b
+row, §5 AC-6; requirements FR-6, FR-12, FR-13, AC-6; Pass 7 P7-1, P7-2; root `REVIEW.md`; root
+`AGENTS.md` live-spec bullet (l.160–164); the full `tico.md`, and the review-shaped parts of
+`cobb.md` and `graph-dba.md`.
+
+CPG: not applicable — the artifact is agent-prompt text, no code change.
+
+**Verdict: approve with suggestions.** One minor finding and one nit. No blocker or major.
+
+### Checks run
+
+- **No permission, tool, frontmatter or hook change** — verified. Each file's frontmatter block
+  (`graph-dba` and `cobb` to l.11, `tico` to l.16) is byte-identical to `HEAD`, and every diff
+  hunk starts below it. `git diff --stat` touches no `.claude/`, hook or `claude/scripts/` file.
+  `cobb.md` gains exactly one line: How-you-work step 6.
+- **AC-6 loop, run verbatim from the repo root** — it prints only `claude/teco/teco.md`, which
+  is L3c's. L3a's four files already carry the pointer in the working tree, so they no longer
+  show up. Positive control: a scratch copy of `tico.md` with `REVIEW.md` renamed is listed. The
+  check can go red.
+- **Pointer fit.** `cobb`: step 6 covers its gates of `REVIEW.md` files and agent work, its
+  prompt-lint reviews and its team certification. `graph-dba`: step 9 sits in the How-you-work
+  list, which is read whole as the system prompt, so it is read before any review. The list order
+  carries no sequencing, so the placement is fine.
+- **`tico` scoping is complete.** I read every review, gate and verdict line (`grep -n -i`).
+  `tico` routes gates (l.57) and reads `analyst`'s verdict before the Ready-for-design flip
+  (l.110, l.169). For a manual it calls `qa-engineer`/`analyst` and does not self-certify (l.163).
+  It checks that a consult deliverable fits (l.44), which is integration, not a verdict. Its only
+  verdicts of its own are the Integrating check, and an `accepted` on a trivial unit with no gate
+  (l.57–58). The pointer covers both. See P14-n1 for the wording.
+- **P7-2 repoint** — fixed. `tico.md` l.110 reads "growth-stops check (root `REVIEW.md`)", which
+  resolves to `REVIEW.md`'s bold **Growth-stops check.** `tico.md` l.66 and `graph-dba.md` l.64
+  still cite the growth-stops *bullet* for authoring rules, and that bullet still exists.
+- **P7-1 duplicates** — none in these three files. A grep for growth-stops, mutant, unfiltered,
+  positive-control and evidence-bar phrasing finds no reviewer duplicate in `cobb.md`,
+  `graph-dba.md` or `tico.md`. P7-1's table has no L3b row.
+- **Kaizen** — each entry is the `agent-maintenance` template shape (What / Why / Plan items) and
+  sits at the top, most recent first. The three L3b entries are the only ones citing L3b; L3a's
+  four entries cite L3a.
+- **Growth.** About 180 words across the three prompts, all new scope (FR-6, FR-12) plus one
+  repoint. Nothing is restated.
+
+### Findings
+
+**P14-m1 (minor) — `graph-dba`'s delta-plan pointer paraphrases half of the rule it cites.**
+Verified by reading the cited bullet and the L3a sibling. `graph-dba.md` l.64 says only "states
+only the change against it". The cited root `AGENTS.md` bullet (l.163–164) also requires "citing
+the affected sections and any open feature's plan it relies on". Those are FR-12's second half
+and all of FR-13. A paraphrase that reads as complete invites a `-graph.md` note with no section
+citations, and that is a finding under root `REVIEW.md` *Always check* 2. L3a's
+`data-scientist.md` l.81 states the whole rule, so the two pointers to one rule differ. Replace the
+added sentence with the `data-scientist` wording:
+
+```markdown
+For a component with a live spec, the document states only the change against it, citing the affected spec sections and any open feature's plan it relies on (root `AGENTS.md`, live-spec bullet).
+```
+
+Its reach is one sentence. The kaizen entry's "What" should then say "… states only the change
+against it, citing affected spec sections and any open feature's plan".
+
+**P14-n1 (nit) — "line check" is `teco` vocabulary, and nothing in `tico.md` defines it.**
+Verified: `grep -n 'line check' claude/tico/tico.md` hits only the new sentence. `tico`'s own
+check is the done-condition check in the sentence just before it, so the reader has to infer the
+link. Suggested replacement for the added sentence:
+
+```markdown
+Before that check, and before any gate verdict of your own, read and apply the root `REVIEW.md` and the `REVIEW.md` of each component the work touches.
+```
+
+If you take it, edit the matching words in the `tico` kaizen "What" line too.
+
+### Proposed REVIEW.md lines
+
+None. Neither finding is a recurring class.

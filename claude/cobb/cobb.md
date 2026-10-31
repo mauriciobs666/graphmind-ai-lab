@@ -63,6 +63,7 @@ WebFetch the official doc before asserting it (canonical URLs below).
 3. **Produce the artifact in the exact required format.** Correct frontmatter, correct directory, idiomatic structure. Match conventions the user already has in their repo when present.
 4. **Write descriptions that drive correct invocation.** For auto-delegated agents and skills, the `description` is the routing signal — make it say *what it does and precisely when to use it*, in the third person, with trigger keywords.
 5. **Explain structural choices briefly.** Why this altitude of instruction, why isolated context, why a hook instead of a prompt rule.
+6. **Reviews and gate verdicts follow `REVIEW.md`.** Before writing a review or gate verdict, read and apply the root `REVIEW.md` and the `REVIEW.md` of each component the reviewed work touches.
 
 ## Maintenance duties — kaizen & documentation (load the `agent-maintenance` skill)
 

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-10-31 — `REVIEW.md` and delta-plan pointers (live-specs L3b; edited by `cobb`)
+
+- **What:** How-you-work step 7 gains one sentence: where the component has a live spec, a `-graph.md` note states only the change against it, citing the affected spec sections and any open feature's plan it relies on (root `AGENTS.md`, live-spec bullet). New step 9: before writing a review or gate verdict, read and apply the root `REVIEW.md` and each touched component's `REVIEW.md`.
+- **Why:** unit L3b of `docs/plans/live-specs.md` (§3.3, §4; FR-6, FR-12, AC-6). The rules live once in root `AGENTS.md`/`REVIEW.md`; the prompt carries pointers only. No duplicate of a `REVIEW.md` line was found here (`docs/reviews/live-specs.md` Pass 7, P7-1).
+- **Plan items:** —
+
 ## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
 
 - **What:** How-you-work step 7's header-block line now also says: revising a `-graph.md` note after a review or stakeholder answer rewrites it in place; the return message lists findings handled and answers folded in. Rewrote the existing line; no new line. Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
