@@ -45,6 +45,11 @@ nothing in `runner`/`cli`/`packs` calls it yet (U1d).
 
 Full suite `2294 passed, 4 deselected, 2 xfailed` (`tests/test_decisions.py`: 203); `ruff` clean.
 
+*2026-10-31:* impl review Pass 2 — `apply_policy` refuses out-of-bounds policies itself (one
+shared bounds helper, so the branch-order mutant is equivalent by construction; P2-m2),
+`PolicyDecision` enforces `answer is None` iff `handoff` (P2-n2), and the id/sha256 regexes use
+`fullmatch` (P2-n1); vector rows unchanged.
+
 ## 2026-10-30 — typed-decision-models U1a (offline) — `LMStudio.decide` on `/v1/decisions`; live probe pending
 
 **What:** `docs/plans/typed-decision-models.md` §4 U1a, **offline half only**. `lmstudio.py` gains
@@ -88,6 +93,9 @@ Full suite `2294 passed, 4 deselected, 2 xfailed` (`tests/test_decisions.py`: 20
 Full suite `2074 passed, 4 deselected, 2 xfailed` at delivery, `2091 passed, 4 deselected,
 2 xfailed` after the fix round (which also closed U1b-n1/n2's stale "three profiles" text); `ruff`
 clean.
+
+*2026-10-31:* impl review Pass 2 P2-m1 — both warm-up timeout pins now use `123.5`, not the
+`firstCallTimeoutSeconds` default `300.0`, so a hardcoded `300.0` reddens too (as does `7.0`).
 
 ## 2026-10-30 — typed-decision-models U3a — `classification.score_item` split, no behaviour change
 

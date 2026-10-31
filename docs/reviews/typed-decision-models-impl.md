@@ -312,3 +312,47 @@ CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the d
 
 1. **(architect) Over-limit hand-off versus "empty band iff no hand-off model".** Under the 512-token ruling, should `Candidate.load` accept an empty band with a hand-off model (an overflow-only hand-off)? And what is a decision-model-only candidate's over-limit item: kept failure, withheld, or refused? This is the one U1c contract the ruling touches. It should be settled before U1d builds on `_policy_problem`.
 2. **(architect) Which document owns the `eval_set_hash` line format?** It is now a stored-data format, and HISTORY is a record, not a spec. I recommend one sentence in plan2's next revision, citing the separator.
+
+## Pass 3
+
+*2026-10-31. The Pass 2 fix round, reviewed against the uncommitted `model-bench/` diff from `da877b2a`.*
+
+**Verdict: approve.** Every Pass 2 finding I raised is fixed, and each fix was confirmed by running it. There are no new findings.
+
+**Checks run:**
+- **Suite:** `2311 passed, 4 deselected, 2 xfailed`, run from `model-bench/`. That is 2294 plus 17 new `test_decisions.py` tests. `ruff` is clean.
+- **Mutants:** each was run on a copy, then restored and checked with `cmp`.
+- **Fixtures:** `tests/fixtures/` has no diff.
+
+CPG: considered, not relevant — no `cpg_modelbench` graph is loaded, and the change is 4 files.
+
+### Dispositions
+
+- **P2-m1: fixed.** A hardcoded `timeout_s=300.0` now reddens on both warm-ups: 2 tests on decisions and 1 on embeddings. `7.0` still reddens 2.
+  - The U1a HISTORY claim ("`timeout_s` hardcoded … reddens") is now true. That closes **U1a-m4** as well.
+- **P2-m2: fixed.**
+  - `apply_policy` now calls `_policy_bounds_problem` before either branch runs.
+  - Removing that call reddens 11 tests.
+  - Dropping `low <= high` from the shared helper reddens 2 tests: one through `apply_policy`, one through `Candidate.load`.
+  - `Candidate.load` still refuses the same bands, because it calls the same helper.
+- **P2-n1: fixed.** Both regexes now use `fullmatch`. Reverting either one to a `$`-anchored `match` reddens its new `"…\n"` row (1 test each).
+- **P2-n2: fixed.** Removing `PolicyDecision.__post_init__` reddens 4 tests. A one-way version (rejecting only a hand-off that carries an answer) reddens the `decided-with-no-answer` row. All 22 `apply-policy.jsonl` rows still construct.
+- **P2-n3: not taken.** It was optional. Both new HISTORY items are one dated line each, as the convention asks.
+
+### Claim 1: the branch-swap mutant is now equivalent. Confirmed.
+
+- **By execution:** I swapped the order of the yes and no branches. All 220 `test_decisions.py` tests stay green.
+- **By exhaustive comparison:** I ran `apply_policy` over 169 (l, h) pairs that include invalid bounds, NaN and `bool`, crossed with 16 values of p, including p outside [0, 1], NaN, ±inf and `bool`. Of these 2,704 inputs, 1,952 were refused by the bounds check. The remaining 752 all agree with an independently written version that checks *no* first.
+- **The argument:** the two orders can differ only when both `p >= h` and `p < l` hold, which requires `l > h`. The bounds check refuses `l > h` before either branch runs.
+- **This holds even for a p that `decide` would never pass**, such as NaN. With NaN, both comparisons are false, so both orders give a hand-off.
+
+### Claim 2: no error row in `apply-policy.jsonl`. The call is right for U1c.
+
+- **The plan:** plan2 §4.1 keeps the rows unchanged.
+- **The shape:** an `expected: {"error": …}` row would give the falkor-chat and decision-models copies a second shape to parse inside one file.
+- **What is left uncovered is narrow.** A copy that leaves out the bounds refusal stays order-independent as long as it is never handed `l > h`. Any band that is measured passes through `Candidate.load`, which refuses `l > h`. So the risk is confined to inputs that are never measured: a hand-edited falkor-chat `models.json`, or a `fit.py` search that tries `l > h`.
+- **If the three copies must agree on refusals too,** the right vehicle is a separate family file, for example `decision-contract/policy-bounds.jsonl` (policy → `refused: true|false`). That leaves `apply-policy.jsonl`'s shape and rows untouched. It belongs in U5's and U9's briefs, not in U1c. See the open question.
+
+### Open question
+
+1. **(architect / teco) Should U5 and U9 pin the bounds refusal in their own copies?** The options are each copy's own suite, or a shared `policy-bounds.jsonl` family. Either way, it needs to be named in those briefs so the refusal is transcribed rather than dropped.

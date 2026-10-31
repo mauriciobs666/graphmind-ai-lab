@@ -91,9 +91,33 @@ class PolicyDecision:
     handoff: bool
     answer: bool | str | None
 
+    def __post_init__(self) -> None:
+        if (self.answer is None) != self.handoff:
+            raise ValueError(
+                f"PolicyDecision: answer is None iff handoff (handoff={self.handoff!r}, "
+                f"answer={self.answer!r})"
+            )
+
+
+def _policy_bounds_problem(policy: Mapping[str, Any]) -> str | None:
+    """The policy's own bounds — `0 ≤ l ≤ h ≤ 1` for a band, `0 ≤ c ≤ 1` for a confidence floor —
+    or `None`. The one home of the rule: `apply_policy` and `Candidate.load` both call it."""
+    if policy.get("kind") == "predicate-band":
+        low, high = policy.get("noBelow"), policy.get("yesAtOrAbove")
+        if not (_probability(low) and _probability(high) and low <= high):
+            return f"policy band must have 0 <= noBelow <= yesAtOrAbove <= 1, got {low!r}, {high!r}"
+        return None
+    floor = policy.get("minConfidence")
+    if not _probability(floor):
+        return f"policy.minConfidence must be in [0, 1], got {floor!r}"
+    return None
+
 
 def apply_policy(policy: Mapping[str, Any], answer: DecisionAnswer) -> PolicyDecision:
-    """v1.3 §3.3, for a policy `Candidate.load` already validated.
+    """v1.3 §3.3. The policy's bounds are checked here too, not left to `Candidate.load`: on a
+    band with `l > h` the yes-first and no-first branch orders disagree, so a transcribed copy
+    could silently differ (impl review Pass 2, P2-m2). With `l ≤ h` enforced first, the order is
+    immaterial — `p < l` implies `p < h`, and `p ≥ h` implies `p ≥ l`.
 
     - `predicate-band {yesAtOrAbove: h, noBelow: l}`: *yes* iff `p ≥ h`, *no* iff `p < l`,
       hand-off iff `l ≤ p < h`. `l == h` is an empty band: never a hand-off.
@@ -101,6 +125,10 @@ def apply_policy(policy: Mapping[str, Any], answer: DecisionAnswer) -> PolicyDec
       `c == 0` never hands off.
     """
     kind = policy.get("kind")
+    if kind in ("predicate-band", "choice-confidence"):
+        problem = _policy_bounds_problem(policy)
+        if problem is not None:
+            raise ValueError(f"apply_policy: {problem}")
     if kind == "predicate-band" and answer.type == "predicate":
         p = answer.probability
         if p is None:
@@ -183,8 +211,9 @@ class CandidateError(ValueError):
     """A candidate file that cannot be measured as written. The CLI's exit-4 refusal."""
 
 
-_CANDIDATE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Used with `fullmatch` only: a `$` anchor also matches before a trailing `\n` (P2-n1).
+_CANDIDATE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _PROVENANCE_KEYS = ("builtBy", "datasetVersion", "sourceSha")
 
 
@@ -228,7 +257,7 @@ class Candidate:
         hand-off model, a fit outcome or quality target outside its closed set."""
         if (
             not isinstance(candidate_id, str)
-            or not _CANDIDATE_ID_RE.match(candidate_id)
+            or not _CANDIDATE_ID_RE.fullmatch(candidate_id)
             or candidate_id in (".", "..")
         ):
             raise CandidateError(f"candidateId {candidate_id!r} is not a plain file name")
@@ -343,16 +372,13 @@ def _policy_problem(policy: Any, question_type: str, handoff: str | None) -> str
     expected_kind = _POLICY_KIND_BY_QUESTION_TYPE[question_type]
     if kind != expected_kind:
         return f"policy.kind {kind!r} does not fit a {question_type} question ({expected_kind!r})"
+    problem = _policy_bounds_problem(policy)
+    if problem is not None:
+        return problem
     if kind == "predicate-band":
-        low, high = policy.get("noBelow"), policy.get("yesAtOrAbove")
-        if not (_probability(low) and _probability(high) and low <= high):
-            return f"policy band must have 0 <= noBelow <= yesAtOrAbove <= 1, got {low!r}, {high!r}"
-        empty = low == high
+        empty = policy["noBelow"] == policy["yesAtOrAbove"]
     else:
-        floor = policy.get("minConfidence")
-        if not _probability(floor):
-            return f"policy.minConfidence must be in [0, 1], got {floor!r}"
-        empty = floor == 0
+        empty = policy["minConfidence"] == 0
     if empty != (handoff is None):
         return (
             "a policy that never hands off needs handoffModel null, and one that can hand off "
@@ -380,7 +406,7 @@ def _fit_manifest_problem(manifest: Any) -> str | None:
         return "fitManifest must be an object"
     if not _nonempty_str(manifest.get("file")):
         return "fitManifest.file must be a non-empty string"
-    if not isinstance(manifest.get("sha256"), str) or not _SHA256_RE.match(manifest["sha256"]):
+    if not isinstance(manifest.get("sha256"), str) or not _SHA256_RE.fullmatch(manifest["sha256"]):
         return "fitManifest.sha256 must be 64 lowercase hex characters"
     size = manifest.get("size")
     if isinstance(size, bool) or not isinstance(size, int) or size < 0:

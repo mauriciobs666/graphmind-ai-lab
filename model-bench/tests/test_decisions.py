@@ -112,6 +112,47 @@ def test_apply_policy_refuses_a_policy_that_does_not_fit_the_answer(policy, answ
         apply_policy(policy, _answer(answer))
 
 
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {"kind": "predicate-band", "yesAtOrAbove": 0.4, "noBelow": 0.6},
+        {"kind": "predicate-band", "yesAtOrAbove": 0.9, "noBelow": -0.1},
+        {"kind": "predicate-band", "yesAtOrAbove": 1.1, "noBelow": 0.1},
+        {"kind": "predicate-band", "yesAtOrAbove": math.nan, "noBelow": 0.1},
+        {"kind": "predicate-band", "yesAtOrAbove": 0.9, "noBelow": True},
+        {"kind": "predicate-band", "yesAtOrAbove": 0.9},
+    ],
+    ids=["l-above-h", "l-below-0", "h-above-1", "h-nan", "l-bool", "l-missing"],
+)
+def test_apply_policy_refuses_a_band_outside_zero_le_l_le_h_le_one(policy):
+    """Impl review Pass 2, P2-m2: `apply_policy` does not rely on `Candidate.load` having
+    validated its band. Three copies exist (model-bench, falkor-chat U9, decision-models' fit
+    search); on `l > h` the yes-first and no-first branch orders disagree (`p = 0.5` above is
+    *yes* one way, *no* the other), so the band is refused before either branch runs."""
+    with pytest.raises(ValueError, match="band"):
+        apply_policy(policy, _answer({"type": "predicate", "probability": 0.5}))
+
+
+@pytest.mark.parametrize("c", [-0.1, 1.1, math.nan, True, None], ids=repr)
+def test_apply_policy_refuses_a_confidence_floor_outside_zero_one(c):
+    policy = {"kind": "choice-confidence", "minConfidence": c}
+    if c is None:
+        del policy["minConfidence"]
+    with pytest.raises(ValueError, match="minConfidence"):
+        apply_policy(policy, _answer({"type": "choice", "choice": "order", "confidence": 0.9}))
+
+
+@pytest.mark.parametrize(
+    ("handoff", "answer"),
+    [(False, None), (True, True), (True, False), (True, "order")],
+    ids=["decided-with-no-answer", "handoff-with-yes", "handoff-with-no", "handoff-with-choice"],
+)
+def test_policy_decision_refuses_a_state_that_cannot_exist(handoff, answer):
+    """Impl review Pass 2, P2-n2: `answer is None` iff `handoff` — a rule the copies transcribe."""
+    with pytest.raises(ValueError, match="handoff"):
+        PolicyDecision(handoff=handoff, answer=answer)
+
+
 # --- input_hash / INPUT_FIELDS_BY_ROLE against input-hash.jsonl (v1.3 §3.5, §5 U1c) -------------
 
 _HASH_ROWS = _rows("input-hash.jsonl")
@@ -492,7 +533,7 @@ def test_candidate_load_refuses_a_file_whose_id_disagrees_with_its_name(tmp_path
     _refused(tmp_path, _with(("candidateId",), "guard-laya-band-v2"), match="candidateId")
 
 
-@pytest.mark.parametrize("candidate_id", ["../escape", "a/b", "", ".", ".."])
+@pytest.mark.parametrize("candidate_id", ["../escape", "a/b", "", ".", "..", "guard\n"])
 def test_candidate_load_refuses_an_id_that_is_not_a_plain_file_name(tmp_path, candidate_id):
     with pytest.raises(CandidateError, match="candidateId"):
         Candidate.load(tmp_path, candidate_id)
@@ -524,6 +565,7 @@ def test_candidate_load_refuses_a_body_that_is_not_a_json_object(tmp_path, raw):
         (("fitManifest", "file"), ""),
         (("fitManifest", "sha256"), "abc"),
         (("fitManifest", "sha256"), "G" * 64),
+        (("fitManifest", "sha256"), "0" * 64 + "\n"),
         (("fitManifest", "size"), -1),
         (("fitManifest", "size"), 1.5),
         (("fitManifest", "size"), True),

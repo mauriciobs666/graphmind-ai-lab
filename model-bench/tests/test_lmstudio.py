@@ -1159,7 +1159,9 @@ def test_warm_up_on_decisions_surface_passes_its_budget_and_residency_through(
     """Impl review U1a-m3: the warm-up is the call that carries the cold-load budget
     (`firstCallTimeoutSeconds`, §3.6), so its `timeout_s` must reach the opener unchanged, and
     `was_resident_before` must round-trip — a constant either way would misreport a cold load
-    as warm, or the reverse."""
+    as warm, or the reverse. The budget is 123.5, a value no code path defaults to: a test at
+    `firstCallTimeoutSeconds`' default (300.0) cannot catch that default hardcoded (impl review
+    Pass 2, P2-m1)."""
     timeouts: list[float | None] = []
     body = _json_bytes(
         {"model": "laya", "answers": [{"type": "predicate", "name": "advance",
@@ -1176,10 +1178,10 @@ def test_warm_up_on_decisions_surface_passes_its_budget_and_residency_through(
         call_surface="decisions",
         system_prompt=None,
         was_resident_before=was_resident_before,
-        timeout_s=300.0,
+        timeout_s=123.5,
         question=_DECISION_QUESTIONS[0],
     )
-    assert timeouts == [300.0]
+    assert timeouts == [123.5]
     assert result.wasResidentBefore is was_resident_before
 
 
@@ -1198,9 +1200,9 @@ def test_warm_up_on_embeddings_surface_passes_its_budget_through():
         call_surface="embeddings",
         system_prompt=None,
         was_resident_before=False,
-        timeout_s=300.0,
+        timeout_s=123.5,
     )
-    assert timeouts == [300.0]
+    assert timeouts == [123.5]
 
 
 def test_warm_up_on_decisions_surface_refuses_a_missing_question():
