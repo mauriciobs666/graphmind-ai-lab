@@ -1165,3 +1165,168 @@ eval test is least able to catch. That conflicts with §0's "no rule may make a 
 *Fix:* the stopping condition above. Rank first by worst-cell excess (`max_c D_c`, rung 1's own
 tie-break inverted), then by discordance, then by `s`. The edge is avoided because the least-excess
 band is chosen, and noise is never rewarded.
+
+## Pass 8
+
+**Scope.** I reviewed the method note at v1.5, against the U1a live probe (`ws:agent-team`
+document `480ef825…`). The checks:
+- the over-limit premise, against the code;
+- bias from the forced hand-off;
+- its interaction with the v1.4 kept-failure rules and the guard ladder;
+- the input caps, recomputed;
+- growth-stops.
+
+I read this code: `falkor-chat` `retry.py`, `transport.py:140-160`, `llm.py`
+(`FallbackClient`) and `app.py:690-730` (`_render_judge_user`, `JUDGE_USER_MAX_CHARS`);
+`config/models.json` `timeouts`; `model-bench` `lmstudio.py` (`_raw_post`, `decide`,
+`LMStudioCallFailed`). I re-rendered the 85 side-check items. Whether long messages hand off or
+fail closed is with the stakeholder, so the over-limit treatment is judged on its merits below.
+
+**Verdict: needs changes, with two majors and a line-checkable stopping condition.** The
+forced-hand-off method is sound and does not loosen any bar. But v1.5 does not finish wiring it:
+- **P8-M1:** the over-limit case is missing from the failure table, so an implementer reading the
+  table today would score an over-limit item under the "decision call fails" row.
+- **P8-M2:** the new mechanics have no route into the plan.
+
+**Stopping condition (falsifiable; a line check, no Pass 9).** The next revision must do all of
+these and change nothing else:
+1. Add an over-limit row to the §Q4.3 table, placed above the decision-call-failure row. Give an
+   entry in all four columns. State that over-limit items are excluded from
+   `decisionCallFailures`.
+2. In §Q2.1–§Q2.3, state that an over-limit calibration item:
+   - is a hand-off in every band (it has no `p`);
+   - enters `s`, and enters `t̄_{L|H}` with the failed call's elapsed time included;
+   - is excluded from the ROC-AUC diagnostic.
+3. State what happens to an over-limit item on a candidate with no `handoffModel`.
+4. Replace the "Absorbed by …2.md" line with a short **v1.5 handed list** naming the plan edits
+   (P8-M2).
+
+CPG: considered, not relevant — a method note plus code-site reads. There is no model-bench CPG,
+and the falkor-chat sites were read directly.
+
+**Pass 7 disposition.**
+- P7-M1 — **fixed.** §Q2.1 sorts by `(max_c D_c ↑, max_c m_c ↑, s ↑)`, and the
+  (2,0) / (3,1) / (19,16) check is stated.
+
+**1. Over-limit premise, verified against the code.**
+- **Distinguishable by body text: yes in falkor-chat, with a structured field. In model-bench,
+  only through the exception message.**
+  - falkor-chat: `transport.py:146-152` raises `ProviderCallError(kind="http", status=500,
+    detail=body)`, with the body capped at 500 characters. The probed text, "input (N tokens) is
+    too large to process…", starts the body, so it is reliably inside `detail`.
+  - model-bench: `_raw_post` puts the body only into the message string (`_truncate`, 500
+    characters). `LMStudioCallFailed` carries `status` and no body field. Detecting over-limit
+    there means parsing `str(exc)`.
+  - The string is llama.cpp's, as surfaced by one LM Studio version. A wording change would turn
+    over-limit into an ordinary decision failure. That fails safe: guard → `llm-fallback`; new
+    abilities → fail closed, which is stricter. It is still a silent change of method.
+- **"retry.py would otherwise retry it": not true today.**
+  - `is_transient` does class every 5xx as transient (`retry.py:89-90`).
+  - But `call_with_retry` is used only by `ingestion.py:138` and `embedding.py:259`. The guard
+    judge, the responder and the planned `DecisionClient` path (plan §3.7) have no retry
+    wrapper.
+  - `FallbackClient` (`llm.py`) applies only to chat chains, and the shipped defaults are single
+    models.
+  - So "never retry it" is a guard against a future wrapper, not a fix for current behaviour.
+    The note's "timeouts are not retried (`retry.py`)" is true but cites the wrong reason: nothing
+    on these paths retries at all.
+  - `timeouts.guard` and `timeouts.agent` are 180 s, as the note says.
+
+**2. Bias.**
+- **No bar becomes easier to meet relative to the runtime the bench mirrors.**
+  - Over-limit is a function of the input only, so it is identical in both replicates.
+  - On the guard, a forced hand-off is the LLM's answer: concordant, as any hand-off is.
+  - FR-2 is charged the failed call *plus* the hand-off, which makes it harder.
+  - §Q2.3 lets the fit see that longer instructions cost hand-offs.
+- **Two residual effects (P8-m2):**
+  - The over-limit share on eval is whatever the generator produced. If it is about 0, the
+    forced path is never exercised end to end, and eval understates production's `s` and
+    latency. `overLimit k/n` and `record_decision` make that visible after the fact.
+  - On new abilities, long items score the hand-off LLM's agreement rather than Laya's. That is
+    faithful to the recommended runtime, but per-class agreement then mixes the two models in a
+    proportion set by length.
+- **Under the fail-closed alternative:**
+  - The guard is unchanged in effect, because its only safe fallback is still the LLM
+    (`llm-fallback`).
+  - On new abilities, over-limit items score the fail-closed answer: join-in `no` (agreement on
+    true-`no`, disagreement on true-`yes`); message type, a disagreement in every class.
+  - That makes FR-10 harder, concentrated in the classes whose messages run long (likely
+    `complaint`/`escalation`). It can push the fit to `fit-infeasible: agreement`.
+  - It also makes FR-10 latency easier: only the failed call is charged.
+  - Those items would count in `decisionCallFailures`, or in a fail-closed `overLimit`. The
+    over-limit row would read "as the decision-call-failure row".
+
+**3. Interactions.**
+- **Kept-failure table: conflict (P8-M1).** The over-limit treatment exists only as prose.
+  - An over-limit item *is* an HTTP 500 decision-call failure, so the table's "candidate
+    decision call fails" row matches it.
+  - Under that row the guard gets a concordant pair at `y_i` = elapsed + the incumbent's `x_i`,
+    instead of a real hand-off call. The new abilities get fail-closed, the opposite of the
+    recommended treatment.
+  - The counts can double-count, because `decisionCallFailures` is not told to exclude
+    over-limit items.
+- **Guard ladder: unspecified, not wrong (P8-m1).** Over-limit calibration items have no `p`.
+  - The band search over "distinct calibration `p` values" must treat them as hand-offs in
+    every band. They raise `s`'s floor, add 0 to every `D_c`, and their `t̄_{L|H}` must include
+    the failed call.
+  - If that floor exceeds `s_2`, every rung but 4 is infeasible, which is correct.
+  - The §Q2.3 AUC must exclude them.
+- **Decision-only candidate (P8-m1).** With no `handoffModel`, a forced hand-off is impossible.
+  The note does not say whether the item falls back to the guard's LLM or fails closed.
+- **Load rule × over-limit: no conflict.** Nothing suggests a 500 reloads the model.
+
+**4. Input caps, recomputed from the renderers.**
+
+| Point | Text cap (chars) | Fixed labels + speakers | ≈ tokens at 4 chars/token |
+|---|---|---|---|
+| guard | 6,000 whole message (`JUDGE_USER_MAX_CHARS`, `app.py:692`) | included | ~1,500 |
+| join-in | 6 × 400 prior + 400 new = 2,800 | ~50 + 7 speaker names | ~700+ |
+| message type | 400 prior + 2,000 = 2,400 | ~30 + 1 speaker name | ~600+ |
+
+- **The note's figures match** for turn text.
+- **The side-check range reproduces.** Re-rendered, the items span 134–436 characters:
+  `understanding` 171–436, `turns` 134–430.
+- **Unstated: the question text counts too.** The probe's two-question call reported 113 input
+  tokens, summed across questions, for a 62-character input (about 12 tokens). That leaves about
+  44 tokens of question per question even with short instructions. So the usable evidence budget
+  is 512 minus the question tokens, roughly 1,500–1,850 characters at 4 chars/token, not 2,048. The note says the question counts (§Q2.3)
+  but does not carry that into the caps paragraph (nit).
+- **The 4 chars/token estimate** is unmeasured, as the note says.
+
+### New findings
+
+**P8-M1 (major) — §Q4.3's table has no over-limit row, and its decision-call-failure row
+captures the case.** See interaction 1. *Fix:* stopping condition, item 1. Under fail-closed, the
+row reads "as the decision-call-failure row", and it still needs the count rule.
+
+**P8-M2 (major) — v1.5 adds plan mechanics with no route to the plan.** The handed list says
+"Absorbed by `docs/plans/typed-decision-models2.md`", but these edits are new:
+- over-limit detection in both clients: a structured `body` (or `detail`) field on
+  `LMStudioCallFailed`, a match on a stable substring (`too large to process`), and the
+  verbatim probe body pinned as a fixture next to `lmStudioAppVersion`;
+- `reason="over-limit"` in `ItemResult.detail` and in `record_decision`;
+- chat timeouts set to the runtime's 180 s in both arms;
+- the explicit-load precondition (§Q6's load rule);
+- plan2's R-13, "silent context truncation", which is now false.
+
+*Fix:* a v1.5 handed list, stopping condition item 4. It is `architect`'s to absorb, after the
+stakeholder's long-message answer.
+
+**P8-m1 (minor) — How over-limit items enter fitting and decision-only candidates is
+unspecified.** See interaction 2 and 3. *Fix:* stopping condition, items 2–3.
+
+**P8-m2 (minor) — The forced path may be untested on eval.** With no length quota, eval may
+contain no over-limit items. *Fix:* nothing in the note. The handed list should ask for a U1e or
+U2 offline test that feeds the pinned 500 body through `decide` and the runner. The bar line
+prints `overLimit 0/n` as a reminder.
+
+**P8-n1 (nit)** — §Q4.3 cites `retry.py` for "timeouts are not retried". The operative fact is
+that no retry wrapper exists on the guard, responder or decision path. The caps paragraph should
+also subtract the instruction tokens.
+
+**Growth-stops (5,616 → 6,093 words, claimed as new scope).** Mostly new scope: new evidence and
+the method it forces (over-limit, timeout sources, the load rule, Q2.5's confidence fact). The
+rejected-alternatives list is design rationale and is acceptable. Restated facts: the probe's
+505/513 boundary, the 500 text and the 3,286 ms cold call. Their home is the probe document and,
+after U1e, `model-bench/docs/HISTORY.md`. Cite them rather than restate them (minor). No history
+or debate prose.

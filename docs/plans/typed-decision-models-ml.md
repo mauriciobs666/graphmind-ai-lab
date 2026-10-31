@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.4 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 7)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.6 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 8)
 
-*2026-10-30 — v1.4: rules on the chat timeout and on one load per run (`docs/reviews/typed-decision-models2.md` Pass 1, M2/m2).*
+*2026-10-31 — v1.6: answers review Pass 8; over-limit hand-off is the stakeholder's decision. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
 
 ## 0. The question and the decision it serves
 
@@ -84,6 +84,16 @@ Each item comes from one **seed**, drawn by stratified sampling.
   The check covers the rendered evidence fields only.
 - **Filling cells** by random subsampling within (label × stratum). Generate about 1.6× the
   target, since labels will not match intents one for one.
+- **Length is reported, not stratified.** An input over the 512-token limit is a forced hand-off
+  (§Q4.3). The question's own tokens come out of that budget: about 44 for a short question, by
+  the probe's arithmetic. That leaves at most about 1,870 characters of evidence, at an estimated
+  ~4 characters per token (Laya's tokenizer is unmeasured), and less with longer instructions.
+  Every point's render cap exceeds that: about 2,800 characters of turn text for join-in, 2,400
+  for message type and 6,000 for the guard (`JUDGE_USER_MAX_CHARS`). The 85 side-check items
+  render at 134–436 characters, far inside the limit. There
+  is no length quota, because the generator's mix is not production's. Sizes do not change,
+  because over-limit items are scored (FR-11). Production's share comes from `record_decision`'s
+  `reason=over-limit` (FR-3).
 
 | Point | Cell | Eval per cell | Eval total | Calibration | Train (U8 only) |
 |---|---|---|---|---|---|
@@ -184,6 +194,9 @@ FR-1's test (§Q3), FR-2's 2.0, and FR-10's 0.90 and 350 ms. One rule covers all
   noisier band. With one cell differing and worst, `(b_w, c_w)` = (2,0) beats (3,1) and (19,16).
   - The search is exhaustive over `l ≤ h`, from the distinct calibration `p` values plus `{0, 1}`.
   - `s = 1` gives every `D_c = 0`, so rung 4 always exists.
+  - An over-limit calibration item has no `p`, so it is a hand-off in every band (§Q4.3), here and
+    in §Q2.2. It adds 0 to every `D_c`, it raises the floor of `s`, and it enters `t̄_{L|H}` with
+    the failed call's time included.
 
 ### Q2.2 New-ability points
 
@@ -207,7 +220,8 @@ For a predicate the search is §Q2.1's band search; for a choice it is a 1-D sea
 
 - **At most 5 instruction texts per point,** scored by the objective on calibration. The cap
   limits selection on calibration. One text is a minimal control: bare label names for a choice,
-  a one-line question for a predicate.
+  a one-line question for a predicate. A longer text forces more hand-offs (§Q1.3), a cost the
+  fit sees on the served artifact.
 - **Why the control.** arXiv 2609.26758 ("Type-Safe Is Not Error-Free…") studies Jev and two
   open-weight decision models. Its abstract reports two findings:
   - yes/no option names raise decision-flip rates by up to 70.4 pp over a 0/1 control;
@@ -218,7 +232,8 @@ For a predicate the search is §Q2.1's band search; for a choice it is a 1-D sea
   little weight, and a predicate (yes/no), the guard's `advance`, is the most exposed shape.
 - **Diagnostic.** `fit.py`'s fit report (not the fit manifest) records each instruction text's
   calibration ROC-AUC of `p` (or `confidence`) against the label. An AUC ≤ 0.5 is a reversed or
-  uninformative ranking that no threshold repairs. If the chosen text's is, the fit records
+  uninformative ranking that no threshold repairs. Over-limit items have no score and are
+  excluded. If the chosen text's AUC is ≤ 0.5, the fit records
   `fit-infeasible: ranking`, and the candidate is still evaluated (§Q2.0).
 
 ### Q2.4 Minimum calibration size
@@ -238,7 +253,9 @@ For a predicate the search is §Q2.1's band search; for a choice it is a 1-D sea
   approximately by a choice threshold.
 - Temperature scaling can reorder choice confidences, but it is fitted to log loss, not this
   objective, so a reorder may as easily hurt. No map.
-- Use `confidence` as returned. U1a records whether it equals `max(probabilities)`.
+- Use `confidence` as returned. It is not `max(probabilities)` (probe document, one choice
+  answer). Its definition is undocumented, so the fit report also gives `max(probabilities)`'s
+  AUC (§Q2.3), as an exploratory figure.
 - **Next lever,** if one `minConfidence` is infeasible: one threshold per predicted label. The
   likely failure is one weak class. That needs a new policy kind (`docs/plans/typed-decision-models2.md` §3.8).
 
@@ -387,10 +404,20 @@ The rows follow what the runtime does with each item:
   reply, so `no`. `_safe_classify` mirrors it (§3.7): no label.
 - **A decision-call failure** also has a runtime decision (§3.7): the guard's `llm-fallback`; the
   new abilities fail closed.
+- **An over-limit input hands off to the LLM at every point** (stakeholder decision,
+  2026-10-31). LM Studio does not truncate: a question whose tokenized input, question text
+  included, exceeds 512 tokens gets an HTTP 500 (boundary and body text: the probe document).
+  The outcome depends on the input alone, so these items are a known class, not a random fault.
+  The runtime treats one as an unsure item: `decidedBy="llm-handoff"`, reason `over-limit`. The
+  client recognises the stable substring `too large to process`; any other 500 stays a failure.
+  - **No hand-off model.** On a candidate with no `handoffModel`, no hand-off is possible, so the
+    item takes the decision-call-failure row's outcomes. It still counts in `overLimit`.
+  - **Rejected:** failing closed (systematically blind to long messages); caller-side truncation
+    (no Laya tokenizer, and a character cap guarantees nothing); chunking (unvalidated).
 - **Timeout sources.** The decision timeout is the candidate's `decisionTimeoutSeconds`, which
   §3.7 copies into `timeoutSeconds`. The chat timeout, both arms and the hand-off, must equal the
   runtime's for that kind: **180 s** (`falkor-chat/config/models.json` `timeouts.guard` and
-  `timeouts.agent`; timeouts are not retried, `retry.py`). Equal arms are not enough: a
+  `timeouts.agent`; no retry wrapper exists on the guard, responder or decision paths). Equal arms are not enough: a
   shorter shared timeout still shortens kept hand-off failures (FR-10's 350 ms is absolute) and
   drops more guard pairs, moving R. A run at another value gives no bar verdict.
 
@@ -399,15 +426,17 @@ The rows follow what the runtime does with each item:
 | `withheldFor="load"` in either arm | dropped from both arms | dropped | dropped pairwise | dropped |
 | Guard chat call fails or times out, in the incumbent run or a candidate hand-off | dropped from both arms (today's withholding, no elapsed time) | — | dropped pairwise | — |
 | New-ability hand-off chat call fails or times out | — | `y_i` = elapsed (decision + hand-off to its failure) | — | scored fail-closed, as below |
-| Candidate decision call fails or times out | `y_i` = elapsed (decision timeout) + incumbent's `x_i` | `y_i` = elapsed | kept as a **concordant pair**: the candidate's answer is the incumbent's | scored as the fail-closed answer: join-in `no`; message type "no label", a disagreement |
+| Decision call over the 512-token limit (§Q4.3 above) | `y_i` = failed call + hand-off call | `y_i` = failed call + hand-off call | the hand-off LLM's answer, as for any hand-off | the hand-off LLM's answer |
+| Candidate decision call fails or times out (over-limit excluded) | `y_i` = elapsed (decision timeout) + incumbent's `x_i` | `y_i` = elapsed | kept as a **concordant pair**: the candidate's answer is the incumbent's | scored as the fail-closed answer: join-in `no`; message type "no label", a disagreement |
 | Reply parses as malformed (any chat call) | as measured | as measured | §3.2's parse fallback (guard: suspend) | §3.2's parse fallback |
 
 - **Counts.** Every dropped row is counted per arm and per reason, and printed beside each bar.
-  Kept failures print per replicate beside `handoffShare`: `decisionCallFailures k/n` and, for
-  new abilities, `handoffCallFailures k/n`.
+  Kept failures and forced hand-offs print per replicate beside `handoffShare`:
+  `decisionCallFailures k/n` (over-limit items excluded), `overLimit k/n` (a floor on `s`) and,
+  for new abilities, `handoffCallFailures k/n`.
 - **Why a concordant pair.** It leaves `p_worse` unchanged and keeps `n_c` and ψ̂ at the
   runtime's values.
-- **Elapsed time needs capture** on both failed-call rows; `ItemTiming` does not record it today
+- **Elapsed time needs capture** on the failed-call rows and on over-limit items; `ItemTiming` does not record it today
   (`docs/plans/typed-decision-models2.md` §3.3).
 - **Not assessable.** If the paired scored n of eval items falls below FR-11's 200, through load
   or chat-call withholding, the bar line prints `not assessable (scored n < 200)` instead of a
@@ -523,7 +552,10 @@ fail of a candidate exactly as good as the incumbent (§Q3.2 gives the figures).
 
   An `"assumed"` run's bars print `not assessable (load changed mid-run)` and the replicate is
   rerun; same hash, so K is unchanged. The fixed-input check misses a reload that leaves that one
-  `p` unchanged.
+  `p` unchanged. Under default JIT, LM Studio held one JIT model, and a hand-off evicted the
+  decision model (probe document). So both models must be explicitly loaded, in the bench and in
+  a falkor-chat deployment. Otherwise every hand-off is followed by a cold reload, and the measured
+  latency does not transfer.
 - **Interactions.** Fitting (§Q2) happens under a third load, and the replicate rule covers it.
   Replicate 2 shares replicate 1's `candidateContentHash`, so it does not raise K (§3.5).
 
@@ -535,7 +567,7 @@ Q7 is used only by U8, after a point misses its bar despite §Q2's refit.
 2026-10-30. Its provenance relative to LM Studio's `ggml-org` GGUF is unverified, and U8's first
 step confirms that the weights match. The card states:
 - a ModernBERT-large backbone, plus a decision head trained from scratch, 421M parameters in all;
-- a 512-token per-question context;
+- a 512-token per-question context (the U1a probe confirms the limit as a hard error, §Q4.3);
 - "ships over-confident";
 - training with a strictly proper scoring rule.
 
@@ -559,12 +591,29 @@ refit on the served GGUF.**
    A failure means the export changes the model, and U8 reports "no".
 6. **Refit.** Refit thresholds (§Q2) on the **served** model, because Q8_0 moves `p`. The fit
    manifest's `purposes` gains `training`, and the leakage check covers the train hashes.
-7. **Context.** Record `usage.input_tokens` per item. Count and report eval items above the
-   context limit, since truncation fails silently, most likely on long `turns` inputs.
+7. **Context.** Nothing truncates silently (§Q4.3). The 500 names LM Studio's physical batch, not
+   the model. Raising it would serve inputs beyond the card's 512-token context, which is
+   untested, and it would be a different served artifact, so U8 does not raise it without
+   measuring first.
 
 ## Handed to architect
 
-Absorbed by `docs/plans/typed-decision-models2.md` (v1.1, accepted 2026-10-30); the plan now owns these mechanics.
+Items 1–6 are the v1.5/v1.6 additions to `docs/plans/typed-decision-models2.md`. Earlier items
+are absorbed there, and this list is removed once the plan absorbs these.
+1. **§3.3 / §3.7: over-limit detection (§Q4.3).** `LMStudioCallFailed` gains a structured `body`
+   field; falkor-chat's `ProviderCallError.detail` already carries it. Both clients match
+   `too large to process`, with the verbatim probe body pinned as a fixture beside
+   `lmStudioAppVersion`. The bench scores the item per §Q4.3's over-limit row, and
+   `reason="over-limit"` goes into `ItemResult.detail` and `record_decision`.
+2. **§3.6: counts.** `overLimit k/n` per replicate and per cell. `decisionCallFailures` excludes
+   over-limit items.
+3. **§3.2 / §3.3: chat timeouts** at the runtime's 180 s in both arms (§Q4.3).
+4. **§3.7 / §6: explicit loading** of both models, in the bench and in deployment (§Q6). R-13
+   ("silent context truncation") is false, and becomes "forced hand-off, a floor on `s`".
+5. **§3.5: fit.** Over-limit calibration items are handled per §Q2.1/§Q2.3. The fit report adds
+   `max(probabilities)`'s AUC (§Q2.5).
+6. **§5: an offline test (U1e or U2)** feeds the pinned 500 body through `decide` and the runner,
+   since eval may hold no over-limit item.
 
 ## Reproducing the figures
 
