@@ -25,6 +25,13 @@
   that edits it, or an explicit no-change ruling. A filtered or path-limited sweep, or a pattern
   that matches only the already-known sites, is a bound, not proof. Run a prescribed check
   command verbatim, from the working directory it states.
+- In a spec-update check, read the lines the update left unchanged too. A contradiction
+  carried over from the previous text is a finding, the same as a new one.
+- In a live-spec check, a fact stated in two sections of the spec set is a finding, and every
+  copy is checked against the code, not only the one the change edited.
+- A whole-component spec check (a catch-up or a first spec) builds its inventory from every
+  shipped file, scripts and operator tooling included. It never builds it from a git-log window:
+  a document edited after a feature landed can still omit that feature.
 - Whether a finding should become a standing rule. If it should, propose it in your review as a
   `### Proposed REVIEW.md lines` block naming the target file and heading. Each line is an
   addition or a prune, and the review's prose states its source: the finding ID or, for a
