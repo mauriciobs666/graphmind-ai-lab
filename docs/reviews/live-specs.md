@@ -2001,3 +2001,401 @@ or gate verdict" to "Before any methodology review or gate verdict". Take or lea
 ### Proposed REVIEW.md lines
 
 None. P16-1 is a placement in one prompt, not a recurring review-finding class.
+
+## Pass 17
+
+**Scope.** Unit L5s (`analyst`): the set-level AC-1 gate on falkor-chat's live spec. It covers
+`falkor-chat/docs/DESIGN.md`, `SERVER.md` and `QUERIES.md` together, as committed at **`9d240859`**
+(the working tree matches), against shipped code at **`c0eeb348`**. Since that commit nothing has
+changed under `falkor-chat/server`, `scripts`, `config` or `web`. I read plan §3.5 and §5,
+requirements FR-3, AC-1 and AC-3, root and `falkor-chat/REVIEW.md`, and Passes 8–15. I built the
+inventory from the code. I did not take it from the L5 inventories. I did not run pytest or
+`test_queries.sh`. Every probe below is offline: the server venv imports the modules directly with
+stub repositories, and nothing touches FalkorDB. Growth-stops does not apply, because these are
+live specs.
+
+CPG: used cpg_falkorchat — to inventory the non-test methods of every module outside the §3.5 home table, and the production call sites of `call_with_retry`, `split_into_chunks`, `compute_line_total`, `evaluate_guard`/`validate_cmp`, `find_fuzzy_candidates` and `minhash_signature`, which home each surface; `scripts/` was read directly.
+
+**Verdict: needs changes. AC-1 is not met.** The three documents agree on almost everything, and
+every cross-document citation resolves. Two contradictions remain, though, and both are visible
+only across documents or from outside the L5 inventories:
+
+- `DESIGN.md` states that a workspace's vector dimension can never change. A shipped script
+  changes it.
+- `DESIGN.md` §9 holds a third copy of the ingest-scheduling rule that Pass 9 B4 and Pass 10 B1
+  fixed in the other two documents. That copy still reads as unconditional.
+
+Four catch-all surfaces are under-stated. Each one goes to the writer of its home document, per
+the plan's L5s rule.
+
+### Set checks (verified)
+
+| Check | Result |
+|---|---|
+| Cross-document `§` citations | I ran a script over all three files that extracts each `DESIGN`/`SERVER`/`QUERIES` `§` citation and looks for a matching `##`–`####` heading. 85 citations checked. The only misses are the 12 `DESIGN §14.x`/`§15.x` keys in DESIGN §14's own map, which is the positive control (those numbers are, correctly, not DESIGN headings). |
+| SERVER §1.4/§2.2 query cells → QUERIES | 105 `§` references checked. Every one resolves; the only misses are SERVER's own §1.3/§1.8/§1.12. Pass 15 m4 is fixed: all four ingest cells now say "when a worker is wired". I spot-read the cited sections for the storefront state, readiness and ingest rows, and each states the fact the cell claims. |
+| DESIGN §14 map | All 13 rows resolve to `SERVER.md` headings. §1.6 is a pointer, which is acceptable for the one docstring-free `§14.6` row. |
+| AC-3 (§5 grep, verbatim, all three files) | DESIGN 0 hits, SERVER 0 hits. QUERIES has 9 hits, all of them the property names `defVersion:`/`currentVersion:`, ruled not history. The K-refs are K-016, -018, -029, -030, -033, -064, -074, -076, -080 and -090. Each has an open `###` heading in `BACKLOG.md`. |
+| Inbound code citations | 42 `DESIGN §` citations in `server/`, `web/`, `scripts/` and `tests/`. Each resolves to a section that states what the citing comment expects, except two (m3). The code has no `SERVER §`/`QUERIES §` citations to dangle: they all name QUERIES sections, and the cell loop covers those sections. |
+
+### Findings
+
+**B1 (blocker, verified; `DESIGN.md`): the spec says a workspace's vector dimension can never
+change, but a shipped tool changes it.**
+- DESIGN l.69 says "fixed at workspace creation". l.765 says "fixed per workspace at bootstrap".
+  l.919 says "Fixed at workspace creation, never after". l.79 says an embedding upgrade is
+  "Re-embed only; no schema change".
+- `scripts/migrate_embeddings.sh` → `embedding_migration.migrate` (`09e30282`, HISTORY
+  2026-09-20) re-embeds every `Message`/`Chunk` and stamps `n.embeddingModel` (l.183–184).
+  It then drops and recreates both vector indexes at the new dimension (l.207–211) and moves
+  `embeddingModelOverride`. Its preconditions: stop that workspace's server first, and restart
+  it afterwards to clear the dimension cache.
+- Neither the operation nor the `Message.embeddingModel`/`Chunk.embeddingModel` property
+  appears anywhere in the spec set.
+- The same gap covers workspace creation. `create_workspace.sh` runs `bootstrap_schema.sh` and
+  then pins `WorkspaceConfig.embeddingModelOverride` to the current default.
+  `start_server.sh:197` and `start_demo.sh:270` call it. DESIGN §7.1 names only `bootstrap_schema.sh`.
+- `backfill_document_current.sh` is also unmentioned. It stamps `currentVersion`/`documentCurrent`
+  where they are absent, and default chunk search returns nothing until it has run.
+- Why the scoped checks missed it: the migration landed **before** DESIGN's drift baseline
+  (`git merge-base --is-ancestor 09e30282 7a270329` → true). The writer's `baseline..pin` log
+  window cannot see it, and the L5a inventory read only `bootstrap_schema.sh` from `scripts/`.
+
+*Fix (DESIGN §1.3, §5.1, §7.1, §11):* a dimension is chosen at creation and changed only by
+`migrate_embeddings.sh`. The script re-embeds, records `embeddingModel` per row, drops and
+recreates both vector indexes, and moves the override. The workspace's server is stopped
+before it runs and restarted after. Add `embeddingModel` to the `Message`/`Chunk` schema. State
+that `create_workspace.sh` is how a served workspace is made (bootstrap + pin), and state the
+`backfill_document_current.sh` precondition.
+
+**B2 (blocker, verified; `DESIGN.md` §9): the third copy of the ingest-scheduling rule still
+reads as unconditional.** Pass 9 B4 and Pass 10 B1 fixed this rule in `SERVER.md` §1.12 and
+`QUERIES.md` §14.9, and both now say "only when a worker is wired". DESIGN §9 still reads as if
+it always applies:
+
+| Row | Text | What the code does |
+|---|---|---|
+| "Document background jobs" (l.836) | "per chunk, one embed job and one extract job … `ready` when the count reaches 0" | With neither worker wired (the default), `api.py:178` and `mcp.py:316` skip `_schedule_chunk_processing`. `start_document_progress` never runs, so the document stays `processing` permanently. Each job also exists only when its own worker is wired (`background.py` `total_jobs`). |
+| "Update detection" (l.837) | "background job after a non-auto-superseded ingest" | `_schedule_update_detection` returns when `repo_for_detection` is `None` (`app.py:399`, `background.py:317`). |
+
+*Fix:* keep only the write pattern and the status and retry semantics in these two rows. Replace
+the "when" with "scheduled per `SERVER.md` §1.12", which is the home of the scheduling rule. The
+proposed rule below covers this class: one fact, three copies, and the copy left unchecked drifts.
+
+**M1 (major, verified by execution; `DESIGN.md` §6.1): guard semantics are named but not
+stated.** A def author cannot predict a publish rejection or a run's path from §6.1. It says
+"whitelisted ops … two path roots … depth/width/node caps … structured boolean verdict" but
+never gives the ops, caps, path rules or verdict policy. The baseline text did not state them
+either. *Contract text to add* (probe output in the Appendix):
+- The ops are `eq ne lt le gt ge in contains exists truthy`.
+- `exists`/`truthy` take no `value`; every other op requires one.
+- `eq` uses plain JSON equality with no coercion (`"1"≠1`).
+- An ordering op on incomparable types is `false`.
+- Caps: depth 5, nodes 32, width 8.
+- `not` takes exactly one child. `all([])` is `true` and `any([])` is `false`. A nested child
+  that carries `op` may omit `kind`.
+- Path `output` is the raw step output. `output.<k>…` reads the step output parsed as a JSON
+  object. `ctx.<k>…` reads the run ctx. A bare `ctx` and empty segments are rejected, and there
+  is no list indexing.
+- On a missing path, `ne` is `false` but `not(eq)` is `true`.
+- `llm` guard:
+  - The judge sees the node's `understanding` object (from the step output, else
+    `ctx.understanding`). Only when that is empty does it see the last 6 thread turns, ≤ 400
+    chars each. The prompt is capped at 6000 chars, and the oldest turns are dropped first.
+  - The reply must be one JSON object `{decision, rationale}` that owns its lines.
+  - Only a literal `true` advances. An unparseable reply, a non-bool `decision`, or a rationale
+    asserting an un-negated deficiency is `false` (the bias is to suspend).
+  - With no judge wired, the run fails.
+- A null guard behaves like `""`.
+
+**M2 (major, verified by execution; `SERVER.md` §1.11, cited from the `/shop/api/state` row):
+the cart-pricing contract is missing, and one value contradicts the code.** `pricing.py` plus
+`services._priced_cart_lines` (l.2998–3035):
+- A line's `lineTotal` is `price × quantity`, unrounded (3 × 0.1 → `0.30000000000000004`).
+- `total` is the sum of the line totals.
+- A cart line whose `productId` no longer resolves in `reference` is **omitted** from `items`
+  and `total`, and is **not** snapshotted by `place_order`. The `place_order` Cypher
+  (`repository.py:3721ff.`) nevertheless `DETACH DELETE`s **every** `CartItem`, so that line
+  disappears silently.
+- A cart holding only such lines reads as empty, and `place_order` returns the empty-cart string.
+- l.877's empty-cart value `{"items": [], "total": 0.0}` is wrong. The tool returns
+  `{"items": [], "total": 0}`, because `sum([])` is an `int`. The `0.0` comes from the tool's
+  docstring and the test stub (`test_tools.py:96`), not from the code.
+
+*Fix:* one paragraph under the tool table. Cite it from the `/shop/api/state` row, and correct
+`0.0` → `0`.
+
+**M3 (major, verified by reading; `SERVER.md` §1.8): the provider wire contract stops at
+resolution.** §1.8 covers which model is called but not what is sent or which replies count as a
+tool call. That decides whether a candidate model can drive an agent node at all
+(`llm.py:134–178`, `_parse_content_tool_calls` l.296ff.). *Contract text to add:*
+- `POST {base}/chat/completions` with `model`, `messages`, `tools` (on a tool turn) and the
+  overlay's per-model params.
+- A tool call is read from `choices[0].message.tool_calls`. When that field is absent, the
+  server checks `content` in this order:
+  1. a JSON object `{name, arguments}`, `{action, args}`, `{function:{…}}` or `{tool_calls:[…]}`;
+  2. bare `name({...})` call syntax.
+  Anything else is plain text.
+- A missing `choices` is `ProviderCallError(kind="response_shape")`.
+
+Cite this paragraph from the M1 judge sentence instead of repeating it.
+
+**M4 (major, verified by execution; `DESIGN.md` §5.1/§9): the ingestion pipeline's observable
+parameters are missing.** *Contract text to add:*
+- `Entity.type` is the closed set `Person, Organization, Location, Product, Event, Concept,
+  Other`. An out-of-set or missing type is stored as `Other`, and so is every stub entity
+  synthesized for a relationship endpoint. This is the value set of `query_graph_data`'s
+  `Entity.type` facet, `SERVER.md` §1.11.
+- Chunks are split on paragraph, then sentence (`. ! ?` or newline), then a hard cut at 1000
+  chars. Every chunk after the first carries the previous chunk's last 150 chars, so a chunk can
+  reach 1150 chars (probe: 2,500 chars → 1000/1150/650).
+- A fuzzy `SAME_AS` is type-filtered: it links to the top-ranked of ≤ 5 full-text candidates
+  with `confidence` = full-text score and technique `fuzzy_fulltext`. An exact match uses
+  `exact_normalized_name_type`.
+- A `SUPERSEDES` suggestion's `confidence` is the Jaccard ratio over 5-word shingles of
+  case-folded, whitespace-collapsed text. `textNormalizedHash` is a SHA-256 of that same
+  normalized text.
+- Neither `fuzzy_fulltext` nor the shingle size is stated anywhere in the set.
+
+**m1 (minor, verified; `QUERIES.md` §1): "The app calls it (or its equivalent) once when a new
+workspace is created" is false.** No server module calls `bootstrap_schema.sh`; the start scripts
+call `create_workspace.sh`. *Fix:* reduce the line to a pointer to DESIGN §7.1 (B1's text).
+
+**m2 (minor, verified; `QUERIES.md`): it restates DESIGN facts, and one copy has already gone
+incomplete.**
+- §12.5 l.1393–1399 restates DESIGN §6.2's `maxSteps` tripwire note almost verbatim. Both
+  copies match the code today.
+- §14 "Versioning flags" (l.1830–1833) restates DESIGN §5.1's version-lifecycle property.
+- §14.6 l.2278, §15 l.2610–2617 and §16 l.2760–2788 restate DESIGN §5.1/§7.1 schema and index
+  lists. §16's block gives `Customer {customerId, createdAt}` and drops the profile fields that
+  DESIGN §5.1 lists.
+
+*Fix:* replace each with a `DESIGN.md` §5.1/§6.2/§7.1 citation. Query-local notes stay.
+
+**m3 (minor, verified; owner `coder` via `teco`, not a spec writer): two inbound code citations
+dangle.**
+- `scripts/bootstrap_schema.sh:378` cites "still the DESIGN §13 open question" for the
+  1536 default. DESIGN §13 has no such question.
+- `scripts/test_queries.sh:346` cites DESIGN §1.3 for "Score is cosine distance". That fact now
+  lives in DESIGN §7.1/§8.
+
+*Fix:* repoint both comments (§7.1 and §8). The spec should not regain the text.
+
+**Nits.** (n1) DESIGN §9's retry clause should add "a timeout is not retried"
+(`retry.is_transient`, `retry_timeouts=False`). (n2) The `SERVER.md` l.878 `add_to_cart` cell
+restates DESIGN §6.1's grounding hold in a clause. It is consistent, so cite §6.1 instead.
+
+**Carried, still open (no new finding):** P8-m5. `grep -n -i 'GRAPH.CONFIG'
+falkor-chat/docs/BACKLOG.md` returns nothing, so DESIGN §13 still calls an untracked item
+"tracked" (`teco`). Pass 10 M1/M2 are still owed backlog items (`teco`).
+
+### Catch-all homing table
+
+| Surface (code) | Home | Stated adequately? |
+|---|---|---|
+| `guards.py` + `app._LlmGuardJudge` (guard semantics, verdict policy) | `DESIGN.md` §6.1 | No: M1 |
+| `retry.py` (provider retry classifier and policy) | `DESIGN.md` §9 "Document background jobs" | Yes; n1 |
+| `chunking.py` | `DESIGN.md` §9 "Ingest document" | No: M4 |
+| `extraction.py` (taxonomy, caps, stub repair) | `DESIGN.md` §5.1 / §5.4 | Caps yes, taxonomy no: M4 |
+| `fusion.py`, `ingestion.py` | `DESIGN.md` §9 "Extract entities" | Partly: M4 |
+| `update_detection.py`, `background._safe_detect_update` | `DESIGN.md` §9 "Update detection" | Partly: M4, B2 |
+| `background.py` scheduling | `SERVER.md` §1.12 | Yes; DESIGN copy: B2 |
+| Retrieval (`services.hybrid_search`/`search_documents`, retrieve tool) | shape `DESIGN.md` §8; surfaces `SERVER.md` §1.11/§1.4/§2.2; text `QUERIES.md` §6/§14.3 | Yes |
+| `llm.py`, `transport.py` (wire request, reply parsing, fallback) | `SERVER.md` §1.8 | Fallback yes, wire/reply no: M3 |
+| `pricing.py` + `services._priced_cart_lines` | `SERVER.md` §1.11 | No: M2 |
+| `embedding.py` (dimension guard) | `SERVER.md` §1.8 | Yes |
+| `responder.py`, `trigger.py` | `SERVER.md` §1.12 | Yes (Pass 9) |
+| `logformat.py`, `config/logging.json` | `SERVER.md` §1.10 | Yes |
+| `scripts/create_workspace.sh`, `migrate_embeddings.sh` + `embedding_migration.py`, `backfill_document_current.sh` | `DESIGN.md` §7.1 / §5.1 | No: B1 |
+| Other `scripts/` (seed, verify, start, load, eval corpus) | operator tooling: `falkor-chat/README.md`/`AGENTS.md`, outside the FR-4 set | Ruled out of spec scope (open question 1) |
+| `proof_defs.py` def content (`salesperson@v9`, `order-fulfillment@v1`) | — | Open question 1 |
+
+### What's solid
+
+Every query text, route, tool and config key that the L5 checks inventoried still matches. All
+190 cross-document and query-cell citations resolve. The set has no contradiction between
+SERVER and QUERIES. `DESIGN.md` §8 (retrieval shape), §9's retry policy and the dormant-schema
+notes match the code.
+
+### Open questions
+
+1. **Is workflow def content and operator tooling spec surface?** My ruling is no. The FR-3 spec
+   covers engine semantics, the schema and the graph-writing scripts (B1). Seeded def content
+   (`proof_defs.py`: prompts, tool grants, `maxSteps` 40/16/24) and the seed, verify and start
+   scripts stay in code and `README.md`. If the stakeholder rules def content in, it needs a home
+   (`SERVER.md` §1.11 already tracks grants) and a new L5 pass.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: Pass 9's proposed line, now recurring across
+three passes (Pass 9 B4, Pass 10 B1, this Pass's B2: the same fact drifted in each document of
+the set). I endorse Pass 9's addition as written, with no new line. Its "two sections of the spec
+set" already spans documents.
+
+Target: root `REVIEW.md`, *Always check*. Source: B1. The drift predated the writer's git-log
+window, and the scoped inventory skipped `scripts/`.
+
+```markdown
+- A whole-component spec check (a catch-up or a first spec) builds its inventory from every
+  shipped file, scripts and operator tooling included. It never builds it from a git-log window:
+  a document edited after a feature landed can still omit that feature.
+```
+
+No prune. No test, CI job or hook checks spec coverage.
+
+### Appendix: offline probes (server venv, `-I`, stub repositories, no FalkorDB)
+
+```
+ops ['contains','eq','exists','ge','gt','in','le','lt','ne','truthy']
+validate_cmp: regex→reject  truthy w/o value→ok  eq w/o value→reject  bare ctx→reject
+              bare output→ok  depth 6→reject  width 9→reject
+evaluate: ne on missing→False  not(eq) on missing→True  all[]→True any[]→False
+          eq "1" vs 1→False  output.x on '{"x":2}'→True
+_coerce_verdict: "true"(str)→False  "not enough information"→False  "no more information is needed"→True
+extract(type "Company", rel to unlisted "Bob") → [{Acme, Other}, {Bob, Other}]
+split_into_chunks('a'*2500) → [1000, 1150, 650]
+get_cart (a@0.1×3 + delisted 'gone') → items [a], total 0.30000000000000004
+place_order → lines [a]   (Cypher deletes every CartItem: repository.py place_order)
+cart of only 'gone' → {'items': [], 'total': 0}; place_order → None
+ViewCartTool on empty cart → {"items": [], "total": 0}
+```
+
+Positive controls: each probe yields both outcomes on the same function. For example,
+`_coerce_verdict` returns True for the negated cue and False for the bare cue, and `validate_cmp`
+returns ok and reject. The citation scripts report the 12 map keys as missing.
+
+## Pass 18
+
+**Scope.** Unit L3c gate (`analyst`). The artifact is `cobb`'s uncommitted edits to
+`claude/teco/teco.md`, `claude/architect/architect.md`, `claude/README.md`,
+`claude/teco/kaizen/{history,plan}.md` and `claude/architect/kaizen/history.md`. Read: plan §3.1,
+§3.4, §4 L3c row, §5; requirements FR-6–FR-8, FR-12, AC-6, AC-9; root `AGENTS.md` l.160–173;
+root, `falkor-chat/` and `model-bench/` `REVIEW.md`; Passes 11 (m2, rulings) and 16;
+`docs/reviews/live-specs-security.md` S5; ledger l.17, l.35–45. I did not write this text.
+
+CPG: not applicable — the artifact is agent-prompt and catalog text, with no code change.
+
+**Verdict: approve with suggestions.** There is no blocker or major, one minor for `teco` and one
+nit. The growth-stops check does not apply, because prompts, catalogs and kaizen files are outside
+the bullet's scope.
+
+### Checks run
+
+- **AC-9 sweep, verbatim from the repo root:** 91 hits, the same as `cobb`'s count. Rulings on the
+  six files (the kaizen files fall outside the pathspecs):
+  - `teco.md` l.3, l.92, l.138 and l.155 each carry a live-spec carve-out. These four are the
+    plan's named sites, and they are fixed.
+  - `teco.md` l.53 ("tests alongside"), l.168 and l.181 ("alongside") are no-change.
+  - `claude/README.md` l.7: the "doc updates part of every unit's done-condition" clause is now
+    followed by the live-spec exception, so it is fixed. Its "alongside `tico`" phrase is
+    no-change.
+  - `claude/README.md` l.8, l.14 and l.17 ("alongside") and l.185 (the catalog "same change"
+    rule) are no-change.
+  - `architect.md` has no hits.
+
+  `cobb`'s rulings agree. I also grepped the implementer prompts (`coder`, `tdd-engineer`,
+  `frontend-engineer`, `graph-dba`) for a doc-update instruction the pattern would miss and
+  found none.
+- **AC-6 loop:** prints nothing. Positive control: `teco.md` had 0 `REVIEW.md` matches at `HEAD`
+  and has 4 now, so at `HEAD` the loop would have listed it.
+- **Bar `awk` (`FNR`):** it prints `falkor-chat/AGENTS.md: 87` and `88`. Both lines predate this
+  work (Pass 11 i1), and L3c does not touch that file. This is a smell, not a gate.
+- **Word counts:** re-counted against `HEAD`. They are 8,296→8,585, 1,582→1,614 and
+  5,587→5,641, as reported.
+- **Frontmatter:** `yaml.safe_load` of the edited block gives the same five keys. Only
+  `description` differs from `HEAD`. `tools`, `permissionMode` and `hooks` are byte-identical.
+- **architect pointer:** the sentence matches `graph-dba.md`/`data-scientist.md` word for word,
+  apart from the document noun. It resolves to root l.160 ("A live spec is …").
+
+### Rulings on the five questions
+
+1. **Commissioned, nothing beyond it.** Each L3c-row item is present:
+   - the carve-outs at l.3, l.92, l.138 and l.155;
+   - the curation sentence (l.152);
+   - the scan flagging spec sections (l.154);
+   - the Feature close bullet, carrying ledger carry-forward (b);
+   - the pointer (l.137), which covers line checks as "any verdict of your own";
+   - the README row and the `architect.md` pointer.
+
+   Two edits are outside the row: the l.144 growth-stops repoint, and the S5 sentences. Each is
+   brief-commissioned, by ledger l.35 (P7-2) and l.45 (S5) respectively.
+2. **The bullet cites the root and does not restate it.**
+   - Step (2) adds only the delegation default, which matches plan §3.4 step 2.
+   - Step (3) adds only the slug-less home, which matches §3.4 step 3.
+   - Step (4) adds the integrity check. Its "each prune's cited enforcer" equals §3.4's "each
+     cited enforcer", because only prunes cite one (root `REVIEW.md`, last *Always check*).
+   - The narrowing bullet refers to "step (4)'s gate" and does not restate who gates.
+   - Steps (1) and (5), the "needs changes" block and the spec-less clause are left to the root.
+
+   There is no contradiction in any step.
+3. **S5 rulings.**
+   - **(a) is sound.** I ran a coverage probe over the axes a `REVIEW.md` change varies on: the
+     four headings plus "a new heading", against add/prune and widen/narrow.
+     - Every prune qualifies.
+     - So does every *Do not report* addition.
+     - So do a severity cap or downgrade, a scope limiter or exemption on an existing check, and
+       an evidence relaxation.
+     - A reword is a prune plus an addition, so it qualifies.
+     - Additions that widen do not qualify.
+     - A line whose effect is unclear (for example, one that redefines a term) is caught by "when
+       unsure".
+
+     It does not contradict the root, which uses "narrowing" without defining it. It supersedes
+     Pass 11 m2's closed set and does not contradict it: both of m2's members are kept as "always
+     qualify", and the additions are exactly S5's three bypass cases. The cost is more `cobb`
+     gates, and FR-8 does not require those lines to go ungated. The home is right. `teco` is the
+     only agent that classifies and routes at step (4), so the definition belongs where the
+     router reads it. Root `AGENTS.md` cannot take the words, because L2c is at its cap (Pass 11
+     m2). Plan §3.4's parenthetical, "(a prune or a *Do not report* addition)", now states less
+     than `teco.md` does. The plan has been executed against and will be archived, so do not
+     revise it. `teco.md` is authoritative.
+   - **(b) is sound in `teco.md`, and its consequence should be explicit.** "Never relaxes the
+     prompt" means a gated narrowing line can relax only `REVIEW.md`-level or unprompted checks.
+     Relaxing a check a prompt requires takes a prompt edit, which is `cobb`'s. That design holds
+     together, and the conflict report sends the case to `cobb`. **L3d propagation: go**, to the
+     seven pointer prompts, with one done-condition. The unit first rules on every existing
+     narrowing line against each prompt. Today that is root `REVIEW.md` *Do not report* 1 (a spec
+     departing from the plan where it matches the code), set against `analyst.md` l.36
+     (conformance). I read these as not in conflict: conformance compares code to plan, and the
+     line governs spec to plan. The unit should still rule on it, because after propagation a
+     conflict leaves the gated line inert. A single root `REVIEW.md` line would cost fewer words,
+     but it is weaker against S5's threat (a poisoned proposal), since it sits inside the file it
+     governs. Reviewers keep "as a finding". `teco.md`'s copy rightly omits it.
+4. **Frontmatter `description`. The premise is supported, by inference.** I cannot see the brief.
+   However, the plan row commissions "l.3", and l.3 at `HEAD` is the `description` line. A brief
+   that barred every frontmatter edit would therefore contradict the plan it executes. `teco`'s
+   own verification (ledger l.17) checks only `tools`/`permissionMode`/`hooks`. **The edit is
+   acceptable, and in fact required by the plan.** The YAML still parses, and no permission key
+   moved.
+5. **Sweeps:** see *Checks run*.
+
+### Findings
+
+**P18-1 (minor, verified; owner `teco`, not `cobb`) — The switch-over has no ledger text yet.**
+Plan §3.4 puts the switch-over in "ledger text, not `AGENTS.md`": units dispatched earlier finish
+under their brief, and later ones make no live-spec edit. `grep -n -i switch-over` on both open
+ledgers finds only L3c's row label. Without that line, `teco.md` l.138's categorical "a build unit
+that edited the spec is off-brief" would misfire on a unit that was legitimately briefed before the
+switch-over. With it, the plan's in-change spec instructions also become close-step items, for
+example `docs/plans/typed-decision-models3.md` §3.7, U9's `SERVER.md` §1.8 line. U9 is not
+dispatched yet, so the exposure is small. Fix: in the L3c commit step, add this dated decision
+line to `docs/plans/live-specs-coordination.md`, plus a one-line pointer in
+`docs/plans/typed-decision-models-coordination.md`:
+
+```markdown
+- 2026-10-31: Switch-over at the L3c commit (<sha>): units dispatched earlier finish under their brief; later ones make no live-spec edit, and a plan's in-change spec instruction (e.g. `docs/plans/typed-decision-models3.md` §3.7, U9's `SERVER.md` §1.8 line) becomes a close-step item.
+```
+
+**P18-n1 (nit) — The README row drops the gate's exception.** "`cobb` gating any narrowing one"
+leaves out the root's "(`analyst` if `cobb` proposed it)". Replacement:
+"`cobb` (`analyst` for a line `cobb` proposed) gating any narrowing one", +6 words. Take or leave.
+
+### What's solid
+
+The Feature close bullet carries only the how and resolves every step to the root. The narrowing
+definition is the first one that closes S5's bypasses without un-gating anything m2 gated. The
+kaizen entries are accurate, and the `teco` plan note mirrors P16-2's repoint.
+
+### Proposed REVIEW.md lines
+
+None. P18-1 is a one-off ledger omission, and P18-n1 is catalog wording.

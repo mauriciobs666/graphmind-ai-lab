@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-10-31 — delta-plan pointer (live-specs L3c; edited by `cobb`)
+
+- **What:** `architect.md` 1,582→1,614 words. How-you-work step 5 (write the plan) gained one sentence: for a component with a live spec, the plan states only the change against it, citing the affected spec sections and any open feature's plan it relies on (root `AGENTS.md`, live-spec bullet). Same wording as `graph-dba.md`/`data-scientist.md` (Pass 14 P14-m1). No `REVIEW.md` pointer: `architect` writes no review or gate verdict.
+- **Why:** `docs/plans/live-specs.md` §3.1 and §4 L3c row (FR-12, FR-13). Gated by `analyst`.
+- **Plan items:** none.
+
 ## 2026-10-29 — growth-stops pointer (document-size discipline, U2; edited by `cobb`)
 
 - **What:** `architect.md` Guardrails gained one bullet, led "Rework rewrites in place; only new scope adds" (lead corrected after the I3 gate's m1, `docs/reviews/document-size-discipline-impl.md`, since new scope may add text): a revision rewrites the affected text in place to the current design, and the return message (not the plan) lists findings handled and answers folded in. `plan-authoring-techniques.md` "Reconciling a diverging delegated note": "with a short revision note" → "updating the header's one-line revision note". Each cites root `AGENTS.md`'s growth-stops bullet rather than restating it.
