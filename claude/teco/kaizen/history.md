@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-31 — Raw-capture template states the 200-character `title` limit
+
+- **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed.
+- **Why:** falkor-chat's MCP `ingest_document` now refuses a `title` over 200 characters (`schemas.MAX_NAME_LEN`, backlog K-101, commit 7490f634) with an `isError` result; before, it was accepted, and `ws:agent-team` already holds 7 documents with titles that long, so a capture that isn't retried is lost. Stakeholder-approved 2026-10-31; one team-wide edit by `cobb` across all 13 agents' templates.
+- **Plan items:** none.
+
 ## 2026-10-31 — narrowing gate checks the prompts (live-specs L3e; edited by `cobb`)
 
 - **What:** `teco.md` 8,585→8,637 words. Feature close → **Narrowing** bullet gained one sentence: brief the gate to also check a proposed narrowing line against every prompt carrying the `REVIEW.md` precedence sentence (found by `grep -l 'never relaxes it' claude/*/*.md`, not a roster list); a line relaxing a check one of them requires has no effect for that agent, so the gate pairs it with that prompt edit (`cobb`'s) or rejects it. No frontmatter, tool-grant, permission or hook change.

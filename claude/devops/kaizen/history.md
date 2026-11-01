@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-10-31 — Raw-capture template states the 200-character `title` limit
+
+- **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed.
+- **Why:** falkor-chat's MCP `ingest_document` now refuses a `title` over 200 characters (`schemas.MAX_NAME_LEN`, backlog K-101, commit 7490f634) with an `isError` result; before, it was accepted, and `ws:agent-team` already holds 7 documents with titles that long, so a capture that isn't retried is lost. Stakeholder-approved 2026-10-31; one team-wide edit by `cobb` across all 13 agents' templates.
+- **Plan items:** none.
+
 ## 2026-10-14 — `ops-quirks.md`: WSL2 process-spawn stall (~13.1s, about 1 in 3,000–6,000 spawns), promoted by `cobb`
 
 - **What:** a new entry at the top of `claude/devops/ops-quirks.md`. On this host any spawned

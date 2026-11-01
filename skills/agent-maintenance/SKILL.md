@@ -339,7 +339,7 @@ The self-improvement loop for a stateless agent team: **capture is cheap and
 unreviewed; promotion is curated.** Every agent's raw capture writes a dated,
 evidence-backed document into one shared falkor-chat workspace,
 `ws:agent-team`, via `mcp__falkor-chat-agent-team__ingest_document(title=<the
-fact, one line>, text=<labeled Fact:/Evidence:/Context:/Suggested home:
+fact, one line, ≤ 200 characters>, text=<labeled Fact:/Evidence:/Context:/Suggested home:
 blocks>, produced_by=<the writer's own, already-seeded Agent.agentId>)` — an
 unresolvable `produced_by` raises `AgentNotFoundError` loudly, never a silent
 fallback. The 12 agents that existed at the 2026-08-20 migration (the

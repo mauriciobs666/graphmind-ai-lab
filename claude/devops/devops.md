@@ -110,7 +110,7 @@ You are a subagent: you run in your own context and can't ask interactive questi
 
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing (this workspace resolves in every project — you are user-scoped):
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line>, text=<below>, produced_by='devops')`, where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='devops')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
 
 ```
 Fact: <the fact, one line>

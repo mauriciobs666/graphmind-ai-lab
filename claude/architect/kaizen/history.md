@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-10-31 — Raw-capture template states the 200-character `title` limit
+
+- **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed.
+- **Why:** falkor-chat's MCP `ingest_document` now refuses a `title` over 200 characters (`schemas.MAX_NAME_LEN`, backlog K-101, commit 7490f634) with an `isError` result; before, it was accepted, and `ws:agent-team` already holds 7 documents with titles that long, so a capture that isn't retried is lost. Stakeholder-approved 2026-10-31; one team-wide edit by `cobb` across all 13 agents' templates.
+- **Plan items:** none.
+
 ## 2026-10-31 — delta-plan pointer (live-specs L3c; edited by `cobb`)
 
 - **What:** `architect.md` 1,582→1,614 words. How-you-work step 5 (write the plan) gained one sentence: for a component with a live spec, the plan states only the change against it, citing the affected spec sections and any open feature's plan it relies on (root `AGENTS.md`, live-spec bullet). Same wording as `graph-dba.md`/`data-scientist.md` (Pass 14 P14-m1). No `REVIEW.md` pointer: `architect` writes no review or gate verdict.

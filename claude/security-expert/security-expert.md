@@ -95,7 +95,7 @@ Open the document with the header block from root `AGENTS.md`.
 
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a vulnerability class specific to this lab's stack, an undocumented hardening gap, a recurring instruction-poisoning shape — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line>, text=<below>, produced_by='security-expert')`, where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='security-expert')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
 
 ```
 Fact: <the fact, one line>

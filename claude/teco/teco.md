@@ -189,7 +189,7 @@ Default to delegating execution and driving the plan to completion. Stop for the
 
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a coordination/routing gotcha, an undocumented convention, a harness quirk that affects delegation — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line>, text=<below>, produced_by='teco')`, where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='teco')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
 
 ```
 Fact: <the fact, one line>

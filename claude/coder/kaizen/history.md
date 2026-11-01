@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-10-31 — Raw-capture template states the 200-character `title` limit
+
+- **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed.
+- **Why:** falkor-chat's MCP `ingest_document` now refuses a `title` over 200 characters (`schemas.MAX_NAME_LEN`, backlog K-101, commit 7490f634) with an `isError` result; before, it was accepted, and `ws:agent-team` already holds 7 documents with titles that long, so a capture that isn't retried is lost. Stakeholder-approved 2026-10-31; one team-wide edit by `cobb` across all 13 agents' templates.
+- **Plan items:** none.
+
 ## 2026-09-20 — standing distillation pass, `cobb`, U3 of `claude/docs/plans/kaizen-distillation3-coordination.md`: the 1 remaining `coder` current-shape entry — PROMOTED into `claude/tdd-engineer/test-design-techniques.md`, 0 discarded, 0 kept open — `coder` closes at 0 produced / 0 mentioned
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`

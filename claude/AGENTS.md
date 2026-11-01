@@ -11,7 +11,8 @@ This directory (`claude/`) holds custom Claude Code subagents.
   remaining 11 agents the next day — K-030's last Track 1 item): every agent's own file writes a
   document into `ws:agent-team`, a dedicated falkor-chat workspace, via
   `mcp__falkor-chat-agent-team__ingest_document(text=..., title=..., produced_by=<own agentId>)`.
-  `title` = the entry's `fact` (one line); `text` is a fixed, labeled rendering, one paragraph per
+  `title` = the entry's `fact` (one line, ≤ 200 characters — the tool refuses a longer one, so
+  shorten and retry, keeping detail in `text`); `text` is a fixed, labeled rendering, one paragraph per
   field:
   ```
   Fact: <fact>
