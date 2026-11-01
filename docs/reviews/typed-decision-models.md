@@ -1330,3 +1330,478 @@ rejected-alternatives list is design rationale and is acceptable. Restated facts
 505/513 boundary, the 500 text and the 3,286 ms cold call. Their home is the probe document and,
 after U1e, `model-bench/docs/HISTORY.md`. Cite them rather than restate them (minor). No history
 or debate prose.
+
+## Pass 9
+
+**Scope.** The method note v1.6 → v1.7 and `fr10.py`, both uncommitted
+(`git diff HEAD -- docs/plans/typed-decision-models-ml.md docs/plans/typed-decision-models-ml/`).
+I read the whole diff, §Q1, §Q4.3, §Q6, §Q7 and the handed list. I checked the premise against
+requirements FR-5/FR-6/FR-8, AC-4 and the decision log, and the stakeholder decisions against the
+coordination ledger. I checked §Q6's wording against plan2 §3.6 and `decision_stats.py:304`. I ran
+`fr10.py` and re-derived its figures by hand. I read this repo's subagent transcripts
+(`~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/*/subagents/`, 210 `.jsonl` + `.meta.json`)
+to test the transcript-audit, model-id and token claims. The stakeholder decisions (opus generates,
+sonnet labels; full sizes, pilot first, guard → message type → join-in) are stated correctly
+(ledger 2026-10-31 entries) and are not reopened.
+
+**Verdict: needs changes — five majors, no blocker.** The transport change is sound in outline and
+the arithmetic is exact. But:
+- the third-vote shortcut's equivalence is overstated (P9-M1);
+- the top-up can make FR-10 easier (P9-M2);
+- the audit misses the two channels most likely to carry seed knowledge (P9-M3);
+- batched generation removes §Q6's "by construction" independence (P9-M4);
+- the pilot cannot be run as written (P9-M5).
+
+**Stopping condition (line check by teco, no Pass 10).** The next revision does each of these, and
+nothing else beyond the minors' fixes:
+1. P9-M1: §Q1.2 states that the vote-3 rule equals always-three only absent batch-composition
+   effects. It names the 3–0 estimator and a vote-3-batch balance check, and draws fillers to the
+   point's answer mix.
+2. P9-M2: §Q1.3 gives the top-up a rule that cannot make a cell easier, or a numeric trigger with
+   a consequence.
+3. P9-M3: §Q1.2's audit covers the spawn prompt, agent type and injected context. The exchange
+   directory is outside the repo, and MCP tools are excluded for FR-8.
+4. P9-M4: generation batches are randomised across cells and splits, `genRunId` is recorded, and
+   the designEffect check is a handed item.
+5. P9-M5: the pilot states its item count, its numeric screen rule, what the cap drops to, the fate
+   of pilot items, and who decides after it.
+6. Handed items 7–11 gain the new mechanisms (P9-M3 to P9-M5, P9-m1 to P9-m4).
+
+CPG: considered, not relevant — a method note and a stdlib figures script; `GRAPHS` lists no
+`cpg_modelbench`, and the built code cited (`decision_stats.py`) was read directly.
+
+**Pass 8 disposition.**
+- P8-M1 — **fixed.** §Q4.3 has an over-limit row with all four columns. The failure row reads
+  "(over-limit excluded)", and the counts line excludes over-limit from `decisionCallFailures`.
+- P8-M2 — **fixed.** Handed items 1–6.
+- P8-m1 — **fixed.** §Q2.1 makes over-limit a hand-off in every band. §Q4.3 covers the candidate
+  with no `handoffModel`.
+- P8-m2 — **fixed.** Handed item 6.
+- P8-n1 — **fixed.** "No retry wrapper exists on the guard, responder or decision paths", and the
+  caps paragraph subtracts about 44 question tokens.
+- P8 growth-stops (restated probe facts) — **fixed.** §Q4.3 cites the probe document.
+
+**Checks that hold (verified).**
+- **Premise (FR-5/6/8).** Holds literally. Sonnet and opus through Claude Code are hosted frontier
+  models. Labelling stays a one-off build cost (FR-6). Inputs are generated (FR-8). Sonnet ≠
+  `qwen3-4b` (FR-5), and AC-4's "names the labeler model" is met by the transcript id. Two caveats:
+  FR-8's "no real thread leaves the machine" now depends on the tool allowlist (P9-M3); the
+  decision log lacks the 2026-10-31 entries (P9-m6).
+- **Majority rule.** Pathwise exact, given the votes:
+  - Predicate: (a,a) fixes the majority whatever vote 3 is; (a,b) is decided by vote 3.
+  - Choice: (A,A) → A; (A,B) + A/B → that label; (A,B) + C → three distinct → dropped.
+  - So the drop set is the same as always-three. `labelVotes` sums to 2 only on agreeing items,
+    which have no tie. §Q7's `labelVotes / 3` reads only train and dev, which keep three votes
+    (§Q7 step 1 and §Q1.2), so it is consistent.
+  - The equivalence is pathwise *given vote 3's value*, not in distribution (P9-M1).
+- **§Q3–§Q6 untouched** except P16-n4. The only hunk in that range is §Q6's "unstable across
+  replicates — not met", which matches plan2 §3.6 (line 243) and `decision_stats.UNSTABLE`
+  (line 304). §Q2 and §Q7 are untouched.
+- **Transcript facts.**
+  - The path `<session>/subagents/agent-<id>.jsonl` exists.
+  - Assistant entries carry `message.model` (`claude-sonnet-5-5`, `claude-opus-5-5`,
+    `claude-haiku-5-5` observed).
+  - `<synthetic>` occurs 19 times, and every one is a usage-limit stop ("You've hit your 5-hour /
+    session / weekly limit"). Rerunning on it is the right rule.
+  - Tool calls are recorded with their inputs, so the path audit is implementable.
+  - First-turn context across all 210 transcripts is 21,990–46,815 tokens, which matches the note.
+- **Numbers.** `python3 -I docs/plans/typed-decision-models-ml/fr10.py` exits 0 and prints
+  1800 / 2160 / 4968 / 108 / 90 / 85M / 17M / +12600, every figure the note states. I
+  re-derived them by hand and closed form (Appendix P9-A). That includes the three
+  per-round-rounded figures: 2,160, 108 and 90. Whole-volume rounding would give 101 and 87, so
+  the note's "batched per round and vote" wording is what makes 108 and 90 right.
+
+### New findings
+
+**P9-M1 (major) — "yields the same majority as three votes always drawn" holds only if vote 3's
+batch context does not matter, and the 1:1 filler design changes that context.** *Verified by
+reading; effect size inferred.*
+- Under always-three, vote 3 sits in a random batch, as votes 1 and 2 do. Under the shortcut, it
+  sits in a batch that is half vote-1/2-disagreeing items, against about `d` ≈ 15% in a random
+  batch.
+- The note itself screens for exactly this kind of context effect (balance, position). A
+  balancing labeler shifts vote 3 on the d share of items whose label vote 3 decides.
+- Those items concentrate in the hard classes, so the shift is systematic, not noise. That is
+  roughly 1–2 pp of labels per point moved in one direction, which reaches FR-1/FR-10.
+- "Those votes give the 3–0 share" names no estimator. Read naively over three-vote items, the
+  3–0 share is about halved.
+
+*Fix (`data-scientist`):*
+- Reword the claim to "same majority rule; equal in distribution absent batch-composition
+  effects".
+- Draw fillers so each vote-3 batch's expected answer mix (by votes 1–2) equals the point's.
+- Compute the balance diagnostic on vote-3 batches separately.
+- State the estimator: 3–0 share = (1 − d) × P(filler vote 3 = its agreed label).
+
+**P9-M2 (major) — The intent-targeted top-up tilts short cells toward easier items. It makes
+FR-10 easier, against §0's "no … rule may make a bar easier".** *Inferred from the design.*
+- Items labelled L but generated from another intent are the ones the generator "missed" toward
+  L: ambiguous by construction. In the 1.6× design, a cell kept round-1's share of them.
+- The top-up fills the shortfall with intent-L seeds only, which lowers that share in exactly the
+  cells that were short. Labels underproduced relative to their intent are likely the hard ones.
+- FR-10 agreement is single-arm against the label, so easier items raise it directly. FR-1 is
+  paired, so the effect there is second-order.
+- The note concedes the tilt and prints intent-label agreement per cell, but attaches no
+  consequence.
+
+*Fix (`data-scientist`), one of:*
+- (a) top-up seeds draw intents in the short cell's stratum in round 1's proportions. This
+  costs about 1/P(L | stratum) per needed item, but has no tilt;
+- (b) keep intent-targeted top-up, but cap each final cell's intent-matching share at its round-1
+  share plus a stated margin. A cell that cannot meet the cap stays short and prints its n, as a
+  class below 52 already does.
+
+**P9-M3 (major) — The transcript audit checks tool calls only. The spawn prompt, agent type and
+injected context are unchecked, and all three are in the transcript.** *Verified against
+transcripts.*
+- **Spawn prompt.** The first `user` entry is the prompt written by the coordinating session,
+  which "has seen seeds and intents" (§Q1.2). It is free text from a seed-aware author, outside
+  `promptSha256` and outside the audit.
+- **Agent type.** A `fork` subagent inherits the parent's whole conversation. `.meta.json`
+  records `agentType`.
+- **Injected context.**
+  - Attachments carry root `AGENTS.md`, `CLAUDE.md` and the auto-memory `MEMORY.md`
+    (`instructions`).
+  - They also carry `gitStatus` with untracked file names and the last 5 commit messages
+    (`session_context`), and the MCP and skill listings.
+  - An exchange directory inside the repo puts request/answer names into every later run's
+    `gitStatus`. U5 ledger commits are in the same channel.
+- **FR-8.** The session exposes MCP tools that read real falkor-chat data
+  (`mcp__falkor-chat-agent-team__*`, `mcp__cypher__query`). Voiding a run after such a call does
+  not un-send the data. Only the allowlist prevents it.
+
+*Fix (`data-scientist` states the rule; `architect` owns the mechanism, new handed item):*
+- The audit asserts the first user message is byte-equal to a hashed template with only the
+  request path substituted. That template joins `promptSha256`.
+- `agentType` equals the role's definition, never `fork`.
+- The `instructions` file list and hashes are recorded per run, against an allowlist.
+- The exchange directory lives outside the repo, with opaque file names.
+- The allowlist has no MCP tool, and the FR-8 rationale is stated beside it.
+- The "no withheld field" test (handed item 10) is a closed-schema check with a planted extra
+  field as its positive control (root `REVIEW.md`).
+
+**P9-M4 (major) — Generation in batches of 25 per run removes §Q6's "by-construction" basis.
+Top-up batches concentrate it.** *Verified by reading; magnitude unknown.*
+- §Q1.3 says "one item per seed is what makes items independent". §Q6's
+  `designEffect = 1.0, basis = "by-construction"` cites it. v1.6 had one generator call per seed.
+- Now 25 items share one generation context: style, length, phrasing. Batch composition is
+  unspecified, and top-up batches are by construction one short cell's intent, so they are
+  cell-concentrated.
+- Within-run correlation of item difficulty inflates the true variance behind every Wilson
+  interval and `mdd`.
+- `decision_stats.parity_cell` already takes `design_effect ≥ 1.0` (line 195–212), so the remedy
+  needs no change to built code.
+
+*Fix:*
+- `data-scientist`: round-1 generation batches draw seeds at random across the point's cells,
+  strata and splits, and top-up seeds pool across all short cells of a point. Each item records
+  `genRunId`.
+- `data-scientist`: U7 prints the between-run variance of candidate discordance as a diagnostic.
+  §Q6's basis reads "one item per seed; generation runs randomised across cells", with a stated
+  trigger for setting `designEffect` from that diagnostic.
+- `architect`: a handed item.
+
+**P9-M5 (major) — The pilot, which gates all spend, cannot be executed as written.** *Verified by
+reading.*
+- "One generation batch" is 25 items, but the screen needs 100 guard items: 4 generation runs.
+- The screen needs 2 + 2 + 10 = 14 label runs. Neither these nor reruns are in the 108/90 budget.
+- "Clearly exceeds" has no number. "The cap drops" has no target, and a drop to 10 multiplies
+  label runs about fivefold.
+- Whether pilot items, with an extra 10-per-batch vote, enter guard's splits is unstated.
+- Nothing says who decides to proceed once the measured F and c reproject the cost (handed item
+  11 only logs them).
+- Power (Appendix P9-A): with 100 paired items at d ≈ 0.15, a one-sided 5% test has 80% power
+  only for a gap of about 14 pp. "Gross effects only" is honest, so the rule should say so in
+  numbers.
+
+*Fix (`data-scientist`):*
+- State 100 items from 4 generation runs.
+- State the rule (for example, disagreement(50 vs 10) − disagreement(50 vs 50) ≥ 10/100 → cap 25)
+  and the new run count that cap implies.
+- Pilot items are discarded, or kept with votes 1–2 only. Say which.
+- After the pilot, teco reports the reprojected tokens to the stakeholder before guard's full
+  spend.
+
+*`architect`:* fold this into handed item 11.
+
+**P9-m1 (minor) — "Temperature and thinking are not settable" is half wrong.** *Verified.* Each
+`api-request` entry records `params.thinking` (`adaptive`) and `params.output_config.effort`. Agent
+frontmatter sets effort. *Fix (`data-scientist`):* pin effort in both agent definitions, and record
+`thinking` and `effort` per run in `runs[]`. Only temperature stays unknown.
+
+**P9-m2 (minor) — Audit-voided runs: rerun or drop?** §Q1.2 voids and reruns. Handed item 8 adds
+`dropped.auditFailed`, which drops items. Dropping items whose run misbehaved is a filter that may
+correlate with difficulty, and model-bench `REVIEW.md` requires every re-run to be recorded.
+*Fix (`data-scientist`, then `architect`):* voided runs are rerun with fresh keys and recorded in
+`runs[]` with a reason. Items drop only after a stated retry cap, counted by reason.
+
+**P9-m3 (minor) — "The answer echoes the request's SHA-256" cannot be done with a Read/Write-only
+allowlist.** A model cannot compute SHA-256, and granting Bash breaks the minimal allowlist. *Fix
+(`data-scientist`):* the request header carries its body hash, the subagent copies it, and ingest
+recomputes it.
+
+**P9-m4 (minor) — The rubric stop rule (> 3% drops → fix the rubric before drawing eval) has no
+checkpoint in the new sequence.** Only message type can drop items. The guard pilot cannot
+exercise the rule, and split-blind batches label calibration and eval together. *Fix
+(`data-scientist`):* message type's first round labels a calibration-only tranche (or its first N
+batches) and checks the drop rate before the rest is generated.
+
+**P9-m5 (minor) — The 17M basis does not reproduce.** "The smallest 2-call run processed 61k": no
+2-call run exists among the 210 transcripts. The smallest is 3 calls and 133k processed (cache
+reads included). A label run needs at least 3 calls (Read, Write, final reply). The note's F ≈ 60k
+is possible for a lean agent but is not evidenced, while the 143k prior matches the observed
+3-call floor. *Fix (`data-scientist`):* cite the 3-call floor, and present 85M and 17M as
+pessimistic and optimistic bounds pending the pilot.
+
+**P9-m6 (minor) — The 2026-10-31 decisions are only in the coordination ledger.** These are
+generator opus and labeller sonnet (which refines the "Which LLM produces the labels?" entry and
+AC-4), and full sizes with the pilot first (the counterpart of the logged P5-M3b answer). *Fix
+(teco → `tico`):* decision-log entries in `docs/requirements/typed-decision-models.md`.
+
+**P9-n1 (nit)** — Pair agreement of two single votes is not a ceiling on agreement with the
+*majority* label, which is less noisy. At per-vote accuracy 0.9, pair agreement is about 0.82 but
+majority accuracy is about 0.97. Call it "label-noise indicator". The balance-effect regressor
+should use batch-mates' labels from *another* vote, not this run's own answers: a run-level shift
+otherwise biases the slope toward 0. The header's `Reviews:` still reads Pass 8.
+
+**Hand-off completeness (check 6).** Items 7–11 cover transport, the `generation.json` fields,
+`labelVotes`, tests and pilot-first sequencing. The pilot is sequenced before any full spend. They
+miss:
+- the run driver: which session spawns the runs, resumption across usage windows, idempotent
+  ingest of a re-sent batch;
+- the spawn-prompt template and the context isolation (P9-M3);
+- `genRunId` and the designEffect diagnostic (P9-M4);
+- the pilot's rule and its decision point (P9-M5);
+- effort pinning (P9-m1);
+- rerun recording (P9-m2).
+
+Every other new mechanism has an owning unit (U5).
+
+**Growth-stops (6,285 → 7,070 words).** The growth is new scope: transport, the vote rule,
+diagnostics, top-up, cost model, pilot, and handed items 7–11. Comparison prose was *removed*
+("replace the plan's prior of ~50", "about 14× the plan's prior", "'about 40' is just 200 / 5").
+There is no finding→resolution prose, and the revision line is one dated line. "The coordinator's
+prior" attributes an estimate rather than stating a bound; P9-m5's rewording fixes it. Handed item
+7's "Replace `labeler.py`" is a plan-edit instruction, not history. Pass.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: P9-M3.
+- A method or plan that runs LLM work as Claude Code subagents names what its transcript audit
+  checks beyond tool calls: the spawn prompt (against a hashed template), `agentType`, and the
+  injected `instructions`/`gitStatus` context. A tool-call-only audit is a finding.
+
+## Appendix P9-A — figure re-derivation and screen power
+
+| Point | kept | round 1 / top-up n | votes (2n + 0.3n) | label runs 2⌈n/50⌉ + ⌈0.3n/50⌉ | gen runs ⌈n/25⌉ |
+|---|---|---|---|---|---|
+| guard | 800 | 880 / 80 | 2,024 / 184 | 36+6=42 / 4+1=5 | 36 / 4 |
+| join-in | 400 | 440 / 40 | 1,012 / 92 | 18+3=21 / 2+1=3 | 18 / 2 |
+| message type | 600 | 660 / 60 | 1,518 / 138 | 28+4=32 / 4+1=5 | 27 / 3 |
+| **total** | **1,800** | **2,160** | **4,968** (= 2.3 × 2,160) | **108** | **90** |
+
+- Tokens. Prior: 198 × 143k + 2,160 × 8k + 4,968 × 8k = 28.31M + 17.28M + 39.74M = 85.3M.
+  Estimate: 198 × 60k + 2,160 × 1.2k + 4,968 × 0.6k = 11.88 + 2.59 + 2.98 = 17.5M.
+- U8: 3,500 × 1.2 × 3 = 12,600.
+- Screen power. Paired disagreement difference on 100 items at d ≈ 0.15:
+  SE ≈ √((0.15 + 0.15)/100) ≈ 0.055, so the 80%-power gap at one-sided α = 0.05 is about
+  (1.645 + 0.84) × 0.055 ≈ 0.14.
+
+## Pass 10
+
+**Scope.** The method note at v1.8 (7,460 words) and `fr10.py`, both uncommitted. I read §Q1.2,
+§Q1.3, §Q3.2, §Q5.1, §Q6, §Q7 and handed items 7–11, plus the three new 2026-10-31 decision-log
+entries. Against built model-bench I read:
+- `decision_stats.parity_cell` (lines 194–212);
+- `stats.Basis` (line 67) and `results.RunResult` (lines 680–705);
+- `runner.py`'s `basis`/`designEffect` sites (lines 1184–1189 and 1994);
+- `report.py`'s `ReplicateGroup` and `compare_report` (lines 2577–2585);
+- in-flight U3c.2's `report.py:2190`, which is uncommitted.
+
+I ran `fr10.py` and re-derived its figures by hand. Pass 9's stopping condition is the
+done-condition.
+
+**Verdict: needs changes. Two new majors, both line-checkable (no Pass 11).** Every Pass 9 item is
+met, and both of the author's departures from my fixes are right; see the two worked cases below.
+The new majors come from the fixes meeting the built code and each other:
+- P10-M1: the `designEffect` "basis" collides with the built load-rule `basis`.
+- P10-M2: the retry cap counts environmental voids.
+
+**Stopping condition (teco line check).**
+1. P10-M1: §Q6 names the design-effect provenance with a label other than `basis`. Handed item 11
+   (or a new item) tells the architect where the per-cell value lives: computed at render time,
+   with `RunResult.designEffect`/`basis` untouched. It also flags plan2 §3.4's "final".
+2. P10-M2: §Q1.2's rerun rule separates environmental voids (halt, no count) from run-attributable
+   ones (count toward the cap).
+3. P10-m1 to P10-m3 are reworded as stated below. Nothing else changes.
+
+CPG: considered, not relevant. This is a method note plus a stdlib script; there is no
+`cpg_modelbench`, and the built sites were read directly.
+
+**Pass 9 disposition.**
+- P9-M1 — **fixed, by a better route than mine** (case 1 below). There are three votes for every
+  item, each in a random batch. `labelVotes` sums to 3, so §Q7's `/3` is exact. The 3–0 share is
+  now direct. No shortcut text remains (swept for filler, sequential, "vote 3", "summing to 2").
+- P9-M2 — **fixed** (case 2 below), with one caveat (P10-m1) and one undefined term (P10-m2).
+- P9-M3 — **fixed.** §Q1.2's audit covers:
+  - the hashed spawn template;
+  - `agentType` ≠ `fork`;
+  - the `instructions` allowlist by name and hash;
+  - the pinned `message.model`.
+
+  The exchange directory is outside the repo with opaque names. There is no MCP tool, and the FR-8
+  rationale is stated. `session_context` is hashed. Handed item 10 has the closed schema with a
+  planted positive control.
+- P9-M4 — **fixed.** Generation runs are randomised across strata, top-up runs pool short strata,
+  and splits are assigned after labelling. `genRunId` is recorded, and §Q6 estimates
+  `designEffect`. Two new findings follow from it: P10-M1 and P10-m3.
+- P9-M5 — **fixed.** The pilot is:
+  - 100 items from 4 generation runs;
+  - 6 + 10 label runs;
+  - a numeric rule, `D(50,10) − D(50,50) ≥ 0.10` → cap 25, with 291 runs;
+  - pilot items discarded;
+  - teco takes the reprojection to the stakeholder before guard's full spend.
+- P9-m1 — **fixed.** Effort is pinned (labeler `high`, generator `medium`), and `thinking`/`effort`
+  are recorded per run.
+- P9-m2 — **fixed.** Void → rerun with fresh keys, recorded in `runs[]`;
+  `dropped.retryCapExceeded`. See P10-M2 for how the cap interacts with the audit.
+- P9-m3 — **fixed.** The header carries the body hash, and ingest recomputes it.
+- P9-m4 — **fixed.** Message type labels a 250-item round-1 tranche, with the rule
+  `100·drops > 3·250`, then relabels the tranche and rechecks before splits are assigned. Three
+  votes and split-blind batches are compatible with it: splits are assigned after labelling. The
+  tranche costs no extra runs (⌈250/50⌉ + ⌈410/50⌉ = 14 = ⌈660/50⌉).
+- P9-m5 — **fixed.** 110M and 23M are stated as bounds, and the 3-call/133k floor is cited.
+- P9-m6 — **fixed.** Three decision-log entries exist (requirements lines 281–287).
+- P9-n1 — **fixed.** "Label-noise indicator"; the balance check uses another vote; the header
+  reads Pass 9.
+
+**Case 1 — P9-M1: is withdrawing the shortcut right, or was answer-mix matching enough?
+Confirmed: withdrawal is right. My fix was incomplete.**
+- Matching fillers to the answer mix of votes 1–2 equalises only the batch's answer shares.
+- The vote-3 batch still holds disagreeing items at share ½, against d ≈ 0.15 in a random batch.
+  Any effect of batch *difficulty* on a vote (contrast, relative calibration) survives.
+- To bring the disagreeing share down to d, each disagreeing item needs (1−d)/d fillers. Vote 3
+  then covers d·n·(1 + (1−d)/d) = n items: always-three at full cost.
+- So no cheaper sequential design matches vote 3's distribution, and the 3–0 estimator and the
+  vote-3 balance check are moot.
+- Cost: item-votes 4,968 → 7,020, verified below.
+
+**Case 2 — P9-M2: do stratum-restricted top-up draws leave each cell's distribution unchanged?
+Confirmed, with two conditions; the cost formula holds; 0.2× is plausible but fragile.**
+- Round 1 draws seeds from design D. A cell's items are draws of X | (L = ℓ, S = s) under D.
+- A top-up draw from D(· | S = s) keeps D's intent mix in s. Its items with L = ℓ are draws from
+  the same conditional, so pooling them and subsampling (or "first N", independent of content)
+  leaves the cell's distribution unchanged. Stopping on fill is optional stopping on a count, not
+  on item content, so it adds no bias.
+- **Condition (a): S must exclude the intended answer.** Otherwise "restricted to the stratum" *is*
+  intent targeting. The note never defines S (P10-m2).
+- **Condition (b): no generation-context effect.** Round-1 runs span all strata, but top-up runs
+  hold only short strata. By case 1's own standard, a different batch composition can shift X's
+  distribution, though not in a known direction, so it is not "easier" by construction
+  (P10-m1).
+- **Cost.** Each draw restricted to s yields ℓ with probability P(ℓ | s), so the expected number of
+  draws is shortfall / P(ℓ | s). With several short cells in one stratum, the draws are shared, so
+  the stratum costs the *max* over its cells, not the sum: as written, the formula is a safe upper
+  bound.
+- **0.2× (fr10's 1.1 + 0.2).**
+  - At P(ℓ) exactly 0.2 for each message-type label, round 1's count is Bin(660, 0.2): mean 132,
+    sd 10.3. It falls below 120 about 12% of the time, so top-ups are small.
+  - One label at 0.15 gives a shortfall of 120 − 99 = 21. That takes 140 draws, 0.23× of 600.
+  - Two labels at 0.15 give about 0.47×.
+  - So 0.2× holds only if label marginals stay within about 25% of intent marginals. The note
+    already replaces it with round 1's rates, and the pilot measures P(label | kind) for the guard.
+
+**Numbers (verified).** `python3 -I docs/plans/typed-decision-models-ml/fr10.py` prints every
+figure the coordinator listed, and I re-derived them by hand:
+- **Labelled:** 880+160 + 440+80 + 660+120 = 2,340. Item-votes 3 × 2,340 = 7,020.
+- **Label runs at 50**, 3⌈n/50⌉: 54+12+27+6+42+9 = 150. **At 25**, 3⌈n/25⌉:
+  108+21+54+12+81+15 = 291.
+- **Generation runs**, ⌈n/25⌉: 36+7+18+4+27+5 = 97.
+- **Tokens:** 247 × 143k + 2,340 × 8k + 7,020 × 8k = 110.2M; 247 × 66k + 2,340 × 1.2k + 7,020 × 0.6k
+  = 23.3M.
+- **Pilot:** 20 runs and 400 item-votes, giving 6.86M and 1.68M.
+- **U8:** 3,500 × 1.3 × 3 = 13,650.
+- **Screen power:** Φ((g − 0.10)/0.055) = 0.034 / 0.50 / 0.766 / 0.966 at g = 0 / 0.10 / 0.14 / 0.20.
+  SE = √(0.30/100) is the no-overlap upper bound for a paired difference that shares a vote. The
+  stated false-trigger rate and power are therefore conservative.
+- Not printed: the token cost of cap 25. That is +141 runs, +9.3M to +20.2M, which the pilot's
+  "reprojected tokens" output covers (nit).
+
+### New findings
+
+**P10-M1 (major) — §Q6's `designEffect` "basis `estimated (genRunId)`" collides with built code.
+There is no home for a per-cell value.** *Verified against code.*
+- `stats.Basis` is a closed `Literal["by-construction", "measured", "assumed"]` (line 67).
+- On decision runs, `RunResult.basis` is the **load rule's** output (`runner.py:1184-1189`,
+  `_within_load_basis`). `ReplicateGroup.kind = assumed` turns it into `not assessable`.
+- `RunResult.designEffect` is one scalar per run, which the runner sets to 1.0 (`runner.py:1994`).
+- In-flight U3c.2 passes `run.designEffect` to every cell (`report.py:2190`). `compare_report`
+  takes the max designEffect and the weakest basis across arms (`report.py:2580-2585`).
+- Plan2 §3.4 calls `designEffect=1.0, basis="by-construction"` "final" for candidate runs.
+
+`parity_cell` itself is **not** invalidated: it takes `design_effect ≥ 1.0`, and that value
+reaches only the limits, as §Q3.2 requires. But writing a per-cell estimate into the run's
+`designEffect`/`basis` would do two things:
+- fail the closed `Literal`, or overload the load-rule field;
+- move `compare_report`'s instrument choice.
+
+*Fix:*
+- `data-scientist`: rename the provenance in §Q6 (for example `designEffectSource: "genRunId
+  ICC"`) and say it never touches `RunResult.basis`.
+- `architect`, in the successor: report-side computation per cell from the pack's `genRunId`,
+  passed to `parity_cell` and to FR-10's intervals, with `RunResult.designEffect = 1.0` unchanged.
+  Plan2 §3.4's "final" is superseded, and U3c.2's `run.designEffect` call site becomes per-cell.
+
+**P10-M2 (major) — The 3-attempt cap counts environmental voids, so one repo edit can drop whole
+batches.** *Inferred from the audit rules.*
+- §Q1.2 voids a run when an `instructions` file's hash leaves the allowlist (root `AGENTS.md`,
+  `CLAUDE.md`, `MEMORY.md`), or when `message.model` is not the pinned id. After 3 voids, the
+  batch's items drop.
+- Root `AGENTS.md` had 2 commits in the last week (`git log --since=2026-10-24 -- AGENTS.md`).
+  `MEMORY.md` is the user's auto-memory and changes outside any commit. A campaign spans several
+  usage windows. A sonnet alias that moves to a new model id would void every run in the same way.
+- Either way, the cap converts an environment change into mass `retryCapExceeded` drops, after
+  spending 3 × runs. Every void is counted, but it is wasted spend and shrinks cells.
+
+*Fix (`data-scientist`; then `architect`, handed item 7's driver):* two void classes.
+- **Environmental** (instructions hash, model id, `agentType`): halt the driver, count no attempt,
+  and resume after a recorded decision. Example decisions: re-pin a hash, or ask the stakeholder
+  about a new model id.
+- **Run-attributable** (tool or path, spawn prompt mismatch, malformed answer): count toward the
+  cap.
+- Simpler still, run the driver session from a clean directory outside the repo, so the
+  `instructions` set is near-empty and stable.
+
+**P10-m1 (minor) — "Each cell then holds independent draws given (label, stratum), as round 1
+did" omits condition (b) of case 2.** Top-up runs pool only short strata. *Fix
+(`data-scientist`):* qualify it as "absent generation-context effects". Record the round per item,
+and print round-1 vs top-up within each cell on intent-label agreement and pair agreement,
+exploratory. This is the same standard case 1 applied to vote 3.
+
+**P10-m2 (minor) — "Stratum" is undefined, and the name is taken.** Case 2's correctness needs S to
+exclude the intended answer. The natural reading is the non-label part of each table cell: guard
+evidence kind; none for join-in and message type. Built model-bench already uses item `stratum`
+for `eval`/`side-check` (`packs.py:1027-1131`). §Q1.2's withheld list ("stratum, split") is
+ambiguous between the two. *Fix (`data-scientist`):* define the top-up stratum in §Q1.3 as that,
+under a distinct name (for example "design stratum").
+
+**P10-m3 (minor) — `m̄` understates the design effect under unequal run sizes.** Pooled top-up runs
+put many items from short cells into few runs, while round-1 runs put about 3 into each cell. The
+cluster-size-weighted `m₀ = Σm²/Σm` (Kish) is the right m in `1 + (m − 1)·ICC`. The mean
+under-corrects in exactly the short cells. *Fix (`data-scientist`):* replace `m̄` with `m₀` in
+§Q6.
+
+**P10-n1 (nit)** — §Q6 says FR-10's Wilson intervals are "stated at `n / designEffect`", but §Q5.1
+still reads "Wilson 95% per class" with no designEffect. That is one fact in two places; §Q5.1
+should cite §Q6 and say k scales too (k/DE). "Drawn at random across the point's cells and
+strata" should read "strata": a cell's label is unknown at generation.
+
+**Growth-stops (7,070 → 7,460).** The growth is new mechanism:
+- audit rules and the rerun rule;
+- tranche, effort, top-up loop, generation runs;
+- pilot protocol, `designEffect` estimate, handed-item expansions.
+
+The withdrawn shortcut and fillers were removed rather than kept beside the new rule. I found no
+comparison prose ("v1.7", "instead of", "no longer" sweep: one pre-existing §Q4.3 hit). There is one
+dated revision line; its "(the third-vote shortcut is withdrawn)" is acceptable as the revision
+note. Pass.

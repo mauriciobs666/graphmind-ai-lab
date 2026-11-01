@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.6 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 8)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.8 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 10)
 
-*2026-10-31 — v1.6: answers review Pass 8; over-limit hand-off is the stakeholder's decision. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
+*2026-10-31 — v1.8: answers review Passes 9–10; three votes always drawn; same-design top-up; per-cell design effect at report time. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
 
 ## 0. The question and the decision it serves
 
@@ -51,29 +51,80 @@ Each item comes from one **seed**, drawn by stratified sampling.
 
 ### Q1.2 Blind labeling (R-4)
 
-- **Generator ≠ labeler.** Both are hosted frontier models (FR-6, FR-8), but with two distinct
-  model ids, so no model labels inputs it wrote. `generation.json` records both. `labels.labeler`
-  is the labeler (AC-4).
-- **Blind.** The labeler sees only the rendered decision input (§3.2) plus a fixed rubric. It
-  never sees the seed, the intent, the difficulty or the generator prompt.
-- **Majority of three** independent calls at the provider's default temperature. Calls at 0 would
-  be one call three times.
-  - A choice item with three different labels has no label. It is dropped and counted.
-  - If more than 3% of a point's items drop, fix the rubric before drawing eval.
-  - Nothing else is filtered: items are kept whatever their vote split or intent agreement.
+Generation and labelling run as **Claude Code subagents** exchanging files: a script writes request
+batches, an isolated subagent writes one answer file per batch, a script validates and ingests it.
+These are hosted frontier models at one-off build cost (FR-6, FR-8). The coordinating session never
+generates or labels: it has seen seeds and intents.
+
+- **Generator ≠ labeler.** `opus` generates and `sonnet` labels (stakeholder-set). One model family
+  may share errors. Blindness, intent agreement and the caveat line naming both models are the
+  counterweights. Model ids come from the transcript's `message.model` (e.g. `claude-sonnet-5-5`),
+  not the tier alias. `labels.labeler` is the labeler (AC-4).
+- **Blind.** A request is a closed schema. Its header carries the body's SHA-256. Its body holds
+  the rubric once and, per item, a key random per (item, vote) plus the rendered input (§3.2). No
+  seed, intent, difficulty, design stratum (§Q1.3), split, generator metadata or other vote
+  appears in it.
+  Generator requests hold seeds only (§Q1.4).
+- **Isolation.** The exchange directory is outside the repo, with opaque names and no earlier
+  vote's answers. The tool allowlist is request-read and answer-write only, with **no MCP tool**:
+  some MCP tools read real falkor-chat data, and voiding a run cannot un-send it, so the allowlist
+  is what protects FR-8.
+- **Ingest audit.** From the run's transcript and `.meta.json`
+  (`~/.claude/projects/<slug>/<session>/subagents/agent-<id>.*`). A run is void if any of these hold:
+  - its first user message is not the role's hashed spawn template with only the request path
+    substituted;
+  - its `agentType` is not the role's (so never `fork`);
+  - it uses a tool or path beyond its two files;
+  - an injected `instructions` file is outside the allowlist (root `AGENTS.md`, `CLAUDE.md`,
+    `MEMORY.md`, by name and hash);
+  - any `message.model` is not the pinned id;
+  - the answer lacks the header hash, which ingest recomputes;
+  - a key is missing, or an answer is out of space.
+
+  The `session_context` hash is recorded. U5 commit messages and file names carry counts only.
+- **Reruns.** Every void run is recorded in `runs[]` with its reason. What happens next depends
+  on the class of void:
+  - **Environmental or driver voids** halt the driver and count no attempt. These are a changed
+    `instructions` hash, a moved model id, a wrong `agentType` or a spawn-prompt mismatch. The
+    driver resumes after a recorded decision: re-pin a hash, or ask the stakeholder about a new
+    model id.
+  - **Usage-limit stops** (`<synthetic>`) wait for the next window and count no attempt.
+  - **Run-attributable voids** count toward the cap. These are a tool or path use, an answer-hash
+    mismatch, a missing key or an out-of-space answer. The batch is rerun with fresh keys, and
+    after 3 counted attempts its items drop, counted by reason.
+
+  The driver session runs from a clean directory outside the repo. Its injected context is then
+  near-empty and stable, and that directory holds the exchange files.
+- **Batches.** One point per batch, at most 50 items drawn at random across its design strata,
+  answered one line per key. Each vote re-partitions and reshuffles, so context effects vary across an
+  item's votes.
+- **Majority of three blind votes** per item, each in a separate run with random batch-mates.
+  - A choice item with three different labels is dropped and counted.
+  - Message type labels its first 250 round-1 items as a tranche. If `100·drops > 3·250`, the
+    rubric is fixed and the tranche relabelled. The rule is rechecked over the point before eval is
+    drawn.
+  - Nothing else is filtered.
+- **Sampling.** Temperature is unknown (`labelerTemperature: null`). Effort is pinned per agent
+  definition: `high` for the labeler (the reference), `medium` for the generator. Each run records
+  `thinking` and `effort`.
+- **Provenance.** `promptSha256` covers the agent definition, spawn template, rubric and request
+  template. Each run records the Claude Code version, agent id, model id, request hash,
+  `instructions` hashes and tokens.
 - **Diagnostics** (exploratory, per answer class):
-  - unanimity (the 3–0 share), the labeler's own consistency ceiling; near 0.90, FR-10's bar
-    sits at label-noise level.
-  - intent-label agreement.
-- `labelVotes` is stored per item for §Q7. It maps every answer in the point's answer space to its
-  vote count, and the counts sum to 3. Predicate answers are `yes` and `no`; a choice uses all five
-  labels, zeros included. It is not an input field, so it never enters `input_hash`.
+  - **Pair agreement**, a label-noise indicator, not a ceiling: the majority is less noisy than one
+    vote. The 3–0 share prints beside it.
+  - **Intent-label agreement.**
+  - **Position effect.** Answer rate by position decile. Positions are random, so a trend is causal.
+  - **Balance effect.** An item's vote against its batch-mates' answer share under another vote.
+    A negative slope means the labeler balances answers.
+- `labelVotes` (for §Q7, outside `input_hash`) maps the whole answer space, zeros included, to vote
+  counts summing to 3.
 
 ### Q1.3 Clusters, splits and sizes
 
 - **One item per seed, in every split.** Cluster = seed, and splits are drawn by seed with a
-  recorded RNG seed. One item per seed is what makes items independent and keeps
-  `designEffect = 1.0` true (§Q6). Minimal pairs (two variants of one seed) are a U8-only option,
+  recorded RNG seed. One item per seed keeps items independent except through shared generation
+  runs (§Q6). Minimal pairs (two variants of one seed) are a U8-only option,
   priced separately if U8 wants them.
 - **Shingle check.** An eval item that shares an 8-token span with any train or calibration item
   is dropped and counted. Condition sentences are exempt. Tokens are produced by:
@@ -82,8 +133,24 @@ Each item comes from one **seed**, drawn by stratified sampling.
   3. splitting on whitespace.
 
   The check covers the rendered evidence fields only.
-- **Filling cells** by random subsampling within (label × stratum). Generate about 1.6× the
-  target, since labels will not match intents one for one.
+- **Filling cells** by random subsampling within (label × design stratum). The **design stratum**
+  is a table cell's non-label part: evidence kind for guard, and none for join-in and message type.
+  It never includes the intended answer. It is distinct from the pack's `stratum`
+  (`eval`/`side-check`).
+  - Round 1 generates about 1.1× the target under §Q1.1's design.
+  - A short cell is topped up by more draws from the **same design**, restricted to the cell's
+    design stratum but never to an intent. This repeats until every cell fills, and surplus items are
+    unused. Absent generation-context effects, each cell then holds independent draws given
+    (label, design stratum), as round 1 did, so the top-up cannot make a cell easier. Top-up runs
+    pool only short strata, so that condition is checked. Each item records its `genRound`. Within
+    each cell, intent-label agreement and pair agreement print for round 1 against the top-up, as
+    exploratory figures.
+  - A rare label costs about shortfall / P(label | design stratum) draws. The 0.2× planning figure is
+    replaced by round 1's measured rates.
+- **Generation runs.** Each run takes 25 seeds drawn at random across the point's design strata
+  (a seed's label is unknown at generation). A top-up run pools all of the point's short strata.
+  Splits are assigned after labelling, so every run spreads across splits. Each item records
+  `genRunId`. Shared generation context can correlate items within a run, and §Q6 measures that.
 - **Length is reported, not stratified.** An input over the 512-token limit is a forced hand-off
   (§Q4.3). The question's own tokens come out of that budget: about 44 for a short question, by
   the probe's arithmetic. That leaves at most about 1,870 characters of evidence, at an estimated
@@ -101,24 +168,43 @@ Each item comes from one **seed**, drawn by stratified sampling.
 | `join-in-judge` | label (2) | **100** (FR-11 binds) | 200 | = eval | ≥ 1,000 |
 | `message-type-classifier` | label (5) | **60** (floor 52) | 300 | = eval | ≥ 1,500 |
 
-These sizes **replace the plan's prior of ~50 per cell**. FR-11's 200 is a floor, not a target.
+FR-11's 200 is a floor, not a target.
 - **Guard: 100 per cell.** At 50 per cell, parity can only detect a 13.1–19.9 pp worsening
   (§Q3.3), against stored incumbent error rates of 10–13%. At 100 per cell that falls to
   6.7–14.1 pp. The cost is about 5 min per chat arm (§Q4.4).
-- **Message type: 60 per label.** "About 40 per label" is just 200 / 5. The criterion is that one
-  class truly at 0.85 passes with probability ≤ 0.20 (§Q5.3).
+- **Message type: 60 per label.** The criterion: one class truly at 0.85 passes with probability
+  ≤ 0.20 (§Q5.3).
   - Under `10·k ≥ 9·n` that probability is a sawtooth in n, with local worsts at multiples of 10:
     0.263 at 40, 0.219 at 50, 0.185 at 60.
   - Every n ≥ 52 meets the criterion, so **52 is the floor** and 60 the round design size.
   - A class withheld below 52 shows in its printed n (`docs/plans/typed-decision-models2.md` §3.6).
 
-**Labelling volume (stakeholder-accepted 2026-10-30).**
-- **Kept items.** Eval is 900 (400 + 200 + 300), and calibration matches it: 1,800 kept items.
-- **Labelling.** With 1.6× over-generation that is about 2,880 items labelled, × 3 votes ≈ 8,640
-  labeller calls. That is about 14× the plan's prior reading of 600 single-labelled items. There
-  is also one generator call per seed.
-- **If U8 runs,** its train split (≥ 3,500 kept) adds about 16,800 calls, about 42× in total.
-- `fr10.py` prints this arithmetic.
+**Labelling volume (stakeholder-set 2026-10-31: full sizes, pilot first).**
+- **Counts.** 1,800 kept (eval 900 = 400 + 200 + 300, calibration the same). About 2,340 labelled,
+  7,020 item-votes, 150 sonnet runs and 97 opus runs (batched per round and vote). U8's train
+  split (≥ 3,500 kept) adds about 13,650 item-votes.
+- **Tokens:** runs × F + items × c, with F the per-run floor and c the per-item marginal. These are
+  bounds, pending the pilot.
+  - **Pessimistic, about 110M.** F = 143k, c = 8k. The smallest completed subagent run in this
+    repo made 3 calls and processed 133k.
+  - **Optimistic, about 23M.** F ≈ 66k, which is 3 calls at the smallest first-turn context (22k);
+    c ≈ 1.2k to generate and 0.6k to label.
+  - How cached and per-tier tokens count against the usage limit is unknown.
+- **Pilot, on guard.**
+  - **Runs.** 100 items from 4 generation runs. Votes 1–3 are labelled at 50 per batch (6 runs),
+    plus one screen vote at 10 per batch (10 runs). That is 1.7M–6.9M tokens.
+  - **Screen.** `D(x, y)` is the share of the 100 items labelled differently by a vote at batch
+    size x and one at size y. If `D(50, 10) − D(50, 50) ≥ 0.10`, the cap becomes 25, and
+    labelling needs about 291 runs.
+  - **Power** (normal approximation, SE ≈ 0.055). The screen triggers with probability 0.03 at no
+    gap, 0.77 at 14 pp and 0.97 at 20 pp, so it catches gross effects only.
+  - **Pilot items are discarded,** and their seeds are not reused.
+  - **Outputs.** F and c per role (input, cache-write, cache-read, output), the `D` values and the
+    cap, audit voids and reruns, and the reprojected tokens per point.
+  - **Decision.** `teco` takes these to the stakeholder, who decides before guard's full spend.
+- **Spend point by point:** guard, then message type, then join-in. Each point is complete on its
+  own and may fall in a later usage window. If usage runs out, stop at a point boundary.
+- `fr10.py` prints these figures.
 
 ### Q1.4 Side-check items are never generation material
 
@@ -473,7 +559,7 @@ each candidate item costs 20 ms, plus the LLM's latency in a random hand-off sub
 - **Metric.** For each true answer `j`, `a_j = k_j/n_j` over scored eval items labeled `j` (§Q4.3).
 - **Bar.** `bar_holds(k_j/n_j, 0.90, direction="at-least")`, evaluated as `10·k_j ≥ 9·n_j`. FR-10
   holds iff every class meets it, in every replicate, and §Q4.2 also holds.
-- **Interval.** Wilson 95% per class, printed beside it.
+- **Interval.** Wilson 95% per class, printed beside it, at §Q6's design effect.
 
 ### Q5.2 The five-label family: no correction
 
@@ -515,19 +601,32 @@ FR-10 is not met, on `escalation`. AC-15's always-majority arm scores 0/60 on fo
 
 ## Q6 — Determinism and replicate runs
 
-**Method.** `designEffect = 1.0, basis = "by-construction"` stands for candidate runs. A bar claim
-needs **two load replicates** of the candidate arm, and a bar is met only if it is met in both
-(stakeholder-confirmed 2026-10-30).
+**Method.** A bar claim needs **two load replicates** of the candidate arm. A bar is met only if
+it is met in both (stakeholder-confirmed 2026-10-30).
+
+**Design effect.** A per-cell design effect is estimated at report time from the pack's
+`genRunId`, with provenance `designEffectSource: "genRunId ICC"`. It never touches
+`RunResult.basis`, which is the load rule's closed `stats.Basis`. The run-level
+`RunResult.designEffect` stays 1.0.
+- **Estimate.** For each FR-1 cell, or each FR-10 class, take the per-item outcome: discordance for
+  FR-1, agreement for FR-10. Group the items by `genRunId` and take the one-way ANOVA ICC. Then
+  `designEffect = max(1.0, 1 + (m₀ − 1)·ICĈ)`, with Kish's `m₀ = Σm²/Σm` over the cell's
+  per-run counts `m`. The plain mean would under-correct the short cells that pooled top-up runs
+  load.
+- **Scope.** The estimate reaches only the limits, never a decision (§Q3.2): FR-1's MDD and FR-10's
+  Wilson intervals, both stated at `n / designEffect` (FR-10's at `k/DE` of `n/DE`).
+- **Size.** With randomised round-1 runs, `m₀` is about 3 per cell, so the effect is small and its
+  estimate noisy. The floor at 1.0 keeps it from shrinking a limit.
 
 **The cost.** One extra candidate run per point, about 5 min at 400 items. It also raises the false
 fail of a candidate exactly as good as the incumbent (§Q3.2 gives the figures).
 
-- **The basis stands:** it concerns unit independence. Within a run:
-  - each eval item is its own cluster (§Q1.3);
+- **Within a load, inference is conditional.** Within a run:
+  - items are independent apart from shared generation runs, which `designEffect` covers;
   - every item runs on one load (the load rule below);
   - Laya is deterministic within a load.
 
-  So inference is exact for "this candidate under this load": the load is one shared draw the run
+  So inference is for "this candidate under this load": the load is one shared draw the run
   is conditional on, not clustering, and no within-run design effect represents it.
 - **Replicates are needed.** The deployed model runs under another load. The requirements record
   14/30 vs 12/30 across two loads at a 0.5 cut-off, so at least 6.7% of those items flipped. A band
@@ -538,7 +637,7 @@ fail of a candidate exactly as good as the incumbent (§Q3.2 gives the figures).
   3. Reload the **decision model only**, then run replicate 2. The hand-off LLM's load, shared with
      the incumbent by FR-3's pairing, is not under test.
 - **Rule.** FR-1 (each cell), FR-2 and FR-10 are evaluated per replicate, each against the one
-  incumbent run. A split result prints `unstable across loads — not met`. The conjunction only
+  incumbent run. A split result prints `unstable across replicates — not met`. The conjunction only
   makes bars harder, as §Q3.2 requires.
 - **Diagnostic.** Print the replicate disagreement in final answer and in `decidedBy`, each as
   `k/n` with Wilson.
@@ -598,8 +697,9 @@ refit on the served GGUF.**
 
 ## Handed to architect
 
-Items 1–6 are the v1.5/v1.6 additions to `docs/plans/typed-decision-models2.md`. Earlier items
-are absorbed there, and this list is removed once the plan absorbs these.
+Items 1–6 are the v1.5/v1.6 additions to `docs/plans/typed-decision-models2.md`, and items 7–11
+the v1.7/v1.8 ones. Earlier items are absorbed there, and this list is removed once the plan absorbs
+these.
 1. **§3.3 / §3.7: over-limit detection (§Q4.3).** `LMStudioCallFailed` gains a structured `body`
    field; falkor-chat's `ProviderCallError.detail` already carries it. Both clients match
    `too large to process`, with the verbatim probe body pinned as a fixture beside
@@ -614,6 +714,45 @@ are absorbed there, and this list is removed once the plan absorbs these.
    `max(probabilities)`'s AUC (§Q2.5).
 6. **§5: an offline test (U1e or U2)** feeds the pinned 500 body through `decide` and the runner,
    since eval may hold no over-limit item.
+7. **v1.3 §3.4, U5 brief, §6 assumptions: transport.** Replace `labeler.py`,
+   `ANTHROPIC_API_KEY` and the `-m live` test with five parts, each per §Q1.2:
+   - a request writer;
+   - two agent definitions (allowlist, effort, hashed spawn template);
+   - an ingester running every audit check, idempotent on a re-sent answer and refusing a second
+     answer to one request;
+   - a **run driver** naming the session that spawns runs. It works from the queue and template
+     only, from a clean directory outside the repo. It resumes across usage windows from on-disk
+     batch state (pending, ingested, void, halted) and applies the rerun classes: an environmental
+     or driver void halts it pending a recorded decision;
+   - offline tests on fixture transcripts.
+8. **Plan2 §3.5 `generation.json`.**
+   - `generator`/`labeler` become `{surface: "claude-code-subagent", tier, model, effort}`, and
+     the distinct-id refusal stays.
+   - `labelerTemperature: null`.
+   - `promptSha256` gains `agentDefinition` and `spawnTemplate`.
+   - `runs[]` holds §Q1.2's per-run record, plus role and status with reason, reruns included.
+   - `dropped` gains `retryCapExceeded`.
+9. **Plan2 §3.5 items and labelling.**
+   - Items carry `genRunId` and `genRound`, which the importer copies outside
+     `INPUT_FIELDS_BY_ROLE`.
+   - Add §Q1.2's diagnostics and message-type tranche.
+   - Add §Q1.3's top-up and generation-run rules.
+10. **Plan2 §5 U5 tests.** These cover:
+    - every audit refusal;
+    - the closed request schema, with a planted extra field as its positive control;
+    - a top-up never conditioning on intent;
+    - generation runs spanning cells;
+    - the driver resuming without re-sending ingested batches.
+11. **Sequencing and U7.**
+    - The pilot (§Q1.3) runs first. Its outputs go in the ledger, and `teco` takes them to the
+      stakeholder before guard's full spend.
+    - The points then run in order, each starting only after the one before it.
+    - **Design effect (§Q6).** The report computes it per cell from the pack's `genRunId`, and
+      passes it to `parity_cell` and FR-10's intervals with `designEffectSource` printed.
+      - `RunResult.designEffect` (1.0) and `basis` are unchanged.
+      - Plan2 §3.4's "final" `designEffect = 1.0` is superseded for the limits.
+      - U3c.2's `run.designEffect` call site (`report.py`) becomes per-cell.
+      - `compare_report`'s max-designEffect rule keeps reading the run-level value.
 
 ## Reproducing the figures
 

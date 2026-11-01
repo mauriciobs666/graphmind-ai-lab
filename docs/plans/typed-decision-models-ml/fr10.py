@@ -49,17 +49,44 @@ if __name__ == "__main__":
         lo, hi = wilson(k, 60)
         print(f"  {lab:<10} {k}/60 = {k / 60:.3f} [{lo:.3f}, {hi:.3f}] {'met' if 10 * k >= 9 * 60 else 'not met'}")
 
-    print("\n§Q1.3 labelling volume (labeller calls; one variant per cluster in eval and calibration)")
-    eval_items = 4 * 100 + 2 * 100 + 5 * 60
-    kept = 2 * eval_items  # calibration = eval
-    prior_calls = 3 * 200  # plan prior: 200 eval items per point, labelled once
-    over, votes = 1.6, 3
-    labelled = kept * over
-    calls = labelled * votes
+    print("\n§Q1.3 labelling volume (subagent runs, three votes per item, two-round fill)")
+    kept_by_point = {"guard": 2 * 4 * 100, "join-in": 2 * 2 * 100, "message-type": 2 * 5 * 60}  # calibration = eval
+    rounds = (1.1, 0.2)  # round 1, then same-design top-up: planning figures, replaced by round 1's P(label | stratum)
+    b_gen = 25
+
+    def ceil(x):
+        return int(-(-x // 1))
+
+    def volume(b_label):
+        labelled = votes = label_runs = gen_runs = 0
+        for k in kept_by_point.values():
+            for r in rounds:
+                n = round(k * r)
+                labelled += n
+                votes += 3 * n
+                label_runs += 3 * ceil(n / b_label)  # each vote re-partitions the round
+                gen_runs += ceil(n / b_gen)
+        return labelled, votes, label_runs, gen_runs
+
+    kept = sum(kept_by_point.values())
+    labelled, votes, label_runs, gen_runs = volume(50)
+    print(f"kept {kept} (eval {kept // 2} + calibration {kept // 2}); labelled {labelled}; item-votes {votes}")
+    print(f"runs at 50 per label batch: {label_runs} label (sonnet), {gen_runs} generation (opus)")
+    pilot_label, pilot_gen = 3 * 2 + 10, 4  # 100 guard items: votes 1-3 at 50, one screen vote at 10
+    bounds = [("pessimistic", 143e3, 8e3, 8e3), ("optimistic", 66e3, 1.2e3, 0.6e3)]
+    for name, F, c_gen, c_lab in bounds:
+        tokens = (label_runs + gen_runs) * F + labelled * c_gen + votes * c_lab
+        pilot = (pilot_label + pilot_gen) * F + 100 * c_gen + 400 * c_lab
+        print(f"tokens processed, {name} (F={F / 1e3:.0f}k, c_gen={c_gen / 1e3:.1f}k, "
+              f"c_label={c_lab / 1e3:.1f}k): {tokens / 1e6:.0f}M; pilot {pilot / 1e6:.1f}M")
+    _, _, label_runs_25, _ = volume(25)
+    print(f"pilot: {pilot_gen} generation + {pilot_label} label runs; if the screen sets the cap to 25: "
+          f"{label_runs_25} label runs")
     train_kept = 1000 + 1000 + 1500
-    train_calls = train_kept * over * votes
-    print(f"eval {eval_items}, eval+calibration kept {kept} ({kept / 600:.1f}x the prior's 600 items)")
-    print(f"labeller calls without over-generation {kept * votes} ({kept * votes / prior_calls:.0f}x prior {prior_calls})")
-    print(f"with {over}x over-generation: {labelled:.0f} items labelled, {calls:.0f} calls ({calls / prior_calls:.1f}x)")
-    print(f"U8 train split (kept {train_kept}): +{train_calls:.0f} calls; total {calls + train_calls:.0f} "
-          f"({(calls + train_calls) / prior_calls:.0f}x)")
+    print(f"U8 train split (kept {train_kept}, {sum(rounds):.1f}x labelled, three votes): "
+          f"+{round(train_kept * sum(rounds) * 3)} item-votes")
+    from math import erf
+    se = sqrt(0.30 / 100)  # paired disagreement gap, 100 items, d ~ 0.15 per comparison
+    trigger = {g: 0.5 * (1 + erf((g - 0.10) / (se * sqrt(2)))) for g in (0.0, 0.10, 0.14, 0.20)}
+    print(f"pilot screen (gap >= 0.10, normal approx., SE {se:.3f}): P(trigger | true gap) "
+          + " ".join(f"{g:.2f}:{p:.2f}" for g, p in trigger.items()))

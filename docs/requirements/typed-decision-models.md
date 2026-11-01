@@ -1,6 +1,6 @@
 # Typed Decision Models (Jev/Laya-style "System 1") — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-30
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-31
 
 ## Intent
 
@@ -278,3 +278,13 @@ on calibration data still measured on the evaluation set? → **Yes, every fitte
 measured once; that run counts toward the reuse count.** (FR-4)
 2026-10-30 — (Method note review Pass 5, P5-m6, clarification) Must the input generator be the
 labeler? → **No: inputs come from a hosted frontier model, which need not be the labeler.** (FR-8)
+2026-10-31 — (Method note revision U0c) How are generation and labelling run with no
+`ANTHROPIC_API_KEY`? → **Through Claude Code subagents (file exchange), not the API:** "I don't
+have an API key to use and you will need to classify yourself". (FR-6, FR-8 unchanged)
+2026-10-31 — Which models generate and which label? → **Generator opus, labeller sonnet.** Refines
+the 2026-10-30 "Which LLM produces the labels?" entry; replaces a same-day "use opus for labeling"
+answer that was never logged here or acted on. (FR-6, FR-8, AC-4)
+2026-10-31 — (Method note revision U0c, Q4) With no API, at what size is labelling spent? → **Full
+sizes, pilot first; spent point by point (guard → message type → join-in) across usage windows,
+stopping at a point boundary if usage runs out.** Replaces the API-cost basis of the 2026-10-30
+(P5-M3b) "full design size accepted" entry. (no FR change)
