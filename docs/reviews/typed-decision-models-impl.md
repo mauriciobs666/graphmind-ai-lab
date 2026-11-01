@@ -3464,3 +3464,127 @@ ICC was estimated.**
 None. P26-m1 is the second instance of a loader-versus-validator gap, after P25-m1, but in a
 different form: a renderer trusting record ids. Its fix mirrors an existing guard, so it does not
 yet justify a rule.
+
+## Pass 27 — U3e.3 family-pooled design effect (2026-11-01)
+
+*2026-11-01. Gate of U3e.3, uncommitted in `model-bench/`. The note and plan changes are committed
+at `749154e8`. Files: `modelbench/decision_stats.py`, `modelbench/report.py`, the three
+decision-stats and decision-bar test files, `README.md` and `docs/HISTORY.md`. Read against the
+note v1.14 §Q6 "Design effect" (`docs/plans/typed-decision-models-ml.md`), plan4 v1.3 §3.9 and
+§5's U3e.3 row, and the hand fixture in `docs/reviews/typed-decision-models.md` Pass 13.
+`decision-models/` was not opened.*
+
+**Verdict: approve.** The code is faithful to §Q6 and §3.9 on every point the brief lists:
+- the contributing rule (`g_c ≥ 2`, `N_c > g_c`);
+- per-cell sums of squares, the pooled `n₀`, the unfloored `icc`, and each cell's own Kish `m₀`;
+- 1.00 for an empty cell, and the formula for a non-empty non-contributing cell;
+- both reason texts, verbatim;
+- the family line's place and format, FR-10 pooling every class including empty ones, and FR-1
+  pooling the four verdict cells on `cand ≠ inc`.
+
+There are no blockers, majors or minors. There is one nit. Question 2 is a method question and goes
+to `data-scientist`.
+
+**Checks run** (from `model-bench/`, with a private `PYTHONPYCACHEPREFIX`):
+- **Suite:** `3619 passed, 5 deselected, 2 xfailed`. Ruff is clean. The test-function counts
+  match `HISTORY.md`: 96 → 101, 53 → 57 and 24 → 29.
+- **Independent recomputation** (`scratchpad/p27/indep.py`): exact `Fraction` arithmetic written
+  apart from the code.
+  - On Pass 13's fixture it gives `ICĈ = 721/2557` and `contributing = 2`, with DE A 1.403,
+    B 1.677, C 1.282, D 1.000 and an empty E 1.000. `family_design_effect` returns the same.
+  - On the FR-10 clustered fixture as its docstring describes it, it gives `ICĈ = 0.76230`,
+    `yes` 9.64 and `no` 26.92.
+- **Mutants:** 4 of mine, run against the three test files. Each file was copied to
+  `scratchpad/p27/` first, then restored and checked with `cmp`.
+
+  | Mutant | Result |
+  |---|---|
+  | Z1 FR-1 discordance `cand and not inc` (P26-m2's guard, re-run against the family form) | red (1) |
+  | Z4 `n₀` divided by `Σ(N_c − g_c)` instead of `Σ(g_c − 1)` | red (10) |
+  | Z11 FR-1 family over every paired metric (pooled and side check), not the four cells | red (27) |
+  | Z12 an empty cell's `m₀` set to 2 (it would take the formula) | red (1) |
+- **Removal of `design_effect(outcomes_by_run)`:** a grep finds no reference to `design_effect(`
+  or `_cell_design_effect` left in `modelbench/`, `tests/` or `scripts/`. The remaining
+  `design_effect` names are `parity_cell`'s keyword and `stats.design_effect` in `runner.py`, which
+  is unrelated. `README.md` and `AGENTS.md` name neither. `HISTORY.md` records the removal.
+
+CPG: considered, not relevant — no model-bench CPG is loaded. The change was read, recomputed and
+mutated directly.
+
+### Pass 26 dispositions
+
+- **P26-m1:** fixed. The ghost-id probe, re-run, gives exit 0 and "not assessable (cannot read this
+  replicate's items: agreement_items: no eval stratum in the pack for items ['ghost-item'])".
+- **P26-m2:** fixed. A *c*-direction test is present (`b=0, c=4`, `test_decision_bar.py:922-929`),
+  and Z1 is red.
+- **P26-n1:** superseded. §Q6 now prints a not-estimable family line, and its "a fallback never as
+  a measurement" is met.
+- **P26-n2:** fixed. No `README.md` line is over 101 characters.
+- **The routed questions (`n₀`; DE ≤ m₀ and a cap):** answered by note v1.14 §Q6. `n₀` is now stated
+  there, and "Rejected: a cap below `m₀` …".
+
+### The five questions
+
+1. **Exact match to §Q6 and §3.9: yes.**
+   - **Empty and non-contributing cells:** an empty cell gives `m₀ = 1` and so DE 1.0. A
+     non-empty non-contributing cell takes `1 + (m₀ − 1)·ICĈ`, as in the fixture's C (one run,
+     1.282) and D (singletons, 1.000).
+   - **Reasons:** the module constants are character-identical to note line 788.
+   - **Placement:** the family line is appended after the FR-1 heading (`report.py`, in
+     `_render_replicate`) and after the FR-10 heading, before any cell or class line. Tests pin
+     `head + 1` for both bars and one family line per replicate. Early returns print none.
+   - **Format:** `{icc:+.3f}` gives the ASCII sign. The not-estimable form is
+     `… not estimable (<reason>) — DE 1.00`.
+   - **FR-10** passes `agreement.outcomes`, whose every class is present, `()` when empty.
+   - **FR-1** passes exactly `PER_KIND_VERDICT_METRICS` on `cand != inc`. Z11 and Z1 are both red.
+2. **The constant class's DE 26.92 is what §Q6 prescribes as written. Whether it should be is a
+   method question for `data-scientist`.**
+   - **Recomputed:** `no` holds 140 items in 4 runs of 35, all agreeing. It contributes (`g_c =
+     4`, `N_c = 140 > 4`) with zero SSB and SSW, so the pooled `ICĈ = 0.76230` applies:
+     `1 + (35 − 1)·0.7623 = 26.92`.
+   - §Q6 "Per cell" gives every non-empty cell the formula. No exception exists for a cell with no
+     within-cell variation, and "Why pooled" accepts that different ICCs are averaged. So the code
+     is faithful.
+   - **A side effect to put to `data-scientist`:** the constant class *raises* the ICC that then
+     penalizes it. It adds 136 within-cell degrees of freedom and no sum of squares, which lowers
+     MSW: `yes` alone gives ICĈ 0.745 (DE 9.44), and pooled gives 0.762 (DE 9.64).
+   - **What it does in practice:**
+     - `no`'s Wilson interval for 140/140 goes from [0.973, 1.000] at DE 1 to [0.575, 1.000] at
+       26.92. That is Wilson at 5.2 of 5.2, so the class is treated as about five independent
+       items.
+     - It stays bounded: `DE ≤ m₀` gives `n/DE ≥ N/m₀ = N²/Σm² ≥ 1`, and Wilson stays within
+       [0, 1].
+     - It remains limit-only (§Q3.2), because FR-10's state reads the measured `k/n`. The test
+       asserts `DE 26.92 — met`.
+   - This is not a code finding.
+3. **`pooled over 1 cells`: nit at most** (P27-n1).
+4. **Untouched or removed cleanly:** yes.
+   - The diff touches neither `results.py` nor `runner.py`.
+   - `report.py`'s run-level `max(…designEffect…)` sites are outside the hunks, and `compare_report`
+     is untouched.
+   - A test pins `RunResult.designEffect == 1.0` on the stored records.
+   - The removal of `design_effect(outcomes_by_run)` is covered under "Checks run".
+5. **Growth-stops:** see below.
+
+### Findings
+
+**P27-n1 (nit; `data-scientist` for the note's template, then the same implementer). `pooled over 1
+cells` / `1 classes`.**
+- §Q6 "Print" gives the template with a fixed plural, and the code renders it literally. A
+  one-contributing-cell family therefore reads `pooled over 1 cells`. The rendering test pins
+  `pooled over 1 classes`.
+- If wanted, the note gains a singular form (`cell`/`class` at `k = 1`). Then
+  `_family_design_effect_line` and that test follow. Nothing else depends on the string.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** is unchanged at 2,490 words, and nothing in it is now wrong.
+- **`README.md`**: the bar-section sentence is rewritten in place for the family line. The old
+  per-cell `(genRunId ICC)` wording is gone, not kept beside the new text. No line is over 101
+  characters.
+- **`HISTORY.md`**: one new entry, read by lookup. Its counts reproduce. It sits above, and does not
+  edit, the U3e.2 entry it supersedes.
+
+### Proposed REVIEW.md lines
+
+None.

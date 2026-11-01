@@ -216,8 +216,8 @@ def test_ac15_an_always_no_arm_on_a_70_30_set_does_not_meet_the_bar(tmp_path):
     _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
     text = _report(tmp_path, *_two_loads(tmp_path, JOIN_IN, default="no"))
     assert _class_lines(text) == [
-        "  - agreeWhenYes: 0/60 items [0.000, 0.060]; DE 1.00 (genRunId ICC) — not met",
-        "  - agreeWhenNo: 140/140 items [0.973, 1.000]; DE 1.00 (genRunId ICC) — met",
+        "  - agreeWhenYes: 0/60 items [0.000, 0.060]; DE 1.00 — not met",
+        "  - agreeWhenNo: 140/140 items [0.973, 1.000]; DE 1.00 — met",
     ]
     assert "- FR-10 per-class agreement (replicate 1): not met" in text
     assert "- FR-10 per-class agreement (replicate 2): not met" in text
@@ -263,7 +263,7 @@ def test_note_q54_worked_example_misses_on_escalation_with_the_notes_intervals(t
     assert "per-class 95% Wilson, not simultaneous" in text
     assert _class_lines(text) == [
         f"  - agree[{label}]: {_Q54_AGREEING[label]}/60 items {_Q54_WILSON[label]}; "
-        "DE 1.00 (genRunId ICC) — "
+        "DE 1.00 — "
         + ("not met" if label == "escalation" else "met")
         for label in MESSAGE_TYPE_LABELS
     ]
@@ -306,7 +306,7 @@ def test_a_class_with_no_scored_item_is_not_assessable_and_never_met(tmp_path):
     text = _report(tmp_path, *_two_loads(tmp_path, MESSAGE_TYPE))
     lines = _class_lines(text)
     assert lines[3] == (
-        "  - agree[escalation]: 0/0 items [—]; DE 1.00 (genRunId ICC) — not assessable (no scored "
+        "  - agree[escalation]: 0/0 items [—]; DE 1.00 — not assessable (no scored "
         "eval item in this class)"
     )
     assert "    - scored n 0 beside method minimum 52 (design 60) — below it: printed, never " \
@@ -628,9 +628,9 @@ def test_the_class_interval_takes_the_design_effect_as_k_over_de_of_n_over_de():
     assert wide[1] - wide[0] > (lambda lo_hi: lo_hi[1] - lo_hi[0])(stats.wilson_interval(54, 60))
 
 
-# --- the per-class design effect (plan4 §3.9, §5 U3e.2; note §Q6 "Design effect") -----------------
+# --- the family-pooled design effect (plan4 §3.9, §5 U3e.3; note §Q6 "Design effect") ------------
 
-_DE_TEXT = r"; DE (\d+\.\d\d) \(genRunId ICC\)"
+_DE_TEXT = r"; DE (\d+\.\d\d) — "
 
 
 def _regroup(root: Path, gen_run_ids: dict[str, str]) -> None:
@@ -667,3 +667,86 @@ def test_a_class_whose_misses_share_one_run_widens_its_interval_at_k_over_de(tmp
     for line in (spread, clustered):
         assert line.startswith("  - agreeWhenYes: 54/60 items [")
         assert line.endswith("— met")
+
+
+def _family_lines(text: str, replicate: int = 1) -> list[str]:
+    return [line for line in _block(text, replicate).splitlines()
+            if line.startswith("  - design effect:")]
+
+
+def test_the_family_line_sits_once_under_the_fr10_heading_ahead_of_the_first_class(tmp_path):
+    """Note §Q6 "Print": AC-15's always-no arm agrees on no `yes` and on every `no`, so both
+    classes are constant: not estimable, DE 1.00 everywhere, one line per replicate directly
+    under the bar's heading."""
+    _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+    text = _report(tmp_path, *_two_loads(tmp_path, JOIN_IN, default="no"))
+    for replicate in (1, 2):
+        lines = _block(text, replicate).splitlines()
+        head = next(i for i, x in enumerate(lines) if x.startswith("- FR-10 per-class agreement,"))
+        assert lines[head + 1] == (
+            "  - design effect: genRunId ICC not estimable (outcome constant in every "
+            "contributing cell) — DE 1.00"
+        )
+        assert lines[head + 2].startswith("  - agreeWhenYes: ")
+        assert len(_family_lines(text, replicate)) == 1
+    for line in _class_lines(text):
+        assert decision_stats.DESIGN_EFFECT_SOURCE not in line
+
+
+def test_misses_spread_over_runs_give_a_negative_pooled_icc_floored_at_one(tmp_path):
+    """Six `yes` misses on it-000..005 (runs 0, 1, 2, 3, 0, 1), `no` all agreeing. Hand-computed
+    apart from the code (exact fractions): ICĈ = −0.02459, over both classes; floored DE 1.00."""
+    _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+    misses = {i: ("ok", False) for i in _ids(JOIN_IN, True, _JOIN_70_30, 6)}
+    text = _report(tmp_path, *_two_loads(tmp_path, JOIN_IN, misses))
+    assert _family_lines(text) == ["  - design effect: genRunId ICC -0.025 pooled over 2 classes"]
+    assert [line.split("; ")[1] for line in _class_lines(text)] == [
+        "DE 1.00 — met", "DE 1.00 — met",
+    ]
+
+
+def test_misses_sharing_one_run_pool_their_icc_into_the_constant_class(tmp_path):
+    """The six `yes` misses regrouped into one eight-item run `hot` (two agreeing), the rest of
+    `yes` 13 per run, `no` 35 per run and constant. Hand-computed apart from the code: ICĈ =
+    0.76230, so `yes` (m₀ = 248/60) takes 9.64 and `no` (m₀ = 35) takes 26.92 — the pooling
+    cost note §Q6 states. A per-class estimate would leave `no` at 1.00."""
+    _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+    _regroup(tmp_path, dict.fromkeys(_ids(JOIN_IN, True, _JOIN_70_30, 8), "hot"))
+    misses = {i: ("ok", False) for i in _ids(JOIN_IN, True, _JOIN_70_30, 6)}
+    text = _report(tmp_path, *_two_loads(tmp_path, JOIN_IN, misses))
+    assert _family_lines(text) == ["  - design effect: genRunId ICC +0.762 pooled over 2 classes"]
+    assert [line.split("; ")[1] for line in _class_lines(text)] == [
+        "DE 9.64 — met", "DE 26.92 — met",
+    ]
+
+
+def test_an_early_return_fr10_replicate_prints_no_family_line(tmp_path):
+    _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+    first, second = _two_loads(tmp_path, JOIN_IN)
+    items = tuple(replace(i, scoreable={}, counts={}) if i.itemId == "it-050" else i
+                  for i in second.items)
+    text = _report(tmp_path, first, replace(second, items=items))
+    assert "aggregates disagree" in _block(text, 2)
+    assert _family_lines(text, 2) == []
+    assert len(_family_lines(text, 1)) == 1
+
+
+def test_the_family_line_renders_the_notes_three_forms():
+    """Note §Q6 "Print": a signed 3-dp ICC with an ASCII sign and `<k>` cells or classes, or the
+    not-estimable form with its reason."""
+    est = decision_stats.FamilyDesignEffect(0.0344, None, 3, {})
+    neg = decision_stats.FamilyDesignEffect(-0.0121, None, 1, {})
+    off = decision_stats.FamilyDesignEffect(
+        None, decision_stats.NOT_ESTIMABLE_NO_CONTRIBUTING, 0, {}
+    )
+    assert report._family_design_effect_line(est, "cells") == (
+        "design effect: genRunId ICC +0.034 pooled over 3 cells"
+    )
+    assert report._family_design_effect_line(neg, "classes") == (
+        "design effect: genRunId ICC -0.012 pooled over 1 classes"
+    )
+    assert report._family_design_effect_line(off, "classes") == (
+        "design effect: genRunId ICC not estimable (no cell spans two runs with one holding two "
+        "of its items) — DE 1.00"
+    )
+    assert report._design_effect_text(1.0) == "DE 1.00"

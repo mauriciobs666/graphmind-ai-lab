@@ -320,3 +320,15 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - **teco line check: met.** No row cites an attachment for a non-allow outcome (`hook_blocking_error` and the denying entry: 0 hits). The remaining mentions of `hookDenied`, `guardError` and `permissionDenied` are the revision line, plus §3.4's 'replaces plan4's counted `hookDenied` row'.
 
   Committed with report §10 and the ledger. **The U5.5 fix round is unblocked**: a fresh tdd-engineer (a9fa7d0ca92fadb1a is at 206k), against plan6 v1.5 §3.3/§3.4/§5 U5.5 plus P8-F3–F6. Re-gate on `analyst` a045d38ef791e1ace (Pass 9 in `docs/reviews/typed-decision-models4-impl.md`).
+- 2026-11-01: Dispatched U3e.3 → fresh tdd-engineer abe497c454455270a (model-bench; plan4 §3.9 and the U3e.3 row; baseline 3605). Dispatched the U5.5 fix round → fresh tdd-engineer aa6a62c59d3f9b9bd (decision-models; plan6 v1.5 §3.3/§3.4/U5.5, plus P8-F3–F6). The two have disjoint trees and run in parallel.
+- 2026-11-01: U3e.3 delivered (tdd-engineer abe497c454455270a, 140.9k tokens / 41 tools).
+  - teco's re-run: 3619 passed, 5 deselected, 2 xfailed (3605 before); ruff clean.
+  - The 3 required mutants and 12 extras are all killed.
+  - teco's mutant (the ids reversed against the outcomes in `_family_design_effect`) → 4 red; file restored and cmp'd.
+  - The report flags a constant FR-10 class taking DE 26.92 under a pooled ICC of 0.762 (the note's stated pooling cost), plus a `1 cells` plural.
+
+  Gate → `analyst` a02c86cb14ba399b7, impl Pass 27, with the constant-class question routed onward to `data-scientist` if it is a method question.
+- 2026-11-01: Pass 27 (U3e.3; analyst a02c86cb14ba399b7) → **approve**. P26 is fully closed.
+  - DE 26.92 is faithful to §Q6 as written; the constant-class question, P27-n1 (the `1 cells` plural) and a side effect go to `data-scientist` a615087b155a2f402. The side effect: a constant cell lowers MSW and so raises the pooled ICC.
+  - The question is limit-only (§Q3.2) and bounded (DE ≤ m₀), so it does not block the commit.
+  - U3e.3 committed with Pass 27. Next model-bench units: U6.6, then U2.4. A note change from the DS ruling would become a small U3e.4.

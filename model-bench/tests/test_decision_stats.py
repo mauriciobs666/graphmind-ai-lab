@@ -376,67 +376,155 @@ def test_parity_cell_shaping_arguments_are_keyword_only_with_no_default():
         assert params[name].default is inspect.Parameter.empty
 
 
-# --- design_effect (note §Q6 "Design effect"; plan4 §3.9, §5 U3e.2) -------------------------------
+# --- family_design_effect (note §Q6 "Design effect"; plan4 §3.9, §5 U3e.3) ------------------------
 #
-# One-way ANOVA ICC over the cell's per-run outcomes, then `max(1, 1 + (m₀ − 1)·ICĈ)` with Kish's
-# `m₀ = Σm²/N`. Every expected figure is hand-computed in its comment.
+# One ICC pooled over a family's contributing cells (`g_c ≥ 2`, `N_c > g_c`), each cell's sums of
+# squares about its own mean, the pooled `n₀`; then per cell `max(1, 1 + (m₀ − 1)·ICĈ)` with the
+# cell's own Kish `m₀ = Σm²/Σm`. Every expected figure is a literal: the review's hand fixture
+# (`docs/reviews/typed-decision-models.md` Pass 13) or hand-computed in its comment — never
+# recomputed by the code under test.
 
 _T, _F = True, False
 
-
-def test_design_effect_is_one_for_a_single_run():
-    assert decision_stats.design_effect({"r1": [_T, _F, _T, _T, _F]}) == 1.0
-
-
-def test_design_effect_is_one_when_every_run_holds_one_item():
-    # N = g: MSW has no degrees of freedom.
-    assert decision_stats.design_effect({"r1": [_T], "r2": [_F], "r3": [_T]}) == 1.0
-
-
-def test_design_effect_is_one_for_constant_outcomes():
-    # MSB = MSW = 0: the ICC's denominator is 0.
-    assert decision_stats.design_effect({"r1": [_T, _T], "r2": [_T, _T, _T]}) == 1.0
-    assert decision_stats.design_effect({"r1": [_F, _F], "r2": [_F, _F, _F]}) == 1.0
+#: Review Pass 13's hand fixture: A and B contribute; C is one run (`g_c = 1`); D has `N_c = g_c`.
+_HAND = {
+    "A": {"a1": [_T, _F, _F], "a2": [_F, _F], "a3": [_T, _T]},
+    "B": {"b1": [_F, _F, _F, _T], "b2": [_F]},
+    "C": {"c1": [_T, _F]},
+    "D": {"d1": [_T], "d2": [_F]},
+}
 
 
-def test_design_effect_is_one_for_no_items():
-    assert decision_stats.design_effect({}) == 1.0
+def test_family_design_effect_pools_one_icc_over_the_hand_fixture():
+    # Pass 13: MSB = 461/1260, MSW = 17/84, n₀ = 72/35 → ICĈ = 721/2557. A per-cell estimate gives
+    # A 1.691; sums of squares about the grand mean, or n₀ = N/g = 12/5, move ICĈ off 721/2557.
+    got = decision_stats.family_design_effect(_HAND)
+    assert got.icc == pytest.approx(721 / 2557, abs=1e-12)
+    assert got.reason is None
+    assert got.contributing == 2
+    assert dict(got.effects) == pytest.approx(
+        {"A": 1.403, "B": 1.677, "C": 1.282, "D": 1.000}, abs=1e-3
+    )
 
 
-def test_design_effect_matches_the_anova_formula_on_two_equal_runs():
+def test_an_empty_cell_takes_one_and_moves_nothing_else():
+    # Note §Q6 "Per cell": an empty cell (FR-10's `0/0` class) takes 1.00.
+    got = decision_stats.family_design_effect({**_HAND, "E": {}})
+    assert got.icc == pytest.approx(721 / 2557, abs=1e-12)
+    assert got.contributing == 2
+    assert got.effects["E"] == 1.0
+    assert list(got.effects) == ["A", "B", "C", "D", "E"]
+
+
+def test_a_non_contributing_cell_takes_the_pooled_formula():
+    # Note §Q6: a one-run cell takes `1 + (N_c − 1)·ICĈ` — C = 1 + 721/2557, never 1.00.
+    got = decision_stats.family_design_effect(_HAND)
+    assert got.effects["C"] == pytest.approx(1 + 721 / 2557, abs=1e-12)
+
+
+def test_every_cell_single_run_is_not_estimable_and_takes_one():
+    cells = {"A": {"r1": [_T, _F, _T]}, "B": {"r2": [_F, _T]}, "C": {"r3": [_T], "r4": [_F]},
+             "E": {}}
+    got = decision_stats.family_design_effect(cells)
+    assert got.icc is None
+    assert got.reason == decision_stats.NOT_ESTIMABLE_NO_CONTRIBUTING
+    assert got.contributing == 0
+    assert dict(got.effects) == {"A": 1.0, "B": 1.0, "C": 1.0, "E": 1.0}
+
+
+def test_an_empty_family_is_not_estimable_with_no_effects():
+    got = decision_stats.family_design_effect({})
+    assert (got.icc, got.reason, got.contributing, dict(got.effects)) == (
+        None, decision_stats.NOT_ESTIMABLE_NO_CONTRIBUTING, 0, {}
+    )
+
+
+def test_outcome_constant_in_every_contributing_cell_is_not_estimable_and_takes_one():
+    # MSB = MSW = 0 over A and B, while non-contributing C varies (Pass 13, P13-n1).
+    cells = {
+        "A": {"r1": [_T, _T], "r2": [_T, _T, _T]},
+        "B": {"r1": [_F, _F], "r2": [_F]},
+        "C": {"r3": [_T, _F]},
+    }
+    got = decision_stats.family_design_effect(cells)
+    assert got.icc is None
+    assert got.reason == decision_stats.NOT_ESTIMABLE_CONSTANT
+    assert dict(got.effects) == {"A": 1.0, "B": 1.0, "C": 1.0}
+
+
+def test_the_not_estimable_reasons_are_the_notes_texts():
+    assert decision_stats.NOT_ESTIMABLE_NO_CONTRIBUTING == (
+        "no cell spans two runs with one holding two of its items"
+    )
+    assert decision_stats.NOT_ESTIMABLE_CONSTANT == "outcome constant in every contributing cell"
+    assert decision_stats.DESIGN_EFFECT_SOURCE == "genRunId ICC"
+
+
+def test_a_negative_icc_keeps_its_value_and_floors_each_effect_at_one():
+    # r1 = r2 = 1,0: MSB = 0, MSW = 1/2, n₀ = 2 → ICĈ = −.5/.5 = −1; 1 + (2 − 1)·(−1) = 0 → 1.0.
+    # An empty cell E stays at 1.00 here too: `m₀ = 0` would give it 1 − ICĈ = 2.
+    got = decision_stats.family_design_effect({"A": {"r1": [_T, _F], "r2": [_T, _F]},
+                                               "C": {"r3": [_T, _F, _T]}, "E": {}})
+    assert got.icc == pytest.approx(-1.0, abs=1e-12)
+    assert got.reason is None
+    assert dict(got.effects) == {"A": 1.0, "C": 1.0, "E": 1.0}
+
+
+def test_one_contributing_cell_matches_the_anova_formula_on_two_equal_runs():
     # r1 = 1,1,1,0 (mean .75), r2 = 0,0,0,1 (mean .25), grand mean .5, N = 8, g = 2.
     # SSB = 4·.25² + 4·.25² = .5 → MSB = .5; SSW = 2·(3·.25² + .75²) = 1.5 → MSW = 1.5/6 = .25.
     # n₀ = (8 − 32/8)/1 = 4; ICĈ = (.5 − .25)/(.5 + 3·.25) = .2; m₀ = 32/8 = 4 → DE = 1 + 3·.2.
-    got = decision_stats.design_effect({"r1": [_T, _T, _T, _F], "r2": [_F, _F, _F, _T]})
-    assert got == pytest.approx(1.6, abs=1e-12)
+    got = decision_stats.family_design_effect({"A": {"r1": [_T, _T, _T, _F],
+                                                     "r2": [_F, _F, _F, _T]}})
+    assert got.icc == pytest.approx(0.2, abs=1e-12)
+    assert got.effects["A"] == pytest.approx(1.6, abs=1e-12)
 
 
-def test_design_effect_floors_a_negative_icc_at_one():
-    # r1 = r2 = 1,0: MSB = 0, MSW = 1/2, n₀ = 2 → ICĈ = −.5/.5 = −1, and 1 + (2 − 1)·(−1) = 0.
-    assert decision_stats.design_effect({"r1": [_T, _F], "r2": [_T, _F]}) == 1.0
-
-
-def test_design_effect_uses_kish_m0_on_unequal_runs_never_the_mean_size():
+def test_each_cell_uses_its_own_kish_m0_never_the_mean_run_size():
     # r1 = six 1s and two 0s (m = 8, mean .75), r2 = 0,0 (m = 2, mean 0), N = 10, grand mean .6.
     # SSB = 8·.15² + 2·.6² = .9 = MSB; SSW = 6·.25² + 2·.75² = 1.5 → MSW = 1.5/8 = .1875.
     # Σm² = 68: n₀ = (10 − 6.8)/1 = 3.2, ICĈ = .7125/(.9 + 2.2·.1875) = 19/35.
     # Kish m₀ = 6.8 → DE = 1 + 5.8·19/35 = 145.2/35; the mean m̄ = 5 would give 111/35.
-    got = decision_stats.design_effect({"r1": [_T] * 6 + [_F] * 2, "r2": [_F, _F]})
-    assert got == pytest.approx(145.2 / 35, abs=1e-12)
-    assert got != pytest.approx(111 / 35, abs=1e-6)
+    # Cell C (one run of 3): m₀ = 3 → 1 + 2·19/35 = 73/35.
+    got = decision_stats.family_design_effect(
+        {"A": {"r1": [_T] * 6 + [_F] * 2, "r2": [_F, _F]}, "C": {"r3": [_T, _F, _T]}}
+    )
+    assert got.icc == pytest.approx(19 / 35, abs=1e-12)
+    assert got.effects["A"] == pytest.approx(145.2 / 35, abs=1e-12)
+    assert got.effects["A"] != pytest.approx(111 / 35, abs=1e-6)
+    assert got.effects["C"] == pytest.approx(73 / 35, abs=1e-12)
 
 
-def test_design_effect_ignores_run_order_and_names():
-    a = decision_stats.design_effect({"x": [_T] * 6 + [_F] * 2, "y": [_F, _F]})
-    b = decision_stats.design_effect({"b": [_F, _F], "a": [_F, _T, _T, _F, _T, _T, _T, _T]})
-    assert a == pytest.approx(b, abs=1e-12)
+def test_family_design_effect_ignores_run_and_cell_order_and_run_names():
+    a = decision_stats.family_design_effect(_HAND)
+    shuffled = {
+        "D": {"z": [_F], "y": [_T]},
+        "C": {"q": [_F, _T]},
+        "B": {"p": [_F], "o": [_T, _F, _F, _F]},
+        "A": {"n": [_T, _T], "m": [_F, _F], "l": [_F, _T, _F]},
+    }
+    b = decision_stats.family_design_effect(shuffled)
+    assert b.icc == pytest.approx(a.icc, abs=1e-12)
+    assert dict(b.effects) == pytest.approx(dict(a.effects), abs=1e-12)
 
 
-def test_design_effect_refuses_an_empty_run_or_a_non_bool_outcome():
+def test_family_design_effect_refuses_an_empty_run_or_a_non_bool_outcome():
     with pytest.raises(ValueError, match="empty"):
-        decision_stats.design_effect({"r1": [_T, _F], "r2": []})
+        decision_stats.family_design_effect({"A": {"r1": [_T, _F], "r2": []}})
     with pytest.raises(ValueError, match="bool"):
-        decision_stats.design_effect({"r1": [_T, 1], "r2": [_F, _F]})
+        decision_stats.family_design_effect({"A": {"r1": [_T, 1], "r2": [_F, _F]}})
+
+
+def test_family_design_effect_is_a_frozen_record():
+    got = decision_stats.family_design_effect(_HAND)
+    assert dataclasses.is_dataclass(got)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        got.icc = 0.0  # type: ignore[misc]
+
+
+def test_the_per_cell_design_effect_is_gone():
+    # Plan4 §3.9: one estimator; `design_effect(outcomes_by_run)` is removed.
+    assert not hasattr(decision_stats, "design_effect")
 
 
 # --- combine_replicates (plan2 §3.6 bar states; note §Q6) -----------------------------------------

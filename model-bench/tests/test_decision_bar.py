@@ -448,7 +448,7 @@ def test_four_fr1_lines_each_holds_with_its_detectable_difference_and_minimum(st
     assert cells[0] == (
         "  - falseAdvanceRateByUnderstanding: candidate 0/197 [0.000, 0.019] vs incumbent 0/197 "
         f"[0.000, 0.019]; diff +0.0 pp; b=0, c=0, p_worse=1.0000; worse by at most "
-        f"{upper * 100:.1f} pp (one-sided 95%); DE 1.00 (genRunId ICC) — holds (could only "
+        f"{upper * 100:.1f} pp (one-sided 95%); DE 1.00 — holds (could only "
         "detect ≥ 3.4 pp at n = 197, "
         "ψ̂ = 0.00)"
     )
@@ -502,9 +502,8 @@ def test_a_worse_cell_makes_the_replicate_and_the_bar_not_met(tmp_path):
     text = _report(root)
     assert _cell_lines(text)[0].endswith("b=6, c=0, p_worse=0.0156; worse by at most "
                                          + _cell_lines(text)[0].split("worse by at most ")[1]
-                                         .split(" pp")[0] + " pp (one-sided 95%); DE 1.00 "
-                                         "(genRunId ICC) — not met: "
-                                         "candidate worse")
+                                         .split(" pp")[0] + " pp (one-sided 95%); DE 1.00 — "
+                                         "not met: candidate worse")
     assert "- FR-1 (replicate 1): not met" in text
     assert "- FR-1 (replicate 2): met" in text
     assert "FR-1 parity, over 2 replicate(s) (2 load(s)): unstable across replicates — not met" \
@@ -860,9 +859,9 @@ def test_every_non_assumed_replicate_is_compared_with_the_first_and_an_assumed_o
     assert vs == ["- replicate 3 vs replicate 1", "- replicate 4 vs replicate 1"]
 
 
-# --- the per-cell design effect (plan4 §3.9, §5 U3e.2; note §Q6 "Design effect") ------------------
+# --- the family-pooled design effect (plan4 §3.9, §5 U3e.3; note §Q6 "Design effect") ------------
 
-_DE = re.compile(r"; DE (\d+\.\d\d) \(genRunId ICC\)")
+_DE = re.compile(r"; DE (\d+\.\d\d) — ")
 _LIMIT = re.compile(r"could only detect ≥ ([\d.]+) pp at n = (\d+)")
 
 
@@ -880,9 +879,9 @@ def _fa_u_line(root: Path, flips) -> str:
 
 
 def test_a_cell_whose_discordance_shares_one_run_states_its_limit_at_n_over_de(tmp_path):
-    # Plan4 §5 U3e.2: the four candidate-worse items (b = 4, p_worse = 1/16, holds) sit one per
-    # run by default; regrouped into one eight-item run, the cell's ICC is high — DE > 1, a larger
-    # MDD at n = floor(n_c / DE), and the same p_worse and decision (note §Q3.2).
+    # Plan4 §5 U3e.2/U3e.3: the four candidate-worse items (b = 4, p_worse = 1/16, holds) sit one
+    # per run by default; regrouped into one eight-item run, the family's ICC is high — DE > 1, a
+    # larger MDD at n = floor(n_c / DE), and the same p_worse and decision (note §Q3.2).
     flips = {f"pad-{n:03d}" for n in range(4)}
     spread = _fa_u_line(_root(tmp_path / "spread"), flips)
     clustered_root = _root(tmp_path / "clustered")
@@ -929,3 +928,58 @@ def test_incumbent_worse_discordance_sharing_one_run_also_raises_de(tmp_path):
     line = _cell_lines(_report(root))[0]
     assert "b=0, c=4" in line
     assert float(_DE.search(line).group(1)) > 1.0
+
+
+_FAMILY = "  - design effect: genRunId ICC "
+_FAMILY_ESTIMATED = re.compile(
+    r"^  - design effect: genRunId ICC [+-]\d\.\d{3} pooled over \d cells$"
+)
+
+
+def _bar_lines(text: str, replicate: int = 1) -> list[str]:
+    block = text.split(f"#### replicate {replicate} —")[1].split("####")[0]
+    return block.splitlines()
+
+
+def test_the_family_line_sits_once_under_the_bar_heading_ahead_of_the_first_cell(stored):
+    # Note §Q6 "Print", plan4 §3.9 "Call sites": one family line per replicate, directly under
+    # the FR-1 heading at cell-line indentation. Every cell's discordance is 0 here, so the ICC
+    # is not estimable for the constant reason, and every cell prints DE 1.00.
+    text = _report(stored)
+    for replicate in (1, 2):
+        lines = _bar_lines(text, replicate)
+        head = next(i for i, line in enumerate(lines) if line.startswith("- FR-1 parity, per cell"))
+        assert lines[head + 1] == (
+            "  - design effect: genRunId ICC not estimable (outcome constant in every "
+            "contributing cell) — DE 1.00"
+        )
+        assert lines[head + 2].startswith(f"  - {_FA_U}: ")
+        assert sum(line.startswith(_FAMILY) for line in lines) == 1
+
+
+def test_no_cell_line_carries_the_design_effect_source(stored):
+    # Plan4 §3.9: `DESIGN_EFFECT_SOURCE` prints once, in the family line; each cell line ends
+    # its figures with `DE <x.xx>`.
+    cells = _cell_lines(_report(stored))
+    assert len(cells) == 4
+    for line in cells:
+        assert decision_stats.DESIGN_EFFECT_SOURCE not in line
+        assert _DE.search(line).group(1) == "1.00"
+
+
+def test_an_early_return_replicate_prints_no_family_line(stored):
+    # Plan4 §3.9: the early-return branches print no cell lines, so no family line.
+    text = _report(stored, models=CAND)
+    assert "FR-1 (replicate 1): not assessable (no incumbent run in this comparison)" in text
+    assert "design effect:" not in text
+
+
+def test_discordance_spread_over_runs_prints_an_estimated_signed_family_icc(tmp_path):
+    # Four candidate-worse items, one per default run: the family ICC is estimable, printed
+    # signed to 3 dp with its contributing-cell count.
+    root = _root(tmp_path)
+    line = _fa_u_line(root, {f"pad-{n:03d}" for n in range(4)})
+    assert _DE.search(line)
+    family = [x for x in _bar_lines(_report(root)) if x.startswith(_FAMILY)]
+    assert len(family) == 1
+    assert _FAMILY_ESTIMATED.match(family[0]), family[0]

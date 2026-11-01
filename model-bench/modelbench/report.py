@@ -2124,19 +2124,32 @@ def _holds_clause(line: decision_stats.ParityLine, k: int) -> str:
 
 
 def _design_effect_text(design_effect: float) -> str:
-    """Plan4 §3.9's print beside each FR-1 cell and FR-10 class: `DE <x.xx> (genRunId ICC)`."""
-    return f"DE {design_effect:.2f} ({decision_stats.DESIGN_EFFECT_SOURCE})"
+    """Note §Q6 "Print" beside each FR-1 cell and FR-10 class: `DE <x.xx>`."""
+    return f"DE {design_effect:.2f}"
 
 
-def _cell_design_effect(
-    outcomes: Sequence[bool], ids: Sequence[str], gen_run_ids: Mapping[str, str]
-) -> float:
-    """Note §Q6 "Design effect" for one cell or class: its per-item outcomes, grouped by each
-    item's `genRunId` (plan4 §3.9) through the ids parallel to them."""
-    by_run: dict[str, list[bool]] = {}
-    for outcome, item_id in zip(outcomes, ids, strict=True):
-        by_run.setdefault(gen_run_ids[item_id], []).append(outcome)
-    return decision_stats.design_effect(by_run)
+def _family_design_effect(
+    outcomes: Mapping[str, Sequence[bool]],
+    ids: Mapping[str, Sequence[str]],
+    gen_run_ids: Mapping[str, str],
+) -> decision_stats.FamilyDesignEffect:
+    """Note §Q6 "Design effect" for one family (plan4 §3.9): each key's per-item outcomes,
+    grouped by each item's `genRunId` through the ids parallel to them; an empty key stays an
+    empty cell."""
+    cells: dict[str, dict[str, list[bool]]] = {}
+    for key, values in outcomes.items():
+        by_run = cells.setdefault(key, {})
+        for outcome, item_id in zip(values, ids[key], strict=True):
+            by_run.setdefault(gen_run_ids[item_id], []).append(outcome)
+    return decision_stats.family_design_effect(cells)
+
+
+def _family_design_effect_line(family: decision_stats.FamilyDesignEffect, unit: str) -> str:
+    """Note §Q6 "Print": the family's line, `unit` being `cells` (FR-1) or `classes` (FR-10)."""
+    source = decision_stats.DESIGN_EFFECT_SOURCE
+    if family.icc is None:
+        return f"design effect: {source} not estimable ({family.reason}) — DE 1.00"
+    return f"design effect: {source} {family.icc:+.3f} pooled over {family.contributing} {unit}"
 
 
 def _parity_text(
@@ -2273,16 +2286,14 @@ def _render_replicate(
         return _ReplicateBars(lines + [""], reason, reason)
 
     cells = PER_KIND_VERDICT_METRICS  # the guard's four FR-1 cells; `pair_items` seeds each
-    # Plan4 §3.9: each cell's design effect, on its per-pair discordance (`cand ≠ inc`); the
+    # Plan4 §3.9: one family over the four cells' per-pair discordance (`cand ≠ inc`); the
     # run-level `designEffect` stays 1.0 for `compare_report`.
-    effects = {
-        cell: _cell_design_effect(
-            [cand != inc for cand, inc in paired.outcomes[cell]],
-            paired.outcome_ids[cell],
-            dp.gen_run_ids,
-        )
-        for cell in cells
-    }
+    family = _family_design_effect(
+        {cell: [cand != inc for cand, inc in paired.outcomes[cell]] for cell in cells},
+        paired.outcome_ids,
+        dp.gen_run_ids,
+    )
+    effects = family.effects
     parity = {
         cell: decision_stats.parity_cell(
             paired.outcomes[cell],
@@ -2303,6 +2314,7 @@ def _render_replicate(
         "- FR-1 parity, per cell (one-sided exact McNemar, α = "
         f"{decision_stats.FR1_ALPHA:g}, unadjusted; `p_worse` decides, `U` is descriptive):"
     )
+    lines.append(f"  - {_family_design_effect_line(family, 'cells')}")
     for cell in cells:
         line = parity[cell]
         minimum = decision_stats.GUARD_CELL_METHOD_MIN
@@ -2507,14 +2519,16 @@ def _render_fr10_replicate(
         f"- {quality_name}, within each true answer (each class ≥ "
         f"{decisions.FR10_PER_ANSWER_AGREEMENT:g} on its measured value; {_FR10_INTERVAL}):",
     ]
+    # Plan4 §3.9: one family over every class's per-item agreement, empty classes included.
+    family = _family_design_effect(agreement.outcomes, agreement.outcome_ids, dp.gen_run_ids)
+    lines.append(f"  - {_family_design_effect_line(family, 'classes')}")
     minimum = decision_stats.FR10_CLASS_METHOD_MIN
     # On a replicate whose state is not its classes' (assumed, blocked, scored n < 200), each class
     # line ends with that state, never with a `met` the replicate cannot claim.
     own = state is None and agreement.scored_n >= decisions.MIN_EVAL_ITEMS
     for metric, agreed in agreement.outcomes.items():
         k, n = sum(agreed), len(agreed)
-        # Plan4 §3.9: the class's design effect, on its per-item agreement indicator.
-        effect = _cell_design_effect(agreed, agreement.outcome_ids[metric], dp.gen_run_ids)
+        effect = family.effects[metric]
         if n:
             lo, hi = _fr10_class_interval(k, n, design_effect=effect)
             figures = f"{metric}: {k}/{n} {noun} [{lo:.3f}, {hi:.3f}]"

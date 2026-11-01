@@ -151,47 +151,90 @@ def mdd(n: int, psi_hat: float, *, alpha: float, power_target: float) -> float |
     raise AssertionError(f"mdd: no grid point reached power {power_target} at n = {n}")
 
 
-# --- the per-cell design effect (note §Q6 "Design effect"; plan4 §3.9) ----------------------------
+# --- the family-pooled design effect (note §Q6 "Design effect"; plan4 §3.9) -----------------------
 
-#: Note §Q6: the provenance printed beside every per-cell design effect.
+#: Note §Q6's `designEffectSource`, printed once in each family's line.
 DESIGN_EFFECT_SOURCE = "genRunId ICC"
 
+#: Note §Q6 "Print": why a family's ICC is not estimable — no cell contributes.
+NOT_ESTIMABLE_NO_CONTRIBUTING = "no cell spans two runs with one holding two of its items"
+#: Note §Q6 "Print": why a family's ICC is not estimable — `MSB + (n₀ − 1)·MSW = 0`.
+NOT_ESTIMABLE_CONSTANT = "outcome constant in every contributing cell"
 
-def design_effect(outcomes_by_run: Mapping[str, Sequence[bool]]) -> float:
-    """Note §Q6 "Design effect": one cell's (or one FR-10 class's) per-item outcomes, grouped by
-    the generation run (`genRunId`) that produced each item. With `N = Σm` items in `g` runs, the
-    one-way ANOVA mean squares `MSB`/`MSW`, `n₀ = (N − Σm²/N)/(g − 1)` and
-    `ICĈ = (MSB − MSW)/(MSB + (n₀ − 1)·MSW)`, the result is `max(1.0, 1 + (m₀ − 1)·ICĈ)` with
-    Kish's `m₀ = Σm²/N` — never the mean run size, which under-corrects the short cells pooled
-    top-up runs load. `1.0` when `g < 2`, `N = g`, or the ICC's denominator is 0 (constant
-    outcomes). The floor keeps it from ever shrinking a limit; it reaches limits only (§Q3.2).
-    """
+
+@dataclass(frozen=True)
+class FamilyDesignEffect:
+    """Note §Q6 "Design effect" for one family (FR-1's four cells, or a point's FR-10 classes) in
+    one replicate. `icc` is the unfloored pooled `ICĈ`, `None` when not estimable, and `reason`
+    is set iff it is. `contributing` is the print's `<k>`. `effects` holds one design effect per
+    input cell, empty cells included."""
+
+    icc: float | None
+    reason: str | None
+    contributing: int
+    effects: Mapping[str, float]
+
+
+def _runs(cell: str, by_run: Mapping[str, Sequence[bool]]) -> list[list[int]]:
     groups: list[list[int]] = []
-    for run, outcomes in outcomes_by_run.items():
+    for run, outcomes in by_run.items():
         values = list(outcomes)
         if not values:
-            raise ValueError(f"design_effect: run {run!r} is empty")
+            raise ValueError(f"family_design_effect: cell {cell!r}, run {run!r} is empty")
         if not all(isinstance(v, bool) for v in values):
-            raise ValueError(f"design_effect: run {run!r} holds a non-bool outcome")
+            raise ValueError(
+                f"family_design_effect: cell {cell!r}, run {run!r} holds a non-bool outcome"
+            )
         groups.append([int(v) for v in values])
-    g = len(groups)
-    n_total = sum(len(group) for group in groups)
-    if g < 2 or n_total == g:
-        return 1.0
-    grand = sum(sum(group) for group in groups) / n_total
-    means = [sum(group) / len(group) for group in groups]
-    msb = sum(len(gr) * (mu - grand) ** 2 for gr, mu in zip(groups, means)) / (g - 1)
-    msw = sum(
-        (v - mu) ** 2 for gr, mu in zip(groups, means) for v in gr
-    ) / (n_total - g)
-    sum_m_sq = sum(len(group) ** 2 for group in groups)
-    n0 = (n_total - sum_m_sq / n_total) / (g - 1)
+    return groups
+
+
+def family_design_effect(
+    cells: Mapping[str, Mapping[str, Sequence[bool]]],
+) -> FamilyDesignEffect:
+    """Note §Q6 "Design effect": a whole family at once, cell → `genRunId` → that run's outcomes
+    in the cell. One one-way ANOVA ICC is pooled over the contributing cells (`g_c ≥ 2` runs,
+    `N_c > g_c` items), each cell's sums of squares about its own mean, with the pooled
+    `n₀ = Σ(N_c − Σm²/N_c)/Σ(g_c − 1)`. Each cell then takes `max(1.0, 1 + (m₀ − 1)·ICĈ)` with
+    its own Kish `m₀ = Σm²/Σm`; an empty cell takes 1.0, and every cell takes 1.0 when the ICC
+    is not estimable. The floor keeps it from ever shrinking a limit; it reaches limits only."""
+    runs = {cell: _runs(cell, by_run) for cell, by_run in cells.items()}
+    ssb = ssw = df_b = df_w = n0_num = 0.0
+    contributing = 0
+    for groups in runs.values():
+        g, n = len(groups), sum(len(gr) for gr in groups)
+        if g < 2 or n <= g:
+            continue
+        contributing += 1
+        mean = sum(sum(gr) for gr in groups) / n
+        for gr in groups:
+            mu = sum(gr) / len(gr)
+            ssb += len(gr) * (mu - mean) ** 2
+            ssw += sum((v - mu) ** 2 for v in gr)
+        df_b += g - 1
+        df_w += n - g
+        n0_num += n - sum(len(gr) ** 2 for gr in groups) / n
+    if not contributing:
+        return _not_estimable(runs, NOT_ESTIMABLE_NO_CONTRIBUTING, contributing)
+    msb, msw, n0 = ssb / df_b, ssw / df_w, n0_num / df_b
     denominator = msb + (n0 - 1) * msw
     if denominator == 0:
-        return 1.0
+        return _not_estimable(runs, NOT_ESTIMABLE_CONSTANT, contributing)
     icc = (msb - msw) / denominator
-    m0 = sum_m_sq / n_total
-    return max(1.0, 1 + (m0 - 1) * icc)
+    effects: dict[str, float] = {}
+    for cell, groups in runs.items():
+        n = sum(len(gr) for gr in groups)
+        m0 = sum(len(gr) ** 2 for gr in groups) / n if n else 1.0
+        effects[cell] = max(1.0, 1 + (m0 - 1) * icc)
+    return FamilyDesignEffect(icc, None, contributing, MappingProxyType(effects))
+
+
+def _not_estimable(
+    runs: Mapping[str, object], reason: str, contributing: int
+) -> FamilyDesignEffect:
+    return FamilyDesignEffect(
+        None, reason, contributing, MappingProxyType(dict.fromkeys(runs, 1.0))
+    )
 
 
 # --- one FR-1 cell (note §Q3.1, §Q3.3–§Q3.5) ------------------------------------------------------

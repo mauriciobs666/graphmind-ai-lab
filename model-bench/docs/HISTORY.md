@@ -2,6 +2,42 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U3e.3 — family-pooled design effect
+
+**What:** plan4 v1.3 §3.9 and §5's U3e.3 row (`docs/plans/typed-decision-models4.md`), on the
+method note v1.14's §Q6 "Design effect" (`docs/plans/typed-decision-models-ml.md`); replaces
+U3e.2's per-cell estimator.
+
+- **`decision_stats.family_design_effect(cells) -> FamilyDesignEffect`**, pure: cell → `genRunId`
+  → outcomes. One one-way ANOVA ICC pooled over the contributing cells (`g_c ≥ 2`, `N_c > g_c`),
+  each cell's sums of squares about its own mean, pooled `n₀ = Σ(N_c − Σm²/N_c)/Σ(g_c − 1)`; each
+  cell then `max(1.0, 1 + (m₀ − 1)·ICĈ)` at its own Kish `m₀`, a non-contributing non-empty cell
+  included, an empty cell 1.0. Not estimable (`icc` None, every cell 1.0) with
+  `NOT_ESTIMABLE_NO_CONTRIBUTING` or `NOT_ESTIMABLE_CONSTANT`, the note's texts verbatim. Refuses
+  an empty run or a non-bool outcome. `design_effect(outcomes_by_run)` is removed.
+- **`report.py`:** `_family_design_effect` replaces `_cell_design_effect`, and
+  `_family_design_effect_line` renders the family line once per replicate, directly under the FR-1
+  or FR-10 bar heading: `design effect: genRunId ICC <±x.xxx> pooled over <k> cells` (`classes`),
+  or `… not estimable (<reason>) — DE 1.00`; none on an early-return replicate. Cell and class
+  lines print `DE <x.xx>` only. FR-1 pools the four cells' discordance; FR-10 every class, empty
+  ones included. `RunResult.designEffect` (1.0), `basis` and `compare_report` are unchanged.
+  README's bar-section paragraph names the new print.
+
+**Tests:** `tests/test_decision_stats.py` 96 → 101 test functions (review Pass 13's hand fixture
+as literals: `icc` 721/2557, `contributing` 2, DE A 1.403, B 1.677, C 1.282, D 1.000; empty cell
+E 1.00 under a positive and a negative ICĈ; both not-estimable cases and the empty family; the
+reason texts; Kish `m₀` per cell; order invariance; refusals; frozen record; the old function
+gone), `tests/test_decision_bar.py` 53 → 57 and `tests/test_decision_bar_fr10.py` 24 → 29 (family
+line placement and count per replicate, none on early return, no `genRunId ICC` on a cell line, a
+signed estimated line; FR-10 literals hand-computed apart from the code: `-0.025` with both
+classes DE 1.00, and `+0.762` with `yes` DE 9.64 and the constant `no` DE 26.92); the old
+`(genRunId ICC)` goldens and `_DE`/`_DE_TEXT` regexes rewritten. Mutants, each red: per-cell
+estimation (4 failed, full suite), SS about the grand mean (8), `n₀ = N/g` (5); plus a
+non-contributing cell at 1.0, `N_c = g_c` contributing, no empty-cell guard, no floor, constant
+case under the other reason, unsigned ICC, source on the cell line, FR-1 family line after the
+cells, a family line on an FR-1 and an FR-10 early return, FR-10 empty classes dropped, FR-1 on
+the candidate's outcome. Suite 3605 → 3619 passed, 5 deselected, 2 xfailed; ruff clean.
+
 ## 2026-11-01 — typed-decision-models U3e.2 — per-cell design effect
 
 **What:** plan4 §3.9's per-cell design effect and §4.2's U3e.2 brief

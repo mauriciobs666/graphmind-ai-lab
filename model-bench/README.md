@@ -197,13 +197,15 @@ then one **bar section** (`docs/plans/typed-decision-models.md` §3.5–§3.6,
 `typed-decision-models2.md` §3.6). Per candidate: its fit-manifest leakage line, how many candidates
 already ran on this evaluation set, its fit outcome. Per replicate: `handoffShare`,
 `decisionCallFailures` and `overLimit`; the scored eval n beside FR-11's 200, with every drop
-counted; the four FR-1 parity cells, each with its detectable difference, method minimum,
-`overLimit` and design effect `DE <x.xx> (genRunId ICC)` — the items' clustering by
-generation run (`genRunId`), which widens the detectable difference and never moves a
-decision; the FR-2 speed-up ratio; and the side check, which does not affect pass/fail. On a
+counted; a design-effect line, `design effect: genRunId ICC <±x.xxx> pooled over <k> cells` (or
+`not estimable (<reason>) — DE 1.00`) — the items' clustering by generation run (`genRunId`),
+one ICC pooled over the family, which widens limits and never moves a decision; the four FR-1
+parity cells, each with its detectable difference, method minimum, `overLimit` and its own
+`DE <x.xx>`; the FR-2 speed-up ratio; and the side check, which does not affect pass/fail. On a
 new-ability pack (FR-10, one arm: no incumbent; a chat arm is a reference whose results no bar
 reads, though its timeout and pack content still apply) a replicate adds `handoffCallFailures`, then
-each true answer's agreement `k/n` with its per-class Wilson interval (at that class's own `DE`),
+its own design-effect line (`classes`), then each true answer's agreement `k/n` with its
+per-class Wilson interval (at that class's `DE`),
 method minimum and `overLimit` — every class must reach 0.90, and one with no scored item is
 `not assessable` — and the mean latency against 350 ms. Then the replicates' disagreement and
 one overall state per bar: `met` needs every replicate met and two fresh loads of the decision
