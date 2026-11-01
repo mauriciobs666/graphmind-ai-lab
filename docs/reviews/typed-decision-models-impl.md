@@ -2414,3 +2414,170 @@ figures print. The states stay `not assessable`.
 
 None new. Pass 18's proposed line (guards still reach runs rerouted around `runs`) covers P19-m1's
 class.
+
+## Pass 20
+
+*2026-10-31. Gate of U2.3 (plan4 §3.10, §5 `| U2.3 |`, R-21): between-item probe failures.
+Uncommitted on `827e953e`, in `model-bench/`: `modelbench/runner.py`, the new
+`tests/test_runner_probe_failures.py`, `docs/BACKLOG.md`, `docs/HISTORY.md` and `AGENTS.md`.
+Read against plan4 §3.10, its U2.3 row and R-21, and SMB plan §3.6 clause (iv) together with its
+fourth-disposition paragraph.*
+
+**Verdict: approve with suggestions.** The helper and its four call sites match §3.10 on every
+surface, and every wiring point I mutated goes red except one. There are four findings and no
+blocker or major:
+- two minor findings about R-21's wording: the BACKLOG item (P20-m1, `tdd-engineer`) and plan4
+  itself (P20-m2, `architect`);
+- two nits (P20-n1, P20-n2, `tdd-engineer`).
+
+**Checks run** (from `model-bench/`):
+- **Suite:** `3111 passed, 5 deselected, 2 xfailed`. `ruff check .` is clean.
+- **Mutants:** 21, all from `scratchpad/p20/p20_mutate.py` in a private directory. Each one ran
+  the full suite with its own `PYTHONPYCACHEPREFIX`, and the file was restored and checked with
+  `cmp` after each. At the end, `runner.py`'s sha256 was `29b3be139de0dca8…`, the same as at the
+  start.
+  - **Mine (13).** 12 went red:
+    - v1-only failing open: 1 red;
+    - exit 5 instead of 3: 6;
+    - a fixed `"unreachable"` message: 1;
+    - the stderr line sent to stdout: red;
+    - the line printed twice: red;
+    - `residency()` retried instead of `[]`: red;
+    - the chat, handoff or tool-caller site reverted to a bare `residency()`: red at each;
+    - the decisions site's label without the item id: red;
+    - the tool-caller label keyed on `shape` instead of `scriptId`: red;
+    - the exception class dropped from the line: red.
+    The one survivor is A5, a catch widened to `except Exception` (P20-n1).
+  - **Re-sample of the implementer's table (8).** All 8 went red:
+    - treat-as-resident at the chat site: 4;
+    - failing open: red;
+    - refusing every failure: red;
+    - catching `LMStudioUnreachable` alone: red;
+    - catching `TimeoutError` alone: 24;
+    - the load rule over a failed chat call: red;
+    - the load rule over a failing turn: 4;
+    - a run kept on an outage: 6.
+- **Coverage (c).** All 33 tests call the real `run_pack`, or `cli.main` for the store check,
+  against subclasses of the existing `StubLMStudio`, `DecisionStub` and `HandoffStub`. None of
+  them stubs `_between_item_residency`, `probe` wiring or a driver. The stubs replace only
+  `residency()`'s sequence and `probe()`'s answers, and they count `probe_calls`.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded; the code was read, mutated and
+executed directly.
+
+### Contract fidelity
+
+- **Chat and embeddings** (`_drive_single_call_items`). A `[]` snapshot reaches the existing
+  `_load_withheld_for` only on the completed path. The `LMStudioCallTimeout` and
+  `LMStudioCallFailed` branches `continue` before any load producer runs, which is SMB §3.6's
+  precedence. B5 pins this.
+- **`_turn_timings`.** A failing disposition still returns before the load expression, so the
+  same precedence holds there, and B6 pins it. **The tool-caller snapshot is per conversation:**
+  the snapshot taken after conversation *k* guards every turn of *k+1*. A failed probe after `s1`
+  therefore withholds `s2`'s turns for `"load"`, and the test asserts exactly that item. The
+  label names the conversation the snapshot follows, which is the only one `_turn_timings`
+  knows. The snapshot after the last conversation guards nothing (P20-n2).
+- **Decisions.** Both the kept-failure branch and the success branch read
+  `_load_withheld_for(model_info, resident)`, so item 2 is `"load"` either way. The load rule
+  then gives `"assumed"` from the `"load"` item. I checked `827e953e`'s `runner.py` lines 598 and
+  628: these lines are unchanged.
+- **Handoff.** `_models_withheld_for(models, [])` is `"load"`, so `snapshot_lacked_a_model` flips.
+  Consider a guard item whose hand-off chat call fails after a failed probe. It keeps its own
+  `"timeout"` or `"no_response"`, as SMB precedence requires, and the flag still makes the run
+  `"assumed"`. I traced this by reading; no test covers this combination, and that is acceptable
+  because the flag's logic is pre-existing.
+- **Outage.** Any value other than `"api-v0"` raises `RunRefused(_PROBE_MESSAGES[...], exitCode=3)`
+  with step 2's exact text, and `from exc`. `cli.py:750-752` prints it once and returns the code.
+  `run_pack` stores nothing, and the `cli.main` test asserts that no `results/` directory
+  appears. **The right instance:** `run_pack` has one `lmstudio`, and the helper takes it from
+  each driver's own parameter. The `probe_calls == 2` assertion (step 2, then the re-probe) would
+  catch a probe of anything else.
+
+### Judgement calls
+
+1. **No stored field changes.** I agree. At `827e953e`, a kept decision failure already takes
+   `withheldFor` from the snapshot (lines 598 and 787/877 for handoff), so `[]` reaches it with
+   no new field.
+2. **The extra `before: str`.** I accept it as a deviation from §3.10's one-argument signature.
+   The helper cannot otherwise name the item, and the plan requires the item to be named. On
+   `tool-caller`, "the conversation after 's1'" is accurate, because the next script is not in
+   scope at `_turn_timings`.
+3. **"Stores nothing" asserted through `cli.main`.** This is right, because only `cli` stores.
+   The other three surfaces assert the `RunRefused` exit code and message on `run_pack`, which
+   is enough for them.
+4. **The two forms of skipping the re-probe.** Both are real, and they are distinct: failing
+   open is §3.10's rejected option 2, and refusing on any failure is rejected option 1. Both go
+   red in my re-run.
+5. **BACKLOG drops "traceback".** The claim about `_raw_post` is correct. I checked
+   `lmstudio.py:728-760`, where every rung maps to `LMStudioCallTimeout` or
+   `LMStudioCallFailed`; a refused connection is a `URLError` (rung 3) and becomes
+   `LMStudioCallFailed`. Every item driver catches both classes, so plan4 R-21 is wrong about
+   item calls. However, a traceback path does exist outside item calls, and neither document
+   names it (P20-m2).
+6. **The short HISTORY entry.** I agree with keeping it short. The "33" count and the mutant
+   classes match the file and my re-sample.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** is under the context-file convention. It has 2,495 words and no
+  line over 700 characters. The new paragraph is new scope: a "what will bite me" invariant
+  with a plan citation. Three passages were compressed to offset it. Each fact they dropped is
+  in `docs/HISTORY.md`, so these are moves, not losses:
+  - the qwen-vs-ministral sample-size result, at lines 1322-1327;
+  - `EXIT_NOTESTSCOLLECTED`, at line 5399;
+  - "8 collection errors, exit 2", at line 5422.
+  No finding.
+- **BACKLOG.** The P8-m2 item is replaced in place, not appended to, and the delivered P8-m2 is
+  recorded in the new HISTORY entry. Its content is inaccurate in two places (P20-m1).
+- **HISTORY.md** is read by lookup and has one new entry. No finding.
+
+### Findings
+
+**P20-m1 (minor; `tdd-engineer`). The R-21 BACKLOG item understates what SMB §3.6 already
+rules.** The item says that clause (iv) "asks for a re-probe after a timeout" and that the gap
+"needs an `architect` ruling on which item-call failures re-probe". But SMB §3.6's
+fourth-disposition paragraph already rules both cases for scored chat calls:
+- a *connection* failure "re-probes exactly as clause (iv) specifies";
+- an error response "does not re-probe and does not exit 3".
+`LMStudioCallFailed.status is None` separates the two. Only the decisions and handoff kept
+failures, and the multi-turn `tool-caller` turn, are unruled.
+- **Fix:** rewrite the item in place. It should state that, for chat and embeddings, SMB rules a
+  re-probe after a timeout or a `status is None` failure, and that no driver implements it. The
+  `architect` ask should narrow to the decision surfaces and the turn. Add P20-m2's `prime`
+  path if `architect` brings it under R-21. (Verified against the SMB plan text and
+  `lmstudio.py`.)
+
+**P20-m2 (minor; `architect`). Plan4 R-21's "or a traceback" is wrong for item calls, and the
+real traceback path is unnamed.** P20 judgement call 5 shows that every item call degrades to a
+scored or kept failure. An LM Studio outage can still escape as a traceback, though, through the
+embedder's `prime` hook:
+- `runner.py:470` calls `prime` with no `try`;
+- an uncached corpus reaches `lmstudio.embed` at `scoring/retrieval.py:341`;
+- nothing in `run_pack` catches the resulting `LMStudioCallFailed` or `LMStudioCallTimeout`;
+- `cli.py:750` catches only `RunRefused`.
+I traced this by reading and did not reproduce it.
+- **Fix:** correct R-21 in place. Either drop "or a traceback", or name `prime`'s corpus embed as
+  the one call that has one, and rule whether it joins the gap U2.3 filed. A probable shape is a
+  re-probe that exits 3 on an outage, like the warm-up. That is `architect`'s call.
+
+**P20-n1 (nit; `tdd-engineer`). Nothing pins that the helper lets other exceptions through.**
+A5 (`except Exception as exc:`) survives the full suite with 3111 passed. Under A5, a defect
+that raises from `residency()` would be re-probed and silently become `[]`, a `"load"`
+withholding, instead of a traceback.
+- **Fix:** in `tests/test_runner_probe_failures.py`, add one chat case whose item-2 snapshot is a
+  `RuntimeError`. Assert that it propagates out of `run_pack` and that `probe_calls == 1`. A5
+  must then go red.
+
+**P20-n2 (nit; `tdd-engineer`, take or leave). The `tool-caller` snapshot after the last
+conversation guards nothing.** `_turn_timings` probes after the last determinism-probe script,
+and in the tests after `s3`. If that probe fails while the server is up, the stderr line says
+"before the conversation after 's3' … so that item counts as not shown resident", and there is
+no such conversation or item. If the server is down, the run exits 3 here instead of at step
+10's exit 5. Both outcomes store nothing, so the only effect is the wording.
+- **Fix:** make the message neutral ("what follows counts as not shown resident"). Alternatively,
+  leave it as is.
+
+### Proposed REVIEW.md lines
+
+None. P20-n1's class, a narrowed catch with nothing pinning its narrowness, is already covered
+by root `REVIEW.md`'s rule that every check can both fail and pass.

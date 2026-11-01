@@ -2,6 +2,40 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U2.3 — a failed between-item residency probe (P8-m2)
+
+**What:** plan4 §3.10's ruling, closing the P8-m2 backlog item.
+
+- **`runner._between_item_residency(lmstudio, *, where)`** serves all four between-item sites
+  (`_drive_single_call_items`, `_drive_decision_items`, `_drive_handoff_items`, `_turn_timings`).
+  It catches `LMStudioUnreachable`, `LMStudioCallFailed` and `TimeoutError` from `residency()` and
+  re-probes. Anything but `"api-v0"` raises `RunRefused(exitCode=3)` with step 2's
+  `_PROBE_MESSAGES` text (SMB plan §3.6 clause (iv)), so nothing is stored. Otherwise it returns
+  `[]` and writes one stderr line naming where the probe sat (before an item; on `tool-caller`,
+  after a conversation, since the last one's snapshot guards nothing) and the exception class.
+  Any other exception propagates unprobed. No record field changes.
+- **What `[]` does is each site's existing load rule.** Chat/embeddings: a completed call is
+  `withheldFor="load"`; a failed call keeps `"timeout"`/`"no_response"` (SMB §3.6 precedence).
+  `_turn_timings` behaves the same way. Decisions/handoff: the item is `"load"` whether its call
+  succeeded or was kept failed, and the load rule gives `"assumed"`.
+- `docs/BACKLOG.md`: P8-m2 replaced by the item-call outage gap (plan4 R-21), narrowed to what SMB
+  §3.6 leaves unruled, with the embedder `prime` traceback as a pointer (impl review P20-m1,
+  P20-m2). AGENTS: one
+  invariant paragraph; three passages compressed.
+
+**Tests:** `tests/test_runner_probe_failures.py` (new, 35), all on the real `run_pack` with a
+stubbed `LMStudio`. Each of the three exception classes is tested on every surface. Items 1 and 3
+are unchanged, item 2 is `"load"` or keeps its own failure, and one stderr line is written.
+`probe()` answering `"unreachable"` exits 3 on all four surfaces (`"v1-only"` too, on chat), and
+through `cli.main` nothing is written under `results/`. A `RuntimeError` from the snapshot
+propagates with no re-probe (P20-n1), and a failed snapshot after the last `tool-caller`
+conversation moves no item (P20-n2). Eleven mutants, each run against the full suite, all went red:
+treat-as-resident (two forms), the re-probe skipped (failing open, or refusing every failure, the
+rejected option), each exception class caught alone, the catch widened to `except Exception`, the
+load rule over a failed chat call or turn, and a run kept on an outage.
+
+**Suite:** 3113 passed, 5 deselected, 2 xfailed; `ruff check .` clean.
+
 ## 2026-10-31 — typed-decision-models U3c.2 — `compare`'s replicate groups and the bar section, speed-up side
 
 **What:** the rest of v1.3 §4 U3c / plan2 §4.1 U3c / plan3 §4.1 U3c, calling U3c.1's

@@ -44,6 +44,7 @@ from __future__ import annotations
 import importlib
 import json
 import platform
+import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -365,6 +366,30 @@ def _load_withheld_for(
     return None if _is_resident(model_info.id, resident_before) else "load"
 
 
+def _between_item_residency(lmstudio: LMStudio, *, where: str) -> list[ResidentModel]:
+    """The between-item residency snapshot, with a failed probe ruled (typed-decision-models plan4
+    §3.10). `residency()` failing in any of its three ways (`LMStudioUnreachable`,
+    `LMStudioCallFailed`, a socket `TimeoutError`) re-probes the server: anything but `"api-v0"`
+    is an outage and refuses the run with exit 3 and step 2's message, storing nothing (SMB plan
+    §3.6 clause (iv)). Otherwise the snapshot is `[]` — "not shown resident", never "resident" —
+    and one stderr line names `where` (the probe's place in the run) and the exception class. What
+    `[]` does is each caller's existing load rule: a completed chat call is withheld for
+    `"load"`, a failed one keeps its own disposition, a decision item takes `"load"`."""
+    try:
+        return lmstudio.residency()
+    except (LMStudioUnreachable, LMStudioCallFailed, TimeoutError) as exc:
+        probe_result = lmstudio.probe()
+        if probe_result != "api-v0":
+            raise RunRefused(_PROBE_MESSAGES[probe_result], exitCode=3) from exc
+        print(
+            f"model-bench: the between-item residency probe {where} failed "
+            f"({type(exc).__name__}: {exc}); LM Studio still answers, so the snapshot reads "
+            "as not shown resident (typed-decision-models plan4 §3.10)",
+            file=sys.stderr,
+        )
+        return []
+
+
 def _gap_ms(call: CallTiming) -> float | None:
     """`-ml` §11.5.1's per-call gap: `wallClockMs − (ttftMs + generationMs)`. `None` if any operand
     is `None` (a chat-surface-only figure). This is `results._call_gap_ms`'s own formula — the
@@ -453,7 +478,9 @@ def _drive_single_call_items(
     resident = baseline_residency
     results: list[ItemResult] = []
     for item_input in pack.iter_items():
-        resident = lmstudio.residency()  # between-item probe — never during a timed call
+        resident = _between_item_residency(  # between-item probe — never during a timed call
+            lmstudio, where=f"before item {item_input.get('itemId')!r}"
+        )
         try:
             if call_surface == "chat":
                 build_messages = getattr(scorer, "build_messages", None)  # NEW — S4 spec §4.1
@@ -578,7 +605,9 @@ def _drive_decision_items(
     question = dict(candidate.question)
     results: list[ItemResult] = []
     for item_input in pack.iter_items():
-        resident = lmstudio.residency()  # between-item probe — never during a timed call
+        resident = _between_item_residency(  # between-item probe — never during a timed call
+            lmstudio, where=f"before item {item_input.get('itemId')!r}"
+        )
         text = scorer.decision_input(item_input, pack=pack)
         started = clock()
         try:
@@ -857,7 +886,9 @@ def _drive_handoff_items(
     results: list[ItemResult] = []
     snapshot_lacked_a_model = False
     for item_input in pack.iter_items():
-        resident = lmstudio.residency()  # between-item probe — never during a timed call
+        resident = _between_item_residency(  # between-item probe — never during a timed call
+            lmstudio, where=f"before item {item_input.get('itemId')!r}"
+        )
         load_withheld = _models_withheld_for(models, resident)
         snapshot_lacked_a_model = snapshot_lacked_a_model or load_withheld is not None
         text = scorer.decision_input(item_input, pack=pack)
@@ -1102,7 +1133,9 @@ def _turn_timings(
             None if _is_resident(model_id, resident_before) else "load"
         ) or _gap_withheld_for(probe_timing)
         timings.append(ItemTiming(wallClockMs=turn.wallClockMs, calls=calls, withheldFor=withheld))
-    return tuple(timings), lmstudio.residency()
+    return tuple(timings), _between_item_residency(
+        lmstudio, where=f"after conversation {trace.scriptId!r}"
+    )
 
 
 def _drive_conversations(

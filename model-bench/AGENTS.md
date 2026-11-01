@@ -15,8 +15,7 @@ roles has a scorer module in `modelbench/scoring/`: `retrieval.py` (`embedder`),
 `ConversationScorer`, for the multi-turn `tool-caller` role — and `grounding.py` (`chat-responder`,
 deterministic layer only per FR-21a; the judged-quality layer stays deferred, `docs/BACKLOG.md`).
 Every pack has its own required live run against a real LM Studio. `tool-caller`'s known-answer
-validation (`qwen/qwen3-4b-2507` vs. `mistralai/ministral-3-3b`) ships flagged "not reproduced":
-no configuration tried reached significance at this pack's sample size.
+validation ships flagged "not reproduced" (`docs/HISTORY.md`).
 `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
 (the loader: `load_pack`/`validate_pack` with the decision-point contract, keyed on a
 `decisionPoint` key alone; content hashing, the AST import allowlist), `lmstudio`,
@@ -132,8 +131,7 @@ it is the *cluster* key.
 
 **`tests/test_package.py` is not a placeholder** — it pins `modelbench.__version__` to the installed
 distribution metadata, which is what stamps `benchVersion` into every run record. Keep it: pytest
-exits 5 (`EXIT_NOTESTSCOLLECTED`) on an empty suite, so configuring that exit code away would hide a
-real collection breakage later rather than fix anything.
+exits 5 on an empty suite, and configuring that away would hide a real collection breakage.
 
 **A public name starting with `test` is collected by pytest as a test** in every module that imports
 it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
@@ -157,6 +155,11 @@ a real reply needs a fresh live call, never a read of `results/runs/*.json`.** `
 live: `packs.load_pack`, the scorer's own `build_messages`, `LMStudio.chat` at the same
 model/prompt/`temperature: 0.0` (`docs/test-reports/small-model-benchmarking-s7-report.md`).
 
+**A between-item residency snapshot goes through `runner._between_item_residency`, never a bare
+`lmstudio.residency()`.** A failed probe re-probes: an outage refuses (exit 3); otherwise the
+snapshot is `[]`, never the previous one, which would let a reloaded run pass as one load
+(typed-decision-models plan4 §3.10).
+
 **`compare --negative-control` duplicates one stored record as both arms** (`cli._select_arms`
 returns `[candidates[0], candidates[0]]`), never two runs: a wiring smoke check, `b = c = 0` by
 construction, refused on a decision-point pack. `--models` keeps each model key's newest run;
@@ -174,9 +177,8 @@ otherwise `load_history`'s ascending filename order makes `candidates[0]` the ol
   `scripts/refresh_golden.py` is a human-invoked maintenance script and is never reachable from a
   run. **The default test suite holds to the same rule too**: 3 tests that live-verify a copied-in
   golden asset against its real `falkor-chat/` source carry `tests/conftest.py`'s
-  `requires_falkor_chat` skip guard — a plain `skipif`, deliberately distinct from the `live` marker
-  below (a different precondition) — so `pytest -q` skips them cleanly (reported in the summary
-  line) rather than failing when `falkor-chat/` is absent or renamed. The one reverse edge is
+  `requires_falkor_chat` skip guard (a plain `skipif`, not the `live` marker below), so `pytest -q`
+  skips them rather than failing when `falkor-chat/` is absent or renamed. The one reverse edge is
   test-only: falkor-chat's suite byte-copies `tests/fixtures/decision-contract/` files and asserts
   them equal to ours unless `model-bench/` is absent (typed-decision-models v1.3 §3.2.2).
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
@@ -215,8 +217,7 @@ otherwise `load_history`'s ascending filename order makes `candidates[0]` the ol
 ## Commands
 
 All of these need `model-bench/` as the working directory — the repo has no root pytest config, so
-from the repo root pytest ignores this component's `testpaths` and walks the whole monorepo
-(measured: 8 collection errors, exit 2).
+from the repo root pytest ignores this component's `testpaths` and walks the whole monorepo.
 
 ```bash
 ./setup.sh                                       # create/refresh .venv (idempotent; --recreate)
