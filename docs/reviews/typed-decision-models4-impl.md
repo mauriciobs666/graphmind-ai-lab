@@ -195,3 +195,204 @@ the file and confirmed it with `cmp`.
 | M8 | non-literal dynamic import not reported | 1 failed |
 | M9 | absolute `from` imports skipped | 2 failed |
 | M10 | treat `bool` as int | 20 passed (equivalent mutant: `True != 6379`) |
+
+## Pass 2 — U5.2 guard contract copies (2026-10-31)
+
+### Scope & verdict
+
+**Reviewed:** the uncommitted work on top of `9ccc2518`, all in `decision-models/`:
+- `decisionmodels/render.py` and `decisionmodels/hashing.py`;
+- the byte-copies `tests/fixtures/decision-contract/render-guard.jsonl` (14 rows) and
+  `input-hash.jsonl` (4 rows);
+- `tests/test_decision_contract.py`;
+- the edits to `AGENTS.md`, `README.md` and `docs/HISTORY.md`.
+
+**Against:**
+- plan4 §4.1's U5.2 row (done when the copies are `cmp`-equal and every row passes);
+- v1.3 §3.2, §3.2.1, §3.2.2 and §3.5;
+- plan4 §3.2, the request writer that consumes `render.py`.
+
+**Truth sources, read in full for the functions concerned:**
+- falkor-chat's real `app._render_judge_user` (`falkor-chat/server/falkorchat/app.py:695-730`)
+  and `guards._recent_turns` (`guards.py:538-570`);
+- model-bench's transcriptions `_normalize_turns` and `_render_judge_user`
+  (`model-bench/modelbench/scoring/classification.py:29-82`);
+- model-bench's `input_hash` (`model-bench/modelbench/decisions.py:54-56`, `:168-183`).
+
+**Verdict: approve with suggestions.** The done-condition holds, and I verified each part:
+- Both copies are `cmp`-equal to model-bench's.
+- `.venv/bin/pytest -q` gives 53 passed, and `ruff check .` is clean.
+- A three-way differential agrees on every generated input. It ran over 12,000 generated
+  cases plus 720 boundary cases, with no mismatch for normalization, rendering or the composed item
+  rendering (Appendix B).
+
+There are no blockers and no majors.
+
+`render.py`'s md5 is `2ce93c54…`. That file is behaviorally sound on the contract's domain: it
+matches falkor-chat's real function on every differential case and every vector row. So no
+behavior-changing residue from the implementer's failed restore remains. A behavior-neutral residue
+would be invisible to this check, but the file reads clean line by line.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the two modules (135 lines) and every truth-source function were read in full.
+
+**Method.** I used a fresh `PYTHONPYCACHEPREFIX` and `-p no:cacheprovider`. Each mutation was made
+against a copy kept aside, then restored and checked equal with `cmp`. At the end I compared the
+sha256 of every file under `decisionmodels/` and `tests/` against a baseline taken before the first
+mutation: all 8 were unchanged. No git command changed the tree. The final suite run gave 53 passed.
+
+### Findings
+
+**P2-F1 — minor — `render_guard_item`'s turn order is unpinned. Reversing it leaves 53 green.**
+*Owner: `coder`.* Verified with mutant R18: `normalize_turns(...)[::-1]` in `render.py:88` gives 53
+passed. The vector rows exercise `render_guard_input` over already-normalized `recentTurns`. The
+two `render_guard_item` tests use one turn and zero turns. But `render_guard_item` is the function
+plan4 §3.2's request writer calls to produce the text the labeller votes on. An order or wiring
+slip there would silently change the labelled inputs while every vector stays green.
+**Fix:** add one `render_guard_item` test with at least 8 raw rows. Include an invalid row, a speaker
+fallback, and a newest turn long enough to force the cap to drop a turn. Write the expected string
+by hand from v1.3 §3.2's rule, oldest first. Then confirm R18 goes red.
+
+**P2-F2 — minor — the `HISTORY.md` "Verified" line is not accurate as written.** *Owner: `coder`.*
+`docs/HISTORY.md` says "every file was restored `cmp`-equal". By the implementer's own report to
+`teco`, one run left two mutants in `render.py`, and they were removed afterwards. The mutant table
+is also not reproducible as stated: it lists "the cap check's separator arithmetic", but this
+implementation has no separator arithmetic, because it searches directly (judgement call 3).
+`HISTORY.md` is the record, so a false line there misleads. **Fix:** replace the mutant sentence with
+one present-tense line. It should say that the mutants were re-run after the failed restore was
+recovered (md5 `2ce93c54…`), and cite this pass for the independent re-sample. Do not
+narrate the incident.
+
+**P2-F3 — minor — turn normalization has no cross-component pin. This answers judgement call 1.**
+*Owner: `architect`, via `teco`. The vector would be built by a model-bench `coder` unit.* The rule
+is shared by falkor-chat (`guards._recent_turns`, the truth), model-bench (`_normalize_turns`) and
+now decision-models. v1.3 §3.2.1 also makes it the join-in renderer's rule. But v1.3 §3.2.2's
+vector families do not include it. In this component, the four hand-written tests do pin the rule
+as written: my mutants R9, R10, R11, R13, R14 and R15 all go red, and so do the coordinator's two.
+Today all three copies agree: 0 mismatches in 12,000 differential cases. What a hand test cannot
+catch is drift *at the truth source*, for example falkor-chat changing `RECENT_TURNS_N`. Through
+plan4 §3.2, such drift would silently make the labeller see different evidence from what
+falkor-chat's judge sees at run time. **Suggestion:** add a model-bench-owned
+`normalize-turns.jsonl`, with expected outputs produced by running falkor-chat's real
+`_recent_turns` (as `render-guard.jsonl` is produced). Byte-copy it here, and fold it into U5.2b
+or U4, which needs the rule anyway for join-in. Until then the hand tests are adequate for a
+contract that matches today. This is not a U5.2 blocker.
+
+**P2-F4 — nit — `AGENTS.md` grew 282 → 362 words, partly by restating `HISTORY.md`.** *Owner:
+`coder`.* "Current state" was rewritten rather than appended to, which is right. But it opens with
+"Landed: …" and then says what landed is in `HISTORY.md`. It will grow again with every U5.x unit.
+The new "Contract copies are byte-copies" invariant is genuine new scope and should stay. Its
+clause "pins row counts to the file's non-blank lines" is test detail that belongs in the test's
+docstring. **Fix:** make "Current state" one sentence naming the modules present
+(`render.py`, `hashing.py`, guard only), cite `HISTORY.md` for the rest, and drop the row-count
+clause.
+
+**Judgement calls:**
+1. *Normalization in `render.py`, pinned only by hand tests:* the pin is adequate for U5.2, but a
+   vector should pin it later. See P2-F3; ownership is the architect's call, with the vector
+   produced in model-bench.
+2. *`INPUT_FIELDS_BY_ROLE` is `guard-judge` only:* **accept.** It equals model-bench's mapping today
+   (`dict(...) ==` checked), and model-bench itself has only that row until U4. An unknown role
+   raises `ValueError`, which is tested. `input_hash` matches model-bench's on 20,000 random nested
+   items, with 0 mismatches. Mutants H1–H7 all go red.
+3. *A direct newest-k search instead of the separator arithmetic:* **accept.** No divergence was
+   found:
+   - It matches falkor-chat's real function and model-bench's port on 12,000 random cases, about
+     3,400 of which render within 100 characters of the cap.
+   - It also matches on 720 boundary cases, and at the exact edge: a single turn whose message is
+     exactly 6,000 characters is kept, and one character more falls back to the base.
+   - The differential has power: the positive controls `MAX_CHARS` 5999 and 6001 each produce 453
+     mismatches in 1,500 cases.
+
+   Its cost is quadratic in turn count, which falkor-chat removed in its K-027 n-2 change. That is
+   irrelevant behind the 6-turn normalization.
+4. *README Status rewritten:* **accept.** It was replaced in place and is in the present tense. It
+   tracks work status, so `teco` lists it at milestone close (root `AGENTS.md`, compaction bullet).
+
+**FR-8:** this holds, and it is verified. `render.py` imports only `json`, `collections.abc` and
+`typing`; `hashing.py` imports only `hashlib`, `json`, `collections.abc`, `types` and `typing`.
+`tests/test_fr8_isolation.py` gives 24 passed with both new modules in its scan. "falkor-chat"
+appears only in module docstrings, which are exempt. The model-bench path (`_MODEL_BENCH`) lives
+only in `tests/test_decision_contract.py`.
+
+**Growth-stops:** root `AGENTS.md`'s growth-stops bullet covers requirements, plans and reviews, not
+these files. I checked them against their own rules instead:
+- `AGENTS.md` follows the context-file rule (rewrite, do not append); see P2-F4.
+- `HISTORY.md` is read by lookup, so appending one entry is correct; see P2-F2 for accuracy.
+
+### What's solid
+
+- The guarded equality test reads both files as bytes. The row-count test counts from raw bytes
+  rather than through the loader. A one-byte fixture change goes red (F1).
+- Most of my re-sample went red (Appendix A): 24 of 26 mutants. That includes every
+  canonicalisation step of the hash and every block, separator and cap edge of the renderer.
+  Of the 2 survivors, R18 is P2-F1's gap and R12 is equivalent on this domain.
+- R12 deserves a note: dropping `default=str` survives because JSON-loaded items carry only
+  JSON-native values. It would matter only for an in-memory `understanding` holding, say, a
+  `datetime`, and no current caller passes one.
+- A non-Mapping turn row raises `AttributeError` here, exactly as in model-bench, whereas
+  falkor-chat skips it. That is consistent with the evaluation side and loud. U5.4's schema check
+  is the right place to refuse such an item.
+
+### Appendix A — re-sampled mutants (Pass 2)
+
+Each mutant was a single replacement, followed by the full suite. Mutants whose target text also
+appears in a docstring were re-applied to the code occurrence; the first attempt hit the docstring
+and was discarded.
+
+| ID | Mutation | Result |
+|---|---|---|
+| R1 | `MAX_CHARS` 6000→5999 | 4 failed |
+| R2 | `<= MAX_CHARS` → `<` | 2 failed |
+| R3 | state block always emitted | 11 failed |
+| R4 | `sort_keys=False` (state) | 3 failed |
+| R5 | `indent=1` (state) | 5 failed |
+| R6 | keep the oldest turns instead of the newest | 2 failed |
+| R7 | no hard truncation of `base` | 2 failed |
+| R8 | turns joined by `\n\n` | 4 failed |
+| R9 | default speaker `Member` | 2 failed |
+| R10 | slice before filtering | 1 failed |
+| R11 | no `authorId` fallback | 1 failed |
+| R12 | no `default=str` | **53 passed** (equivalent on JSON-loaded items) |
+| R13 | empty text kept | 1 failed |
+| R14 | default role `assistant` | 1 failed |
+| R15 | `render_guard_item` skips normalization | 1 failed |
+| R16 | header gains a trailing space | 9 failed |
+| R17 | state with `ensure_ascii=False` | 1 failed |
+| R18 | `render_guard_item` reverses turn order | **53 passed** (P2-F1) |
+| H1 | `ensure_ascii=True` | 1 failed |
+| H2 | spaced separators | 4 failed |
+| H3 | `path` dropped from the fields | 4 failed |
+| H4 | absent field written as `null` | 1 failed |
+| H5 | `sort_keys=False` | 4 failed |
+| H6 | UTF-16 encoding | 4 failed |
+| H7 | `itemId` added to the fields | 4 failed |
+| F1 | one byte in the `render-guard.jsonl` copy | 2 failed |
+
+### Appendix B — differential
+
+The differential script ran with `python -I`, against `decisionmodels.render`, model-bench's
+`classification`, and falkor-chat's `_render_judge_user`/`_recent_turns`. The falkor-chat functions
+were extracted from source by AST, so no falkor-chat import ran. Scratch script:
+`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p2/diff/differential.py`.
+
+**Generated inputs:**
+- turn counts of 0–40;
+- texts of 0–3,000 characters, with lengths of 399, 400 and 401 over-sampled, using non-ASCII,
+  newline, quote and emoji characters;
+- invalid `text` values: `None`, the empty string and an int;
+- empty, `None` and `0` speaker fallbacks;
+- conditions and `understanding` sized from 5,000 to 6,200 characters.
+
+**Runs:** seeds 1, 2 and 3, 4,000 cases each, plus 240 boundary cases per seed. Each run reported
+`{"norm": 0, "render": 0, "item": 0}` mismatches.
+
+**Positive controls**, patching `decisionmodels.render` in process with seed 1 and 1,500 cases:
+
+| Patch | norm | render | item |
+|---|---|---|---|
+| `MAX_CHARS=6001` | 0 | 453 | 333 |
+| `MAX_CHARS=5999` | 0 | 453 | 333 |
+| `RECENT_TURNS_KEPT=7` | 297 | 0 | 174 |
+| `TURN_TEXT_MAX_CHARS=401` | 854 | 0 | 551 |
+
+**`input_hash` against model-bench's:** 20,000 random nested items, 0 mismatches.

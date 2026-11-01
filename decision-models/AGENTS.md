@@ -9,9 +9,8 @@ the design.
 
 ## Current state
 
-Scaffold only: `decisionmodels/__init__.py`, the FR-8 isolation test and the version pin. The
-remaining units (U5.2–U5.10, U5.2b) and their order are plan4 §4.1/§4.3; the layout they fill is
-plan4 §3.1. What has landed is in `docs/HISTORY.md`.
+`decisionmodels/` holds `render.py` and `hashing.py`, guard point only; the rest of plan4 §4.1's
+units are not built yet (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
@@ -23,6 +22,12 @@ plan4 §3.1. What has landed is in `docs/HISTORY.md`.
   scan covers `decisionmodels/` only — `scripts/import_side_check_shingles.py` (plan2 §3.5) is the
   one sanctioned reader of the side-check items (`model-bench/packs/guard-judge-understanding/`),
   and it writes hashes only.
+- **Contract copies are byte-copies, never regenerated or edited here.**
+  `tests/fixtures/decision-contract/*.jsonl` are copies of model-bench's canonical vectors (v1.3
+  §3.2.2); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
+  `model-bench/` is absent). A red equality test means re-copy from
+  `model-bench/tests/fixtures/decision-contract/`, then fix the code. Reading model-bench from
+  `tests/` is allowed: the FR-8 scan covers `decisionmodels/` only.
 - **No hosted API client.** v1.3's `labeler.py` is void (plan4 §1); generation and labelling go
   through the subagent file exchange (plan4 §3).
 - **Agent definitions live in `agents/`, not `claude/` or `.claude/agents/`** (plan4 §3.1): they

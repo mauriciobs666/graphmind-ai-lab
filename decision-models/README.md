@@ -35,6 +35,6 @@ cd decision-models && .venv/bin/pytest -q # run the suite from the component dir
 
 ## Status
 
-Scaffold only (typed-decision-models unit U5.1): the package, the FR-8 isolation test, and the
-docs. The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
-`docs/HISTORY.md`.
+The scaffold (U5.1) and the guard contract copies (U5.2): the guard input renderer and the
+`input_hash` leakage key, pinned by byte-copies of model-bench's golden vectors. The layout the
+later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in `docs/HISTORY.md`.
