@@ -2059,3 +2059,358 @@ None.
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 18
+
+*2026-10-31. U3c.2: the uncommitted `model-bench/` diff against `01f6f2f4`, covering
+`modelbench/{cli,report,decision_stats}.py`, `tests/{test_decision_bar.py (new),
+test_decision_stats.py, test_report.py}`, `README.md`, `AGENTS.md` and `docs/HISTORY.md`. Specs,
+with the later plan winning: v1.3 §3.5–§3.6, §4 U3c and §5 U3c rows; plan2 §3.3, §3.6, §4.1 U3c
+and §5 U3c rows; plan3 §3.3, §3.6, §4.1 U3c and its U3c test row; note v1.8 §Q3–§Q6. Out of
+scope: `typed-decision-models4.md`, and `run.designEffect = 1.0` per cell (note §Q6 defers the
+per-cell estimate past U5).*
+
+**Verdict: needs changes** (one major, small fix). Every plan2 §3.6 refusal, state and print
+line is present and pinned, as are plan3's `overLimit` prints and the P12-n1/P16-n2 rulings. The
+`pair_items` split is sound, and the U3c.1 guarantees hold. The major: once candidates no longer
+pass through `compare_report`'s `runs`, the existing pack-content guard no longer reaches them.
+A bar is then stated over an incumbent and replicates measured on different pack content, with
+no banner (P18-M1). There is also one minor test gap in the disagreement line (P18-m1) and two
+nits.
+
+**Checks run** (from `model-bench/`, with a fresh `PYTHONPYCACHEPREFIX` each time):
+- **Suite and lint:** `3070 passed, 5 deselected, 2 xfailed`; `ruff check .` clean. The test
+  counts in HISTORY are right: `test_decision_bar.py` has 42 functions, which collect as 45 tests,
+  and `test_decision_stats.py` gains 12.
+- **Mutants:** 26 in all, each run against the full suite. For each one the file was copied aside,
+  then restored and `cmp`-checked. Afterwards, `sha256sum -c` over `modelbench/*.py` and the new
+  test file matched the pre-run values. The scripts are `scratchpad/p18/mutate.py` and
+  `mutate_s.py`.
+  - **18 of my own, on plumbing:** 12 went red, 6 survived. The survivors are P18-m1 and
+    Disposition (c). Appendix P18 lists them.
+  - **8 re-run from the implementer's mutant classes, as HISTORY names them,** because the
+    implementer's table is not trusted. All 8 went red: rank refusal, empty cell dropped,
+    hard-coded 85, incumbent latency used as the candidate's, caveat moved after the bar, FR-2
+    ignoring scored n, first run not forced to `load`, incumbent identity check removed.
+- **Probes** (`scratchpad/p18/probe_mixed.py`, `probe_inputs.py`):
+  - A relabel between the incumbent run and the replicates makes `pair_items` raise, because the
+    declared metric follows the label. That prints `not assessable`.
+  - An edit to the inputs alone does not. The incumbent ran on content `ebd24cb9` and both
+    replicates on `ad5b18ed`, and the report still prints `FR-1 … not met` and `FR-2 … met` with
+    no mismatch banner (P18-M1).
+- **Load state** (model-bench `REVIEW.md`): `residentModelsAtStart` is captured at
+  `runner.py:1843`, before `_load_absent` (1879). So `same-load` really does mean "resident
+  before this run's own load", and the U7-sequence test drives it through real `run_pack`.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded (`GRAPHS`); the code was read,
+mutated and executed directly.
+
+### (a) Contract fidelity to plan2 §3.6
+
+Each item below was checked line by line against the code and its test:
+- **Refusals.** `--session`/`--models`, unknown key, more than one chat arm, a chat arm that is
+  not the incumbent, a chat-arm run count other than one, two content hashes, different chat
+  timeouts, `--negative-control` and `rank` each refuse with exit 2 and write nothing.
+- **Equal off-pin timeouts.** A timeout of 120 s or `None` on every arm prints every bar
+  `not assessable (chat timeout ≠ 180 s)`, which is plan2 §5's row.
+- **Replicate kinds.** `assumed` / `load` / `same-load` follow the plan, and the first
+  non-assumed run is a `load` even when resident.
+- **K.** It is taken from the earliest run and printed once per arm. With interleaved D/H, D's K
+  is 0 and H's is 1.
+- **Reuse-adjusted limit.** It prints at K ≥ 1, and a printed `k=0` mutant goes red.
+  `mdd_reuse is None` occurs exactly when `mdd is None`, since at n ≥ 5 the grid reaches power 1
+  at δ = 1. So the `and line.mdd_reuse is not None` guard cannot hide a limit.
+- **Labeler caveat.** It is the first result line.
+- **Leakage, reuse and fit-outcome lines.** All three are present.
+- **Per-replicate counts.** Each replicate prints `handoffShare`, `decisionCallFailures` and
+  `overLimit`.
+- **Scored n and drops.** The scored eval n prints beside FR-11's 200, with eval-only drops.
+- **FR-1 lines.** All four print in note §Q3.4's form, each followed by its method minimum and
+  per-cell `overLimit k/n`, `0/n` included.
+- **FR-2.** It is `bar_holds(R, 2.0, "at-least")` with the pinned B and the pack seed.
+- **Side check.** The header prints the pack's actual count (P12-n1, pinned against an 85 mutant),
+  with side-check drops shown separately.
+- **Across the replicates.** The disagreement line follows, then `combine_replicates` per bar.
+
+### (b) The `pair_items` API change
+
+The split is sound.
+- `strata` is required and keyword-only, and a test pins that.
+- An item with no known stratum raises. So does a scored incumbent item whose metrics contradict
+  its stratum, which guards against a stale `strata`.
+- Withheld items count in `drops` or `side_check_drops` by the pack's stratum alone.
+
+The U3c.1 guarantees are intact.
+- Cell seeding is unchanged, and P16-m1's four cells reach the report: the empty-cell test
+  prints `0/0 [—]`, and the S2 mutant goes red.
+- Concordant pairing and over-limit pairing are untouched.
+
+Neither changed test is weaker.
+- The side-check decision-failure test now asserts both maps, which is stricter.
+- The renamed test keeps its assertion byte for byte. The claim its old comment made, that a
+  side-check pair adds nothing to scored n, is now asserted by
+  `test_a_withheld_side_check_item_is_counted_apart_from_the_bars_drops` (`scored_n == 1`).
+
+### (c) Plumbing
+
+These went red, each turning at least one test red:
+- the session filter on the replicate group;
+- K computed from the latest run, from this arm's runs only, without `evalSetHash`, or with `<=`;
+- the incumbent's timeout left out of the mismatch set;
+- residency keyed on `candidateId`;
+- the arms swapped into `pair_items`;
+- side-check drops merged into the bar's drops;
+- a printed `k=0`;
+- scored n `<` changed to `<=`;
+- the override for an inconsistent replicate.
+
+The survivors are P18-m1, plus one equivalent-in-effect mutant: the chat-arm count read across
+sessions. Its failure is loud (a spurious refusal), never a silent wrong bar, so no action.
+
+### (d) U4 fit
+
+Nothing here blocks U4.
+- `ReplicateGroup`, `_decision_point_arms`, `combine_replicates`, `DecisionPointPack.strata` and
+  `_disagreement_line` are role-agnostic. `_final_answer` works on `agree[<label>]` outcomes.
+- Two facts belong in the U4 brief:
+  - `_render_decision_bar` computes `blocked` (no incumbent, timeout off the pin) only after the
+    speed-up early return. The FR-10 side must hoist the timeout block, because note §Q4.3 applies
+    the 180 s pin to new abilities too.
+  - `pair_items` raises on a new-ability role. U4 adds its own drop accounting over the candidate
+    run (plan2 §3.6).
+
+### (e) Growth-stops (`model-bench/AGENTS.md`)
+
+The context-file convention applies, so the rule is "rewritten, not appended".
+- The file has 2,502 words (2,454 at the base) and no line over 700 characters.
+- **New scope:** one invariant paragraph, which v1.3 §4 U3c requires (bar constants,
+  `BAR_KIND_BY_ROLE`, the `runs`/`replicates` split).
+- **Rework, done in place:**
+  - The `groundingRate` "is fixed" sentence is removed. It was history, and it is in
+    `docs/HISTORY.md` at line 1180.
+  - The `(U1d–U2.2 in docs/HISTORY.md)` aside and `results.py:688` are removed.
+  - The raw-reply paragraph is compressed. Only examples were lost.
+- No history is restated. The one remaining dated clause, the P11-m2 ruling, is a live constraint
+  until U7, with a citation. See P18-n2 for the budget.
+
+### Dispositions of the implementer's judgement calls
+
+1. **Correct, and the citation checks out.** Plan2 §3.6 "Bar states" and note §Q4.3 "Not
+   assessable" put scored n first, and note §Q3.1 says "FR-1 holds iff all four cells hold".
+   On a `not assessable` replicate, each cell line ends with that state.
+2. **Agreed.** The exit-code policy is "0 whenever the tool ran and reported", and this answers
+   P16 Open question 1.
+3. **Agreed.** This is P16-m1 carried through to the print.
+4. **Agreed, and plan2 §5's row says so.** Timeout precedence masks an inconsistent incumbent's
+   reason, but both states are `not assessable`, so the effect is only on the wording.
+5. **Literally plan2 §3.6** ("makes its group's bars not assessable").
+6. **Agreed.** Plan2 §3.6 and note §Q6 set no stratum limit.
+7. **Lenient against v1.3 §3.5's "stored candidate runs"** (P18-n1).
+8. **Agreed.** A duplicated arm would build a duplicate group, and refusing it selects nothing.
+9. **Sound, but only while the replicates ran on this pack's content.** That holds because
+   `run` refuses an overlap with exit 4 and `fitManifestSize` is a required candidate field. The
+   "this pack's M items" half is what P18-M1 breaks.
+10. **Agreed.** `decision_point` is pack data, `replicates` is plan2's own name, and the pairing
+    key is fixed by the pack.
+11. **Agreed.** See (b).
+
+### Findings
+
+**P18-M1 (major; `coder`, and `teco` ledgers it as a U3c addition). A bar is stated over arms
+measured on different pack content, with no banner.** Plan2 §3.6 passes candidates only as
+`replicates`, so `compare_report`'s `PACK VERSION MISMATCH`/`PACK CONTENT HASH MISMATCH` banner
+(`report.py` §"banners") now sees the chat arm alone and can never fire. Before U3c.2, the same
+`compare` put the candidates into `runs`, and the comparison was flagged and labelled unpaired
+(v1.3 AC-3, AGENTS "never silently mixing").
+- The bar section checks no content hash. It also reads `strata`, the eval and side-check counts
+  and "this pack's M items" from the pack on disk, which may be a third content.
+- `pair_items` catches a label or `path` edit, because the declared metric changes. It does not
+  catch an edit to the inputs. My probe edited six conditions between the incumbent run
+  (`ebd24cb9`) and the replicates (`ad5b18ed`), and the report printed `FR-1 … not met` and
+  `FR-2 … met` with no notice. A U3d re-import that fixes a condition typo, inside a reused
+  session, reaches exactly this case.
+- **Fix:** in `_render_decision_bar`, if `{incumbent, every replicate}`'s
+  `fingerprint.packContentHash` plus the loaded pack's `contentHash` hold more than one value,
+  set `blocked = "not assessable (arms ran on different pack content: <hash8 list>)"`. That uses
+  the same mechanism as the timeout block. A cli usage refusal would also do. The implementer
+  chooses which, and states it in README.
+- **Assertion that catches it being wrong:** a `test_decision_bar` test built like
+  `probe_inputs.py` (an input-only edit between the incumbent and replicate runs) asserts every
+  bar carries that reason. Deleting the check must turn that test red.
+
+**P18-m1 (minor; `coder`). The disagreement line is pinned only on its final-answer count.** Four
+mutants survive the full suite:
+- `decidedBy` never compared (the test expects `0/200` either way);
+- the one-sided-withhold count dropped (expected `0`);
+- `assumed` replicates included in the comparison;
+- only replicate 2 compared, which matters from 3 replicates on.
+
+A fifth survivor is in the per-replicate block: side-check metrics also printed as `(pooled)`
+eval lines. That puts exploratory side-check rates in the eval section.
+
+Plan2 §3.6 specifies all four disagreement behaviours (note §Q6's diagnostic).
+- **Fix:** extend `test_the_disagreement_line_compares_each_replicate_with_the_first` with one
+  handed-off-versus-decided item (`decidedBy` 1/n) and one item withheld on one side only. Add a
+  3-replicate case with an `assumed` middle replicate, asserting `replicate 3 vs replicate 1` and
+  no `vs` line for the assumed one. In `test_a_side_check_item_scores_exploratory_lines_only`,
+  assert that no `sideCheck… (pooled)` line exists. Each of the five mutants in Appendix P18 must
+  then turn red.
+
+**P18-n1 (nit; `coder`). K is a lower bound when the pack has invalid records.**
+`_replicate_groups` reads only `valid`, but v1.3 §3.5 counts "stored candidate runs". A record
+excluded as invalid still looked at the evaluation set, so K, and with it the reuse-adjusted
+limit, can be understated. The `INVALID RESULTS EXCLUDED` banner does print, but far below the
+K line.
+- **Fix:** when `invalid` is non-empty, append `(valid records only; N invalid excluded)` to the
+  K line, and pin it with one test. Counting invalid records' envelopes would need
+  `InvalidRecord` to carry its fingerprint, which is more than this nit is worth.
+
+**P18-n2 (nit; `coder`). `model-bench/AGENTS.md` is 2 words over its ~2,500 budget, and its new
+paragraph ends on rationale.** The paragraph's last clause ("a withheld record carries nothing
+to tell its stratum by") restates `pair_items`' docstring. Drop it; that brings the file back
+under budget.
+
+### Proposed REVIEW.md lines
+
+Target `model-bench/REVIEW.md`, `## Always check`. Source: P18-M1. U4 reuses this path, so the
+line changes what U4's reviewer checks:
+
+- A change that routes runs around `compare_report`'s `runs` (as `replicates`, or as any new
+  argument) shows that every guard the `runs` path applies still reaches them: the pack-version
+  and content-hash banners, aggregate consistency, and the schema banner. Each one is pinned by a
+  test on the rerouted runs.
+
+### Appendix P18 — mutants
+
+| Mutant | Result |
+|---|---|
+| M1 replicate-group session filter dropped | red (≥5) |
+| M2 K from the latest run | red (1) |
+| M3 K ignores `evalSetHash` | red (1) |
+| M4 K counts a same-`startedAt` run | red (1) |
+| M5 K from this arm's runs, not history | red (≥4) |
+| M6 chat-arm runs counted across sessions | survived (loud failure only; no action) |
+| M7 chat timeout left out of the cli mismatch set | red (1) |
+| M8 resident-at-start keyed on `candidateId` | red (2) |
+| M9 `pair_items` arms swapped | red (≥5) |
+| M10 bar drops include side-check drops | red (1) |
+| M11 printed `k=0` in the FR-1 line | red (1) |
+| M12 `assumed` replicates in the disagreement line | **survived** (P18-m1) |
+| M13 disagreement for replicate 2 only | **survived** (P18-m1) |
+| M14 scored-n `<` → `<=` | red (≥4) |
+| M15 inconsistent replicate does not override the group | red (1) |
+| M16 `decidedBy` never compared | **survived** (P18-m1) |
+| M17 one-sided-withhold count dropped | **survived** (P18-m1) |
+| M18 pooled lines take side-check metrics | **survived** (P18-m1) |
+| S1–S8 (implementer classes, listed under Checks run) | red (1–2 each) |
+
+## Pass 19
+
+*2026-10-31. Re-gate of the U3c.2 fix round. It is still uncommitted on `01f6f2f4` and touches
+`modelbench/report.py`, `tests/test_decision_bar.py`, `README.md`, `AGENTS.md` and
+`docs/HISTORY.md`. Its delta was read against Pass 18's saved `report.py` snapshot; `cli.py` is
+byte-identical to that snapshot.*
+
+**Verdict: approve with suggestions.** Every Pass 18 finding is fixed, and all five Pass 18
+survivors now go red. Two new findings, both about tests of the content guard:
+- one minor: the coordinator's `g.runs[0]` mutant is **not** equivalent, and it survives
+  (P19-m1);
+- one nit: nothing pins the guard winning over earlier reasons (P19-n1).
+
+**Checks run** (from `model-bench/`, with a fresh `PYTHONPYCACHEPREFIX` each time):
+- **Suite:** `3076 passed, 5 deselected, 2 xfailed`.
+- **Mutants:** 11 in all, from `scratchpad/p19/mutate19.py` and two one-off copies. Each was
+  copied aside, restored and checked with `cmp`. Afterwards `sha256sum -c` over `modelbench/*.py`
+  and `tests/*.py` matched the pre-run values.
+  - The five Pass 18 survivors: all red.
+  - N2, the loaded pack's hash left out: red (1).
+  - N3, a content-blocked replicate still paired: red (3).
+  - N4, the K line's invalid note dropped: red (1).
+  - The `pair_items` catch narrowed to `KeyError`: red (1).
+  - Survivors: N1, the content guard losing to earlier reasons (P19-n1), and C1, `g.runs[0]` per
+    group (P19-m1).
+- **Probe** `scratchpad/p19/probe_c1.py`. The incumbent and replicate 1 ran on the pack's
+  content, and replicate 2 on input-edited content.
+  - Unmutated: every bar prints `not assessable (arms ran on different pack content: a186a681,
+    ebd24cb9)`.
+  - Under C1: `FR-1 … met` and `FR-2 … met`, exit 0.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded; the code was mutated and executed
+directly.
+
+### Dispositions
+
+- **P18-M1: fixed.** `_pack_content_reason` is applied last in `_render_decision_bar`, and a
+  `different_content` block skips pairing. Three tests cover it: the input-edit probe, a
+  replicate-only mismatch, and the pack edited after every arm ran. N2 and N3 go red. Coverage
+  across replicate positions is incomplete (P19-m1).
+- **P18-m1: fixed.** M12, M13, M16, M17 and M18 each go red. The 4-replicate test (load, assumed,
+  load, load) is needed for M13.
+- **P18-n1: fixed.** The K line ends `(valid records only; N invalid excluded)`; N4 goes red.
+- **P18-n2: fixed.** The clause is dropped. `AGENTS.md` is 2,492 words, with no line over 700
+  characters.
+
+### Interactions
+
+- **Content guard against an inconsistent replicate.** In `_render_replicate`, a replicate's own
+  state (`LOAD_CHANGED`, `_REPLICATE_INCONSISTENT`) still takes precedence over `blocked`. So an
+  inconsistent replicate's group prints `not assessable (replicate i: aggregates disagree …)` on
+  its overall lines, while its sibling replicates print the content reason. Both are
+  `not assessable`, and a replicate is never paired across contents. It affects only the wording.
+  No action.
+- **Content guard against the off-pin timeout, an inconsistent incumbent and no incumbent.** The
+  guard overwrites all three. That is the right order: those states still pair and print figures,
+  and the content state must not. N1 shows nothing pins it (P19-n1).
+- **Block or refuse.** Plan2 §3.6 refuses selection-shaped problems: the arm set, mixed candidate
+  hashes, mismatched timeouts. It states the property of a stored record as `not assessable`: an
+  equal off-pin timeout, `assumed`, inconsistent aggregates.
+  - A pack edited after every arm ran is a record property that no arm selection can fix, so
+    stating it is the consistent choice.
+  - An arm-against-arm mismatch is closer to the timeout-mismatch refusal the coder cites. Either
+    choice was acceptable (P18-M1's fix offered both).
+  - Putting one rule in `compare_report` means every caller gets it. Accepted.
+- **The pairing-error test now forges `packContentHash`.** That is the only way to reach the path
+  now. A runner validates the pack before running, so a stratum-less pack never produces records.
+  An item-set difference, the other natural trigger, now implies a content difference, which the
+  guard catches first. The `pair_items` catch is therefore defensive. It still deserves its test,
+  and the `KeyError`-narrowing mutant shows the test is live. The test's comment states the
+  forgery. Accepted.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** is under the context-file convention. It is 10 words shorter than
+  in Pass 18, and the only change is the removed clause.
+- **The content guard's home.** The guard is user-visible report behaviour, so README is the
+  right home. Its constraint lives in the `_pack_content_reason` and `DecisionPointPack`
+  docstrings. AGENTS already states the `runs`/`replicates` split, which is the fact that bites.
+  Agreed.
+- **`docs/HISTORY.md`** is read by lookup. Folding the fix round into the still-uncommitted U3c.2
+  entry is right, since it is one delivered change. Its claims check out against the code and the
+  runs above, including 51 tests in `test_decision_bar.py`. One caveat: "replicates … left out
+  of it" names the coder's whole-set mutant, which goes red, not C1.
+
+### Findings
+
+**P19-m1 (minor; `coder`). The content guard is not pinned for a later replicate.** Under C1
+(`runs = [g.runs[0] for g in replicates.values()]`) the full suite stays green. The equivalence
+argument does not hold:
+- `_replicate_groups` refuses two **`candidateContentHash`** values in a group;
+- it does not refuse two **`packContentHash`** values.
+
+`test_a_replicate_on_other_content…` puts the odd content in replicate 1, which C1 still reads.
+The probe puts it in replicate 2, and C1 then prints `met` over mixed content.
+- **Fix:** add the mirror case. The incumbent and replicate 1 run on the pack's content, and
+  replicate 2 on edited content (`probe_c1.py`'s shape), then `_assert_every_bar`. C1 must then
+  turn red.
+
+**P19-n1 (nit; `coder`). "Applied last, so it wins" is untested.** N1 survives the full suite:
+`blocked = blocked or _pack_content_reason(…)`. Under it, an off-pin timeout plus a content
+mismatch prints the timeout reason. It also pairs items across the two contents, and their
+figures print. The states stay `not assessable`.
+- **Fix:** one test with equal off-pin timeouts on every arm and an input edit between the arms.
+  Assert the content reason on every bar. N1 must then turn red.
+
+### Proposed REVIEW.md lines
+
+None new. Pass 18's proposed line (guards still reach runs rerouted around `runs`) covers P19-m1's
+class.

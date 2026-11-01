@@ -2,6 +2,65 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U3c.2 — `compare`'s replicate groups and the bar section, speed-up side
+
+**What:** the rest of v1.3 §4 U3c / plan2 §4.1 U3c / plan3 §4.1 U3c, calling U3c.1's
+`decision_stats`.
+
+- **`cli._replicate_groups(runs, *, session, arm_keys)`** (plan2 §3.6): every run of each
+  candidate `armKey` in the session, oldest `startedAt` first, as a `report.ReplicateGroup`
+  (`runs`, `kind`, `loadCount`, `k`, `earlierCandidates`). `assumed` iff `basis == "assumed"`;
+  `load` for the first non-assumed run or one whose decision model was not resident at start;
+  else `same-load`. K is v1.3 §3.5's, for the earliest run, over the pack's whole valid history.
+- **Arm rules** (`cli._decision_point_arms`), each exit 2 with nothing written: no `--session` or
+  `--models`; a key with no run in the session, or named twice; more than one chat arm, or one
+  that is not the incumbent; not exactly one chat-arm run; two content hashes in a group; arms at
+  different chat timeouts; `--negative-control`. `rank` refuses a decision-point pack.
+- **`report.compare_report(..., decision_point=, replicates=)`**: the labeler caveat as the first
+  result line, then one bar section per candidate: the leakage, reuse and fit-outcome lines; per
+  replicate the counts, the scored eval n with eval-only drops, the four FR-1 lines (note §Q3.4,
+  with the reuse-adjusted limit at K ≥ 1), each cell's method minimum and `overLimit`, the FR-2
+  ratio, pooled and side-check lines (exploratory); then the disagreement line and one
+  `combine_replicates` state per bar. `runs` is the chat arm alone, so the generic tables are
+  unchanged. `test_no_caller_can_choose_the_analysis_unit`'s closed set gains both parameters.
+- **`decision_stats.pair_items` gains a required `strata`** (the P16-n2 ruling, eval-only drop
+  counts). `drops` now holds eval items only; side-check drops, including
+  `SIDE_CHECK_DECISION_FAILURE`, move to the new `PairedItems.side_check_drops`. A scored
+  incumbent item whose metrics contradict its stratum raises. Two U3c.1 tests changed with the
+  contract: the side-check decision failure's expected map, and the eval-by-verdict-cell test,
+  rewritten since the stratum now comes from the pack.
+- **Judgement calls:** the per-replicate state is `not assessable (scored n < 200)` when the paired
+  scored eval n is below 200, else `not met` on any worse cell, else `met` (plan2 §3.6, note
+  §Q3.1/§Q4.3); on a not-assessable replicate each cell line ends with that state, never
+  `holds`. A `pair_items` raise prints `not assessable (cannot pair with the incumbent: …)`. No
+  incumbent, an inconsistent incumbent, or a chat timeout off 180 s (a legacy `None` included)
+  blocks every bar with its reason; an inconsistent replicate makes its group's overall states
+  `not assessable`. The incumbent, every replicate and the loaded pack not sharing one
+  `packContentHash` blocks every bar, unpaired, as `not assessable (arms ran on different pack
+  content: …)` (impl review P18-M1): candidates no longer reach the `runs` banners, and a stored
+  record's content is stated, as an off-pin timeout is, rather than refused. K counts valid stored
+  records only, and its line says how many invalid ones it left out (P18-n1). The disagreement
+  line covers every item of the run. The side-check header prints the pack's real count
+  (P12-n1).
+- README: non-feature 2 reworded per v1.3 §3.6, and `compare`/`rank` on a decision-point pack
+  documented, the pack-content guard and its not-refusing included. AGENTS: one invariant paragraph
+  (bar constants, `BAR_KIND_BY_ROLE`, the `runs`/`replicates` split, eval-only drops), two
+  paragraphs compressed.
+
+**Tests:** `tests/test_decision_bar.py` (new, 53), built from real offline `run_pack` records
+under `tmp_path`; `tests/test_decision_stats.py` +12. The pairing-error test now forges its
+records' `packContentHash`, since a runner refuses the stratum-less pack. A mutation run
+killed all 27 mutants: every arm refusal, the rank refusal, side-check drops in the eval count,
+three FR-1 lines for an empty cell, the scored-n state rule (FR-1 and FR-2), a hard-coded 85, the
+incumbent's latency as the candidate's, each K rule, the kind rules and the caveat's position.
+The Pass 18 fix round killed impl review Pass 18's five survivors (`decidedBy`, one-sided
+withholds, `assumed` replicates and replicate 3+ in the disagreement line; side-check metrics as
+pooled lines) and its own five (content check removed, replicates or the loaded pack left out of
+it, mismatched content still paired, the K line's invalid note dropped), and Pass 19's two (only
+each group's first replicate checked; the timeout reason winning over the content one).
+
+**Suite:** 3078 passed, 5 deselected, 2 xfailed; `ruff check .` clean.
+
 ## 2026-10-31 — typed-decision-models U3c.1 fix round — impl review Pass 16 (P16-m1, m2, n1, n3)
 
 - **P16-m1:** `pair_items` now seeds `outcomes` with `()` and `over_limit` with `0` for every

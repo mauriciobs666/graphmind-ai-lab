@@ -450,12 +450,16 @@ def test_no_caller_can_choose_the_analysis_unit() -> None:
     whitelist fails when *any* new knob appears, which is the only form that catches an analysis
     unit arriving under a name nobody thought to forbid. Growing it is therefore a deliberate act.
     `negative_control` joined it in review P3-4 — it selects a banner, and reads nothing about the
-    data.
+    data. `decision_point` and `replicates` joined it in typed-decision-models U3c.2 (plan2 §3.6
+    names `replicates`): the first is pack data (labels, strata), the second the candidate runs;
+    the bar pairs by `itemId`, which the pack fixes, so neither chooses a unit.
     """
     import inspect
 
     params = inspect.signature(compare_report).parameters
-    assert set(params) == {"runs", "pack", "invalid", "negative_control"}
+    assert set(params) == {
+        "runs", "pack", "invalid", "negative_control", "decision_point", "replicates",
+    }
 
 
 # --- S1 done-condition 8: headlineMetric null -----------------------------------------------------

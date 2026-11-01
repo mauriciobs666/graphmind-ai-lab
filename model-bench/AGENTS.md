@@ -16,8 +16,7 @@ roles has a scorer module in `modelbench/scoring/`: `retrieval.py` (`embedder`),
 deterministic layer only per FR-21a; the judged-quality layer stays deferred, `docs/BACKLOG.md`).
 Every pack has its own required live run against a real LM Studio. `tool-caller`'s known-answer
 validation (`qwen/qwen3-4b-2507` vs. `mistralai/ministral-3-3b`) ships flagged "not reproduced":
-no configuration tried reached significance at this pack's sample size. `chat-responder`'s
-`groundingRate` abstention-detection defect, found on its live run, is fixed (`docs/HISTORY.md`).
+no configuration tried reached significance at this pack's sample size.
 `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
 (the loader: `load_pack`/`validate_pack` with the decision-point contract, keyed on a
 `decisionPoint` key alone; content hashing, the AST import allowlist), `lmstudio`,
@@ -28,7 +27,7 @@ policies, hashes, `Candidate.load`, bar constants). `tests/fixtures/decision-con
 decision-point hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
 `run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
-the arm's absent models itself before the warm-ups (U1d–U2.2 in `docs/HISTORY.md`). A guard's
+the arm's absent models itself before the warm-ups. A guard's
 withheld hand-off record is `classification.score_answer`'s to shape; the runner never patches
 `detail`. **Never store a `model:decisions`/`model:handoff` record under `results/runs/` before
 typed-decision-models U7**, not even a smoke run:
@@ -83,6 +82,15 @@ it demotes-and-names on the substitute one.
 source** — the decision-point bar statistics and their pinned constants, cited by section. It may
 call `stats` primitives, never `stats.verdict`/`stats.holm_steps` (either makes `holds` easier,
 note §Q3.2); `tests/test_decision_stats.py` pins that by an AST read and a patched-out run.
+
+**A decision point's bar is requirement constants, never pack data.** `decisions.py` holds
+`MIN_EVAL_ITEMS`, `FR2_MIN_SPEEDUP`, the `FR10_*` pair, `DECISION_POINT_CHAT_TIMEOUT_SECONDS` and
+`BAR_KIND_BY_ROLE` (role → bar kind, the pack's `incumbent` agreeing), each mutation-pinned: a
+pack can neither pick nor lower its bar. On a decision-point
+`compare`, `compare_report` gets the chat arm alone as `runs` and candidates only as
+`replicates` (`cli._replicate_groups`, never last-wins), and its bar section states the bar
+without touching the exit code. Its drop counts are eval-only, by the pack's strata
+(`pair_items(strata=)`).
 
 **Five honesty rules that are easy to break silently, and what holds each in place:**
 
@@ -140,23 +148,19 @@ same-sentence heuristic reuses that regex; a second boundary definition is a sec
 **`sessionId` sits at the top level of a stored `RunResult`, not inside `fingerprint`.** A query
 that reads `fingerprint.sessionId` to filter stored runs by session silently gets nothing — every
 record reads as if `sessionId` were absent — because the field lives on `RunResult` itself
-(`results.py:688`, populated straight from `RunResult.from_dict`'s own `d.get("sessionId")`, not
-through `Fingerprint`). Read `run.sessionId` directly.
+(`RunResult.from_dict` reads it directly, not through `Fingerprint`). Read `run.sessionId`.
 
 **A stored run record never persists a model's raw reply text — auditing a scorer's verdict against
-a real reply after the fact needs a fresh live call, never a read of `results/runs/*.json`.**
-`RunResult`/`ItemResult` keep only `outcome`, `scoreable`, `counts`, and a scorer-defined `detail`
-block (grounding's is `{abstained, checklistPass, wordCount}`) — no `message`/`content`/`reply`
-field exists anywhere in the schema. Reproducing a real reply for a spot-check means calling the
-harness live with the same inputs — `modelbench.packs.load_pack` for the pack, the scorer's own
-`build_messages` (e.g. `grounding.build_messages`), and `modelbench.lmstudio.LMStudio.chat`, same
-model/pack/prompt/`temperature: 0.0` — never the stored artifact
-(`docs/test-reports/small-model-benchmarking-s7-report.md`).
+a real reply needs a fresh live call, never a read of `results/runs/*.json`.** `RunResult`/
+`ItemResult` keep only `outcome`, `scoreable`, `counts` and a scorer-defined `detail`; no
+`message`/`content`/`reply` field exists in the schema. A spot-check re-runs the same inputs
+live: `packs.load_pack`, the scorer's own `build_messages`, `LMStudio.chat` at the same
+model/prompt/`temperature: 0.0` (`docs/test-reports/small-model-benchmarking-s7-report.md`).
 
 **`compare --negative-control` duplicates one stored record as both arms** (`cli._select_arms`
 returns `[candidates[0], candidates[0]]`), never two runs: a wiring smoke check, `b = c = 0` by
-construction. `--models` keeps each model key's newest run; otherwise `load_history`'s ascending
-filename order makes `candidates[0]` the oldest match.
+construction, refused on a decision-point pack. `--models` keeps each model key's newest run;
+otherwise `load_history`'s ascending filename order makes `candidates[0]` the oldest match.
 
 ## Hard rules (they are design constraints, not preferences)
 

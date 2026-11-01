@@ -23,10 +23,11 @@ parameter reaches it.
 from __future__ import annotations
 
 import functools
-from typing import Mapping, NamedTuple, Sequence
+from dataclasses import dataclass
+from typing import Literal, Mapping, NamedTuple, Sequence
 
-from modelbench import stats
-from modelbench.packs import PackConfigError, PackRef, check_sampling_contract
+from modelbench import decision_stats, decisions, stats
+from modelbench.packs import Pack, PackConfigError, PackRef, check_sampling_contract
 from modelbench.results import (
     BinaryMetric,
     ContinuousMetric,
@@ -102,6 +103,36 @@ def _metric_aggregate(
 ) -> BinaryMetric | ContinuousMetric | DistributionSummary | None:
     """`name`'s own aggregate on `run`, or `None` when this arm declares none for it (§3.3 (iv))."""
     return next((m for m in run.aggregates.named_metrics() if m.name == name), None)
+
+
+#: A candidate replicate's load classification (typed-decision-models plan2 §3.6).
+ReplicateKind = Literal["load", "same-load", "assumed"]
+
+
+@dataclass(frozen=True)
+class ReplicateGroup:
+    """One candidate arm's replicates on a decision-point `compare` (plan2 §3.6), built by
+    `cli._replicate_groups`: every run of the arm's `armKey` in the session, oldest `startedAt`
+    first, all of one `candidateContentHash`.
+
+    - `kind[i]`: `assumed` (`basis == "assumed"`, note §Q6 "Load rule"), `load` (the group's first
+      non-assumed run, or one whose decision model was not resident at start) or `same-load`;
+    - `loadCount`: the `load` replicates;
+    - `k`: v1.3 §3.5's reuse count K, computed once for the **earliest** run and used by every
+      replicate, so a pair of replicates counts once (note §Q6); `earlierCandidates` are the K
+      `candidateContentHash` values it counts, sorted."""
+
+    runs: tuple[RunResult, ...]
+    kind: tuple[ReplicateKind, ...]
+    loadCount: int
+    k: int
+    earlierCandidates: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.kind) != len(self.runs) or not self.runs:
+            raise ValueError("a replicate group has one kind per run, and at least one run")
+        if self.loadCount != self.kind.count("load") or self.k != len(self.earlierCandidates):
+            raise ValueError("a replicate group's loadCount and k must count its kinds and hashes")
 
 
 class DuplicateModelInReport(ValueError):
@@ -1933,21 +1964,503 @@ def rank_report(
     return "\n".join(lines) + "\n"
 
 
+# --- the decision-point bar section (typed-decision-models v1.3 §3.5–§3.6; plan2 §3.6; plan3 §3.6)
+#
+# One section, printed on a decision-point pack's `compare`, that **states** the requirement's bar
+# and never acts on it: the exit code is unchanged and nothing is written outside `reports/`
+# (v1.3 §3.6). Every figure is `decision_stats`' (the method note's); this code composes and
+# prints, and decides nothing beyond the per-replicate state rule below (plan2 §3.6 "Bar states").
+
+_LABELER_CAVEAT = (
+    "Labels: {labeler}, unreviewed (FR-5). Results measure agreement with this labeler on "
+    "synthetic inputs, not verified correctness."
+)
+_BAR_NOTE = (
+    "_This section states the requirement's bar and never acts on it: no exit code depends on "
+    "it, and adopting a candidate stays a human edit (v1.3 §3.6). Each bar is judged on its "
+    "measured value, its interval printed beside it (FR-11a)._"
+)
+_EXPLORATORY = "exploratory — no significance claim"
+#: Per-replicate states this section adds beside `decision_stats`' own (plan2 §3.6, §3.2).
+_TIMEOUT_REASON = (
+    f"not assessable (chat timeout ≠ {decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS} s)"
+)
+_NO_INCUMBENT = "not assessable (no incumbent run in this comparison)"
+_INCUMBENT_INCONSISTENT = "not assessable (the incumbent run's aggregates disagree with its items)"
+_REPLICATE_INCONSISTENT = "not assessable (this replicate's aggregates disagree with its items)"
+_SIDE_CHECK_PREFIX = "sideCheck"
+_DIFFERENT_CONTENT = "not assessable (arms ran on different pack content"
+
+
+def _pack_content_reason(
+    dp: DecisionPointPack,
+    incumbent: RunResult | None,
+    replicates: Mapping[str, ReplicateGroup],
+) -> str | None:
+    """The bar's own pack-content guard (impl review P18-M1). Candidates reach the report only as
+    `replicates`, so the `runs` banners (`PACK CONTENT HASH MISMATCH`) never see them; and the bar
+    reads strata and counts from the pack on disk, a third content. Any disagreement among the
+    incumbent's, every replicate's and the loaded pack's hash makes every bar not assessable."""
+    runs = [r for g in replicates.values() for r in g.runs]
+    if incumbent is not None:
+        runs.append(incumbent)
+    hashes = {r.fingerprint.get("packContentHash") for r in runs} | {dp.contentHash}
+    if len(hashes) == 1:
+        return None
+    shown = ", ".join(
+        sorted("none recorded" if h is None else str(h)[:8] for h in hashes)
+    )
+    return f"{_DIFFERENT_CONTENT}: {shown})"
+
+
+@dataclass(frozen=True)
+class DecisionPointPack:
+    """What the bar section reads from the pack itself (v1.3 §3.5): the labeler, the incumbent,
+    every item's `stratum` by `itemId` (`None` for an item with none), which `pair_items` takes so
+    the bars' drop counts stay eval-only (impl review P16-n2), and the pack's `contentHash`, which
+    every arm's recorded `packContentHash` must equal for a bar to be stated (impl review
+    P18-M1)."""
+
+    labeler: str
+    incumbent: str | None
+    strata: Mapping[str, str | None]
+    contentHash: str
+
+    @classmethod
+    def from_pack(cls, pack: Pack) -> "DecisionPointPack":
+        """Raises `PackConfigError` when the `labels.labeler` the caveat names is missing — a
+        pack `validate_pack` refuses (FR-5)."""
+        labels = pack.manifest.get("labels")
+        labeler = labels.get("labeler") if isinstance(labels, Mapping) else None
+        names = (
+            [labeler.get("provider"), labeler.get("model")]
+            if isinstance(labeler, Mapping)
+            else []
+        )
+        if len(names) != 2 or not all(isinstance(n, str) and n for n in names):
+            raise PackConfigError(
+                f"{pack.packId}: a decision-point pack needs labels.labeler.provider and .model "
+                "for the report's labeler caveat (FR-5)"
+            )
+        decision_point = pack.manifest.get("decisionPoint")
+        incumbent = (
+            decision_point.get("incumbent") if isinstance(decision_point, Mapping) else None
+        )
+        return cls(
+            labeler=f"{names[0]}/{names[1]}",
+            incumbent=incumbent if isinstance(incumbent, str) else None,
+            strata={str(row.get("itemId")): row.get("stratum") for row in pack.iter_items()},
+            contentHash=pack.contentHash,
+        )
+
+    @property
+    def eval_count(self) -> int:
+        return sum(1 for s in self.strata.values() if s == "eval")
+
+    @property
+    def side_check_count(self) -> int:
+        return sum(1 for s in self.strata.values() if s == "side-check")
+
+
+def _rate_cell(k: int, n: int) -> str:
+    """`k/n [lo, hi]` with a Wilson interval, or `0/0 [—]` when there is no denominator."""
+    if not n:
+        return "0/0 [—]"
+    lo, hi = stats.wilson_interval(k, n)
+    return f"{k}/{n} [{lo:.3f}, {hi:.3f}]"
+
+
+def _count_cell(run: RunResult, name: str) -> str:
+    """One exploratory count from the run's own aggregate, `k/n`, or why there is none."""
+    metric = _metric_aggregate(run, name)
+    if isinstance(metric, BinaryMetric):
+        return f"{name} {metric.successes}/{metric.n}"
+    return f"{name} — (not recorded on this surface)"
+
+
+def _drops_text(drops: Mapping[tuple[str, str], int]) -> str:
+    if not drops:
+        return "none dropped"
+    parts = [f"{arm} {reason} {count}" for (arm, reason), count in sorted(drops.items())]
+    return "dropped: " + ", ".join(parts)
+
+
+def _holds_clause(line: decision_stats.ParityLine, k: int) -> str:
+    """Note §Q3.3's `holds (…)` form, and §Q3.5's reuse-adjusted limit when K ≥ 1."""
+    if line.mdd is None:
+        return (
+            f"holds (no worsening is detectable at n = {line.n_effective}: fewer than 5 items)"
+        )
+    psi = "—" if line.psi_hat is None else f"{line.psi_hat:.2f}"
+    clause = f"could only detect ≥ {_pp(line.mdd)} pp at n = {line.n_effective}, ψ̂ = {psi}"
+    if k >= 1 and line.mdd_reuse is not None:
+        clause += f"; reuse-adjusted at K = {k}: ≥ {_pp(line.mdd_reuse)} pp"
+    return f"holds ({clause})"
+
+
+def _parity_text(metric: str, line: decision_stats.ParityLine, *, k: int, state: str) -> str:
+    """Note §Q3.4's printed line. `state` is the replicate's: on `met`/`not met` the line ends
+    with the cell's own reading; on a `not assessable (…)` replicate it ends with that state,
+    never with a `holds` the replicate cannot claim (plan2 §3.6)."""
+    if line.n:
+        diff = f"{(line.e1 - line.e2) / line.n * 100:+.1f} pp"
+        upper = f"{line.U * 100:.1f}" if line.U is not None else "—"
+    else:
+        diff, upper = "—", "—"
+    figures = (
+        f"{metric}: candidate {_rate_cell(line.e1, line.n)} vs incumbent "
+        f"{_rate_cell(line.e2, line.n)}; diff {diff}; b={line.b}, c={line.c}, "
+        f"p_worse={line.p_worse:.4f}; worse by at most {upper} pp (one-sided 95%)"
+    )
+    if state not in (decision_stats.MET, decision_stats.NOT_MET):
+        return f"{figures} — {state}"
+    if line.state == "worse":
+        return f"{figures} — not met: candidate worse"
+    return f"{figures} — {_holds_clause(line, k)}"
+
+
+def _speedup_text(paired: decision_stats.PairedItems, *, seed: int) -> tuple[str, float | None]:
+    """Note §Q4.1's figure, `R = Σx/Σy` with its paired bootstrap interval, and the measured
+    `R` (or `None` when none can be computed, and why)."""
+    x = [row[1] for row in paired.latency]
+    y = [row[2] for row in paired.latency]
+    try:
+        ratio = decision_stats.speedup_ratio(
+            x,
+            y,
+            seed=seed,
+            B=decision_stats.BOOTSTRAP_B,
+            levels=(stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI),
+        )
+    except ValueError as exc:
+        return f"FR-2 speed-up: no ratio over {len(x)} paired eval item(s) ({exc})", None
+    text = (
+        f"FR-2 speed-up: {ratio.point:.2f} [{ratio.lo:.2f}, {ratio.hi:.2f}] — the incumbent's "
+        f"mean {sum(x) / len(x):.0f} ms over the candidate's {sum(y) / len(y):.0f} ms, "
+        f"{len(x)} paired eval items (paired percentile bootstrap 95%, B={ratio.B}, "
+        f"seed {ratio.seed}); the bar is ≥ {decisions.FR2_MIN_SPEEDUP:g} on the measured ratio"
+    )
+    return text, ratio.point
+
+
+def _fr1_state(paired: decision_stats.PairedItems, lines: Mapping[str, decision_stats.ParityLine]):
+    """Plan2 §3.6 "Bar states" with note §Q3.1/§Q4.3: a paired scored eval n below
+    `MIN_EVAL_ITEMS` is `not assessable (scored n < 200)` whatever the cells say; otherwise any
+    `worse` cell is `not met`, else `met`."""
+    if paired.scored_n < decisions.MIN_EVAL_ITEMS:
+        return decision_stats.SCORED_N_BELOW_MIN
+    if any(line.state == "worse" for line in lines.values()):
+        return decision_stats.NOT_MET
+    return decision_stats.MET
+
+
+def _fr2_state(paired: decision_stats.PairedItems, ratio: float | None) -> str:
+    if paired.scored_n < decisions.MIN_EVAL_ITEMS:
+        return decision_stats.SCORED_N_BELOW_MIN
+    if ratio is None:
+        return "not assessable (no speed-up ratio)"
+    met = decisions.bar_holds(ratio, decisions.FR2_MIN_SPEEDUP, direction="at-least")
+    return decision_stats.MET if met else decision_stats.NOT_MET
+
+
+class _ReplicateBars(NamedTuple):
+    lines: list[str]
+    fr1: str
+    fr2: str
+
+
+def _render_replicate(
+    index: int,
+    run: RunResult,
+    kind: str,
+    *,
+    group: ReplicateGroup,
+    incumbent: RunResult | None,
+    blocked: str | None,
+    dp: DecisionPointPack,
+    pack: PackRef,
+) -> _ReplicateBars:
+    """Plan2 §3.6's per-replicate block (with plan3 §3.6's `overLimit` prints). `blocked` is a
+    comparison-wide `not assessable (…)` state (no incumbent, chat timeout ≠ 180 s, arms on
+    different pack content — which, like an inconsistent arm, leaves nothing to pair)."""
+    suffix = ", not counted as a load" if kind == "same-load" else ""
+    lines = [f"#### replicate {index} — run `{run.runId}`, basis {run.basis}{suffix}", ""]
+    if kind == "same-load":
+        lines.append(
+            f"- replicate {index}: same load as an earlier run — not counted as a load"
+        )
+    lines.append(
+        "- "
+        + " · ".join(
+            _count_cell(run, name) for name in ("handoffShare", "decisionCallFailures", "overLimit")
+        )
+    )
+    state = decision_stats.LOAD_CHANGED if kind == "assumed" else blocked
+    if _aggregate_item_mismatches(run, pack):
+        state = _REPLICATE_INCONSISTENT
+    unpairable = (_REPLICATE_INCONSISTENT, _INCUMBENT_INCONSISTENT)
+    different_content = blocked is not None and blocked.startswith(_DIFFERENT_CONTENT)
+    if incumbent is None or state in unpairable or blocked in unpairable or different_content:
+        reason = state or blocked or _NO_INCUMBENT
+        lines += [f"- FR-1 (replicate {index}): {reason}", f"- FR-2 (replicate {index}): {reason}"]
+        return _ReplicateBars(lines + [""], reason, reason)
+    try:
+        paired = decision_stats.pair_items(
+            incumbent.items, run.items, role=pack.role, strata=dp.strata
+        )
+    except ValueError as exc:
+        reason = f"not assessable (cannot pair with the incumbent: {exc})"
+        lines += [f"- FR-1 (replicate {index}): {reason}", f"- FR-2 (replicate {index}): {reason}"]
+        return _ReplicateBars(lines + [""], reason, reason)
+
+    cells = PER_KIND_VERDICT_METRICS  # the guard's four FR-1 cells; `pair_items` seeds each
+    parity = {
+        cell: decision_stats.parity_cell(
+            paired.outcomes[cell],
+            design_effect=run.designEffect,
+            k=group.k,
+            alpha=decision_stats.FR1_ALPHA,
+        )
+        for cell in cells
+    }
+    ratio_text, ratio = _speedup_text(paired, seed=pack.seed)
+    fr1 = state or _fr1_state(paired, parity)
+    fr2 = state or _fr2_state(paired, ratio)
+    lines.append(
+        f"- scored eval n: {paired.scored_n} of the pack's {dp.eval_count} eval items, beside "
+        f"FR-11's {decisions.MIN_EVAL_ITEMS}; {_drops_text(paired.drops)}"
+    )
+    lines.append(
+        "- FR-1 parity, per cell (one-sided exact McNemar, α = "
+        f"{decision_stats.FR1_ALPHA:g}, unadjusted; `p_worse` decides, `U` is descriptive):"
+    )
+    for cell in cells:
+        line = parity[cell]
+        minimum = decision_stats.GUARD_CELL_METHOD_MIN
+        thin = " — below it: printed, never refused" if line.n < minimum else ""
+        lines += [
+            f"  - {_parity_text(cell, line, k=group.k, state=fr1)}",
+            f"    - scored n {line.n} beside method minimum {minimum}{thin}; "
+            f"overLimit {paired.over_limit[cell]}/{line.n}",
+        ]
+    lines += [
+        f"- FR-1 (replicate {index}): {fr1}",
+        f"- {ratio_text} — {fr2}",
+    ]
+    pooled = [m for m in paired.outcomes if m not in cells and not m.startswith(_SIDE_CHECK_PREFIX)]
+    for metric in pooled:
+        pairs = paired.outcomes[metric]
+        cand, inc = sum(p[0] for p in pairs), sum(p[1] for p in pairs)
+        lines.append(
+            f"- {metric} (pooled): candidate {_rate_cell(cand, len(pairs))} vs incumbent "
+            f"{_rate_cell(inc, len(pairs))} — {_EXPLORATORY}"
+        )
+    lines += [
+        "",
+        f"Side check — {dp.side_check_count} human-curated items (does not affect pass/fail)",
+        "",
+    ]
+    side = [m for m in paired.outcomes if m.startswith(_SIDE_CHECK_PREFIX)]
+    for metric in side:
+        pairs = paired.outcomes[metric]
+        cand, inc = sum(p[0] for p in pairs), sum(p[1] for p in pairs)
+        lines.append(
+            f"- {metric}: candidate {_rate_cell(cand, len(pairs))} vs incumbent "
+            f"{_rate_cell(inc, len(pairs))} — {_EXPLORATORY}"
+        )
+    lines += [f"- side check: {_drops_text(paired.side_check_drops)}", ""]
+    return _ReplicateBars(lines, fr1, fr2)
+
+
+def _final_answer(item: ItemResult) -> tuple[tuple[str, bool], ...] | None:
+    """An item's final answer as its declared outcomes (an answer is never stored, AGENTS
+    invariant; the same item's events differ iff its answers do), or `None` with no answer."""
+    declared = sorted(m for m in item.scoreable if item.scoreable[m])
+    if not declared:
+        return None
+    return tuple((m, item.scored_outcome(m)) for m in declared)
+
+
+def _disagreement_line(first: tuple[int, RunResult], other: tuple[int, RunResult]) -> str:
+    """Note §Q6's diagnostic: one replicate against the first, on final answer and `decidedBy`,
+    each `k/n` with Wilson over the items with a final answer in both; failed calls and
+    one-sided withholds are counted beside it (plan2 §3.6)."""
+    (i, a), (j, b) = first, other
+    by_id = {item.itemId: item for item in a.items}
+    answer = decided = n = failed = one_sided = 0
+    for item in b.items:
+        mate = by_id.get(item.itemId)
+        if mate is None:
+            continue
+        if mate.detail.get("failedCall") or item.detail.get("failedCall"):
+            failed += 1
+        withheld = [x.timing is not None and x.timing.withheldFor is not None for x in (mate, item)]
+        if withheld[0] != withheld[1]:
+            one_sided += 1
+        left, right = _final_answer(mate), _final_answer(item)
+        if left is None or right is None:
+            continue
+        n += 1
+        answer += left != right
+        decided += mate.detail.get("decidedBy") != item.detail.get("decidedBy")
+    return (
+        f"- replicate {j} vs replicate {i}: final answer differs on {_rate_cell(answer, n)}, "
+        f"decidedBy on {_rate_cell(decided, n)}; beside it, {failed} item(s) with a failed call "
+        f"in either and {one_sided} withheld in one replicate only"
+    )
+
+
+def _render_candidate_arm(
+    key: str,
+    group: ReplicateGroup,
+    *,
+    incumbent: RunResult | None,
+    blocked: str | None,
+    dp: DecisionPointPack,
+    pack: PackRef,
+    invalid_count: int,
+) -> list[str]:
+    first = group.runs[0]
+    hashes = ", ".join(h[:8] for h in group.earlierCandidates) or "none"
+    # K reads valid records only; an invalid one may still have seen this evaluation set, so K is
+    # then a lower bound (impl review P18-n1).
+    partial = (
+        f" (valid records only; {invalid_count} invalid excluded)" if invalid_count else ""
+    )
+    lines = [
+        f"### Candidate `{key}`",
+        "",
+        f"- fit manifest: {first.fingerprint.get('fitManifestSize')} inputs "
+        f"(training/calibration/cut-off); 0 overlap with this pack's {len(dp.strata)} items "
+        "(checked at run time, sha256 over canonical input fields)",
+        f"- Candidates already run on this evaluation set: {group.k} ({hashes}){partial}",
+        f"- fit outcome: {first.fingerprint.get('fitOutcome')} (quality target "
+        f"{first.fingerprint.get('fitQualityTarget')})",
+        "",
+    ]
+    fr1: list[str] = []
+    fr2: list[str] = []
+    inconsistent: list[int] = []
+    for index, (run, kind) in enumerate(zip(group.runs, group.kind, strict=True), 1):
+        bars = _render_replicate(
+            index, run, kind, group=group, incumbent=incumbent, blocked=blocked, dp=dp, pack=pack
+        )
+        lines += bars.lines
+        fr1.append(bars.fr1)
+        fr2.append(bars.fr2)
+        if bars.fr1 == _REPLICATE_INCONSISTENT:
+            inconsistent.append(index)
+
+    lines += ["#### Across the replicates", ""]
+    counted = [
+        (i, run)
+        for i, (run, kind) in enumerate(zip(group.runs, group.kind, strict=True), 1)
+        if kind != "assumed"
+    ]
+    if len(counted) < 2:
+        lines.append(
+            f"- replicate disagreement: {len(counted)} non-assumed replicate(s), nothing to compare"
+        )
+    for other in counted[1:]:
+        lines.append(_disagreement_line(counted[0], other))
+    if inconsistent:
+        shown = ", ".join(str(i) for i in inconsistent)
+        overall_1 = overall_2 = (
+            f"not assessable (replicate {shown}: aggregates disagree with items)"
+        )
+    else:
+        overall_1 = decision_stats.combine_replicates(fr1, group.loadCount)
+        overall_2 = decision_stats.combine_replicates(fr2, group.loadCount)
+    lines += [
+        f"- **FR-1 parity, over {len(group.runs)} replicate(s) ({group.loadCount} load(s)): "
+        f"{overall_1}**",
+        f"- **FR-2 speed-up, over {len(group.runs)} replicate(s) ({group.loadCount} load(s)): "
+        f"{overall_2}**",
+        "",
+    ]
+    return lines
+
+
+def _render_decision_bar(
+    pack: PackRef,
+    dp: DecisionPointPack,
+    *,
+    incumbent: RunResult | None,
+    replicates: Mapping[str, ReplicateGroup],
+    invalid_count: int = 0,
+) -> list[str]:
+    """The bar section, speed-up side (v1.3 §3.6, plan2 §3.6). The new-ability side is U4's.
+    `invalid_count` is the pack's stored records excluded as invalid, which K cannot read."""
+    lines = ["## Requirement bar", "", _BAR_NOTE, ""]
+    if decisions.BAR_KIND_BY_ROLE.get(pack.role) != "speed-up":
+        return lines + [
+            f"Role `{pack.role}` has no speed-up bar; its FR-10 bar is not built yet.",
+            "",
+        ]
+    timeouts = {r.requestTimeoutSeconds for g in replicates.values() for r in g.runs}
+    if incumbent is not None:
+        timeouts.add(incumbent.requestTimeoutSeconds)
+    blocked = None
+    if incumbent is None:
+        blocked = _NO_INCUMBENT
+    elif _aggregate_item_mismatches(incumbent, pack):
+        blocked = _INCUMBENT_INCONSISTENT
+    if any(t != decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS for t in timeouts):
+        blocked = _TIMEOUT_REASON
+    # Last, so it wins: pairing items across two pack contents states nothing (P18-M1).
+    blocked = _pack_content_reason(dp, incumbent, replicates) or blocked
+    if incumbent is not None:
+        lines += [f"Incumbent: `{incumbent.armKey}` — run `{incumbent.runId}`.", ""]
+    else:
+        lines += [f"Incumbent: none in this comparison (the pack names `{dp.incumbent}`).", ""]
+    if not replicates:
+        return lines + ["No candidate arm was named, so there is no bar to state.", ""]
+    for key, group in replicates.items():
+        lines += _render_candidate_arm(
+            key,
+            group,
+            incumbent=incumbent,
+            blocked=blocked,
+            dp=dp,
+            pack=pack,
+            invalid_count=invalid_count,
+        )
+    return lines
+
+
 def compare_report(
     runs: Sequence[RunResult],
     *,
     pack: PackRef,
     invalid: Sequence[InvalidRecord] = (),
     negative_control: bool = False,
+    decision_point: DecisionPointPack | None = None,
+    replicates: Mapping[str, ReplicateGroup] | None = None,
 ) -> str:
-    """Render the markdown comparison for one pack. Never ranks across roles or packs."""
+    """Render the markdown comparison for one pack. Never ranks across roles or packs.
+
+    On a decision-point pack (`decision_point` given) the labeler caveat is the first result
+    line and the bar section follows it (v1.3 §3.5–§3.6). `runs` is then the chat arm alone, or
+    empty, so the generic tables below render their fewer-than-two-arms case; candidates arrive
+    only as `replicates` (plan2 §3.6)."""
     check_sampling_contract(pack)
     if pack.metrics.headlineMetric is not None and (
         pack.metrics.headlineMetric not in pack.metrics.verdictMetrics
     ):
         raise PackConfigError("headlineMetric is not a member of verdictMetrics")
+    if replicates and decision_point is None:
+        raise ValueError("replicates are a decision-point comparison's, and need its pack")
 
     lines: list[str] = [f"# Comparison — {pack.label} ({pack.role})", ""]
+    if decision_point is not None:
+        lines += [_LABELER_CAVEAT.format(labeler=decision_point.labeler), ""]
+        lines += _render_decision_bar(
+            pack,
+            decision_point,
+            incumbent=runs[0] if runs else None,
+            replicates=replicates or {},
+            invalid_count=len(invalid),
+        )
     lines += _render_role_caveat(pack)
 
     # S1 done-condition 10 — an arm whose stored aggregates disagree with its own items is

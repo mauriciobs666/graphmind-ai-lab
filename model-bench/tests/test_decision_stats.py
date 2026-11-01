@@ -539,8 +539,16 @@ def _withheld_handoff(item_input, withheld="timeout", *, over_limit=False):
     return _score(item_input, None, _timing(None, withheld), input_tokens=40)
 
 
-def _pair(incumbent, candidate):
-    return decision_stats.pair_items(incumbent, candidate, role="guard-judge")
+def _strata(items):
+    """The pack strata `pair_items` takes (P16-n2 ruling): this file's convention is that an id
+    starting with `s` is a side-check item (`_input("s1", stratum="side-check")`), any other an
+    eval one."""
+    return {i.itemId: "side-check" if i.itemId.startswith("s") else "eval" for i in items}
+
+
+def _pair(incumbent, candidate, *, strata=None):
+    strata = _strata(incumbent) if strata is None else strata
+    return decision_stats.pair_items(incumbent, candidate, role="guard-judge", strata=strata)
 
 
 def test_pair_items_pairs_two_answered_eval_items_on_every_declared_metric():
@@ -607,7 +615,9 @@ def test_a_side_check_decision_failure_is_dropped_from_the_side_check_and_counte
     paired = _pair([_inc(side, False)], [_failed(side)])
     assert paired.outcomes == _cells()
     assert paired.latency == () and paired.scored_n == 0
-    assert paired.drops == {("candidate", "side-check decision failure"): 1}
+    # Eval-only drop counts (P16-n2 ruling): the side-check drop is counted, in its own map.
+    assert paired.drops == {}
+    assert paired.side_check_drops == {("candidate", "side-check decision failure"): 1}
 
 
 def test_an_answered_side_check_item_pairs_on_its_side_check_metric_only():
@@ -719,7 +729,9 @@ def test_pair_items_refuses_a_decision_failure_on_the_incumbent_arm():
 def test_pair_items_pairs_speed_up_points_only(role):
     item = _input("e1")
     with pytest.raises(ValueError, match=role):
-        decision_stats.pair_items([_inc(item, False)], [_decided(item, False)], role=role)
+        decision_stats.pair_items(
+            [_inc(item, False)], [_decided(item, False)], role=role, strata={"e1": "eval"}
+        )
 
 
 def test_the_verdict_cell_table_is_keyed_on_the_speed_up_roles_and_holds_the_scorers_cells():
@@ -732,13 +744,76 @@ def test_the_verdict_cell_table_is_keyed_on_the_speed_up_roles_and_holds_the_sco
     )
 
 
-def test_a_pooled_only_eval_item_is_still_an_eval_item_by_its_verdict_cell():
-    # An eval item is one whose incumbent declares a verdict cell; a pair outside every cell
-    # (side check) adds nothing to the scored n. Every turns item lands on its own cell.
+def test_a_turns_eval_item_lands_on_its_own_cell_and_in_the_scored_n():
     item = _input("t1", expected=True, path="turns", tier="clear_advance")
     paired = _pair([_inc(item, True)], [_decided(item, False)])
     assert paired.outcomes[_FS_T] == ((True, False),)
     assert paired.scored_n == 1
+
+
+# --- the drop counts are eval-only (impl review P16-n2, teco ruling) ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("inc_withheld", "cand_withheld", "expected"),
+    [
+        ("load", None, {("incumbent", "load"): 1}),
+        (None, "load", {("candidate", "load"): 1}),
+        ("timeout", None, {("incumbent", "timeout"): 1}),
+        ("no_response", None, {("incumbent", "no_response"): 1}),
+    ],
+)
+def test_a_withheld_side_check_item_is_counted_apart_from_the_bars_drops(
+    inc_withheld, cand_withheld, expected
+):
+    # The stratum comes from the pack: a withheld incumbent item has no metric to tell it by.
+    side, kept = _input("s1", stratum="side-check"), _input("e1")
+    paired = _pair(
+        [_inc(side, False, withheld=inc_withheld), _inc(kept, False)],
+        [_decided(side, True, withheld=cand_withheld), _decided(kept, False)],
+    )
+    assert paired.drops == {}
+    assert paired.side_check_drops == expected
+    assert paired.scored_n == 1
+
+
+def test_a_withheld_eval_item_is_counted_in_the_bars_drops_only():
+    paired = _pair(
+        [_inc(_input("e1"), False, withheld="load"), _inc(_input("e2"), False)],
+        [_decided(_input("e1"), True), _withheld_handoff(_input("e2"), "timeout")],
+    )
+    assert paired.drops == {("incumbent", "load"): 1, ("candidate", "timeout"): 1}
+    assert paired.side_check_drops == {}
+
+
+def test_pair_items_takes_the_stratum_from_the_pack_not_from_the_records():
+    # The same withheld record counts as eval or side check by the mapping alone.
+    item = _input("e1")
+    incumbent, candidate = [_inc(item, False, withheld="load")], [_decided(item, True)]
+    as_side = _pair(incumbent, candidate, strata={"e1": "side-check"})
+    assert as_side.drops == {} and as_side.side_check_drops == {("incumbent", "load"): 1}
+
+
+@pytest.mark.parametrize("strata", [{}, {"e1": "train"}, {"e1": None}])
+def test_pair_items_refuses_an_item_with_no_known_stratum(strata):
+    item = _input("e1")
+    with pytest.raises(ValueError, match="e1"):
+        _pair([_inc(item, False)], [_decided(item, False)], strata=strata)
+
+
+@pytest.mark.parametrize(
+    ("item", "stratum"),
+    [(_input("e1"), "side-check"), (_input("e1", stratum="side-check"), "eval")],
+)
+def test_pair_items_refuses_a_stratum_its_incumbents_metrics_contradict(item, stratum):
+    with pytest.raises(ValueError, match="stratum"):
+        _pair([_inc(item, False)], [_decided(item, False)], strata={"e1": stratum})
+
+
+def test_pair_items_takes_strata_by_keyword_with_no_default():
+    param = inspect.signature(decision_stats.pair_items).parameters["strata"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
 
 
 # --- speedup_ratio (note §Q4.1) and mean_latency (note §Q4.2) -------------------------------------

@@ -368,6 +368,8 @@ _VERDICT_CELLS_BY_ROLE: Mapping[str, tuple[str, ...]] = MappingProxyType(
 _CHAT_WITHHELD = ("timeout", "no_response")
 _OVER_LIMIT = "over-limit"
 SIDE_CHECK_DECISION_FAILURE = "side-check decision failure"
+#: The pack's two strata (v1.3 §3.5), as `pair_items`' `strata` carries them per `itemId`.
+_EVAL, _SIDE_CHECK = "eval", "side-check"
 
 Arm = Literal["incumbent", "candidate"]
 
@@ -382,9 +384,12 @@ class PairedItems:
     - `latency`: `(itemId, x_i, y_i)` over the paired **eval** items, ordered by `itemId` (note
       §Q4.1) — `x_i` the incumbent's wall clock, `y_i` the candidate's per note §Q4.3.
     - `scored_n`: the paired scored eval n (FR-11, note §Q4.3 "Not assessable").
-    - `drops[(arm, reason)]`: every dropped item, counted on the arm that caused it, by reason —
-      `"load"`, `"timeout"`, `"no_response"` or `SIDE_CHECK_DECISION_FAILURE` (note §Q4.3
-      "Counts"; plan2 §3.3 "Side check").
+    - `drops[(arm, reason)]`: every dropped **eval** item, counted on the arm that caused it, by
+      reason — `"load"`, `"timeout"` or `"no_response"` (note §Q4.3 "Counts"). These print beside
+      the bars, and FR-11 counts eval items, so a side-check drop never enters them.
+    - `side_check_drops[(arm, reason)]`: the same for side-check items, plus
+      `SIDE_CHECK_DECISION_FAILURE` (plan2 §3.3 "Side check"). They print in the side-check
+      section only, which does not affect pass/fail (v1.3 §3.5).
     - `over_limit[metric]`: the paired over-limit candidate items, `0` included, for every
       `outcomes` metric (plan3 §3.6, `overLimit k/n` beside each cell).
     """
@@ -393,6 +398,7 @@ class PairedItems:
     latency: tuple[tuple[str, float, float], ...]
     scored_n: int
     drops: Mapping[tuple[Arm, str], int]
+    side_check_drops: Mapping[tuple[Arm, str], int]
     over_limit: Mapping[str, int]
 
 
@@ -403,6 +409,10 @@ def _by_item_id(items: Sequence[ItemResult], arm: Arm) -> dict[str, ItemResult]:
             raise ValueError(f"pair_items: item {item.itemId!r} appears twice in the {arm} arm")
         by_id[item.itemId] = item
     return by_id
+
+
+def _count(counter: dict[tuple[Arm, str], int], arm: Arm, reason: str) -> None:
+    counter[(arm, reason)] = counter.get((arm, reason), 0) + 1
 
 
 def _wall_clock(item: ItemResult, arm: Arm) -> float:
@@ -441,7 +451,11 @@ def _concordant(candidate: ItemResult) -> bool:
 
 
 def pair_items(
-    incumbent: Sequence[ItemResult], candidate: Sequence[ItemResult], *, role: str
+    incumbent: Sequence[ItemResult],
+    candidate: Sequence[ItemResult],
+    *,
+    role: str,
+    strata: Mapping[str, str],
 ) -> PairedItems:
     """Note §Q4.3's table, for a speed-up point (plan2 §3.6 "Pairing and drops"). Per `itemId`:
 
@@ -456,6 +470,11 @@ def pair_items(
     4. any other item, plan3's handed-off over-limit item included, pairs on its own answer,
        with `y_i` = its `wallClockMs`.
 
+    `strata` maps every `itemId` to its pack `stratum` (`"eval"`/`"side-check"`, v1.3 §3.5) —
+    the pack's, because a withheld item's records carry no metric to tell its stratum by (impl
+    review P16-n2). It splits the drop counts; a scored incumbent item whose declared metrics
+    disagree with its stratum (an eval item with no verdict cell, or the reverse) raises.
+
     Both arms must hold the same item ids, each once. New-ability points pair nothing (U4).
     """
     cells = _VERDICT_CELLS_BY_ROLE.get(role)
@@ -466,30 +485,33 @@ def pair_items(
     if inc_by_id.keys() != cand_by_id.keys():
         unmatched = sorted(inc_by_id.keys() ^ cand_by_id.keys())
         raise ValueError(f"pair_items: the arms hold different items: {unmatched!r}")
+    unknown = sorted(i for i in inc_by_id if strata.get(i) not in (_EVAL, _SIDE_CHECK))
+    if unknown:
+        raise ValueError(f"pair_items: no eval/side-check stratum for items {unknown!r}")
 
     # Every verdict cell is present, empty or not, so no FR-1 line can silently vanish (P16-m1).
     outcomes: dict[str, list[tuple[bool, bool]]] = {cell: [] for cell in cells}
     over_limit: dict[str, int] = dict.fromkeys(cells, 0)
     latency: list[tuple[str, float, float]] = []
     drops: dict[tuple[Arm, str], int] = {}
-
-    def drop(arm: Arm, reason: str) -> None:
-        drops[(arm, reason)] = drops.get((arm, reason), 0) + 1
+    side_check_drops: dict[tuple[Arm, str], int] = {}
 
     for item_id in sorted(inc_by_id):
         inc, cand = inc_by_id[item_id], cand_by_id[item_id]
+        is_eval = strata[item_id] == _EVAL
+        counter = drops if is_eval else side_check_drops
         if inc.detail.get("failedCall") is not None:
             raise ValueError(f"pair_items: incumbent item {item_id!r} carries a failed call")
         inc_why, cand_why = _withheld(inc), _withheld(cand)
         if "load" in (inc_why, cand_why):
             for arm, why in (("incumbent", inc_why), ("candidate", cand_why)):
                 if why == "load":
-                    drop(arm, "load")
+                    _count(counter, arm, "load")
             continue
         if inc_why in _CHAT_WITHHELD or cand_why in _CHAT_WITHHELD:
             for arm, why in (("incumbent", inc_why), ("candidate", cand_why)):
                 if why in _CHAT_WITHHELD:
-                    drop(arm, why)
+                    _count(counter, arm, why)
             continue
         inc_errs = {
             metric: inc.scored_outcome(metric) for metric in inc.scoreable if inc.scoreable[metric]
@@ -498,11 +520,15 @@ def pair_items(
             raise ValueError(
                 f"pair_items: incumbent item {item_id!r} is neither scored nor withheld"
             )
-        is_eval = any(metric in cells for metric in inc_errs)
+        if is_eval != any(metric in cells for metric in inc_errs):
+            raise ValueError(
+                f"pair_items: item {item_id!r} is in stratum {strata[item_id]!r} but its "
+                f"incumbent declares {sorted(inc_errs)!r}"
+            )
         x = _wall_clock(inc, "incumbent")
         if _concordant(cand):
             if not is_eval:
-                drop("candidate", SIDE_CHECK_DECISION_FAILURE)
+                _count(counter, "candidate", SIDE_CHECK_DECISION_FAILURE)
                 continue
             pairs = {metric: (err, err) for metric, err in inc_errs.items()}
             y = _wall_clock(cand, "candidate") + x
@@ -527,5 +553,6 @@ def pair_items(
         latency=tuple(latency),
         scored_n=len(latency),
         drops=drops,
+        side_check_drops=side_check_drops,
         over_limit=over_limit,
     )

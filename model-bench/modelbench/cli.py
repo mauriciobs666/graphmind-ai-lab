@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any, Sequence
@@ -37,7 +38,13 @@ from typing import Any, Sequence
 from modelbench import hostinfo
 from modelbench.lmstudio import LMStudio
 from modelbench.packs import PackConfigError, load_pack, pack_ref_from_manifest, validate_pack
-from modelbench.report import compare_report, rank_report
+from modelbench.report import (
+    DecisionPointPack,
+    ReplicateGroup,
+    ReplicateKind,
+    compare_report,
+    rank_report,
+)
 from modelbench.results import (
     RunResult,
     load_history,
@@ -50,6 +57,13 @@ from modelbench.runner import RunConfig, RunRefused, _load_item_scorer, run_pack
 
 class UnknownModelKey(ValueError):
     """`--models` named a key with no stored run for this pack (§3.6a's exit 2)."""
+
+
+class DecisionPointUsageError(ValueError):
+    """`compare`/`rank` used on a decision-point pack in a way typed-decision-models plan2 §3.6
+    refuses (§3.6a's exit 2, as `UnknownModelKey`): no `--session` or `--models`, more than one
+    chat arm or one that is not the incumbent, not exactly one chat-arm run, two content hashes in
+    one replicate group, chat timeouts that differ between arms, `--negative-control`, `rank`."""
 
 
 class AttestUsageError(ValueError):
@@ -235,6 +249,161 @@ def _select_arms(
     return candidates
 
 
+def _is_decision_point(manifest: Mapping[str, Any]) -> bool:
+    """A decision-point pack is one whose manifest has a `decisionPoint` key, whatever its value
+    (v1.3 §3.5) — the same test `packs` keys every decision-point refusal on."""
+    return "decisionPoint" in manifest
+
+
+def _earlier_candidates(run: RunResult, history: Sequence[RunResult]) -> tuple[str, ...]:
+    """v1.3 §3.5's K for `run`, as the content hashes it counts: the distinct
+    `candidateContentHash` values among `history`'s candidate runs (one pack, every version) with
+    `run`'s `evalSetHash` and a `startedAt` strictly earlier than `run`'s, `run`'s own hash
+    excluded — so a candidate edited in place under one `candidateId` counts as a new one, and a
+    same-`startedAt` run is not earlier."""
+    own = run.fingerprint.get("candidateContentHash")
+    eval_set = run.fingerprint.get("evalSetHash")
+    started = run.fingerprint.get("startedAt")
+    return tuple(
+        sorted(
+            {
+                str(other.fingerprint.get("candidateContentHash"))
+                for other in history
+                if other.fingerprint.get("candidateContentHash")
+                and other.fingerprint.get("candidateContentHash") != own
+                and other.fingerprint.get("evalSetHash") == eval_set
+                and str(other.fingerprint.get("startedAt")) < str(started)
+            }
+        )
+    )
+
+
+def _resident_at_start(run: RunResult) -> bool:
+    """Whether the run's decision model (`fingerprint.modelKey`) was resident when it started."""
+    resident = run.fingerprint.get("residentModelsAtStart") or ()
+    model = run.fingerprint.get("modelKey")
+    return any(isinstance(e, Mapping) and e.get("id") == model for e in resident)
+
+
+def _replicate_groups(
+    runs: Sequence[RunResult], *, session: str, arm_keys: Sequence[str]
+) -> dict[str, ReplicateGroup]:
+    """Plan2 §3.6's replicate groups, one per candidate `armKey` in `arm_keys`: **every** run of
+    that key in `session`, ordered by `startedAt` — never last-wins. `runs` is the pack's whole
+    valid history, every session, because K reads it (v1.3 §3.5).
+
+    Refuses (`DecisionPointUsageError`) a group holding more than one `candidateContentHash` — a
+    file edited in place is a different candidate — and raises `UnknownModelKey` for a key with no
+    run in the session. Each run's kind: `assumed` when `basis == "assumed"`; else `load` for the
+    group's first non-assumed run, or one with no `residentModelsAtStart` entry whose `id` is its
+    `modelKey`; else `same-load`. K is the earliest run's (`_earlier_candidates`)."""
+    groups: dict[str, ReplicateGroup] = {}
+    for key in arm_keys:
+        members = sorted(
+            (r for r in runs if r.sessionId == session and r.armKey == key),
+            key=lambda r: str(r.fingerprint.get("startedAt")),
+        )
+        if not members:
+            raise UnknownModelKey(f"no stored run for {key!r} in session {session!r}")
+        hashes = {r.fingerprint.get("candidateContentHash") for r in members}
+        if len(hashes) > 1:
+            raise DecisionPointUsageError(
+                f"candidate {key!r} has {len(hashes)} content hashes in session {session!r}: a "
+                "candidate file edited in place is a different candidate; re-run it under a new "
+                "candidateId (typed-decision-models plan2 §3.6)"
+            )
+        kinds: list[ReplicateKind] = []
+        for run in members:
+            if run.basis == "assumed":
+                kinds.append("assumed")
+            elif "load" not in kinds or not _resident_at_start(run):
+                kinds.append("load")
+            else:
+                kinds.append("same-load")
+        earlier = _earlier_candidates(members[0], runs)
+        groups[key] = ReplicateGroup(
+            runs=tuple(members),
+            kind=tuple(kinds),
+            loadCount=kinds.count("load"),
+            k=len(earlier),
+            earlierCandidates=earlier,
+        )
+    return groups
+
+
+def _decision_point_arms(
+    runs: Sequence[RunResult],
+    *,
+    manifest: Mapping[str, Any],
+    models: str | None,
+    session: str | None,
+    negative_control: bool,
+) -> tuple[RunResult | None, dict[str, ReplicateGroup]]:
+    """Plan2 §3.6's arm set for `compare` on a decision-point pack: the chat arm's one run (or
+    `None`) and one replicate group per candidate arm, in `--models` order. Every refusal is a
+    `DecisionPointUsageError` (exit 2), and a key with no run in the session `UnknownModelKey`."""
+    if negative_control:
+        raise DecisionPointUsageError(
+            "--negative-control is refused on a decision-point pack (plan2 §3.6)"
+        )
+    if session is None or not models:
+        raise DecisionPointUsageError(
+            "compare on a decision-point pack needs --session and --models: every replicate of "
+            "each named arm in that session enters the bar, never a last-wins pick (plan2 §3.6)"
+        )
+    wanted = [m.strip() for m in models.split(",") if m.strip()]
+    if len(set(wanted)) != len(wanted):
+        raise DecisionPointUsageError(f"--models names an arm twice: {', '.join(wanted)}")
+    in_session = [r for r in runs if r.sessionId == session]
+    missing = [m for m in wanted if not any(r.armKey == m for r in in_session)]
+    if missing:
+        raise UnknownModelKey(
+            f"no stored run for {', '.join(repr(m) for m in missing)} in this pack and session "
+            f"{session!r}; `model-bench models --tested --pack <id>` lists what is stored"
+        )
+    chat_keys = [
+        m for m in wanted
+        if not any(r.armKey == m and r.fingerprint.get("candidateId") for r in in_session)
+    ]
+    candidate_keys = [m for m in wanted if m not in chat_keys]
+    if len(chat_keys) > 1:
+        raise DecisionPointUsageError(
+            f"--models names {len(chat_keys)} chat arms ({', '.join(chat_keys)}); a "
+            "decision-point comparison takes at most one (plan2 §3.6)"
+        )
+    chat: RunResult | None = None
+    if chat_keys:
+        key = chat_keys[0]
+        decision_point = manifest.get("decisionPoint")
+        incumbent = decision_point.get("incumbent") if isinstance(decision_point, Mapping) else None
+        if incumbent is not None and key != incumbent:
+            raise DecisionPointUsageError(
+                f"the chat arm {key!r} is not this speed-up pack's incumbent {incumbent!r} "
+                "(plan2 §3.6)"
+            )
+        chat_runs = [r for r in in_session if r.armKey == key]
+        if len(chat_runs) != 1:
+            raise DecisionPointUsageError(
+                f"session {session!r} holds {len(chat_runs)} runs of the chat arm {key!r}; the "
+                "bar pairs every replicate with exactly one (plan2 §3.6)"
+            )
+        chat = chat_runs[0]
+    groups = _replicate_groups(runs, session=session, arm_keys=candidate_keys)
+    timeouts = {r.requestTimeoutSeconds for g in groups.values() for r in g.runs}
+    if chat is not None:
+        timeouts.add(chat.requestTimeoutSeconds)
+    if len(timeouts) > 1:
+        shown = ", ".join(
+            "none recorded" if t is None else f"{t:g} s"
+            for t in sorted(timeouts, key=lambda t: (t is not None, t or 0.0))
+        )
+        raise DecisionPointUsageError(
+            f"the arms ran at different chat timeouts ({shown}); a bar compares arms at one "
+            "(plan2 §3.2)"
+        )
+    return chat, groups
+
+
 def _select_rank_arms(runs: Sequence[RunResult], *, session: str | None) -> list[RunResult]:
     """Every distinct arm with a stored run for this pack (and session, if given) — never a
     fixed arm count (catalog-sweep plan §3.3). `--session` filters exactly as `_select_arms`
@@ -293,19 +462,43 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     # The manifest's `packId`, not the pack **directory** name: they coincide by the §3.3
     # convention (`packs/<pack-id>/`) and nothing enforces it, so this was latent (review m-6).
     valid, invalid = load_history(root, packId=pack.packId)
+    decision_point: DecisionPointPack | None = None
+    replicates: dict[str, ReplicateGroup] = {}
     try:
-        arms = _select_arms(
-            valid,
-            models=args.models,
-            session=args.session,
-            negative_control=args.negative_control,
-        )
-    except UnknownModelKey as exc:
+        if _is_decision_point(json.loads(manifest.read_text(encoding="utf-8"))):
+            # The bar section reads the pack itself: its labels and every item's stratum (v1.3
+            # §3.5, impl review P16-n2), so a decision-point compare loads the whole pack.
+            loaded = load_pack(manifest.parent)
+            decision_point = DecisionPointPack.from_pack(loaded)
+            chat, replicates = _decision_point_arms(
+                valid,
+                manifest=loaded.manifest,
+                models=args.models,
+                session=args.session,
+                negative_control=args.negative_control,
+            )
+            arms = [chat] if chat is not None else []
+        else:
+            arms = _select_arms(
+                valid,
+                models=args.models,
+                session=args.session,
+                negative_control=args.negative_control,
+            )
+    except (UnknownModelKey, DecisionPointUsageError) as exc:
         print(f"model-bench: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except (OSError, PackConfigError) as exc:
+        print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
+        return EXIT_BAD_PACK
     try:
         markdown = compare_report(
-            arms, pack=pack, invalid=invalid, negative_control=args.negative_control
+            arms,
+            pack=pack,
+            invalid=invalid,
+            negative_control=args.negative_control,
+            decision_point=decision_point,
+            replicates=replicates,
         )
     except PackConfigError as exc:
         print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
@@ -335,6 +528,16 @@ def _cmd_rank(args: argparse.Namespace) -> int:
     except (PackConfigError, KeyError, ValueError) as exc:
         print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
         return EXIT_BAD_PACK
+
+    if _is_decision_point(json.loads(manifest.read_text(encoding="utf-8"))):
+        # Plan2 §3.6: a ranked table over a decision-point pack would pick one run per arm and
+        # rank candidate runs outside the replicate rule — an unrecorded selection on the bars.
+        print(
+            f"model-bench: rank is refused on decision-point pack {pack.packId}; use compare "
+            "--session <id> --models <incumbent>,<candidate>... (plan2 §3.6)",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
 
     try:
         footprints = _load_footprints(args.footprints)

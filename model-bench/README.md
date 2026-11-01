@@ -17,9 +17,10 @@ Design: `docs/plans/small-model-benchmarking.md` (repo root), plus the statistic
 
 - **No CI hook, no scheduler, no timer.** `model-bench` only ever runs because a person typed a
   command. Nothing here is wired into any other component's test suite.
-- **No pass/fail gate.** There is no threshold, no "bad score" and no non-zero exit for a result you
-  did not like. The only non-zero exits are operational: bad arguments, unreachable LM Studio, an
-  invalid pack, a missing fingerprint field.
+- **No pass/fail gate.** There is no threshold of its own; a decision-point pack's report states the
+  requirement's bar and never acts on it. There is no "bad score" and no non-zero exit for a result
+  you did not like. The only non-zero exits are operational: bad arguments, unreachable LM Studio,
+  an invalid pack, a missing fingerprint field.
 - **No leaderboard and no cross-role aggregate number.** A "tool-caller" score and an "embedder"
   score do not add up to anything, so there is no command that adds them up. Comparison is always
   within one pack, and that is enforced by the shape of the code, not by a convention anyone has to
@@ -181,6 +182,30 @@ record is keyed by its `armKey` — the candidate id — in `compare --models`, 
 
 On a decision-point pack (any arm), chat calls run at a pinned 180 s: `--request-timeout` with
 any other value is refused, exit `4`. Every run records the request timeout it used.
+
+`compare` on a decision-point pack needs `--session` and `--models`: at most one chat arm (on the
+guard, the pack's `decisionPoint.incumbent`, with exactly one run in the session) plus candidate
+ids. Every run of each candidate in the session is a **replicate**, oldest first; none is picked
+last-wins. Exit `2`, and nothing written, for: a missing `--session` or `--models`, a key with no
+run in the session or named twice, a second chat arm or one that is not the incumbent, two
+incumbent runs, a candidate with two content hashes in the session, arms run at different chat
+timeouts, or `--negative-control`. `rank` refuses a decision-point pack outright.
+
+Its report opens with the labeler caveat — what FR-5 makes these labels mean is
+`docs/requirements/typed-decision-models.md`'s FR-5, not restated here — then one **bar section**
+(`docs/plans/typed-decision-models.md` §3.5–§3.6, `typed-decision-models2.md` §3.6). Per
+candidate: its fit-manifest leakage line, how many candidates already ran on this evaluation set,
+its fit outcome. Per replicate: `handoffShare`, `decisionCallFailures` and `overLimit`; the scored
+eval n beside FR-11's 200, with every drop counted; the four FR-1 parity cells, each with its
+detectable difference, method minimum and `overLimit`; the FR-2 speed-up ratio; and the side
+check, which does not affect pass/fail. Then the replicates' disagreement and one overall state
+per bar: `met` needs every replicate met and two fresh loads of the decision model. A replicate
+whose model was already resident is not a load, and one whose load changed mid-run prints `not
+assessable`. Unless the incumbent, every replicate and the pack on disk share one content hash,
+every bar prints `not assessable (arms ran on different pack content: …)`: like an off-pin
+timeout, that is a property of stored records, so the report states it rather than refusing. The
+candidates line counts valid records only, and says how many invalid ones it left out. The
+generic tables below cover the chat arm alone. Exit codes are unchanged.
 
 **Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints
