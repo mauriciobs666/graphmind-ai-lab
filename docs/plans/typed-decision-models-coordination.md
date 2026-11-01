@@ -529,3 +529,5 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 
 2026-11-01 — Post-smoke round **gated: approve with suggestions** (Pass 17, analyst a15fc6dc7006de0df): plan6 v1.14 (smoke facts L1–L6, F-1 page-bound acceptance, F-3 margin wording, repeated-key and `name` refusals), U5.5 `max_turns_run` fixture swap, P16-n2 install refusals; P17-m1 stale prose, P17-n1 whitespace-key test, P17-n2 fixture tool-use count all fixed by coder ae29e4ea0f015275e. Suite 1147 passed / 2 xfailed, ruff clean (re-run by me); my `name`-check mutant 70 red in a scratch copy. Committing by explicit path. Next: U6.4 timer.
 
+2026-11-01 — Post-smoke round committed `cb8a7097`. U6.4 dispatched → devops `af59db0027d3d2305` (in-flight; timer scripts + README + HISTORY; verified on a throwaway campaign with a fake `claude`, no real timer left enabled). Cold-start fallback: fresh devops from plan6 §3.2/§4 U6.4 + this entry.
+
