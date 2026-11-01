@@ -3293,3 +3293,174 @@ mutated directly.
 
 None. P25-m1 is a single instance of a validator and a loader drifting apart. If it recurs, propose
 "a loader's refusal must be a subset of `validate_pack`'s, pinned by one probe".
+
+## Pass 26 — U3e.2 per-cell design effect (2026-11-01)
+
+*2026-11-01. Gate of U3e.2, uncommitted in `model-bench/` on `291216f7`. Files:
+`modelbench/decision_stats.py`, `modelbench/report.py`, `tests/test_decision_stats.py`,
+`tests/test_decision_bar.py`, `tests/test_decision_bar_fr10.py`, `README.md` and `docs/HISTORY.md`.
+Read against plan4 §3.9 and §5's U3e.2 row, and against the note's §Q6 "Design effect"
+(`docs/plans/typed-decision-models-ml.md`).*
+
+**Verdict: approve with suggestions.** The change does what §3.9 and the U3e.2 row ask:
+- **The formula** is §3.9's exactly, and agrees with §Q6 (Kish `m₀`, floor at 1.0, discordance for
+  FR-1, agreement for FR-10).
+- **`outcome_ids`** is filled in the same pass as `outcomes` and stays parallel after drops.
+- **The two call sites** switched to the per-cell value, and every cell and class line prints
+  `DE <x.xx> (genRunId ICC)`.
+- **Unchanged:** `RunResult.designEffect`, `basis` and `compare_report`. The diff touches no
+  `results.py` or `runner.py` line, and `report.py:1026`, `:1673` and `:2954` still take the
+  run-level maximum.
+
+There are no blockers and no majors. There are two minors and two nits. Two of the three questions
+are ML-method questions and route to `data-scientist`, below.
+
+**Checks run** (from `model-bench/`, with a private `PYTHONPYCACHEPREFIX`):
+- **Suite:** `3601 passed, 5 deselected, 2 xfailed`. Ruff is clean. The test-function counts
+  match `HISTORY.md`: 83 → 94, 50 → 52 and 22 → 23.
+- **Independent estimator check** (`scratchpad/p26/de_probe.py`):
+  - The probe recomputes the ICC as a variance component, `σ̂²_a = (MSB − MSW)/n₀` and
+    `ICĈ = σ̂²_a/(σ̂²_a + MSW)`, written separately from `design_effect`.
+  - On 2,000 random unbalanced groupings (2–8 runs of 1–30 items) it matches `design_effect` to
+    within 1.8e-15.
+  - `1.0 ≤ DE ≤ max(1, m₀)` held in every case.
+- **Reproduction of the 24.86 cell** (question 3): rebuilt from the test's own fixture.
+- **FR-10 `KeyError` probe:** one stored replicate's first `itemId` was renamed to `ghost-item`,
+  keeping its `packContentHash`. `cli.main(["compare", …])` raised an uncaught
+  `KeyError: 'ghost-item'` (P26-m1).
+- **Mutants:** 5, run against the three touched test files. Each file was copied to
+  `scratchpad/p26/` first, then restored and checked with `cmp`.
+
+  | Mutant | Result |
+  |---|---|
+  | Y1 FR-1 outcome `cand and not inc` (b-direction discordance only) | **survives** (P26-m2) |
+  | Y2 FR-1 outcome is the candidate's error (the implementer's M6) | red (1) |
+  | Y3 FR-10 groups misses (`not a`) instead of agreement | survives — **equivalent**: `MSB`/`MSW` are invariant under `y → 1 − y` |
+  | Y4 `n₀ = N/g` (mean run size) | red (1) |
+  | Y6 FR-10 prints `DE 1.00` while its interval uses the class's value | red (1) |
+
+CPG: considered, not relevant — no model-bench CPG is loaded. The change was read, probed and
+mutated directly.
+
+### Pass 25 dispositions
+
+- **P25-m1:** fixed. Rerunning `scratchpad/p25/probe.py` at `291216f7`, `validate_pack` now refuses
+  a deleted `provider` for both blocks. The coverage probe
+  `test_validate_pack_refuses_exactly_the_model_blocks_from_pack_refuses` (block × key ×
+  corruption) is present.
+- **P25-n1:** fixed. `from_pack`'s non-string `genRunId` cases and
+  `test_deleting_both_model_blocks_gives_two_problems` are present. X2 and X3 were not re-run.
+
+### The three questions
+
+1. **The FR-1 outcome: it conforms. This is a code question, and it is settled.**
+   - §Q6 "Estimate" says, verbatim, "the per-item outcome: discordance for FR-1". The plan's
+     §3.9 says "`cand ≠ inc` per pair". `report.py:2279-2283` groups `cand != inc`.
+   - Executed evidence:
+     - Y2 (the candidate's own error) turns red.
+     - `test_fr1_groups_discordance_so_errors_both_arms_share_leave_de_at_one` shows shared,
+       concordant errors in one run leave `DE 1.00`.
+   - **Coverage gap:** no test places a *c*-direction (incumbent-worse) discordance in a run, so a
+     b-only mutant (Y1) survives. That is P26-m2.
+   - Whether discordance is the right clustered quantity for an exact McNemar cell is the note's
+     decision, already taken. It is not open here.
+2. **`n₀`: the code is right. Whether it is the right estimator is an ML question.**
+   - The code-level answer is yes. `n₀ = (N − Σm²/N)/(g − 1)` is the standard average group size
+     in the unbalanced one-way random-effects ANOVA. With it, §3.9's ICC equals the
+     variance-component form, which the probe confirms numerically.
+   - **Route to `data-scientist`:** §Q6 says only "one-way ANOVA ICC" and gives no `n₀`, so the
+     estimator is fixed by the plan, not the note. `model-bench/AGENTS.md` says `decision_stats.py`
+     implements the note §Q3–§Q6 "and no other source", so §Q6 should state the estimator in one
+     line.
+   - Whether the ANOVA ICC suits a rare binary outcome is also `data-scientist`'s to decide. Here
+     the outcome is discordance at `ψ̂ ≈ 0.02` with few runs per cell, where that estimator is
+     known to be unstable.
+3. **DE 24.86: the arithmetic is correct. Whether that size is intended is an ML question.**
+   - The fixture's `falseAdvanceRateByUnderstanding` cell holds 197 items. The runs are 47 / 47 /
+     47 / 47 / 8 (`hot`) / 1, so `m₀ = Σm²/N = 45.18`.
+   - The four discordant items all sit in `hot` (4 of 8), giving `ICĈ = 23.86/44.18 ≈ 0.54` and
+     `DE = 24.86`. `n_eff = ⌊197/24.86⌋ = 7`, and the line prints "could only detect ≥ 77.2 pp at
+     n = 7".
+   - **There is a built-in cap: `DE ≤ m₀`**, because `ICĈ ≤ 1` whenever `n₀ ≥ 1`. The probe held
+     this in all 2,000 cases. So `n_eff ≥ N/m₀ = N²/Σm² ≥ 1` always, and nothing downstream sees
+     `n_eff < 1`.
+   - The fixture's 24.86 comes from its runs of 47 items per cell. §Q6 "Size" expects `m₀ ≈ 3`
+     per cell, which would bound DE near 3.
+   - **Route to `data-scientist`:** whether a cap or shrinkage below `m₀` is intended, and whether
+     `m₀ ≈ 3` holds for the guard's actual run layout. Plan4 §3.8 runs 25 seeds per run, both
+     evidence kinds per run, with four cells. Nothing in the code is missing relative to the
+     spec.
+
+**Also checked:**
+- **Where `DE` is printed:**
+  - FR-1: after "(one-sided 95%)" and before " — <state>", on every cell line, including
+    not-assessable replicates whose cell lines still render.
+  - FR-10: after the interval and before the state, including `0/0 [—]; DE 1.00` on an empty
+    class.
+  - A replicate with no pairing (inconsistent, different content, no incumbent) prints no cell
+    lines, so it prints no `DE`.
+  - See P26-n1 on the `1.00` fallback.
+- **`gen_run_ids[item_id]` against `from_pack`'s guarantee:**
+  - **FR-1 cannot hit it.** `pair_items` refuses any id whose stratum is not eval or side-check.
+    It also refuses a side-check item that declares a per-kind cell. `strata` and `gen_run_ids`
+    are built from the same rows, so every id in a cell is an eval id with a `genRunId`.
+  - **FR-10 can.** `agreement_items` never consults the pack (P26-m1).
+
+### Findings
+
+**P26-m1 (minor; fresh `coder`, in this fix round). FR-10's design effect raises an uncaught
+`KeyError` on a record item that is not in the pack.**
+- Evidence: `_render_fr10_replicate` passes `agreement.outcome_ids` straight into
+  `gen_run_ids[item_id]` (`report.py`, `_cell_design_effect`). The probe above gets an uncaught
+  `KeyError: 'ghost-item'` out of `cli.main`.
+- The FR-1 path turns the same record into "not assessable (cannot pair …)", because `pair_items`
+  checks ids against `strata`.
+- **Why it matters:** before U3e.2, FR-10 ignored item ids. Now a malformed record, one that
+  agrees with its own content hash but not with the pack, crashes `compare` with a traceback. The
+  README's closed exit-code contract (`0` whenever the tool ran and reported) promises it never
+  does.
+- **Fix:** give `agreement_items` the pack's `strata`, as `pair_items` has, and make it raise
+  `ValueError` on an id that is not an eval item of the pack. The existing `except ValueError` in
+  `_render_fr10_replicate` then prints "not assessable (cannot read this replicate's items: …)".
+- **Test:** the ghost-id record must give exit 0 and that line. Removing the new check must turn
+  it red.
+
+**P26-m2 (minor; same `coder`). FR-1's discordance is pinned in one direction only.**
+- Evidence: Y1 (`cand and not inc`) passes all 283 tests in the three files. Both FR-1 DE tests
+  use b-direction flips (candidate worse) or no discordance.
+- **Why it matters:** §Q6 groups discordance, `b + c`. A cell whose clustered discordance is
+  incumbent-worse (*c*) would silently get `DE 1.00` and a too-narrow MDD.
+- **Fix:** add a `test_decision_bar.py` case with the regrouped `hot` run holding *c*-direction
+  discordance (the incumbent errs, the candidate does not) that asserts `DE > 1`. Y1 must then
+  turn red.
+
+**P26-n1 (nit; `architect`, with `data-scientist`). `DE 1.00 (genRunId ICC)` is printed where no
+ICC was estimated.**
+- `design_effect` returns the 1.0 fallback for an empty cell, a single run, all-singleton runs and
+  constant outcomes. The line still names "genRunId ICC" as its source: for example,
+  `agree[escalation]: 0/0 items [—]; DE 1.00 (genRunId ICC)`, and every n = 1 FR-1 cell in the
+  fixture.
+- This conforms to §3.9's literal "Each such line prints `DE <x.xx> (genRunId ICC)`", and 1.0 is
+  the value actually applied. But it reads as "measured: no clustering".
+- **Decide whether** the fallback should print, for example, `DE 1.00 (not estimable: <reason>)`.
+  If yes, §3.9 changes first.
+
+**P26-n2 (nit; same `coder`). README rewrap.**
+- `README.md:202` (163 characters) and `:206` (119 characters) are the new bar-section lines.
+  Every other line in the file is at most 101 characters.
+- The wording is faithful to §Q6 "Scope": it widens the limits and never moves a decision.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** is unchanged at 2,490 words. Its line 109 (`RunResult.designEffect`
+  required) is still true.
+- One `AGENTS.md` claim now leans on the plan: "implements the note §Q3–§Q6 and no other source",
+  while `n₀` comes from plan4 §3.9. That is question 2's routing, not an `AGENTS.md` edit.
+- **`README.md`** inserts new-scope words in place, with no history restated.
+- **`HISTORY.md`** gets one entry, read by lookup. Its counts reproduce.
+
+### Proposed REVIEW.md lines
+
+None. P26-m1 is the second instance of a loader-versus-validator gap, after P25-m1, but in a
+different form: a renderer trusting record ids. Its fix mirrors an existing guard, so it does not
+yet justify a rule.

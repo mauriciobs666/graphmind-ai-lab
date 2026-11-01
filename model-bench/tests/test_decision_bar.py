@@ -448,7 +448,8 @@ def test_four_fr1_lines_each_holds_with_its_detectable_difference_and_minimum(st
     assert cells[0] == (
         "  - falseAdvanceRateByUnderstanding: candidate 0/197 [0.000, 0.019] vs incumbent 0/197 "
         f"[0.000, 0.019]; diff +0.0 pp; b=0, c=0, p_worse=1.0000; worse by at most "
-        f"{upper * 100:.1f} pp (one-sided 95%) — holds (could only detect ≥ 3.4 pp at n = 197, "
+        f"{upper * 100:.1f} pp (one-sided 95%); DE 1.00 (genRunId ICC) — holds (could only "
+        "detect ≥ 3.4 pp at n = 197, "
         "ψ̂ = 0.00)"
     )
     assert cells[1].endswith("— holds (no worsening is detectable at n = 1: fewer than 5 items)")
@@ -501,7 +502,8 @@ def test_a_worse_cell_makes_the_replicate_and_the_bar_not_met(tmp_path):
     text = _report(root)
     assert _cell_lines(text)[0].endswith("b=6, c=0, p_worse=0.0156; worse by at most "
                                          + _cell_lines(text)[0].split("worse by at most ")[1]
-                                         .split(" pp")[0] + " pp (one-sided 95%) — not met: "
+                                         .split(" pp")[0] + " pp (one-sided 95%); DE 1.00 "
+                                         "(genRunId ICC) — not met: "
                                          "candidate worse")
     assert "- FR-1 (replicate 1): not met" in text
     assert "- FR-1 (replicate 2): met" in text
@@ -856,3 +858,74 @@ def test_every_non_assumed_replicate_is_compared_with_the_first_and_an_assumed_o
     assert "basis assumed" in text.split("#### replicate 2 —")[1].split("\n")[0]
     vs = [line.split(":")[0] for line in text.splitlines() if " vs replicate " in line]
     assert vs == ["- replicate 3 vs replicate 1", "- replicate 4 vs replicate 1"]
+
+
+# --- the per-cell design effect (plan4 §3.9, §5 U3e.2; note §Q6 "Design effect") ------------------
+
+_DE = re.compile(r"; DE (\d+\.\d\d) \(genRunId ICC\)")
+_LIMIT = re.compile(r"could only detect ≥ ([\d.]+) pp at n = (\d+)")
+
+
+def _regroup(root: Path, gen_run_ids: dict[str, str]) -> None:
+    """Rewrites the pack's `genRunId`s before any run, so every record carries the new content."""
+    path = root / "packs" / base._PACK_ID / "items.jsonl"
+    rows = [{**row, "genRunId": gen_run_ids.get(row["itemId"], row.get("genRunId"))}
+            if row.get("stratum") == "eval" else row for row in _rows(root)]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def _fa_u_line(root: Path, flips) -> str:
+    _store_all(root, _incumbent(root), _candidate(root, minutes=10, flips=flips))
+    return _cell_lines(_report(root))[0]
+
+
+def test_a_cell_whose_discordance_shares_one_run_states_its_limit_at_n_over_de(tmp_path):
+    # Plan4 §5 U3e.2: the four candidate-worse items (b = 4, p_worse = 1/16, holds) sit one per
+    # run by default; regrouped into one eight-item run, the cell's ICC is high — DE > 1, a larger
+    # MDD at n = floor(n_c / DE), and the same p_worse and decision (note §Q3.2).
+    flips = {f"pad-{n:03d}" for n in range(4)}
+    spread = _fa_u_line(_root(tmp_path / "spread"), flips)
+    clustered_root = _root(tmp_path / "clustered")
+    _regroup(clustered_root, {f"pad-{n:03d}": "hot" for n in range(8)})
+    clustered = _fa_u_line(clustered_root, flips)
+
+    de_spread, de_clustered = (float(_DE.search(line).group(1)) for line in (spread, clustered))
+    assert de_spread == 1.0
+    assert de_clustered > 1.0
+    (mdd_s, n_s), (mdd_c, n_c) = (
+        (float(m.group(1)), int(m.group(2))) for m in map(_LIMIT.search, (spread, clustered))
+    )
+    assert n_s == 197 and n_c < n_s
+    assert mdd_c > mdd_s
+    for line in (spread, clustered):
+        assert "b=4, c=0, p_worse=0.0625" in line
+        assert " — holds (" in line
+    # The run record's own `designEffect` stays 1.0 (plan4 §3.9 "Unchanged").
+    valid, _ = load_history(clustered_root, packId=base._PACK_ID)
+    assert valid and {run.designEffect for run in valid} == {1.0}
+
+
+def test_fr1_groups_discordance_so_errors_both_arms_share_leave_de_at_one(tmp_path):
+    # Plan4 §3.9: FR-1's per-item outcome is `cand ≠ inc`. Errors both arms make on one run's
+    # items are concordant — no discordance clusters, so DE 1.00 — though the candidate's own
+    # errors cluster there.
+    root = _root(tmp_path)
+    hot = {f"pad-{n:03d}" for n in range(8)}
+    _regroup(root, dict.fromkeys(hot, "hot"))
+    both = {f"pad-{n:03d}" for n in range(6)}
+    _store_all(root, _incumbent(root, flips=both), _candidate(root, minutes=10, flips=both))
+    line = _cell_lines(_report(root))[0]
+    assert "b=0, c=0" in line
+    assert _DE.search(line).group(1) == "1.00"
+
+
+def test_incumbent_worse_discordance_sharing_one_run_also_raises_de(tmp_path):
+    # Impl review P26-m2: discordance is `b + c` (note §Q6 "Estimate"), so four incumbent-worse
+    # pairs (c = 4) in one eight-item run cluster as the candidate-worse ones do.
+    root = _root(tmp_path)
+    _regroup(root, {f"pad-{n:03d}": "hot" for n in range(8)})
+    flips = {f"pad-{n:03d}" for n in range(4)}
+    _store_all(root, _incumbent(root, flips=flips), _candidate(root, minutes=10))
+    line = _cell_lines(_report(root))[0]
+    assert "b=0, c=4" in line
+    assert float(_DE.search(line).group(1)) > 1.0

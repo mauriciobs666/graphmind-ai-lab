@@ -376,6 +376,69 @@ def test_parity_cell_shaping_arguments_are_keyword_only_with_no_default():
         assert params[name].default is inspect.Parameter.empty
 
 
+# --- design_effect (note §Q6 "Design effect"; plan4 §3.9, §5 U3e.2) -------------------------------
+#
+# One-way ANOVA ICC over the cell's per-run outcomes, then `max(1, 1 + (m₀ − 1)·ICĈ)` with Kish's
+# `m₀ = Σm²/N`. Every expected figure is hand-computed in its comment.
+
+_T, _F = True, False
+
+
+def test_design_effect_is_one_for_a_single_run():
+    assert decision_stats.design_effect({"r1": [_T, _F, _T, _T, _F]}) == 1.0
+
+
+def test_design_effect_is_one_when_every_run_holds_one_item():
+    # N = g: MSW has no degrees of freedom.
+    assert decision_stats.design_effect({"r1": [_T], "r2": [_F], "r3": [_T]}) == 1.0
+
+
+def test_design_effect_is_one_for_constant_outcomes():
+    # MSB = MSW = 0: the ICC's denominator is 0.
+    assert decision_stats.design_effect({"r1": [_T, _T], "r2": [_T, _T, _T]}) == 1.0
+    assert decision_stats.design_effect({"r1": [_F, _F], "r2": [_F, _F, _F]}) == 1.0
+
+
+def test_design_effect_is_one_for_no_items():
+    assert decision_stats.design_effect({}) == 1.0
+
+
+def test_design_effect_matches_the_anova_formula_on_two_equal_runs():
+    # r1 = 1,1,1,0 (mean .75), r2 = 0,0,0,1 (mean .25), grand mean .5, N = 8, g = 2.
+    # SSB = 4·.25² + 4·.25² = .5 → MSB = .5; SSW = 2·(3·.25² + .75²) = 1.5 → MSW = 1.5/6 = .25.
+    # n₀ = (8 − 32/8)/1 = 4; ICĈ = (.5 − .25)/(.5 + 3·.25) = .2; m₀ = 32/8 = 4 → DE = 1 + 3·.2.
+    got = decision_stats.design_effect({"r1": [_T, _T, _T, _F], "r2": [_F, _F, _F, _T]})
+    assert got == pytest.approx(1.6, abs=1e-12)
+
+
+def test_design_effect_floors_a_negative_icc_at_one():
+    # r1 = r2 = 1,0: MSB = 0, MSW = 1/2, n₀ = 2 → ICĈ = −.5/.5 = −1, and 1 + (2 − 1)·(−1) = 0.
+    assert decision_stats.design_effect({"r1": [_T, _F], "r2": [_T, _F]}) == 1.0
+
+
+def test_design_effect_uses_kish_m0_on_unequal_runs_never_the_mean_size():
+    # r1 = six 1s and two 0s (m = 8, mean .75), r2 = 0,0 (m = 2, mean 0), N = 10, grand mean .6.
+    # SSB = 8·.15² + 2·.6² = .9 = MSB; SSW = 6·.25² + 2·.75² = 1.5 → MSW = 1.5/8 = .1875.
+    # Σm² = 68: n₀ = (10 − 6.8)/1 = 3.2, ICĈ = .7125/(.9 + 2.2·.1875) = 19/35.
+    # Kish m₀ = 6.8 → DE = 1 + 5.8·19/35 = 145.2/35; the mean m̄ = 5 would give 111/35.
+    got = decision_stats.design_effect({"r1": [_T] * 6 + [_F] * 2, "r2": [_F, _F]})
+    assert got == pytest.approx(145.2 / 35, abs=1e-12)
+    assert got != pytest.approx(111 / 35, abs=1e-6)
+
+
+def test_design_effect_ignores_run_order_and_names():
+    a = decision_stats.design_effect({"x": [_T] * 6 + [_F] * 2, "y": [_F, _F]})
+    b = decision_stats.design_effect({"b": [_F, _F], "a": [_F, _T, _T, _F, _T, _T, _T, _T]})
+    assert a == pytest.approx(b, abs=1e-12)
+
+
+def test_design_effect_refuses_an_empty_run_or_a_non_bool_outcome():
+    with pytest.raises(ValueError, match="empty"):
+        decision_stats.design_effect({"r1": [_T, _F], "r2": []})
+    with pytest.raises(ValueError, match="bool"):
+        decision_stats.design_effect({"r1": [_T, 1], "r2": [_F, _F]})
+
+
 # --- combine_replicates (plan2 §3.6 bar states; note §Q6) -----------------------------------------
 
 MET = decision_stats.MET
@@ -561,6 +624,30 @@ def test_pair_items_pairs_two_answered_eval_items_on_every_declared_metric():
     assert paired.latency == (("e1", 800.0, 20.0),)
     assert paired.scored_n == 1
     assert paired.drops == {}
+
+
+def test_pair_items_outcome_ids_stay_parallel_to_outcomes_after_pairwise_drops():
+    # Plan4 §3.9: `outcome_ids[metric]` is each pair's `itemId`, parallel to `outcomes[metric]`,
+    # filled in the same pass — so a dropped item leaves neither.
+    e = {i: _input(i) for i in ("e1", "e2", "e3", "e4", "e5")}
+    side = _input("s1", stratum="side-check")
+    incumbent = [
+        _inc(e["e1"], False), _inc(e["e2"], False), _inc(e["e3"], False, withheld="timeout"),
+        _inc(e["e4"], True), _inc(e["e5"], False, withheld="load"), _inc(side, False),
+    ]
+    candidate = [
+        _decided(e["e1"], True), _decided(e["e2"], False, withheld="load"),
+        _decided(e["e3"], False),
+        _failed(e["e4"]), _decided(e["e5"], False), _decided(side, True),
+    ]
+    paired = _pair(incumbent, candidate)
+    assert paired.outcome_ids[_FA_U] == ("e1", "e4")
+    assert paired.outcomes[_FA_U] == ((True, False), (True, True))
+    assert paired.outcome_ids.keys() == paired.outcomes.keys()
+    for metric, pairs in paired.outcomes.items():
+        assert len(paired.outcome_ids[metric]) == len(pairs), metric
+    side_metrics = [m for m in paired.outcomes if paired.outcomes[m] and m.startswith("sideCheck")]
+    assert side_metrics and all(paired.outcome_ids[m] == ("s1",) for m in side_metrics)
 
 
 def test_pair_items_orders_everything_by_item_id():
@@ -971,7 +1058,7 @@ def test_every_public_function_runs_with_verdict_and_holm_steps_patched_out(monk
     decision_stats.combine_replicates([MET, NOT_MET], 2)
     _ratio([800.0, 700.0], [20.0, 25.0])
     decision_stats.mean_latency([300.0, 200.0], seed=1, B=50, levels=_CI95)
-    decision_stats.agreement_items([], role="join-in-judge")
+    _agreement_items([], role="join-in-judge")
 
 
 # --- seed and levels plumbing (coordinator integration mutants) -----------------------------------
@@ -1088,6 +1175,30 @@ def _na(pack, item_id, expected, answer, *, ms=30.0, withheld=None, **kw):
 _FAILED = {"decided_by": None, "probability": None}
 
 
+def _agreement_items(items, *, role):
+    """`agreement_items` over records whose every id is an eval item of the pack (FR-15)."""
+    strata = {item.itemId: "eval" for item in items}
+    return decision_stats.agreement_items(items, role=role, strata=strata)
+
+
+def test_agreement_items_refuses_an_item_that_is_no_eval_item_of_the_pack(new_ability_packs):
+    # Impl review P26-m1: as `pair_items` refuses an id with no stratum, so the FR-10 input — its
+    # ids reach the pack's `genRunId` map, which holds eval items only.
+    pack = new_ability_packs["join-in-judge"]
+    items = [_na(pack, "a", True, True), _na(pack, "ghost", True, True)]
+    refused = r"no eval stratum in the pack for items \['ghost'\]"
+    for ghost in ({}, {"ghost": "side-check"}, {"ghost": None}):
+        strata = {"a": "eval", **ghost}
+        with pytest.raises(ValueError, match=refused):
+            decision_stats.agreement_items(items, role="join-in-judge", strata=strata)
+
+
+def test_agreement_items_takes_strata_by_keyword_with_no_default():
+    param = inspect.signature(decision_stats.agreement_items).parameters["strata"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is inspect.Parameter.empty
+
+
 def test_agreement_items_counts_agreement_within_each_class_ordered_by_item_id(new_ability_packs):
     pack = new_ability_packs["join-in-judge"]
     items = [
@@ -1096,7 +1207,7 @@ def test_agreement_items_counts_agreement_within_each_class_ordered_by_item_id(n
         _na(pack, "b", True, False, ms=30.0),
         _na(pack, "d", False, False, ms=40.0),
     ]
-    got = decision_stats.agreement_items(items, role="join-in-judge")
+    got = _agreement_items(items, role="join-in-judge")
     assert got.outcomes == {"agreeWhenYes": (False, True), "agreeWhenNo": (False, True)}
     assert got.latency == (("a", 20.0), ("b", 30.0), ("c", 10.0), ("d", 40.0))
     assert (got.scored_n, got.drops) == (4, {})
@@ -1120,7 +1231,7 @@ def test_agreement_items_drops_load_withheld_items_and_scores_kept_failures_fail
             reason="over-limit"),
         _na(pack, "i5", "question", "question", ms=25.0),
     ]
-    got = decision_stats.agreement_items(items, role="message-type-classifier")
+    got = _agreement_items(items, role="message-type-classifier")
     assert got.outcomes == {
         "agree[order]": (False, True), "agree[question]": (True,), "agree[complaint]": (),
         "agree[escalation]": (), "agree[other]": (False,),
@@ -1134,8 +1245,27 @@ def test_agreement_items_drops_load_withheld_items_and_scores_kept_failures_fail
     }
 
 
+def test_agreement_items_outcome_ids_stay_parallel_to_outcomes_after_a_load_drop(
+    new_ability_packs
+):
+    # Plan4 §3.9: U4's FR-10 input carries the same parallel ids as `PairedItems`.
+    pack = new_ability_packs["join-in-judge"]
+    items = [
+        _na(pack, "c", True, True),
+        _na(pack, "a", False, True),
+        _na(pack, "b", True, False, withheld="load"),
+        _na(pack, "d", False, False),
+        _na(pack, "e", True, True),
+    ]
+    got = _agreement_items(items, role="join-in-judge")
+    assert got.outcomes == {"agreeWhenYes": (True, True), "agreeWhenNo": (False, True)}
+    assert got.outcome_ids == {"agreeWhenYes": ("c", "e"), "agreeWhenNo": ("a", "d")}
+    empty = _agreement_items([], role="join-in-judge")
+    assert empty.outcome_ids == {"agreeWhenYes": (), "agreeWhenNo": ()}
+
+
 def test_agreement_items_gives_every_class_even_with_no_items(new_ability_packs):
-    got = decision_stats.agreement_items([], role="join-in-judge")
+    got = _agreement_items([], role="join-in-judge")
     assert got.outcomes == {"agreeWhenYes": (), "agreeWhenNo": ()}
     assert (got.latency, got.scored_n, got.drops) == ((), 0, {})
 
@@ -1143,21 +1273,21 @@ def test_agreement_items_gives_every_class_even_with_no_items(new_ability_packs)
 def test_agreement_items_refuses_what_no_new_ability_candidate_records(new_ability_packs):
     pack = new_ability_packs["join-in-judge"]
     with pytest.raises(ValueError, match="new-ability points only"):
-        decision_stats.agreement_items([], role="guard-judge")
+        _agreement_items([], role="guard-judge")
     with pytest.raises(ValueError, match="appears twice"):
-        decision_stats.agreement_items(
+        _agreement_items(
             [_na(pack, "a", True, True), _na(pack, "a", True, True)], role="join-in-judge"
         )
     with pytest.raises(ValueError, match="not exactly one"):
-        decision_stats.agreement_items([_na(pack, "a", True, True)],
+        _agreement_items([_na(pack, "a", True, True)],
                                        role="message-type-classifier")
     guard_record = _score(_input("g"), True, _timing(20.0), decided_by="decision-model",
                           probability=0.5)
     with pytest.raises(ValueError, match="not exactly one"):
-        decision_stats.agreement_items([guard_record], role="join-in-judge")
+        _agreement_items([guard_record], role="join-in-judge")
     withheld = dataclasses.replace(
         _na(pack, "w", True, True),
         timing=ItemTiming(wallClockMs=None, calls=(), withheldFor="timeout"),
     )
     with pytest.raises(ValueError, match="keeps a failed call"):
-        decision_stats.agreement_items([withheld], role="join-in-judge")
+        _agreement_items([withheld], role="join-in-judge")

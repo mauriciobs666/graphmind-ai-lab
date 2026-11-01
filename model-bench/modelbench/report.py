@@ -2123,10 +2123,29 @@ def _holds_clause(line: decision_stats.ParityLine, k: int) -> str:
     return f"holds ({clause})"
 
 
-def _parity_text(metric: str, line: decision_stats.ParityLine, *, k: int, state: str) -> str:
-    """Note §Q3.4's printed line. `state` is the replicate's: on `met`/`not met` the line ends
-    with the cell's own reading; on a `not assessable (…)` replicate it ends with that state,
-    never with a `holds` the replicate cannot claim (plan2 §3.6)."""
+def _design_effect_text(design_effect: float) -> str:
+    """Plan4 §3.9's print beside each FR-1 cell and FR-10 class: `DE <x.xx> (genRunId ICC)`."""
+    return f"DE {design_effect:.2f} ({decision_stats.DESIGN_EFFECT_SOURCE})"
+
+
+def _cell_design_effect(
+    outcomes: Sequence[bool], ids: Sequence[str], gen_run_ids: Mapping[str, str]
+) -> float:
+    """Note §Q6 "Design effect" for one cell or class: its per-item outcomes, grouped by each
+    item's `genRunId` (plan4 §3.9) through the ids parallel to them."""
+    by_run: dict[str, list[bool]] = {}
+    for outcome, item_id in zip(outcomes, ids, strict=True):
+        by_run.setdefault(gen_run_ids[item_id], []).append(outcome)
+    return decision_stats.design_effect(by_run)
+
+
+def _parity_text(
+    metric: str, line: decision_stats.ParityLine, *, k: int, state: str, design_effect: float
+) -> str:
+    """Note §Q3.4's printed line, with the cell's design effect (plan4 §3.9). `state` is the
+    replicate's: on `met`/`not met` the line ends with the cell's own reading; on a `not
+    assessable (…)` replicate it ends with that state, never with a `holds` the replicate cannot
+    claim (plan2 §3.6)."""
     if line.n:
         diff = f"{(line.e1 - line.e2) / line.n * 100:+.1f} pp"
         upper = f"{line.U * 100:.1f}" if line.U is not None else "—"
@@ -2135,7 +2154,8 @@ def _parity_text(metric: str, line: decision_stats.ParityLine, *, k: int, state:
     figures = (
         f"{metric}: candidate {_rate_cell(line.e1, line.n)} vs incumbent "
         f"{_rate_cell(line.e2, line.n)}; diff {diff}; b={line.b}, c={line.c}, "
-        f"p_worse={line.p_worse:.4f}; worse by at most {upper} pp (one-sided 95%)"
+        f"p_worse={line.p_worse:.4f}; worse by at most {upper} pp (one-sided 95%); "
+        f"{_design_effect_text(design_effect)}"
     )
     if state not in (decision_stats.MET, decision_stats.NOT_MET):
         return f"{figures} — {state}"
@@ -2253,10 +2273,20 @@ def _render_replicate(
         return _ReplicateBars(lines + [""], reason, reason)
 
     cells = PER_KIND_VERDICT_METRICS  # the guard's four FR-1 cells; `pair_items` seeds each
+    # Plan4 §3.9: each cell's design effect, on its per-pair discordance (`cand ≠ inc`); the
+    # run-level `designEffect` stays 1.0 for `compare_report`.
+    effects = {
+        cell: _cell_design_effect(
+            [cand != inc for cand, inc in paired.outcomes[cell]],
+            paired.outcome_ids[cell],
+            dp.gen_run_ids,
+        )
+        for cell in cells
+    }
     parity = {
         cell: decision_stats.parity_cell(
             paired.outcomes[cell],
-            design_effect=run.designEffect,
+            design_effect=effects[cell],
             k=group.k,
             alpha=decision_stats.FR1_ALPHA,
         )
@@ -2278,7 +2308,7 @@ def _render_replicate(
         minimum = decision_stats.GUARD_CELL_METHOD_MIN
         thin = " — below it: printed, never refused" if line.n < minimum else ""
         lines += [
-            f"  - {_parity_text(cell, line, k=group.k, state=fr1)}",
+            f"  - {_parity_text(cell, line, k=group.k, state=fr1, design_effect=effects[cell])}",
             f"    - scored n {line.n} beside method minimum {minimum}{thin}; "
             f"overLimit {paired.over_limit[cell]}/{line.n}",
         ]
@@ -2362,9 +2392,8 @@ _EMPTY_CLASS = "not assessable (no scored eval item in this class)"
 
 
 def _fr10_class_interval(k: int, n: int, *, design_effect: float) -> tuple[float, float]:
-    """Note §Q5.1's interval: Wilson 95% at the design effect, `k/DE` of `n/DE` (note §Q6). Today
-    every caller passes the run's `designEffect` (1.0); plan4 §3.9's per-class value (U3e.2) is
-    passed here, at the one call site, and nothing else changes."""
+    """Note §Q5.1's interval: Wilson 95% at the design effect, `k/DE` of `n/DE` (note §Q6), the
+    class's own per-class value (plan4 §3.9), never the run's `designEffect`."""
     return stats.wilson_interval(k / design_effect, n / design_effect)
 
 
@@ -2454,7 +2483,9 @@ def _render_fr10_replicate(
     agreement: decision_stats.AgreementItems | None = None
     if state != _REPLICATE_INCONSISTENT and not different_content:
         try:
-            agreement = decision_stats.agreement_items(run.items, role=pack.role)
+            agreement = decision_stats.agreement_items(
+                run.items, role=pack.role, strata=dp.strata
+            )
         except ValueError as exc:
             state = f"not assessable (cannot read this replicate's items: {exc})"
     if agreement is None:
@@ -2482,11 +2513,14 @@ def _render_fr10_replicate(
     own = state is None and agreement.scored_n >= decisions.MIN_EVAL_ITEMS
     for metric, agreed in agreement.outcomes.items():
         k, n = sum(agreed), len(agreed)
+        # Plan4 §3.9: the class's design effect, on its per-item agreement indicator.
+        effect = _cell_design_effect(agreed, agreement.outcome_ids[metric], dp.gen_run_ids)
         if n:
-            lo, hi = _fr10_class_interval(k, n, design_effect=run.designEffect)
+            lo, hi = _fr10_class_interval(k, n, design_effect=effect)
             figures = f"{metric}: {k}/{n} {noun} [{lo:.3f}, {hi:.3f}]"
         else:
             figures = f"{metric}: 0/0 {noun} [—]"
+        figures += f"; {_design_effect_text(effect)}"
         thin = " — below it: printed, never refused" if n < minimum else ""
         lines += [
             f"  - {figures} — {class_states[metric] if own else quality}",

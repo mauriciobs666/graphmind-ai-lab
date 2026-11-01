@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U3e.2 — per-cell design effect
+
+**What:** plan4 §3.9's per-cell design effect and §4.2's U3e.2 brief
+(`docs/plans/typed-decision-models4.md`), on the method note's §Q6 "Design effect"
+(`docs/plans/typed-decision-models-ml.md`); the plan's and the note's formulas agree (Kish
+`m₀ = Σm²/N`). Plans 5 and 6 do not amend §3.9.
+
+- **`decision_stats.design_effect(outcomes_by_run)`**, pure: one-way ANOVA ICC with
+  `n₀ = (N − Σm²/N)/(g − 1)`, then `max(1.0, 1 + (m₀ − 1)·ICĈ)`; `1.0` for `g < 2`, `N = g` or a
+  zero denominator (constant outcomes); refuses an empty run or a non-bool outcome.
+  `DESIGN_EFFECT_SOURCE = "genRunId ICC"`.
+- **`PairedItems.outcome_ids`** and **`AgreementItems.outcome_ids`**: each outcome's `itemId`,
+  parallel to `outcomes[metric]`, filled in the same pass, so a dropped item leaves neither.
+- **`agreement_items` takes the pack's `strata`** (required, keyword-only, as `pair_items`) and
+  raises `ValueError` on a record item that is not an `eval` item of the pack, so FR-10 prints
+  `not assessable (cannot read this replicate's items: …)` where an unknown id reached the
+  `genRunId` lookup as an uncaught `KeyError` out of `compare` (impl review P26-m1).
+- **`report.py`, the two call sites:** `_render_replicate`'s `parity_cell` takes each FR-1 cell's
+  own design effect on its per-pair discordance (`cand ≠ inc`), and `_render_fr10_replicate`'s
+  Wilson interval each class's own, on its agreement indicator — both grouped through
+  `DecisionPointPack.gen_run_ids` (`_cell_design_effect`). Each cell and class line prints
+  `; DE <x.xx> (genRunId ICC)` before its state. `RunResult.designEffect` (1.0), `basis` and
+  `compare_report` are unchanged. README's bar-section paragraph names the print, wrapped to the
+  file's width (P26-n2).
+
+**Tests:** plan4 §5's U3e.2 row — `tests/test_decision_stats.py` 83 → 96 test functions (DE 1.0
+for one run, runs of size 1, constant outcomes and no items; the hand-computed two-run ANOVA
+fixture, 1.6; a negative ICĈ floored; unequal sizes at Kish `m₀` = 145.2/35, never `m̄`'s 111/35;
+order/name invariance; refusals; `outcome_ids` parallel after pairwise and load drops on both
+inputs; `agreement_items` refusing a non-eval id, `strata` keyword-only with no default),
+`tests/test_decision_bar.py` 50 → 53 (discordance sharing one run: `DE > 1`, smaller `n`, larger
+MDD, same `p_worse` and `holds`, records' `designEffect` still 1.0; incumbent-worse discordance,
+`c = 4`, in one run: `DE > 1`; concordant errors sharing a run leave `DE 1.00`),
+`tests/test_decision_bar_fr10.py` 22 → 24 (misses sharing one run: `DE > 1`, wider interval, same
+`k/n` and `met`; a record item the pack does not hold: exit 0 and not assessable); five exact-line
+asserts gain the `DE 1.00` print. Nine mutants (`m̄` for `m₀`; no floor; `outcome_ids` kept for
+dropped items in `pair_items`, and in `agreement_items`; DE not applied at the FR-1 site, and at
+the FR-10 site; FR-1's outcome the candidate's error, and `cand and not inc`; the P26-m1 guard
+removed) each redden at least one test. Suite 3587 → 3605 passed, 5 deselected, 2 xfailed; ruff
+clean.
+
 ## 2026-11-01 — typed-decision-models U3e.1 — pack provenance
 
 **What:** plan4 §3.9's pack-contract half and §4.2's U3e.1 brief (`docs/plans/typed-decision-models4.md`);

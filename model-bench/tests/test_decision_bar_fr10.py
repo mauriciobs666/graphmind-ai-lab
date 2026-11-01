@@ -216,8 +216,8 @@ def test_ac15_an_always_no_arm_on_a_70_30_set_does_not_meet_the_bar(tmp_path):
     _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
     text = _report(tmp_path, *_two_loads(tmp_path, JOIN_IN, default="no"))
     assert _class_lines(text) == [
-        "  - agreeWhenYes: 0/60 items [0.000, 0.060] — not met",
-        "  - agreeWhenNo: 140/140 items [0.973, 1.000] — met",
+        "  - agreeWhenYes: 0/60 items [0.000, 0.060]; DE 1.00 (genRunId ICC) — not met",
+        "  - agreeWhenNo: 140/140 items [0.973, 1.000]; DE 1.00 (genRunId ICC) — met",
     ]
     assert "- FR-10 per-class agreement (replicate 1): not met" in text
     assert "- FR-10 per-class agreement (replicate 2): not met" in text
@@ -262,7 +262,8 @@ def test_note_q54_worked_example_misses_on_escalation_with_the_notes_intervals(t
     text = _report(tmp_path, *_two_loads(tmp_path, MESSAGE_TYPE, specs))
     assert "per-class 95% Wilson, not simultaneous" in text
     assert _class_lines(text) == [
-        f"  - agree[{label}]: {_Q54_AGREEING[label]}/60 items {_Q54_WILSON[label]} — "
+        f"  - agree[{label}]: {_Q54_AGREEING[label]}/60 items {_Q54_WILSON[label]}; "
+        "DE 1.00 (genRunId ICC) — "
         + ("not met" if label == "escalation" else "met")
         for label in MESSAGE_TYPE_LABELS
     ]
@@ -305,7 +306,8 @@ def test_a_class_with_no_scored_item_is_not_assessable_and_never_met(tmp_path):
     text = _report(tmp_path, *_two_loads(tmp_path, MESSAGE_TYPE))
     lines = _class_lines(text)
     assert lines[3] == (
-        "  - agree[escalation]: 0/0 items [—] — not assessable (no scored eval item in this class)"
+        "  - agree[escalation]: 0/0 items [—]; DE 1.00 (genRunId ICC) — not assessable (no scored "
+        "eval item in this class)"
     )
     assert "    - scored n 0 beside method minimum 52 (design 60) — below it: printed, never " \
         "refused; overLimit 0/0" in text
@@ -434,6 +436,22 @@ def test_an_inconsistent_replicate_makes_its_groups_bars_not_assessable(tmp_path
 
 
 # --- comparison-wide blocking, above the bar-kind split (impl review Pass 18) --------------------
+
+
+def test_a_record_item_the_pack_does_not_hold_is_not_assessable_never_a_crash(tmp_path):
+    """Impl review P26-m1: a stored replicate whose item id is not one of the pack's eval items
+    (its own content hash intact) reads as not assessable, as FR-1's `pair_items` reads it —
+    never an uncaught error out of `compare` (the closed exit-code contract)."""
+    _workspace(tmp_path, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+    first, second = _two_loads(tmp_path, JOIN_IN)
+    items = tuple(
+        replace(i, itemId="ghost-item") if i.itemId == "it-000" else i for i in second.items
+    )
+    text = _report(tmp_path, first, _reaggregate(_pack(tmp_path), second, items))
+    assert "- FR-10 per-class agreement (replicate 2): not assessable (cannot read this " \
+        "replicate's items: agreement_items: no eval stratum in the pack for items " \
+        "['ghost-item']" in text
+    assert "- FR-10 per-class agreement (replicate 1): met" in text
 
 
 def _assert_every_fr10_bar(text: str, reason: str) -> None:
@@ -608,3 +626,44 @@ def test_the_class_interval_takes_the_design_effect_as_k_over_de_of_n_over_de():
     wide = report._fr10_class_interval(54, 60, design_effect=2.0)
     assert wide == stats.wilson_interval(27.0, 30.0)
     assert wide[1] - wide[0] > (lambda lo_hi: lo_hi[1] - lo_hi[0])(stats.wilson_interval(54, 60))
+
+
+# --- the per-class design effect (plan4 §3.9, §5 U3e.2; note §Q6 "Design effect") -----------------
+
+_DE_TEXT = r"; DE (\d+\.\d\d) \(genRunId ICC\)"
+
+
+def _regroup(root: Path, gen_run_ids: dict[str, str]) -> None:
+    """Rewrites the pack's `genRunId`s before any run, so every record carries the new content."""
+    path = root / "packs" / base._PACK_ID / "items.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    rows = [{**r, "genRunId": gen_run_ids.get(r["itemId"], r["genRunId"])} for r in rows]
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def test_a_class_whose_misses_share_one_run_widens_its_interval_at_k_over_de(tmp_path):
+    """Plan4 §5 U3e.2: the six `yes` misses (54/60, met) spread across the four runs by default;
+    regrouped so they fill one eight-item run, the class's ICC is high — `DE > 1` and a wider
+    Wilson interval at `k/DE` of `n/DE`, with the same `k/n` and decision (note §Q6 "Scope")."""
+    import re
+
+    misses = {i: ("ok", False) for i in _ids(JOIN_IN, True, _JOIN_70_30, 6)}
+    lines = {}
+    for name, regroup in (("spread", {}), ("clustered", dict.fromkeys(
+            _ids(JOIN_IN, True, _JOIN_70_30, 8), "hot"))):
+        root = tmp_path / name
+        _workspace(root, JOIN_IN, _labels(JOIN_IN, _JOIN_70_30))
+        _regroup(root, regroup)
+        lines[name] = _class_lines(_report(root, *_two_loads(root, JOIN_IN, misses)))[0]
+
+    spread, clustered = lines["spread"], lines["clustered"]
+    de = {k: float(re.search(_DE_TEXT, v).group(1)) for k, v in lines.items()}
+    assert de["clustered"] > 1.0 and de["clustered"] > de["spread"]
+    lo_s, hi_s = (float(x) for x in re.search(r"\[([\d.]+), ([\d.]+)\]", spread).groups())
+    lo_c, hi_c = (float(x) for x in re.search(r"\[([\d.]+), ([\d.]+)\]", clustered).groups())
+    assert hi_c - lo_c > hi_s - lo_s
+    exact = report._fr10_class_interval(54, 60, design_effect=de["clustered"])
+    assert abs(lo_c - exact[0]) < 0.006
+    for line in (spread, clustered):
+        assert line.startswith("  - agreeWhenYes: 54/60 items [")
+        assert line.endswith("— met")

@@ -151,6 +151,49 @@ def mdd(n: int, psi_hat: float, *, alpha: float, power_target: float) -> float |
     raise AssertionError(f"mdd: no grid point reached power {power_target} at n = {n}")
 
 
+# --- the per-cell design effect (note §Q6 "Design effect"; plan4 §3.9) ----------------------------
+
+#: Note §Q6: the provenance printed beside every per-cell design effect.
+DESIGN_EFFECT_SOURCE = "genRunId ICC"
+
+
+def design_effect(outcomes_by_run: Mapping[str, Sequence[bool]]) -> float:
+    """Note §Q6 "Design effect": one cell's (or one FR-10 class's) per-item outcomes, grouped by
+    the generation run (`genRunId`) that produced each item. With `N = Σm` items in `g` runs, the
+    one-way ANOVA mean squares `MSB`/`MSW`, `n₀ = (N − Σm²/N)/(g − 1)` and
+    `ICĈ = (MSB − MSW)/(MSB + (n₀ − 1)·MSW)`, the result is `max(1.0, 1 + (m₀ − 1)·ICĈ)` with
+    Kish's `m₀ = Σm²/N` — never the mean run size, which under-corrects the short cells pooled
+    top-up runs load. `1.0` when `g < 2`, `N = g`, or the ICC's denominator is 0 (constant
+    outcomes). The floor keeps it from ever shrinking a limit; it reaches limits only (§Q3.2).
+    """
+    groups: list[list[int]] = []
+    for run, outcomes in outcomes_by_run.items():
+        values = list(outcomes)
+        if not values:
+            raise ValueError(f"design_effect: run {run!r} is empty")
+        if not all(isinstance(v, bool) for v in values):
+            raise ValueError(f"design_effect: run {run!r} holds a non-bool outcome")
+        groups.append([int(v) for v in values])
+    g = len(groups)
+    n_total = sum(len(group) for group in groups)
+    if g < 2 or n_total == g:
+        return 1.0
+    grand = sum(sum(group) for group in groups) / n_total
+    means = [sum(group) / len(group) for group in groups]
+    msb = sum(len(gr) * (mu - grand) ** 2 for gr, mu in zip(groups, means)) / (g - 1)
+    msw = sum(
+        (v - mu) ** 2 for gr, mu in zip(groups, means) for v in gr
+    ) / (n_total - g)
+    sum_m_sq = sum(len(group) ** 2 for group in groups)
+    n0 = (n_total - sum_m_sq / n_total) / (g - 1)
+    denominator = msb + (n0 - 1) * msw
+    if denominator == 0:
+        return 1.0
+    icc = (msb - msw) / denominator
+    m0 = sum_m_sq / n_total
+    return max(1.0, 1 + (m0 - 1) * icc)
+
+
 # --- one FR-1 cell (note §Q3.1, §Q3.3–§Q3.5) ------------------------------------------------------
 
 CellState = Literal["holds", "worse"]
@@ -382,6 +425,8 @@ class PairedItems:
     - `outcomes[metric]`: `(candidate errs, incumbent errs)` per paired item, ordered by `itemId` —
       a cell's `parity_cell` input. Every verdict cell of the role is here, as `()` when no
       item paired in it; so is every other metric the incumbent declares (pooled, side check).
+    - `outcome_ids[metric]`: each pair's `itemId`, parallel to `outcomes[metric]` and filled in
+      the same pass (plan4 §3.9) — the design effect's grouping through the pack's `genRunId`.
     - `latency`: `(itemId, x_i, y_i)` over the paired **eval** items, ordered by `itemId` (note
       §Q4.1) — `x_i` the incumbent's wall clock, `y_i` the candidate's per note §Q4.3.
     - `scored_n`: the paired scored eval n (FR-11, note §Q4.3 "Not assessable").
@@ -396,6 +441,7 @@ class PairedItems:
     """
 
     outcomes: Mapping[str, tuple[tuple[bool, bool], ...]]
+    outcome_ids: Mapping[str, tuple[str, ...]]
     latency: tuple[tuple[str, float, float], ...]
     scored_n: int
     drops: Mapping[tuple[Arm, str], int]
@@ -493,6 +539,7 @@ def pair_items(
 
     # Every verdict cell is present, empty or not, so no FR-1 line can silently vanish (P16-m1).
     outcomes: dict[str, list[tuple[bool, bool]]] = {cell: [] for cell in cells}
+    outcome_ids: dict[str, list[str]] = {cell: [] for cell in cells}
     over_limit: dict[str, int] = dict.fromkeys(cells, 0)
     latency: list[tuple[str, float, float]] = []
     drops: dict[tuple[Arm, str], int] = {}
@@ -546,12 +593,14 @@ def pair_items(
         is_over_limit = cand.detail.get("reason") == _OVER_LIMIT
         for metric, pair in pairs.items():
             outcomes.setdefault(metric, []).append(pair)
+            outcome_ids.setdefault(metric, []).append(item_id)
             over_limit[metric] = over_limit.get(metric, 0) + int(is_over_limit)
         if is_eval:
             latency.append((item_id, x, y))
 
     return PairedItems(
         outcomes={metric: tuple(pairs) for metric, pairs in outcomes.items()},
+        outcome_ids={metric: tuple(ids) for metric, ids in outcome_ids.items()},
         latency=tuple(latency),
         scored_n=len(latency),
         drops=drops,
@@ -569,6 +618,7 @@ class AgreementItems:
       `agree[<label>]`, …), ordered by `itemId` — `k_j/n_j` is `sum`/`len`. Every class of the
       role's answer space is here, as `()` when no item scored in it, so no FR-10 line can
       silently vanish.
+    - `outcome_ids[metric]`: each outcome's `itemId`, parallel to `outcomes[metric]` (plan4 §3.9).
     - `latency`: `(itemId, y_i)` over the scored items, ordered by `itemId` — note §Q4.2's
       `mean_latency` input, `y_i` the item's wall clock (a kept failure's runs to its raise).
     - `scored_n`: the scored eval n (FR-11, note §Q4.3 "Not assessable").
@@ -580,13 +630,16 @@ class AgreementItems:
     """
 
     outcomes: Mapping[str, tuple[bool, ...]]
+    outcome_ids: Mapping[str, tuple[str, ...]]
     latency: tuple[tuple[str, float], ...]
     scored_n: int
     drops: Mapping[tuple[Arm, str], int]
     over_limit: Mapping[str, int]
 
 
-def agreement_items(candidate: Sequence[ItemResult], *, role: str) -> AgreementItems:
+def agreement_items(
+    candidate: Sequence[ItemResult], *, role: str, strata: Mapping[str, str | None]
+) -> AgreementItems:
     """Note §Q4.3's table, for a new-ability point (plan2 §3.6: "New-ability points pair nothing,
     but use the same drop accounting over the candidate run"). Per item, by `itemId`:
 
@@ -598,12 +651,19 @@ def agreement_items(candidate: Sequence[ItemResult], *, role: str) -> AgreementI
     A chat call withheld (`"timeout"`/`"no_response"`) raises: a new ability keeps its failed
     calls (`HANDOFF_FAILURE_BY_ROLE`), so such a record is not a candidate run of this role. So
     does a repeated `itemId`, an item declaring other than exactly one of the role's classes, or
-    a scored item with no wall clock. Every item of a valid new-ability pack is `eval` (FR-15)."""
+    a scored item with no wall clock. Every item of a valid new-ability pack is `eval` (FR-15):
+    `strata` is the pack's `stratum` per `itemId`, as `pair_items` takes it, and a record item
+    that is not an `eval` item of the pack raises — its id would reach the design effect's
+    `genRunId` grouping (impl review P26-m1)."""
     if BAR_KIND_BY_ROLE.get(role) != "new-ability":
         raise ValueError(f"agreement_items takes new-ability points only, not role {role!r}")
     classes = per_class_agreement_metrics(ANSWER_SPACE_BY_ROLE[role])
     by_id = _by_item_id(candidate, "candidate")
+    foreign = sorted(i for i in by_id if strata.get(i) != _EVAL)
+    if foreign:
+        raise ValueError(f"agreement_items: no eval stratum in the pack for items {foreign!r}")
     outcomes: dict[str, list[bool]] = {metric: [] for metric in classes}
+    outcome_ids: dict[str, list[str]] = {metric: [] for metric in classes}
     over_limit: dict[str, int] = dict.fromkeys(classes, 0)
     latency: list[tuple[str, float]] = []
     drops: dict[tuple[Arm, str], int] = {}
@@ -626,10 +686,12 @@ def agreement_items(candidate: Sequence[ItemResult], *, role: str) -> AgreementI
             )
         metric = declared[0]
         outcomes[metric].append(bool(item.scored_outcome(metric)))
+        outcome_ids[metric].append(item_id)
         over_limit[metric] += int(item.detail.get("reason") == _OVER_LIMIT)
         latency.append((item_id, _wall_clock(item, "candidate")))
     return AgreementItems(
         outcomes={metric: tuple(agreed) for metric, agreed in outcomes.items()},
+        outcome_ids={metric: tuple(ids) for metric, ids in outcome_ids.items()},
         latency=tuple(latency),
         scored_n=len(latency),
         drops=drops,
