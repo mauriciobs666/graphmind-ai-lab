@@ -22,7 +22,6 @@ from falkorchat.schemas import (
     MAX_CONFIG_LEN,
     MAX_DIFF_PREVIEW,
     MAX_KEY_LEN,
-    MAX_TEXT_LEN,
 )
 from falkorchat.services import (
     CATALOG_INDEX_LIMIT,
@@ -39,6 +38,7 @@ from falkorchat.services import (
     DocumentTooLargeError,
     DocumentUpdateNotFoundError,
     EmptyDocumentError,
+    InputBoundError,
     InvalidSearchQueryError,
     MatchNotFoundError,
     MemberIdCollisionError,
@@ -1830,19 +1830,19 @@ class _UntouchableRepo:
     whatever repo access is moved ahead of the guard turns the test red."""
 
     def __getattr__(self, name):
-        raise AssertionError(f"repo.{name} touched before the length check")
+        raise AssertionError(f"repo.{name} touched before the input-bound check")
 
 
 def test_post_message_rejects_text_over_max_text_len_before_any_repo_call():
-    """K-099: `post_message` re-checks `MAX_TEXT_LEN` itself — an MCP
-    `send_message` has no pydantic layer, so REST's 422 never covered it.
-    Rejected before validation reads or writes: nothing touches the repo, so
+    """K-099: `post_message` re-checks the 8000-character cap itself — the
+    MCP `send_message` signature declares no bound, so REST's 422 never
+    covered it. Rejected before validation reads or writes: nothing touches the repo, so
     an over-length post to a missing thread is `MessageTooLongError`, never
     `ThreadNotFoundError`."""
     svc = make_service(_UntouchableRepo())
 
-    with pytest.raises(MessageTooLongError, match=f"{MAX_TEXT_LEN + 1}.*{MAX_TEXT_LEN}.*split"):
-        svc.post_message(CTX, thread_id="t1", text="x" * (MAX_TEXT_LEN + 1))
+    with pytest.raises(MessageTooLongError, match="8001.*8000.*split"):
+        svc.post_message(CTX, thread_id="t1", text="x" * 8001)
 
 
 def test_post_message_at_exactly_max_text_len_is_accepted():
@@ -1851,17 +1851,17 @@ def test_post_message_at_exactly_max_text_len_is_accepted():
     repo.members.add("u1")
     svc = make_service(repo)
 
-    msg = svc.post_message(CTX, thread_id="t1", text="x" * MAX_TEXT_LEN)
+    msg = svc.post_message(CTX, thread_id="t1", text="x" * 8000)
 
     assert repo.calls[-1][0] == "post_first_message"
-    assert len(msg["text"]) == MAX_TEXT_LEN
+    assert len(msg["text"]) == 8000
 
 
 def test_post_message_length_cap_reads_text_not_mentions_or_thread_id():
     """The cap counts characters of `text` only: a short body with a long
     mentions list and a long thread id is still written."""
     repo = FakeRepo()
-    tid = "t" * (MAX_TEXT_LEN + 1)
+    tid = "t" * 8001
     repo.threads.add(tid)
     repo.members.add("u1")
     mentions = [f"m{i}" for i in range(50)]
@@ -5077,3 +5077,194 @@ def test_order_belongs_to_customer_refuses_another_actors_order():
         "owned": False, "status": None,
     }
     assert ("order_belongs_to_customer", "u1", "o-theirs") in repo.calls
+
+
+# ── K-101: stored-value input bounds in the service (every front door) ──────────
+# Literal values only (root REVIEW.md: an expected value is never read from the
+# constant under test). Each refusal runs against `_UntouchableRepo`, so a check
+# moved behind any repository read or write turns the test red.
+
+
+def _bounds_world() -> tuple[Services, FakeRepo]:
+    repo = FakeRepo()
+    repo.channels.add("c1")
+    repo.threads.add("t1")
+    repo.members.add("u1")
+    repo.members.update(f"m{i}" for i in range(60))
+    return make_service(repo), repo
+
+
+@pytest.mark.parametrize(
+    "text", ["", "   ", "\n\t "], ids=["empty", "spaces", "newline-tab"],
+)
+def test_post_message_rejects_blank_text_before_any_repo_call(text):
+    """K-101 stakeholder decision: whitespace-only text is refused on every
+    front door, a deliberate tightening of REST's `min_length=1`."""
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match="message text"):
+        svc.post_message(CTX, thread_id="t1", text=text)
+
+
+def test_post_message_accepts_a_one_character_text():
+    svc, repo = _bounds_world()
+
+    svc.post_message(CTX, thread_id="t1", text="x")
+
+    assert repo.calls[-1][0] == "post_first_message"
+
+
+def test_post_message_accepts_text_with_surrounding_whitespace_verbatim():
+    svc, repo = _bounds_world()
+
+    msg = svc.post_message(CTX, thread_id="t1", text="  hi  ")
+
+    assert msg["text"] == "  hi  "
+
+
+def test_post_message_rejects_51_mentions_before_any_repo_call():
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match=r"mentions.*51.*50"):
+        svc.post_message(
+            CTX, thread_id="t1", text="hi", mentions=[f"m{i}" for i in range(51)],
+        )
+
+
+def test_post_message_counts_mentions_as_sent_not_after_dedup():
+    """REST's `max_length=50` counts the list it receives; 51 copies of one
+    known member are refused even though they dedup to a single edge."""
+    svc, repo = _bounds_world()
+
+    with pytest.raises(InputBoundError, match="mentions"):
+        svc.post_message(CTX, thread_id="t1", text="hi", mentions=["m0"] * 51)
+    assert repo.calls == []
+
+
+def test_post_message_accepts_50_mentions():
+    svc, repo = _bounds_world()
+
+    msg = svc.post_message(
+        CTX, thread_id="t1", text="hi", mentions=[f"m{i}" for i in range(50)],
+    )
+
+    assert len(msg["mentions"]) == 50
+
+
+@pytest.mark.parametrize("name", ["", "x" * 201], ids=["empty", "201"])
+def test_create_channel_rejects_name_out_of_bounds_before_any_repo_call(name):
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match="channel name"):
+        svc.create_channel(CTX, name=name)
+
+
+@pytest.mark.parametrize("name", ["x", "x" * 200], ids=["1", "200"])
+def test_create_channel_accepts_name_within_bounds(name):
+    svc, repo = _bounds_world()
+
+    svc.create_channel(CTX, name=name)
+
+    assert repo.calls[-1][0] == "create_channel"
+
+
+@pytest.mark.parametrize("title", ["", "x" * 201], ids=["empty", "201"])
+def test_create_thread_rejects_title_out_of_bounds_before_any_repo_call(title):
+    """Checked before the channel lookup too: an out-of-bounds title on a
+    missing channel is `InputBoundError`, never `ChannelNotFoundError`."""
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match="thread title"):
+        svc.create_thread(CTX, channel_id="missing", title=title)
+
+
+@pytest.mark.parametrize("title", ["x", "x" * 200], ids=["1", "200"])
+def test_create_thread_accepts_title_within_bounds(title):
+    svc, repo = _bounds_world()
+
+    svc.create_thread(CTX, channel_id="c1", title=title)
+
+    assert repo.calls[-1][0] == "create_thread"
+
+
+@pytest.mark.parametrize(
+    "field,kwargs",
+    [
+        ("title", {"title": "x" * 201}),
+        ("source_format", {"source_format": ""}),
+        ("source_format", {"source_format": "x" * 51}),
+        ("source_format", {"source_format": None}),
+        ("source_label", {"source_label": "x" * 201}),
+    ],
+    ids=["title-201", "format-empty", "format-51", "format-none", "label-201"],
+)
+def test_ingest_document_rejects_metadata_out_of_bounds_before_any_repo_call(
+    field, kwargs,
+):
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match=field):
+        svc.ingest_document(CTX, text="a document", **kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"title": "x" * 200},
+        {"title": ""},
+        {"title": None},
+        {"source_format": "x"},
+        {"source_format": "x" * 50},
+        {"source_label": "x" * 200},
+        {"source_label": None},
+    ],
+    ids=["title-200", "title-empty", "title-none", "format-1", "format-50",
+         "label-200", "label-none"],
+)
+def test_ingest_document_accepts_metadata_within_bounds(kwargs):
+    svc, repo = _bounds_world()
+
+    receipt = svc.ingest_document(CTX, text="a document", **kwargs)
+
+    assert receipt["status"] == "processing"
+    assert receipt["documentId"] in repo.documents
+
+
+def test_ingest_document_bounds_source_label_even_when_a_title_is_given():
+    """K-101 review P1-2: the label is stored only as the `title` fallback, but
+    REST's `sourceLabel` `maxLength` 422s it regardless, so the service refuses
+    a 201-character label beside a valid title too."""
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError, match="source_label is 201 characters"):
+        svc.ingest_document(CTX, text="a document", title="t", source_label="x" * 201)
+
+
+def test_ingest_documents_turns_an_over_long_title_into_that_items_receipt():
+    """The service check, not REST's all-or-nothing body validation, is what
+    keeps MCP's per-item receipts: the bad item errors, its siblings land."""
+    svc, repo = _bounds_world()
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "good document one"},
+            {"text": "bad title", "title": "x" * 201},
+            {"text": "good document two"},
+        ],
+    )
+
+    assert [r["status"] for r in results] == ["processing", "error", "processing"]
+    assert results[1]["errorType"] == "InputBoundError"
+    assert "201" in results[1]["error"] and "200" in results[1]["error"]
+    assert len(repo.documents) == 2
+
+
+def test_input_bound_error_names_field_size_and_limit():
+    svc = make_service(_UntouchableRepo())
+
+    with pytest.raises(InputBoundError) as exc:
+        svc.create_channel(CTX, name="x" * 201)
+
+    assert str(exc.value) == "channel name is 201 characters, exceeding the 200 limit"
+    assert (exc.value.field, exc.value.size, exc.value.limit) == ("channel name", 201, 200)

@@ -91,6 +91,7 @@ from .services import (
     DocumentTooLargeError,
     DocumentUpdateNotFoundError,
     EmptyDocumentError,
+    InputBoundError,
     InvalidSearchQueryError,
     MatchNotFoundError,
     MessageTooLongError,
@@ -724,6 +725,15 @@ SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
         "`PostMessageIn.text` caps at `MAX_MESSAGE_TEXT_LEN` (2000), below "
         "`MAX_TEXT_LEN`, so `422 validation_failed` answers first and this is "
         "unreachable from any client"
+    ),
+    InputBoundError: (
+        "K-101's stored-value bounds; the one this surface calls is "
+        "`services.post_message`'s, and it cannot fire: `PostMessageIn.text`'s "
+        "`_nonblank` validator answers `422 validation_failed` for blank text "
+        "first, and the route always sends `mentions=[agent_id]`, one of 50; "
+        "no storefront route creates a channel or thread or ingests a document "
+        "through `Services` (`Storefront.join` creates its channel and thread "
+        "via `repo.ensure_participant`, which carries no K-101 check)"
     ),
     UnknownOrderTransitionError: (
         "`services.advance_order`'s guard on an unknown transition string — "

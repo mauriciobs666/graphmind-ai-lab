@@ -2931,7 +2931,7 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     """
     family = _subclasses(ServiceError)
     mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
-    assert len(family) == 14, sorted(k.__name__ for k in family)
+    assert len(family) == 15, sorted(k.__name__ for k in family)
     assert family - (mapped | unreachable) == set()
     assert not mapped & unreachable
     assert (mapped | unreachable) - family == set()
@@ -2973,6 +2973,20 @@ def test_the_message_length_unreachability_claim_is_pinned_to_its_producer():
     assert max_len <= MAX_TEXT_LEN
 
 
+def test_the_blank_message_unreachability_claim_is_pinned_to_its_producer():
+    """K-101 — `InputBoundError` is excused as unreachable because the
+    storefront's own `PostMessageIn` refuses blank text before the service's
+    non-blank check can (the P11-6 shape again: two declarations agreeing).
+    Dropping `_check_text` would put an unmapped `ServiceError` on
+    `POST /shop/api/messages`."""
+    from pydantic import ValidationError
+
+    for blank in ("", "   ", "\n\t "):
+        with pytest.raises(ValidationError):
+            storefront_api.PostMessageIn(text=blank)
+    assert storefront_api.PostMessageIn(text=" hi ").text == " hi "
+
+
 def test_the_service_error_map_resolves_through_the_class_tree():
     """**P11-10** — `service_error_response` walks `type(exc).__mro__`, and
     replacing that with an exact-type lookup left the file green (mutation
@@ -2990,11 +3004,11 @@ def test_the_service_error_map_resolves_through_the_class_tree():
     assert service_error_response(derived("gone")) == (401, "invalid_token")
 
     # ...and minting it did not disturb the family the two partition tests
-    # assert is exactly fourteen. This used to need `del` + `gc.collect()` and so
+    # assert is exactly fifteen. This used to need `del` + `gc.collect()` and so
     # rested on reclaim timing; `_subclasses` now filters on the defining
     # package, which holds while the subclass is still alive (P12-4)
     assert derived in ThreadNotFoundError.__subclasses__()
-    assert len(_subclasses(ServiceError)) == 14
+    assert len(_subclasses(ServiceError)) == 15
     assert derived not in _subclasses(ServiceError)
 
     # ...and it agrees with the partition: nothing declared unreachable
@@ -4150,11 +4164,14 @@ STOREFRONT_RAISES_TODAY = frozenset({
 # has its own producer test. `MessageTooLongError` (`post_message`'s K-099
 # `MAX_TEXT_LEN` re-check, added after that measurement — six now) is excused
 # the same way: `PostMessageIn.text`'s smaller bound answers `422` first, with
-# its own producer test. So five of the six are exempted here by a
-# mechanism rather than by appearing in a list; `RuntimeError` is not a
-# `ServiceError` at all and takes a written reason in `NON_FAMILY_RAISES`.
+# its own producer test. `InputBoundError` (`post_message`'s K-101 non-blank
+# and mentions-count checks — seven now) is excused the same way:
+# `PostMessageIn.text`'s `_nonblank` answers `422` first and the route sends
+# one mention, with its own producer test. So six of the seven are exempted
+# here by a mechanism rather than by appearing in a list; `RuntimeError` is not
+# a `ServiceError` at all and takes a written reason in `NON_FAMILY_RAISES`.
 SERVICE_RAISES_TODAY = frozenset({
-    "MessageTooLongError", "RuntimeError", "ThreadNotFoundError",
+    "InputBoundError", "MessageTooLongError", "RuntimeError", "ThreadNotFoundError",
     "UnknownActorError", "UnknownMemberError", "UnknownOrderTransitionError",
 })
 

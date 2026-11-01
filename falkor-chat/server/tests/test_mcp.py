@@ -242,21 +242,20 @@ def _thread_with_sync_schedule(repo, worker):
 
 
 def test_send_message_over_max_text_len_is_rejected_naming_the_limit(repo):
-    """K-099: REST 422s an over-`MAX_TEXT_LEN` post via pydantic; MCP has no
-    schema layer, so `send_message` must refuse it too — loudly, with the
-    limit in the error, writing nothing and scheduling no embed job."""
+    """K-099: REST 422s an 8001-character post via pydantic; the MCP tool
+    signature declares no bound, so the service's cap is what refuses it —
+    loudly, with the limit in the error, writing nothing and scheduling no
+    embed job. Literal 8001/8000, never `MAX_TEXT_LEN` (root REVIEW.md)."""
     from mcp.server.fastmcp.exceptions import ToolError
-
-    from falkorchat.schemas import MAX_TEXT_LEN
 
     worker = RecordingWorker()
     original = mcp_mod._schedule
     mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
     try:
         tid = _thread_with_sync_schedule(repo, worker)
-        with pytest.raises(ToolError, match=f"exceeding the {MAX_TEXT_LEN} limit"):
+        with pytest.raises(ToolError, match="8001 characters, exceeding the 8000 limit"):
             asyncio.run(mcp_mod.mcp.call_tool(
-                "send_message", {"body": "x" * (MAX_TEXT_LEN + 1), "re": tid}
+                "send_message", {"body": "x" * 8001, "re": tid}
             ))
         rows = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
             "read_messages", {"re": tid, "since": 0, "advance": False}
@@ -269,21 +268,62 @@ def test_send_message_over_max_text_len_is_rejected_naming_the_limit(repo):
 
 
 def test_send_message_at_exactly_max_text_len_is_accepted_and_embedded(repo):
-    from falkorchat.schemas import MAX_TEXT_LEN
-
     worker = RecordingWorker()
     original = mcp_mod._schedule
     mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
     try:
         tid = _thread_with_sync_schedule(repo, worker)
         posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
-            "send_message", {"body": "x" * MAX_TEXT_LEN, "re": tid}
+            "send_message", {"body": "x" * 8000, "re": tid}
         )))
     finally:
         mcp_mod._schedule = original
 
-    assert len(posted["text"]) == MAX_TEXT_LEN
-    assert worker.calls == [("test", posted["msgId"], "x" * MAX_TEXT_LEN)]
+    assert len(posted["text"]) == 8000
+    assert worker.calls == [("test", posted["msgId"], "x" * 8000)]
+
+
+# ── K-101: stored-value bounds reach MCP through the service (no database) ──────
+
+
+@pytest.mark.parametrize(
+    "tool,args,match",
+    [
+        ("send_message", {"body": "", "re": "t1"}, "message text"),
+        ("send_message", {"body": "   ", "re": "t1"}, "message text"),
+        ("send_message",
+         {"body": "hi", "re": "t1", "mentions": [f"m{i}" for i in range(51)]},
+         "mentions has 51 items, exceeding the 50 limit"),
+        ("create_channel", {"name": ""}, "channel name"),
+        ("create_channel", {"name": "x" * 201}, "201 characters, exceeding the 200 limit"),
+        ("create_thread", {"channel_id": "c1", "title": ""}, "thread title"),
+        ("create_thread", {"channel_id": "c1", "title": "x" * 201}, "thread title"),
+        ("ingest_document", {"text": "doc", "title": "x" * 201}, "title is 201"),
+        ("ingest_document", {"text": "doc", "source_format": ""}, "source_format"),
+        ("ingest_document", {"text": "doc", "source_label": "x" * 201}, "source_label"),
+    ],
+    ids=["body-empty", "body-blank", "mentions-51", "name-empty", "name-201",
+         "title-empty", "title-201", "doc-title-201", "format-empty", "label-201"],
+)
+def test_mcp_tool_refuses_out_of_bounds_stored_value_before_any_repo_call(
+    tool, args, match,
+):
+    """The refusal comes from the service (`InputBoundError`), so it reaches
+    MCP with no signature annotation: the untouchable repo proves nothing was
+    read or written, and no embed job was scheduled."""
+    from mcp.server.fastmcp.exceptions import ToolError
+    from test_services import _UntouchableRepo
+
+    worker = RecordingWorker()
+    _configure(_UntouchableRepo(), embed_worker=worker)
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *a: fn(*a)  # synchronous
+    try:
+        with pytest.raises(ToolError, match=match):
+            asyncio.run(mcp_mod.mcp.call_tool(tool, args))
+    finally:
+        mcp_mod._schedule = original
+    assert worker.calls == []
 
 
 def test_send_message_tool_description_states_the_current_max_text_len(repo):

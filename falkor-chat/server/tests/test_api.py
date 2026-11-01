@@ -2103,3 +2103,55 @@ def test_thread_participants_empty_when_channel_has_no_members(client):
 def test_thread_participants_unknown_thread_404(client):
     r = client.get("/threads/ghost/participants")
     assert r.status_code == 404
+
+
+# ── K-101: whitespace-only message text is a 400 through REST (no database) ─────
+
+
+@pytest.fixture()
+def fake_client():
+    """A throwaway app over `Services(FakeRepo())`: touches no graph at all."""
+    from test_services import FakeRepo
+
+    repo = FakeRepo()
+    repo.threads.add("t1")
+    repo.members.add("u1")
+    app = create_app(
+        Services(repo),
+        context_provider=lambda: CallContext(ws="test", actor="u1"),
+        mount_mcp=False,
+    )
+    return TestClient(app), repo
+
+
+def test_post_whitespace_only_message_is_400_input_bound_error(fake_client):
+    """Stakeholder decision (K-101): `"   "` passes `PostMessageIn`'s
+    `min_length=1` and is refused by the service — the generic
+    `ServiceError` handler's 400 envelope, not the 201 it used to get."""
+    client, repo = fake_client
+
+    r = client.post("/threads/t1/messages", json={"text": "   "})
+
+    assert r.status_code == 400
+    assert r.json() == {
+        "error": "InputBoundError",
+        "detail": "message text must not be empty or whitespace-only",
+    }
+    assert not [c for c in repo.calls if c[0].startswith("post_")]
+
+
+def test_post_empty_message_is_still_422_from_pydantic(fake_client):
+    client, _ = fake_client
+
+    r = client.post("/threads/t1/messages", json={"text": ""})
+
+    assert r.status_code == 422
+
+
+def test_post_nonblank_message_is_still_201(fake_client):
+    client, _ = fake_client
+
+    r = client.post("/threads/t1/messages", json={"text": " hi "})
+
+    assert r.status_code == 201
+    assert r.json()["text"] == " hi "

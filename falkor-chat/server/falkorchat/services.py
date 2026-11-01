@@ -67,6 +67,9 @@ from .schemas import (
     MAX_DIFF_PREVIEW,
     MAX_DOCUMENT_CHARS,
     MAX_KEY_LEN,
+    MAX_MENTIONS,
+    MAX_NAME_LEN,
+    MAX_SOURCE_FORMAT_LEN,
     MAX_TEXT_LEN,
 )
 from .transport import ProviderCallError
@@ -96,7 +99,7 @@ WAITING_STEP_TYPES: frozenset[str] = frozenset({"human", "wait"})
 # live chat thread and let the next ordinary human message drive it one step with
 # no input and no guard data. `error` is the diagnostic note `fail_run` stamps.
 # Enforced in the SERVICE (both the start ctx and submitted input), not only in
-# `schemas.py`: MCP tools and direct service callers never see a pydantic model.
+# `schemas.py`: MCP tools and direct service callers never see those REST models.
 #
 # `timerFired` (K-028 v3, `docs/plans/workflow-timers.md` §3.3) is the sweep's
 # step-scoped escalation marker — `Services.sweep_due_workflow_runs` is the ONLY
@@ -234,9 +237,9 @@ class InvalidSearchQueryError(ServiceError):
 class DocumentTooLargeError(ServiceError):
     """Raised when `ingest_document`'s text exceeds `MAX_DOCUMENT_CHARS` (plan §3.5).
 
-    Enforced in the service, not only at the REST pydantic boundary — an MCP
-    caller has no schema layer, so this is the one place both transports are
-    bound by the same cap.
+    Enforced in the service, not only at the REST pydantic boundary, so every
+    front door (REST, MCP, in-process callers) is bound by the same cap — the
+    `InputBoundError` posture (K-101).
     """
 
 
@@ -245,11 +248,53 @@ class MessageTooLongError(ServiceError):
 
     Same posture as `DocumentTooLargeError`: enforced in the service, not only
     at the REST pydantic boundary (`PostMessageIn.text = Field(max_length=
-    MAX_TEXT_LEN)`, a 422 there) — an MCP `send_message` caller has no schema
-    layer, so this is the one place every front door into `post_message` is
-    bound by the same cap. The cap also bounds what reaches the embedder,
-    which is loaded at a context sized for a `MAX_TEXT_LEN` message.
+    MAX_TEXT_LEN)`, a 422 there), so every front door into `post_message` is
+    bound by the same cap whatever its own schema declares. The cap also
+    bounds what reaches the embedder, which is loaded at a context sized for
+    a `MAX_TEXT_LEN` message.
     """
+
+
+class InputBoundError(ServiceError):
+    """Raised when a caller-supplied value that gets stored is outside its bound (K-101).
+
+    Every bound on a stored value is a service invariant, checked before any
+    repository call, so REST, MCP and in-process callers are bound alike
+    (`docs/reviews/mcp-input-bounds-rca.md` §5.2): message text (non-blank —
+    stricter than REST's `min_length=1`, a stakeholder decision) and mentions
+    (counted as sent, before dedup), channel name and thread title, and
+    `ingest_document`'s `title`/`source_format`/`source_label`. REST's pydantic
+    models still answer 422 first for the bounds they declare; whitespace-only
+    message text passes them and reaches this check, a 400. Through
+    `ingest_documents` a violation becomes that item's own receipt.
+
+    `field`, `size` and `limit` name the offending value: for a too-long value
+    `size` is its length and `limit` the maximum; for an empty one `size` is
+    its length and `limit` the minimum. Older per-bound classes
+    (`MessageTooLongError`, `DocumentTooLargeError`, `EmptyDocumentError`,
+    `BatchTooLargeError`) predate this one and keep their names.
+    """
+
+    def __init__(self, field: str, size: int, limit: int, message: str) -> None:
+        super().__init__(message)
+        self.field = field
+        self.size = size
+        self.limit = limit
+
+
+def _check_length(field: str, value: object, *, min_len: int, max_len: int) -> None:
+    """Raise `InputBoundError` unless `value` is a string of `min_len..max_len` chars."""
+    if not isinstance(value, str):
+        raise InputBoundError(
+            field, 0, min_len, f"{field} must be a string, got {type(value).__name__}"
+        )
+    if len(value) < min_len:
+        raise InputBoundError(field, len(value), min_len, f"{field} must not be empty")
+    if len(value) > max_len:
+        raise InputBoundError(
+            field, len(value), max_len,
+            f"{field} is {len(value)} characters, exceeding the {max_len} limit",
+        )
 
 
 class MatchNotFoundError(ServiceError):
@@ -307,8 +352,8 @@ class EmptyDocumentError(ServiceError):
     """Raised when `ingest_document`'s text is empty or whitespace-only.
 
     `IngestDocumentIn.text = Field(min_length=1, ...)` blocks a literal ``""``
-    at the REST boundary but not a whitespace-only string, and MCP has no
-    schema layer at all — this is the one place both transports are bound.
+    at the REST boundary but not a whitespace-only string; this check binds
+    every front door, REST and MCP alike.
     Without it, `chunking.split_into_chunks` happily returns `[]` (it has no
     opinion on validity, by design) and `create_document` would write a real
     `Document` with zero `Chunk`s, permanently stuck at `status:'processing'`
@@ -323,8 +368,9 @@ class BatchTooLargeError(ServiceError):
 
     Same posture as `DocumentTooLargeError`: enforced in the service, not
     only at the REST pydantic boundary (`IngestDocumentsIn.documents =
-    Field(max_length=MAX_BATCH_SIZE)`) — an MCP caller has no schema layer,
-    so this is the one place both transports are bound by the same cap.
+    Field(max_length=MAX_BATCH_SIZE)`). The MCP `items` argument is untyped on
+    purpose (typing it would lose the per-item receipts), so this is the one
+    place both transports are bound by the same cap.
     """
 
 
@@ -864,6 +910,7 @@ class Services:
     # ── channels ────────────────────────────────────────────────────────────────
 
     def create_channel(self, ctx: CallContext, *, name: str) -> dict[str, Any]:
+        _check_length("channel name", name, min_len=1, max_len=MAX_NAME_LEN)
         channel_id = self._id()
         now = self._clock()
         self._repo.create_channel(
@@ -879,6 +926,7 @@ class Services:
     def create_thread(
         self, ctx: CallContext, *, channel_id: str, title: str
     ) -> dict[str, Any]:
+        _check_length("thread title", title, min_len=1, max_len=MAX_NAME_LEN)
         if not self._repo.channel_exists(ctx.ws, channel_id=channel_id):
             raise ChannelNotFoundError(channel_id)
         thread_id = self._id()
@@ -968,10 +1016,13 @@ class Services:
     ) -> dict[str, Any]:
         """Post a message into an existing thread.
 
-        Rejects `text` longer than `MAX_TEXT_LEN` (`MessageTooLongError`, K-099)
-        before any read or write — REST's `PostMessageIn` already 422s it, but
-        an MCP `send_message` has no schema layer, so the cap is re-checked here
-        for every front door, the `DocumentTooLargeError` posture. Validates the
+        Rejects, before any read or write, `text` longer than `MAX_TEXT_LEN`
+        (`MessageTooLongError`, K-099), `text` that is empty or whitespace-only
+        and more than `MAX_MENTIONS` mentions counted as sent, before dedup
+        (both `InputBoundError`, K-101). Every front door is bound alike. REST's
+        `PostMessageIn` 422s an over-long text, `""` and 51 mentions first, but
+        its `min_length=1` admits `"   "`, which this check turns into a 400
+        (a stakeholder decision: stricter than REST's own model). Validates the
         actor and mentions, derives `role` from the actor's node label
         (`User → user`, `Agent → assistant` — agents can author), then
         dispatches on the §4 v2 status row via `_dispatch_write`.
@@ -985,6 +1036,16 @@ class Services:
                 f"message text is {len(text)} characters, "
                 f"exceeding the {MAX_TEXT_LEN} limit; "
                 f"split it into several messages"
+            )
+        if not text.strip():
+            raise InputBoundError(
+                "message text", len(text), 1,
+                "message text must not be empty or whitespace-only",
+            )
+        if mentions is not None and len(mentions) > MAX_MENTIONS:
+            raise InputBoundError(
+                "mentions", len(mentions), MAX_MENTIONS,
+                f"mentions has {len(mentions)} items, exceeding the {MAX_MENTIONS} limit",
             )
         wanted, role = self._validate_and_derive_role(
             ctx, thread_id=thread_id, mentions=mentions
@@ -1193,10 +1254,11 @@ class Services:
 
         Rejects empty/whitespace-only text (`EmptyDocumentError`) and text over
         `MAX_DOCUMENT_CHARS` (`DocumentTooLargeError`) before any split/write
-        happens — both mirror the REST-boundary size caps elsewhere in this
-        codebase, `schemas.MAX_TEXT_LEN`/`PostMessageIn`, but are enforced here
-        too, not only at the REST pydantic boundary, so an MCP caller (no
-        schema layer at all) is bound the same way. `title` falls back to
+        happens, and then (`InputBoundError`, K-101) a `title` over
+        `MAX_NAME_LEN`, a `source_format` outside 1..`MAX_SOURCE_FORMAT_LEN`
+        or a `source_label` over `MAX_NAME_LEN` — `IngestDocumentIn`'s bounds,
+        enforced here too so every front door is bound the same way. `title`
+        and `source_label` may be `None`; `source_format` may not. `title` falls back to
         `source_label` (a caller-supplied descriptive source name, e.g. a
         filename) when omitted, and to `""` when neither is given —
         `Document.title` has no other natural default. `Document.status`
@@ -1236,6 +1298,13 @@ class Services:
                 f"document text is {len(text)} characters, "
                 f"exceeding the {MAX_DOCUMENT_CHARS} limit"
             )
+        if title is not None:
+            _check_length("title", title, min_len=0, max_len=MAX_NAME_LEN)
+        _check_length(
+            "source_format", source_format, min_len=1, max_len=MAX_SOURCE_FORMAT_LEN,
+        )
+        if source_label is not None:
+            _check_length("source_label", source_label, min_len=0, max_len=MAX_NAME_LEN)
         chunk_texts = chunking.split_into_chunks(text)
         document_id = self._id()
         now = self._clock()
@@ -1336,8 +1405,8 @@ class Services:
 
         The batch itself is capped at `MAX_BATCH_SIZE` (`BatchTooLargeError`)
         — enforced here, not only at the REST `IngestDocumentsIn` pydantic
-        boundary, so an MCP caller (no schema layer at all) is bound the same
-        way, mirroring `MAX_DOCUMENT_CHARS`/`DocumentTooLargeError`'s exact
+        boundary, so the untyped MCP `items` argument is bound the same way,
+        mirroring `MAX_DOCUMENT_CHARS`/`DocumentTooLargeError`'s exact
         posture above. This check runs before any item is processed, so a
         batch that is too large writes nothing at all (all-or-nothing at the
         batch-size boundary, independent of the item-level all-or-nothing
@@ -1606,8 +1675,9 @@ class Services:
         `pydantic` already bounds these at the REST boundary
         (`schemas.py`'s `MAX_KEY_LEN=200` on `PublishWorkflowDefIn.key/version`,
         `WorkflowStepIn.key`, `WorkflowTransitionIn.from_/to`), but every
-        non-REST caller (tests, scripts, a future MCP tool) reaches `Services`
-        directly and bypasses pydantic entirely — this mirrors the bound at
+        non-REST caller (tests, scripts, a future MCP tool whose signature
+        omits the bound) reaches `Services` without REST's models — this
+        mirrors the bound at
         the service layer, the same pattern `MAX_CONFIG_LEN`'s ctx-merge check
         already uses in `submit_workflow_input`/`sweep_due_workflow_runs`.
 
