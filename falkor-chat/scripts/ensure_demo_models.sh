@@ -14,19 +14,25 @@
 #   - stops (exit 1) if any model OUTSIDE the set is loaded (e.g. qwen, which the
 #     :8200 agent-team server may be using), or the chat model is loaded with a
 #     context other than 8192 — it never unloads or reloads anything;
-#   - loads whichever demo model is missing: `lms load <id> -c 8192 --gpu max
-#     --identifier <id> -y`, then re-reads the API to confirm (waiting up to 30 s
-#     while a just-loaded model still reports `loading`; ENSURE_DEMO_MODELS_SETTLE_S /
-#     _INTERVAL_S override it for tests; a value that isn't a finite number of
-#     seconds — > 0 for the interval, >= 0 for the wait — is a refusal);
-#   - does nothing when both are already loaded (idempotent; no CLI needed).
-# The embedder's context is not checked (the API misreports it as 2048) and GPU
-# offload is not observable — see scripts/ensure_demo_models.py's docstring.
+#   - loads whichever demo model is missing, each at its own context: `lms load <id>
+#     -c <ctx> --gpu max --identifier <id> -y`, ctx 8192 for the chat model and 4096
+#     for the embedder (it embeds one text at a time — K-099), then re-reads the API
+#     to confirm (waiting up to 30 s while a just-loaded model still reports `loading`;
+#     ENSURE_DEMO_MODELS_SETTLE_S / _INTERVAL_S override it for tests; a value that
+#     isn't a finite number of seconds — > 0 for the interval, >= 0 for the wait — is
+#     a refusal);
+#   - does nothing when both are already loaded (idempotent; no CLI needed);
+#   - then, on success, checks the embedder's real context with `lms ps --json` (the
+#     API misreports it as 2048) and only WARNS, with the reload command, when it isn't
+#     4096 — the embedder is shared with the :8200 agent-team server, so a mismatch is
+#     never a refusal or a reload. No CLI -> a "not checked" note.
+# GPU offload is not observable — see scripts/ensure_demo_models.py's docstring.
 #
 # Env vars:
 #   LMS_CLI                    path to the lms CLI (lms or lms.exe). Unset: `lms`, then
-#                              `lms.exe`, on PATH. Only needed when a load is needed;
-#                              absent then -> stop with load-it-yourself instructions.
+#                              `lms.exe`, on PATH. Needed when a load is needed (absent
+#                              then -> stop with load-it-yourself instructions) and for
+#                              the advisory embedder-context check (absent -> skipped).
 #                              WSL example: LMS_CLI=/mnt/c/Users/<you>/.lmstudio/bin/lms.exe
 #   FALKORCHAT_OPENCODE_CONFIG gives the LM Studio baseURL; must match what the server gets.
 #                              Unset: $HOME/.config/opencode/opencode.local.json if present

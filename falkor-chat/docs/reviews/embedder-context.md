@@ -344,6 +344,45 @@ finds no assertion on it, and the `test_mcp.py` cap test matches only `exceeding
 limit`. Under `falkor-chat/REVIEW.md`, an error message is behavior, so it can now vanish
 silently. **Fix:** add `split` to the existing `pytest.raises(..., match=...)` in either test.
 
+## Pass 4 — P2 re-check
+
+**Verdict: approve.** Pass 2's embedder-context change is cleared.
+- I grepped the three permitted files for FalkorDB fixtures and found none. They pass: **85**.
+- Mutants ran on a copy of `ensure_demo_models.py`, restored afterwards, with the file touched and
+  `__pycache__` cleared. sha256 identical before and after (`191706c8…`).
+- A gitignored `scripts/__pycache__/embedding_migration.cpython-312.pyc` was left behind. It is a
+  bytecode file for a different module, not a change to the tree.
+- I did no LM Studio loads or unloads.
+
+- **P2-1 — fixed.** MF (the embedder check dropped after a load) is killed: 1 failed.
+- **P2-2 — fixed.** MA (the load-it-yourself line at 4096) and MB (the app hint at 4096) are
+  killed: 1 failed each.
+- **P2-3 — fixed.**
+  - The report's verdict now reads "On the builds above: silent head truncation, not a rejection".
+  - The script docstring (step 6) and the WARNING text both say "on the LM Studio build probed in"
+    and cite the report. The docstring adds a re-probe-after-update note.
+  - I re-read the build evidence read-only, and every value matches the report:
+    - `lms runtime ls` shows `llama.cpp-win-x86_64-nvidia-cuda12-avx2@2.67.0` in the ✓ column.
+    - `lms version` shows `CLI commit: dcefd5a`.
+    - `LM Studio/resources/app/package.json` has `"version": "0.4.26+4"`.
+  - The report also gained a process note on probing a shared LM Studio. That note answers
+    Pass 2's first open question.
+- **P2-4 — fixed.**
+  - The exit-code line now reads "0 = demo set loaded, nothing foreign, chat model at
+    DEMO_CONTEXT_LENGTH (the embedder's context is only advised on)".
+  - The no-op line now reads "chat model at the demo context — nothing to load (embedder context
+    checked below)".
+- **P2-5 — fixed.** These mutants are all killed:
+  - MC (a bad `LMS_CLI` left uncaught on the no-op path): 1 failed.
+  - ME with the instance-count guard turned into `== 0`, and the reverse case turned into `> 1`:
+    1 failed each.
+  - The non-int guard removed: 3 failed.
+  - Its `bool` exclusion dropped: 1 failed.
+  - The `lms ps` exit-code mutant stays untested, by agreement. It is close to an equivalent
+    mutant (Pass 2, item 3).
+
+Nothing new to report.
+
 ## Appendix
 
 **Pass 2 kill probe** (`scratchpad/t/test_probe_p2.py`, imports the shipped `rig` fixture). On the shipped

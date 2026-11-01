@@ -27,21 +27,33 @@ What it does, in order — every refusal happens before any load:
   3. Refuses (exit 1, nothing loaded or unloaded) when:
        * any model OUTSIDE the demo set is loaded (e.g. `qwen/qwen3-4b-2507`, which the
          `:8200` agent-team server may be using) — the operator decides what to unload;
-       * the chat model is loaded with a context length other than DEMO_CONTEXT_LENGTH.
-         The embedder's context is NOT checked: the API misreports it for embedding
-         models (2048 for an instance `lms ps --json` shows at 8192, the value the
-         runtime log in `docs/test-reports/salesperson-single-model-fit-report.md` also
-         shows). Cost of the skip: an embedder at a wrong context passes, which the
-         storefront cannot notice — it never embeds. GPU offload is not reported by the
-         API or `lms ps`, so it is set at load only;
+       * the chat model is loaded with a context length other than DEMO_CONTEXT_LENGTH
+         (8192, the KV pool concurrent storefront turns share). The embedder's context is
+         never a refusal: the API misreports it for embedding models (2048 for an instance
+         `lms ps --json` shows at 8192), and step 6 checks it advisorily instead. GPU
+         offload is not reported by the API or `lms ps`, so it is set at load only;
        * a demo model is still `loading` (wait and re-run).
-  4. Nothing missing -> prints "nothing to do", exit 0 (idempotent; no CLI needed).
-  5. Otherwise loads each missing model with the `lms` CLI —
-     `lms load <id> -c 8192 --gpu max --identifier <id> -y` — then re-reads the API
+  4. Nothing missing -> prints "nothing to load", exit 0 (idempotent; no CLI needed).
+  5. Otherwise loads each missing model with the `lms` CLI at its own context —
+     `lms load <id> -c <ctx> --gpu max --identifier <id> -y`, ctx = DEMO_CONTEXT_LENGTH
+     (8192) for the chat model, EMBED_CONTEXT_LENGTH (4096) for the embedder — then
+     re-reads the API
      (while a demo model still reports `loading`, every SETTLE_INTERVAL_S for up to
      SETTLE_S = 30 s; an override that isn't a finite number of seconds — > 0 for the
      interval, >= 0 for SETTLE_S — is a refusal) and stops unless the full set is loaded and nothing foreign appeared. `--identifier`
      makes a racing duplicate load fail instead of silently creating `<id>:2`.
+  6. On every exit-0 path, checks the embedder's real context with `lms ps --json` and
+     prints a WARNING (exit stays 0, nothing reloaded) when it is not EMBED_CONTEXT_LENGTH,
+     with the operator's reload command. Advisory, not a refusal, because the embedder is
+     shared (the `:8200` agent-team server embeds through it) and the storefront never
+     embeds: at a larger context it only costs VRAM; at a smaller one an over-context
+     input is truncated to its head on the LM Studio build probed in
+     `docs/test-reports/embedder-context-report.md` (not rejected there — re-probe after an
+     LM Studio/runtime update: upstream llama.cpp rejects instead), which degrades search
+     recall for long messages but cannot break the demo. Refusing would force an unload of
+     a model other servers use. No CLI, a bad LMS_CLI, `lms ps` unreadable, not exactly
+     one instance with the embedder's identifier, or a non-integer context -> a note that
+     it was not checked.
 
 It NEVER runs `lms unload`, never reloads a loaded model, and never JIT-loads by
 calling a model.
@@ -50,7 +62,8 @@ The CLI is found by configuration: `LMS_CLI` (path to `lms`/`lms.exe`) if set, e
 `lms` then `lms.exe` on PATH. It is only needed when something must be loaded; when it
 is absent the step stops with load-it-yourself instructions.
 
-Exit codes: 0 = demo set loaded with the demo settings; 1 = refused or failed (message
+Exit codes: 0 = demo set loaded, nothing foreign, chat model at DEMO_CONTEXT_LENGTH (the
+embedder's context is only advised on, step 6); 1 = refused or failed (message
 says why and what to do); 2 = usage; 3 = the URL answered but is not LM Studio.
 """
 
@@ -78,11 +91,15 @@ if str(_SERVER_DIR) not in sys.path:  # direct run outside the venv's own resolu
 
 # The demo settings — the configuration measured in
 # docs/test-reports/salesperson-single-model-fit-report.md (8192 is also the unified
-# KV pool concurrent storefront turns share).
+# KV pool concurrent storefront turns share). The embedder sees one text at a time, so
+# it gets its own, smaller context: 4096 covers a REST-capped message (MAX_TEXT_LEN =
+# 8,000 chars) and every document chunk (K-099).
 DEMO_CONTEXT_LENGTH = 8192
+EMBED_CONTEXT_LENGTH = 4096
 DEMO_GPU = "max"
 
 API_TIMEOUT_S = 5.0
+PS_TIMEOUT_S = 30.0
 LOAD_TIMEOUT_S = 300.0
 # Post-load wait while a demo model still reports `loading` (env-overridable for tests,
 # read by settle_config() when ensure() starts — never at import, so a bad value is a
@@ -123,6 +140,10 @@ class DemoSet:
     @property
     def all_ids(self) -> tuple[str, ...]:
         return (*self.chat, self.embedding)
+
+    def context_for(self, model_id: str) -> int:
+        """The context a model is loaded at: the embedder's own, else the chat pool's."""
+        return EMBED_CONTEXT_LENGTH if model_id == self.embedding else DEMO_CONTEXT_LENGTH
 
 
 def _say(msg: str) -> None:
@@ -282,10 +303,10 @@ def check_refusals(demo: DemoSet, loaded: dict[str, dict]) -> None:
 
 # ── 5. load what is missing ────────────────────────────────────────────────────────
 
-def load_args(model_id: str) -> list[str]:
+def load_args(model_id: str, context_length: int) -> list[str]:
     return [
         "load", model_id,
-        "-c", str(DEMO_CONTEXT_LENGTH),
+        "-c", str(context_length),
         "--gpu", DEMO_GPU,
         "--identifier", model_id,
         "-y",
@@ -301,14 +322,58 @@ def find_cli() -> str | None:
     return shutil.which("lms") or shutil.which("lms.exe")
 
 
-def manual_instructions(missing: list[str]) -> str:
-    cmds = "\n".join(f"      lms {' '.join(load_args(m))}" for m in missing)
+def manual_instructions(demo: DemoSet, missing: list[str]) -> str:
+    cmds = "\n".join(f"      lms {' '.join(load_args(m, demo.context_for(m)))}" for m in missing)
+    contexts = ", ".join(f"{m} {demo.context_for(m)}" for m in missing)
     return (
         "  Load them yourself, then re-run:\n"
         f"{cmds}\n"
-        f"  (or in the LM Studio app: context length {DEMO_CONTEXT_LENGTH}, GPU offload max).\n"
+        f"  (or in the LM Studio app: context length {contexts}; GPU offload max).\n"
         "  To let this step load them, point LMS_CLI at the lms CLI\n"
         "  (e.g. LMS_CLI=/mnt/c/Users/<you>/.lmstudio/bin/lms.exe under WSL) or put lms on PATH."
+    )
+
+
+def check_embedder_context(demo: DemoSet, cli: str | None) -> None:
+    """Step 6: advisory check of the embedder's real context via `lms ps --json` (the
+    API misreports it). Never refuses, never reloads — see the module docstring."""
+    want = EMBED_CONTEXT_LENGTH
+    if cli is None:
+        _say(f"embedder context not checked (no lms CLI); it should be {want}")
+        return
+    try:
+        proc = subprocess.run([cli, "ps", "--json"], capture_output=True, text=True,
+                              timeout=PS_TIMEOUT_S)
+        instances = json.loads(proc.stdout) if proc.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        instances = None
+    if not isinstance(instances, list):
+        _say(f"embedder context not checked (`lms ps --json` unreadable); it should be {want}")
+        return
+    ctxs = [i.get("contextLength") for i in instances
+            if isinstance(i, dict) and i.get("identifier") == demo.embedding]
+    if len(ctxs) != 1:
+        _say(f"embedder context not checked (`lms ps --json` lists {len(ctxs)} instance(s) "
+             f"identified {demo.embedding}); it should be {want}")
+        return
+    ctx = ctxs[0]
+    if not isinstance(ctx, int) or isinstance(ctx, bool):
+        _say(f"embedder context not checked (`lms ps --json` contextLength {ctx!r}); "
+             f"it should be {want}")
+        return
+    if ctx == want:
+        _say(f"embedder context {ctx} (lms ps)")
+        return
+    effect = ("only costs VRAM" if ctx > want else
+              f"longer inputs lose all but their first {ctx} tokens on the LM Studio build "
+              "probed in falkor-chat/docs/test-reports/embedder-context-report.md")
+    print(
+        f"{PREFIX} WARNING: {demo.embedding} is loaded with context {ctx}, not {want} "
+        f"({effect}).\n"
+        "  This step never reloads, and other servers (the :8200 agent-team server) may be\n"
+        "  using it. When nothing is, reload it yourself:\n"
+        f"      lms unload {demo.embedding} && lms {' '.join(load_args(demo.embedding, want))}",
+        file=sys.stderr, flush=True,
     )
 
 
@@ -336,26 +401,33 @@ def ensure(demo: DemoSet) -> int:
 
     missing = [mid for mid in demo.all_ids if mid not in loaded]
     if not missing:
-        _say("both demo models already loaded with the demo settings — nothing to do")
+        _say("both demo models loaded, chat model at the demo context — nothing to load "
+             "(embedder context checked below)")
+        try:
+            cli = find_cli()
+        except Refusal as exc:  # a bad LMS_CLI only blocks loads, not a ready demo
+            _say(f"embedder context not checked: {exc}")
+        else:
+            check_embedder_context(demo, cli)
         return 0
 
     _say("not loaded: " + ", ".join(missing))
     cli = find_cli()
     if cli is None:
         raise Refusal("the lms CLI was not found (LMS_CLI unset, no lms/lms.exe on PATH).\n"
-                      + manual_instructions(missing))
+                      + manual_instructions(demo, missing))
 
     for mid in missing:
-        args = [cli, *load_args(mid)]
+        args = [cli, *load_args(mid, demo.context_for(mid))]
         _say("loading (can take a minute): " + " ".join(args))
         try:
             proc = subprocess.run(args, capture_output=True, text=True, timeout=LOAD_TIMEOUT_S)
         except (OSError, subprocess.TimeoutExpired) as exc:
-            raise Refusal(f"`lms load {mid}` did not complete: {exc}\n" + manual_instructions([mid]))
+            raise Refusal(f"`lms load {mid}` did not complete: {exc}\n" + manual_instructions(demo, [mid]))
         if proc.returncode != 0:
             tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-5:])
             raise Refusal(f"`lms load {mid}` exited {proc.returncode}:\n{tail}\n"
-                          + manual_instructions([mid]))
+                          + manual_instructions(demo, [mid]))
 
     # Re-read: catches a CLI wired to a different LM Studio than the server's URL, and a
     # load that evicted something.
@@ -369,6 +441,7 @@ def ensure(demo: DemoSet) -> int:
         )
     check_refusals(demo, after)
     _say("loaded: " + ", ".join(missing) + " — demo models ready")
+    check_embedder_context(demo, cli)
     return 0
 
 
