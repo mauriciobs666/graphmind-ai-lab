@@ -287,39 +287,117 @@ Throughput, with the same prompts (6371–6376 tokens) as the 4096 arm:
 - Wall time for round 2's first chat was 9.40 s, against 8.52 s at 4096. Steady-state chats ran
   8.15–8.56 s in both arms. The page-in shows up in wall time, not in LM Studio's TTFT stat.
 
+### Same-day follow-up: embedder at 2048
+
+This run answers the stakeholder question "can we try with 2048?" (2026-10-31). It is a
+measurement only: `EMBED_CONTEXT_LENGTH` stays 4096. The sequence, instruments and prompts are the
+same as the other two runs, and ministral was reloaded fresh first.
+
+| step | `lms ps --json` (identifier: contextLength) |
+|---|---|
+| arrival 21:54:40 | ministral: 8192, embedder: 4096 |
+| after `lms unload text-embedding-qwen3-embedding-0.6b` 21:54:41 | ministral: 8192 |
+| after `lms unload mistralai/ministral-3-3b` 21:54:42 (`nvidia-smi` 116) | `[]` |
+| after `lms load mistralai/ministral-3-3b -c 8192 --gpu max --identifier … -y` 21:54:56 | ministral: 8192 |
+| after `lms load text-embedding-qwen3-embedding-0.6b -c 2048 --gpu max --identifier … -y` (609.54 MiB) 21:55:05 | ministral: 8192, embedder: 2048 |
+| after round 1 / after embeds / after round 2 | unchanged |
+
+GPU memory, in MiB. `llama-server` (ministral) is pid 15204; the embedder runs in LM Studio process pid 9632.
+
+| reading | `nvidia-smi` used | ministral ded / sh | embedder proc ded / sh | adapter ded / sh |
+|---|---|---|---|---|
+| ministral alone | 5407 | **5351** / 112 | — | 5411 / 128 |
+| + embedder 2048, immediately | 5825 | **4741** / 176 | **1025** / 268 | 5816 / 461 |
+| after round 1 (4 chats) | 5861 | 5291 / 176 | 467 / — | 5790 / 177 |
+| after embeddings (1 + 5) | 5789 | 4715 / 176 | 1033 / 268 | 5793 / 459 |
+| after round 2 (2 chats) | 5851 | 5291 / 176 | 457 / 268 | 5807 / 458 |
+
+Throughput (prompts of 6372–6376 tokens):
+- Round 1: 37.20 / 37.15 / 37.38 / 37.51 tok/s. TTFT 2.031 s (the first after load), then
+  1.581 / 1.585 / 1.584 s.
+- Embeddings: the first after the chats took 0.818 s. The batch of 5 took 0.041 / 0.024 / 0.036 /
+  0.024 / 0.025 s.
+- Round 2: 37.52 / 37.27 tok/s, TTFT 1.576 / 1.579 s. Round 2's first chat took 8.37 s wall.
+
+### Where the cut falls at 2048, on realistic text
+
+Method: run 2's binary search, but over **characters** of a realistic text. It finds the shortest
+prefix whose vector equals the full text's (cos > 0.999999). Calls went to the demo embedder
+identifier `text-embedding-qwen3-embedding-0.6b`: first while it was loaded at 2048 (21:57:19–27),
+then, after the restore, at 4096 (to 21:58:06). `lms ps --json` showed only the two demo models
+before and after both runs. The sample texts (scratch `texts/`) are:
+- **prose:** the user-facing paragraphs of `falkor-chat/docs/manuals/*.md`, markdown stripped,
+  17,441 chars of English.
+- **code:** a contiguous 12,000-char slice of `falkor-chat/server/falkorchat/services.py`.
+- **urls:** 12,000 chars of real URLs taken from the repo's `*.md` files, each joined by a
+  short chat word ("see", "per", "compare with" …).
+
+Raw output, embedder at 2048:
+
+```
+{"label": "prose", "full_chars": 17441, "half_equals_full": false, "cutoff_chars": 9681, "last_differing_chars": 9680, "share_of_8000_surviving": 1.0, "cutoff_tail": "r-reports vector-index memory on this engine build"}
+{"label": "code", "full_chars": 12000, "half_equals_full": false, "cutoff_chars": 7960, "last_differing_chars": 7959, "share_of_8000_surviving": 0.995, "cutoff_tail": "processing'`\n    since nothing downstream can ever"}
+{"label": "urls", "full_chars": 12000, "half_equals_full": true, "cutoff_chars": 5733, "last_differing_chars": 5732, "share_of_8000_surviving": 0.717, "cutoff_tail": "F the fix is in https://huggingface.co/unsloth/Min"}
+```
+
+Raw output, embedder at 4096, with the same texts:
+
+```
+{"label": "prose", "full_chars": 17441, "half_equals_full": false, "cutoff_chars": 17441, "last_differing_chars": 17440, "share_of_8000_surviving": 1.0, ...}
+{"label": "code", "full_chars": 12000, "half_equals_full": false, "cutoff_chars": 12000, "last_differing_chars": 11999, "share_of_8000_surviving": 1.0, ...}
+{"label": "urls", "full_chars": 12000, "half_equals_full": false, "cutoff_chars": 11514, "last_differing_chars": 11513, "share_of_8000_surviving": 1.0, ...}
+```
+
+(At 4096, `cutoff_chars` equal to `full_chars` means the whole text is inside the window: the last
+character still changes the vector.)
+
+| text | cut at 2048 (chars) | share of an 8,000-char `MAX_TEXT_LEN` message kept at 2048 | at 4096 |
+|---|---|---|---|
+| English prose | **9,681** | 100% | whole 17,441 kept |
+| Python code | **7,960** | 99.5% (the last ~40 chars dropped) | whole 12,000 kept |
+| URL-heavy message | **5,733** | **71.7%** (~2,270 chars dropped) | cut at 11,514 (8,000 fits) |
+
+Against the live data in K-099's backlog text (`ws:acme` messages at most 1,817 chars, and
+`ws:agent-team` chunks at most 1,139), every one of these cuts is 3–8× longer, so neither is cut
+at 2048. The cut at 2048 binds only on long, dense messages: a URL- or symbol-heavy post longer
+than ~5,700 chars, or code longer than ~8,000. These are three samples, not a distribution.
+Arbitrary text (e.g. CJK or emoji) can be denser still.
+
 ### Restore and end state
 
 | step | `lms ps --json` (identifier: contextLength) |
 |---|---|
-| before `lms unload text-embedding-qwen3-embedding-0.6b` 21:47:14 | ministral: 8192, embedder: 8192 |
-| after it 21:47:15 | ministral: 8192 |
-| after `ensure_demo_models.sh` (loaded embedder `-c 4096`; `embedder context 4096 (lms ps)`; exit 0) 21:47:21 | ministral: 8192 (parallel 4), embedder: 4096 — both idle, `ttlMs` null |
+| 4096→8192 A/B restore: before `lms unload text-embedding-qwen3-embedding-0.6b` 21:47:14 | ministral: 8192, embedder: 8192 |
+| after it 21:47:15; after `ensure_demo_models.sh` (exit 0) 21:47:21 | ministral: 8192; then ministral: 8192, embedder: 4096 |
+| 2048 restore: before `lms unload text-embedding-qwen3-embedding-0.6b` 21:57:38 | ministral: 8192, embedder: 2048 |
+| after it 21:57:41 | ministral: 8192 |
+| after `ensure_demo_models.sh` (loaded `-c 4096`; `embedder context 4096 (lms ps)`; exit 0) 21:57:45, still so at 21:58:06 | ministral: 8192 (parallel 4), embedder: 4096 — both idle, `ttlMs` null |
 
-End-state counters, idle: `nvidia-smi` 5819/6141. Ministral (pid 2204) 4395 ded / 176 sh, and the
-embedder process (pid 9460) 1377 / 324. The embedder holds its VRAM right after a load, as in both
-arms, until the next chat pages it out. qwen was not reloaded, and no model other than the two
-demo models appeared during the run.
+End-state counters, idle (21:57:47): `nvidia-smi` 5729/6141. Ministral (pid 15204) 4331 ded /
+176 sh, and the embedder process (pid 18508) 1377 / 324. The embedder holds its VRAM right after a
+load until the next chat pages it out. qwen was not reloaded, and no model other than the two
+demo models appeared during any run.
 
 ### Comparison
 
 All figures are in MiB. "Evicted" means ministral's clean-load dedicated usage minus its usage
 while the embedder is resident.
 
-| figure | fit report, 2026-10-21, embedder 8192 | today, embedder 8192 (A/B) | today, embedder 4096 |
-|---|---|---|---|
-| ministral alone, ded / sh | 5353 / 112 | 5351 / 112 | 5351 / 112 |
-| embedder process while active, ded / sh | 2130 / 484 (2136 after embeds) | **2130 / 484** (2138 after embeds) | **1377 / 324** (1385 after embeds) |
-| ministral while embedder active, ded | 3689 (3693 after embeds) | 3653 (3691 after embeds) | **4391** (4395 after embeds) |
-| ministral evicted when the embedder runs | ~1,664 | 1,698 (1,660 after embeds) | **960** (956 after embeds) |
-| embedder process after chats, ded | 547 | 465 / 439 | 435 / 425 |
-| `nvidia-smi` used, both resident | 5839 | 5840–5886 | 5826–5839 |
-| first embed after chats, s (1 sample) | 1.385 | 2.127 | 0.850 |
-| generation tok/s | 38.5–40.5 (prompt ~3.1k) | 37.12–37.42 (prompt ~6.4k) | 37.37–37.46 (prompt ~6.4k) |
+| figure | fit report, 2026-10-21, embedder 8192 | today, embedder 8192 (A/B) | today, embedder 4096 | today, embedder 2048 |
+|---|---|---|---|---|
+| ministral alone, ded / sh | 5353 / 112 | 5351 / 112 | 5351 / 112 | 5351 / 112 |
+| embedder process while active, ded / sh | 2130 / 484 (2136 after embeds) | **2130 / 484** (2138 after embeds) | **1377 / 324** (1385 after embeds) | **1025 / 268** (1033 after embeds) |
+| ministral while embedder active, ded | 3689 (3693 after embeds) | 3653 (3691 after embeds) | **4391** (4395 after embeds) | **4741** (4715 after embeds) |
+| ministral evicted when the embedder runs | ~1,664 | 1,698 (1,660 after embeds) | **960** (956 after embeds) | **610** (636 after embeds) |
+| embedder process after chats, ded | 547 | 465 / 439 | 435 / 425 | 467 / 457 |
+| `nvidia-smi` used, both resident | 5839 | 5840–5886 | 5826–5839 | 5789–5861 |
+| first embed after chats, s (1 sample) | 1.385 | 2.127 | 0.850 | 0.818 |
+| generation tok/s | 38.5–40.5 (prompt ~3.1k) | 37.12–37.42 (prompt ~6.4k) | 37.37–37.46 (prompt ~6.4k) | 37.15–37.52 (prompt ~6.4k) |
 
 Sources:
 - The fit report column is from `docs/test-reports/salesperson-single-model-fit-report.md`: the
   "+ embedder" table, the Throughput section and the Verdict.
-- The two "today" columns are from this section's tables.
+- The three "today" columns are from this section's tables.
 - Today's 8192 arm reproduces the fit report's embedder figures exactly (2130 / 484), so the
   instrument and method carried over.
 
@@ -337,3 +415,15 @@ These are same-day A/B figures on the same box, runtime and prompts.
 - **Timing, one sample per arm, so indicative only:** the first embedding after a chat took
   0.85 s at 4096 against 2.13 s at 8192. The first chat after the embeddings took 8.52 s wall
   against 9.40 s.
+
+**Follow-up, 2048 vs 4096** (same day, same method, each run from a fresh ministral load):
+- **Embedder while active:** 1377 → **1025 MiB** dedicated (**−352 MiB, −26%**), and 324 → 268 MiB
+  shared (−56).
+- **Ministral paged out:** 960 / 956 → **610 / 636 MiB** (**about −320 to −350 MiB, −34–36%**).
+  It still pages, so 2048 also leaves the pair oversubscribed (`nvidia-smi` 5789–5861 of 6141).
+- **Not changed:** generation speed (37.15–37.52 vs 37.37–37.46 tok/s) and steady TTFT (1.58 s
+  both). The first embed after a chat took 0.818 s vs 0.850 s (1 sample each).
+- **What 2048 costs in coverage:** a single input is cut at 9,681 chars of English prose, 7,960
+  of code and 5,733 of a URL-heavy message. That keeps 100% / 99.5% / 71.7% of an 8,000-char
+  message. At 4096 all three keep the full 8,000. The largest live inputs measured (1,817 / 1,139
+  chars) fit at either context.
