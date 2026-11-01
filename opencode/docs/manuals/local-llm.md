@@ -83,7 +83,7 @@ LM Studio ships an OpenAI-compatible server, so it plugs into OpenCode as a cust
 ### Step 1 — Load a model in LM Studio with enough context
 
 1. Load a model in LM Studio (e.g. `mistralai/ministral-3-3b`).
-2. **Before clicking Load, set the Context Length to at least `16384`** (32K recommended). The default `4096` is too small — OpenCode's system prompt alone is several thousand tokens before any conversation. You'll otherwise see `n_keep >= n_ctx` errors.
+2. **Before clicking Load, set the Context Length to at least `20480`** (32K recommended). The default `4096` is too small — OpenCode's system prompt alone is several thousand tokens before any conversation. You'll otherwise see `n_keep >= n_ctx` errors. (`tank`, below, enforces `20480` as a hard minimum.)
 3. Push GPU Offload up as far as VRAM allows.
 4. Click **Load Model**.
 
@@ -147,6 +147,18 @@ Not every GGUF works equally well with OpenCode. Things to look for:
 - **Non-reasoning, or supports disabling reasoning.** A reasoning model (Qwen3 with `/think`, DeepSeek R1, etc.) can take a minute to answer "hello" because most of its tokens are spent on hidden reasoning. For an interactive agent, prefer a plain instruct model.
 - **3B–9B is usually plenty** for a personal agent. Bigger = slower + more VRAM.
 
+### Using `tank` with ministral
+
+`tank` runs on `mistralai/ministral-3-3b`; a trial of `qwen/qwen3-4b-2507` as a replacement did not pass, so ministral stays. Before each run `tank` checks LM Studio and refuses to start unless exactly one copy of its model is loaded, with a context length of at least `20480` and parallel set to `1`.
+
+Ministral has no saved per-model default, so load it yourself before a run (full details in `opencode/agents/tank/README.md`, Prerequisites):
+
+```bash
+lms load mistralai/ministral-3-3b -c 20480 --parallel 1 --gpu max --identifier mistralai/ministral-3-3b -y
+```
+
+Never load it while `lms ps` already lists it. **Unload it before running the falkor-chat demo** (`lms unload mistralai/ministral-3-3b`): the demo needs ministral at a context of `8192` and will not share a copy with `tank`. Reload it with the command above when you return to `tank`.
+
 ### Troubleshooting
 
 - **`Unrecognized key: agents`** → Use `agent` (singular), not `agents`.
@@ -154,7 +166,8 @@ Not every GGUF works equally well with OpenCode. Things to look for:
 - **`API key required`** → Add `options.apiKey` to the provider, or `set OPENAI_API_KEY=lm-studio`.
 - **`Connection refused`** → LM Studio's server isn't running.
 - **`Model not found`** → The agent's `model` must be `<provider-key>/<model-id>`, and `<model-id>` must match LM Studio's reported ID exactly.
-- **`n_keep: X >= n_ctx: 4096`** → Reload the model with a larger Context Length (16K+).
+- **`n_keep: X >= n_ctx: 4096`** → Reload the model with a larger Context Length (20K+).
 - **`Only user and assistant roles are supported`** → The model's chat template rejects `system` messages. Pick a different model or use the lmstudio-community re-upload.
 - **Painfully slow responses** → Reasoning model. Either disable thinking with `/no_think` (works on official Qwen3) or switch to a plain instruct model like Ministral.
+- **`tank` prints `REFUSED: ...`** → LM Studio's loaded copy doesn't meet `tank`'s requirements (more than one copy, context below `20480`, or parallel not `1`). Unload the copy (`lms unload mistralai/ministral-3-3b`) and reload it with the command above.
 - **Slow first response only** → LM Studio is JIT-loading the model. Eject and explicitly pre-load to avoid the timeout.
