@@ -700,3 +700,39 @@ test number or step. My own citations above are by symbol.
   *Recommendation:* pin 2.1.312 immediately, by dispatching S53's `prepare-bin` first. Treat any
   move to another build as K-P0-12's deliberate step.
 - None of the findings changes P0 scope.
+
+---
+
+### P0-11a
+
+> Step S12 (P0-11a only): `cpg/ccg/keynorm.py`, `cpg/tests/test_keynorm.py` (untracked). Contracts: BS2 §1.7.1, §1.8; EP2 §1.1, §2.
+
+#### Pass 1
+
+**Scope & verdict: approve with suggestions.** Static read of both files against BS2 §1.7.1/§1.8, EP2 §1.1/§2 (K1–K33, K42), BS2 F-13, and `ccg.bundle.screen_fails`; plus execution: `cpg/` suite `.venv/bin/python -m pytest -q` → **1306 passed** (rerun by me), `tests/test_keynorm.py` → 93 passed. 19 mutants on copies under the scratchpad (`.../scratchpad/mut/`, runner `.../scratchpad/run.py`), PYTHONPATH to the copy. No blocker or major; two minor test gaps.
+
+CPG: considered, not relevant — a 20-line pure function in a new, unindexed file; reading it was cheaper than a graph query.
+
+**Contract conformance (checked, not skimmed)**
+- Verb kept, never screened; `{}`, `{**}`, `{?}`, `{#}` and empty segments kept (the four placeholders and `""` all return `screen_fails=False`, verified by running). Partly parameterized `{x7k2q9w4m1p8z3v6}.json` is screened as written → `{#}` (K30). Provider `{#}` / consumer `{?}` per EP2 §1.1; K1–K22, K30–K33 all reproduced by the test table, every output a fixed point in both forms.
+- F-13: the function neither decodes nor resolves dots, so it encodes neither order; it is correct under the RFC order. K31/K32 inputs are given post-step-5 and the module/test docstrings say so. K42 is rightly out of scope (it is `normalize`'s row).
+- Verb heuristic (`not startswith("/") and " " in path`): consistent with BS spec §6 (`<VERB> <path>`, verb in the nine methods or `*`; step 4 guarantees a leading `/` on the path). A verb-bearing key always has a space before the first `/`; a bare path starts with `/`. `* /…` works (probed). Ambiguity exists only for off-contract input (a path with no leading `/` and a space, e.g. `a b`), which step 4 precludes.
+- `ValueError` on any placeholder but `{#}`/`{?}`: no conflict. Plan S12 row and `-spec2` §1.8 name only those two; EP2 K39/K40's "consumer form" is the caller's mapping `form → placeholder`.
+
+**Findings**
+
+*Minor*
+1. **Test gap: a segment mixing a failing run with a percent-escape is never exercised** (mutant R "skip segments containing `%`" survives 93/93). K14 is the only `%` row and it *passes* the screen. `mask("GET /x7k2q9w4m1p8z3v6%2Fabc","{#}")` → `GET /{#}` (I ran it; the failing run before the escape must still mask). Add that, plus its pair: the non-decoding pin `mask("GET /x7k2q9w4%6d1p8z3v6","{#}")` stays unchanged (observed: unchanged; decoding would give K13's masked form). The latter also pins "8a never decodes", which the F-13 tests only assert on dot segments. Mutant F (decode before screening) survives for the same reason.
+2. **Test gap: verb split on the first space is unpinned** (mutant C, `rpartition`, survives). `mask("GET /a b/x7k2q9w4m1p8z3v6","{#}")` → `GET /a b/{#}`; an `rpartition` verb would swallow `GET /a` as the verb and the space-bearing segment would be mis-split. The test with a space (`/a b/…`) covers only the verb-less branch. Add the verb-bearing counterpart.
+
+*Nit*
+3. **Equivalent / dead guards:** mutants A (`s and`), B (`not in _PLACEHOLDERS`) and O/P (dropping `{**}`/`{}` from the set) survive because `screen_fails` is already False for all five of those strings under the current screen, so the guards are behaviorally redundant today. They are legitimate belt-and-braces for EP2's "not screened" wording, and killable only by stubbing `screen_fails` (as `test_screen_is_the_one_in_bundle` already does with monkeypatch). Optional: one stub test `screen_fails = lambda s: True` asserting placeholders and empties still survive, which would make the guard load-bearing and tested.
+4. `test_screen_is_the_one_in_bundle`: the assertion `keynorm.screen_fails is not keynorm.mask_http_segments` is vacuous, and the `monkeypatch.undo()` mid-test is odd. Drop both; the stub assertion above them already proves the delegation.
+5. Mutants G (lower-casing before the screen) and the T5 case behavior survive because no K row contains an uppercase T5 prefix (`AKIA…`, `AIza…`); that is `screen_fails`' test surface (S10), not this function's. Noted, not asked.
+6. The EP2 §1.1 prose says the function takes the *form* (`provider`/`consumer`); the plan row and implementation take the placeholder string. The plan row governs and is the stated signature, so this is fine, but `match_keys.py` and EP2 §13.4's `normalize` should be briefed with the placeholder-string signature.
+
+**Mutation record:** 19 mutants; killed 10 (verb never split / always split without the leading-`/` check / verb screened, swapped placeholder, dropped `ValueError`, last-segment-only, trailing `/` stripped, `split("/",3)`, skip-`{` [teco's], `{}` accepted as a form); survived 9: A, B, O, P (equivalent, finding 3), C (finding 2), F and R (finding 1), G and S (off-contract or `screen_fails`' surface, findings 5).
+
+**What's solid.** Imports `screen_fails` from `ccg.bundle` rather than copying it (proved by a stub test); pure, no I/O; the oracle table is copied from EP2 §2 with stated post-step inputs; fixed-point and consumer-form cross-checks are parametrized over every row; ValueError closes the bad-form hole at the single seam both callers use.
+
+**Open questions:** none blocking. Suggest `teco` folds findings 1 and 2 into a short follow-up (two tests, no code change) before P0-11b imports the function.
