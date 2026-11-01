@@ -1473,3 +1473,226 @@ Probes, as fixture edits run through the suite's helpers:
 - launch at 6 h / 6 h 1 s → `launchFailed` / `launchFailing`;
 - an empty driver transcript at exit 0 / exit 1 → `neverSpawned` / `launchFailed`;
 - the six raw headless sessions → as in question 1.
+
+## Pass 10 — U5.6 campaign ledger and driver CLI (2026-11-01)
+
+**Verdict: needs changes.** There is no blocker, but there are two majors. Both concern a contract that a later unit reads: the per-run provenance and the key → item binding, and the pilot report's keys. Both fixes are small. Re-check them with the suite and the mutants named below; no Pass 11 is needed unless the P10-m1 option (b) is taken.
+
+### Scope
+
+- **Reviewed:** the uncommitted U5.6 diff against `5f1faeb2`. That is `campaign.py`, `driver.py`, `test_campaign.py` and `test_driver.py`, all read whole, plus the `README.md`, `AGENTS.md` and `HISTORY.md` edits.
+- **Specs:** plan6 v1.7 §3.2, §3.4, §3.5 and the §4/§5 U5.6 rows; plan5 §3.2, §3.6 and the §4 U5.6 row; plan4 §3.2, §3.3, §3.5, §3.7, §3.8 and the §4.1/§5 U5.6 rows; the carried rulings (P5-F4 cases (a)–(d), P6-F1 case (e), Pass 8 q3, the retired names) and Pass 9's carry. I read `audit.py`'s `audit_run`, `combine`, `run_record`, `Launch`, `Expected` and `_check_bounds`, and `ingest.py`'s `ingest_answer[_files]`.
+- **Suite:** run on the live tree, `.venv/bin/pytest -q` from `decision-models/`, with no deselection: **761 passed, 2 xfailed**. `ruff check .` is clean. `test_campaign.py` + `test_driver.py` give 90 tests, which matches HISTORY's "81 and 9".
+- **Mutants:** run in a private copy, `scratchpad/p10/repo/`, with a fresh `PYTHONPYCACHEPREFIX`. A probe test confirmed that the copy imports its own package. That copy gives 756 passed + 5 skipped, because the model-bench byte-copy tests skip there. Each mutated file was restored and checked with `cmp`, which reported equal.
+  - I re-ran three of the coder's mutants and reproduced its counts: M1 event-after-move gives 6, M2 re-ingest calling audit/combine gives 8, M6 pause ignored gives 1.
+  - I also ran 30 mutants of my own (Appendix I).
+- **Live tree:** I ran no git command that changes the tree. Outside the scratchpad I wrote only this review, plus gitignored `__pycache__` bytecode under `decision-models/`. The bytecode came from the probes: `python -I` ignores `PYTHONPYCACHEPREFIX`. The sha256 of every reviewed file is unchanged.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded (`GRAPHS` lists only `cpg_falkorchat`); the unit's files were read in full.
+
+### New findings
+
+**P10-M1 — major — the values the ledger carries to `runs[]` and to the key → item binding are pinned by no test.** *Owner: a fresh `coder`/`tdd-engineer` (test-only). Verified by running mutants.*
+- **teco's premise is true.** Traced: `issue` writes `attempt` and `requestSha256` into `issued` (`campaign.py:623-626`). `fold` copies both into `Attempt` (`:199-203`). `_outcome_event` passes `attempt.attempt` and `attempt.request_sha256` to `audit.run_record` (`:677-679`), which writes them verbatim into the event's `run` (`audit.py:736-739`).
+  - Plan4 §3.7 makes that `requestSha256` the item's generator provenance, replacing v1.3's call hash. U5.10's finalize, which is not yet built, is its only reader. U5.10's §3.7 vector check compares JSON *types* only, so no later check catches a wrong value either.
+- **The same class, by mutant.** Each of these gives 0 red on the full suite (Appendix I):
+  - teco's two (T1, T2);
+  - the same two at the `run_record` call site (T25, T26);
+  - `role` fixed to `"label"` (T3). No generation run is ever ingested in a test;
+  - `runId` fixed (T4), or numbered over all outcomes rather than located runs (T24);
+  - **the worst: `issued.keys` bound to the reversed refs (T5).** That mapping is the only record of which item each answer key labels. Plan4 §3.2: keys are random per (item, vote). Today only `set(keys)` is asserted (`test_campaign.py:221`). A misbinding would attach votes to the wrong items with no error anywhere.
+- **Fix** (serves plan4 §3.7 `runs[]` and the §3.2 keys; Appendix I has the tests verbatim). Three tests, each computing its expected value itself:
+  - (1) a launchFailed, then a counted void, then an ingested attempt gives `issued.attempt` [1, 2, 3]; `run` is `None`, then (`run_0001`, 2), then (`run_0002`, 3); and `requestSha256` equals sha256 of `store/req/<opaque>.jsonl`'s bytes;
+  - (2) every request line's `text` renders the item its `issued.keys[key]` names;
+  - (3) a located generation run records `role: "generate"`.
+- **Run:** all three pass on the live code, and together they redden all eight survivors, T1–T5 and T24–T26, with 1 red each.
+
+**P10-M2 — major — `init --phase full` reads the pilot report's `cap` and `rngSeeds` with silent defaults.** *Owner: `coder` (fix); `teco` (carry the key names into U5.8's brief). Verified by a probe.*
+- The code reads `report["stakeholderDecision"].get("cap", 50)` (`campaign.py:441`) and `report.get("rngSeeds", [])` (`:448`).
+- **Probe** (`probes/probe_behaviour.py`): a report that passes the spend gate but spells the keys `capChosen` and `pilotRngSeeds`. `init` succeeds and records `labelBatchCap: 50` and `held-rng-seeds: []`. `fresh_rng_seed` can then return a pilot seed.
+- **Why it matters.** The key names are the coder's call 4, and U5.8's row does not fix them. A naming drift in U5.8 would therefore have two silent effects:
+  - it undoes plan5 §3.2's addition ("seeds are not reused", made mechanical), which exists only because the pilot store is deleted;
+  - it overrides the stakeholder's `--cap 25` (plan4 §3.8).
+- **Fix** (serves plan5 §3.2 and plan4 §3.8): refuse unless `stakeholderDecision.cap` is 25 or 50 and `rngSeeds` is a non-empty list of ints. A pilot always draws, so an empty list is wrong. Add one planted-report test per key: the key absent, then mistyped → refused, and no root is created. Mutant T13 already reddens the cap's *value*. These tests cover the key's *absence*.
+
+**P10-m1 — minor — plan6's runner loop, taken literally, re-launches in a spent window.** *Owner: `teco` (choose); then `coder` (U5.6 fix round, option b) or the U6.3 brief (option a). Verified by reading; the tests show the behaviour.*
+- Plan6 §3.2 says "`run` exits 0 when `next` returns `stop`", including on a usage stop. But `next` returns `Stop("usage-stop")` only when its *own* reconciliation meets one. After `run`'s step-5 `ingest` records a usage stop, the next `next` serves the same batch again. `test_next_stops_on_a_usage_stop_its_reconciliation_meets` asserts that `next` serves again.
+- A U6.3 that follows the plan's text therefore launches `claude -p` again and again inside a spent window. Ten usage stops never halt (plan4 §5), and the ledger grows on every pass.
+- **Option (a):** keep the design. Carry "exit on `IngestResult.stop`" into U6.3's brief, with a U6.3 §5 test: a fake child that leaves a `rate_limit` → exactly one launch, exit 0.
+- **Option (b), which I recommend:** the `Campaign` instance remembers a usage stop its own `ingest` recorded, and its `next` returns `Stop("usage-stop")`. Plan6's loop is then correct as written, and U6.3 gains no new contract.
+  - The assertions for (b): after `ingest` returns a usage stop, the same instance's `next()` is `Stop("usage-stop", …)`, and a fresh `Campaign(root)` serves.
+
+**P10-m2 — minor — an unparsable `store/runs/<sessionId>.exit` makes every `next` raise.** *Owner: `coder`; `teco` (carry the contract to U6.3). Verified by a probe.*
+- `_exit_code` calls `int(path.read_text().strip())` (`campaign.py:790`).
+- **Probe:** an empty `.exit`, as from a runner killed mid-write, gives `ValueError: invalid literal for int()` out of `next()`. Every timer fire then crashes, and nothing is written to `status` or `store/refusal`.
+- **Fix:** read a non-integer file as unobserved. The code already has that branch: exitCode `None`, then `launchFailed`. Test with an empty `.exit` → `launchFailed`, `launch.exitCode is None`.
+- U6.3's brief should fix the format: a decimal integer, negative for a signal (Python's `returncode`), written atomically after `wait()` and before `ingest`.
+
+**P10-m3 — minor — the campaign root is `abspath`, not `realpath`.** *Owner: `coder`. The bypass is verified; the slug mismatch is inferred.*
+- `Campaign.root = os.path.abspath(root)` (`campaign.py:379`), and two things follow from that.
+- **The `root_refusal` bypass (verified).** A root reached through a symlink whose target is inside a work tree with an `AGENTS.md` gives `root_refusal(...) is None`.
+- **The slug mismatch (inferred).** `transcript_slug` is built from the symlinked path. `getcwd()` in a child started with `cwd=` a symlink returns the physical path (verified with `pwd -P` and `os.getcwd()` under an empty environment). So Claude Code would write transcripts under the *physical* slug, and every launch would read as `launchFailed` until `launchFailing` fires, 6 h later and for the wrong reason. Claude's own `cwd` handling was not run, because the brief rules out live calls.
+- `_check_bounds` already uses `realpath` on both sides, so the guard checks are unaffected.
+- **Fix:** `Path(os.path.realpath(root))`. Test: a symlinked root whose target is under a planted `.git` is refused, and `transcript_path` uses the target's slug.
+- **Serves:** plan4 §3.5's root refusal and plan6 §3.2's "reconciliation reads only that transcript".
+
+**P10-m4 — minor — call 2's launch-clock restart is unpinned.** *Owner: `coder`. Verified by a mutant.*
+- Dropping the epoch filter from `_launch` (T10) gives 0 red. Only the cap's half has a test (T11 gives 1 red).
+- **Fix:** with a bound of 1 h, launchFailed at t0, then a `launchFailing` halt at t0 + 61 min, then `resolve`, then launchFailed at t0 + 62 min → `reissued`, not `halted`.
+
+**P10-n1 — nit — other branches that nothing pins** (each gives 0 red; Appendix I). *Owner: `coder`, in the same round.*
+- `issue`'s two refusals, the stale request (T14) and the already-issued opaque (T15).
+- `launchFailing` keeping its stdout/stderr evidence (T19). Plan6 §3.4 records it for the launch rows, and at a halt it is what the human reads.
+- The non-ASCII half of `transcript_slug` (T17). Add a path with `ç`.
+- `status`'s "last issued" line (T28).
+- `countsAttempt` (T8) and `details` (T7). `fold` counts on `outcome == "void"` and never reads `countsAttempt`, so either `fold` reads it or the event drops it. Today it is a second copy of a fact that can drift.
+
+**P10-n2 — nit — a torn final ledger line bricks every command.** *Owner: `coder`. Verified by a probe.*
+- **Probe:** appending `{"event":"queued","at":"2026` gives a `JSONDecodeError` traceback from `status` (probed). `resolve`, `next` and `ingest` read through the same `events()` (`campaign.py:388-392`, traced).
+- `audit.py` already treats a final line with no newline as truncation (P8-F5).
+- **Fix:** refuse with a `CampaignRefused` that names the byte offset. Never drop the line silently, because it may be a commit point.
+
+
+### The implementer's calls
+
+1. **`.exit` file, missing → non-zero → `launchFailed`.** This is right. Plan6 §3.4's never-spawned row needs "a child that exited 0", so an unobserved exit cannot claim it. The cost is a bounded, uncapped re-issue rather than a cap. U6.3's row does not own the file name, so `teco` carries the name and format into U6.3's brief (P10-m2).
+2. **`resolve` restarts the cap and the clock.** This is acceptable, and no plan row owns it. The trade-off: in an outage that persists after a retry, the re-halt comes one full bound later, not at once. That is cheap, because a launch that produces nothing spends nothing. The clock half is unpinned (P10-m4).
+3. **`--skip-batch` only after `safeguardStop`.** This is right. Plan6 §3.5 offers the three actions "at the halt" of a safeguards flag, and the key is `dropped.safeguardSkipped`. `test_skip_batch_is_for_a_safeguard_stop` asserts both the refusal and that the ledger is byte-equal (I read it). The coder reports its M13 at 1 red; I did not re-run it.
+4. **Pilot-report keys.** The names are reasonable. `cap` and `stakeholderRef` follow plan4 §3.8's and plan5 §3.6's flag names; `rngSeeds` is the coder's own. U5.8's row does not own them, so `teco` carries them. The silent defaults are P10-M2.
+5. **`IngestResult.stop`.** This works, but it departs from plan6 §3.2's exit wording. See P10-m1 for the option I recommend.
+6. **Plan6's headless `run` over "ingest only after the hand-back".** This is right. Plan6 §1 carries only the idempotence and Void-is-ingested rulings. §3.2 steps 4–5 ingest after the wait or the kill, and §3.4's `incomplete` row classes an unfinished run. Nothing in `campaign.py` depends on the old rule.
+
+### What's solid
+
+- **Commit point and re-ingest.** I reproduced the coder's M1 (6) and M2 (8). Cases (a)–(e) are planted with the ledger compared byte-equal. A probe crash after the event and before the move also re-ingests as a no-op that finishes the move for the two void shapes the tests do not plant: a part-layout void (`.1` + `.3`, `malformed`) and an `answerMissing` void (`probes/probe_layout_void.py`).
+- **Retired names.** A late part (T20: 3 red) and a part that differs from its stored copy (T21: 1 red) are both refused, and nothing is appended.
+- **Pass 9's carry is honoured:**
+  - `interrupted` stays out of `earlier_no_attempt` (coder's M5);
+  - `Expected` paths are absolute (M11);
+  - the re-ingest path never reaches `audit_run`/`combine` (M2);
+  - `Launch.fail_bound` comes from `init` (M10).
+- **Plan rows covered:**
+  - plan6 §5 U5.6: session id, a planted second session (M17: 3 red), pause byte-equal, durations, skip-batch;
+  - plan5 §4 U5.6: held RNG seed, held `seedId`, the redraw, and the spend-gate branches;
+  - plan4 §5 U5.6: resume, the caps, the halt gate and the `init` refusals.
+  - Mutants T6, T9, T11, T12, T13, T16, T18, T22, T23, T29 and T30 all redden.
+- **Docs:**
+  - `AGENTS.md` is 721 words (665 before). The ingest bullet was rewritten in place, not appended to, and no line is over 700 characters.
+  - The `README.md` campaign section and the `HISTORY.md` entry are new scope, and their claims match the code.
+
+### Open questions
+
+- **`runs[].attempt` semantics** (for `architect` if it matters to U5.10). The code numbers every issue of a batch, so uncounted re-issues are included. Plan4 §3.7 does not say whether `attempt` means that or the counted-attempt number. P10-M1's test pins today's reading. If it is the wrong one, that test is the place to change it.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: P10-M1 (T1–T5, T24–T26) and teco's two survivors in the coordination ledger's U5.6 entry.
+
+- Addition: "For a record another unit consumes (a ledger event, a dataset row, a key binding), mutate each field's value at its write site. A field whose value no test pins, with the expected value computed independently, is a finding."
+
+No existing line is now enforced elsewhere, so no prune is proposed.
+
+### Appendix I — Pass 10 mutants and probes
+
+The runner, mutant list and probes are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p10/`: `mutate.py`, `mutants.json`, `probes/`. Baseline: 756 passed + 5 skipped, 2 xfailed. Every mutant ran the full suite, and every file was restored and checked with `cmp`, which reported equal.
+
+| ID | Mutation (`campaign.py`) | Red |
+|---|---|---|
+| T1 / T2 | `issued.attempt` → `1` / `requestSha256` reversed (teco's) | **0 / 0** |
+| T3 | `run_record(role="label")` | **0** |
+| T4 / T24 | `runId` constant / numbered over every outcome | **0 / 0** |
+| T5 | `issued.keys` bound to the reversed refs | **0** |
+| T25 / T26 | `attempt=1` / wrong `request_sha256` at the `run_record` call | **0 / 0** |
+| T6 | `voidClass` → `None` | 2 |
+| T7 / T8 | `details` → `[]` / `countsAttempt` → `False` | **0 / 0** (P10-n1) |
+| T9 | `produced` always true | 2 |
+| T10 | launch clock ignores the epoch | **0** (P10-m4) |
+| T11 | no-attempt cap ignores the epoch | 1 |
+| T12 | unobserved exit recorded as `-1` | 1 |
+| T13 | the report's `cap` ignored | 3 |
+| T14 / T15 | `issue`'s stale / duplicate-opaque refusals dropped | **0 / 0** (P10-n1) |
+| T16 | request written before `issued` | 46 |
+| T17 | non-ASCII letters kept in the slug | **0** (P10-n1) |
+| T18 | dropped seeds counted as items | 1 |
+| T19 | `launchFailing` without launch evidence | **0** (P10-n1) |
+| T20 / T21 | late part accepted / differing stored copy accepted | 3 / 1 |
+| T22 / T23 | `interrupted` without an open attempt / pilot seeds not held | 1 / 1 |
+| T27 / T28 | `resolved.batch` dropped / status "last issued" dropped | 0 / **0** (informational / P10-n1) |
+| T29 / T30 | overflow id skips one / `.git` checked on the root only | 1 / 2 |
+| coder M1 / M2 / M6 | re-run from the coder's `mutants.json` | 6 / 8 / 1 (as claimed) |
+
+P10-M1's positive control (`probes/test_p10_pins.py`, copied into the scratch repo's `tests/` and then removed): the 3 tests pass on the live code, and T1, T2, T3, T4, T5, T24, T25 and T26 each give 1 red with it present.
+
+Probes (`probes/probe_behaviour.py`, `probes/probe_layout_void.py`; live package imported read-only, writes under `scratchpad/p10/tmp/`):
+- an empty `.exit` → `ValueError` from `next()` (P10-m2);
+- a torn final ledger line → `JSONDecodeError` from `status()` (P10-n2);
+- misnamed pilot-report keys → `labelBatchCap: 50`, held `[]` (P10-M2);
+- a symlinked root → the slug differs from the physical cwd's; a symlink into a work tree → `root_refusal` is `None` (P10-m3);
+- crash before the move for a layout void and an `answerMissing` void → the re-ingest appends nothing and finishes the move.
+
+**Growth-stops check:** Pass 10 holds only new findings; no earlier finding is re-argued. Passes 1–9 are byte-identical to the pre-pass copy (`cmp` on the prefix).
+
+## Pass 11 — U5.6 fix round (2026-11-01)
+
+**Verdict: approve.** Every Pass 10 finding is fixed, and the fixes hold together. There are no new findings beyond one optional nit.
+- **Suite:** 819 passed, 2 xfailed on the live tree; ruff is clean.
+- **Mutants:** in a fresh private copy (`scratchpad/p11/repo/`, 814 passed + 5 skipped), with a fresh `PYTHONPYCACHEPREFIX` and without `-I`. Each file was restored and checked with `cmp`.
+  - All 26 applicable Pass 10 mutants now redden. T8, T12, T13 and T23 no longer apply because their code changed; T13 and T23 were re-planted on the new code and redden.
+  - All 11 new mutants (N1–N11) redden.
+  - Two of the coder's 32 (A1, A32) were re-run and give 1 red each, as claimed.
+- **Live tree:** the reviewed files' sha256 values are unchanged, and I ran no git command that changes the tree.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded.
+
+### Pass 10 findings
+
+- **P10-M1:** fixed. T1–T5 and T24–T26 each redden: T5 gives 2, through the item binding and the seed binding; the rest give 1. T7 (`details`) and T27 (`resolved` fields) are now pinned too.
+- **P10-M2:** fixed. The misnamed-key probe is refused (`cap is None`). N7 gives 15, T13b 3, T23b 1 and N10 3.
+- **P10-m1:** fixed with option (b). N1 and N2 give 2 each, and N3 (a re-ingest that sets the flag) gives 1.
+- **P10-m2:** fixed. The empty `.exit` probe now gives `launchFailed` with `exitCode: null`. N8 gives 2 and N9 10.
+- **P10-m3:** fixed. The symlink-into-tree probe is refused. N6 gives 1, and T30 gives 3.
+- **P10-m4:** fixed. T10 gives 1.
+- **P10-n1:** fixed. T14, T15, T17, T19 and T28 each redden. `countsAttempt` is dropped; see ruling 1.
+- **P10-n2:** fixed. The torn-line probe gives `CampaignRefused` with the byte offset. N4 gives 5 and N5 1.
+- **Open question (`runs[].attempt`):** answered by plan6 v1.8 §3.7: the issue ordinal, which matches the code and the P10-M1 test.
+
+### Rulings on the fix round's calls
+
+1. **`countsAttempt` dropped:** right. No reader exists. I swept every non-deprecated `*.py`, `*.md` and `*.jsonl` file. Plan4 §3.7's `runs[]`, plan6 §3.7 and the U5.10 row never name it, and `fold` counts on `outcome == "void"`. `audit.Verdict.counts_attempt` stays, and it is pinned in `test_audit.py`.
+2. **Usage stop remembered by the instance only:** this is a contract change, not a weaker test. It matches plan6 §3.2 "Scheduling", where a fire costs at most one short driver turn. The three edited tests now model one fire as one instance:
+   - `test_ten_usage_stops…` keeps all its assertions, with a fresh instance per fire;
+   - `test_next_stops_on_a_usage_stop…` gains assertions: the same instance stops twice, and a fresh one serves;
+   - `test_a_launch_that_produced_something…` moves only the later launch to a fresh instance.
+   N1 and N2 redden the loop test, which counts launches.
+3. **Splitting on `\n` only:** right. `ensure_ascii=False` writes U+2028 raw, and N11 (`splitlines`) reddens the round-trip test plus all five torn-line tests. `_append` refusing to write after a torn line is right too: anything appended later would sit behind a line no reader can parse.
+
+### Interactions
+
+- **The torn-line refusal and the commit point:** `probes/probe_p11.py` runs this sequence. A crash mid-append of the `outcome` line leaves the line torn, and `next` is refused. Truncating the torn bytes is the human's repair. Re-ingest then gives one `ingested` outcome, and the parts move to `store/` once. Cases (a)–(e) are unaffected because they crash only after a complete append, and the suite is green.
+- **`realpath` and the audit:** `Expected` paths, the spawn prompt and the transcript slug all derive from the one physical root. `test_a_symlinked_root_names_the_physical_transcript_folder` runs a clean batch through a symlinked root to `ingested`, so the audit's comparisons agree. `_check_bounds` already used `realpath`.
+- **The usage-stop flag and re-ingest:** only a first ingest sets the flag (N3 reddens otherwise). `next` checks the flag after reconciliation and the stray check, so a fire still clears `exchange/` before stopping.
+- **The usage-stop flag and pause:** a probe shows pause wins (`Stop("paused")`), and once the pause file is removed the same instance gives `Stop("usage-stop")`.
+
+**P11-n1 — nit — the README's "repair by hand" could name the safe repair.** *Owner: `coder`, optional. Verified by tracing and by a probe.*
+- Every writer appends its event before acting on it: `issue` writes only `store/req` first, which is harmless, and the move follows the outcome append. So truncating the torn last line is always safe; the probe above shows it.
+- Saying so in the README bullet would spare the human a judgment call.
+
+### Appendix J — Pass 11 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p11/`: `all-mutants.json`, `re-mutants.json`, `coder-sample.json`, `mutants-run.txt`, `probes/probe_p11.py`.
+
+| ID | Mutation | Red |
+|---|---|---|
+| N1 / N2 | usage flag never set / never read | 2 / 2 |
+| N3 | a re-ingest of a usage stop sets the flag | 1 |
+| N4 / N5 | torn last line dropped / `_append` skips the torn check | 5 / 1 |
+| N6 | `abspath` root | 1 |
+| N7 | `pilot_report_refusal` bypassed | 15 |
+| N8 / N9 | exit regex `match` / evidence records `-1` | 2 / 10 |
+| N10 | a `stakeholderRef` that is merely truthy passes | 3 |
+| N11 | the ledger read with `splitlines` | 6 |
+| T13b / T23b | cap ignored / pilot seeds not held (re-planted) | 3 / 1 |
+| T1–T7, T9–T11, T14–T22, T24–T30 | Pass 10 set | all red (T10 1, T19 2, T28 1) |
+| A1 / A32 (coder's) | `attempt` → 1 / a non-event line accepted | 1 / 1 |
+
+**Growth-stops check:** Pass 11 gives one line per Pass 10 finding, and its only new finding is a nit. Passes 1–10 are byte-identical to the pre-pass copy (`cmp` on the prefix).

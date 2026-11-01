@@ -1,8 +1,8 @@
 # Typed Decision Models — Implementation Plan, Headless Driver and Probe-Informed Audit
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.7 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.8 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
 
-*2026-11-01 — v1.7: P30-m1, U5.10's run fixtures are ones `audit_run` produces and the vector's second run is a type exemplar; P30-n1.*
+*2026-11-01 — v1.8: §3.7 fixes `runs[].attempt` as the batch's issue ordinal (4-impl review Pass 10 open question).*
 
 ## 1. Goal & scope
 
@@ -235,7 +235,7 @@ The hand-back is exempt from the bounds checks, `guardBreach` included, and coun
 
 ### 3.7 Dataset files model-bench imports (plan4 §3.7 amended; P24-m2)
 
-Plan4 §3.7 defines `generation.json` and the item keys. These two shapes complete the contract that `finalize` (U5.10) writes and that `model-bench/scripts/import_decision_pack.py` reads. Today they are stated only in that importer's docstring and test builder.
+Plan4 §3.7 defines `generation.json` and the item keys. A run's `attempt` is its batch's issue ordinal from 1, counting no-attempt re-issues too, so `runs[]` may skip numbers; nothing compares it with the retry cap. These two shapes complete the contract that `finalize` (U5.10) writes and that `model-bench/scripts/import_decision_pack.py` reads. Today they are stated only in that importer's docstring and test builder.
 
 - **`splits.json`** is one JSON object with exactly the keys `rngSeed` (int, the split draw's seed), `eval`, `train` and `calibration`.
   - Each of the three lists holds `itemId` strings. Order carries no meaning (P2-m3).
@@ -314,7 +314,7 @@ These rows replace plan4 §5's U5.5 "No `tool_result` is incomplete" clause and 
 
 ## 7. Ready to implement
 
-Plan: `docs/plans/typed-decision-models6.md` v1.7 (extends plan4).
+Plan: `docs/plans/typed-decision-models6.md` v1.8 (extends plan4).
 - The campaign driver becomes `driver run`: a stdlib runner that launches one `claude -p --agent dm-driver` session per batch, with `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, an environment allowlist, refusals on named user settings (shown by `status`), a runner-chosen `--session-id`, a timeout, and an `flock` lock passed to the child. Pausing is a lock-free `store/pause` file, and a 30-minute user timer starts the runner.
 - `dm-driver` is pinned to `claude-sonnet-5-5` and loses `Bash`. The guard, the only bound on tool use, is wired once with `onFailure: "block"` (§3.3).
 - The audit rows and their precedence are §3.4's.

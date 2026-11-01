@@ -11,8 +11,9 @@ the design.
 
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
-`ingest.py` (answer checks, idempotence) and `audit.py` (transcript audit). Later plan4 §4.1
-units are unbuilt (`docs/HISTORY.md`).
+`ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
+reconciliation, halts) and `driver.py` (CLI: `init`, `resolve`, `status`). Later plan4 §4.1 and
+plan6 §4 units are unbuilt (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
@@ -51,9 +52,13 @@ units are unbuilt (`docs/HISTORY.md`).
 - **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
   one schema check; the writer runs it before any request leaves it. No `*Id` key
   reaches a generation request, whatever `points/` declares.
-- **Ingest and audit never record** (their docstrings): the ledger is U5.6's. A second,
-  different answer raises `AnswerRefused`. The audit's classes beat ingest's; `audit.combine`
-  joins them, and only a `CLEAN`/`COUNT` audit ingests and records `answerSha256`.
+- **Only `campaign.py` writes the ledger**; ingest and audit never record. The audit's classes
+  beat ingest's (`audit.combine`), and only a `CLEAN`/`COUNT` audit ingests and records
+  `answerSha256`. The `outcome` event is the commit point, appended before parts move to
+  `store/`; a re-ingest never calls `audit_run`/`combine` and appends nothing; a re-issued name
+  is retired, so a late answer raises `AnswerRefused` (`campaign.py`'s docstring).
+- **`next`/`ingest` are library entry points for `driver run`**, never subcommands (plan6
+  §3.2). `next` checks `store/pause` before reading anything.
 - **The audit locates a run only through the driver's `Agent` `tool_use` and `.meta.json`
   `toolUseId`**, never through what it checks, and fails closed (plan6 §3.4): only F2's
   foreground shape completes, and a tool use the guard did not allow with its own entry halts

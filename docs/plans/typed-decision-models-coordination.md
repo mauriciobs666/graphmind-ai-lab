@@ -404,3 +404,53 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - Both are routed to architect a7b930e4646af8d40 for v1.7, which also takes the §7 'v1.4' fix. The re-check is a teco line check: the fixes are textual and the union rule is unchanged.
   - Plan6, Pass 30 and the ledger commit together after v1.7.
 - 2026-11-01: Plan6 v1.7 delivered (architect a7b930e4646af8d40, 87k tokens / 6 tools; 7,149 → 7,145 words). P30-m1 fixed: the vector's second run is now a type exemplar, and U5.10's 'Passes' fixtures are `audit_run` outputs. teco checked these against `audit.py` `_facts` (`claudeCodeVersion` comes from `conversation[0]`) and `_check_run` (`spawnPromptMismatch` maps to DRIVER). P30-n1 cut; §7 now says v1.7. Teco line check passed. **Plan6 v1.7 accepted**; U6.8 and U5.10 are buildable. Committed with Pass 30.
+- 2026-11-01: Committed `5f1faeb2` (plan6 v1.7, Pass 30, ledger).
+- 2026-11-01: **U5.6 delivered** (coder a62d2b080d46a77de, 284k tokens / 59 tools). New files: `campaign.py`, `driver.py`, `test_campaign.py`, `test_driver.py`; edits to README, HISTORY and AGENTS (721 words).
+  - teco re-run: 761 passed, 2 xfailed; ruff clean. The coder's 18 mutants all went red.
+  - **teco mutants on `issue`'s `issued` event: both SURVIVED.** `attempt` set to a constant `1` gave 0 red. A reversed `requestSha256` gave 0 red. Both flow, through `_outcome_event` → `audit.run_record`, into the dataset's `runs[]` provenance. Sent to the gate.
+  - The coder's own open calls for the gate:
+    - `store/runs/<sessionId>.exit` is a contract for U6.3;
+    - `resolve` resets the cap and the clock;
+    - `--skip-batch` is allowed only after `safeguardStop`;
+    - the pilot-report key names are a contract for U5.8;
+    - U6.3's loop must exit on `IngestResult.stop`.
+  - Gate: fresh `analyst`, impl Pass 10 in `docs/reviews/typed-decision-models4-impl.md`.
+  - Fix routing: the coder is at 284k, so the fix goes to a fresh implementer unless it needs figures only the coder saw.
+- 2026-11-01: U5.6 gate dispatched to `analyst` a49496efce14fa7f5 (impl Pass 10). U6.8 can now go out, but it stays held until U5.6's fix round is closed, because both touch decision-models HISTORY.
+- 2026-11-01: Stakeholder: LM Studio is free; teco may use it as needed from now on (this lifts the earlier ask-first hold on U7 and `pytest -m live`).
+- 2026-11-01: **Pass 10** (analyst a49496efce14fa7f5, 193k tokens / 56 tools) → **needs changes**.
+  - **Majors:**
+    - P10-M1: run-record and ledger fields no test pins by value. This covers teco's two survivors, plus `role`, `runId` and the `issued.keys` key→item binding. Three pin tests are drafted at `scratchpad/p10/probes/test_p10_pins.py`.
+    - P10-M2: `init --phase full` silently defaults the pilot report's `cap` (to 50) and `rngSeeds` (to `[]`).
+  - **Minors:**
+    - P10-m1: plan6 §3.2's loop and the usage stop. teco picks **option (b)**: the `Campaign` instance remembers a usage stop from its own `ingest`, so `next` returns stop, as plan6 §3.2 is written.
+    - P10-m2: a bad `.exit` file raises.
+    - P10-m3: `abspath` should be `realpath`.
+    - P10-m4: the launch-clock reset at `resolve` is untested.
+  - **Nits:** P10-n1, untested branches; P10-n2, a torn last ledger line.
+  - **Rulings on the six calls:** all six stand.
+  - **Carries:**
+    - **U6.3 brief:** exit file `store/runs/<sid>.exit`, with its format stated and written atomically; a missing file counts as non-zero.
+    - **U5.8 brief:** the pilot-report keys `stakeholderDecision.{outcome,cap,stakeholderRef}`, `missingCueCheck.state` and `rngSeeds`.
+  - **Open question,** `runs[].attempt`: every issue, or counted attempts only? Asked to architect a7b930e4646af8d40 inline before the fix dispatch.
+  - **Feature-close REVIEW.md candidate (P10-M1):** "For a record another unit consumes, mutate each field's value at its write site; a field no test pins, with the expected value computed independently, is a finding."
+  - **Fix routing:** a fresh `coder`; the original is at 284k and the fix is self-contained from the review. Re-gate: Pass 11, on the same analyst, because option (b) is a code change.
+- 2026-11-01: The architect (a7b930e4646af8d40, 101k / 7) ruled that `runs[].attempt` is the batch's **issue ordinal**, matching the code. Plan6 is now **v1.8** (7,145 → 7,167 words; one sentence in §3.7, the dated line, §7). teco checked the lines.
+  - U5.6 fix round dispatched to a fresh `coder`, ae91754f67b0615f5, covering all Pass 10 findings with P10-m1 option (b).
+  - Plan6 v1.8 commits with the U5.6 integration.
+- 2026-11-01: U5.6 fix round delivered (coder ae91754f67b0615f5, 182k / 57).
+  - teco re-ran the suite: 819 passed, 2 xfailed, ruff clean. All 32 of the coder's mutants went red. teco's mutant (pilot `rngSeeds` loses its last seed on the hand-off) gave 1 red.
+  - Deviations for the gate:
+    - `countsAttempt` was dropped from `outcome`.
+    - The usage-stop memory is deliberately per instance, per plan6 §3.2 Scheduling. Three tests now use a fresh instance per fire.
+    - The ledger is split on `\n` only (U+2028).
+  - Carries:
+    - **U6.3:** one `Campaign` instance per `run` process. The `.exit` file is written atomically, as decimal `returncode`. `cwd=camp.exchange_dir`.
+    - **U5.8:** the pilot-report key types.
+    - **U5.10:** no `countsAttempt`.
+  - Re-gate: Pass 11, on the same analyst a49496efce14fa7f5.
+- 2026-11-01: **Pass 11** (analyst a49496efce14fa7f5, 238k / 74) → **approve**.
+  - All Pass 10 findings are fixed. The interaction checks were clean: torn line × crash cases, `realpath` × audit paths, and usage-stop flag × re-ingest and × pause.
+  - The coder's three calls are upheld.
+  - P11-n1 (README: name the safe repair) was a one-sentence fix, made by teco.
+  - **U5.6 accepted.** Committed with plan6 v1.8, Passes 10–11 and the ledger.

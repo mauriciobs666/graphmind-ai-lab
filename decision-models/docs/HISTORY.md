@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.6 — campaign ledger and driver CLI
+
+**What:** `docs/plans/typed-decision-models6.md` (v1.8) §4's U5.6 row and §5 U5.6 row over plan4
+`typed-decision-models4.md` §3.3 (caps, halts, idempotence), §3.5 and §5 U5.6, and plan5
+`typed-decision-models5.md` §3.2, §3.6's spend gate and §4 U5.6; the carried rulings in
+`docs/plans/typed-decision-models-coordination.md` (P5-F4 commit point and cases (a)–(d), P6-F1
+case (e), Pass 8 q3, retired names) and impl review Pass 9's caller items; then a fix round for
+Pass 10's findings (`docs/reviews/typed-decision-models4-impl.md`).
+
+- `decisionmodels/campaign.py`: the append-only, fsync'd ledger and its fold (`pending`, `issued`,
+  `ingested`, counted `void` up to `retryCapExceeded` at 3, `reissued`, `usage-stop`, `halted`);
+  `Campaign.next`/`prepare`/`issue`/`ingest` as library entry points for U6.3's `run` (`next`
+  stops on `store/pause` before reading anything, on a halt, on a usage stop, and when nothing is
+  pending); `issued` carries `sessionId`, and reconciliation reads only that session's
+  transcript; `interrupted {batch}` keeps an attempt out of `earlier_no_attempt`;
+  `launchFailed`/`launchFailing` outcomes carry stdout, stderr and the exit code, with the clock
+  read from `issued` times and `init`'s `launchFailBound`; `Expected` uses absolute paths.
+  `record_draw` and `fresh_rng_seed` (plan5 §3.2); `init --phase full` holds the pilot's RNG seeds
+  and applies the spend gate; `resolve` retries, `--skip-batch` (`dropped.safeguardSkipped`),
+  `--repin-instructions`, `--repin-model` (`generation-restart`/`labelling-restart`).
+- **Ingest:** the `outcome` event is appended before parts move (copy all, fsync, unlink). A
+  re-ingest checks the ledger first, never calls `audit_run`/`combine`, re-reads through
+  `ingest_answer_files` (from `store/` when it holds every recorded part) and appends nothing.
+  Plan6's headless sequence wins over the ledger's "`ingest` runs only after the run hands back":
+  `run` ingests once the child exits or is killed, and an unfinished run is `incomplete`.
+- `decisionmodels/driver.py`: `init`, `resolve`, `status` (`python -m decisionmodels.driver`).
+- **Calls made here:** an unobserved child exit counts as non-zero; the no-attempt cap and the
+  launch clock restart after a `resolve`; `--skip-batch` is refused for a halt other than
+  `safeguardStop`; the pilot report is read for `stakeholderDecision.{outcome, cap,
+  stakeholderRef}`, `missingCueCheck.state` and `rngSeeds`.
+- **Pass 10 fix round:**
+  - P10-M1: `issued.attempt` (plan6 v1.8 §3.7's issue ordinal, skipping numbers),
+    `requestSha256`, `answerSha256`, `runId` (located runs only), `role`, `details`, `resolved`'s
+    fields and the `issued.keys` binding (label item and generation seed) are pinned by value,
+    each expected value computed in the test.
+  - P10-M2: `init --phase full` refuses a report whose `stakeholderDecision.cap` is not 25 or 50,
+    whose `rngSeeds` is not a non-empty list of ints, whose `stakeholderRef` (when it is needed)
+    is not a non-empty string, or that is not a JSON object; no key has a default.
+  - P10-m1 (option b): a `Campaign` instance remembers a usage stop its own `ingest` recorded and
+    its `next` returns `Stop("usage-stop")`, so plan6 §3.2's loop launches once per spent window.
+    The memory is the instance's, not the ledger's: the next timer fire is a new instance and
+    serves again, which is plan6 §3.2's "a fire within a spent window costs at most one short
+    driver turn".
+  - P10-m2: `store/runs/<sessionId>.exit` is ASCII `-?[0-9]+` with optional whitespace; an empty
+    or other file is an exit never observed (`launch.exitCode: null`), never an exception.
+  - P10-m3: the root is `realpath`, so a symlink neither hides a work tree from `root_refusal` nor
+    names the wrong transcript folder.
+  - P10-n1: `countsAttempt` is dropped from the `outcome` event: `combine` sets it exactly when
+    the outcome is `void`, the one fact `fold` counts, so it could only drift.
+  - P10-n2: a torn last ledger line (no newline) or a line that is not an event refuses every
+    command naming its byte offset, raised from `events()`, and `_append` refuses to write after
+    one. The ledger is split on `\n` only (`str.splitlines` also split on a raw U+2028).
+- `tests/test_campaign.py` (139 tests) and `tests/test_driver.py` (9); `README.md`, `AGENTS.md`.
+
+**Verified:** `pytest -q` from `decision-models/`, no deselection: 819 passed, 2 xfailed (761/2
+before the fix round, 671/2 before the unit); `ruff check .` clean. Mutants ran in a private copy
+(the model-bench byte-copy tests skip there), each file restored `cmp`-equal. The unit's 18:
+outcome event appended after the move 6; re-ingest calling `audit_run`+`combine` 8; re-ingest
+taken as a first ingest 12; a retired name's late answer accepted 3; a held RNG seed accepted 2;
+`interrupted` counted in `earlier_no_attempt` 1; `pause` ignored by `next` 1; a void re-ingested
+with `None` 1; `fresh_rng_seed` not redrawing 1; a held `seedId` accepted 1; the 6 h default for
+the bound recorded at `init` 1; a relative root 1; the spend gate without `stakeholderRef` 1;
+`--skip-batch` on any halt 1; parts moved one by one 2; re-ingest reading `exchange/` only 2; a
+halt ignored by `next` 1; any session's transcript read 3. The fix round's 32, every one red:
+`attempt` → 1 1, or the counted number 1; `requestSha256` reversed 1, or wrong at `run_record` 1;
+keys bound to reversed refs 2; role `label` 1; `runId` constant 1, or over every outcome 1;
+`run_record` attempt 1 1; the report refusal dropped 15; the cap check 8; the `rngSeeds` check
+4; `stakeholderRef` truthy 3; the usage-stop flag never set 2, or ignored by `next` 2, or set by a
+re-ingest 1; bare `int()` on `.exit` 7, or a lax parse 2; `abspath` 1; the launch clock ignoring
+`resolve` 1; `issue`'s stale 1 and duplicate 1 refusals; `launchFailing` without evidence 2;
+non-ASCII kept in the slug 1; status "last issued" 1; `details` empty 1; a torn line dropped 5,
+or appended after 1; `str.splitlines` 6; `resolved.batch` dropped 1; `answerSha256` reversed 8; a
+non-event line accepted 1.
+
 ## 2026-11-01 — typed-decision-models U6.6 — dataset contract vector copy
 
 **What:** `docs/plans/typed-decision-models6.md` v1.5 §3.7 and §4's U6.6 row:
