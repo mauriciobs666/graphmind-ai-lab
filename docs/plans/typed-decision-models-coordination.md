@@ -461,3 +461,52 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
     - Each line equals the baseline with run 2 removed. Run 2's value differences are ids, status, tokens and the seven §3.7 keys.
     - model-bench: 3654 passed, 5 deselected, 2 xfailed. decision-models: 819 passed, 2 xfailed.
   - The coder's three mutants (row-named `model` string, a key outside the seven, `(run,) =` revert) each gave 3 red.
+- 2026-11-01: Committed `c2328164` (U6.8). **U6.3** dispatched to `coder` aa8af0097edb4fcc1.
+  - Scope: the plan6 v1.8 U6.3 rows in §4 and §5.
+  - The brief carries the U5.6 contracts: one `Campaign` per process; an atomic `.exit` file holding a decimal `returncode`; `cwd=exchange_dir`; `interrupted` written once; `pass_fds` lock.
+  - Gate: a fresh `analyst` (impl Pass 12), sequenced right after delivery.
+- 2026-11-01: **U6.3 delivered** (coder aa8af0097edb4fcc1, 226k tokens / 54 tools).
+  - teco checks: suite re-run 854 passed, 2 xfailed; ruff clean. Of the coder's 33 mutants, 32 went red; the survivor, M25, is argued equivalent. teco's mutants (swapping the template's `{agent_type}` fill; dropping `TZ` from the allowlist) each gave 1 red.
+  - The coder's open calls, for the gate:
+    - `driverTemplate` and `userSettingsSha256` are added to the `expectations` event;
+    - the hash covers `permissions` and `modelSettings` only;
+    - `run` stops after `launchFailed`;
+    - settings are checked at the top of every iteration;
+    - `store/refusal` is written only after the lock is taken;
+    - SIGINT is handled like SIGTERM;
+    - `runner.json` is never deleted.
+  - Carries:
+    - **U5.7:** `install` records the template and the settings hash, and takes the lock through `Campaign.locked()`.
+    - **U6.4:** set `PATH` and `LANG` explicitly in the unit; refusals exit 1.
+  - Gate: fresh `analyst`, impl Pass 12.
+  - Pass 12 dispatched → `analyst` a15fc6dc7006de0df.
+- 2026-11-01: **Session crash during Pass 12.**
+  - The review file kept Scope and Findings: P12-M1 is a major for `architect` (plan6 §3.2 settings refusals); m1–m3 and n1–n3 are for `coder`. The verdict and appendix were still pending.
+  - The scratchpad was wiped. The live tree is intact: teco re-ran the suite, 854 passed, 2 xfailed, ruff clean.
+  - The same analyst a15fc6dc7006de0df was resumed to finish the pass.
+- 2026-11-01: **Pass 12 verdict: approve with suggestions** (analyst a15fc6dc7006de0df, 236k / 14 after resume).
+  - All 8 of the coder's calls stand.
+  - M25 is not equivalent: keep the branch and add test P8.
+  - Carried to U6.4: record the unit's `KillMode`. Under cron nothing kills leftover processes.
+  - Proposed REVIEW.md line (root): plant a descendant that survives the first signal; assert the grace by elapsed time; run timing tests under CPU oversubscription.
+  - Dispatched in parallel. The files are disjoint, and the seam is stated in both briefs: settings-key scope belongs to the architect.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U6.3-fix (P12-m1–m3, n1–n2, n3 optional) | `coder` | `ad0c1499ce1b26dfc` | in-flight | runner/test_runner/campaign/driver/docs | teco check + analyst Pass 13 → — | — |
+| plan6 v1.9 (P12-M1 settings refusals) | `architect` | `a625868abc8979916` | delivered | `docs/plans/typed-decision-models6.md` | analyst → — | — |
+- 2026-11-01: **plan6 v1.9 delivered** (architect a625868abc8979916).
+  - Design (§3.2): a closed forbidden list (`env`, `hooks`, `disableAllHooks: true`, `autoContinueAtUsageLimit: true`, `fallbackModel`, `apiKeyHelper`), plus `userSettingsDigests`, one sha256 per top-level key outside a closed exempt set. An exempt list fails closed when a future CLI adds a key.
+  - `model` edits stay non-refusing: the audit's model-pin halt catches their effect.
+  - New unit **U6.3b** (`coder`): the run-side code, sequenced after the U6.3 fix round, before U5.7.
+  - Facts for the gate: `autoContinueAtUsageLimit` defaults to true; the key list was not complete at five.
+  - Not verified by the architect: that a `-p` child ignores the 31 display keys; the `switchModelsOnFlag: false` transcript shape.
+  - Gate: fresh `analyst`, plan review.
+  - Plan gate dispatched → `analyst` af00ca48e6134ee93 (plan6 review Pass 4).
+- 2026-11-01: **plan6 v1.9 gate (Pass 4): needs changes** (analyst af00ca48e6134ee93, 128k / 22).
+  - P4-M1 (major): `permissions` is recorded whole, so ordinary allow-rule growth would refuse the next fire. The user's own file has 6 allow rules and `defaultMode: auto`. The fix digests `permissions` without `allow` and `defaultMode`.
+  - P4-m1: `agentPushNotifEnabled` is not inert, so it leaves the exempt set.
+  - P4-m2 to P4-m4 and the nits are small row and clause fixes.
+  - teco ruling on Q-1: a stalled unattended campaign is acceptable until a human reads `status`. The digest stays fail-closed.
+  - Revision sent to the same architect a625868abc8979916 with Pass 4's stopping condition as the done-condition: a teco line check, no full Pass 5.
+- 2026-11-01 — plan6 v1.10 delivered by a625868abc8979916 (8,707 words). teco line check against Pass 4's stopping condition: PASS. §3.2 carries the `permissions` digest rule (allow/defaultMode left out) with its cases in the U6.3b row; `agentPushNotifEnabled` is recorded; m2 ruled in one sentence, no new mechanism; refusal text carries the revert/`install` hint; U6.4 has the refused-fire case; U6.3b header lists `campaign.py`. Plan6 is the build spec for U6.3b. Unit order unchanged: U6.3 fix round (coder ad0c1499ce1b26dfc, in-flight) → U6.3b → U5.7.

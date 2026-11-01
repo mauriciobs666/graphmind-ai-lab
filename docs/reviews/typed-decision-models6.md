@@ -417,3 +417,125 @@ Every remaining finding except P3-m2 comes from v1.3's own fixes, and P3-m2 came
 Target: root `REVIEW.md`, *Always check*.
 - **Addition (source: P3-M1):** A fail-closed path is traced to its consumer. The guard's own failure must reach a class that halts and is distinguishable from a policy decision. A fail-closed default that the consumer counts as the actor's fault turns a broken guard into silent attrition.
 - **Addition (source: P3-m1, P3-m2, and gate (c) in report §9.1):** A row that keys on a missing record (no hook entry, no result, no field) is checked against every producer of that absence: a kill, batched or parallel writes, and validation before the recorder runs. Checking only the producer that motivated the row is not enough.
+
+## Pass 4 (2026-11-01)
+
+**Scope.** Plan6 v1.9 (8,410 words, uncommitted) against v1.8 at `6837ddbb`, the last commit touching the file (`git show 6837ddbb:docs/plans/typed-decision-models6.md | wc -w` gives 7,167). The v1.9 diff covers §2, §3.2, §4, §5, §6 and §7. I checked it against:
+- `code.claude.com/docs/en/settings-reference`, read 2026-11-01. The page is 442,645 characters and I read it in chunks, 0 to 500,000. The `switchModelsOnFlag`, `fallbackModel` and `outputStyle` sections did not appear in any chunk I read, so those three are unconfirmed;
+- `decision-models/decisionmodels/runner.py`, `campaign.py` (`record_expectations`), `driver.py` and `tests/test_runner.py` as they stand;
+- the user's own `~/.claude/settings.json`, key names and non-secret values only, read-only.
+
+I ran no `claude` session and did not run the suite, because this is a static plan review.
+
+**Verdict: needs changes.** There is one major (P4-M1), which is a false refusal that the user's real settings file shows. The design premises hold, and the code, the rows and the §5 cases agree with each other (see the checks). Stopping condition at the end.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the evidence is the settings reference, the runner code and the user's settings file.
+
+### Earlier findings
+
+- **P12-M1** (`docs/reviews/typed-decision-models4-impl.md`, Pass 12): answered by v1.9's inversion, which is the first of the two directions the finding offered. The forbidden set holds the five named twins, and a digest map covers every key outside a closed exempt set. The five keys named by the finding are all handled: `fallbackModel`, `apiKeyHelper` and `disableAllHooks` are forbidden, and `effortLevel` and `outputStyle` are recorded. The directly asked question (does a user-level `disableAllHooks` also disable the project guard wiring?) is answered by the docs; see check 1.
+- **P2-M1's stopping condition:** holds literally; see check 3. Its harm returns for keys outside the exempt set; see P4-M1.
+
+### The five checks
+
+1. **Settings keys: they exist and behave as the plan says, with three gaps in what I could verify.**
+   - **`disableAllHooks`** (verified, docs): "In any other settings file: Claude Code disables user, project, local, and plugin hooks; managed hooks, Agent SDK hooks, and hooks from plugins force-enabled in managed `enabledPlugins` keep running." So a user-file `true` does switch off `exchange/`'s project-level guard wiring, and the forbidden refusal is right. Scope is "Any file". The same page says the key also turns off a custom status line and file-suggestion command; neither matters to a `-p` child.
+   - **`autoContinueAtUsageLimit`** (verified, docs): default `true`. Scope is "User or managed": read from user settings, `--settings` and managed settings only, and "when none of those sets the key, a project or local settings file that sets it turns the feature off rather than being ignored". That matches §3.2's pin: only the value `false` helps, and only when the user file does not set it. The user's real file sets `false`, so `install` would pass on day one.
+   - **`apiKeyHelper`** (verified): runs a shell command and sends its output as `X-Api-Key` and `Authorization: Bearer`; scope "Any file". The forbidden entry is right.
+   - **`switchModelsOnFlag`** (not verified). The settings reference lists it as "switch to the fallback model and continue, or pause so you can choose". I did not find its section, so the `-p` behavior and the default in §2's bullet are the plan's word, not mine. The key is exempt only because the model pin catches the effect (§3.4), so the unconfirmed behavior costs a halted batch, not a silent miss.
+   - **The exempt set is inert for the properties that matter, with one exception and one unverified key:**
+     - Verified from the docs: `awaySummaryEnabled` ("Claude Code never shows the recap in non-interactive mode"), `promptSuggestionEnabled` (a hide/show toggle for input-box suggestions), `feedbackSurveyRate`, `voice`, `timeFormat`, `timeZone` (all described as "in the interface"), `spinner*`, `theme`, `editorMode`, `verbose`, `viewMode`, `tui`.
+     - **Exception:** `agentPushNotifEnabled` is described as "Let Claude send a push notification to your phone when it decides to". That is something Claude *does*, not something the terminal shows. See P4-m1.
+     - **Unverified:** whether `timeZone` reaches a date or time string in the prompt. The docs say "interface" only.
+   - **Keys missing from the plan's treatment:** none is silently ignored, because every key outside the exempt set is digested. The closed set is exactly 31 display-only keys plus `model`, `switchModelsOnFlag`, `autoContinueAtUsageLimit`, `disableAllHooks` and `$schema` (counted from the plan's text). The siblings that the forbidden class does not name are P4-m2.
+
+2. **Fail-closed digest: it holds, with a false-refusal source in the user's real file and a recovery path that works.**
+   - **`oauthAccount` and `projects` are not a source.** The settings reference's "Global config settings" section says those keys live in `~/.claude.json`, which "Claude Code ignores anywhere else", and `~/.claude/backups/` shows `.claude.json` being rewritten every few minutes. The plan reads `~/.claude/settings.json` only, so that churn never reaches the digest. The plan does not say this. See P4-n1.
+   - **What the CLI does write into the settings file** (verified, docs): `autoUpdatesChannel` (from `/config`), `minimumVersion` (on a channel switch), `enabledPlugins` (`/plugin`), `pluginConfigs`, `enableArtifact`, `crossSessionInbound`, `remote.defaultEnvironmentId`, `feedbackDrafts`, `autoMemoryEnabled` (`/memory`), `autoContinueAtUsageLimit` (`/config`). All of them are recorded, so each is a false refusal. The plan accepts this (§3.2 "Why this way round", §6).
+   - **The realistic one is `permissions.allow`:** P4-M1.
+   - **Recovery is reachable.**
+     - A refusal after the lock goes to `store/refusal` (`runner.py:193-200`) and `status` prints it (`campaign.py:966-968`).
+     - A launch deletes the file (`runner.py:277`), so it does not outlive the acceptance.
+     - Re-running `install` appends a new `expectations` event, and `run` reads the latest (`campaign.py:184-185`).
+     - `install` refuses while the lock is held (§3.1), which only delays recovery by one batch.
+     - The refusal text carries no recovery hint, and nothing alerts a human: P4-m3.
+   - **Forbidden keys are not recoverable by `install`**, by design. The only recovery is to revert.
+
+3. **§3.2 against the stakeholder rule: consistent.** A `theme` or `model` edit does not refuse (both are in the exempt set; U6.3b's "Not refused" row lists them). A `permissions` edit does (recorded; U6.3b's "Recorded" row plants a new deny rule). The rule is satisfied as written, but `permissions.allow` is a `permissions` edit that the stakeholder most plausibly meant to let through: P4-M1.
+
+4. **Rows, §5 cases and the code: they agree, with one scope gap.**
+   - **Names and shapes.** U6.3b's names (`FORBIDDEN_SETTINGS`, `UNRECORDED_SETTINGS`, `user_settings_digests`, `forbidden_settings_refusal`, `settings_refusal(settings, recorded)`, `record_expectations(user_settings_digests=…)`, the `userSettingsDigests` field) replace exactly the names the code has now: `REFUSED_SETTINGS`, `HASHED_SETTINGS`, `user_settings_sha256`, `settings_refusal(settings, recorded_sha256)` (`runner.py:74-112`), the `user_settings_sha256` keyword and `userSettingsSha256` event key (`campaign.py:582-596`) and `Runner._install_record` (`runner.py:230-237`). A grep for the old names finds only those sites, `tests/test_runner.py`, `docs/HISTORY.md:34` and `docs/plans/typed-decision-models-coordination.md:471`, both of which are history.
+   - **No migration is needed:** `driver.py` has no `install` yet, so no `expectations` event exists outside tests. That claim holds.
+   - **U6.3b ↔ U5.7.** U5.7 calls `runner.user_settings_digests` and U6.3b's `forbidden_settings_refusal`; its planted cases (each forbidden key refuses `install` with nothing appended; the recorded map equals `user_settings_digests` of the planted file; a second `install` after an `outputStyle` edit lets `run` launch) do not repeat U6.3b's. The forbidden-key checks are cases of the same function at two call sites, and each side names the other.
+   - **Order.** U6.3 fix round → U6.3b → U5.7 is buildable. U6.3b needs the fix round done because both edit `runner.py`, `test_runner.py` and `HISTORY.md`; U5.7 needs the finished functions.
+   - **Scope gap:** P4-m4.
+
+5. **Growth-stops: rewritten in place for the user-settings paragraph; the rest is new scope.**
+   - **Words:** 7,167 at `6837ddbb`, 8,410 now: +1,243 (`git diff --stat`: 1 file, 42 insertions, 14 deletions).
+   - **By section** (my script over the two files): §2 +181, §3.2 +567, §4 +179, §5 +202, §6 +82, §7 +22, header and revision line +10.
+   - **New scope:** the U6.3b unit and its §5 row, the settings-reference facts, the forbidden and recorded rules, the project pin, and the U5.7 install-side cases. The old four-line "User settings" paragraph was replaced, and U6.3's row shrank to a pointer.
+   - **Plan form:** it states the current design only. There is no finding→resolution table. The revision note is one line. Finding IDs appear as citations only (`P2-M1`, `M1`, `m2`, `P12-M1`).
+   - **Restated facts (nit, P4-n2):** the cost of a false refusal is stated in §3.2 "Why this way round" and again in §6. The `fallbackModel` and `apiKeyHelper` facts are stated in §2 and again in §3.2's forbidden list.
+
+### New findings
+
+**P4-M1 — major — the `permissions` digest refuses on ordinary allow-rule growth, which is the user's own routine.** *Owner: `architect` (§3.2 "Recorded keys", §4 U6.3b row, §5 U6.3b row). Verified on the user's real file; the child's behavior is inferred.*
+- §3.2 records `permissions` whole. Its stated reason is that "a new deny or ask rule applies even to a guard-allowed call" (§2, hooks reference).
+- The user's file, at `~/.claude/settings.json`, holds `permissions.allow` with 6 entries: 5 `WebFetch(domain:…)` rules and `WebSearch`, plus `defaultMode: "auto"`. These are the accumulated "always allow" answers from interactive work. The file was modified today at 17:07 (`stat`). Any further "always allow" changes the `permissions` digest and stops the next fire, and the refusal says only "`permissions` changed".
+- An added `allow` rule cannot cause a refusal mid-campaign. A hook `deny` and settings deny/ask rules still win over it (hooks reference, verified in Pass 3 check 1), and the guard decides every call.
+- `permissions.defaultMode` is also inert: the command passes `--permission-mode acceptEdits` (§3.2), which overrides it. Inferred; I did not read the precedence in the docs.
+- This is the harm P2-M1 named (an ordinary edit stalls an unattended campaign), reached through the one key the stakeholder rule singled out.
+
+**Fix:** digest `permissions` without its `allow` list and `defaultMode`, so a new `deny`, `ask`, `additionalDirectories` or any other `permissions.*` key still refuses. State why `allow` and `defaultMode` are inert, in one sentence citing §2.
+- U6.3b's "Not refused" row gains: a new `allow` entry, and a `defaultMode` change.
+- Its "Recorded" row keeps the new deny rule, and gains a new `ask` rule.
+- **Mutant that reddens:** digesting `permissions` whole fails the `allow` case. Digesting nothing under `permissions` fails the `deny` and `ask` cases.
+- The assertion catching this design being wrong: a U5.7 smoke that plants an `allow` rule for a path the guard denies and records the child's `permissionDecision`. That smoke is optional, because Pass 3's check 1 already verified deny precedence.
+
+**P4-m1 — minor — `agentPushNotifEnabled` is in the exempt set, but the docs describe an agent action, not a display.** *Owner: `architect` (§3.2 exempt list). Verified wording; the effect on a `-p` child is not known.*
+- The docs: "Let Claude send a push notification to your phone when it decides to". It sits beside `inputNeededNotifEnabled` and `preferredNotifChannel`, but unlike them, Claude chooses when it fires.
+- The user's file already sets `agentPushNotifEnabled: true` and `inputNeededNotifEnabled: true`, so the question is live. A tool the key enables would be one more tool call in the transcript. The agent definitions' `tools:` lists probably bound it, but §3.2 states that these keys "change only the interactive terminal", which the docs do not support for this one.
+
+**Fix:** drop `agentPushNotifEnabled` from `UNRECORDED_SETTINGS` (30 display-only keys). Cost: one false refusal if the user toggles it, and the key is already set at install, so it joins the baseline. Update U6.3b's pinned-set case.
+
+**P4-m2 — minor — the forbidden class is a named list again, and it misses the siblings of the keys it names.** *Owner: `architect` (§3.2 "Forbidden keys", §6). Names verified in the settings reference's key index; none of them is set in the user's file today, so nothing is baselined yet.*
+- §3.2's forbidden rule is "twins of a banned flag or variable". The same class has more members in the index: `fastMode` ("a higher cost per token"), `advisorModel` ("runs a second model when Claude asks it"), `modelOverrides`, `processWrapper`, `awsAuthRefresh`, `awsCredentialExport`, `gcpAuthRefresh`, `forceLoginGatewayUrl`, `allowedProviders`, `availableModels`.
+- If any is set at `install`, it becomes the baseline silently, and §3.2's own reasoning says a billing change leaves no trace in a transcript. §6 states the risk for later-added keys; it holds for these existing ones too.
+
+**Fix:** pick the axes the forbidden class varies on and give each one an entry and a planted case, rather than extending the list by the names above: credential source, routing/provider, model selection, cost tier, process wrapper. Then, in U5.7, make `install` print the recorded key names *and* name which axis each recorded key was judged on. A key on no axis is "recorded, unreviewed", which is the thing a human should read.
+
+**P4-m3 — minor — a refusal carries no recovery hint, and an unattended fire stops without alerting anyone.** *Owner: `architect` (§3.2 "Accepting a change", §4 U6.4 row). Verified against the runner code and the plan text.*
+- The plan says what a refusal names (every key added, removed or changed). The runner's refusal text (`runner.py:106-115`) does not say "revert it or re-run `driver install`". `status` shows REFUSED, but only to someone who runs `status`.
+- A refused fire exits 1 (`driver.py:19`). U6.4's row tests the fires, `pause` and disabling, and has no refused fire.
+
+**Fix:** U6.3b's row adds that a refusal ends with the sentence "revert it, or run `driver install` to accept it". U6.4's row adds a refused fire: the timer unit shows as failed in the scheduler's listing. That ties the cost the plan accepts to a place a human looks.
+
+**P4-m4 — minor — U6.3b does not name the tests and fixtures it replaces.** *Owner: `architect` (§4 U6.3b row). Verified by grep.*
+- `tests/test_runner.py` has the `Bench` helper that records `runner.user_settings_sha256(recorded)` (line 138), and a block of tests built on the old design: lines 375–485, including `test_the_hash_covers_only_permissions_and_model_settings` (line 466) and the canonical-form test (line 482). The row says the functions are replaced but not that these tests are rewritten, nor which keep their intent.
+- A faithful implementer will find them by running the suite, so this is a clarity gap, not a build blocker. The row also heads itself "in `runner.py`" while changing `campaign.py`'s `record_expectations`, which the same row does list.
+
+**Fix:** add one clause naming the `Bench` recorded value and the old-design tests as replaced by the row's cases, and say the row touches `campaign.py` too.
+
+**P4-n1 — nit — say which file the check reads.** *Owner: `architect`.* One sentence in §3.2: the check reads `~/.claude/settings.json` only. `~/.claude.json` (account, project state, a dozen display keys) is outside it, and the docs say Claude Code ignores those keys in `settings.json`. That is the answer to the first false-refusal question anyone asks.
+
+**P4-n2 — nit — restated facts.** *Owner: `architect`.* Cut §6's "User-settings refusals" bullet to a pointer to §3.2's "Why this way round", and have §3.2's forbidden list cite §2 for `fallbackModel` and `apiKeyHelper` rather than restate them.
+
+### What's solid
+
+- The inversion is the right design. A list of keys to ignore fails closed, and the doc evidence supports the reasoning: the settings reference lists far more keys than the plan's first four lists could have tracked.
+- The forbidden check runs before the digest comparison, applies at `install` as well as `run`, and a forbidden key is never made a baseline.
+- The project pin is correct against the docs' scope rule for `autoContinueAtUsageLimit`.
+- U6.3b is a separate unit with a stated reason, and U5.7 calls its functions instead of reimplementing them. The §5 rows carry mutants that redden (dropping a forbidden key, adding `outputStyle` to the exempt set, a fixed key list, names without digests) and a canonical-form case with a hand-written expected string.
+- The refusal shows key names and never values, with a planted marker test.
+
+### Open questions
+
+- Q-1: is a stalled unattended campaign acceptable until a human reads `status` or the scheduler's failed list? P4-m3 assumes yes, with an alert in the scheduler. If the answer is no, the digest needs a narrower recorded set than "everything outside a closed list".
+
+### Stopping condition
+
+The next revision (v1.10) passes by a `teco` line check, with no full Pass 5, if all of the following hold:
+1. P4-M1: §3.2 digests `permissions` without `allow` and `defaultMode`, and U6.3b's rows name a new `allow` entry and a `defaultMode` change as not refused and a new `deny` and a new `ask` rule as refused.
+2. P4-m1: `agentPushNotifEnabled` is not in `UNRECORDED_SETTINGS`, or §2 cites docs text showing that it does nothing under `-p`. The pinned-set case matches.
+3. P4-m2 to P4-m4: each is ruled in one sentence or one row clause.
+4. §3.2 and the rows gain no new mechanism beyond those rulings, and the plan's word count does not grow by more than the new rows and clauses require (growth-stops).
