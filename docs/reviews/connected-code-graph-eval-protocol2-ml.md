@@ -391,6 +391,107 @@ v1.2 is acceptable, and `teco` may close this without another analyst pass, iff 
 **Falsifier:** run the scratchpad's `interact.py` (I1–I3) against the stated K40–K42 outputs. Any
 mismatch reopens the finding concerned.
 
+## Pass 3
+
+**Scope:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` v1.3 (uncommitted) against
+`docs/plans/connected-code-graph-bundle-spec3.md` v1.1 §6 (committed `95734945`) and
+`cpg/ccg/keynorm.py` (committed `cafb1a20`). My emulation (`p3.py`, `p3run.py`, `p3int.py` in the
+scratchpad) does step 5 (decode), then step 6 (collapse, then RFC 3986 §5.2.4 `remove_dot_segments`
+written out literally), then step 7, then `ccg.keynorm.mask_http_segments`. It does not reuse the
+author's code.
+
+**Verdict: approve with suggestions.** 0 blockers, 0 majors, 1 new minor, 2 nits. CPG: considered,
+not relevant — a method note; the claims were checked by executing the committed `keynorm.py`.
+
+### Pass 2 dispositions
+
+- **P2-m1: fixed.** Gold carries a stored `form`, and `renormalize-check` re-runs with it (§1.5).
+  Executed: K39's consumer id is reproduced, and a provider-form rerun differs.
+- **P2-m2: fixed.** §1.4 computes both probes and the removal values from writer originals. K41a
+  fails and K41b passes, computed from writer originals.
+- **P2-m3: fixed**, by following spec3's order instead of reordering (my Pass 2 asked for exactly
+  this). The three Pass 2 inputs and K42, K45 are fixed points. A residual is P3-m1.
+- **P2-m4: fixed.** The P1-assembler row and the `form` field are in §3 (S47, S49).
+- **P2-n1: fixed.** Re-counted below.
+- **Pass 2 stopping condition:** items 1, 2, 4 and 5 met; item 3 met through K42 (spec3's order).
+
+### Execution
+
+- **K13, K31, K32, K42–K47: all as stated.** `GET /hooks/{#}`, `GET /a/b`, `GET /a/{#}`, `GET /b`,
+  `GET /a/`, `GET /a/b/`, `GET /a/`, `GET /`, `GET /`. Spec3 §6's own two examples reproduce
+  (`GET /a/%7Euser/%2f` → `GET /a/~user/%2F`; `GET /a/b/..` → `GET /a/`).
+- **K1–K22 and K30–K33 are unchanged:** 26/26 equal to v1.1's outputs, 32/32 with K42–K47, every
+  output a fixed point.
+- **Tally 47/33/14 confirmed by parsing the note:** 33 unit-table rows (K1 to K47, none missing),
+  14 integration bullets, 47 distinct ids. I ran 46 cases (K26 pending S49's logger), which is the
+  note's 48 checks with K29 and K41 counted as two each; all hold. K24, K25, K27, K28, K34, K35,
+  K39/K40 and the leak rows K29a/b, K36–K38, K41a/b were re-run against the new function.
+- **`renormalize-check` and the oracle agree:** K35 gives 0 differences under the same screen, and
+  only `POST /hooks/x7k2q9w4m1p8` (K33) changes under the T1-at-12 double. K42's id is stable.
+- **Coarsening:** over 30,000 random keys (17,419 EP v1.2 classes), 0 classes are split by v1.3.
+  I did not reproduce the note's 29,794 / 15,673 figures; they come from its own generator.
+- **Stale-term grep (stop condition):** `bs2Version` 0 hits. `BS2` appears once, in "p0-2 §16.1 row
+  BS2-21", a live row id. `BS-m7` (K2) is retained in spec3 §1.8. Step numbers match spec3's
+  (1, 4, 5, 6, 7, 8a) in §0, §1.1, §1.4 and K12–K14, K31, K32, K42–K47. No dispositions section is
+  left.
+- **Growth-stops:** the file shrank, 429 lines / 5,162 words (committed copy) to 384 / 4,397.
+  New scope: K43–K47 and the step-order rewrite (spec3 F-13). Rework: disposition tables removed.
+  The one revision line complies. See P3-n2 for a restated-evidence item.
+
+### New findings
+
+#### P3-m1 (minor): "normalize is idempotent" is false where decoding forms a new escape
+
+**Evidence.** Step 5 is a single left-to-right pass. An input with a stray `%` followed by an
+escape makes a new one: `GET /a/%2%45%2%45/b` → `GET /a/%2E%2E/b` → `GET /b`. In a 30,000-key run
+over a pool that includes `%2%45` and `%4%31`, 4,916 keys are non-idempotent. All 4,916 contain one
+of those two fragments, and none of the other keys is. This falsifies §1.1's sentence "`normalize`
+is idempotent" and the §2 line "must also be a fixed point", and spec3 §6's "fixed point"
+claim. The earlier "0 non-idempotent" result depended on the generator not producing it.
+
+**Why it is minor.** Nothing relies on it. The monotonicity argument (§0) rests on coarsening, and
+that holds: 0 splits. `renormalize-check` re-runs on writer forms, and the harness never
+re-normalizes stored gold. Exposure is nil, since no real route is written like this.
+
+**Fix.** Narrow both claims: "idempotent except for an input whose decoding forms a new escape (a
+stray `%` before an escape)". Route the matching spec3 §6 wording to `architect`. Do not iterate
+the decode. Add K48 with `GET /a/%2%45%2%45/b` → `GET /a/%2E%2E/b`, marked not a fixed point.
+
+#### P3-n1 (nit): a dot-resolved literal is in neither leak probe
+
+`GET /a/x7k2q9w4m1p8z3v6/../b` normalizes to `GET /a/b` both before and after 8a, so a report that
+names the literal route passes (executed). It is the correct reading of "the raw spelling is not a
+probe", and no real writer writes a route like this. Accept; add one sentence to R2.
+
+#### P3-n2 (nit): §2's "Reproduced" block is a run log; K17 cites §1.7.1
+
+- The 25-line block records what was run, in a document that should state the design only. Reduce
+  it to one line pointing at this review. Also trim §1.1's sentence about what EP's gloss "kept"
+  and "dropped".
+- K17's "letters-only residual" is in spec3 §1.7.6 (and §1.6.1), not §1.7.1.
+
+### Obligations on `docs/plans/connected-code-graph-p0-2.md` (for its owner; not edited)
+
+§3 matches Pass 1's list plus Pass 2's additions. p0-2 itself is stale against EP2 v1.3:
+- **S12 row (line 377) and the `keynorm.py` test row (line 1317):** "K1–K22 and K30–K32" must
+  become K1–K22, K30–K33 and K42–K47 (EP2 §3, S12 row).
+- **S49 row (line 414):** "K1–K42" must become K1–K47.
+- **Traceability rows EP2-10 (line 1771) and EP2-15 (line 1776):** "K1–K39" and "K40–K42" are
+  stale. The note's 47 cases include K40–K41 and K43–K47.
+
+### Stopping condition
+
+v1.4 may close without another analyst pass iff:
+1. §1.1 and §2 narrow the idempotence claim, or add K48 as above, and spec3 §6's wording is routed
+   to `architect`;
+2. `grep -nE 'bs2Version|specVersion' docs/plans/connected-code-graph-eval-protocol2-ml.md` still
+   shows only `specVersion` in §1.5 and §3, and `grep -n 'K1–K4[0-9]' docs/plans/connected-code-graph-p0-2.md`
+   shows only `K1–K47`;
+3. p0-2's three stale ranges are updated by its owner.
+
+**Falsifier:** run `p3run.py` and `p3int.py` against K48's stated output; a different result
+reopens P3-m1.
+
 ## Appendix (Pass 1)
 
 ### A.1 Oracle reproduction (scratch `oracle.py`)
