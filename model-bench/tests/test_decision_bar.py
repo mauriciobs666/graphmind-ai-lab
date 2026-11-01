@@ -932,7 +932,7 @@ def test_incumbent_worse_discordance_sharing_one_run_also_raises_de(tmp_path):
 
 _FAMILY = "  - design effect: genRunId ICC "
 _FAMILY_ESTIMATED = re.compile(
-    r"^  - design effect: genRunId ICC [+-]\d\.\d{3} pooled over \d cells$"
+    r"^  - design effect: genRunId ICC [+-]\d\.\d{3} pooled over (?:1 cell|(?:[2-9]|\d{2,}) cells)$"
 )
 
 

@@ -2145,11 +2145,17 @@ def _family_design_effect(
 
 
 def _family_design_effect_line(family: decision_stats.FamilyDesignEffect, unit: str) -> str:
-    """Note §Q6 "Print": the family's line, `unit` being `cells` (FR-1) or `classes` (FR-10)."""
+    """Note §Q6 "Print": the family's line, `unit` being `cells` (FR-1) or `classes` (FR-10),
+    singular at `k = 1` (`1 cell`, `1 class`)."""
     source = decision_stats.DESIGN_EFFECT_SOURCE
     if family.icc is None:
         return f"design effect: {source} not estimable ({family.reason}) — DE 1.00"
-    return f"design effect: {source} {family.icc:+.3f} pooled over {family.contributing} {unit}"
+    k = family.contributing
+    noun = _SINGULAR_UNIT[unit] if k == 1 else unit
+    return f"design effect: {source} {family.icc:+.3f} pooled over {k} {noun}"
+
+
+_SINGULAR_UNIT = {"cells": "cell", "classes": "class"}
 
 
 def _parity_text(

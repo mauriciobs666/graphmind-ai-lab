@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U3e.4 — singular family-line noun at k = 1
+
+**What:** method note v1.15 §Q6 "Print" (`docs/plans/typed-decision-models-ml.md`): the family
+line reads `pooled over 1 cell` / `pooled over 1 class` at `k = 1`
+(`report._family_design_effect_line`); plural otherwise. Also P28-n1: README's exit-code
+paragraph rewrapped to the file's width, wording unchanged.
+
+**Tests:** `test_decision_bar_fr10.py`'s three-forms test pins `1 class` and `1 cell`;
+`test_decision_bar.py`'s `_FAMILY_ESTIMATED` regex accepts only `1 cell` or `<k ≥ 2> cells` (its
+spread-over-runs fixture is a real k = 1 case). Mutant, singular branch removed: 2 failed, full
+suite. Suite 3625 passed, 5 deselected, 2 xfailed (unchanged; assertions added to existing
+tests); ruff clean.
+
 ## 2026-11-01 — typed-decision-models U2.4 — the `prime` guard (P20-m2)
 
 **What:** plan5 §3.1 and §4's U2.4 row (`docs/plans/typed-decision-models5.md`): `prime` gets its

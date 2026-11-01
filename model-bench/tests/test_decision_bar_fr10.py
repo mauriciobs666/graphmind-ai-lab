@@ -732,8 +732,8 @@ def test_an_early_return_fr10_replicate_prints_no_family_line(tmp_path):
 
 
 def test_the_family_line_renders_the_notes_three_forms():
-    """Note §Q6 "Print": a signed 3-dp ICC with an ASCII sign and `<k>` cells or classes, or the
-    not-estimable form with its reason."""
+    """Note §Q6 "Print": a signed 3-dp ICC with an ASCII sign and `<k>` cells or classes (singular
+    at `k = 1`), or the not-estimable form with its reason."""
     est = decision_stats.FamilyDesignEffect(0.0344, None, 3, {})
     neg = decision_stats.FamilyDesignEffect(-0.0121, None, 1, {})
     off = decision_stats.FamilyDesignEffect(
@@ -743,7 +743,10 @@ def test_the_family_line_renders_the_notes_three_forms():
         "design effect: genRunId ICC +0.034 pooled over 3 cells"
     )
     assert report._family_design_effect_line(neg, "classes") == (
-        "design effect: genRunId ICC -0.012 pooled over 1 classes"
+        "design effect: genRunId ICC -0.012 pooled over 1 class"
+    )
+    assert report._family_design_effect_line(neg, "cells") == (
+        "design effect: genRunId ICC -0.012 pooled over 1 cell"
     )
     assert report._family_design_effect_line(off, "classes") == (
         "design effect: genRunId ICC not estimable (no cell spans two runs with one holding two "
