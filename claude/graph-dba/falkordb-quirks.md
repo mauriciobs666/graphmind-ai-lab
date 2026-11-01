@@ -37,6 +37,13 @@ to the general fact here.
 - **Index before constraint, always** — `GRAPH.CONSTRAINT CREATE` requires a
   pre-existing exact-match index on the same property, or it fails with
   `"missing supporting exact-match index"`.
+- **falkordb-py's `Graph.create_node_unique_constraint` masks a missing index** (verified
+  2026-11-01, falkordb-py 1.6.2 against module 41811): the helper first runs
+  `create_node_range_index` (exceptions swallowed), so index-before-constraint appears to hold
+  even when the DDL forgot the index, and a constraint on a not-yet-existing key succeeds. The raw
+  `GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE <L> PROPERTIES 1 <p>` fails with `missing supporting
+  exact-match index`. Any test that checks a DDL's index set must use the raw command
+  (`cpg/tests/test_ddl_live.py`).
 - **`GRAPH.CONSTRAINT CREATE`'s entity-type keyword is `NODE`/`RELATIONSHIP`, not `LABEL`**
   (verified 2026-08-18, module 41811). `GRAPH.CONSTRAINT CREATE <key> UNIQUE LABEL <Label>
   PROPERTIES <n> <prop>...` fails outright with `"Invalid constraint entity type"` — the
