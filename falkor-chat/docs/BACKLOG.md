@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-099
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-101
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -89,6 +89,31 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Owner:** `devops` (1, 2, 4) and `coder` (3).
 - **Test strategy:** `lms ps --json` shows the embedder at 4096 and ministral at 8192; an over-length MCP
   `send_message` is rejected like REST's 422; the fit report's VRAM/paging measurement repeated.
+
+### K-100 — A long agent reply is embedded by its head only; chunk it rather than cap it (🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31)
+
+> Agent/LLM replies write through `Services.post_agent_answer` (responder, workflow `post_message`
+> tool), which K-099's `MAX_TEXT_LEN` cap deliberately does not touch; the responder self-embeds its
+> answer. LM Studio silently truncates an over-context embed to its leading tokens
+> (`docs/test-reports/embedder-context-report.md`), so a reply past ~4,096 tokens is stored whole and
+> full-text-searchable but its vector covers only the head — semantic/hybrid search misses the tail.
+> **Decided (stakeholder, 2026-10-31):** don't cap a model's reply; chunk it for embedding instead.
+> Open: how a multi-vector message ranks in message search (one hit per message, not per chunk), and
+> whether the chunker already used for documents is reused.
+- **Owner:** `architect` (design), then an implementer.
+
+### K-101 — REST input bounds are not enforced on the MCP/service paths (🟡 in-progress — RCA `docs/reviews/mcp-input-bounds-rca.md`, 2026-10-31; absorbs K-074)
+
+> REST's pydantic schemas carry every message/name/title/limit bound; MCP tools declare none and the
+> service backs only four (RCA §inventory, Appendix A). Instances include an empty MCP
+> `send_message` body, more than `MAX_MENTIONS` mentions, unbounded channel names / thread titles,
+> negative `limit`s, and K-074's over-200-char `ingest_document` title (7 such titles live in
+> `ws:agent-team`). **Decided (stakeholder, 2026-10-31):** fix the whole class per the RCA's
+> recommendation — service checks for every stored value, `Annotated` bounds on the MCP tool
+> signatures, a REST↔MCP bound-parity test — and **reject whitespace-only message text** on every
+> front door (REST's current 201 for it becomes a 400). K-074 is folded in here.
+- **Owner:** `tdd-engineer`.
+- **Test strategy:** the RCA's parity test first, then each known gap flipped to its fix with literal-value tests.
 
 ### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 
@@ -771,23 +796,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   per job, where today it costs nothing until a job fails (plan §6 R-7).
 - **Test strategy:** an offline test where a sibling has already failed the document: the job
   makes no provider call and still reports exactly once.
-
-### K-074 — MCP `ingest_document` accepts a title over `MAX_NAME_LEN` (200) that REST `POST /documents` rejects with a 422 (🔵 proposed — found during the K-071 re-drive, 2026-10-17)
-
-> **Why it exists.** REST validates `title` (and `sourceLabel`/`producedBy`) at the pydantic
-> boundary, `IngestDocumentIn` in `server/falkorchat/schemas.py`, capped at `MAX_NAME_LEN` = 200.
-> MCP `ingest_document` has no schema layer, and `Services.ingest_document` checks only the text
-> (empty, `MAX_DOCUMENT_CHARS`), not the title. So the same document is accepted on one front door
-> and rejected on the other: `ws:agent-team` document `9b2c6b30…` was ingested through MCP with a
-> 331-char title, and its 2026-10-17 re-ingest through REST was rejected with a 422 until the
-> title was shortened to 200 chars (`HISTORY.md` 2026-10-17).
-- **Owner:** `tdd-engineer` (reproduction test first).
-- **Scope:** make the two front doors agree on the title cap (and check the other capped fields).
-  The direction is the implementer's call: enforce `MAX_NAME_LEN` in `Services.ingest_document`
-  for both paths — the precedent is the text cap, already mirrored there for MCP's sake — or
-  relax REST.
-- **Risks/RAM:** enforcing the cap on MCP rejects long titles that MCP callers send today.
-- **Test strategy:** the same over-length title through both REST and MCP gets the same outcome.
 
 ### K-076 — Entity fuzzy query: symbol-only names make junk suggestions, and `\`-escaped punctuation misses its own name (🔵 proposed — `docs/reviews/fusion-fuzzy-escape.md` Pass 2, P2-1/P2-2, 2026-10-17)
 
