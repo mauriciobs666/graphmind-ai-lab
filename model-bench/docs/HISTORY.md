@@ -2,6 +2,52 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U3d — the decision-point pack importer
+
+**What:** v1.3 §3.4 "Importer", plan2 §4.1 U3d, plan4 §4.2 U3d, and the U3d brief items in
+`docs/plans/typed-decision-models-coordination.md` (P12 point 2 / the P12-m2 ruling, P22-n1).
+New `scripts/import_decision_pack.py`; no `modelbench/` module changed.
+
+- **Dataset half** (`--role --dataset --pack-version`): copies the eval split only into the
+  existing `packs/<role>-synthetic/`, rewriting `pack.json`, `items.jsonl` and `PROVENANCE.md` by
+  plain overwrite; `prompts/` is never written, and a missing pack directory or prompt is refused.
+  Each eval item is projected to `itemId`, the role's input fields, `expected`, `origin` and
+  `genRunId`/`genRound`/`seedId`/`labelVotes` (+ `threadPosition` on message type), each required;
+  other source fields are not copied. The manifest writes `incumbent` explicitly (`null` on new
+  abilities), `verdictMetrics` as the bar kind's exact set (the guard's four per-kind rates),
+  `scorer` per `SCORER_BY_ROLE`, `prompt.systemPrompt` per role, and `labels.labeler`/`generator`
+  as `{provider: "anthropic", model, surface, effort}` from `generation.json`. `PROVENANCE.md`
+  carries both blocks, `labelBatchCap`, and each source's git SHA and SHA-256. The guard appends
+  `guard-judge-understanding`'s 85 items as `side-check` with `labelSource: "human"`. The pack is
+  validated in a staging copy before any write; an unchanged `--pack-version` is refused.
+- **Candidate half** (`--candidate`): the candidate and the fit manifest it names, verified by
+  `Candidate.load`/`load_fit_manifest` in staging, into `candidates/`; never the fit report.
+  Identical bytes are a no-op; other bytes under an existing name are refused.
+- **New pack data:** `packs/guard-judge-synthetic/prompts/judge.md`, a byte-copy of
+  `guard-judge-understanding`'s judge prompt (pinned by a test), so the guard import has the
+  committed prompt P22-n1 requires.
+- **Assumed source shapes** (decision-models U5.10 has not built `finalize`): `splits.json` is an
+  object whose `"eval"` lists the eval `itemId`s, each once; each dataset item has a unique
+  `itemId`. `sampling.seed` is a fixed `20261101`; the prompt block mirrors the guard pack's
+  (`temperature 0.0`, `maxTokens 256`). Source files must be committed (`git status` clean) so the
+  recorded SHA names their bytes.
+
+- **Shipped-pack check** (`tests/test_decision_point_pack.py`, impl review P24-m3): the five
+  legacy packs are named, must validate and carry no `decisionPoint`; every `packs/*-synthetic/`
+  holding a `pack.json` must carry `decisionPoint` and validate, so an import adds a check instead
+  of breaking a pack count. Any other pack directory is reported.
+
+**Tests:** `tests/test_import_decision_pack.py` (115), offline on datasets built under `tmp_path`,
+including plan4 §5's U3d row (provenance kept, `input_hash` and `evalSetHash` unchanged), a
+per-path SHA stub pinning one git check and its own recorded SHA per dataset file (P24-m1), and the
+guard's `temperature`/`maxTokens` bound to `guard-judge-understanding/pack.json` (P24-n2);
+`tests/test_decision_point_pack.py` 152 → 158 (the shipped-pack check's plants). 25 mutants (each
+provenance field dropped, prompt writes, omitted `incumbent`, pooled guard metrics, exclusive
+create, no version gate, fit report copied, …) plus the review round's (`splits.json`/`items.jsonl`
+git check skipped, rows' SHAs swapped, `maxTokens`/`temperature` changed, planted sixth legacy
+pack, invalid or `decisionPoint`-less synthetic pack) each redden at least one test. Suite 3429 →
+3550 passed, 5 deselected, 2 xfailed; ruff clean.
+
 ## 2026-11-01 — typed-decision-models U4.3 — the FR-10 bar section
 
 **What:** plan v1.3 §3.6 (the new-ability bar, AC-12/AC-15), plan2 §3.6 (per-replicate FR-10

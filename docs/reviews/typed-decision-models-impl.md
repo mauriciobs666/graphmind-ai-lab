@@ -3020,3 +3020,145 @@ new paragraph's last line, left unwrapped. Rewrap it to the file's ~100-characte
 ### Proposed REVIEW.md lines
 
 None. P23-m1 is a single instance. The existing boundary rule did its job on the bars themselves.
+
+## Pass 24 — U3d decision-point importer (2026-11-01)
+
+*2026-11-01. Gate of U3d, uncommitted on `6ffeca23`. Files: `scripts/import_decision_pack.py`
+and `tests/test_import_decision_pack.py` (both new), `packs/guard-judge-synthetic/prompts/judge.md`
+(new), and `README.md`/`AGENTS.md`/`docs/HISTORY.md`. Read against v1.3 §3.4 "Importer", §3.5 and
+U3d; plan2 §4.1 U3d; plan4 §3.7, §4.2 U3d and §5's U3d row. Carried items: P12-m2 and P22-n1.
+decision-models was read only.*
+
+**Verdict: approve with suggestions.** Both halves follow v1.3 §3.4 and plan2 U3d:
+- the eval split only, `PROVENANCE.md`, the version gate, and the candidate with its manifest
+  but never the fit report;
+- every plan4 §4.2 provenance field, with the §5 U3d row's `input_hash` claim pinned for all
+  three roles;
+- both carried items: the four per-kind `verdictMetrics` from `classification`'s constant, an
+  explicit `incumbent`, an existing directory, plain overwrite, and `prompts/` untouched.
+
+There are no blockers and no majors. There are three minors and two nits.
+
+**Checks run** (on a private copy, `scratchpad/p24/wt/`):
+- **Suite:** `3537 passed, 3 skipped, 5 deselected, 2 xfailed`. The 3 skips are the
+  falkor-chat-sibling guards, which a copy cannot run, so this agrees with teco's 3540. The new
+  file collects 111 tests, as `HISTORY.md` says.
+- **Mutants:** 7 of mine, run against the importer and pack tests. The live files' sha256 was
+  re-checked afterwards: OK.
+
+  | Mutant | Result |
+  |---|---|
+  | X1 `splits.json` git check skipped (literal SHA) | **survives** (P24-m1) |
+  | X2 side-check rows lose `labelSource: human` | red |
+  | X3 version gate ignores `PROVENANCE.md` | red |
+  | X4 generator = labeler refusal removed | red |
+  | X5 candidate overwrite check removed | red |
+  | X6 `SAMPLING_SEED` changed | survives (call 4: no pin needed) |
+  | X7 `maxTokens` 256 → 512 | **survives** (P24-n2) |
+- **Prompt bytes:** the new `judge.md` is `cmp`-identical to `guard-judge-understanding`'s. Parsing
+  `falkor-chat/server/falkorchat/app.py`'s `_JUDGE_SYSTEM_PROMPT` with `ast`, it equals the file
+  only after `rstrip("\n")` (738 against 739 characters). That is the ledger's U9 premise, and it
+  is true.
+- **Sweeps:** `splits` in plans 2, 4, 5 and 6 and in `decision-models/` (code, `AGENTS.md`,
+  `README.md`), and `.gitignore`/`git check-ignore` on `decision-models/data/`.
+
+CPG: considered, not relevant — no model-bench CPG is loaded; the script was read, mutated and
+executed directly.
+
+### The five questions
+
+1. **The guard prompt file: in scope, and the right source.**
+   - P22-n1 makes the importer require an existing pack directory and prompt. The new abilities'
+     prompts came with U4.2, but no unit provided the guard's. U3d is the first unit that needs
+     it, and having the importer copy it would break "never writes `prompts/`".
+   - The incumbent pack's file is the right source. FR-1 and FR-2 compare arms on the same pack
+     prompt, so the synthetic pack measures what the stored guard history measures.
+   - `test_the_guard_handoff_prompt_is_a_byte_copy…` binds the two files. Whatever U9 decides
+     about the newline must therefore change both files together (P24-n1).
+2. **`splits.json`: no defined shape exists.**
+   - v1.3 §3.4's tree names the file (`items.jsonl, splits.json, generation.json`).
+   - Plan2 §3.5 and plan4 §3.6 define split *assignment* (by `seedId`, within cells), not a
+     format. Plan4 §3.7 defines `generation.json` and item keys only. Plans 5 and 6 are silent,
+     and decision-models has no split code.
+   - The importer's assumed shape is reasonable. The predicate `labelVotes` keys
+     (`"true"`/`"false"` in the test) are just as unstated. Where they should be homed is P24-m2.
+3. **The git checks fit U5i.**
+   - Plan4 §4.1 makes "dataset version committed" the U5c done-condition. U5i (`teco`) runs
+     after it, so a clean, committed source is exactly what U5i will have.
+   - `decision-models/data/` is not ignored (`check-ignore` exit 1).
+   - An untracked, modified or out-of-repo file refuses before any write (tested).
+   - **Gap:** the guard's side-check source is hashed but not git-checked. Its row reads
+     `— (model-bench)`. That is acceptable for a model-bench file the same commit can carry, but
+     the gap is real.
+   - X1's survival is P24-m1.
+4. **Constants not in the plan.**
+   - **`sampling.seed 20261101`: accept.** It is pack data, fixed before any data exists and the
+     same across re-imports. It selects nothing, so it needs no pin.
+   - **Temperature 0.0 and `maxTokens` 256: accept.** They copy `guard-judge-understanding`'s
+     prompt block. Production's `config/models.json` also sets temperature 0, with no token cap.
+     The run fingerprint records `handoffTemperature`/`handoffMaxTokens`, so any divergence is
+     visible.
+   - **Exit codes 0/1/2: accept.** They match `refresh_golden.py`.
+   - **Candidate overwrite (identical → no-op, other bytes → refused): accept.** It is plan2
+     §3.6's "a file edited in place is a different candidate".
+5. **The pack-count test: a note is not enough** (P24-m3).
+
+### Findings
+
+**P24-m1 (minor; fresh `coder`). The per-file git check and recorded SHA are unpinned.**
+- Every test stubs `source_sha` with one value (`_FAKE_SHA`). The provenance test asserts only
+  that the value appears somewhere, so X1 passes all 263 importer and pack tests.
+- An unchecked `splits.json` could change eval membership from an uncommitted edit, and
+  `PROVENANCE.md` would not show it.
+- **Fix:** make the stub return a distinct SHA per path and record its calls. Assert it was
+  called for exactly `items.jsonl`, `splits.json` and `generation.json`, and that each
+  provenance row carries its own SHA. X1 must then turn red.
+
+**P24-m2 (minor; `architect`, then `teco` for the U5.10 brief). The dataset contract the importer
+reads has no home.**
+- The `splits.json` shape and the predicate `labelVotes` key spelling exist only in the
+  importer's docstring and its test builder.
+- If U5.10 diverges, the importer refuses loudly ("must be a list of itemId strings"), so nothing
+  is silently mis-imported. But the mismatch is found at U5i, after a paid campaign.
+- **Fix:**
+  - State both items beside plan4 §3.7 in plan6, which is in flight and `Extends:` plan4.
+  - Pin them with one minimal dataset vector (`generation.json`, `items.jsonl`, `splits.json`)
+    under `tests/fixtures/decision-contract/`. The importer's tests import it, and U5.10 checks
+    its `finalize` output's shape against a byte-copy under the existing guarded-equality
+    pattern (v1.3 §3.2.2).
+
+**P24-m3 (minor; fresh `coder`, in this fix round).
+`test_every_shipped_pack_validates_unchanged_and_none_is_a_decision_point_pack` breaks on the
+first import.**
+- It asserts `len(roots) == 5` and that no pack has `decisionPoint`.
+- U5i is a `teco` data unit whose done-condition is "the pack validates", so the first import
+  would leave the suite red until a code edit is delegated.
+- **Fix:** name the five legacy packs and keep the assertions for them. Separately, validate every
+  `packs/*-synthetic/` that has a `pack.json`. The committed imports then gain a suite check
+  instead of breaking one. A planted sixth legacy pack and a planted invalid synthetic pack must
+  each turn it red.
+
+**P24-n1 (nit; `teco`). Add to the U9 brief:**
+- `guard-judge-synthetic/prompts/judge.md` is a second copy of the prompt behind the newline
+  question, bound to the first by a byte test.
+- Any prompt edit changes the pack's content hash, so it also needs a re-import under a new
+  `--pack-version`. The importer is the only writer of `pack.json`.
+
+**P24-n2 (nit; fresh `coder`). The guard's prompt parameters are not bound to the incumbent
+pack's.**
+- X7 survives.
+- **Fix:** add a test asserting that the imported guard manifest's `temperature`/`maxTokens`
+  equal `guard-judge-understanding/pack.json`'s.
+- Also rewrap `README.md`'s new 113-character line (the `judge.md` sentence).
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** went from 2,482 to 2,490 words, with no line over 700 characters.
+  Two entries (the prompt home and the FR-23 bullet) were rewritten in place to name the
+  importer. That is new scope, with no history restated.
+- **`README.md`** gains a usage paragraph: new scope.
+- **`HISTORY.md`** gets one entry, read by lookup. Its counts reproduce.
+
+### Proposed REVIEW.md lines
+
+None. P24-m1 is a single instance.

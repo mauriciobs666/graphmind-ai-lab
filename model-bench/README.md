@@ -270,9 +270,32 @@ without `decisionPoint` keeps its looser parse. A new-ability pack (`join-in-jud
 role fixes the scorer (`decisions.SCORER_BY_ROLE`), so a pack declaring another is refused. Its
 `verdictMetrics` are the per-class agreement metrics (`agreeWhenYes`/`agreeWhenNo`, or
 `agree[<label>]` per label), every `eval` item's `expected` must lie in the answer space, and its hand-off prompt is
-`packs/<role>-synthetic/prompts/<point>-handoff.md`. Golden vectors in
+`packs/<role>-synthetic/prompts/<point>-handoff.md` (the guard's,
+`packs/guard-judge-synthetic/prompts/judge.md`, is a byte-copy of `guard-judge-understanding`'s
+judge prompt). Golden vectors in
 `tests/fixtures/decision-contract/` pin this parse and the judge prompt render, and falkor-chat's
 own suite checks its functions against byte-copies of them.
+
+**Importing a decision point's data and candidates** (`scripts/import_decision_pack.py`, one-way,
+human-invoked, never reached from a run; `docs/plans/typed-decision-models.md` §3.4):
+
+```bash
+.venv/bin/python scripts/import_decision_pack.py --role <role> \
+    --dataset ../decision-models/data/<role>/<datasetVersion> --pack-version <new version>
+.venv/bin/python scripts/import_decision_pack.py --candidate <dir>/<candidateId>.json
+```
+
+The first copies the dataset's **eval split only** (the `itemId`s in `splits.json`'s `"eval"`
+list) into the existing `packs/<role>-synthetic/`, rewriting `pack.json`, `items.jsonl` and
+`PROVENANCE.md` and nothing else: `prompts/` is committed pack data the importer never writes, and
+a missing pack directory or prompt is refused. Each eval item keeps its input fields, `expected`,
+`origin`, `genRunId`, `genRound`, `seedId`, `labelVotes` (and `threadPosition` on message type);
+`labels.labeler`/`labels.generator` come from `generation.json`; the guard pack also gets the
+85 items of `guard-judge-understanding` as its `side-check` stratum. The pack must validate before
+anything is written, its source files must be committed (their git SHAs go into `PROVENANCE.md`),
+and an unchanged `--pack-version` is refused. The second copies a candidate and the fit manifest
+its `fitManifest.file` names (never the fit report) into `candidates/`, after both load; a file
+already there with other bytes is refused. Exit `0` imported, `1` refused, `2` bad arguments.
 
 **Scope note — the `embedder` pack scores exact cosine, not the production ANN pipeline.**
 `embedder-graphrag-retrieval` embeds the pack's fixed corpus and queries, then ranks with

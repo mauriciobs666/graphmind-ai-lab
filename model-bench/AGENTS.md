@@ -24,10 +24,11 @@ validation ships flagged "not reproduced" (`docs/HISTORY.md`).
 `decision_stats` (the bar statistics), and `decisions` (typed-decision-models' pure half —
 policies, hashes, `Candidate.load`, bar constants, role tables). Its two new-ability roles,
 `join-in-judge` and `message-type-classifier`, are scored by `scoring/agreement.py` (renderers,
-hand-off parses, per-class agreement, fail-closed answers); their hand-off prompts are pack data in
-`packs/<role>-synthetic/prompts/`. `tests/fixtures/decision-contract/` pins
-those, `decisions`, and `classification`'s guard render, turn normalization and decision-point
-hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
+hand-off parses, per-class agreement, fail-closed answers); every decision point's hand-off prompt
+is pack data in `packs/<role>-synthetic/prompts/`, which the importer never writes.
+`tests/fixtures/decision-contract/` pins those, `decisions`, and `classification`'s guard render,
+turn normalization and decision-point hand-off parse (falkor-chat's `_coerce_verdict`; the old
+pack's stays loose).
 `run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
 the arm's absent models itself before the warm-ups. A guard's
@@ -177,14 +178,15 @@ otherwise `load_history`'s ascending filename order makes `candidates[0]` the ol
   produced them still installs. The one stated reversal trigger (plan §3.2): add `numpy` if a pack's
   corpus exceeds ~1 000 documents or scoring exceeds ~5 s.
 - **Standalone — FR-23.** No runtime code path reads any path outside `model-bench/`. Golden data
-  from `falkor-chat` is *copied in* and versioned here with provenance; the one-way importer
-  `scripts/refresh_golden.py` is a human-invoked maintenance script and is never reachable from a
-  run. **The default test suite holds to the same rule too**: 3 tests that live-verify a copied-in
-  golden asset against its real `falkor-chat/` source carry `tests/conftest.py`'s
-  `requires_falkor_chat` skip guard (a plain `skipif`, not the `live` marker below), so `pytest -q`
-  skips them rather than failing when `falkor-chat/` is absent or renamed. The one reverse edge is
-  test-only: falkor-chat's suite byte-copies `tests/fixtures/decision-contract/` files and asserts
-  them equal to ours unless `model-bench/` is absent (typed-decision-models v1.3 §3.2.2).
+  from `falkor-chat` and decision-models' datasets and candidates are *copied in* and versioned
+  here with provenance by the one-way, human-invoked `scripts/refresh_golden.py` and
+  `scripts/import_decision_pack.py`, never reachable from a run. **The default test suite holds
+  to the same rule too**: 3 tests that live-verify a copied-in golden asset against its real
+  `falkor-chat/` source carry `tests/conftest.py`'s `requires_falkor_chat` skip guard (a plain
+  `skipif`, not the `live` marker below), so `pytest -q` skips them rather than failing when
+  `falkor-chat/` is absent or renamed. The one reverse edge is test-only: falkor-chat's suite
+  byte-copies `tests/fixtures/decision-contract/` files and asserts them equal to ours unless
+  `model-bench/` is absent (typed-decision-models v1.3 §3.2.2).
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
   takes a `packId` and there is no API to load across packs. See `README.md`'s three non-features.
 

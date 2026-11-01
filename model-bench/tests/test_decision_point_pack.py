@@ -109,15 +109,108 @@ def test_200_eval_items_and_the_85_item_side_check_are_accepted(tmp_path):
     assert validate_pack(pack) == []
 
 
-def test_every_shipped_pack_validates_unchanged_and_none_is_a_decision_point_pack():
+#: The packs shipped before `decisionPoint` existed (v1.3 §3.5). Every other pack directory holding
+#: a `pack.json` is a decision point's `packs/<role>-synthetic/`, written by
+#: `scripts/import_decision_pack.py`.
+_LEGACY_PACKS = (
+    "chat-responder-grounded-answers",
+    "embedder-graphrag-retrieval",
+    "guard-judge-understanding",
+    "nlq-structured-query",
+    "tool-caller-shop-assistant",
+)
+
+
+def _shipped_pack_problems(packs_dir: Path) -> list[str]:
+    """Every problem with `packs_dir`'s packs: a legacy pack missing, an unknown non-synthetic pack,
+    a legacy pack carrying `decisionPoint` or failing `validate_pack`, and an imported
+    `*-synthetic` pack lacking `decisionPoint` or failing `validate_pack`. A `*-synthetic`
+    directory without a `pack.json` (only its committed `prompts/`, before the first import) is
+    not a pack and is skipped."""
+    roots = {p.name: p for p in packs_dir.iterdir() if (p / "pack.json").is_file()}
+    synthetic = sorted(name for name in roots if name.endswith("-synthetic"))
+    legacy = sorted(set(roots) - set(synthetic))
+    problems = []
+    if legacy != sorted(_LEGACY_PACKS):
+        problems.append(f"the non-synthetic packs are {legacy}, not {sorted(_LEGACY_PACKS)}")
+    for name in sorted(roots):
+        pack = load_pack(roots[name])
+        is_decision_point = "decisionPoint" in pack.manifest
+        if is_decision_point != (name in synthetic):
+            problems.append(f"{name}: decisionPoint present={is_decision_point}")
+        problems.extend(f"{name}: {problem}" for problem in validate_pack(pack))
+    return problems
+
+
+def test_every_shipped_pack_validates_and_only_imported_synthetic_packs_are_decision_points():
     """The refusals key on `decisionPoint`'s presence (v1.3 §3.5), so no pack shipped before it —
-    none carries the key, labels or strata — gains a problem."""
-    roots = sorted(p for p in _SHIPPED_PACKS.iterdir() if (p / "pack.json").is_file())
-    assert len(roots) == 5
-    for root in roots:
-        pack = load_pack(root)
-        assert "decisionPoint" not in pack.manifest, root.name
-        assert validate_pack(pack) == [], root.name
+    none carries the key, labels or strata — gains a problem. A decision point's pack, once the
+    importer writes it, is checked here too rather than breaking a pack count (impl review
+    P24-m3)."""
+    assert _shipped_pack_problems(_SHIPPED_PACKS) == []
+
+
+def _packs_copy(tmp_path: Path) -> Path:
+    """A `packs/` holding copies of the five legacy packs only, so each plant below is judged on
+    its own whatever the live tree holds."""
+    packs_dir = tmp_path / "packs"
+    for name in _LEGACY_PACKS:
+        shutil.copytree(_SHIPPED_PACKS / name, packs_dir / name)
+    return packs_dir
+
+
+def test_the_legacy_packs_alone_report_nothing(tmp_path):
+    assert _shipped_pack_problems(_packs_copy(tmp_path)) == []
+
+
+def test_a_sixth_legacy_pack_is_reported(tmp_path):
+    packs_dir = _packs_copy(tmp_path)
+    shutil.copytree(packs_dir / "guard-judge-understanding", packs_dir / "guard-judge-extra")
+    problems = _shipped_pack_problems(packs_dir)
+    assert any(p.startswith("the non-synthetic packs are") for p in problems), problems
+
+
+def test_a_missing_legacy_pack_is_reported(tmp_path):
+    packs_dir = _packs_copy(tmp_path)
+    shutil.rmtree(packs_dir / "nlq-structured-query")
+    assert _shipped_pack_problems(packs_dir) == [
+        f"the non-synthetic packs are {sorted(set(_LEGACY_PACKS) - {'nlq-structured-query'})}, "
+        f"not {sorted(_LEGACY_PACKS)}"
+    ]
+
+
+def test_an_invalid_imported_synthetic_pack_is_reported(tmp_path):
+    """A `*-synthetic` pack carrying `decisionPoint` but breaking its rules: here the legacy guard
+    pack with the key added, which `test_the_decision_point_key_alone_switches_every_refusal_on`
+    shows is refused seven ways."""
+    packs_dir = _packs_copy(tmp_path)
+    target = packs_dir / "guard-judge-synthetic"
+    shutil.copytree(packs_dir / "guard-judge-understanding", target)
+    manifest = json.loads((target / "pack.json").read_text())
+    manifest["packId"] = "guard-judge-synthetic"
+    manifest["decisionPoint"] = {}
+    (target / "pack.json").write_text(json.dumps(manifest))
+    problems = _shipped_pack_problems(packs_dir)
+    assert problems and all(p.startswith("guard-judge-synthetic: ") for p in problems), problems
+
+
+def test_a_synthetic_pack_without_decision_point_is_reported(tmp_path):
+    packs_dir = _packs_copy(tmp_path)
+    target = packs_dir / "guard-judge-synthetic"
+    shutil.copytree(packs_dir / "guard-judge-understanding", target)
+    assert _shipped_pack_problems(packs_dir) == [
+        "guard-judge-synthetic: decisionPoint present=False"
+    ]
+
+
+def test_a_legacy_pack_carrying_decision_point_is_reported(tmp_path):
+    packs_dir = _packs_copy(tmp_path)
+    manifest_path = packs_dir / "nlq-structured-query" / "pack.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["decisionPoint"] = {}
+    manifest_path.write_text(json.dumps(manifest))
+    problems = _shipped_pack_problems(packs_dir)
+    assert "nlq-structured-query: decisionPoint present=True" in problems, problems
 
 
 def test_the_decision_point_key_alone_switches_every_refusal_on(tmp_path):
