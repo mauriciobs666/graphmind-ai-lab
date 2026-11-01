@@ -396,6 +396,27 @@ def test_a_claude_at_or_above_the_floor_installs_as_an_integer_tuple(
     assert len(made.expectations()) == 1
 
 
+def test_the_version_is_read_from_stderr_too(tmp_path: Path) -> None:
+    binary = Path(__import__("shutil").which("claude"))
+    binary.write_text("#!/bin/sh\necho '2.1.316 (Claude Code)' >&2\n", "utf-8")
+    assert runner.claude_version_refusal(__import__("os").environ) is None
+    binary.write_text("#!/bin/sh\necho '2.1.294' >&2\n", "utf-8")
+    assert "older than 2.1.295" in runner.claude_version_refusal(__import__("os").environ)
+
+
+def test_a_hung_claude_version_is_a_refusal_not_a_raised_timeout(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    binary = Path(__import__("shutil").which("claude"))
+    binary.write_text("#!/bin/sh\nsleep 30\n", "utf-8")
+    real = runner.subprocess.run
+    monkeypatch.setattr(runner.subprocess, "run",
+                        lambda argv, **kw: real(argv, **{**kw, "timeout": 0.3}))
+    message = runner.claude_version_refusal(__import__("os").environ)
+    assert message is not None and "could not run (TimeoutExpired)" in message
+    made = fresh_campaign(tmp_path)
+    refuses(made, "TimeoutExpired")
+
+
 def test_the_floor_is_2_1_295() -> None:
     assert runner.MIN_CLAUDE_VERSION == (2, 1, 295)
 
