@@ -29,9 +29,9 @@ ROWS = [
         "POST /services/T024BE7LD/B01ABCDEFGH/{#}",
     ),
     ("K11", "GET /t/3f2a9c1e5b7d/x7k2q9w4m1p8z3v6/info", "GET /t/{#}/{#}/info"),
-    # K12: steps 1, 4, 5 give this; the trailing "/" and its empty segment are kept.
+    # K12: steps 1, 4, 6 give this; the trailing "/" and its empty segment are kept.
     ("K12", "POST /hooks/x7k2q9w4m1p8z3v6/", "POST /hooks/{#}/"),
-    # K13: step 6 decodes %6d (-> "m") before 8a, so the screen sees the decoded run.
+    # K13: step 5 decodes %6d (-> "m") before 8a, so the screen sees the decoded run.
     ("K13", "GET /hooks/x7k2q9w4m1p8z3v6", "GET /hooks/{#}"),
     # K14: %2F stays, uppercased, and splits the runs, so the segment passes.
     ("K14", "GET /a/x7k2q9w4%2Fm1p8z3v6", "GET /a/x7k2q9w4%2Fm1p8z3v6"),
@@ -54,7 +54,7 @@ ROWS = [
     ("K22", "GET /x7k2q9w4m1p8z3v6", "GET /{#}"),
     # K30: step 7 rewrites only a wholly-parameter segment; this one is a literal.
     ("K30", "GET /f/{x7k2q9w4m1p8z3v6}.json", "GET /f/{#}"),
-    # K31 / K32: step 5 already resolved the dot segments (K31's masked segment is gone).
+    # K31 / K32: step 6 already resolved the dot segments (K31's masked segment is gone).
     ("K31", "GET /a/b", "GET /a/b"),
     ("K32", "GET /a/x7k2q9w4m1p8z3v6", "GET /a/{#}"),
     ("K33", "POST /hooks/x7k2q9w4m1p8", "POST /hooks/x7k2q9w4m1p8"),
@@ -127,7 +127,7 @@ def test_verb_is_never_screened():
 
 
 def test_empty_segments_are_kept_verbatim():
-    # Consecutive slashes are step 5's business; 8a keeps whatever empty segments it is given.
+    # Consecutive slashes are step 6's business; 8a keeps whatever empty segments it is given.
     assert mask("GET //a//x7k2q9w4m1p8z3v6/", "{#}") == "GET //a//{#}/"
 
 
@@ -146,7 +146,7 @@ def test_adjacent_placeholders_are_not_screened_even_if_inside_a_long_run():
 
 
 def test_encoded_dot_segments_are_not_this_functions_business():
-    # Step 6 then step 5 turn "GET /a/%2E%2E/b" into "GET /b" (K42, F-13 order). The input here
+    # Step 5 then step 6 turn "GET /a/%2E%2E/b" into "GET /b" (K42, F-13 order). The input here
     # is that result; a not-yet-resolved form is passed through unchanged, never resolved by 8a.
     assert mask("GET /b", "{#}") == "GET /b"
     assert mask("GET /a/%2E%2E/b", "{#}") == "GET /a/%2E%2E/b"
@@ -154,7 +154,7 @@ def test_encoded_dot_segments_are_not_this_functions_business():
 
 
 def test_masked_segment_hidden_behind_dots_is_gone_before_8a():
-    # K31 under F-13: decode, then resolve -> the failing segment was removed by step 5.
+    # K31 under F-13: decode, then resolve -> the failing segment was removed by step 6.
     # With the pre-8a result as input, nothing remains to mask.
     assert mask("GET /a/b", "{#}") == "GET /a/b"
 
@@ -170,7 +170,7 @@ def test_segment_mixing_failing_run_and_percent_escape_is_masked():
 
 
 def test_8a_never_decodes_percent_escapes():
-    # %6d is "m" only after step 6; 8a screens it as written, where the escape splits the run.
+    # %6d is "m" only after step 5; 8a screens it as written, where the escape splits the run.
     assert mask("GET /x7k2q9w4%6d1p8z3v6", "{#}") == "GET /x7k2q9w4%6d1p8z3v6"
 
 

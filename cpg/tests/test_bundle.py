@@ -1,6 +1,6 @@
 """Tests for ``ccg.bundle`` and ``ccg/schemas/bundle-v1.schema.json``.
 
-Spec: ``docs/plans/connected-code-graph-bundle-spec.md`` v1.3 — §2 (envelope, header), §3 (ids),
+Spec: ``docs/plans/connected-code-graph-bundle-spec3.md`` v1.1 — §2 (envelope, header), §3 (ids),
 §5 (records), §7 (reason codes), §8 (determinism). P0 plan
 ``docs/plans/connected-code-graph-p0.md`` §9.1, row ``ccg/bundle.py + bundle-v1 (S10)``.
 
@@ -290,9 +290,8 @@ import re  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 _PLANS = Path(__file__).resolve().parents[2] / "docs/plans"
-SPEC_TEXT = (_PLANS / "connected-code-graph-bundle-spec.md").read_text(encoding="utf-8")
-#: BS2 v1.3: replaces the clauses its §1 headings name; read with the spec (its §0).
-SPEC2_TEXT = (_PLANS / "connected-code-graph-bundle-spec2.md").read_text(encoding="utf-8")
+#: One source: spec3 v1.1, the consolidation of the bundle spec and spec2.
+SPEC_TEXT = (_PLANS / "connected-code-graph-bundle-spec3.md").read_text(encoding="utf-8")
 
 
 def _section(heading_re: str, text: str | None = None) -> str:
@@ -331,14 +330,14 @@ SPEC_ORDER = ["header"] + _ticks(
 # §3.3's lang tokens.
 SPEC_LANGS = [_ticks(r[1])[0] for r in _table_rows(_section(r"3\.3 "))]
 
-# Table sections: record type -> heading regex (spec), or (heading regex, SPEC2_TEXT) where
+# Table sections: record type -> heading regex (spec), or (heading regex, SPEC_TEXT) where
 # BS2 replaces the table: §1.5 replaces spec §5.14's, §1.6 spec §5.18's launchFact list.
 TABLE_SECTIONS = {
     "header": r"2\.2 ", "file": r"5\.2 ", "symbol": r"5\.3 ", "param": r"5\.4 ",
     "callsite": r"5\.6 ", "valueSet": r"5\.8 ", "constant": r"5\.9 ", "data": r"5\.10 ",
-    "decorator": r"5\.12 ", "fieldAccess": r"5\.13 ", "import": (r"1\.5 ", SPEC2_TEXT),
+    "decorator": r"5\.12 ", "fieldAccess": r"5\.13 ", "import": (r"1\.5 ", SPEC_TEXT),
     "dependency": r"5\.15 ", "configEntry": r"5\.17 ",
-    "launchFact": (r"1\.6 ", SPEC2_TEXT),
+    "launchFact": (r"1\.6 ", SPEC_TEXT),
 }
 
 
@@ -355,7 +354,7 @@ PROSE_RECORDS = {
     "cond": (r"5\.5 ", ["symbolId", "ordinal", "line", "code"], [], {}),
     # BS2 §1.4 replaces §5.11's field sentence: "`point` is any point …, `cond` is a `cond`
     # point, and `point ≠ cond`."
-    "controlledBy": ((r"1\.4 ", SPEC2_TEXT), ["point", "cond"], [], {}),
+    "controlledBy": ((r"1\.4 ", SPEC_TEXT), ["point", "cond"], [], {}),
     # §5.16: symbolId; framework (open list, "…"); kindHint ∈ {…}; evidence ∈ {…}.
     "testMarker": (r"5\.16 ", ["symbolId", "framework", "kindHint", "evidence"], [],
                    {"kindHint": ["unit", "integration", "e2e", "unknown"],
@@ -1381,7 +1380,7 @@ def test_constant_id_uses_the_files_lang_not_the_units():
 PROSE_FIELD_TEXT = {
     "ret": (r"5\.5 ", r"\*\*`ret`\.\*\*.*?Fields:(.*?)(?=\n- \*\*`cond`)"),
     "cond": (r"5\.5 ", r"\*\*`cond`\.\*\*.*?Fields:(.*)"),
-    "controlledBy": ((r"1\.4 ", SPEC2_TEXT), r"^(.*?) A `cond`→`cond` record"),
+    "controlledBy": ((r"1\.4 ", SPEC_TEXT), r"^(.*?) A `cond`→`cond` record"),
     "testMarker": (r"5\.16 ", r"Fields:(.*)"),
     "schemaEntry": (r"5\.18 ", r"\*\*`schemaEntry`\.\*\*.*?Fields:(.*?)Graph:"),
     "secretSighting": (r"5\.19 ", r"Fields \(.*?\):(.*?)\*\*v1 writers"),
@@ -1465,8 +1464,9 @@ def test_schema_alone_rejects_non_ip_colon_shapes(value):
 
 
 def _spec_secret_tokens() -> list[str]:
-    row = next(c for c in _table_rows(_section(r"5\.17 ")) if _ticks(c[0]) == ["bindValue"])
-    m = re.search(r"substring\*\* match on (.*?);", row[3])
+    """§1.7.3's 'the original 15' substring words."""
+    text = _section(r"1\.7\.3 ")
+    m = re.search(r"the original 15:(.*?);", text, re.S)
     assert m
     return _ticks(m.group(1))
 
@@ -1631,8 +1631,9 @@ def test_vendored_name_as_a_files_basename_is_not_vendored():
     bundle.validate(recs)
 
 
-# === BS2 v1.3 (docs/plans/connected-code-graph-bundle-spec2.md, §4.1's S10 items) ==========
+# === BS2 v1.3 (docs/plans/connected-code-graph-bundle-spec3.md, §4.1's S10 items) ==========
 
+import math  # noqa: E402
 import shlex  # noqa: E402
 
 # --- vector tables, parsed from BS2's text (§1.6.3: "never retyped into the test") ----------
@@ -1640,7 +1641,7 @@ import shlex  # noqa: E402
 def _vector_rows(prefix: str) -> dict[str, list[str]]:
     """Every ``| <prefix>-N | … |`` row of BS2, by id, as stripped cells."""
     out = {}
-    for line in SPEC2_TEXT.splitlines():
+    for line in SPEC_TEXT.splitlines():
         m = re.match(rf"^\| ({prefix}-\d+) \|", line)
         if m:
             out[m.group(1)] = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip())[1:-1]]
@@ -1722,7 +1723,7 @@ def test_bv_vector_outcome(bv_id):
 # --- the 36 words (§1.7.3), parsed --------------------------------------------------------
 
 def _spec2_words() -> tuple[list[str], list[str]]:
-    text = _section(r"1\.7\.3 ", SPEC2_TEXT)
+    text = _section(r"1\.7\.3 ", SPEC_TEXT)
     sub = text[text.index("as a substring of the folded segment"):text.index(
         "as a whole folded token")]
     whole = text[text.index("as a whole folded token"):text.index("The total stays")]
@@ -1770,7 +1771,7 @@ def test_name_rule_cases_from_spec2_1_7_3(name, fails):
 # --- the token screen (§1.7.1), examples parsed ------------------------------------------
 
 def _t6_examples() -> tuple[list[str], list[str]]:
-    text = _section(r"1\.7\.1 ", SPEC2_TEXT)
+    text = _section(r"1\.7\.1 ", SPEC_TEXT)
     t6 = text[text.index("**T6"):text.index("**Scope of the screen")]
     fail_part, pass_part = t6.split("So these fail:")[1].split("pass.")[0].rsplit("\n\n", 1)
     fails = [t for t in _ticks(fail_part) if len(t) > 3]
@@ -1852,15 +1853,26 @@ SEPARATOR_PLACEMENTS = [  # §1.6.3 placements 9–11, the separator axis (v1.3)
 PREFIXES = [[], ["--auth-enabled"], ["--log4jConfigurationFile1"], ["-Xmx2g"], ["-q7zz"]]
 
 
-def _probe_counts() -> dict[str, tuple[int, str]]:
-    """§1.6.3's 'Observed' table: check -> (cells, in-clear cell text)."""
-    text = _section(r"1\.6\.3 ", SPEC2_TEXT)
-    rows = {}
-    for line in text.splitlines():
-        m = re.match(r"^\s*\| ([^|]+?) \| ([\d,]+) \| (.+?) \|$", line)
-        if m:
-            rows[m.group(1)] = (int(m.group(2).replace(",", "")), m.group(3))
-    return rows
+def _probe_counts() -> dict[str, int]:
+    """§1.6.3's pass-condition formulas: check -> cell count, parsed from the text.
+
+    Each formula reads ``a × b × … = **N**`` (or ``= N``); the product of its factors must equal
+    the stated N, so a slipped factor or a slipped total in the spec is itself a failure.
+    """
+    text = _section(r"1\.6\.3 ")
+    keys = {"grid": "the grid", "separator": "the separator axis",
+            "allow-list": "**The allow-list prefix grid**", "transplant": "**BS-M1's transplant**"}
+    found = {}
+    for name, marker in keys.items():
+        start = text.index(marker)
+        m = re.search(r"((?:\d[\d,]*\s*×\s*)+\d[\d,]*)\s*=\s*\*{0,2}(\d[\d,]*)\*{0,2}",
+                      text[start:].replace("\n", " "))
+        assert m, name
+        factors = [int(f.replace(",", "")) for f in re.split(r"\s*×\s*", m.group(1))]
+        total = int(m.group(2).replace(",", ""))
+        assert math.prod(factors) == total, (name, factors, total)
+        found[name] = total
+    return found
 
 
 def _leaks(placements, needle=V) -> tuple[int, list]:
@@ -1879,17 +1891,15 @@ def _leaks(placements, needle=V) -> tuple[int, list]:
 
 
 def test_probe_grid_has_no_value_in_clear():
-    expected_cells, in_clear = _probe_counts()["Grid"]
     cells, leaks = _leaks(PLACEMENTS)
-    assert cells == expected_cells == 17_280
-    assert leaks == [] and in_clear == "**0**"
+    assert cells == _probe_counts()["grid"]
+    assert leaks == []
 
 
 def test_probe_separator_axis_has_no_value_in_clear():
-    expected_cells, in_clear = _probe_counts()["Separator axis"]
     cells, leaks = _leaks(SEPARATOR_PLACEMENTS)
-    assert cells == expected_cells == 6_480
-    assert leaks == [] and in_clear == "**0**"
+    assert cells == _probe_counts()["separator"]
+    assert leaks == []
 
 
 def _transplant_flag(key_path: str) -> str:
@@ -1899,8 +1909,10 @@ def _transplant_flag(key_path: str) -> str:
 
 
 def test_probe_bs_m1_transplant_leaves_only_the_bare_positional_residual():
-    expected_cells, in_clear = _probe_counts()["Transplant"]
-    expected_leaks = int(in_clear.split(",")[0])
+    expected_cells = _probe_counts()["transplant"]
+    # §1.6.3 names the one residual: "only BV-11's `4821`, as a bare positional"; the leak count
+    # (BV-11 under two prefixes) is observed behaviour, not stated by the spec.
+    expected_leaks = 2
     cells, leaks = 0, []
     for i in range(6, 21):
         key_path, _, value, binds = _bv(f"BV-{i}")
@@ -1916,9 +1928,9 @@ def test_probe_bs_m1_transplant_leaves_only_the_bare_positional_residual():
                 cells += 1
                 if any(value in el for el in out):
                     leaks.append((f"BV-{i}", "positional" if place is None else col, pre))
-    assert cells == expected_cells == 675
+    assert cells == expected_cells
     assert all(c == "positional" for _, c, _ in leaks), leaks
-    assert len(leaks) == expected_leaks == 2
+    assert len(leaks) == expected_leaks
     assert {b for b, _, _ in leaks} == {"BV-11"}
     assert _transplant_flag("services.app.command[2]") == "command"
 
@@ -2098,7 +2110,7 @@ T6_SEPARATORS = [
 
 
 def test_t6_separator_table_matches_the_spec_class():
-    text = _section(r"1\.7\.1 ", SPEC2_TEXT)
+    text = _section(r"1\.7\.1 ", SPEC_TEXT)
     removed = re.search(r"with (.*?) removed, leaves", text, re.S).group(1)
     assert sorted(_ticks(removed)) == sorted(s for s, _, _ in T6_SEPARATORS)
 
@@ -2126,6 +2138,15 @@ ALLOW_LIST_ENTRIES = ["-jar", "-cp", "-classpath", "-port", "-addr", "-host", "-
                       "-verbose:gc"]
 
 
+def test_allow_list_entries_are_the_spec_representatives():
+    """§1.6.3's allow-list prefix grid names its 18 representatives."""
+    text = _section(r"1\.6\.3 ")
+    bullet = text[text.index("**The allow-list prefix grid**"):]
+    bullet = bullet[bullet.index("The entries are"):bullet.index("which stands for")]
+    assert _ticks(bullet) == ALLOW_LIST_ENTRIES
+    assert len(ALLOW_LIST_ENTRIES) == 18
+
+
 def test_allow_list_entries_are_flags():
     for e in ALLOW_LIST_ENTRIES:
         assert bundle.gate_argv(["x", e]) == ["x", e], e
@@ -2141,14 +2162,14 @@ def test_allow_list_prefix_grid_has_no_value_in_clear():
                 cells += 1
                 if any(V in el for el in out):
                     leaks.append(argv)
-    assert cells == len(ALLOW_LIST_ENTRIES) * 432 * 11 == 85_536
+    assert cells == _probe_counts()["allow-list"]
     assert leaks == []
 
 
 # === BS10-P2-M1: freeze-bearing lists, shapes and thresholds, probed both ways ===============
 
 def _class2_text() -> str:
-    text = _section(r"1\.6\.1 ", SPEC2_TEXT)
+    text = _section(r"1\.6\.1 ", SPEC_TEXT)
     return text[text.index("**exact strings:**"):text.index("An entry is a flag only if")]
 
 
@@ -2231,7 +2252,7 @@ def test_xx_shape_name_is_capitalised_and_case_sensitive(sign):
 
 
 def _spec_t5_prefixes() -> list[str]:
-    text = _section(r"1\.7\.1 ", SPEC2_TEXT)
+    text = _section(r"1\.7\.1 ", SPEC_TEXT)
     return _ticks(text[text.index("case-sensitive prefixes:"):text.index("**T6")])
 
 

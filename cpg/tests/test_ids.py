@@ -1,12 +1,13 @@
 """Tests for ``ccg.ids`` — the id hash and canonical tuples.
 
-Spec: ``docs/plans/connected-code-graph-bundle-spec.md`` v1.3 §3.1 (hash), §3.2 (tuples),
+Spec: ``docs/plans/connected-code-graph-bundle-spec3.md`` v1.1 §3.1 (hash), §3.2 (tuples),
 §3.6 (golden vectors). Every expected id below is **copied from the spec's §3.6 table**, never
 computed by the code under test. Ids that §3.6 states inside a row (the enclosing symbol of
 GV-14/GV-17/GV-20 and GV-20's call site) are copied the same way, as ``GV-14s`` etc.
 """
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +91,26 @@ GOLDEN = [
 @pytest.mark.parametrize(("vector", "tup", "expected"), GOLDEN, ids=[g[0] for g in GOLDEN])
 def test_golden_vector_reproduces_via_hash(vector, tup, expected):
     assert ids.tuple_id(tup) == expected
+
+
+SPEC_PATH = Path(__file__).resolve().parents[2] / "docs/plans/connected-code-graph-bundle-spec3.md"
+
+
+def _spec_gv_ids(text: str) -> dict[str, str]:
+    """§3.6's rows: ``GV-n`` -> the id in the ``id`` column."""
+    return {m.group(1): m.group(2) for m in re.finditer(
+        r"^\| (GV-\d+) \|.*\| `([0-9a-f]{32})` \|", text, re.M)}
+
+
+def test_hard_coded_golden_ids_equal_the_spec_s3_6_table():
+    spec = _spec_gv_ids(SPEC_PATH.read_text(encoding="utf-8"))
+    assert len(spec) == 22
+    ours = {v: e for v, _, e in GOLDEN}
+    assert {v: ours[v] for v in spec} == spec
+    # the ids §3.6 states inside GV-14, GV-17 and GV-20 rows
+    text = SPEC_PATH.read_text(encoding="utf-8")
+    for stated in (SYM_GET_HEALTH, SYM_HTTPERR_INIT, SYM_TOOLS_CLOSE, CS_CLOSE_SOON_1):
+        assert stated in text
 
 
 # The same vectors through the §3.2 constructors (the tag is the constructor's job, not the
