@@ -40,19 +40,51 @@ DECISION_POINT_CHAT_TIMEOUT_SECONDS = 180
 
 # --- pinned tables ------------------------------------------------------------------------------
 
-#: v1.3 §3.5: a decision point's bar kind comes from its role, never from the pack. `guard-judge`
-#: only until U4 adds `join-in-judge` and `message-type-classifier` (both `new-ability`).
-BAR_KIND_BY_ROLE: Mapping[str, str] = MappingProxyType({"guard-judge": "speed-up"})
+#: v1.3 §3.5: a decision point's bar kind comes from its role, never from the pack.
+BAR_KIND_BY_ROLE: Mapping[str, str] = MappingProxyType(
+    {
+        "guard-judge": "speed-up",
+        "join-in-judge": "new-ability",
+        "message-type-classifier": "new-ability",
+    }
+)
 
 #: Plan2 §3.3: what a failed **hand-off chat call** does to the item. `withhold` keeps today's
 #: behaviour; `fail-closed` keeps the item scored as the fail-closed answer. Keyed exactly like
-#: `BAR_KIND_BY_ROLE` (U4 adds the two `fail-closed` rows); U2 is the first consumer.
-HANDOFF_FAILURE_BY_ROLE: Mapping[str, str] = MappingProxyType({"guard-judge": "withhold"})
+#: `BAR_KIND_BY_ROLE`.
+HANDOFF_FAILURE_BY_ROLE: Mapping[str, str] = MappingProxyType(
+    {
+        "guard-judge": "withhold",
+        "join-in-judge": "fail-closed",
+        "message-type-classifier": "fail-closed",
+    }
+)
 
-#: v1.3 §3.5: the item fields `input_hash` covers, per model-bench role. `guard-judge` only until
-#: U4 adds the other two rows.
+#: v1.3 §3.5: the item fields `input_hash` covers, per model-bench role; the
+#: `message-type-classifier` row is plan2 §3.1's (`priorTurn` added, note §Q1.5). Keyed exactly
+#: like `BAR_KIND_BY_ROLE`.
 INPUT_FIELDS_BY_ROLE: Mapping[str, tuple[str, ...]] = MappingProxyType(
-    {"guard-judge": ("condition", "understanding", "turns", "path")}
+    {
+        "guard-judge": ("condition", "understanding", "turns", "path"),
+        "join-in-judge": ("agentName", "priorTurns", "newMessage"),
+        "message-type-classifier": ("text", "priorTurn"),
+    }
+)
+
+#: FR-10: message-type classification uses exactly these five labels (small talk is `other`).
+MESSAGE_TYPE_LABELS: tuple[str, ...] = ("order", "question", "complaint", "escalation", "other")
+
+#: v1.3 §3.2's answer-space column, per role: the `decisionPoint.answer` a decision-point pack of
+#: that role must declare (`validate_pack`; a choice's labels compared as a set). Keyed exactly
+#: like `BAR_KIND_BY_ROLE`.
+ANSWER_SPACE_BY_ROLE: Mapping[str, Mapping[str, Any]] = MappingProxyType(
+    {
+        "guard-judge": MappingProxyType({"type": "predicate"}),
+        "join-in-judge": MappingProxyType({"type": "predicate"}),
+        "message-type-classifier": MappingProxyType(
+            {"type": "choice", "labels": MESSAGE_TYPE_LABELS}
+        ),
+    }
 )
 
 #: Plan2 §3.2 / note §Q2.0: the rung a fit reached. Every outcome is evaluated (FR-4).

@@ -2581,3 +2581,151 @@ no such conversation or item. If the server is down, the run exits 3 here instea
 
 None. P20-n1's class, a narrowed catch with nothing pinning its narrowness, is already covered
 by root `REVIEW.md`'s rule that every check can both fail and pass.
+
+## Pass 21 — U4.1 new roles, tables, renderers, parses, vectors (2026-11-01)
+
+*2026-11-01. Gate of U4.1, uncommitted on `d7c7465a`: model-bench `modelbench/{roles,decisions,packs}.py`,
+the new `scoring/agreement.py`, tests, 5 new vectors and 6 new `input-hash.jsonl` rows, `AGENTS.md`/`README.md`/`HISTORY.md`;
+falkor-chat `scripts/generate_guard_decision_vectors.py`, `server/tests/test_decision_contract.py`
+and the new `normalize-turns.jsonl` copy. Read against v1.3 §3.2, §3.2.1, §3.2.2, §3.5, §3.6, §4 U4 and
+the `| U4 |` rows; plan2 §3.1, §3.3, §4.1 U4; plan3 §4.1 U4; plan4/plan5 where they name U4; note
+§Q1.5; the ledger's U4.1–U4.3 rows and its "U4 brief" lines.*
+
+**Verdict: approve with suggestions.** The tables, renderers, parses and hash rows match the plans,
+and every vector matches an independent check. There is no blocker or major. There are two minor
+findings: a plan deliverable that no U4.x row owns (P21-m1, `teco`), and a renderer rule that its
+vectors don't pin (P21-m2, `coder`). There are three nits.
+
+**Checks run:**
+- **model-bench** (from `model-bench/`): `3275 passed, 5 deselected, 2 xfailed`, and `ruff check .`
+  is clean.
+- **falkor-chat** (from `server/`): `tests/test_decision_contract.py` alone gives `131 passed`. That
+  is the review-safe subset; the tests that wipe `reference` were not run.
+- **Generator re-run** into a scratch dir: `render-guard`, `handoff-parse-guard` and
+  `normalize-turns.jsonl` are byte-identical to model-bench's canonical copies, and all three
+  falkor-chat copies are `cmp`-equal to model-bench's.
+- **Mutants:** 6 of mine, each on a live file copied aside, run against the full suite and
+  restored with `cmp`. The final sha256 over `modelbench/` and `tests/` matches the starting one.
+  Results, by number of failing tests:
+
+  | Mutant | Result |
+  |---|---|
+  | M1 `input_hash` writes an absent field as `null` | 3 red |
+  | M2 message-type `priorTurn` speaker re-derived by the row rule | 6 red |
+  | M3 join-in new message's speaker skips `authorId` | **survives** (P21-m2) |
+  | M4 `ensure_ascii=True` | 7 red |
+  | M5 one `expected` edited in model-bench's `normalize-turns.jsonl` | 1 red in model-bench, 1 red in falkor-chat |
+  | M6 non-string new-message text passed through `str()` | **survives** (P21-n3) |
+- **Delegate's 58 mutants:** I read `scratchpad/u41/mutant_results.json`. Every mutant went red,
+  and all are restored.
+
+CPG: considered, not relevant — a `cpg_falkorchat` CALL lookup for `_recent_turns` returned no rows,
+so I used grep, which finds one caller (`guards.py:244`); no model-bench CPG is loaded, and the code
+was read and executed directly.
+
+### Rulings (a)–(d)
+
+- **(a) Canonical item form, guard exempt: sound.** v1.3 §3.5's `if k in item` stays the guard's
+  rule: `input-hash.jsonl`'s absent-is-omitted row pins it, and M1 turns it red. For new-ability
+  items, `validate_pack` makes the rule a no-op. decision-models agrees with that form:
+  `points.input_field_errors` demands "exactly the input fields", and its message-type generator
+  writes `priorTurn: null` for an opening message. So both sides hash the same canonical form. The
+  guard's only path-dependent items are its human-curated side-check rows (`cs-07`).
+- **(b) `ANSWER_SPACE_BY_ROLE`, `MESSAGE_TYPE_LABELS`: accept.** They put v1.3 §3.2's answer-space
+  column into data. A table is needed so that the per-class `verdictMetrics` set derives from the
+  role. If it derived from the pack's own `answer`, a pack could choose its own classes. The table
+  also adds a refusal to the guard pack; the guard contract fixture still passes it.
+- **(c) Import of the private `_normalize_turns`: accept.** It is in the same package, and one
+  transcription of `_recent_turns` is better than two. `normalize-turns.jsonl` now pins it. The
+  model-bench copy does not tolerate non-Mapping rows, which is the item domain the generator
+  docstring excludes.
+- **The four carried items are all delivered:**
+  - Pass 6: `test_a_guard_candidate_on_a_join_in_pack_refuses_on_role_before_any_call` asserts that
+    no load call and no chat call happen. The delegate's mutant 57 turns it red (2 tests).
+  - P13-n1: see (d).
+  - The exact per-class refusal: 11 refused shapes and 2 accepted orders.
+  - P2-F3: `normalize-turns.jsonl` (see the vector checks below).
+- **(d) Keyed on the bar kind: accept.** The P13-n1 test re-keys join-in to speed-up and goes red on
+  the pair. The delegate's mutant 49 turns it red.
+
+### Vector provenance
+
+- **Hand-written vectors.** `write_hand_vectors.py` imports only `json`, `sys` and `pathlib`, and its
+  expected strings are literals. I wrote a separate implementation from v1.3 §3.2.1 and note §Q1.5
+  text alone. It agrees on all 18 render rows, including:
+  - every 400 and 2000 cut, tested on both sides of its boundary;
+  - every prior turn filtered out, which omits the block;
+  - filtering before taking the last 6;
+  - an agent speaker on `priorTurn`.
+- **Hash rows.** I recomputed all 10 `input-hash.jsonl` rows with stdlib `hashlib` over v1.3 §3.5's
+  formula, and all 10 match.
+- **Gap.** One speaker branch of the new message is not pinned (P21-m2).
+
+### Findings
+
+**P21-m1 (minor; `teco`). Two U4 obligations are in no U4.x row.**
+- **The two hand-off prompts.** v1.3 §4 U4 places "the two hand-off prompts as pack data" in U4
+  (§3.2's `prompts/join-in-handoff.md` and `prompts/message-type-handoff.md`). No later plan
+  reassigns them, and U4.1 did not write them. The ledger's U4.2 row (predicate/choice,
+  fail-closed, `reason`, `perClass`) does not name them, and neither does the U4.3 row. The
+  `handoff` surface sends a pack's `systemPrompt`, so without these prompts no new-ability pack can
+  run that surface. v1.3 §3.2.2 lists hand-off prompts among the copies falkor-chat (U9) must keep
+  equal.
+- **The new-ability item checks.** `_classification_item_problems` (`packs.py:1242`, P12-m1) runs
+  only when `scorer == "classification"`. So nothing refuses a join-in item whose `expected` is not
+  a bool, or a message-type item whose label is outside the answer space, and a run would raise
+  partway through. The U4.2 row does not carry this check.
+- **Fix:** add both to the U4.2 row: the prompts as pack data, plus an `agreement` item check that
+  mirrors P12-m1. Or name another owner for the prompts and state their copy rule for U9.
+- **Evidence:** I grepped all five plans and the ledger rows. Verified.
+
+**P21-m2 (minor; fresh `coder`). The new message's `authorId` fallback is not pinned.**
+- The `render-join-in.jsonl` case "speaker rule: … on prior turns and the new message" gives its
+  new message no `displayName` and no `authorId`, so only the `member` branch runs.
+- M3 replaces the rule with `displayName or "member"`, and the suite still passes (3275).
+- So a U9 or U5.2b-render port that skips `authorId`, or treats an empty `displayName` as a value,
+  would pass these vectors. model-bench `REVIEW.md` requires the vectors to cover every rule the
+  docstring claims, and `render_join_in_input`'s docstring claims "the same speaker rule".
+- **Fix:** add one hand-written row whose `newMessage` is
+  `{"displayName": "", "authorId": "u9", "text": "…"}`, expected to render as `u9: …`. M3 must then
+  go red. Land the row before U5.2b-render copies the vectors, so it needs no re-copy.
+- **Evidence:** executed.
+
+**P21-n1 (nit; `teco`). The behavioural pins for mutants 5 and 22 belong in the U4.2 and U4.3
+briefs.**
+- Exact-table pins are acceptable until then. They are hand transcriptions, they can fail, and they
+  don't read their expected values from the table.
+- Plan2 §3.3 says the value pin is the kept-versus-withheld test.
+  - **U4.2 brief:** run P9-m3's real-scorer test over *both* new-ability roles, with
+    `HANDOFF_FAILURE_BY_ROLE` unpatched. Run on join-in alone, the test leaves mutant 5
+    (message-type → `withhold`) to the exact-table pin.
+  - **U4.3 brief:** the FR-10 section on a message-type pack prints the `item` unit, which turns
+    mutant 22 red.
+
+**P21-n2 (nit; `coder`). Stale text.**
+- `README.md:227` still says a pack's `role` is "one of the five FR-21 roles" and lists five;
+  `ROLES` now has seven.
+- `tests/test_roles.py:90` and `:125` quote `UnknownRole`'s old docstring, "There is no sixth".
+- **Fix:** edit both in place.
+
+**P21-n3 (nit; `coder`, take or leave). A non-string new-message text renders as `""`.**
+`render_join_in_input` has this rule, which no plan states, and M6 survives it.
+`render_message_type_input` raises on the same input. decision-models' schema forces a non-empty
+string. **Fix:** drop the coercion, so a malformed item raises in the same way in both renderers.
+Alternatively, pin the rule with a vector row.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** has 2,488 words and no line over 700 characters.
+  - **New scope:** the role-tables sentence and the `validate_pack` sentence are rewritten in place.
+  - **Compressions:** three passages were compressed, and none loses a live constraint.
+    - `test_package.py` drops "Keep it: pytest exits 5…". Its rationale is in `HISTORY.md:5444-5449`,
+      and a 3,275-test suite cannot be empty.
+    - The sentence-scoping paragraph and the `sessionId` paragraph each keep their rule and their
+      failure mode.
+- **`HISTORY.md`** is read by lookup and has one entry. Its figures reproduce: 3275/5/2, 131, six
+  hash rows, and 58 mutants all red.
+
+### Proposed REVIEW.md lines
+
+None. P21-m2 is covered by model-bench `REVIEW.md`'s vector-coverage line.

@@ -10,11 +10,11 @@ one shared fake clock (`_StubClock`) by each call's own duration, so an item's `
 exactly the calls the item clock spans (impl review P9-M1). Nothing here writes under
 `model-bench/results/`.
 
-The new-ability (`fail-closed`) rows have no role to run on yet — `HANDOFF_FAILURE_BY_ROLE` holds
-the guard alone until U4 — so those tests patch the runner's copy of the table to make the guard
+The new-ability (`fail-closed`) rows exist in `HANDOFF_FAILURE_BY_ROLE` (U4.1), but their scorer
+(`agreement.py`) is U4.2's, so those tests patch the runner's copy of the table to make the guard
 fixture `fail-closed`, and use a scorer that accepts `failed_call="handoff"`, which
 `classification.score_answer` (the guard's) refuses by design. That is plan2 §5 U2's "join-in
-fixture" in the only shape available before U4.
+fixture" in the only shape available before U4.2.
 """
 
 from __future__ import annotations
@@ -219,7 +219,7 @@ def _counts(metric) -> tuple[int, int]:
 
 class FailClosedScorer:
     """`classification`'s hooks, plus a `score_answer` that accepts `failed_call="handoff"` and
-    records the keywords it was handed. Stands in for U4's fail-closed scorer, with the guard
+    records the keywords it was handed. Stands in for U4.2's fail-closed scorer, with the guard
     fixture's table row patched to `fail-closed` (module docstring)."""
 
     decision_input = staticmethod(classification.decision_input)

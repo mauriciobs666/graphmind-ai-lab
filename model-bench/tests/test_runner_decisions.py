@@ -654,6 +654,24 @@ def test_a_candidate_for_another_role_refuses(tmp_path):
     assert exc.exitCode == 4 and "a 'guard-judge' candidate" in str(exc)
 
 
+def test_a_guard_candidate_on_a_join_in_pack_refuses_on_role_before_any_call(tmp_path):
+    """Impl review Pass 6: now that `join-in-judge` has an input-field row, a guard candidate on a
+    join-in pack passes every later check — the hash, the predicate answer space, the hooks, the
+    catalog — so the role check alone stands between it and a run. Behavioural, not only by
+    message: with the role check gone this run proceeds and makes its calls."""
+
+    def join_in(manifest):
+        manifest["role"] = "join-in-judge"
+        manifest["decisionPoint"]["incumbent"] = None
+
+    _workspace(tmp_path, manifest_edit=join_in)
+    lms = DecisionStub(decide_responses=_four(0.9, 0.1, 0.9, 0.1))
+    exc = _refused(tmp_path, lms)
+    assert lms.load_calls == [] and lms.chat_calls == []
+    assert exc.exitCode == 4
+    assert "a 'guard-judge' candidate and the pack's role is 'join-in-judge'" in str(exc)
+
+
 def test_an_unloadable_candidate_refuses(tmp_path):
     _workspace(tmp_path, fit={"outcome": "promising", "qualityTarget": "D_c<=0"})
     exc = _refused(tmp_path, DecisionStub())
@@ -1118,7 +1136,7 @@ def test_build_fingerprint_takes_decision_fields_iff_the_surface_is_decisions(tm
 
 def test_a_choice_decision_scores_its_chosen_value_with_the_confidence_as_probability(tmp_path):
     """v1.3 §3.3: `probability` is a predicate's p, or a choice's **confidence** — never one of
-    its per-value probabilities. No choice role is built yet (U4), so the candidate is a loaded
+    its per-value probabilities. No choice scorer is built yet (U4.2), so the candidate is a loaded
     one re-shaped to a choice question and the scorer records what it is handed."""
     _workspace(tmp_path)
     loaded = Candidate.load(tmp_path, _CANDIDATE_ID)

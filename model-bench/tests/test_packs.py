@@ -474,6 +474,8 @@ _ROUTE_III_WRONG_PAIRING_KEY_HEAD: dict[str, str] = {
     "nlq-generator": "scriptId",
     "chat-responder": "scriptId",
     "embedder": "scriptId",
+    "join-in-judge": "scriptId",
+    "message-type-classifier": "scriptId",
 }
 
 

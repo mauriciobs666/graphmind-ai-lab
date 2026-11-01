@@ -1174,6 +1174,9 @@ def _contract_rows(name: str) -> list[dict[str, Any]]:
 
 _RENDER_GUARD_ROWS = _contract_rows("render-guard.jsonl")
 _HANDOFF_PARSE_GUARD_ROWS = _contract_rows("handoff-parse-guard.jsonl")
+#: Generated from falkor-chat's real `guards._recent_turns(thread)` by the same script (impl review
+#: P2-F3); the join-in renderer shares this normalization (`agreement.render_join_in_input`).
+_NORMALIZE_TURNS_ROWS = _contract_rows("normalize-turns.jsonl")
 
 
 @pytest.fixture(scope="module")
@@ -1191,6 +1194,15 @@ def test_render_judge_user_matches_render_guard_jsonl(row: dict[str, Any]):
         row["condition"], row["understanding"], row["recentTurns"]
     )
     assert rendered == row["expected"]
+
+
+@pytest.mark.parametrize(
+    "row", _NORMALIZE_TURNS_ROWS, ids=[r["case"] for r in _NORMALIZE_TURNS_ROWS]
+)
+def test_normalize_turns_matches_normalize_turns_jsonl(row: dict[str, Any]):
+    """The port equals falkor-chat's `_recent_turns` on every vector thread: the speaker and role
+    rules, the text filter before the last-6 cut, and the 400-char text cut."""
+    assert classification._normalize_turns(row["thread"]) == row["expected"]
 
 
 @pytest.mark.parametrize(
@@ -1213,6 +1225,7 @@ def test_decision_point_handoff_parse_matches_handoff_parse_guard_jsonl(
     [
         ("render-guard.jsonl", _RENDER_GUARD_ROWS),
         ("handoff-parse-guard.jsonl", _HANDOFF_PARSE_GUARD_ROWS),
+        ("normalize-turns.jsonl", _NORMALIZE_TURNS_ROWS),
     ],
 )
 def test_every_vector_line_is_a_parametrized_row(name: str, rows: list[dict[str, Any]]):

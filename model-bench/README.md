@@ -171,7 +171,8 @@ rather than truncating) is counted in `overLimit`; with a hand-off model it is h
 without one it is kept as a failure. A failed hand-off chat call withholds the item on the guard
 (as a failed chat call always has). On the
 new-ability roles it is to be kept as a fail-closed answer, counted in `handoffCallFailures`;
-those roles cannot run on the `handoff` surface until typed-decision-models U4 adds them. The
+those roles cannot run on the `handoff` surface until typed-decision-models U4.2 gives them a
+scorer. The
 `handoff` surface also records `handoffShare` (items handed off, over every item not withheld by a
 failed hand-off call — an item withheld for a reload is in n) and each verdict metric split into
 `…DecidedByModel` and `…HandedOff`, all exploratory. After the last
@@ -223,8 +224,9 @@ or `host.json` stale/absent. Nothing else — there is no score-driven exit code
 ## What a pack is, and how to add one
 
 A **pack** is a directory under `packs/<pack-id>/`, declared by `pack.json`: `packId`,
-`packVersion`, `role` (one of the five FR-21 roles — `embedder`, `guard-judge`, `nlq-generator`,
-`tool-caller`, `chat-responder`), `scorer` (the module name `run` resolves against
+`packVersion`, `role` (one of `roles.ROLES`: the five FR-21 roles — `embedder`, `guard-judge`,
+`nlq-generator`, `tool-caller`, `chat-responder` — plus typed-decision-models' `join-in-judge` and
+`message-type-classifier`), `scorer` (the module name `run` resolves against
 `modelbench/scoring/`), `environment.requires`, a `prompt` block for any chat-surface role, `data`
 (the golden files), `sampling` (item or script/replicate counts, the seed, the `pairingKey` and
 `analysisUnit` that make a comparison paired), and `metrics` (`verdictMetrics`, `headlineMetric`).

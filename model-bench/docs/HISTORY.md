@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U4.1 — the two new-ability roles, their tables and contract vectors
+
+**What:** plan v1.3 §3.2, §3.2.1, §3.5, §3.6 (§8 U4's tables, renderers, parses and vectors),
+plan2 §3.1 and §3.3, and four carried items (`docs/plans/typed-decision-models-coordination.md`).
+The scorer (`agreement`'s `score_item`/`aggregate` and decision hooks) is U4.2's; the FR-10 bar
+section is U4.3's.
+
+- **`roles.ROLES` gains `join-in-judge` and `message-type-classifier`**: unit kind `item`,
+  single-call, analysis unit `itemId` (v1.3 §3.6).
+- **`decisions.py`:** the new-ability rows of `BAR_KIND_BY_ROLE`, `HANDOFF_FAILURE_BY_ROLE`
+  (`fail-closed`) and `INPUT_FIELDS_BY_ROLE` (`agentName, priorTurns, newMessage`; `text, priorTurn`
+  per plan2 §3.1); new `MESSAGE_TYPE_LABELS` (FR-10's five) and `ANSWER_SPACE_BY_ROLE` (v1.3 §3.2's
+  answer-space column).
+- **`scoring/agreement.py` (new, contract half only):** `render_join_in_input`,
+  `render_message_type_input`, `parse_join_in_handoff`, `parse_message_type_handoff`,
+  `per_class_agreement_metrics`.
+- **`validate_pack`** on a decision-point pack: `decisionPoint.answer` must be the role's; the
+  `verdictMetrics` rule keys on the bar kind, not a role name (impl review P13-n1) — speed-up, the
+  four per-kind rates; new-ability, exactly the per-class agreement set derived from the answer
+  space (architect ruling on P12-m2, item 3); a new-ability item must carry every input field
+  (`priorTurns: []`, `priorTurn: null`, never omitted), because `input_hash` omits an absent field
+  and the two forms would split one item (coordinator ruling, U4.1).
+- **Vectors** (`tests/fixtures/decision-contract/`): `render-join-in.jsonl` (10 rows),
+  `render-message-type.jsonl` (9), `handoff-parse-join-in.jsonl` (22) and
+  `handoff-parse-message-type.jsonl` (26), written by hand from the plans (falkor-chat has no
+  join-in or message-type code to generate them from; U9 builds it against these); six new-role rows in `input-hash.jsonl`, hashed with
+  `sha256sum` over hand-written canonical JSON, one an opening join-in item with `priorTurns: []`;
+  `normalize-turns.jsonl`, generated from falkor-chat's real `guards._recent_turns` by
+  `falkor-chat/scripts/generate_guard_decision_vectors.py`, byte-copied to falkor-chat's
+  `server/tests/data/decision-contract/` and pinned there (impl review P2-F3).
+- **Gate fixes (impl review Pass 21):** a `render-join-in.jsonl` row pins the new message's
+  `authorId` fallback under an empty `displayName` (P21-m2); `render_join_in_input` no longer
+  renders a non-string new-message text as `""` but raises, as `render_message_type_input` does
+  (P21-n3); stale "five roles" text in `README.md` and `test_roles.py` (P21-n2).
+- README: the hand-off-surface sentence now waits on U4.2. AGENTS: two paragraphs rewritten in
+  place, three compressed.
+
+**Tests:** `tests/test_scoring_agreement.py` (new) runs the four hand vectors, their case coverage
+and the per-class names; `test_scoring_classification.py` runs `normalize-turns.jsonl` against
+`_normalize_turns`; `test_roles.py`/`test_decisions.py` pin every table exactly and bind the
+decision tables' keys to `BAR_KIND_BY_ROLE` and it to `ROLES`; `test_decision_point_pack.py`
+covers each new refusal alone; `test_runner_decisions.py` adds Pass 6's behavioural row (a guard
+candidate on a join-in pack refuses before any call). 58 mutants, each run against the full suite,
+all went red: every new table row moved, dropped and widened, each cut off by one either way, a
+parse accepting an out-of-space label, each new refusal skipped or narrowed, and the role check
+dropped. Four more for Pass 21 (speaker rule as `displayName or "member"`, an empty
+`displayName` kept as a value, the `""` coercion restored, a `str()` coercion) all went red.
+falkor-chat's `tests/test_decision_contract.py`: 131 passed.
+
+**Suite:** 3278 passed, 5 deselected, 2 xfailed; `ruff check .` clean.
+
 ## 2026-10-31 — typed-decision-models U2.3 — a failed between-item residency probe (P8-m2)
 
 **What:** plan4 §3.10's ruling, closing the P8-m2 backlog item.

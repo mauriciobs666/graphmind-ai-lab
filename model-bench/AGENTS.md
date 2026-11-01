@@ -9,7 +9,7 @@ for the full design.
 
 ## Current state
 
-**All eight stages (S0–S8) are closed — the feature is delivered.** Every one of the five FR-21
+**All eight stages (S0–S8) are closed — the feature is delivered.** Each of FR-21's five
 roles has a scorer module in `modelbench/scoring/`: `retrieval.py` (`embedder`), `classification.py`
 (`guard-judge`), `extraction.py` (`nlq-generator`), `toolcalls.py` — the package's first
 `ConversationScorer`, for the multi-turn `tool-caller` role — and `grounding.py` (`chat-responder`,
@@ -22,8 +22,11 @@ validation ships flagged "not reproduced" (`docs/HISTORY.md`).
 `hostinfo`, `tooling`, `convo` (turn assembly and driving), `runner` (`RunConfig`, the
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 `decision_stats` (the bar statistics), and `decisions` (typed-decision-models' pure half —
-policies, hashes, `Candidate.load`, bar constants). `tests/fixtures/decision-contract/` pins it and `classification`'s guard render and
-decision-point hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
+policies, hashes, `Candidate.load`, bar constants, role tables). Its two new-ability roles,
+`join-in-judge` and `message-type-classifier`, have no scorer yet: `scoring/agreement.py` holds only
+their renderers, hand-off parses and FR-10 metric names. `tests/fixtures/decision-contract/` pins
+those, `decisions`, and `classification`'s guard render, turn normalization and decision-point
+hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
 `run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
 the arm's absent models itself before the warm-ups. A guard's
@@ -85,7 +88,9 @@ note §Q3.2); `tests/test_decision_stats.py` pins that by an AST read and a patc
 **A decision point's bar is requirement constants, never pack data.** `decisions.py` holds
 `MIN_EVAL_ITEMS`, `FR2_MIN_SPEEDUP`, the `FR10_*` pair, `DECISION_POINT_CHAT_TIMEOUT_SECONDS` and
 `BAR_KIND_BY_ROLE` (role → bar kind, the pack's `incumbent` agreeing), each mutation-pinned: a
-pack can neither pick nor lower its bar. On a decision-point
+pack can neither pick nor lower its bar. `validate_pack` also holds `decisionPoint.answer` to
+`ANSWER_SPACE_BY_ROLE`, `verdictMetrics` to the bar kind's exact set, and a new-ability item to
+every input field (`[]`/`null`, never omitted: `input_hash` omits an absent field). On a decision-point
 `compare`, `compare_report` gets the chat arm alone as `runs` and candidates only as
 `replicates` (`cli._replicate_groups`, never last-wins), and its bar section states the bar
 without touching the exit code. Its drop counts are eval-only, by the pack's strata
@@ -130,23 +135,20 @@ raising on a repeated unit id is a backstop, not the mechanism — it fires only
 it is the *cluster* key.
 
 **`tests/test_package.py` is not a placeholder** — it pins `modelbench.__version__` to the installed
-distribution metadata, which is what stamps `benchVersion` into every run record. Keep it: pytest
-exits 5 on an empty suite, and configuring that away would hide a real collection breakage.
+distribution metadata, which stamps `benchVersion` into every run record.
 
 **A public name starting with `test` is collected by pytest as a test** in every module that imports
 it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
 
 **Sentence scoping inside `modelbench/scoring/` is `grounding._SENTENCE_BOUNDARY_RE`** — `.`/`!`/`?`,
 except a `.` flanked by digits on both sides — never a bare `.` split (`rfind(".")`, `split(".")`).
-This pack domain is decimal-heavy (`4.5`, `18.5%`, dollar amounts, page references), and a bare
-split reads the decimal point as a sentence end, truncating whatever span was scoped to that boundary
-and silently reopening the abstention-detection misclassification the span exists to prevent. A new
+This pack domain is decimal-heavy (`4.5`, `18.5%`), and a bare split ends a sentence at the
+decimal point, silently reopening the abstention misclassification the span exists to prevent. A new
 same-sentence heuristic reuses that regex; a second boundary definition is a second copy of the bug.
 
-**`sessionId` sits at the top level of a stored `RunResult`, not inside `fingerprint`.** A query
-that reads `fingerprint.sessionId` to filter stored runs by session silently gets nothing — every
-record reads as if `sessionId` were absent — because the field lives on `RunResult` itself
-(`RunResult.from_dict` reads it directly, not through `Fingerprint`). Read `run.sessionId`.
+**`sessionId` sits at the top level of a stored `RunResult`, not inside `fingerprint`.** A filter
+on `fingerprint.sessionId` silently matches nothing (`RunResult.from_dict` reads the field
+directly). Read `run.sessionId`.
 
 **A stored run record never persists a model's raw reply text — auditing a scorer's verdict against
 a real reply needs a fresh live call, never a read of `results/runs/*.json`.** `RunResult`/

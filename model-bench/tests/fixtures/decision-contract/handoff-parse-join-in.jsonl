@@ -1,0 +1,22 @@
+{"case": "bool true: reply", "reply": "{\"reply\": true}", "expected": {"reply": true, "parseFailure": false}}
+{"case": "bool false: no reply", "reply": "{\"reply\": false}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "string \"true\": not a reply", "reply": "{\"reply\": \"true\"}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "integer 1: not a reply", "reply": "{\"reply\": 1, \"why\": \"named\"}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "null reply: not a reply", "reply": "{\"reply\": null}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "whole-reply object with no reply key: parsed, not a reply", "reply": "{\"decision\": true}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "extra keys are ignored", "reply": "{\"reply\": true, \"why\": \"they named the agent\"}", "expected": {"reply": true, "parseFailure": false}}
+{"case": "fenced json bool true: reply", "reply": "```json\n{\"reply\": true}\n```", "expected": {"reply": true, "parseFailure": false}}
+{"case": "prose then own-line object: reply", "reply": "They asked the room.\n{\"reply\": true}\n", "expected": {"reply": true, "parseFailure": false}}
+{"case": "own-line rule: trailing prose on the closing line is quoted, not asserted", "reply": "Hmm.\n{\"reply\": true} is tempting, but no.\n", "expected": {"reply": false, "parseFailure": true}}
+{"case": "own-line rule: require_key skips a keyless own-line object", "reply": "Example:\n{\"note\": 1}\n{\"reply\": true}\n", "expected": {"reply": true, "parseFailure": false}}
+{"case": "own-line rule: the guard's key is not this point's", "reply": "x\n{\"decision\": true}\n", "expected": {"reply": false, "parseFailure": true}}
+{"case": "duplicate keys: the last value wins (reply)", "reply": "{\"reply\": false, \"reply\": true}", "expected": {"reply": true, "parseFailure": false}}
+{"case": "duplicate keys: the last value wins (no reply)", "reply": "{\"reply\": true, \"reply\": false}", "expected": {"reply": false, "parseFailure": false}}
+{"case": "malformed: two own-line verdicts disagree", "reply": "a\n{\"reply\": true}\n{\"reply\": false}\n", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: verdict quoted mid-sentence", "reply": "I would say {\"reply\": true} here.", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: not json at all", "reply": "not json at all", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: truncated object", "reply": "{\"reply\": true, \"why\": \"cut", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: top-level array", "reply": "[{\"reply\": true}]", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: empty reply", "reply": "", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: whitespace-only reply", "reply": "  \n ", "expected": {"reply": false, "parseFailure": true}}
+{"case": "malformed: non-string content (null)", "reply": null, "expected": {"reply": false, "parseFailure": true}}

@@ -23,6 +23,7 @@ import pytest
 
 from modelbench import decisions, roles
 from modelbench.decisions import (
+    ANSWER_SPACE_BY_ROLE,
     BAR_KIND_BY_ROLE,
     DECISION_POINT_CHAT_TIMEOUT_SECONDS,
     FIT_OUTCOMES,
@@ -31,6 +32,7 @@ from modelbench.decisions import (
     FR10_PER_ANSWER_AGREEMENT,
     HANDOFF_FAILURE_BY_ROLE,
     INPUT_FIELDS_BY_ROLE,
+    MESSAGE_TYPE_LABELS,
     MIN_EVAL_ITEMS,
     OVER_LIMIT_MARKER,
     QUALITY_TARGETS_BY_BAR_KIND,
@@ -204,27 +206,61 @@ def test_input_hash_matches_the_golden_vector(row):
     assert input_hash(row["item"], row["role"]) == row["expected"]
 
 
-def test_the_guard_hash_vectors_reach_every_input_field_and_a_non_input_one():
-    """What makes a shrink **and** a widen of the `guard-judge` row each redden: every input field
-    is present in some vector item (a dropped one changes that hash), and the items carry the
-    non-input fields v1.3 §3.2.2 names (an added one changes the hash)."""
-    items = [r["item"] for r in _HASH_ROWS if r["role"] == "guard-judge"]
-    for field in INPUT_FIELDS_BY_ROLE["guard-judge"]:
+#: The non-input fields every vector item of a role carries (v1.3 §3.2.2; plan2 §3.5 adds `seedId`,
+#: `labelVotes` and, on message type, `threadPosition` — none of them in `INPUT_FIELDS_BY_ROLE`).
+_NON_INPUT_FIELDS_BY_ROLE = {
+    "guard-judge": ("itemId", "tier", "expected", "stratum"),
+    "join-in-judge": ("itemId", "expected", "stratum", "seedId", "labelVotes"),
+    "message-type-classifier": (
+        "itemId", "expected", "stratum", "seedId", "labelVotes", "threadPosition",
+    ),
+}
+
+
+@pytest.mark.parametrize("role", sorted(_NON_INPUT_FIELDS_BY_ROLE))
+def test_the_hash_vectors_reach_every_input_field_and_the_non_input_ones(role):
+    """What makes a shrink **and** a widen of each role's row redden: every input field is present
+    in some vector item of that role (a dropped one changes that hash), and the items carry the
+    non-input fields (an added one changes the hash)."""
+    items = [r["item"] for r in _HASH_ROWS if r["role"] == role]
+    assert items, role
+    for field in INPUT_FIELDS_BY_ROLE[role]:
         assert any(field in item for item in items), field
-    for field in ("itemId", "tier", "expected", "stratum"):
+    for field in _NON_INPUT_FIELDS_BY_ROLE[role]:
         assert all(field in item for item in items), field
 
 
-def test_input_fields_by_role_is_the_guard_row_only():
-    """v1.3 §3.5's `guard-judge` row, transcribed; U4 adds the other two roles' rows."""
+@pytest.mark.parametrize("role", ["join-in-judge", "message-type-classifier"])
+def test_every_new_ability_hash_vector_is_in_the_canonical_form(role):
+    """Coordinator ruling (U4.1): a new-ability item carries every input field, an empty one
+    written, never omitted — `input_hash` omits an absent field, so the two forms would hash as
+    two items. The opening join-in row pins `priorTurns: []`."""
+    items = [r["item"] for r in _HASH_ROWS if r["role"] == role]
+    for item in items:
+        assert all(field in item for field in INPUT_FIELDS_BY_ROLE[role]), item["itemId"]
+    if role == "join-in-judge":
+        assert any(item["priorTurns"] == [] for item in items)
+    else:
+        assert any(item["priorTurn"] is None for item in items)
+
+
+def test_every_input_fields_row_has_hash_vectors():
+    assert {r["role"] for r in _HASH_ROWS} == set(INPUT_FIELDS_BY_ROLE)
+
+
+def test_input_fields_by_role_is_the_plans_table():
+    """v1.3 §3.5's rows, with plan2 §3.1's `message-type-classifier` row (`priorTurn`, note
+    §Q1.5), transcribed — the move pin: a field moved to another role's row reddens here."""
     assert dict(INPUT_FIELDS_BY_ROLE) == {
         "guard-judge": ("condition", "understanding", "turns", "path"),
+        "join-in-judge": ("agentName", "priorTurns", "newMessage"),
+        "message-type-classifier": ("text", "priorTurn"),
     }
 
 
 def test_input_hash_refuses_a_role_with_no_input_fields():
-    with pytest.raises(ValueError, match="join-in-judge"):
-        input_hash({"agentName": "a"}, "join-in-judge")
+    with pytest.raises(ValueError, match="embedder"):
+        input_hash({"text": "a"}, "embedder")
 
 
 # --- eval_set_hash (v1.3 §3.5 FR-4) ---------------------------------------------------------------
@@ -347,23 +383,58 @@ def test_bar_holds_refuses_an_unknown_direction_or_a_non_finite_value(
 # --- the pinned tables (v1.3 §3.5; plan2 §3.2, §3.3) ---------------------------------------------
 
 
-def test_bar_kind_by_role_is_the_guard_row_only():
-    """v1.3 §3.5, transcribed — `guard-judge` is the speed-up point; U4 adds the two new-ability
-    roles. A pack cannot pick its own bar."""
-    assert dict(BAR_KIND_BY_ROLE) == {"guard-judge": "speed-up"}
-    assert set(BAR_KIND_BY_ROLE) <= set(roles.ROLES)
+def test_bar_kind_by_role_is_the_plans_table():
+    """v1.3 §3.5, transcribed — `guard-judge` is the speed-up point, `join-in-judge` and
+    `message-type-classifier` the new abilities. A pack cannot pick its own bar."""
+    assert dict(BAR_KIND_BY_ROLE) == {
+        "guard-judge": "speed-up",
+        "join-in-judge": "new-ability",
+        "message-type-classifier": "new-ability",
+    }
     assert set(BAR_KIND_BY_ROLE.values()) <= set(QUALITY_TARGETS_BY_BAR_KIND)
 
 
-def test_handoff_failure_by_role_has_exactly_the_bar_kind_roles():
-    """Plan2 §3.3: U1c pins `HANDOFF_FAILURE_BY_ROLE`'s keys to `BAR_KIND_BY_ROLE`'s."""
-    assert set(HANDOFF_FAILURE_BY_ROLE) == set(BAR_KIND_BY_ROLE)
+def test_the_decision_point_roles_are_roles_last_two_plus_the_guard():
+    """Binds `BAR_KIND_BY_ROLE`'s keys to `roles.ROLES`: every decision point is a role, and the
+    roles v1.3 §3.6 added for typed-decision-models are exactly its new abilities."""
+    assert set(BAR_KIND_BY_ROLE) <= set(roles.ROLES)
+    assert set(roles.ROLES[-2:]) == {r for r, k in BAR_KIND_BY_ROLE.items() if k == "new-ability"}
 
 
-def test_handoff_failure_by_role_is_the_guard_row_only():
-    """Plan2 §3.3's `guard-judge` row, transcribed (U2's withheld-versus-kept test is the
-    behavioural value pin; this is the third mutation, a moved value, until then)."""
-    assert dict(HANDOFF_FAILURE_BY_ROLE) == {"guard-judge": "withhold"}
+@pytest.mark.parametrize(
+    "table", [HANDOFF_FAILURE_BY_ROLE, INPUT_FIELDS_BY_ROLE, ANSWER_SPACE_BY_ROLE],
+    ids=["HANDOFF_FAILURE_BY_ROLE", "INPUT_FIELDS_BY_ROLE", "ANSWER_SPACE_BY_ROLE"],
+)
+def test_each_decision_point_table_has_exactly_the_bar_kind_roles(table):
+    """Plan2 §3.3 (U1c pins `HANDOFF_FAILURE_BY_ROLE`'s keys to `BAR_KIND_BY_ROLE`'s); the same
+    binding for the input-field and answer-space tables."""
+    assert set(table) == set(BAR_KIND_BY_ROLE)
+
+
+def test_handoff_failure_by_role_is_the_plans_table():
+    """Plan2 §3.3's three rows, transcribed: the guard withholds, the new abilities fail closed
+    (U2's withheld-versus-kept tests are the guard's behavioural value pin)."""
+    assert dict(HANDOFF_FAILURE_BY_ROLE) == {
+        "guard-judge": "withhold",
+        "join-in-judge": "fail-closed",
+        "message-type-classifier": "fail-closed",
+    }
+
+
+def test_message_type_labels_are_fr10s_five():
+    assert MESSAGE_TYPE_LABELS == ("order", "question", "complaint", "escalation", "other")
+
+
+def test_answer_space_by_role_is_the_plans_answer_space_column():
+    """v1.3 §3.2's table: the guard and join-in are predicates, message type a choice over
+    FR-10's five labels."""
+    assert {role: dict(space) for role, space in ANSWER_SPACE_BY_ROLE.items()} == {
+        "guard-judge": {"type": "predicate"},
+        "join-in-judge": {"type": "predicate"},
+        "message-type-classifier": {
+            "type": "choice", "labels": ("order", "question", "complaint", "escalation", "other"),
+        },
+    }
 
 
 def test_fit_outcomes_and_quality_targets_are_the_notes_sets():
@@ -385,7 +456,8 @@ def test_fit_outcomes_and_quality_targets_are_the_notes_sets():
 
 def test_the_tables_are_read_only():
     for table in (BAR_KIND_BY_ROLE, HANDOFF_FAILURE_BY_ROLE, INPUT_FIELDS_BY_ROLE,
-                  QUALITY_TARGETS_BY_BAR_KIND):
+                  QUALITY_TARGETS_BY_BAR_KIND, ANSWER_SPACE_BY_ROLE,
+                  *ANSWER_SPACE_BY_ROLE.values()):
         with pytest.raises(TypeError):
             table["x"] = "y"  # type: ignore[index]
 
@@ -564,10 +636,28 @@ def test_candidate_load_refuses_an_ill_shaped_fit(tmp_path, fit):
     _refused(tmp_path, _with(("fit",), fit), match="fit")
 
 
-@pytest.mark.parametrize("role", ["join-in-judge", "embedder", "no-such-role"])
+@pytest.mark.parametrize("role", ["chat-responder", "embedder", "no-such-role"])
 def test_candidate_load_refuses_a_role_with_no_bar_kind(tmp_path, role):
-    """Only `BAR_KIND_BY_ROLE`'s roles are decision points (the other two arrive with U4)."""
+    """Only `BAR_KIND_BY_ROLE`'s roles are decision points."""
     _refused(tmp_path, _with(("role",), role), match="role")
+
+
+@pytest.mark.parametrize("role", ["join-in-judge", "message-type-classifier"])
+def test_candidate_load_holds_a_new_ability_role_to_the_new_ability_targets(tmp_path, role):
+    """The new-ability rows of `BAR_KIND_BY_ROLE`, behaviourally: a new-ability candidate loads
+    with a new-ability quality target and is refused a speed-up one (plan2 §3.2)."""
+    body = _valid()
+    body["role"] = role
+    if role == "message-type-classifier":
+        body["question"] = {
+            "type": "choice", "name": "type", "instructions": "",
+            "choices": [{"value": v, "instructions": ""} for v in MESSAGE_TYPE_LABELS],
+        }
+        body["policy"] = {"kind": "choice-confidence", "minConfidence": 0.0}
+    body["fit"] = {"outcome": "within-margin", "qualityTarget": "T=0.94"}
+    assert _load(tmp_path, body).role == role
+    body["fit"] = {"outcome": "within-margin", "qualityTarget": "D_c<=0"}
+    _refused(tmp_path, body, match="qualityTarget")
 
 
 def test_candidate_load_refuses_a_file_whose_id_disagrees_with_its_name(tmp_path):

@@ -16,8 +16,8 @@ from typing import Any, Callable
 
 import pytest
 
-from modelbench import packs
-from modelbench.decisions import MIN_EVAL_ITEMS
+from modelbench import decisions, packs
+from modelbench.decisions import MESSAGE_TYPE_LABELS, MIN_EVAL_ITEMS
 from modelbench.packs import STRATA, load_pack, validate_pack
 
 _TESTS = Path(__file__).resolve().parent
@@ -47,6 +47,21 @@ def _side_check_items() -> list[dict[str, Any]]:
     return [{**row, "stratum": "side-check"} for row in rows]
 
 
+#: A re-roled contract pack's items also carry their new-ability role's input fields, in the
+#: canonical form (every field present; `_input_field_problems`), each item its own input.
+_NEW_ABILITY_INPUTS: dict[str, Callable[[int], dict[str, Any]]] = {
+    "join-in-judge": lambda n: {
+        "agentName": "Pastel",
+        "priorTurns": [] if n % 2 else [{"displayName": "Ana", "role": "user", "text": f"hi {n}"}],
+        "newMessage": {"displayName": "Bo", "role": "user", "text": f"message {n}"},
+    },
+    "message-type-classifier": lambda n: {
+        "text": f"message {n}",
+        "priorTurn": None if n % 2 else {"speaker": "Ana", "text": f"hi {n}"},
+    },
+}
+
+
 def _contract_pack(
     root: Path,
     *,
@@ -66,6 +81,8 @@ def _contract_pack(
     rows = [_eval_item(n, expected=n % 2 == 0) for n in range(evals)]
     if side_check:
         rows.extend(_side_check_items())
+    for n, row in enumerate(rows):
+        row.update(_NEW_ABILITY_INPUTS.get(manifest.get("role"), lambda n: {})(n))
     if rows_edit is not None:
         rows_edit(rows)
     (pack_dir / "items.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
@@ -103,7 +120,7 @@ def test_every_shipped_pack_validates_unchanged_and_none_is_a_decision_point_pac
 
 
 def test_the_decision_point_key_alone_switches_every_refusal_on(tmp_path):
-    """The real guard pack validates without the key, and with it is refused on each of the six
+    """The real guard pack validates without the key, and with it is refused on each of the seven
     rules it breaks — even with an empty block, since no refusal keys on a field inside it."""
     pack_dir = tmp_path / "guard"
     shutil.copytree(_REAL_GUARD_PACK, pack_dir)
@@ -119,9 +136,10 @@ def test_the_decision_point_key_alone_switches_every_refusal_on(tmp_path):
         "0 item(s) in stratum 'eval'",
         "needs its 'side-check' stratum",
         "metrics.verdictMetrics must be exactly",
+        "decisionPoint.answer is None",
     ):
         assert sum(needle in p for p in problems) == 1, (needle, problems)
-    assert len(problems) == 6, problems
+    assert len(problems) == 7, problems
 
 
 @pytest.mark.parametrize("block", [None, [], "guard"])
@@ -258,44 +276,45 @@ def test_a_role_with_no_bar_kind_is_refused(tmp_path):
     _only([p for p in problems if "BAR_KIND_BY_ROLE" in p], "is not a decision point")
 
 
-@pytest.fixture
-def new_ability_join_in(monkeypatch):
-    """U4 adds the `new-ability` rows; until then a test adds one to `packs`' own reference so the
-    `new-ability` and other-role branches can be exercised now."""
-    monkeypatch.setattr(
-        packs, "BAR_KIND_BY_ROLE", {"guard-judge": "speed-up", "join-in-judge": "new-ability"}
-    )
+#: v1.3 §3.6: a predicate point's per-class FR-10 agreement metrics.
+_AGREE_YES_NO = ["agreeWhenYes", "agreeWhenNo"]
+#: v1.3 §3.6: a choice point's, one per FR-10 label.
+_AGREE_FIVE = [f"agree[{label}]" for label in MESSAGE_TYPE_LABELS]
 
 
 def _join_in(manifest):
+    """The guard contract pack re-roled as a join-in pack: no scorer (U4.2 builds `agreement`),
+    a null incumbent, a predicate answer space and the per-class agreement pair."""
     manifest["role"] = "join-in-judge"
     manifest.pop("scorer")
     manifest["decisionPoint"]["incumbent"] = None
+    manifest["metrics"]["verdictMetrics"] = list(_AGREE_YES_NO)
 
 
-def _decision_problems(pack) -> list[str]:
-    """`join-in-judge` is not yet a model-bench role, so the sampling axis also objects; keep
-    only the decision-point contract's own problems."""
-    return packs._decision_point_problems(pack)
+def _message_type(manifest):
+    """As `_join_in`, for message type: a choice over FR-10's five labels."""
+    _join_in(manifest)
+    manifest["role"] = "message-type-classifier"
+    manifest["decisionPoint"]["answer"] = {"type": "choice", "labels": list(MESSAGE_TYPE_LABELS)}
+    manifest["metrics"]["verdictMetrics"] = list(_AGREE_FIVE)
 
 
-def test_a_new_ability_pack_with_a_null_incumbent_and_no_side_check_passes(
-    tmp_path, new_ability_join_in
-):
-    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=_join_in)
-    assert _decision_problems(pack) == []
+@pytest.mark.parametrize("edit", [_join_in, _message_type], ids=["join-in", "message-type"])
+def test_a_new_ability_pack_with_a_null_incumbent_and_no_side_check_passes(tmp_path, edit):
+    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=edit)
+    assert validate_pack(pack) == []
 
 
-def test_a_non_null_incumbent_on_a_new_ability_role_is_refused(tmp_path, new_ability_join_in):
+def test_a_non_null_incumbent_on_a_new_ability_role_is_refused(tmp_path):
     def edit(manifest):
         _join_in(manifest)
         manifest["decisionPoint"]["incumbent"] = "qwen/qwen3-4b-2507"
 
     pack = _contract_pack(tmp_path, side_check=False, manifest_edit=edit)
-    _only(_decision_problems(pack), "new-ability point and has none")
+    _only(validate_pack(pack), "new-ability point and has none")
 
 
-def test_deleting_the_incumbent_on_a_new_ability_role_still_refuses(tmp_path, new_ability_join_in):
+def test_deleting_the_incumbent_on_a_new_ability_role_still_refuses(tmp_path):
     """Absent is not null: a new-ability pack states `incumbent: null`, never omits it."""
 
     def edit(manifest):
@@ -303,12 +322,12 @@ def test_deleting_the_incumbent_on_a_new_ability_role_still_refuses(tmp_path, ne
         del manifest["decisionPoint"]["incumbent"]
 
     pack = _contract_pack(tmp_path, side_check=False, manifest_edit=edit)
-    _only(_decision_problems(pack), "decisionPoint.incumbent is absent")
+    _only(validate_pack(pack), "decisionPoint.incumbent is absent")
 
 
-def test_a_side_check_stratum_on_any_other_role_is_refused(tmp_path, new_ability_join_in):
+def test_a_side_check_stratum_on_any_other_role_is_refused(tmp_path):
     pack = _contract_pack(tmp_path, manifest_edit=_join_in)
-    _only(_decision_problems(pack), "belongs to guard-judge only")
+    _only(validate_pack(pack), "belongs to guard-judge only")
 
 
 # ==================================================================================================
@@ -657,15 +676,202 @@ def test_a_missing_or_empty_verdict_metrics_is_refused_by_this_rule_too(tmp_path
     assert any("metrics.verdictMetrics must be exactly" in p for p in problems), problems
 
 
-def test_the_verdict_metrics_rule_is_the_guards_only(tmp_path, new_ability_join_in):
-    """The new-ability rule is U4's: a join-in pack is not held to the guard's four."""
+# ==================================================================================================
+# 7. A new-ability pack's verdict metrics are exactly its per-class agreement set (ruling item 3);
+#    its answer space is its role's (v1.3 §3.2, `ANSWER_SPACE_BY_ROLE`)
+# ==================================================================================================
+
+
+def _new_ability(tmp_path, base, *, verdict=None, answer=None):
+    def edit(manifest):
+        base(manifest)
+        if verdict is not None:
+            manifest["metrics"]["verdictMetrics"] = verdict
+        if answer is not None:
+            manifest["decisionPoint"]["answer"] = answer
+
+    return validate_pack(_contract_pack(tmp_path, side_check=False, manifest_edit=edit))
+
+
+@pytest.mark.parametrize(
+    ("base", "verdict"),
+    [
+        pytest.param(_join_in, list(reversed(_AGREE_YES_NO)), id="join-in-reversed"),
+        pytest.param(_message_type, list(reversed(_AGREE_FIVE)), id="message-type-reversed"),
+    ],
+)
+def test_the_per_class_set_in_any_order_is_accepted(tmp_path, base, verdict):
+    assert _new_ability(tmp_path, base, verdict=verdict) == []
+
+
+@pytest.mark.parametrize(
+    ("base", "verdict"),
+    [
+        pytest.param(_join_in, list(_FOUR), id="join-in-the-guards-four"),
+        pytest.param(_join_in, ["agreeWhenYes"], id="join-in-one-missing"),
+        pytest.param(_join_in, [*_AGREE_YES_NO, "agree[order]"], id="join-in-one-extra"),
+        pytest.param(_join_in, [*_AGREE_YES_NO, "agreeWhenNo"], id="join-in-duplicate"),
+        pytest.param(_join_in, ["agreementYes", "agreementNo"], id="join-in-misnamed"),
+        pytest.param(_join_in, "agreeWhenYes", id="join-in-not-a-list"),
+        pytest.param(_message_type, _AGREE_FIVE[:4], id="message-type-one-missing"),
+        pytest.param(_message_type, [*_AGREE_FIVE, "agree[smalltalk]"], id="message-type-sixth"),
+        pytest.param(_message_type, [*_AGREE_FIVE, _AGREE_FIVE[0]], id="message-type-duplicate"),
+        pytest.param(_message_type, list(_AGREE_YES_NO), id="message-type-the-predicate-pair"),
+        pytest.param(
+            _message_type, [f"agree[{label.upper()}]" for label in MESSAGE_TYPE_LABELS],
+            id="message-type-case",
+        ),
+    ],
+)
+def test_any_other_new_ability_verdict_metrics_are_refused(tmp_path, base, verdict):
+    problem = _only(_new_ability(tmp_path, base, verdict=verdict), "verdictMetrics")
+    assert "new-ability" in problem and "FR-10" in problem
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_a_missing_or_empty_new_ability_verdict_metrics_is_refused_by_this_rule_too(
+    tmp_path, empty
+):
+    """The sampling axis also objects to these; this rule does not lean on it."""
 
     def edit(manifest):
         _join_in(manifest)
-        manifest["metrics"]["verdictMetrics"] = ["agreementYes"]
+        if empty:
+            manifest["metrics"]["verdictMetrics"] = []
+        else:
+            del manifest["metrics"]["verdictMetrics"]
 
-    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=edit)
-    assert _decision_problems(pack) == []
+    problems = validate_pack(_contract_pack(tmp_path, side_check=False, manifest_edit=edit))
+    assert any("new-ability pack's metrics.verdictMetrics" in p for p in problems), problems
+
+
+def test_a_guard_pack_with_the_per_class_pair_is_refused(tmp_path):
+    def edit(manifest):
+        manifest["metrics"]["verdictMetrics"] = list(_AGREE_YES_NO)
+
+    problem = _only(validate_pack(_contract_pack(tmp_path, manifest_edit=edit)), "verdictMetrics")
+    assert "speed-up" in problem and "FR-13" in problem
+
+
+def test_the_verdict_rule_follows_the_bar_kind_not_the_role_name(tmp_path, monkeypatch):
+    """Impl review P13-n1: the rule keys on `BAR_KIND_BY_ROLE`, never on `SIDE_CHECK_ROLE`. Made a
+    speed-up point, a join-in pack is held to the four per-kind rates and refused the pair."""
+    monkeypatch.setattr(
+        packs, "BAR_KIND_BY_ROLE", {**decisions.BAR_KIND_BY_ROLE, "join-in-judge": "speed-up"}
+    )
+
+    def as_speed_up(verdict):
+        def edit(manifest):
+            _join_in(manifest)
+            manifest["decisionPoint"]["incumbent"] = "qwen/qwen3-4b-2507"
+            manifest["metrics"]["verdictMetrics"] = verdict
+
+        return edit
+
+    four = _contract_pack(tmp_path / "a", side_check=False, manifest_edit=as_speed_up(list(_FOUR)))
+    assert validate_pack(four) == []
+    pair = _contract_pack(
+        tmp_path / "b", side_check=False, manifest_edit=as_speed_up(_AGREE_YES_NO)
+    )
+    assert "FR-13" in _only(validate_pack(pair), "verdictMetrics")
+
+
+@pytest.mark.parametrize(
+    ("base", "answer"),
+    [
+        pytest.param(_join_in, {"type": "choice", "labels": ["yes", "no"]}, id="join-in-choice"),
+        pytest.param(_join_in, {"type": "predicate", "labels": []}, id="join-in-labels"),
+        pytest.param(_join_in, {}, id="join-in-empty"),
+        pytest.param(_join_in, "predicate", id="join-in-not-an-object"),
+        pytest.param(_message_type, {"type": "predicate"}, id="message-type-predicate"),
+        pytest.param(
+            _message_type, {"type": "choice", "labels": list(MESSAGE_TYPE_LABELS[:4])},
+            id="message-type-four-labels",
+        ),
+        pytest.param(
+            _message_type,
+            {"type": "choice", "labels": [*MESSAGE_TYPE_LABELS, "smalltalk"]},
+            id="message-type-sixth-label",
+        ),
+        pytest.param(
+            _message_type,
+            {"type": "choice", "labels": [*MESSAGE_TYPE_LABELS, "order"]},
+            id="message-type-duplicate-label",
+        ),
+        pytest.param(
+            _message_type, {"type": "choice", "labels": ",".join(MESSAGE_TYPE_LABELS)},
+            id="message-type-labels-not-a-list",
+        ),
+        pytest.param(_message_type, {"type": "choice"}, id="message-type-no-labels"),
+    ],
+)
+def test_an_answer_space_other_than_the_roles_is_refused(tmp_path, base, answer):
+    problem = _only(_new_ability(tmp_path, base, answer=answer), "decisionPoint.answer")
+    assert "ANSWER_SPACE_BY_ROLE" in problem
+
+
+def test_the_message_type_labels_in_any_order_are_accepted(tmp_path):
+    answer = {"type": "choice", "labels": list(reversed(MESSAGE_TYPE_LABELS))}
+    assert _new_ability(tmp_path, _message_type, answer=answer) == []
+
+
+# The canonical item form (coordinator ruling, U4.1): every input field present, an empty value
+# written — an opening join-in item's `priorTurns: []`, message type's `priorTurn: null`.
+
+
+@pytest.mark.parametrize(
+    ("base", "field"),
+    [
+        *[
+            pytest.param(_join_in, f, id=f"join-in-{f}")
+            for f in ("agentName", "priorTurns", "newMessage")
+        ],
+        *[pytest.param(_message_type, f, id=f"message-type-{f}") for f in ("text", "priorTurn")],
+    ],
+)
+def test_a_new_ability_item_omitting_an_input_field_is_refused(tmp_path, base, field):
+    def rows_edit(rows):
+        del rows[3][field]
+
+    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=base, rows_edit=rows_edit)
+    problem = _only(validate_pack(pack), "input fields")
+    assert "'ev-003'" in problem and "1 item(s)" in problem
+
+
+@pytest.mark.parametrize(
+    ("base", "field", "empty"),
+    [
+        pytest.param(_join_in, "priorTurns", [], id="join-in-opening"),
+        pytest.param(_message_type, "priorTurn", None, id="message-type-no-preceding-turn"),
+    ],
+)
+def test_every_new_ability_item_in_the_canonical_empty_form_is_accepted(
+    tmp_path, base, field, empty
+):
+    def rows_edit(rows):
+        for row in rows:
+            row[field] = empty
+
+    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=base, rows_edit=rows_edit)
+    assert validate_pack(pack) == []
+
+
+def test_a_guard_item_omitting_an_input_field_is_not_this_rule(tmp_path):
+    """The guard's side-check items predate the canonical form (`input-hash.jsonl`'s `cs-07`
+    row omits `understanding`); the rule is the new abilities'."""
+
+    def rows_edit(rows):
+        del rows[0]["understanding"]
+
+    assert validate_pack(_contract_pack(tmp_path, rows_edit=rows_edit)) == []
+
+
+@pytest.mark.parametrize("answer", [{"type": "choice", "labels": ["yes", "no"]}, None])
+def test_a_guard_pack_with_another_answer_space_is_refused(tmp_path, answer):
+    def edit(manifest):
+        manifest["decisionPoint"]["answer"] = answer
+
+    _only(validate_pack(_contract_pack(tmp_path, manifest_edit=edit)), "decisionPoint.answer")
 
 
 @pytest.mark.parametrize("name", _FOUR)

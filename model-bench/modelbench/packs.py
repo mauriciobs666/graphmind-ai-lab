@@ -43,7 +43,12 @@ from types import MappingProxyType, ModuleType
 from typing import Any, Iterator, Mapping, NamedTuple
 
 from modelbench.convo import _HISTORY_REPLAY_MODES, Conversation, PromptConfig, Turn
-from modelbench.decisions import BAR_KIND_BY_ROLE, MIN_EVAL_ITEMS
+from modelbench.decisions import (
+    ANSWER_SPACE_BY_ROLE,
+    BAR_KIND_BY_ROLE,
+    INPUT_FIELDS_BY_ROLE,
+    MIN_EVAL_ITEMS,
+)
 from modelbench.roles import MULTI_CALL_TURN_BY_ROLE, analysis_unit_field
 from modelbench.stats import ALPHA_FAMILY
 
@@ -1029,7 +1034,13 @@ def _decision_point_problems(pack: Pack) -> list[str]:
     * a role not in `decisions.BAR_KIND_BY_ROLE`, an absent `incumbent`, or one that disagrees
       with the role's bar kind: non-null on `speed-up`, null on `new-ability`;
     * a `SIDE_CHECK_ROLE` pack with no `side-check` item, or a `side-check` item on any other role
-      (FR-15, AC-17)."""
+      (FR-15, AC-17);
+    * a `decisionPoint.answer` that is not the role's (`decisions.ANSWER_SPACE_BY_ROLE`, v1.3 §3.2);
+    * `metrics.verdictMetrics` other than the bar kind's exact set, each once: a speed-up pack's
+      four per-kind rates (FR-13), a new-ability pack's per-class agreement metrics derived from
+      its answer space (FR-10);
+    * on a new-ability pack, an item lacking any of its role's `INPUT_FIELDS_BY_ROLE` fields — the
+      canonical item form, so one input has one `input_hash` (`_input_field_problems`)."""
     if "decisionPoint" not in pack.manifest:
         return []
     pid = pack.packId
@@ -1065,28 +1076,94 @@ def _decision_point_problems(pack: Pack) -> list[str]:
 
     problems.extend(_labels_problems(pack, decision_point))
     problems.extend(_strata_problems(pack))
-    if pack.role == SIDE_CHECK_ROLE:
-        problems.extend(_guard_verdict_metrics_problems(pack))
+    if bar_kind is not None:
+        problems.extend(_answer_space_problems(pack, decision_point))
+        problems.extend(_verdict_metrics_problems(pack, bar_kind))
+    if bar_kind == "new-ability":
+        problems.extend(_input_field_problems(pack))
     return problems
 
 
-def _guard_verdict_metrics_problems(pack: Pack) -> list[str]:
-    """A decision-point guard pack's `verdictMetrics` are exactly the four per-kind rates (FR-13;
-    architect ruling on impl review P12-m2): the same set, in any order, with no duplicate — a
-    pooled, missing, extra or repeated name changes `k` and the AC-2 per-path diagnostics. The
-    names are `classification`'s own constant, imported at call time (`classification` imports
-    this module)."""
-    from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
-
-    declared = (pack.manifest.get("metrics") or {}).get("verdictMetrics")
-    names = list(declared) if isinstance(declared, (list, tuple)) else None
-    if names is not None and len(names) == len(set(names)) and set(names) == set(
-        PER_KIND_VERDICT_METRICS
-    ):
+def _input_field_problems(pack: Pack) -> list[str]:
+    """A new-ability item carries **every** input field of its role, none omitted: an opening
+    join-in item has `priorTurns: []`, a message-type item with no preceding turn `priorTurn:
+    null` (plan2 §3.1). `input_hash` omits an absent field (v1.3 §3.5), so an omitted
+    `priorTurns` and an empty one would hash as two items — splitting one input in the leakage
+    check, `evalSetHash` and the reuse count (FR-4). The renderer's signature takes all three
+    join-in inputs (v1.3 §3.2.1), so this is the plans' form, not a new one. Presence only: the
+    fields' types are the scorer's (U4.2). The guard keeps its absent-is-omitted rows: its
+    side-check items predate this contract."""
+    try:
+        rows = list(pack.iter_items())
+    except (OSError, KeyError, PackConfigError, json.JSONDecodeError):
+        return []  # `_strata_problems` already reports the unreadable items
+    fields = INPUT_FIELDS_BY_ROLE[pack.role]
+    lacking = [row for row in rows if any(field not in row for field in fields)]
+    if not lacking:
         return []
     return [
-        f"{pack.packId}: a decision-point {SIDE_CHECK_ROLE} pack's metrics.verdictMetrics must be "
-        f"exactly {sorted(PER_KIND_VERDICT_METRICS)}, each once; got {declared!r} (FR-13)"
+        f"{pack.packId}: {len(lacking)} item(s) lack one of role {pack.role!r}'s input fields "
+        f"{list(fields)} (an empty value is written, never omitted; INPUT_FIELDS_BY_ROLE, plan "
+        f"v1.3 §3.5): {_item_ids(lacking)}"
+    ]
+
+
+def _answer_space_problems(pack: Pack, decision_point: Mapping[str, Any]) -> list[str]:
+    """v1.3 §3.2: the pack's `decisionPoint.answer` is its role's answer space
+    (`decisions.ANSWER_SPACE_BY_ROLE`) — the same `type`, no `labels` on a predicate, and on a
+    choice the same label set with no repeat (order is the pack's own)."""
+    expected = ANSWER_SPACE_BY_ROLE[pack.role]
+    answer = decision_point.get("answer")
+    ok = isinstance(answer, Mapping) and answer.get("type") == expected["type"]
+    if ok and expected["type"] == "predicate":
+        ok = "labels" not in answer
+    elif ok:
+        labels = answer.get("labels")
+        ok = (
+            isinstance(labels, list)
+            and all(isinstance(label, str) for label in labels)
+            and len(labels) == len(set(labels))
+            and set(labels) == set(expected["labels"])
+        )
+    if ok:
+        return []
+    return [
+        f"{pack.packId}: decisionPoint.answer is {answer!r}; role {pack.role!r}'s answer space is "
+        f"{_plain(expected)!r} (ANSWER_SPACE_BY_ROLE, plan v1.3 §3.2)"
+    ]
+
+
+def _plain(answer_space: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: list(v) if isinstance(v, tuple) else v for k, v in answer_space.items()}
+
+
+def _verdict_metrics_problems(pack: Pack, bar_kind: str) -> list[str]:
+    """A decision-point pack's `verdictMetrics` are exactly its bar kind's set, in any order, with
+    no duplicate — a missing, extra or repeated name changes `k`, the AC-2 per-path diagnostics
+    and, on a new ability, which classes FR-10's conjunction covers:
+
+    * **speed-up** — the four per-kind rates (FR-13; architect ruling on impl review P12-m2),
+      `classification`'s own constant;
+    * **new-ability** — the per-class agreement metrics derived from the role's answer space
+      (`agreement.per_class_agreement_metrics`, FR-10; the same ruling's item 3).
+
+    Keyed on the bar kind, never on a role name (impl review P13-n1). The scorer modules are
+    imported at call time (`classification` imports this module)."""
+    if bar_kind == "speed-up":
+        from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
+
+        required, cite = PER_KIND_VERDICT_METRICS, "FR-13"
+    else:
+        from modelbench.scoring.agreement import per_class_agreement_metrics
+
+        required, cite = per_class_agreement_metrics(ANSWER_SPACE_BY_ROLE[pack.role]), "FR-10"
+    declared = (pack.manifest.get("metrics") or {}).get("verdictMetrics")
+    names = list(declared) if isinstance(declared, (list, tuple)) else None
+    if names is not None and len(names) == len(set(names)) and set(names) == set(required):
+        return []
+    return [
+        f"{pack.packId}: a decision-point {bar_kind} pack's metrics.verdictMetrics must be "
+        f"exactly {sorted(required)}, each once; got {declared!r} ({cite})"
     ]
 
 

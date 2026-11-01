@@ -2,19 +2,24 @@
 """Generate the guard decision point's golden vectors (typed-decision-models v1.3 §3.2.2).
 
 Human-invoked maintenance script, never run by the server or the test suite. It writes
-`render-guard.jsonl` and `handoff-parse-guard.jsonl` into OUT_DIR, with every `expected` value
-produced by falkor-chat's REAL code — never by the model-bench port the vectors pin:
+`render-guard.jsonl`, `handoff-parse-guard.jsonl` and `normalize-turns.jsonl` into OUT_DIR, with
+every `expected` value produced by falkor-chat's REAL code — never by the model-bench port the
+vectors pin:
 
   * `render-guard.jsonl` — `app._render_judge_user(condition, understanding, recentTurns)`;
   * `handoff-parse-guard.jsonl` — a judge reply through the production judge
     (`app._build_llm_judge` over a stub LLM returning `reply`) then `guards._coerce_verdict`
     (`advance`); `parseFailure` is `llm.extract_own_line_json_object(reply,
-    require_key="decision") is None`.
+    require_key="decision") is None`;
+  * `normalize-turns.jsonl` — `guards._recent_turns(thread)`, the turn normalization the guard
+    judge and (v1.3 §3.2.1) the join-in renderer share (typed-decision-models impl review P2-F3).
+    Its threads are lists of row objects only — the item domain model-bench and decision-models
+    render; `_recent_turns`' tolerance of a non-list thread or a non-object row is not pinned.
 
 The cue/negator probe rows are emitted by iterating `guards._NEGATION_CUES` and
 `guards._NEGATORS` themselves, so a change to either table changes the rows.
 
-model-bench owns the canonical copies. After running, copy both files to
+model-bench owns the canonical copies. After running, copy the files to
 `model-bench/tests/fixtures/decision-contract/`, then byte-copy them to
 `falkor-chat/server/tests/data/decision-contract/` (`server/tests/test_decision_contract.py`
 asserts the two equal).
@@ -201,6 +206,47 @@ def probe_cases() -> list[tuple[str, str]]:
     return rows
 
 
+# --- normalize-turns.jsonl -----------------------------------------------------------------------
+
+
+def _row(name: str, text: object, role: str = "user") -> dict[str, object]:
+    return {"displayName": name, "role": role, "text": text}
+
+
+_KEPT = guards.RECENT_TURNS_N
+_TEXT_MAX = guards.TURN_TEXT_MAX
+
+NORMALIZE_CASES: list[tuple[str, list[dict[str, object]]]] = [
+    ("empty thread", []),
+    ("speaker: displayName, else authorId, else member; an empty displayName falls through",
+     [{"displayName": "Ana", "authorId": "u1", "text": "a"}, {"authorId": "u2", "text": "b"},
+      {"text": "c"}, {"displayName": "", "authorId": "u3", "text": "d"},
+      {"displayName": "", "authorId": "", "text": "e"}]),
+    ("speaker and role that are not strings are stringified",
+     [{"displayName": 7, "role": 3, "text": "a"}]),
+    ("role: kept when set, 'user' when missing or empty",
+     [_row("A", "a", "assistant"), {"displayName": "B", "text": "b"},
+      {"displayName": "C", "role": "", "text": "c"}]),
+    ("text: missing, null, empty and non-string rows are dropped; whitespace-only is kept",
+     [{"displayName": "A"}, _row("A", None), _row("A", ""), _row("A", 5), _row("A", ["x"]),
+      _row("A", " "), _row("A", "kept")]),
+    ("extra row keys are not carried",
+     [{"displayName": "A", "role": "user", "text": "a", "createdAt": 1752570000000,
+       "msgId": "m-1", "authorId": "u1"}]),
+    (f"text cut: {_TEXT_MAX} chars kept whole, {_TEXT_MAX + 1} lose the last",
+     [_row("A", "a" * (_TEXT_MAX - 1) + "b"), _row("B", "c" * _TEXT_MAX + "d")]),
+    (f"exactly {_KEPT} valid rows are all kept",
+     [_row("A", f"t{i}") for i in range(1, _KEPT + 1)]),
+    (f"{_KEPT + 1} valid rows keep the last {_KEPT}",
+     [_row("A", f"t{i}") for i in range(1, _KEPT + 2)]),
+    ("filter first, then the tail: dropped rows in the tail do not shrink the window",
+     [*[_row("A", f"t{i}") for i in range(1, _KEPT + 1)], _row("A", ""),
+      _row("A", f"t{_KEPT + 1}"), {"displayName": "A"}, _row("A", 5)]),
+    ("non-ASCII and multi-line text kept raw",
+     [_row("Zoë", "linha um\nlinha dois — ação"), _row("João", "e agora?")]),
+]
+
+
 class _ReplyLLM:
     """Stub LLM returning one canned judge reply."""
 
@@ -231,11 +277,15 @@ def main(out: Path) -> None:
         parse_rows.append({"case": case, "reply": reply, "expected": {
             "advance": guards._coerce_verdict(raw).decision, "parseFailure": parse_failure}})
 
-    cases = [r["case"] for r in (*render_rows, *parse_rows)]
+    normalize_rows = [{"case": case, "thread": thread, "expected": guards._recent_turns(thread)}
+                      for case, thread in NORMALIZE_CASES]
+
+    cases = [r["case"] for r in (*render_rows, *parse_rows, *normalize_rows)]
     if len(cases) != len(set(cases)):
         raise SystemExit("duplicate case names")
     for name, rows in (("render-guard.jsonl", render_rows),
-                       ("handoff-parse-guard.jsonl", parse_rows)):
+                       ("handoff-parse-guard.jsonl", parse_rows),
+                       ("normalize-turns.jsonl", normalize_rows)):
         with (out / name).open("w", encoding="utf-8", newline="\n") as fh:
             fh.writelines(_dumps(row) + "\n" for row in rows)
         print(f"{name}: {len(rows)} rows")

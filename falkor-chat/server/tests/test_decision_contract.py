@@ -11,9 +11,11 @@ against a stale copy:
 * `render-guard.jsonl` — `_render_judge_user(condition, understanding, recent_turns)`;
 * `handoff-parse-guard.jsonl` — a judge reply through the production judge
   (`_build_llm_judge` over a stub LLM) and `_coerce_verdict`: `advance` is the verdict's
-  `decision`; `parseFailure` is whether the own-line parse found no verdict.
+  `decision`; `parseFailure` is whether the own-line parse found no verdict;
+* `normalize-turns.jsonl` — `guards._recent_turns(thread)`, the turn normalization the guard
+  render and the join-in render share (typed-decision-models impl review P2-F3).
 
-Both are written by `scripts/generate_guard_decision_vectors.py` (human-invoked, this tree's
+All three are written by `scripts/generate_guard_decision_vectors.py` (human-invoked, this tree's
 venv), which also iterates `guards`' cue and negator tables for its probe rows.
 
 The guarded equality test asserts each copy byte-identical to model-bench's, and skips only when
@@ -36,7 +38,7 @@ from falkorchat.guards import _coerce_verdict
 _COPIES = Path(__file__).resolve().parent / "data" / "decision-contract"
 _MODEL_BENCH = Path(__file__).resolve().parents[3] / "model-bench"
 _CANONICAL = _MODEL_BENCH / "tests" / "fixtures" / "decision-contract"
-_VECTOR_FILES = ("render-guard.jsonl", "handoff-parse-guard.jsonl")
+_VECTOR_FILES = ("render-guard.jsonl", "handoff-parse-guard.jsonl", "normalize-turns.jsonl")
 
 
 def _rows(name: str) -> list[dict[str, Any]]:
@@ -46,6 +48,7 @@ def _rows(name: str) -> list[dict[str, Any]]:
 
 _RENDER_ROWS = _rows("render-guard.jsonl")
 _PARSE_ROWS = _rows("handoff-parse-guard.jsonl")
+_NORMALIZE_ROWS = _rows("normalize-turns.jsonl")
 
 
 @pytest.mark.parametrize("name", _VECTOR_FILES)
@@ -57,7 +60,11 @@ def test_the_vector_copy_is_byte_identical_to_model_benchs(name: str) -> None:
 
 @pytest.mark.parametrize(
     ("name", "rows"),
-    [("render-guard.jsonl", _RENDER_ROWS), ("handoff-parse-guard.jsonl", _PARSE_ROWS)],
+    [
+        ("render-guard.jsonl", _RENDER_ROWS),
+        ("handoff-parse-guard.jsonl", _PARSE_ROWS),
+        ("normalize-turns.jsonl", _NORMALIZE_ROWS),
+    ],
 )
 def test_every_vector_line_is_a_parametrized_row(name: str, rows: list[dict[str, Any]]) -> None:
     lines = [line for line in (_COPIES / name).read_bytes().splitlines() if line.strip()]
@@ -123,3 +130,8 @@ def test_the_guard_handoff_verdict_matches_handoff_parse_guard_jsonl(row: dict[s
     parsed = llm.extract_own_line_json_object(row["reply"], require_key="decision")
     assert verdict.decision is row["expected"]["advance"]
     assert (parsed is None) is row["expected"]["parseFailure"]
+
+
+@pytest.mark.parametrize("row", _NORMALIZE_ROWS, ids=[r["case"] for r in _NORMALIZE_ROWS])
+def test_recent_turns_matches_normalize_turns_jsonl(row: dict[str, Any]) -> None:
+    assert guards._recent_turns(row["thread"]) == row["expected"]
