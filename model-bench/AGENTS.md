@@ -23,8 +23,8 @@ no configuration tried reached significance at this pack's sample size. `chat-re
 `decisionPoint` key alone; content hashing, the AST import allowlist), `lmstudio`,
 `hostinfo`, `tooling`, `convo` (turn assembly and driving), `runner` (`RunConfig`, the
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
-and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
-constants). `tests/fixtures/decision-contract/` pins it and `classification`'s guard render and
+`decision_stats` (the bar statistics), and `decisions` (typed-decision-models' pure half —
+policies, hashes, `Candidate.load`, bar constants). `tests/fixtures/decision-contract/` pins it and `classification`'s guard render and
 decision-point hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
 `run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
@@ -78,6 +78,11 @@ with **no defaults**; `min_detectable_difference` takes `n_effective: float`, so
 count raises. **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
 `resolving.observable_floor` — and it **raises** on the `mcnemar-exact` path (a theorem there) while
 it demotes-and-names on the substitute one.
+
+**`decision_stats.py` implements `docs/plans/typed-decision-models-ml.md` §Q3–§Q6 and no other
+source** — the decision-point bar statistics and their pinned constants, cited by section. It may
+call `stats` primitives, never `stats.verdict`/`stats.holm_steps` (either makes `holds` easier,
+note §Q3.2); `tests/test_decision_stats.py` pins that by an AST read and a patched-out run.
 
 **Five honesty rules that are easy to break silently, and what holds each in place:**
 
@@ -148,15 +153,10 @@ harness live with the same inputs — `modelbench.packs.load_pack` for the pack,
 model/pack/prompt/`temperature: 0.0` — never the stored artifact
 (`docs/test-reports/small-model-benchmarking-s7-report.md`).
 
-**`compare --negative-control` always duplicates exactly one already-stored run record as both
-arms — never two independently-run invocations, even when two live runs share a session.**
-`cli.py`'s `_select_arms` returns `[candidates[0], candidates[0]]`; which record survives as
-`candidates[0]` depends on the other flags. `--models` dedups by model key keeping the
-**last-stored** (newest) run for that key (`by_key = {r.modelKey: r for r in candidates}`, last
-value wins); with only `--session`, or no model/session filter at all, the filtered list keeps
-`load_history`'s ascending filename order, so `candidates[0]` is instead the **oldest** matching
-run. Either way the mode's purpose is unaffected — a wiring smoke check where `b = c = 0` by
-construction, never a real comparison.
+**`compare --negative-control` duplicates one stored record as both arms** (`cli._select_arms`
+returns `[candidates[0], candidates[0]]`), never two runs: a wiring smoke check, `b = c = 0` by
+construction. `--models` keeps each model key's newest run; otherwise `load_history`'s ascending
+filename order makes `candidates[0]` the oldest match.
 
 ## Hard rules (they are design constraints, not preferences)
 

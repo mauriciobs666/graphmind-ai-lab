@@ -1782,3 +1782,208 @@ the bare `missing` inside a negated `still missing` is not negated, so no ration
 that pair. It fails loudly rather than silently, so no action is needed now. If such a cue is ever
 added, the assertion should exempt the pairs whose cue contains another cue. A comment on the
 assertion stating the assumption would save the next maintainer the diagnosis.
+
+## Pass 16
+
+*2026-10-31. U3c.1: `model-bench/modelbench/decision_stats.py` and `tests/test_decision_stats.py`
+(both new), plus the `model-bench/AGENTS.md` and `docs/HISTORY.md` edits. The diff is uncommitted
+against `3fe94041`. Specs: plan2 §3.6 (pairing and drops, the API, pinned constants), plan2 §4.1
+U3c and the §5 `| U3c |` rows; plan3 §3.3 (the bench's over-limit item), §3.6 (counts and
+pairing) and §4.1 U3c; v1.3 §3.6. The formula source is note v1.6 §Q1.3 and §Q3–§Q6. Out of scope,
+because U3c.2 owns them: `cli._replicate_groups`, the arm refusals and every `report.py` print.*
+
+**Verdict: approve with suggestions.** Every formula matches the note. My independent
+re-derivation reproduces all of the note's figures, and a differential run against the module
+found no disagreement. The pairing rules match plan2 and plan3. There are two minors for the
+implementer:
+- `PairedItems` leaves out a verdict cell that has no paired item, so U3c.2 could print three FR-1
+  lines and still conclude "all hold" (P16-m1);
+- two parts of how far the design effect reaches are untested (P16-m2).
+
+There are also four nits. One goes to `teco` for the U3c.2 brief and one to `data-scientist`.
+
+**Checks run** (from `model-bench/`, with a fresh `PYTHONPYCACHEPREFIX` each time):
+- **Suite and lint:** `3005 passed, 5 deselected, 2 xfailed`; `ruff` clean.
+- **Independent re-derivation** (`scratchpad/p16/indep.py`, stdlib, `python3 -I`, importing nothing
+  from model-bench). It computes power by enumerating the trinomial `(b, c)` directly, with
+  `p_b = (ψ+δ)/2`, `p_c = (ψ−δ)/2` and `p_0 = 1−ψ`, rejecting on an exact `Fraction` tail. The
+  module and the note's script instead use binomial-of-binomial; the two are mathematically
+  equivalent but share no code. It reproduces:
+  - all 20 cells of the §Q3.3 table, including the n = 75 and n = 150 rows (150 at ψ̂ = 0/0.05
+    gives 4.5/4.8, matching the note's "4.5–4.8");
+  - §Q3.5's reuse-adjusted limits: 13.1/15.2/16.4/17.2 at n = 50 and 8.2/9.1/9.4/9.6 at n = 100;
+  - §Q3.6 row 2's 14.5 at ψ̂ = 0.16;
+  - §Q3.2's false-fail figures, 1.05/4.86/9.04% for four cells and 2.08/9.49/17.27% for two
+    replicates;
+  - every §Q3.6 `p_worse`, and the 0.0547 at (8, 2).
+
+  A differential run (`diffmdd.py`) compared `decision_stats.mdd` with this code. It covered 77
+  grid cases (n from 0 to 50 against seven values of ψ̂, including ψ̂ = 0 and 1), 25 random
+  `(n, ψ̂)` pairs and 3 reuse targets, 105 cases in all. There were 0 disagreements.
+- **Mutants:** 20 of my own, in `scratchpad/p16/mutate.py`. Each ran on a copy against the full
+  suite, was restored and `cmp`-checked, and the `sha256` matched the pre-run value.
+  - **16 went red:**
+    - floor instead of ceiling on the grid;
+    - `ψ` without `max(ψ̂, δ)`;
+    - `n_effective` rounded up with `ceil`;
+    - a two-sided z for `U`;
+    - the concordant `y` without `+ x_i`;
+    - side-check items counted in `latency`;
+    - the order of rules 2 and 3 swapped;
+    - one load accepted as enough;
+    - `p_worse` summed from `b + 1`;
+    - an unpaired bootstrap;
+    - an over-limit hand-off treated as concordant;
+    - chat withholding dropped only on the incumbent;
+    - `mdd` taken at `n` instead of `n_effective`;
+    - the reuse target `0.8^(1/K)`;
+    - a load drop counted on both arms;
+    - the point estimate as a mean of ratios.
+  - **4 survived:** see P16-m2 and P16-n1.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded; the module was read and executed
+directly.
+
+### (a) Formula fidelity
+
+- **Grid and ceiling.** `delta = step / 1000` steps 0.1 pp, and the first grid point with
+  `power ≥ target` is returned. That is §Q3.3's ceiling.
+- **Power.** `ψ = max(ψ̂, δ)`, `q = (ψ+δ)/(2ψ)`, and `crit(m)` uses the same correctly rounded
+  tail comparison as `p_worse`. The result is `None` exactly when no `m ≤ n` can reject, which is
+  `n < 5` at α = 0.05.
+- **Reuse target.** `parity_cell` passes `MDD_POWER ** (1 / (k + 1))` from K ≥ 1 on, which is
+  §Q3.5.
+- **`U`.** It is `mover_d_interval(a, b, c, d, z=1.6448536269514722)[1]`. I checked the
+  orientation in `stats.py:136`: `p1 = (a+b)/n`, the candidate's rate.
+- **Design effect.** The brief says it enters `U`. **The note says it does not**: "Only the
+  detection limit takes `designEffect`" (§Q3.2), and §Q3.4's `U` has no design-effect term. The
+  code follows the note. `n_effective` feeds both `mdd` calls, `ψ̂` stays `m / n_c` as §Q3.3
+  requires, and `p_worse` decides. This part is correct, but it is partly untested (P16-m2).
+- **FR-2.** `R = Σx/Σy`, with `B` index resamples from `random.Random(seed)`, each pair kept
+  together, and `stats.percentile` at the caller's `levels`. The `Fraction(1, 40)`/`(39, 40)` pair
+  exists as `stats.LEVEL_CI95_*`. The note does not specify how indexes are drawn, so
+  `randrange` is a legitimate choice. The interval values depend on it, and the test pins it
+  against a reference resample.
+
+### (b) Pairing
+
+`pair_items` matches the rules, rule by rule:
+- note §Q4.3's table;
+- plan2 §3.3's three rules: "Cell", concordant pairing, and "Side check" dropped and counted;
+- plan3 §3.6's two over-limit rules. A handed-off over-limit item uses its own `wallClockMs`. A
+  `decisions`-surface one is treated as a decision failure, so its `y = elapsed + x_i`, matching
+  note §Q4.3's "No hand-off model" row.
+
+A guard hand-off failure on an over-limit item is withheld (plan3 §3.3 table, last column), so it
+drops before `_concordant` runs. That is why `failedCall="handoff"` raises. The rules match.
+
+Nothing U3c.2 needs from pairing is missing, apart from P16-m1 and P16-n2.
+
+### Disposition of the implementer's judgement calls
+
+- **(1) In scope.** Plan2 §3.6's API names `speedup_ratio` and `mean_latency`.
+- **(2) Sound.** The concordant item's cell is the incumbent's by plan2 §3.3 "Cell", and the
+  incumbent is always scored once both withholding rules have passed. The one limit is
+  load-withheld items, whose stratum cannot be known from the records (P16-n2).
+- **(3) Agreed.** v1.3 §3.5 says the side check "does not affect pass/fail", and note §Q4.3's
+  scored n is "the paired scored n of eval items".
+- **(5) Matches** note §Q4.3 "Counts". The raises are on out-of-contract records; how U3c.2
+  surfaces them is its own choice (Open question 1).
+- **(7) Matches** plan2 §3.6's `assumed` rule and rule 4.
+- **(8) Right to follow plan2.** Plan2 lets a `same-load` replicate into the conjunction, so
+  "across loads" would mis-describe a split between same-load runs. The note should be aligned
+  (P16-n4).
+- **(9) Follows the note.** §Q3.3 reads n < 5 as `holds (no worsening is detectable …)`. The
+  thin-cell guard is the method-minimum print beside the cell, which P16-m1 can make disappear.
+- **(10) Needed.** The line prints "at n = …", which is `floor(n_c/DE)`.
+- **(11) Confirmed.** Note v1.6's "Handed to architect" has six items, so there is no "item 9".
+  §Q1.3 carries "100 (floor 50)" and "60 (floor 52)".
+
+### (c) API fit for U3c.2
+
+U3c.2 has every figure it needs.
+- **FR-1 line:** `e1`, `e2`, `n`, `b`, `c`, `p_worse`, `U`, `psi_hat`, `n_effective`, `mdd`,
+  `mdd_reuse` and `state`. U3c.2 adds the Wilson intervals from `stats.wilson_interval`.
+- **FR-2:** `latency` and `scored_n`.
+- **Per-cell `overLimit`:** `over_limit[m]` against `len(outcomes[m])`, once P16-m1 is fixed.
+- **States:** the constants and `combine_replicates`.
+- **Method minimums:** the constants.
+
+Two decision rules are left for U3c.2 to compose, and its brief should name them (Open
+question 1):
+- a replicate's FR-1 state is `SCORED_N_BELOW_MIN` when `scored_n < MIN_EVAL_ITEMS`, whatever the
+  cells say (plan2 §3.6), else `NOT_MET` if any cell is `worse`, else `MET`;
+- a `pair_items` raise must become a printed state, not a crash.
+
+### (d) Growth-stops check (`model-bench/AGENTS.md`)
+
+`AGENTS.md` falls under the context-file convention ("rewritten, not appended"), not the
+growth-stops bullet. Applying the same test anyway:
+- It is 2,454 words (was 2,475), and no line is over 700 characters.
+- **New scope:** the `decision_stats.py` invariant paragraph, which v1.3 §3.6 requires ("U3c
+  adds one `model-bench/AGENTS.md` invariant line"), and the `decision_stats` entry in the module
+  list.
+- **Rework:** the `--negative-control` paragraph is compressed and no fact is lost. The
+  duplicated record, the smoke-check purpose, newest-per-key under `--models` and oldest-first
+  otherwise all survive.
+- No history is restated.
+
+### Findings
+
+**P16-m1 (minor, implementer). A verdict cell with no paired item is missing from
+`PairedItems.outcomes` and `over_limit`.** The docstring says "every metric the incumbent
+declares is here". A probe (`scratchpad/p16/probe.py`) paired three understanding/`False` items.
+`outcomes` held only `falseAdvanceRate` and `falseAdvanceRateByUnderstanding`, and the three
+other verdict cells were absent. A U3c.2 loop over `outcomes`, or an `all(...)` over its lines,
+would print three FR-1 lines and their method-minimum prints, and could return `met` without
+the fourth. A loop over the four names would raise `KeyError` instead.
+- **Fix:** seed `outcomes` with `()` and `over_limit` with `0` for every cell in
+  `_VERDICT_CELLS_BY_ROLE[role]` before the loop. `parity_cell(())` already gives the note's
+  n = 0 line.
+- **Positive control:** this probe, asserting all four keys present.
+
+**P16-m2 (minor, implementer). Part of how far the design effect reaches is untested.** Two
+mutants survive the full suite:
+- `mdd_reuse` computed at `n` instead of `n_effective`;
+- `U` computed from a table shrunk to `n_effective`.
+
+The reuse limit should use `n_effective` like the plain one (§Q3.3, §Q3.5). `U` should not move
+with the design effect at all (§Q3.2: "only the detection limit takes `designEffect`"). Today
+the effect is nil, because `designEffect = 1.0` is final for candidate runs (plan2 §3.4).
+However, the API takes the argument and claims both behaviours.
+- **Fix:** one test at `design_effect = 2.0`, `k = 1`. Assert that `mdd_reuse == mdd(floor(n/2),
+  ψ̂, …, 0.8**(1/2))`, and that `U` equals the same cell's `U` at `design_effect = 1.0`.
+
+**P16-n1 (nit, implementer). The α boundary is unpinned.** `p <= alpha` → `p < alpha` survives,
+because `p_worse` is dyadic and never equals 0.05. That makes the mutant equivalent at
+`FR1_ALPHA`, but not for the `alpha` parameter. Pin it with `parity_cell` on `(5, 0)` at
+`alpha=1/32`, which should be `worse`. The other survivor, `power >= target` → `>`, is equivalent
+in practice: a float power never lands exactly on the target. No action.
+
+**P16-n2 (nit, `teco` for the U3c.2 brief). `drops` does not separate eval from side-check
+items.** A load-withheld side-check item lands in the same `("incumbent", "load")` count as an
+eval one (probe). U3c.2's "counts beside each bar" would then include side-check drops, which do
+not affect any bar.
+
+The stratum of a withheld item cannot be recovered from the records: the incumbent has no
+scores and the candidate may have none. Separating the drops therefore means `pair_items` would
+need the pack's per-item strata. Decide in the U3c.2 brief whether the bar's drop counts must be
+eval-only. If they must, U3c.2 adds that argument. If not, print the caveat.
+
+**P16-n3 (nit, implementer). HISTORY overstates one test.** It says the §Q3.3 table is
+re-derived "at n = 50/75/100". The tests cover the n = 50 and n = 100 rows, but only one n = 75
+cell (`(75, 0.20)`). Say so, or add the row. My independent run reproduces all four rows.
+
+**P16-n4 (nit, `data-scientist`). Note §Q6 says "unstable across loads — not met"; plan2 §3.6
+says "unstable across replicates — not met".** The code follows plan2, which is right because
+same-load replicates enter the conjunction. Align the note at its next revision.
+
+### Open questions
+
+1. **(`teco`, U3c.2 brief)** Name the per-replicate FR-1 state rule (scored n below 200 takes
+   precedence over the cells), how a `pair_items` raise is printed, and P16-n2's drop scope.
+
+### Proposed REVIEW.md lines
+
+None. Each finding is a single instance, already covered by the "every check can fail and
+pass" line.

@@ -2,6 +2,51 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U3c.1 — `decision_stats.py`: the bar statistics, pure
+
+**What:** the module half of v1.3 §4 U3c / plan2 §4.1 U3c / plan3 §4.1 U3c. It implements
+`docs/plans/typed-decision-models-ml.md` §Q3–§Q6 and no other source; nothing calls it yet
+(U3c.2 wires `cli._replicate_groups` and the `report.py` bar section).
+
+- **`p_worse(b, c)`** (note §Q3.1), exact, `1` at `m = 0`. **`mdd(n, psi_hat, *, alpha,
+  power_target)`** (§Q3.3), the exact power in log space on the 0.1 pp grid, first point at or
+  above the target, and `None` below n = 5. With `power_target = 0.8 ** (1 / (K + 1))` it gives
+  the reuse-adjusted limit (§Q3.5).
+- **`parity_cell(pairs, *, design_effect, k, alpha) -> ParityLine`**: §Q3.4's fields (`e1`,
+  `e2`, `n`, `b`, `c`, `p_worse`, `U`, `psi_hat`, `mdd`, `mdd_reuse`), plus `n_effective` and the
+  cell state `holds`/`worse`. The design effect reaches the limits only.
+- **`pair_items(incumbent, candidate, *, role)`** follows note §Q4.3's table for a speed-up role.
+  Load and guard chat-call withholding drop an item pairwise. A guard decision failure is
+  concordant on the incumbent's cells, with `y_i` = its elapsed time + `x_i`; on the side check
+  it is dropped and counted. Plan3 §3.6 adds two over-limit rules: a handed-off over-limit item
+  pairs on its own answer with its own `wallClockMs`, and a `decisions`-surface one pairs as a
+  decision failure. Drops are counted per arm and reason. `over_limit` gives each metric's
+  count, 0 included. `latency` and `scored_n` cover eval items only, because the side check does
+  not affect pass/fail (v1.3 §3.5).
+- **`combine_replicates(states, load_count)`**: plan2 §3.6's four rules. An `assumed` replicate
+  (`LOAD_CHANGED`) is left out.
+- **`speedup_ratio`** (§Q4.1, a ratio of means with a paired index bootstrap through
+  `stats.percentile`) and **`mean_latency`** (§Q4.2). Both return a `stats.BootstrapResult` and
+  take `seed`/`B`/`levels` as required keywords.
+- **Pinned constants:** `FR1_ALPHA`, `MDD_POWER`, `MDD_GRID_PP`, `BOOTSTRAP_B`,
+  `GUARD_CELL_METHOD_MIN = 50` and `FR10_CLASS_METHOD_MIN = 52`, cited to note §Q1.3. A test
+  re-derives 52 from the §Q5.3 criterion.
+
+**Tests:** `tests/test_decision_stats.py`, 169 tests.
+- The note's figures are re-derived from the formulas, never from its scripts: §Q3.3's MDD table
+  at n = 50/75/100, §Q3.5's reuse-adjusted values at K = 1…3, every §Q3.6 worked-example row, and
+  §Q1.3's sawtooth (0.263/0.219/0.185).
+- Pair fixtures are built by the real `classification.score_answer` on the decision-point
+  fixture pack.
+- The ban on `stats.verdict`/`stats.holm_steps` is pinned by an AST reader with a coverage probe
+  over nine spellings and by a run with both patched to raise.
+- Both bootstraps' seed and `levels` are pinned against a reference resample at a non-zero seed
+  and at non-CI95 levels.
+- A mutation run killed all 30 mutants, including a hard-coded seed and swapped or defaulted
+  levels in each bootstrap.
+
+**Suite:** 3005 passed, 5 deselected, 2 xfailed; `ruff check .` clean.
+
 ## 2026-10-31 — typed-decision-models U3b.2 — the guard's decision-point hand-off parse, `render-guard.jsonl`, `handoff-parse-guard.jsonl` and falkor-chat's equality test
 
 **What:** the second half of v1.3 §4 U3b (§3.2, §3.2.2, §5 U3b row 2, R-10), with impl review
