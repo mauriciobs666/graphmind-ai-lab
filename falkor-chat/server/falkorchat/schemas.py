@@ -21,10 +21,20 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 # Size bounds: RAM is the binding constraint (AGENTS.md rule 6) — message text
-# lands in graph memory AND the full-text index, so the boundary caps it.
+# lands in graph memory AND the full-text index. These constants are the one
+# declaration of each bound: the REST models below, the MCP tool signatures
+# (`mcp.py`, `Annotated[..., Field(...)]` — FastMCP validates and advertises
+# them) and the service's stored-value checks (`services.py`, K-101) all read
+# them. `tests/test_input_bound_parity.py` keeps REST and MCP in step.
 MAX_NAME_LEN = 200
 MAX_TEXT_LEN = 8000
 MAX_MENTIONS = 50
+# Read-parameter ranges (K-101): the `limit` of every list/search route and its
+# MCP twin, and the thread read window's `limit` (also the room-wide MCP read's,
+# which has no REST twin). Request hygiene, owned by each transport — the
+# service trusts its in-process callers' limits.
+MAX_LIST_LIMIT = 200
+MAX_READ_LIMIT = 1000
 # Server-minted ids (runId, msgId, …) are hex uuids; bound path params defensively so a
 # pathological id can't reach a query (rule 6 — the boundary caps every string input).
 MAX_ID_LEN = 200
@@ -40,7 +50,7 @@ class CreateThreadIn(BaseModel):
 
 class PostMessageIn(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_TEXT_LEN)
-    # REST mention parity with the MCP tool
+    # mention parity with the MCP `send_message` tool, which declares the same bound
     mentions: list[str] | None = Field(None, max_length=MAX_MENTIONS)
 
 
@@ -49,15 +59,16 @@ class PostMessageIn(BaseModel):
 # leaf-module reason `MAX_CONFIG_LEN`/`MAX_DIFF_PREVIEW` are: `services.py`
 # already imports from this module, so the reverse direction deadlocks at
 # import time (see that module's own note on `MAX_CONFIG_LEN`). `services.py`
-# imports this constant so an MCP caller (no pydantic layer) is bound by the
-# identical cap, not just the REST boundary below.
+# imports this constant so every front door and in-process caller is bound by
+# the identical cap, not just the REST boundary below.
 MAX_DOCUMENT_CHARS = 500_000
 MAX_SOURCE_FORMAT_LEN = 50
 # FR-11 bulk ingestion (K-050 M5 Stage 6a) — plan §3.5's suggested, implementer-
 # tunable bound (`document-ingestion.md` §3.5 "Bounds"). Declared here for the
 # same leaf-module reason as `MAX_DOCUMENT_CHARS` above: `services.py` imports
-# it so an MCP caller (no pydantic layer) is bound by the identical cap, not
-# just the REST `IngestDocumentsIn` boundary below.
+# it so the MCP `ingest_documents` caller — whose `items` argument is untyped on
+# purpose, to keep per-item receipts — is bound by the identical cap, not just
+# the REST `IngestDocumentsIn` boundary below.
 MAX_BATCH_SIZE = 20
 
 
@@ -75,9 +86,13 @@ class IngestDocumentsIn(BaseModel):
     §3.6). `min_length=1` rejects an empty batch at the REST boundary (an
     empty `POST /documents/batch` call has no meaningful receipt to return);
     `max_length=MAX_BATCH_SIZE` mirrors the same cap `Services.ingest_documents`
-    enforces for the MCP caller that skips this pydantic layer entirely.
+    enforces for every caller.
     """
 
+    # (Not in the docstring: FastAPI publishes it as REST documentation.) The
+    # service cap is the only one MCP's `ingest_documents` has — its `items`
+    # argument is deliberately untyped, so a bad item becomes that item's
+    # receipt instead of failing the whole call.
     documents: list[IngestDocumentIn] = Field(min_length=1, max_length=MAX_BATCH_SIZE)
 
 

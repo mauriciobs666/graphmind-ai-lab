@@ -4,6 +4,19 @@ A thin adapter that translates MCP tool calls into the same `Services` methods t
 REST router calls. No business logic lives here. The `Services` instance and the
 actor/context provider are injected via `configure(...)` at app-build time (and in
 tests), so this module never hardcodes the tenant.
+
+**Input bounds (K-101).** FastMCP builds a pydantic argument model from each tool
+signature, so the `Annotated[..., Field(...)]` bounds below are validated before a
+tool body runs and published in the tool's `inputSchema`, where the agent's model
+reads them. A violation comes back as a tool error (`isError`) whose text names the
+argument and the limit. The bounds read the same `schemas.py` constants as REST;
+`tests/test_input_bound_parity.py` checks the two front doors agree. Stored-value
+bounds are repeated here on purpose — the service enforces them for every caller,
+this layer advertises them. Read parameters (`limit`, `since`, `query`) are bounded
+here only, as REST bounds them in its `Query()` layer. Not copied
+(`docs/reviews/mcp-input-bounds-rca.md` §5.2 item 3): path-id lengths and
+`produced_by` (lookup-only), and `ingest_documents.items`, untyped so one bad item
+becomes its own receipt instead of failing the whole call.
 """
 
 from __future__ import annotations
@@ -11,9 +24,10 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from . import config
 from .background import (
@@ -24,9 +38,24 @@ from .background import (
     _schedule_update_detection,
 )
 from .config import CallContext
+from .schemas import (
+    MAX_LIST_LIMIT,
+    MAX_MENTIONS,
+    MAX_NAME_LEN,
+    MAX_READ_LIMIT,
+    MAX_SOURCE_FORMAT_LEN,
+    MAX_TEXT_LEN,
+)
 from .services import Services
 
 _log = logging.getLogger(__name__)
+
+# Reusable argument bounds (see the module docstring). Each mirrors one REST
+# `Field`/`Query` declaration; the parity test pins the pairing.
+ListLimit = Annotated[int, Field(ge=1, le=MAX_LIST_LIMIT)]
+Name = Annotated[str, Field(min_length=1, max_length=MAX_NAME_LEN)]
+OptionalName = Annotated[str | None, Field(max_length=MAX_NAME_LEN)]
+SearchQuery = Annotated[str, Field(min_length=1)]
 
 mcp = FastMCP("falkor-chat")
 # Serve the Streamable-HTTP handler at the mount root so that mounting the app
@@ -199,15 +228,18 @@ def _schedule_background(ctx: CallContext, posted: dict[str, Any]) -> None:
 
 @mcp.tool()
 def send_message(
-    body: str, re: str, mentions: list[str] | None = None, frm: str | None = None
+    body: Annotated[str, Field(min_length=1, max_length=MAX_TEXT_LEN)],
+    re: str,
+    mentions: Annotated[list[str] | None, Field(max_length=MAX_MENTIONS)] = None,
+    frm: str | None = None,
 ) -> dict[str, Any]:
     """Post `body` into thread `re`, optionally mentioning members.
 
-    `body` may be at most 8000 characters (`schemas.MAX_TEXT_LEN`, the same
-    cap the REST route enforces); a longer body is rejected with an error
-    naming the limit, and nothing is posted or scheduled — split it into
-    several messages instead. `frm` is reserved/ignored in M1 — the author is
-    the configured actor (Q#1). Schedules the same out-of-band
+    `body` must be non-blank and at most 8000 characters; a longer body is
+    rejected with an error naming the limit, and nothing is posted or
+    scheduled — split it into several messages instead. At most 50
+    `mentions`. `frm` is reserved/ignored in M1 — the author is the
+    configured actor (Q#1). Schedules the same out-of-band
     embed/trigger/responder work the REST route does (K-041), off-band so the
     write itself is never delayed.
     """
@@ -220,11 +252,11 @@ def send_message(
 @mcp.tool()
 def read_messages(
     re: str | None = None,
-    since: int | None = None,
-    limit: int = 50,
+    since: Annotated[int | None, Field(ge=0)] = None,
+    limit: Annotated[int, Field(ge=1, le=MAX_READ_LIMIT)] = 50,
     advance: bool = True,
 ) -> list[dict[str, Any]]:
-    """Catch up on messages.
+    """Catch up on messages (`limit` 1-1000, `since` >= 0).
 
     With `re` (thread id): read that thread since your cursor (or explicit
     `since`), advancing the cursor unless `since` is given. Cursor-driven reads
@@ -241,14 +273,16 @@ def read_messages(
 
 
 @mcp.tool()
-def create_thread(channel_id: str, title: str) -> dict[str, Any]:
-    """Create a thread in an existing channel so an agent is self-sufficient."""
+def create_thread(channel_id: str, title: Name) -> dict[str, Any]:
+    """Create a thread in an existing channel so an agent is self-sufficient.
+
+    `title` is 1-200 characters."""
     ctx = _get_context()
     return _svc().create_thread(ctx, channel_id=channel_id, title=title)
 
 
 @mcp.tool()
-def search_messages(query: str, limit: int = 50) -> list[dict[str, Any]]:
+def search_messages(query: SearchQuery, limit: ListLimit = 50) -> list[dict[str, Any]]:
     """Full-text keyword search over this workspace's messages (QUERIES.md §5).
 
     Returns matches newest-relevance first (RediSearch score). Invalid query
@@ -259,14 +293,16 @@ def search_messages(query: str, limit: int = 50) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def create_channel(name: str) -> dict[str, Any]:
-    """Create a channel so an agent is self-sufficient (can set up its own space)."""
+def create_channel(name: Name) -> dict[str, Any]:
+    """Create a channel so an agent is self-sufficient (can set up its own space).
+
+    `name` is 1-200 characters."""
     ctx = _get_context()
     return _svc().create_channel(ctx, name=name)
 
 
 @mcp.tool()
-def list_channels(limit: int = 50) -> list[dict[str, Any]]:
+def list_channels(limit: ListLimit = 50) -> list[dict[str, Any]]:
     """List this workspace's channels, newest first.
 
     The navigation entry point: without it an agent cannot discover an existing
@@ -277,7 +313,7 @@ def list_channels(limit: int = 50) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def list_threads(channel_id: str, limit: int = 50) -> list[dict[str, Any]]:
+def list_threads(channel_id: str, limit: ListLimit = 50) -> list[dict[str, Any]]:
     """List a channel's threads, most recently active first.
 
     Pairs with `list_channels` so an agent can find the thread id `send_message`
@@ -289,10 +325,18 @@ def list_threads(channel_id: str, limit: int = 50) -> list[dict[str, Any]]:
 
 @mcp.tool()
 def ingest_document(
-    text: str, title: str | None = None, source_format: str = "text",
-    source_label: str | None = None, produced_by: str | None = None,
+    text: str,
+    title: OptionalName = None,
+    source_format: Annotated[
+        str, Field(min_length=1, max_length=MAX_SOURCE_FORMAT_LEN)
+    ] = "text",
+    source_label: OptionalName = None,
+    produced_by: str | None = None,
 ) -> dict[str, Any]:
     """Ingest a text document: split into chunks, retained verbatim (K-050).
+
+    `text` must be non-blank and at most 500,000 characters; `title` and
+    `source_label` at most 200; `source_format` 1-50.
 
     Attributed to the configured `get_context()` actor (FR-4) — same posture
     as `send_message`, MCP ignores any notion of a client-supplied author.
@@ -333,15 +377,17 @@ def ingest_document(
 def ingest_documents(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Bulk-ingest multiple documents in one call (FR-11, K-050 M5 Stage 6a).
 
-    Each entry in `items` takes the same fields as `ingest_document`'s own
-    parameters: `text` (required), `title`, `source_format` (defaults
-    `"text"`), `source_label`, `produced_by` (all optional except `text`).
+    Each entry in `items` takes the same fields, and the same bounds, as
+    `ingest_document`'s own parameters: `text` (required), `title`,
+    `source_format` (defaults `"text"`), `source_label`, `produced_by` (all
+    optional except `text`). At most 20 items per call.
     `produced_by` is per-item, not a batch-level default
     (`agent-knowledge-base-strategy.md` §4.1) — a caller wanting one producer
     for every item in a batch just repeats the same string in each item's
     dict. Returns **one receipt per item**, in the same order as `items` —
     a per-item failure
-    (empty text, oversized text, unknown actor) does not abort the batch; it
+    (empty or oversized text, an out-of-bound field, unknown actor) does not
+    abort the batch; it
     comes back as that item's own `{"status": "error", "error": ...,
     "errorType": ...}` receipt instead (`Services.ingest_documents`
     docstring has the full reasoning). Chunk embedding/extraction is
@@ -379,7 +425,7 @@ def get_document(document_id: str) -> dict[str, Any] | None:
 
 
 @mcp.tool()
-def search_documents(query: str, limit: int = 20) -> list[dict[str, Any]]:
+def search_documents(query: SearchQuery, limit: ListLimit = 20) -> list[dict[str, Any]]:
     """Rank ingested document chunks by similarity to `query` (K-050 M5 Stage 2,
     FR-3 standalone KB search — independent of chat/`search_messages`).
 
@@ -407,7 +453,7 @@ def delete_document(document_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def list_documents(
-    current_only: bool = True, limit: int = 50
+    current_only: bool = True, limit: ListLimit = 50
 ) -> list[dict[str, Any]]:
     """List ingested documents, oldest first (§3.7's discoverability surface
     for FR-4/FR-5/FR-8). `current_only=True` (default) excludes superseded
@@ -438,7 +484,7 @@ def get_document_history(document_id: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def list_pending_document_updates(limit: int = 50) -> list[dict[str, Any]]:
+def list_pending_document_updates(limit: ListLimit = 50) -> list[dict[str, Any]]:
     """List `SUPERSEDES` suggestions awaiting confirm/reject (OQ-3's review
     surface) — oldest first, each carrying both documents' id + title."""
     ctx = _get_context()
@@ -447,7 +493,7 @@ def list_pending_document_updates(limit: int = 50) -> list[dict[str, Any]]:
 
 @mcp.tool()
 def list_document_updates(
-    status: str | None = None, limit: int = 50
+    status: str | None = None, limit: ListLimit = 50
 ) -> list[dict[str, Any]]:
     """List `SUPERSEDES` document updates, optionally filtered by `status`
     (`pending` / `confirmed` / `rejected`) — with no filter, includes the
@@ -488,7 +534,7 @@ def recheck_document_update(match_id: str) -> dict[str, Any] | None:
 
 
 @mcp.tool()
-def list_pending_matches(limit: int = 50) -> list[dict[str, Any]]:
+def list_pending_matches(limit: ListLimit = 50) -> list[dict[str, Any]]:
     """List `SAME_AS` suggestions awaiting confirm/reject (OQ-2's review
     surface) — oldest first, each carrying both entities' id + name."""
     ctx = _get_context()
@@ -496,7 +542,7 @@ def list_pending_matches(limit: int = 50) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def list_matches(status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_matches(status: str | None = None, limit: ListLimit = 50) -> list[dict[str, Any]]:
     """List `SAME_AS` matches, optionally filtered by `status` (`pending` /
     `confirmed` / `rejected`) — with no filter, includes the auto-merged tier
     (`status='confirmed', decidedBy='system'`), otherwise undiscoverable."""

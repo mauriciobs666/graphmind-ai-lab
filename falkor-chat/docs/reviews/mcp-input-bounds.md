@@ -309,3 +309,135 @@ with an unknown keyword carrying a bound, before the change.
 | N7b | same with `"mentions[]"`: positive control | green, as it should be |
 | N7c | N7b with MCP advertising 199 | killed |
 | N9 | recursion guard made a global visited set | killed (9 tests) |
+
+## Pass 3 — MCP signature bounds
+
+**Scope.** The uncommitted second half of K-101 against `HEAD` (`e7ccf17d`; the service half is
+`16f76f46`): `mcp.py`, `schemas.py`, `api.py`, `tests/test_input_bound_parity.py` and
+`tests/test_mcp.py`. Out of scope: the `services.py` hunk (a K-099 docstring),
+`scripts/ensure_demo_models.*` and `tests/test_ensure_demo_models_script.py`.
+
+**CPG:** considered, not relevant — the questions are about annotations, published schemas and
+test reach, and I answered each by executing it. `cpg_falkorchat` predates the diff.
+
+**Verdict: approve with suggestions.** Every bound now sits on its §5.2 layer, and none is tighter
+than REST, the service, or any known client. A violation reaches the client as a legible `isError`
+result. Check (iii) is no longer vacuous. The walker is closed-world for JSON Schema. The two new
+findings are nits. Once P3-2's one-line fix lands, **the walker-shape finding class is closed**, and
+further walker-shape findings are out of scope for K-101.
+
+**Evidence.**
+- `pytest -q tests/test_services.py tests/test_input_bound_parity.py tests/test_mcp.py`: **478 passed**.
+- `pytest -q tests/test_api.py -k "<not each of the 24 wf_repo/wf_client tests>"`: **95 passed,
+  24 deselected**. The `--setup-plan` output for the selection lists 0 `wf_*` fixtures.
+- `reference` was untouched, so no re-seed is needed.
+- Mutants ran in a fresh scratchpad copy (Appendix C).
+
+**Dispositions**
+- **P2-1: fixed.** `propertyNames` is recursed with the `{key}` suffix and is in both probes. The
+  closed-world tripwire covers the rest of the keyword axis (check 1 below).
+- **P2-2: fixed.** `_is_constrained_twin` matches at a field boundary, and
+  `test_twin_field_matches_only_at_a_field_boundary` pins `body.source` as rejected.
+
+**Checks requested by the brief**
+
+1. **Closed world. It holds for JSON Schema, and a collection error is loud enough.**
+   - Planted live keywords: `json_schema_extra={'maxGraphemes': 3}` on REST `CreateChannelIn.name`
+     (K1), and `x-maxGraphemes` on MCP `Name` (K3). Both raise `UnknownSchemaKeywordError` at
+     import.
+   - Making `contains` inert (K5) is killed by the raw-schema tripwire test.
+   - `test_live_schemas_use_only_keywords_the_collector_knows` pins that the live walk was not
+     empty.
+   - **Loud enough:** K1 ran together with `test_services.py`. pytest reported `1 error`, exit 2,
+     and *no test of either file ran* (the session stops at collection, and `pyproject.toml` has no
+     `--continue-on-collection-errors`). That cannot be misread as the §1.7 hazard: it is not a
+     skip and not exit 0. The real cost is the other way: a harmless new keyword stops the whole
+     default suite. K2 shows the realistic case, `Field(deprecated=True)`. That is an accepted cost
+     of being closed-world, and the error message says exactly what to do.
+   - **The remaining gap is one layer above JSON Schema** (P3-2).
+2. **No annotation is tighter than REST, the service, or a known client.** *Verified.*
+   - `test_value_exactly_at_the_bound_reaches_the_service` passes the boundary value for every
+     annotated argument, and the parity check (iii) compares every `Mcp` entry with REST's value.
+     M11 (`read_messages` `limit` capped at 200 instead of 1000) is killed.
+   - Clients are within bounds:
+     - mcp-monitor sends `since=0, limit=200` (`mcp-monitor/config.example.toml:77`) against
+       ≥ 0 and 1–1000.
+     - `agent-kb-retrieval` sends `search_documents(limit=5)` with a non-empty prefixed query.
+     - Kiro sends `send_message` with a non-empty body and 1 mention, and `read_messages(re=…)`.
+   - The `claude/` capture template is `title=<the fact, one line>`, with no cap. A 243-character
+     title now returns, over an in-memory client session, `isError` with `1 validation error for
+     ingest_documentArguments` / `title` / `String should have at most 200 characters`. It is
+     legible and names the field and the limit. It is also prevented up front, because the tool
+     description now says "at most 200". See Open questions.
+3. **`api.py` "byte-identical OpenAPI": false, but the constraints are identical.** *Run.*
+   - I dumped the router's OpenAPI from a scratch copy with `HEAD`'s `api.py`/`schemas.py`
+     (`git show`) and from the tree. The two dumps differ (35,685 vs 35,811 bytes).
+   - A structural diff finds exactly one change: `components.schemas.IngestDocumentsIn.description`.
+     That is `schemas.py`'s rewritten docstring, which FastAPI publishes.
+   - Every constraint is unchanged. The 12 `Query` swaps are no-ops (P3-1).
+4. **The three changed existing tests are justified. None of them weakens a check.**
+   - `test_send_message_over_max_text_len_…` now matches pydantic's text, because the signature
+     refuses first. The service cap is still pinned in `test_services.py`
+     (`test_post_message_rejects_text_over_max_text_len_before_any_repo_call`).
+   - The service-via-MCP parametrization shrank to the two whitespace cases. Those are the only
+     stored-value refusals still reachable through MCP. The removed cases moved, with literals, to
+     `test_client_sees_a_tool_error_naming_the_field_and_the_limit`.
+   - The description test swapped `MAX_TEXT_LEN` for a literal, which makes it stronger. M10b
+     (`ListLimit` drifting to 201) passes the parity test by design, because both sides read the
+     constant. It is killed by 10 literal pins in `test_mcp.py`.
+5. **Every service check still has a test that reaches it.**
+   - Through MCP, the service is reached only by whitespace-only `body`, which passes
+     `min_length=1`, and by `ingest_documents` items, which are untyped.
+   - Every other `InputBoundError` branch is now unreachable from MCP and REST alike. Each one is
+     still exercised directly: by `test_services.py`'s literal tests and by the parity check (iv)
+     probes, all through `Services(FakeRepo())`. In-process callers keep the guarantee.
+
+**P3-1 (nit) — the "byte-identical" claim is wrong, and the REST description now describes MCP
+internals.**
+- The only OpenAPI change is `IngestDocumentsIn`'s description, which now tells REST readers about
+  MCP's untyped `items`.
+- **Fix:** correct the claim in the delivery record to "constraint-identical (one description
+  changed)". Optionally, move the MCP sentence from the docstring into a `#` comment so it stays
+  out of the REST docs.
+
+**P3-2 (nit) — the closed world stops at the OpenAPI parameter object.** *Verified with a planted
+spec.*
+- `rest_constraints` reads `param.get("schema", {})`. A parameter in the legal `content` form,
+  `{"in": "query", "name": "p", "content": {"application/json": {"schema": {"maxLength": 5}}}}`,
+  yields `{}`, silently.
+- FastAPI does not emit that form today. But it is the one position the tripwire does not cover.
+- **Fix:** raise `UnknownSchemaKeywordError` when a parameter has no `schema`, and plant that spec
+  in `test_rest_collector_resolves_referenced_parameters_and_request_bodies`'s neighbour first.
+
+**SERVER.md sections to update at feature close**, in addition to the Pass 1 list:
+- **`§2.2` tools table**: each signature's bounds, or a note that they are advertised in
+  `inputSchema`.
+- **`§2.2`**: a bound violation is an `isError` result naming the argument and the limit, before
+  any service call. This is a client-visible contract.
+- **`§1.4` "Bounds"**: the MCP room-wide `read_messages` `limit` is 1–1000, and it has no REST twin.
+- Changed model-visible text (`falkor-chat/REVIEW.md`): the tool descriptions now state limits and
+  "non-blank". They invite no fabricated value and no bypass, so no measurement is needed.
+
+**Open questions**
+- **The agent capture template** (`claude/*/<agent>.md`,
+  `ingest_document(title=<the fact, one line>, …)`) states no 200-character cap. The tool
+  description now advertises it, and the error is legible. Should `cobb` add "≤ 200 characters" to
+  the template anyway, so a capture is not lost to a model that does not retry?
+
+### Proposed REVIEW.md lines
+
+Nothing new this pass. For *this* guard, the closed-world tripwire now enforces the walker-shape
+class. Pass 1's proposed line still stands, because it targets *other* guards that enumerate a
+schema or tree, and no test enforces it for those.
+
+## Appendix C — Pass 3 mutants (fresh scratchpad copy, restored after each, `__pycache__` cleared)
+
+| ID | Mutation | Result |
+|---|---|---|
+| K1 | REST `CreateChannelIn.name` `json_schema_extra={'maxGraphemes': 3}` | killed: collection error, exit 2, 0 tests ran (even with `test_services.py` in the same run) |
+| K2 | REST `CreateChannelIn.name` `deprecated=True` (harmless keyword) | collection error. A false alarm, accepted cost of closed world |
+| K3 | MCP `Name` alias `json_schema_extra={'x-maxGraphemes': 3}` | killed: collection error |
+| K5 | `contains` added to `INERT_KEYS` | killed (raw-schema tripwire test) |
+| M10b | `ListLimit` `le=MAX_LIST_LIMIT + 1` | survives parity (by design), killed by 10 `test_mcp.py` literal pins |
+| M11 | `read_messages.limit` `le=200` | killed (`test_mcp_layer_constraints_match_rest`) |
+| — | planted OpenAPI parameter in `content` form | **silently `{}`** (P3-2) |

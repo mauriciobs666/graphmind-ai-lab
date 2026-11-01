@@ -242,10 +242,11 @@ def _thread_with_sync_schedule(repo, worker):
 
 
 def test_send_message_over_max_text_len_is_rejected_naming_the_limit(repo):
-    """K-099: REST 422s an 8001-character post via pydantic; the MCP tool
-    signature declares no bound, so the service's cap is what refuses it —
-    loudly, with the limit in the error, writing nothing and scheduling no
-    embed job. Literal 8001/8000, never `MAX_TEXT_LEN` (root REVIEW.md)."""
+    """K-099: an 8001-character post is refused loudly, with the limit in the
+    error, writing nothing and scheduling no embed job. Since K-101 the MCP
+    signature's own bound refuses it before the service's cap is reached
+    (the service cap is pinned in `test_services.py`). Literal 8001/8000,
+    never `MAX_TEXT_LEN` (root REVIEW.md)."""
     from mcp.server.fastmcp.exceptions import ToolError
 
     worker = RecordingWorker()
@@ -253,7 +254,7 @@ def test_send_message_over_max_text_len_is_rejected_naming_the_limit(repo):
     mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
     try:
         tid = _thread_with_sync_schedule(repo, worker)
-        with pytest.raises(ToolError, match="8001 characters, exceeding the 8000 limit"):
+        with pytest.raises(ToolError, match="body\n  String should have at most 8000 characters"):
             asyncio.run(mcp_mod.mcp.call_tool(
                 "send_message", {"body": "x" * 8001, "re": tid}
             ))
@@ -289,28 +290,20 @@ def test_send_message_at_exactly_max_text_len_is_accepted_and_embedded(repo):
 @pytest.mark.parametrize(
     "tool,args,match",
     [
-        ("send_message", {"body": "", "re": "t1"}, "message text"),
         ("send_message", {"body": "   ", "re": "t1"}, "message text"),
-        ("send_message",
-         {"body": "hi", "re": "t1", "mentions": [f"m{i}" for i in range(51)]},
-         "mentions has 51 items, exceeding the 50 limit"),
-        ("create_channel", {"name": ""}, "channel name"),
-        ("create_channel", {"name": "x" * 201}, "201 characters, exceeding the 200 limit"),
-        ("create_thread", {"channel_id": "c1", "title": ""}, "thread title"),
-        ("create_thread", {"channel_id": "c1", "title": "x" * 201}, "thread title"),
-        ("ingest_document", {"text": "doc", "title": "x" * 201}, "title is 201"),
-        ("ingest_document", {"text": "doc", "source_format": ""}, "source_format"),
-        ("ingest_document", {"text": "doc", "source_label": "x" * 201}, "source_label"),
+        ("send_message", {"body": "\n\t ", "re": "t1"}, "message text"),
     ],
-    ids=["body-empty", "body-blank", "mentions-51", "name-empty", "name-201",
-         "title-empty", "title-201", "doc-title-201", "format-empty", "label-201"],
+    ids=["body-blank", "body-newline-tab"],
 )
 def test_mcp_tool_refuses_out_of_bounds_stored_value_before_any_repo_call(
     tool, args, match,
 ):
-    """The refusal comes from the service (`InputBoundError`), so it reaches
-    MCP with no signature annotation: the untouchable repo proves nothing was
-    read or written, and no embed job was scheduled."""
+    """Whitespace-only text passes the signature's `min_length=1` (as it
+    passes REST's) and is refused by the service's non-blank check
+    (`InputBoundError`, K-101 stakeholder decision): the untouchable repo
+    proves nothing was read or written, and no embed job was scheduled. Every
+    other stored-value bound is now refused earlier, by the signature — see
+    `test_client_sees_a_tool_error_naming_the_field_and_the_limit`."""
     from mcp.server.fastmcp.exceptions import ToolError
     from test_services import _UntouchableRepo
 
@@ -327,14 +320,217 @@ def test_mcp_tool_refuses_out_of_bounds_stored_value_before_any_repo_call(
 
 
 def test_send_message_tool_description_states_the_current_max_text_len(repo):
-    """The description is what an MCP client reads; its literal limit must
-    track `MAX_TEXT_LEN`, not drift from it."""
-    from falkorchat.schemas import MAX_TEXT_LEN
-
+    """The description is what an MCP client reads; its stated limit must be
+    the real one. Literal, never `MAX_TEXT_LEN` (root REVIEW.md)."""
     _configure(repo)
     tools = asyncio.run(mcp_mod.mcp.list_tools())
     desc = next(t.description for t in tools if t.name == "send_message")
-    assert f"at most {MAX_TEXT_LEN} characters" in desc
+    assert "at most 8000 characters" in desc
+
+
+# ── K-101: bounds declared on the MCP tool signatures (no database) ─────────────
+# Every expected value below is a literal, never a `schemas.MAX_*` constant: the
+# parity test compares MCP against REST, and both read the same constants, so a
+# drifted constant would move both sides together and pass it (root REVIEW.md).
+
+
+def _tool_schemas() -> dict[str, dict]:
+    return {t.name: t.inputSchema for t in asyncio.run(mcp_mod.mcp.list_tools())}
+
+
+def _arg(schema: dict, arg: str) -> dict:
+    """The constraint-bearing node for `arg`: the non-null `anyOf` branch for
+    an Optional argument, else the property itself."""
+    prop = schema["properties"][arg]
+    branches = [b for b in prop.get("anyOf", []) if b.get("type") != "null"]
+    return branches[0] if branches else prop
+
+
+_KEYWORDS = ("minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum")
+
+_LIST_TOOLS_WITH_200_LIMIT = (
+    "search_messages", "list_channels", "list_threads", "search_documents",
+    "list_documents", "list_pending_document_updates", "list_document_updates",
+    "list_pending_matches", "list_matches",
+)
+
+EXPECTED_ARG_BOUNDS = {
+    ("send_message", "body"): {"minLength": 1, "maxLength": 8000},
+    ("send_message", "mentions"): {"maxItems": 50},
+    ("read_messages", "since"): {"minimum": 0},
+    ("read_messages", "limit"): {"minimum": 1, "maximum": 1000},
+    ("create_thread", "title"): {"minLength": 1, "maxLength": 200},
+    ("create_channel", "name"): {"minLength": 1, "maxLength": 200},
+    ("search_messages", "query"): {"minLength": 1},
+    ("search_documents", "query"): {"minLength": 1},
+    ("ingest_document", "title"): {"maxLength": 200},
+    ("ingest_document", "source_format"): {"minLength": 1, "maxLength": 50},
+    ("ingest_document", "source_label"): {"maxLength": 200},
+    **{(tool, "limit"): {"minimum": 1, "maximum": 200} for tool in _LIST_TOOLS_WITH_200_LIMIT},
+}
+
+
+@pytest.mark.parametrize(
+    "tool,arg", sorted(EXPECTED_ARG_BOUNDS), ids=lambda v: v if isinstance(v, str) else "",
+)
+def test_tool_input_schema_advertises_the_bound(tool, arg):
+    node = _arg(_tool_schemas()[tool], arg)
+    advertised = {k: node[k] for k in _KEYWORDS if k in node}
+    assert advertised == EXPECTED_ARG_BOUNDS[(tool, arg)]
+
+
+@pytest.mark.parametrize(
+    "tool,arg",
+    [
+        # RCA §5.2 item 3 "not copied": lookup-only, no stored-value cost.
+        ("ingest_document", "produced_by"),
+        ("delete_document", "document_id"),
+        ("confirm_match", "match_id"),
+        # Service-only by RCA Appendix A: the service's own blank refusal is stricter.
+        ("ingest_document", "text"),
+    ],
+)
+def test_not_copied_arguments_advertise_no_bound(tool, arg):
+    node = _arg(_tool_schemas()[tool], arg)
+    assert {k for k in _KEYWORDS if k in node} == set()
+
+
+def test_ingest_documents_items_stays_untyped_so_per_item_receipts_survive():
+    """Typing `items` would make one bad item fail the whole call (RCA §5.1 B)."""
+    node = _tool_schemas()["ingest_documents"]["properties"]["items"]
+    assert node["type"] == "array"
+    assert node["items"] == {"additionalProperties": True, "type": "object"}
+    assert {k for k in _KEYWORDS if k in node} == set()
+
+
+@pytest.mark.parametrize(
+    "tool,args,field,message",
+    [
+        ("read_messages", {"limit": 0}, "limit", "greater than or equal to 1"),
+        ("read_messages", {"limit": 1001}, "limit", "less than or equal to 1000"),
+        ("read_messages", {"since": -1}, "since", "greater than or equal to 0"),
+        ("list_channels", {"limit": -1}, "limit", "greater than or equal to 1"),
+        ("search_documents", {"query": "q", "limit": 201}, "limit",
+         "less than or equal to 200"),
+        ("send_message", {"body": "", "re": "t1"}, "body", "at least 1 character"),
+        ("send_message", {"body": "x" * 8001, "re": "t1"}, "body",
+         "at most 8000 characters"),
+        ("search_messages", {"query": ""}, "query", "at least 1 character"),
+        ("create_channel", {"name": "x" * 201}, "name", "at most 200 characters"),
+        ("ingest_document", {"text": "doc", "source_format": "x" * 51}, "source_format",
+         "at most 50 characters"),
+        ("send_message",
+         {"body": "hi", "re": "t1", "mentions": [f"m{i}" for i in range(51)]},
+         "mentions", "at most 50 items"),
+        ("create_channel", {"name": ""}, "name", "at least 1 character"),
+        ("create_thread", {"channel_id": "c1", "title": ""}, "title", "at least 1 character"),
+        ("create_thread", {"channel_id": "c1", "title": "x" * 201}, "title",
+         "at most 200 characters"),
+        ("ingest_document", {"text": "doc", "title": "x" * 201}, "title",
+         "at most 200 characters"),
+        ("ingest_document", {"text": "doc", "source_format": ""}, "source_format",
+         "at least 1 character"),
+        ("ingest_document", {"text": "doc", "source_label": "x" * 201}, "source_label",
+         "at most 200 characters"),
+    ],
+    ids=["read-limit-0", "read-limit-1001", "since-neg", "channels-limit-neg",
+         "docsearch-limit-201", "body-empty", "body-8001", "query-empty", "name-201",
+         "format-51", "mentions-51", "name-empty", "title-empty", "title-201",
+         "doc-title-201", "format-empty", "label-201"],
+)
+def test_client_sees_a_tool_error_naming_the_field_and_the_limit(tool, args, field, message):
+    """What an MCP client receives over the wire for an annotated bound: a
+    `CallToolResult` with `isError` set and one text block naming the field and
+    the limit (FastMCP's pydantic argument model, `mcp` 1.28.1). The refusal
+    happens before the tool body runs, so the untouchable repo proves nothing
+    was read, written or scheduled."""
+    from mcp.shared.memory import create_connected_server_and_client_session
+    from test_services import _UntouchableRepo
+
+    worker = RecordingWorker()
+    _configure(_UntouchableRepo(), embed_worker=worker)
+
+    async def call():
+        async with create_connected_server_and_client_session(
+            mcp_mod.mcp._mcp_server,
+        ) as client:
+            return await client.call_tool(tool, args)
+
+    result = asyncio.run(call())
+    assert result.isError is True
+    [block] = result.content
+    assert f"validation error for {tool}Arguments\n{field}\n" in block.text
+    assert message in block.text
+    assert worker.calls == []
+
+
+class _RecordingServices:
+    """Answers every `Services` method with an empty result and records the
+    keyword arguments it was called with: isolates the MCP signature layer, so
+    an accepted call proves the annotation let the value through unchanged."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    def __getattr__(self, name):
+        def method(ctx, **kwargs):
+            self.calls.append((name, kwargs))
+            if name == "ingest_document":
+                return {"documentId": "d1", "status": "processing", "autoSuperseded": True}
+            if name.startswith(("list_", "search_", "read_")) or name == "ingest_documents":
+                return []
+            return {"ok": True}
+        return method
+
+
+@pytest.mark.parametrize(
+    "tool,args,method,expected",
+    [
+        ("read_messages", {"limit": 1000}, "read_messages", {"limit": 1000}),
+        ("read_messages", {"limit": 1, "since": 0}, "read_messages",
+         {"limit": 1, "since": 0}),
+        ("read_messages", {"re": "t1", "since": None}, "read_messages", {"since": None}),
+        ("list_channels", {"limit": 200}, "list_channels", {"limit": 200}),
+        ("list_matches", {"limit": 1}, "list_matches", {"limit": 1}),
+        ("search_documents", {"query": "q", "limit": 200}, "search_documents",
+         {"query": "q", "limit": 200}),
+        ("search_messages", {"query": "q"}, "search_messages", {"query": "q"}),
+        ("send_message", {"body": "x" * 8000, "re": "t1"}, "post_message",
+         {"text": "x" * 8000}),
+        ("send_message",
+         {"body": "hi", "re": "t1", "mentions": [f"m{i}" for i in range(50)]},
+         "post_message", {"mentions": [f"m{i}" for i in range(50)]}),
+        ("create_channel", {"name": "x" * 200}, "create_channel", {"name": "x" * 200}),
+        ("create_thread", {"channel_id": "c1", "title": "x"}, "create_thread",
+         {"title": "x"}),
+        ("ingest_document",
+         {"text": "doc", "title": "x" * 200, "source_format": "x" * 50,
+          "source_label": "x" * 200},
+         "ingest_document",
+         {"title": "x" * 200, "source_format": "x" * 50, "source_label": "x" * 200}),
+        ("ingest_document", {"text": "doc", "source_format": "x"}, "ingest_document",
+         {"source_format": "x"}),
+        # Not copied: a 201-char producer still reaches the service, which owns it.
+        ("ingest_document", {"text": "doc", "produced_by": "x" * 201}, "ingest_document",
+         {"produced_by": "x" * 201}),
+        # Untyped: a 21-item batch reaches the service, whose BatchTooLargeError owns it.
+        ("ingest_documents", {"items": [{"text": "d"}] * 21}, "ingest_documents",
+         {"documents": [{"text": "d"}] * 21}),
+    ],
+    ids=["read-limit-1000", "read-limit-1-since-0", "since-none", "channels-200",
+         "matches-1", "docsearch-200", "query-1", "body-8000", "mentions-50",
+         "name-200", "title-1", "doc-fields-at-max", "format-1", "produced-by-201",
+         "batch-21"],
+)
+def test_value_exactly_at_the_bound_reaches_the_service(tool, args, method, expected):
+    """No annotation is tighter than REST/the service: the boundary value
+    itself passes the MCP layer and reaches the service unchanged."""
+    svc = _RecordingServices()
+    mcp_mod.configure(svc, context_provider=lambda: TEST_CTX)
+    asyncio.run(mcp_mod.mcp.call_tool(tool, args))
+    [(called, kwargs)] = svc.calls
+    assert called == method
+    assert {k: kwargs[k] for k in expected} == expected
 
 
 # ── §14 Documents & Chunks (K-050 M5 Stage 1) ────────────────────────────────────

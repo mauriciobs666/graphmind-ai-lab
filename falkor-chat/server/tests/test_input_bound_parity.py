@@ -10,9 +10,12 @@ No database. Two independent declarations are compared:
 
 Both sides go through one collector, `schema_constraints`, which reaches every
 position a bound can sit at: `$ref`, `anyOf`/`oneOf`/`allOf`, nested
-properties (`.name`), list elements (`[]`), tuple positions (`[i]`) and map
-values (`{}`). Its reach is itself tested: the "collector coverage probe"
-section plants one constrained field per location, wrapping and spelling in a
+properties (`.name`), list elements (`[]`), tuple positions (`[i]`), map
+values (`{}`) and map keys (`{key}`). It is **closed-world**: a keyword it
+neither walks nor lists as inert raises `UnknownSchemaKeywordError`, so a
+schema shape it was not taught fails this module loudly instead of hiding a
+bound. Its reach is itself tested: the "collector coverage probe" section
+plants one constrained field per location, wrapping and spelling in a
 synthetic router and tool, and fails when the collector misses one. A
 recursive model is walked once, so a bound inside it is reported where the
 model first appears.
@@ -32,8 +35,9 @@ fails when:
         error one step past REST's limit, or is refused at REST's limit
         itself — called through `Services(FakeRepo())`.
 
-`KnownGap` marks a bound neither the service nor MCP enforces yet; each one is
-a §5.2 fix still to land, named by its target layer.
+`KnownGap` marked a bound neither the service nor MCP enforced yet, named by
+its target layer; K-101 closed every one, and `test_no_known_gap_remains`
+keeps it that way.
 
 **Blind spot:** custom `field_validator`s (`schemas._bounded_flat_dict`, the
 storefront's `_nonblank`) are invisible to OpenAPI, so this guard cannot see
@@ -79,6 +83,7 @@ CONSTRAINT_KEYS = (
     "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
     "enum", "const",
 )
+CONSTRAINT_KEYS_SET = frozenset(CONSTRAINT_KEYS)
 
 
 # ── mapping vocabulary ──────────────────────────────────────────────────────────
@@ -150,7 +155,6 @@ NO_MCP_TWIN_ROUTES = frozenset({
 })
 
 _PATH_ID = NotCopied("path id is lookup-only; an unknown id is None/NotFound, no K-049 path")
-_LIMIT_GAP = (KnownGap("mcp"),)
 
 MSG = "POST /threads/{thread_id}/messages"
 DOC = "POST /documents"
@@ -161,51 +165,66 @@ BATCH = "POST /documents/batch"
 MAPPING: dict[tuple[str, str, str], tuple[Any, ...]] = {
     # ── messages ──
     (MSG, "body.text", "minLength"): (
-        Service("post_message.text", InputBoundError), KnownGap("mcp"),
+        Service("post_message.text", InputBoundError), Mcp("send_message", "body"),
     ),
     (MSG, "body.text", "maxLength"): (
-        Service("post_message.text", MessageTooLongError), KnownGap("mcp"),
+        Service("post_message.text", MessageTooLongError), Mcp("send_message", "body"),
     ),
     (MSG, "body.mentions", "maxItems"): (
-        Service("post_message.mentions", InputBoundError), KnownGap("mcp"),
+        Service("post_message.mentions", InputBoundError), Mcp("send_message", "mentions"),
     ),
-    ("GET /threads/{thread_id}/messages", "query.since", "minimum"): _LIMIT_GAP,
-    ("GET /threads/{thread_id}/messages", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /threads/{thread_id}/messages", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /search", "query.q", "minLength"): _LIMIT_GAP,
-    ("GET /search", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /search", "query.limit", "maximum"): _LIMIT_GAP,
+    ("GET /threads/{thread_id}/messages", "query.since", "minimum"): (
+        Mcp("read_messages", "since"),
+    ),
+    ("GET /threads/{thread_id}/messages", "query.limit", "minimum"): (
+        Mcp("read_messages", "limit"),
+    ),
+    ("GET /threads/{thread_id}/messages", "query.limit", "maximum"): (
+        Mcp("read_messages", "limit"),
+    ),
+    ("GET /search", "query.q", "minLength"): (Mcp("search_messages", "query"),),
+    ("GET /search", "query.limit", "minimum"): (Mcp("search_messages", "limit"),),
+    ("GET /search", "query.limit", "maximum"): (Mcp("search_messages", "limit"),),
     # ── channels / threads ──
     ("POST /channels", "body.name", "minLength"): (
-        Service("create_channel.name", InputBoundError), KnownGap("mcp"),
+        Service("create_channel.name", InputBoundError), Mcp("create_channel", "name"),
     ),
     ("POST /channels", "body.name", "maxLength"): (
-        Service("create_channel.name", InputBoundError), KnownGap("mcp"),
+        Service("create_channel.name", InputBoundError), Mcp("create_channel", "name"),
     ),
-    ("GET /channels", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /channels", "query.limit", "maximum"): _LIMIT_GAP,
+    ("GET /channels", "query.limit", "minimum"): (Mcp("list_channels", "limit"),),
+    ("GET /channels", "query.limit", "maximum"): (Mcp("list_channels", "limit"),),
     ("POST /channels/{channel_id}/threads", "body.title", "minLength"): (
-        Service("create_thread.title", InputBoundError), KnownGap("mcp"),
+        Service("create_thread.title", InputBoundError), Mcp("create_thread", "title"),
     ),
     ("POST /channels/{channel_id}/threads", "body.title", "maxLength"): (
-        Service("create_thread.title", InputBoundError), KnownGap("mcp"),
+        Service("create_thread.title", InputBoundError), Mcp("create_thread", "title"),
     ),
-    ("GET /channels/{channel_id}/threads", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /channels/{channel_id}/threads", "query.limit", "maximum"): _LIMIT_GAP,
+    ("GET /channels/{channel_id}/threads", "query.limit", "minimum"): (
+        Mcp("list_threads", "limit"),
+    ),
+    ("GET /channels/{channel_id}/threads", "query.limit", "maximum"): (
+        Mcp("list_threads", "limit"),
+    ),
     # ── documents: single ingest ──
+    # `text` stays service-only (RCA Appendix A "unchanged"): the service's
+    # blank refusal is already stricter than REST's `min_length=1`.
     (DOC, "body.text", "minLength"): (Service("ingest_document.text", EmptyDocumentError),),
     (DOC, "body.text", "maxLength"): (Service("ingest_document.text", DocumentTooLargeError),),
     (DOC, "body.title", "maxLength"): (
-        Service("ingest_document.title", InputBoundError), KnownGap("mcp"),
+        Service("ingest_document.title", InputBoundError), Mcp("ingest_document", "title"),
     ),
     (DOC, "body.sourceFormat", "minLength"): (
-        Service("ingest_document.source_format", InputBoundError), KnownGap("mcp"),
+        Service("ingest_document.source_format", InputBoundError),
+        Mcp("ingest_document", "source_format"),
     ),
     (DOC, "body.sourceFormat", "maxLength"): (
-        Service("ingest_document.source_format", InputBoundError), KnownGap("mcp"),
+        Service("ingest_document.source_format", InputBoundError),
+        Mcp("ingest_document", "source_format"),
     ),
     (DOC, "body.sourceLabel", "maxLength"): (
-        Service("ingest_document.source_label", InputBoundError), KnownGap("mcp"),
+        Service("ingest_document.source_label", InputBoundError),
+        Mcp("ingest_document", "source_label"),
     ),
     (DOC, "body.producedBy", "maxLength"): (
         NotCopied("lookup-only; an unknown producer is already AgentNotFoundError"),
@@ -239,19 +258,27 @@ MAPPING: dict[tuple[str, str, str], tuple[Any, ...]] = {
         NotCopied("lookup-only; an unknown producer is already AgentNotFoundError"),
     ),
     # ── documents: reads ──
-    ("GET /documents", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /documents", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /documents/search", "query.q", "minLength"): _LIMIT_GAP,
-    ("GET /documents/search", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /documents/search", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /document-updates/pending", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /document-updates/pending", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /document-updates", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /document-updates", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /matches/pending", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /matches/pending", "query.limit", "maximum"): _LIMIT_GAP,
-    ("GET /matches", "query.limit", "minimum"): _LIMIT_GAP,
-    ("GET /matches", "query.limit", "maximum"): _LIMIT_GAP,
+    ("GET /documents", "query.limit", "minimum"): (Mcp("list_documents", "limit"),),
+    ("GET /documents", "query.limit", "maximum"): (Mcp("list_documents", "limit"),),
+    ("GET /documents/search", "query.q", "minLength"): (Mcp("search_documents", "query"),),
+    ("GET /documents/search", "query.limit", "minimum"): (Mcp("search_documents", "limit"),),
+    ("GET /documents/search", "query.limit", "maximum"): (Mcp("search_documents", "limit"),),
+    ("GET /document-updates/pending", "query.limit", "minimum"): (
+        Mcp("list_pending_document_updates", "limit"),
+    ),
+    ("GET /document-updates/pending", "query.limit", "maximum"): (
+        Mcp("list_pending_document_updates", "limit"),
+    ),
+    ("GET /document-updates", "query.limit", "minimum"): (
+        Mcp("list_document_updates", "limit"),
+    ),
+    ("GET /document-updates", "query.limit", "maximum"): (
+        Mcp("list_document_updates", "limit"),
+    ),
+    ("GET /matches/pending", "query.limit", "minimum"): (Mcp("list_pending_matches", "limit"),),
+    ("GET /matches/pending", "query.limit", "maximum"): (Mcp("list_pending_matches", "limit"),),
+    ("GET /matches", "query.limit", "minimum"): (Mcp("list_matches", "limit"),),
+    ("GET /matches", "query.limit", "maximum"): (Mcp("list_matches", "limit"),),
     # ── path ids (not copied, RCA §5.2 item 3) ──
     **{
         (route, f"path.{pid}", c): (_PATH_ID,)
@@ -341,6 +368,10 @@ class ConflictingConstraintError(ValueError):
     """Two schema branches give one position different values for a keyword."""
 
 
+class UnknownSchemaKeywordError(ValueError):
+    """A schema node carries a keyword the collector does not classify."""
+
+
 def _own(node: dict[str, Any]) -> dict[str, Any]:
     """Constraint keywords on this one node (floats that are integers normalized)."""
     return {
@@ -359,9 +390,23 @@ def _pointer(root: dict[str, Any], ref: str) -> dict[str, Any]:
     return node
 
 
+# Keywords the collector descends into (each child keeps or extends the path)…
+RECURSED_KEYS = frozenset({
+    "$ref", "anyOf", "oneOf", "allOf", "properties", "items", "prefixItems",
+    "additionalProperties", "patternProperties", "propertyNames",
+})
+# …and keywords it knows carry no bound to mirror. `not` is listed on purpose:
+# a negated keyword is not a bound. `$defs` holds models reached via `$ref`.
+INERT_KEYS = frozenset({
+    "type", "title", "description", "default", "format", "required", "examples",
+    "discriminator", "not", "$defs",
+})
+
+
 def schema_constraints(
     node: dict[str, Any], root: dict[str, Any], path: str,
     out: dict[tuple[str, str], Any], _refs: tuple[str, ...] = (),
+    seen: set[str] | None = None,
 ) -> None:
     """Record `out[(position, keyword)] = value` for every constraint reachable
     from `node`. The one collector both front doors share (review P1-1).
@@ -369,40 +414,63 @@ def schema_constraints(
     Recurses through every JSON-Schema position that can carry a bound:
     `$ref` (with its sibling keywords, a recursive model stopping at the second
     visit), `anyOf`/`oneOf`/`allOf` (same position), `properties` (`.name`),
-    `items` (`[]`, or `[i]` for the array form), `prefixItems` (`[i]`) and
-    `additionalProperties`/`patternProperties` (`{}`). `not` is skipped on
-    purpose: a negated keyword is not a bound to mirror. Two branches giving
-    one position different values raise `ConflictingConstraintError` instead
-    of letting the last one silently win.
+    `items` (`[]`, or `[i]` for the array form), `prefixItems` (`[i]`),
+    `additionalProperties`/`patternProperties` (`{}`) and `propertyNames`
+    (`{key}`). Two branches giving one position different values raise
+    `ConflictingConstraintError` instead of letting the last one silently win.
+
+    **Closed world (review P2-1):** every keyword on a node must be a
+    constraint (`CONSTRAINT_KEYS`), recursed (`RECURSED_KEYS`) or known inert
+    (`INERT_KEYS`); anything else raises `UnknownSchemaKeywordError`. So a
+    keyword a future framework release emits fails this guard loudly rather
+    than hiding whatever bound sits under it. `seen`, when given, collects
+    every keyword classified, so a test can show the walk was not empty.
     """
+    unknown = sorted(set(node) - CONSTRAINT_KEYS_SET - RECURSED_KEYS - INERT_KEYS)
+    if unknown:
+        raise UnknownSchemaKeywordError(
+            f"{path or '<root>'}: schema keyword(s) {unknown} are neither walked nor "
+            "known inert; teach `schema_constraints` where a bound under them sits"
+        )
+    if seen is not None:
+        seen.update(node)
     ref = node.get("$ref")
     if ref is not None and ref not in _refs:
-        schema_constraints(_pointer(root, ref), root, path, out, (*_refs, ref))
+        schema_constraints(_pointer(root, ref), root, path, out, (*_refs, ref), seen)
     for key, value in _own(node).items():
         prior = out.setdefault((path, key), value)
         if prior != value:
             raise ConflictingConstraintError(f"{path} {key}: {prior!r} vs {value!r}")
+
+    def walk(child: dict[str, Any], child_path: str) -> None:
+        schema_constraints(child, root, child_path, out, _refs, seen)
+
     for combinator in ("anyOf", "oneOf", "allOf"):
         for branch in node.get(combinator, []):
-            schema_constraints(branch, root, path, out, _refs)
+            walk(branch, path)
     for name, prop in node.get("properties", {}).items():
-        schema_constraints(prop, root, f"{path}.{name}" if path else name, out, _refs)
+        walk(prop, f"{path}.{name}" if path else name)
     items = node.get("items")
     if isinstance(items, dict):
-        schema_constraints(items, root, f"{path}[]", out, _refs)
+        walk(items, f"{path}[]")
     elif isinstance(items, list):
         for i, item in enumerate(items):
-            schema_constraints(item, root, f"{path}[{i}]", out, _refs)
+            walk(item, f"{path}[{i}]")
     for i, item in enumerate(node.get("prefixItems", [])):
-        schema_constraints(item, root, f"{path}[{i}]", out, _refs)
+        walk(item, f"{path}[{i}]")
     extra = node.get("additionalProperties")
     if isinstance(extra, dict):
-        schema_constraints(extra, root, f"{path}{{}}", out, _refs)
+        walk(extra, f"{path}{{}}")
     for pattern_schema in node.get("patternProperties", {}).values():
-        schema_constraints(pattern_schema, root, f"{path}{{}}", out, _refs)
+        walk(pattern_schema, f"{path}{{}}")
+    keys = node.get("propertyNames")
+    if isinstance(keys, dict):
+        walk(keys, f"{path}{{key}}")
 
 
-def rest_constraints(app: FastAPI) -> dict[tuple[str, str, str], Any]:
+def rest_constraints(
+    app: FastAPI, seen: set[str] | None = None,
+) -> dict[tuple[str, str, str], Any]:
     """`(route, field path, keyword) -> value` for every constraint `app` publishes."""
     spec = app.openapi()
     found: dict[tuple[str, str, str], Any] = {}
@@ -413,15 +481,24 @@ def rest_constraints(app: FastAPI) -> dict[tuple[str, str, str], Any]:
             for param in op.get("parameters", []):
                 if "$ref" in param:
                     param = _pointer(spec, param["$ref"])
-                schema_constraints(
-                    param.get("schema", {}), spec, f"{param['in']}.{param['name']}", positions,
-                )
+                where = f"{param['in']}.{param['name']}"
+                if "schema" not in param:
+                    # Closed world one layer up (review P3-2): the `content`
+                    # form (or none) would otherwise read as "no bounds".
+                    raise UnknownSchemaKeywordError(
+                        f"{route} {where}: parameter has no `schema` "
+                        f"(keys {sorted(param)}, e.g. the `content` form); "
+                        "teach `rest_constraints` where its bounds sit"
+                    )
+                schema_constraints(param["schema"], spec, where, positions, seen=seen)
             body = op.get("requestBody")
             if body:
                 if "$ref" in body:
                     body = _pointer(spec, body["$ref"])
                 for media in body.get("content", {}).values():
-                    schema_constraints(media.get("schema", {}), spec, "body", positions)
+                    schema_constraints(
+                        media.get("schema", {}), spec, "body", positions, seen=seen,
+                    )
             for (field, key), value in positions.items():
                 found[(route, field, key)] = value
     return found
@@ -436,12 +513,12 @@ def mcp_arguments(server) -> set[tuple[str, str]]:
     }
 
 
-def mcp_constraints(server) -> dict[tuple[str, str, str], Any]:
+def mcp_constraints(server, seen: set[str] | None = None) -> dict[tuple[str, str, str], Any]:
     """`(tool, argument path, keyword) -> value` for every constraint `server` advertises."""
     found: dict[tuple[str, str, str], Any] = {}
     for tool in asyncio.run(server.list_tools()):
         positions: dict[tuple[str, str], Any] = {}
-        schema_constraints(tool.inputSchema, tool.inputSchema, "", positions)
+        schema_constraints(tool.inputSchema, tool.inputSchema, "", positions, seen=seen)
         for (arg, key), value in positions.items():
             found[(tool.name, arg, key)] = value
     return found
@@ -496,20 +573,38 @@ def test_every_mcp_args_entry_names_a_live_tool_argument():
     assert stale == [], f"MCP_ARGS entries no tool declares: {stale}"
 
 
+def _is_constrained_twin(route: str, field: str) -> bool:
+    """`field` carries a constraint on `route` itself or holds one below it.
+
+    "Below" is matched at a field boundary — the next character of the
+    constrained path opens a nested property, element or map position — so a
+    name that is merely a string prefix (`body.source` vs `body.sourceFormat`)
+    does not pass (review P2-2)."""
+    return any(
+        r == route and (f == field or (f.startswith(field) and f[len(field)] in ".[{"))
+        for r, f, _c in PARITY_REST
+    )
+
+
 def test_every_twin_points_at_a_constrained_parity_field():
     """A twin names a field that carries a constraint itself or holds one
     below it (a list element, a nested model's field)."""
-    def constrained(route: str, field: str) -> bool:
-        return any(
-            r == route and _split(f)[0] == _split(field)[0] and f.startswith(field)
-            for r, f, _c in PARITY_REST
-        )
-
     dangling = sorted(
         (key, twin) for key, twin in MCP_ARGS.items()
-        if isinstance(twin, Twin) and not constrained(twin.route, twin.field)
+        if isinstance(twin, Twin) and not _is_constrained_twin(twin.route, twin.field)
     )
     assert dangling == []
+
+
+def test_twin_field_matches_only_at_a_field_boundary():
+    """Review P2-2: `body.source` must not pass as the twin of
+    `body.sourceFormat` just because it is a string prefix of it."""
+    assert _is_constrained_twin(DOC, "body.sourceFormat")
+    assert _is_constrained_twin(MSG, "body.mentions")
+    assert _is_constrained_twin(BATCH, "body.documents")  # constrained below: `[]`
+    assert not _is_constrained_twin(DOC, "body.source")
+    assert not _is_constrained_twin(DOC, "body.sourceFormatX")
+    assert not _is_constrained_twin(MSG, "body.text.")
 
 
 def test_mapping_entries_are_well_formed():
@@ -534,10 +629,13 @@ def test_mapping_entries_are_well_formed():
         )
 
 
-def test_no_service_layer_gap_remains():
-    """K-101 Round 2 ratchet: every stored-value bound is a service invariant.
-    Only the MCP-signature half (`KnownGap("mcp")`) may still be open."""
-    gaps = sorted(k for k, layers in MAPPING.items() if KnownGap("service") in layers)
+def test_no_known_gap_remains():
+    """K-101 Round 2 ratchet: every bound has landed on its §5.2 layer — the
+    service for stored values, the MCP signature for advertising them and for
+    read parameters. A new bound may not be parked as a `KnownGap`."""
+    gaps = sorted(
+        k for k, layers in MAPPING.items() if any(isinstance(x, KnownGap) for x in layers)
+    )
     assert gaps == []
 
 
@@ -707,6 +805,7 @@ class _ProbeBody(BaseModel):
     element: list[Annotated[str, Field(max_length=4)]] = []
     optional_element: list[Annotated[str, Field(max_length=5)]] | None = None
     dict_value: dict[str, Annotated[int, Field(le=6)]] = {}
+    dict_key: dict[Annotated[str, Field(max_length=8)], str] = {}
     pair: tuple[Annotated[str, Field(max_length=7)], int] = ("a", 1)
     inner: _Inner
     inners: list[_Inner] = []
@@ -752,6 +851,7 @@ EXPECTED_REST_PROBE = {
     (PROBE, "body.element[]", "maxLength"): 4,
     (PROBE, "body.optional_element[]", "maxLength"): 5,
     (PROBE, "body.dict_value{}", "maximum"): 6,
+    (PROBE, "body.dict_key{key}", "maxLength"): 8,
     (PROBE, "body.pair[0]", "maxLength"): 7,
     (PROBE, "body.inner.x", "maxLength"): 10,
     (PROBE, "body.inners[].x", "maxLength"): 10,
@@ -771,6 +871,7 @@ def _probe_mcp_server() -> FastMCP:
         optional: Annotated[str | None, Field(max_length=22)] = None,
         element: list[Annotated[str, Field(max_length=23)]] | None = None,
         dict_value: dict[str, Annotated[int, Field(ge=24)]] | None = None,
+        dict_key: dict[Annotated[str, Field(max_length=25)], int] | None = None,
         inners: list[_Inner] | None = None,
         kind: Literal["k1", "k2"] = "k1",
         color: _Color = _Color.RED,
@@ -786,6 +887,7 @@ EXPECTED_MCP_PROBE = {
     ("probe_tool", "optional", "maxLength"): 22,
     ("probe_tool", "element[]", "maxLength"): 23,
     ("probe_tool", "dict_value{}", "minimum"): 24,
+    ("probe_tool", "dict_key{key}", "maxLength"): 25,
     ("probe_tool", "inner.x", "maxLength"): 10,
     ("probe_tool", "inners[].x", "maxLength"): 10,
     ("probe_tool", "kind", "enum"): ["k1", "k2"],
@@ -828,6 +930,7 @@ def test_schema_collector_covers_composition_axes_the_frameworks_do_not_emit_tod
             "one": {"oneOf": [{"type": "null"}, {"maximum": 36}]},
             "tuple": {"type": "array", "items": [{"maxLength": 37}, {"minimum": 38}]},
             "pattern": {"patternProperties": {"^x": {"maxLength": 39}}},
+            "keys": {"type": "object", "propertyNames": {"maxLength": 43}},
             "chained": {"$ref": "#/$defs/A"},
             "tree": {"$ref": "#/$defs/Node"},
             "negated": {"not": {"maxLength": 40}},
@@ -840,6 +943,7 @@ def test_schema_collector_covers_composition_axes_the_frameworks_do_not_emit_tod
         ("one", "maximum"): 36,
         ("tuple[0]", "maxLength"): 37, ("tuple[1]", "minimum"): 38,
         ("pattern{}", "maxLength"): 39,
+        ("keys{key}", "maxLength"): 43,
         ("chained", "maxLength"): 31, ("chained", "minLength"): 32,
         # a recursive model is walked once: its second visit stops, so the
         # bound is reported where the model first appears, not at every depth
@@ -854,6 +958,73 @@ def test_schema_collector_refuses_conflicting_branches_and_foreign_refs():
     foreign = {"$ref": "https://example.com/schema.json"}
     with pytest.raises(ValueError, match="non-local"):
         schema_constraints(foreign, foreign, "x", {})
+
+
+@pytest.mark.parametrize(
+    "keyword,value",
+    [
+        # JSON-Schema keywords that can carry a bound the collector does not walk
+        ("contains", {"maxLength": 3}),
+        ("if", {"maxLength": 3}),
+        ("dependentSchemas", {"a": {"maxLength": 3}}),
+        ("unevaluatedProperties", {"maxLength": 3}),
+        # and a keyword no draft defines: the next framework release's spelling
+        ("maxGraphemes", 3),
+    ],
+)
+def test_schema_collector_refuses_a_keyword_it_does_not_know(keyword, value):
+    """Closed world (review P2-1): a keyword the collector neither recurses
+    into nor lists as inert fails the guard loudly, instead of being skipped
+    along with any bound under it."""
+    node = {"type": "string", keyword: value}
+    with pytest.raises(UnknownSchemaKeywordError, match=keyword):
+        schema_constraints(node, node, "x", {})
+
+
+def test_schema_collector_treats_not_as_inert():
+    """`not` is listed, not recursed: a negated keyword is not a bound to mirror."""
+    node = {"type": "string", "not": {"maxLength": 3, "contains": {}}}
+    found: dict[tuple[str, str], Any] = {}
+    schema_constraints(node, node, "x", found)
+    assert found == {}
+
+
+def test_live_schemas_use_only_keywords_the_collector_knows():
+    """The tripwire runs over both live declarations at import (`REST`/`MCP`
+    above); this pins that it actually reached every node, by counting the
+    keywords it classified — an empty walk would make the closed world vacuous."""
+    seen: set[str] = set()
+    rest_constraints(_live_rest_app(), seen=seen)
+    mcp_constraints(mcp_mod.mcp, seen=seen)
+    assert {"properties", "anyOf", "$ref", "items", "maxLength", "maximum"} <= seen
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"content": {"application/json": {"schema": {"maxLength": 5}}}},
+        {},  # neither form: still not "no bounds", just unreadable
+    ],
+    ids=["content-form", "no-schema-at-all"],
+)
+def test_rest_collector_refuses_a_parameter_without_a_schema(extra):
+    """Review P3-2: OpenAPI's other legal parameter form carries its schema
+    under `content`, not `schema`. Reading `param.get("schema", {})` would
+    drop any bound in it silently; the closed world extends one layer up, to
+    the parameter object. FastAPI does not emit this form today, so it is
+    planted in a hand-written document."""
+    spec = {"paths": {"/r": {"get": {"parameters": [{
+        "in": "query", "name": "p", **extra,
+    }]}}}}
+
+    class _SpecApp:
+        def openapi(self):
+            return spec
+
+    with pytest.raises(
+        UnknownSchemaKeywordError, match=r"GET /r query\.p: parameter has no `schema`",
+    ):
+        rest_constraints(_SpecApp())
 
 
 def test_rest_collector_resolves_referenced_parameters_and_request_bodies():

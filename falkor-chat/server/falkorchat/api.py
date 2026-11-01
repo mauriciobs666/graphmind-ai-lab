@@ -24,6 +24,8 @@ from .config import get_context as _resolve_context
 from .schemas import (
     MAX_ID_LEN,
     MAX_KEY_LEN,
+    MAX_LIST_LIMIT,
+    MAX_READ_LIMIT,
     CreateChannelIn,
     CreateThreadIn,
     IngestDocumentIn,
@@ -70,7 +72,7 @@ def build_router(
 
     @router.get("/channels")
     def list_channels(
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_channels(ctx, limit=limit)
@@ -85,7 +87,7 @@ def build_router(
     @router.get("/channels/{channel_id}/threads")
     def list_threads(
         channel_id: str,
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_threads(ctx, channel_id=channel_id, limit=limit)
@@ -120,7 +122,7 @@ def build_router(
     @router.get("/search")
     def search_messages(
         q: str = Query(..., min_length=1),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.search_messages(ctx, query=q, limit=limit)
@@ -129,7 +131,7 @@ def build_router(
     def read_thread(
         thread_id: str,
         since: int | None = Query(None, ge=0),
-        limit: int | None = Query(None, ge=1, le=1000),
+        limit: int | None = Query(None, ge=1, le=MAX_READ_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         # No params → the full §4 thread read (M1 web client contract). Either
@@ -242,7 +244,7 @@ def build_router(
     @router.get("/documents/search")
     def search_documents(
         q: str = Query(..., min_length=1),
-        limit: int = Query(20, ge=1, le=200),
+        limit: int = Query(20, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.search_documents(ctx, query=q, limit=limit)
@@ -266,7 +268,7 @@ def build_router(
     @router.get("/documents")
     def list_documents(
         current_only: bool = Query(True),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_documents(ctx, current_only=current_only, limit=limit)
@@ -306,7 +308,7 @@ def build_router(
 
     @router.get("/document-updates/pending")
     def list_pending_document_updates(
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_pending_document_updates(ctx, limit=limit)
@@ -314,7 +316,7 @@ def build_router(
     @router.get("/document-updates")
     def list_document_updates(
         status: str | None = Query(None),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_document_updates(ctx, status=status, limit=limit)
@@ -348,7 +350,7 @@ def build_router(
 
     @router.get("/matches/pending")
     def list_pending_matches(
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_pending_matches(ctx, limit=limit)
@@ -356,7 +358,7 @@ def build_router(
     @router.get("/matches")
     def list_matches(
         status: str | None = Query(None),
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_matches(ctx, status=status, limit=limit)
@@ -426,7 +428,7 @@ def build_router(
 
     @router.get("/workflow-defs")
     def list_workflow_defs(
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         return services.list_workflow_defs(ctx, limit=limit)
@@ -544,7 +546,7 @@ def build_router(
     @router.get("/workspaces/{ws}/snapshots")
     def list_snapshots(
         ws: str,
-        limit: int = Query(50, ge=1, le=200),
+        limit: int = Query(50, ge=1, le=MAX_LIST_LIMIT),
         ctx: CallContext = Depends(get_context),
     ):
         # The path `ws` is descriptive; tenancy is resolved by `get_context`
