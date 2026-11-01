@@ -1097,3 +1097,34 @@ Successor-not-edit handling; the three-query lookup order with no `OR` filters a
 
 ### Open question for `teco`
 M2: close S17 with the ceiling carried to S23, or hold that clause?
+
+## Pass 9 — S17 note revised in place (2026-11-01)
+
+**Scope:** `docs/plans/connected-code-graph-p0-graph.md` as revised, read whole, against Pass 8 and spec3 §1.6/§1.6.1-§1.6.3/§5.18/§9.1/F-11. **Verdict: needs changes (two small edits and one scoping edit); then acceptable without a further full review.** Eight of the nine Pass 8 items are closed; the revision to the ninth (m4, G-1) introduces two defects. CPG: considered, not relevant — a design note; no loaded `cpg_*` graph.
+
+**Dispositions**
+- M1 (repo scope): fixed for the lookup. §1.3 scopes both queries by `repoId`, `SkippedFile` carries `repoId`, §1.6 indexes `(path, repoId)`, §5 adds the two-repo live test and the `.d.ts` "not found" case. **Residual: N1 below** (the §1.4 anchor query is still unscoped).
+- M2 (batch ceiling): fixed as a recorded decision. §4/§6.1: 20,000 provisional, one constant (`BATCH_MAX`), carried to S23, "S17 closes without that value".
+- m1 (D6): fixed. D6 is per `VIA` edge, self included, reached through `HAS_CALL <-`; §5 has the two-key and sole-candidate tests; coherent with spec3 (no bundle field).
+- m2 (labelling falsifiability): fixed. §5 (a) `Ret`-reached stays `confirmed` (kills "everything `possible`"), (b) planted case `possible`, (c) `viaData`. Note (b) tests the continuation kind, as §3.3's rule is defined by it, not by reachability to a callee `Ret`; wording only.
+- m3 (visited set / guards): fixed. §5 names `impact.py`, the two-point `DATA` cycle, the `<` vs `<=` pin (my I7), the 10,000-row raise and the level-64 guard. Falsifiable by those mutants.
+- m4 (G-1): **not closed; see N2 and N3.**
+- m5 (index table, `MOUNTED_BY`, hygiene): fixed. §1.6 table (10 `UNIQUE` = the 7 of the graph note plus `Param`/`Ret`/`Cond`, matching D10), D5 marked P1/outside the first loader slice, test names instead of line numbers, §3.3 now cites the report.
+
+**New findings**
+
+**N1 (minor). §1.4's anchor query is not repo-scoped.** `MATCH (f:File {path:$p})-[:DEFINES]->(s:Symbol)` returns the symbols of every repo's file with that path: the same defect as M1, in the query that answers stack-frame and File+line anchors. Add `repoId:$r` (and `unitId` where a path can fall under two units) and fold a two-repo case into the §5 live test.
+
+**N2 (major). `argv0` is derived from the wrong field.** §1.5 says "`argv0` is `args[0]` of the already-gated `command`/`args`". Spec3 §1.6: `command` **is** argv[0] ("argv[0] after the argv gate"); `args` is argv[1…]. `args[0]` is the first argument (for example `-jar`, or a secret-shaped positional), not the program. As written the loader would carry exactly the kind of text F-11 meant to keep out. *Fix:* "`argv0` is `command` (per-kind: only on a `kind: command` record)". Verified: read of spec3 §1.6 table and F-11.
+
+**N3 (major). `launchPairs` as defined does not match spec3 §1.6.3 or G-1.** Ruling on the question: **no, not consistent.**
+- The §1.6.3/§1.6.1 allow-list is the closed list of single-dash **flag names** that the argv gate classifies as flags (`-jar -cp -classpath -port -addr -host -listen -bind -ea -da -server -client`, `-Xmx/-Xms/-Xss<n>`, `-XX:±Name`, `-verbose:gc|class|jni|module`). It exists so those flags are not over-redacted; it is not a list of role-relevant keys, and spec3 never defines "role-relevant pair". F-11 / security P3-1 recommends carrying only role-relevant pairs so that §1.6.1's named residuals stay out of the graph.
+- Pairing a value to an allow-listed key re-imports a named residual: AV-68 (`-host hunter2`) is documented as passing the gate unredacted, "the same ... as `--host hunter2`" (spec3 §1.6.1 residuals). The bundle accepts it; copying it into a queryable store is the widening P3-1 wanted closed.
+- Most allow-listed entries take no value (`-ea`, `-server`, `-XX:+Name`, `-verbose:gc`, `-Xmx2g`); "key/value pair" is then undefined (the next element belongs to something else). And `--port`/`--host` (double dash), the common form, are not on the list at all while `-host` is, so the carry set is arbitrary against the role, and `port` is already a field.
+- *Recommendation:* drop `launchPairs` from v1 (`port`, `mountPath`, `service`, `envVar`, `protocol`, `launchKind`, `command` as argv[0] suffice, and adding a carried property later is additive for the graph). If S33 names a need now, define a **separate closed list** in the S17 note (for example `--port --host --listen --bind --addr` and the single-dash forms), pair rule "next element, only if it is not a flag or a sentinel", `<redacted>` carried as is, rendering through F-4, and a test that `-host hunter2` is carried as the accepted residual and nothing outside the list is.
+
+**N4 (nit). §4 says the indexes are "now incl. `SkippedFile.path`, the three `pointId` indexes"**; §1.6 is the authority and also indexes `SkippedFile.repoId`. Replace the clause with "the §1.6 index column".
+
+**Interaction check (same-revision fixes against each other):** M1's `repoId` scoping and §1.6's `(path, repoId)` index agree; `File` carries `repoId` (spec3 §9.1). D6 (per `VIA`) and §5's two-key test agree. The `possible` labelling (§3.3) and §5 (a)-(c) agree. The 10 constraints in D10 equal the table's `UNIQUE` column. §1.4 (unscoped) is the one place the M1 fix is not carried through (N1); §1.5's G-1 rewrite is where the revision itself broke (N2, N3). No contradiction between M2's provisional batch and the zero-retry/timeout text.
+
+**May the note be accepted?** Not as it stands. Accept once N2 and N3 are edited (one sentence and one deletion or one closed list), and N1 is scoped; N4 may ride along. Those edits are mechanical to verify (`grep -n "args\[0\]\|launchPairs" docs/plans/connected-code-graph-p0-graph.md`, and the §1.4 query), so a grep check by `teco` suffices; no third full pass needed. The DDL/loader dispatch can start from §1.6 and §1.3 now.

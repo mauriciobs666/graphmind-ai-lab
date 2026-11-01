@@ -1,6 +1,6 @@
 # Connected code graph — graph model, store design & sizing
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 2.1
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 2.1 · **Extended by:** `docs/plans/connected-code-graph-p0-graph.md`
 
 _Revision 2026-10-26: v2 adds §6 (B1 edge directions and traversal table, B2 graph side, per-requirement schema deltas after S1–S38 and the use-case re-check, new stakeholder questions); §3.1 rule 1, Q3 peak, Q7 edge list and Q10 ACL corrected in place to point at it._
 
