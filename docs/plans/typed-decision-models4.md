@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Subagent Labelling Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`
 
 *2026-10-31 — v1.2: answers review Pass 2; note citations move to v1.9.*
 

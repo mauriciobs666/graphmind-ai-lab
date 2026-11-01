@@ -1805,3 +1805,239 @@ The withdrawn shortcut and fillers were removed rather than kept beside the new 
 comparison prose ("v1.7", "instead of", "no longer" sweep: one pre-existing §Q4.3 hit). There is one
 dated revision line; its "(the third-vote shortcut is withdrawn)" is acceptable as the revision
 note. Pass.
+
+## Pass 11 — method note v1.10 (2026-11-01)
+
+**Scope.** The note's v1.9 (`2d6af936`) → v1.10 working-tree diff, read with
+`docs/reviews/typed-decision-models-ml.md` Pass 1 and plan4 §3.2–§3.8, §4.1 and §5. The probes are
+in the session scratchpad `n11/`:
+- `sidecheck.py` covers the side-check counts;
+- `band.py` and `alt.py` compute exact binomials over the pilot band;
+- `alloc.py` makes 3,000 draws of 1–3 seeds through the in-flight, untracked
+  `decisionmodels/seeds.py`. That is a bound on the coder's current state, not on a commit.
+
+**Verdict: needs changes. Two majors, no blocker, both line-checkable.** The arithmetic is exact,
+and the same-revision changes fit together. But the pilot band fails a correct design about a
+third of the time (P11-M1), and the plan-impact list given to the architect is incomplete
+(P11-M2).
+
+CPG: considered, not relevant. This is a method note plus point data, and no `cpg_decisionmodels`
+is loaded (`GRAPHS`).
+
+**Checks that pass** (verified):
+- **Weights.** P(non-empty | `true`) = ⅓ × ¾ = 25%. P(non-empty | `false`) = ⅞ in both
+  difficulties, so 87.5%. Cue agreement is (75 + 87.5)/2 = 81.25%, at guard's 50/50
+  answer mix (220 per kind × answer).
+- **Side check.** 51 `understanding` rows: 31/33 (80.4–98.3%), 5/18 (12.5–50.9%) and 44/51
+  (74.3–93.2%) all reproduce. All three design values lie inside them.
+- **Apportionment × conditional axes.** One-seed draws give `missingForm` cell shares within
+  Monte Carlo error of design (for example `unlisted` 0.043 against 0.042, `indirect` 0.040 against
+  0.042). Join-in `true` seeds draw only cue_01, cue_02 and cue_04, at about ⅓ each; `false` seeds
+  draw all five at about ⅕ each.
+- **Id-blindness × screen.** These are consistent. With ids withheld, an id-form hit costs only a
+  regeneration.
+- **M1 forms × the rubric's `missing` rule.** `immaterial` → `true` and `listed` → `false` follow
+  the rule; `unlisted` and `ambiguous` reach `false` through "when unsure, `false`".
+
+### New findings
+
+**P11-M1 (major) — The pilot's `missing` band rejects a correct design about 36% of the time.**
+*Verified (`band.py`, exact binomial).* The rule compares the pilot's *point estimates* with the
+side check's 95% intervals, so it ignores the pilot's own sampling error. At 25 `true` and 25
+`false` items, with labels equal to intent:
+- the `false` figure passes with probability 0.77, because 25/25 (p = 0.035) exceeds 98.3% and
+  ≤ 20/25 falls below 80.4%;
+- the `true` figure passes with probability 0.90;
+- all three pass jointly with probability 0.64 (0.59–0.72 across 30/20 to 17/33 splits).
+
+So the note's "catches only a gross failure" is false as written. A correct design forces a
+`resolve` and a rule change about a third of the time. Nothing then rechecks the changed rules
+before full spend, because round 1's reprint is exploratory.
+
+*Fix (`data-scientist`):* replace the rule with one whose false-alarm rate is stated. One that I
+ran (`alt.py`) fails a figure when its design value lies outside the pilot's own Wilson 95%
+interval:
+- under design it passes 0.88–0.92;
+- a cue that decides every item fails with certainty;
+- it misses a generator that always lists the fact (pass 0.87).
+
+That miss is P11-m1's job. The note must also say how a changed rule is verified before spend,
+for example with one fresh 50-item block.
+
+**P11-M2 (major) — The plan4 impact list is incomplete.** *Verified by reading plan4.* Beyond the
+author's three items:
+- (a) **U5.3.** §4.1's brief and done-condition, with no §5 row, cover neither the multi-axis
+  conditional `when` nor unbiased apportionment. Add a U5.3 row: expected counts over many RNG
+  seeds at sizes 1–7, which a largest-remainder mutant reddens.
+- (b) **Screen citations.** §3.3's table, §3.6 "Generated-text screen" and §5 U5.8 pin "note v1.9
+  §Q1.2 'Hits'", but v1.10 changed Hits: any id-form token, plus six form names in `metaPosition`.
+  U5.8 needs fixtures for a non-`dom` id-form token and for a form name in meta position.
+- (c) **§5 U5.4.** Its positive controls should add the note's planted `domainId` on a generation
+  line.
+- (d) **Gating.** The pilot band has no gating mechanism in §3.8. `init --phase full` should
+  refuse while a figure is out of band and no `resolve` is recorded.
+
+*Fix (`architect`, in the successor plan in progress; `teco` routes it).*
+
+**P11-m1 (minor) — Generator compliance with `missingForm` is never checked per item.** Each form
+fixes `missing`'s emptiness mechanically: `empty`, `indirect`, `unlisted` and `ambiguous` mean
+`[]`, while `immaterial` and `listed` mean non-empty. `point.json` already has `seedBindings`
+(`points.py:171-190`), but there is no binding for this. The 25%/87.5% figures and the pilot band
+therefore mix generator disobedience with labeller divergence. *Fix (`data-scientist`, note §Q1.1;
+then `architect`):* make emptiness a seed binding checked at generation ingest. A mismatch
+regenerates, like a screen hit. The pilot band then measures only the labels.
+
+**P11-m2 (minor) — The design matches the side check's marginals but not where they come from.**
+*Verified (`sidecheck.py`, by tier).* The side check's 5 non-empty `true` items are all
+`clear_advance`, and its 9 `boundary` items are all `false` with the fact listed. The design puts
+`immaterial` only in `true × near-miss`. So `true × clear`, two-thirds of the `true` items, is
+decided by the cue every time. No marginal band can see this. *Fix (`data-scientist`):* either
+give `true × clear` an `immaterial` weight and re-derive the three figures, or state the departure
+as deliberate.
+
+**P11-m3 (minor) — Join-in's boundary has no `true` seed, and the `false` seed invites it.**
+Rubric lines 65–66 rule that small talk addressed to the agent by name and inviting an answer is
+`true`. cue_05 ("social small talk", `point.json:68`) is drawn only for `false`. A `false ×
+near-miss` cue_05 seed asks the generator for exactly that boundary, because the generator's
+near-miss text is "the agent's name appears but the message is for someone else". *Fix
+(`data-scientist`):* narrow cue_05's text to small talk not addressed to the agent. If the
+boundary's `true` side should be exercised, state that it comes through cue_01.
+
+**P11-n1 (nit)** — "Reproducing the figures" still opens with "Every figure … is printed by one of
+three stdlib scripts" and then lists two that are not. The 42% and 25/87.5/81% figures are in
+neither list.
+
+### Growth-stops (8,224 → 9,533)
+
+There is exactly one dated revision line, and it is compliant. The `missingForm` axis, the pilot
+cue check, the conditional cue, id-blindness and apportionment are new mechanism. The growth is
+not all new scope, though:
+- **P11-m4 (minor), about 350 of the 1,309 words.** These restate facts whose home is elsewhere:
+  - "Message-type rubric cases" calls itself "rubric-only … change no method", so its home is
+    `rubric.md`, which `promptSha256` pins;
+  - the join-in boundary sentence copies `rubric.md:65-66`;
+  - "The assistant's display name" restates `generator.md` instructions;
+  - "Rubric conventions" restates the tie-break list;
+  - the "300 times in 300 draws" sentence and its Reproducing bullet are finding evidence. They
+    cite a "v1.9 allocator" that was never committed (`seeds.py` is untracked) and that
+    `seeds.py`'s docstring already rebuts.
+
+  *Fix (`data-scientist`):* keep the principle sentences and cite the files for the rest.
+
+### What's solid
+
+The axis design answers M1, M2 and m1 directly. The weights and intervals are exact. The
+conditional axes and systematic rounding compose correctly in the in-flight code. Withholding ids
+removes a leak channel instead of policing it.
+
+**Stopping condition (teco line check, no Pass 12).**
+1. P11-M1: a pilot rule with a stated false-alarm rate, plus a recheck after a rule change.
+2. P11-M2: (a)–(d) reach the plan4 successor.
+3. P11-m1 to P11-m4 are fixed or ruled on in one line each.
+
+## Pass 12 — method note v1.11 (2026-11-01)
+
+**Scope.** The note at v1.11 (9,526 words, which includes the mid-pass binding sentence): §Q1.1 "Guard `missing` forms" and "Join-in cue",
+§Q1.3 "Pilot", "Reproducing the figures", and the `points/` files it cites (working tree, mid-edit
+by the coder). Plan5 v1.2 was read only for P11-M2's routing; it is not gated here. My
+instrument is in the scratchpad's `n12/`, and I did not run the author's `pilotcheck.py`:
+- `check.py` draws pilot items from the real `seeds.draw_seeds` (100 guard seeds, 50
+  `understanding`, 400 RNG seeds). For each draw it computes an exact distribution of `k` and
+  applies the rule with Wilson 95% bounds.
+- `robust.py` is a Monte Carlo test of a candidate statistic.
+
+**Verdict: needs changes. One new major, line-checkable (no Pass 13).** Every Pass 11 finding is
+fixed or routed. The one-sided rule removes false rejections entirely. But its stated power holds
+only at a noise level lower than the one the note uses for its false-reject claim (P12-M1).
+
+CPG: considered, not relevant. This is a method note and point data, and no `cpg_decisionmodels`
+is loaded.
+
+**Pass 11 disposition.**
+- P11-M1 — **fixed, by a different rule.** One-sided false-reject is 0.0000 under no noise, 5%,
+  10/25 and 15/35, and under false-leaning noise. That is structural: with about 20% counter-cue
+  items, independent noise can only lower agreement. The 100-item recheck block is mandatory.
+  The power claim fails (P12-M1).
+- My two-sided alternative — **the author is right.** Under fixed forms it falsely fails 0.25 at
+  10/25 noise and 0.52 at 15/35. It is 0.009 at 5% and 0 with no noise, so the 0.25–0.48 figure
+  holds at the stated noise. My Pass 11 figures assumed binomial forms and no noise.
+- P11-M2 — **routed.** Plan5 covers (a) through its U5.3 row (apportionment, with a
+  largest-remainder mutant), (b) in §2 and §3.5, (c) in the §4 U5.4 row, and (d) in §3.6's
+  `cue-check` halt.
+- P11-m1 — **fixed.** The note has "Obedience is checked per item", and the
+  `point.json` binding exists: `emptinessAxis: missingForm`, with `emptyFor` and `nonEmptyFor`.
+- P11-m2 — **fixed.** With `true × clear` weighted `empty` 5 to `immaterial` 1, the design values
+  recompute exactly:
+  - non-empty `missing` on `true` items: ⅔·⅙ + ⅓·½ = 5/18 = 27.8%;
+  - non-empty on `false` items: 7/8 = 87.5%;
+  - cue agreement: (13/18 + 7/8)/2 = 79.86%;
+  - counter-cue items: 20.1%.
+
+  All three values lie inside the side-check intervals. The `clear_advance` attribution holds:
+  5 of 5.
+- P11-m3 — **fixed.** cue_05 now reads "addressed to the room or to another person, not to the
+  agent" (`point.json:68`), and the `true` side goes through cue_01.
+- P11-m4 — **fixed.** Each cut rule exists where cited:
+  - message type's rubric covers off-topic questions (line 74), cancellations (95–98) and
+    returns (101);
+  - join-in's covers small talk (65) and an unclear addressee (72);
+  - guard's covers the speaker sentence (19–20) and "unsure" (75);
+  - both generators fix the assistant name (guard 55–56, message type 32–33);
+  - the guard generator covers the condition fit (12–14) and the six forms (28–38).
+
+  The words fell from 9,533 to 9,507 despite the new pilot rules. There is one dated revision
+  line. "300 of 300" is gone.
+- P11-n1 — **fixed.** The text now reads "Most figures", and both the closed forms and the
+  cue-check rates are listed.
+
+**Interactions (checked).**
+- Obedience works with the fixed forms. `a` is computed from the kept items' forms, so a drop
+  after 3 obedience hits is absorbed.
+- A rubric change made by `resolve` is labelled in the recheck block under the new hash.
+- The recheck block inherits P12-M1's power.
+
+### New findings
+
+**P12-M1 (major) — The cue check's stated power assumes 5% noise. At the note's own 10/25 noise it
+catches a fully cue-following labeller 31% of the time.** *Verified (`check.py`).* Power is the
+one-sided rule's probability of failing at 50 `understanding` items:
+
+| f (cue-following) | 5% noise | 10% clear / 25% near-miss | 15/35 |
+|---|---|---|---|
+| 1.00 | 0.952 | 0.311 | 0.061 |
+| 0.75 | 0.551 | 0.094 | 0.016 |
+| 0.50 | 0.139 | 0.017 | 0.003 |
+
+The note states false-reject at 10/25 noise, where it is trivially 0, and power at 5%. Noise on
+the concordant 80% of items pulls `k` down and cancels the cue-following on the counter-cue 20%.
+The 0.34 for a 50-item block also reproduces (0.341), and only at 5% noise. Labeller noise is
+unmeasured, and stored incumbent errors run 10–13% (§Q1.3), so the check's real power is
+anywhere from about 0.06 to 0.95. The one-sided justification also cites pair agreement and
+intent-label agreement, but neither is among the pilot's outputs.
+
+*Fix (`data-scientist`):*
+- State power at the noise used for false-reject.
+- Add the concordant items' intent-departure rate (an estimate of `e`), pair agreement and
+  intent-label agreement to the pilot outputs. Print the check's power at the observed `e`.
+- Alternatively, use a noise-robust statistic. One I ran (`robust.py`) compares, within each
+  difficulty, counter-cue items' cue-following rate with concordant items' departure rate (both
+  equal `e` under the null), using a one-sided CMH test at z ≥ 1.645. It falsely fails 0.057–0.069
+  and catches f = 1 with power 1.000 at all three noise levels, and f = 0.5 with power
+  0.75–0.96. The H0 column is the assertion that would catch it being wrong. Its normal
+  approximation runs about 1–2 pp hot at these counts, so the author picks the exact form.
+
+**Mid-pass sentence** (§Q1.1 "Obedience is checked per item": "Every other seed binding …
+takes the same path under its own reason"). *Checked against `point.json` and plan5 §3.5.*
+- The ruling matches plan5 §3.5's `bindingMismatch` path, with its own reason and its own 5% halt.
+- **Growth-stops: acceptable.** The 19 words rule on a path plan5 had asked about, which is new
+  scope rather than restated text. v1.11 had not been gated, so collision rule 5 allows the
+  in-place edit, and `Version:` is optional.
+- **P12-n1 (nit, `data-scientist`).** The parenthetical names only guard's four other bindings.
+  Message type's `priorTurn`-present-when-`follow-up` binding is covered by "every other", but
+  not by the list, so the list should read as examples ("for example …") or name it. The dated
+  line should gain a clause (for example "seed-binding routing"). Pass 12 gates the 9,526-word
+  text, and the line alone does not let a reader tell this text apart from the 9,507-word one.
+
+**Stopping condition (teco line check).** P12-M1's power is restated at a consistent noise model,
+and the pilot prints `e` and the power at that `e`, or the note adopts a noise-robust statistic
+with its rates stated.

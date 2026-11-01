@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.9 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 10)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.12 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
-*2026-10-31 — v1.9: answers plan4 Passes 1–2 (F11, F13, P2-m2–m4) on top of the gated v1.8 (`01f6f2f4`): generated-text screen, per-point spend projection, pilot blocks of 50. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
+*2026-11-01 — v1.12: answers `docs/reviews/typed-decision-models.md` Passes 11–12 on top of v1.10's U5.3 changes (`docs/reviews/typed-decision-models-ml.md` Pass 1): noise-robust exact stratified pilot cue check with a recheck block, per-item form obedience and seed-binding routing, `immaterial` in `true × clear`, cue_05 narrowed, rubric text cited rather than restated. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
 
 ## 0. The question and the decision it serves
 
@@ -35,19 +35,88 @@ Each item comes from one **seed**, drawn by stratified sampling.
 
 | Point | Seed axes |
 |---|---|
-| `guard-judge` | condition text × domain × evidence kind (`understanding`/`turns`) × intended answer × difficulty (`clear`/`near-miss`) |
-| `join-in-judge` | thread purpose × addressee cue (agent named but not @mentioned; question to the room; human-to-human; reply to the agent's last turn; small talk) × intended answer × difficulty |
+| `guard-judge` | condition text × domain × evidence kind (`understanding`/`turns`) × intended answer × difficulty (`clear`/`near-miss`); `understanding` seeds add a `missing` form |
+| `join-in-judge` | thread purpose × addressee cue (agent named but not @mentioned; question to the room; human-to-human; reply to the agent's last turn; small talk) × intended answer × difficulty; the cue is drawn given the intended answer |
 | `message-type-classifier` | intended label (5) × domain × thread position (`opening`/`follow-up`) × difficulty |
 
 - **Guard conditions.** A third of guard seeds use production's one condition ("the user has
-  provided enough information to research their request"). The rest spread over ≥ 8
-  generator-authored conditions of the same shape, so a candidate is not fitted to one sentence.
-  `turns` seeds vary from 1 to 10 turns, which exercises the renderer's last-6 cut.
+  provided enough information to research their request"). The rest spread over ≥ 8 other
+  conditions of the same shape, so a candidate is not fitted to one sentence.
+  - **Fixed data.** Conditions, domains, purposes and cues are written for generation, not taken
+    from production, and are fixed data in each point's `point.json`. The generator never invents
+    them, which keeps seeds reproducible from the RNG seed and §Q1.3's exemption for condition
+    sentences well defined.
+  - **Independent draws.** Condition and domain are drawn independently, with no compatibility
+    mask. The generator adapts the situation to the condition (`points/guard-judge/generator.md`).
+  - **Turns.** `turns` seeds vary from 1 to 10 turns, which exercises the renderer's last-6 cut.
+- **Guard `missing` forms.**
+  - **The side check.** An `understanding` item's `missing` list is a strong but imperfect cue,
+    and the human difficulty lies in whether a listed entry is material. Of the side check's 51
+    `understanding` items:
+    - 31 of 33 `false` items have a non-empty `missing` (Wilson 80.4–98.3%);
+    - 5 of 18 `true` items list an entry the condition does not need, all of them
+      `clear_advance` (12.5–50.9%);
+    - the label equals "`missing` is empty" on 44 of 51 (74.3–93.2%).
+  - **Why forms.** Left alone, the generator would make that cue decide every `understanding`
+    item, half of FR-13's parity. Each such seed carries a `missingForm`, drawn given (intended
+    answer, difficulty) (`points/guard-judge/point.json`; per-form text in `generator.md`). Each
+    form fixes whether `missing` is empty. `turns` seeds carry `null`.
+
+  | Intended answer × difficulty | `missingForm` (weight) → `missing` |
+  |---|---|
+  | `true` × `clear` | `empty` (5) → `[]` · `immaterial` (1) → non-empty |
+  | `true` × `near-miss` | `immaterial` (1) → non-empty · `indirect` (1) → `[]` |
+  | `false` × `clear` | `listed` (7) → non-empty · `unlisted` (1) → `[]` |
+  | `false` × `near-miss` | `listed` (7) → non-empty · `ambiguous` (1) → `[]` |
+
+  - **Design values**, with labels equal to intent:
+    - `missing` is non-empty on ⅔ × ⅙ + ⅓ × ½ = 5/18 ≈ 27.8% of `true` items and on 7/8 = 87.5%
+      of `false` items;
+    - the cue agrees with the label on (13/18 + 7/8) / 2 ≈ 79.9% at guard's 50/50 answer mix.
+
+    All three lie inside the side-check intervals. `immaterial` sits in `true × clear`, where the
+    side check has it.
+  - **Counter-cue items.** `immaterial`, `unlisted` and `ambiguous` items have a `missing` that
+    points to the other answer. They are (5/18 + 1/8) / 2 ≈ 20% of `understanding` items.
+  - **Obedience is checked per item.** At generation ingest, an item whose `missing` emptiness
+    contradicts its form is handled like a screen hit (§Q1.2): regenerated, and dropped after 3
+    hits, counted by form, with its own reason and its own 5% round halt. Materiality cannot be
+    checked mechanically, so it is left to the labels. Every other seed binding (for example a
+    verbatim condition, a turn count, or `priorTurn` on a `follow-up`) takes the same path under
+    its own reason.
+  - The six form names are in guard's `screen.metaPosition`. The pilot check is in §Q1.3
+    "Pilot".
+- **Join-in cue given the answer.** The rubric rules human-to-human exchange (cue_03) and small
+  talk (cue_05) `false`. Drawn independently of intent, they would make two in five `true` seeds
+  contradictory.
+  - **Draw.** `cue` is drawn given `intendedAnswer` (`points/join-in-judge/point.json`). `true`
+    seeds draw cue_01, cue_02 or cue_04, and `false` seeds draw any of the five, each at weight 1.
+  - **cue_05.** Its text is small talk to the room or to another person, never to the agent. The
+    rubric's rule for small talk addressed to the agent by name (`points/join-in-judge/rubric.md`,
+    "Small talk") gets its `true` side through cue_01.
 - **Near-miss** seeds hold back one material fact, or state it ambiguously. They are a third of
   every point's seeds and the synthetic counterpart of the side check's `boundary` tier. Without
   them, the eval set is easy and hides differences.
 - **Intent is a sampling variable, never a label.** No item is kept or dropped for agreeing with
   its intent.
+- **Apportionment is unbiased at every draw size.** Every stratified, balanced and conditional
+  axis, at every hierarchical level, gives each value its quota rounded down or up.
+  - The expected count equals the quota exactly, at any draw size.
+  - Deterministic largest remainder fails this on small top-up draws: it always rounds toward the
+    heavier value (`clear`), which would make a top-up cell easier than round 1.
+  - The algorithm, systematic rounding with one random start per allocation, is in
+    `decisionmodels/seeds.py`'s module docstring.
+- **Rubric conventions.** A guard rubric convention must not contradict the incumbent's system
+  prompt (`_JUDGE_SYSTEM_PROMPT`, `falkor-chat/server/falkorchat/app.py`). A contradiction would
+  score convention mismatches as incumbent errors, and so favour the candidate fitted to these
+  labels.
+  - **New-ability tie-breaks and boundary cases** define the label, since there is no incumbent.
+    They are rubric-only and live in each `points/<role>/rubric.md`, which `promptSha256` pins.
+  - **Join-in's silence default** for an unclear addressee is product behaviour, consistent with
+    FR-12.
+- **Speaker names.** The guard renderer (a production contract) never reads `role`, so the
+  generator templates fix the assistant's display name (`points/guard-judge/generator.md`,
+  `points/message-type-classifier/generator.md`).
 
 ### Q1.2 Blind labeling (R-4)
 
@@ -63,14 +132,18 @@ generates or labels: it has seen seeds and intents.
 - **Blind.** A request is a closed schema. Its header carries the body's SHA-256. Its body holds
   the rubric once and, per item, a key random per (item, vote) plus the rendered input (§3.2). No
   seed, intent, difficulty, design stratum (§Q1.3), split, generator metadata or other vote
-  appears in it. Generator requests hold seeds only (§Q1.4).
+  appears in it. Generator requests hold seeds only (§Q1.4), and only their text axes.
+  - No `*Id` field and no `seedId` reaches the generator; `Seed.axes` keeps them for the store.
+  - The reason: an id the generator never sees can be echoed only by invention, and a mangled
+    echo ("domain 7") would pass the screen.
 - **Generated-text screen.** The generator knows each seed's intent, so its text could leak it, for
   example "(near-miss: the budget is withheld)". That would leak into the votes, and also into
   Laya's eval input. The generator template forbids commentary, and at generation ingest a
   deterministic screen checks the rendered evidence fields, before any labelling.
   - **Hits.** Two kinds of token are screened:
-    - Tokens no prose uses are hits anywhere: `near-miss`, and domain or condition ids in their
-      non-word form, such as `dom_07`.
+    - Tokens no prose uses are hits anywhere: `near-miss`, and any token in the non-word id form,
+      such as `dom_07` (`seeds.ID_PATTERN`). Since ids never reach the generator, such a hit
+      catches an invented reference code or a request-writer defect.
     - Ordinary words are hits only in a meta position: inside brackets or parentheses, or after
       `label`, `answer`, `category` or `intent`. That covers `intended`, `difficulty` and the
       answer names. So "had difficulty paying" and a plain "complaint" pass.
@@ -161,7 +234,8 @@ generates or labels: it has seen seeds and intents.
   - A short cell is topped up by more draws from the **same design**, restricted to the cell's
     design stratum but never to an intent. This repeats until every cell fills, and surplus items are
     unused. Absent generation-context effects, each cell then holds independent draws given
-    (label, design stratum), as round 1 did, so the top-up cannot make a cell easier. Top-up runs
+    (label, design stratum), as round 1 did, so the top-up cannot make a cell easier. That holds
+    only under §Q1.1's unbiased apportionment, because top-up draws are small. Top-up runs
     pool only short strata, so that condition is checked. Each item records its `genRound`. Within
     each cell, intent-label agreement and pair agreement print for round 1 against the top-up, as
     exploratory figures.
@@ -232,6 +306,41 @@ FR-11's 200 is a floor, not a target.
   - **Pilot items are discarded,** and their seeds are not reused.
   - **Outputs.** F and c per role (input, cache-write, cache-read, output), the `D` values and the
     cap, audit voids and reruns, and the reprojected tokens per point.
+  - **`missing` cue check** (§Q1.1 "Guard `missing` forms").
+    - **What it tests.** Whether the labeller judges counter-cue items by the list rather than
+      by materiality, over the pilot's labelled `understanding` items (about 50), stratified by
+      difficulty × intended answer. Obedience is checked per item, so only the labels vary.
+    - **Counts per stratum.**
+      - `x` is the number of counter-cue items whose majority label departs from intent, which
+        for these items means it follows the cue.
+      - `y` is the number of concordant items whose label departs from intent.
+      - Under label noise independent of the cue, both counts depart at the same rate within a
+        stratum, whatever that rate is.
+    - **Rule.** This is an exact stratified conditional test, one-sided.
+      - Given each stratum's `x + y`, `x` is hypergeometric, so the null distribution of `Σx` is
+        the convolution of the strata's hypergeometrics.
+      - The check fails when `P(Σx ≥ observed) ≤ 0.05`.
+      - The pilot prints each stratum's `x`, `y` and departure rates, then `Σx` and the p-value.
+    - **Why stratify by answer.** Noise that depends on the answer, such as leaning towards
+      `false`, would otherwise read as cue-following.
+    - **Rates.** These are exact, over the pilot's 50 items at v1.11's weights, and cover five
+      noise models: none; 5%; 10% clear / 25% near-miss; 15/35; and false-leaning 10/25.
+      - It falsely fails at most 0.022, and at most 0.05 by construction under any noise
+        independent of the cue. With difficulty-only strata, false-leaning noise raises this to
+        0.056.
+      - A labeller that follows the cue on every counter-cue item fails with probability 1.000.
+      - On three in four counter-cue items it fails with probability 0.92–1.00, and on half
+        0.59–0.96.
+      - It therefore catches a gross failure whatever the noise. Round 1 reprints the counts over
+        all of guard's `understanding` items in `diagnostics.json`, as exploratory figures.
+    - **Not used.** The side-check intervals anchor the weights (§Q1.1), not this check. Cue
+      agreement `k/n` is not used either, because noise on concordant items masks cue-following.
+    - **On failure.** The fix is a recorded `resolve`. It may change the forms' generator text,
+      the weights, or the guard rubric under §Q1.1's rubric convention.
+      - Before guard's full spend, a fresh block of 100 items reruns the check under the changed
+        rule. It takes 4 generation runs and votes 1–3, with no screen vote.
+      - A second failure goes to the stakeholder.
+      - Both results join the decision package.
   - **Decision.** `teco` takes these to the stakeholder, who decides before guard's full spend.
 - **Spend point by point:** guard, then message type, then join-in. Each point is complete on its
   own and may fall in a later usage window. If usage runs out, stop at a point boundary.
@@ -787,10 +896,19 @@ these.
 
 ## Reproducing the figures
 
-Every figure in this note is printed by one of three stdlib scripts in
+Most figures in this note are printed by one of three stdlib scripts in
 `docs/plans/typed-decision-models-ml/`, run from the repo root with `python3 -I`:
 - `parity.py` covers §Q3.
 - `latency.py model-bench/results/runs` covers §Q4.4, including the slow-tier columns.
 - `fr10.py` covers §Q1.3's sawtooth and labelling volume, and §Q5.
+
+The §Q1.1 and §Q1.3 "Pilot" figures on `missing` and the cue have no script:
+- **The side-check counts.** Group the `understanding`-path rows of
+  `model-bench/packs/guard-judge-understanding/items.jsonl` by (`expected`, `missing`
+  non-empty), and by `tier` for the `clear_advance` attribution. The intervals are Wilson 95%.
+- **The design values and join-in's two in five.** Each is the closed form stated beside it.
+- **The cue check's rates.** Exact enumeration over the pilot's 50 items in four strata. A
+  concordant item departs from intent with probability `e`, a counter-cue one with
+  `f + (1 − f)·e`. Each outcome is scored by the stratified conditional p-value.
 
 `decision_stats.py`'s tests re-derive the figures from the formulas, not from these scripts.
