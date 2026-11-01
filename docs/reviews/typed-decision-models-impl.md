@@ -1518,3 +1518,267 @@ verdict rule and its side-check rule are different facts that happen to share a 
 edit to the side-check constant would silently move the verdict rule too. A
 `GUARD_ROLE = "guard-judge"` (or `BAR_KIND_BY_ROLE[role] == "speed-up"`) would keep them apart.
 Take it or leave it. No current mutant distinguishes the two.
+
+## Pass 14
+
+*2026-10-31. U3b.2: the guard's decision-point hand-off parse port, `render-guard.jsonl` and
+`handoff-parse-guard.jsonl`, and falkor-chat's `tests/test_decision_contract.py` with its byte-copies.
+The diff is uncommitted against `6e3ec33f` (`model-bench/` files plus the two new falkor-chat test
+paths). Out of scope: `falkor-chat/server/falkorchat/services.py` (`MessageTooLongError`, K-099),
+`falkor-chat/docs/plans/embedder-context-coordination.md` and the ledger, which belong to a
+concurrent session. Specs: v1.3 §3.2, §3.2.2, §4 U3b, §5 U3b row 2, R-10. Plan2 §4.1 restates
+R-10, and plan3 adds `over-limit.jsonl` only, so neither amends U3b.2.*
+
+**Verdict: needs changes.** The port is faithful, line for line. The old pack's parse is
+unchanged. The vectors reproduce byte-for-byte from falkor-chat's real code, and the equality
+test's skip cannot fire spuriously. However, the vector rows leave several falkor-chat behaviours
+unpinned (P14-M1). Five of the ten contradiction cues, the own-line parse's trailing-prose and
+`require_key` rules, and the render cap's boundary can each change on either side with both suites
+green. One of those rules guards against false advances. This is the unit's core deliverable, and
+v1.3 §3.2.2 wants it pinned "before U7 measures". The fix is rows plus one coverage assertion, so it
+is small. Also one minor (P14-m1) and two nits.
+
+**Checks run** (fresh `PYTHONPYCACHEPREFIX` for each run; scratch files are under
+`scratchpad/p14/`):
+- **model-bench** (cwd `model-bench/`): `2762 passed, 5 deselected, 2 xfailed`. `ruff` is clean.
+  The new tests are `47 passed` (10 render, 34 parse, 3 others), which matches 2715 → 2762.
+- **falkor-chat:** I ran only `tests/test_decision_contract.py`, from `falkor-chat/server` with
+  its venv. First I confirmed that it requests no fixture. `conftest`'s only autouse fixture,
+  `_model_config_env`, sets environment variables and touches no graph. The run gave
+  `46 passed`, 0 skipped. It also gave `46 passed` from cwd `server/tests/`. Per the brief, I did
+  **not** run the full suite, because `wf_repo` wipes `reference` (SERVER.md §1.7). I accept the
+  implementer's `3401 passed, 14 deselected, 1 xfailed` (from 3355) as reported. That run is the
+  evidence for the U3b brief's "U3b's gate also runs the falkor-chat suite".
+- **Claim 2 (provenance): confirmed.** I re-ran the generator into a fresh directory with
+  falkor-chat's venv. Both outputs are `cmp`-identical to model-bench's files and to falkor-chat's
+  copies. I also checked rows by hand, independent of the generator. The `;` row ("did not say;
+  more info…") truncates the window after `;`, so it contradicts. The 12/13-char window rows fall
+  at offsets 6 and 7 before the cue at 18 and 19.
+- **Claim 4 (skip): confirmed.** `_MODEL_BENCH` is `Path(__file__).resolve().parents[3]`, so it
+  does not depend on the cwd. For a positive control, I copied the test and its data into a
+  scratch tree with no `model-bench/` sibling. That gave `2 skipped, 44 passed`, and the skip
+  reason was printed. A present `model-bench/` with a missing canonical file raises
+  `FileNotFoundError`, so it goes red, not skipped.
+- **Mutants.** Each was applied to a copy, then restored and `cmp`-checked. The `sha256` of all
+  five touched or mutated files matched the pre-run hashes, which also equal the implementer's
+  `pre.sha`. The implementer's labels M5/M8/F2 do not appear in HISTORY or the scratch files, so
+  I matched them by description:
+  - Red as claimed:
+    - (A) model-bench's contradiction check disabled;
+    - (B) decision-point packs on the loose parse;
+    - (F2) falkor-chat's `_coerce_verdict` skipping the contradiction check.
+  - Mine, survived (all green). These are the evidence for P14-M1 and P14-m1, listed in Appendix P14.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded, and `cpg_falkorchat` is stale per
+the brief; the falkor-chat functions were read and executed directly.
+
+### Dispositions of the implementer's claims
+
+- **Claim 1 (port faithful): confirmed for the code, not fully pinned (P14-M1).** I diffed
+  `_NEGATION_CUES`, `_NEGATORS`, `_NEGATOR_WINDOW`, `_CLAUSE_BOUNDARY`, `_rationale_contradicts`
+  and `_is_negated` against `guards.py:80-103,509-535`. They are token-identical.
+  `_coerce_verdict` is the decision half of `guards.py:488-506`, and its branch order is
+  equivalent. In model-bench, `extract_own_line_json_object` then `_coerce_verdict` composes the
+  same way as `_LlmGuardJudge.__call__` plus `_coerce_verdict` (`app.py:797-805`). That holds
+  because falkor-chat's unparseable fallback `{"decision": False}` coerces to a suspend, which is
+  model-bench's `(False, "parse_failure")`.
+- **Claim 2 (vectors through `_build_llm_judge`): the right reading of §3.2.2.** §3.2.2 names
+  `_coerce_verdict`, but §3.2's table defines the hand-off parse as
+  `extract_own_line_json_object(require_key="decision")` then `_coerce_verdict`. Going through the
+  production judge pins exactly that composition, including the unparseable branch. Hand-built
+  mappings would have skipped the parse half. `parseFailure` comes from a separate `extract` call,
+  because the judge's fallback cannot be told apart from a real `false`. The docstrings on both
+  sides say so.
+- **Claim 3 (old pack): confirmed.** The new branch is the only change in `answer_from_chat`. It is
+  keyed on `_is_decision_point` (`"decisionPoint" in manifest`, U3b.1's keying), and
+  `pack=None` falls through. The test-file diff is append-only, so the U3a rescore golden and the
+  stored-records test are the originals, and both are green. `"true"` gives `(False, "pass")` on
+  the fixture decision-point pack and `(True, "pass")` on the real pack and on `None`.
+- **Claim 5 (counts): confirmed** for model-bench and for the 46 falkor-chat tests. The full
+  falkor-chat count is accepted as reported.
+- **Claim 7 (docs): see P14-n2.**
+  - `model-bench/AGENTS.md` is 2,475 words (was 2,484). No line is over 700 characters.
+  - The trim lost no current fact. The model pair, the "not reproduced" flag and "groundingRate
+    fixed" stay. The five-round chain and the re-run are history, cited to HISTORY and still told
+    in README:58-68.
+  - The replacement sentence is accurate. `falkor-chat/server/tests/test_decision_contract.py` is
+    the only file outside `model-bench/` that reads `model-bench/`: `test_fusion.py`'s hits are
+    string literals, and `decision-models/` does not exist yet.
+  - README's new paragraph matches the code.
+  - The HISTORY entry is new and its claims check out. None of these files falls under the
+    growth-stops bullet.
+
+### Findings
+
+**P14-M1 (major). The vectors pin only part of the hand-off parse and the render, so either
+side can drift silently.** Each of these mutants leaves both suites green (Appendix P14):
+- **Cues.** Dropping `insufficient`, `still need`, `unable`, `not yet` or `need more` from
+  model-bench's `_NEGATION_CUES` stays green. So does dropping `unable` from falkor-chat's, or
+  adding a new cue (`missing`) to it. Only `not enough`, `still missing`, `cannot `, `unclear` and
+  `more info` have a contradicting row. `insufficient` appears only negated. `cannot ` → `cannot`
+  also survives: no row ends a rationale in "cannot".
+- **Own-line parse.** Two rules are unpinned:
+  - The trailing-prose skip ("quoted, not asserted"). Removing it **survives on both sides**, and
+    removing it is a false advance: `'{"decision": true} is what I would say, but no.\n'` is
+    `None` today.
+  - falkor-chat's `require_key` filter. Removing it is green there, though model-bench's own
+    suite catches it on its side. `'Example:\n{"note": 1}\n{"decision": true}\n'` advances only
+    because of `require_key`.
+
+  The duplicate-key last-wins rule is also unpinned.
+- **Render cap boundary.** Changing `>` to `>=` survives on both sides. Changing model-bench's
+  separator arithmetic to `+ 1` survives too. A turn sized to make the total exactly 6000 is kept
+  today; at 6001 it is dropped. No row sits at either point.
+
+**Fix (implementer).** Don't add the rows above as a list. Add a coverage probe over the axes
+the parse and render vary on.
+- In the generator, emit one row per `guards._NEGATION_CUES` entry, bare and un-negated
+  (contradicts), and one per `(negator, cue)` pair negated (affirms). Iterate over falkor-chat's
+  real tables, not over a typed list.
+- Add rows for each own-line rule, `require_key` disambiguation and duplicate keys, plus the
+  render's `total == 6000` and `6001` turn rows.
+- In falkor-chat's `test_decision_contract.py`, assert that every `guards._NEGATION_CUES` entry and
+  every `_NEGATORS` entry occurs in at least one row of the matching polarity. That makes a cue
+  added in falkor-chat redden there until a row covers it.
+- On the model-bench side, make the same assertion over its port's tables.
+
+Positive controls: mutants D1–D5, G and G2 must go red, and so must K, J2 and H/H3. This touches
+neither U3b.1 nor the parse code. Because the generator's output is a full regenerate, re-copy both
+files and re-run `cmp`.
+
+**P14-m1 (minor). The pack keying is pinned at `answer_from_chat` only, not at either seam that
+calls it.** Passing `pack=None` in `classification.score_item:597` (the chat arm, which is how the
+incumbent is measured on a decision-point pack) stays green. So does passing it in
+`runner._drive_handoff_items:801` (the candidate's hand-off). Either regression would put a
+decision-point arm back on the loose parse, which advances on `"true"`, while every test passes.
+**Fix:** add one test per seam on the fixture decision-point pack. For `score_item`, a `"true"`
+reply scores a suspend. For a `run_pack` hand-off run, a stub hand-off replying `"true"` records
+the item as not advanced. Positive controls: mutants S and S2.
+
+**P14-n1 (nit). The vector loaders are unpinned.** A loader that keeps every other row stays green
+(`2740 passed`). The byte-equality test does not cover the parse into parametrized rows. P14-M1's
+coverage assertion will catch most such truncations. To close it fully, assert the parametrized
+row count against a count of non-blank lines taken from `read_bytes()`.
+
+**P14-n2 (nit). The generator lives only in the session scratchpad.** This is not a provenance
+gap: falkor-chat's test recomputes every row through the real functions, so the `expected` values
+stay verified for as long as the test runs. But P14-M1 needs a regenerate, and later units extend
+these files. Check the generator in as a human-invoked script in falkor-chat (it imports
+`falkorchat`, so `refresh_golden.py`'s "never touches a falkor-chat venv" rule keeps it out of
+`model-bench/scripts/`), and cite it from HISTORY.
+
+### Routed outside the implementer
+
+- **`teco` (feature close, not this unit): the `falkor-chat/docs/SERVER.md` §1.7 bullet.**
+  `SERVER.md` is falkor-chat's live spec, and root `AGENTS.md` updates it once, at the feature's
+  close. The test adds no runtime contract, and nothing in falkor-chat's context files contradicts
+  it, so nothing is wrong today. Ledger it as an obligation for close step (2): "the
+  `test_decision_contract.py` copies are model-bench's; a change to `_render_judge_user`,
+  `extract_own_line_json_object` or the `guards` cue tables reddens it — regenerate in
+  model-bench and re-copy". The falkor-chat `HISTORY.md` entry for the test file belongs to the
+  same close.
+
+### Proposed REVIEW.md lines
+
+None. P14-M1 is one instance, and root `REVIEW.md`'s "every check … can both fail and pass. Name
+the mutant" already required the drop-one-entry mutants that found it.
+
+### Appendix P14 — survivors and probes
+
+Harness `scratchpad/p14/mut.sh`: copy aside, apply one exact-once replacement, run the suite,
+restore, `cmp`. model-bench runs the full suite; falkor-chat runs `test_decision_contract.py`
+only.
+
+| ID | Side | Mutant | Result |
+|---|---|---|---|
+| D1–D5 | mb | drop cue `insufficient` / `still need` / `unable` / `not yet` / `need more` | 2762 passed |
+| D6 | mb | drop cue `cannot ` (positive control) | 1 red |
+| E | mb | `"cannot "` → `"cannot"` | 2762 passed |
+| G | fc | add cue `"missing"` | 46 passed |
+| G2 | fc | drop cue `unable` | 46 passed |
+| K / K3 | fc / mb | own-line trailing-prose skip removed | 46 passed / 2762 passed |
+| J2 / J3 | fc / mb | `require_key` filter removed | 46 passed / 4 red (model-bench's own extract tests) |
+| K2 | fc | duplicate keys keep first | 46 passed |
+| H / H3 | mb / fc | render cap `>` → `>=` | 2762 passed / 46 passed |
+| H2 | mb | separator arithmetic always `+ 1` | 2762 passed |
+| L | mb | test loader keeps every other row | 2740 passed |
+| S / S2 | mb | `score_item` / `_drive_handoff_items` pass `pack=None` | 2762 passed each |
+
+Real falkor-chat outputs for the proposed rows (`falkor-chat/server/.venv`, `-I`):
+- trailing-prose reply → `None`;
+- `require_key` reply → `{'decision': True}`, which advances;
+- duplicate keys → `{'decision': True}`;
+- each of the five bare cues, with `decision: true` → `False`;
+- a 6000-char total → turn kept; 6001 → base only (12 chars).
+
+## Pass 15
+
+*2026-10-31. Re-gate of U3b.2 after the Pass 14 fix round. The diff is uncommitted against
+`6e3ec33f`, and adds `falkor-chat/scripts/generate_guard_decision_vectors.py`.*
+
+**Verdict: approve.** Every Appendix P14 survivor except H2 now goes red, on the side it was
+planted. H2 is equivalent by execution. The fixes do not mask each other. Two new nits.
+
+**Checks run** (fresh `PYTHONPYCACHEPREFIX` each run; every mutated file restored and
+`sha256`-checked against `scratchpad/p14/pre15.sha`):
+- **model-bench:** `2836 passed, 5 deselected, 2 xfailed`; `ruff` clean.
+- **falkor-chat:** `tests/test_decision_contract.py` alone gives `118 passed`, 0 skipped. `ruff` is
+  clean on it and on the generator. I did not run the full falkor-chat suite. The fix round touched
+  only this test file, its data and an unimported script, so the implementer's earlier `3401 passed`
+  stands as reported. HISTORY says the suite was not re-run.
+- **Generator reproducible:** run into an empty directory with `.venv/bin/python -I`, from
+  `falkor-chat/server` and again from an unrelated cwd. Both outputs (14 and 99 rows) are
+  `cmp`-identical to model-bench's files and to falkor-chat's copies.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded, and `cpg_falkorchat` is stale per
+the brief; the falkor-chat functions were read and executed directly.
+
+### Dispositions
+
+- **P14-M1: fixed.** Each surviving mutant is now red:
+  - **Cues:** D1–D5 and E, each on its own probe row; G and Gn (a negator added in falkor-chat) on
+    falkor-chat's coverage test; G2 on its probe row.
+  - **Own-line parse:** K/K3 (trailing prose), J2 (`require_key`) and K2 (duplicate keys), each on
+    its own-line rule row.
+  - **Render cap:** H/H3 on the two exact-6000 render rows.
+  - My own mutant, dropping the `never ` negator from model-bench's port, is red as well.
+- **H2: equivalent, confirmed by execution.** H2 is my "separator arithmetic always + 1", and it is
+  the same mutant as the implementer's H2b. A differential run compared model-bench's
+  `_render_judge_user` with the mutant over 206,000 inputs. Those were 200,000 random ones, plus an
+  exhaustive sweep of 1–3 turns with totals from 5980 to 6019 and every split. The outputs differed
+  0 times. The `kept == 1` eviction ends the loop, and `total` is never read after it
+  (`scratchpad/p14/h2diff.py`).
+- **P14-m1: fixed.** S goes red on `test_score_item_on_a_decision_point_pack_scores_a_true_string_as_a_suspend`.
+  S2 goes red on `test_a_hand_off_reply_with_a_true_string_is_a_suspend_on_a_decision_point_pack`.
+- **P14-n1: fixed.** The loader mutant that keeps every other row goes red on both sides
+  (`test_every_vector_line_is_a_parametrized_row`).
+- **P14-n2: fixed.** The generator is checked in. Its placement is consistent: `falkor-chat/scripts/`
+  already holds Python scripts that import `falkorchat` (`seed_eval_corpus.py`,
+  `embedding_migration.py`, `ensure_demo_models.py`), and `server/scripts/` does not exist.
+- **Interactions between the fixes: not circular.** The coverage tests read the live tables at
+  test time, not the generator's output.
+  - A table change without a regenerate reddens falkor-chat (G, Gn).
+  - With the cue added and the vectors regenerated into both trees, model-bench still goes red,
+    because its port lacks the cue (`probe: cue 'missing' un-negated contradicts`). So a regenerate
+    cannot hide a port that lags behind.
+  - Dropping one cue's probe row from both copies reddens both coverage tests.
+- **The row-count pin is relative, by design.** It counts lines in the bytes against the
+  parametrized rows. It catches a loader that drops rows, but not a row missing from the file
+  itself. See P15-n1.
+
+### Findings
+
+**P15-n1 (nit). Nothing pins the presence of the hand-written own-line and cap rows.** Removing
+the trailing-prose row from both copies stays green on both sides (`117 passed` / `2835 passed`).
+After that, K/K3 would survive again. The risk is low: the files change only by regenerating, and
+the generator holds the row, so a drop shows up in a reviewed diff. To close it, extend
+`test_the_vectors_cover_the_plans_cases` with the `own-line rule`, `duplicate keys` and
+`cap boundary` prefixes. The positive control is this data mutant.
+
+**P15-n2 (nit). The coverage assertion assumes that no cue contains another cue.** I added the
+cue `missing` to `guards`, regenerated, and copied the vectors into both trees. falkor-chat then
+stays red with "no affirming row for 'nothing ' + 'still missing'". That is correct behaviour:
+the bare `missing` inside a negated `still missing` is not negated, so no rationale can affirm
+that pair. It fails loudly rather than silently, so no action is needed now. If such a cue is ever
+added, the assertion should exempt the pairs whose cue contains another cue. A comment on the
+assertion stating the assumption would save the next maintainer the diagnosis.

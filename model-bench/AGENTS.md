@@ -14,20 +14,19 @@ roles has a scorer module in `modelbench/scoring/`: `retrieval.py` (`embedder`),
 (`guard-judge`), `extraction.py` (`nlq-generator`), `toolcalls.py` — the package's first
 `ConversationScorer`, for the multi-turn `tool-caller` role — and `grounding.py` (`chat-responder`,
 deterministic layer only per FR-21a; the judged-quality layer stays deferred, `docs/BACKLOG.md`).
-Every pack has its own required live run against a real LM Studio. Two of those runs found real
-problems and shipped honestly rather than quietly: `tool-caller`'s known-answer validation
-(`qwen/qwen3-4b-2507` vs. `mistralai/ministral-3-3b`) did not reach statistical significance at
-this pack's sample size on any configuration tried, and ships flagged "not reproduced" rather than
-massaged into one; `chat-responder`'s `groundingRate` metric had a real abstention-detection defect
-found on its own required live run, fixed over a five-round gated chain, and confirmed fixed on a
-fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
+Every pack has its own required live run against a real LM Studio. `tool-caller`'s known-answer
+validation (`qwen/qwen3-4b-2507` vs. `mistralai/ministral-3-3b`) ships flagged "not reproduced":
+no configuration tried reached significance at this pack's sample size. `chat-responder`'s
+`groundingRate` abstention-detection defect, found on its live run, is fixed (`docs/HISTORY.md`).
+`modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
 (the loader: `load_pack`/`validate_pack` with the decision-point contract, keyed on a
 `decisionPoint` key alone; content hashing, the AST import allowlist), `lmstudio`,
 `hostinfo`, `tooling`, `convo` (turn assembly and driving), `runner` (`RunConfig`, the
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 and `decisions` (typed-decision-models' pure half — policies, hashes, `Candidate.load`, bar
-constants — pinned by `tests/fixtures/decision-contract/`). `run --candidate` drives a
-candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
+constants). `tests/fixtures/decision-contract/` pins it and `classification`'s guard render and
+decision-point hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
+`run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
 the `handoff` surface (`runner._drive_handoff_items`); on a decision-point pack the runner loads
 the arm's absent models itself before the warm-ups (U1d–U2.2 in `docs/HISTORY.md`). A guard's
 withheld hand-off record is `classification.score_answer`'s to shape; the runner never patches
@@ -169,12 +168,13 @@ construction, never a real comparison.
 - **Standalone — FR-23.** No runtime code path reads any path outside `model-bench/`. Golden data
   from `falkor-chat` is *copied in* and versioned here with provenance; the one-way importer
   `scripts/refresh_golden.py` is a human-invoked maintenance script and is never reachable from a
-  run. Nothing in `falkor-chat` changes, in either direction, ever. **The default test suite holds
-  to the same rule too**: 3 tests that live-verify a copied-in golden asset against its real
-  `falkor-chat/` source carry `tests/conftest.py`'s `requires_falkor_chat` skip guard — a plain
-  `skipif`, deliberately distinct from the `live` marker below (a different precondition) — so
-  `pytest -q` skips them cleanly (reported in the summary line) rather than failing when
-  `falkor-chat/` is absent or renamed.
+  run. **The default test suite holds to the same rule too**: 3 tests that live-verify a copied-in
+  golden asset against its real `falkor-chat/` source carry `tests/conftest.py`'s
+  `requires_falkor_chat` skip guard — a plain `skipif`, deliberately distinct from the `live` marker
+  below (a different precondition) — so `pytest -q` skips them cleanly (reported in the summary
+  line) rather than failing when `falkor-chat/` is absent or renamed. The one reverse edge is
+  test-only: falkor-chat's suite byte-copies `tests/fixtures/decision-contract/` files and asserts
+  them equal to ours unless `model-bench/` is absent (typed-decision-models v1.3 §3.2.2).
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
   takes a `packId` and there is no API to load across packs. See `README.md`'s three non-features.
 

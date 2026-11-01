@@ -19,6 +19,7 @@ fixture" in the only shape available before U4.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from types import MappingProxyType
@@ -381,6 +382,22 @@ def test_a_mixed_run_decides_two_items_and_hands_off_two(tmp_path):
         "fx-ca-02": {"falseSuspendRateByTurns": 1, "falseSuspendRate": 1},
     }
     assert [len(lms.decide_calls), len(lms.chat_calls)] == [4 + 1, 2]  # + the re-check
+
+
+def test_a_hand_off_reply_with_a_true_string_is_a_suspend_on_a_decision_point_pack(tmp_path):
+    """v1.3 §5 U3b at the hand-off seam (impl review P14-m1): `_drive_handoff_items` hands the
+    parse its decision-point pack, so `"decision": "true"` is falkor-chat's suspend, not the old
+    pack's loose advance. Both hand-offs are `clear_advance` items, so each is a false suspend."""
+    _handoff_workspace(tmp_path)
+    string_true = dataclasses.replace(_reply(True), message={"content": '{"decision": "true"}'})
+    lms = HandoffStub(decide_responses=list(_MIXED), chat_responses=[string_true, string_true])
+    run, _ = _run(tmp_path, lms)
+    handed = {i.itemId: i.counts for i in run.items if i.detail["decidedBy"] == "handoff"}
+    assert handed == {
+        "fx-ca-01": {"falseSuspendRateByUnderstanding": 1, "falseSuspendRate": 1},
+        "fx-ca-02": {"falseSuspendRateByTurns": 1, "falseSuspendRate": 1},
+    }
+    assert all(i.outcome == "pass" for i in run.items)
 
 
 def test_a_handed_off_item_has_two_calls_and_a_decided_one_has_one(tmp_path):

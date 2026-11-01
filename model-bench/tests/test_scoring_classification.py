@@ -1150,3 +1150,149 @@ def test_a_load_withholding_is_legal_on_a_decided_item_or_a_kept_failure(answer,
         **_decision_keywords(**keywords),
     )
     assert result.timing.withheldFor == "load"
+
+
+# ==================================================================================================
+# 8. typed-decision-models U3b.2 — the decision-point guard hand-off parse and the render, against
+#    the golden vectors (docs/plans/typed-decision-models.md §3.2, §3.2.2, §4 U3b, §5 U3b)
+# ==================================================================================================
+
+#: model-bench's canonical copies (v1.3 §3.2.2). Their `expected` values were produced by running
+#: falkor-chat's real `app._render_judge_user`, and its real hand-off chain (`app._build_llm_judge`
+#: over a stub LLM returning the row's `reply`, then `guards._coerce_verdict`;
+#: `parseFailure` is `llm.extract_own_line_json_object(reply, require_key="decision") is None`),
+#: never by the code they pin. falkor-chat asserts its functions against byte-copies of them
+#: (`falkor-chat/server/tests/test_decision_contract.py`).
+_CONTRACT = Path(__file__).parent / "fixtures" / "decision-contract"
+_DECISION_POINT_GUARD_PACK = Path(__file__).parent / "fixtures" / "packs" / "decision_point_guard"
+
+
+def _contract_rows(name: str) -> list[dict[str, Any]]:
+    with (_CONTRACT / name).open(encoding="utf-8") as fh:
+        return [json.loads(line) for line in fh if line.strip()]
+
+
+_RENDER_GUARD_ROWS = _contract_rows("render-guard.jsonl")
+_HANDOFF_PARSE_GUARD_ROWS = _contract_rows("handoff-parse-guard.jsonl")
+
+
+@pytest.fixture(scope="module")
+def decision_point_pack() -> Pack:
+    pack = load_pack(_DECISION_POINT_GUARD_PACK)
+    assert "decisionPoint" in pack.manifest
+    return pack
+
+
+@pytest.mark.parametrize("row", _RENDER_GUARD_ROWS, ids=[r["case"] for r in _RENDER_GUARD_ROWS])
+def test_render_judge_user_matches_render_guard_jsonl(row: dict[str, Any]):
+    """The guard's decision-model input and hand-off user message (v1.3 §3.2: "exactly as
+    today") equals falkor-chat's `_render_judge_user` on every vector row."""
+    rendered = classification._render_judge_user(
+        row["condition"], row["understanding"], row["recentTurns"]
+    )
+    assert rendered == row["expected"]
+
+
+@pytest.mark.parametrize(
+    "row", _HANDOFF_PARSE_GUARD_ROWS, ids=[r["case"] for r in _HANDOFF_PARSE_GUARD_ROWS]
+)
+def test_decision_point_handoff_parse_matches_handoff_parse_guard_jsonl(
+    row: dict[str, Any], decision_point_pack: Pack
+):
+    """On a decision-point pack the hand-off parse is falkor-chat's: the own-line parse, then
+    `_coerce_verdict` (strict `True`, rationale contradiction with negation). Unparseable is a
+    suspend and a `parse_failure`."""
+    expected = row["expected"]
+    outcome = "parse_failure" if expected["parseFailure"] else "pass"
+    answer = classification.answer_from_chat(_chat_result(row["reply"]), pack=decision_point_pack)
+    assert answer == (expected["advance"], outcome)
+
+
+@pytest.mark.parametrize(
+    ("name", "rows"),
+    [
+        ("render-guard.jsonl", _RENDER_GUARD_ROWS),
+        ("handoff-parse-guard.jsonl", _HANDOFF_PARSE_GUARD_ROWS),
+    ],
+)
+def test_every_vector_line_is_a_parametrized_row(name: str, rows: list[dict[str, Any]]):
+    """Impl review P14-n1: the loader drops no row — counted from the raw bytes, not the loader."""
+    lines = [line for line in (_CONTRACT / name).read_bytes().splitlines() if line.strip()]
+    assert len(rows) == len(lines)
+
+
+def _true_verdict_rationale(reply: Any) -> str | None:
+    """The lower-cased rationale of a whole-reply `{"decision": true, "rationale": <str>}`."""
+    try:
+        parsed = json.loads(reply)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict) or parsed.get("decision") is not True:
+        return None
+    rationale = parsed.get("rationale")
+    return rationale.lower() if isinstance(rationale, str) else None
+
+
+def test_every_cue_and_negator_of_the_port_has_a_row_of_its_polarity():
+    """Impl review P14-M1: every `_NEGATION_CUES` entry has a parsed `true` row where it stands
+    alone, un-negated, and contradicts; every (`_NEGATORS`, cue) pair has one where it affirms. So
+    a cue or negator added to the port without a row reddens here."""
+    cues, negators = classification._NEGATION_CUES, classification._NEGATORS
+    rows = [
+        (row["expected"], _true_verdict_rationale(row["reply"]))
+        for row in _HANDOFF_PARSE_GUARD_ROWS
+    ]
+    rows = [(e, r) for e, r in rows if r is not None and not e["parseFailure"]]
+    for cue in cues:
+        assert any(
+            not expected["advance"]
+            and cue in rationale
+            and not any(neg + cue in rationale for neg in negators)
+            and not any(other in rationale.replace(cue, "|") for other in cues if other != cue)
+            for expected, rationale in rows
+        ), f"no contradicting row for cue {cue!r}"
+        for negator in negators:
+            assert any(
+                expected["advance"] and negator + cue in rationale for expected, rationale in rows
+            ), f"no affirming row for {negator!r} + {cue!r}"
+
+
+def test_score_item_on_a_decision_point_pack_scores_a_true_string_as_a_suspend(
+    decision_point_pack: Pack,
+):
+    """v1.3 §5 U3b at the chat-surface seam (impl review P14-m1): `score_item` hands the parse
+    its decision-point pack, so a `clear_advance` item answered `"true"` is a false suspend."""
+    item = next(i for i in decision_point_pack.iter_items() if i["itemId"] == "fx-ca-01")
+    result = classification.score_item(
+        item, _chat_result('{"decision": "true"}'), _timing(), pack=decision_point_pack
+    )
+    assert result.outcome == "pass"
+    assert result.counts == {"falseSuspendRateByUnderstanding": 1, "falseSuspendRate": 1}
+
+
+def test_the_vectors_cover_the_plans_cases():
+    """v1.3 §5 U3b's cases are present: negation, rationale contradiction, string versus bool
+    `decision`, malformed input — and both verdicts on a parsed reply."""
+    cases = [r["case"] for r in _HANDOFF_PARSE_GUARD_ROWS]
+    for prefix in ("negation", "contradiction", "string \"true\"", "malformed"):
+        assert any(c.startswith(prefix) for c in cases), prefix
+    parsed = [r["expected"]["advance"] for r in _HANDOFF_PARSE_GUARD_ROWS
+              if not r["expected"]["parseFailure"]]
+    assert True in parsed and False in parsed
+
+
+def test_a_true_string_is_not_an_advance_on_a_decision_point_pack_but_still_is_on_the_old_pack(
+    decision_point_pack: Pack, real_pack: Pack
+):
+    """v1.3 §5 U3b: `"decision": "true"` is not an advance on decision-point packs. The old pack
+    keeps today's loose parse (`bool("true")`), byte-for-byte."""
+    reply = _chat_result('{"decision": "true", "rationale": "The user gave the service."}')
+    assert classification.answer_from_chat(reply, pack=decision_point_pack) == (False, "pass")
+    assert classification.answer_from_chat(reply, pack=real_pack) == (True, "pass")
+    assert classification.answer_from_chat(reply, pack=None) == (True, "pass")
+
+
+def test_a_contradicting_rationale_still_advances_on_the_old_pack(real_pack: Pack):
+    """The old pack never ran `_rationale_contradicts`; U3b.2 does not add it there."""
+    reply = _chat_result('{"decision": true, "rationale": "Not enough information was given."}')
+    assert classification.answer_from_chat(reply, pack=real_pack) == (True, "pass")

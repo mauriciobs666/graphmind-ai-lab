@@ -1,9 +1,10 @@
 """guard-judge's `ItemScorer` — a module, not a class, satisfying the Protocol structurally
 (`scoring/retrieval.py`'s own precedent). Transcribes `falkorchat.app._LlmGuardJudge`'s prompt
 construction, `falkorchat.guards._recent_turns`'s turn normalization, and
-`falkorchat.llm.extract_own_line_json_object`'s conservative parse as DATA + CODE, never an import
-(D1, FR-23 — `model-bench` never reads `falkor-chat` at run time). No live call, no database — one
-chat call per item.
+`falkorchat.llm.extract_own_line_json_object`'s conservative parse, and (a decision-point pack's
+hand-off parse only) `falkorchat.guards._coerce_verdict`'s verdict rule as DATA + CODE, never an
+import (D1, FR-23 — `model-bench` never reads `falkor-chat` at run time). No live call, no
+database — one chat call per item.
 
 Design: `docs/plans/small-model-benchmarking-s4-spec.md` §5.1.3, §2.3-§2.4 (the two real
 mechanisms this module transcribes, verified directly against the shipped falkor-chat source), §7
@@ -182,6 +183,62 @@ def extract_own_line_json_object(
     return matches[0] if len(matches) == 1 else None
 
 
+# --- the decision-point hand-off verdict (transcribed from `guards._coerce_verdict`,
+# `guards._rationale_contradicts` and `guards._is_negated`; typed-decision-models v1.3 §3.2, §4 U3b)
+# Pinned against falkor-chat's real functions by `tests/fixtures/decision-contract/
+# handoff-parse-guard.jsonl` (v1.3 §3.2.2), never imported (FR-23). ----------------------------
+
+#: Deficiency assertions contradicting a `decision: true` when un-negated (`guards._NEGATION_CUES`).
+_NEGATION_CUES: tuple[str, ...] = (
+    "not enough", "insufficient", "still missing", "still need", "cannot ", "unable",
+    "unclear", "not yet", "more info", "need more",
+)
+#: A cue immediately preceded by one of these, in the same clause, affirms (`guards._NEGATORS`).
+_NEGATORS: tuple[str, ...] = ("no ", "not ", "nothing ", "never ", "n't ")
+#: How many chars before a cue a negator may start (`guards._NEGATOR_WINDOW`).
+_NEGATOR_WINDOW = 12
+#: A negator on the far side of one of these never reaches the cue (`guards._CLAUSE_BOUNDARY`).
+_CLAUSE_BOUNDARY: frozenset[str] = frozenset(";.,")
+
+
+def _coerce_verdict(raw: Any) -> bool:
+    """The decision half of `guards._coerce_verdict`, biased to suspend: only a mapping whose
+    `decision` is the real bool `True` (not `"true"`, not `1`) and whose rationale does not
+    contradict it advances. A non-string rationale reads as empty. falkor-chat's verdict also
+    carries a rationale string; no model-bench record reads one, so it is not ported."""
+    if not isinstance(raw, Mapping):
+        return False
+    rationale = raw.get("rationale")
+    rationale = rationale if isinstance(rationale, str) else ""
+    if raw.get("decision") is not True:
+        return False
+    return not _rationale_contradicts(rationale)
+
+
+def _rationale_contradicts(rationale: str) -> bool:
+    """Verbatim port of `guards._rationale_contradicts`: true when any occurrence of a
+    `_NEGATION_CUES` cue in the lower-cased rationale is not negated (`_is_negated`)."""
+    low = rationale.lower()
+    for cue in _NEGATION_CUES:
+        start = low.find(cue)
+        while start != -1:
+            if not _is_negated(low, start):
+                return True
+            start = low.find(cue, start + 1)
+    return False
+
+
+def _is_negated(low: str, cue_start: int) -> bool:
+    """Verbatim port of `guards._is_negated`: a negator in the `_NEGATOR_WINDOW` chars before the
+    cue, after the last `_CLAUSE_BOUNDARY` char in that window, negates it."""
+    window = low[max(0, cue_start - _NEGATOR_WINDOW):cue_start]
+    for i in range(len(window) - 1, -1, -1):
+        if window[i] in _CLAUSE_BOUNDARY:
+            window = window[i + 1:]
+            break
+    return any(neg in window for neg in _NEGATORS)
+
+
 # --- prompt assembly (the `ItemScorer.build_messages` hook, runner spec §4.1) --------------------
 
 
@@ -297,15 +354,23 @@ def answer_from_chat(result: ChatResult, *, pack: Pack) -> tuple[bool, str]:
 
     Parses `result.message.get("content")` via `extract_own_line_json_object(...,
     require_key="decision")`. `None` -> `(False, "parse_failure")` — the SAME fallback the real
-    judge applies (app.py:727-728), never a fabricated guess. Parsed -> `(bool(parsed.get(
-    "decision")), "pass")`: this pack's parse, looser than falkor-chat's `_coerce_verdict` (a
-    `"false"` string is an advance), kept as-is for this pack — the strict parse is a decision-point
-    pack's only (plan §4 U3b). `pack` is unread here; it is part of the seam's signature."""
+    judge applies (`_LlmGuardJudge`'s unparseable branch), never a fabricated guess. Parsed, the
+    verdict depends on the pack:
+    - the old pack: `bool(parsed.get("decision"))`, looser than falkor-chat's `_coerce_verdict` (a
+      `"false"` string is an advance), kept byte-for-byte (pinned by
+      `test_score_item_rescores_the_real_pack_byte_identically_to_before_the_split`);
+    - a decision-point pack (typed-decision-models v1.3 §3.2, §4 U3b): `_coerce_verdict` — only a
+      real bool `True` with an uncontradicted rationale advances, so a `"true"` string does not —
+      the same verdict rule as falkor-chat's runtime hand-off, pinned by
+      `handoff-parse-guard.jsonl`.
+    Either way the outcome is `"pass"`."""
     parsed = extract_own_line_json_object(
         result.message.get("content"), require_key="decision"
     )
     if parsed is None:
         return False, "parse_failure"
+    if _is_decision_point(pack):
+        return _coerce_verdict(parsed), "pass"
     return bool(parsed.get("decision")), "pass"
 
 

@@ -231,7 +231,12 @@ A guard decision-point pack's `verdictMetrics` are exactly its four per-kind rat
 (`falseAdvanceRateByUnderstanding` … `falseSuspendRateByTurns`), each once, in any order. Each
 `eval` guard item scores its per-kind rate (from its label and `path`) plus the pooled
 `falseAdvanceRate`/`falseSuspendRate`, now exploratory; a `side-check` item scores only its
-exploratory `sideCheck*` metric.
+exploratory `sideCheck*` metric. A guard hand-off reply is read the way falkor-chat reads its
+judge (`guards._coerce_verdict`): only a JSON `true` whose rationale does not contradict it (an
+un-negated "not enough", "still missing", …) advances, so `"decision": "true"` suspends. A pack
+without `decisionPoint` keeps its looser parse. Golden vectors in
+`tests/fixtures/decision-contract/` pin this parse and the judge prompt render, and falkor-chat's
+own suite checks its functions against byte-copies of them.
 
 **Scope note — the `embedder` pack scores exact cosine, not the production ANN pipeline.**
 `embedder-graphrag-retrieval` embeds the pack's fixed corpus and queries, then ranks with
