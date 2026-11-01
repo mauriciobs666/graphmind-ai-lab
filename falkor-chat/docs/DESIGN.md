@@ -71,7 +71,7 @@ links there and does not re-explain. `AGENTS.md` carries only a terse pointer in
 
 | Component | Decision | Rationale | Detailed in |
 |---|---|---|---|
-| Embedding model | **Qwen3-Embedding-0.6B** (GGUF, Q8_0) | Best small-model MTEB quality; 100+ languages (PT-BR + EN); ~0.6 GB resident | §11 |
+| Embedding model | **Qwen3-Embedding-0.6B** (GGUF, Q8_0), loaded at a **2048-token** context (`scripts/ensure_demo_models.py` `EMBED_CONTEXT_LENGTH`; the chat model keeps 8192) | Best small-model MTEB quality; 100+ languages (PT-BR + EN); ~0.6 GB resident. The small context saves VRAM; LM Studio silently embeds only the first 2048 tokens of a longer input, so a dense message within the message-text cap (`SERVER.md` §1.4 Bounds) can be embedded by its head only until chunking lands (K-100); probe in `docs/test-reports/embedder-context-report.md` | §11 |
 | Vector dimension | **`EMBEDDING_DIM=1024`** | Native dim; ~12.4 KB/message with HNSW — the §11 RAM line | §11 |
 | Default LLM (every chat kind) | **Qwen3-4B-Instruct-2507** Q4_K_M (non-thinking) | RAG answering, not CoT; low latency | `config/models.json` |
 | Storefront agent LLM | **Ministral-3-3B**, pinned in the `salesperson` def's `assistant` step `config.model` (`proof_defs.py`); `query_graph_data` inherits the calling step's model (§6.1) | Fits the storefront demo's single-model GPU budget | §6.1 |

@@ -327,22 +327,44 @@ every sampled run posted, else `degraded` — never folded into `ready`.
 **Error envelope.** A `ServiceError` answers `{"error": <class name>, "detail": …}` — `404` for
 `ChannelNotFoundError`, `ThreadNotFoundError`, `MatchNotFoundError`, `DocumentNotFoundError`,
 `DocumentUpdateNotFoundError` and `AgentNotFoundError`, `400` for every other subclass (e.g.
-`DocumentTooLargeError`, `BatchTooLargeError`, `UnknownActorError`, an unresolvable mention).
+`DocumentTooLargeError`, `BatchTooLargeError`, `InputBoundError`, `UnknownActorError`, an unresolvable mention).
 `WorkflowDefSpecError` → `400`, `WorkflowDefNotFoundError` → `404`, `WorkflowDefConflictError` →
 `409`, `SearchNotAvailableError` → `503`, and the run errors below use the same envelope. A plain
 `HTTPException` 404 (the "… not found" rows above) answers FastAPI's `{"detail": …}`; a request
 failing Pydantic validation answers FastAPI's `422`.
 
-**Bounds.** Request bodies are size-bounded at the Pydantic boundary (`schemas.py`): message text
-≤ 8000 chars, channel name / thread title ≤ 200, mentions ≤ 50; document text ≤ 500,000 chars,
-`title`/`sourceLabel`/`producedBy` ≤ 200, `sourceFormat` ≤ 50, a batch ≤ 20 documents. Path
-segments are bounded ≤ 200 (`422` beyond) only for the document id on `DELETE`, `/deletion` and
-`/history`, every `{mid}`, every `{runId}`, and the `{key}`/`{version}` of the def-structure,
-materialize, snapshot-structure and diff routes; every other path id is unbounded. Message text lands in graph RAM *and* the full-text index, so the transport caps it (RAM
-rule 6). The document and batch caps are also enforced in the service, so an MCP caller is held to
-them too. Every `limit` is `Query`-bounded 1–200 (default 50; `GET /documents/search` defaults to
-20), except the thread window (1–1000) and `GET /threads/{tid}/workflow-runs` (1–50, default 10);
-`POST /workflow-runs/due` takes a body `limit` of 1–1000 (default 200).
+**Bounds.** Each upper bound shared by more than one layer is declared once, as a `schemas.py`
+constant, and read by every layer that enforces it: REST's Pydantic models and `Query()`/`Path()`
+parameters, the MCP tool signatures (§2.2), and `services.py`. Which layer owns a bound depends on
+what it bounds:
+
+- **Stored values — the service, for every front door.** `services.py` checks these before any
+  repository call, so every front door is held to them alike (a `400` on REST, a tool error on
+  MCP, §2.2). Client-authored message text, through `post_message`, is non-blank and ≤ 8000 chars
+  (`MAX_TEXT_LEN`; `MessageTooLongError` guards over-long, but no shipped caller reaches it — all
+  three front doors refuse it first) with mentions ≤ 50, counted as sent, before dedup. Agent
+  answers (`post_agent_answer`, used by the responder and the workflow `post_message` tool) carry
+  neither cap; chunking is K-100. Channel name and thread title are 1–200 chars. Document text is
+  non-blank (`EmptyDocumentError`) and ≤ 500,000 chars (`DocumentTooLargeError`). Document
+  `title`/`sourceLabel` ≤ 200 and `sourceFormat` 1–50. A batch holds ≤ 20 documents
+  (`BatchTooLargeError`). A violation with no class named here is `InputBoundError`. REST's request
+  bodies declare the same bounds and answer a whole-body `422` first, except for whitespace-only
+  text, which passes their `min_length=1`: a message's answers `400 InputBoundError`, a document's
+  `400 EmptyDocumentError` — or, in `POST /documents/batch`, that item's own receipt. REST's
+  `producedBy` ≤ 200 is a request bound only: the service resolves the value to an existing `Agent`
+  (`AgentNotFoundError`) instead of length-checking it. Message text lands in graph RAM *and* the
+  full-text index, which is why it is capped (RAM rule 6).
+- **Read parameters — each transport.** These are request hygiene, and the service trusts its
+  in-process callers' values. Every list/search `limit` is 1–200 (`MAX_LIST_LIMIT`; default 50,
+  `GET /documents/search` defaults to 20). The thread window's `limit` is 1–1000 (`MAX_READ_LIMIT`)
+  and its `since` ≥ 0. A search `q` is non-empty. The MCP tools declare the same ranges (§2.2).
+  REST alone has `GET /threads/{tid}/workflow-runs` (`limit` 1–50, default 10) and
+  `POST /workflow-runs/due` (body `limit` 1–1000, default 200).
+- **Path segments — REST only.** Path segments are bounded ≤ 200 (`422` beyond) only for: the
+  document id on `DELETE`, `/deletion` and `/history`; the match id on the `/document-updates/…`
+  and `/matches/…` confirm, reject and recheck routes; every `{runId}`; and the `{key}`/`{version}`
+  of the def-structure, materialize, snapshot-structure and diff routes. Every other path id is
+  unbounded, `GET /messages/{mid}`'s included. The MCP tools bound no id argument.
 
 The **two append variants** (`DESIGN.md` §5.3) stay hidden inside `post_message`: the service
 checks whether the thread already has a `HEAD`/`TAIL` and dispatches the correct
@@ -386,7 +408,8 @@ pure graph work with no LLM, so it is fast and deterministically testable.
 **Bounds, and which layer owns which.** Pydantic bounds only what it can see: the
 *submitted* dict (≤32 keys, key ≤ 200 chars, serialized ≤ 8000) and `maxSteps` (1…50). The
 **merged** ctx bound, the reserved-key rule and the parked-step declaration check live in
-`services.py`, because MCP tools and direct service callers never reach a pydantic model.
+`services.py`, because direct service callers never reach REST's Pydantic models (and no MCP tool
+fronts a workflow run).
 
 **Reserved run-ctx keys — `services.RESERVED_CTX_KEYS`: `threadId`, `error` and `timerFired` —
 are rejected on both routes, in the service.**
@@ -566,7 +589,7 @@ salesperson/dist/              # the storefront SPA build served at /shop (repo-
 | `app.py` | `create_app` / `_build_default_app`: wiring, mounts, error map, lifespan, the LLM guard judge |
 | `config.py` | configuration keys and the `get_context` seam (§1.3) |
 | `api.py` · `storefront_api.py` · `mcp.py` | the three front doors (§1.4, §2) |
-| `schemas.py` | Pydantic request/response models and their bounds |
+| `schemas.py` | Pydantic request/response models, and the bound constants REST, MCP and the service share (§1.4 Bounds) |
 | `services.py` · `storefront.py` | domain logic; the storefront's participants, turn executor and resets |
 | `repository.py` · `db.py` | every Cypher query; the FalkorDB connection |
 | `background.py` | out-of-band job wrappers both transports schedule (§1.12) |
@@ -1031,8 +1054,10 @@ app.mount("/mcp", mcp_app)           # agents connect at /mcp
 
 ### 2.2 Tools → service → query
 
-Every tool resolves `ctx` through `get_context` (§1.3). A service error surfaces as an MCP tool
-error.
+Every tool resolves `ctx` through `get_context` (§1.3). A failed call — a service error or an
+argument-bound violation — is an `isError` result whose text is `Error executing tool <tool>:
+<message>`; the error class name is not included. Each *declared* argument bound (below) is
+advertised in the tool's `inputSchema`; the service-only ones are stated in its description.
 
 | MCP tool | Service method | `QUERIES.md` |
 |---|---|---|
@@ -1071,11 +1096,23 @@ Each document and review tool has the semantics of its REST twin (§1.4).
   re-deliver or skip within that exact millisecond. Rows are chronological, carry `threadId`, and
   flag reader-mentions with `isMention` (`QUERIES.md` §9 ordering note). Room-wide reads (no `re`)
   default `since` to epoch 0 and never advance (there is no room cursor).
-- **No schema layer on MCP.** Tool arguments reach the service without Pydantic, so only the
-  service-enforced bounds apply: the document and batch caps hold, but a document `title` over
-  200 characters, which REST rejects, is accepted (K-074). `ingest_documents` isolates a
-  malformed item (missing or non-string `text`, a non-dict entry) as its own
-  `{"status":"error","errorType":"MalformedItemError",…}` receipt.
+- **Argument bounds.** FastMCP validates each tool's `Annotated[…, Field(…)]` signature before the
+  body runs, so a violation reads, writes and schedules nothing, and its message names the argument
+  and the limit. The values are §1.4 Bounds', read from the same `schemas.py` constants
+  (`tests/test_input_bound_parity.py` keeps the front doors in agreement), on: `send_message`
+  `body`/`mentions`; `read_messages` `since`/`limit` — room-wide reads included, which have no REST
+  twin; `create_channel` `name`; `create_thread` `title`; both search tools' `query`/`limit`; every
+  list `limit`; `ingest_document` `title`/`source_label`/`source_format`. Service-only: a non-blank
+  `body` (whitespace passes `min_length=1`), `ingest_document` `text`, and the batch cap
+  (an empty `items` answers `[]`, writing nothing). Undeclared: id arguments and `produced_by`,
+  which are only looked up.
+- **`ingest_documents` per-item receipts.** `items` is a list of objects whose fields are untyped,
+  so a non-object entry fails the whole call as a validation error, while a bad field inside an
+  object becomes that item's own `{"status":"error","error":…,"errorType":…}` receipt and the rest
+  of the batch proceeds: `MalformedItemError` for a missing or non-string `text` or a non-string
+  `produced_by`; `EmptyDocumentError`/`DocumentTooLargeError` for a blank or oversized `text`;
+  `InputBoundError` for a `title` or `source_label` that is over-long or not a string, or a
+  `source_format` that is empty, over-long or `null`.
 - **REST mention parity:** `POST /threads/{tid}/messages` also accepts an optional `mentions[]`.
 
 ### 2.3 Client connection contract
