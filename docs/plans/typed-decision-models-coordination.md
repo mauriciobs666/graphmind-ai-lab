@@ -313,3 +313,10 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - U3e.3 will rewrite the `DE 1.00 (genRunId ICC)` golden strings, which is expected.
 
   Committed: note v1.14, plan4 v1.3, note review Pass 13, ledger. U3e.3 is unblocked (tdd-engineer); then U2.4.
+- 2026-11-01: Plan6 v1.5 delivered (architect a2ac5b19e6660c0d9, now 200.3k tokens; 6,803 words, down from 6,988). The falsifier's removal rule is applied.
+  - Every hook `reject` halts as one class, **`guardRejected`**, replacing `hookDenied`, `guardError`, `permissionDenied` and the denying guard entry.
+  - The rows are keyed on `permissionDecision`. `hookMissing` is the halting catch-all, D3's `accept`/`config` included.
+  - No further probe is needed: an unprobed timeout or cannot-start shape still halts.
+  - **teco line check: met.** No row cites an attachment for a non-allow outcome (`hook_blocking_error` and the denying entry: 0 hits). The remaining mentions of `hookDenied`, `guardError` and `permissionDenied` are the revision line, plus §3.4's 'replaces plan4's counted `hookDenied` row'.
+
+  Committed with report §10 and the ledger. **The U5.5 fix round is unblocked**: a fresh tdd-engineer (a9fa7d0ca92fadb1a is at 206k), against plan6 v1.5 §3.3/§3.4/§5 U5.5 plus P8-F3–F6. Re-gate on `analyst` a045d38ef791e1ace (Pass 9 in `docs/reviews/typed-decision-models4-impl.md`).

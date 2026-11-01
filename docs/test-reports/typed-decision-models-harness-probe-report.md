@@ -806,6 +806,113 @@ One more difference from the interactive run: under `-p` the foreground meta has
 5. **The kit hook is allow-all and logs every event.** The production guard denies out-of-bounds calls. Every finding above about `allow` is therefore exactly the production guard's behaviour for a call it allows.
 6. **The out-of-bounds file** `…/dm-probe-headless-outside/h6-outside.txt` was left in place as evidence, in the session scratchpad.
 
+## 10. Guard-deny probe (U6.7)
+
+U6.7 plants three `Write`s against a guard wired with `"onFailure": "block"` (`docs/plans/typed-decision-models6.md` §5, U6.7 row). `devops` ran it once, on 2026-11-01, 16:18:20–16:18:46 UTC, on the same host and CLI as §9 (`claude` 2.1.316). The spend was one Sonnet driver session with one subagent, with 6 subagent tool uses. There was no rerun, and no dialog appeared.
+
+**Headline: gates (g) and (h) fail; (i) passes.** No hook attachment of any type is persisted for a tool use that the hook denies, fails with `onFailure: "block"`, or leaves undecided. A guard failure (D2) is therefore **structurally identical to a guard deny (D1)** in the transcript. Only the human-readable `tool_result` text differs. This returns to `architect` before U5.5.
+
+### 10.1 Setup
+
+- **Kit.** U6.2's headless kit (Appendix J), reused in place, with these changes:
+  - a new hook, `hook_u67.py`, logs every call to `hook-log-u67.jsonl`. For a `PreToolUse` `Write` whose path, joined to `cwd` and passed through `realpath`, is `<kit>/d1.txt`, it prints a `deny` decision and exits 0. For `<kit>/d2.txt` it logs a line with `"exit": 1`, writes one line to stderr and exits 1 with no stdout. For `<kit>/d3.txt` it logs a line and exits 0 with no output. Every other `PreToolUse` gets the same `allow` that `hook.py` prints. Other events are only logged.
+  - `.claude/settings.json` wires `python3 <kit>/hook_u67.py settings` for `PreToolUse` (matcher `*`) with `"onFailure": "block"` on the command object, and without it for `Stop` and `SubagentStop`. The 2.1.316 bundle's hook schema puts `onFailure` on the command (or http) hook object; its `w1e` predicate reads `e.onFailure==="block"` there.
+  - `hook.py` is unchanged. The U6.2 settings were restored after the run, and the U6.7 copy is kept as `runs/settings-u67.json`.
+- **Request** `req/u67.txt`, line 2 (with `<kit>` for the folder):
+
+  ````text
+  Make exactly three Write calls, one at a time, in this order, each with the content ok: first <kit>/d1.txt, then <kit>/d2.txt, then <kit>/d3.txt. Attempt every one of these three Writes, whatever the earlier ones return; do not retry any of them, and do not check whether they succeeded. Then write the single word ok to the answer path. Do nothing else.
+  ````
+
+- **Pre-run state.** `d1.txt`, `d2.txt` and `d3.txt` were absent at the kit root (`rm -f`, then `ls` confirmed). `runs/u67.*` and `ans/u67.txt` were also absent.
+- **Command.** H1's, through `./run_case.sh u67 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. `runs/u67.cmd`, verbatim:
+
+  ````text
+  case=u67
+  session=b0bbcc3d-ae67-4b4b-94a1-7906110bb8b0
+  start=2026-11-01T16:18:20.348Z
+  env: PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/mauricio USER=mauricio LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  argv: /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id b0bbcc3d-ae67-4b4b-94a1-7906110bb8b0 --strict-mcp-config --mcp-config /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
+  ````
+
+- **Raw extracts on disk**, all under the kit's `runs/` folder: `u67-extract.txt` (the per-tool-use extractor `u67_extract.py`'s output), `u67-d-results-raw.jsonl` (the three D `tool_result` entries, unredacted), `u67-hook-timeline.txt` and `u67-summary.txt` (the result JSON without `result`, `usage` and `modelUsage`).
+
+### 10.2 Verdicts
+
+| Gate | Result | Evidence |
+|---|---|---|
+| **(g)** D1: `tool_use` and hook-log line exist, file absent, a `hook_success` carries the deny | **fail** on the last clause | The `tool_use` `toolu_01UCoxt1bDshggmVXpskphGs` exists. The hook-log line is `case=D1 action=deny exit=0`, and `d1.txt` is absent. But **no attachment of any type** carries that `toolUseID`. The subagent sequence goes `assistant[tool_use]:Write > user:tool_result`, with nothing between (§10.3). The deny is recorded only on the `tool_result` entry: `is_error: true`, top-level `permissionDecision` `{"decision": "reject", "source": "hook", "reasonType": "hook", "reasonCode": "hook:PreToolUse"}`, and a new top-level key, `toolDenialKind: "permission-rule"`. |
+| **(h)** D2: `tool_use` and a hook-log line naming exit 1 exist, file absent, a `PreToolUse` attachment other than `hook_success` exists for its `toolUseID` | **fail** (load-bearing) | The `tool_use` `toolu_01PFnV5yErGWR4q4qssYKfUK` exists. The hook-log line is `case=D2 action=fail exit=1`, and `d2.txt` is absent. **D2 leaves no `PreToolUse` attachment of any type for its `toolUseID`: no `hook_success`, no `hook_blocking_error`, no `hook_non_blocking_error`.** A text search of both session files for `hook_blocking_error`, `hook_non_blocking_error`, `hook_cancelled` and `blockingError` finds 0 hits. The exact attachment type D2 leaves is: **none**. Its `tool_result` entry has the same key set and the same `permissionDecision` value as D1's, `toolDenialKind: "permission-rule"` included. Only the text differs (§10.3). Under plan6 §3.4 as written, a guard failure **cannot be told from a guard deny** by structure. It can still be told from a pre-hook validation error, which has no `permissionDecision`. |
+| **(i)** D3, positive control: file exists, `permissionDecision.source` ≠ `hook` | **pass** | `d3.txt` exists (2 bytes, `ok`). The `tool_result` has no `is_error`, and its `permissionDecision` is `{"decision": "accept", "source": "config", "reasonType": "mode"}`, so `acceptEdits` decided. The kit therefore allows a new file at its root when the hook does not decide. D1's and D2's absent files are the hook's doing, so (g) and (h) are real results. |
+
+**Consequences for §3.4, for `architect`** (`devops`' reading, not a design):
+1. **No guard entry exists for a denied call.** The "denying guard entry" that §3.4's `hookDenied` row and the U5.5 `hookDenied` fixture presume is never written. As §3.4 stands, D1 matches the `hookMissing` row (no guard entry, no guard failure, and a `permissionDecision` present, so it is not the pre-hook row), and `hookMissing` halts. Every guard deny would halt the campaign as `hookMissing`, instead of counting as `hookDenied`.
+2. **`guardError` has no structural marker.** What D1 and D2 have in common, and what no other probed tool use has, is a `tool_result` with `permissionDecision.decision: "reject"`, `source: "hook"`, `reasonCode: "hook:PreToolUse"`, plus `toolDenialKind: "permission-rule"`. Within that shape, only the `tool_result` content separates them:
+   - D1: `PreToolUse:Write hook error: probe U6.7 D1 deny`, the hook's `permissionDecisionReason`;
+   - D2: `PreToolUse:Write hook error: [python3 <kit>/hook_u67.py settings]: failed; blocking because onFailure is "block"`, then the hook's stderr line.
+
+   That is user-visible wording of the kind §3.4 already refuses to key on (m3). A guard-side discriminator is possible: the guard owns its `permissionDecisionReason` on every deny, so it could stamp a fixed prefix there. That is a design choice for `architect`.
+3. **A hook that exits 0 without output also leaves no attachment** (D3). Under plan6's guard, which always prints a decision, this case should not arise. If it did, it would read as `hookMissing` with a config-sourced `permissionDecision`.
+4. **The runner sees both D1 and D2.** The result JSON's `permission_denials` lists exactly D1's and D2's `tool_use_id`s, and not D3's (§10.5). It does not separate them either.
+
+### 10.3 Per-tool-use records
+
+Subagent `agent-ada23a789665b817b`, in transcript order. Its meta: `requestShape` `foreground`, `finished` `true`, `requestNonInteractive` `true`.
+
+Entry sequence (bookkeeping types omitted, as in §9.6):
+
+````text
+user:str > att:environment > att:model > att:session_context > att:date > att:credential_org > att:prompt_snapshot > assistant[tool_use]:Read > att:hook_success(PreToolUse) > user:tool_result > att:prompt_snapshot > assistant[tool_use]:thinking > assistant[tool_use]:Read > att:hook_success(PreToolUse) > user:tool_result > assistant[tool_use]:Write(d1) > user:tool_result > assistant[tool_use]:Write(d2) > user:tool_result > assistant[tool_use]:Write(d3) > user:tool_result > assistant[tool_use]:Write(ans) > att:hook_success(PreToolUse) > user:tool_result > assistant[end_turn]:text
+````
+
+The `(d1)`…`(ans)` labels are added here. The extractor prints the bare tool name.
+
+| # | `tool_use` (id, name, input keys, path) | Attachments for its `toolUseID` (type, keys) | Hook `stdout` / `exitCode` (transcript; else hook log) | `tool_result` `is_error` | Top-level `permissionDecision` | Other `tool_result` entry keys of note | Hook-log line | File |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `toolu_01PZY62Mnge9LPJaAYvJfiz5` `Read` `[file_path, limit, offset]` `<kit>/req/u67.txt` | `hook_success` (`PreToolUse`), keys `[command, content, durationMs, exitCode, hookEvent, hookName, stderr, stdout, toolUseID, type]` | `allow` JSON / 0 | absent | `{"decision": "accept", "source": "hook", "reasonType": "hook"}` | none | `action=allow exit=0` | — |
+| 2 | `toolu_01UvoPz3HfsWiMiH3N6BF9pJ` `Read`, same | `hook_success`, same keys | `allow` JSON / 0 | absent | `accept`/`hook`/`hook` | none | `action=allow exit=0` | — |
+| **D1** | `toolu_01UCoxt1bDshggmVXpskphGs` `Write` `[content, file_path]` `<kit>/d1.txt` | **none** | not in transcript. Hook log: `exit=0`; stdout by construction `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "probe U6.7 D1 deny"}}` | `true` | `{"decision": "reject", "source": "hook", "reasonType": "hook", "reasonCode": "hook:PreToolUse"}` | `toolDenialKind: "permission-rule"`; `toolUseResult` is a string, `Error: PreToolUse:Write hook error: probe U6.7 D1 deny` | `case=D1 action=deny exit=0` | **absent** |
+| **D2** | `toolu_01PFnV5yErGWR4q4qssYKfUK` `Write`, same keys, `<kit>/d2.txt` | **none** | not in transcript. Hook log: `exit=1`; no stdout; stderr `probe U6.7 D2: guard failure, exit 1` | `true` | `{"decision": "reject", "source": "hook", "reasonType": "hook", "reasonCode": "hook:PreToolUse"}` | `toolDenialKind: "permission-rule"`; `toolUseResult` string `Error: PreToolUse:Write hook error: [python3 <kit>/hook_u67.py settings]: failed; blocking because onFailure is "block"` + newline + the stderr line | `case=D2 action=fail exit=1` | **absent** |
+| **D3** | `toolu_01BJYRnqfr1NwJZVrZ1sbjbx` `Write`, same keys, `<kit>/d3.txt` | **none** | not in transcript. Hook log: `exit=0`; no output | absent | `{"decision": "accept", "source": "config", "reasonType": "mode"}` | no `toolDenialKind`; no `toolUseResult` | `case=D3 action=no-decision exit=0` | **exists**, 2 bytes |
+| 6 | `toolu_013LU5dD7WVmoMxoGbp7HiyE` `Write`, same keys, `<kit>/ans/u67.txt` | `hook_success`, same keys | `allow` JSON / 0 | absent | `accept`/`hook`/`hook` | none | `action=allow exit=0` | exists (`ok`) |
+
+The D1 and D2 `tool_result` entries have identical key sets: `[agentId, cwd, entrypoint, gitBranch, isSidechain, message, parentUuid, permissionDecision, promptId, sessionId, sourceToolAssistantUUID, timestamp, toolDenialKind, toolUseResult, type, userType, uuid, version]`. Every non-id field compared equal across them, except `message` and `toolUseResult`, whose text is quoted above (`runs/u67-d-results-raw.jsonl`). Each `tool_result` block is `[content, is_error, tool_use_id, type]`.
+
+**Driver session** `b0bbcc3d`: its sequence is H1's (§9.6) exactly. The one `Agent` `tool_use`, `toolu_016afc37vPRmT8dWHkJYvZay`, has one guard `hook_success` (`allow`, exit 0), then a `tool_result` with `toolUseResult.status: "completed"` and `permissionDecision` `accept`/`hook`/`hook`, then `asst[end_turn]:text`.
+
+### 10.4 Hook log
+
+`hook-log-u67.jsonl` as `runs/u67-hook-timeline.txt`: UTC time, session prefix, `src`, event, `agent_type`, tool, `tool_use_id`, path, and the hook's own `case`/`action`/`exit` fields. Verbatim, with `<kit>` for the folder:
+
+````text
+2026-11-01T16:18:23.962Z b0bbcc3d settings PreToolUse probe-driver Agent toolu_016afc37vPRmT8dWHkJYvZay  case=None action=allow exit=0
+2026-11-01T16:18:26.335Z b0bbcc3d settings PreToolUse probe-sub Read toolu_01PZY62Mnge9LPJaAYvJfiz5 <kit>/req/u67.txt case=None action=allow exit=0
+2026-11-01T16:18:30.313Z b0bbcc3d settings PreToolUse probe-sub Read toolu_01UvoPz3HfsWiMiH3N6BF9pJ <kit>/req/u67.txt case=None action=allow exit=0
+2026-11-01T16:18:33.125Z b0bbcc3d settings PreToolUse probe-sub Write toolu_01UCoxt1bDshggmVXpskphGs <kit>/d1.txt case=D1 action=deny exit=0
+2026-11-01T16:18:34.938Z b0bbcc3d settings PreToolUse probe-sub Write toolu_01PFnV5yErGWR4q4qssYKfUK <kit>/d2.txt case=D2 action=fail exit=1
+2026-11-01T16:18:37.186Z b0bbcc3d settings PreToolUse probe-sub Write toolu_01BJYRnqfr1NwJZVrZ1sbjbx <kit>/d3.txt case=D3 action=no-decision exit=0
+2026-11-01T16:18:39.785Z b0bbcc3d settings PreToolUse probe-sub Write toolu_013LU5dD7WVmoMxoGbp7HiyE <kit>/ans/u67.txt case=None action=allow exit=0
+2026-11-01T16:18:40.634Z b0bbcc3d settings SubagentStop probe-sub None None  case=None action=log-only exit=0
+2026-11-01T16:18:45.829Z b0bbcc3d settings Stop probe-driver None None  case=None action=log-only exit=0
+````
+
+Every hook-log `tool_use_id` matches a transcript `tool_use` one to one. The hook ran exactly once per tool use, with no retry and no extra run on D2's failure.
+
+### 10.5 Run outcome and files
+
+- `runs/u67.exit`: `0 2026-11-01T16:18:46.159Z`. stderr was empty.
+- Result JSON (`runs/u67-summary.txt`, keys and values only): `type` `result`, `subtype` `success`, `is_error` `False`, `num_turns` 2, `stop_reason` `end_turn`, `terminal_reason` `completed`, `safety_stops` 0, `api_error_status` `None`, `subagent_stats.started_in_background` 0, `completed` 1.
+- `permission_denials` holds two entries, `{tool_name: "Write", tool_use_id: "toolu_01UCoxt1bDshggmVXpskphGs", tool_input}` and the same for `toolu_01PFnV5yErGWR4q4qssYKfUK`: D1 and D2, not D3.
+- Files after the run, at the kit root: `d1.txt` absent, `d2.txt` absent, `d3.txt` present (2 bytes, `ok`). `ans/u67.txt` is present (`ok`).
+
+### 10.6 Deviations and limits
+
+1. **Hook `stdout`/`exitCode` for D1–D3 come from the hook log and the hook's code, not the transcript.** The row asks for both per tool use. The transcript carries them only inside a `hook_success`, and D1–D3 have none.
+2. **One D2 failure mode only.** D2 exits 1. A guard that times out, cannot start (exit 127), or is killed also takes the `onFailure: "block"` path in the bundle (`QBt`: `cancelled` or `non_blocking_error`). None of those was run, so their persisted shapes are inferred, not observed.
+3. **Text-based distinction not probed for stability.** The D2 wording `blocking because onFailure is "block"` was seen in one run of one CLI version.
+4. **The kit's `settings.json` was restored** to U6.2's after the run, so Appendix J still describes it. The U6.7 wiring is in `runs/settings-u67.json`, and `hook_u67.py`, `req/u67.txt`, `u67_extract.py`, `d3.txt` and `ans/u67.txt` stay in the kit as evidence.
+5. **Placement.** This section sits after §9 and before the Appendices, so the numbered sections stay together. Nothing else in the report changed.
+
 ## Appendices — the probe kit
 
 These are the kit's own files, copied byte for byte from `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/` (the original session scratchpad), as they stood after attempt 2. Paths inside them are unchanged and point at that scratchpad. Appendix I says how to rerun from elsewhere. Run outputs (`hook-log.jsonl`, `ans/`, `panes/`, the results files) are not kit files; their evidence is quoted in §3–§7.
