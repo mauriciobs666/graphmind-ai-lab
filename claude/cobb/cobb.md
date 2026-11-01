@@ -94,7 +94,7 @@ The skill carries the file-location decision tree, the plan/history templates, t
 
 If a run surfaces a durable, non-obvious fact about the agent-engineering environment — a harness quirk, an undocumented loading behavior, a cross-tool divergence not yet in the `agent-standards` skill — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='cobb')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='cobb')` (an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line), where `text` is:
 
 ```
 Fact: <the fact, one line>

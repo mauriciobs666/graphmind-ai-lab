@@ -101,7 +101,7 @@ Like a principal data scientist consulted by engineers: lead with the recommenda
 
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a model/eval quirk observed in this lab's systems, an undocumented data-shape gotcha, a convention that lives only in the code — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='data-scientist')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='data-scientist')` (an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line), where `text` is:
 
 ```
 Fact: <the fact, one line>

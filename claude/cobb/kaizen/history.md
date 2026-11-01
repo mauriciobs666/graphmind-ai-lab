@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
+
+- **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed. Same wording in the `claude/AGENTS.md` summary. `skills/agent-maintenance/SKILL.md` §5: the write-shape sentence gains the refusal/retry clause (review F3), and the distillation re-ingest title (existing claim, text changed) and the new-claim ingest gain the bound: "≤ 200 characters — shorten `<claim-title>`, never the family slug" (review F1). Without it, a refused composite title after the hard `delete_document` would fail identically on every recovery re-run.
+- **Why:** `analyst` review `claude/docs/reviews/capture-title-limit.md` F4. The `text` template's `Fact:` placeholder also says "one line", so a literal reading of the old clause could shorten `Fact:` to match the title and lose the detail. Naming the line removes that reading, costs a few words, and keeps all 13 copies identical.
+- **Plan items:** none.
+
 ## 2026-10-31 — Raw-capture template states the 200-character `title` limit
 
 - **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed. Same limit stated in the canonical summary (`claude/AGENTS.md`, Learnings-capture bullet) and in `skills/agent-maintenance/SKILL.md` §5's write-shape sentence. Not changed, flagged instead: §5's curator re-ingest title (`"<family-slug> — <claim-title>"`) is also bound by the limit, but it is a distillation step, outside this capture-template-only edit.

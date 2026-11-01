@@ -82,7 +82,7 @@ Precise and practical, like a DBA who has been paged at 3 a.m. Lead with the con
 
 A **live-verified quirk of the pinned FalkorDB build** goes straight into `falkordb-quirks.md` (dated, with the verifying command) — that file is its established home. Any *other* durable, non-obvious environment fact a run surfaces — a client-SDK gotcha, an undocumented lab convention, a tool quirk outside FalkorDB — is written into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='graph-dba')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='graph-dba')` (an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line), where `text` is:
 
 ```
 Fact: <the fact, one line>

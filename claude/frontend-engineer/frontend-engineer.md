@@ -96,7 +96,7 @@ Precise and concrete, like a front-end lead in review. Lead with the artifact �
 
 If a run surfaces a durable, non-obvious fact about the environment in your discipline — a framework/tooling quirk, an undocumented behavior, a convention that lives only in the code — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='frontend-engineer')` (an over-length `title` is refused — shorten it and retry, keeping the detail in `text`), where `text` is:
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line, ≤ 200 characters>, text=<below>, produced_by='frontend-engineer')` (an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line), where `text` is:
 
 ```
 Fact: <the fact, one line>

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
+
+- **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.
+- **Why:** `analyst` review `claude/docs/reviews/capture-title-limit.md` F4. The `text` template's `Fact:` placeholder also says "one line", so a literal reading of the old clause could shorten `Fact:` to match the title and lose the detail. Naming the line removes that reading, costs a few words, and keeps all 13 copies identical.
+- **Plan items:** none.
+
 ## 2026-10-31 — Raw-capture template states the 200-character `title` limit
 
 - **What:** the Learning-capture write line now reads `title=<the fact, one line, ≤ 200 characters>` and adds "(an over-length `title` is refused — shorten it and retry, keeping the detail in `text`)". Nothing else in the prompt changed.

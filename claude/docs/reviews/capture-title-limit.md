@@ -128,3 +128,55 @@ silently, and every session pays it.
 
 No `REVIEW.md` additions are proposed. The relevant discipline is already the "no X remains is an
 unfiltered sweep" line, and applying it produced F1 and F2.
+
+## Pass 2
+
+**Rechecked:** the uncommitted `git diff -- claude skills` (28 files, +100/−18) and `c6e33c9d`.
+**Verdict: approve with suggestions.** All four findings are fixed. One new minor finding (F5) is
+latent today.
+
+- **F1 — fixed, with a gap (see F5).** Lines `SKILL.md:598–600` and `:607` now carry the bound and
+  "shorten `<claim-title>`, never the family slug". Verified by reading.
+- **F2 — fixed** in `c6e33c9d`. `team-knowledge-base.md` l.62 and l.69 state the limit, the refusal
+  and the retry.
+- **F3 — fixed.** `SKILL.md:342–343` carries the refused/retry clause. Backticks are correctly left
+  out inside the open code span.
+- **F4 — fixed.** The 13 prompts and `claude/AGENTS.md:15` now say "the full fact stays in
+  `text`'s `Fact:` line". Rechecked: with `produced_by` masked, all 13 template lines collapse to one
+  unique line (`sort | uniq -c` → 13). `grep -rn "keeping the detail\|keeping detail"` finds no
+  remaining hit in `claude/` or `skills/`, excluding history and reviews.
+- **Kaizen entries — conform.** There is one new dated **What / Why / Plan items** entry per agent,
+  newest first. The 12 non-`cobb` entries are byte-identical, and `cobb`'s entry adds the SKILL.md
+  scope. A second same-day entry, not a rewrite of the first, is acceptable in an append-only log.
+- **Manual consistency — consistent in substance.** `c6e33c9d` says "keep the detail in `text`" and
+  does not name the `Fact:` line. That is fine at an end-user manual's altitude; no change is needed.
+
+### F5 — minor (new, latent) — A shortened claim title is never recorded, so recovery can't find it by title
+
+Each claim in the manifest stores `{title, documentId, verified}` (`SKILL.md:566–568`). The
+split-sibling lookup goes by that `title` (`:588–590`). Orphan recovery scans `list_documents` for a
+document whose title "exactly matches this claim's expected title". It rebuilds that title from the
+`"<family-slug> — <claim-title>"` convention (`:674–678`).
+
+F1's shortening step is free-form and cannot be reproduced. The existing-claim bullet tells the
+curator to overwrite only `documentId`, never `title` (`:601–602`). So a shortened re-ingest leaves
+a live document whose title matches neither the manifest nor the rebuilt convention.
+
+If that ingest is interrupted, the orphan scan reports "Found none" and re-ingests. The result is the
+duplicate that this step exists to prevent.
+
+The risk is latent today. The longest of the manifest's 90 claim titles is 185 characters, and none
+exceeds 200 (verified by script over `claude/cobb/scripts/kb-claim-manifest.json`). The trace itself
+was inferred by reading.
+
+**Suggest (`cobb`):** decide the shortened title once and write it to the manifest entry's `title`
+in the same pre-pair write that sets `verified: "pending"`. For a new claim, compute it before the
+ingest. Then have the orphan scan match the manifest's recorded `title`, not a rebuilt one. No
+existing assertion would catch a wrong version of this design, so the exact wording is `cobb`'s
+call.
+
+### Nit — The F1 inline code renders badly
+
+At `SKILL.md:599`, the backticks around `<claim-title>` close the code span that opens at `:596`.
+In rendered view, `<claim-title>` becomes a bare HTML-like tag. The raw text agents read is
+unaffected. Dropping those backticks, as F3 did, would make the two consistent.

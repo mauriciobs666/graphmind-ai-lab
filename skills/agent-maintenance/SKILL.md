@@ -339,7 +339,8 @@ The self-improvement loop for a stateless agent team: **capture is cheap and
 unreviewed; promotion is curated.** Every agent's raw capture writes a dated,
 evidence-backed document into one shared falkor-chat workspace,
 `ws:agent-team`, via `mcp__falkor-chat-agent-team__ingest_document(title=<the
-fact, one line, ≤ 200 characters>, text=<labeled Fact:/Evidence:/Context:/Suggested home:
+fact, one line, ≤ 200 characters — refused if longer; shorten and retry, the full
+fact stays in the text's Fact: line>, text=<labeled Fact:/Evidence:/Context:/Suggested home:
 blocks>, produced_by=<the writer's own, already-seeded Agent.agentId>)` — an
 unresolvable `produced_by` raises `AgentNotFoundError` loudly, never a silent
 fallback. The 12 agents that existed at the 2026-08-20 migration (the
@@ -594,13 +595,16 @@ distills — on request, and folded into every certification pass (§4):
      `delete_document(documentId)` (the old id), then
      `ingest_document(text=<new claim text>, title=<same "<family-slug> —
      <claim-title>" convention Stage 6 used for a split sibling, or the plain
-     heading text for a claim that was never split>, produced_by='cobb')`
+     heading text for a claim that was never split; ≤ 200 characters —
+     shorten `<claim-title>`, never the family slug, if it would go over>,
+     produced_by='cobb')`
      against `ws:agent-team`. Overwrite the manifest entry's `documentId`
      with the new id, but leave `verified` at `"pending"` — the final flip to
      `true` happens only in the last bullet below, after a byte-exact check,
      never write `true` before that check runs.
    - **New claim** (a heading, or a new split sibling, that never existed
-     before) — no prior id, so skip the delete: `ingest_document` directly,
+     before) — no prior id, so skip the delete: `ingest_document` directly
+     (same title convention and 200-character bound as above),
      then add a fresh entry to the manifest under its file/heading with
      `verified: "pending"` until the last bullet below confirms it.
    - **Claim removed** (a heading deleted or merged away, nothing replaces
