@@ -1,6 +1,6 @@
 # Typed Decision Models — Implementation Plan, Over-Limit and Loading Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Extends:** `docs/plans/typed-decision-models2.md` · **Reviews:** `docs/reviews/typed-decision-models3.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Extends:** `docs/plans/typed-decision-models2.md` · **Reviews:** `docs/reviews/typed-decision-models3.md` · **Extended by:** `docs/plans/typed-decision-models4.md`
 
 *2026-10-31 — v1.2: answers review Pass 1; declined: m3's shared `policy-bounds.jsonl` (optional, and each copy's own refusal test pins it), and the body document's ingestion-status nit (no plan content).*
 

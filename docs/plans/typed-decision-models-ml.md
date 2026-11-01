@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.8 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 10)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.9 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 10)
 
-*2026-10-31 — v1.8: answers review Passes 9–10; three votes always drawn; same-design top-up; per-cell design effect at report time. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
+*2026-10-31 — v1.9: answers plan4 Passes 1–2 (F11, F13, P2-m2–m4) on top of the gated v1.8 (`01f6f2f4`): generated-text screen, per-point spend projection, pilot blocks of 50. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
 
 ## 0. The question and the decision it serves
 
@@ -63,8 +63,23 @@ generates or labels: it has seen seeds and intents.
 - **Blind.** A request is a closed schema. Its header carries the body's SHA-256. Its body holds
   the rubric once and, per item, a key random per (item, vote) plus the rendered input (§3.2). No
   seed, intent, difficulty, design stratum (§Q1.3), split, generator metadata or other vote
-  appears in it.
-  Generator requests hold seeds only (§Q1.4).
+  appears in it. Generator requests hold seeds only (§Q1.4).
+- **Generated-text screen.** The generator knows each seed's intent, so its text could leak it, for
+  example "(near-miss: the budget is withheld)". That would leak into the votes, and also into
+  Laya's eval input. The generator template forbids commentary, and at generation ingest a
+  deterministic screen checks the rendered evidence fields, before any labelling.
+  - **Hits.** Two kinds of token are screened:
+    - Tokens no prose uses are hits anywhere: `near-miss`, and domain or condition ids in their
+      non-word form, such as `dom_07`.
+    - Ordinary words are hits only in a meta position: inside brackets or parentheses, or after
+      `label`, `answer`, `category` or `intent`. That covers `intended`, `difficulty` and the
+      answer names. So "had difficulty paying" and a plain "complaint" pass.
+  - **On a hit,** the seed is regenerated, not dropped: the seed is kept and only its text is
+    redrawn, so the design mix is unchanged. Regeneration runs pool hits across design strata.
+    A regenerated item keeps its seed's `genRound` and takes the new run's `genRunId`.
+    After 3 hits the seed drops, counted by its axes.
+  - **Halt** if more than 5% of a round's items hit, because the template is then defective.
+  - Hits print by intent and difficulty.
 - **Isolation.** The exchange directory is outside the repo, with opaque names and no earlier
   vote's answers. The tool allowlist is request-read and answer-write only, with **no MCP tool**:
   some MCP tools read real falkor-chat data, and voiding a run cannot un-send it, so the allowlist
@@ -87,7 +102,9 @@ generates or labels: it has seen seeds and intents.
   - **Environmental or driver voids** halt the driver and count no attempt. These are a changed
     `instructions` hash, a moved model id, a wrong `agentType` or a spawn-prompt mismatch. The
     driver resumes after a recorded decision: re-pin a hash, or ask the stakeholder about a new
-    model id.
+    model id. A **generator** re-pin discards the in-progress point's generated items and restarts
+    its generation, so a point never mixes two generators. A **labeler** re-pin keeps the items
+    and restarts the point's labelling. Finalized points keep their pins.
   - **Usage-limit stops** (`<synthetic>`) wait for the next window and count no attempt.
   - **Run-attributable voids** count toward the cap. These are a tool or path use, an answer-hash
     mismatch, a missing key or an out-of-space answer. The batch is rerun with fresh keys, and
@@ -102,7 +119,10 @@ generates or labels: it has seen seeds and intents.
   - A choice item with three different labels is dropped and counted.
   - Message type labels its first 250 round-1 items as a tranche. If `100·drops > 3·250`, the
     rubric is fixed and the tranche relabelled. The rule is rechecked over the point before eval is
-    drawn.
+    drawn. If the recheck fails, `finalize` halts, the rubric is fixed, and every item of the point
+    is relabelled (all three votes). The items are not dropped: ties concentrate in confusable
+    classes, so dropping them would make FR-10 easier. A second failure goes to the stakeholder,
+    since it means the label set does not separate.
   - Nothing else is filtered.
 - **Sampling.** Temperature is unknown (`labelerTemperature: null`). Effort is pinned per agent
   definition: `high` for the labeler (the reference), `medium` for the generator. Each run records
@@ -147,6 +167,15 @@ generates or labels: it has seen seeds and intents.
     exploratory figures.
   - A rare label costs about shortfall / P(label | design stratum) draws. The 0.2× planning figure is
     replaced by round 1's measured rates.
+  - **Spend halt.** Before each top-up round, project its **total** tokens from the point's own
+    round 1, not from the pilot. The projection is (top-up items / round-1 items) × round 1's
+    labelling tokens, plus top-up generation runs × round 1's mean tokens per generation run.
+    Halt if that exceeds half of round 1's measured tokens. Both sides sum the same four classes:
+    input, cache-write, cache-read and output.
+  - **On a stakeholder "no"**, eval cells fill first. The point finalizes short, with every n
+    printed, if each eval cell meets its floor (§Q1.3 table; join-in 100 per label, FR-11) and each
+    calibration cell meets the eval floor (§Q2.4). Otherwise the point waits, with its data kept;
+    it is never dropped.
 - **Generation runs.** Each run takes 25 seeds drawn at random across the point's design strata
   (a seed's label is unknown at generation). A top-up run pools all of the point's short strata.
   Splits are assigned after labelling, so every run spreads across splits. Each item records
@@ -193,9 +222,11 @@ FR-11's 200 is a floor, not a target.
 - **Pilot, on guard.**
   - **Runs.** 100 items from 4 generation runs. Votes 1–3 are labelled at 50 per batch (6 runs),
     plus one screen vote at 10 per batch (10 runs). That is 1.7M–6.9M tokens.
-  - **Screen.** `D(x, y)` is the share of the 100 items labelled differently by a vote at batch
-    size x and one at size y. If `D(50, 10) − D(50, 50) ≥ 0.10`, the cap becomes 25, and
-    labelling needs about 291 runs.
+  - **Screen.** Over the `n` items carrying votes 1, 2 and the screen vote, `Δ` is the number
+    where vote 1 differs from the screen vote, minus the number where vote 1 differs from vote 2.
+    If `10·Δ ≥ n`, the cap becomes 25, and labelling needs about 291 runs. If `n < 80`, fresh
+    pilot items are added in blocks of 50 (2 generation runs) until `n ≥ 80`. Each block takes
+    votes 1–3 at 50 per batch and its screen vote at 10, so both `D` values keep their batch sizes.
   - **Power** (normal approximation, SE ≈ 0.055). The screen triggers with probability 0.03 at no
     gap, 0.77 at 14 pp and 0.97 at 20 pp, so it catches gross effects only.
   - **Pilot items are discarded,** and their seeds are not reused.
