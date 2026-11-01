@@ -131,31 +131,31 @@ check "3 no entry with the key: exit 1, names id" 1 "$ID" "not in LM Studio"
 
 # --- 4 not loaded ------------------------------------------------------------
 reset; run model-preflight.sh
-check "4 not loaded: exit 0 NOTE, minimum named" 0 "NOTE:" "$ID not loaded" "16384" "Prerequisites"
+check "4 not loaded: exit 0 NOTE, minimum named" 0 "NOTE:" "$ID not loaded" "20480" "Prerequisites"
 check_absent "4b NOTE does not claim a per-model default" "per-model default"
 
 # --- 5 context ---------------------------------------------------------------
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 16384 1)")"; run model-preflight.sh
-check "5a context exactly the minimum: exit 0 OK" 0 "OK: $ID loaded, context 16384, parallel 1"
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20480 1)")"; run model-preflight.sh
+check "5a context exactly the minimum: exit 0 OK" 0 "OK: $ID loaded, context 20480, parallel 1"
 check_absent "5a2 no NOTE when only the own copy is loaded" "NOTE:"
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 16383 1)")"; run model-preflight.sh
-check "5b context minimum-1: exit 1" 1 "REFUSED" "16383"
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20479 1)")"; run model-preflight.sh
+check "5b context minimum-1: exit 1" 1 "REFUSED" "20479"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 8192 1)")"; run model-preflight.sh
-check "5c context 8192: exit 1, both numbers and lms unload" 1 "REFUSED: $ID loaded at 8192, tank needs" "16384" "lms unload $ID"
+check "5c context 8192: exit 1, both numbers and lms unload" 1 "REFUSED: $ID loaded at 8192, tank needs" "20480" "lms unload $ID"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 32768 1)")"; run model-preflight.sh
 check "5d context 32768: exit 0 OK" 0 "OK: $ID loaded, context 32768, parallel 1"
 
 # --- 6 copies ----------------------------------------------------------------
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 32768 1)" "$(inst "$ID:2" 20000 1)")"; run model-preflight.sh
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 32768 1)" "$(inst "$ID:2" 24000 1)")"; run model-preflight.sh
 check "6a two instances: exit 1, both ids named" 1 "REFUSED: 2 copies of $ID" "$ID:2" "lms unload"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID:2" 32768 1)")"; run model-preflight.sh
 check "6b single instance with id <id>:2: exit 1" 1 "REFUSED" "$ID:2"
 
 # --- 7 id and URL root from opencode.json ------------------------------------
 reset
-set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")" "$(entry "$OTHER" llm "$(inst "$OTHER" 8192 1)")"
+set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")" "$(entry "$OTHER" llm "$(inst "$OTHER" 8192 1)")"
 run model-preflight.sh
-check "7a no arg: id from agent.tank.model, lmstudio/ stripped, inner slash kept" 0 "OK: $ID loaded, context 20000"
+check "7a no arg: id from agent.tank.model, lmstudio/ stripped, inner slash kept" 0 "OK: $ID loaded, context 24000"
 case "$(cat "$CURL_LOG")" in
   *"$BASE_URL/api/v1/models") pass "7b URL root: trailing /v1 stripped" ;;
   *) fail "7b URL root: trailing /v1 stripped" "curl got: $(cat "$CURL_LOG")" ;;
@@ -166,32 +166,32 @@ case "$(cat "$CURL_LOG")" in
   *) fail "7c URL root: trailing /v1/ stripped" "curl got: $(cat "$CURL_LOG")" ;;
 esac
 reset
-set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")" "$(entry "$OTHER" llm "$(inst "$OTHER" 8192 1)")"
+set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")" "$(entry "$OTHER" llm "$(inst "$OTHER" 8192 1)")"
 run model-preflight.sh "$OTHER"
 check "7d explicit argument overrides the config id" 1 "REFUSED: $OTHER loaded at 8192"
 
 # --- 8 cwd independence ------------------------------------------------------
 reset
-set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")"
+set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")"
 ( cd / && PATH="$FAKE_BIN:$PATH" "$FIX_SCRIPTS/model-preflight.sh" >"$FIXTURE_ROOT/o" 2>"$FIXTURE_ROOT/e"; echo $? >"$FIXTURE_ROOT/c" )
-if [ "$(cat "$FIXTURE_ROOT/c")" = 0 ] && grep -q "OK: $ID loaded, context 20000" "$FIXTURE_ROOT/o" "$FIXTURE_ROOT/e"; then
+if [ "$(cat "$FIXTURE_ROOT/c")" = 0 ] && grep -q "OK: $ID loaded, context 24000" "$FIXTURE_ROOT/o" "$FIXTURE_ROOT/e"; then
   pass "8 run from / still reads the agent's opencode.json"
 else
   fail "8 run from /" "exit $(cat "$FIXTURE_ROOT/c"): $(cat "$FIXTURE_ROOT/o" "$FIXTURE_ROOT/e")"
 fi
 
 # --- 9 parallel --------------------------------------------------------------
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20000 4)")"; run model-preflight.sh
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 4)")"; run model-preflight.sh
 check "9a parallel 4: exit 1, both numbers" 1 "REFUSED: $ID loaded with parallel 4, tank needs 1"
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")"; run model-preflight.sh
-check "9b parallel 1: exit 0 OK" 0 "OK: $ID loaded, context 20000, parallel 1"
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")"; run model-preflight.sh
+check "9b parallel 1: exit 0 OK" 0 "OK: $ID loaded, context 24000, parallel 1"
 check_absent "9b2 no NOTE when only the own copy is loaded" "NOTE:"
-reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20000 -)")"; run model-preflight.sh
+reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 -)")"; run model-preflight.sh
 check "9c parallel absent: exit 1 (fail-safe)" 1 "REFUSED" "parallel"
 
 # --- 10 other LLM instance ---------------------------------------------------
 reset
-set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")" \
+set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")" \
   "$(entry "$OTHER" llm "$(inst "$OTHER:3" 4096 2)")" \
   "$(entry "embed/emb-z" embedding "$(inst "embed/emb-z" 2048 1)")"
 run model-preflight.sh
@@ -237,7 +237,7 @@ wire() {  # wire NAME SCRIPT EXPECTED_ARGV ARG...
   if [ "$EXIT_CODE" -ne 1 ] || [ -s "$OC_LOG" ]; then
     fail "$name refuses" "exit $EXIT_CODE, opencode argv: $(cat "$OC_LOG")"
   else pass "$name: preflight refuses -> exit 1, opencode never called"; fi
-  reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20000 1)")"; run "$script" "$@"
+  reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")"; run "$script" "$@"
   if [ "$EXIT_CODE" -ne 0 ] || [ "$(cat "$OC_LOG")" != "$expect" ]; then
     fail "$name passes" "exit $EXIT_CODE, opencode argv: $(cat "$OC_LOG")"
   else pass "$name: preflight passes -> opencode called with unchanged argv"; fi

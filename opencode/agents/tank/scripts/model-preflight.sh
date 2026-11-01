@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # FR-7: minimum context of the one loaded copy (README Prerequisites).
-TANK_MIN_CONTEXT_LENGTH=16384
+TANK_MIN_CONTEXT_LENGTH=20480
 # FR-7: parallel slots the one loaded copy must have (README Prerequisites).
 TANK_REQUIRED_PARALLEL=1
 
