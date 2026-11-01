@@ -332,3 +332,10 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - DE 26.92 is faithful to §Q6 as written; the constant-class question, P27-n1 (the `1 cells` plural) and a side effect go to `data-scientist` a615087b155a2f402. The side effect: a constant cell lowers MSW and so raises the pooled ICC.
   - The question is limit-only (§Q3.2) and bounded (DE ≤ m₀), so it does not block the commit.
   - U3e.3 committed with Pass 27. Next model-bench units: U6.6, then U2.4. A note change from the DS ruling would become a small U3e.4.
+- 2026-11-01: Constant-class question and P27-n1 relayed to data-scientist a615087b155a2f402. U2.4 dispatched to fresh tdd-engineer acbd9b52e033bedb0 (plan5 §3.1 and the U2.4 row; baseline 3619). U6.6 is held until the U5.5 fix round lands, since both touch `decision-models/` (the byte-copy and its equality test).
+- 2026-11-01: Note v1.15 (data-scientist a615087b155a2f402, 122.2k tokens; 10,148 words).
+  - No estimator change: a constant cell contributes and takes the pooled DE. The DS simulated excluding such cells, and no mean DE moved by more than 0.002 on the planned layout.
+  - P27-n1: singular noun at k = 1.
+  - Gate skipped explicitly: there is no new rule, only one stated behaviour (already analyst-verified as built in Pass 27) and a print nit. Committed.
+  - Plan4 §3.9 cites §Q6 for the print and restates no template, so no plan change is needed.
+  - **U3e.4** (pluralize the family line in `report.py` `_family_design_effect_line`, plus tests at `test_decision_bar.py:935` and `test_decision_bar_fr10.py:746`, and a k = 1 FR-10 case) is queued on the U2.4 tdd-engineer acbd9b52e033bedb0 after it delivers, to serialize `model-bench/`.

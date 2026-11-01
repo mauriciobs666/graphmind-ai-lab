@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.14 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.15 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
-*2026-11-01 — v1.14: §Q6 "Design effect" states the empty and non-contributing cell values, the cost of pooling unequal ICCs (FR-10 still pools), exact reason texts and print format (`docs/reviews/typed-decision-models.md` Pass 13).*
+*2026-11-01 — v1.15: §Q6 "Design effect" states that a constant cell contributes and takes the pooled DE, and makes the family line's noun singular at `k = 1` (impl review Pass 27, question 2 and P27-n1).*
 
 ## 0. The question and the decision it serves
 
@@ -761,6 +761,8 @@ it is met in both (stakeholder-confirmed 2026-10-30).
   - An empty cell (`N_c = 0`, FR-10's `0/0` line) takes 1.00.
   - A non-empty non-contributing cell takes the formula (a one-run cell: `1 + (N_c − 1)·ICĈ`):
     its items share a run whether or not they inform the estimate.
+  - A constant cell contributes and takes the formula. Excluding it on its observed outcome moved
+    no mean DE by 0.002 on the planned layout, where cells' layouts dilute MSB and MSW alike.
 - **Not estimable** when no cell contributes, or when `MSB + (n₀ − 1)·MSW = 0` (the outcome is
   constant within every contributing cell). Every cell then takes 1.00.
 - **Why pooled.** ANOVA is a sound ICC estimator for binary outcomes (Ridout, Demétrio & Firth,
@@ -784,7 +786,7 @@ it is met in both (stakeholder-confirmed 2026-10-30).
   the replicate prints no cell lines: `design effect: genRunId ICC <ICĈ> pooled over <k> cells`
   (`classes` for FR-10), or `design effect: genRunId ICC not estimable (<reason>) — DE 1.00`.
   - `<ICĈ>` is signed to 3 dp with an ASCII sign (`+0.034`, `-0.012`); `<k>` counts contributing
-    cells.
+    cells, and at `k = 1` the noun is singular (`1 cell`, `1 class`).
   - The reason is `no cell spans two runs with one holding two of its items` or `outcome constant
     in every contributing cell`.
   - Each cell or class line prints `DE <x.xx>`. A floored negative ICC reads as estimated, and a
