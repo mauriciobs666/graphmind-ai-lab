@@ -18,6 +18,13 @@
   evidence.
 - A measured comparison (an eval, a live run, a re-run against a baseline) pins its baseline to
   an explicit commit sha, and no step of the run overwrites the file it compares against.
+- In a spec check of an MCP tool's input contract, read the generated `inputSchema`
+  (FastMCP `list_tools()`) and drive one violating `call_tool`, rather than reading the signature or
+  docstring. A claim that an argument is untyped or unbounded, or that a bad item becomes its own
+  receipt rather than failing the call, must hold in the schema and in the result.
+- A change to how a model is loaded (context length, offload, quantization) in
+  `scripts/` is checked for its effect on spec'd behavior (`DESIGN.md` §1.3, e.g. what an embed
+  or a turn can cover), not only for the script's own contract.
 
 ## Evidence bar
 

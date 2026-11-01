@@ -39,6 +39,10 @@
   what a reviewer does. A rule that a test, CI job or hook already enforces is not added, and a
   prune names the test, CI job or hook that now enforces it. With an addition, also propose
   pruning any line in that file that is now enforced elsewhere.
+- A guard that enumerates a schema or tree (OpenAPI, JSON Schema, AST) to find "every X" is checked
+  with one planted X for each composition axis the format allows (nested object, array element,
+  map value, `$ref`, `anyOf`/`allOf`), not only the shapes in use today. A walker that recurses
+  into only some axes is a bound, not proof.
 
 ## Do not report
 
