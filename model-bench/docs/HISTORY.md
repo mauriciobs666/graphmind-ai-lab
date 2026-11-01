@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.6 — dataset contract vector and `labelVotes`-key refusal
+
+**What:** `docs/plans/typed-decision-models6.md` v1.5 §3.7 (amending
+`docs/plans/typed-decision-models4.md` §3.7) and §4's U6.6 row.
+
+- **Contract vector** `tests/fixtures/decision-contract/dataset-shape.jsonl`, model-bench-owned:
+  one line per decision point (`guard-judge`, `join-in-judge`, `message-type-classifier`, sorted
+  role order as `ROLES`), each `{"role", "generation", "items", "splits"}`. `generation` is the
+  complete plan4 §3.7 object with `promptSha256.spawnTemplate.driver`,
+  `dropped.safeguardSkipped`, plan5 §3.5's `dropped.formMismatch`/`bindingMismatch` and one
+  `runs[]` entry; `items` is three items, one per split, carrying exactly the keys the importer
+  reads; `splits` is `{rngSeed, eval, train, calibration}`. Only the guard's `formMismatch` has an
+  entry (plan5 §3.5: only the guard has `missing` forms). decision-models holds a byte-copy, which
+  U5.10 checks `finalize` against.
+- **Importer** (`scripts/import_decision_pack.py`): new `label_vote_keys(role)`; an eval item whose
+  `labelVotes` keys are not exactly the answer space as strings (`"true"`/`"false"` lowercase, or
+  the five message-type labels, zeros included) is refused. The docstring's "assumed" `splits.json`
+  shape now cites plan6 §3.7. README's importer paragraph names the refusal.
+
+**Tests:** `tests/test_import_decision_pack.py` gains a contract-vector section (26 tests): the
+vector's line count and order, the generation key tree against plan4/5/6, the guard-only form
+entry, `_model_block`/`_label_batch_cap` on the vector's generation, the splits shape and
+partition with `_eval_ids`, every item through `_project_eval_item`, and the refusal (planted
+`"True"`, `"FALSE"`, `"0"`, a dropped key, `"Order"`, an extra key; plus `"True"` through a whole
+import, writing nothing). Mutants, each restored `cmp`-equal: refusal removed → 11 failed;
+`rngSeed` deleted from the vector → 3 failed here and decision-models' equality test red (1 failed)
+until the copy is re-made. Suite 3651 passed, 5 deselected, 2 xfailed (baseline 3625); ruff clean.
+
 ## 2026-11-01 — typed-decision-models U3e.4 — singular family-line noun at k = 1
 
 **What:** method note v1.15 §Q6 "Print" (`docs/plans/typed-decision-models-ml.md`): the family

@@ -377,3 +377,16 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - Committed. **U5.5 accepted.**
   - Carry into the U5.6 brief: `audit_run` now requires `launch=Launch(fail_bound=…)`, plus Pass 9's three items.
   - Next: U6.6 (coder), then U5.6.
+- 2026-11-01: Committed `85a69612` (U5.5b). U6.6 dispatched → `coder` a716b52aa329c0705 (plan6 §3.7 and the U6.6 row; baselines: model-bench 3625, decision-models 666). Gate: `analyst` impl. U5.6 follows U6.6, since both edit `decision-models/docs/HISTORY.md`.
+- 2026-11-01: U6.6 delivered (coder a716b52aa329c0705, 144.4k tokens / 45 tools).
+  - teco's re-run: model-bench 3651 passed (3625 before); decision-models 671 passed (666 before); ruff clean.
+  - teco's mutant (predicate vote keys spelled `str(True)`/`str(False)`) → 34 red; file restored and cmp'd.
+  - falkor-chat's contract test lists its files explicitly, so it is unaffected.
+  - The coder's calls that U5.10 inherits: items carry only importer-read keys; only the guard line has a `formMismatch` entry.
+
+  Gate → fresh `analyst` a3586603054d41c8e, impl Pass 29 (a02c86cb14ba399b7 is at 205k). U5.6 waits for the U6.6 commit (shared decision-models HISTORY).
+- 2026-11-01: Pass 29 (U6.6; analyst a3586603054d41c8e, 112.0k tokens / 39 tools) → **approve with suggestions**.
+  - P29-m1 (the `model-bench/AGENTS.md` reverse-edge sentence) and P29-n1 (the test builder's labels) → same coder a716b52aa329c0705.
+  - **P29-M1** (§3.7's value-type comparison is unpassable as worded: run `null`s vs void-run strings, and no rule for which vector item an output item is compared against) → fresh `architect` a7b930e4646af8d40, plan6 v1.6, before U5.10. It does not block U6.6.
+  - Any vector edit becomes a named follow-up unit.
+- 2026-11-01: U6.6 fixes for P29-m1/n1 (coder a716b52aa329c0705; comment, docstring and AGENTS text only; `model-bench/AGENTS.md` at 2,495 words). teco's re-run: counts unchanged. **U6.6 accepted** and committed with Pass 29. Next: U5.6 (decision-models).

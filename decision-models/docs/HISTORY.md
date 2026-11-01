@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.6 — dataset contract vector copy
+
+**What:** `docs/plans/typed-decision-models6.md` v1.5 §3.7 and §4's U6.6 row:
+`tests/fixtures/decision-contract/dataset-shape.jsonl` is a byte-copy of model-bench's canonical
+dataset contract vector (`generation.json`, items and `splits.json` per role), which U5.10 checks
+`finalize`'s output against. `tests/test_decision_contract.py` adds it to the guarded equality
+test and the row-count test, and checks each of its items against this package's points
+(`input_field_errors`, `expected` in the answer space, `labelVotes` keys the answer space as JSON
+strings).
+
+**Verified:** `pytest -q` from `decision-models/`: 671 passed, 2 xfailed (baseline 666/2); `ruff
+check .` clean. Deleting `rngSeed` from the canonical file without re-copying reddens the equality
+test (1 failed); re-copying turns it green; both files restored `cmp`-equal.
+
 ## 2026-11-01 — typed-decision-models U5.5 — transcript audit
 
 **What:** `docs/plans/typed-decision-models6.md` v1.5 §3.3 (guard bounds), §3.4 (audit rows,

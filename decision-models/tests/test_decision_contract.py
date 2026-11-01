@@ -9,7 +9,11 @@ two of them under `tests/fixtures/decision-contract/`:
 * `render-guard.jsonl` — `render_guard_input(condition, understanding, recentTurns)`; expected
   strings produced by falkor-chat's real `_render_judge_user`;
 * `input-hash.jsonl` — `input_hash(item, role)` for all three roles; digests computed by hand
-  from v1.3 §3.5.
+  from v1.3 §3.5;
+* `dataset-shape.jsonl` — plan6 §3.7's dataset contract vector (`generation.json`, items and
+  `splits.json`, one line per role; `docs/plans/typed-decision-models6.md`, U6.6), which
+  `finalize`'s output is checked against (U5.10). Here only its items are checked against this
+  package's point definitions.
 
 The guarded equality test asserts each copy byte-identical to model-bench's and skips only when
 `model-bench/` is absent from the checkout (v1.3 §3.2.2's skip rule). Reading model-bench's files
@@ -29,11 +33,12 @@ from typing import Any
 import pytest
 
 from decisionmodels import hashing, render
+from decisionmodels.points import input_field_errors, load_point
 
 _COPIES = Path(__file__).resolve().parent / "fixtures" / "decision-contract"
 _MODEL_BENCH = Path(__file__).resolve().parents[2] / "model-bench"
 _CANONICAL = _MODEL_BENCH / "tests" / "fixtures" / "decision-contract"
-_VECTOR_FILES = ("render-guard.jsonl", "input-hash.jsonl")
+_VECTOR_FILES = ("render-guard.jsonl", "input-hash.jsonl", "dataset-shape.jsonl")
 
 
 def _rows(name: str) -> list[dict[str, Any]]:
@@ -43,6 +48,7 @@ def _rows(name: str) -> list[dict[str, Any]]:
 
 _RENDER_ROWS = _rows("render-guard.jsonl")
 _HASH_ROWS = _rows("input-hash.jsonl")
+_SHAPE_ROWS = _rows("dataset-shape.jsonl")
 
 
 @pytest.mark.parametrize("name", _VECTOR_FILES)
@@ -54,7 +60,11 @@ def test_the_vector_copy_is_byte_identical_to_model_benchs(name: str) -> None:
 
 @pytest.mark.parametrize(
     ("name", "rows"),
-    [("render-guard.jsonl", _RENDER_ROWS), ("input-hash.jsonl", _HASH_ROWS)],
+    [
+        ("render-guard.jsonl", _RENDER_ROWS),
+        ("input-hash.jsonl", _HASH_ROWS),
+        ("dataset-shape.jsonl", _SHAPE_ROWS),
+    ],
 )
 def test_every_vector_line_is_a_parametrized_row(name: str, rows: list[dict[str, Any]]) -> None:
     """The loader drops no row: counted from the raw bytes, not from the loader."""
@@ -71,6 +81,20 @@ def test_render_guard_input_matches_render_guard_jsonl(row: dict[str, Any]) -> N
 @pytest.mark.parametrize("row", _HASH_ROWS, ids=[r["case"] for r in _HASH_ROWS])
 def test_input_hash_matches_input_hash_jsonl(row: dict[str, Any]) -> None:
     assert hashing.input_hash(row["item"], row["role"]) == row["expected"]
+
+
+@pytest.mark.parametrize("row", _SHAPE_ROWS, ids=[r["role"] for r in _SHAPE_ROWS])
+def test_the_dataset_shape_items_fit_this_packages_points(row: dict[str, Any]) -> None:
+    """Each item's inputs pass `input_field_errors`, its `expected` is in the point's answer space,
+    and its `labelVotes` keys are that space written as JSON strings (plan6 §3.7: `"true"`,
+    `"false"`, never a capitalized or boolean key)."""
+    point = load_point(row["role"])
+    vote_keys = {a if isinstance(a, str) else json.dumps(a) for a in point.expected}
+    for item in row["items"]:
+        inputs = {field: item[field] for field in point.input_fields}
+        assert input_field_errors(point, inputs) == []
+        assert item["expected"] in point.expected
+        assert set(item["labelVotes"]) == vote_keys
 
 
 def test_input_hash_refuses_a_role_with_no_input_fields() -> None:

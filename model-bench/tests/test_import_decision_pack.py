@@ -1,18 +1,22 @@
 """`scripts/import_decision_pack.py` — typed-decision-models U3d, the one-way importer of a
 decision-models dataset's eval split into `packs/<role>-synthetic/` and of a candidate with its fit
 manifest into `candidates/` (v1.3 §3.4 "Importer"; plan2 §4.1 U3d; plan4 §4.2 U3d and §5's U3d
-row; impl review P12 point 2 and P22-n1 via the coordination ledger's U3d brief).
+row; impl review P12 point 2 and P22-n1 via the coordination ledger's U3d brief), plus plan6
+§3.7's contract vector and `labelVotes`-key refusal (U6.6).
 
 Offline throughout. decision-models has no dataset yet, so each test builds one under `tmp_path`
-in the shape the plans give the producer (plan4 §3.7 `generation.json`; items with the role's input
-fields, `expected`, `origin`, `genRunId`, `genRound`, `seedId`, `labelVotes`, message type's
-`threadPosition`; `splits.json` as the importer's docstring assumes), plus a model-bench root under
-`tmp_path` holding copies of the committed prompts and the guard's side-check source. Nothing here
-writes under the real `model-bench/`.
+(plan4 §3.7 `generation.json`; items with the role's input fields, `expected`, `origin`,
+`genRunId`, `genRound`, `seedId`, `labelVotes`, message type's `threadPosition`, plus extra fields
+the importer must ignore; plan6 §3.7's `splits.json`), plus a model-bench root under `tmp_path`
+holding copies of the committed prompts and the guard's side-check source. Nothing here writes
+under the real `model-bench/`. The canonical contract vector
+`fixtures/decision-contract/dataset-shape.jsonl` is read by its own section below; decision-models'
+`finalize` (U5.10) checks against its copy.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import shutil
@@ -104,7 +108,7 @@ def _source_item(role: str, n: int, split: str) -> dict[str, Any]:
         "genRunId": f"run_{n // 25:03d}",
         "genRound": 1 + (n % 3 == 0),
         "labelVotes": votes,
-        # producer-side fields the pack never carries
+        # extra fields the importer must ignore (plan6 §3.7's items.jsonl carries neither)
         "intent": "x",
         "split": split,
     }
@@ -267,6 +271,184 @@ def test_a_non_eval_item_lacking_provenance_is_not_read(tmp_path, root):
                 del item["genRunId"]
 
     _import(root, "join-in-judge", _dataset(tmp_path, "join-in-judge", edit_items=edit))
+
+
+# --- the dataset contract vector (plan6 §3.7, U6.6) ---------------------------------------------
+
+_SHAPE_FILE = _TESTS / "fixtures" / "decision-contract" / "dataset-shape.jsonl"
+_SHAPE_LINES = [json.loads(line) for line in _SHAPE_FILE.read_text("utf-8").splitlines()
+                if line.strip()]
+_SHAPE_BY_ROLE = {line["role"]: line for line in _SHAPE_LINES}
+_SPLITS = ("eval", "train", "calibration")
+
+#: plan4 §3.7's `generation.json`, with plan6 §3.5's `promptSha256.spawnTemplate.driver` and
+#: `dropped.safeguardSkipped` and plan5 §3.5's `dropped.formMismatch`/`bindingMismatch`: the key
+#: tree, `None` at a leaf. `formMismatch` and `runs` are data-sized and checked on their own.
+_GENERATION_KEYS: dict[str, Any] = {
+    "generator": {"surface": None, "tier": None, "model": None, "effort": None},
+    "labeler": {"surface": None, "tier": None, "model": None, "effort": None},
+    "votesPerItem": None, "labelerTemperature": None, "labelBatchCap": None,
+    "promptSha256": {
+        "agentDefinition": {"generator": None, "labeler": None, "driver": None},
+        "spawnTemplate": {"generator": None, "labeler": None, "driver": None},
+        "requestTemplate": {"generator": None, "labeler": None},
+        "rubric": None, "guardHook": None,
+    },
+    "generatedAt": None, "itemCount": None,
+    "dropped": {
+        "voteTie": None, "shingleSplit": None, "shingleSideCheck": None, "screenHits": None,
+        "retryCapExceeded": {"seeds": None, "items": None},
+        "safeguardSkipped": {"seeds": None, "items": None},
+        "formMismatch": None, "bindingMismatch": None,
+    },
+    "runs": None,
+}
+_RUN_KEYS = {
+    "runId", "role", "batchId", "attempt", "status", "voidClass", "voidReason",
+    "claudeCodeVersion", "agentId", "model", "requestSha256", "instructions",
+    "sessionContextSha256", "thinking", "effort", "tokens",
+}
+
+
+def _key_tree(value: Any, shape: Any) -> Any:
+    """`value`'s keys, descended only where `shape` has a dict, in `shape`'s form."""
+    if not isinstance(shape, dict):
+        return None
+    assert isinstance(value, dict)
+    return {k: _key_tree(value[k], shape.get(k)) for k in value}
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def test_the_vector_has_one_line_per_decision_point_and_drops_none():
+    raw = [line for line in _SHAPE_FILE.read_bytes().splitlines() if line.strip()]
+    assert len(_SHAPE_LINES) == len(raw) == 3
+    assert [line["role"] for line in _SHAPE_LINES] == ROLES
+    for line in _SHAPE_LINES:
+        assert list(line) == ["role", "generation", "items", "splits"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_the_vector_generation_is_complete(role):
+    generation = _SHAPE_BY_ROLE[role]["generation"]
+    assert _key_tree(generation, _GENERATION_KEYS) == _GENERATION_KEYS
+    assert generation["votesPerItem"] == 3
+    assert generation["itemCount"] == len(_SHAPE_BY_ROLE[role]["items"])
+    forms = generation["dropped"]["formMismatch"]
+    assert isinstance(forms, dict) and all(_is_int(n) for n in forms.values())
+    assert _is_int(generation["dropped"]["bindingMismatch"])
+    (run,) = generation["runs"]
+    assert set(run) == _RUN_KEYS
+    assert set(run["tokens"]) == {"input", "cacheWrite", "cacheRead", "output"}
+    assert [set(i) for i in run["instructions"]] == [{"path", "sha256"}]
+
+
+def test_the_guard_line_carries_a_form_entry_and_the_others_none():
+    """plan5 §3.5: only the guard has `missing` forms, so only its `formMismatch` can hold an
+    entry — the one U5.10 compares a dropped form's value type against."""
+    forms = {role: line["generation"]["dropped"]["formMismatch"]
+             for role, line in _SHAPE_BY_ROLE.items()}
+    assert len(forms.pop("guard-judge")) == 1
+    assert all(f == {} for f in forms.values())
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_the_importer_reads_the_vector_generation(role):
+    generation = _SHAPE_BY_ROLE[role]["generation"]
+    labeler, generator = imp._model_block(generation, "labeler"), imp._model_block(
+        generation, "generator")
+    assert labeler["model"] != generator["model"]
+    assert imp._label_batch_cap(generation) == generation["labelBatchCap"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_the_vector_splits_are_plan6_s_shape(role):
+    line = _SHAPE_BY_ROLE[role]
+    splits = line["splits"]
+    assert list(splits) == ["rngSeed", *_SPLITS]
+    assert _is_int(splits["rngSeed"])
+    listed = [i for name in _SPLITS for i in splits[name]]
+    assert all(isinstance(i, str) and i for i in listed)
+    assert sorted(listed) == sorted(item["itemId"] for item in line["items"])
+    assert all(len(splits[name]) == 1 for name in _SPLITS)
+    assert imp._eval_ids(splits) == splits["eval"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_every_vector_item_passes_the_importer_projection(role):
+    line = _SHAPE_BY_ROLE[role]
+    for item in line["items"]:
+        projected = imp._project_eval_item(item, role)
+        assert set(projected) - {"stratum"} == set(item)
+        votes = item["labelVotes"]
+        assert set(votes) == imp.label_vote_keys(role)
+        assert sum(votes.values()) == line["generation"]["votesPerItem"]
+
+
+def test_label_vote_keys_are_the_answer_space_as_strings():
+    assert imp.label_vote_keys("guard-judge") == {"true", "false"}
+    assert imp.label_vote_keys("join-in-judge") == {"true", "false"}
+    assert imp.label_vote_keys("message-type-classifier") == set(MESSAGE_TYPE_LABELS)
+
+
+def _replant(votes: dict[str, int], old: str, new: str | None) -> dict[str, int]:
+    """`votes` with key `old` renamed to `new` (dropped when `new` is None), keeping the sum."""
+    count = votes[old]
+    out = {k: v for k, v in votes.items() if k != old}
+    if new is None:
+        first = next(iter(out))
+        out[first] += count
+    else:
+        out[new] = count
+    return out
+
+
+_BAD_VOTE_KEYS = [
+    ("guard-judge", "true", "True"),
+    ("join-in-judge", "true", "True"),
+    ("join-in-judge", "false", "FALSE"),
+    ("join-in-judge", "false", "0"),
+    ("join-in-judge", "false", None),
+    ("message-type-classifier", "order", "Order"),
+    ("message-type-classifier", "other", "small-talk"),
+    ("message-type-classifier", "escalation", None),
+]
+
+
+@pytest.mark.parametrize(("role", "old", "new"), _BAD_VOTE_KEYS)
+def test_a_label_votes_key_outside_the_answer_space_is_refused(role, old, new):
+    """plan6 §3.7: the keys are exactly the answer space as strings, zeros included; counts
+    summing to 3 under other keys are refused."""
+    item = copy.deepcopy(_SHAPE_BY_ROLE[role]["items"][0])
+    item["labelVotes"] = _replant(item["labelVotes"], old, new)
+    assert sum(item["labelVotes"].values()) == 3
+    with pytest.raises(imp.ImportRefused, match="labelVotes keys"):
+        imp._project_eval_item(item, role)
+
+
+def test_an_extra_label_votes_key_is_refused():
+    item = copy.deepcopy(_SHAPE_BY_ROLE["join-in-judge"]["items"][0])
+    item["labelVotes"]["maybe"] = 0
+    with pytest.raises(imp.ImportRefused, match="labelVotes keys"):
+        imp._project_eval_item(item, "join-in-judge")
+
+
+@pytest.mark.parametrize("role", ["guard-judge", "join-in-judge"])
+def test_an_import_with_a_capitalized_predicate_vote_is_refused_and_writes_nothing(
+    tmp_path, root, role
+):
+    """The done-condition's planted `"True"`, through the whole dataset import."""
+    def edit(items):
+        victim = next(i for i in items if i["split"] == "eval")
+        victim["labelVotes"] = _replant(victim["labelVotes"], "true", "True")
+
+    pack_dir = root / "packs" / f"{role}-synthetic"
+    before = _snapshot(pack_dir)
+    with pytest.raises(imp.ImportRefused, match="labelVotes keys"):
+        _import(root, role, _dataset(tmp_path, role, edit_items=edit))
+    assert _snapshot(pack_dir) == before
 
 
 # --- the manifest ------------------------------------------------------------------------------

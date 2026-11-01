@@ -24,16 +24,20 @@ model-bench. Two exclusive modes, the plan's "both halves":
 
 **The source formats this reads.** `generation.json` is plan4 §3.7's; its `labeler`/`generator`
 blocks become the pack's `labels.labeler`/`labels.generator` as `{provider: "anthropic", model,
-surface, effort}` (plan4 §4.2), and `labelBatchCap` goes to `PROVENANCE.md`. The plans name
-`items.jsonl` and `splits.json` (v1.3 §3.4 tree) but not `splits.json`'s shape, which decision-
-models' `finalize` (U5.10) has not built yet. **Assumed here, as the contract U5.10 must write:**
-`splits.json` is a JSON object whose `"eval"` key lists the eval items' `itemId`s, each once;
-other keys are not read. Each dataset item is a JSON object with a unique `itemId`.
+surface, effort}` (plan4 §4.2), and `labelBatchCap` goes to `PROVENANCE.md`. `splits.json` and
+`labelVotes` are plan6 §3.7's (`docs/plans/typed-decision-models6.md`): `splits.json` holds
+`rngSeed`, `eval`, `train` and `calibration`, and only `eval` is read (each `itemId` once). Each
+dataset item is a JSON object with a unique `itemId`. The contract vector
+`tests/fixtures/decision-contract/dataset-shape.jsonl` pins all three files' shapes per role;
+decision-models' `finalize` (U5.10) checks its output against a byte-copy of it.
 
 **What an eval item keeps** (`_project_eval_item`): `itemId`, the role's
 `decisions.INPUT_FIELDS_BY_ROLE` fields, `expected`, `origin`, and the provenance fields
 `genRunId`, `genRound`, `seedId`, `labelVotes` (plus `threadPosition` on message type, plan4
 §4.2), each required; `stratum` is written as `"eval"`. Any other source field is not copied.
+`labelVotes` must be counts summing to 3 whose keys are exactly the role's answer space written as
+strings (`label_vote_keys`: `"true"`/`"false"` on a predicate point, lowercase; each label on a
+choice point), zeros included.
 None of the provenance fields is an input field, so `input_hash` is unchanged by them (plan4 §5).
 """
 
@@ -201,6 +205,15 @@ def _label_batch_cap(generation: Mapping[str, Any]) -> int:
     return cap
 
 
+def label_vote_keys(role: str) -> frozenset[str]:
+    """The exact `labelVotes` key set of a role's items (plan6 §3.7): its answer space written as
+    strings. A JSON boolean is never a key, so a predicate's spelling is fixed lowercase."""
+    space = ANSWER_SPACE_BY_ROLE[role]
+    if space["type"] == "predicate":
+        return frozenset({"true", "false"})
+    return frozenset(space["labels"])
+
+
 def _eval_ids(splits: Any) -> list[str]:
     ids = splits.get("eval") if isinstance(splits, Mapping) else None
     if not isinstance(ids, list) or not all(isinstance(i, str) and i for i in ids):
@@ -235,6 +248,11 @@ def _project_eval_item(row: Mapping[str, Any], role: str) -> dict[str, Any]:
         and sum(votes.values()) == 3
     ):
         raise ImportRefused(f"eval item {item_id!r}: labelVotes must be counts summing to 3")
+    if set(votes) != label_vote_keys(role):
+        raise ImportRefused(
+            f"eval item {item_id!r}: labelVotes keys {sorted(votes)} are not the answer space "
+            f"{sorted(label_vote_keys(role))}"
+        )
     projected = {field: row[field] for field in required}
     projected["stratum"] = "eval"
     return projected

@@ -3677,3 +3677,154 @@ still ends `run` in a traceback.**
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 29 — U6.6 the dataset contract vector (2026-11-01)
+
+*2026-11-01. Gate of U6.6, uncommitted. Files: `model-bench/scripts/import_decision_pack.py`
+(`label_vote_keys`, the `labelVotes`-key refusal, docstring), `model-bench/tests/test_import_decision_pack.py`,
+the new `model-bench/tests/fixtures/decision-contract/dataset-shape.jsonl` and its copy under
+`decision-models/tests/fixtures/decision-contract/`, `decision-models/tests/test_decision_contract.py`,
+`model-bench/README.md` and both `HISTORY.md` files. Read against plan6 v1.5 §3.7 and its §4 U6.6
+and §5 U5.10 rows (`docs/plans/typed-decision-models6.md`), plan4 §3.6–§3.7, plan5 §3.5, plan2
+§3.5, and decision-models' `points/*/point.json`, `points.py` and `audit.run_record`. Out of scope:
+`opencode/`, `docs/plans/agent-reading-cost*` and the coordination ledger.*
+
+**Verdict: approve with suggestions.** The vector is §3.7 as written. It has one line per point in
+`ROLES` order, each `{role, generation, items, splits}`. The `generation` key tree is complete, and
+it includes `spawnTemplate.driver`, `safeguardSkipped`, `formMismatch`, `bindingMismatch` and one
+run. There are three items, one per split, and `splits` is `{rngSeed, eval, train, calibration}`.
+`labelVotes` keys are the answer space as strings. The refusal rejects exactly a key set other than
+that space, and every mutant of it I tried is killed. The copy is guarded like the existing two.
+falkor-chat is unaffected. One major is a plan gap in how U5.10 compares value types, which the
+vector makes concrete. It goes to `architect` before U5.10's brief and does not block U6.6. There is
+one minor and one nit.
+
+**Checks run** (each suite from its own component directory, with a private `PYTHONPYCACHEPREFIX`):
+- **Suites:** model-bench `3651 passed, 5 deselected, 2 xfailed`; decision-models
+  `671 passed, 2 xfailed`; ruff clean in both. All match the brief and the `HISTORY.md` entries. The
+  26 new model-bench tests and the 5 new decision-models tests add up to those counts.
+- **Refusal mutants** (`import_decision_pack.py`, test file only; restored and `cmp`-equal):
+
+  | Mutant | Result |
+  |---|---|
+  | refusal removed (`if False:`) | 11 failed (as reported) |
+  | subset only (`not set(votes) <= keys`) | 2 failed (the dropped-key rows) |
+  | superset only (`not set(votes) >= keys`) | 1 failed (the extra key) |
+  | case-folded keys | 6 failed |
+  | refusal applied to message type only | 8 failed |
+  | refusal skipped on the guard | 2 failed |
+
+- **Vector mutants** (both fixtures copied aside, restored, and `cmp`-equal to each other and the
+  originals):
+  - `rngSeed` deleted from the canonical guard line: decision-models' equality test fails (1); it
+    passes after a re-copy (45 passed). model-bench: 1 failed. This is the U6.6 done-condition.
+  - `"true"` renamed `"True"` on a join-in train item in both files: decision-models' points check
+    fails (1), and model-bench's projection test fails (1).
+- **Shipped packs:** `packs/*-synthetic/` hold only `prompts/`, with no `items.jsonl`. No pack has
+  been imported, so nothing that previously validated can now be refused. Outside the importer and
+  tests, no model-bench code reads `labelVotes` (sweep over `*.py`/`*.json`/`*.jsonl`).
+- **falkor-chat:** not run (it wipes a shared graph). Read `server/tests/test_decision_contract.py:41`:
+  `_VECTOR_FILES` names three other files. No test or script in falkor-chat or model-bench globs
+  `decision-contract/`. `scripts/generate_guard_decision_vectors.py:286-288` writes only its own
+  three files.
+
+CPG: considered, not relevant — no model-bench or decision-models CPG is loaded (`GRAPHS`). The
+paths were read directly.
+
+### The checks asked for
+
+- **1. Is the vector faithful and producible?**
+  - **The item key set is the plans' key set, not an accident of the importer.** Plan2 §3.5 adds
+    `seedId` and `labelVotes`, plus `threadPosition` on message type. Plan4 §3.7 adds `genRunId`
+    and `genRound`, which replace v1.3's generator-call hash. v1.3 §3.4 gives `origin`, and the
+    importer docstring and plan6 §3.7 give `itemId`. With the input fields and `expected`, that is
+    exactly the importer's `required` tuple. The equal-key-sets rule therefore asks `finalize` for
+    nothing the plans do not name. Diagnostics read seed axes from the store by `seedId`, not from
+    `items.jsonl` (plan4 §3.6), so nothing downstream needs an extra item key.
+  - **The items fit decision-models' schema.** All nine pass `input_field_errors` (run). The guard's
+    `understanding: {}` on a `turns` item and `turns: []` on an `understanding` item are the forms
+    `presentWhen` requires (`points.py:164-165`, `:218-224`). Message type's `priorTurn` is `null` on
+    an opening item and an object on a follow-up.
+  - **A `formMismatch` entry on the guard line only is right.** By plan5 §3.5, `formMismatch` is a
+    binding error on `missingForm`, and only the guard declares one (`emptinessAxis: missingForm`,
+    with `immaterial` among `nonEmptyFor`). join-in has no `seedBindings`. Message type's only binding
+    is `presentWhen`, which is a `bindingMismatch`. So a faithful `finalize` cannot write a
+    non-guard form entry, and the empty `{}` on those lines is producible.
+  - **The vector does constrain the producer in one way the plans leave open:** the value-type
+    comparison (P29-M1).
+- **2. The refusal.** It sits after the counts check, so `labelVotes` must be counts summing to 3
+  first and must then have exactly the role's key set (`import_decision_pack.py:251-255`). It only
+  applies to projected (eval) items, as the pre-existing rule for non-eval items does. JSON object
+  keys are always strings, so a boolean key cannot arrive from a file. The six mutants above show
+  every direction of the set comparison is pinned. Nothing that validated before can now be refused
+  (see "Shipped packs").
+- **3. Guarded equality.** The new file is a third member of the same parametrized
+  `_VECTOR_FILES` equality test (`test_decision_contract.py:41`, `:54-58`). It uses the same
+  model-bench-absent skip, and it is also in the raw-line row-count test. The points check
+  (`test_the_dataset_shape_items_fit_this_packages_points`) derives its expected vote keys from
+  decision-models' own `point.json`, not from the vector or from model-bench's `label_vote_keys`.
+  It is therefore an independent check, and it can fail (the planted `"True"` above).
+- **4. Growth-stops.** See the section below.
+- **5. `model-bench/AGENTS.md:186-189`.** It is wrong and should be fixed in this unit (P29-m1).
+
+### Findings
+
+**P29-M1 (major; `architect`, before U5.10's brief; does not block U6.6). No faithful `finalize`
+can pass §3.7's per-entry value-type comparison against the vector as specified.**
+- **Evidence (traced by reading; U5.10 does not exist yet):**
+  - **Runs.** §3.7 compares each `runs[]` entry's value types "against the vector's entry", and
+    the vector has one ingested run with `voidClass`/`voidReason` set to `null`. A void run's
+    record carries strings there (`audit.py:699-723` `combine`, `:727-743` `run_record`).
+    `run_record` also yields `None` for `claudeCodeVersion`, `model`, `sessionContextSha256`,
+    `thinking` and `effort` whenever the transcript lacks them (`audit.py:677-692`).
+  - **Items.** §3.7 compares items "per entry in the same way", but it does not say against which
+    vector item. Message type's `priorTurn` is `null` on one vector item and an object on another,
+    so an eval split holding both opening and follow-up items mismatches whichever single entry is
+    chosen.
+- **Why it matters:** U5.10's implementer will either redden on any campaign with a void run or a
+  follow-up item, or quietly weaken the comparison. Either way the contract check is lost.
+- **Fix (a design choice for `architect`):** state in §3.7 how a container entry is compared.
+  - **Option (a):** against the union of types the vector shows for that key across its entries.
+    The vector then gains a void run beside the ingested one, which revises "one `runs[]` entry".
+    Its items already show both shapes for every nullable or empty-able field.
+  - **Option (b):** a named list of nullable keys.
+  - **Either way,** an entry with no vector counterpart is refused, never passed vacuously. For
+    example, a non-empty `formMismatch` on a non-guard line has nothing to compare against.
+  - If option (a) is chosen, the vector edit is a small follow-up to U6.6 with both copies re-made.
+
+**P29-m1 (minor; `coder`, this unit). `model-bench/AGENTS.md:186-189` names falkor-chat as "the one
+reverse edge" byte-copying `decision-contract/` files.**
+- **Evidence:** decision-models' suite already byte-copied `render-guard.jsonl` and
+  `input-hash.jsonl` before U6.6. This unit adds `dataset-shape.jsonl`, which only decision-models
+  copies.
+- **Why it matters:** this is the always-loaded context for anyone editing a canonical vector. As
+  written, it tells that editor to expect only falkor-chat's equality test to redden. An edit to
+  `dataset-shape.jsonl` then breaks decision-models' suite unnoticed.
+- **Fix:** replace the sentence in place, with no history clause. For example: "The reverse edges
+  are test-only: falkor-chat's and decision-models' suites each byte-copy the
+  `tests/fixtures/decision-contract/` files they list and assert them equal to ours unless
+  `model-bench/` is absent (typed-decision-models v1.3 §3.2.2)." `decision-models/AGENTS.md:27-32`
+  is already correct.
+
+**P29-n1 (nit; `coder`). The importer test builder still describes a producer shape that §3.7 now
+forbids.**
+- **Evidence:** `_source_item` (`test_import_decision_pack.py:110-112`) writes `intent` and `split`
+  as "producer-side fields the pack never carries". The module docstring calls the builder's output
+  "the shape the plans give the producer". The vector's equal-key-sets rule rules both fields out of
+  `items.jsonl`.
+- **Fix:** keep the fields, because the test that the importer ignores unknown keys is still worth
+  having. Relabel them as "extra fields the importer must ignore", and drop "the shape the plans
+  give the producer" from the docstring, which now points at the vector anyway.
+
+### Growth-stops
+
+- **`model-bench/README.md`:** one 4-line insertion in the importer paragraph (`@@ -298,0 +299,4`).
+  It is new scope, the new refusal and the vector citation, with no rework growth, and every line
+  is ≤ 101 characters.
+- **Both `HISTORY.md` files:** one new entry each, read by lookup. Their counts reproduce: 26 and 5
+  tests; 3625 → 3651 and 666 → 671; and refusal removed → 11 failed.
+- **`model-bench/AGENTS.md`:** unchanged, but now wrong (P29-m1).
+
+### Proposed REVIEW.md lines
+
+None.

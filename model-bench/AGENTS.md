@@ -184,9 +184,10 @@ otherwise `load_history`'s ascending filename order makes `candidates[0]` the ol
   to the same rule too**: 3 tests that live-verify a copied-in golden asset against its real
   `falkor-chat/` source carry `tests/conftest.py`'s `requires_falkor_chat` skip guard (a plain
   `skipif`, not the `live` marker below), so `pytest -q` skips them rather than failing when
-  `falkor-chat/` is absent or renamed. The one reverse edge is test-only: falkor-chat's suite
-  byte-copies `tests/fixtures/decision-contract/` files and asserts them equal to ours unless
-  `model-bench/` is absent (typed-decision-models v1.3 §3.2.2).
+  `falkor-chat/` is absent or renamed. The reverse edges are test-only: falkor-chat's and
+  decision-models' suites each byte-copy the `tests/fixtures/decision-contract/` files they list
+  and assert them equal to ours unless `model-bench/` is absent (typed-decision-models v1.3
+  §3.2.2).
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
   takes a `packId` and there is no API to load across packs. See `README.md`'s three non-features.
 

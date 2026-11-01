@@ -296,6 +296,10 @@ list) into the existing `packs/<role>-synthetic/`, rewriting `pack.json`, `items
 `PROVENANCE.md` and nothing else: `prompts/` is committed pack data the importer never writes, and
 a missing pack directory or prompt is refused. Each eval item keeps its input fields, `expected`,
 `origin`, `genRunId`, `genRound`, `seedId`, `labelVotes` (and `threadPosition` on message type);
+`labelVotes` must be counts summing to 3 keyed by exactly the answer space as strings (`"true"`/
+`"false"` lowercase on a predicate point, each label on message type), or the import is refused
+(`docs/plans/typed-decision-models6.md` §3.7, whose contract vector
+`tests/fixtures/decision-contract/dataset-shape.jsonl` pins all three dataset files' shapes);
 `labels.labeler`/`labels.generator` come from `generation.json`; the guard pack also gets the
 85 items of `guard-judge-understanding` as its `side-check` stratum. The pack must validate before
 anything is written, its source files must be committed (their git SHAs go into `PROVENANCE.md`),
