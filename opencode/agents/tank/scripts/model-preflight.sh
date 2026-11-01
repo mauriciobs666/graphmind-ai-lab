@@ -53,14 +53,14 @@ def note_others():
     if others:
         print(f"NOTE: other LLM instance(s) loaded: {', '.join(others)}", file=sys.stderr)
 if not insts:
-    print(f"NOTE: {mid} not loaded; the first request JIT-loads it, and it must come up at >= {minctx} (README Prerequisites)", file=sys.stderr)
+    print(f"NOTE: {mid} not loaded; the first request JIT-loads it, and it must come up at >= {minctx} with parallel {par}. Unless the host has saved per-model defaults for it (qwen has; ministral has not), load it by hand as in README Prerequisites", file=sys.stderr)
     note_others(); sys.exit(0)
 ids = [i.get("id") for i in insts]
 if len(insts) >= 2 or ids[0] != mid:
     die(f"REFUSED: {len(insts)} copies of {mid} loaded ({', '.join(map(str, ids))}); unload the extra one(s) with `lms unload <id:n>`")
 cfg = insts[0].get("config") or {}
 ctx, p = cfg.get("context_length"), cfg.get("parallel")
-fix = f"when nothing else is using it, `lms unload {mid}` and let the per-model default reload it (README Prerequisites)"
+fix = f"when nothing else is using it, `lms unload {mid}` and reload it at >= {minctx} with parallel {par} (README Prerequisites)"
 if not isinstance(ctx, int) or ctx < minctx:
     die(f"REFUSED: {mid} loaded at {ctx}, tank needs >= {minctx}; {fix}")
 if p != par:

@@ -132,7 +132,8 @@ check "3 no entry with the key: exit 1, names id" 1 "$ID" "not in LM Studio"
 # --- 4 not loaded ------------------------------------------------------------
 reset; run model-preflight.sh
 check "4 not loaded: exit 0 NOTE, minimum named" 0 "NOTE:" "$ID not loaded" "20480" "Prerequisites"
-check_absent "4b NOTE does not claim a per-model default" "per-model default"
+check_absent "4b NOTE does not promise a per-model default reload" "let the per-model default"
+check "4c NOTE: parallel 1 named, hand-load fallback, ministral has no saved default" 0 "parallel 1" "by hand" "ministral has not"
 
 # --- 5 context ---------------------------------------------------------------
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20480 1)")"; run model-preflight.sh
@@ -142,6 +143,8 @@ reset; set_models "$(entry "$ID" llm "$(inst "$ID" 20479 1)")"; run model-prefli
 check "5b context minimum-1: exit 1" 1 "REFUSED" "20479"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 8192 1)")"; run model-preflight.sh
 check "5c context 8192: exit 1, both numbers and lms unload" 1 "REFUSED: $ID loaded at 8192, tank needs" "20480" "lms unload $ID"
+check_absent "5c2 fix text does not promise a per-model default reload" "let the per-model default"
+check "5c3 fix text: reload at minimum with parallel 1" 1 "reload it at >= 20480 with parallel 1"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 32768 1)")"; run model-preflight.sh
 check "5d context 32768: exit 0 OK" 0 "OK: $ID loaded, context 32768, parallel 1"
 
@@ -183,6 +186,8 @@ fi
 # --- 9 parallel --------------------------------------------------------------
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 4)")"; run model-preflight.sh
 check "9a parallel 4: exit 1, both numbers" 1 "REFUSED: $ID loaded with parallel 4, tank needs 1"
+check_absent "9a2 fix text does not promise a per-model default reload" "let the per-model default"
+check "9a3 fix text: reload at minimum with parallel 1" 1 "reload it at >= 20480 with parallel 1"
 reset; set_models "$(entry "$ID" llm "$(inst "$ID" 24000 1)")"; run model-preflight.sh
 check "9b parallel 1: exit 0 OK" 0 "OK: $ID loaded, context 24000, parallel 1"
 check_absent "9b2 no NOTE when only the own copy is loaded" "NOTE:"
@@ -252,6 +257,14 @@ for s in bring-up.sh tear-down.sh; do
     pass "12d $s: 0 args -> usage, exit 1, curl never called"
   else fail "12d $s: 0 args" "exit $EXIT_CODE curl: $(cat "$CURL_LOG") oc: $(cat "$OC_LOG")"; fi
 done
+
+# --- 13 README literal tracks the constant (second home of the minimum) -----------
+README="$REAL_SCRIPTS_DIR/../README.md"
+SCRIPT_MIN="$(sed -n 's/^TANK_MIN_CONTEXT_LENGTH=\([0-9][0-9]*\)$/\1/p' "$REAL_SCRIPTS_DIR/model-preflight.sh")"
+README_C="$(tr '\n' ' ' < "$README" | sed -n 's/.*lms load [^ ]* -c \([0-9][0-9]*\) .*/\1/p')"
+if [ -n "$SCRIPT_MIN" ] && [ "$README_C" = "$SCRIPT_MIN" ]; then
+  pass "13 README 'lms load ... -c $README_C' equals TANK_MIN_CONTEXT_LENGTH"
+else fail "13 README -c literal equals TANK_MIN_CONTEXT_LENGTH" "README '$README_C' vs script '$SCRIPT_MIN'"; fi
 
 echo
 echo "----------------------------------------"

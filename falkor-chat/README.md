@@ -32,7 +32,7 @@ executed inside the same graph.
 - **For the AI agent (M2 GraphRAG) only:** an OpenAI-compatible LLM endpoint — e.g.
   [LM Studio](https://lmstudio.ai/) on `:1234` — serving an **embedding** model
   (`text-embedding-qwen3-embedding-0.6b`, 1024-dim) **and** a **chat** model
-  (`qwen/qwen3-4b-2507`, whose LM Studio load defaults are set as `opencode/agents/tank/README.md` Prerequisites describes, so extraction calls queue: `docs/plans/standard-local-model.md` R2). Not needed if you run with `FALKORCHAT_ENABLE_AGENT=0` (chat core only).
+  (`qwen/qwen3-4b-2507`, saved in LM Studio with per-model load defaults of context 20480 and parallel 1, so extraction calls queue: `docs/plans/standard-local-model.md` R2). Not needed if you run with `FALKORCHAT_ENABLE_AGENT=0` (chat core only).
 
 ---
 
