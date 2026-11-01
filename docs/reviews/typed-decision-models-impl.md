@@ -3162,3 +3162,134 @@ pack's.**
 ### Proposed REVIEW.md lines
 
 None. P24-m1 is a single instance.
+
+## Pass 25 — U3e.1 pack provenance (2026-11-01)
+
+*2026-11-01. Gate of U3e.1, uncommitted in `model-bench/` on `8fcb341c`. Files: `modelbench/packs.py`,
+`modelbench/report.py`, the `decision_point_guard` fixture pack, the eval-item builders in five test
+files, `tests/test_import_decision_pack.py`, `README.md` and `docs/HISTORY.md`. Read against plan4
+§3.9 ("Pack contract" and "Interface changes"), §4.2 U3e.1 and §5's U3e.1 row, and the committed
+importer (`scripts/import_decision_pack.py`, `362dc56b`). U3e.2 is out of scope except for the
+interface it consumes.*
+
+**Verdict: approve with suggestions.** All three parts of the §5 U3e.1 row are present and
+pinned:
+- the two `validate_pack` refusals, each with a deleted-key and wrong-type case;
+- `gen_run_ids` equal to the eval items' `itemId → genRunId` map, on the contract pack and on an
+  imported pack for each of the three roles;
+- the exact two-model caveat line.
+
+The importer's output passes the new checks: it always writes `labels.generator` with `provider`,
+and a non-empty string `genRunId` on every eval row (`import_decision_pack.py:184-194`, `:227-229`).
+
+There are no blockers and no majors. There is one minor and one nit.
+
+**Checks run:**
+- **Suite** (from `model-bench/`): `3572 passed, 5 deselected, 2 xfailed`. Ruff is clean. The
+  collected counts match `HISTORY.md`: 177 in `test_decision_point_pack.py` and 118 in
+  `test_import_decision_pack.py`. 158 + 19 new matches the 17 new functions plus 2 rows in the
+  deleted-key table.
+- **Probe** (`scratchpad/p25/probe.py`, on `_contract_pack` copies):
+  - deleting `labels.labeler.provider` gives `validate_pack == []`, and `from_pack` then raises;
+  - deleting `labels.generator.provider` does the same;
+  - a generator model equal to the labeler's gives `validate_pack == []`.
+- **Mutants:** 3 of mine. Each file was copied aside to `scratchpad/p25/` first, and `cmp` matched
+  after restoring.
+
+  | Mutant | Result |
+  |---|---|
+  | X1 `validate_pack` checks only for the `genRunId` key, not a non-empty string | red (4) |
+  | X2 `from_pack` takes any truthy `genRunId` and stores `str()` of it | **survives** (P25-n1) |
+  | X3 the generator refusal runs only when the labeler's model is valid | **survives** (P25-n1) |
+
+CPG: considered, not relevant — no model-bench CPG is loaded; the change was read, probed and
+mutated directly.
+
+### The four questions
+
+1. **Generator provider: the premise holds, and the gap was already there for the labeler.**
+   - At `8fcb341c`, `_labels_problems` checked only `labels.labeler.model`, while
+     `DecisionPointPack.from_pack` already required `.provider` as well. The probe shows the same
+     result now for both blocks.
+   - `compare` never calls `validate_pack` (`cli.py:450-490`), so `from_pack` is its only check.
+   - **Under §3.9:** the wording ("refuses a missing `labels.generator.model`") is met to the
+     letter. But `from_pack`'s docstring claims every pack it refuses is one "`validate_pack`
+     refuses", which is false for `provider`.
+   - **Cost:** a pack can validate and run, then fail `compare` with exit 4. Fixing `pack.json`
+     changes the content hash, so every stored arm then reports `not assessable (arms ran on
+     different pack content)` and must be re-run.
+   - **Reach:** only a hand-built pack can hit this, because the importer always writes
+     `provider`.
+   - **Acceptable as a copy? Not quite.** The fix is one predicate and closes the gap for both
+     blocks: P25-m1.
+2. **A generator equal to the labeler: no requirement, so no finding.**
+   - Plan2 §3.5 and plan4 §3.7 place the refusal at generation. The importer repeats it
+     (`:441`).
+   - §3.9's pack contract lists exactly two refusals, and this is not one of them.
+   - The method note (`typed-decision-models-ml.md` "Generator ≠ labeler") states it as a property
+     of the method, and names "the caveat line naming both models" as its counterweight. A
+     hand-built pack with equal models would print the same name twice in the caveat, which is
+     visible.
+   - Adding the refusal would be defence in depth, not conformance. That is the architect's call,
+     not a defect.
+3. **Side-check exemption: consistent.**
+   - §3.9 says "an eval item without … `genRunId`", and builds `gen_run_ids` "for eval items".
+   - The importer's side-check rows are `guard-judge-understanding`'s items, re-stamped
+     (`:244-251`), and they have no `genRunId`.
+   - The test pins both that the 85 side-check items have no `genRunId` and that the pack is
+     accepted.
+   - **Interface for U3e.2:**
+     - FR-1 pairs are eval-only (`pair_items(strata=)`).
+     - A new-ability pack can hold no side-check item (`packs.py:1303`), so FR-10's input is
+       eval-only too.
+     - `gen_run_ids` is `Mapping[str, str]`, keyed by `str(itemId)`, the same key `strata` uses.
+     - So every outcome id U3e.2 looks up resolves. Keys, eval-only and the value type all match
+       §3.9.
+4. **Docs: faithful, and nothing in `AGENTS.md` is now wrong.**
+   - A word-level diff of `README.md` against `8fcb341c` shows only the intended insertions, in
+     both paragraphs: "labels caveat, naming the labeler and the input generator", "and a
+     `generator.model`", "and a non-empty string `genRunId`", and "and `genRunId`". The rest is
+     rewrap.
+   - `AGENTS.md` does not list the `labels` checks or the caveat text. Its decision-point
+     paragraph (`:89-99`) is still true.
+
+### Findings
+
+**P25-m1 (minor; fresh `coder`, in this fix round). `validate_pack` accepts a pack that
+`from_pack` refuses.**
+- Evidence: `packs.py` `_labels_problems` checks `.model` only. `report._model_name` requires
+  `.provider` and `.model`. The probe gives `validate_pack == []` with either block's `provider`
+  deleted.
+- **Why it matters:** the failure comes after a run, at `compare` (exit 4). The repair changes
+  `contentHash`, which makes every stored arm not assessable.
+- **Fix:**
+  - Have `_labels_problems` refuse an absent, empty or non-string `provider` for both blocks.
+  - Put the predicate in one place. For example, `report._model_name` could call a helper in
+    `packs`, so the two checks cannot drift apart again.
+  - Correct `from_pack`'s docstring if any difference remains.
+- **Test:** do not add one test per shape. Write one coverage probe over the axes:
+  - block (`labeler`, `generator`) × key (`provider`, `model`) × corruption (deleted, `""`,
+    non-string);
+  - for each case, assert that `validate_pack` is non-empty if and only if `from_pack` raises.
+  - Deleting the new provider check must then turn the probe red.
+
+**P25-n1 (nit; same `coder`). Two branches are unpinned.**
+- X2: `from_pack`'s non-string `genRunId` guard. No test gives it a non-string value, and
+  `compare` does not validate first.
+- X3: no test deletes both the labeler and the generator. That pair should list both problems,
+  like the existing labeler-plus-incumbent test.
+- **Fix:** extend `test_the_decision_point_pack_refuses_an_eval_item_without_gen_run_id` with `""`
+  and `7`. Add a test that deletes both blocks and asserts two problems. X2 and X3 must then turn
+  red.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** is unchanged at 2,490 words. Nothing in it is now wrong (question 4).
+- **`README.md`** inserts new-scope words in place. The rest is rewrap, and no changed line is over
+  100 characters.
+- **`HISTORY.md`** gets one entry, read by lookup. Its counts reproduce.
+
+### Proposed REVIEW.md lines
+
+None. P25-m1 is a single instance of a validator and a loader drifting apart. If it recurs, propose
+"a loader's refusal must be a subset of `validate_pack`'s, pinned by one probe".

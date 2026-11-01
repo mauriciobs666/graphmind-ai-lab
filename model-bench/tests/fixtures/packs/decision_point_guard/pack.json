@@ -27,6 +27,7 @@
   "labels": {
     "source": "llm-unreviewed",
     "labeler": {"provider": "anthropic", "model": "fixture-labeler"},
+    "generator": {"provider": "anthropic", "model": "fixture-generator"},
     "inputs": "synthetic"
   }
 }

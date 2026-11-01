@@ -508,7 +508,8 @@ def _pad_to_the_contract(pack_dir: Path) -> None:
     for n in range(MIN_EVAL_ITEMS - evals):
         rows.append({
             "itemId": f"pad-{n:03d}", "tier": "clear_suspend", "path": "understanding",
-            "stratum": "eval", "origin": "synthetic", "condition": f"padding condition {n}",
+            "stratum": "eval", "origin": "synthetic", "genRunId": f"pad-run-{n % 4}",
+            "condition": f"padding condition {n}",
             "understanding": {"request": "pad"}, "turns": [], "expected": False,
         })
     rows.append({

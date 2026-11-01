@@ -191,26 +191,26 @@ run in the session or named twice, a second chat arm or one that is not the incu
 incumbent runs, a candidate with two content hashes in the session, arms run at different chat
 timeouts, or `--negative-control`. `rank` refuses a decision-point pack outright.
 
-Its report opens with the labeler caveat — what FR-5 makes these labels mean is
-`docs/requirements/typed-decision-models.md`'s FR-5, not restated here — then one **bar section**
-(`docs/plans/typed-decision-models.md` §3.5–§3.6, `typed-decision-models2.md` §3.6). Per
-candidate: its fit-manifest leakage line, how many candidates already ran on this evaluation set,
-its fit outcome. Per replicate: `handoffShare`, `decisionCallFailures` and `overLimit`; the scored
-eval n beside FR-11's 200, with every drop counted; the four FR-1 parity cells, each with its
-detectable difference, method minimum and `overLimit`; the FR-2 speed-up ratio; and the side
-check, which does not affect pass/fail. On a new-ability pack (FR-10, one arm: no incumbent; a
-chat arm is a reference whose results no bar reads, though its timeout and pack content still
-apply) a replicate adds `handoffCallFailures`, then each true answer's agreement `k/n` with its
-per-class Wilson interval, method minimum and `overLimit` — every class must reach 0.90, and one
-with no scored item is `not assessable` — and the mean latency against 350 ms. Then the
-replicates' disagreement and one overall state per bar: `met` needs every replicate met and two
-fresh loads of the decision model. A replicate whose model was already resident is not a load, and
-one whose load changed mid-run prints `not assessable`. Unless the chat arm (incumbent or
-reference), every replicate and the pack on disk share one content hash, every bar prints `not
-assessable (arms ran on different pack content: …)`: like an off-pin timeout, that is a property of
-stored records, so the report states it rather than refusing. The candidates line counts valid
-records only, and says how many invalid ones it left out. The generic tables below cover the chat
-arm alone. Exit codes are unchanged.
+Its report opens with the labels caveat, naming the labeler and the input generator — what FR-5
+makes these labels mean is `docs/requirements/typed-decision-models.md`'s FR-5, not restated here —
+then one **bar section** (`docs/plans/typed-decision-models.md` §3.5–§3.6,
+`typed-decision-models2.md` §3.6). Per candidate: its fit-manifest leakage line, how many candidates
+already ran on this evaluation set, its fit outcome. Per replicate: `handoffShare`,
+`decisionCallFailures` and `overLimit`; the scored eval n beside FR-11's 200, with every drop
+counted; the four FR-1 parity cells, each with its detectable difference, method minimum and
+`overLimit`; the FR-2 speed-up ratio; and the side check, which does not affect pass/fail. On a
+new-ability pack (FR-10, one arm: no incumbent; a chat arm is a reference whose results no bar
+reads, though its timeout and pack content still apply) a replicate adds `handoffCallFailures`, then
+each true answer's agreement `k/n` with its per-class Wilson interval, method minimum and
+`overLimit` — every class must reach 0.90, and one with no scored item is `not assessable` — and the
+mean latency against 350 ms. Then the replicates' disagreement and one overall state per bar: `met`
+needs every replicate met and two fresh loads of the decision model. A replicate whose model was
+already resident is not a load, and one whose load changed mid-run prints `not assessable`. Unless
+the chat arm (incumbent or reference), every replicate and the pack on disk share one content hash,
+every bar prints `not assessable (arms ran on different pack content: …)`: like an off-pin timeout,
+that is a property of stored records, so the report states it rather than refusing. The candidates
+line counts valid records only, and says how many invalid ones it left out. The generic tables below
+cover the chat arm alone. Exit codes are unchanged.
 
 **Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints
@@ -249,32 +249,32 @@ multi-turn one (only `tool-caller` today); then run `./run.sh validate --pack pa
 
 **A decision-point pack** is one whose `pack.json` has a `decisionPoint` key
 (`docs/plans/typed-decision-models.md` §3.5); no shipped pack has one, and a pack without it
-validates exactly as before. With it, `validate` (and so `run`) also requires: a `labels` block
-with `source: "llm-unreviewed"`, `inputs: "synthetic"` and a `labeler.model` that is not
-`decisionPoint.incumbent`; a role in the bar table, with `incumbent` stated (a model id on the
-guard's speed-up point, `null` on a new-ability one); a `stratum` on every item, `eval` or
-`side-check`, never defaulted; at least 200 `eval` items, each with `origin: "synthetic"`; and, on
-`guard-judge` only and there always, a `side-check` stratum (the human-curated items, exempt from
-`origin`). A deleted key is refused, never defaulted. On a pack scored by `classification` (the
-guard's), every `eval` item needs a bool `expected` and a `path` of `understanding` or `turns`,
-and every `side-check` item a `path` and a known `tier`, so a run never stops on a malformed item.
-A guard decision-point pack's `verdictMetrics` are exactly its four per-kind rates
+validates exactly as before. With it, `validate` (and so `run`) also requires: a `labels` block with
+`source: "llm-unreviewed"`, `inputs: "synthetic"`, and `labeler` and `generator` blocks each with a
+`provider` and a `model`, the labeler's not `decisionPoint.incumbent`; a role in the bar table, with
+`incumbent` stated (a model id on the guard's speed-up point, `null` on a new-ability one); a
+`stratum` on every item, `eval` or `side-check`, never defaulted; at least 200 `eval` items, each
+with `origin: "synthetic"` and a non-empty string `genRunId`; and, on `guard-judge` only and there
+always, a `side-check` stratum (the human-curated items, exempt from `origin` and `genRunId`). A
+deleted key is refused, never defaulted. On a pack scored by `classification` (the guard's), every
+`eval` item needs a bool `expected` and a `path` of `understanding` or `turns`, and every
+`side-check` item a `path` and a known `tier`, so a run never stops on a malformed item. A guard
+decision-point pack's `verdictMetrics` are exactly its four per-kind rates
 (`falseAdvanceRateByUnderstanding` … `falseSuspendRateByTurns`), each once, in any order. Each
 `eval` guard item scores its per-kind rate (from its label and `path`) plus the pooled
 `falseAdvanceRate`/`falseSuspendRate`, now exploratory; a `side-check` item scores only its
-exploratory `sideCheck*` metric. A guard hand-off reply is read the way falkor-chat reads its
-judge (`guards._coerce_verdict`): only a JSON `true` whose rationale does not contradict it (an
-un-negated "not enough", "still missing", …) advances, so `"decision": "true"` suspends. A pack
-without `decisionPoint` keeps its looser parse. A new-ability pack (`join-in-judge`,
-`message-type-classifier`) is scored by `agreement`, and a guard pack by `classification` — the
-role fixes the scorer (`decisions.SCORER_BY_ROLE`), so a pack declaring another is refused. Its
+exploratory `sideCheck*` metric. A guard hand-off reply is read the way falkor-chat reads its judge
+(`guards._coerce_verdict`): only a JSON `true` whose rationale does not contradict it (an un-negated
+"not enough", "still missing", …) advances, so `"decision": "true"` suspends. A pack without
+`decisionPoint` keeps its looser parse. A new-ability pack (`join-in-judge`,
+`message-type-classifier`) is scored by `agreement`, and a guard pack by `classification` — the role
+fixes the scorer (`decisions.SCORER_BY_ROLE`), so a pack declaring another is refused. Its
 `verdictMetrics` are the per-class agreement metrics (`agreeWhenYes`/`agreeWhenNo`, or
-`agree[<label>]` per label), every `eval` item's `expected` must lie in the answer space, and its hand-off prompt is
-`packs/<role>-synthetic/prompts/<point>-handoff.md` (the guard's,
+`agree[<label>]` per label), every `eval` item's `expected` must lie in the answer space, and its
+hand-off prompt is `packs/<role>-synthetic/prompts/<point>-handoff.md` (the guard's,
 `packs/guard-judge-synthetic/prompts/judge.md`, is a byte-copy of `guard-judge-understanding`'s
-judge prompt). Golden vectors in
-`tests/fixtures/decision-contract/` pin this parse and the judge prompt render, and falkor-chat's
-own suite checks its functions against byte-copies of them.
+judge prompt). Golden vectors in `tests/fixtures/decision-contract/` pin this parse and the judge
+prompt render, and falkor-chat's own suite checks its functions against byte-copies of them.
 
 **Importing a decision point's data and candidates** (`scripts/import_decision_pack.py`, one-way,
 human-invoked, never reached from a run; `docs/plans/typed-decision-models.md` §3.4):

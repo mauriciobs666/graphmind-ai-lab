@@ -241,10 +241,10 @@ _FAIL_CLOSED = {"join-in-judge": False, "message-type-classifier": None}
 
 
 def _new_ability_item(row: dict[str, Any], role: str) -> dict[str, Any]:
-    """A guard fixture row as a `role` item: same id, stratum and origin; the role's input fields;
-    the gold label in the role's answer space."""
+    """A guard fixture row as a `role` item: same id, stratum, origin and (on an `eval` item)
+    `genRunId`; the role's input fields; the gold label in the role's answer space."""
     n = row["itemId"]
-    item = {key: row[key] for key in ("itemId", "stratum", "origin")}
+    item = {key: row[key] for key in ("itemId", "stratum", "origin", "genRunId") if key in row}
     if role == "join-in-judge":
         item.update(
             agentName="Pastel",

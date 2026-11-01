@@ -27,12 +27,14 @@ _REAL_GUARD_PACK = _SHIPPED_PACKS / "guard-judge-understanding"
 
 
 def _eval_item(n: int, *, expected: bool = False, path: str = "understanding") -> dict[str, Any]:
-    """One synthetic `eval` item, its own condition so no input hash repeats."""
+    """One synthetic `eval` item, its own condition so no input hash repeats, from one of four
+    generation runs (plan4 §3.9)."""
     return {
         "itemId": f"ev-{n:03d}",
         "path": path,
         "stratum": "eval",
         "origin": "synthetic",
+        "genRunId": f"gen-run-{n % 4}",
         "condition": f"generated condition {n}",
         "understanding": {"request": f"request {n}"} if path == "understanding" else {},
         "turns": [] if path == "understanding" else [{"displayName": "A", "text": f"turn {n}"}],
@@ -446,6 +448,8 @@ def _del(*path: str) -> Callable[[dict[str, Any]], None]:
         (("labels", "source"), "labels.source"),
         (("labels", "labeler"), "labels.labeler.model"),
         (("labels", "labeler", "model"), "labels.labeler.model"),
+        (("labels", "generator"), "labels.generator.model"),
+        (("labels", "generator", "model"), "labels.generator.model"),
         (("labels", "inputs"), "labels.inputs"),
         (("decisionPoint", "incumbent"), "decisionPoint.incumbent is absent"),
         (("scorer",), "scorer is None"),
@@ -1076,3 +1080,143 @@ def test_a_decision_point_pack_declaring_another_roles_scorer_is_refused(tmp_pat
     problems = validate_pack(pack)
     problem = _only([p for p in problems if "SCORER_BY_ROLE" in p], f"scorer is {scorer!r}")
     assert repr(decisions.SCORER_BY_ROLE[role]) in problem and repr(role) in problem
+
+
+# ==================================================================================================
+# 11. Pack provenance: every eval item's `genRunId`, the generator's model, and what the report
+#     reads of both (plan4 §3.9; §5's U3e.1 row)
+# ==================================================================================================
+
+
+@pytest.mark.parametrize("value", [None, "", 7, ["gen-run-0"]])
+def test_an_eval_item_without_a_non_empty_string_gen_run_id_is_refused(tmp_path, value):
+    def edit(rows):
+        rows[3]["genRunId"] = value
+
+    problem = _only(validate_pack(_contract_pack(tmp_path, rows_edit=edit)), "genRunId")
+    assert "1 'eval' item(s)" in problem and "'ev-003'" in problem and "plan4 §3.9" in problem
+
+
+def test_deleting_an_eval_items_gen_run_id_still_refuses(tmp_path):
+    def edit(rows):
+        del rows[0]["genRunId"]
+
+    problem = _only(validate_pack(_contract_pack(tmp_path, rows_edit=edit)), "genRunId")
+    assert "'ev-000'" in problem
+
+
+def test_a_side_check_item_is_exempt_from_the_gen_run_id_refusal_by_stratum(tmp_path):
+    """The human-curated side check was never generated: none of its 85 items carries one."""
+    pack = _contract_pack(tmp_path)
+    side_checks = [r for r in pack.iter_items() if r["stratum"] == "side-check"]
+    assert len(side_checks) == 85 and not any("genRunId" in r for r in side_checks)
+    assert validate_pack(pack) == []
+
+
+@pytest.mark.parametrize("model", [None, "", 7])
+def test_a_generator_model_that_is_not_a_non_empty_string_is_refused(tmp_path, model):
+    def edit(manifest):
+        manifest["labels"]["generator"]["model"] = model
+
+    problem = _only(validate_pack(_contract_pack(tmp_path, manifest_edit=edit)),
+                    "labels.generator.model")
+    assert repr(model) in problem
+
+
+def test_a_generator_block_that_is_not_an_object_is_refused(tmp_path):
+    def edit(manifest):
+        manifest["labels"]["generator"] = "anthropic/fixture-generator"
+
+    _only(validate_pack(_contract_pack(tmp_path, manifest_edit=edit)), "labels.generator.model")
+
+
+def test_a_pack_without_decision_point_needs_neither_gen_run_id_nor_a_generator():
+    """Keyed on `decisionPoint`'s presence: the legacy guard pack carries neither."""
+    pack = load_pack(_REAL_GUARD_PACK)
+    assert "decisionPoint" not in pack.manifest
+    assert not any("genRunId" in row for row in pack.iter_items())
+    assert validate_pack(pack) == []
+
+
+def test_gen_run_ids_maps_every_eval_item_and_no_side_check_item(tmp_path):
+    pack = _contract_pack(tmp_path)
+    dp = report.DecisionPointPack.from_pack(pack)
+    rows = list(pack.iter_items())
+    assert dp.gen_run_ids == {
+        r["itemId"]: r["genRunId"] for r in rows if r["stratum"] == "eval"
+    }
+    assert len(dp.gen_run_ids) == dp.eval_count == MIN_EVAL_ITEMS
+    assert set(dp.gen_run_ids.values()) == {f"gen-run-{n}" for n in range(4)}
+
+
+def test_the_decision_point_pack_names_both_models_for_the_caveat(tmp_path):
+    dp = report.DecisionPointPack.from_pack(_contract_pack(tmp_path))
+    assert dp.labeler == "anthropic/fixture-labeler"
+    assert dp.generator == "anthropic/fixture-generator"
+
+
+@pytest.mark.parametrize("deleted", [("labels", "generator"), ("labels", "generator", "model"),
+                                     ("labels", "generator", "provider")])
+def test_the_decision_point_pack_refuses_a_pack_without_its_generator(tmp_path, deleted):
+    pack = _contract_pack(tmp_path, manifest_edit=_del(*deleted))
+    with pytest.raises(packs.PackConfigError, match="labels.generator"):
+        report.DecisionPointPack.from_pack(pack)
+
+
+_DELETED = object()
+
+
+@pytest.mark.parametrize("value", [_DELETED, "", 7], ids=["deleted", "empty", "non-string"])
+def test_the_decision_point_pack_refuses_an_eval_item_without_gen_run_id(tmp_path, value):
+    """`compare` never validates first, so `from_pack`'s own guard is the check there (P25-n1)."""
+
+    def edit(rows):
+        if value is _DELETED:
+            del rows[5]["genRunId"]
+        else:
+            rows[5]["genRunId"] = value
+
+    pack = _contract_pack(tmp_path, rows_edit=edit)
+    with pytest.raises(packs.PackConfigError, match="'ev-005'.*genRunId"):
+        report.DecisionPointPack.from_pack(pack)
+
+
+def test_deleting_both_model_blocks_gives_two_problems(tmp_path):
+    """Each block is checked on its own: neither refusal hides the other (P25-n1)."""
+
+    def edit(manifest):
+        del manifest["labels"]["labeler"]
+        del manifest["labels"]["generator"]
+
+    problems = validate_pack(_contract_pack(tmp_path, manifest_edit=edit))
+    assert len(problems) == 2, problems
+    assert any("labels.labeler.model" in p for p in problems)
+    assert any("labels.generator.model" in p for p in problems)
+
+
+@pytest.mark.parametrize("corruption", ["deleted", "empty", "non-string"])
+@pytest.mark.parametrize("key", packs.MODEL_BLOCK_KEYS)
+@pytest.mark.parametrize("block", packs.LABELS_MODEL_BLOCKS)
+def test_validate_pack_refuses_exactly_the_model_blocks_from_pack_refuses(
+    tmp_path, block, key, corruption
+):
+    """P25-m1's coverage probe, block × key × corruption: a model block `from_pack` cannot name in
+    the caveat is one `validate_pack` refuses, naming that key — so a pack never validates and
+    runs, only to fail at `compare` (exit 4) with a repair that changes its content hash."""
+    assert packs.LABELS_MODEL_BLOCKS == ("labeler", "generator")
+    assert packs.MODEL_BLOCK_KEYS == ("provider", "model")
+
+    def edit(manifest):
+        entry = manifest["labels"][block]
+        if corruption == "deleted":
+            del entry[key]
+        else:
+            entry[key] = "" if corruption == "empty" else 7
+
+    pack = _contract_pack(tmp_path, manifest_edit=edit)
+    problem = _only(validate_pack(pack), f"labels.{block}.{key}")
+    with pytest.raises(packs.PackConfigError, match=f"labels\\.{block}\\.{key}"):
+        report.DecisionPointPack.from_pack(pack)
+    assert ("None" if corruption == "deleted" else repr("" if corruption == "empty" else 7)) in (
+        problem
+    )

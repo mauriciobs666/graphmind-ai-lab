@@ -34,6 +34,7 @@ from modelbench.decisions import (
     load_fit_manifest,
 )
 from modelbench.packs import load_pack, validate_pack
+from modelbench.report import DecisionPointPack
 from modelbench.scoring.agreement import per_class_agreement_metrics
 from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
 
@@ -511,6 +512,21 @@ def test_a_reimport_under_an_unchanged_pack_version_is_refused(tmp_path, root):
     with pytest.raises(imp.ImportRefused, match="unchanged"):
         _import(root, "join-in-judge", dataset, version="1.0.0")
     assert _snapshot(pack_dir) == before
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_an_imported_pack_gives_the_report_its_gen_run_ids_and_both_models(tmp_path, root, role):
+    """plan4 §3.9 (U3e.1): what the importer writes is what the report reads — every eval item's
+    `genRunId` by `itemId`, and the caveat's `provider/model` for the labeler and the generator."""
+    dataset = _dataset(tmp_path, role)
+    _import(root, role, dataset)
+    dp = DecisionPointPack.from_pack(load_pack(root / "packs" / f"{role}-synthetic"))
+    source = {json.loads(line)["itemId"]: json.loads(line)
+              for line in (dataset / "items.jsonl").read_text().splitlines()}
+    eval_ids = json.loads((dataset / "splits.json").read_text())["eval"]
+    assert dp.gen_run_ids == {i: source[i]["genRunId"] for i in eval_ids}
+    assert dp.labeler == f"anthropic/{LABELER['model']}"
+    assert dp.generator == f"anthropic/{GENERATOR['model']}"
 
 
 def test_the_version_gate_reads_provenance_too(tmp_path, root):

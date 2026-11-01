@@ -48,7 +48,10 @@ def _fast_bootstrap(monkeypatch):
 
 
 def _item(role: str, n: int, expected: Any) -> dict[str, Any]:
-    item: dict[str, Any] = {"itemId": f"it-{n:03d}", "stratum": "eval", "origin": "synthetic"}
+    item: dict[str, Any] = {
+        "itemId": f"it-{n:03d}", "stratum": "eval", "origin": "synthetic",
+        "genRunId": f"run-{n % 4}",
+    }
     if role == JOIN_IN:
         item.update(
             agentName="Pastel",

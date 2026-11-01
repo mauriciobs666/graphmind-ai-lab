@@ -1013,6 +1013,34 @@ SIDE_CHECK_ROLE = "guard-judge"
 _ITEM_IDS_SHOWN = 5
 
 
+def _non_empty_str(value: Any) -> bool:
+    return isinstance(value, str) and bool(value)
+
+
+#: The `labels` blocks a decision-point pack's report caveat names as `provider/model` (FR-5,
+#: plan4 §3.9), and the keys each must carry as a non-empty string.
+LABELS_MODEL_BLOCKS: tuple[str, ...] = ("labeler", "generator")
+MODEL_BLOCK_KEYS: tuple[str, ...] = ("provider", "model")
+
+
+def model_block_problem(labels: Any, block: str) -> str | None:
+    """The one predicate on a `labels.<block>` model block, shared by `validate_pack` and
+    `report.DecisionPointPack.from_pack` so the validator and the loader cannot drift (impl review
+    P25-m1): every `MODEL_BLOCK_KEYS` key a non-empty string. `None` when it holds, else one
+    message naming each offending key with its value (a deleted key reads `None`)."""
+    entry = labels.get(block) if isinstance(labels, Mapping) else None
+    values = {
+        key: entry.get(key) if isinstance(entry, Mapping) else None for key in MODEL_BLOCK_KEYS
+    }
+    bad = [f"labels.{block}.{key} = {v!r}" for key, v in values.items() if not _non_empty_str(v)]
+    if not bad:
+        return None
+    return (
+        f"{', '.join(bad)}: absent, empty or not a string; the report's caveat names the {block} "
+        "as provider/model (FR-5, plan4 §3.9)"
+    )
+
+
 def _item_ids(rows: list[Mapping[str, Any]]) -> str:
     ids = [repr(row.get("itemId", "<unknown>")) for row in rows[:_ITEM_IDS_SHOWN]]
     more = f", … ({len(rows)} in all)" if len(rows) > _ITEM_IDS_SHOWN else ""
@@ -1027,10 +1055,14 @@ def _decision_point_problems(pack: Pack) -> list[str]:
     deleted (v1.3 §5's U3b row) — nothing is defaulted:
 
     * `labels` absent or not an object, or `labels.source != "llm-unreviewed"` (FR-5);
-    * `labels.labeler.model` absent, or equal to `decisionPoint.incumbent` (FR-5, AC-4);
+    * `labels.labeler`'s or `labels.generator`'s `provider` or `model` absent, empty or not a
+      string (`model_block_problem`, the report's own check; FR-5, plan4 §3.9), or the labeler's
+      `model` equal to `decisionPoint.incumbent` (FR-5, AC-4);
     * `labels.inputs != "synthetic"`, or an `eval` item whose `origin != "synthetic"` — the
       `side-check` stratum is exempt by stratum (FR-8, AC-7);
     * an item with no `stratum`, or one outside `STRATA` (no default);
+    * an `eval` item without a non-empty string `genRunId`, the run `report.DecisionPointPack`'s
+      `gen_run_ids` groups by (plan4 §3.9); the `side-check` stratum is exempt by stratum;
     * fewer than `decisions.MIN_EVAL_ITEMS` items in stratum `eval` (FR-11, AC-13);
     * a role not in `decisions.BAR_KIND_BY_ROLE`, an absent `incumbent`, or one that disagrees
       with the role's bar kind: non-null on `speed-up`, null on `new-ability`;
@@ -1226,11 +1258,13 @@ def _labels_problems(pack: Pack, decision_point: Mapping[str, Any]) -> list[str]
         problems.append(
             f"{pid}: labels.source is {labels.get('source')!r}, not 'llm-unreviewed' (FR-5)"
         )
+    for block in LABELS_MODEL_BLOCKS:
+        problem = model_block_problem(labels, block)
+        if problem is not None:
+            problems.append(f"{pid}: {problem}")
     labeler = labels.get("labeler")
     model = labeler.get("model") if isinstance(labeler, Mapping) else None
-    if not (isinstance(model, str) and model):
-        problems.append(f"{pid}: labels.labeler.model is absent or empty, got {model!r} (FR-5)")
-    elif model == decision_point.get("incumbent"):
+    if _non_empty_str(model) and model == decision_point.get("incumbent"):
         problems.append(
             f"{pid}: the labeler {model!r} is the incumbent judge; the incumbent is never graded "
             "against itself (FR-5, AC-4)"
@@ -1253,6 +1287,7 @@ def _strata_problems(pack: Pack) -> list[str]:
     evals = [row for row in rows if row.get("stratum") == "eval"]
     side_checks = [row for row in rows if row.get("stratum") == "side-check"]
     not_synthetic = [row for row in evals if row.get("origin") != "synthetic"]
+    no_gen_run = [row for row in evals if not _non_empty_str(row.get("genRunId"))]
 
     problems: list[str] = []
     if no_stratum:
@@ -1274,6 +1309,11 @@ def _strata_problems(pack: Pack) -> list[str]:
         problems.append(
             f"{pid}: {len(not_synthetic)} 'eval' item(s) have an origin other than 'synthetic': "
             f"{_item_ids(not_synthetic)} (FR-8, AC-7)"
+        )
+    if no_gen_run:
+        problems.append(
+            f"{pid}: {len(no_gen_run)} 'eval' item(s) have no non-empty string genRunId, the "
+            f"generation run the design effect groups by: {_item_ids(no_gen_run)} (plan4 §3.9)"
         )
     if pack.role == SIDE_CHECK_ROLE and not side_checks:
         problems.append(
