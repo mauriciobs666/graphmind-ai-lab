@@ -1075,3 +1075,75 @@ These ran in the private copy with the full suite. Baseline: 476 passed, 4 xfail
 | N8 | `offset < 1` check removed | **476 passed** (P6-F3) |
 | N9 | line-1 repeated name read as missing | 1 failed |
 | N10 | request-side `RecursionError` catch disabled | **476 passed** (P6-F3) |
+
+## Pass 7 — U5.2b-hash (2026-11-01)
+
+**Verdict: approve with suggestions.** There is no blocker or major. I re-ran the suite without
+deselection: 487 passed, 2 xfailed. `ruff` is clean, and `tests/test_fr8_isolation.py` gives 24
+passed. The vector is `cmp`-equal to model-bench's. Model-bench's `decisions.py` is unmodified
+against HEAD, and its row equals the one at `1554d560`.
+
+Mutants ran in a private copy (`scratchpad/p7u52bh/repo/`), with model-bench symlinked in and,
+where marked, removed. The copy matches the live tree (`diff -rq`), the live sha256 is unchanged,
+and model-bench was only read. CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff (one table, two tests) was read in full.
+
+**The AST reader (question 1) fails loudly in every case but one.** I ran it against planted
+`decisions.py` variants:
+- A renamed symbol, a plain `=` assignment, or a re-export from another module raises
+  `AssertionError` ("defines no … literal").
+- A value bound through a name raises `ValueError`.
+- A file that is mid-edit and does not parse raises `SyntaxError`.
+- A missing `decisions.py` raises `FileNotFoundError`.
+- Only an absent `model-bench/` skips. Under `-rs` that skip is listed beside the 3 existing guarded
+  skips: 483 passed, 4 skipped.
+- **The silent case is P7-F2.**
+
+**P7-F1 — minor — the exact-order comparison is a false-red coupling.** *Owner: `coder`. Verified
+by running it.*
+- `canonical_input_json` builds a dict and dumps it with `sort_keys=True`. Tuple order changes no
+  hash, and nothing in decision-models reads the order.
+- Mutant H2 reorders join-in's fields, which is hash-neutral. Under
+  `test_input_fields_by_role_equals_model_benchs` it gives 1 failed.
+- A pure reorder refactor in model-bench (U4.2 is editing it now) would therefore redden
+  decision-models' suite. Plan5 §3.4 puts that suite in every U4.x gate, so the cost would be a
+  pointless re-copy.
+- This repeats the coupling `HISTORY.md` itself calls "a hash-neutral reorder falsely red" for the
+  points test, and the point test was fixed accordingly.
+
+**Fix:** compare `{role: sorted(fields)}` on both sides. Sorted lists, not sets, still catch a
+duplicated field. I ran this:
+- H2 (reorder) becomes green: 487 passed.
+- H1 (drop `priorTurn`) gives 5 failed.
+- H3 (an extra field) gives 2 failed.
+- H4 (a duplicated field) gives 1 failed.
+
+**P7-F2 — nit — the reader takes the first top-level binding.** *Owner: `coder`. Verified by
+running it.* If `decisions.py` gains a later `INPUT_FIELDS_BY_ROLE = …` override, the test passes
+against the stale first literal.
+
+**Fix:** collect every top-level `Assign`, `AnnAssign` or import that binds the name, and require
+exactly one.
+
+**P7-F3 — nit — `README.md:44` is 167 characters.** *Owner: `coder`.* The edit joined two lines
+without reflowing them.
+
+**Obligations (question 3): nothing is dropped.** Plan5 §3.4's U5.2b-hash list is complete:
+- both rows are present;
+- `input-hash.jsonl` is re-copied with 10 rows (4 guard, 3 join-in, 3 message type);
+- `inputFields` equals the rows as sets for every role;
+- the xfails, `PLANNED_INPUT_FIELDS` and the `.get` fallback are gone. A sweep finds them only in
+  `HISTORY.md`.
+
+The deleted tuple test was P3-F6's order-sensitive test, which plan5 slated for deletion.
+
+The new checks can fail without model-bench:
+- H1 gives 4 failed with `model-bench/` absent, through the copied vectors and the points test.
+- H3 gives 1 failed, through the points test.
+- Only the hash-neutral H2 goes green without model-bench, which is correct.
+
+**Docs (question 4): the figures reproduce.** They are 487 passed / 2 xfailed, FR-8 24, 6 new
+vector rows and the `1554d560` row. `AGENTS.md` shrinks from 581 to 574 words, rewritten in place:
+the U5.2b bullet is narrowed to the renderers. I did not re-run all of the delegate's ten mutants.
+My H1 matches its "field dropped" class (5 failed).
+
+**Growth-stops check:** Pass 7 is new findings only. Passes 1–6 are byte-identical (`cmp`).

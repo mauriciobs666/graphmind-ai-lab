@@ -40,11 +40,6 @@ ANSWERS = {
         ("order", "question", "complaint", "escalation", "other"),
     ),
 }
-PLANNED_INPUT_FIELDS = {
-    "guard-judge": ("condition", "understanding", "turns", "path"),
-    "join-in-judge": ("agentName", "priorTurns", "newMessage"),
-    "message-type-classifier": ("text", "priorTurn"),
-}
 CELLS = {  # (cell count, eval per cell, eval floor per cell)
     "guard-judge": (4, 100, 50),
     "join-in-judge": (2, 100, 100),
@@ -83,28 +78,9 @@ def test_the_answer_space_matches_the_contract(role: str) -> None:
 
 
 @pytest.mark.parametrize("role", ROLES)
-def test_the_input_fields_match_the_leakage_key(role: str) -> None:
-    wanted = hashing.INPUT_FIELDS_BY_ROLE.get(role, PLANNED_INPUT_FIELDS[role])
-    assert load_point(role).input_fields == wanted == PLANNED_INPUT_FIELDS[role]
-
-
-def test_guard_inputs_equal_hashings_row_as_a_set() -> None:
-    assert set(hashing.INPUT_FIELDS_BY_ROLE["guard-judge"]) == set(
-        load_point("guard-judge").input_fields
-    )
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=KeyError,
-    reason="hashing.py has no row for this role until U5.2b copies U4's (plan5 §3.4, P3-F6); "
-    "the XPASS then forces this xfail and PLANNED_INPUT_FIELDS' fallback to be deleted",
-)
-@pytest.mark.parametrize("role", ("join-in-judge", "message-type-classifier"))
-def test_hashing_defines_the_new_roles_with_the_points_fields(role: str) -> None:
-    """Set comparison, so tuple order between `point.json` and model-bench's row is not churn. A
-    row whose fields differ is an AssertionError, which this xfail does not absorb: red."""
-    assert set(hashing.INPUT_FIELDS_BY_ROLE[role]) == set(load_point(role).input_fields)
+def test_the_input_fields_equal_hashings_row_as_a_set(role: str) -> None:
+    """Set comparison, so tuple order between `point.json` and the leakage key is not churn."""
+    assert set(load_point(role).input_fields) == set(hashing.INPUT_FIELDS_BY_ROLE[role])
 
 
 @pytest.mark.parametrize("role", ROLES)

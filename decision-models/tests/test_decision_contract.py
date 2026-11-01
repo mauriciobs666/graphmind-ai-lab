@@ -1,5 +1,6 @@
-"""The guard decision point's contract copies (typed-decision-models U5.2; plan
-`docs/plans/typed-decision-models4.md` §4.1 over v1.3 §3.2, §3.2.2, §3.5).
+"""The decision contract copies (typed-decision-models U5.2, U5.2b-hash; plans
+`docs/plans/typed-decision-models4.md` §4.1 and `docs/plans/typed-decision-models5.md` §3.4 over
+v1.3 §3.2, §3.2.2, §3.5).
 
 model-bench owns the canonical golden vectors (`model-bench/tests/fixtures/decision-contract/`).
 This suite asserts `decisionmodels.render` and `decisionmodels.hashing` against **byte-copies** of
@@ -7,7 +8,8 @@ two of them under `tests/fixtures/decision-contract/`:
 
 * `render-guard.jsonl` — `render_guard_input(condition, understanding, recentTurns)`; expected
   strings produced by falkor-chat's real `_render_judge_user`;
-* `input-hash.jsonl` — `input_hash(item, role)`; digests computed by hand from v1.3 §3.5.
+* `input-hash.jsonl` — `input_hash(item, role)` for all three roles; digests computed by hand
+  from v1.3 §3.5.
 
 The guarded equality test asserts each copy byte-identical to model-bench's and skips only when
 `model-bench/` is absent from the checkout (v1.3 §3.2.2's skip rule). Reading model-bench's files
@@ -18,7 +20,9 @@ regenerating it.
 
 from __future__ import annotations
 
+import ast
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +75,68 @@ def test_input_hash_matches_input_hash_jsonl(row: dict[str, Any]) -> None:
 
 def test_input_hash_refuses_a_role_with_no_input_fields() -> None:
     with pytest.raises(ValueError, match="no input fields"):
-        hashing.input_hash({"text": "hi"}, "message-type-classifier")
+        hashing.input_hash({"text": "hi"}, "no-such-role")
+
+
+def _binds(node: ast.stmt, name: str) -> bool:
+    """Whether a top-level statement binds `name`: an assignment target or an import alias."""
+    if isinstance(node, ast.AnnAssign):
+        return isinstance(node.target, ast.Name) and node.target.id == name
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(n, ast.Name) and n.id == name
+            for target in node.targets
+            for n in ast.walk(target)
+        )
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return any((alias.asname or alias.name.split(".")[0]) == name for alias in node.names)
+    return False
+
+
+def _input_fields_literal(source: str) -> dict[str, tuple[str, ...]]:
+    """`INPUT_FIELDS_BY_ROLE`'s literal in a `decisions.py` source, which must bind the name
+    exactly once at top level, as `INPUT_FIELDS_BY_ROLE: … = MappingProxyType({…})`: a second
+    binding would leave the literal stale (Pass 7 P7-F2)."""
+    bindings = [n for n in ast.parse(source).body if _binds(n, "INPUT_FIELDS_BY_ROLE")]
+    if len(bindings) != 1:
+        raise AssertionError(f"INPUT_FIELDS_BY_ROLE is bound {len(bindings)} times, not once")
+    node = bindings[0]
+    if not (isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Call)):
+        raise AssertionError("model-bench's decisions.py defines no INPUT_FIELDS_BY_ROLE literal")
+    return ast.literal_eval(node.value.args[0])
+
+
+def _sorted_rows(rows: Mapping[str, tuple[str, ...]]) -> dict[str, list[str]]:
+    """Order-free but duplicate-sensitive: `canonical_input_json` sorts keys, so tuple order
+    changes no hash (Pass 7 P7-F1)."""
+    return {role: sorted(fields) for role, fields in rows.items()}
+
+
+def test_input_fields_by_role_equals_model_benchs() -> None:
+    """Read from model-bench's source, never imported (FR-8)."""
+    if not _MODEL_BENCH.is_dir():
+        pytest.skip("model-bench/ is absent from this checkout (v1.3 §3.2.2 skip rule)")
+    source = (_MODEL_BENCH / "modelbench" / "decisions.py").read_text(encoding="utf-8")
+    assert _sorted_rows(hashing.INPUT_FIELDS_BY_ROLE) == _sorted_rows(_input_fields_literal(source))
+
+
+_ONE_BINDING = 'INPUT_FIELDS_BY_ROLE: Mapping = MappingProxyType({"r": ("a", "b")})\n'
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        'INPUT_FIELDS_BY_ROLE = MappingProxyType({"r": ("a",)})\n',
+        'INPUT_FIELDS_BY_ROLE: Mapping = MappingProxyType({"r": ("a",)})\n',
+        "X, INPUT_FIELDS_BY_ROLE = 1, {}\n",
+        "from elsewhere import INPUT_FIELDS_BY_ROLE\n",
+        "from elsewhere import ROWS as INPUT_FIELDS_BY_ROLE\n",
+    ],
+)
+def test_the_reader_refuses_a_second_binding(second: str) -> None:
+    assert _input_fields_literal(_ONE_BINDING) == {"r": ("a", "b")}
+    with pytest.raises(AssertionError, match="bound 2 times"):
+        _input_fields_literal(_ONE_BINDING + second)
 
 
 # --- turn normalization (hand-derived from the rule; no cross-component vector covers it) -------

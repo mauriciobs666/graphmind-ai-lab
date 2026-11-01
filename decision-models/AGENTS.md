@@ -9,7 +9,7 @@ the design.
 
 ## Current state
 
-`decisionmodels/` holds `render.py` and `hashing.py` (guard only), `points.py` (loads
+`decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas) and
 `ingest.py` (answer checks, idempotence). Later plan4 §4.1 units are unbuilt (`docs/HISTORY.md`).
 
@@ -52,10 +52,8 @@ the design.
   reaches a generation request, whatever `points/` declares.
 - **Ingest never records** (`ingest.py` docstring): the ledger (U5.6) and transcript audit (U5.5)
   are the caller's. A second, different answer raises `AnswerRefused`.
-- **Guard-only until U5.2b.** `hashing.py` lacks the join-in and message-type rows
-  (U5.2b-hash) and `exchange.RENDERERS` their renderers (U5.2b-render); strict xfails in
-  `tests/test_points.py` and `tests/test_exchange.py` then XPASS: delete them (and
-  `PLANNED_INPUT_FIELDS`).
+- **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
+  message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

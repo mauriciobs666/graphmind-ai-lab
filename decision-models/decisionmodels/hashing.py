@@ -22,11 +22,16 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
-#: v1.3 §3.5: the item fields `input_hash` covers, keyed by model-bench role. `guard-judge` only:
-#: the join-in and message-type rows (plan2 §3.1 for the latter) arrive with their vectors in
-#: U5.2b, after model-bench's U4 lands them.
+#: v1.3 §3.5: the item fields `input_hash` covers, keyed by model-bench role; equal to
+#: model-bench's `decisions.INPUT_FIELDS_BY_ROLE` (plan2 §3.1 for message type). Every
+#: new-ability item carries every field: an opening join-in has `priorTurns: []`, and a message
+#: with no prior turn has `priorTurn: null`, so both hash as present.
 INPUT_FIELDS_BY_ROLE: Mapping[str, tuple[str, ...]] = MappingProxyType(
-    {"guard-judge": ("condition", "understanding", "turns", "path")}
+    {
+        "guard-judge": ("condition", "understanding", "turns", "path"),
+        "join-in-judge": ("agentName", "priorTurns", "newMessage"),
+        "message-type-classifier": ("text", "priorTurn"),
+    }
 )
 
 

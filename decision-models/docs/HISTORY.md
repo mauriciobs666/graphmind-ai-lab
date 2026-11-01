@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.2b-hash — leakage key for join-in and message type
+
+**What:** `docs/plans/typed-decision-models5.md` §3.4's U5.2b-hash (the hashing half of
+`docs/plans/typed-decision-models4.md` §4.1's U5.2b; formula v1.3 §3.5).
+
+- `decisionmodels/hashing.py`: `INPUT_FIELDS_BY_ROLE` gains `join-in-judge` (`agentName`,
+  `priorTurns`, `newMessage`) and `message-type-classifier` (`text`, `priorTurn`), equal to
+  model-bench's `decisions.INPUT_FIELDS_BY_ROLE` at `1554d560`. An opening join-in's
+  `priorTurns: []` and a `priorTurn: null` hash as present fields.
+- `tests/fixtures/decision-contract/input-hash.jsonl`: re-copied from model-bench (6 new join-in
+  and message-type rows), `cmp`-equal; every row recomputes through `input_hash`.
+- `tests/test_decision_contract.py`: `test_input_fields_by_role_equals_model_benchs` reads
+  model-bench's row literal by AST (never imported; skipped when `model-bench/` is absent) and
+  compares `{role: sorted(fields)}`: order-free, since `canonical_input_json` sorts keys, but
+  duplicate-sensitive. The reader requires exactly one top-level binding of the name (assignment
+  or import), pinned by five planted second bindings. The unknown-role refusal now uses a role no
+  table defines.
+- `tests/test_points.py`: every point's `inputFields` equals `hashing`'s row as a set. P3-F6's
+  two strict xfails (which XPASSed once the rows landed), `PLANNED_INPUT_FIELDS` and its `.get`
+  fallback are deleted. `AGENTS.md`, `README.md`.
+
+**Verified:** `pytest -q` from `decision-models/`, no deselection: 492 passed, 2 xfailed (the
+U5.2b-render renderer xfails); `ruff check .` clean; `tests/test_fr8_isolation.py` 24 passed.
+Mutants ran in a private dir, each file restored `cmp`-equal and sha256-checked afterwards. A
+join-in field dropped reddened 5; `priorTurn` moved to join-in 6; an extra join-in field 2; a
+duplicated join-in field 1; one copied digest edited 2; a null `priorTurn` omitted like an absent
+field 1; the reader taking the first binding 5, ignoring import bindings 2. A hash-neutral
+reorder of the join-in row stays green (red, 1, if the model-bench comparison reverts to exact
+order). Comparing as sets misses the duplicate (0), as does the point conformance test, which is
+set-based by plan5 §3.4; as lists, the point test falsely reddens on a reorder. Review:
+`docs/reviews/typed-decision-models4-impl.md` Pass 7 (P7-F1–F3 applied).
+
 ## 2026-11-01 — typed-decision-models U5.4 — exchange and ingester
 
 **What:** `docs/plans/typed-decision-models4.md` §4.1's U5.4 — §3.2 in full, §3.3's answer rows,
