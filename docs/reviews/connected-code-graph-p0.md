@@ -1128,3 +1128,34 @@ M2: close S17 with the ceiling carried to S23, or hold that clause?
 **Interaction check (same-revision fixes against each other):** M1's `repoId` scoping and §1.6's `(path, repoId)` index agree; `File` carries `repoId` (spec3 §9.1). D6 (per `VIA`) and §5's two-key test agree. The `possible` labelling (§3.3) and §5 (a)-(c) agree. The 10 constraints in D10 equal the table's `UNIQUE` column. §1.4 (unscoped) is the one place the M1 fix is not carried through (N1); §1.5's G-1 rewrite is where the revision itself broke (N2, N3). No contradiction between M2's provisional batch and the zero-retry/timeout text.
 
 **May the note be accepted?** Not as it stands. Accept once N2 and N3 are edited (one sentence and one deletion or one closed list), and N1 is scoped; N4 may ride along. Those edits are mechanical to verify (`grep -n "args\[0\]\|launchPairs" docs/plans/connected-code-graph-p0-graph.md`, and the §1.4 query), so a grep check by `teco` suffices; no third full pass needed. The DDL/loader dispatch can start from §1.6 and §1.3 now.
+
+## Pass 10 — S17 DDL unit (2026-11-01, commit `d0f19026`)
+
+**Scope:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/ccg/store/__init__.py` (`parse_ddl`), `cpg/tests/test_ddl_live.py` against `docs/plans/connected-code-graph-p0-graph.md` §1.6, §1.3, D10, §4 (D16). Not reviewed: `spikes/vertical-slice/load.py`, `assemble.py`. **Verdict: approve with suggestions.** No blocker. CPG: considered, not relevant — a DDL file and a live test, not indexed by any loaded `cpg_*` graph.
+
+**Executed.** `cd cpg && .venv/bin/python -m pytest tests -q`: 1383 passed, **5 deselected** (the `live` marker is off by default); `-m "live or not live" tests/test_ddl_live.py`: 9 passed against `ccg-falkordb:6390`. All my live writes went to fresh `ccg_p0slice__build_ddl9<N>` keys, deleted afterwards (`TIMEOUT_MAX` read only; no config set; `falkordb-dev` untouched).
+
+**Set equality, both directions (read and executed).** Transcribing §1.6 myself: 17 indexes (Repo 1, Unit 1, File 2, SkippedFile 2, Symbol 3, CallSite 1, Param/Ret/Cond 3, Name 1, ContractPoint 2, Link 1) and 10 `UNIQUE` (Unit, File, Symbol, CallSite, Param, Ret, Cond, Name, ContractPoint, Link) equal the DDL file and the test's `EXPECTED_*`. Live: `db.indexes()` is compared as a set against the table with a duplicate check, type `RANGE`, status `OPERATIONAL`; constraints compared as a set and single-property. Apply protocol correct: indexes on an empty key (`assert not exists(key)`), nodes, then raw `GRAPH.CONSTRAINT CREATE`, bounded 60 s poll; a duplicate `Link` id is refused after. Using the raw command rather than the falkordb-py helper is right (the helper creates a missing index; the new quirks entry is accurate, and my drop-index mutant confirms the engine rejects the raw form).
+
+**My mutants (`.../scratchpad/p10.py`, `p10b.py`), live:**
+| Mutant | Result |
+|---|---|
+| original | passes |
+| drop `SkippedFile.repoId` index (unconstrained) | killed by the live set compare |
+| drop `Param.pointId` index | killed, but by the engine ("missing supporting exact-match index"), not by the compare |
+| `qname` -> `qnam` | killed (missing + extra named) |
+| extra `Link.status` index | killed |
+| drop `Name` constraint / extra `Repo` constraint | both killed |
+| duplicate ids loaded before the constraints | `apply_ddl` raises with `[('Link', ['linkId'], 'FAILED') ...]`: FAILED handling works (engine does create the constraint as `FAILED`) |
+| `TIMEOUT_MAX` nonzero, recording stub for `g.query` | all 17 index statements carry `timeout=5000` |
+
+**Findings**
+- **m1 (minor). The live mutant test is weaker than it looks.** `pytest.raises(Exception)` passes on any error, including a dropped connection or a `KeyError`; and the `drop_index` mutant picks `Param.pointId`, which the engine itself refuses, so it never reaches the set comparison. The compare is what protects the 7 unconstrained indexes (my `SkippedFile.repoId` case). *Fix:* add an unconstrained-index mutant and match the exception (`AssertionError` with "missing"/"extra", or `ResponseError` with "missing supporting"). The `constraint_first` case only tests the engine, not the file: harmless, but it should say so.
+- **m2 (minor). FAILED is untested in the committed suite.** The handling exists and works (my run), but no test loads duplicates before the constraints; a mutant that treats `FAILED` as pending would only time out after 60 s, or not be noticed. Add `apply_ddl(..., between=<two Links with one linkId>)` expecting the `FAILED` assertion (my `p10b.py` is the shape).
+- **m3 (minor). The nonzero `TIMEOUT_MAX` branch has no test of its own.** The instance has 0, so `timeout_max = 0` takes the other lambda every run. The stub above shows the branch is right for index statements and `between` queries; commit a pure stub test (a recording `select_graph`) asserting a timeout on every write and none required on the poll read. The live check stays S22/S23's, as §4 says.
+- **m4 (minor). `EXPECTED_*` is a hand transcription of §1.6, not read from it.** A change to the note's table that the DDL follows, or the reverse, is invisible. Parse the §1.6 table from the plan as S10 parses spec tables, so drift between plan and DDL is a red test.
+- **m5 (minor). `parse_ddl` strictness is thinly tested.** One negative case (a two-property index). `fullmatch` is strict in practice, but pin: trailing inline `//` on a statement line, `PROPERTIES 2`, lower-case keyword, a statement after a stray token, and a final statement without `;` (currently accepted silently).
+- **n1 (nit).** `_connect` passes `retry=None`; D16 wants an explicit zero-retry object, never the client default. Test-only here, but copy the right form into the loader's connection.
+- **n2 (nit).** The default suite deselects the live tests, so a gate record should say which command ran.
+
+**Sufficiency:** the DDL file satisfies the done-condition clause "applies to an empty key, `db.indexes()` matches it, post-load constraints reach `OPERATIONAL`" (executed). The untested edges are m2/m3.
