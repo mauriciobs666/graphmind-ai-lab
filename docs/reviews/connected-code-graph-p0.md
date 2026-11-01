@@ -1012,3 +1012,43 @@ Cited sections exist and do not contradict unchanged text: §4.1 rule 4 (1189), 
 ### What's solid
 
 All seven deltas faithful with real section citations; `-spec3` retained intact for S10's parsing; the slice measurements quoted (33/74, 14 synthesized, 1 `use==def`, empty-file fallback) check against the stored artifacts and report; the doc-only list is accurate bar one file; the document is delta-only.
+
+## Pass 6 — `-spec4` rewrite and `skippedFiles` code (2026-11-01)
+
+**Scope:** `docs/plans/connected-code-graph-bundle-spec4.md` (rewritten) against Pass 5; uncommitted `cpg/ccg/schemas/bundle-v1.schema.json`, `cpg/ccg/bundle.py` (`_skipped_files`, called from `_header`), `cpg/tests/test_bundle.py` (new tests ~2370-2560). **Verdict: approve with suggestions.** No blocker.
+
+CPG: considered, not relevant — spec text and a small validator edit in `cpg/`, which no loaded `cpg_*` graph indexes; read and executed.
+
+**Dispositions (Pass 5)**
+- M1 (premise): closed. Header, §0, §1 and §4 now say "exactly one schema change, `"1.0"`, field part of `"1.0"` from its first frozen byte"; I found no leftover "no schema change" or "1.1" sentence (read whole document). The schema, `bundle.py` and test edits match §1/§4 (diff read).
+- M2 (reproducibility): closed in the spec. Source-file definition, closed `test` pattern, precedence, writer-applies-regardless-of-override and the coverage probe are all present. See m1 for what the validator does not enforce.
+- m1 (ret): closed, spec now follows the code (`lambda` kind, block-bodied included). m2 (ownedRegions): closed (frozen-untested list, §2 note). m3: closed (`normalize.py:5` listed). n1: closed.
+
+**Architect's three calls**
+- `__tests__` added: accept. It is the Jest convention, the list is closed and the stakeholder said "TS tests"; only `e2e` was evidenced by the slice. Note `e2e` matches at any depth, wider than `tests/e2e/**` in the decision; harmless, but the probe should include both segment names.
+- `.d.ts`/`.pyi` outside "source files": accept. Consequence to state in S17: such a file that was not parsed is answered "not found", not "not mapped".
+- S17 path lookup: accept.
+
+**Code, executed.** `cd cpg && .venv/bin/python -m pytest tests -q`: 1357 passed (46.8 s). The `s14a` positive control ran, not skipped (42 passed with `-k skip -rs`). Mutants on a scratchpad copy (`.../scratchpad/p6/mut.py`; the copy needs `docs/plans` beside `cpg/`), `-k skip`:
+- Killed: sortedness off; uniqueness off; under-rootPath off; prefix without `/`; vendored off; has-`file`-record off; `mapped = set()` (so `by_type["file"]` is populated by the time `_header` runs); `h.get(...)` -> `[]`.
+- Schema mutants, all killed: `minItems` removed, extra enum value, entry `additionalProperties` true, `reason` not required, `path` `$ref` -> plain string.
+- Survivors: `path.encode("utf-8") < previous` -> `path < previous`: **equivalent, confirmed.** UTF-8 preserves code-point order, and Python compares `str` by code point; 200,000 random pairs over BMP, astral, 2-, 3-byte and `/` characters disagreed 0 times. `< previous` -> `<= previous`: equivalent, equality is rejected by the uniqueness branch first.
+
+**Findings**
+- **m1 (minor, decide before the freeze). The `test` pattern, the precedence and the source-extension rule are writer-only; the validator accepts a `test` entry that does not match the pattern, a `frontend-ignore` entry that does, and a `.d.ts` entry.** That agrees with spec4's own validator list and with `-spec3` §1.10 (a writer rule). But §1.10 makes adding a validator check after the freeze a **major** change, so "writer-only" must be a decision taken now: either add the three mechanical checks (all decidable from the path and `unit.lang`) before acceptance, or leave them writer-only and rely on the P1 probe. I lean to adding the two reason/pattern checks, since they are exactly what the precedence rule promises.
+- **m2 (minor). "Byte-exact schema" vs the doc-only fix.** §0 says the freeze record cites a commit naming a byte-exact schema; §4 then edits the schema's top-level `description` after acceptance. Either land that description edit in the same commit as the field, or say the freeze covers the schema excluding `description`.
+- **n1 (nit).** Line 7 still says the document "states only the seven deltas"; it now states eight changes (`skippedFiles` plus its registry codes). The code is uncommitted: the "failing tests first" ordering in §4 is a process claim I cannot check from the tree.
+
+Growth-stops: the rewrite replaced the OPEN block and the Q-A text in place; no finding table or history in the document. Pass 5's request to keep it delta-only holds.
+
+**Freeze statement.** Yes: the freeze may be recorded effective on acceptance of `-spec4`, **provided** (1) the schema, `bundle.py` and test edits are committed first or with it and the record cites that commit (they are uncommitted now), and (2) m2 is settled. m1 should be decided before the same acceptance; it is not a reason to withhold it.
+
+## Pass 7 — `_is_test_path` and the citation edits (2026-11-01)
+
+**Scope:** uncommitted `git diff -- cpg` (7 files) against `-spec4` §1. **Verdict: approve.** CPG: considered, not relevant — a small validator and comment edit in `cpg/`, not indexed by any loaded `cpg_*` graph; read and executed.
+
+- **Pass 6 m1 (reason/pattern checks): fixed.** `_skipped_files` rejects both directions (`(reason == "test") != is_test`); `_is_test_path` is JS/TS only (`lang != "javascript"` -> False, so any `test` entry in another language is rejected and a `frontend-ignore` entry there is never reclassified), segments `e2e`/`__tests__` taken below `rootPath` only (the basename is excluded), `*.test|spec.<ext>` over spec3 §3.3's eight JS/TS extensions. It matches spec4 §1 line for line (read). `cd cpg && .venv/bin/python -m pytest tests -q`: 1379 passed. Ten own mutants on a scratchpad copy, run against the whole of `tests/test_bundle.py`, all killed: language gate off, `__tests__` dropped, `e2e` dropped, `spec` kind dropped, extensions cut to three, basename counted as a directory, either reject direction removed, `rootPath` not stripped, `.test.` dot dropped. (A first run with `-k skip` showed all as surviving; that selected only tests with "skip" in the name, so it was my filter, not a gap.) Not checked by design: the `.d.ts`/`.pyi`/extension rule for a `frontend-ignore` entry (spec4 lists it as a writer rule; the P1 probe owns it).
+- **Pass 6 m2 (byte-exact schema vs citation edits): fixed.** Schema, loaded as JSON and compared with `HEAD` after removing the top-level `description` and the new `$defs.header.properties.skippedFiles`: equal. So the only schema deltas are the field and the `description` string, in one change set. `bundle.py` hunks are the docstring, the `JS_TEST_EXTENSIONS` constant, one comment line and the validator (`git diff -U0`); `ids.py`, `keynorm.py`, `normalize.py` and `cpg/README.md` change only citation text.
+- **Pass 6 n1 (seven vs eight deltas):** not re-checked; nit.
+
+**Freeze statement.** The freeze may be recorded effective on acceptance of `-spec4`. The single remaining condition is process, not content: the code, schema, tests and citation edits are uncommitted, so the freeze record must cite the commit that lands them (with or before acceptance).

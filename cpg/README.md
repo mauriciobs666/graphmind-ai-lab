@@ -67,14 +67,14 @@ The first element is always the record-type tag. Use the constructors (`symbol_i
 element order, check each position's type (`str` or `int`), and reject a signature outside
 Java, Kotlin, C# and C++, or an empty one. Passing a signature only for function-like symbols,
 and always for those, is the caller's job (§4.3). The spec is
-`docs/plans/connected-code-graph-bundle-spec.md` §3, and its golden vectors GV-1–GV-22 are in
+`docs/plans/connected-code-graph-bundle-spec3.md` §3, and its golden vectors GV-1–GV-22 are in
 `tests/test_ids.py`.
 
 ## Bundles, in one paragraph
 
-**The contract** is `docs/plans/connected-code-graph-bundle-spec.md` v1.3 as amended by
-`docs/plans/connected-code-graph-bundle-spec2.md` ("BS2") v1.3, read together until `-spec3`
-consolidates them (BS2 §0). **The spec is normative and `ccg/bundle.py` is the reference
+**The contract** is `docs/plans/connected-code-graph-bundle-spec3.md` (the consolidation of the
+earlier spec and "BS2") read together with `docs/plans/connected-code-graph-bundle-spec4.md`
+(spec4 §0). **The spec is normative and `ccg/bundle.py` is the reference
 validator**: a disagreement between them is a `bundle.py` defect (BS2 §1.12).
 `bundle-v1.schema.json` is **necessary, not sufficient**: it never rejects a spec-valid record,
 and a consumer that runs only the schema is not a validator (it accepts, for example, a quoted

@@ -292,6 +292,8 @@ from pathlib import Path  # noqa: E402
 _PLANS = Path(__file__).resolve().parents[2] / "docs/plans"
 #: One source: spec3 v1.1, the consolidation of the bundle spec and spec2.
 SPEC_TEXT = (_PLANS / "connected-code-graph-bundle-spec3.md").read_text(encoding="utf-8")
+#: spec4 amends spec3 (read together, spec4 §0): its one schema change is header.skippedFiles.
+SPEC4_TEXT = (_PLANS / "connected-code-graph-bundle-spec4.md").read_text(encoding="utf-8")
 
 
 def _section(heading_re: str, text: str | None = None) -> str:
@@ -387,7 +389,10 @@ def _spec_fields(rtype: str) -> tuple[set[str], set[str], dict[str, list[str]]]:
             enums[names[0]] = _ticks(tcell)
         elif tcell == "§3.3 token":
             enums[names[0]] = SPEC_LANGS
-    if rtype != "header":
+    if rtype == "header":  # spec4 §1 adds one row to spec3 §2.2's table (the v1 freeze text)
+        for cells in _table_rows(_section(r"1\. Rule 4", SPEC4_TEXT)):
+            (req if cells[2].startswith("yes") else opt).update(_ticks(cells[0]))
+    else:
         req |= {"type", "id"}  # §5.0: every record carries both
     return req, opt, enums
 
@@ -2352,3 +2357,265 @@ def test_argv0_supplies_no_context():
     unflagged-positional residual."""
     assert bundle.gate_argv(["htpasswd", "admin", "hunter2"]) == ["htpasswd", "admin", "hunter2"]
     assert bundle.gate_argv(["x", "htpasswd", "admin"]) == ["x", "htpasswd", "<redacted>"]
+
+
+# === spec4 §1: header.skippedFiles (inside bundleSchemaVersion "1.0") =========================
+
+def _skipped_bundle(skipped, **hdr) -> list[dict]:
+    """The rich bundle (unit rootPath ``salesperson``) with ``header.skippedFiles`` set."""
+    return ordered(counted(rich_records(), skippedFiles=skipped, **hdr))
+
+
+def _sk(path, reason="test") -> dict:
+    return {"path": path, "reason": reason}
+
+
+def _skipped_reasons_spec() -> list[str]:
+    """spec4 §1's `reason` bullet: "closed enum `test` | `frontend-ignore`"."""
+    sec = _section(r"1\. Rule 4", SPEC4_TEXT)
+    m = re.search(r"\*\*`reason`:\*\* closed enum ([^.;]*)[.;]", sec)
+    assert m
+    return _ticks(m.group(1))
+
+
+def _skipped_reason_enum() -> list[str]:
+    items = _resolve(_def("header")["properties"]["skippedFiles"])["items"]
+    return _resolve(items["properties"]["reason"])["enum"]
+
+
+def test_spec4_skipped_reasons_are_the_two_codes():
+    assert sorted(_skipped_reasons_spec()) == ["frontend-ignore", "test"]
+
+
+def test_schema_skipped_file_reasons_match_spec4_registry():
+    assert sorted(_skipped_reason_enum()) == sorted(_skipped_reasons_spec())
+
+
+def test_skipped_files_reasons_stay_out_of_the_status_registry():
+    """spec4 §1: "no `status`" - the codes are not record-level status reasons (§7.2)."""
+    for rtype in SPEC_ORDER:
+        reason = _def(rtype)["properties"].get("reason")
+        codes = _resolve(reason)["enum"] if reason else []
+        assert not set(codes) & set(_skipped_reasons_spec())
+
+
+def test_skipped_files_is_optional_in_the_header_schema():
+    assert "skippedFiles" not in _def("header")["required"]
+    assert _def("header")["properties"]["bundleSchemaVersion"]["const"] == "1.0"
+
+
+def test_bundle_without_skipped_files_is_valid():
+    assert "skippedFiles" not in rich_bundle()[0]
+    bundle.validate(rich_bundle())
+
+
+def test_bundle_with_sorted_unique_skipped_files_is_valid():
+    recs = _skipped_bundle([_sk("salesperson/a.test.ts"),
+                            _sk("salesperson/src/i18n/x.ts", "frontend-ignore")])
+    bundle.validate(recs)
+    assert bundle.loads(to_bytes(recs)) == recs
+    assert bundle.loads(bundle.dumps(recs)) == recs
+
+
+def test_skipped_files_on_a_header_only_bundle_is_valid():
+    bundle.validate([header(skippedFiles=[_sk("salesperson/a.test.ts")])])
+
+
+def test_skipped_files_present_but_empty_is_rejected():
+    with pytest.raises(bundle.BundleError, match="skippedFiles"):
+        bundle.validate(_skipped_bundle([]))
+
+
+@pytest.mark.parametrize("entry", [
+    {"path": "salesperson/a.test.ts", "reason": "other"},
+    {"path": "salesperson/a.test.ts", "reason": "vendored"},
+    {"path": "salesperson/a.test.ts", "reason": ""},
+    {"path": "salesperson/a.test.ts"},
+    {"reason": "test"},
+    {"path": "salesperson/a.test.ts", "reason": "test", "status": "possible"},
+    {"path": 3, "reason": "test"},
+    "salesperson/a.test.ts",
+])
+def test_skipped_file_entry_shape_is_closed(entry):
+    with pytest.raises(bundle.BundleError, match="skippedFiles"):
+        bundle.validate(_skipped_bundle([entry]))
+
+
+@pytest.mark.parametrize(("path", "reason"), [("salesperson/a.test.ts", "test"),
+                                              ("salesperson/a.ts", "frontend-ignore")])
+def test_each_registry_reason_is_accepted(path, reason):
+    bundle.validate(_skipped_bundle([_sk(path, reason)]))
+
+
+def test_skipped_files_must_be_a_list():
+    with pytest.raises(bundle.BundleError, match="skippedFiles"):
+        bundle.validate([header(skippedFiles={"path": "salesperson/a.ts", "reason": "test"})])
+
+
+def test_skipped_files_must_be_sorted_by_path():
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*sorted"):
+        bundle.validate(_skipped_bundle([_sk("salesperson/b.test.ts"),
+                                         _sk("salesperson/a.test.ts")]))
+
+
+@pytest.mark.parametrize(("first", "second"), [
+    ("salesperson/B.test.ts", "salesperson/a.test.ts"),   # byte order: uppercase first
+    ("salesperson/a-b.test.ts", "salesperson/a/b.test.ts"),   # "-" (0x2d) < "/" (0x2f)
+    ("salesperson/a.test.ts", "salesperson/a.test.tsx"),   # a prefix sorts first
+])
+def test_skipped_files_sort_is_byte_order_of_the_whole_path(first, second):
+    bundle.validate(_skipped_bundle([_sk(first), _sk(second)]))
+    with pytest.raises(bundle.BundleError, match="sorted"):
+        bundle.validate(_skipped_bundle([_sk(second), _sk(first)]))
+
+
+def test_skipped_files_paths_must_be_unique():
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*unique"):
+        bundle.validate(_skipped_bundle([_sk("salesperson/a.test.ts"),
+                                         _sk("salesperson/a.test.ts")]))
+
+
+def test_skipped_files_uniqueness_is_by_path_not_by_entry():
+    """A path listed under two reasons is a duplicate path (spec4 §1: "once, as `test`")."""
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*unique"):
+        bundle.validate(_skipped_bundle([_sk("salesperson/a.ts", "frontend-ignore"),
+                                         _sk("salesperson/a.ts", "test")]))
+
+
+@pytest.mark.parametrize("path", [
+    "/salesperson/a.test.ts", "salesperson//a.test.ts", "salesperson/", "./salesperson/a.ts",
+    "salesperson/../a.ts", "salesperson/..", "",
+])
+def test_skipped_files_paths_must_be_repo_relative_posix(path):
+    with pytest.raises(bundle.BundleError, match="skippedFiles"):
+        bundle.validate(_skipped_bundle([_sk(path)]))
+
+
+@pytest.mark.parametrize("path", [
+    "other/a.test.ts", "salespersonX/a.test.ts", "salesperson", "a.test.ts",
+])
+def test_skipped_files_paths_must_be_under_root_path(path):
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*rootPath"):
+        bundle.validate(_skipped_bundle([_sk(path)]))
+
+
+def test_skipped_files_under_a_dot_root_may_be_any_path():
+    recs = ordered(counted([], skippedFiles=[_sk("a.test.ts"), _sk("src/b.test.ts")],
+                           unit={"repoId": REPO, "rootPath": ".", "lang": LANG},
+                           unitId=ids.unit_id(REPO, ".", LANG)))
+    bundle.validate(recs)
+
+
+@pytest.mark.parametrize("path", [
+    "salesperson/node_modules/x.js", "salesperson/src/node_modules/deep/x.js",
+])
+def test_skipped_files_must_not_be_under_vendored_dirs(path):
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*vendored"):
+        bundle.validate(_skipped_bundle([_sk(path)], vendoredDirs=["node_modules"]))
+
+
+def test_skipped_files_vendored_name_as_a_basename_is_not_vendored():
+    bundle.validate(_skipped_bundle([_sk("salesperson/scripts/node_modules", "frontend-ignore")],
+                                    vendoredDirs=["node_modules"]))
+
+
+def test_skipped_file_must_have_no_file_record():
+    assert any(r["type"] == "file" and r["path"] == P_CLIENT for r in rich_records())
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*file record"):
+        bundle.validate(_skipped_bundle([_sk(P_CLIENT, "frontend-ignore")]))
+
+
+def test_skipped_files_cannot_check_completeness():
+    """spec4 §1: an absent source file that is not listed anywhere is not detectable."""
+    bundle.validate(_skipped_bundle([_sk("salesperson/src/never-mentioned.test.ts")]))
+
+
+def test_skipped_files_is_part_of_the_canonical_bytes():
+    recs = _skipped_bundle([_sk("salesperson/a.test.ts")])
+    line = bundle.canonical_line(recs[0])
+    assert b'"skippedFiles":[{"path":"salesperson/a.test.ts","reason":"test"}]' in line
+
+
+_S14A = Path(__file__).resolve().parents[1] / ".ccg-work/vertical-slice/s14a"
+
+
+@pytest.mark.skipif(not _S14A.is_dir(), reason="stored s14a slice bundles absent")
+def test_stored_s14a_slice_bundles_validate_with_no_skipped_files():
+    """Positive control (spec4 §0): bundles written before the field stay valid, unchanged."""
+    files = sorted(_S14A.glob("*.bundle.jsonl"))
+    assert len(files) == 2
+    for f in files:
+        recs = bundle.read_bundle(f)
+        assert "skippedFiles" not in recs[0]
+
+
+# --- spec4 §1: the closed `test` pattern, decidable from one entry ----------------------------
+
+def _spec4_test_pattern_text() -> str:
+    m = re.search(r"\*\*`test` pattern.*?(?=\n- \*\*Precedence)", _section(r"1\. Rule 4", SPEC4_TEXT),
+                  re.S)
+    assert m
+    return m.group(0)
+
+
+def _spec_js_exts() -> list[str]:
+    row = [r for r in _table_rows(_section(r"3\.3 ")) if _ticks(r[1]) == [LANG]][0]
+    return [t.lstrip(".") for t in _ticks(row[2])]
+
+
+def test_spec4_test_pattern_is_what_the_validator_implements():
+    text = _spec4_test_pattern_text()
+    for needle in ("*.test.<ext>", "*.spec.<ext>", "`e2e`", "`__tests__`", "JS/TS units only"):
+        assert needle in text
+    assert sorted(bundle.JS_TEST_EXTENSIONS) == sorted(_spec_js_exts())
+
+
+@pytest.mark.parametrize("path", [
+    "salesperson/a.test.ts", "salesperson/src/a.spec.tsx", "salesperson/a.test.mjs",
+    "salesperson/.test.js", "salesperson/e2e/login.ts", "salesperson/src/__tests__/x.js",
+    "salesperson/x/e2e/y/z.ts",
+])
+def test_frontend_ignore_on_a_test_pattern_path_is_rejected(path):
+    """Precedence (spec4 §1): a file that is both is listed once, as `test`."""
+    bundle.validate(_skipped_bundle([_sk(path, "test")]))
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*test"):
+        bundle.validate(_skipped_bundle([_sk(path, "frontend-ignore")]))
+
+
+@pytest.mark.parametrize("path", [
+    "salesperson/a.ts", "salesperson/a.test.py", "salesperson/a.test", "salesperson/atest.ts",
+    "salesperson/a.tests.ts", "salesperson/a.test.d.ts.map", "salesperson/e2e",
+    "salesperson/e2e.ts", "salesperson/src/e2e-utils/a.ts", "salesperson/__tests__.js",
+    "salesperson/src/tests/a.ts", "salesperson/a.test/b.ts",
+])
+def test_test_entry_that_does_not_match_the_pattern_is_rejected(path):
+    bundle.validate(_skipped_bundle([_sk(path, "frontend-ignore")]))
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*test"):
+        bundle.validate(_skipped_bundle([_sk(path, "test")]))
+
+
+def test_test_pattern_directory_segments_are_below_root_path():
+    """spec4 §1: "a directory segment below `rootPath`" - the root's own name does not count."""
+    root = "e2e"
+    recs = ordered(counted([], skippedFiles=[_sk("e2e/a.ts", "frontend-ignore")],
+                           unit={"repoId": REPO, "rootPath": root, "lang": LANG},
+                           unitId=ids.unit_id(REPO, root, LANG)))
+    bundle.validate(recs)
+    recs[0]["skippedFiles"] = [_sk("e2e/a.ts", "test")]
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*test"):
+        bundle.validate(recs)
+
+
+def _python_unit(skipped) -> list[dict]:
+    return ordered(counted([], skippedFiles=skipped,
+                           unit={"repoId": REPO, "rootPath": "svc", "lang": "python"},
+                           unitId=ids.unit_id(REPO, "svc", "python")))
+
+
+def test_a_non_js_ts_unit_has_no_test_pattern_so_no_test_entry():
+    """spec4 §1: "any other language has none in v1" - so nothing there is `test`, and the
+    JS/TS-only pattern never reclassifies a `frontend-ignore` entry."""
+    bundle.validate(_python_unit([_sk("svc/test_a.py", "frontend-ignore"),
+                                  _sk("svc/tests/a.test.ts", "frontend-ignore")]))
+    with pytest.raises(bundle.BundleError, match="skippedFiles.*test"):
+        bundle.validate(_python_unit([_sk("svc/a.test.ts", "test")]))

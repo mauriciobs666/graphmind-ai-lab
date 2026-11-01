@@ -1,6 +1,6 @@
 """Step 8a of the ``http`` ``keyNorm``: mask literal path segments that fail the token screen.
 
-Spec: ``docs/plans/connected-code-graph-bundle-spec2.md`` §1.8 (step 8a) and §1.7.1 (the screen);
+Spec: ``docs/plans/connected-code-graph-bundle-spec3.md`` §1.8 (step 8a) and §1.7.1 (the screen);
 ``docs/plans/connected-code-graph-eval-protocol2-ml.md`` §1.1 (the one shared implementation).
 ``assemble.py`` and ``match_keys.py`` import :func:`mask_http_segments`; neither reimplements it.
 

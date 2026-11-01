@@ -1,6 +1,7 @@
 """Fact-bundle JSONL: read, validate and write with deterministic order.
 
-Spec: ``docs/plans/connected-code-graph-bundle-spec.md`` v1.3 — §2 (envelope and header), §5
+Spec: ``docs/plans/connected-code-graph-bundle-spec3.md`` (v1.1) read with ``-spec4`` (spec4 §0)
+— §2 (envelope and header), §5
 (records), §7 (reason codes), §8 (determinism). The record shapes live in
 ``ccg/schemas/bundle-v1.schema.json``, the contract; this module adds what JSON Schema cannot
 say: line framing and canonical bytes (§8.1), record order and duplicate ids (§8.3), id
@@ -35,6 +36,10 @@ RECORD_TYPES: tuple[str, ...] = (
     "configEntry", "launchFact", "schemaEntry", "secretSighting",
 )
 _ORDER = {t: i for i, t in enumerate(RECORD_TYPES)}
+
+#: spec3 §3.3's file extensions of the ``javascript`` token (TS and JS are one token), the
+#: ``<ext>`` of spec4 §1's ``*.test.<ext>`` / ``*.spec.<ext>`` test pattern.
+JS_TEST_EXTENSIONS: tuple[str, ...] = ("ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs")
 
 
 class BundleError(ValueError):
@@ -258,7 +263,7 @@ def _pep503(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-# === BS2 v1.3 gates (docs/plans/connected-code-graph-bundle-spec2.md) ======================
+# === BS2 gates (docs/plans/connected-code-graph-bundle-spec3.md, which consolidates BS2) ====
 # One implementation each of the token screen (§1.7.1), the name rule (§1.7.3), the bindValue
 # value grammar (§1.7.2) and the argv gate (§1.6.1). The writer and the validator share them:
 # a record's argv is valid iff it is a fixed point of ``gate_argv`` (§1.6.1 "the emitted
@@ -731,6 +736,53 @@ class _Semantics:
             raise BundleError("line 1: vendoredDirs must be sorted (§2.2)")
         if h["history"] != "available":
             raise BundleError("line 1: history must be 'available' in P0 (§2.2)")
+        self._skipped_files(h.get("skippedFiles", []))
+
+    def _skipped_files(self, entries: list[dict]) -> None:
+        """spec4 §1: ``header.skippedFiles`` is sorted by path (byte order), unique, under
+        ``rootPath``, outside ``vendoredDirs`` and has no ``file`` record. Completeness (every
+        source file that has neither) needs the file system and is not checked here."""
+        mapped = {r["path"] for _, r in self.by_type["file"].values()}
+        prefix = "" if self.root == "." else self.root + "/"
+        previous = None
+        for e in entries:
+            path = e["path"]
+            if previous is not None:
+                if path == previous:
+                    raise BundleError(f"line 1: skippedFiles path {path!r} is listed twice: "
+                                      "paths are unique (spec4 §1)")
+                if path.encode("utf-8") < previous.encode("utf-8"):
+                    raise BundleError("line 1: skippedFiles must be sorted by path in byte "
+                                      f"order ({path!r} follows {previous!r}, spec4 §1)")
+            previous = path
+            if not path.startswith(prefix):
+                raise BundleError(f"line 1: skippedFiles path {path!r} is not under the unit's "
+                                  f"rootPath {self.root!r} (spec4 §1)")
+            if self._is_vendored(path):
+                raise BundleError(f"line 1: skippedFiles path {path!r} is vendored: "
+                                  "vendoredDirs explains it (spec4 §1)")
+            if path in mapped:
+                raise BundleError(f"line 1: skippedFiles path {path!r} has a file record "
+                                  "(spec4 §1)")
+            is_test = self._is_test_path(path)
+            if (e["reason"] == "test") != is_test:
+                raise BundleError(
+                    f"line 1: skippedFiles path {path!r} "
+                    + ("matches the closed test pattern, so its reason is 'test' (spec4 §1 "
+                       "precedence)" if is_test else "does not match the closed test pattern, "
+                       "so its reason cannot be 'test' (spec4 §1)"))
+
+    #: spec4 §1's closed ``test`` pattern: JS/TS units only (``lang`` ``javascript``, whose
+    #: extensions are spec3 §3.3's); any other language has none in v1.
+    def _is_test_path(self, path: str) -> bool:
+        if self.header["unit"]["lang"] != "javascript":
+            return False
+        rel = path[len(self.root) + 1:] if self.root != "." else path
+        *dirs, base = rel.split("/")
+        if any(d in ("e2e", "__tests__") for d in dirs):
+            return True
+        return any(base.endswith(f".{kind}.{ext}")
+                   for kind in ("test", "spec") for ext in JS_TEST_EXTENSIONS)
 
     # -- records (§5) --
     def _file(self, n, r):

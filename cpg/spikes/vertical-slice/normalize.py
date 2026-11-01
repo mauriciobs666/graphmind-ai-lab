@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """normalize.py -- S11 (P0-10): extract.sc facts -> a bundle-v1 JSONL file.
 
-Contract: docs/plans/connected-code-graph-p0-2.md S11 row and §4.4; bundle spec v1.3 plus
--spec2 v1.3 (``docs/plans/connected-code-graph-bundle-spec.md``, ``...-bundle-spec2.md``).
+Contract: docs/plans/connected-code-graph-p0-2.md S11 row and §4.4; bundle spec
+``docs/plans/connected-code-graph-bundle-spec3.md`` read with ``...-bundle-spec4.md``.
 Runs on the HOST, outside the sandbox: it reads the facts file extract.sc wrote, the staged
 source (for call-site positions, fingerprints, imports) and the source repository's history
 (``git blame``, bundle spec BF12). It writes through ``ccg.bundle.write_bundle`` so the file is

@@ -1,6 +1,6 @@
 # Connected code graph — fact-bundle spec, consolidated (v1 candidate)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Supersedes:** `docs/plans/connected-code-graph-bundle-spec.md`, `docs/plans/connected-code-graph-bundle-spec2.md` · **Version:** 1.2 (2026-11-01: §6 idempotence claim narrowed) · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
+> **Status:** superseded · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Supersedes:** `docs/plans/connected-code-graph-bundle-spec.md`, `docs/plans/connected-code-graph-bundle-spec2.md` · **Superseded by:** `docs/plans/connected-code-graph-bundle-spec4.md` · **Version:** 1.2 (2026-11-01: §6 idempotence claim narrowed) · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
 
 This is step S16 (unit P0-13) of `docs/plans/connected-code-graph-p0-2.md`, in consolidation mode:
 the bundle spec (v1.3) and its pre-freeze amendments (`-spec2`, v1.3) in one text. **Bundle schema

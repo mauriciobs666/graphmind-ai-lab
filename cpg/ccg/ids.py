@@ -1,6 +1,6 @@
 """Canonical tuples and ids — the one place hashing is defined.
 
-Spec: ``docs/plans/connected-code-graph-bundle-spec.md`` §3.1 (the hash) and §3.2 (the tuples);
+Spec: ``docs/plans/connected-code-graph-bundle-spec3.md`` §3.1 (the hash) and §3.2 (the tuples);
 P0 plan ``docs/plans/connected-code-graph-p0.md`` §2 D10.
 
     id(tuple) = lowercase-hex(SHA-256(canonical-json(normalize(tuple))))[0:32]
