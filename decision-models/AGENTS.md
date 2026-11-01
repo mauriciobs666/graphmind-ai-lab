@@ -10,8 +10,9 @@ the design.
 ## Current state
 
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
-`points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas) and
-`ingest.py` (answer checks, idempotence). Later plan4 §4.1 units are unbuilt (`docs/HISTORY.md`).
+`points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
+`ingest.py` (answer checks, idempotence) and `audit.py` (transcript audit). Later plan4 §4.1
+units are unbuilt (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
@@ -50,8 +51,15 @@ the design.
 - **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
   one schema check; the writer runs it before any request leaves it. No `*Id` key
   reaches a generation request, whatever `points/` declares.
-- **Ingest never records** (`ingest.py` docstring): the ledger (U5.6) and transcript audit (U5.5)
-  are the caller's. A second, different answer raises `AnswerRefused`.
+- **Ingest and audit never record** (their docstrings): the ledger is U5.6's. A second,
+  different answer raises `AnswerRefused`. The audit's classes beat ingest's; `audit.combine`
+  joins them, and only a `CLEAN`/`COUNT` audit ingests and records `answerSha256`.
+- **The audit locates a run only through the driver's `Agent` `tool_use` and `.meta.json`
+  `toolUseId`**, never through what it checks, and fails closed (plan6 §3.4): only F2's
+  foreground shape completes, and a tool use the guard did not allow with its own entry halts
+  (`guardRejected`, `hookMissing`). Its bounds code never imports `guard_hook.py`. `maxTurns` is
+  provisional until U5.7's smoke. Fixtures (`tests/fixtures/transcripts/`) are hand-built in the
+  probe report's recorded key sets, never copies of real transcript content.
 - **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
   message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).

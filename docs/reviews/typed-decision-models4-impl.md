@@ -1147,3 +1147,329 @@ the U5.2b bullet is narrowed to the renderers. I did not re-run all of the deleg
 My H1 matches its "field dropped" class (5 failed).
 
 **Growth-stops check:** Pass 7 is new findings only. Passes 1–6 are byte-identical (`cmp`).
+
+## Pass 8 — U5.5 transcript audit (2026-11-01)
+
+**Verdict: needs changes.** There is no blocker. There are two majors, both on how real runs end on this
+machine. Neither is visible on the hand-written fixtures. What I ran:
+- **Suite:** 568 passed, 2 xfailed, with no deselection. `ruff` is clean, FR-8 gives 24 passed and
+  `tests/test_audit.py` gives 76.
+- **Mutants and probes:** these ran in `scratchpad/p8u55/repo/`, with `model-bench/` symlinked and
+  only read. Each mutant was restored and checked with `cmp`. The probes are planted fixture edits
+  driven through the suite's own helpers (Appendix G).
+- **Live tree:** the sha256 of all 45 files was unchanged at the end. No git command changed the tree.
+- **Real transcripts:** I read keys, types and counts with Python, across 238 subagent runs. I
+  copied nothing out of them.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; `audit.py`, its tests and fixtures were read in full.
+
+### Findings
+
+**P8-F1 — major — under background spawning, a dead run and a still-running run are both counted.**
+*Owner: `architect` (the ruling already asked for), then `tdd-engineer`. Verified by running it.*
+- All 236 `Agent` results on this machine are `async_launched`. This holds with or without a
+  `run_in_background` key. So `has_result` (`audit.py:336`) is always true, and the `incomplete`
+  row never fires.
+- On the fixture with `toolUseResult.status: "async_launched"`, a run cut after its first Read
+  gives `COUNT maxTurns`. So does a run cut before its final reply, which is what a run still
+  working when `driver ingest` runs looks like. The delegate's flag says these runs are
+  `answerMissing`. The actual reason is `maxTurns`, but the class is the same: counted where the
+  plan says no attempt, with items dropping as `retryCapExceeded`.
+- **Minimal audit change, run in the copy:** a `tool_result` whose `toolUseResult.status` is
+  `async_launched` is not a completion. For such a spawn, completion is `.meta.json`
+  `finished: true`. A foreground result keeps today's rule. The suite stays at 568 passed. A
+  background run that is finished and complete is `CLEAN`. A background run that is unfinished,
+  whether killed or still running, is `REISSUE incomplete`. A background run that is finished but
+  cut short is `COUNT maxTurns`.
+- Add fixtures in both shapes. Today the fixtures carry no `toolUseResult`, and the meta carries no
+  `requestShape`.
+- *Inferred:* a killed run's meta lacks `finished`. The 2 in-flight runs lack it, and I have no
+  sample of a killed run.
+- **U5.6 brief:** run `ingest` only after the run hands back. A re-issued opaque name must be
+  retired in the ledger, so a late answer to it is never ingested.
+
+**P8-F2 — major — real subagent runs end with a `SubagentHandback` call, and the audit voids every
+such run.** *Owner: `architect`, together with P8-F1. Verified by running it.*
+- 206 of 207 finished runs here end with a `SubagentHandback` `tool_use`. Their last conversation
+  entry is its `tool_result`, not an `end_turn` reply.
+- The call is injected even when `tools:` omits it: all 71 `analyst` runs end with it.
+- On the clean fixture, I replaced the final `done` reply with that call:
+  - unhooked, it gives `HALT hookMissing`, with `maxTurns` and `toolOutOfBounds` also found;
+  - with the guard allowing it, it gives `COUNT maxTurns`.
+- If `dm-labeler` runs end this way, every batch voids. The U5.7 smoke would catch this, but only
+  in a usage window.
+
+**Fix:**
+- The architect rules on whether dm runs end with a hand-back.
+- If they do, exactly one final `SubagentHandback` counts as the reply. It is exempt from the
+  bounds and hook checks, and it has its own fixture.
+
+**P8-F3 — minor — two mutants survive, and the §5 halt-over-counted test cannot go red alone.**
+*Owner: `tdd-engineer`. Verified by running it.*
+- **A6** ties counted with re-issue (`COUNT: 1`) and passes all 568 tests. Every precedence test
+  pairs rows whose table order already agrees with the tiers. A planted `hookDenied` plus
+  `rate_limit` gives `WAIT`, and `COUNT` under A6.
+- **P1** (`has_result` ignores `tool_use_id`) passes all 568. The fixture driver holds no other
+  `tool_result`, but a real driver always does: `driver next` is a Bash call. A planted Bash
+  `tool_result`, with the spawn's result dropped, gives `REISSUE`, and `CLEAN` under P1.
+- `test_a_fixture_matching_a_halt_row_and_a_counted_row_halts` stays green under A1 and A2 (only
+  its siblings catch them), because `agentTypeMismatch` precedes `toolOutOfBounds` in the table.
+
+**Fix:**
+- Pin the two planted cases.
+- Re-pair the §5 clause test as `hookDenied` plus `authentication_failed`, where the counted row
+  comes first in the table.
+
+**P8-F4 — minor — any hook's JSON decision passes as the guard's.** *Owner: `tdd-engineer`; U5.7
+supplies the command. Verified by running it.*
+- All 5,198 real `hook_success` entries carry `command`, and every agent guard here prints a
+  `permissionDecision`. So the stdout parse does not single out the guard.
+- With every hook entry's `command` set to a non-guard script, the fixture stays `CLEAN`.
+- Example: a user-level hook stays active while the project guard is off.
+
+**Fix:** add `Expected.guard_command`, and require `command` to equal it.
+
+**P8-F5 — minor — flag (c): a run killed between a `tool_use` and its hook entry halts instead of
+re-issuing.** *Owner: `tdd-engineer`. Verified by running it.*
+- Hook entries always follow their `tool_use` (5,207 of 5,207).
+- The fixture cut there, with no `tool_result`, gives `HALT hookMissing` above `incomplete`.
+- A truncated last line likewise gives `transcriptUnreadable`.
+
+Both fail closed, but cost a `resolve`.
+
+**Fix:**
+- When the run is incomplete, exempt the trailing unanswered `tool_use` from `hookMissing`.
+- Read an unparseable final line as truncation.
+
+**P8-F6 — nit — `README.md:45` is 142 characters**, the same unreflowed join as P7-F3. *Owner:
+`tdd-engineer`.*
+
+**Flag (a)** needs no new finding: the provisional `maxTurns` shape is carried to U5.7 in the ledger.
+Settle it together with P8-F2, which changes what the last entry of a clean run is.
+
+### Questions 1–7
+
+**1. §5 clauses.** Every U5.5 clause has a test, and each test goes red under some mutant. The
+exception is the halt-over-counted clause on its own (P8-F3).
+- The 3/900/2087 fixture is literal and written by hand: `cacheWrite` 500/800/650 makes the last
+  entry neither the first nor the maximum. The first-entry mutant A4 gives 5 failed.
+
+**2. Judgement calls.** Each one is stricter than §3.3 or equal to it.
+- Table order breaks ties within a tier. Precedence matches §3.3, though A6 is unpinned (P8-F3).
+- One cap shared across never-spawned and incomplete is the §5 U5.6 wording.
+- `Write` to the request becomes counted, never a halt.
+- `toolUseRepeated` and `transcriptUnreadable` are halts that never displace a counted void.
+- Effort: all 238 real runs have `api-request` entries with `output_config.effort`.
+- Locating the spawn only through `assistant` entries is sound: replays sit only in
+  `api-request-blob` entries.
+- **Where a class does change:** P8-F1 (no-attempt → counted), P8-F2 (clean → halt or counted) and
+  P8-F5 (re-issue → halt).
+
+**3. The `combine` seam.** It matches the ruling.
+- A `COUNT` audit over a valid answer keeps that answer's hash, so a re-delivery is
+  `AlreadyIngested` and the attempt is counted once.
+- Raising on `AlreadyIngested` fits, provided the U5.6 re-ingest path checks the ledger first and
+  never calls `audit_run` or `combine`. It finishes the move and appends nothing.
+- **Add both points to the U5.6 brief.**
+
+**4. Fixture fields.** I spot-checked `.meta.json` `toolUseId`/`agentType`, the `hook_success`
+keys, the first `user` content (a string, 238 of 238) and `api-request` `params`. All match. The
+gaps are completion shapes (P8-F1, P8-F2), not field names.
+
+**5. Flags.** (a) is carried to U5.7. (b) is P8-F1, and the audit is unsound under background
+spawning. (c) is P8-F5.
+
+**6. Docs.** The figures reproduce: 568/2, 76 tests, FR-8 24, and 20 mutants plus 1 equivalent.
+`AGENTS.md` grows by 57 words of new scope, and no line exceeds 700 characters. It passes the
+context-file rule.
+
+**7. My data-plumbing mutants.**
+- P1 survives (P8-F3).
+- P3 takes the `effort` fact from the last `api-request` and survives. That is equivalent on a
+  constant-effort run.
+- P4, a corrupted `agentId`, gives 1 failed.
+
+**Growth-stops check:** Pass 8 is new findings only. Passes 1–7 are byte-identical (`cmp`).
+
+### Appendix G — Pass 8 mutants
+
+These ran with the full suite. Baseline: 568 passed, 2 xfailed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| A1 | `COUNT` tier 0 (tied with halt) | 2 failed (re-issue and usage stop over counted) |
+| A2 | table order only | 1 failed (halt over re-issue) |
+| A3 | `syntheticError` counted | 4 failed |
+| A4 | first-entry tokens | 5 failed |
+| A6 | `COUNT` tier 1 (tied with re-issue) | **568 passed** (P8-F3) |
+| P1 | `has_result` ignores `tool_use_id` | **568 passed** (P8-F3) |
+| P2 | instructions as a subset (teco's mutant) | 1 failed |
+| P3 | `effort` fact from the last `api-request` | 568 passed (equivalent here) |
+| P4 | `agentId` reversed in `run_record` | 1 failed |
+| fix | P8-F1's background rule, applied | 568 passed |
+
+Probes, as fixture edits:
+- deny + rate limit → `WAIT`;
+- deny + authentication failure → `HALT`;
+- dropped spawn result plus a Bash result → `REISSUE`;
+- background, killed or still running → `COUNT maxTurns`;
+- killed before the hook entry → `HALT hookMissing`;
+- a non-guard `command` → `CLEAN`;
+- a terminal `SubagentHandback` → `HALT`, or `COUNT` when the guard allows it.
+
+## Pass 9 — U5.5 re-gate against plan6 v1.5 (2026-11-01)
+
+**Verdict: approve with suggestions.** There is no blocker or major. Every §10.3 shape gives plan6's class, on the fixtures and on the raw probe transcripts. What I ran:
+- **Suite:** 656 passed, 2 xfailed, with no deselection; `ruff` is clean; `tests/test_audit.py` has 164 tests.
+- **Mutants:** 22, in `scratchpad/p9u55/repo/` with `PYTHONPYCACHEPREFIX` set. Each file was copied aside, restored and checked with `cmp`.
+- **Raw transcripts:** I ran `audit_run` read-only over all six headless sessions. Ids are cited; no content was copied.
+- **Live tree:** the sha256 of all 46 files was unchanged at the end, and no git command changed the tree. I did not touch `model-bench/`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; `audit.py` and the fixture builders were read in full.
+
+### Pass 8 findings
+
+- **P8-F1:** superseded by plan6 §3.1/§3.4 (foreground only). Raw H2 (`190af10c`) gives `HALT backgroundSpawn`, and raw H3a (`43b56824`) finds `incomplete`.
+- **P8-F2:** superseded by plan6 §3.4 "Terminal shape". A hand-back, hooked or not, is `CLEAN`. M14 and M15 each give 1 failed.
+- **P8-F3:** fixed as plan6 §5 re-plants it. P1 gives 2 failed, A6 (counted tied with the usage stop) 2 and A6b (counted tied with halt) 4. The halt-over-counted test now uses a counted row that comes first in the table.
+- **P8-F4:** fixed (`Expected.guard_command`, plan6 §3.4 "guard entry").
+- **P8-F5:** fixed. Plan6 replaces my "trailing call" fix with "every in-flight call", which is sound for parallel calls (P3-m1). Truncation is read only on a final line with no newline, narrower than I proposed. M2 gives 20 failed and M7 1.
+- **P8-F6:** fixed. No line in `README.md` exceeds 100 characters.
+
+### New findings
+
+**P9-F1 — minor — `spawnShapeUnknown` is never applied to an in-flight run.** *Owner:
+`tdd-engineer`. Verified by running it.*
+- `_check_completion` (`audit.py:466`) tests the meta's shape only when a result is matched.
+- Plan6 §3.4's row ("a meta `requestShape` other than `foreground`") has no such condition, and
+  in the precedence it sits above the re-issues.
+- An in-flight run whose meta says `detached`, or has no `requestShape`, gives
+  `REISSUE incomplete` where plan6 gives `HALT`.
+- The meta is written at spawn: the raw H3a meta has `requestShape: foreground` without
+  `finished`. So the plan's rule costs a killed run nothing.
+
+**Fix:**
+- Check `requestShape` whenever a meta exists, and keep the `status` and `finished` clauses for
+  matched runs.
+- Pin it with an in-flight run and a `detached` meta → `HALT spawnShapeUnknown`.
+
+**P9-F2 — minor — the order of the halt rows is unpinned.** *Owner: `tdd-engineer`. Verified by
+running it.*
+- Mutant M1 reverses the first four plan6 halt rows in `ROWS`, and all 656 tests still pass.
+- The order decides the halt **reason**, and the reason decides what the stakeholder may do at
+  `resolve`: `--skip-batch` exists for a safeguards flag (plan6 §3.5).
+- Today a refusal plus a guard deny correctly gives `safeguardStop`. No test pins that.
+
+**Fix:** pin two pairs in plan6's table order:
+- refusal + `guardRejected` → `safeguardStop`;
+- `backgroundSpawn` + `guardRejected` → `backgroundSpawn`.
+
+**P9-F3 — nit — a hand-back refused by input validation is `CLEAN`.** *Owner: `architect` (a
+one-line ruling), else `tdd-engineer` follows the row. Verified by running it.*
+- The `HANDBACK` branch (`audit.py:591`) comes before the `inputInvalid` branch.
+- Plan6 exempts the hand-back only from the bounds checks and `hookMissing`, so the validation row
+  would count this case.
+- No label is at stake: the answer is ingested from its file.
+
+**P9-F4 — nit — boundaries and caller contracts that nothing pins.** *Owner: `tdd-engineer`.
+Verified by running it.*
+- The behaviour matches the plan in each case, but no test pins it:
+  - M9 (`>=` for `>`) survives. A launch at exactly 6 h gives `launchFailed` and one at 6 h 1 s
+    gives `launchFailing`.
+  - M17 (an empty driver transcript treated as missing) survives. Today such a file gives
+    `neverSpawned` at exit 0 and `launchFailed` otherwise, as the plan says.
+- `Launch.fail_bound` defaults to 6 h. If U5.6 omits the bound recorded at `init`, nothing says
+  so. Make the field required.
+- M19 (a relative `cwd` accepted) is equivalent: a real `cwd` is always absolute.
+
+**P9-F5 — nit — plan6 §5 cites attempt 1 `c5ce5291` "line 46".** *Owner: `architect`.* The
+validation entry is line 48; line 46 is an `api-request` entry. The fixture's key sets match
+line 48 exactly.
+
+**Carry to the U5.6 brief (`teco`):**
+- Leave `interrupted` outcomes out of `earlier_no_attempt` (plan6 §3.2: they do not count toward
+  the cap). The flag alone exempts only the current outcome.
+- Build `Expected` with absolute paths. With relative paths every run gives
+  `HALT guardBreach`, which is loud but wrong.
+- Pass 8's seam point stands: the re-ingest path never calls `audit_run` or `combine`.
+
+### Questions 1–6
+
+**1. §10.3 shapes.**
+- On raw `b0bbcc3d`, D1 and D2 give `guardRejected` and D3 gives `hookMissing`, so the run halts
+  `guardRejected`.
+- Raw H6 (`973830b1`) gives `guardBreach`.
+- Raw H1 and H4 find only `pathOutOfBounds`, because the kit's answer files end in `.txt`. Under
+  dm bounds both are clean.
+- The fixture `tool_result` entries for D1–D3 have exactly the raw key sets, and the same
+  `permissionDecision`, `toolDenialKind`, block keys, `is_error` and `toolUseResult` type. The
+  validation entry matches raw line 48 (P9-F5).
+
+**2. Precedence.** The tiers match plan6 §3.4, and A6, A6b, M8 and M16 each go red. `ROWS` order
+does carry meaning the tests cannot see: the halt reason (P9-F2).
+
+**3. The implementer's calls.** None of them needs `architect`.
+- `Launch`: the clock resets from the last launch that produced something, read from ledger
+  timestamps. M10 gives 1 failed. Bound and default: P9-F4.
+- `inputInvalid` is a name the plan leaves open.
+- `ENVIRONMENTAL` versus `DRIVER` changes no action: both halt and count nothing.
+- Truncation is P8-F5.
+- The empty-transcript cases follow the plan's rows: P9-F4 for the driver; the subagent case is
+  tested.
+
+**4. Bounds.** All checked by running them:
+- `realpath`: M5 gives 3 failed.
+- Joining to `cwd`: M6 and M12 give 5 each.
+- The separator and sibling prefix: M4 gives 6.
+- The driver bound: M18 gives 1.
+- Swapping the bound folders gives 115, as teco found.
+- `audit.py` imports only the standard library and `.ingest`; `guard_hook.py` is named only in a
+  docstring.
+
+**5. Interactions.**
+- A call in flight never reaches `inputInvalid`, because that row needs a `tool_result` entry.
+- `hookMissing` skips calls in flight (M2: 20 failed).
+- An in-flight hand-back leaves the run `incomplete`, and the terminal rule runs only on a matched
+  result.
+- The one gap is P9-F3.
+
+**6. Docs.** The figures reproduce: 656/2, 164 tests, and the mutants I re-ran match their
+`HISTORY.md` counts.
+- `AGENTS.md` is 665 words (631 at Pass 8). The audit bullet was rewritten in place, not appended
+  to, and no line exceeds 700 characters, so it passes the context-file rule.
+- The `README.md` and `HISTORY.md` additions are new scope.
+
+**Growth-stops check:** Pass 9 has one line per Pass 8 finding and new findings only. Passes 1–8
+are byte-identical (`cmp`).
+
+### Appendix H — Pass 9 mutants and probes
+
+Each mutant ran with the full suite. Baseline: 656 passed, 2 xfailed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| M1 | first four halt rows reversed in `ROWS` | **656 passed** (P9-F2) |
+| M2 | in-flight calls read | 20 failed |
+| M3 | `inputInvalid` ignores attachments | 1 failed |
+| M4 / M5 / M6 | prefix without separator / `normpath` / relative path not joined | 6 / 3 / 5 failed |
+| M7 | truncation accepted on any line | 1 failed |
+| M8 | `spawnShapeUnknown` tier above the usage stop | 1 failed |
+| M9 | launch bound `>=` | **656 passed** (P9-F4) |
+| M10 / M11 | `last_produced` ignored / `interrupted` ignored | 1 / 1 failed |
+| M12 | `cwd` plumbing dropped | 5 failed |
+| M13 | Read/Write bound folders swapped | 115 failed |
+| M14 / M15 | hand-back exempt from `guardRejected` / hand-back not last allowed | 1 / 1 failed |
+| M16 | `finished` not required | 2 failed |
+| M17 | empty driver transcript read as missing | **656 passed** (P9-F4) |
+| M18 | driver's non-`Agent` bound dropped | 1 failed |
+| M19 | relative `cwd` accepted | 656 passed (equivalent) |
+| A6 / A6b / P1 | Pass 8 survivors, on the new code | 2 / 4 / 2 failed |
+
+Probes, as fixture edits run through the suite's helpers:
+- in flight with a `detached` meta, or with no `requestShape` → `REISSUE` (P9-F1);
+- a hand-back refused by validation → `CLEAN` (P9-F3);
+- refusal + deny → `safeguardStop`;
+- relative `Expected` paths → `guardBreach`;
+- launch at 6 h / 6 h 1 s → `launchFailed` / `launchFailing`;
+- an empty driver transcript at exit 0 / exit 1 → `neverSpawned` / `launchFailed`;
+- the six raw headless sessions → as in question 1.

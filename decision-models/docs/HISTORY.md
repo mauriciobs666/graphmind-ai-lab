@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.5 — transcript audit
+
+**What:** `docs/plans/typed-decision-models6.md` v1.5 §3.3 (guard bounds), §3.4 (audit rows,
+precedence, in-flight rule) and §5 U5.5, over `docs/plans/typed-decision-models4.md` §3.3's
+location rule and remaining rows and §3.7's `runs[]` record and token rule; plus impl review
+Pass 8's P8-F3–F6 (`docs/reviews/typed-decision-models4-impl.md`). P8-F1/F2 are settled by
+plan6 (foreground only; one final `SubagentHandback` is a reply).
+
+- `decisionmodels/audit.py`: `audit_run(driver_transcript, Expected, *, earlier_no_attempt,
+  launch=Launch(), interrupted=False)` locates the run through the driver's `Agent` `tool_use`
+  and `.meta.json` `toolUseId` and returns an `Audit`: every matching row as a `Finding` in table
+  order, the chosen class, and `RunFacts`. `Expected.guard_command` is the declared guard command
+  (P8-F4).
+- **Rows shipped:** `safeguardStop`, `backgroundSpawn`, `guardRejected` (a guard deny or a blocked
+  guard failure, keyed on `permissionDecision` `reject`/`hook`), `guardBreach` (an allowed call
+  outside the guard's bounds, recomputed with the audit's own `realpath` canonicalization),
+  `inputInvalid` (counted: no decision, `is_error`, no attachment), `hookMissing` (any other
+  decision, incl. D3's `accept`/`config`), `driverModelMismatch`, `syntheticError` (either
+  transcript), `rateLimit`, `spawnShapeUnknown`, `incomplete`, `neverSpawned`, `launchFailed`
+  (uncapped) and `launchFailing` (past `Launch.fail_bound`), then plan4's location, driver,
+  injected-context and counted rows (`maxTurns`, `toolOutOfBounds` for hand-back misuse,
+  `pathOutOfBounds`). `hookDenied` is removed.
+- **Precedence:** halts, usage stop, `spawnShapeUnknown`, re-issues, counted; table order within
+  a tier. In-flight tool uses (no result while the spawn has none) are read by no row, so a killed
+  run is `incomplete`. An `interrupted` incomplete is not capped. A final line with no newline
+  that does not parse is truncation (P8-F5).
+- **Fixtures** (`tests/fixtures/transcripts/`): the clean run moved to H1's foreground shape
+  (driver guard entry, `completed` result, `requestShape`, a Sonnet driver);
+  `guard-decisions.jsonl` holds the U6.7 D1/D2/D3 `tool_result` entries and attempt 1's
+  validation error in their recorded key sets (probe report §10.3, §7), ids and paths replaced.
+  `tests/test_audit.py`: 164 tests. `README.md` line 45 reflowed (P8-F6); `AGENTS.md`.
+
+**Verified:** `pytest -q` from `decision-models/`, no deselection: 656 passed, 2 xfailed (baseline
+568/2); `ruff check .` clean. Mutants ran in a private copy, each restored `cmp`-equal;
+failures per mutant: `guardRejected` counted 4; deny counted and failure halted, told apart by text
+(the rejected alternative) 3; `hookMissing` reading in-flight tool uses 20; in-flight ignoring the
+driver's result 1; `async_launched` as completion 1; `finished` not required 2; `spawnShapeUnknown`
+first 1; counted tied with the usage stop (A6) 2; counted tied with halt (A1) 4; table order only
+(A2) 5; re-issue tied with the usage stop 1; `safeguardStop` counted 6; refusal marker ignored 4;
+`refusedMessageId` ignored 2; `guardBreach` counted 23; `normpath` for `realpath` 3; prefix without
+separator 6; driver bound unchecked 1; result matched ignoring `tool_use_id` (P1) 2; any command as
+the guard 1; any decision as the guard's 1; any hook event 2; `inputInvalid` despite an attachment
+1; hand-back not exempt 2; hand-back count unchecked 2; hand-back not a terminal reply 4; driver
+model unchecked 2; driver `<synthetic>` ignored 2; `launchFailed` capped 1; launch clock never
+resets 1; non-zero exit as never spawned 1; `interrupted` ignored 1; no truncation tolerance 2; any
+unparseable final line as truncation 1; empty transcript skipped 1. Accepting `async_launched` in
+the shape check survives (0): equivalent, as the background row is tested first.
+
 ## 2026-11-01 — typed-decision-models U5.2b-hash — leakage key for join-in and message type
 
 **What:** `docs/plans/typed-decision-models5.md` §3.4's U5.2b-hash (the hashing half of

@@ -356,3 +356,15 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 - 2026-11-01: Pass 28 (U2.4; analyst a02c86cb14ba399b7) → **approve with suggestions**. U2.4 is committed with Pass 28.
   - **P28-m1:** a pre-existing gap; U2.4 is faithful to §3.1. `LMStudio.embed` doesn't validate a 200 body's vector count or type, so the corpus and item embed paths can raise `ValueError`/`TypeError` outside the exit-code contract. It is **out of this feature's scope**: only the embedder role embeds, and the new-ability packs don't. Reported as a follow-up for model-bench's BACKLOG (ruling: `architect`; fix: `tdd-engineer`) rather than chased here.
   - **P28-n1** (README wrap) is folded into U3e.4 on tdd-engineer acbd9b52e033bedb0.
+- 2026-11-01: U3e.4 delivered (tdd-engineer acbd9b52e033bedb0): singular family noun at k = 1, plus the P28-n1 README wrap. teco's re-run: 3625 passed; ruff clean. The singular-branch mutant → 2 red (engineer). Gate skipped explicitly: a print nit with no logic beyond one conditional, already mutation-checked. Committed.
+- 2026-11-01: Pass 9 (U5.5; analyst a045d38ef791e1ace, 256.3k tokens / 27 tools) → **approve with suggestions**.
+  - Every §10.3 shape gives plan6's class, on fixtures and on the raw H1–H6 and U6.7 transcripts.
+  - teco fixed P9-F5 itself (a one-token edit: plan6's attempt-1 cite now reads line 48).
+  - **U5.5 committed with Pass 9.** Fix round **U5.5b** → fresh tdd-engineer (aa6a62c59d3f9b9bd is at 303k):
+    - P9-F1: `spawnShapeUnknown` checked whenever a meta exists, including in flight.
+    - P9-F2: pin the halt order (refusal + `guardRejected` → `safeguardStop`; `backgroundSpawn` + `guardRejected` → `backgroundSpawn`).
+    - P9-F3: a hand-back refused by input validation is counted as `inputInvalid`, following plan6's row (no architect ruling needed).
+    - P9-F4: pin the 6 h bound and the empty driver transcript; make `Launch.fail_bound` required.
+
+    Re-check: teco's own, by suite plus mutants; minors only.
+  - **Carry into the U5.6 brief:** keep `interrupted` outcomes out of `earlier_no_attempt`; build `Expected` with absolute paths; the re-ingest path never calls `audit_run`/`combine`.
