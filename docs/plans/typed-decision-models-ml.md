@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.12 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.14 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
-*2026-11-01 — v1.12: answers `docs/reviews/typed-decision-models.md` Passes 11–12 on top of v1.10's U5.3 changes (`docs/reviews/typed-decision-models-ml.md` Pass 1): noise-robust exact stratified pilot cue check with a recheck block, per-item form obedience and seed-binding routing, `immaterial` in `true × clear`, cue_05 narrowed, rubric text cited rather than restated. The probe facts cited here are in `ws:agent-team` document 480ef825… (the U1a probe).*
+*2026-11-01 — v1.14: §Q6 "Design effect" states the empty and non-contributing cell values, the cost of pooling unequal ICCs (FR-10 still pools), exact reason texts and print format (`docs/reviews/typed-decision-models.md` Pass 13).*
 
 ## 0. The question and the decision it serves
 
@@ -745,18 +745,50 @@ FR-10 is not met, on `escalation`. AC-15's always-majority arm scores 0/60 on fo
 it is met in both (stakeholder-confirmed 2026-10-30).
 
 **Design effect.** A per-cell design effect is estimated at report time from the pack's
-`genRunId`, with provenance `designEffectSource: "genRunId ICC"`. It never touches
-`RunResult.basis`, which is the load rule's closed `stats.Basis`. The run-level
-`RunResult.designEffect` stays 1.0.
-- **Estimate.** For each FR-1 cell, or each FR-10 class, take the per-item outcome: discordance for
-  FR-1, agreement for FR-10. Group the items by `genRunId` and take the one-way ANOVA ICC. Then
-  `designEffect = max(1.0, 1 + (m₀ − 1)·ICĈ)`, with Kish's `m₀ = Σm²/Σm` over the cell's
-  per-run counts `m`. The plain mean would under-correct the short cells that pooled top-up runs
-  load.
-- **Scope.** The estimate reaches only the limits, never a decision (§Q3.2): FR-1's MDD and FR-10's
-  Wilson intervals, both stated at `n / designEffect` (FR-10's at `k/DE` of `n/DE`).
-- **Size.** With randomised round-1 runs, `m₀` is about 3 per cell, so the effect is small and its
-  estimate noisy. The floor at 1.0 keeps it from shrinking a limit.
+`genRunId` (`designEffectSource: "genRunId ICC"`). `RunResult.basis` (the load rule's closed
+`stats.Basis`) and the run-level `RunResult.designEffect` (1.0) are untouched.
+- **Outcome.** Per item: discordance (`cand ≠ inc`) in an FR-1 cell, agreement in an FR-10 class.
+- **One ICC per family, per replicate.** The four FR-1 cells are one family; a point's FR-10
+  classes are another. Within each cell, items are grouped by `genRunId`. A cell contributes if it
+  has `g_c ≥ 2` runs and `N_c > g_c` items, and the sums run over contributing cells:
+  - `MSB = ΣSSB_c / Σ(g_c − 1)` and `MSW = ΣSSW_c / Σ(N_c − g_c)`, each cell's sums of squares
+    about its own mean;
+  - `n₀ = Σ(N_c − Σm²/N_c) / Σ(g_c − 1)`, the unbalanced one-way ANOVA's average run size;
+  - `ICĈ = (MSB − MSW)/(MSB + (n₀ − 1)·MSW)`, the plain one-way ANOVA ICC for one cell.
+- **Per cell.** `designEffect = max(1.0, 1 + (m₀ − 1)·ICĈ)`, with the cell's own Kish
+  `m₀ = Σm²/Σm` over its per-run counts `m`; the plain mean would under-correct cells that short
+  top-up runs load. Since `ICĈ ≤ 1`, `designEffect ≤ m₀`.
+  - An empty cell (`N_c = 0`, FR-10's `0/0` line) takes 1.00.
+  - A non-empty non-contributing cell takes the formula (a one-run cell: `1 + (N_c − 1)·ICĈ`):
+    its items share a run whether or not they inform the estimate.
+- **Not estimable** when no cell contributes, or when `MSB + (n₀ − 1)·MSW = 0` (the outcome is
+  constant within every contributing cell). Every cell then takes 1.00.
+- **Why pooled.** ANOVA is a sound ICC estimator for binary outcomes (Ridout, Demétrio & Firth,
+  *Biometrics* 1999); it lacks events: at ψ ≈ 0.02 a cell of 100 holds about two. Simulated
+  on guard's round-1 layout with no clustering at ψ = 0.02, the per-cell
+  estimate gave `designEffect ≥ 1.65` in 10% of cells and `≥ 3.5` in 1%; pooled, 1.37 and 2.07.
+  At a true ICC of 0.1 (`designEffect` 1.27 at `m₀` = 3.7), both averaged 1.3. Different base
+  rates cost nothing, each cell being centred on its own mean. Different ICCs are averaged:
+  with ρ = 0.2 in one guard cell and 0 in three, every cell's mean is 1.18, against 1.54 true for
+  that cell (`√DE` about 13% narrow). That touches limits only, and per-class noise is the larger
+  error at these counts, so FR-10 pools too. Rejected: a cap below `m₀` (arbitrary; it cuts real
+  effects) and shrinkage (no prior exists).
+- **Scope.** Limits only, never a decision (§Q3.2): FR-1's MDD at `n / designEffect`, FR-10's
+  Wilson interval at `k/DE` of `n/DE`.
+- **Size.** Each 25-seed run spreads over a point's cells, so round-1 `m₀` per cell is about 3.7
+  for guard (3.4–4.1, 5th–95th percentile), 3.1 for message type and 6.3 for join-in, simulated
+  on the planned layout ("Reproducing the figures"). A top-up run adds at most about 6 eval items
+  per cell, so a modest top-up barely moves `m₀`. The floor at 1.0 never shrinks a limit; under no
+  clustering it biases `designEffect` upward (pooled mean 1.10 at ψ = 0.02), the safe side.
+- **Print.** Per replicate, each family prints one line ahead of its cell lines, and none when
+  the replicate prints no cell lines: `design effect: genRunId ICC <ICĈ> pooled over <k> cells`
+  (`classes` for FR-10), or `design effect: genRunId ICC not estimable (<reason>) — DE 1.00`.
+  - `<ICĈ>` is signed to 3 dp with an ASCII sign (`+0.034`, `-0.012`); `<k>` counts contributing
+    cells.
+  - The reason is `no cell spans two runs with one holding two of its items` or `outcome constant
+    in every contributing cell`.
+  - Each cell or class line prints `DE <x.xx>`. A floored negative ICC reads as estimated, and a
+    fallback never as a measurement.
 
 **The cost.** One extra candidate run per point, about 5 min at 400 items. It also raises the false
 fail of a candidate exactly as good as the incumbent (§Q3.2 gives the figures).
@@ -887,7 +919,8 @@ these.
     - The pilot (§Q1.3) runs first. Its outputs go in the ledger, and `teco` takes them to the
       stakeholder before guard's full spend.
     - The points then run in order, each starting only after the one before it.
-    - **Design effect (§Q6).** The report computes it per cell from the pack's `genRunId`, and
+    - **Design effect (§Q6).** The report computes it per cell from the pack's `genRunId`,
+      pooled per family (§Q6), and
       passes it to `parity_cell` and FR-10's intervals with `designEffectSource` printed.
       - `RunResult.designEffect` (1.0) and `basis` are unchanged.
       - Plan2 §3.4's "final" `designEffect = 1.0` is superseded for the limits.
@@ -902,7 +935,8 @@ Most figures in this note are printed by one of three stdlib scripts in
 - `latency.py model-bench/results/runs` covers §Q4.4, including the slow-tier columns.
 - `fr10.py` covers §Q1.3's sawtooth and labelling volume, and §Q5.
 
-The §Q1.1 and §Q1.3 "Pilot" figures on `missing` and the cue have no script:
+The §Q1.1 and §Q1.3 "Pilot" figures on `missing` and the cue, and §Q6's design-effect figures,
+have no script:
 - **The side-check counts.** Group the `understanding`-path rows of
   `model-bench/packs/guard-judge-understanding/items.jsonl` by (`expected`, `missing`
   non-empty), and by `tier` for the `clear_advance` attribution. The intervals are Wilson 95%.
@@ -910,5 +944,10 @@ The §Q1.1 and §Q1.3 "Pilot" figures on `missing` and the cue have no script:
 - **The cue check's rates.** Exact enumeration over the pilot's 50 items in four strata. A
   concordant item departs from intent with probability `e`, a counter-cue one with
   `f + (1 − f)·e`. Each outcome is scored by the stratified conditional p-value.
+- **§Q6's design-effect figures.** Monte Carlo, 400 layouts per row: ⌈1.1 × target⌉ seeds,
+  balanced over cells, shuffled and cut into runs of 25; each cell subsampled to eval +
+  calibration, then half to eval. The `m₀` percentiles come from these layouts. Outcomes are
+  Bernoulli(ψ), or at ICC ρ, Bernoulli at a per-(cell, run) Beta(`ψ(1−ρ)/ρ`, `(1−ψ)(1−ρ)/ρ`)
+  rate.
 
 `decision_stats.py`'s tests re-derive the figures from the formulas, not from these scripts.

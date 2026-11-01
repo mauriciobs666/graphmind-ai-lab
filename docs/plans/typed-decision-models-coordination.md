@@ -292,3 +292,24 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 
   **U3e.2 accepted as built against note v1.12 / plan4 §3.9**, and committed with Pass 26. The engineer's fix round was not re-gated: those findings were minors, and teco re-verified them by suite and mutant.
 - 2026-11-01: Note v1.13 delivered (data-scientist a615087b155a2f402, 93.3k tokens / 20 tools; 9,581 → 10,027 words). It rules a **method change**: one ICC pooled per family (the FR-1 cells; a point's FR-10 classes) with each cell's own Kish m₀. A fallback prints 'not estimable (<reason>) — DE 1.00' on a family line, and each line prints only `DE <x.xx>`. n₀ is stated in §Q6. No cap below m₀. m₀ is about 3.7 for guard, 3.1 for message type and 6.3 for join-in. Next: a note re-gate (`analyst`, `docs/reviews/typed-decision-models-ml.md`). Then the §3.9 amendment (architect; plan4 has been executed against, so in a successor or extending plan) and a code unit **U3e.3** (tdd-engineer), with the DS's mutants: per-cell instead of pooled, sums of squares about the grand mean, n₀ = N/g. U2.4 waits behind U3e.3.
+- 2026-11-01: Committed `698c042e` (plan6 v1.4, plan6 review Pass 3, report §9, ledger) and `de63603d` (U3e.2 plus impl review Pass 26).
+  - Dispatched U6.7 to a fresh `devops` a190ef89fa8161e93 (a350c1b9e32b6e8d2 is at 241k); report §10, gates (g)/(h)/(i).
+  - Dispatched the note v1.13 re-gate to a fresh `analyst` a38118ce6f184be95 (Pass 13 in `docs/reviews/typed-decision-models.md`).
+  - Held: U6.6 (to limit spend while credits are tight; it is unblocked); the U5.5 fix round (after U6.7's fixtures); U3e.3 (after Pass 13 and the §3.9 amendment).
+- 2026-11-01: Note Pass 13 (analyst a38118ce6f184be95, 105.8k tokens / 31 tools) → **approve with suggestions**. P13-M1 (plan4 §3.9 still per-cell; `architect`), P13-m1 (DE for an empty or non-contributing cell), P13-m2 (pooling cost under unequal ICCs), P13-n1 and P13-n2. Stopping condition for a teco line check: §3.9 cites §Q6 and names the new interface; §Q6 states the empty and non-contributing values; `grep 'genRunId ICC)' plan4` is empty. m1/m2/n1/n2 → note v1.14 on data-scientist a615087b155a2f402 first; then the architect amends §3.9; then U3e.3, with the 721/2557 hand fixture as its test anchor. U3e.3 is held until then.
+- 2026-11-01: U6.7 delivered (devops a190ef89fa8161e93, 151.9k tokens / 33 tools; one Sonnet session, no rerun; report §10). **(g) fails, (h) fails, (i) passes.**
+  - In 2.1.316, neither a PreToolUse deny (D1) nor an `onFailure: block` failure (D2) persists any hook attachment.
+  - Both leave a `tool_result` with `is_error`, `permissionDecision {reject, hook, reasonCode hook:PreToolUse}` and `toolDenialKind: permission-rule`, and they differ only in text.
+  - teco verified this independently on the subagent transcript `agent-ada23a789665b817b.jsonl`: the D1 and D2 ids appear only in their `tool_use` and `tool_result`, with the same `permissionDecision`.
+  - The harness flagged a settings-json pattern in the report (kit wiring, design content); not acted on.
+  - Plan6 §3.4's guard-entry rows rest on a false premise → architect (plan6 v1.5). This is Pass 3's falsifier case, a new §3.3/§3.4 major, so the brief asks for feature removal, not addition.
+- 2026-11-01: Note v1.14 (data-scientist a615087b155a2f402, 111.1k tokens / 7 tools; 10,097 words). §Q6 states the empty cell (1.00) and the non-contributing cell (formula); FR-10 pooling is kept, with its cost stated. Teco line check of Pass 13's note condition: met. The §3.9 amendment (P13-M1) goes to a fresh `architect`; plan4 only, in parallel with plan6 v1.5 (disjoint files).
+- 2026-11-01: The stakeholder is using LM Studio for their own tests. Ask them before any unit that needs it (U7 onward, or any `pytest -m live`). No unit before the pilot needs it.
+- 2026-11-01: Plan4 v1.3 delivered (fresh architect a64436fc47daad69a, 75.5k tokens / 12 tools; amended in place per the Q-1 precedent; 6,262 → 6,612 words).
+  - §3.9 cites §Q6 and names `family_design_effect` → `FamilyDesignEffect`.
+  - New §5 row **U3e.3**, with the hand fixture and three mutants; the architect reproduced each mutant's displacement.
+  - **teco line check of Pass 13's stopping condition: met** (the `genRunId ICC)` grep is empty).
+  - teco's trivial edit: §4.2 U7 now needs U3e.3.
+  - U3e.3 will rewrite the `DE 1.00 (genRunId ICC)` golden strings, which is expected.
+
+  Committed: note v1.14, plan4 v1.3, note review Pass 13, ledger. U3e.3 is unblocked (tdd-engineer); then U2.4.

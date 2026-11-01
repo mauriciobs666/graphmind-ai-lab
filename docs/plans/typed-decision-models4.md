@@ -1,8 +1,8 @@
 # Typed Decision Models — Implementation Plan, Subagent Labelling Amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Extends:** `docs/plans/typed-decision-models3.md` · **Reviews:** `docs/reviews/typed-decision-models4.md` · **Extended by:** `docs/plans/typed-decision-models5.md`, `docs/plans/typed-decision-models6.md`
 
-*2026-10-31 — v1.2: answers review Pass 2; note citations move to v1.9.*
+*2026-11-01 — v1.3: §3.9 follows note v1.14 §Q6 (family-pooled ICC); U3e.3 added to §5 (P13-M1).*
 
 ## 1. Goal & scope
 
@@ -362,32 +362,45 @@ Each bullet names its owning unit (§4.1).
 
 ### 3.9 Per-cell design effect (plan2 §3.4 and §3.6; note §Q6 "Design effect")
 
-- `decision_stats.design_effect(outcomes_by_run: Mapping[str, Sequence[bool]]) -> float`, pure:
-  - `N = Σm`, `g` groups, one-way ANOVA mean squares `MSB` and `MSW`;
-  - `n₀ = (N − Σm²/N)/(g − 1)` and `ICĈ = (MSB − MSW)/(MSB + (n₀ − 1)·MSW)`;
-  - `m₀ = Σm²/N` (Kish), and the result is `max(1.0, 1 + (m₀ − 1)·ICĈ)`;
-  - it returns 1.0 when `g < 2`, `N = g`, or the denominator is 0.
-- **Interface changes** (by symbol, since U3c.2 is in flight):
-  - `decision_stats.PairedItems` gains `outcome_ids: Mapping[str, tuple[str, ...]]`, the `itemId`
-    of each pair, parallel to `outcomes[metric]`. `pair_items` fills both in one pass.
-  - `report.DecisionPointPack` gains `gen_run_ids: Mapping[str, str]`, built where `strata` is
-    built, for eval items.
-  - U4's per-class FR-10 input gains the same parallel ids.
-- **The report computes it per replicate and per cell.**
-  - FR-1: the outcome is `cand ≠ inc` per pair, grouped through `outcome_ids` and `gen_run_ids`.
-  - FR-10: per class, the agreement indicator.
-  - The value goes to `parity_cell(design_effect=…)`, and to FR-10's Wilson interval as
-    `wilson_interval(k/DE, n/DE)` (float arguments are safe there).
-  - Each such line prints `DE <x.xx> (genRunId ICC)`.
+Note §Q6 "Design effect" is the one home of the estimator (one ICC pooled per family, each cell's
+own Kish `m₀`), the empty-cell and non-contributing-cell values, the two not-estimable reasons and
+the print. This section names the interface and the call sites only. U3e.2 built a per-cell form;
+U3e.3 replaces it.
+
+- **Interface** (`decision_stats.py`, pure). `design_effect(outcomes_by_run)` is removed, and its
+  tests are rewritten against the new function; there is one estimator.
+  - `family_design_effect(cells: Mapping[str, Mapping[str, Sequence[bool]]]) -> FamilyDesignEffect`
+    takes a whole family at once: cell (or class) → `genRunId` → that run's outcomes in the cell.
+    An empty cell is an empty mapping. A run with no outcomes, or a non-bool outcome, raises
+    `ValueError`, as U3e.2's function did.
+  - `FamilyDesignEffect` is a frozen dataclass with `icc: float | None` (the unfloored `ICĈ`;
+    `None` when not estimable), `reason: str | None` (set iff `icc is None`), `contributing: int`
+    (§Q6's `<k>`), and `effects: Mapping[str, float]`, one DE for every input key, empty cells
+    included.
+  - The two reason texts are module constants, `NOT_ESTIMABLE_NO_CONTRIBUTING` and
+    `NOT_ESTIMABLE_CONSTANT`, holding §Q6's strings verbatim.
+- **`DESIGN_EFFECT_SOURCE`** keeps its value `"genRunId ICC"`, the note's `designEffectSource`.
+  It is printed once, in the family line, and no longer on a cell line.
+- **Report** (`report.py`).
+  - `_cell_design_effect` becomes `_family_design_effect(outcomes, ids, gen_run_ids)`: per-key
+    outcomes and their parallel ids, grouped through `gen_run_ids` into the nested mapping.
+  - `_design_effect_text` prints `DE <x.xx>` only.
+  - A new `_family_design_effect_line(family, unit)` renders §Q6's family line, with `unit` as
+    `"cells"` or `"classes"`.
+- **Call sites.** Each family is computed once per replicate, before its cell lines. Its line goes
+  directly under the bar's heading line, at cell-line indentation (`  - design effect: …`), ahead
+  of the first cell or class line.
+  - FR-1, in `_render_replicate`: one call over the four cells' discordance (`cand ≠ inc`). Its
+    `effects` feed `parity_cell(design_effect=…)` and `_parity_text`.
+  - FR-10, in `_render_fr10_replicate`: one call over every class in `agreement.outcomes`,
+    empty ones included. The class's DE feeds `wilson_interval(k/DE, n/DE)` and its line.
+  - The early-return branches print no cell lines, so they print no family line.
+- **Ids and provenance** (U3e.1/U3e.2, unchanged). `PairedItems.outcome_ids`,
+  `AgreementItems.outcome_ids`, `DecisionPointPack.gen_run_ids`, and `validate_pack`'s `genRunId`
+  and `labels.generator` refusals with the two-model caveat
+  (`Labels: {labeler}, inputs generated by {generator}, unreviewed (FR-5). …`).
 - **Unchanged:** `RunResult.designEffect` (1.0), `RunResult.basis`, and `compare_report`'s
-  max-`designEffect` rule. Plan2 §3.4's "final" `designEffect = 1.0` now holds for the run record
-  only.
-- **Call sites.** The `parity_cell` call in U3c.2's per-replicate renderer
-  (`report._render_replicate`) switches from `run.designEffect` to the per-cell value, and so does
-  U4's FR-10 class line.
-- **Pack contract.** On a decision-point pack, `validate_pack` refuses an eval item without a
-  non-empty string `genRunId`, and refuses a missing `labels.generator.model`. The caveat names
-  both models: `Labels: {labeler}, inputs generated by {generator}, unreviewed (FR-5). …`.
+  max-`designEffect` rule. Plan2 §3.4's "final" `designEffect = 1.0` holds for the run record only.
 
 ### 3.10 Between-item probe failures (P8-m2; SMB plan §3.6)
 
@@ -458,7 +471,7 @@ The live units follow note §Q1.2–§Q1.3 (pilot first, point order, counts-onl
   - Replace the P8-m2 item in `model-bench/docs/BACKLOG.md` with the item-call outage gap (R-21),
     and add a `HISTORY.md` entry.
 - **U6.** Each point's U6 starts after that point's U5i. Nothing else changes.
-- **U7.** Needs U2.3, U3e.2 and the point's U6.
+- **U7.** Needs U2.3, U3e.3 (after U3e.2) and the point's U6.
 
 ### 4.3 Order
 
@@ -501,6 +514,7 @@ hand-built from §2's shapes, plus one trimmed real transcript as a shape check.
 | U3d | An imported eval item keeps `genRunId`, `genRound`, `seedId` and `labelVotes`; `input_hash` is unchanged by them. |
 | U3e.1 | `validate_pack` refuses an eval item without `genRunId` and a pack without `labels.generator.model`. `gen_run_ids` covers every eval item. The caveat names both models. |
 | U3e.2 | `design_effect` gives 1.0 for one run, for runs of size 1 and for constant outcomes. On a hand-computed two-run fixture it matches the ANOVA formula, and a negative ICĈ floors at 1.0. Unequal sizes use `m₀`; a mutant using the mean `m̄` reddens. `outcome_ids` stay aligned with `outcomes` after a pairwise drop. A cell whose items share one high-ICC run prints `DE > 1` and a larger `mdd`, with the same `p_worse` and decision. `RunResult.designEffect` stays 1.0 and `compare_report` is unchanged. |
+| U3e.3 (`tdd-engineer`; after U3e.2, before U2.4) | §3.9's interface and call sites, against note §Q6. **Hand fixture** (review Pass 13, `docs/reviews/typed-decision-models.md`), asserted as literals, never recomputed by the code under test: A = {[1,0,0], [0,0], [1,1]}, B = {[0,0,0,1], [0]}, C = {[1,0]}, D = {[1], [0]} give `icc` = 721/2557 (to 1e-12), `contributing` = 2, and DE A 1.403, B 1.677, C 1.282, D 1.000 (to 1e-3); an added empty cell E = {} takes 1.000. **Mutants, each red on that fixture:** per-cell estimation instead of pooled (A goes to 1.691); sums of squares about the family's grand mean, not each cell's own mean; `n₀ = N/g`. **Not estimable:** every cell single-run, and every contributing cell constant, each give `icc` None, its reason constant, and 1.00 in every cell. A negative `ICĈ` keeps its value and floors each DE at 1.00. **Print:** the FR-1 and FR-10 golden strings show the family line once per replicate, directly under the bar's heading and ahead of the first cell or class line, with a signed 3-dp ICC, `<k>` and `cells`/`classes`, or the not-estimable form; each cell or class line ends its figures with `DE <x.xx>`; no cell line carries `DESIGN_EFFECT_SOURCE`; an early-return replicate prints no family line. An FR-10 class at `0/0` prints `DE 1.00`. `RunResult.designEffect` stays 1.0, and `RunResult.basis` and `compare_report` are unchanged. |
 | U2.3 | Per exception, with `probe()` returning `"api-v0"`, a probe raising before item 2 completes the run. **Chat:** a completed item 2 is `"load"`, and a timed-out item 2 stays `"timeout"`. **Decisions and handoff:** item 2 is `"load"` whether its call succeeded or failed, and the run is `"assumed"`. Items 1 and 3 are unchanged; one stderr line is written; `_turn_timings` behaves as chat. With `probe()` returning `"unreachable"`, the run exits 3 and stores nothing. A treat-as-resident mutant reddens. |
 
 ## 6. Risks & open questions

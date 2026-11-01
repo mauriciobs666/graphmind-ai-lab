@@ -2041,3 +2041,203 @@ takes the same path under its own reason"). *Checked against `point.json` and pl
 **Stopping condition (teco line check).** P12-M1's power is restated at a consistent noise model,
 and the pilot prints `e` and the power at that `e`, or the note adopts a noise-robust statistic
 with its rates stated.
+
+## Pass 13 — method note v1.13, §Q6 "Design effect" (2026-11-01)
+
+**Scope.** The uncommitted v1.13 delta (`git diff -- docs/plans/typed-decision-models-ml.md`):
+§Q6 "Design effect" read whole, the v1.13 line, and the new "Reproducing the figures" bullet. I
+also read §Q1.1 "Apportionment", §Q1.3's sizes table and "Generation runs", plan4 §3.6 and §3.9,
+plan5 §3.2, impl review Pass 26, and the code at `de63603d` (`decision_stats.design_effect`,
+`report.py` at 2126–2139, 2279–2311 and 2517). The probes are in the scratchpad's
+`analyst-p13/`, which holds copies of the author's `de/` scripts and my own:
+- `note_pooled.py` is an exact-fraction implementation of §Q6 as written, plus a hand fixture and
+  the degenerate cases.
+- `crosscheck.py` checks the simulation's estimator against `note_pooled.py`.
+- `hetero.py` tests pooling when the ICC is not shared.
+
+**Verdict: approve with suggestions.** The estimator is well defined and correctly stated, and
+every figure reproduces. The simulated layout is the planned round-1 layout. There are no
+blockers. One major sits outside the note: plan4 §3.9 still specifies the per-cell form, and it
+must change before the code unit starts (P13-M1). Two minors and two nits are in-note. Fold P13-m1
+and P13-n1 before the code unit, because they decide behaviour that the code will pin.
+
+CPG: considered, not relevant — this is a method note, and `model-bench/` has no loaded CPG. The
+estimator was checked by direct execution.
+
+**Pass 12 disposition.** P12-M1 and P12-n1 are outside this delta (§Q1.3 "Pilot" is unchanged
+since v1.12), so this pass does not recheck them.
+
+**Impl review Pass 26 answers folded in (question → answer).**
+- Q2, the `n₀` and estimator → stated: a pooled `n₀`, and the ANOVA ICC kept, citing Ridout et
+  al. 1999.
+- Q3, the DE size / cap → no cap and no shrinkage, with a stated rationale. The `m₀` premise is
+  corrected per point.
+- P26-n1, the fallback print → a family line with a signed ICC or `not estimable (<reason>) — DE
+  1.00`, and `DE <x.xx>` per line.
+
+### Questions 1–5, settled by execution
+
+1. **The estimator is well defined and correct.** *Verified.*
+   - §Q6 fixes each cell's SSB and SSW about its own mean, and states the pooled
+     `n₀ = Σ(N_c − Σm²/N_c)/Σ(g_c − 1)`. This is the right `n₀` for runs nested in fixed cells:
+     `E[ΣSSB_c] = Σ(g_c−1)σ²_w + Σ(N_c − Σm²/N_c)σ²_b`.
+   - **Hand fixture** (exact fractions): A = {[1,0,0], [0,0], [1,1]}, B = {[0,0,0,1], [0]},
+     C = {[1,0]} with `g_c = 1`, and D = {[1], [0]} with `N_c = g_c`. Only A and B contribute.
+     - MSB = 461/1260, MSW = 17/84, `n₀` = 72/35, and `ICĈ` = 721/2557 ≈ 0.2820. I computed it
+       by hand first, and the code reproduced it.
+     - DE is A 1.403, B 1.677, C 1.282 and D 1.000.
+   - **One contributing cell** equals the committed `design_effect` exactly: 1.6912 on A.
+   - The simulation's estimator matches mine on 3,000 random families: max |Δ| 3.3e-16, and the
+     two agree on every not-estimable case.
+   - **The degenerate cases are complete.**
+     - No contributing cell gives not estimable.
+     - A cell with `g_c ≥ 2` and `N_c = g_c` is excluded (D).
+     - `Σ(N_c − g_c)` cannot be 0 for an estimable family.
+     - For any contributing cell, `n₀ > 1` strictly: with `m_i = 1 + a_i` and `A = Σa_i > 0`,
+       `N − Σm²/N − (g−1) = [A(g−1) + A² − Σa²]/N > 0`. So the denominator is 0 only if
+       MSB = MSW = 0, which is exactly "constant within every contributing cell". The note's
+       parenthesis is therefore exact.
+     - `ICĈ ≤ 1` gives `DE ≤ m₀`.
+     - MSW = 0 gives ICC 1, and MSB = 0 with MSW > 0 gives −1, floored to DE 1.00. Both checked.
+   - Two cases the note leaves open are in P13-m1.
+2. **The figures reproduce, and the layout is the real one.** *Verified (re-run).*
+   - `pooled.py`, with no clustering at ψ = 0.02:
+     - per-cell DE is p90 1.65 and p99 3.70;
+     - pooled DE is p90 1.37 and p99 2.07, with mean 1.10.
+   - At ICC 0.1, the per-cell mean is 1.30 and the pooled mean 1.29, against a true 1.27.
+   - `null.py` (other RNG seeds) gives per-cell p90 1.67 and p99 3.54. So "≥ 3.5 in 1%" is within
+     Monte Carlo noise.
+   - `sim.py` gives `m₀` of 3.70 (3.38–4.08), 3.12 and 6.34.
+   - **The layout matches the plans:**
+     - ⌈1.1 × (eval + calibration)⌉ seeds, shuffled and cut into runs of 25 (plan4 §3.6, note
+       §Q1.3);
+     - cells filled by subsampling within label × design stratum, then calibration = eval;
+     - balanced cells, which follows from §Q1.1's unbiased apportionment at a 50/50 or
+       5-way-balanced intent.
+   - **Not simulated:** label ≠ intent drift, regeneration runs (plan4 §3.6), and top-ups. Each
+     adds only small runs. The note's "≤ about 6 eval items per cell per top-up run" checks out:
+     25 seeds over one guard kind's two cells, half to eval. Message type's top-up is about 2.5,
+     since it has no design stratum.
+3. **The pooling premise.** *Measured; the ruling routes to `data-scientist` (P13-m2).*
+   - With rates that differ across cells but one shared binary-scale ICC, pooling is unbiased per
+     cell. At ψ = .02/.05/.10/.15 and ρ = 0.1, every cell's pooled mean is 1.27, equal to the
+     true value.
+   - That is what centring each cell on its own mean buys. The premise matters only when the ICC
+     itself differs across cells.
+4. **The print rule** states a signed ICC on the family line, the
+   `not estimable (<reason>) — DE 1.00` fallback, and `DE <x.xx>` per line. *Verified by grep.*
+   - Nothing else in the note says `DE <x.xx> (genRunId ICC)`. `designEffectSource: "genRunId
+     ICC"`, at the head of §Q6, is a provenance field, not a print.
+   - Outside the note, the old print survives in plan4 §3.9 at line 381, and in
+     `report.py:2127-2128` through `DESIGN_EFFECT_SOURCE` (P13-M1).
+   - The two reason texts are inexact (P13-n1).
+5. **Growth-stops: acceptable, with one restated fact.** *Counted.*
+   - 9,581 → 10,027 words, so +446. That is 650 words added and 146 removed.
+   - The old "Estimate" and "Size" bullets and the v1.12 line were replaced in place, not
+     stacked. The dated line is one line, and there is no finding→resolution table.
+   - The growth is new scope: a new estimator, a new not-estimable rule, a new print rule and the
+     reproduction bullet that the note's own convention requires. The "Why pooled" bullet
+     (about 120 words) states reasons as design.
+   - One restated fact: the layout ("1.1× target, cells subsampled, then half to eval") is said
+     in both "Size" and the reproduction bullet (P13-n2).
+
+### Findings
+
+**P13-M1 (major; `architect`, before the code unit). Plan4 §3.9 still specifies the per-cell
+estimator and the old print, and P26-n1 made "§3.9 changes first" the condition.** *Verified.*
+- **Evidence.** `docs/plans/typed-decision-models4.md:365-381` still gives:
+  - a per-cell `design_effect(outcomes_by_run) -> float` with a per-cell `n₀`;
+  - "returns 1.0 when `g < 2`";
+  - "Each such line prints `DE <x.xx> (genRunId ICC)`".
+
+  The note's "Handed to architect" item 11 (lines 915–920) still says "computes it per cell"
+  with no pooling.
+- **Why it matters.** `model-bench/AGENTS.md` binds `decision_stats.py` to the note, but the
+  `report.py` call sites, the print and the function's shape follow plan4 §3.9. A coder briefed
+  from plan4 rebuilds v1.12.
+- **The function's interface changes.** The ICC needs every cell of the family at once, so the
+  architect picks the API (for example a family-level function that returns the ICC or a reason,
+  plus a per-cell DE). The note should not pick it.
+- **Fix.** `architect` revises §3.9 to cite §Q6 for the estimator, the not-estimable rule and the
+  print, then names the new signature and the two call sites. Add one clause to the note's item
+  11: "pooled per family (§Q6)".
+- **Test anchor.** Use this pass's hand fixture, independent of the code: `ICĈ = 721/2557`, and
+  DE A 1.403, B 1.677, C 1.282, D 1.000 (if P13-m1 keeps the formula for C). A per-cell
+  implementation gives A 1.691 and turns it red.
+
+**P13-m1 (minor; `data-scientist`, fold before the code unit). Two cell cases are left open, and
+one of them divides by zero.** *Verified (`note_pooled.py`).*
+- **An empty cell or class** (`N_c = 0`) has `m₀ = 0/0`. The case is real: an FR-10 class
+  printing `0/0 [—]` (`report.py:2521`).
+- **A non-contributing cell in an estimable family.** The formula as written gives a `g_c = 1`
+  cell `1 + (N_c − 1)·ICĈ`, which is fixture C's 1.282. The committed code gives such a cell 1.0.
+  The formula is the statistically consistent choice, but it changes behaviour, so the note
+  should say which applies.
+- **Fix.** Under "Per cell", say that an empty cell takes 1.00, and say whether a
+  non-contributing cell takes the pooled formula or 1.00.
+
+**P13-m2 (minor; `data-scientist` rules). "Pooling costs no bias" holds only under a common
+generation-run ICC, and the cost when that fails is not stated.** *Measured (`hetero.py`, guard
+layout, 400 reps).*
+
+| Case | True DE per cell | Pooled mean per cell |
+|---|---|---|
+| ψ .02/.05/.10/.15, ρ = 0.1 in all four | 1.27 each | 1.27 each |
+| ρ = 0.2 in one cell, 0 elsewhere (ψ = .05) | 1.54 / 1.00 ×3 | 1.18 in all four |
+| ρ rising with ψ (.02 → .15) | 1.05 / 1.13 / 1.27 / 1.40 | 1.32 in all four |
+
+- **What the table shows.** Different base rates are handled. Different ICCs are averaged, so a
+  cell whose clustering is truly its own gets a narrower MDD or Wilson interval than the truth
+  (1.54 → 1.18 is about 13% narrower in `√DE`).
+- **No decision moves (§Q3.2),** so this is not blocker-class. But the note's safety argument
+  ("the safe side for a limit") covers the floor, not this case.
+- **For FR-10 the premise is weaker a priori.** Classes differ in kind, and a generator run can
+  plausibly confuse one class without touching another.
+- **Fix.** Add a sentence that states this cost. Or, if `data-scientist` judges FR-10's premise
+  unsafe, pool FR-1 only and keep a per-class rule for FR-10. Either way, print each cell's own
+  ICC as a diagnostic if that is wanted. That ruling is outside a general review.
+
+**P13-n1 (nit; `data-scientist`). Both not-estimable reason texts are inexact.** *Verified by
+case.*
+- "no cell has a run holding two of its items" is false when every cell comes from a single run
+  (`g_c = 1`, `N_c ≥ 2`), which is also "no contributing cell". Suggested text: `no cell spans two
+  runs with one holding two of its items`.
+- "outcome constant in every cell" should read "in every contributing cell". A non-contributing
+  cell can vary: in my fixture, C = [1,0] varies while the family is not estimable.
+
+**P13-n2 (nit; `data-scientist`). Print details and the reproduction text.**
+- **Print.**
+  - Fix "signed" to a concrete format, for example `+0.034` / `-0.012` with an ASCII hyphen, so
+    the test string is unambiguous.
+  - State that `<k>` counts contributing cells.
+  - FR-10 should say "classes".
+  - Say where the family line goes, for example before its cell lines, and that it is absent
+    when a replicate prints no cell lines.
+- **Reproduction.**
+  - The section's lead sentence ("The §Q1.1 and §Q1.3 'Pilot' figures … have no script") no
+    longer scopes the §Q6 bullet.
+  - State the Beta parameterization (`a = ψ(1−ρ)/ρ`, `b = (1−ψ)(1−ρ)/ρ`).
+  - Say that the `m₀` percentiles come from the same layouts.
+  - Drop "1.1× target, cells subsampled, then half to eval" from "Size" in favour of a pointer
+    to that bullet, so the fact has one home.
+
+### What's solid
+
+- **The pooled estimator** is the right object: runs nested in fixed cells, each cell centred on
+  its own mean. Its degenerate-case rule is exactly complete for the denominator, by the
+  `n₀ > 1` proof above.
+- **The simulated layout** is the planned one, not a convenient proxy. Every stated figure
+  reproduces within Monte Carlo noise.
+- **The print rule** makes a floored negative ICC and a fallback distinguishable, which was
+  P26-n1's point.
+
+### Open questions
+
+- For `teco`: should the code unit wait for P13-m1's ruling and the plan4 §3.9 revision
+  (P13-M1)? I recommend that it wait. Both decide values the tests will pin.
+
+**Stopping condition (teco line check, no Pass 14 needed).** The pass is met when all three of
+these hold:
+- plan4 §3.9 cites §Q6 and names the new interface;
+- §Q6 states the empty-cell and non-contributing-cell values;
+- `grep -n 'genRunId ICC)' docs/plans/typed-decision-models4.md` returns nothing.
