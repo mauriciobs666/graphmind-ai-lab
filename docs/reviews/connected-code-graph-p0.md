@@ -736,3 +736,59 @@ CPG: considered, not relevant — a 20-line pure function in a new, unindexed fi
 **What's solid.** Imports `screen_fails` from `ccg.bundle` rather than copying it (proved by a stub test); pure, no I/O; the oracle table is copied from EP2 §2 with stated post-step inputs; fixed-point and consumer-form cross-checks are parametrized over every row; ValueError closes the bad-form hole at the single seam both callers use.
 
 **Open questions:** none blocking. Suggest `teco` folds findings 1 and 2 into a short follow-up (two tests, no code change) before P0-11b imports the function.
+
+---
+
+### S11
+
+> Step S11 (P0-10): `cpg/spikes/vertical-slice/` (untracked). Contracts: `docs/plans/connected-code-graph-p0-2.md` `| S11 |` row, §2 D15/D16; bundle spec3 §1, §4.0, §5; ES2 §1.5.
+
+#### Pass 1
+
+**Scope & verdict: approve with suggestions.** No blocker: every claim I re-measured reproduced. Two majors concern what the evidence does not cover (one omission is mis-described; three of the five emitter items have no test that can fail). Static read of `run_extract.sh`, `normalize.py` (emitter paths), `extract.sc`, the tests and the notes, plus execution: the 18 tests pass (rerun by me); both bundles re-read through `ccg.bundle.read_bundle`; independent re-derivations (scripts under the scratchpad, `.../scratchpad/a1.py`..`a9.py`); 12 mutants; the failure branch driven.
+
+CPG: considered, not relevant — the code under review is new, untracked spike code that `cpg_falkorchat` does not index; I read and ran it.
+
+**Claims re-measured (all by my own code, not `verify_qnames.py`)**
+- Record counts: fcs 85,071 / sp 2,775 in run1 and run2, by type equal to the notes. Bodies of run1/run2 `cmp`-identical; headers differ only in `builtAt`/`sandboxAuditIds`. `builtTree` equals `git rev-parse defca60f:<root>` for both units.
+- qnames: my own `ast` walker (written from spec §4.1/§4.2, sharing nothing with either S11 file) yields 4,686 qnames = the bundle's 4,686 (0 only-mine, 0 only-bundle). Spans: 0 diffs except the empty `<module>` (below). sp: 11 symbols of `client.ts`/`endpoints.ts` checked by hand against the source (spans, `timedSignal.<anon>#1`, `.isTimeout`, `.cleanup`): all agree. I did not re-derive all 257 TS qnames; the sp claim is verified on that sample only.
+- `import`: my `ast` count of 926 Python imports (alias-expanded) equals the bundle's per-file (line, module, names) in all 107 files; ordinals `0..k-1`, lines non-decreasing, names strictly sorted. 87 carry `symbolId`.
+- Fingerprints: all 4,943 recomputed from `git show` by spec §5.3: 0 wrong. `lastChanged*`: 240 random symbols (both units) recomputed with my own `git blame --line-porcelain`: 0 wrong. cond `code`: none over 200 chars or holding whitespace runs.
+- G-4, two definitions. Raw `cb` facts: fcs 48,022 / sp 2,242. Node-level self-edges: 2,751 / 5 (all `pk=c`, so they are cond-to-cond self-edges). Node-level distinct non-self (point,cond) pairs: 7,791 / 464 (of which cond-to-cond 1,530 / 125, equal to the bundle's). Written: 5,699 / 451, 0 self, 0 duplicate ids, every `cond` is a `cond` record. The gap (2,092 / 13 pairs) is the synthetic-call points the notes describe; I did not recompute those against the CPG, only against the facts file extract.sc wrote. 38 two-cycles in fcs, none in sp.
+- Sandbox: all 10 audit records of the two runs are `offline`, `network none`, `refused=false`, `exitCode 0`; `extractScriptHash` equals the extract record's `script.sha256`. After my runs: no `ccg-sbx-*` container, no labeled volume, no `.ccg-ovl-*` or `/tmp/ccg-sbx.*` residue; `docker-config` still empty. §1.6 items: `launchFact` etc. count 0; a sweep for AKIA/ghp_/sk-/PEM/JWT/xox/AIza shapes matched 0 lines in both bundles; the longest `constant`s are prose and routes.
+- F-13: `grep -i 'keynorm|%2e|percent|unquote|urllib'` over every S11 file matches nothing.
+
+**Findings**
+
+*Major*
+
+1. **The JS bundle omits 7 production/e2e files, and the notes name the wrong cause.** Notes finding 3 and the per-file table say the 33 absent files of 74 are `*.test.ts(x)`. `find` over the staged tree finds 26 `*.test.ts(x)`. `run1/sp/perfile.json` `nonEmptyNotInCpg` lists 33; the 7 others are `src/i18n/{LanguageChooser.tsx,Provider.tsx,config.ts,format.ts,useLocale.ts}` and `tests/e2e/{mobile-shell,presenter}.spec.ts`. The whole `src/i18n/` directory is missing (its 3 tests too). So storefront production code (the locale hook and provider that components call) has no `file`/`symbol` and its callers' sites cannot carry a `targets`. Bundle spec §4.1 rule 4 says "every code file has exactly one file-scope symbol", so this is a spec-vs-frontend conflict, not only a coverage note; and the "257/257" re-derivation holds only over the files the frontend parsed. The exclusion rule (a directory name, a `spec` suffix) is inferred from the file list; I did not find it in Joern.
+   *Fix:* correct notes finding 3 and the table; list all 33 with the rule that excludes each (read it from the jssrc2cpg default-ignore settings, in the sandbox image); record it as an SL-7/S14 delta; ask for a ruling on rule 4 (either the emitter adds `file` + `<module>` records for source files the frontend skips, from source alone; or the spec says which files may be absent). Whether D15's per-file rule for JS is "over CPG files" depends on this.
+
+2. **Three of the five emitter items, and `complexity`/fallback, are pinned by nothing that can fail.** The suite exercises only helpers (`quote_field`, `name_norm`, `g4_filter`, `last_changed`, ...); `assemble` has no test, and the live checks do not constrain these. My mutants on copies (`.../scratchpad/mut/`, harness `run` in my session), suite result:
+   - M1 §1.5 de-dup removed (`if key in seen: continue`) **survives 18/18**. The live corpus cannot kill it either: I found 0 Python `from` imports with a repeated name and 0 TS single-line imports with repeated specifiers. So §1.5 has no evidence. (Positive control: calling `py_imports` by hand on `from m import a, a, a as b, b as a, a as b` gives `a`, `a as b`, `b as a`, so the current code is right.)
+   - M10 cond-to-cond removed (`point_of_use[("c", k)]`) **survives**; M2 `complexity` off by one **survives**; M3 empty-file fallback using `--reverse` **survives**; M11 fingerprint keeping blank lines **survives** (notes item 15 concedes the three values are unchecked; I verified them above, so they are right today).
+   - Killed: M4 (strip), M5 (dedup order), M6 (IDENT prefix match), M7 (Unicode IDENT), M8 (tie-break), M9 (cap 4), M12 (`ensure_ascii`).
+   So the notes' "23 mutants killed" holds for the helpers, and 5 of my 12 survive in `assemble`.
+   *Fix:* tests in `tests/test_s11.py` for `py_imports`/`js_imports` with repeated names (expected arrays written by hand from §1.5), and a small synthetic-facts `assemble` case asserting a cond-to-cond `controlledBy`, `complexity == 1 + len(conds)` (or the ruling from finding 3), and an empty-file symbol's `lastChanged*`. Put the guards in the test file, not in `run_extract.sh`'s verify step (a guard authored with the step it checks cannot redden).
+
+*Minor*
+
+3. **`complexity` is not the spec's definition, and the notes understate the gap.** §5.3: McCabe over "decision points in the symbol's own CFG, plus 1"; the implementation is `1 + count(own cond records)` (CDG sources; `normalize.py:870`; `complexity != 1+conds` for 0 symbols, verified). Against my own `ast` count (if/while/ifexp/for/except/boolop/comprehension, nested scopes excluded) on 4,016 Python functions and methods: 3,532 equal; +1 in 393, +2 in 47, +3 in 3; lower by 1..6 in 41 (my count has its own choices, e.g. `with` and `try` are not counted, so treat the sign of the gap as indicative). §5.5 gives "Joern's CDG sources decide" for `cond`, not for `complexity`. *Ask:* a spec3 ruling that either defines `complexity = 1 + count(cond)` or keeps McCabe and says how it is measured. Not blocking for P0 if no AC reads it.
+
+4. **Empty-span `lastChanged*` and file span: spec says nothing today.** §5.3 defines the value as the latest committer date "among the lines of `git blame`" over the span; for the empty `tests/eval/__init__.py` there are none, yet `lastChangedAt` is required (`history` is `available`, §2.2). The delegate's fallback (`git log -1 <commit> -- path`) gives `dbd2cdf…`, 2026-08-16T09:56:22Z, which I reproduced (the file has one commit). The same file shows a second silent choice: the file record has `lineCount 0`, the module symbol `lineStart 1, lineEnd 1` (the only symbol whose end exceeds its file's `lineCount`; fingerprint is the hash of the empty string). *Ask:* one sentence each in spec3 §5.3 for both (suggested: fall back to the path's last commit; span `1..max(1, lineCount)`), then a test (finding 2).
+
+5. **Content-check failure branch (item 3): acceptable for P0, with two notes.** I drove it: a scratchpad copy of `run_extract.sh` whose `git archive` line writes one unparseable `bad.ts`, `--units sp`: `joern-parse` exits 0, `cpg-content-check.sc` prints `CONTENT …=EMPTY` and exits 1, and the script fails with `unit sp: content check failed -- … see …/contentcheck.txt`, exit 1, no container or volume left. A Python `bad.py` does **not** reproduce it (pysrc2cpg still emits a `<module>` METHOD and the check says `ok`), so the empty-CPG case is only constructible with JS/TS input. Because the failure is real and cheap (~25 s), record this run in the notes. And: the `|| fail "...no non-external METHOD..."` message fires on **any** non-zero runner exit (docker down, timeout, flag refusal), mis-attributing it; test for the `EMPTY` line before using that wording (`run_extract.sh`, step 3).
+
+6. **Python spans from `ast`, and the `ast` dependency (item 4): allowed.** The S11 row places `normalize.py` on the host and BF12 requires `lastChanged*` there; §4.0 requires qnames derivable "with only the source file", so a stdlib parse of the source is the contract, not a drift. "Built in the sandbox" attaches to the CPG extraction, which is true (all 10 records). One gap: the bundle depends on the host's Python (`ast` grammar and `end_lineno`), and `header.tools` records no Python version; record it in `normalizerVersion` or the notes before this runs on a second machine.
+
+*Nit*
+
+7. The notes' G-4 split ("26,476 repeated", "13,096 unmapped") depends on classifying unmapped edges before duplicates; by node-level pairs the duplicates are 37,480 of 48,022. Both sum to the raw count. S14 should state the definition when it quotes the figure.
+8. `check_audit.py` reads `cpg/.audit/sandbox.jsonl` by a fixed relative path; a run elsewhere checks the wrong file without error. Harmless for the spike.
+
+**What's solid.** Independent qname, import, fingerprint and `lastChanged*` reproduction at 0 diffs; the G-4 rule is needed (self-edges are all cond-kind) and correct under two counting definitions; run1/run2 determinism; `@AUDIT_ID@` used for both outputs; every sandbox call offline through `offline-run.sh` with an audit record tied to the script hash; `lastChanged*` computed on the host from the real repo; F-13 untouched; no secrets-shaped values.
+
+**Stopping condition for Pass 2.** No Pass 2 is needed if all of these hold, each checkable mechanically: (a) the notes' 33-file list has a named exclusion rule per file and a recorded spec ruling for §4.1 rule 4 (finding 1); (b) mutants M1, M2, M10 turn `pytest spikes/vertical-slice/tests` red (finding 2); (c) spec3 §5.3 carries the `complexity` ruling and the empty-span sentences (findings 3 and 4) — these two are `architect`'s, not S11's. Findings 5 to 8 are take-or-leave.
+
+**Open questions.** Is `src/i18n/` supposed to be in the slice (the S12 AC-1 chain does not touch it)? If the answer is "no, never", finding 1 reduces to the rule-4 wording.
