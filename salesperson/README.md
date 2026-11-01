@@ -13,9 +13,6 @@ Delivered per `docs/requirements/salesperson-ui.md` (FR-1…FR-11, AC-1…AC-11)
 `docs/plans/salesperson-ui.md` (the stack rationale is §4.2); delivery record, the S15 QA pass and
 defect-fix wave, and open items are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
 
-> This directory previously held a retired Streamlit chatbot. That app now lives at
-> `deprecated/salesperson/` and is unrelated to the code here — see `deprecated/README.md`.
-
 ## Stack
 
 | Concern | Choice |

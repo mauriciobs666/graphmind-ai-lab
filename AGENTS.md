@@ -17,15 +17,13 @@ engineering** (Claude Code and OpenCode artifacts).
 - `salesperson/` — Business-facing, mobile-first storefront SPA (React + Vite + TypeScript,
   `i18next` in English/Brazilian Portuguese/Spanish) for the workflow-engine-backed `salesperson`
   agent hosted by `falkor-chat/`'s server: a pure static bundle, served at `/shop` on that same
-  FastAPI process (one process, one port, no CORS), replacing the retired Streamlit app
-  (`deprecated/salesperson/`). Delivered per `docs/requirements/salesperson-ui.md` /
+  FastAPI process (one process, one port, no CORS). Delivered per `docs/requirements/salesperson-ui.md` /
   `docs/plans/salesperson-ui.md`; delivery record, the defect-fix wave, and open items are in
   `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`.
 - `opencode/` — Personal OpenCode configuration. **`agents/tank/`** is the one live agent: a
   headless, local-model DevOps variant that runs a read-only health/hygiene check by default and
   can bring up/tear down one Docker-Compose environment it itself started
-  (`opencode/agents/tank/README.md`). Former custom agents and OpenCode-only `SKILL.md` packages
-  are retired (`deprecated/opencode/` — see that row in `deprecated/README.md`). The manual
+  (`opencode/agents/tank/README.md`). The manual
   covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, is what `tank` builds on.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
@@ -69,20 +67,8 @@ engineering** (Claude Code and OpenCode artifacts).
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
   `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified asyncio/Starlette/
   FastAPI/pydantic gotchas, incl. test-harness ones, for `coder`/`tdd-engineer`/`architect`/
-  `analyst`/`qa-engineer`). OpenCode-only skills go in `opencode/skills/` (currently empty — the
-  prior set is retired, `deprecated/opencode/skills/`). Format ports across Claude Code/OpenCode/
+  `analyst`/`qa-engineer`). OpenCode-only skills go in `opencode/skills/` (currently empty). Format ports across Claude Code/OpenCode/
   Kiro; tool-gating & activation behavior do not — verify per tool.
-- `deprecated/` — **retired components, preserved but not maintained**: no bug fixes, upgrades, or
-  refactors, and no precedent for new work. Holds `deprecated/salesperson/`, the standalone
-  Streamlit sales-assistant chatbot (its own `kg_pastel` FalkorDB graph + LangChain/LangGraph;
-  optional local LLM via LM Studio), retired because it talks to an older, separate backend rather
-  than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
-  workflow-engine-backed `salesperson` agent, specified in `docs/requirements/salesperson-ui.md`
-  and planned in `docs/plans/salesperson-ui.md` — is **delivered**, at `salesperson/` (see that
-  Structure bullet above). Also holds
-  `deprecated/opencode/`, `opencode/`'s former custom agents (`rpg`, `coding-senior`, `severino/`)
-  and OpenCode-only `SKILL.md` packages, retired to clear the way for the headless `tank` agent
-  (see the `opencode/` bullet above).
 
 ## Component docs (read before working in a component)
 
@@ -99,7 +85,6 @@ engineering** (Claude Code and OpenCode artifacts).
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
 | `decision-models/` | `decision-models/README.md` · `decision-models/AGENTS.md` · `docs/requirements/typed-decision-models.md` · `docs/plans/typed-decision-models4.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
-| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` · `deprecated/opencode/agents/severino/README.md` |
 
 ## Working in this repo
 
@@ -111,18 +96,11 @@ engineering** (Claude Code and OpenCode artifacts).
   it deploys on, `/shop` mount) — follow `salesperson/AGENTS.md` and `falkor-chat/docs/SERVER.md`
   §1.3 for the storefront surface; delivery record and open items in
   `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not root `docs/`.
-- **OpenCode agent tasks** → `opencode/` — `agents/tank/` is the one live agent (former ones are
-  retired, `deprecated/opencode/agents/`); follow `opencode/AGENTS.md` and
+- **OpenCode agent tasks** → `opencode/` — `agents/tank/` is the one live agent; follow `opencode/AGENTS.md` and
   `opencode/agents/tank/README.md` for setup/run, `opencode/docs/manuals/local-llm.md` for local
   LM Studio setup.
-- **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills; OpenCode-only ones are
-  retired (`deprecated/opencode/skills/`) — a new one goes in `opencode/skills/` fresh. Follow
+- **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills; a new OpenCode-only one goes in `opencode/skills/`. Follow
   each `<name>/SKILL.md` and the directory's `README.md`.
-- **Retired components** → `deprecated/` — read for reference only, never maintained, extended, or
-  copied from. The retired Streamlit chatbot is `deprecated/salesperson/`; "the salesperson app"
-  almost certainly means its **delivered** replacement at `salesperson/` (see that Structure
-  bullet above; delivery record in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`) — confirm before
-  touching anything under `deprecated/`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills); follow
   `claude/AGENTS.md`, which also owns the add/edit/rename update rule (source, `kaizen/`, catalogs)
   for agents and skills alike.

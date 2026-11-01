@@ -92,8 +92,8 @@ Use this for any future library/utility code (`excel_extractor`, `salesperson`, 
 
 ### Standard 2 — agent eval / bless harness (agent behavior)
 
-Canonical exemplar: `deprecated/opencode/agents/severino/tests/` (severino itself is retired,
-but this eval/bless harness is still the reusable pattern). This is the pattern documented below.
+The exemplar was `severino`'s `tests/` (severino is retired and removed from the repo; the
+eval/bless harness is still the reusable pattern). This is the pattern documented below.
 
 ---
 

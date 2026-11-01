@@ -141,8 +141,7 @@ These agents live in this repo but run from Claude Code's config dir via symlink
     still applies; invoking it as a subagent degrades it to one interview round per invocation).
 - **Skills:** now in the repo-root [`skills/`](../skills/) home, deployed via **per-skill**
   symlinks `~/.claude/skills/<name>` → `skills/<name>` (a new skill needs its own link). Also
-  symlinked into Kiro — see [`skills/README.md`](../skills/README.md#deployment). (OpenCode kept a separate, disjoint
-  skill set at `opencode/skills/`, now retired — `deprecated/opencode/skills/`.)
+  symlinked into Kiro — see [`skills/README.md`](../skills/README.md#deployment). (`opencode/skills/` is a separate, currently empty home for OpenCode-only skills.)
 
 So edits here are picked up live, and the definitions stay version-controlled.
 

@@ -11,10 +11,6 @@ backlog go to `falkor-chat/docs/HISTORY.md`/`BACKLOG.md` (root `docs/HISTORY.md`
 scoped to the CPG component only, not this feature). `salesperson/` adopts its own `docs/` tree
 only if it acquires topics of its own.
 
-> `deprecated/salesperson/` is a *different, retired* Streamlit app that used to occupy this
-> path. It is not a precedent for anything here (`deprecated/README.md`). Do not copy patterns
-> or dependencies out of it. The plan cites it only as a behavioural parity reference (§2.4).
-
 ## Hard constraints
 
 1. **`vite.config.ts`'s `base: "/shop/"` is a contract with the server**, not a preference.

@@ -2,9 +2,7 @@
 
 `opencode/` is greenfield: **`agents/tank/`** is the only live agent — a headless, local-model
 DevOps variant that runs a read-only health/hygiene check by default and can bring up/tear down
-one Docker-Compose environment it itself started (`agents/tank/README.md`). Former custom agents
-(`rpg`, `coding-senior`, `severino`) and OpenCode-only `SKILL.md` packages are retired to
-`deprecated/opencode/` — read-only history, never extended or copied from. A new OpenCode-only
+one Docker-Compose environment it itself started (`agents/tank/README.md`). A new OpenCode-only
 skill goes in `opencode/skills/` fresh (currently empty).
 
 **Don't hand-edit `tank`'s persona.** `agents/tank/opencode.json`'s `prompt` field live-includes

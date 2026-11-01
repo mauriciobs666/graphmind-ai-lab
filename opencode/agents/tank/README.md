@@ -127,8 +127,7 @@ live-reproduced bypass (`opencode/docs/plans/devops-opencode-headless.md` §3.2,
 
 ## Configuration reference
 
-See [`opencode.json`](opencode.json). Key pieces (same shape as the retired `severino` project,
-`deprecated/opencode/agents/severino/opencode.json`):
+See [`opencode.json`](opencode.json). Key pieces (same shape as the retired `severino` project's `opencode.json`):
 
 | Field | Purpose |
 |---|---|

@@ -5,6 +5,21 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-01 — `deprecated/` removed from the repo
+
+- **What.** The whole `deprecated/` tree (57 tracked files: the retired Streamlit `salesperson`
+  chatbot and `opencode`'s former agents `rpg`/`coding-senior`/`severino` plus OpenCode-only
+  skills) was deleted by stakeholder decision. The last commit still containing it is `3a686012`;
+  recover with `git show 3a686012:deprecated/<path>`. Live docs no longer describe or link it: root
+  `AGENTS.md` (Structure bullet, component-docs row, "Retired components" rule, mentions in the
+  `salesperson/`, `opencode/` and skills bullets), `salesperson/{README,AGENTS}.md`,
+  `opencode/AGENTS.md`, `opencode/agents/tank/README.md`, `opencode/docs/manuals/local-llm.md`
+  (one note), `claude/README.md`, `claude/cobb/TESTING.md`, `skills/README.md`,
+  `skills/agent-standards/opencode.md`, `skills/joern-cpg/references/cpg-model.md`. Plans, reviews,
+  requirements and older HISTORY entries that cite `deprecated/` are frozen and left as written.
+- **Home.** Recorded here because this log already carries the salesperson retirement and the
+  root `docs/HISTORY.md` is scoped to the CPG component.
+
 ## 2026-10-31 — K-101 closed: REST input bounds hold on the MCP and service paths
 
 - **What.** Every stored value REST bounds is now a service invariant, checked before any

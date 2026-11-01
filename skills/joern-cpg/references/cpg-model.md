@@ -34,7 +34,7 @@ or the whole thing (`cpg` = the modern full graph, `cpg14` = the legacy schema,
 > `pysrc2cpg`-built graphs checked in this repo, `cpg_falkorchat` and
 > `cpg_deprecated_salesperson` (the graph was named `cpg_salesperson` when this
 > was first verified; renamed 2026-09-02 when the `salesperson/` component was
-> retired to `deprecated/salesperson/`, finding unchanged and re-confirmed on
+> retired (since removed from the repo), finding unchanged and re-confirmed on
 > the renamed graph; the graph was then deleted 2026-09-18 in a FalkorDB
 > cleanup, once it no longer served a purpose beyond this documentation
 > example) — `CALL db.labels()` on both returned none of the five. Only

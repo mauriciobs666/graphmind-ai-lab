@@ -245,11 +245,10 @@ tracked as backlog **C-310**.
 
 ## Severino gotchas (retired local LM-Studio agent — kept for the config-schema lesson)
 
-`severino` itself is retired (`deprecated/opencode/agents/severino/`), but the schema pitfalls it
+`severino` itself is retired (removed from the repo), but the schema pitfalls it
 surfaced still apply to any OpenCode agent using an LM Studio provider:
 
 - Top-level config key is **`agent`** (singular), **no `name`** field on the agent.
 - Model id form `lmstudio/<model-id>`; LM Studio context **≥16K** or OpenCode's
   system prompt overflows (`n_keep >= n_ctx`).
-- See `deprecated/opencode/agents/severino/AGENTS.md` (its `CLAUDE.md` is a `@AGENTS.md` import
-  stub) and `opencode/docs/manuals/local-llm.md` for the live walkthrough.
+- See `opencode/docs/manuals/local-llm.md` for the live walkthrough.
