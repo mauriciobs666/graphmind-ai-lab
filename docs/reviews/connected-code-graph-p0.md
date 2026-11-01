@@ -949,3 +949,66 @@ Re-derived chain, counterfactual and determinism from stored artifacts; bundle s
 ### Proposed REVIEW.md lines
 
 Under `## Always check` in root `REVIEW.md`, source: M2 and Q4. "A walk or query that reports a status (`confirmed`) is checked with a planted case where the evidence for that status is absent; a status stamped from the traversal's shape rather than its evidence is a finding."
+
+## Pass 5 — `-spec4` gate (2026-11-01)
+
+### Scope & verdict
+
+**Scope:** `docs/plans/connected-code-graph-bundle-spec4.md` (121 lines) and the `-spec3` header edit (Status `superseded`, `Superseded by:`; `git diff` shows that one line only) against my Pass 4 "`-spec4` content" (7 deltas), `-spec3` base text, `cpg/spikes/vertical-slice/normalize.py`, and the 2026-11-01 stakeholder decision. Ran: `tests/test_bundle.py` + `tests/test_ids.py` from `cpg/` with the repo venv: 1215 passed with the edited `-spec3` header (they parse its tables, not its `Status:`). Read, not run: nothing else.
+
+**Verdict: approve with suggestions**, conditional on the Q-A ruling below being folded in. All 7 deltas are present and faithful (table below); no blocker. Two majors are spec-completeness points on the skipped list; the Q-A text must change because the ruling changes the "no schema change" premise.
+
+CPG: considered, not relevant — spec text plus untracked/spike code; no loaded `cpg_*` graph indexes `cpg/`. I read the files and the stored `s14a` bundles.
+
+### Delta fidelity (Pass 4 -> `-spec4`)
+
+| Pass 4 delta | `-spec4` | Check |
+|---|---|---|
+| (1) rule 4 vs `jssrc2cpg`, per Q3 | §1 | Faithful; the sentence replaced is `-spec3` line 1189 (verified). Stakeholder decision reflected (tests excluded; production included if override works; fallback listed). 23+3+2 = 28 test, 5 production = 33 matches the slice report S1 row. |
+| (2) `complexity = 1 + cond count` | §2 | Faithful; matches `normalize.py` (`1 + len(cond_by_scope[sid])`). |
+| (3) empty file | §2 | Faithful. Verified on `s14a`: `falkor-chat/server/tests/eval/__init__.py` module `1..1`, `lastChanged*` from the path's last commit (`dbd2cdff`), the only fallback file (`report.json blameFallbackFiles`); `git log -1 --format='%ct %H' <commit> -- <path>` is what the code runs. The code passes only `[(ls, le)]` to `last_changed`, not `ownedRegions`; spec says "plus `ownedRegions`". Same on the slice (none exist); see m2. |
+| (4) synthesized `ret` | §2 | Differs from code in scope: m1. |
+| (5) `use == def` legal | §2 | Faithful. |
+| (6) §10 drop "five" | §3 | Faithful; the quoted parenthetical is at `-spec3` line 2085 (verified). |
+| (7) host-Python writer note | §3 | Faithful; `-spec3` names 3.12 in §3.1 (Python 3.12.3 at line 1107). |
+
+Cited sections exist and do not contradict unchanged text: §4.1 rule 4 (1189), §5.2, §5.3, §5.5, §5.10, §2.1 (1.0 "no other files are part of the bundle", line 944), §0 line 23, §8.6, §1.4 G-3/G-4, F-12. The claim "nothing re-points to `-spec4`" holds: `test_ids.py:96` and `test_bundle.py:294` read `-spec3` only.
+
+### Findings
+
+**M1 (major). Q-A changes spec4's own premise; the text must be revised with the ruling.** Lines 7-9 ("No schema field ... changes; `bundleSchemaVersion` stays `"1.0"`; schema and `bundle.py` untouched"), line 62-63, and §4 (lines 112-115, 119) all assume no code change. Under the ruling (A', below) the schema, `bundle.py`, the writer and S10 tests change in the same acceptance. *Fix:* replace the OPEN block with the decided field; add one row for the `bundle.py`/schema/test edit as a unit that must land with or before acceptance, so the freeze is a single state. Evidence: read.
+
+**M2 (major). The skipped list is not reproducible as specified.** (a) "every source file of the unit's language" has no definition (extension set per `-spec3` §3.3? are `.d.ts`, `vite.config.ts`, `*.js` configs source?). (b) `test` has no rule: `*.test.ts(x)`, `tests/e2e/**` are examples, not a rule; and a file under `src/i18n/` named `*.test.ts` is both a test and frontend-ignored, with no precedence. (c) If P1 overrides the frontend defaults, the test files are parsed unless P1 also excludes them by an explicit pattern; "excluded by design" then needs a recorded mechanism, which the doc leaves to P1's plan while the validator must be able to check `skippedFiles`. *Fix:* spec4 states a closed, writer-side `test` path-pattern list (as `-spec3` §5.0 does for the vendored default), the precedence (`test` wins over `frontend-ignore`), and the per-language source-extension rule; and requires the coverage probe below. Verified: read; the 33-file split comes from the slice report, not re-derived.
+
+**m1 (minor). §5.5 `ret`: recommend the spec follow the code, narrowly worded.** Evidence: `normalize.py` ~930-935 synthesizes `ret` 0 for every `kind == "lambda"` scope absent from `rets_by_scope`, line `max(s.line, 1)`; `-spec4` says expression-bodied only. Observed: 14 synthesized in `sp`, 0 in `fcs` (`report.json`); I could not partition the 14 into expression vs block-bodied (my heuristic over-matched, so the count is inferred, not measured). Reasons to change the spec: the freeze should state what S14 ran and SL-6 compared; narrowing the code needs body-shape information from the fact stream, changes ret ids for any block-bodied void lambda, and so invalidates the stored `s14a`/SL-6 evidence; a ret with no incoming `data` is harmless. Wording: "a `lambda`-kind symbol with no frontend `RETURN` gets a synthesized `ret`, ordinal 0, `line` = `max(lineStart, 1)`." `function`/`method` kinds with no `return` keep zero rets (the code agrees). Cost: `-spec3` §5.5's "expression-bodied functions have one ret" stays true. Also spec says `lineStart`, code `s.line`: equal for a lambda (no decorators, `span_start`), nit.
+
+**m2 (minor). Empty-file fallback and `ownedRegions`.** `-spec4` says the fallback triggers when span plus `ownedRegions` have no blamed line; the code checks the span only. Not a slice difference (no owned regions until P2). Add it to the frozen-untested list so P2 inherits the obligation.
+
+**m3 (minor). Doc-only list: verified, with one omission.** Unfiltered `git grep` over tracked files for `bundle-spec(2)?.md`: `cpg/ccg/ids.py:3`, `bundle.py:3` and `:261`, `keynorm.py:3`, schema `description` (line 5), `cpg/README.md` (51, 70, 75-78 and the BS2 lines up to 108) all confirmed; **`cpg/spikes/vertical-slice/normalize.py:5` also cites them and is not listed.** Prose docs under `docs/plans` and `docs/reviews` are historical; leave. `test_bundle.py:293` says "spec3 v1.1" (header is 1.2): harmless. Done by the "rerun suite" instruction; I saw no test pinning the schema `description`, not proven by a mutant.
+
+**n1 (nit).** `Version: 1.0` on `-spec4` collides visually with `bundleSchemaVersion` `"1.0"`; use another number or drop it. "the bundle's `file` records are exactly the parsed ... files" (line 29): Markdown/config files are parsed by the normalizer, not "the frontend"; say "by the unit's extractor".
+
+**Growth-stops check:** the document is a new successor stating deltas only; it restates `-spec3` content in no place I found (the "Why" paragraph restates the slice finding briefly: acceptable). The one growth to avoid: the OPEN block must be replaced, not appended to.
+
+### Q-A ruling: (A'), `header.skippedFiles` optional, inside `"1.0"`, added by `-spec4` before the freeze takes effect
+
+**Not a product call;** the scope decision (what is excluded) is the user's and is made. Where the record lives is a technical ruling. One process fact deserves telling to the user: it ends with `"1.0"` containing the field.
+
+**Why in the bundle (rejecting B).** The skipped list is a fact about the unit's code; `-spec3` §0 makes the bundle the only thing the assembler reads about it, §2.1 says no other file is part of it. A sidecar sits outside the JSONL determinism rules (§8), the `counts` truncation check and the validator; it can pair with the wrong build (stale-kept unit, new sidecar); the loader needs two artifacts with an atomicity question; and the "not mapped" answer would depend on a file the spec declares non-bundle. B saves one schema edit and pays for it forever.
+
+**Why no `"1.1"` bump (A') and why that is legitimate, not a shortcut.** `-spec3` §8.6 governs a *frozen* schema, and `-spec4` §0 (my Pass 4 M1) says the freeze takes effect on acceptance. `-spec3` §1 says that when the slice forces a change, the successor *is* the route, and the `skippedFiles` need is an SL-7 delta (a [P-slice] rule 4 mismatch whose resolution needs a field), so the successor may carry it. A bump now would freeze `1.0` as a schema no writer will ever produce with a skipped file, and force a version split on day zero: "1.0 or 1.1 depending on content" or "always 1.1". Backward compatibility is intact: optional, absent when empty, so the four stored slice bundles stay valid; no reader outside the repo exists (`bundleSchemaVersion` is recorded by `load.py`, written by `normalize.py`; I found no other consumer). Pass 4's remark that "an optional header field is an additive minor bump" assumed the freeze had already happened; correct for after, not before. **Conditions that make it legitimate:** (1) the schema, `bundle.py` and tests land with or before the acceptance of `-spec4`; (2) the freeze record cites that commit, so "frozen v1.0" names a byte-exact schema; (3) the field is frozen untested like the other [P-slice]-unexercised items, with the P1 extractor as first writer. If `teco` or the user prefers not to touch a schema once the slice has "passed", (A) with `"1.1"` is the fallback and is also sound; the rest of this ruling is unchanged.
+
+**Shape.** `header.skippedFiles`: array of `{path, reason}`, sorted by `path` (byte order), present **exactly when non-empty** (the `ownedRegions` precedent, so "none" has one encoding), `reason` a closed enum `test` | `frontend-ignore` (add the two codes to the §7 registry rule, §7.1 "a pack may not invent codes"). Validator checks: sorted, unique, POSIX, under `unit.rootPath`, not under `vendoredDirs`, no `file` record for the same path, reason in enum. It cannot check completeness (needs the file system); say so.
+
+**Effects.** *S10 tests:* new cases for each validator check above, plus "a bundle without the field is still valid" (the stored `s14a` bundles are the positive control) and the existing header-key pin test, which must change; the field's tests cannot be written inside the same step as the pin that guards it (authoring both together makes the pin pass by construction): land the failing validator tests first. *S17:* one source for the loader; the graph needs a representation lookup by path ("is X mapped?"), so a node or index, not only a list property on `Unit`; S17 decides, spec4 §4 should say so. *Loader:* reads one artifact. *Freeze meaning:* strengthened relative to B (everything the engine answers from is under the validated, hashed envelope).
+
+**Coverage probe for M2 (not a list).** A table test over the axes the rule varies on: language (JS/TS, Python, other) x reason (`test`, `frontend-ignore`) x overlap (a file that is both) x location (under a vendored dir, under `rootPath`, outside) x override on/off (P1), asserting for each cell that the path appears exactly once with one reason, or not at all, and that no `file` record exists for it. A cell not in the table fails the test.
+
+### Open questions
+
+1. `jssrc2cpg` default-ignore override remains unverified (spec4 says so). Web evidence only: x2cpg frontends receive a maintainer-supplied `defaultIgnoredFilesRegex` and user `--exclude`/`--exclude-regex`; I found no documented switch that turns the defaults off, so the fallback is the likelier case for `salesperson/src/i18n`. P1 should test the actual `jssrc2cpg --help` of the pinned Joern, and a staged-copy rename is not an escape (it changes path-anchored `qname`s).
+2. `teco`: confirm A' with the user (the one wording the user may care about: "1.0" gains the field).
+
+### What's solid
+
+All seven deltas faithful with real section citations; `-spec3` retained intact for S10's parsing; the slice measurements quoted (33/74, 14 synthesized, 1 `use==def`, empty-file fallback) check against the stored artifacts and report; the doc-only list is accurate bar one file; the document is delta-only.
