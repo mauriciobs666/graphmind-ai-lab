@@ -184,8 +184,11 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
         elif kind == "expectations":
             state.expectations = dict(event)
             for role, spec in event["roles"].items():
-                state.pins[role] = spec["model"]
-                state.instructions[role] = [list(pair) for pair in spec.get("instructions", [])]
+                # Only the first event sets the pins: a later `install` accepts a settings edit
+                # and must not undo a `resolve --repin-model/--repin-instructions`.
+                state.pins.setdefault(role, spec["model"])
+                state.instructions.setdefault(
+                    role, [list(pair) for pair in spec.get("instructions", [])])
         elif kind == "held-rng-seeds":
             state.held_rng_seeds.update(event["rngSeeds"])
         elif kind == "seed-draw":
@@ -579,13 +582,18 @@ class Campaign:
     def record_expectations(self, *, guard_command: str,
                             roles: Mapping[str, Mapping[str, Any]],
                             driver_template: str | None = None,
-                            user_settings_digests: Mapping[str, str] | None = None) -> None:
+                            user_settings_digests: Mapping[str, str] | None = None,
+                            prompt_sha256: Mapping[str, Any] | None = None,
+                            settings_sha256: str | None = None) -> None:
         """The declared expectations `install` writes (plan4 §3.5; U5.7): per role (`generator`,
         `labeler`) its `agentType`, `model`, `effort`, `spawnTemplate` and `instructions`
         (`[path, sha256]` pairs), plus the guard's `command`. `driver run` also needs
         `driverTemplate` (plan6 §3.3's message, `{agent_type}` and `{spawn_prompt}` slots) and
         `userSettingsDigests` (`runner.user_settings_digests`, plan6 §3.2), and refuses without
-        them."""
+        them. `install` also records `promptSha256` (plan4 §3.7's `agentDefinition`,
+        `spawnTemplate` and `guardHook` hashes) and `settingsSha256`. The latest event wins, except
+        that only the first sets the per-role model pins and declared `instructions` (`fold`): a
+        later `install` must not undo a `resolve --repin-model/--repin-instructions`."""
         if set(roles) != set(ROLE_OF_KIND.values()):
             raise CampaignRefused("expectations need exactly the generator and labeler roles")
         event: dict[str, Any] = {"event": "expectations", "guardCommand": guard_command,
@@ -594,6 +602,10 @@ class Campaign:
             event["driverTemplate"] = driver_template
         if user_settings_digests is not None:
             event["userSettingsDigests"] = dict(user_settings_digests)
+        if prompt_sha256 is not None:
+            event["promptSha256"] = json.loads(json.dumps(prompt_sha256))
+        if settings_sha256 is not None:
+            event["settingsSha256"] = settings_sha256
         self._append(event)
 
     def fresh_rng_seed(self) -> int:

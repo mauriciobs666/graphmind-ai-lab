@@ -46,8 +46,9 @@ type (U5.2b-hash), and the transcript audit (U5.5: `decisionmodels/audit.py` loc
 run from the driver's transcript and classes it per plan6 §3.4 over plan4 §3.3), and the
 campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
 `decisionmodels/driver.py`), and the unattended runner with its stop switch (U6.3:
-`decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`). Labelling requests render
-guard items only until U5.2b-render.
+`decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`), and the three agent
+definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
+live smoke has not been run). Labelling requests render guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
 
@@ -83,8 +84,85 @@ or `AGENTS.md`. Run these from `decision-models/`:
 - **`resolve`** is the only way past a halt. Retry re-issues the halted batch under a new name;
   `--skip-batch` (a safeguards stop only) drops it and counts it as `safeguardSkipped`; a
   re-pin records the new model (a generation or labelling restart) or instructions set.
-- `install` (U5.7) and `finalize` (U5.10) are not built yet. `run` refuses a campaign that has
-  no `install` record, so no batch is spawned today.
+- `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
+
+### `install`, the agent definitions and the guard
+
+```bash
+.venv/bin/python -m decisionmodels.driver install --root ~/dm-campaigns/pilot
+```
+
+`agents/` holds the sources, which are dataset provenance (hashed into `promptSha256`): the three
+definitions `dm-driver.md` (Sonnet, `Agent(dm-generator, dm-labeler)` only, `maxTurns: 3`),
+`dm-generator.md` (Opus, effort `medium`, `Read, Write`, `maxTurns: 6`) and `dm-labeler.md`
+(Sonnet, effort `high`, `Read, Write`, `maxTurns: 14`), the spawn templates
+(`spawn-generator.txt`, `spawn-labeler.txt`, `spawn-driver.txt`; no trailing newline, because a
+template is compared byte for byte), `guard_hook.py` and `settings.json`. `install` takes the
+campaign lock (it refuses while a `run` holds it) and, before writing anything:
+
+- refuses a `claude` older than 2.1.295 (`runner.MIN_CLAUDE_VERSION`, the first with `onFailure`),
+  one with no parsable `claude --version`, or none on `PATH`; `run` makes the same check before
+  every launch, after the pause check;
+- refuses a definition whose frontmatter lacks a key of its role's set, has another key (Claude Code
+  ignores a misspelt one) or breaks a pin (plan6 §3.3 "Definition check");
+- refuses a `~/.claude/settings.json` that has a forbidden key, with the same check `run` makes
+  (`runner.forbidden_settings_refusal`), and records the digest of every other recorded key
+  (`runner.user_settings_digests`); it prints the recorded **key names**, never a value, so the
+  person installing sees the baseline;
+- byte-copies the sources into `exchange/.claude/` and compares every installed file's sha256 with
+  its source: a one-byte edit of an installed file, a stray file in `.claude/agents/`, a
+  `settings.local.json`, or sources that no longer hash to what the campaign's first install
+  recorded refuses (remove the copy, or start a new campaign);
+- appends an `expectations` event: the guard's exact command, per role its pins read from the
+  installed definition (model, effort), its spawn template and an empty `instructions` set, the
+  driver template, the user-settings digests and `promptSha256`. It is fresh on every run, which is
+  how a refused user-settings edit is accepted: edit, `install` again, and the next `run`
+  launches. Only the first event sets the model pins and declared `instructions`, so a re-run
+  keeps a `resolve --repin-model/--repin-instructions` decision. The project `settings.json` pins `autoContinueAtUsageLimit: false` and wires the guard
+  once (`PreToolUse`, matcher `*`, `"onFailure": "block"`).
+
+`--agents-dir <dir>` installs from another directory of the same files; the smoke's `maxTurns: 2`
+batch uses a copy of `agents/` with `dm-labeler.md`'s `maxTurns` edited, in a campaign of its own
+(the hashes then name the copy).
+
+**The guard** (`agents/guard_hook.py`, stdlib only) is the only bound on a tool call. It prints one
+JSON decision and exits 0, or, when it cannot judge a call (a missing or unknown `agent_type`, a
+missing `tool_input`, bad input, any exception, a failed log write), exits 1 with no decision, which
+`onFailure: "block"` turns into a block. `dm-driver` may call only `Agent`, with the pending
+request's role, no key beyond `subagent_type`, `prompt` and `description`, and the exact spawn
+prompt. A subagent may `Read` strictly inside `exchange/req/` and `Write` strictly inside
+`exchange/ans/` (paths resolved with `realpath`, so `..` and symlinks do not escape), and call
+`SubagentHandback`; nothing else. Each call is logged to `store/hook-log.jsonl` (agent type, tool
+and tool-use id, decision; never a path or prompt).
+
+### The label smoke (human-started, not yet run)
+
+```bash
+.venv/bin/python -m decisionmodels.driver smoke-fixture --out ~/dm-campaigns/items.jsonl   # 50 items
+.venv/bin/python -m decisionmodels.driver init --point guard-judge --phase smoke \
+    --root ~/dm-campaigns/smoke --fixture ~/dm-campaigns/items.jsonl
+.venv/bin/python -m decisionmodels.driver install --root ~/dm-campaigns/smoke
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/smoke   # once, by hand
+```
+
+It spends real tokens (one Sonnet driver session and one Sonnet labelling run of 50 items), so a
+person starts it, once, through `driver run`, never the timer. The fixture is 50 guard
+`understanding` items whose rendering is exactly the 6,000-character cap in double-escaped pt-BR,
+the costliest line for Read's 25,000-token cap. It records, in `docs/HISTORY.md`:
+
+- the first spawn's foreground shape (`status: "completed"`, `requestShape: "foreground"`);
+- that the batch ingests with no void, every page Read succeeds, and the largest page's tokens
+  (the transcript's usage deltas around each Read) are at most 22,500; over that, the smoke fails
+  and the 40,000-character page constant goes to the architect;
+- a second batch, in a second smoke campaign installed with `--agents-dir` from a copy whose
+  `dm-labeler.md` has `maxTurns: 2`: the cut-short shape and its terminal entry, which U5.5 then
+  swaps for its provisional `maxTurns` fixture;
+- whether `SubagentHandback` appears in a transcript, and whether a hook sees it;
+- that the guard's `hook_success` `command` equals the recorded `guardCommand` verbatim (the
+  unexpanded `$CLAUDE_PROJECT_DIR` string), that no guard entry is missing, and that the
+  injected-context rows (no `instructions`, no `gitStatus`, no MCP attachment) pass;
+- any `Agent` input key beyond `description`, `prompt` and `subagent_type`, which the guard would
+  deny, and any safeguards or usage-limit shape met.
 
 ### `run`, `pause` and `resume`
 
@@ -106,8 +184,8 @@ or `AGENTS.md`. Run these from `decision-models/`:
   another `run` or an orphaned child holds `store/driver.lock` (one line: "another `driver run`
   holds store/driver.lock"). Its last line says why (`stopped: done`, `stopped: halted (…)`, …).
 - It **refuses** (exit 1, nothing appended to the ledger) a root inside a git work tree or under
-  a `CLAUDE.md`/`AGENTS.md`, a campaign with no `install` record, and, checked before every
-  launch, `~/.claude/settings.json` with a forbidden key (`env`, `hooks`, `fallbackModel`,
+  a `CLAUDE.md`/`AGENTS.md`, a campaign with no `install` record, a `claude` below the version floor (2.1.295) or
+  with no parsable version, and, checked before every launch, `~/.claude/settings.json` with a forbidden key (`env`, `hooks`, `fallbackModel`,
   `apiKeyHelper`, `disableAllHooks: true`, `autoContinueAtUsageLimit: true`; refused even if
   `install` saw it), or in which any other key outside `runner.UNRECORDED_SETTINGS` (`model`,
   `theme` and the other terminal-only keys) was added, removed or changed since `install`

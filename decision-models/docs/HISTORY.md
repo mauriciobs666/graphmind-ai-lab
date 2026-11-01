@@ -2,6 +2,99 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.7 — agent definitions, guard and `driver install` (smoke not run)
+
+**What:** `docs/plans/typed-decision-models6.md` v1.11 §3.2 "User settings", §3.3 and the U5.7 rows
+of §4/§5, over plan4 §3.4, §3.5 and §5 U5.7. The code, tests and docs only: **the human-started
+smoke has not run**, nothing here called the real `claude`, and no token was spent.
+
+- `agents/`: `dm-driver.md` (`claude-sonnet-5-5`, `tools: Agent(dm-generator, dm-labeler)`,
+  `maxTurns: 3`), `dm-generator.md` (`claude-opus-5-5`, effort `medium`, `Read, Write`,
+  `maxTurns: 6`), `dm-labeler.md` (`claude-sonnet-5-5`, effort `high`, `Read, Write`,
+  `maxTurns: 14`; both `omitClaudeMd: true`, `permissionMode: acceptEdits`); none carries `hooks`.
+  `spawn-generator.txt`/`spawn-labeler.txt` (plan4 §3.4's text, no trailing newline),
+  `spawn-driver.txt` (the driver message, slots `{agent_type}` and `{spawn_prompt}`),
+  `settings.json` (`autoContinueAtUsageLimit: false`; `PreToolUse`, matcher `*`, one command
+  handler `python3 "$CLAUDE_PROJECT_DIR/.claude/guard_hook.py"`, `timeout: 30`,
+  `"onFailure": "block"`) and `guard_hook.py`.
+- `agents/guard_hook.py`: stdlib only. Decisions print plan4's `hookSpecificOutput` JSON and exit 0;
+  an unjudgeable input (missing or unknown `agent_type`, wrong event, missing `tool_name` or
+  `tool_input`, bad JSON, any exception, a failed log append) exits 1 with no decision. `dm-driver`:
+  `Agent` only, keys limited to `subagent_type`/`prompt`/`description`, the role of the single
+  request in `exchange/req/`, and a prompt byte-equal to that role's installed template with the
+  request path. Subagents: `Read` strictly inside `req/`, `Write` strictly inside `ans/` (relative
+  paths joined to the input's `cwd`, then `os.path.realpath`), `SubagentHandback` allowed for them
+  only. Every decision is appended to `store/hook-log.jsonl`.
+- `decisionmodels/install.py`, `driver install --root <dir> [--agents-dir <dir>]`: under
+  `Campaign.locked()`, `runner.forbidden_settings_refusal` on `~/.claude/settings.json` (reused),
+  `runner.user_settings_digests` (reused) recorded as `userSettingsDigests`, the recorded key
+  names printed (never a value); sources byte-copied to `exchange/.claude/` and each installed file
+  re-hashed against its source; refusal of an edited installed file, a stray file in
+  `.claude/agents/`, a `settings.local.json`, a symlinked file, a source that no longer matches the
+  first install's `promptSha256`, a definition with `hooks`, a settings wiring that is not one
+  `PreToolUse` `*` guard with `onFailure: "block"`, or one without `autoContinueAtUsageLimit: false`.
+  A fresh `expectations` event on every run: `guardCommand` (`install.guard_command`), per role the
+  pins read from the installed definition, its spawn template and `instructions: []`,
+  `driverTemplate`, `userSettingsDigests`, `settingsSha256` and `promptSha256 {agentDefinition,
+  spawnTemplate (with `driver`), guardHook}`.
+  `Campaign.record_expectations` gained `prompt_sha256` and `settings_sha256`.
+- `decisionmodels/smoke.py` and `driver smoke-fixture --out <items.jsonl> [--count 50]`: the P5-F5
+  fixture, 50 guard `understanding` items each rendering exactly `render.MAX_CHARS`.
+- `README.md` (the `install` section, the guard, the smoke), `AGENTS.md` (current-state line, the
+  `agents/` invariant).
+
+**Calls made here:**
+- The guard command uses `$CLAUDE_PROJECT_DIR` so the source `settings.json` can be byte-copied
+  and hash-checked; the guard finds `exchange/` and `store/` from its own installed path. Whether
+  Claude Code expands it, and writes the unexpanded string as `hook_success.command`, is unverified.
+- The guard's `Agent` check is an allowlist of keys, stricter than plan6's four named keys; if the
+  harness adds a key by default the smoke shows a `guardRejected` halt.
+- `SubagentHandback` is allowed for the subagents unconditionally (plan6's condition is unknown
+  until the smoke); a deny on it would halt every run as `guardRejected`.
+- A failed `hook-log.jsonl` append fails closed (exit 1), per "any exception".
+- `install` records `settingsSha256` beside, not inside, `promptSha256`, to keep plan4 §3.7's key set.
+- `--agents-dir` is how the smoke's `maxTurns: 2` copy installs; its hashes name the copy.
+
+**Review Pass 15 fixes and plan6 v1.13 (§3.3 "Definition check", "Version floor"):**
+- P15-m1: `fold` lets only the first `expectations` event set the model pins and declared
+  `instructions` (later events refresh the rest), so re-running `install` keeps a `resolve` repin;
+  the plan6 §3.2 rule is the architect's.
+- `runner.MIN_CLAUDE_VERSION = (2, 1, 295)` and `claude_version_refusal(environ)`: `claude
+  --version` under the child's allowlisted environment, first `x.y.z`, integer-tuple compare;
+  below the floor, a non-zero exit, no parsable version or no binary refuses. `install` calls it
+  before any write; `Runner._loop` calls it after the pause check and before the settings check
+  (a refusal goes through `store/refusal`, exit 1, nothing appended). Floor only. The
+  missing-binary case in `tests/test_runner.py` is now a refusal, and the `OSError`-at-launch path
+  is tested by planting the failure in `Popen`. The test fake `claude` answers `--version`
+  (`tests/conftest.py`'s `fake_claude` for the install and guard files).
+- `install.definition_error` (§3.3's key sets and pinned values, `hooks` by name) runs before any
+  copy; it subsumes P15-n1's missing `model`/`effort` traceback. P15-n2: a guard test with
+  differing role templates, built in a tmp dir.
+- Suite 1085 → 1138 passed, 2 xfailed. Mutants, all red but for one that got a test and then went
+  red: six for P15 (fold pins, fold instructions, swapped `TEMPLATE_FILES`, and the pin check, now
+  the definition check); 24 for the floor and definition check (floor ±1, string compare, no-parse,
+  non-zero exit, missing binary, loop order against pause and settings, call removed, install
+  order, child environment, and each validated key).
+
+**The smoke** (a person, once, `driver run`, never the timer; `README.md` has the commands). It runs
+one Sonnet driver session and one Sonnet labelling run over 50 `smoke-fixture` items, then a second
+smoke campaign installed from a copy whose `dm-labeler.md` has `maxTurns: 2`. It records here:
+the first spawn's foreground shape (F2); no void and every page Read succeeding, with the largest
+page's tokens (transcript usage deltas around each Read) at most 22,500, else the 40,000-character
+constant goes to the architect; the `maxTurns: 2` cut-short shape and terminal entry (U5.5 then
+swaps its provisional fixture); whether `SubagentHandback` appears and is hooked; that the guard
+`hook_success.command` equals `guardCommand` verbatim, that the guard allowed every call with its
+own entry, and that the injected-context rows pass; any `Agent` input key beyond the three, and
+any safeguards or usage-limit shape met.
+
+**Verified:** from `decision-models/`, `.venv/bin/pytest -q -p no:cacheprovider` 900 passed, 2 xfailed
+before; 1085 passed, 2 xfailed after (the delta is the two new files, `tests/test_install.py` and
+`tests/test_guard_hook.py`, 185 tests); `ruff check .` clean. Forty-six mutants of `guard_hook.py`,
+`install.py` and `settings.json` each redden those two files except one, which is equivalent
+(dropping the guard's own `subagent_type` check leaves the role cross-check denying the same calls);
+files restored `cmp`-equal. Four first survived (the driver's non-`Agent` tools, a tool use with no
+object input, the guard-file check on the settings command, and the above) and three got tests.
+
 ## 2026-11-01 — typed-decision-models U6.3b — the user-settings record
 
 **What:** `docs/plans/typed-decision-models6.md` v1.10 §3.2 "User settings" and the U6.3b rows of

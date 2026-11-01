@@ -2127,3 +2127,241 @@ Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c
 D1–D4 are the only probes that fail on the live code. In `repo2/` (the fix in P14-m1) the suite plus all 11 probes gives 898 passed, with exactly the two fixture-dependent tests above failing.
 
 **Growth-stops check:** Pass 14 adds one new finding and one nit, and re-opens no earlier finding. Passes 1–13 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 15 — U5.7 agent definitions, guard and install (2026-11-01)
+
+**Verdict: approve with suggestions.** U5.7 delivers the three definitions, the guard, the settings wiring and `driver install` as plan6 v1.11 §3.3 and the U5.7 rows describe them. I found no blocker and no major.
+- **P15-m1 (minor):** re-running `install`, the sanctioned way to accept a refused settings edit, resets a `resolve --repin-model` or `--repin-instructions` decision to the definition's values, because the ledger fold lets each `expectations` event overwrite the pins.
+- **P15-n1 and P15-n2 (nits):** a missing `effort` in an `--agents-dir` copy gives a traceback after files are written, and `install` validates no frontmatter field but `hooks`; and the guard's template map is untested because the two role templates are byte-identical.
+- **Mutants:** 32 of mine, 30 red. The two survivors are the one the coder reported (equivalent in effect) and P15-n2.
+- **For the cobb consult:** Answer (e) lists which frontmatter fields no probe has exercised.
+
+### Scope
+
+- **Reviewed:** the uncommitted U5.7 diff against `bfb34dc1`. New: `agents/` (the three definitions, three spawn templates, `settings.json`, `guard_hook.py`), `decisionmodels/install.py`, `decisionmodels/smoke.py`, `tests/test_install.py` and `tests/test_guard_hook.py`. Edited: `campaign.py` (`record_expectations`), `driver.py`, `README.md`, `AGENTS.md` and `docs/HISTORY.md`.
+- **Specs, the later one winning:** plan6 v1.11 §3.2 "User settings", §3.3 and the U5.7 rows of §4 and §5; plan5 v1.5; plan4 v1.3 §3.4, §3.5, §3.7 and the U5.7 rows. For the Claude Code behaviour, I read the subagents and hooks documentation (`code.claude.com/docs/en/sub-agents` and `/hooks`) and the U6.1, U6.2 and U6.7 probe report.
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **1085 passed, 2 xfailed**; `ruff check` clean.
+- **Mutants and probes:** private copy `scratchpad/p15/repo/`, fresh `PYTHONPYCACHEPREFIX` per run, no `-I`. Baseline 1080 passed + 5 skipped. Each file was restored and `cmp` reported equal. 32 mutants and 7 probe tests, which I added to the copy only (Appendix N). My two suggested fixes were applied in a second copy, `repo2/`.
+- **Live tree:** no git command that changes it; I wrote only this review. The reviewed files' sha256 values are in `scratchpad/p15/live-sha256.txt`. Out of scope, as briefed: the live smoke and anything that calls the real `claude`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the new files were read in full.
+
+### Answers to the gate's questions
+
+**(a) Conformance: conforms.** Checked by reading each file against the rows, and by the mutants in (c).
+- **Frontmatter against plan4 §3.4's table as plan6 §3.3 amends it:**
+  - `dm-driver`: `claude-sonnet-5-5`, `tools: Agent(dm-generator, dm-labeler)`, `maxTurns: 3`, no `initialPrompt`, no `hooks`, no `Bash`.
+  - `dm-generator`: `claude-opus-5-5`, effort `medium`, `Read, Write`, `maxTurns: 6`, `omitClaudeMd`, `permissionMode: acceptEdits`.
+  - `dm-labeler`: `claude-sonnet-5-5`, effort `high`, `maxTurns: 14`, same flags.
+  - `P_max + 4` gives 6 and 14, as the plan says.
+- **Driver template and hash:** `spawn-driver.txt` has the `{agent_type}` and `{spawn_prompt}` slots and the `PROMPT:` line that the `dm-driver` body names. `promptSha256.spawnTemplate.driver` is recorded beside `generator` and `labeler`. The templates carry no trailing newline, and install refuses one that does (I11 and the template test).
+- **Guard rules, each verified by a mutant or a test:**
+  - **No `Bash`:** the driver may call only `Agent`.
+  - **Canonical paths:** `realpath` of the joined path, strictly inside `realpath(exchange/req)` or `realpath(exchange/ans)`. G3 (sibling prefix) gives 4 red, G4 (no `realpath`) 4, and G16 (the guard's own `cwd`) 3.
+  - **Fail closed:** G9 (exit 0 on a failure) gives 35 red.
+  - **`onFailure: "block"`** is required by install (I15 gives 4 red).
+  - **The bounds derive from the install location**, `realpath(__file__)`, never from the input (G1 gives 64 red).
+- **Install steps, in order:** the lock; the `runner.forbidden_settings_refusal` check, which is the same function `run` uses (I12 gives 8 red); `runner.user_settings_digests` (I6 gives 2); the source checks; the installed-versus-source sha256 compare (I11 gives 9); the fresh `expectations` event. The output names keys and never a value, and the project pin `autoContinueAtUsageLimit: false` is required before anything is copied (I14 gives 1).
+- **The "refusals precede every write" claim has one exception,** P15-n1.
+
+**(b) The coder's deviations: all five stand.**
+1. **Exit 1 with no stdout when the guard cannot judge: plan6 requires it, and the brief was stale.** Plan4 §3.4 said "always exits 0"; plan6 §3.3 amends that to exit 1 plus `onFailure: "block"`, and plan6 is later. The hooks documentation agrees: exit 1 without valid JSON is a non-blocking error, so the action goes ahead unless `onFailure` is `"block"`. That is why install refuses a wiring without it.
+2. **The Agent key whitelist (`subagent_type`, `prompt`, `description`) is stricter than plan4's four named keys, and conflicts with nothing.** Every Agent input the probe report lists for the driver has exactly those three keys, plus `run_in_background` where a driver on Opus backgrounded. A real shape cannot halt unless a future CLI adds a key the model did not send. A deny there halts loudly and cheaply, and the smoke should record the hook's actual `tool_input` key set.
+3. **`SubagentHandback` allowed for the two subagents, with no condition: acceptable.** Plan6 makes the allow conditional on the smoke showing a hook sees it. Allowing a path-free tool that the subagents' `tools: Read, Write` list does not grant is harmless, and G13 (also allowed for the driver) gives 2 red. The hooks documentation does not mention the tool, so the smoke settles whether the line is ever used.
+4. **The guard command `python3 "$CLAUDE_PROJECT_DIR/.claude/guard_hook.py"`, recorded unexpanded:** plausible, unverified. The hooks documentation says a shell-form command is expanded by the shell, which would leave `hook_success.command` as the configured string, equal to `guardCommand`. No probe used a variable: every probe wired an absolute path. If the recorded string differs, the first smoke batch halts as `hookMissing`, which is loud and cheap. The fallback is install writing the absolute path into the installed `settings.json`, at the cost of the byte-copy. `python3` must also resolve on the child's allowlisted `PATH`, which is a U6.4 point.
+5. **`settingsSha256` beside `promptSha256`: acceptable.** Nothing reads it, and I8 (1 red) pins it. It sits outside `promptSha256`, so U5.10's "matches §3.7's keys exactly" is unaffected, provided U5.10 does not copy it into that object.
+
+**(c) Mutants: adequate.** 32 mutants of mine, 30 red (Appendix N).
+- **Plumbing, the install side.** Wrong model, effort, spawn template, driver template, guard command, digests, definition hashes, template hashes and settings hash each redden 1 to 12 tests. An unread earlier-hash check, a skipped installed compare, a skipped forbidden check and a skipped `onFailure` check do too.
+- **Plumbing, the guard side.** The Read and Write folders swapped (7 red), the role map swapped (5), `startswith` without the separator (4), no `realpath` (4), and the guard's directory one level off (64) are each caught.
+- **G8, dropping the `subagent_type in SUBAGENTS` check: I agree it is equivalent in effect.** With the check gone, an unknown role and a missing `subagent_type` end in a `KeyError`, exit 1 and a block (probe A4), where the check gives a deny. Both block and both halt; the U6.7 probe found that a deny and a blocked failure are structurally identical in the transcript.
+- **G6 is a survivor of mine (P15-n2).** Swapping the guard's template-file map is invisible because `spawn-generator.txt` and `spawn-labeler.txt` are byte-identical (`cmp` says so).
+
+**(d) Refusals and the interaction with U6.3 and U6.3b: sound, with one interaction (P15-m1).**
+- Each forbidden key refuses `install` with the ledger byte-equal. Safe values install. A `theme` or `model` edit changes no digest. Re-running after a refused `outputStyle` edit appends a second event and the next `run` launches (the test per row).
+- The ordering holds: lock first, settings and sources next, writes last. Probe A1 is the one refusal that arrives after files exist (P15-n1).
+- `run` still checks pause before settings, and still requires the install record. `userSettingsDigests` round-trips through `runner.user_settings_digests` (I6 reddens).
+- **The interaction is P15-m1.**
+
+**(e) Version-sensitive fields: which no probe has exercised.** From the probe report (`claude` 2.1.316) and the documentation.
+- **Probed, with the same field and value:**
+  - `model: claude-sonnet-5-5` on a driver and a subagent;
+  - `tools: Agent(<type>)` on the driver;
+  - `maxTurns: 3` on the driver;
+  - `omitClaudeMd: true` and `permissionMode: acceptEdits` on a subagent (the documentation says `omitClaudeMd` needs 2.1.271 or later);
+  - `effort: high` on a subagent;
+  - `onFailure: "block"` with a guard exit of 1 (D2). The documentation says it needs 2.1.295 or later.
+- **Not probed:**
+  - `model: claude-opus-5-5` and `effort: medium` as a **subagent** pin;
+  - `maxTurns: 6` and `14`, and the cut-short shape (the smoke's `maxTurns: 2` row);
+  - `permissionMode` when another agent spawns the subagent: the documentation ties it to the parent's mode, and the guard is the bound under `-p`;
+  - `onFailure` for a guard **timeout** or **cannot-start** (the probe report calls these inferred);
+  - the `$CLAUDE_PROJECT_DIR` expansion in the shell-form `command`, and the recorded `hook_success.command`;
+  - whether a hook ever sees `SubagentHandback`;
+  - the hook's `timeout: 30` field;
+  - the project-level `autoContinueAtUsageLimit: false`: the settings reference gives that key "User or managed" scope, so a project value is probably ignored, which plan6 says costs nothing;
+  - `python3` on the child's allowlisted `PATH`, which the hook command needs.
+
+### Findings
+
+**P15-m1 — minor — re-running `install` resets a repinned model or instruction set.** *Owner: `architect` (plan6 §3.2's "accept by re-running `install`" says nothing about the pins), then `coder`. Verified by probe A2 and by a tested fix.*
+- `fold` takes `state.pins[role]` and `state.instructions[role]` from **every** `expectations` event (`campaign.py` `fold`), and `install` writes each event's `model` from the definition and `instructions: []`. A `resolve --repin-model` or `--repin-instructions` therefore lasts only until the next `install`.
+- **Probe A2:** the ledger gets a `labelling-restart` repin to `claude-haiku-9` and a `repin-instructions` set, then `install` runs again. Before: `claude-haiku-9` and the planted pair. After: `claude-sonnet-5-5` and `[]`.
+- **Why it matters.** The re-run is the only way to accept a user-settings edit that `run` refused. After any earlier repin, the next batch audits against the old pin or the empty set and halts again, and a human re-resolves. It is loud and not silent, but it costs a halt, and `resolve` records a decision that the next `install` undoes without telling anyone.
+- **Fix** (serves plan6 §3.2 "Accepting a change"), tested in `repo2/`: in `fold`, `setdefault` the pins and instructions from an `expectations` event, so only the first event sets them. That loses nothing, because a later install of the same sources writes the same pins. The suite stays green (1087 passed with probes A1 and A2), and A2 passes. Add A2 as a test, and state the rule in §3.2.
+
+**P15-n1 — nit — a definition without `model` or `effort` fails after files are written, and `install` validates no field but `hooks`.** *Owner: `coder`. Verified by probes A1 and A3.*
+- A1: an `--agents-dir` copy of `dm-labeler.md` without `effort:` gives `KeyError: 'effort'` from `install()`, a traceback, and all seven files already copied under `exchange/.claude/`. The ledger is unchanged. The README and the `install.py` docstring say that every refusal comes before any write.
+- A3: a copy of `dm-driver.md` with `Bash`, `claude-opus-5-5` and `maxTurns: 99` installs. The §5 U5.7 pins (`claude-sonnet-5-5`, no `Bash`, `maxTurns: 3`) are asserted on the repository's own sources only.
+- **Fix,** tested in `repo2/` for the first half: in `_read_sources`, refuse a generator or labeler definition that lacks `model` or `effort`, before any copy. The suite stays green. Optionally refuse a driver definition whose `tools` contains `Bash`.
+
+**P15-n2 — nit — the guard's template map is untested.** *Owner: `coder`. Verified by mutant G6 (0 red) and `cmp`.*
+- Swapping `TEMPLATE_FILES` in the guard changes nothing the suite can see, because `spawn-generator.txt` and `spawn-labeler.txt` are byte-identical. If the two ever diverge, the guard would deny every prompt of one role, or allow the other role's.
+- **Fix:** one test in `tests/test_guard_hook.py` that installs from an `--agents-dir` copy whose generator template differs in one word, then asserts that the guard allows the generation request's own prompt and denies the labeler template's.
+
+### Appendix N — Pass 15 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p15/`: `mutants.py`, `mutate.py`, `probes/test_p15_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1080 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+
+| ID | Mutation (`install.py` I, `guard_hook.py` G) | Red |
+|---|---|---|
+| I1 / I2 | generator model recorded as the labeler's literal / effort a constant | 1 / 1 |
+| I3 | role spawn template is the driver template | 12 |
+| I4 | guard command recorded as a literal | 3 |
+| I5 | driver template is the labeler template | 2 |
+| I6 | user settings digests recorded empty | 2 |
+| I7 | definition hashes assigned to the wrong roles | 2 |
+| I8 | `settingsSha256` over the guard source | 1 |
+| I9 | declared `instructions` not empty | 7 |
+| I10 / I11 | earlier-hash check / installed-versus-source compare removed | 1 / 9 |
+| I12 | forbidden user settings not refused | 8 |
+| I13 | `spawnTemplate` hashes all the generator's | 2 |
+| I14 / I15 | autoContinue pin / `onFailure: "block"` not required | 1 / 4 |
+| I16 | the recorded command not read from the installed copy | 1 |
+| G1 | the guard's exchange directory one level off | 64 |
+| G2 | Read and Write folders swapped | 7 |
+| G3 / G4 | sibling prefix not excluded / no `realpath` | 4 / 4 |
+| G5 | the role-to-agent map swapped | 5 |
+| G6 | the template-file map swapped | **0** (P15-n2) |
+| G7 | `model` key allowed on `Agent` | 1 |
+| G8 | `subagent_type` membership check dropped | **0** (equivalent, answer (c)) |
+| G9 | exit 0 on a failure | 35 |
+| G10 | event name not checked | 1 |
+| G11 | an unknown `agent_type` denied, not failed | 5 |
+| G12 | prompt compared by prefix | 1 |
+| G13 | hand-back allowed for the driver | 2 |
+| G14 | the request's role not compared | 3 |
+| G15 | the pending request need not be unique | 1 |
+| G16 | a relative path joined to the guard's own `cwd` | 3 |
+
+**Probes** (pytest functions added to the copy's `tests/` only; the guard probes use `test_guard_hook`'s `tree` fixture):
+- **A1:** an `--agents-dir` labeler without `effort` → `KeyError: 'effort'`, seven files written, ledger unchanged. Fails the "refuses before any write" assertion.
+- **A2:** a repin of the labeler's model and instructions, then `install` → pins reset to `claude-sonnet-5-5` and `[]`. Fails against the repin's lasting.
+- **A3:** a driver copy with `Bash`, Opus and `maxTurns: 99` → installs.
+- **A4:** an unknown role in the request header and no `subagent_type` → a deny, or with G8 an exit 1 and `KeyError: None`.
+- **A5:** an arbitrary `description` string is allowed.
+- **A6:** the three definition hashes are distinct per role.
+- **A7:** the hook log's keys are `agent_type`, `at`, `decision`, `event`, `tool_name`, `tool_use_id`, with no path.
+
+**Fixes tried in `repo2/`:** `fold` takes pins and instructions with `setdefault`; `_read_sources` refuses a generator or labeler definition without `model` and `effort`. Full suite plus probes: 1087 passed + 5 skipped, 2 xfailed, so A1 and A2 turn green and no existing test pins the old behaviour.
+
+**Growth-stops check:** Pass 15 adds one minor and two nits and re-opens no earlier finding. Passes 1–14 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 16 — U5.7 fix round: version floor and definition check (2026-11-01)
+
+**Verdict: approve.** The Pass 15 findings are fixed and re-run red against the mutants that undo them. The version floor and the definition check conform to plan6 v1.13 §3.3 as written, and nothing in the round's own interactions is defective. There are two nits.
+- **P16-n1:** the stderr half of the version probe and its timeout path are untested.
+- **P16-n2:** the definition check does not reject a duplicated frontmatter key, and does not pin a definition's `name`.
+- **Mutants:** 27 of mine against this round, plus a re-run of Pass 15's G6. 25 redden on the suite as it stands, and the probes kill the other two.
+
+### Scope
+
+- **Reviewed:** the uncommitted U5.7 tree after the fix round, against my Pass 15 reading and, for committed code, `bfb34dc1`. In detail: `runner.py` (`MIN_CLAUDE_VERSION`, `claude_version_refusal`, its call in `Runner._loop`), `install.py` (`definition_error`, the version call, `_read_sources`), `campaign.py`'s `fold`, `tests/conftest.py`, and the diffs of `test_runner.py`, `test_install.py` and `test_guard_hook.py`. Spec: plan6 v1.13 §3.3 "Definition check" and "Version floor", and the §4 and §5 U5.7 rows. For context I read cobb's consult, `decision-models/docs/reviews/typed-decision-models-frontmatter.md`.
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **1138 passed, 2 xfailed**; `ruff check` clean. I also ran it with `PATH=/usr/bin:/bin`, so that the real `claude` (at `~/.local/bin/claude`) is unreachable: the same 1138 pass, so no test depends on the real CLI.
+- **Mutants and probes:** private copy `scratchpad/p16/repo/`, fresh `PYTHONPYCACHEPREFIX` per run, no `-I`. Baseline 1133 passed + 5 skipped. Each file was restored and `cmp` reported equal. 27 mutants (and a re-run of G6) and 13 probe tests, which I added to the copy only (Appendix O).
+- **Live tree:** no git command that changes it; I wrote only this review. The reviewed files' sha256 values are in `scratchpad/p16/live-sha256.txt`. Out of scope, as briefed: the live smoke.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Disposition of Pass 15
+
+- **P15-m1** (re-install resets a repin): fixed. `fold` uses `setdefault` for the pins and the instructions, so only the first `expectations` event sets them. F1 and F2, which restore the overwrite, give 1 red each; F3 (pins never set) gives 126. The new test drives a real `resolve --repin-model` and `--repin-instructions` through a halt, then `install`, and compares with an independently written pair and model. My own probe A2, reduced to the model, also passes.
+- **P15-n1** (a definition missing `effort` fails after files are written): fixed. The same input refuses with the ledger unchanged and no `exchange/.claude` directory (my A1 re-run, and the 22 planted-definition cases, each of which asserts the directory does not exist). The driver-with-`Bash` copy of my A3 is refused as well.
+- **P15-n2** (the guard's template map): fixed. `test_each_role_is_checked_against_its_own_template` installs a copy whose two templates differ, and checks each role's own prompt allowed and the other's denied. Mutant G6, which survived Pass 15, gives 1 red.
+
+### Answers to the gate's questions
+
+**(a) Each Pass 15 finding is fixed:** see the disposition above. All three were re-run, not read.
+
+**(b) Conformance to §3.3: conforms.**
+- **Definition check, key sets and pins.** `definition_error` matches the plan's text: subagents' keys `name`, `description`, `model`, `effort`, `tools`, `maxTurns`, `omitClaudeMd`, `permissionMode`; the driver's `name`, `description`, `model`, `tools`, `maxTurns`. The pinned values are `tools: Read, Write`, `omitClaudeMd: true`, `permissionMode: acceptEdits`, an integer `maxTurns`, and non-empty `model` and `effort` for the subagents; for the driver `model: claude-sonnet-5-5`, `maxTurns: 3` and `tools: Agent(dm-generator, dm-labeler)`, so `Bash` cannot appear. `hooks` is refused by name in all three. Each of D1 to D9 (unknown key, missing key, driver pins, integer check, `hooks`, driver `effort`, the `tools` and `omitClaudeMd` pins, empty value) reddens the suite, and D10 (the check skipped for the driver) gives 3 red.
+- **Floor-only.** `claude_version_refusal` compares an integer tuple with `(2, 1, 295)` and keeps no recorded version. W2 (`<=`) gives 2 red, W3 (a string compare) 3, W6 and W7 (the floor one patch off) 6 and 7. A version change between two runs above the floor changes nothing (its test).
+- **The child's allowlisted environment.** The probe runs under `child_env(environ)`. W1, which passes the full environment, gives 1 red, and my probe V1 (a fake `claude --version` that exits 3 when `ANTHROPIC_API_KEY` or `CLAUDE_CODE_EFFORT_LEVEL` is present, and 4 without the background-task variable) passes on the live code.
+- **Parsing.** The first `x.y.z` in stdout plus stderr, as the plan says: output with none refuses, and so does a non-zero exit with a version (W4 gives 1 red). Probe V3 shows that a banner carrying an earlier `x.y.z` (`node 20.1.0` before the CLI's own) would decide; that is what "first" means in the plan, and the real CLI prints one line.
+- **The refusal path.** A version refusal on `run` exits 1 with `refused: launch refused: …`, writes `store/refusal`, shows in `status` and leaves the ledger byte-equal (its test, under `_refusing`, like the settings refusal).
+- **Install refusals precede any write.** The version check is the first step under the lock, and the definition check runs in `_read_sources`, before `_check_installed` and before any copy. Probe V2 (2.1.294 at install) leaves the ledger unchanged and no `exchange/.claude`. The old `KeyError` case refuses (Pass 15's disposition).
+
+**(c) Interaction within the round: sound.**
+- **Order.** `Runner._loop` checks pause, then the version, then the install record and the settings. W8 (version before pause) and W9 (version after settings) each give 1 red, and the two order tests state the plan's order. The version refusal precedes the settings refusal in the text a person sees (the test asserts "forbidden" is absent).
+- **A missing `claude` binary.** It is now a refusal (exit 1, nothing issued, ledger byte-equal), where U6.3 made it a `launchFailed`. That follows §5's row ("a missing binary refuse[s]") and plan6 §3.3. The U6.3 launch-cannot-start path is reachable only if the binary vanishes between the version check and the launch.
+- **The changed U6.3 test: intent preserved.** The old test's intent was that an unstartable launch is a `launchFailed` outcome (`exitCode: None`, "the launch failed" in the evidence), and that the run stops after one launch instead of looping. The new test `test_a_launch_that_cannot_start_is_a_launch_failure_not_a_crash` keeps every assertion (code 0, no calls, one outcome with that reason and evidence) and reaches the path by making `Popen` raise only for the `-p` launch. Its comment says why. The old test's PATH-restoring timer, which guarded against a run that kept launching, is gone, but the single-outcome assertion covers the same loop. A second new test covers the missing-binary refusal.
+- **`fake_claude` is not vacuous.** It is applied module-wide to `test_install.py` and `test_guard_hook.py` by `pytestmark`. Its `--version` text and exit code are set per test, and it can remove the binary. The suite passes with the real CLI off `PATH`, and the version tests reach both refusals and passes through it, with W11 (install never checks the version) giving 9 red.
+
+**(d) Mutants: adequate.**
+- **Plumbing I mutated:** the version probe's environment (W1), what `definition_error` reads against what `install` copies (D10), the fold's pin source (F1, F2, F3), and what `record_expectations` writes (F4, 5 red).
+- **Survivors of the suite, both closed by a probe:**
+  - W5 (stderr not searched) and W12 (a `TimeoutExpired` from a hung `claude --version` not caught) leave the suite green, and probes V6 and V5 kill them (P16-n1).
+- **The first run of D9 was a malformed mutant** (a syntax error, which my runner reported as 0 failures). I re-ran it correctly: 1 red. All figures in this section come from that corrected run.
+
+**(e) Pass 15's survivors.** G6 now gives 1 red. I did not re-run G8, which Pass 15 showed equivalent in effect, and the guard is unchanged.
+
+### Findings
+
+**P16-n1 — nit — two branches of `claude_version_refusal` are unpinned.** *Owner: `coder`. Verified by mutants W5 and W12 (0 red each) and by probes that kill them.*
+- **W5:** dropping `done.stderr` from the search leaves the suite green. A CLI that printed its version on stderr would then refuse every launch. Probe V6 plants it.
+- **W12:** narrowing the `except` to `OSError` leaves the suite green. A `claude --version` that hangs past 30 s would then raise `TimeoutExpired` out of `run` and `install` as a traceback, not a refusal. Probe V5 plants it (a `sleep 100` fake, with the timeout cut to 1 s).
+- **Fix** (serves the §5 row's "output with no `x.y.z` … refuse"): add V5 and V6 as tests, each with the expected refusal text written in the test.
+
+**P16-n2 — nit — `definition_error` rejects neither a duplicated frontmatter key nor a wrong `name`.** *Owner: `architect` (§3.3 lists keys and pins, not these), then `coder`. Verified by probes D1 and D2.*
+- **D1:** a labeler with `maxTurns: 14` and a second `maxTurns: 2` installs, because `frontmatter()` keeps the last value. Which value Claude Code keeps is unknown to me, and the hash records the file either way.
+- **D2:** a labeler named `dm-labelerx` installs. `agent_type` is the agent's `name`, and the guard and the audit key on the constants `dm-generator` and `dm-labeler`. The result would be an unknown `subagent_type` and a halted first batch, loud and cheap.
+- Both reach only an `--agents-dir` copy, since the shipped files pass. If the plan wants them closed, the rule is one line in §3.3: "a key appears once, and `name` equals the role's agent type". Quoted pin values are already refused (probe D3).
+
+### Appendix O — Pass 16 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p16/`: `mutants.py`, `mutate.py`, `probes/test_p16_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1133 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+
+| ID | Mutation | Red |
+|---|---|---|
+| W1 | version probe under the full environment | 1 |
+| W2 / W3 | floor `<=` / compared as a string | 2 / 3 |
+| W4 | a non-zero exit with a version accepted | 1 |
+| W5 | stderr not searched | **0**; 1 with probe V6 |
+| W6 / W7 | floor 2.1.294 / 2.1.296 | 6 / 7 |
+| W8 / W9 | version check before the pause check / after the settings check | 1 / 1 |
+| W10 / W11 | `run` / `install` never checks the version | 6 / 9 |
+| W12 | `TimeoutExpired` not caught | **0**; 1 with probe V5 |
+| W13 | `run` checks the version once, before the loop | 6 |
+| D1 / D2 | unknown / missing frontmatter keys allowed | 3 / 2 |
+| D3 / D6 | driver held to the subagent pins / allowed an `effort` key | 60 / 60 |
+| D4 / D5 | the `maxTurns` integer check / the `hooks` check removed | 1 / 1 |
+| D7 / D8 | the driver `tools` pin / the `omitClaudeMd` pin dropped | 1 / 1 |
+| D9 | empty `model` or `effort` allowed (re-run after a malformed first try) | 1 |
+| D10 | the definition check skipped for the driver | 3 |
+| F1 / F2 | `fold` overwrites the pins / the instructions | 1 / 1 |
+| F3 | `fold` never sets the pins | 126 |
+| F4 | `record_expectations` drops `promptSha256` | 5 |
+| G6 | the guard's template map swapped (Pass 15's survivor) | 1 |
+
+**Probes** (pytest functions added to the copy's `tests/` only, under the `fake_claude` fixture):
+- **Pass 15 re-runs:** a missing `effort` refuses before any write; a re-install keeps a repinned model; a driver with `Bash` is refused; the first install still sets the pins from the definitions.
+- **V1:** the version probe's environment is the allowlist: a fake that exits non-zero if `ANTHROPIC_API_KEY` or `CLAUDE_CODE_EFFORT_LEVEL` is present, or if the background-task variable is absent. Passes.
+- **V2:** 2.1.294 at install → refused, ledger unchanged, no `exchange/.claude`.
+- **V3:** a banner `node 20.1.0` before `2.1.316` → accepted (the first `x.y.z` decides).
+- **V4:** `2.1.295-beta.1` → accepted.
+- **V5:** a hung `claude --version` (timeout cut to 1 s) → a refusal naming `TimeoutExpired`.
+- **V6:** a version printed on stderr only → accepted.
+- **C1:** a `run` refused at 2.1.294 writes `store/refusal`; at 2.1.296 it launches and the file is gone.
+- **D1:** two `maxTurns` lines → installs. **D2:** `name: dm-labelerx` → installs. **D3:** `omitClaudeMd: "true"` → refused.
+
+**Growth-stops check:** Pass 16 adds two nits and re-opens no earlier finding. Passes 1–15 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.

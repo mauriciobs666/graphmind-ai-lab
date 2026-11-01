@@ -12,9 +12,11 @@ the design.
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts), `runner.py` (`driver run`, `pause [--now]`, `resume`) and `driver.py`
-(CLI: `init`, `resolve`, `run`, `pause`, `resume`, `status`). Later plan4 §4.1 and plan6 §4 units
-are unbuilt (`docs/HISTORY.md`).
+reconciliation, halts), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
+(`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
+`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
+definitions, spawn templates, `guard_hook.py` and `settings.json`. Later plan4 §4.1 and plan6 §4
+units are unbuilt, and U5.7's live smoke has not run (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
@@ -35,7 +37,12 @@ are unbuilt (`docs/HISTORY.md`).
 - **No hosted API client.** v1.3's `labeler.py` is void (plan4 §1); generation and labelling go
   through the subagent file exchange (plan4 §3).
 - **Agent definitions live in `agents/`, not `claude/` or `.claude/agents/`** (plan4 §3.1): they
-  are dataset provenance, and `claude/`'s rules do not apply to them.
+  are dataset provenance, and `claude/`'s rules do not apply to them. Every file there is hashed
+  into `promptSha256` and byte-copied by `install`, so an edit is a dataset-version change, and a
+  spawn template has no trailing newline (the audit compares it byte for byte). `guard_hook.py` is
+  the only bound on a call: stdlib only, exit 1 with no decision when it cannot judge (the wiring's
+  `onFailure: "block"` blocks), never imports `decisionmodels`. Its command uses an unexpanded
+  `$CLAUDE_PROJECT_DIR`, unverified in a live transcript until the smoke.
 - **`points/<role>/` is data, reviewed as data.** `point.json` (answer space, input-field schema,
   seed bindings, seed design and its weights, cells and sizes, screen tokens), `rubric.md`,
   `generator.md`; `points/common/` holds the answer-file section appended to each

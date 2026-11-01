@@ -1,0 +1,3 @@
+Make exactly one Agent call with subagent_type {agent_type}, the description "dm batch", and as its prompt exactly the text after the line PROMPT:, with nothing added or removed. Then reply done.
+PROMPT:
+{spawn_prompt}

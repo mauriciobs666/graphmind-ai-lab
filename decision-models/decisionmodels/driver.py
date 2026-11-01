@@ -3,7 +3,8 @@
 "Subcommands").
 
 `init`, `resolve` and `status` (U5.6); `run`, `pause [--now]` and `resume` (U6.3, the runner and
-stop switch in `decisionmodels.runner`). `install` (U5.7) and `finalize` (U5.10) join later;
+stop switch in `decisionmodels.runner`); `install` (U5.7, `decisionmodels.install`) and
+`smoke-fixture` (the label smoke's items, `decisionmodels.smoke`). `finalize` (U5.10) joins later;
 `next` and `ingest` are library entry points of `campaign.Campaign` that `run` calls, listed for
 no session.
 
@@ -11,6 +12,8 @@ no session.
   [--batch-timeout 45m] [--launch-fail-bound 6h]`
 - `resolve --root <dir> --decision <text> [--skip-batch | --repin-instructions |
   --repin-model generator|labeler <id>]`
+- `install --root <dir> [--agents-dir <dir>]`
+- `smoke-fixture --out <items.jsonl> [--count 50]`
 - `run --root <dir>`: exits 0 when it stops (done, halt, usage stop, pause, a held lock, a
   `launchFailed` launch, a signal)
 - `pause --root <dir> [--now]` and `resume --root <dir>`
@@ -30,7 +33,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from . import runner
+from . import install, runner, smoke
 from .campaign import PHASES, Campaign, CampaignRefused, parse_duration
 from .points import ROLES
 
@@ -62,6 +65,16 @@ def _parser() -> argparse.ArgumentParser:
     action.add_argument("--repin-instructions", action="store_true")
     action.add_argument("--repin-model", nargs=2, metavar=("ROLE", "MODEL"))
 
+    inst = commands.add_parser("install", help="install the agent definitions and guard; record "
+                                               "the declared expectations")
+    inst.add_argument("--root", required=True, type=Path)
+    inst.add_argument("--agents-dir", type=Path, default=install.AGENTS_DIR,
+                      help="another directory of the same sources (the smoke's maxTurns copy)")
+
+    fixture = commands.add_parser("smoke-fixture", help="write the label smoke's items.jsonl")
+    fixture.add_argument("--out", required=True, type=Path)
+    fixture.add_argument("--count", type=int, default=50)
+
     run = commands.add_parser("run", help="the unattended runner: one session per batch")
     run.add_argument("--root", required=True, type=Path)
 
@@ -78,8 +91,22 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _smoke_fixture(out: Path, count: int) -> int:
+    if out.exists():
+        print(f"refused: {out} exists", file=sys.stderr)
+        return 1
+    if count < 1:
+        print("refused: --count must be positive", file=sys.stderr)
+        return 1
+    out.write_text(smoke.fixture_text(count), "utf-8")
+    print(f"wrote {count} items to {out}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "smoke-fixture":
+        return _smoke_fixture(args.out, args.count)
     camp = Campaign(args.root)
     try:
         if args.command == "run":
@@ -88,6 +115,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             lines = (runner.pause(args.root, now=args.now) if args.command == "pause"
                      else runner.resume(args.root))
             print("\n".join(lines))
+        elif args.command == "install":
+            print("\n".join(install.install(args.root, agents_dir=args.agents_dir)))
         elif args.command == "init":
             camp.init(point=args.point, phase=args.phase, fixture=args.fixture,
                       batch_timeout=args.batch_timeout,

@@ -1,0 +1,1 @@
+Read {request_path} with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.

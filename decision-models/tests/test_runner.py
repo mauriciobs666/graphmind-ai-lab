@@ -47,6 +47,10 @@ sys.dont_write_bytecode = True
 CONTROL = Path({control!r})
 COMPONENT = {component!r}
 
+if "--version" in sys.argv[1:]:       # before the call count: not a launch
+    version = CONTROL / "version"
+    sys.stdout.write(version.read_text() if version.exists() else "2.1.316 (Claude Code)\\n")
+    sys.exit(0)
 n = len(list(CONTROL.glob("call-*.json")))
 plans = json.loads((CONTROL / "plan.json").read_text())
 plan = plans[min(n, len(plans) - 1)]
@@ -282,17 +286,26 @@ def test_stdout_stderr_and_the_exit_code_are_the_launch_evidence(
     assert exit_file(bench, session) == "3\n"
 
 
-def test_a_missing_claude_binary_is_a_launch_failure_not_a_crash(
+def test_a_missing_claude_binary_refuses_the_run_before_anything_is_issued(
         bench: Bench, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
     monkeypatch.setenv("PATH", "/nonexistent")
+    before = bench.camp.ledger_path.read_bytes()
+    code, _, err = run(bench, capsys)
+    assert code == 1 and "could not run" in err
+    assert bench.camp.ledger_path.read_bytes() == before and bench.calls() == []
+
+
+def test_a_launch_that_cannot_start_is_a_launch_failure_not_a_crash(
+        bench: Bench, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    real = subprocess.Popen
+
+    def refuse_the_launch(argv, *args, **kwargs):
+        if "-p" in argv:                      # the version check goes through
+            raise FileNotFoundError("planted")
+        return real(argv, *args, **kwargs)
+    monkeypatch.setattr(subprocess, "Popen", refuse_the_launch)
     bench.plan({"final": "clean"})
-    # Puts the fake back on PATH: a run that went on launching would reach it, and fail below.
-    restore = threading.Timer(2, os.environ.__setitem__, ("PATH", bench.path))
-    restore.start()
-    try:
-        code, _, _ = run(bench, capsys)
-    finally:
-        restore.cancel()
+    code, _, _ = run(bench, capsys)
     assert code == 0 and bench.calls() == []
     (outcome,) = bench.outcomes()
     assert outcome["reason"] == "launchFailed" and outcome["launch"]["exitCode"] is None
@@ -1012,3 +1025,59 @@ def test_a_child_past_batch_timeout_is_killed_as_a_group_and_the_batch_ingested(
         for pid in (first["pid"], first["grandchild"]):
             if alive(pid):
                 os.kill(pid, signal.SIGKILL)
+
+
+# --- the version floor (plan6 §3.3) ---------------------------------------------------------------
+
+
+def set_version(bench: Bench, text: str) -> None:
+    (bench.control / "version").write_text(text, "utf-8")
+
+
+@pytest.mark.parametrize("text", ["2.1.294\n", "1.99.1000\n", "garbage\n", ""])
+def test_a_claude_below_the_floor_or_with_no_version_refuses_the_run(
+        bench: Bench, capsys: pytest.CaptureFixture, text: str) -> None:
+    set_version(bench, text)
+    before = bench.camp.ledger_path.read_bytes()
+    code, _, err = run(bench, capsys)
+    assert code == 1 and err.startswith("refused: launch refused: ")
+    assert bench.camp.ledger_path.read_bytes() == before and bench.calls() == []
+    assert any(line.startswith("REFUSED: ") and "claude" in line
+               for line in bench.camp.status())
+    assert "refusal" in {p.name for p in bench.camp.store.iterdir()}
+
+
+@pytest.mark.parametrize("text", ["2.1.295\n", "2.1.316\n", "2.1.1000\n"])
+def test_a_claude_at_or_above_the_floor_launches(
+        bench: Bench, capsys: pytest.CaptureFixture, text: str) -> None:
+    set_version(bench, text)
+    bench.plan({"final": "clean"})
+    code, _, _ = run(bench, capsys)
+    assert code == 0 and len(bench.calls()) == 1
+
+
+def test_a_version_change_between_two_runs_above_the_floor_changes_nothing(
+        bench: Bench, capsys: pytest.CaptureFixture) -> None:
+    bench.camp.queue_batch("label", ["fx_0001"])
+    bench.plan({"final": "clean"}, {"final": "clean"})
+    set_version(bench, "2.1.300\n")
+    assert run(bench, capsys)[0] == 0
+    set_version(bench, "2.2.0\n")
+    assert run(bench, capsys)[0] == 0
+    assert len(bench.calls()) == 2
+
+
+def test_the_version_check_comes_after_the_pause_check(
+        bench: Bench, capsys: pytest.CaptureFixture) -> None:
+    set_version(bench, "2.1.294\n")
+    bench.camp.pause_path.touch()
+    code, out, _ = run(bench, capsys)
+    assert code == 0 and "stopped: paused" in out
+
+
+def test_the_version_check_comes_before_the_settings_check(
+        bench: Bench, capsys: pytest.CaptureFixture) -> None:
+    set_version(bench, "2.1.294\n")
+    bench.write_settings({**SETTINGS, "env": {"X": "1"}})       # a forbidden key as well
+    code, _, err = run(bench, capsys)
+    assert code == 1 and "older than 2.1.295" in err and "forbidden" not in err

@@ -47,6 +47,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -95,6 +96,9 @@ UNRECORDED_SETTINGS = frozenset({
 #: `permissions` sub-keys left out of the digest: an allow rule cannot loosen a deny, an ask or
 #: the guard, and `--permission-mode acceptEdits` overrides `defaultMode` (plan6 §3.2, §2).
 UNDIGESTED_PERMISSIONS = ("allow", "defaultMode")
+#: plan6 §3.3 "Version floor": `onFailure` needs 2.1.295; below it the guard may fail open.
+MIN_CLAUDE_VERSION = (2, 1, 295)
+_VERSION = re.compile(r"\d+\.\d+\.\d+")
 RECOVERY = "revert it, or run `driver install` to accept it"
 LOCK_HELD = ("another `driver run` holds store/driver.lock (a live run, or an orphaned child); "
              "exiting")
@@ -162,6 +166,27 @@ def settings_refusal(settings: Mapping[str, Any], recorded: Mapping[str, str]) -
              if keys]
     return ("~/.claude/settings.json differs from what `driver install` recorded "
             f"({'; '.join(parts)}); {RECOVERY}")
+
+
+def claude_version_refusal(environ: Mapping[str, str]) -> str | None:
+    """Why the `claude` on the child's `PATH` is refused (plan6 §3.3 "Version floor"), or `None`:
+    `claude --version` under the child's allowlisted environment must exit 0 and print an
+    `x.y.z` that, as an integer tuple, is at least `MIN_CLAUDE_VERSION`. Floor only."""
+    floor = ".".join(map(str, MIN_CLAUDE_VERSION))
+    try:
+        done = subprocess.run(["claude", "--version"], env=child_env(environ),
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                              timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"`claude --version` could not run ({type(exc).__name__}); is `claude` on PATH?"
+    found = _VERSION.search(done.stdout + done.stderr)
+    if done.returncode != 0 or found is None:
+        return f"`claude --version` gave no version (exit {done.returncode}); need {floor} or later"
+    version = tuple(int(part) for part in found.group().split("."))
+    if version < MIN_CLAUDE_VERSION:
+        return (f"claude {found.group()} is older than {floor}, the first with the guard's "
+                '`onFailure: "block"`; update Claude Code')
+    return None
 
 
 def child_env(environ: Mapping[str, str]) -> dict[str, str]:
@@ -257,6 +282,9 @@ class Runner:
             if camp.pause_path.exists():
                 # Before the settings check: a fire while paused exits 0 at once (plan6 §3.2).
                 return self._stopped(Stop("paused", "store/pause exists"))
+            version = claude_version_refusal(os.environ)
+            if version is not None:
+                raise CampaignRefused(f"launch refused: {version}")
             template, recorded = self._install_record()
             refusal = settings_refusal(read_user_settings(user_settings_path()), recorded)
             if refusal is not None:
