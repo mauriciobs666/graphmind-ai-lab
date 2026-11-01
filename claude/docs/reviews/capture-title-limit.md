@@ -1,6 +1,6 @@
 # Review: raw-capture template states the 200-character `title` limit
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-101 (follow-up)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-101 (follow-up)
 
 ## Scope & verdict
 

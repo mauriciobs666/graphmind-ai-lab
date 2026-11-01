@@ -1,6 +1,6 @@
 # Embedder context — over-context behavior and per-model load context
 
-> **Status:** active · **Owner:** `devops` · **Tracks:** K-099
+> **Status:** archived · **Owner:** `devops` · **Tracks:** K-099
 
 ## Probe: over-context embed
 

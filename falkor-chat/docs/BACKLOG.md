@@ -66,32 +66,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > `--identifier`, on the evidence of one unsaved live probe — re-probe and record the result.
 - **Owner:** stakeholder decision, then `devops`.
 
-### K-099 — The embedder is loaded at the chat model's 8192 context, and MCP `send_message` has no length cap (🔵 proposed — `tico` explanation session, 2026-10-31)
-
-> `ensure_demo_models.py` loads every missing model with one `load_args` (`-c 8192 --gpu max`),
-> so `text-embedding-qwen3-embedding-0.6b` gets the 8192 sized for the chat model's shared KV pool.
-> The embedder sees one text at a time, so it needs only the longest single input. Inputs measured
-> 2026-10-31: `ws:agent-team` chunks max 1,139 chars (avg 694, ~300–400 tokens; the chunker caps
-> them at ~1,000 + 150 overlap), `ws:acme` messages max 1,817 chars; REST messages are capped at
-> `MAX_TEXT_LEN` = 8,000 chars (~2,000–2,900 tokens; URL-dense text is the high end). So 2048 fits documents and 4096 fits
-> REST-capped messages. **The gap:** MCP `send_message` → `services.post_message` enforces no length
-> cap (unlike `ingest_document`, which re-checks `MAX_DOCUMENT_CHARS`), so an agent post can exceed
-> any context. Unverified: whether LM Studio truncates or rejects an over-context embed; a rejection
-> fails the embed job silently (log only) and drops the message from search. **Why bother:** the
-> fit report (`docs/test-reports/salesperson-single-model-fit-report.md`) shows ~2.1 GiB dedicated
-> for the embedder process (~0.6 GB weights) and ~1.6 GiB of ministral paged out whenever it runs;
-> a smaller embedder context may shrink that, unmeasured. **Decided (stakeholder, 2026-10-31):**
-> the embedder loads at **2048** (reverses the same day's 4096 decision after the same-day A/B in
-> `docs/test-reports/embedder-context-report.md`: −352 MiB vs 4096, ministral paging −35%); a
-> message longer than the window is covered by chunking (K-100, widened to every message); the
-> chat model stays at 8192. Remaining: (1) probe LM Studio's over-context embed behavior;
-> (2) load the embedder at 2048 (its own context in `ensure_demo_models.py`, not the chat model's);
-> (3) enforce `MAX_TEXT_LEN` on MCP `send_message` as REST does; (4) re-measure VRAM and paging
-> against the fit report.
-- **Owner:** `devops` (1, 2, 4) and `coder` (3).
-- **Test strategy:** `lms ps --json` shows the embedder at 2048 and ministral at 8192; an over-length MCP
-  `send_message` is rejected like REST's 422; the fit report's VRAM/paging measurement repeated.
-
 ### K-100 — A message longer than the embedder's window is embedded by its head only; chunk it rather than cap it (🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31)
 
 > Agent/LLM replies write through `Services.post_agent_answer` (responder, workflow `post_message`
@@ -106,19 +80,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > multi-vector message ranks in message search (one hit per message, not per chunk), and whether the
 > chunker already used for documents is reused.
 - **Owner:** `architect` (design), then an implementer.
-
-### K-101 — REST input bounds are not enforced on the MCP/service paths (🟡 in-progress — RCA `docs/reviews/mcp-input-bounds-rca.md`, 2026-10-31; absorbs K-074)
-
-> REST's pydantic schemas carry every message/name/title/limit bound; MCP tools declare none and the
-> service backs only four (RCA §inventory, Appendix A). Instances include an empty MCP
-> `send_message` body, more than `MAX_MENTIONS` mentions, unbounded channel names / thread titles,
-> negative `limit`s, and K-074's over-200-char `ingest_document` title (7 such titles live in
-> `ws:agent-team`). **Decided (stakeholder, 2026-10-31):** fix the whole class per the RCA's
-> recommendation — service checks for every stored value, `Annotated` bounds on the MCP tool
-> signatures, a REST↔MCP bound-parity test — and **reject whitespace-only message text** on every
-> front door (REST's current 201 for it becomes a 400). K-074 is folded in here.
-- **Owner:** `tdd-engineer`.
-- **Test strategy:** the RCA's parity test first, then each known gap flipped to its fix with literal-value tests.
 
 ### K-102 — 11 `ws:agent-team` documents sit in `failed` with unembedded chunks, invisible to semantic search (🔵 proposed — found during K-099, 2026-10-31)
 

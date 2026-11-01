@@ -1,6 +1,6 @@
 # MCP input bounds (K-101): implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-101
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-101
 
 ## Pass 1 — service bounds + parity test
 

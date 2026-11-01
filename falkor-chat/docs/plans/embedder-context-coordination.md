@@ -1,6 +1,6 @@
 # Embedder context and MCP message cap — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-099, K-101
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-099, K-101
 
 Scope and the stakeholder decision (embedder at 2048 — reversed from 4096 the same day — chat model stays 8192) live in
 `falkor-chat/docs/BACKLOG.md` K-099; this ledger only tracks units.
@@ -17,7 +17,8 @@ Scope and the stakeholder decision (embedder at 2048 — reversed from 4096 the 
 | U6b — K-101 MCP `Annotated` tool-signature bounds + review P2-1 (closed-world collector) / P2-2 | `tdd-engineer` | `ac40cbad3a000d415` | accepted (Pass 3 approve w/ suggestions; P3-1/P3-2 nits fixed + mutation-verified, re-gate skipped as nit-level; full suite 3634 passed, teco solo) | code + tests | `analyst` → — | — |
 | U3b — same-day 2048 measurement + cutoff (stakeholder ask 2026-10-31; decision input, no script change) | `devops` | `a6e53d08434c67adf` (resumed) | accepted — 2048 vs 4096: embedder −352 MiB, paging −35%; cut at 2048: prose 9,681 / code 7,960 / URL-heavy 5,733 chars; teco cross-checked against raw logs | `docs/test-reports/embedder-context-report.md` | — (measurement) | 209k tok / 84 tools (cumulative) |
 | U1b — switch embedder to 2048 (stakeholder decision 2026-10-31, reverses 4096) | `devops` | `a6e53d08434c67adf` (resumed) | accepted (Pass 5 approve w/ suggestions; P5-1/P5-2 text fixes applied by teco) | script + tests + `AGENTS.md` + report headline; live embedder at 2048 (loaded by hand — script refused, qwen resident; ~21 s embedder gap 22:04:18–39) | `analyst` → — | 231k tok / 107 tools (cumulative — next devops work goes fresh) |
-| U4 — feature close: SERVER.md MCP surface update, impl check, HISTORY | implementer / `analyst` | — | queued | `docs/reviews/embedder-context-impl.md` | `analyst` → — | — |
+| U7 — capture-template title ≤ 200 chars (stakeholder yes 2026-10-31; follows K-101) | `cobb` | `a6f06e9efe3cde0b6` | accepted — `a5cc041c`, manual `c6e33c9d`, follow-ups `0821d09d`, F5 `bf6039d4` (review Pass 3 approve) | 13 prompts + 13 kaizen histories + `claude/AGENTS.md` + `skills/agent-maintenance/SKILL.md` (three-way check: `claude/`,`skills/` clean at session start, no commits there since) | `analyst` → — | 70k tok / 14 tools |
+| U4 — feature close: SERVER.md update (step 2) | `tdd-engineer` | `a580b55ad5d6b2d9f` | accepted — spec `3a9564f1` (close checks Pass 3 approve), REVIEW.md `62b75cc0`, HISTORY entries + backlog removal + archive in the close commit | `docs/reviews/embedder-context-impl.md` | `analyst` → — | — |
 
 ## Documentation impact
 
@@ -39,3 +40,6 @@ Scope and the stakeholder decision (embedder at 2048 — reversed from 4096 the 
 - 2026-10-31: U6a committed `16f76f46` after teco's solo full suite (3574 passed); `reference` re-seeded by `devops` (`ad9904cbed4a9a6fe`), 11/11 exit 0.
 - 2026-10-31 stakeholder: embedder at **2048** (reverses 4096); K-100 widened to chunk every message over the window. `MessageTooLongError` docstring in `services.py` corrected by teco (trivial, comment-only), committed with U1b.
 - Follow-up for report: `ws:agent-team` holds 11 `failed` documents with unembedded chunks (oldest 2026-10-24, latest 2026-10-31 21:38 — before U1b's embedder gap, so not caused by it); pre-existing, out of scope.
+- 2026-10-31: U6b committed `7490f634`; reseeded by `devops` (`a8938d19f23bce720`), 11/11 exit 0; teco re-verified `reference` (15 Product, 5 WorkflowDef, 19 Step). Close steps 3–5 pending.
+- 2026-10-31 stakeholder: yes to K-102 (filed, commit after this line) and to U7.
+- 2026-10-31: feature close complete for K-099 and K-101; K-100 and K-102 remain open in `BACKLOG.md`.

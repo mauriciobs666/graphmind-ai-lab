@@ -5,6 +5,55 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-31 — K-101 closed: REST input bounds hold on the MCP and service paths
+
+- **What.** Every stored value REST bounds is now a service invariant, checked before any
+  repository call: `InputBoundError` (400) covers blank message text, mentions > 50, channel name
+  and thread title outside 1–200, and document `title`/`source_format`/`source_label`, including
+  per-item receipts in `ingest_documents`. Every MCP tool argument that has a REST bound now
+  declares it as `Annotated[…, Field(…)]`. FastMCP validates these and publishes them in
+  `inputSchema`. The bounds come from the same `schemas.py` constants as REST
+  (`MAX_LIST_LIMIT`/`MAX_READ_LIMIT` are new), and `tests/test_input_bound_parity.py` checks REST
+  and MCP agree. Commits: `2f532ec3` (RCA, `docs/reviews/mcp-input-bounds-rca.md`), `16f76f46`
+  (service half), `7490f634` (MCP half).
+- **Decisions.** K-074 (MCP accepted an over-200 document `title`) is folded into K-101 and closed
+  by it (RCA §5.2). Whitespace-only message text is a 400 on every front door. This is a stakeholder
+  call, stricter than REST's own `min_length=1`; home: `SERVER.md` §1.4 Bounds and the
+  `InputBoundError` docstring. The MCP side leaves id arguments, `produced_by` and
+  `ingest_documents` item fields undeclared (RCA §5.2 item 3).
+- **Spec.** `SERVER.md` §1.4 (Bounds, error envelope), §1.5 (`schemas.py` row) and §2.2 (argument
+  bounds, per-item receipts, the `Error executing tool <tool>: <message>` error shape), in
+  `3a9564f1`. The live-spec check is `docs/reviews/mcp-input-bounds-impl.md`: Pass 1 and Pass 2
+  needed changes, Pass 3 approved. Its `REVIEW.md` addition is applied in `62b75cc0`.
+- **Open.** K-102: 11 `ws:agent-team` documents are stuck in `failed` with unembedded chunks.
+
+## 2026-10-31 — K-099 closed: MCP `send_message` text cap; embedder loads at 2048
+
+- **What.** `Services.post_message` refuses text over `MAX_TEXT_LEN` (8000) with
+  `MessageTooLongError` before any repository access, so MCP `send_message` was bound by REST's
+  cap (`6d4f5c05`). `scripts/ensure_demo_models.py` now loads the embedder at its own context,
+  separate from ministral's 8192. Before, one `-c 8192` applied to both. It reads the resident
+  embedder's context from `lms ps` and warns if that differs, but never reloads it (`0402d9c9`).
+  The probe found LM Studio silently head-truncates an over-context embed.
+- **Decision: 2048 (`f3e0015e`).** The context was first set to 4096. After a same-day A/B the
+  stakeholder reversed that to 2048 the same day. Figures from
+  `docs/test-reports/embedder-context-report.md`:
+  - 4096 vs 8192 (`04255bfa`): embedder −753 MiB dedicated (2130 → 1377), and ministral pages out
+    about 700–740 MiB less.
+  - 2048 vs 4096 (`e7ccf17d`): embedder −352 MiB (1377 → 1025), and ministral pages out about
+    320–350 MiB less.
+  - Cost: a single input is cut at 9,681 chars of English prose, 7,960 of code and 5,733 of a
+    URL-heavy message.
+  - Home: `DESIGN.md` §1.3 and `docs/reviews/embedder-context.md` Pass 5.
+- **Decision: agent answers are uncapped.** `post_agent_answer`, used by the responder and the
+  workflow `post_message` tool, has no text cap. A message, client- or agent-authored, that is
+  longer than the embedder's window is embedded by its head only until K-100 adds chunking. Home:
+  `SERVER.md` §1.4 Bounds.
+- **Spec.** `DESIGN.md` §1.3 (embedder row) and `SERVER.md` §1.4 (Bounds), in `3a9564f1`. The
+  live-spec check is `docs/reviews/embedder-context-impl.md`: Pass 1 and Pass 2 needed changes,
+  Pass 3 approved. Its `REVIEW.md` addition is applied in `62b75cc0`.
+- **Open.** K-100: chunk over-window messages rather than cap them.
+
 ## 2026-10-31 — Live spec caught up to shipped code; K-063 closed; K-091–K-098 filed
 
 - **What.** `docs/DESIGN.md`, `docs/SERVER.md` and `docs/QUERIES.md` are now the component's live

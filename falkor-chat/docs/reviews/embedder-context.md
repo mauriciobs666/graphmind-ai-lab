@@ -1,6 +1,6 @@
 # Review: K-099 embedder context and MCP `send_message` cap
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-099
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-099
 
 ## Pass 1 — MCP send_message cap
 

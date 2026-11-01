@@ -1,6 +1,6 @@
 # MCP input bounds: REST-only validation (RCA)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-101
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-101
 
 **Scope.** Every tool in `server/falkorchat/mcp.py` (25 registered tools), each argument mapped to its
 REST counterpart in `api.py`/`schemas.py`, and the service method both call (`services.py`). The

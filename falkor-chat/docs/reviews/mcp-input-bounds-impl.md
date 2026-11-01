@@ -1,6 +1,6 @@
 # MCP input bounds — live-spec check (feature close)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-101
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-101
 
 ## Scope & verdict
 
