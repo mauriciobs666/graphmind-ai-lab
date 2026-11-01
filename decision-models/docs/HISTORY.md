@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.4 — exchange and ingester
+
+**What:** `docs/plans/typed-decision-models4.md` §4.1's U5.4 — §3.2 in full, §3.3's answer rows,
+idempotence and second-answer refusal — with plan5 (`typed-decision-models5.md`) §3.4's id-blind
+seed lines, under note `docs/plans/typed-decision-models-ml.md` §Q1.2 "Blind"; review
+`docs/reviews/typed-decision-models4-impl.md` Pass 5.
+
+- `decisionmodels/exchange.py`: `build_label_request` / `build_generation_request` (header,
+  line 2, then one item or seed per line, at least one; keys of 10 base32 characters from
+  `secrets`, redrawn on a collision with the caller-held set or this request's keys; a fresh
+  opaque name per request), `write_request` (validates, never overwrites), `request_errors` /
+  `validate_request` / `parse_request` (every line a closed key set, a repeated JSON name refused;
+  any `*Id` key on a generation request refused, whatever `points/` declares), `body_sha256`
+  (layout-free) and `cut_pages` (greedy pages ≤ 40,000 written characters, newline included, cut
+  at `P_MAX` 10 / 2 pages with the header page; the rest is `overflow`; a page's limit is at least
+  1; a line that cannot be parsed — bad JSON, too deep, an integer past Python's digit limit —
+  is a refusal, never an exception). Seed lines are `Seed.axes` with the `*Id` keys projected out; `BuiltRequest.keys` keeps the
+  whole seed. Raw U+0085/U+2028/U+2029 are written escaped and refused raw, so no reader splits a
+  line. `RENDERERS` holds the guard renderer only.
+- `decisionmodels/ingest.py`: `read_answer_parts` (whole file or parts 1…k, no gap),
+  `ingest_answer` / `ingest_answer_files` → `Ingested`, `AlreadyIngested` (same answer bytes),
+  `Void` (run-attributable, one reason by a fixed order plus every detail) or `AnswerRefused`
+  (a second, different answer). A line with a non-string key, a repeated name or nesting too deep
+  to parse is a `malformed` void, never an exception, so reconciling the batch again cannot crash
+  (P5-F1). The answer space is type-strict (`1` is not `true`); generated items are checked by
+  `points.input_field_errors` only (plan5 §3.5: screen and bindings are U5.8's). A CRLF line ending
+  reads as LF, so a `\r`-only line is a blank line, `malformed`, as in an LF answer (P6-F2).
+- `tests/test_exchange.py`, `tests/test_ingest.py`: the §5 U5.4 rows — the plan4 positive
+  controls (`split` on the header, `seedId` on the rubric line, `intent` on an item line), plan5's
+  (`domainId` on a generation line; no `*Id` key in a writer's seed line, all three points), the
+  budget on 50 pt-BR guard items at the render cap, an independent `bodySha256` recomputation and
+  a layout change, a two-part answer, each void reason, and idempotence against a stand-in ledger.
+  Scripted-`secrets` tests pin held-key avoidance and uniqueness within a request; a part with no
+  final newline hashes as the whole answer; a CRLF answer ingests. Strict xfails for the two
+  renderers U5.2b-render adds. `AGENTS.md`, `README.md`.
+- **Observed paging:** the guard rubric line is 5,099 characters and a pt-BR item at the render cap
+  6,331 written characters, so 50 such items take exactly 10 pages (the first content page holds
+  the rubric and 5 items); a 70-item batch is cut at 53.
+
+**Verified:** `pytest -q` from `decision-models/`, with the U5.2b-hash node
+`test_the_vector_copy_is_byte_identical_to_model_benchs[input-hash.jsonl]` deselected: 480 passed,
+1 deselected, 4 xfailed. `ruff check .` clean; `tests/test_fr8_isolation.py` 24 passed. A
+sentinel and 36 mutants ran in a private copy over the two U5.4 test files, each restored
+`cmp`-equal, with both mutated files sha256-equal to the live tree afterwards. The sentinel
+reddened 13 tests, and every mutant reddened at least one: `*Id` projection removed 13;
+`validate_request` accepting `split` 2, `seedId` 4, `intent` 1, `domainId` 1; `*Id` rule removed
+5; idempotence broken 3; second-answer refusal removed 2; page budget off by one 1–2 in each of
+five forms; non-string key check removed 6; repeated-name hook removed 3; held keys ignored 1;
+this request's keys ignored 1; no-final-newline hashing removed 1. After review Pass 6, in a
+second private copy: the `\r` strip removed 1; the request-side `ValueError` catch narrowed to
+`JSONDecodeError` 1; the request-side `RecursionError` catch disabled 1. The request-side
+`offset < 1` check was deleted: the coverage check already refuses any such page.
+
 ## 2026-11-01 — typed-decision-models U5.3 — points, rubrics, seeds
 
 **What:** `docs/plans/typed-decision-models4.md` §4.1's U5.3, with plan5

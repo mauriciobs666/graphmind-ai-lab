@@ -10,16 +10,16 @@ the design.
 ## Current state
 
 `decisionmodels/` holds `render.py` and `hashing.py` (guard only), `points.py` (loads
-`points/<role>/`) and `seeds.py` (seed draws); `points/` holds the three points' data. The rest of
-plan4 §4.1's units are not built yet (`docs/HISTORY.md`).
+`points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas) and
+`ingest.py` (answer checks, idempotence). Later plan4 §4.1 units are unbuilt (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
 - **FR-8: `decisionmodels/` imports stdlib + itself only, and names no real-data reach.**
   `tests/test_fr8_isolation.py` holds the allowlist and the forbidden literals (falkor-chat
   paths/packages, FalkorDB/Redis, the `guard-judge-understanding` side-check items, port 6379).
-  Never widen either to make a unit green; a new reach is a plan change. It is a static tripwire;
-  the test's docstring lists what it cannot see (indirect imports, run-time-assembled names). The
+  Never widen either to make a unit green; a new reach is a plan change. It is a static tripwire
+  (its docstring lists what it cannot see). The
   scan covers `decisionmodels/` only — `scripts/import_side_check_shingles.py` (plan2 §3.5) is the
   one sanctioned reader of the side-check items (`model-bench/packs/guard-judge-understanding/`),
   and it writes hashes only.
@@ -47,9 +47,15 @@ plan4 §4.1's units are not built yet (`docs/HISTORY.md`).
   unbiased systematic rounding — never swap in largest remainder (note §Q1.1). Ids are in the
   non-word form `seeds.ID_PATTERN`. `tests/test_seeds.py` pins a digest per point; a design,
   algorithm or interpreter change re-pins it deliberately.
-- **`hashing.py` lacks the join-in and message-type rows until U5.2b.** `tests/test_points.py`
-  holds strict xfails for them (plan5 §3.4); their XPASS means deleting those xfails and
-  `PLANNED_INPUT_FIELDS`.
+- **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
+  one schema check; the writer runs it before any request leaves it. No `*Id` key
+  reaches a generation request, whatever `points/` declares.
+- **Ingest never records** (`ingest.py` docstring): the ledger (U5.6) and transcript audit (U5.5)
+  are the caller's. A second, different answer raises `AnswerRefused`.
+- **Guard-only until U5.2b.** `hashing.py` lacks the join-in and message-type rows
+  (U5.2b-hash) and `exchange.RENDERERS` their renderers (U5.2b-render); strict xfails in
+  `tests/test_points.py` and `tests/test_exchange.py` then XPASS: delete them (and
+  `PLANNED_INPUT_FIELDS`).
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

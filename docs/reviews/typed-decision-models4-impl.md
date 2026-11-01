@@ -767,3 +767,311 @@ test deselected. Baseline: 330 passed, 2 xfailed.
 | P4 | emptiness binding ignores a non-list `missing` | **330 passed** (P4-F1) |
 | P5 | `hashing` gains a mismatched join-in row | 2 failed, 1 xfailed |
 | P6 | `hashing` gains a matching, reordered join-in row | 2 failed, 1 xfailed |
+
+## Pass 5 — U5.4 exchange and ingester (2026-11-01)
+
+### Scope & verdict
+
+**Reviewed:** the uncommitted U5.4 work in `decision-models/` against `d7c7465a`: new
+`decisionmodels/exchange.py`, `ingest.py`, `tests/test_exchange.py`, `tests/test_ingest.py`, and
+the `AGENTS.md`, `README.md` and `docs/HISTORY.md` edits. Baseline: plan4 §3.2, §3.3's answer
+rows, idempotence and second-answer refusal, the §4.1 and §5 U5.4 rows; plan5 §3.4 and its U5.4
+row; note §Q1.2 "Blind".
+
+**Verdict: needs changes.** One major code defect (P5-F1) needs a fix and a test first. Everything
+else is minor. What I ran:
+- The live tree, with the `input-hash.jsonl` node deselected: 458 passed, 1 deselected, 4 xfailed.
+  `ruff check .` is clean, `tests/test_fr8_isolation.py` gives 24 passed, and `AGENTS.md` is 598
+  words (527 at HEAD).
+- Mutants ran in a private copy (`scratchpad/p5u54/repo/`, with `model-bench/` symlinked in). I
+  confirmed that the copy's `decisionmodels` is the one imported. Each mutant was restored and
+  checked with `cmp` (Appendix E).
+- The coordinator's mutant reproduces: `mint_key(minted)` stays green.
+- A sha256 over the live component's files matched the baseline at the end. No git command changed
+  the tree.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; both modules (734 lines) and both test files were read in full.
+
+### Findings
+
+**P5-F1 — major — an answer line with a non-string key crashes ingest instead of voiding.**
+*Owner: `tdd-engineer`. Verified by running it.* `_check_entries` evaluates `key not in known` on
+a raw JSON value (`ingest.py:160`).
+- `{"key": ["a"], "answer": true}` or `{"key": {"a": 1}, …}` raises `TypeError: unhashable type`,
+  in both label and generation answers.
+- Plan4 §3.3 makes malformed answers run-attributable. A crash instead leaves the batch `issued`.
+  `next` then reconciles by ingesting it again (plan4 §3.5) and crashes again, so the campaign
+  stalls on one model-written line.
+- Related: a line with a repeated name, `{"key": k, "answer": false, "answer": true}`, ingests
+  silently as `true` (last wins). The labeler gave two answers, so the line is not the closed shape.
+
+**Fix:**
+- After `ingest.py:159`, a non-`str` key is `MALFORMED`. I ran this: my two parametrized cases
+  pass and the full suite stays green.
+- Parse answer lines with an `object_pairs_hook` that refuses a duplicate name. The hook raises a
+  plain `ValueError`, not `JSONDecodeError`, so the `except` must widen to catch it (I checked
+  this).
+- Add both shapes to `test_a_malformed_line_is_void`.
+
+**P5-F2 — minor — key uniqueness is untested; the test named for it cannot fail.**
+*Owner: `tdd-engineer`. Verified by running it.*
+- Your mutant M0 (`mint_key(minted)`) stays green, and so does mine, M1
+  (`mint_key(set(held_keys))`, which drops the within-request check). That is a real gap against
+  plan4 §3.2's "unique across the campaign and redrawn on collision".
+- `test_keys_are_unique_within_a_request_and_avoid_held_keys` uses 5 random held keys in a 32¹⁰
+  space, so it cannot fail.
+- Production impact is low: a collision needs both a regression and a draw at about 10⁻¹⁵ per pair.
+  But a test whose name claims the contract also hides it from the next reviewer.
+
+**Fix:** two builder-level tests that patch `exchange.secrets.choice` to a scripted stream, as
+`test_a_key_collision_is_redrawn` already does:
+- the stream `aaaaaaaaaa`, then `bbbbbbbbbb`, with held `{"aaaaaaaaaa"}`, yields
+  `list(built.keys) == ["bbbbbbbbbb"]`;
+- the stream `aaaaaaaaaa` twice, then `bbbbbbbbbb`, for 2 items with nothing held, yields
+  `["aaaaaaaaaa", "bbbbbbbbbb"]`.
+
+The stream also needs 16 more characters for the opaque name. I ran both tests: green on the live
+code, and M0 and M1 each redden one. The existing test can then be dropped or renamed.
+
+**P5-F3 — minor — two answer-normalization behaviors are unpinned.** *Owner: `tdd-engineer`.
+Verified by running it.*
+- M3 hashes the parts raw, with no newline appended: 458 passed. The docstring's claim (an answer's
+  hash does not depend on its part split, `ingest.py:22`) is tested only with parts that end in
+  newlines.
+- M8 drops the `\r` strip: 458 passed.
+
+**Fix:** a test where the first part has its final newline stripped and `prior` is the whole
+answer's hash, which must give `AlreadyIngested`. I ran it: green live, red under M3. Add a CRLF
+answer that ingests, for M8.
+
+**P5-F4 — minor — idempotence at the driver falls in no unit's row.** *Owner: `architect`, for
+plan4 §5's U5.6 row, via `teco`. Verified for the code path; the U5.6 consequence is inferred.*
+- U5.4 proves idempotence against a stand-in ledger, which is all the module can do.
+- Plan4 §3.2 moves the answer parts to `store/` on ingest. A repeated `driver ingest` that reads
+  `exchange/ans/` then finds no parts, and `ingest_answer(…, [], ingested_answer_sha256=<sha>)`
+  raises `AnswerRefused`. So the plan's "no-op" turns into a refusal unless the driver reads from
+  `store/`.
+- A crash between recording a `Void` and moving the files means the void is re-ingested with
+  `ingested_answer_sha256=None`. That could count a second attempt.
+
+**Fix:** add a U5.6 row with three cases:
+- `driver ingest` repeated on an ingested batch leaves the ledger byte-equal;
+- repeated on a voided batch, it counts one attempt;
+- a different second answer is refused.
+
+The audit-precedence seam itself is sound. Ingest emits only run-attributable outcomes, and U5.5's
+row already requires that "a fixture matching a halt row and a counted row halts".
+
+**P5-F5 — minor — the 40,000-character budget assumes prose token density, and the costliest
+line is not prose.** *Owner: `architect`, for plan4's U5.7 smoke row, via `teco`. Inferred: I did
+not measure tokens.*
+- Plan4 §2 measured 2.0 characters per token on raw pt-BR chat text.
+- The densest line is a guard `understanding` item. The renderer ASCII-escapes it and the request
+  escapes it again: 197 `\\u00XX` sequences, about 22% of the line's 6,331 characters.
+  Escape-heavy text tokenizes worse than prose.
+- A page over 25,000 tokens makes Read fail outright.
+
+**Fix:** require the U5.7 smoke fixture to include this shape (`tests/test_exchange.py`'s
+`pt_br_item_at_cap`), not only `turns` prose, or measure it once.
+
+**P5-F6 — nit — the validator accepts degenerate pages and batches.** *Owner: `tdd-engineer`.
+Verified by running it.*
+- `[[1,1],[0,0],[2,2]]` and `[[1,1],[2,2],[7,0]]` both pass `request_errors`, because a
+  zero-limit page covers nothing.
+- `build_label_request(G, [], …)` writes a request with no items, which costs a spawn for nothing.
+
+**Fix:** refuse a `limit < 1` and an empty batch.
+
+**P5-F7 — nit — docs.** *Owner: `tdd-engineer`. Verified.*
+- `HISTORY.md` says 25 mutants; the brief reports 26.
+- `HISTORY.md` says keys are "redrawn against a caller-held set", which is true in code but
+  untested (P5-F2).
+- `AGENTS.md`'s new `bodySha256`/page sentence restates `exchange.py`'s docstring. Citing it would
+  be enough.
+
+### Checks the brief asked for
+
+1. **Request format.** Every §3.2 element matches line by line:
+   - the header's six keys, `[1, 1]` first, `answerPath` under `ans/<opaque>.jsonl`;
+   - line 2 per kind, with `{key, text}` or `{key, <text axes>}` per entry;
+   - closed sets on every line, and canonical `bodySha256`;
+   - newline-inclusive page counting, checked at exactly 40,000 and 40,001;
+   - 16-character opaque names.
+
+   The delegate applies the `*Id` rule to every generation line, which is a superset of plan5's
+   wording. It over-refuses nothing: no header key, line-2 key or design axis ends in `Id`. On the
+   header and line 2 it changes only the error message, since those sets are closed anyway.
+   Every point's writer output validates across 30 RNG seeds × each stratum (one axis shape per
+   point).
+2. **Page slack.** I reproduced every figure: rubric line 5,099, item 6,331, 50 items in exactly 10
+   pages (page 2 holds the rubric and 5 items), and 70 items cut at 53. Three spare items is the
+   wrong measure. Page 2 holds the rubric, so a worst-case 50-item batch still fits until the
+   rubric line reaches 27,335 characters, 5.4× today. Past that, the cut is still correct:
+   overflow goes to the next batch, and only the batch size changes. Neither plan nor code needs
+   an item margin. The margin worth having is in tokens (P5-F5).
+3. **Ingest.**
+   - Type-strict answers hold (M7: 2 failed).
+   - Parts are ordered numerically (M4: 1 failed).
+   - Earlier-ingest is checked before validation, and invalid request text raises
+     `RequestRefused`, never a void.
+   - The reason order is an internal tiebreak inside plan4 §3.3's single run-attributable class,
+     so it matches. Plan5 §3.5's "schema first" is honored.
+   - The gaps are P5-F1 and P5-F4.
+4. **Line separators.** With raw U+2028, U+2029 and U+0085 in a turn, the header hash equals a
+   recomputation over the raw-character body and the independent helper's. `splitlines()` and
+   `split("\n")` agree (3 lines). The body hash is unchanged.
+5. **Docs.** The `HISTORY.md` paging and suite figures reproduce. `AGENTS.md` grows by 71 words for
+   two new modules, which is new scope. It was rewritten in place: the state line was replaced,
+   the U5.2b bullet merged and the FR-8 bullet shortened. No line is over 700 characters. It
+   passes.
+6. **My plumbing mutants.** M9 shifts the store's key→seed pairing by one: 2 failed. M1, the
+   within-request mint, is P5-F2.
+
+### What's solid
+
+- The writer validates its own output twice, before it hands the request out and before it writes.
+  `write_request` never overwrites and writes through a `.partial` rename.
+- `bodySha256` is computed from values, not lines, so escaping and layout cannot move it.
+- Tests take their expected values from the plans, with an independent hash recomputation and the
+  exact-budget boundary on both sides. The second-answer refusal also covers a would-be-void
+  answer.
+
+### Open questions
+
+- Is a `Void` an "ingested" outcome for the ledger's `ingested_answer_sha256`? The module allows
+  either reading, and P5-F4's U5.6 row should state which.
+
+**Growth-stops check on this document:** Pass 5 adds new findings only. Passes 1–4 are
+byte-identical to their pre-Pass-5 text (`cmp` on the first 769 lines).
+
+### Appendix E — Pass 5 mutants
+
+These ran in the private copy with the full suite, the `input-hash.jsonl` node deselected.
+Baseline: 458 passed, 4 xfailed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| M0 | `mint_key(minted)` (coordinator's) | **458 passed** (P5-F2) |
+| M1 | `mint_key(set(held_keys))` | **458 passed** (P5-F2) |
+| M3 | `answer_sha256` hashes parts raw | **458 passed** (P5-F3) |
+| M4 | parts ordered by `str(k)` | 1 failed |
+| M6 | line-separator escaping removed | 1 failed |
+| M7 | answer space not type-strict | 2 failed |
+| M8 | `\r` strip removed | **458 passed** (P5-F3) |
+| M9 | store key→entry pairing shifted by one | 2 failed |
+
+## Pass 6 — U5.4 fix round (2026-11-01)
+
+**Verdict: approve with suggestions.** There is no blocker or major. What I ran:
+- **Suite:** 476 passed, 1 deselected (`input-hash.jsonl`), 4 xfailed. `ruff check .` is clean, and
+  `AGENTS.md` is 581 words.
+- **Mutants:** they ran in a fresh private copy (`scratchpad/p5u54/repo/`, with `model-bench/`
+  symlinked in). Each was restored and checked with `cmp`, and the copy's package matches the live
+  tree with `diff -rq`.
+- **Live tree:** I never wrote to it, and its sha256 matched at the end. No git command changed the
+  tree.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the fix-round diff of both modules was read in full.
+
+### Pass 5 findings
+
+- **P5-F1:** fixed.
+  - List and dict keys are `malformed` voids. A repeated name is caught at any depth, including on
+    line 1 (`answer line 1: repeated name 'bodySha256'`).
+  - A 5,000-digit integer (a plain `ValueError`) and 100,000-deep nesting are `malformed` voids.
+  - Mutant N1 (key check removed) gives 6 failed, N2 (hook removed) 3, N3 (`except` narrowed to
+    `JSONDecodeError`) 3 and N4 (`RecursionError` dropped) 1.
+- **P5-F2:** fixed. M0 and M1 each turn 1 test red (both were green).
+- **P5-F3:** M3 is fixed (1 failed). The `\r` strip was deleted rather than tested; see P6-F2.
+- **P5-F4:** ruled in the coordination ledger (2026-11-01, "Architect inline ruling"). Executed
+  against the module:
+  - an identical void re-delivered with its recorded sha gives `AlreadyIngested`;
+  - a different answer after a void, or after `answerMissing`, gives `AnswerRefused`;
+  - an `answerMissing` void's sha equals `sha256(b"")`;
+  - the delegate's description ("voids a re-read with no prior hash, refuses one with") holds.
+
+  The residue is P6-F1.
+- **P5-F5:** ruled. The U5.7 brief requires 50 `pt_br_item_at_cap` items, with the largest page
+  measured at 22,500 tokens or fewer.
+- **P5-F6:** fixed. Removing the empty-batch check gives 1 failed on the writer side (N5) and 1 on
+  the validator side (N6). Removing the `limit < 1` check (N7) gives 3 failed.
+- **P5-F7:** fixed. `HISTORY.md` reports 36 mutants, the key redraw is now tested, and the
+  restated `AGENTS.md` sentence is gone.
+
+**The request-side hook** cannot refuse a request the driver wrote. The writer serializes Python
+dicts, which cannot repeat a name at any depth, and item text is a string. 151 writer outputs
+validate: 30 RNG seeds × 3 points unrestricted, 30 × 2 guard strata, and a 70-item at-cap label
+batch.
+
+**The fixes work together.** `RepeatedName` subclasses `ValueError`, so the ingest-side
+`except (ValueError, RecursionError)` maps the hook's error, a decode error and a digit-limit error
+all to `malformed`. That stays below `answerMissing` and above every key reason. A line that both
+repeats a name and has an unknown key voids as `malformed`, which is correct.
+
+### New findings
+
+**P6-F1 — minor — a re-read under the ruling can refuse a benign re-ingest in two cases.**
+*Owner: `architect`, for the U5.6 brief, via `teco`. Verified by running it.*
+- **Layout void.** A layout void (both a whole file and parts, or a gap) records `sha256(b"")`,
+  because `ingest_answer_files` hashes `()` (`ingest.py:241`).
+  - A re-read through `ingest_answer_files` gives `AlreadyIngested`.
+  - Reading the same files' bytes and passing them to `ingest_answer` gives `AnswerRefused`.
+- **Mid-move crash.** A 2-part answer was ingested, then part 2 moved to `store/` before a crash.
+  The ruling's "`exchange/ans/` if present, else `store/`" reads only part 1 and gives
+  `AnswerRefused`. That fails closed, but it needs a human. The ruling's case (b) covers only a
+  crash before the move.
+
+**Fix:**
+- In U5.6: always re-read through `ingest_answer_files`, against a directory that keeps the
+  original part names.
+- Make the move atomic as a set: copy every part to `store/`, fsync, then unlink. The re-read
+  takes `store/` when it holds the complete set.
+- Add case (e) to the U5.6 row: a crash mid-move, then re-ingest, leaves the ledger byte-equal.
+
+No module change is required.
+
+**P6-F2 — nit — the `\r` strip was not entirely dead code.** *Owner: `tdd-engineer`. Verified by
+running it.*
+- These ingest exactly as before:
+  - CRLF answers;
+  - a `\r` before a closing brace;
+  - a final `\r` with no LF;
+  - a double `\r`.
+- A raw `\r` inside a string is still `malformed`.
+- But a `\r`-only line in position 1 now voids as `bodyHashMissing`, where an LF blank line voids
+  as `malformed` (the strip made the two agree). A `\r`-only line in the middle stays `malformed`,
+  with a different detail. Only the void reason changes, and the class is the same.
+
+**Fix:** either restore the strip, or accept the change and replace "dead code" in `HISTORY.md`
+with "changes only the void reason of a CR-only first line".
+
+**P6-F3 — nit — two request-side checks cannot fail.** *Owner: `tdd-engineer`. Verified by
+running it.*
+- Mutant N8 (the `offset < 1` check removed) passes the full suite. The coverage check already
+  refuses any offset below 1, so the check is redundant: delete it.
+- Mutant N10 (the request-side `RecursionError` catch disabled) also passes the full suite.
+- `_parse_lines` does not catch the digit-limit `ValueError`, so a request line with a 5,000-digit
+  integer raises a bare `ValueError` from `request_errors`. That predates this round, and the driver
+  cannot write such a line.
+
+**Fix:** catch `ValueError` beside `RecursionError` in `_parse_lines`, so it reports errors the way
+the ingest side does, and pin both.
+
+**Growth-stops check on this document:** Pass 6 gives one line per Pass 5 finding and three new
+findings. Passes 1–5 are byte-identical to their pre-Pass-6 text (`cmp`).
+
+### Appendix F — Pass 6 mutants
+
+These ran in the private copy with the full suite. Baseline: 476 passed, 4 xfailed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| M0 / M1 / M3 | Pass 5's survivors | 1 failed each |
+| N1 | non-string key check removed | 6 failed |
+| N2 | repeated-name hook removed | 3 failed |
+| N3 / N4 | ingest `except` narrowed to `JSONDecodeError` / `ValueError` | 3 / 1 failed |
+| N5 / N6 | empty batch allowed (writer / validator) | 1 / 1 failed |
+| N7 | `limit < 1` check removed | 3 failed |
+| N8 | `offset < 1` check removed | **476 passed** (P6-F3) |
+| N9 | line-1 repeated name read as missing | 1 failed |
+| N10 | request-side `RecursionError` catch disabled | **476 passed** (P6-F3) |

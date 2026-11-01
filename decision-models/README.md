@@ -38,5 +38,8 @@ cd decision-models && .venv/bin/pytest -q # run the suite from the component dir
 The scaffold (U5.1), the guard contract copies (U5.2: the guard input renderer and the
 `input_hash` leakage key, pinned by byte-copies of model-bench's golden vectors), and the
 decision points' definitions with seed generation (U5.3: `points/<role>/` rubric, generator
-template and design per point; `decisionmodels/seeds.py`). The layout the
-later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in `docs/HISTORY.md`.
+template and design per point; `decisionmodels/seeds.py`), and the request/answer exchange
+(U5.4: `decisionmodels/exchange.py` writes closed, paged, id-blind requests;
+`decisionmodels/ingest.py` checks answers). Labelling requests render guard items only until
+U5.2b. The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
+`docs/HISTORY.md`.
