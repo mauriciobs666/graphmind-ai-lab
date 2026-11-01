@@ -170,9 +170,8 @@ the decision model's physical batch, 512 tokens for laya, which LM Studio refuse
 rather than truncating) is counted in `overLimit`; with a hand-off model it is handed off,
 without one it is kept as a failure. A failed hand-off chat call withholds the item on the guard
 (as a failed chat call always has). On the
-new-ability roles it is to be kept as a fail-closed answer, counted in `handoffCallFailures`;
-those roles cannot run on the `handoff` surface until typed-decision-models U4.2 gives them a
-scorer. The
+new-ability roles any failed call is kept and scored as the fail-closed answer (no reply; no
+label, a disagreement), a failed hand-off counted in `handoffCallFailures`. The
 `handoff` surface also records `handoffShare` (items handed off, over every item not withheld by a
 failed hand-off call — an item withheld for a reload is in n) and each verdict metric split into
 `…DecidedByModel` and `…HandedOff`, all exploratory. After the last
@@ -261,7 +260,12 @@ A guard decision-point pack's `verdictMetrics` are exactly its four per-kind rat
 exploratory `sideCheck*` metric. A guard hand-off reply is read the way falkor-chat reads its
 judge (`guards._coerce_verdict`): only a JSON `true` whose rationale does not contradict it (an
 un-negated "not enough", "still missing", …) advances, so `"decision": "true"` suspends. A pack
-without `decisionPoint` keeps its looser parse. Golden vectors in
+without `decisionPoint` keeps its looser parse. A new-ability pack (`join-in-judge`,
+`message-type-classifier`) is scored by `agreement`, and a guard pack by `classification` — the
+role fixes the scorer (`decisions.SCORER_BY_ROLE`), so a pack declaring another is refused. Its
+`verdictMetrics` are the per-class agreement metrics (`agreeWhenYes`/`agreeWhenNo`, or
+`agree[<label>]` per label), every `eval` item's `expected` must lie in the answer space, and its hand-off prompt is
+`packs/<role>-synthetic/prompts/<point>-handoff.md`. Golden vectors in
 `tests/fixtures/decision-contract/` pin this parse and the judge prompt render, and falkor-chat's
 own suite checks its functions against byte-copies of them.
 

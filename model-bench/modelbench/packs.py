@@ -48,6 +48,7 @@ from modelbench.decisions import (
     BAR_KIND_BY_ROLE,
     INPUT_FIELDS_BY_ROLE,
     MIN_EVAL_ITEMS,
+    SCORER_BY_ROLE,
 )
 from modelbench.roles import MULTI_CALL_TURN_BY_ROLE, analysis_unit_field
 from modelbench.stats import ALPHA_FAMILY
@@ -1033,6 +1034,7 @@ def _decision_point_problems(pack: Pack) -> list[str]:
     * fewer than `decisions.MIN_EVAL_ITEMS` items in stratum `eval` (FR-11, AC-13);
     * a role not in `decisions.BAR_KIND_BY_ROLE`, an absent `incumbent`, or one that disagrees
       with the role's bar kind: non-null on `speed-up`, null on `new-ability`;
+    * a `scorer` absent or other than the role's (`decisions.SCORER_BY_ROLE`, v1.3 §3.6);
     * a `SIDE_CHECK_ROLE` pack with no `side-check` item, or a `side-check` item on any other role
       (FR-15, AC-17);
     * a `decisionPoint.answer` that is not the role's (`decisions.ANSWER_SPACE_BY_ROLE`, v1.3 §3.2);
@@ -1040,7 +1042,8 @@ def _decision_point_problems(pack: Pack) -> list[str]:
       four per-kind rates (FR-13), a new-ability pack's per-class agreement metrics derived from
       its answer space (FR-10);
     * on a new-ability pack, an item lacking any of its role's `INPUT_FIELDS_BY_ROLE` fields — the
-      canonical item form, so one input has one `input_hash` (`_input_field_problems`)."""
+      canonical item form, so one input has one `input_hash` (`_input_field_problems`) — or an
+      `eval` item whose `expected` is outside the answer space (`_new_ability_label_problems`)."""
     if "decisionPoint" not in pack.manifest:
         return []
     pid = pack.packId
@@ -1077,11 +1080,54 @@ def _decision_point_problems(pack: Pack) -> list[str]:
     problems.extend(_labels_problems(pack, decision_point))
     problems.extend(_strata_problems(pack))
     if bar_kind is not None:
+        problems.extend(_role_scorer_problems(pack))
         problems.extend(_answer_space_problems(pack, decision_point))
         problems.extend(_verdict_metrics_problems(pack, bar_kind))
     if bar_kind == "new-ability":
         problems.extend(_input_field_problems(pack))
+        problems.extend(_new_ability_label_problems(pack))
     return problems
+
+
+def _role_scorer_problems(pack: Pack) -> list[str]:
+    """v1.3 §3.6: a decision point's scorer is its role's (`SCORER_BY_ROLE`), on the principle
+    that a pack cannot pick its own bar — so a pack cannot pick its own scorer either (impl review
+    P22-m1). An absent `scorer` is refused too: nothing is defaulted (v1.3 §5's U3b row)."""
+    required = SCORER_BY_ROLE[pack.role]
+    declared = pack.manifest.get("scorer")
+    if declared == required:
+        return []
+    return [
+        f"{pack.packId}: scorer is {declared!r}; role {pack.role!r}'s scorer is {required!r} "
+        "(SCORER_BY_ROLE, plan v1.3 §3.6)"
+    ]
+
+
+def _new_ability_label_problems(pack: Pack) -> list[str]:
+    """A new-ability `eval` item's `expected` lies inside its role's answer space
+    (`ANSWER_SPACE_BY_ROLE`): a real bool on a predicate, one of the labels on a choice — the
+    class the `agreement` scorer counts it in, which raises on anything else (impl review P21-m1,
+    mirroring `_classification_item_problems`). Keyed on the bar kind, not the declared scorer."""
+    try:
+        rows = list(pack.iter_items())
+    except (OSError, KeyError, PackConfigError, json.JSONDecodeError):
+        return []  # `_strata_problems` already reports the unreadable items
+    space = ANSWER_SPACE_BY_ROLE[pack.role]
+
+    def inside(value: Any) -> bool:
+        if space["type"] == "predicate":
+            return isinstance(value, bool)
+        return isinstance(value, str) and value in space["labels"]
+
+    evals = [row for row in rows if row.get("stratum") == "eval"]
+    outside = [row for row in evals if not inside(row.get("expected"))]
+    if not outside:
+        return []
+    return [
+        f"{pack.packId}: {len(outside)} 'eval' item(s) have an 'expected' outside role "
+        f"{pack.role!r}'s answer space {_plain(space)!r} (ANSWER_SPACE_BY_ROLE, FR-10): "
+        f"{_item_ids(outside)}"
+    ]
 
 
 def _input_field_problems(pack: Pack) -> list[str]:

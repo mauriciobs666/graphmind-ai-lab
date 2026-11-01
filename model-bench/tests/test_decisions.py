@@ -36,6 +36,7 @@ from modelbench.decisions import (
     MIN_EVAL_ITEMS,
     OVER_LIMIT_MARKER,
     QUALITY_TARGETS_BY_BAR_KIND,
+    SCORER_BY_ROLE,
     Candidate,
     CandidateError,
     PolicyDecision,
@@ -402,8 +403,9 @@ def test_the_decision_point_roles_are_roles_last_two_plus_the_guard():
 
 
 @pytest.mark.parametrize(
-    "table", [HANDOFF_FAILURE_BY_ROLE, INPUT_FIELDS_BY_ROLE, ANSWER_SPACE_BY_ROLE],
-    ids=["HANDOFF_FAILURE_BY_ROLE", "INPUT_FIELDS_BY_ROLE", "ANSWER_SPACE_BY_ROLE"],
+    "table", [HANDOFF_FAILURE_BY_ROLE, INPUT_FIELDS_BY_ROLE, ANSWER_SPACE_BY_ROLE, SCORER_BY_ROLE],
+    ids=["HANDOFF_FAILURE_BY_ROLE", "INPUT_FIELDS_BY_ROLE", "ANSWER_SPACE_BY_ROLE",
+         "SCORER_BY_ROLE"],
 )
 def test_each_decision_point_table_has_exactly_the_bar_kind_roles(table):
     """Plan2 §3.3 (U1c pins `HANDOFF_FAILURE_BY_ROLE`'s keys to `BAR_KIND_BY_ROLE`'s); the same
@@ -418,6 +420,16 @@ def test_handoff_failure_by_role_is_the_plans_table():
         "guard-judge": "withhold",
         "join-in-judge": "fail-closed",
         "message-type-classifier": "fail-closed",
+    }
+
+
+def test_scorer_by_role_is_the_plans_table():
+    """v1.3 §3.6, transcribed: the guard keeps `classification`, the new abilities score with
+    `agreement` (impl review P22-m1; `validate_pack` refuses any other)."""
+    assert dict(SCORER_BY_ROLE) == {
+        "guard-judge": "classification",
+        "join-in-judge": "agreement",
+        "message-type-classifier": "agreement",
     }
 
 
@@ -456,7 +468,7 @@ def test_fit_outcomes_and_quality_targets_are_the_notes_sets():
 
 def test_the_tables_are_read_only():
     for table in (BAR_KIND_BY_ROLE, HANDOFF_FAILURE_BY_ROLE, INPUT_FIELDS_BY_ROLE,
-                  QUALITY_TARGETS_BY_BAR_KIND, ANSWER_SPACE_BY_ROLE,
+                  QUALITY_TARGETS_BY_BAR_KIND, ANSWER_SPACE_BY_ROLE, SCORER_BY_ROLE,
                   *ANSWER_SPACE_BY_ROLE.values()):
         with pytest.raises(TypeError):
             table["x"] = "y"  # type: ignore[index]

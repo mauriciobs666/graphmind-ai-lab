@@ -58,6 +58,7 @@ _NEW_ABILITY_INPUTS: dict[str, Callable[[int], dict[str, Any]]] = {
     "message-type-classifier": lambda n: {
         "text": f"message {n}",
         "priorTurn": None if n % 2 else {"speaker": "Ana", "text": f"hi {n}"},
+        "expected": MESSAGE_TYPE_LABELS[n % len(MESSAGE_TYPE_LABELS)],
     },
 }
 
@@ -283,10 +284,10 @@ _AGREE_FIVE = [f"agree[{label}]" for label in MESSAGE_TYPE_LABELS]
 
 
 def _join_in(manifest):
-    """The guard contract pack re-roled as a join-in pack: no scorer (U4.2 builds `agreement`),
-    a null incumbent, a predicate answer space and the per-class agreement pair."""
+    """The guard contract pack re-roled as a join-in pack: the `agreement` scorer, a null
+    incumbent, a predicate answer space and the per-class agreement pair."""
     manifest["role"] = "join-in-judge"
-    manifest.pop("scorer")
+    manifest["scorer"] = "agreement"
     manifest["decisionPoint"]["incumbent"] = None
     manifest["metrics"]["verdictMetrics"] = list(_AGREE_YES_NO)
 
@@ -354,6 +355,7 @@ def _del(*path: str) -> Callable[[dict[str, Any]], None]:
         (("labels", "labeler", "model"), "labels.labeler.model"),
         (("labels", "inputs"), "labels.inputs"),
         (("decisionPoint", "incumbent"), "decisionPoint.incumbent is absent"),
+        (("scorer",), "scorer is None"),
     ],
 )
 def test_deleting_a_manifest_key_a_refusal_reads_still_refuses(tmp_path, deleted, needle):
@@ -611,7 +613,8 @@ def test_an_item_the_scorer_would_raise_on_is_refused_by_validate_pack(
 
 def test_the_item_shape_checks_are_the_classification_scorers_only(tmp_path):
     """Keyed on the declared scorer: a pack naming none skips them (the decision-point contract's
-    other refusals still apply), so a future scorer's packs are not held to this one's fields."""
+    other refusals still apply), so a future scorer's packs are not held to this one's fields.
+    The one problem left is the absent scorer itself (`SCORER_BY_ROLE`, impl review P22-m1)."""
 
     def manifest_edit(manifest):
         manifest.pop("scorer")
@@ -620,7 +623,7 @@ def test_the_item_shape_checks_are_the_classification_scorers_only(tmp_path):
         rows[0]["path"] = "mixed"
 
     pack = _contract_pack(tmp_path, manifest_edit=manifest_edit, rows_edit=rows_edit)
-    assert validate_pack(pack) == []
+    _only(validate_pack(pack), "scorer is None")
 
 
 # ==================================================================================================
@@ -880,3 +883,103 @@ def test_each_per_kind_rate_ranks_lower_is_better(name):
     rate wins, as for the pooled pair."""
     assert name in report._LOWER_IS_BETTER
     assert report._better(name, 0.1, 0.2) is True
+
+
+# ==================================================================================================
+# 9. A new-ability eval item's `expected` lies inside its answer space (impl review P21-m1; U4.2)
+# ==================================================================================================
+
+
+@pytest.mark.parametrize(
+    ("base", "label"),
+    [
+        *[
+            pytest.param(_join_in, label, id=f"join-in-{label!r}")
+            for label in ("true", 1, 0, None, "yes")
+        ],
+        *[
+            pytest.param(_message_type, label, id=f"message-type-{label!r}")
+            for label in ("smalltalk", "Order", "order ", True, None, ["order"])
+        ],
+    ],
+)
+def test_a_new_ability_eval_item_whose_expected_is_outside_the_answer_space_is_refused(
+    tmp_path, base, label
+):
+    """The `agreement` scorer counts an item in its true answer's class and raises on any other
+    value, so `validate_pack` refuses it first: a predicate needs a real bool (not `"true"`, `1`),
+    a choice one of the labels exactly (case and spacing included)."""
+
+    def rows_edit(rows):
+        rows[4]["expected"] = label
+
+    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=base, rows_edit=rows_edit)
+    problem = _only(validate_pack(pack), "outside role")
+    assert "'ev-004'" in problem and "1 'eval' item(s)" in problem
+
+
+@pytest.mark.parametrize("base", [_join_in, _message_type], ids=["join-in", "message-type"])
+def test_the_label_check_follows_the_bar_kind_not_the_declared_scorer(tmp_path, base):
+    """Keyed on the role's bar kind, like every new-ability refusal: a pack declaring no scorer is
+    refused all the same — beside the absent scorer's own refusal (impl review P22-m1)."""
+
+    def edit(manifest):
+        base(manifest)
+        manifest.pop("scorer")
+
+    def rows_edit(rows):
+        rows[0]["expected"] = "neither"
+
+    pack = _contract_pack(tmp_path, side_check=False, manifest_edit=edit, rows_edit=rows_edit)
+    problems = validate_pack(pack)
+    _only([p for p in problems if "SCORER_BY_ROLE" in p], "scorer is None")
+    assert "'ev-000'" in _only([p for p in problems if "SCORER_BY_ROLE" not in p], "outside role")
+
+
+def test_a_guard_eval_item_keeps_its_own_label_check(tmp_path):
+    """The guard's bool-label check stays `_classification_item_problems`', not this one."""
+
+    def rows_edit(rows):
+        rows[0]["expected"] = "neither"
+
+    problems = validate_pack(_contract_pack(tmp_path, rows_edit=rows_edit))
+    assert "no bool label" in _only(problems, "'ev-000'")
+
+
+# ==================================================================================================
+# 10. A decision point's scorer is its role's (v1.3 §3.6, `SCORER_BY_ROLE`; impl review P22-m1)
+# ==================================================================================================
+
+#: Each decision-point role's contract-pack edit (the guard's is the fixture as shipped).
+_ROLE_BASE = {
+    "guard-judge": None, "join-in-judge": _join_in, "message-type-classifier": _message_type,
+}
+#: Every module under `modelbench/scoring/`; each role is planted with every one but its own.
+_SCORERS = ("classification", "agreement", "grounding", "extraction", "retrieval", "toolcalls")
+
+
+@pytest.mark.parametrize(
+    ("role", "scorer"),
+    [
+        pytest.param(role, scorer, id=f"{role}-{scorer}")
+        for role in _ROLE_BASE
+        for scorer in _SCORERS
+        if scorer != decisions.SCORER_BY_ROLE[role]
+    ],
+)
+def test_a_decision_point_pack_declaring_another_roles_scorer_is_refused(tmp_path, role, scorer):
+    """A planted wrong scorer, on each role, is refused by this rule (the table's own pin is
+    `test_decisions.py`'s). The guard pack keeps its side-check stratum, the new abilities have
+    none."""
+    assert set(_ROLE_BASE) == set(decisions.SCORER_BY_ROLE)
+    base = _ROLE_BASE[role]
+
+    def edit(manifest):
+        if base is not None:
+            base(manifest)
+        manifest["scorer"] = scorer
+
+    pack = _contract_pack(tmp_path, side_check=base is None, manifest_edit=edit)
+    problems = validate_pack(pack)
+    problem = _only([p for p in problems if "SCORER_BY_ROLE" in p], f"scorer is {scorer!r}")
+    assert repr(decisions.SCORER_BY_ROLE[role]) in problem and repr(role) in problem

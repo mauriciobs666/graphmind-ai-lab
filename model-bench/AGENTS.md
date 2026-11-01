@@ -23,8 +23,9 @@ validation ships flagged "not reproduced" (`docs/HISTORY.md`).
 `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration),
 `decision_stats` (the bar statistics), and `decisions` (typed-decision-models' pure half —
 policies, hashes, `Candidate.load`, bar constants, role tables). Its two new-ability roles,
-`join-in-judge` and `message-type-classifier`, have no scorer yet: `scoring/agreement.py` holds only
-their renderers, hand-off parses and FR-10 metric names. `tests/fixtures/decision-contract/` pins
+`join-in-judge` and `message-type-classifier`, are scored by `scoring/agreement.py` (renderers,
+hand-off parses, per-class agreement, fail-closed answers); their hand-off prompts are pack data in
+`packs/<role>-synthetic/prompts/`. `tests/fixtures/decision-contract/` pins
 those, `decisions`, and `classification`'s guard render, turn normalization and decision-point
 hand-off parse (falkor-chat's `_coerce_verdict`; the old pack's stays loose).
 `run --candidate` drives a candidate on the `decisions` surface (`runner._drive_decision_items`) or, with a `handoffModel`,
@@ -37,10 +38,10 @@ typed-decision-models U7**, not even a smoke run:
 still change how such records are scored and read, so an early one would block those units or
 force a schema bump (2026-10-31 P11-m2 ruling,
 `docs/plans/typed-decision-models-coordination.md`). Offline tests write under `tmp_path`.
-The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
-`run`). To run a pack: `README.md`'s Quick start and "What a pack is, and how to add one."
+The CLI ships six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
+`run`); `README.md` covers running and adding a pack.
 **Every unit, defect, gate, and live-run result is in `docs/HISTORY.md`** — this section states only
-what is true now, not how it got that way.
+what is true now.
 
 ## Load-bearing invariants
 
@@ -87,14 +88,15 @@ note §Q3.2); `tests/test_decision_stats.py` pins that by an AST read and a patc
 
 **A decision point's bar is requirement constants, never pack data.** `decisions.py` holds
 `MIN_EVAL_ITEMS`, `FR2_MIN_SPEEDUP`, the `FR10_*` pair, `DECISION_POINT_CHAT_TIMEOUT_SECONDS` and
-`BAR_KIND_BY_ROLE` (role → bar kind, the pack's `incumbent` agreeing), each mutation-pinned: a
-pack can neither pick nor lower its bar. `validate_pack` also holds `decisionPoint.answer` to
-`ANSWER_SPACE_BY_ROLE`, `verdictMetrics` to the bar kind's exact set, and a new-ability item to
-every input field (`[]`/`null`, never omitted: `input_hash` omits an absent field). On a decision-point
+`BAR_KIND_BY_ROLE` (role → bar kind; `incumbent` agrees), each mutation-pinned: a
+pack can neither pick nor lower its bar. `validate_pack` holds `decisionPoint.answer` to
+`ANSWER_SPACE_BY_ROLE`, `scorer` to `SCORER_BY_ROLE`, `verdictMetrics` to the bar kind's exact set, and a new-ability item to
+every input field (`[]`/`null`, never omitted: `input_hash` omits an absent field) and an in-space
+`expected`. On a decision-point
 `compare`, `compare_report` gets the chat arm alone as `runs` and candidates only as
 `replicates` (`cli._replicate_groups`, never last-wins), and its bar section states the bar
 without touching the exit code. Its drop counts are eval-only, by the pack's strata
-(`pair_items(strata=)`).
+(`pair_items(strata=)`); a new ability's come from `decision_stats.agreement_items`.
 
 **Five honesty rules that are easy to break silently, and what holds each in place:**
 

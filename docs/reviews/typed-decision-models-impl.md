@@ -2729,3 +2729,151 @@ Alternatively, pin the rule with a vector row.
 ### Proposed REVIEW.md lines
 
 None. P21-m2 is covered by model-bench `REVIEW.md`'s vector-coverage line.
+
+## Pass 22 — U4.2 agreement scorer (2026-11-01)
+
+*2026-11-01. Gate of U4.2, uncommitted in `model-bench/` on `1554d560`. Files:
+`scoring/agreement.py`, `decision_stats.agreement_items`/`AgreementItems`,
+`packs._new_ability_label_problems`, the two new `packs/*-synthetic/prompts/*-handoff.md` files,
+tests, and `AGENTS.md`/`README.md`/`HISTORY.md`. Read against v1.3 §3.2, §3.4 (importer), §3.6;
+plan2 §3.3, §3.6, §4.1 U4; plan3 §3.3 and §4 U4; plan4 §3.9; note §Q4.3; and the ledger's U4.2 row
+and "U4 brief"/"U4.2 brief" lines, including P21-m1 and P21-n1. `data-scientist` reviews the
+prompts' wording; this pass does not.*
+
+**Verdict: approve with suggestions.** The scorer follows plan2 §3.3 and plan3 §3.3 on every record
+state I traced. Both carried items are met:
+- **P21-m1:** the hand-off prompts are pack data, and an `expected` outside the answer space is
+  refused.
+- **P21-n1:** the kept-versus-withheld tests run on both roles with the table unpatched. Moving
+  message type's `HANDOFF_FAILURE_BY_ROLE` row to `withhold`, which was 1 red at U4.1, is now
+  7 red.
+
+There is no blocker and no major. Two findings are minor: an unowned scorer refusal (P22-m1) and a
+`parseFailures` test that one mutant slips past (P22-m2). There are two nits.
+
+**Checks run** (from `model-bench/`):
+- **Suite:** `3371 passed, 5 deselected, 2 xfailed`; `ruff` is clean; `AGENTS.md` has 2,485 words
+  and no line over 700 characters.
+- **Mutants:** 6 of mine, on live files copied aside, each run against the full suite and restored
+  with `cmp`. The final sha256 over `modelbench/`, `tests/` and `packs/` matches the starting one.
+  Results, by number of failing tests:
+
+  | Mutant | Result |
+  |---|---|
+  | D1 `decision_input` drops join-in's prior turns | 1 red |
+  | D2 `detail.answer` set to the raw answer, not the fail-closed final | 9 red |
+  | D3 `scored_n` counts load drops | 1 red |
+  | D4 `parseFailures` counts outcome `"fail"` | **survives** (P22-m2) |
+  | D5 `agreement_items` walks items in reverse `itemId` order | 2 red |
+  | message type's `HANDOFF_FAILURE_BY_ROLE` row → `withhold` | 7 red |
+- **Scorer probe:** a join-in contract pack declaring each other scorer, run through
+  `validate_pack` (P22-m1).
+- **`validate`** on the prompts-only directory gives a clean "pack.json is absent" refusal.
+
+CPG: considered, not relevant — no model-bench CPG is loaded; the code was read and executed
+directly.
+
+### Delegate calls (a)–(g)
+
+- **(a) An over-limit hand-off failure has `inputTokens=None`: right.** plan3 §3.3's table says
+  "Every row has `detail.probability = None` and `detail.inputTokens = None`", and that table
+  includes the fail-closed failure column. Ruling (b)'s `int|None` covers the case where a hand-off
+  follows a decision call that returned. plan3, the later plan, narrows it for over-limit, and
+  `_decision_detail` does exactly that.
+- **(b) Reusing `ClassificationAggregates`: accept.** `results._aggregates_from_dict` dispatches on
+  `kind` alone. No `report.py` path treats `kind == "classification"` as meaning the guard; I
+  grepped every `isinstance(… Aggregates)` call.
+- **(c) `detail.answer` on every record: accept.** D2 shows the disagreement line's input is pinned.
+  One exception: a chat-arm record withheld before any reply carries no `answer`. That record has
+  `scoreable={}`, so nothing reads it.
+- **(d) Message type's `None` from a parsed reply is a disagreement: accept.** v1.3 §3.2 says
+  "otherwise there is no label", and note §Q4.3 scores no label as a disagreement. It stays outcome
+  `"pass"`, so it is not counted as a parse failure.
+- **(e) The chat arm keeps unanswered calls withheld: accept.** Note §Q4.3 fails a call closed only
+  for the new ability's *hand-off* (candidate) call. The reference arm is no bar's input.
+  `agreement_items` raises on a `timeout` or `no_response` withhold, so the chat arm cannot be fed
+  in by mistake.
+- **(f) Drops in `decision_stats.agreement_items`: accept.** plan2 §3.6 calls for "the same drop
+  accounting over the candidate run", and `pair_items` keeps the guard's in the same module. The
+  function matches note §Q4.3's FR-10 columns:
+  - only `load` drops;
+  - a kept failure's `y_i` is its elapsed time;
+  - an over-limit item is scored on the hand-off answer, or fail-closed if the hand-off fails.
+- **(g) Prompts in `packs/<role>-synthetic/prompts/`: no collision today.**
+  - Nothing enumerates `packs/`: `cli` resolves `packs/<id>/pack.json` by id, and the
+    `test_packs.py` reads name their packs.
+  - `results/` is untouched, so the frozen-record test is unaffected.
+  - `validate` refuses the directory cleanly.
+  - **The collision is in the future, in U3d's brief.** `HISTORY.md` now promises that U3d's
+    importer writes `pack.json` beside `prompts/` and points `prompt.systemPrompt` at the prompt
+    file, and that U9 byte-copies each prompt with a guarded equality test. No plan or ledger row
+    carries either promise (P22-n1).
+
+### Findings
+
+**P22-m1 (minor; fresh `coder`). A decision-point pack can declare another role's scorer.**
+- My probe re-roled the contract pack as join-in and set its `scorer` to `classification`,
+  `grounding` and `extraction` in turn. `validate_pack` returns `[]` for all three.
+- On message type, `classification` is refused only by accident: its bool-`expected` check fires.
+- Under v1.3 §3.6 the role fixes the scorer ("Their scorer is a new `scoring/agreement.py`"), on
+  the same principle as "a pack cannot pick its own bar".
+- What a run does with a wrong scorer is inferred, not traced. It either raises partway through or
+  stores guard-cell metrics, which `agreement_items` later rejects.
+- **Fix:** in `_decision_point_problems`, refuse a decision-point pack whose `scorer` is not its
+  role's: `guard-judge` → `classification`, the new abilities → `agreement`. Key the mapping on the
+  role as a pinned table, with a test per role and a planted wrong scorer that must turn it red.
+- **Why it is a finding:** it comes from the same contract this unit extended, and it is a
+  one-function change.
+
+**P22-m2 (minor; fresh `coder`). One mutant slips past the `parseFailures` test.**
+- Under D4, `aggregate` counts outcome `"fail"` instead of `"parse_failure"`, and all 3371 tests
+  still pass.
+- The test that should catch it,
+  `test_aggregate_counts_parse_failures_and_keeps_withheld_items_out_of_every_class`, pairs one
+  parse failure with one `timeout`-withheld item whose outcome is `"fail"`. Both counts come to 1.
+- A kept failed call is also outcome `"fail"`. So the printed "replies the scorer could not parse"
+  count could fold in kept failures and no test would notice.
+- **Fix:** add a kept failure (`failed_call="handoff"`, outcome `"fail"`) to that test, or make the
+  withheld item `no_response`, and assert `parseFailures == 1`. D4 must then turn it red.
+
+**P22-n1 (nit; `teco`). Two promises in `HISTORY.md` have no owner in the ledger.** Add them to the
+U3d brief and the U9 brief:
+- U3d writes `pack.json` into the existing `packs/<role>-synthetic/` (so it must not create the
+  directory exclusively), names `prompts/<point>-handoff.md` as `prompt.systemPrompt`, and does not
+  overwrite `prompts/`;
+- U9 byte-copies both prompts, with a guarded equality test.
+
+**P22-n2 (nit; fresh `coder`). `HISTORY.md` says "18 mutants", but its own list names 19**, as the
+ledger's count does. **Fix:** correct the figure in place.
+
+**The seams to U4.3 and U3e.2:** nothing is missing. U4.3's inputs all exist:
+- per-class `k/n` from `outcomes`;
+- the class minimum from `len(outcomes[m])`;
+- the mean latency from `latency`;
+- `not assessable` from `scored_n`;
+- drops by reason;
+- per-class `overLimit` from `over_limit`;
+- the disagreement line from `detail.answer`, `decidedBy` and `failedCall`.
+
+One question needs a decision before U4.3 runs (Open questions). The parallel `itemId`s for FR-10's
+design effect are absent, but plan4 §3.9 gives them to U3e.2 explicitly.
+
+### Open questions
+
+- **For the U4.3 brief (`teco`):** plan2 §3.6's disagreement line counts "items with a final answer
+  in both". Does message type's no-label `None`, from a reply that parsed, count as a final answer?
+  Call (d) says yes for scoring. If U4.3 also treats `None` against `None` as replicate agreement,
+  that is a choice nobody has stated.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** went from 2,488 to 2,485 words.
+  - **Rewritten in place:** three entries, for the new-ability scorer, the `validate_pack`
+    sentence, and the drop-accounting home.
+  - **Compressed:** the CLI sentence (the pointer to the README stays) and the context-file
+    preamble line. Neither drops a live constraint.
+- **`HISTORY.md`** gets one entry, which is read by lookup. Its counts reproduce, except P22-n2.
+
+### Proposed REVIEW.md lines
+
+None.

@@ -49,6 +49,17 @@ BAR_KIND_BY_ROLE: Mapping[str, str] = MappingProxyType(
     }
 )
 
+#: v1.3 §3.6: a decision point's scorer comes from its role, never from the pack — the guard's
+#: `classification`, the new abilities' `agreement` (`validate_pack` refuses any other; impl review
+#: P22-m1). model-bench's own: no other component reads it. Keyed exactly like `BAR_KIND_BY_ROLE`.
+SCORER_BY_ROLE: Mapping[str, str] = MappingProxyType(
+    {
+        "guard-judge": "classification",
+        "join-in-judge": "agreement",
+        "message-type-classifier": "agreement",
+    }
+)
+
 #: Plan2 §3.3: what a failed **hand-off chat call** does to the item. `withhold` keeps today's
 #: behaviour; `fail-closed` keeps the item scored as the fail-closed answer. Keyed exactly like
 #: `BAR_KIND_BY_ROLE`.

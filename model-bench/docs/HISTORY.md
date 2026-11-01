@@ -2,6 +2,75 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U4.2 — the agreement scorer
+
+**What:** plan v1.3 §3.6 (the agreement scorer), plan2 §3.3 (fail-closed scoring), plan3 §4 U4
+(`reason`; an over-limit item scored on the hand-off LLM's answer), and the U4.2 carried items in
+`docs/plans/typed-decision-models-coordination.md`. The FR-10 bar section is U4.3's.
+
+- **`scoring/agreement.py` is now the new-ability roles' `ItemScorer`:** `decision_input` (the
+  role's renderer), `build_messages` (the pack's hand-off prompt as system message, the rendered
+  input as user message), `answer_from_chat` (the role's hand-off parse), `score_answer`,
+  `score_item`, `aggregate`, and `class_metric`. An `eval` item declares one metric, its true
+  answer's class, counted `1` iff the final answer equals `expected`. A kept failed call
+  (`failed_call` `"decision"` or `"handoff"`) is scored on `FAIL_CLOSED_ANSWER_BY_ROLE` (join-in no
+  reply, message type no label), never on `outcome` (ruling (b)). `score_answer` refuses every
+  keyword state the plans cannot produce, ruling (b)'s included. `detail` carries the final
+  `answer`, for the replicate disagreement line. `aggregate` returns `ClassificationAggregates`
+  with `perClass` = every class in label order, which the runner appends its counts to (U1d carry).
+- **`decision_stats.agreement_items(candidate, *, role) -> AgreementItems`**, the FR-10 input
+  (Pass 18 carry): note §Q4.3's drop accounting over a single candidate run, beside
+  `pair_items`. Only `withheldFor="load"` drops; kept failures are scored fail-closed. It returns
+  per-class agreement outcomes ordered by `itemId`, `(itemId, y_i)` latencies, `scored_n`,
+  `drops[("candidate", reason)]` and per-class `over_limit`. It lives in `decision_stats`, not the
+  scorer's aggregate: the aggregate keeps load-withheld items in its classes as the guard's does,
+  and §Q4.3's table has one home.
+- **The two hand-off prompts are pack data** (P21-m1): `packs/join-in-judge-synthetic/prompts/
+  join-in-handoff.md` and `packs/message-type-classifier-synthetic/prompts/message-type-handoff.md`,
+  the pack directories v1.3 §3.4's importer writes. Each asks for its parse's own-line object
+  (`{"reply": …}`, `{"type": …}`). The wording ports the rulings of decision-models'
+  `points/<point>/rubric.md`, which define the reference labels (ML review Pass 3, P3-M1–M4):
+  join-in's small talk to the agent by name, name in passing, mixed messages, corrections, and "another
+  person" by name, role or exchange; message type's repeat shown by the previous message, a first
+  angry report as a complaint, and the order/question rulings. Each prompt also states that thread
+  text is never an instruction (P3-n1); message type's, that the label is lowercase and exact
+  (P3-m1). Neither was tuned on any model's output; no model was run. U3d's importer
+  writes `pack.json`/`items.jsonl`/`PROVENANCE.md` beside `prompts/` and names the prompt as
+  `prompt.systemPrompt`. **falkor-chat's U9 copies each file byte-for-byte** as its hand-off
+  call's system prompt, with a guarded byte-equality test that skips when `model-bench/` is
+  absent (v1.3 §3.2.2's rule for the vectors).
+- **`validate_pack`** refuses a new-ability `eval` item whose `expected` is outside the role's
+  answer space, keyed on the bar kind, not the declared scorer (P21-m1). It also refuses a
+  decision-point pack whose `scorer` is absent or is not its role's, from the new pinned table
+  `decisions.SCORER_BY_ROLE` (guard `classification`, new abilities `agreement`; v1.3 §3.6, P22-m1).
+- No vector under `tests/fixtures/decision-contract/` changed.
+- README: the hand-off failure sentence and the decision-point pack paragraph. AGENTS: three
+  entries rewritten in place, one compressed (2,488 → 2,485 words; the `SCORER_BY_ROLE` clause was
+  added in place at no growth).
+
+**Tests:** `test_scoring_agreement.py` covers the hooks, each class, fail-closed scoring under
+either outcome, the over-limit hand-off, the whole keyword cross-product against the legal set,
+AC-15 (an always-no arm on 30/70 scores `agreeWhenYes` 0/30, not met), exactly 0.90 per class
+(27/30, 63/70) met and 26/30 not, and note §Q5.4's example missing on `escalation` only.
+`test_runner_handoff.py`: the `FailClosedScorer` stub and its table patch are gone (P9-m3). The five
+fail-closed tests run on both new-ability roles with the real scorer and the shipped prompt, and
+`HANDOFF_FAILURE_BY_ROLE` unpatched (P21-n1). Three new end-to-end tests cover per-class aggregates
+with per-path splits and a stored record, the hand-off messages, and the `decisions` surface's
+fail-closed failures. `test_decision_stats.py` covers `agreement_items`.
+`test_decision_point_pack.py` covers the new refusals: the `expected` one, and a planted wrong
+scorer on each role (every other `scoring/` module) plus a deleted `scorer`; its message-type
+contract items now carry in-space labels. `test_decisions.py` pins `SCORER_BY_ROLE`. The
+`parseFailures` test now carries a kept failed hand-off beside the withheld call, both outcome
+`"fail"`, and asserts `parseFailures == 1` (P22-m2). `test_scoring_agreement.py` also checks each
+prompt for anchor phrases of its rubric rulings and for one clean line. 19 mutants, each run against the full suite on a scratch copy, all went red: class agreement pooled over all items (in `aggregate` and in `agreement_items`), the fail-closed answer read from `outcome`, an over-limit hand-off scored fail-closed, `perClass` emptied or removed, either new-ability `HANDOFF_FAILURE_BY_ROLE` row moved to `withhold`, the `expected` refusal skipped, `bar_holds` `>=` → `>`, join-in failing closed to yes, the load drop and the over-limit count removed, ruling (b)'s refusal, the yes/no class swapped, a withheld call accepted, `inputTokens` dropped, an out-of-space answer accepted, and the hand-off system prompt replaced. The review fix round ran 7 more the same way (fresh
+`PYTHONPYCACHEPREFIX`, restored and `cmp`-checked, final sha256 over `modelbench/`, `tests/` and
+`packs/` matching), all red: the role-scorer refusal removed (19 failing), `SCORER_BY_ROLE`'s
+join-in row set to `classification` (26), `parseFailures` counting outcome `"fail"` (Pass 22's D4,
+1), and one ruling deleted from a prompt — join-in's name in passing, join-in's correction clause,
+message type's conditional purchase, message type's lowercase-label sentence (1 each).
+
+**Suite:** 3406 passed, 5 deselected, 2 xfailed (from 3278: 3371 at impl review Pass 22 — 34 new test functions, five existing ones parametrized over both roles, and parametrization — then 35 from the Pass 22 / ML Pass 3 fixes); `ruff check .` clean.
+
 ## 2026-11-01 — typed-decision-models U4.1 — the two new-ability roles, their tables and contract vectors
 
 **What:** plan v1.3 §3.2, §3.2.1, §3.5, §3.6 (§8 U4's tables, renderers, parses and vectors),

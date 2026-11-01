@@ -22,8 +22,9 @@ from types import MappingProxyType
 from typing import Literal, Mapping, Sequence
 
 from modelbench import stats
-from modelbench.decisions import BAR_KIND_BY_ROLE, MIN_EVAL_ITEMS
+from modelbench.decisions import ANSWER_SPACE_BY_ROLE, BAR_KIND_BY_ROLE, MIN_EVAL_ITEMS
 from modelbench.results import ItemResult
+from modelbench.scoring.agreement import per_class_agreement_metrics
 from modelbench.scoring.classification import PER_KIND_VERDICT_METRICS
 
 # --- pinned constants (plan2 §3.6), each the note's -----------------------------------------------
@@ -475,7 +476,8 @@ def pair_items(
     review P16-n2). It splits the drop counts; a scored incumbent item whose declared metrics
     disagree with its stratum (an eval item with no verdict cell, or the reverse) raises.
 
-    Both arms must hold the same item ids, each once. New-ability points pair nothing (U4).
+    Both arms must hold the same item ids, each once. New-ability points pair nothing: their
+    drops are `agreement_items`'.
     """
     cells = _VERDICT_CELLS_BY_ROLE.get(role)
     if cells is None or BAR_KIND_BY_ROLE.get(role) != "speed-up":
@@ -554,5 +556,82 @@ def pair_items(
         scored_n=len(latency),
         drops=drops,
         side_check_drops=side_check_drops,
+        over_limit=over_limit,
+    )
+
+
+@dataclass(frozen=True)
+class AgreementItems:
+    """One new-ability candidate replicate's FR-10 input (note §Q4.3, §Q5.1): a single arm, so
+    nothing pairs, but the drops are counted as `pair_items` counts them.
+
+    - `outcomes[metric]`: whether each scored item agreed, per class metric (`agreeWhenYes`,
+      `agree[<label>]`, …), ordered by `itemId` — `k_j/n_j` is `sum`/`len`. Every class of the
+      role's answer space is here, as `()` when no item scored in it, so no FR-10 line can
+      silently vanish.
+    - `latency`: `(itemId, y_i)` over the scored items, ordered by `itemId` — note §Q4.2's
+      `mean_latency` input, `y_i` the item's wall clock (a kept failure's runs to its raise).
+    - `scored_n`: the scored eval n (FR-11, note §Q4.3 "Not assessable").
+    - `drops[("candidate", reason)]`: every dropped item, by reason. Only `"load"` drops one: a
+      kept failed call is scored fail-closed, and an over-limit hand-off on the hand-off LLM's
+      answer.
+    - `over_limit[metric]`: the scored over-limit items per class, `0` included (plan3 §3.6,
+      `overLimit k/n` beside each class line).
+    """
+
+    outcomes: Mapping[str, tuple[bool, ...]]
+    latency: tuple[tuple[str, float], ...]
+    scored_n: int
+    drops: Mapping[tuple[Arm, str], int]
+    over_limit: Mapping[str, int]
+
+
+def agreement_items(candidate: Sequence[ItemResult], *, role: str) -> AgreementItems:
+    """Note §Q4.3's table, for a new-ability point (plan2 §3.6: "New-ability points pair nothing,
+    but use the same drop accounting over the candidate run"). Per item, by `itemId`:
+
+    1. `withheldFor="load"` drops it, counted;
+    2. any other item is scored on its own record, one class metric declared: a kept failed call
+       (`failedCall` `"decision"`/`"handoff"`) already carries the fail-closed answer's count, and
+       an over-limit hand-off the hand-off LLM's (`scoring.agreement`).
+
+    A chat call withheld (`"timeout"`/`"no_response"`) raises: a new ability keeps its failed
+    calls (`HANDOFF_FAILURE_BY_ROLE`), so such a record is not a candidate run of this role. So
+    does a repeated `itemId`, an item declaring other than exactly one of the role's classes, or
+    a scored item with no wall clock. Every item of a valid new-ability pack is `eval` (FR-15)."""
+    if BAR_KIND_BY_ROLE.get(role) != "new-ability":
+        raise ValueError(f"agreement_items takes new-ability points only, not role {role!r}")
+    classes = per_class_agreement_metrics(ANSWER_SPACE_BY_ROLE[role])
+    by_id = _by_item_id(candidate, "candidate")
+    outcomes: dict[str, list[bool]] = {metric: [] for metric in classes}
+    over_limit: dict[str, int] = dict.fromkeys(classes, 0)
+    latency: list[tuple[str, float]] = []
+    drops: dict[tuple[Arm, str], int] = {}
+    for item_id in sorted(by_id):
+        item = by_id[item_id]
+        why = _withheld(item)
+        if why == "load":
+            _count(drops, "candidate", "load")
+            continue
+        if why is not None:
+            raise ValueError(
+                f"agreement_items: item {item_id!r} is withheld for {why!r}; a new ability keeps "
+                "a failed call and scores it fail-closed"
+            )
+        declared = [metric for metric in item.scoreable if item.scoreable[metric]]
+        if len(declared) != 1 or declared[0] not in outcomes:
+            raise ValueError(
+                f"agreement_items: item {item_id!r} declares {sorted(declared)!r}, not exactly one "
+                f"of {list(classes)!r}"
+            )
+        metric = declared[0]
+        outcomes[metric].append(bool(item.scored_outcome(metric)))
+        over_limit[metric] += int(item.detail.get("reason") == _OVER_LIMIT)
+        latency.append((item_id, _wall_clock(item, "candidate")))
+    return AgreementItems(
+        outcomes={metric: tuple(agreed) for metric, agreed in outcomes.items()},
+        latency=tuple(latency),
+        scored_n=len(latency),
+        drops=drops,
         over_limit=over_limit,
     )

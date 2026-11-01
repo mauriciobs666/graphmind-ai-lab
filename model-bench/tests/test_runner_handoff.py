@@ -10,27 +10,29 @@ one shared fake clock (`_StubClock`) by each call's own duration, so an item's `
 exactly the calls the item clock spans (impl review P9-M1). Nothing here writes under
 `model-bench/results/`.
 
-The new-ability (`fail-closed`) rows exist in `HANDOFF_FAILURE_BY_ROLE` (U4.1), but their scorer
-(`agreement.py`) is U4.2's, so those tests patch the runner's copy of the table to make the guard
-fixture `fail-closed`, and use a scorer that accepts `failed_call="handoff"`, which
-`classification.score_answer` (the guard's) refuses by design. That is plan2 §5 U2's "join-in
-fixture" in the only shape available before U4.2.
+The new-ability (`fail-closed`) tests run on the same fixture re-roled as a join-in and a
+message-type pack (`_new_ability_workspace`), with the real `agreement` scorer, the shipped hand-off
+prompt, and `HANDOFF_FAILURE_BY_ROLE` unpatched (impl review P9-m3, P21-n1; U4.2).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
 import pytest
 import test_runner_decisions as base
 
+from modelbench import decisions, runner
+from modelbench.decisions import ANSWER_SPACE_BY_ROLE
 from modelbench.lmstudio import (
     WARMUP_DECISION_INPUT,
     ChatResult,
+    DecisionAnswer,
+    DecisionResult,
     LMStudioCallFailed,
     LMStudioCallTimeout,
     ResidentModel,
@@ -38,7 +40,8 @@ from modelbench.lmstudio import (
 from modelbench.packs import load_pack
 from modelbench.results import ItemResult, ItemTiming, load_history, store
 from modelbench.runner import RunRefused, _build_fingerprint, latency_block
-from modelbench.scoring import classification
+from modelbench.scoring import agreement, classification
+from modelbench.scoring.agreement import per_class_agreement_metrics
 
 QWEN = "qwen/qwen3-4b-2507"
 #: A hand-off band: p >= 0.9 yes, p < 0.1 no, anything between is handed off.
@@ -217,48 +220,137 @@ def _counts(metric) -> tuple[int, int]:
     return metric.successes, metric.n
 
 
-class FailClosedScorer:
-    """`classification`'s hooks, plus a `score_answer` that accepts `failed_call="handoff"` and
-    records the keywords it was handed. Stands in for U4.2's fail-closed scorer, with the guard
-    fixture's table row patched to `fail-closed` (module docstring)."""
+#: The two new-ability roles, each run with the real `agreement` scorer (U4.2).
+NEW_ABILITY_ROLES = ("join-in-judge", "message-type-classifier")
+_SHIPPED_PACKS = Path(__file__).resolve().parents[1] / "packs"
+#: Each role's hand-off prompt, shipped as pack data (v1.3 §3.2).
+_HANDOFF_PROMPT = {
+    "join-in-judge": _SHIPPED_PACKS / "join-in-judge-synthetic" / "prompts" / "join-in-handoff.md",
+    "message-type-classifier": (
+        _SHIPPED_PACKS / "message-type-classifier-synthetic" / "prompts" / "message-type-handoff.md"
+    ),
+}
+#: The fixture's gold label (`expected` bool) as each role's answer: the guard's suspend is no
+#: reply / `other`, its advance a reply / `order`.
+_LABEL = {
+    "join-in-judge": {False: False, True: True},
+    "message-type-classifier": {False: "other", True: "order"},
+}
+#: Each role's fail-closed answer (plan2 §3.3): no reply; no label.
+_FAIL_CLOSED = {"join-in-judge": False, "message-type-classifier": None}
 
-    decision_input = staticmethod(classification.decision_input)
-    answer_from_chat = staticmethod(classification.answer_from_chat)
-    build_messages = staticmethod(classification.build_messages)
-    score_item = staticmethod(classification.score_item)
-    aggregate = staticmethod(classification.aggregate)
 
-    def __init__(self) -> None:
-        self.handoff_failures: list[dict[str, Any]] = []
-
-    def score_answer(self, item_input, answer, outcome, timing, *, pack, decided_by,
-                     probability, failed_call, reason, input_tokens):
-        if failed_call != "handoff":
-            return classification.score_answer(
-                item_input, answer, outcome, timing, pack=pack, decided_by=decided_by,
-                probability=probability, failed_call=failed_call, reason=reason,
-                input_tokens=input_tokens,
-            )
-        self.handoff_failures.append(
-            {"answer": answer, "outcome": outcome, "decided_by": decided_by,
-             "probability": probability, "reason": reason, "input_tokens": input_tokens}
+def _new_ability_item(row: dict[str, Any], role: str) -> dict[str, Any]:
+    """A guard fixture row as a `role` item: same id, stratum and origin; the role's input fields;
+    the gold label in the role's answer space."""
+    n = row["itemId"]
+    item = {key: row[key] for key in ("itemId", "stratum", "origin")}
+    if role == "join-in-judge":
+        item.update(
+            agentName="Pastel",
+            priorTurns=[{"displayName": "Ana", "role": "user", "text": f"before {n}"}],
+            newMessage={"displayName": "Bo", "role": "user", "text": f"message {n}"},
         )
-        detail = {"path": item_input["path"], "tier": item_input["tier"], "failedCall": "handoff"}
-        if reason is not None:
-            detail["reason"] = reason
-        return ItemResult(
-            itemId=item_input["itemId"], pairingKey=(item_input["itemId"],), outcome=outcome,
-            scoreable={}, counts={}, timing=timing, detail=detail,
+    else:
+        item.update(text=f"message {n}", priorTurn={"speaker": "Ana", "text": f"before {n}"})
+    item["expected"] = _LABEL[role][row["expected"]]
+    return item
+
+
+def _new_ability_workspace(root: Path, role: str, **candidate: Any) -> Path:
+    """The hand-off workspace re-roled as a `role` pack: the `agreement` scorer, a null incumbent,
+    the role's answer space and per-class verdict metrics, the shipped hand-off prompt as its
+    `systemPrompt`; a candidate of that role (a 0.1–0.9 band, or a 0.9 confidence floor)."""
+    space = dict(ANSWER_SPACE_BY_ROLE[role])
+    if space["type"] == "choice":
+        space["labels"] = list(space["labels"])
+    prompt = _HANDOFF_PROMPT[role]
+
+    def manifest_edit(manifest):
+        manifest["role"] = role
+        manifest["scorer"] = "agreement"
+        manifest["decisionPoint"] = {"answer": space, "incumbent": None}
+        manifest["metrics"]["verdictMetrics"] = list(per_class_agreement_metrics(space))
+        manifest["prompt"]["systemPrompt"] = f"prompts/{prompt.name}"
+
+    if role == "join-in-judge":
+        candidate.setdefault(
+            "question", {"type": "predicate", "name": "reply", "instructions": "Reply?"}
         )
+    else:
+        candidate.setdefault("question", {
+            "type": "choice", "name": "type", "instructions": "Which type?",
+            "choices": [{"value": label, "instructions": ""} for label in space["labels"]],
+        })
+        candidate.setdefault("policy", {"kind": "choice-confidence", "minConfidence": 0.9})
+    candidate.setdefault("fit", {"outcome": "within-margin", "qualityTarget": "T=0.94"})
+    pack_dir = _handoff_workspace(
+        root,
+        role=role,
+        manifest_edit=manifest_edit,
+        items_edit=lambda row: _new_ability_item(row, role),
+        **candidate,
+    )
+    shutil.copy(prompt, pack_dir / "prompts" / prompt.name)
+    return pack_dir
 
 
-@pytest.fixture
-def fail_closed(monkeypatch) -> FailClosedScorer:
-    scorer = FailClosedScorer()
-    table = MappingProxyType({"guard-judge": "fail-closed"})
-    monkeypatch.setattr("modelbench.runner.HANDOFF_FAILURE_BY_ROLE", table)
-    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
-    return scorer
+def _choice(confidence: float, choice: str) -> DecisionResult:
+    labels = ANSWER_SPACE_BY_ROLE["message-type-classifier"]["labels"]
+    rest = (1.0 - confidence) / (len(labels) - 1)
+    return dataclasses.replace(
+        base._decided(0.0),
+        answers=(
+            DecisionAnswer(
+                name="type",
+                type="choice",
+                probability=None,
+                choice=choice,
+                probabilities=tuple((v, confidence if v == choice else rest) for v in labels),
+                confidence=confidence,
+            ),
+        ),
+    )
+
+
+def _decided_as(role: str, p: float) -> DecisionResult:
+    """`base._decided(p)` in `role`'s answer type. On message type, the band's three regions map
+    to a confident `order` (p ≥ 0.9), a confident `other` (p < 0.1) and an unsure `question` (a
+    hand-off under the 0.9 floor)."""
+    if role == "join-in-judge":
+        return dataclasses.replace(
+            base._decided(p),
+            answers=(dataclasses.replace(base._decided(p).answers[0], name="reply"),),
+        )
+    if p >= 0.9:
+        return _choice(p, "order")
+    if p < 0.1:
+        return _choice(1.0 - p, "other")
+    return _choice(0.5, "question")
+
+
+def _as_role(role: str, responses: list[Any]) -> list[Any]:
+    """A guard decide queue in `role`'s answer type; exceptions pass through."""
+    return [
+        _decided_as(role, r.answers[0].probability) if isinstance(r, DecisionResult) else r
+        for r in responses
+    ]
+
+
+def _reply_as(role: str, answer: bool | str) -> ChatResult:
+    """A hand-off reply carrying `answer` in `role`'s hand-off parse format (v1.3 §3.2)."""
+    key = "reply" if role == "join-in-judge" else "type"
+    return dataclasses.replace(_reply(False), message={"content": json.dumps({key: answer})})
+
+
+def _new_ability_stub(role: str, **kw: Any) -> HandoffStub:
+    """A `HandoffStub` whose warm-up (and re-check) decision is in `role`'s answer type."""
+    return HandoffStub(warm_up_decision=_decided_as(role, 0.5), **kw)
+
+
+def _class_of(item: ItemResult) -> str:
+    (metric,) = item.scoreable
+    return metric
 
 
 # ==================================================================================================
@@ -575,44 +667,60 @@ def test_over_limit_hand_off_fails_withhold_column(tmp_path, failure, withheld, 
     assert run.latency.latencyWithheldForNoResponse == 1
 
 
-def test_over_limit_hand_off_fails_fail_closed_column(tmp_path, fail_closed):
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_over_limit_hand_off_fails_fail_closed_column(tmp_path, role):
     """Plan3 §3.3, "Hand-off fails, `fail-closed` role": kept — `failedCall=handoff`, no
     `decidedBy`, `calls=()` (the decision call failed), the item clock at the raise,
-    `withheldFor=None`, scored as the fail-closed answer by the scorer (`answer=None`). Counts:
-    not handed off; `overLimit`; `handoffCallFailures`; not a decision-call failure."""
-    _handoff_workspace(tmp_path)
-    lms = HandoffStub(
-        decide_responses=list(_OVER_LIMIT_SECOND), chat_responses=[LMStudioCallTimeout("t")]
+    `withheldFor=None` — and scored by the real `agreement` scorer on the role's fail-closed
+    answer (no reply; no label), never on its `"fail"` outcome. Counts: not handed off;
+    `overLimit`; `handoffCallFailures`; not a decision-call failure."""
+    _new_ability_workspace(tmp_path, role)
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, _OVER_LIMIT_SECOND),
+        chat_responses=[LMStudioCallTimeout("t")],
     )
     run, _ = _run(tmp_path, lms)
     item = run.items[1]
     assert item.detail == {
-        "path": "turns", "tier": "clear_suspend", "failedCall": "handoff", "reason": "over-limit",
+        "answer": _FAIL_CLOSED[role], "failedCall": "handoff", "probability": None,
+        "inputTokens": None, "reason": "over-limit",
     }
     assert item.timing == ItemTiming(
         wallClockMs=pytest.approx(_FAILED_DECIDE_MS + _FAILED_CHAT_MS), calls=(), withheldFor=None
     )
     assert item.outcome == "fail"
-    assert fail_closed.handoff_failures == [
-        {"answer": None, "outcome": "fail", "decided_by": None, "probability": None,
-         "reason": "over-limit", "input_tokens": None}
-    ]
+    # fx-cs-02's label is no reply / `other`: join-in's fail-closed "no" agrees, message type's
+    # "no label" disagrees (plan2 §3.3).
+    agreed = {"join-in-judge": 1, "message-type-classifier": 0}[role]
+    assert item.counts == {_class_of(item): agreed}
     assert _counts(_metric(run, "handoffShare")) == (0, 4)
     assert _counts(_metric(run, "overLimit")) == (1, 4)
     assert _counts(_metric(run, "handoffCallFailures")) == (1, 4)
     assert _counts(_metric(run, "decisionCallFailures")) == (0, 4)
-
-
-def test_over_limit_hand_off_succeeds_on_a_fail_closed_role_too(tmp_path, fail_closed):
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_over_limit_hand_off_succeeds_on_a_fail_closed_role_too(tmp_path, role):
     """The success column is the same on either role: handed off, and `handoffCallFailures`
-    0/n is recorded on a `fail-closed` role."""
-    _handoff_workspace(tmp_path)
-    lms = HandoffStub(decide_responses=list(_OVER_LIMIT_SECOND), chat_responses=[_reply(False)])
+    0/n is recorded on a `fail-closed` role. Plan3 §4 U4: the item is scored on the hand-off LLM's
+    answer, never fail-closed — each reply is chosen so the two give opposite agreement on
+    fx-cs-02 (label no reply / `other`)."""
+    _new_ability_workspace(tmp_path, role)
+    reply = {"join-in-judge": True, "message-type-classifier": "other"}[role]
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, _OVER_LIMIT_SECOND),
+        chat_responses=[_reply_as(role, reply)],
+    )
     run, _ = _run(tmp_path, lms)
-    assert run.items[1].detail["decidedBy"] == "handoff"
+    item = run.items[1]
+    assert item.detail == {
+        "answer": reply, "decidedBy": "handoff", "probability": None, "inputTokens": None,
+        "reason": "over-limit",
+    }
+    assert item.counts == {_class_of(item): int(reply == _LABEL[role][False])}
+    assert item.counts[_class_of(item)] != int(_FAIL_CLOSED[role] == _LABEL[role][False])
     assert _counts(_metric(run, "handoffShare")) == (1, 4)
     assert _counts(_metric(run, "handoffCallFailures")) == (0, 4)
-    assert fail_closed.handoff_failures == []
 
 
 @pytest.mark.parametrize(
@@ -683,53 +791,60 @@ def test_a_guard_policy_hand_off_failure_is_withheld_exactly_as_today(tmp_path, 
     assert not _has_metric(run, "handoffCallFailures")
 
 
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
 def test_a_fail_closed_policy_hand_off_failure_is_kept_with_only_the_decision_call(
-    tmp_path, fail_closed
+    tmp_path, role
 ):
-    """Plan2 §5 U2: a join-in-fixture hand-off timeout is kept, with `failedCall="handoff"` and
-    `calls` holding only the decision call; the item clock at the raise; not handed off. The
-    decision call returned, so its `inputTokens` reaches the scorer (plan2 §3.4)."""
-    _handoff_workspace(tmp_path)
-    lms = HandoffStub(
-        decide_responses=list(_MIXED), chat_responses=[LMStudioCallTimeout("t"), _reply(False)]
+    """Plan2 §5 U2 on both new-ability roles, `HANDOFF_FAILURE_BY_ROLE` unpatched (impl review
+    P9-m3, P21-n1): a hand-off timeout is kept, with `failedCall="handoff"` and `calls` holding only
+    the decision call; the item clock at the raise; not handed off; scored fail-closed. The
+    decision call returned, so its `inputTokens` is recorded (plan2 §3.4). A `withhold` row for
+    either role would withhold it instead, which the scorer refuses."""
+    assert runner.HANDOFF_FAILURE_BY_ROLE is decisions.HANDOFF_FAILURE_BY_ROLE
+    _new_ability_workspace(tmp_path, role)
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, _MIXED),
+        chat_responses=[LMStudioCallTimeout("t"), _reply_as(role, _LABEL[role][True])],
     )
     run, _ = _run(tmp_path, lms)
     item = run.items[2]
     assert item.detail == {
-        "path": "understanding", "tier": "clear_advance", "failedCall": "handoff"
+        "answer": _FAIL_CLOSED[role], "failedCall": "handoff", "probability": None,
+        "inputTokens": 40,
     }
     assert [c.wallClockMs for c in item.timing.calls] == [12.0]
     # the decision call (12 ms) plus the failed hand-off (25 ms), impl review P9-M1
     assert item.timing.wallClockMs == pytest.approx(12.0 + _FAILED_CHAT_MS)
     assert item.timing.withheldFor is None
-    assert fail_closed.handoff_failures == [
-        {"answer": None, "outcome": "fail", "decided_by": None, "probability": None,
-         "reason": None, "input_tokens": 40}
-    ]
+    # fx-ca-01's label is a reply / `order`: either fail-closed answer disagrees.
+    assert (item.outcome, item.scoreable, item.counts) == (
+        "fail", {_class_of(item): True}, {_class_of(item): 0}
+    )
     assert _counts(_metric(run, "handoffShare")) == (1, 4)  # item 4 handed off, item 3 kept
     assert _counts(_metric(run, "handoffCallFailures")) == (1, 4)
-
-
-def test_both_failure_counts_equal_the_injected_failures(tmp_path, fail_closed):
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_both_failure_counts_equal_the_injected_failures(tmp_path, role):
     """Plan2 §5 U2: one decision timeout and two hand-off failures (one over-limit) on a
     `fail-closed` role give `decisionCallFailures` 1/4 and `handoffCallFailures` 2/4 — never one
-    counted in the other."""
-    _handoff_workspace(tmp_path)
+    counted in the other — and all three are kept and scored, each on the fail-closed answer."""
+    _new_ability_workspace(tmp_path, role)
     responses = [LMStudioCallTimeout("d"), base._decided(0.5), _over_limit(), base._decided(0.95)]
-    lms = HandoffStub(
-        decide_responses=responses,
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, responses),
         chat_responses=[LMStudioCallFailed("x", status=503, body=""), LMStudioCallTimeout("t")],
     )
     run, _ = _run(tmp_path, lms)
     assert [i.detail.get("failedCall") for i in run.items] == [
         "decision", "handoff", "handoff", None
     ]
+    assert [i.detail["answer"] for i in run.items[:3]] == [_FAIL_CLOSED[role]] * 3
+    assert all(i.scoreable == {_class_of(i): True} for i in run.items)
     assert _counts(_metric(run, "decisionCallFailures")) == (1, 4)
     assert _counts(_metric(run, "handoffCallFailures")) == (2, 4)
     assert _counts(_metric(run, "overLimit")) == (1, 4)
     assert _counts(_metric(run, "handoffShare")) == (0, 4)
-
-
 def test_a_guard_run_with_a_withheld_policy_hand_off_and_a_decision_failure_counts_apart(tmp_path):
     _handoff_workspace(tmp_path)
     responses = [LMStudioCallTimeout("d"), base._decided(0.5), *base._four(0.95, 0.5)]
@@ -943,16 +1058,18 @@ def test_a_withheld_hand_off_failure_after_a_snapshot_without_laya_still_records
     assert len(lms.decide_calls) == 4 and run.basis == "assumed"
 
 
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
 def test_a_fail_closed_policy_hand_off_failure_after_a_snapshot_without_qwen_is_load_withheld(
-    tmp_path, fail_closed
+    tmp_path, role
 ):
     """Impl review P9-m2: a kept (`fail-closed`) hand-off failure is `withheldFor=None` "unless
     residency withholds it for load" (plan2 §3.3) — residency of **both** models."""
-    _handoff_workspace(tmp_path)
+    _new_ability_workspace(tmp_path, role)
     both = _resident("laya", QWEN)
     sequence = [both, both, both, both, _resident("laya"), both, both, both]
-    lms = HandoffStub(
-        decide_responses=list(_MIXED), chat_responses=[LMStudioCallTimeout("t")],
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, _MIXED), chat_responses=[LMStudioCallTimeout("t")],
         residency_sequence=sequence,
     )
     run, _ = _run(tmp_path, lms)
@@ -1153,3 +1270,97 @@ def test_a_kept_decision_failure_after_a_snapshot_missing_the_hand_off_model_is_
     item = run.items[0]
     assert item.detail["failedCall"] == "decision"
     assert (item.timing.calls, item.timing.withheldFor) == ((), "load")
+
+
+# ==================================================================================================
+# 8. The new-ability roles end to end, on the real `agreement` scorer (U4.2)
+# ==================================================================================================
+
+#: Per role, each fixture item's class metric (`agreement.class_metric`).
+_CLASSES = {
+    "join-in-judge": ["agreeWhenNo", "agreeWhenNo", "agreeWhenYes", "agreeWhenYes"],
+    "message-type-classifier": ["agree[other]", "agree[other]", "agree[order]", "agree[order]"],
+}
+
+
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_a_new_ability_hand_off_run_scores_agreement_within_each_true_answer(tmp_path, role):
+    """`_MIXED` on a new-ability pack: fx-cs-01 (label no / `other`) decided yes / `order` —
+    disagrees; fx-cs-02 decided no / `other` — agrees; fx-ca-01 (label yes / `order`) handed off
+    and the hand-off LLM agrees; fx-ca-02 handed off and it does not. Every class of the answer
+    space is in `perClass`, in label order, with its own k/n; the per-path split is per class.
+    The record stores and reads back valid (under `tmp_path`)."""
+    _new_ability_workspace(tmp_path, role)
+    wrong = {"join-in-judge": False, "message-type-classifier": "question"}[role]
+    lms = _new_ability_stub(
+        role,
+        decide_responses=_as_role(role, _MIXED),
+        chat_responses=[_reply_as(role, _LABEL[role][True]), _reply_as(role, wrong)],
+    )
+    run, _ = _run(tmp_path, lms)
+    assert [_class_of(i) for i in run.items] == _CLASSES[role]
+    assert [i.counts[_class_of(i)] for i in run.items] == [0, 1, 1, 0]
+    space = ANSWER_SPACE_BY_ROLE[role]
+    classes = per_class_agreement_metrics(space)
+    head = run.aggregates.perClass[: len(classes)]
+    expected = {name: (0, 0) for name in classes}
+    expected.update({_CLASSES[role][0]: (1, 2), _CLASSES[role][2]: (1, 2)})
+    assert [(m.name, m.successes, m.n, m.unit) for m in head] == [
+        (name, *expected[name], "item") for name in classes
+    ]
+    yes, no = _CLASSES[role][2], _CLASSES[role][0]
+    for name, pair in {
+        f"{no}DecidedByModel": (1, 2), f"{no}HandedOff": (0, 0),
+        f"{yes}DecidedByModel": (0, 0), f"{yes}HandedOff": (1, 2),
+    }.items():
+        assert _counts(_metric(run, name)) == pair, name
+    assert _counts(_metric(run, "handoffShare")) == (2, 4)
+    assert _counts(_metric(run, "handoffCallFailures")) == (0, 4)
+    store(run, tmp_path)
+    valid, invalid = load_history(tmp_path, packId=base._PACK_ID)
+    assert invalid == [] and valid[0].aggregates == run.aggregates
+
+
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_a_new_ability_hand_off_sends_the_shipped_prompt_and_the_rendered_input(tmp_path, role):
+    """v1.3 §3.2: the hand-off chat call is the pack's hand-off prompt (pack data, shipped under
+    `packs/<role>-synthetic/prompts/`) as the system message and the same rendered input the
+    decision model received as the user message."""
+    _new_ability_workspace(tmp_path, role)
+    lms = _new_ability_stub(role, decide_responses=_as_role(role, _MIXED))
+    _run(tmp_path, lms)
+    pack = load_pack(tmp_path / "packs" / base._PACK_ID)
+    rendered = [agreement.decision_input(item, pack=pack) for item in _items(tmp_path)]
+    assert [call["input"] for call in lms.decide_calls[:4]] == rendered
+    assert [call["messages"] for call in lms.chat_calls] == [
+        [
+            {"role": "system", "content": _HANDOFF_PROMPT[role].read_text(encoding="utf-8")},
+            {"role": "user", "content": text},
+        ]
+        for text in rendered[2:]
+    ]
+
+
+@pytest.mark.parametrize("role", NEW_ABILITY_ROLES)
+def test_a_new_ability_decisions_run_scores_its_failed_calls_fail_closed(tmp_path, role):
+    """The `decisions` surface (no hand-off model): a decision timeout and an over-limit decision
+    call are both kept, `failedCall="decision"`, and scored on the fail-closed answer — on
+    fx-cs-01/02 (label no / `other`) join-in's "no" agrees and message type's "no label" does
+    not (plan2 §3.3; plan3 §3.3, "No hand-off model")."""
+    policy = (
+        {"kind": "predicate-band", "yesAtOrAbove": 0.8, "noBelow": 0.8}
+        if role == "join-in-judge"
+        else {"kind": "choice-confidence", "minConfidence": 0.0}
+    )
+    _new_ability_workspace(tmp_path, role, handoffModel=None, policy=policy)
+    responses = [LMStudioCallTimeout("d"), _over_limit(), base._decided(0.95), base._decided(0.05)]
+    lms = _new_ability_stub(role, decide_responses=_as_role(role, responses))
+    run, _ = _run(tmp_path, lms)
+    assert lms.chat_calls == []
+    assert [(i.detail.get("failedCall"), i.detail.get("reason")) for i in run.items] == [
+        ("decision", None), ("decision", "over-limit"), (None, None), (None, None)
+    ]
+    fail_closed = {"join-in-judge": 1, "message-type-classifier": 0}[role]
+    assert [i.counts[_class_of(i)] for i in run.items] == [fail_closed, fail_closed, 1, 0]
+    assert _counts(_metric(run, "decisionCallFailures")) == (1, 4)
+    assert _counts(_metric(run, "overLimit")) == (1, 4)

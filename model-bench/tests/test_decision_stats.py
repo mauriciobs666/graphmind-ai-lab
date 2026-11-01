@@ -10,6 +10,7 @@ written as fractions so the arithmetic is checkable by eye.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import inspect
 import math
 import random
@@ -970,6 +971,7 @@ def test_every_public_function_runs_with_verdict_and_holm_steps_patched_out(monk
     decision_stats.combine_replicates([MET, NOT_MET], 2)
     _ratio([800.0, 700.0], [20.0, 25.0])
     decision_stats.mean_latency([300.0, 200.0], seed=1, B=50, levels=_CI95)
+    decision_stats.agreement_items([], role="join-in-judge")
 
 
 # --- seed and levels plumbing (coordinator integration mutants) -----------------------------------
@@ -1043,3 +1045,119 @@ def test_the_same_seed_reproduces_and_another_non_zero_seed_moves_the_interval(e
 def test_narrower_levels_give_a_strictly_narrower_interval(estimate):
     wide, narrow = estimate(_CI95), estimate(_NARROW)
     assert wide.lo < narrow.lo < narrow.hi < wide.hi
+
+
+# --- agreement_items (note §Q4.3, §Q5.1; plan2 §3.6 "New-ability points pair nothing") ------------
+#
+# Records built by the real `agreement` scorer on the decision-point fixture re-roled as a
+# join-in / message-type pack (only `pack.role` is read when scoring).
+
+
+@pytest.fixture(scope="module")
+def new_ability_packs(tmp_path_factory):
+    import json
+    import shutil
+
+    from modelbench.decisions import ANSWER_SPACE_BY_ROLE
+
+    built = {}
+    for role in ("join-in-judge", "message-type-classifier"):
+        root = tmp_path_factory.mktemp(role) / "pack"
+        shutil.copytree(_DP_PACK.root, root)
+        manifest = json.loads((root / "pack.json").read_text())
+        manifest.update(role=role, scorer="agreement")
+        space = {k: list(v) if isinstance(v, tuple) else v
+                 for k, v in ANSWER_SPACE_BY_ROLE[role].items()}
+        manifest["decisionPoint"] = {"answer": space, "incumbent": None}
+        (root / "pack.json").write_text(json.dumps(manifest))
+        built[role] = load_pack(root)
+    return built
+
+
+def _na(pack, item_id, expected, answer, *, ms=30.0, withheld=None, **kw):
+    """One new-ability record: `answer` decided by the model unless `kw` says otherwise."""
+    from modelbench.scoring import agreement
+
+    keywords = {"decided_by": "decision-model", "probability": 0.5, "failed_call": None,
+                "reason": None, "input_tokens": None, **kw}
+    item = {"itemId": item_id, "stratum": "eval", "expected": expected}
+    timing = ItemTiming(wallClockMs=ms, calls=(), withheldFor=withheld)
+    return agreement.score_answer(item, answer, "pass", timing, pack=pack, **keywords)
+
+
+_FAILED = {"decided_by": None, "probability": None}
+
+
+def test_agreement_items_counts_agreement_within_each_class_ordered_by_item_id(new_ability_packs):
+    pack = new_ability_packs["join-in-judge"]
+    items = [
+        _na(pack, "c", True, True, ms=10.0),
+        _na(pack, "a", False, True, ms=20.0),
+        _na(pack, "b", True, False, ms=30.0),
+        _na(pack, "d", False, False, ms=40.0),
+    ]
+    got = decision_stats.agreement_items(items, role="join-in-judge")
+    assert got.outcomes == {"agreeWhenYes": (False, True), "agreeWhenNo": (False, True)}
+    assert got.latency == (("a", 20.0), ("b", 30.0), ("c", 10.0), ("d", 40.0))
+    assert (got.scored_n, got.drops) == (4, {})
+    assert got.over_limit == {"agreeWhenYes": 0, "agreeWhenNo": 0}
+
+
+def test_agreement_items_drops_load_withheld_items_and_scores_kept_failures_fail_closed(
+    new_ability_packs
+):
+    """Note §Q4.3's FR-10 columns: `withheldFor="load"` drops the item, counted; a decision
+    failure and a hand-off failure are kept, scored on the fail-closed answer (no label: a
+    disagreement), with `y_i` their elapsed time; an over-limit hand-off is scored on the
+    hand-off LLM's answer and counted per class."""
+    pack = new_ability_packs["message-type-classifier"]
+    items = [
+        _na(pack, "i1", "order", "order", withheld="load"),
+        _na(pack, "i2", "other", None, ms=2000.0, failed_call="decision", **_FAILED),
+        _na(pack, "i3", "order", None, ms=900.0, failed_call="handoff", input_tokens=40,
+            **_FAILED),
+        _na(pack, "i4", "order", "order", ms=700.0, decided_by="handoff", probability=None,
+            reason="over-limit"),
+        _na(pack, "i5", "question", "question", ms=25.0),
+    ]
+    got = decision_stats.agreement_items(items, role="message-type-classifier")
+    assert got.outcomes == {
+        "agree[order]": (False, True), "agree[question]": (True,), "agree[complaint]": (),
+        "agree[escalation]": (), "agree[other]": (False,),
+    }
+    assert got.latency == (("i2", 2000.0), ("i3", 900.0), ("i4", 700.0), ("i5", 25.0))
+    assert got.scored_n == 4
+    assert got.drops == {("candidate", "load"): 1}
+    assert got.over_limit == {
+        "agree[order]": 1, "agree[question]": 0, "agree[complaint]": 0,
+        "agree[escalation]": 0, "agree[other]": 0,
+    }
+
+
+def test_agreement_items_gives_every_class_even_with_no_items(new_ability_packs):
+    got = decision_stats.agreement_items([], role="join-in-judge")
+    assert got.outcomes == {"agreeWhenYes": (), "agreeWhenNo": ()}
+    assert (got.latency, got.scored_n, got.drops) == ((), 0, {})
+
+
+def test_agreement_items_refuses_what_no_new_ability_candidate_records(new_ability_packs):
+    pack = new_ability_packs["join-in-judge"]
+    with pytest.raises(ValueError, match="new-ability points only"):
+        decision_stats.agreement_items([], role="guard-judge")
+    with pytest.raises(ValueError, match="appears twice"):
+        decision_stats.agreement_items(
+            [_na(pack, "a", True, True), _na(pack, "a", True, True)], role="join-in-judge"
+        )
+    with pytest.raises(ValueError, match="not exactly one"):
+        decision_stats.agreement_items([_na(pack, "a", True, True)],
+                                       role="message-type-classifier")
+    guard_record = _score(_input("g"), True, _timing(20.0), decided_by="decision-model",
+                          probability=0.5)
+    with pytest.raises(ValueError, match="not exactly one"):
+        decision_stats.agreement_items([guard_record], role="join-in-judge")
+    withheld = dataclasses.replace(
+        _na(pack, "w", True, True),
+        timing=ItemTiming(wallClockMs=None, calls=(), withheldFor="timeout"),
+    )
+    with pytest.raises(ValueError, match="keeps a failed call"):
+        decision_stats.agreement_items([withheld], role="join-in-judge")
