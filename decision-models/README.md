@@ -107,12 +107,16 @@ or `AGENTS.md`. Run these from `decision-models/`:
   holds store/driver.lock"). Its last line says why (`stopped: done`, `stopped: halted (…)`, …).
 - It **refuses** (exit 1, nothing appended to the ledger) a root inside a git work tree or under
   a `CLAUDE.md`/`AGENTS.md`, a campaign with no `install` record, and, checked before every
-  launch, `~/.claude/settings.json` with an `env` or `hooks` key, with
-  `autoContinueAtUsageLimit: true`, or whose `permissions`/`modelSettings` differ from what
-  `install` recorded (`model`, `theme` and other edits are fine). The reason, with a timestamp,
-  goes to `store/refusal`, and `status` shows it until a launch succeeds:
-  ``REFUSED: 2026-11-02T09:00:00+00:00 launch refused: ~/.claude/settings.json has the `hooks`
-  key``.
+  launch, `~/.claude/settings.json` with a forbidden key (`env`, `hooks`, `fallbackModel`,
+  `apiKeyHelper`, `disableAllHooks: true`, `autoContinueAtUsageLimit: true`; refused even if
+  `install` saw it), or in which any other key outside `runner.UNRECORDED_SETTINGS` (`model`,
+  `theme` and the other terminal-only keys) was added, removed or changed since `install`
+  recorded its digest; an unknown key counts, and a new `permissions.allow` entry or
+  `defaultMode` does not. The refusal names the keys, never a value, and ends "revert it, or run
+  `driver install` to accept it". The reason, with a timestamp, goes to `store/refusal`, and
+  `status` shows it until a launch succeeds:
+  ``REFUSED: 2026-11-02T09:00:00+00:00 launch refused: ~/.claude/settings.json has the
+  forbidden `hooks` setting; remove it``.
   Fix the cause; the next fire launches and deletes the file. The root refusal is the exception:
   `run` checks it before taking the lock and writes nothing, and `status` checks the root
   itself, printing `REFUSED: <reason>` (no timestamp) for as long as the cause is there.

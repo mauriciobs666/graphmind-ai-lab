@@ -579,12 +579,12 @@ class Campaign:
     def record_expectations(self, *, guard_command: str,
                             roles: Mapping[str, Mapping[str, Any]],
                             driver_template: str | None = None,
-                            user_settings_sha256: str | None = None) -> None:
+                            user_settings_digests: Mapping[str, str] | None = None) -> None:
         """The declared expectations `install` writes (plan4 §3.5; U5.7): per role (`generator`,
         `labeler`) its `agentType`, `model`, `effort`, `spawnTemplate` and `instructions`
         (`[path, sha256]` pairs), plus the guard's `command`. `driver run` also needs
         `driverTemplate` (plan6 §3.3's message, `{agent_type}` and `{spawn_prompt}` slots) and
-        `userSettingsSha256` (`runner.user_settings_sha256`, plan6 §3.2), and refuses without
+        `userSettingsDigests` (`runner.user_settings_digests`, plan6 §3.2), and refuses without
         them."""
         if set(roles) != set(ROLE_OF_KIND.values()):
             raise CampaignRefused("expectations need exactly the generator and labeler roles")
@@ -592,8 +592,8 @@ class Campaign:
                                  "roles": {role: dict(spec) for role, spec in roles.items()}}
         if driver_template is not None:
             event["driverTemplate"] = driver_template
-        if user_settings_sha256 is not None:
-            event["userSettingsSha256"] = user_settings_sha256
+        if user_settings_digests is not None:
+            event["userSettingsDigests"] = dict(user_settings_digests)
         self._append(event)
 
     def fresh_rng_seed(self) -> int:

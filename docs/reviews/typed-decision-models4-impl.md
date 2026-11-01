@@ -2016,3 +2016,114 @@ Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c
 - **D1:** a leader that never exits plus a stubborn descendant, 2 s timeout, 0.5 s grace → the descendant is dead and the run stops after the second incomplete.
 
 **Growth-stops check:** Pass 13 gives one disposition line per Pass 12 finding and two new nits. Passes 1–12 are unchanged: `git diff` of this review shows one purely additive hunk at the end.
+
+## Pass 14 — U6.3b user-settings record (2026-11-01)
+
+**Verdict: approve with suggestions.** U6.3b implements plan6 v1.10 §3.2 and the §4 and §5 U6.3b rows. I found no blocker and no major, and the two findings are small.
+- **P14-m1:** the first `permissions.allow` rule, or a `permissions` block that holds only allow rules, is refused when `install` saw no such block. That is a literal reading of §3.2's digest, and it contradicts §5's "not refused: a new `permissions.allow` entry" and the README's claim.
+- **P14-n1:** two documentation points.
+- **The plumbing is solid.** 25 mutants of my own all turn the suite red, including every write and read of `userSettingsDigests` (Appendix M).
+
+### Scope
+
+- **Reviewed:** the uncommitted U6.3b diff against `49636569`, which is `runner.py`, `campaign.py`, `tests/test_runner.py`, `README.md` and `docs/HISTORY.md`. Spec: plan6 v1.10 §3.2 "User settings", the §4 U6.3b row and the §5 U6.3b row. U5.7's `install` is out of scope.
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **894 passed, 2 xfailed**; `ruff check` clean.
+- **UNRECORDED list:** I extracted the plan's list from §3.2 by script and compared it with the code's `UNRECORDED_SETTINGS`. Both have 35 keys: 5 named in the bullets (`model`, `switchModelsOnFlag`, `autoContinueAtUsageLimit`, `disableAllHooks`, `$schema`) and the 30 display and input keys. The difference is empty both ways.
+- **Mutants and probes:** private copy `scratchpad/p14/repo/`, fresh `PYTHONPYCACHEPREFIX` per run, no `-I`. Baseline 889 passed + 5 skipped. Each file was restored and `cmp` reported equal. 25 mutants and 11 probe tests that I added to the copy only (Appendix M). My suggested fix was applied in a second copy, `repo2/`.
+- **Live tree:** no git command that changes it; I wrote only this review. The reviewed files' sha256 values are in `scratchpad/p14/live-sha256.txt`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Answers to the gate's questions
+
+**(a) Conformance to §3.2: conforms, with one edge (P14-m1).**
+- **Forbidden set.** `FORBIDDEN_SETTINGS` is exactly `env`, `hooks`, `fallbackModel` and `apiKeyHelper` (any value), plus `disableAllHooks` and `autoContinueAtUsageLimit` (only `true`). The coder's M-mutants and my N11, N18 and N19 each redden. The check is applied before the digest comparison (N10 reddens), and a forbidden key still refuses when it is also in the recorded digests (a test per key).
+- **Value shapes (probe F2).** `autoContinueAtUsageLimit: 1` and `disableAllHooks: 1` refuse, because `1 == True` in Python. That is conservative and harmless. The strings `"true"` pass. They are not booleans, so I take them as outside the schema and report nothing.
+- **UNRECORDED_SETTINGS:** exact against the plan, as stated in Scope. The test pins it against a hand-copied literal; I checked that literal against the plan too.
+- **Permissions digest.** `allow` and `defaultMode` are left out (N12 and N13 each give 2 red), and `deny`, `ask` and `additionalDirectories` stay in (the test per class). One edge is P14-m1.
+- **No values in a refusal.** A marker test covers the digest refusal (N16 reddens) and a second covers the forbidden refusal (N15 reddens). The forbidden message prints the refusing constant, `: true`, never the user's value.
+
+**(b) The forbidden refusal ends "remove it": the coder is right, and the plan's wording is the loose part.**
+- §3.2 places the recovery sentence under "*Accepting a change*", and says re-running `install` "repeats its checks". The same section says `install` refuses to record a forbidden key. A forbidden refusal that said "run `driver install` to accept it" would send the person to a command that refuses them, the same message again.
+- The §4 row ties the sentence to the digest comparison ("then names the added, removed and changed keys and ends with §3.2's recovery sentence"), and the §5 row's recovery bullet sits with the recorded-key cases. So the plan's text requires the sentence on digest refusals only, and the code does exactly that (N17 reddens it, 10 red).
+- **Wording to tighten in the plan,** which is P14-n1: "A refusal's text ends…" should read "A recorded-key refusal's text ends…".
+- **A smaller point.** For `autoContinueAtUsageLimit` and `disableAllHooks`, "remove it" is correct, but "or set it to false" is also accepted. That is optional text.
+
+**(c) Fixtures, vacuity and mutant adequacy: adequate.**
+- Every plumbing argument has a mutant that turns the suite red:
+  - `record_expectations` writing `{}` (N1) gives 34 red, and writing reversed values (N2) gives 32;
+  - writing the retired key name (N3) gives 60;
+  - `run` reading a misspelt key (N4) gives 60, and ignoring the record (N5) gives 34;
+  - hashing the key's name instead of its value (N22) gives 8, and the unsorted and default-separator variants (N23, N24) give 2 and 1.
+- **Set and refusal plumbing:** each of N6 through N9, N20 and N25 is red, and N21 (only a fixed key list recorded, so `futureKey` launches) gives 2.
+- **No test is vacuous.** The expected digests are independently computed hand-written canonical strings: `b'{"deny":["Bash"]}'` and `'{"a":"é","effort":"high"}'`, with `é` pinning `ensure_ascii=False` (N14 reddens). `Bench` records `runner.user_settings_digests(recorded)` and the run side recomputes it, so the pair agrees only if both sides are right; the independent canonical-string tests close that loop.
+
+**(d) Ordinary user actions: mostly right; refusals show and leave the ledger byte-equal.**
+- Not refused, and tested: `theme`, `model`, `verbose`, `$schema`, both `switchModelsOnFlag` values, `autoContinueAtUsageLimit: false`, `disableAllHooks: false`, a new `allow` entry on an existing `permissions` block, a `defaultMode` change, and reordered or re-indented files.
+- **The gap:** the first allow rule when `install` saw no `permissions` block (P14-m1).
+- **`status` and the ledger.** The shared `refused()` helper asserts, for every refusal, that nothing launched, the ledger is byte-equal, `store/refusal` begins with a timestamp, and `status` prints the reason. Probe F4 shows the printed line for a forbidden key.
+
+**(e) Interaction with U6.3: clean.** Verified by probe.
+- **Pause before the settings check.** E1: a paused campaign with an `env` key exits 0 with `stopped: paused`, and no `store/refusal` is written. The pause check still precedes the forbidden check.
+- **The install-record requirement.** E2: a record with a template but no digests refuses with "no driver template or user-settings digests (run `driver install`)", before the settings are read, exit 1. E3: an old `userSettingsSha256` record does not satisfy it. F1: a malformed digest value reports a change, not a crash. N4 and N5 redden the same path.
+- **The settings are still read before `next`.** The coder's L15 mutant from Pass 13 stays red in the suite.
+
+### Findings
+
+**P14-m1 — minor — a `permissions` block that holds only `allow` rules or a `defaultMode` is not the same as no block, so the first allow rule refuses.** *Owner: `architect` (§3.2 states the digest, §5 states the case), then `coder`. Verified by probes D1–D4 and by a tested fix.*
+- `user_settings_digests` strips `allow` and `defaultMode` and then digests what is left, so `permissions: {"allow": ["Read"]}` digests as `{}` and still produces a `permissions` entry. When `install` saw no `permissions` key, the first allow rule the user adds makes the key appear, and the refusal reads `added: permissions`. I ran it:
+  - D1: first allow rule added → exit 1, "added: `permissions`";
+  - D2: a `defaultMode` alone → exit 1;
+  - D3: the last allow rule and its block removed → exit 1 ("removed");
+  - D4: the digests of `{permissions: {allow: [x]}}` and of `{}` differ.
+- **Why it matters.** §5 says "Not refused: a new `permissions.allow` entry", §3.2 says an allow rule "cannot loosen a deny, an ask or the guard", and the README repeats that a new allow entry does not refuse. The unattended campaign would stall on the user's first "always allow" in the user file, which is one of the ordinary edits the stakeholder asked not to stop it. The tests start from `SETTINGS`, whose `permissions` already holds an allow rule, so they never reach this case.
+- **Fix** (serves §5's "not refused" row), tested in `repo2/`: in `user_settings_digests`, after stripping, `continue` when the `permissions` value is empty, so an allow-only or `defaultMode`-only block digests as absent. D1–D4 then pass, and the full suite stays green except two tests whose fixtures assume the block is recorded:
+  - `test_the_digests_cover_each_recorded_key_and_only_those` expects `permissions` in the digests of `SETTINGS`;
+  - `test_a_refusal_names_added_removed_and_changed_keys_and_shows_no_value` expects `changed: permissions`.
+  - Both need a `deny` rule in the recorded `SETTINGS`, or a changed expectation.
+- **The plan decides the rule,** because `permissions: {}` versus absent is a design choice. Whoever takes it adds D1 and D3 as tests and makes the README sentence true. `install` calls the same function, so the fix lands there with no further change.
+
+**P14-n1 — nit — two documentation points.** *Owner: `architect` (the first), `coder` (the second). Verified by reading.*
+- **Plan wording:** §3.2's "A refusal's text ends 'revert it, or run `driver install` to accept it'" applies to recorded-key refusals only (question (b)). Saying so removes the ambiguity that the coder's deviation exposed.
+- **`docs/HISTORY.md`'s U6.3b entry lists the unit's work and mutants, but not the call it made:** forbidden refusals end "remove it", where the plan's sentence would mislead. A one-line "Calls made" item records it.
+
+### Appendix M — Pass 14 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p14/`: `mutants.py`, `mutate.py`, `probes/test_p14_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 889 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+
+| ID | Mutation | Red |
+|---|---|---|
+| N1 / N2 | `record_expectations` writes `{}` / digest values reversed | 34 / 32 |
+| N3 / N4 | key written under the old name / `run` reads a misspelt key | 60 / 60 |
+| N5 | `run` compares against `{}` | 34 |
+| N6 | added and removed swapped | 2 |
+| N7 / N8 / N9 | removed / changed / added keys ignored | 1 / 4 / 5 |
+| N10 | digest check ahead of the forbidden check | 1 |
+| N11 | `disableAllHooks` refuses on any value | 2 |
+| N12 / N13 | `defaultMode` / `allow` digested | 2 / 2 |
+| N14 | `ensure_ascii=True` | 1 |
+| N15 / N16 | a value shown in the forbidden / digest refusal | 1 / 1 |
+| N17 | recovery sentence reworded | 10 |
+| N18 / N19 | `apiKeyHelper` / `fallbackModel` not forbidden | 2 / 2 |
+| N20 | `outputStyle` unrecorded | 4 |
+| N21 | only a fixed key list recorded | 2 |
+| N22 | digest over the key's name | 8 |
+| N23 / N24 | `sort_keys=False` / default separators | 2 / 1 |
+| N25 | `$schema` recorded | 2 |
+
+**Probes** (pytest functions added to the copy's `tests/` only, using `test_runner`'s `Bench`, fake `claude` and fake `HOME`):
+- **D1:** install saw no `permissions` block; the first allow rule is added → exit 1, "added: `permissions`". Fails against the plan's "not refused" row.
+- **D2:** a `defaultMode`-only block is added → exit 1. Fails.
+- **D3:** the last allow rule and its block are removed → exit 1. Fails.
+- **D4:** the digests of `{permissions: {allow: [x]}}` and `{}` differ. Fails.
+- **E1:** a paused campaign with an `env` key → exit 0, `stopped: paused`, no `store/refusal`.
+- **E2:** a record with a template and no digests → exit 1, "no driver template or user-settings digests".
+- **E3:** a record carrying only `userSettingsSha256` → the same refusal.
+- **F1:** a non-string digest value in the record → exit 1, "changed".
+- **F2:** forbidden value shapes (`1`, `"true"`, `None`, `[]`, `""`), observed as described in (a).
+- **F3:** a non-dict `permissions` digests whole, without a crash.
+- **F4:** `status` prints the forbidden refusal.
+
+D1–D4 are the only probes that fail on the live code. In `repo2/` (the fix in P14-m1) the suite plus all 11 probes gives 898 passed, with exactly the two fixture-dependent tests above failing.
+
+**Growth-stops check:** Pass 14 adds one new finding and one nit, and re-opens no earlier finding. Passes 1–13 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.

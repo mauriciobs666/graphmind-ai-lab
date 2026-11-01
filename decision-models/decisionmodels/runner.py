@@ -22,8 +22,10 @@ lock's descriptor (`pass_fds`), so an orphan whose runner died keeps the campaig
 exits. `--fallback-model` and `--setting-sources` are never passed.
 
 **User settings** (`~/.claude/settings.json`, which applies to the child) are checked before each
-launch: an `env` or `hooks` key, `autoContinueAtUsageLimit: true`, or a `permissions`/
-`modelSettings` hash other than the one `install` recorded each refuse. The check runs before
+launch (plan6 §3.2 "User settings"): a `FORBIDDEN_SETTINGS` key refuses outright, and every other
+top-level key outside `UNRECORDED_SETTINGS` is digested (`user_settings_digests`) and must equal
+the `userSettingsDigests` `install` recorded; the refusal names the keys added, removed or
+changed, never a value, and ends with the recovery sentence. The check runs before
 `next`, so a refusal appends nothing, not even a reconciliation. Every refusal `run` makes after
 taking the lock overwrites `store/refusal` with an ISO 8601 timestamp and its reason (which
 `status` prints) and exits 1; a successful launch deletes the file. The root and no-campaign
@@ -70,9 +72,30 @@ CHILD_ENV_ALLOWLIST = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "TMPDIR")
 CHILD_ENV_SET = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 #: plan6 §3.2 step 4: SIGKILL follows SIGTERM after 30 s.
 KILL_GRACE = timedelta(seconds=30)
-#: The user-settings keys whose values `install` hashes (plan6 §3.2 "User settings").
-HASHED_SETTINGS = ("permissions", "modelSettings")
-REFUSED_SETTINGS = ("env", "hooks")
+_ANY: Any = object()
+#: plan6 §3.2 "Forbidden keys": each key with the value that refuses it (`_ANY`: any value). The
+#: settings twins of a flag or variable the plan drops; refused even when `install` saw them.
+FORBIDDEN_SETTINGS: dict[str, Any] = {
+    "env": _ANY, "hooks": _ANY, "disableAllHooks": True, "autoContinueAtUsageLimit": True,
+    "fallbackModel": _ANY, "apiKeyHelper": _ANY,
+}
+#: plan6 §3.2 "Recorded keys": the closed set `install` does not digest. Every other top-level
+#: key is recorded, so an unknown key a later CLI adds refuses (fail closed). Adding to this set
+#: is a plan change.
+UNRECORDED_SETTINGS = frozenset({
+    "model", "switchModelsOnFlag", "autoContinueAtUsageLimit", "disableAllHooks", "$schema",
+    "theme", "editorMode", "verbose", "viewMode", "tui", "spinnerTipsEnabled",
+    "spinnerTipsOverride", "spinnerVerbs", "prefersReducedMotion", "terminalProgressBarEnabled",
+    "terminalTitleFromRename", "showTurnDuration", "syntaxHighlightingDisabled", "timeFormat",
+    "timeZone", "preferredNotifChannel", "inputNeededNotifEnabled", "autoScrollEnabled",
+    "wheelScrollAccelerationEnabled", "emojiCompletionEnabled", "promptSuggestionEnabled",
+    "maxProseWidth", "vimInsertModeRemaps", "awaySummaryEnabled", "voice", "voiceEnabled",
+    "feedbackSurveyRate", "axScreenReader", "spellcheck", "keybindingFlavor",
+})
+#: `permissions` sub-keys left out of the digest: an allow rule cannot loosen a deny, an ask or
+#: the guard, and `--permission-mode acceptEdits` overrides `defaultMode` (plan6 §3.2, §2).
+UNDIGESTED_PERMISSIONS = ("allow", "defaultMode")
+RECOVERY = "revert it, or run `driver install` to accept it"
 LOCK_HELD = ("another `driver run` holds store/driver.lock (a live run, or an orphaned child); "
              "exiting")
 
@@ -94,25 +117,51 @@ def read_user_settings(path: Path) -> dict[str, Any]:
     return settings
 
 
-def user_settings_sha256(settings: Mapping[str, Any]) -> str:
-    """sha256 over the canonical JSON of the `permissions` and `modelSettings` values present
-    (sorted keys, no whitespace): what `install` records and `run` compares."""
-    hashed = {key: settings[key] for key in HASHED_SETTINGS if key in settings}
-    canonical = json.dumps(hashed, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+def user_settings_digests(settings: Mapping[str, Any]) -> dict[str, str]:
+    """Per recorded top-level key, the sha256 of its value's canonical JSON (sorted keys, no
+    whitespace, UTF-8), `permissions` without `allow` and `defaultMode` (and omitted when nothing
+    is left): what `install` records
+    and `run` compares (plan6 §3.2)."""
+    digests: dict[str, str] = {}
+    for key, value in settings.items():
+        if key in UNRECORDED_SETTINGS:
+            continue
+        if key == "permissions" and isinstance(value, dict):
+            value = {k: v for k, v in value.items() if k not in UNDIGESTED_PERMISSIONS}
+            if not value:           # nothing but allow/defaultMode: absent == empty
+                continue
+        canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        digests[key] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return digests
 
 
-def settings_refusal(settings: Mapping[str, Any], recorded_sha256: str) -> str | None:
-    """Why the user settings refuse a launch (plan6 §3.2), or `None`."""
-    for key in REFUSED_SETTINGS:
-        if key in settings:
-            return f"~/.claude/settings.json has the `{key}` key"
-    if settings.get("autoContinueAtUsageLimit") is True:
-        return "~/.claude/settings.json sets autoContinueAtUsageLimit: true"
-    if user_settings_sha256(settings) != recorded_sha256:
-        return ("~/.claude/settings.json's permissions/modelSettings differ from what "
-                "`driver install` recorded")
+def forbidden_settings_refusal(settings: Mapping[str, Any]) -> str | None:
+    """Why the settings are forbidden (plan6 §3.2 "Forbidden keys"), or `None`; names the key,
+    never a value. `install` applies the same check."""
+    for key, refusing in FORBIDDEN_SETTINGS.items():
+        if key in settings and (refusing is _ANY or settings[key] == refusing):
+            suffix = "" if refusing is _ANY else f": {json.dumps(refusing)}"
+            return f"~/.claude/settings.json has the forbidden `{key}` setting{suffix}; remove it"
     return None
+
+
+def settings_refusal(settings: Mapping[str, Any], recorded: Mapping[str, str]) -> str | None:
+    """Why the user settings refuse a launch (plan6 §3.2), or `None`: a forbidden key first, then
+    the keys added, removed or changed since `install` (names only, no values)."""
+    forbidden = forbidden_settings_refusal(settings)
+    if forbidden is not None:
+        return forbidden
+    current = user_settings_digests(settings)
+    added = sorted(set(current) - set(recorded))
+    removed = sorted(set(recorded) - set(current))
+    changed = sorted(key for key in set(current) & set(recorded) if current[key] != recorded[key])
+    if not (added or removed or changed):
+        return None
+    parts = [f"{label}: {', '.join(f'`{key}`' for key in keys)}"
+             for label, keys in (("added", added), ("removed", removed), ("changed", changed))
+             if keys]
+    return ("~/.claude/settings.json differs from what `driver install` recorded "
+            f"({'; '.join(parts)}); {RECOVERY}")
 
 
 def child_env(environ: Mapping[str, str]) -> dict[str, str]:
@@ -227,13 +276,13 @@ class Runner:
         self.say(f"stopped: {stop.reason}" + (f" ({stop.detail})" if stop.detail else ""))
         return 0
 
-    def _install_record(self) -> tuple[str, str]:
+    def _install_record(self) -> tuple[str, dict[str, str]]:
         expectations = self.camp.state().expectations or {}
         template = expectations.get("driverTemplate")
-        recorded = expectations.get("userSettingsSha256")
-        if not isinstance(template, str) or not isinstance(recorded, str):
+        recorded = expectations.get("userSettingsDigests")
+        if not isinstance(template, str) or not isinstance(recorded, dict):
             raise CampaignRefused("`driver install` recorded no driver template or user-settings "
-                                  "hash (run `driver install`)")
+                                  "digests (run `driver install`)")
         return template, recorded
 
     def _batch(self, serve: Serve, template: str) -> Stop | None:

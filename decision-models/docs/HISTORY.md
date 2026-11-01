@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.3b — the user-settings record
+
+**What:** `docs/plans/typed-decision-models6.md` v1.10 §3.2 "User settings" and the U6.3b rows of
+§4/§5, replacing U6.3's two-key hash.
+
+- `decisionmodels/runner.py`: `FORBIDDEN_SETTINGS` (`env`, `hooks`, `fallbackModel`,
+  `apiKeyHelper`; `disableAllHooks` and `autoContinueAtUsageLimit` when `true`) and
+  `UNRECORDED_SETTINGS` (§3.2's closed list) replace `REFUSED_SETTINGS`/`HASHED_SETTINGS`;
+  `user_settings_digests` (sha256 of each recorded top-level key's canonical JSON, `permissions`
+  without `allow`/`defaultMode`) replaces `user_settings_sha256`; `forbidden_settings_refusal` is
+  the check `install` will share; `settings_refusal` runs it first, then names the keys added,
+  removed and changed (no values) and ends with the recovery sentence.
+  `permissions` is omitted from the digests when nothing is left after stripping `allow` and
+  `defaultMode` (absent == empty), so a first allow rule, a lone `defaultMode` or the removal of
+  the last allow rule never refuses (review Pass 14, P14-m1).
+- A call made: the forbidden-key refusal ends "remove it", not the recovery sentence, because
+  `install` refuses to record a forbidden key, so "run `driver install` to accept it" would be
+  false there; the recovery sentence ends only the added/removed/changed refusal (P14-n1).
+- `decisionmodels/campaign.py`: `record_expectations(user_settings_digests=…)` writes
+  `userSettingsDigests`, which `run` requires. No campaign had an `expectations` event, so
+  nothing migrates.
+- `tests/test_runner.py`: the `Bench` helper records digests; the hash tests are replaced by §5's
+  cases (forbidden per key, also when recorded; changed per class; removed key; no value shown;
+  not-refused edits; reorder/re-indent; canonical form; pinned set).
+- `README.md`'s `run` section and the module docstring.
+
+**Verified:** `pytest -q -p no:cacheprovider` from `decision-models/` 894 passed, 2 xfailed;
+`ruff check .` clean. Twelve mutants (§5's list, plus a digest over the wrong key's value) each
+redden `tests/test_runner.py`; the file was restored `cmp`-equal.
+
 ## 2026-11-01 — typed-decision-models U6.3 — `driver run`, the unattended runner
 
 **What:** `docs/plans/typed-decision-models6.md` v1.8 §3.1, §3.2 and the §4/§5 U6.3 rows, over

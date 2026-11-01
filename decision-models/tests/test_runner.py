@@ -135,7 +135,7 @@ class Bench:
                        batch_timeout=batch_timeout)
         self.camp.record_expectations(
             guard_command=GUARD_COMMAND, roles=ROLES, driver_template=DRIVER_TEMPLATE,
-            user_settings_sha256=runner.user_settings_sha256(recorded))
+            user_settings_digests=runner.user_settings_digests(recorded))
         for _ in range(batches - 1):
             self.camp.queue_batch("label", ["fx_0001"])
         self.path = f"{self.bin}:/usr/bin:/bin"
@@ -375,16 +375,13 @@ def test_a_halt_on_ingest_stops_before_the_next_settings_check(
 # --- user settings -------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(("edit", "reason"), [
-    ({"autoContinueAtUsageLimit": True}, "autoContinueAtUsageLimit"),
-    ({"env": {"FOO": "1"}}, "`env`"),
-    ({"hooks": {}}, "`hooks`"),
-    ({"permissions": {"allow": ["Read"], "deny": ["Write"]}}, "permissions/modelSettings"),
-    ({"modelSettings": {"effort": "low"}}, "permissions/modelSettings"),
-])
-def test_a_user_setting_refuses_the_launch(bench: Bench, capsys: pytest.CaptureFixture,
-                                           edit: dict[str, Any], reason: str) -> None:
-    bench.write_settings({**SETTINGS, **edit})
+RECOVERY = "revert it, or run `driver install` to accept it"
+MARKER = "SECRET-MARKER-9f3a"
+
+
+def refused(bench: Bench, capsys: pytest.CaptureFixture, reason: str) -> str:
+    """A launch that refuses with `reason`: nothing launched, ledger byte-equal, the reason (with
+    a timestamp) in `store/refusal`, and printed by `status`. Returns the refusal text."""
     bench.plan({"final": "clean"})
     before = bench.camp.ledger_path.read_bytes()
     code, _, err = run(bench, capsys)
@@ -397,16 +394,145 @@ def test_a_user_setting_refuses_the_launch(bench: Bench, capsys: pytest.CaptureF
     assert driver.main(["status", "--root", str(bench.root)]) == 0
     assert any(line.startswith("REFUSED:") and reason in line
                for line in capsys.readouterr().out.splitlines())
+    return refusal
 
 
-@pytest.mark.parametrize("edit", [{"theme": "light"}, {"model": "sonnet"},
-                                  {"autoContinueAtUsageLimit": False}, {"verbose": True}])
+FORBIDDEN_CASES = [("env", {"FOO": "1"}), ("hooks", {}), ("disableAllHooks", True),
+                   ("autoContinueAtUsageLimit", True), ("fallbackModel", "sonnet"),
+                   ("apiKeyHelper", "/bin/key")]
+
+
+@pytest.mark.parametrize(("key", "value"), FORBIDDEN_CASES)
+def test_a_forbidden_setting_refuses_the_launch(bench: Bench, capsys: pytest.CaptureFixture,
+                                                key: str, value: Any) -> None:
+    bench.write_settings({**SETTINGS, key: value})
+    refused(bench, capsys, f"`{key}`")
+
+
+@pytest.mark.parametrize(("key", "value"), FORBIDDEN_CASES)
+def test_a_forbidden_setting_refuses_even_when_install_recorded_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+        key: str, value: Any) -> None:
+    """As if `install` had seen it: recording it must not make it the campaign's baseline."""
+    made = Bench(tmp_path, settings={**SETTINGS, key: value})
+    monkeypatch.setenv("HOME", str(made.home))
+    monkeypatch.setenv("PATH", made.path)
+    refused(made, capsys, f"`{key}`")
+
+
+def test_only_the_refusing_value_of_a_valued_forbidden_key_refuses() -> None:
+    for key in ("disableAllHooks", "autoContinueAtUsageLimit"):
+        assert runner.forbidden_settings_refusal({key: True}) is not None
+        assert runner.forbidden_settings_refusal({key: False}) is None
+    assert runner.forbidden_settings_refusal(SETTINGS) is None
+
+
+@pytest.mark.parametrize(("edit", "key"), [
+    ({"permissions": {"allow": ["Read"], "deny": ["Write"]}}, "permissions"),
+    ({"permissions": {"allow": ["Read"], "ask": ["Bash"]}}, "permissions"),
+    ({"permissions": {"allow": ["Read"], "additionalDirectories": ["/x"]}}, "permissions"),
+    ({"modelSettings": {"effort": "low"}}, "modelSettings"),
+    ({"effortLevel": "low"}, "effortLevel"),
+    ({"agentPushNotifEnabled": True}, "agentPushNotifEnabled"),
+    ({"outputStyle": "Explanatory"}, "outputStyle"),
+    ({"enabledPlugins": {"x@y": True}}, "enabledPlugins"),
+    ({"futureKey": 1}, "futureKey"),
+])
+def test_a_changed_recorded_setting_refuses_and_names_the_key(
+        bench: Bench, capsys: pytest.CaptureFixture, edit: dict[str, Any], key: str) -> None:
+    bench.write_settings({**SETTINGS, **edit})
+    text = refused(bench, capsys, f"`{key}`")
+    assert text.rstrip("\n").endswith(RECOVERY)
+
+
+def test_a_key_removed_since_install_refuses(bench: Bench,
+                                             capsys: pytest.CaptureFixture) -> None:
+    bench.write_settings({k: v for k, v in SETTINGS.items() if k != "modelSettings"})
+    text = refused(bench, capsys, "removed: `modelSettings`")
+    assert text.rstrip("\n").endswith(RECOVERY)
+
+
+def test_a_refusal_names_added_removed_and_changed_keys_and_shows_no_value(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    made = Bench(tmp_path, settings={**SETTINGS, "permissions": {"deny": ["Write"]}})
+    monkeypatch.setenv("HOME", str(made.home))
+    monkeypatch.setenv("PATH", made.path)
+    made.write_settings({"model": "opus", "permissions": {"deny": [MARKER]},
+                         "outputStyle": MARKER, "futureKey": MARKER})
+    text = refused(made, capsys, "added: `futureKey`, `outputStyle`")
+    assert "removed: `modelSettings`" in text and "changed: `permissions`" in text
+    assert MARKER not in text
+    assert MARKER not in (made.root / "store" / "refusal").read_text("utf-8")
+
+
+def test_a_forbidden_refusal_shows_no_value(bench: Bench, capsys: pytest.CaptureFixture) -> None:
+    bench.write_settings({**SETTINGS, "env": {"TOKEN": MARKER}, "apiKeyHelper": MARKER})
+    assert MARKER not in refused(bench, capsys, "`env`")
+
+
+def test_the_forbidden_check_runs_before_the_digest_comparison(
+        bench: Bench, capsys: pytest.CaptureFixture) -> None:
+    bench.write_settings({**SETTINGS, "hooks": {}, "futureKey": 1})
+    text = refused(bench, capsys, "`hooks`")
+    assert "futureKey" not in text
+
+
+@pytest.mark.parametrize("edit", [
+    {"permissions": {"allow": ["Read", "Write"]}},
+    {"permissions": {"allow": ["Read"], "defaultMode": "plan"}},
+    {"theme": "light"}, {"model": "sonnet"}, {"verbose": True}, {"$schema": "https://x/y.json"},
+    {"switchModelsOnFlag": True}, {"switchModelsOnFlag": False},
+    {"autoContinueAtUsageLimit": False}, {"disableAllHooks": False},
+])
 def test_ordinary_user_edits_do_not_refuse(bench: Bench, capsys: pytest.CaptureFixture,
                                            edit: dict[str, Any]) -> None:
     bench.write_settings({**SETTINGS, **edit})
     bench.plan({"final": "clean"})
     assert run(bench, capsys)[0] == 0
     assert len(bench.calls()) == 1 and bench.batches() == {"bat_0001": "ingested"}
+
+
+@pytest.mark.parametrize(("installed", "now"), [
+    ({"model": "opus"}, {"model": "opus", "permissions": {"allow": ["Read"]}}),
+    ({"model": "opus"}, {"model": "opus", "permissions": {"defaultMode": "plan"}}),
+    ({"model": "opus", "permissions": {"allow": ["Read"]}}, {"model": "opus"}),
+    ({"model": "opus", "permissions": {"allow": ["Read"]}},
+     {"model": "opus", "permissions": {}}),
+])
+def test_permissions_edits_that_leave_nothing_digested_do_not_refuse(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture,
+        installed: dict[str, Any], now: dict[str, Any]) -> None:
+    """A first allow rule (install saw no block), a lone `defaultMode`, and the last allow rule
+    with its block removed: absent == empty."""
+    made = Bench(tmp_path, settings=installed)
+    monkeypatch.setenv("HOME", str(made.home))
+    monkeypatch.setenv("PATH", made.path)
+    made.write_settings(now)
+    made.plan({"final": "clean"})
+    assert run(made, capsys)[0] == 0 and len(made.calls()) == 1
+
+
+def test_a_deny_rule_after_an_allow_only_install_refuses(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    made = Bench(tmp_path, settings={"permissions": {"allow": ["Read"]}})
+    monkeypatch.setenv("HOME", str(made.home))
+    monkeypatch.setenv("PATH", made.path)
+    made.write_settings({"permissions": {"allow": ["Read"], "deny": ["Write"]}})
+    refused(made, capsys, "added: `permissions`")
+
+
+def test_reordered_and_reindented_settings_do_not_refuse(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    recorded = {"permissions": {"deny": ["Bash"], "ask": ["Edit"], "allow": ["Read"]},
+                "modelSettings": {"effort": "high", "x": 1}}
+    made = Bench(tmp_path, settings=recorded)
+    monkeypatch.setenv("HOME", str(made.home))
+    monkeypatch.setenv("PATH", made.path)
+    reordered = {"modelSettings": {"x": 1, "effort": "high"},
+                 "permissions": {"allow": ["Read"], "ask": ["Edit"], "deny": ["Bash"]}}
+    (made.home / ".claude" / "settings.json").write_text(json.dumps(reordered, indent=4), "utf-8")
+    made.plan({"final": "clean"})
+    assert run(made, capsys)[0] == 0 and len(made.calls()) == 1
 
 
 def test_the_settings_are_checked_before_every_launch(
@@ -463,26 +589,62 @@ def test_settings_that_are_not_an_object_refuse(bench: Bench,
     assert code == 1 and "not a JSON object" in err and bench.calls() == []
 
 
-def test_the_hash_covers_only_permissions_and_model_settings() -> None:
-    base = runner.user_settings_sha256(SETTINGS)
-    assert runner.user_settings_sha256({**SETTINGS, "theme": "x", "model": "y"}) == base
-    assert runner.user_settings_sha256({**SETTINGS, "permissions": {}}) != base
-    assert runner.user_settings_sha256({**SETTINGS, "modelSettings": None}) != base
-    without = {k: v for k, v in SETTINGS.items() if k != "modelSettings"}
-    assert runner.user_settings_sha256(without) != base
+def test_the_digests_are_over_canonical_json() -> None:
+    """plan6 §3.2 "canonical JSON" (sorted keys, no whitespace, `permissions` without `allow` and
+    `defaultMode`): `install` records these, so a hand edit that only reorders keys must not
+    refuse every launch."""
+    settings = {"theme": "dark", "permissions": {"deny": ["Bash"], "allow": ["Read"],
+                                                  "defaultMode": "plan"},
+                "modelSettings": {"effort": "high", "a": "é"}}
+    digests = runner.user_settings_digests(settings)
+    assert set(digests) == {"permissions", "modelSettings"}
+    assert digests["permissions"] == hashlib.sha256(b'{"deny":["Bash"]}').hexdigest()
+    assert digests["modelSettings"] == hashlib.sha256(
+        '{"a":"é","effort":"high"}'.encode()).hexdigest()
+    reordered = {"modelSettings": {"a": "é", "effort": "high"},
+                 "permissions": {"defaultMode": "plan", "allow": ["Read"], "deny": ["Bash"]}}
+    assert runner.user_settings_digests(reordered) == digests
 
 
-def test_the_hash_is_over_canonical_json() -> None:
-    """plan6 §3.2 "canonical JSON" (sorted keys, no whitespace): `install` records this value,
-    so a hand edit that only reorders keys must not refuse every launch."""
-    settings = {"theme": "dark", "permissions": {"deny": ["Bash"], "allow": ["Read"]},
-                "modelSettings": {"effort": "high"}}
-    canonical = ('{"modelSettings":{"effort":"high"},'
-                 '"permissions":{"allow":["Read"],"deny":["Bash"]}}')
-    assert runner.user_settings_sha256(settings) == hashlib.sha256(canonical.encode()).hexdigest()
-    reordered = {"modelSettings": {"effort": "high"},
-                 "permissions": {"allow": ["Read"], "deny": ["Bash"]}, "theme": "dark"}
-    assert runner.user_settings_sha256(reordered) == runner.user_settings_sha256(settings)
+def test_the_digests_cover_each_recorded_key_and_only_those() -> None:
+    settings = {**SETTINGS, "permissions": {"allow": ["Read"], "deny": ["Bash"]}}
+    base = runner.user_settings_digests(settings)
+    assert runner.user_settings_digests({**settings, "theme": "x", "model": "y"}) == base
+    assert runner.user_settings_digests({**settings, "permissions": {"deny": ["x"]}}) != base
+    assert runner.user_settings_digests({**settings, "modelSettings": None}) != base
+    without = {k: v for k, v in settings.items() if k != "modelSettings"}
+    assert set(runner.user_settings_digests(without)) == {"permissions"}
+
+
+def test_permissions_with_nothing_left_after_the_strip_are_not_recorded() -> None:
+    """Absent == empty: only `allow`/`defaultMode` leave nothing to digest."""
+    for permissions in ({}, {"allow": ["Read"]}, {"defaultMode": "plan"},
+                        {"allow": ["Read"], "defaultMode": "plan"}):
+        assert "permissions" not in runner.user_settings_digests({"permissions": permissions})
+    assert "permissions" in runner.user_settings_digests({"permissions": {"deny": []}})
+
+
+def test_a_digest_is_over_its_own_keys_value() -> None:
+    digests = runner.user_settings_digests({"outputStyle": "a", "language": "b"})
+    assert digests["outputStyle"] == hashlib.sha256(b'"a"').hexdigest()
+    assert digests["language"] == hashlib.sha256(b'"b"').hexdigest()
+
+
+def test_the_unrecorded_set_is_pinned() -> None:
+    """plan6 §3.2's closed list; adding to it is a plan change."""
+    assert runner.UNRECORDED_SETTINGS == {
+        "model", "switchModelsOnFlag", "autoContinueAtUsageLimit", "disableAllHooks", "$schema",
+        "theme", "editorMode", "verbose", "viewMode", "tui", "spinnerTipsEnabled",
+        "spinnerTipsOverride", "spinnerVerbs", "prefersReducedMotion",
+        "terminalProgressBarEnabled", "terminalTitleFromRename", "showTurnDuration",
+        "syntaxHighlightingDisabled", "timeFormat", "timeZone", "preferredNotifChannel",
+        "inputNeededNotifEnabled", "autoScrollEnabled", "wheelScrollAccelerationEnabled",
+        "emojiCompletionEnabled", "promptSuggestionEnabled", "maxProseWidth",
+        "vimInsertModeRemaps", "awaySummaryEnabled", "voice", "voiceEnabled",
+        "feedbackSurveyRate", "axScreenReader", "spellcheck", "keybindingFlavor"}
+    assert set(runner.FORBIDDEN_SETTINGS) == {"env", "hooks", "disableAllHooks",
+                                              "autoContinueAtUsageLimit", "fallbackModel",
+                                              "apiKeyHelper"}
 
 
 def test_run_needs_the_install_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
