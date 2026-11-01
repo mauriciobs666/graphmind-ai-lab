@@ -13,11 +13,21 @@ Full design and rationale: `opencode/docs/plans/devops-opencode-headless.md`. Se
 ## Prerequisites
 
 - [OpenCode](https://opencode.ai/) installed (`npm install -g opencode-ai`) and on your `PATH`.
-- [LM Studio](https://lmstudio.ai/) installed, with `mistralai/ministral-3-3b` (the default model
-  below) or `nvidia/nemotron-3-nano-4b` loaded and the local server running at
-  `http://localhost:1234/v1`. Follow the general walkthrough in
-  [`opencode/docs/manuals/local-llm.md`](../../docs/manuals/local-llm.md) — load a model with
-  Context Length ≥ 16384, start the server, confirm with `curl http://localhost:1234/v1/models`.
+- [LM Studio](https://lmstudio.ai/) installed, with the local server running at
+  `http://localhost:1234/v1`, serving `tank`'s model (`mistralai/ministral-3-3b` until the
+  `qwen/qwen3-4b-2507` trial decides). General walkthrough:
+  [`opencode/docs/manuals/local-llm.md`](../../docs/manuals/local-llm.md); confirm with
+  `curl http://localhost:1234/v1/models`.
+  - **Once, on the LM Studio host, for qwen:** save its per-model defaults (*My Models →
+    `qwen/qwen3-4b-2507` → ⚙*): Context Length = `TANK_MIN_CONTEXT_LENGTH` and parallel =
+    `TANK_REQUIRED_PARALLEL` (both in `scripts/model-preflight.sh`). Every load path uses them,
+    JIT included, so `tank` and falkor-chat's `:8200` share one copy at that context. With one
+    slot their requests queue (`docs/plans/standard-local-model.md` R2).
+  - **Explicit qwen loads:** never pass `-c` or `--parallel`; always pass `--identifier
+    qwen/qwen3-4b-2507`; never load it while `lms ps` already lists it.
+  - **Preflight:** each outer script runs `scripts/model-preflight.sh` before `opencode run` and
+    exits 1 with a fix-it message when the copy breaks the above. It only reads; it never loads
+    or unloads. `TANK_MODEL_PREFLIGHT=0` skips it (for an LM Studio without `/api/v1`).
 - Docker + Docker Compose, for whatever environment(s) `tank` is asked to manage.
 
 If your LM Studio model ID differs from what's in `opencode.json`'s `provider.lmstudio.models`,
@@ -123,7 +133,7 @@ See [`opencode.json`](opencode.json). Key pieces (same shape as the retired `sev
 | `provider.lmstudio.npm` | `@ai-sdk/openai-compatible` — adapter for any OpenAI-shaped HTTP server |
 | `provider.lmstudio.options.baseURL` | LM Studio server URL (must include `/v1`) |
 | `provider.lmstudio.options.apiKey` | Dummy string (`lm-studio`). The adapter requires it; LM Studio ignores it |
-| `provider.lmstudio.models` | Map of model IDs LM Studio reports |
+| `provider.lmstudio.models` | Map of model IDs LM Studio reports (`mistralai/ministral-3-3b`, `qwen/qwen3-4b-2507`) |
 | `agent.tank.mode` | `primary` — selectable directly with `opencode --agent tank` |
 | `agent.tank.model` | `lmstudio/mistralai/ministral-3-3b` (default) |
 | `agent.tank.prompt` | `{file:...}`-included shared persona + the headless-specific addendum |
@@ -137,9 +147,9 @@ See [`opencode.json`](opencode.json). Key pieces (same shape as the retired `sev
 ## Choosing a model
 
 `mistralai/ministral-3-3b` is the shipped default — it completed the deny+report flow correctly
-and quickly in live testing (plan §2.3). `nvidia/nemotron-3-nano-4b` is listed as an alternate for
-an easy swap (`agent.tank.model`), but was not conclusively exercised the same way; treat a
-`nemotron` swap as a later, separate evaluation, not a like-for-like default change (plan §7).
+and quickly in live testing (plan §2.3). A trial of `qwen/qwen3-4b-2507` is pending under
+`docs/requirements/standard-local-model.md`; select it per run with `opencode run -m
+lmstudio/qwen/qwen3-4b-2507`.
 
 ## Troubleshooting
 
@@ -154,3 +164,7 @@ roles are supported`, slow reasoning models, slow JIT-loaded first response) are
 | Agent picker doesn't show `tank` | You ran `opencode` without going through the outer scripts (or without `cd`-ing into this directory first). Project-scoped config is only loaded from the current working directory. |
 | A run hangs indefinitely with no output | Something in `permission.bash` resolved to `"ask"` — that hangs forever with no human present (verified live, plan §2.3). This shouldn't happen with the shipped table (`allow`/`deny` only); if you've edited it, check for a stray `"ask"`. |
 | `tank` refuses a bring-up/teardown you expected to work | Check the exact error it reported — `not a known environment` (fix `environments.json`), `already running, not started by me`, `not something I brought up`, or `marker present but stale` (see [The state marker](#the-state-marker)) all mean exactly what they say; `tank` never guesses past a refusal. |
+| Outer script exits 1 with `REFUSED: <k> copies of <id> loaded (<ids>)` | More than one copy of the model is loaded. Unload the extra one(s): `lms unload <id:n>`. |
+| `REFUSED: <id> loaded at <c>, tank needs >= <min>` | The copy was loaded with a smaller context. When nothing else is using it, `lms unload <id>` and let the per-model default reload it (Prerequisites). |
+| `REFUSED: <id> loaded with parallel <p>, tank needs <required>` | Same fix as the row above. |
+| `<id> not in LM Studio` / `not reachable at <root>` | Fix the id in `opencode.json`, or start LM Studio's server. |
