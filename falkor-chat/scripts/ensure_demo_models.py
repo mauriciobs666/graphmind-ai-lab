@@ -36,7 +36,7 @@ What it does, in order — every refusal happens before any load:
   4. Nothing missing -> prints "nothing to load", exit 0 (idempotent; no CLI needed).
   5. Otherwise loads each missing model with the `lms` CLI at its own context —
      `lms load <id> -c <ctx> --gpu max --identifier <id> -y`, ctx = DEMO_CONTEXT_LENGTH
-     (8192) for the chat model, EMBED_CONTEXT_LENGTH (4096) for the embedder — then
+     (8192) for the chat model, EMBED_CONTEXT_LENGTH (2048) for the embedder — then
      re-reads the API
      (while a demo model still reports `loading`, every SETTLE_INTERVAL_S for up to
      SETTLE_S = 30 s; an override that isn't a finite number of seconds — > 0 for the
@@ -92,10 +92,14 @@ if str(_SERVER_DIR) not in sys.path:  # direct run outside the venv's own resolu
 # The demo settings — the configuration measured in
 # docs/test-reports/salesperson-single-model-fit-report.md (8192 is also the unified
 # KV pool concurrent storefront turns share). The embedder sees one text at a time, so
-# it gets its own, smaller context: 4096 covers a REST-capped message (MAX_TEXT_LEN =
-# 8,000 chars) and every document chunk (K-099).
+# it gets its own, smaller context. 2048 (stakeholder, 2026-10-31; K-099) fits every
+# input measured 2026-10-31 (ws:acme messages, ws:agent-team chunks); a longer message (a MAX_TEXT_LEN = 8,000
+# message can be, e.g. URL-dense text) is left to K-100's per-message chunking. Measured in
+# docs/test-reports/embedder-context-report.md: at 2048 one input is cut at ~9.7k chars of
+# prose, ~8.0k of code, ~5.7k of URL-dense text; 2048 vs 4096 saves ~350 MiB of embedder
+# VRAM and ~35% of the ministral paging.
 DEMO_CONTEXT_LENGTH = 8192
-EMBED_CONTEXT_LENGTH = 4096
+EMBED_CONTEXT_LENGTH = 2048
 DEMO_GPU = "max"
 
 API_TIMEOUT_S = 5.0

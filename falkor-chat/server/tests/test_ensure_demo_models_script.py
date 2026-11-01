@@ -187,7 +187,7 @@ def rig(tmp_path):
     server.server_close()
 
 
-def _catalog(*, chat=None, embed=None, embed_ps=4096, extra=()) -> list[dict]:
+def _catalog(*, chat=None, embed=None, embed_ps=2048, extra=()) -> list[dict]:
     """chat/embed: None = not loaded, else the context the API reports; embed_ps: the
     embedder's real context, as `lms ps --json` shows it."""
     embedder = _model(EMBED, loaded=embed is not None, ctx=embed, mtype="embeddings")
@@ -245,11 +245,12 @@ def test_one_missing_loads_exactly_it_with_demo_flags(rig):
     rig.set_models(_catalog(chat=8192, embed=None))
     out = rig.run()
     assert out.returncode == 0, out.stdout + out.stderr
-    # K-099: the embedder loads at its own 4096, not the chat model's 8192.
-    assert _mutating(rig.calls()) == [["load", EMBED, "-c", "4096", "--gpu", "max",
+    # K-099: the embedder loads at its own 2048 (literal on purpose — a drift of
+    # EMBED_CONTEXT_LENGTH must go red), not the chat model's 8192.
+    assert _mutating(rig.calls()) == [["load", EMBED, "-c", "2048", "--gpu", "max",
                                        "--identifier", EMBED, "-y"]]
     assert "demo models ready" in out.stdout
-    assert "WARNING" not in out.stderr  # loaded at 4096 -> the ps check agrees
+    assert "WARNING" not in out.stderr  # loaded at 2048 -> the ps check agrees
 
 
 def test_missing_chat_model_loads_at_8192(rig):
@@ -266,7 +267,7 @@ def test_both_missing_loads_both_and_second_run_is_idempotent(rig):
     assert first.returncode == 0, first.stdout + first.stderr
     assert [c[1] for c in _loads(rig.calls())] == [CHAT, EMBED]
     assert [c[2:6] for c in _loads(rig.calls())] == [["-c", "8192", "--gpu", "max"],
-                                                    ["-c", "4096", "--gpu", "max"]]
+                                                    ["-c", "2048", "--gpu", "max"]]
     second = rig.run()
     assert second.returncode == 0
     assert "nothing to load" in second.stdout
@@ -314,8 +315,8 @@ def test_cli_absent_stops_with_instructions(rig):
     out = rig.run(lms=False)
     assert out.returncode == 1
     assert "lms CLI was not found" in out.stderr
-    assert f"lms load {EMBED} -c 4096 --gpu max" in out.stderr
-    assert f"{EMBED} 4096" in out.stderr  # the LM Studio app hint names its own context
+    assert f"lms load {EMBED} -c 2048 --gpu max" in out.stderr
+    assert f"{EMBED} 2048" in out.stderr  # the LM Studio app hint names its own context
     assert "LMS_CLI" in out.stderr
 
 
@@ -584,7 +585,7 @@ def test_garbage_status_line_is_cut_off_or_malformed(rig):
 # ── K-099: the embedder's real context, checked advisorily via `lms ps --json` ─────────
 
 @pytest.mark.parametrize(("ps_ctx", "effect"), [
-    (8192, "only costs VRAM"), (2048, "first 2048 tokens"),
+    (8192, "only costs VRAM"), (4096, "only costs VRAM"), (1024, "first 1024 tokens"),
 ])
 def test_resident_embedder_at_another_context_warns_and_is_never_reloaded(rig, ps_ctx, effect):
     # The contract "never unloads or reloads" holds for the embedder too: a mismatch
@@ -592,17 +593,17 @@ def test_resident_embedder_at_another_context_warns_and_is_never_reloaded(rig, p
     rig.set_models(_catalog(chat=8192, embed=2048, embed_ps=ps_ctx))
     out = rig.run()
     assert out.returncode == 0, out.stdout + out.stderr
-    assert f"loaded with context {ps_ctx}, not 4096" in out.stderr and effect in out.stderr
-    assert f"lms unload {EMBED} && lms load {EMBED} -c 4096" in out.stderr  # told, not done
+    assert f"loaded with context {ps_ctx}, not 2048" in out.stderr and effect in out.stderr
+    assert f"lms unload {EMBED} && lms load {EMBED} -c 2048" in out.stderr  # told, not done
     assert _mutating(rig.calls()) == []
     assert rig.calls() == [["ps", "--json"]]
 
 
-def test_resident_embedder_at_4096_passes_quietly(rig):
-    rig.set_models(_catalog(chat=8192, embed=2048, embed_ps=4096))
+def test_resident_embedder_at_2048_passes_quietly(rig):
+    rig.set_models(_catalog(chat=8192, embed=2048, embed_ps=2048))
     out = rig.run()
     assert out.returncode == 0, out.stdout + out.stderr
-    assert "embedder context 4096" in out.stdout and "WARNING" not in out.stderr
+    assert "embedder context 2048" in out.stdout and "WARNING" not in out.stderr
 
 
 def test_embedder_context_unchecked_without_cli_is_a_note_not_a_refusal(rig):
@@ -627,7 +628,7 @@ def test_post_load_path_warns_on_a_resident_embedder_at_8192(rig):
     out = rig.run()
     assert out.returncode == 0, out.stdout + out.stderr
     assert [c[1] for c in _loads(rig.calls())] == [CHAT] and _unloads(rig.calls()) == []
-    assert "loaded with context 8192, not 4096" in out.stderr
+    assert "loaded with context 8192, not 2048" in out.stderr
 
 
 def test_manual_instructions_name_each_models_own_context(rig):
@@ -635,8 +636,8 @@ def test_manual_instructions_name_each_models_own_context(rig):
     out = rig.run(lms=False)
     assert out.returncode == 1
     assert f"lms load {CHAT} -c 8192 --gpu max" in out.stderr
-    assert f"lms load {EMBED} -c 4096 --gpu max" in out.stderr
-    assert f"{CHAT} 8192" in out.stderr and f"{EMBED} 4096" in out.stderr
+    assert f"lms load {EMBED} -c 2048 --gpu max" in out.stderr
+    assert f"{CHAT} 8192" in out.stderr and f"{EMBED} 2048" in out.stderr
 
 
 def test_bad_lms_cli_on_the_noop_path_is_a_note_not_a_refusal(rig, tmp_path):
@@ -664,7 +665,7 @@ def test_not_exactly_one_embedder_instance_is_a_note_not_a_verdict(rig, instance
     assert f"lists {len(instances)} instance(s)" in out.stdout and "WARNING" not in out.stderr
 
 
-@pytest.mark.parametrize("ctx", [None, "4096", True])
+@pytest.mark.parametrize("ctx", [None, "2048", True])
 def test_non_integer_embedder_context_is_a_note_not_a_verdict(rig, ctx):
     rig.set_models(_catalog(chat=8192, embed=2048))
     _stub_lms_ps(rig, [{"identifier": EMBED, "contextLength": ctx}])

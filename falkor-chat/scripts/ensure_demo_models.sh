@@ -15,8 +15,10 @@
 #     :8200 agent-team server may be using), or the chat model is loaded with a
 #     context other than 8192 — it never unloads or reloads anything;
 #   - loads whichever demo model is missing, each at its own context: `lms load <id>
-#     -c <ctx> --gpu max --identifier <id> -y`, ctx 8192 for the chat model and 4096
-#     for the embedder (it embeds one text at a time — K-099), then re-reads the API
+#     -c <ctx> --gpu max --identifier <id> -y`, ctx 8192 for the chat model and 2048
+#     for the embedder (it embeds one text at a time; 2048 fits every document chunk and
+#     stored message, longer ones are left to K-100 chunking — K-099 and
+#     docs/test-reports/embedder-context-report.md), then re-reads the API
 #     to confirm (waiting up to 30 s while a just-loaded model still reports `loading`;
 #     ENSURE_DEMO_MODELS_SETTLE_S / _INTERVAL_S override it for tests; a value that
 #     isn't a finite number of seconds — > 0 for the interval, >= 0 for the wait — is
@@ -24,7 +26,7 @@
 #   - does nothing when both are already loaded (idempotent; no CLI needed);
 #   - then, on success, checks the embedder's real context with `lms ps --json` (the
 #     API misreports it as 2048) and only WARNS, with the reload command, when it isn't
-#     4096 — the embedder is shared with the :8200 agent-team server, so a mismatch is
+#     2048 — the embedder is shared with the :8200 agent-team server, so a mismatch is
 #     never a refusal or a reload. No CLI -> a "not checked" note.
 # GPU offload is not observable — see scripts/ensure_demo_models.py's docstring.
 #

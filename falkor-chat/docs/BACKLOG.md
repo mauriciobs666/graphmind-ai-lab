@@ -73,7 +73,7 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > The embedder sees one text at a time, so it needs only the longest single input. Inputs measured
 > 2026-10-31: `ws:agent-team` chunks max 1,139 chars (avg 694, ~300–400 tokens; the chunker caps
 > them at ~1,000 + 150 overlap), `ws:acme` messages max 1,817 chars; REST messages are capped at
-> `MAX_TEXT_LEN` = 8,000 chars (~2,000–2,700 tokens). So 2048 fits documents and 4096 fits
+> `MAX_TEXT_LEN` = 8,000 chars (~2,000–2,900 tokens; URL-dense text is the high end). So 2048 fits documents and 4096 fits
 > REST-capped messages. **The gap:** MCP `send_message` → `services.post_message` enforces no length
 > cap (unlike `ingest_document`, which re-checks `MAX_DOCUMENT_CHARS`), so an agent post can exceed
 > any context. Unverified: whether LM Studio truncates or rejects an over-context embed; a rejection
@@ -81,25 +81,30 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > fit report (`docs/test-reports/salesperson-single-model-fit-report.md`) shows ~2.1 GiB dedicated
 > for the embedder process (~0.6 GB weights) and ~1.6 GiB of ministral paged out whenever it runs;
 > a smaller embedder context may shrink that, unmeasured. **Decided (stakeholder, 2026-10-31):**
-> the embedder loads at **4096** — it covers every REST-capped message, not only document chunks;
-> the chat model stays at 8192. Remaining: (1) probe LM Studio's over-context embed behavior;
-> (2) load the embedder at 4096 (its own context in `ensure_demo_models.py`, not the chat model's);
+> the embedder loads at **2048** (reverses the same day's 4096 decision after the same-day A/B in
+> `docs/test-reports/embedder-context-report.md`: −352 MiB vs 4096, ministral paging −35%); a
+> message longer than the window is covered by chunking (K-100, widened to every message); the
+> chat model stays at 8192. Remaining: (1) probe LM Studio's over-context embed behavior;
+> (2) load the embedder at 2048 (its own context in `ensure_demo_models.py`, not the chat model's);
 > (3) enforce `MAX_TEXT_LEN` on MCP `send_message` as REST does; (4) re-measure VRAM and paging
 > against the fit report.
 - **Owner:** `devops` (1, 2, 4) and `coder` (3).
-- **Test strategy:** `lms ps --json` shows the embedder at 4096 and ministral at 8192; an over-length MCP
+- **Test strategy:** `lms ps --json` shows the embedder at 2048 and ministral at 8192; an over-length MCP
   `send_message` is rejected like REST's 422; the fit report's VRAM/paging measurement repeated.
 
-### K-100 — A long agent reply is embedded by its head only; chunk it rather than cap it (🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31)
+### K-100 — A message longer than the embedder's window is embedded by its head only; chunk it rather than cap it (🔵 proposed — `docs/reviews/embedder-context.md` Pass 2 Q5, 2026-10-31)
 
 > Agent/LLM replies write through `Services.post_agent_answer` (responder, workflow `post_message`
 > tool), which K-099's `MAX_TEXT_LEN` cap deliberately does not touch; the responder self-embeds its
 > answer. LM Studio silently truncates an over-context embed to its leading tokens
-> (`docs/test-reports/embedder-context-report.md`), so a reply past ~4,096 tokens is stored whole and
+> (`docs/test-reports/embedder-context-report.md`), so a message past the embedder's ~2,048-token window is stored whole and
 > full-text-searchable but its vector covers only the head — semantic/hybrid search misses the tail.
-> **Decided (stakeholder, 2026-10-31):** don't cap a model's reply; chunk it for embedding instead.
-> Open: how a multi-vector message ranks in message search (one hit per message, not per chunk), and
-> whether the chunker already used for documents is reused.
+> **Decided (stakeholder, 2026-10-31):** don't cap a model's reply; chunk it for embedding instead —
+> and, with the embedder at 2048 (K-099), chunk **every** message longer than the embedder's window
+> (human, agent and AI replies), not only AI replies. At 2048 the window holds ~9.7k chars of prose
+> but only ~5.7k of URL-dense text, so a `MAX_TEXT_LEN` (8,000) message can exceed it. Open: how a
+> multi-vector message ranks in message search (one hit per message, not per chunk), and whether the
+> chunker already used for documents is reused.
 - **Owner:** `architect` (design), then an implementer.
 
 ### K-101 — REST input bounds are not enforced on the MCP/service paths (🟡 in-progress — RCA `docs/reviews/mcp-input-bounds-rca.md`, 2026-10-31; absorbs K-074)

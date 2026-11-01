@@ -383,7 +383,77 @@ silently. **Fix:** add `split` to the existing `pytest.raises(..., match=...)` i
 
 Nothing new to report.
 
+## Pass 5 — embedder at 2048
+
+**Verdict: approve with suggestions.** The script, the tests, `AGENTS.md` and the
+`MessageTooLongError` docstring are correct. Two documents still state 4096 claims that this
+change makes stale (P5-1).
+- I grepped the three permitted files for FalkorDB fixtures and found none. They pass: **86**.
+- Mutants ran on a copy of `ensure_demo_models.py`, restored afterwards, with the file touched and
+  `__pycache__` cleared. sha256 identical before and after (`86f9d69d…`).
+- I did not touch LM Studio.
+
+Stakeholder answer folded in: the embedder loads at 4096 → **2048** (2026-10-31). A message longer
+than the window goes to K-100 chunking.
+
+1. **The rationale matches the measurements.** I re-derived each number from the report's 2048
+   tables:
+   - Embedder VRAM while active: 1377 − 1025 = **352 MiB** (−25.6%). The script says "~350 MiB" ✓.
+   - Ministral paging: 960 → 610 and 956 → 636, which is −350 / −320 MiB, or −36.5% / −33.5%. The
+     script's "~35%" ✓. The report's "−34–36%" rounds slightly inward.
+   - Cut points: 9,681 / 7,960 / 5,733 chars. The script's ~9.7k / ~8.0k / ~5.7k ✓.
+   - `services.py:246-256`, the `MessageTooLongError` docstring only: the embedder at 2048 tokens,
+     a dense `MAX_TEXT_LEN` message can exceed it, the head is embedded, chunking is K-100 ✓.
+2. **The literal-2048 pins go red on drift.**
+   - I planted `EMBED_CONTEXT_LENGTH = 4096`: **9 failed**.
+   - New: 2048 now equals the API's embedder misreport. A regression that trusted the API instead
+     of `lms ps` would confirm itself in production. I planted `ctx = want` in place of the `ps`
+     value: **7 failed**. The tests still tell the two apart, because the warn cases use `ps`
+     contexts other than 2048 (8192/4096/1024).
+3. **Unbounded sweep: two stale claims remain.** I grepped the whole repo for `4096` and `4,096`
+   (excluding `.git`, `.venv` and `deprecated/`) and mapped every hit (Appendix). The two stale
+   hits are P5-1.
+4. **`AGENTS.md` is within the convention.** The row and the paragraph clause each swapped one
+   token in place. The word count stays at 2,812, and no new line exceeds 700 chars (only lines
+   87-88 do, and they predate this change).
+
+**P5-1 (minor, verified by grep) — two documents still state 4096 claims.**
+- `falkor-chat/docs/BACKLOG.md:100` (K-100): "a reply past ~4,096 tokens is stored whole … its
+  vector covers only the head". At 2048, that threshold is ~2,048 tokens.
+  - In the same file, K-099's "`MAX_TEXT_LEN` = 8,000 chars (~2,000–2,700 tokens)" (line 76) is
+    contradicted by the measured URL-dense cut. 5,733 chars filled 2048 tokens, so 8,000 such
+    chars is about 2,860 tokens.
+  - Owner: `teco`.
+- `falkor-chat/docs/test-reports/embedder-context-report.md:292-294`: "It is a measurement only:
+  `EMBED_CONTEXT_LENGTH` stays 4096". This is present tense, and the report's own "Adopted value"
+  line now contradicts it. Make it past tense ("stayed 4096 during this run"). Owner: `devops`.
+
+**P5-2 (nit) — the script comment's "every message stored today" is wider than what was measured.**
+`ensure_demo_models.py:95-96` says 2048 "fits every document chunk and every message stored
+today". The measurement covered only `ws:acme` messages (max 1,817) and `ws:agent-team` chunks
+(max 1,139). Say "every input measured 2026-10-31" instead.
+
 ## Appendix
+
+**Pass 5 sweep map** (`grep -rn '4096\|4,096'`, unbounded; every hit file → owner or ruling).
+- **Stale, P5-1:** `falkor-chat/docs/BACKLOG.md:100`; `embedder-context-report.md:292-294`.
+- **Correct as history:**
+  - the rest of `embedder-context-report.md` (the 4096 A/B arm and the restore tables);
+  - `embedder-context-coordination.md` (ledger rows);
+  - `BACKLOG.md:76,84-85` (the original estimate and the reversal statement);
+  - this review.
+- **Correct test fixtures:** `test_ensure_demo_models_script.py:110` (the stub's no-`-c` default
+  stands in for LM Studio's own default), `:299-412` (chat-model-at-4096 refusal cases) and `:588`
+  (the warn parametrization). `docs/reviews/demo-model-ensure.md:40` describes those cases.
+- **A different 4096, no change:**
+  - the FalkorDB 4096-byte UNIQUE limit: `schemas.py:101-104`, `services.py:1690`,
+    `test_services.py:2614`, `unique-constraint-oversized-value-crash-rca.md`,
+    `oversized-indexed-property-guard-*.md`, `claude/graph-dba/falkordb-quirks.md`;
+  - chat-model contexts: `local-model-ram-budget-ml.md:215`, `opencode/docs/manuals/local-llm.md`;
+  - embedding vectors and numerics: `*.embeddings.json`, `model-bench/**`, `capacity-report.md`,
+    the `archive/` plans, `docs/plans/connected-code-graph-*`, `claude/docs/plans/coordination-graph*`,
+    `docs/reviews/connected-code-graph-p0-impl.md`, `test_retry.py`, `extract-transient-retry.md`,
+    `salesperson-cart-product-id-rca.md`.
 
 **Pass 2 kill probe** (`scratchpad/t/test_probe_p2.py`, imports the shipped `rig` fixture). On the shipped
 code it gives 2 passed. Results under each mutant:

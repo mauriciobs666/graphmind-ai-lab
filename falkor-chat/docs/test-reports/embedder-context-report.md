@@ -290,7 +290,7 @@ Throughput, with the same prompts (6371–6376 tokens) as the 4096 arm:
 ### Same-day follow-up: embedder at 2048
 
 This run answers the stakeholder question "can we try with 2048?" (2026-10-31). It is a
-measurement only: `EMBED_CONTEXT_LENGTH` stays 4096. The sequence, instruments and prompts are the
+measurement only: `EMBED_CONTEXT_LENGTH` stayed 4096 during this run (2048 was adopted afterwards — see the Headline). The sequence, instruments and prompts are the
 same as the other two runs, and ministral was reloaded fresh first.
 
 | step | `lms ps --json` (identifier: contextLength) |
@@ -402,6 +402,8 @@ Sources:
   instrument and method carried over.
 
 ### Headline
+
+**Adopted value: the embedder loads at 2048** (stakeholder, 2026-10-31, after the 2048 follow-up below; a longer message is left to K-100 chunking).
 
 **Yes. Loading the embedder at 4096 reduced both, but did not remove the oversubscription.**
 These are same-day A/B figures on the same box, runtime and prompts.

@@ -249,9 +249,10 @@ class MessageTooLongError(ServiceError):
     Same posture as `DocumentTooLargeError`: enforced in the service, not only
     at the REST pydantic boundary (`PostMessageIn.text = Field(max_length=
     MAX_TEXT_LEN)`, a 422 there), so every front door into `post_message` is
-    bound by the same cap whatever its own schema declares. The cap also
-    bounds what reaches the embedder, which is loaded at a context sized for
-    a `MAX_TEXT_LEN` message.
+    bound by the same cap whatever its own schema declares. The cap bounds
+    what reaches the embedder but does not make it fit: the embedder loads at
+    2048 tokens (K-099), which a dense `MAX_TEXT_LEN` message can exceed — LM
+    Studio then silently embeds only its head; chunking is K-100.
     """
 
 

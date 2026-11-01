@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `teco` · **Tracks:** K-099, K-101
 
-Scope and the stakeholder decision (embedder at 4096, chat model stays 8192) live in
+Scope and the stakeholder decision (embedder at 2048 — reversed from 4096 the same day — chat model stays 8192) live in
 `falkor-chat/docs/BACKLOG.md` K-099; this ledger only tracks units.
 
 ## Units
@@ -14,8 +14,9 @@ Scope and the stakeholder decision (embedder at 4096, chat model stays 8192) liv
 | U3 — re-measure VRAM/paging vs `docs/test-reports/salesperson-single-model-fit-report.md` | `devops` | `a6e53d08434c67adf` (resumed) | accepted — same-day A/B: embedder −753 MiB dedicated, ministral paging −738 MiB; teco cross-checked headline figures against raw phase logs + fit report | `docs/test-reports/embedder-context-report.md` | — (measurement) | — |
 | U5 — RCA: REST bounds not enforced on MCP/service paths (K-101) | `analyst` | `ae01eb536bc013c11` | accepted | `docs/reviews/mcp-input-bounds-rca.md` | — (RCA; teco spot-checked root-cause commit, SERVER.md:1074 claim, 7 over-200 titles) | 182k tok / 60 tools |
 | U6a — K-101 parity test + service checks (incl. whitespace reject, K-074) | `tdd-engineer` | `a5742b9891ed4ef62` | accepted (Pass 2 approve w/ suggestions; P2-1/P2-2 carried into U6b) | `server/falkorchat/{services,storefront_api}.py` + tests incl. new `test_input_bound_parity.py` | `analyst` (`acca5992382a000e3`) → approve w/ suggestions, `docs/reviews/mcp-input-bounds.md` Pass 1 (P1-1 major) → Pass 2 approve w/ suggestions (P2-1 minor: `propertyNames` unwalked; P2-2 nit: twin prefix match); full suite 3574 passed (teco, solo) | 281k tok / 115 tools (cumulative — U6b goes to a fresh dispatch) |
-| U6b — K-101 MCP `Annotated` tool-signature bounds + review P2-1 (closed-world collector) / P2-2 | `tdd-engineer` | `ac40cbad3a000d415` | in-flight | code + tests | `analyst` → — | — |
+| U6b — K-101 MCP `Annotated` tool-signature bounds + review P2-1 (closed-world collector) / P2-2 | `tdd-engineer` | `ac40cbad3a000d415` | in-flight (Pass 3 approve w/ suggestions: P3-1/P3-2 nits; walker class closed after P3-2) | code + tests | `analyst` → — | — |
 | U3b — same-day 2048 measurement + cutoff (stakeholder ask 2026-10-31; decision input, no script change) | `devops` | `a6e53d08434c67adf` (resumed) | accepted — 2048 vs 4096: embedder −352 MiB, paging −35%; cut at 2048: prose 9,681 / code 7,960 / URL-heavy 5,733 chars; teco cross-checked against raw logs | `docs/test-reports/embedder-context-report.md` | — (measurement) | 209k tok / 84 tools (cumulative) |
+| U1b — switch embedder to 2048 (stakeholder decision 2026-10-31, reverses 4096) | `devops` | `a6e53d08434c67adf` (resumed) | accepted (Pass 5 approve w/ suggestions; P5-1/P5-2 text fixes applied by teco) | script + tests + `AGENTS.md` + report headline; live embedder at 2048 (loaded by hand — script refused, qwen resident; ~21 s embedder gap 22:04:18–39) | `analyst` → — | 231k tok / 107 tools (cumulative — next devops work goes fresh) |
 | U4 — feature close: SERVER.md MCP surface update, impl check, HISTORY | implementer / `analyst` | — | queued | `docs/reviews/embedder-context-impl.md` | `analyst` → — | — |
 
 ## Documentation impact
@@ -36,3 +37,5 @@ Scope and the stakeholder decision (embedder at 4096, chat model stays 8192) liv
 - 2026-10-31 stakeholder: K-101 fixes the full class and absorbs K-074; whitespace-only message text rejected on every front door (REST 201 → 400). K-100 (chunk long agent replies) filed, not in this coordination.
 - Feature close (U4) must apply `docs/reviews/mcp-input-bounds.md` Pass 1's proposed root `REVIEW.md` addition (schema-walking guards tested per composition axis) verbatim, plus SERVER.md items it lists beyond RCA §6 (§1.4 REST row for POST messages, §1.4 Bounds non-blank text + the pre-existing false `{mid}` cap claim, §2.2 malformed-item bullet).
 - 2026-10-31: U6a committed `16f76f46` after teco's solo full suite (3574 passed); `reference` re-seeded by `devops` (`ad9904cbed4a9a6fe`), 11/11 exit 0.
+- 2026-10-31 stakeholder: embedder at **2048** (reverses 4096); K-100 widened to chunk every message over the window. `MessageTooLongError` docstring in `services.py` corrected by teco (trivial, comment-only), committed with U1b.
+- Follow-up for report: `ws:agent-team` holds 11 `failed` documents with unembedded chunks (oldest 2026-10-24, latest 2026-10-31 21:38 — before U1b's embedder gap, so not caused by it); pre-existing, out of scope.
