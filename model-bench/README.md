@@ -198,14 +198,19 @@ candidate: its fit-manifest leakage line, how many candidates already ran on thi
 its fit outcome. Per replicate: `handoffShare`, `decisionCallFailures` and `overLimit`; the scored
 eval n beside FR-11's 200, with every drop counted; the four FR-1 parity cells, each with its
 detectable difference, method minimum and `overLimit`; the FR-2 speed-up ratio; and the side
-check, which does not affect pass/fail. Then the replicates' disagreement and one overall state
-per bar: `met` needs every replicate met and two fresh loads of the decision model. A replicate
-whose model was already resident is not a load, and one whose load changed mid-run prints `not
-assessable`. Unless the incumbent, every replicate and the pack on disk share one content hash,
-every bar prints `not assessable (arms ran on different pack content: …)`: like an off-pin
-timeout, that is a property of stored records, so the report states it rather than refusing. The
-candidates line counts valid records only, and says how many invalid ones it left out. The
-generic tables below cover the chat arm alone. Exit codes are unchanged.
+check, which does not affect pass/fail. On a new-ability pack (FR-10, one arm: no incumbent; a
+chat arm is a reference whose results no bar reads, though its timeout and pack content still
+apply) a replicate adds `handoffCallFailures`, then each true answer's agreement `k/n` with its
+per-class Wilson interval, method minimum and `overLimit` — every class must reach 0.90, and one
+with no scored item is `not assessable` — and the mean latency against 350 ms. Then the
+replicates' disagreement and one overall state per bar: `met` needs every replicate met and two
+fresh loads of the decision model. A replicate whose model was already resident is not a load, and
+one whose load changed mid-run prints `not assessable`. Unless the chat arm (incumbent or
+reference), every replicate and the pack on disk share one content hash, every bar prints `not
+assessable (arms ran on different pack content: …)`: like an off-pin timeout, that is a property of
+stored records, so the report states it rather than refusing. The candidates line counts valid
+records only, and says how many invalid ones it left out. The generic tables below cover the chat
+arm alone. Exit codes are unchanged.
 
 **Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints

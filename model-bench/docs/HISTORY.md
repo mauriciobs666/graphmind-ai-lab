@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U4.3 — the FR-10 bar section
+
+**What:** plan v1.3 §3.6 (the new-ability bar, AC-12/AC-15), plan2 §3.6 (per-replicate FR-10
+lines, `not assessable`, the class minimum, the disagreement line), plan3 §3.6 (per-class
+`overLimit`), and the U4.3 carried items in `docs/plans/typed-decision-models-coordination.md`.
+`report.py` only; no vector changed.
+
+- **FR-10 per replicate** (`report._render_fr10_replicate`): `handoffShare`,
+  `decisionCallFailures`, `handoffCallFailures`, `overLimit`; the scored eval n beside FR-11's 200
+  with `agreement_items`' drops; per class `k/n <unit>` with Wilson (`per-class 95% Wilson, not
+  simultaneous`) and its own `met`/`not met` from `bar_holds(k/n, 0.90, "at-least")`, then `scored
+  n … beside method minimum 52 (design 60)` (below it: printed, never refused) and `overLimit k/n`,
+  `0/n` included; the replicate's state; the mean latency (note §Q4.2's bootstrap) against
+  `bar_holds(ȳ, 350, "at-most")`. Overall lines `FR-10 per-class agreement` and `FR-10 mean
+  latency` via `combine_replicates`. The unit noun comes from the role's unit kind (P21-n1).
+- **Replicate state:** scored n < 200 → `not assessable (scored n < 200)`; else any class `not met`
+  → `not met`; else a class with no scored item → `not assessable (no scored eval item in
+  <class>)`; else `met`. **Judgement call (n = 0):** an empty class has no measured value, so it is
+  not assessable (FR-11a); it can never count as met (FR-10 needs every class, note §Q5.1), but a
+  missed class still decides `not met`, since the conjunction is then false either way — the same
+  precedence `combine_replicates` applies across replicates.
+- **Blocking above the bar-kind split** (Pass 18 carry): `report._comparison_block` decides the
+  off-pin timeout and pack-content states before the per-kind section, so FR-10 gets them. The
+  no-incumbent and inconsistent-incumbent states stay speed-up only: FR-10 is single-arm, and a
+  new-ability chat arm is U7's reference run, named in a `Reference chat arm:` line. No bar reads
+  its results, but its timeout and pack content still block every FR-10 bar, which can only
+  withhold a verdict (teco's call on impl review P23-m2).
+- **Disagreement line on new abilities** (`report._answer_agreement`), per the data-scientist's
+  ruling: withheld on either side excluded and counted one- or two-sided; a failed call on either
+  side excluded and counted as a failure (never decided on `answer is None`); otherwise `k/n` on
+  `detail.answer` with Wilson, `None` vs `None` agreeing and counted as `no label in both`
+  (message type only); `decidedBy` over the same n. The guard's line is unchanged.
+- **Seam for U3e.2:** `report._fr10_class_interval(k, n, *, design_effect)` computes
+  `wilson_interval(k/DE, n/DE)`; today its one call site passes `run.designEffect` (1.0).
+
+**Tests:** `tests/test_decision_bar_fr10.py` (23), through `cli compare` on real `run_pack`
+records re-scored by the real `agreement` scorer: AC-15 (always-no on 60/140: `agreeWhenYes` 0/60,
+not met), exactly 0.90 per class met and 53/60 unstable, note §Q5.4 with the note's Wilson column
+and `items`, per-class `overLimit` and the class minimum, the empty class, scored n 199, latency
+350/351 ms, the latency interval over skewed per-item `ms` against the `pack.json` seed and
+`stats.mean_bootstrap_interval` over `itemId`-sorted values (P23-m1),
+assumed/one-load/unreadable/inconsistent replicates, both comparison-wide blocks, the reference
+chat arm, a reference arm on other pack content blocking every FR-10 bar (P23-m2), the ruling's
+7-item fixture (2/5, no label in both 2, failures 1, one-sided withholds 1), the join-in
+parse-failure `False` agreeing, and the Wilson seam. Suite 3429 passed, 5 deselected, 2 xfailed
+(3406 before); ruff clean. 20 mutants on a private copy, each red (counts in the unit's report);
+after impl review Pass 23, latency seed → 0, latency values reversed and the reference arm left
+out of the content block each go red on one test. README: the bar-section paragraph gains the
+new-ability side. AGENTS: one entry rewritten in place (2,485 → 2,482 words).
+
 ## 2026-11-01 — typed-decision-models U4.2 — the agreement scorer
 
 **What:** plan v1.3 §3.6 (the agreement scorer), plan2 §3.3 (fail-closed scoring), plan3 §4 U4

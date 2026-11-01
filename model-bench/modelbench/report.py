@@ -2164,9 +2164,32 @@ def _fr2_state(paired: decision_stats.PairedItems, ratio: float | None) -> str:
 
 
 class _ReplicateBars(NamedTuple):
+    """One replicate's block and its two bar states: FR-1 and FR-2 on a speed-up point, FR-10's
+    per-class agreement and mean latency on a new-ability point (plan2 §3.6)."""
+
     lines: list[str]
-    fr1: str
-    fr2: str
+    quality: str
+    latency: str
+
+
+#: Each bar kind's two bars, as the per-replicate and overall lines name them (plan2 §3.6).
+_BAR_NAMES: Mapping[str, tuple[str, str]] = {
+    "speed-up": ("FR-1 parity", "FR-2 speed-up"),
+    "new-ability": ("FR-10 per-class agreement", "FR-10 mean latency"),
+}
+
+
+def _replicate_head(index: int, run: RunResult, kind: str, counts: Sequence[str]) -> list[str]:
+    """A replicate's heading, its same-load line and its exploratory counts (plan2 §3.6; plan3
+    §3.6: `overLimit k/n` beside the others, `0/n` included)."""
+    suffix = ", not counted as a load" if kind == "same-load" else ""
+    lines = [f"#### replicate {index} — run `{run.runId}`, basis {run.basis}{suffix}", ""]
+    if kind == "same-load":
+        lines.append(
+            f"- replicate {index}: same load as an earlier run — not counted as a load"
+        )
+    lines.append("- " + " · ".join(_count_cell(run, name) for name in counts))
+    return lines
 
 
 def _render_replicate(
@@ -2183,17 +2206,8 @@ def _render_replicate(
     """Plan2 §3.6's per-replicate block (with plan3 §3.6's `overLimit` prints). `blocked` is a
     comparison-wide `not assessable (…)` state (no incumbent, chat timeout ≠ 180 s, arms on
     different pack content — which, like an inconsistent arm, leaves nothing to pair)."""
-    suffix = ", not counted as a load" if kind == "same-load" else ""
-    lines = [f"#### replicate {index} — run `{run.runId}`, basis {run.basis}{suffix}", ""]
-    if kind == "same-load":
-        lines.append(
-            f"- replicate {index}: same load as an earlier run — not counted as a load"
-        )
-    lines.append(
-        "- "
-        + " · ".join(
-            _count_cell(run, name) for name in ("handoffShare", "decisionCallFailures", "overLimit")
-        )
+    lines = _replicate_head(
+        index, run, kind, ("handoffShare", "decisionCallFailures", "overLimit")
     )
     state = decision_stats.LOAD_CHANGED if kind == "assumed" else blocked
     if _aggregate_item_mismatches(run, pack):
@@ -2310,10 +2324,233 @@ def _disagreement_line(first: tuple[int, RunResult], other: tuple[int, RunResult
     )
 
 
+# --- the new-ability side: FR-10 (v1.3 §3.6; plan2 §3.6; plan3 §3.6; note §Q4.2, §Q5, §Q6) ----
+
+#: Note §Q1.3: an FR-10 class's design size, printed beside `FR10_CLASS_METHOD_MIN` (plan2 §3.6
+#: "method minimum 52 (design 60)").
+_FR10_CLASS_DESIGN_N = 60
+_FR10_INTERVAL = "per-class 95% Wilson, not simultaneous"
+#: A class with no scored eval item has no measured value, so its bar cannot be judged (FR-11a).
+#: It never counts as met — FR-10 needs every class (note §Q5.1) — and a `not met` class still
+#: decides the replicate, because the conjunction is then false whatever the empty class holds.
+_EMPTY_CLASS = "not assessable (no scored eval item in this class)"
+
+
+def _fr10_class_interval(k: int, n: int, *, design_effect: float) -> tuple[float, float]:
+    """Note §Q5.1's interval: Wilson 95% at the design effect, `k/DE` of `n/DE` (note §Q6). Today
+    every caller passes the run's `designEffect` (1.0); plan4 §3.9's per-class value (U3e.2) is
+    passed here, at the one call site, and nothing else changes."""
+    return stats.wilson_interval(k / design_effect, n / design_effect)
+
+
+def _fr10_class_state(agreed: Sequence[bool]) -> str:
+    """One class's own reading, on its measured `k/n` alone (note §Q5.1, FR-11a)."""
+    if not agreed:
+        return _EMPTY_CLASS
+    met = decisions.bar_holds(
+        sum(agreed) / len(agreed), decisions.FR10_PER_ANSWER_AGREEMENT, direction="at-least"
+    )
+    return decision_stats.MET if met else decision_stats.NOT_MET
+
+
+def _fr10_quality_state(
+    agreement: decision_stats.AgreementItems, class_states: Mapping[str, str]
+) -> str:
+    """Plan2 §3.6 "Bar states" with note §Q4.3 and §Q5.1: a scored eval n below
+    `MIN_EVAL_ITEMS` is `not assessable (scored n < 200)` whatever the classes say; otherwise
+    any class `not met` is `not met`; otherwise a class with no scored item leaves it not
+    assessable; otherwise — every class met — `met`."""
+    if agreement.scored_n < decisions.MIN_EVAL_ITEMS:
+        return decision_stats.SCORED_N_BELOW_MIN
+    if decision_stats.NOT_MET in class_states.values():
+        return decision_stats.NOT_MET
+    empty = [metric for metric, state in class_states.items() if state == _EMPTY_CLASS]
+    if empty:
+        return f"not assessable (no scored eval item in {', '.join(empty)})"
+    return decision_stats.MET
+
+
+def _fr10_latency(
+    agreement: decision_stats.AgreementItems, *, seed: int
+) -> tuple[str, float | None]:
+    """Note §Q4.2's figure, `ȳ` over the scored items in `itemId` order with its bootstrap
+    interval, and the measured `ȳ` (or `None` when none can be computed, and why)."""
+    y = [ms for _, ms in agreement.latency]
+    try:
+        mean = decision_stats.mean_latency(
+            y,
+            seed=seed,
+            B=decision_stats.BOOTSTRAP_B,
+            levels=(stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI),
+        )
+    except ValueError as exc:
+        return f"FR-10 mean latency: no mean over {len(y)} scored eval item(s) ({exc})", None
+    text = (
+        f"FR-10 mean latency: {mean.point:.0f} ms [{mean.lo:.0f}, {mean.hi:.0f}] over {len(y)} "
+        f"scored eval items (percentile bootstrap 95%, B={mean.B}, seed {mean.seed}); the bar "
+        f"is ≤ {decisions.FR10_MEAN_LATENCY_MS_MAX:g} ms on the measured mean"
+    )
+    return text, mean.point
+
+
+def _fr10_latency_state(agreement: decision_stats.AgreementItems, mean: float | None) -> str:
+    if agreement.scored_n < decisions.MIN_EVAL_ITEMS:
+        return decision_stats.SCORED_N_BELOW_MIN
+    if mean is None:
+        return "not assessable (no mean latency)"
+    met = decisions.bar_holds(mean, decisions.FR10_MEAN_LATENCY_MS_MAX, direction="at-most")
+    return decision_stats.MET if met else decision_stats.NOT_MET
+
+
+def _render_fr10_replicate(
+    index: int,
+    run: RunResult,
+    kind: str,
+    *,
+    blocked: str | None,
+    dp: DecisionPointPack,
+    pack: PackRef,
+) -> _ReplicateBars:
+    """Plan2 §3.6's per-replicate block on a new-ability point: the per-class FR-10 lines with
+    their Wilson intervals and class minimum, `overLimit` per class (plan3 §3.6), and the
+    mean-latency line (note §Q4.2). A single arm: nothing pairs, and `blocked` is a
+    comparison-wide state (chat timeout ≠ 180 s, arms on different pack content)."""
+    lines = _replicate_head(
+        index,
+        run,
+        kind,
+        ("handoffShare", "decisionCallFailures", "handoffCallFailures", "overLimit"),
+    )
+    quality_name, latency_name = _BAR_NAMES["new-ability"]
+    state = decision_stats.LOAD_CHANGED if kind == "assumed" else blocked
+    if _aggregate_item_mismatches(run, pack):
+        state = _REPLICATE_INCONSISTENT
+    different_content = blocked is not None and blocked.startswith(_DIFFERENT_CONTENT)
+    agreement: decision_stats.AgreementItems | None = None
+    if state != _REPLICATE_INCONSISTENT and not different_content:
+        try:
+            agreement = decision_stats.agreement_items(run.items, role=pack.role)
+        except ValueError as exc:
+            state = f"not assessable (cannot read this replicate's items: {exc})"
+    if agreement is None:
+        reason = state or blocked or _REPLICATE_INCONSISTENT
+        lines += [
+            f"- {quality_name} (replicate {index}): {reason}",
+            f"- {latency_name} (replicate {index}): {reason}",
+        ]
+        return _ReplicateBars(lines + [""], reason, reason)
+
+    noun = _SAMPLE_NOUN[unit_kind_for_role(pack.role)]
+    class_states = {m: _fr10_class_state(agreed) for m, agreed in agreement.outcomes.items()}
+    quality = state or _fr10_quality_state(agreement, class_states)
+    latency_text, mean = _fr10_latency(agreement, seed=pack.seed)
+    latency = state or _fr10_latency_state(agreement, mean)
+    lines += [
+        f"- scored eval n: {agreement.scored_n} of the pack's {dp.eval_count} eval {noun}, "
+        f"beside FR-11's {decisions.MIN_EVAL_ITEMS}; {_drops_text(agreement.drops)}",
+        f"- {quality_name}, within each true answer (each class ≥ "
+        f"{decisions.FR10_PER_ANSWER_AGREEMENT:g} on its measured value; {_FR10_INTERVAL}):",
+    ]
+    minimum = decision_stats.FR10_CLASS_METHOD_MIN
+    # On a replicate whose state is not its classes' (assumed, blocked, scored n < 200), each class
+    # line ends with that state, never with a `met` the replicate cannot claim.
+    own = state is None and agreement.scored_n >= decisions.MIN_EVAL_ITEMS
+    for metric, agreed in agreement.outcomes.items():
+        k, n = sum(agreed), len(agreed)
+        if n:
+            lo, hi = _fr10_class_interval(k, n, design_effect=run.designEffect)
+            figures = f"{metric}: {k}/{n} {noun} [{lo:.3f}, {hi:.3f}]"
+        else:
+            figures = f"{metric}: 0/0 {noun} [—]"
+        thin = " — below it: printed, never refused" if n < minimum else ""
+        lines += [
+            f"  - {figures} — {class_states[metric] if own else quality}",
+            f"    - scored n {n} beside method minimum {minimum} (design "
+            f"{_FR10_CLASS_DESIGN_N}){thin}; overLimit {agreement.over_limit[metric]}/{n}",
+        ]
+    lines += [
+        f"- {quality_name} (replicate {index}): {quality}",
+        f"- {latency_text} — {latency}",
+        "",
+    ]
+    return _ReplicateBars(lines, quality, latency)
+
+
+class _AnswerAgreement(NamedTuple):
+    """Two new-ability replicates compared item by item (note §Q6's diagnostic; the
+    data-scientist's ruling on plan2 §3.6's disagreement line, ledgered in
+    `docs/plans/typed-decision-models-coordination.md`)."""
+
+    n: int
+    answer_differs: int
+    decided_by_differs: int
+    no_label_in_both: int
+    failures: int
+    one_sided_withholds: int
+    two_sided_withholds: int
+
+
+def _answer_agreement(
+    first: Sequence[ItemResult], other: Sequence[ItemResult]
+) -> _AnswerAgreement:
+    """Over the `itemId`s in both replicates, in this order:
+
+    1. withheld (`withheldFor`) on either side → excluded, counted one- or two-sided;
+    2. a failed call (`detail.failedCall`) on either side → excluded, counted as a failure. Never
+       decided on `answer is None`: message type's fail-closed answer is also `None`;
+    3. otherwise in `n`, differing iff the final answers (`detail.answer`) differ. `None` is a
+       final answer — no label — so `None` vs `None` agrees, counted as no label in both;
+       `decidedBy` is compared over the same `n`."""
+    by_id = {item.itemId: item for item in first}
+    n = answer = decided = no_label = failures = one_sided = two_sided = 0
+    for item in other:
+        mate = by_id.get(item.itemId)
+        if mate is None:
+            continue
+        withheld = [x.timing is not None and x.timing.withheldFor is not None for x in (mate, item)]
+        if all(withheld):
+            two_sided += 1
+            continue
+        if any(withheld):
+            one_sided += 1
+            continue
+        if mate.detail.get("failedCall") or item.detail.get("failedCall"):
+            failures += 1
+            continue
+        n += 1
+        left, right = mate.detail.get("answer"), item.detail.get("answer")
+        answer += left != right
+        no_label += left is None and right is None
+        decided += mate.detail.get("decidedBy") != item.detail.get("decidedBy")
+    return _AnswerAgreement(n, answer, decided, no_label, failures, one_sided, two_sided)
+
+
+def _answer_disagreement_line(
+    first: tuple[int, RunResult], other: tuple[int, RunResult], *, role: str
+) -> str:
+    """Note §Q6's diagnostic on a new-ability point: each `k/n` with Wilson, `no label in both`
+    beside it on a choice point, and the excluded items counted."""
+    (i, a), (j, b) = first, other
+    got = _answer_agreement(a.items, b.items)
+    no_label = (
+        f"; no label in both: {got.no_label_in_both}"
+        if decisions.ANSWER_SPACE_BY_ROLE[role]["type"] == "choice"
+        else ""
+    )
+    return (
+        f"- replicate {j} vs replicate {i}: final answer differs on "
+        f"{_rate_cell(got.answer_differs, got.n)}, decidedBy on "
+        f"{_rate_cell(got.decided_by_differs, got.n)}{no_label}; beside it, failures: "
+        f"{got.failures}, one-sided withholds: {got.one_sided_withholds}, two-sided withholds: "
+        f"{got.two_sided_withholds}"
+    )
+
+
 def _render_candidate_arm(
     key: str,
     group: ReplicateGroup,
     *,
+    bar_kind: str,
     incumbent: RunResult | None,
     blocked: str | None,
     dp: DecisionPointPack,
@@ -2338,17 +2575,21 @@ def _render_candidate_arm(
         f"{first.fingerprint.get('fitQualityTarget')})",
         "",
     ]
-    fr1: list[str] = []
-    fr2: list[str] = []
+    quality: list[str] = []
+    latency: list[str] = []
     inconsistent: list[int] = []
     for index, (run, kind) in enumerate(zip(group.runs, group.kind, strict=True), 1):
-        bars = _render_replicate(
-            index, run, kind, group=group, incumbent=incumbent, blocked=blocked, dp=dp, pack=pack
-        )
+        if bar_kind == "speed-up":
+            bars = _render_replicate(
+                index, run, kind, group=group, incumbent=incumbent, blocked=blocked, dp=dp,
+                pack=pack,
+            )
+        else:
+            bars = _render_fr10_replicate(index, run, kind, blocked=blocked, dp=dp, pack=pack)
         lines += bars.lines
-        fr1.append(bars.fr1)
-        fr2.append(bars.fr2)
-        if bars.fr1 == _REPLICATE_INCONSISTENT:
+        quality.append(bars.quality)
+        latency.append(bars.latency)
+        if bars.quality == _REPLICATE_INCONSISTENT:
             inconsistent.append(index)
 
     lines += ["#### Across the replicates", ""]
@@ -2362,23 +2603,51 @@ def _render_candidate_arm(
             f"- replicate disagreement: {len(counted)} non-assumed replicate(s), nothing to compare"
         )
     for other in counted[1:]:
-        lines.append(_disagreement_line(counted[0], other))
+        if bar_kind == "speed-up":
+            lines.append(_disagreement_line(counted[0], other))
+        else:
+            lines.append(_answer_disagreement_line(counted[0], other, role=pack.role))
     if inconsistent:
         shown = ", ".join(str(i) for i in inconsistent)
         overall_1 = overall_2 = (
             f"not assessable (replicate {shown}: aggregates disagree with items)"
         )
     else:
-        overall_1 = decision_stats.combine_replicates(fr1, group.loadCount)
-        overall_2 = decision_stats.combine_replicates(fr2, group.loadCount)
-    lines += [
-        f"- **FR-1 parity, over {len(group.runs)} replicate(s) ({group.loadCount} load(s)): "
-        f"{overall_1}**",
-        f"- **FR-2 speed-up, over {len(group.runs)} replicate(s) ({group.loadCount} load(s)): "
-        f"{overall_2}**",
-        "",
-    ]
+        overall_1 = decision_stats.combine_replicates(quality, group.loadCount)
+        overall_2 = decision_stats.combine_replicates(latency, group.loadCount)
+    over = f"over {len(group.runs)} replicate(s) ({group.loadCount} load(s))"
+    name_1, name_2 = _BAR_NAMES[bar_kind]
+    lines += [f"- **{name_1}, {over}: {overall_1}**", f"- **{name_2}, {over}: {overall_2}**", ""]
     return lines
+
+
+def _comparison_block(
+    pack: PackRef,
+    dp: DecisionPointPack,
+    *,
+    bar_kind: str | None,
+    incumbent: RunResult | None,
+    replicates: Mapping[str, ReplicateGroup],
+) -> str | None:
+    """The comparison-wide `not assessable (…)` state every bar of every replicate takes, or
+    `None`. Decided before the bar kind's own section, so FR-10 gets it as FR-1/FR-2 do (impl
+    review Pass 18). The incumbent rules are the speed-up kind's alone: FR-10 is single-arm (note
+    §Q4.2, §Q5.1; plan2 §3.6 "New-ability points pair nothing"), and a new-ability chat arm is
+    U7's reference run, whose results no bar reads. Its timeout and pack content still block,
+    which can only withhold a verdict (impl review P23-m2)."""
+    timeouts = {r.requestTimeoutSeconds for g in replicates.values() for r in g.runs}
+    if incumbent is not None:
+        timeouts.add(incumbent.requestTimeoutSeconds)
+    blocked = None
+    if bar_kind == "speed-up":
+        if incumbent is None:
+            blocked = _NO_INCUMBENT
+        elif _aggregate_item_mismatches(incumbent, pack):
+            blocked = _INCUMBENT_INCONSISTENT
+    if any(t != decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS for t in timeouts):
+        blocked = _TIMEOUT_REASON
+    # Last, so it wins: pairing items across two pack contents states nothing (P18-M1).
+    return _pack_content_reason(dp, incumbent, replicates) or blocked
 
 
 def _render_decision_bar(
@@ -2389,27 +2658,27 @@ def _render_decision_bar(
     replicates: Mapping[str, ReplicateGroup],
     invalid_count: int = 0,
 ) -> list[str]:
-    """The bar section, speed-up side (v1.3 §3.6, plan2 §3.6). The new-ability side is U4's.
-    `invalid_count` is the pack's stored records excluded as invalid, which K cannot read."""
+    """The bar section (v1.3 §3.6, plan2 §3.6): FR-1 and FR-2 on a speed-up point, FR-10 on a
+    new-ability one. `incumbent` is the comparison's one chat arm — the incumbent on a speed-up
+    point, U7's hand-off-LLM reference run on a new-ability one. `invalid_count` is the pack's
+    stored records excluded as invalid, which K cannot read."""
     lines = ["## Requirement bar", "", _BAR_NOTE, ""]
-    if decisions.BAR_KIND_BY_ROLE.get(pack.role) != "speed-up":
-        return lines + [
-            f"Role `{pack.role}` has no speed-up bar; its FR-10 bar is not built yet.",
+    bar_kind = decisions.BAR_KIND_BY_ROLE.get(pack.role)
+    blocked = _comparison_block(
+        pack, dp, bar_kind=bar_kind, incumbent=incumbent, replicates=replicates
+    )
+    if bar_kind not in _BAR_NAMES:
+        return lines + [f"Role `{pack.role}` has no requirement bar.", ""]
+    if bar_kind == "new-ability":
+        reference = (
+            f"`{incumbent.armKey}` — run `{incumbent.runId}`" if incumbent is not None else "none"
+        )
+        lines += [
+            f"Reference chat arm: {reference} (FR-10 is single-arm: no incumbent, and no bar "
+            "reads this run's results; its timeout and pack content still apply).",
             "",
         ]
-    timeouts = {r.requestTimeoutSeconds for g in replicates.values() for r in g.runs}
-    if incumbent is not None:
-        timeouts.add(incumbent.requestTimeoutSeconds)
-    blocked = None
-    if incumbent is None:
-        blocked = _NO_INCUMBENT
-    elif _aggregate_item_mismatches(incumbent, pack):
-        blocked = _INCUMBENT_INCONSISTENT
-    if any(t != decisions.DECISION_POINT_CHAT_TIMEOUT_SECONDS for t in timeouts):
-        blocked = _TIMEOUT_REASON
-    # Last, so it wins: pairing items across two pack contents states nothing (P18-M1).
-    blocked = _pack_content_reason(dp, incumbent, replicates) or blocked
-    if incumbent is not None:
+    elif incumbent is not None:
         lines += [f"Incumbent: `{incumbent.armKey}` — run `{incumbent.runId}`.", ""]
     else:
         lines += [f"Incumbent: none in this comparison (the pack names `{dp.incumbent}`).", ""]
@@ -2419,6 +2688,7 @@ def _render_decision_bar(
         lines += _render_candidate_arm(
             key,
             group,
+            bar_kind=bar_kind,
             incumbent=incumbent,
             blocked=blocked,
             dp=dp,

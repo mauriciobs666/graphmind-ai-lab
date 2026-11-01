@@ -2877,3 +2877,146 @@ design effect are absent, but plan4 §3.9 gives them to U3e.2 explicitly.
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 23 — U4.3 FR-10 bar section (2026-11-01)
+
+*2026-11-01. Gate of U4.3, uncommitted in `model-bench/` on `1784168b`: `report.py` (the FR-10
+section, `_comparison_block`, `_answer_agreement`), the new `tests/test_decision_bar_fr10.py`, and
+`HISTORY.md`/`README.md`/`AGENTS.md`. Read against v1.3 §3.6 and its U4 test rows (AC-15); plan2
+§3.6, §4.1 U4 and §5 U4; plan3 §4 U4; plan4 §3.9; requirements FR-10, FR-11a, AC-12, AC-15; note
+§Q4–§Q6; and the ledger's U4.3 row and "U4 brief"/"U4.3 brief" lines, including the
+data-scientist's disagreement ruling. Pass 18 (d) is the source of the blocking carry.*
+
+**Verdict: approve with suggestions.** Every plan2 §3.6 FR-10 line, state and minimum is present.
+The guard's printed output is byte-identical to `1784168b` across 31 rendered reports. The
+ruling's fixture matches the ledger. The delegate's blocking reading is the right one.
+There are no blockers and no majors. There are two minors, both untested plumbing:
+- the FR-10 latency seed and order (P23-m1);
+- the reference arm's part in the content block (P23-m2).
+
+There are also two nits.
+
+**Checks run.** All of these ran on private copies in `scratchpad/p23/` (`wt/` = working tree,
+`base/` = the tree with `report.py` from `git show 1784168b:`). After each mutant the live file was
+restored and `cmp`-checked.
+- **Suite:** the `wt/` copy gives `3424 passed, 3 skipped, 5 deselected, 2 xfailed`. The 3 skips
+  are the falkor-chat-sibling guards, which are absent from a copy. So this agrees with teco's
+  3427. `ruff` is clean. `AGENTS.md` has 2,482 words (2,485 at the base) and no line over 700
+  characters.
+- **Guard output unchanged:** I ran both full suites with a capture plugin (`plug/capplug.py`)
+  that copies every `compare --out` report. That gave 31 guard reports from `test_decision_bar.py`
+  (2,553 lines). Every one is byte-identical, `cmp`, with no normalisation needed. They include
+  both disagreement-line tests, so the guard keeps its old line.
+- **Mutants (mine):**
+
+  | Mutant | Result |
+  |---|---|
+  | M1 FR-10 latency `seed=pack.seed` → `0` | **survives the full suite** (P23-m1) |
+  | M2 latency values reversed, so not in `itemId` order | **survives the full suite** (P23-m1) |
+  | M3 per-class `overLimit` prints the run total | red |
+  | M4 `no label in both` counts `or` instead of `and` | red |
+  | M5 latency state ignores `blocked` | red |
+  | M6 the class line's call site passes DE 2.0 | red |
+  | M7 the content block omits the chat arm on new abilities | **survives the full suite** (P23-m2) |
+  | P21-n1: `roles.py` message type → `"query"` | red (2, including §Q5.4) |
+- **Note §Q5.4:** I recomputed Wilson 95% (z = 1.95996) for 58, 56, 54, 53 and 55 of 60. The
+  results are [0.886, 0.991], [0.841, 0.974], [0.799, 0.953], [0.778, 0.942] and [0.819, 0.964],
+  which is the note's column digit for digit. `escalation` is the only class not met, since
+  10·53 < 9·60.
+
+CPG: considered, not relevant — no model-bench CPG is loaded; the code was read, mutated and
+executed directly.
+
+### Delegate calls
+
+1. **The blocking reading: the delegate is right.**
+   - Pass 18 (d) asked for one thing only. It noted that `blocked` (no incumbent, timeout off the
+     pin) is computed after the speed-up return. Then it said "the FR-10 side must hoist the
+     *timeout* block, because note §Q4.3 applies the 180 s pin to new abilities too."
+   - The ledger's "timeout/no-incumbent" (2026-10-31 line) paraphrases more than that finding
+     says.
+   - FR-10 is single-arm: v1.3 §3.6, note §Q4.2 and §Q5.1, and plan2 §3.6 "New-ability points
+     pair nothing". Plan2 §4.1 U7 step 1 runs the hand-off LLM's chat arm "as a reference" on
+     new abilities. So blocking FR-10 on a missing reference would refuse a verdict that no
+     input supports refusing.
+   - **What this means for U7:**
+     - A new-ability report renders with or without the reference arm.
+     - If the arm is in `--models`, its timeout and content hash still block every FR-10 bar.
+       `cli` already refuses mixed timeouts, and `_comparison_block` folds the arm's hash into
+       the content check.
+     - So U7 must run the reference arm on the same pack content as the replicates. See P23-m2,
+       which covers whether that coupling is intended.
+2. **A class with n = 0: consistent.**
+   - The precedence (scored n, then any `not met`, then an empty class, then `met`) is
+     `combine_replicates`' own order applied within a replicate: a decided conjunction beats an
+     undecidable member.
+   - The new reason starts `not assessable (`, so `combine_replicates` accepts it and carries
+     its text, as the overall line in `test_a_class_with_no_scored_item…` shows.
+   - Plan2 §3.6 lists only `scored n < 200` as a reason. But an empty class has no measured value
+     (FR-11a), and it can never print `met`. That satisfies model-bench `REVIEW.md`'s
+     degenerate-candidate rule.
+3. **Guard output unchanged: verified** (Checks run). The only guard-adjacent text that changed is
+   the no-bar-kind fallback, which now reads "has no requirement bar". No current role reaches it.
+4. **The disagreement ruling: implemented exactly.**
+   - I recounted the fixture by hand. `n` covers a–e, so `n` = 5. `k` = c, d, so `k` = 2.
+     `no label in both` = b, e, so 2. `failures` = f, so 1. `one-sided` = g, so 1.
+   - `decidedBy` is 1/5, because only e's first side is a hand-off.
+   - Exclusion keys on `withheldFor` and then `failedCall`, never on `answer is None`.
+   - The join-in parse-failure `False` agrees.
+   - M4 goes red, and the guard keeps its line (item 3).
+5. **§Q5.4: reproduced** (Checks run). The test's expected column is the note's, not computed by
+   the code.
+6. **The U3e.2 seam is sufficient.**
+   - `_fr10_class_interval` is called once per class per replicate. That is the granularity plan4
+     §3.9 needs, and M6 pins the call site.
+   - U3e.2 still owes three things: the parallel `itemId`s on `AgreementItems` (plan4 §3.9, "U4's
+     per-class FR-10 input gains the same parallel ids"), the per-class DE at that call site
+     instead of `run.designEffect`, and the `DE <x.xx> (genRunId ICC)` print. All three are
+     U3e.2's by plan.
+7. **My plumbing mutants:** see the table above. M1, M2 and M7 survive.
+
+### Findings
+
+**P23-m1 (minor; fresh `coder`). The FR-10 latency line's seed, order and interval are unpinned.**
+- Note §Q4.2 fixes `ȳ` over values sorted by `itemId`, with the pack's seed.
+- Every FR-10 test uses one constant `ms`, and the fixture says "no interval below is asserted".
+  So M1 (seed → 0) and M2 (order reversed) pass all 3,424 tests.
+- A wrong seed or order changes the printed interval, which is the uncertainty a human reads
+  beside the bar.
+- **Fix:** one test with non-constant per-item `ms` that is asymmetric in `itemId` order. Assert
+  the printed `seed <n>` against the seed read from the test's `pack.json`. Assert the printed
+  `[lo, hi]` against `stats.mean_bootstrap_interval` called in the test, with `itemId`-sorted
+  values and that seed, at the patched B. M1 and M2 must then turn red.
+
+**P23-m2 (minor; fresh `coder` after `teco` picks the intent). The reference arm blocks FR-10, but
+the docs say no bar reads it, and nothing pins either.**
+- `_comparison_block` passes the chat arm to `_pack_content_reason` on both bar kinds. So a
+  reference arm on other content makes every FR-10 bar `not assessable`.
+- `README.md` ("a chat arm is a reference no bar reads") and the `Reference chat arm:` line say
+  otherwise.
+- M7, which leaves the arm out on new abilities, survives.
+- Blocking is the conservative choice: it can only withhold a verdict, and it keeps U7's session
+  on one pack content. I recommend keeping it.
+- **Fix:** state it in README and in the reference line ("its timeout and pack content still
+  apply"). Add a test where the reference arm's `packContentHash` differs and assert every FR-10
+  bar carries the different-content reason. M7 must then turn red.
+
+**P23-n1 (nit; `teco`). Record call 1's ruling in the U7 brief.**
+- A new-ability bar needs no reference arm.
+- If one is run, it must share the replicates' pack content and the 180 s timeout.
+
+**P23-n2 (nit; fresh `coder`, with P23-m1). `README.md` line 205 is 167 characters.** It is the
+new paragraph's last line, left unwrapped. Rewrap it to the file's ~100-character width.
+
+### Growth-stops
+
+- **`model-bench/AGENTS.md`** went from 2,485 to 2,482 words. One entry was rewritten in place,
+  naming `_comparison_block` and FR-10 as single-arm. That is new scope folded into an existing
+  entry, with no restated history.
+- **`README.md`** gains the new-ability side of the bar paragraph. That is new scope.
+- **`HISTORY.md`** gets one entry, read by lookup. Its counts reproduce: 20 functions collect as 21
+  tests, and the total is 3,427.
+
+### Proposed REVIEW.md lines
+
+None. P23-m1 is a single instance. The existing boundary rule did its job on the bars themselves.

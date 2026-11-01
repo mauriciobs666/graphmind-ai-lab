@@ -94,9 +94,9 @@ pack can neither pick nor lower its bar. `validate_pack` holds `decisionPoint.an
 every input field (`[]`/`null`, never omitted: `input_hash` omits an absent field) and an in-space
 `expected`. On a decision-point
 `compare`, `compare_report` gets the chat arm alone as `runs` and candidates only as
-`replicates` (`cli._replicate_groups`, never last-wins), and its bar section states the bar
-without touching the exit code. Its drop counts are eval-only, by the pack's strata
-(`pair_items(strata=)`); a new ability's come from `decision_stats.agreement_items`.
+`replicates` (`cli._replicate_groups`, never last-wins); its bar section states the bar, exit
+code untouched. Comparison-wide blocks precede the bar-kind split (`report._comparison_block`).
+Drop counts are eval-only (`pair_items(strata=)`); FR-10 is single-arm (`agreement_items`).
 
 **Five honesty rules that are easy to break silently, and what holds each in place:**
 
