@@ -60,7 +60,7 @@ vs. "distilled" content — the difference is only in *what* gets written and *w
 ```
 mcp__falkor-chat-agent-team__ingest_document(
     text: str,                      # required — the full content, verbatim
-    title: str | None = None,       # a short label; shown in list_documents
+    title: str | None = None,       # a short label, at most 200 characters; shown in list_documents
     source_format: str = "text",
     source_label: str | None = None,
     produced_by: str | None = None, # the writing agent's own agentId
@@ -68,7 +68,9 @@ mcp__falkor-chat-agent-team__ingest_document(
 ```
 
 - **A raw-capture entry** (any agent, the moment it learns something worth keeping): `title` is
-  the one-line fact; `text` is four labeled paragraphs — `Fact:` / `Evidence:` / `Context:` /
+  the one-line fact, at most 200 characters (a longer title is refused with "title / String
+  should have at most 200 characters" and nothing is stored, so shorten it, keep the detail in
+  `text`, and retry); `text` is four labeled paragraphs — `Fact:` / `Evidence:` / `Context:` /
   `Suggested home:` — one per field, so a short entry stays one chunk and a longer one splits
   along field boundaries rather than mid-sentence.
 - **A distilled-knowledge entry** (`cobb`, curating): one call per **claim**, not per file and
