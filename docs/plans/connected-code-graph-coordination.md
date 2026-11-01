@@ -293,3 +293,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-01 S17 gate Pass 8: approve with suggestions (M1 lookup repo scope, M2 batch ceiling provisional -> carried to S23, m1-m5). Revision sent to graph-dba af73ed7cf2aef95c2; then short re-check by analyst a1298392a90a84779, commit, then dispatch DDL/test/loader remainder.
 
 - 2026-11-01 S17 note ACCEPTED after Pass 9 fixes (N1-N4 verified by my grep: no launchPairs/args[0]; File/SkippedFile queries repoId-scoped). Batch ceiling 20,000 provisional, carried to S23. Committed with graph note Extended-by pointer. S33 hand-off: launchPairs not carried. Remaining S17 row (ddl_v1.cypher, test_ddl_live.py, loader D1-D8) dispatching fresh to graph-dba (prior id carries 222k tokens).
+
+- 2026-11-01 S17 DDL unit (ddl_v1.cypher + test_ddl_live.py) dispatched: graph-dba a9e3b7f487c1d546c, in-flight (live key ccg_p0slice__build_ddl*). Loader D1-D8 + test changes to follow as a separate tdd-engineer unit AFTER it (shared live key, serialize).
