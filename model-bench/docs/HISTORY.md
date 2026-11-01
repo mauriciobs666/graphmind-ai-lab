@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-10-31 — typed-decision-models U3c.1 fix round — impl review Pass 16 (P16-m1, m2, n1, n3)
+
+- **P16-m1:** `pair_items` now seeds `outcomes` with `()` and `over_limit` with `0` for every
+  verdict cell of the role. A cell with no paired item can no longer vanish from the FR-1 lines.
+  Pinned by three understanding/`False` items yielding all four cells. The `pair_items` tests'
+  exact-dict expectations now include the empty cells.
+- **P16-m2:** one test at `design_effect = 2.0`, `k = 1` pins that both limits use `n_effective`
+  and that `U`, `p_worse` and the state do not move with the design effect (note §Q3.2).
+- **P16-n1:** `(5, 0)` at `alpha = 1/32` is `worse`, pinning the inclusive boundary.
+- **P16-n3:** the §Q3.3 table test now covers every n = 75 cell, so the U3c.1 entry's "n =
+  50/75/100" is accurate.
+- Mutants killed: the unseeded `outcomes` and `over_limit`, `mdd_reuse` at `n`, `U` shrunk by
+  the design effect, and `p < alpha`. `tests/test_decision_stats.py` has 177 tests.
+
 ## 2026-10-31 — typed-decision-models U3c.1 — `decision_stats.py`: the bar statistics, pure
 
 **What:** the module half of v1.3 §4 U3c / plan2 §4.1 U3c / plan3 §4.1 U3c. It implements

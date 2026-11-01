@@ -377,8 +377,8 @@ class PairedItems:
     """One candidate replicate paired against the incumbent run, by `itemId` (note §Q3.1, §Q4.3).
 
     - `outcomes[metric]`: `(candidate errs, incumbent errs)` per paired item, ordered by `itemId` —
-      a cell's `parity_cell` input. Every metric the incumbent declares is here: the verdict
-      cells, the pooled rates and the side check's.
+      a cell's `parity_cell` input. Every verdict cell of the role is here, as `()` when no
+      item paired in it; so is every other metric the incumbent declares (pooled, side check).
     - `latency`: `(itemId, x_i, y_i)` over the paired **eval** items, ordered by `itemId` (note
       §Q4.1) — `x_i` the incumbent's wall clock, `y_i` the candidate's per note §Q4.3.
     - `scored_n`: the paired scored eval n (FR-11, note §Q4.3 "Not assessable").
@@ -467,8 +467,9 @@ def pair_items(
         unmatched = sorted(inc_by_id.keys() ^ cand_by_id.keys())
         raise ValueError(f"pair_items: the arms hold different items: {unmatched!r}")
 
-    outcomes: dict[str, list[tuple[bool, bool]]] = {}
-    over_limit: dict[str, int] = {}
+    # Every verdict cell is present, empty or not, so no FR-1 line can silently vanish (P16-m1).
+    outcomes: dict[str, list[tuple[bool, bool]]] = {cell: [] for cell in cells}
+    over_limit: dict[str, int] = dict.fromkeys(cells, 0)
     latency: list[tuple[str, float, float]] = []
     drops: dict[tuple[Arm, str], int] = {}
 

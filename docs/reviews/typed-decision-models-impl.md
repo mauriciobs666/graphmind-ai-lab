@@ -1987,3 +1987,75 @@ same-load replicates enter the conjunction. Align the note at its next revision.
 
 None. Each finding is a single instance, already covered by the "every check can fail and
 pass" line.
+
+## Pass 17
+
+*2026-10-31. Re-gate of the U3c.1 fix round: the uncommitted diff against `042d3838` in
+`model-bench/modelbench/decision_stats.py`, `tests/test_decision_stats.py` and `docs/HISTORY.md`.
+The formula source is note §Q3.*
+
+**Verdict: approve.** All four findings sent to the implementer are fixed, and each Pass 16
+mutant now goes red. The rewritten tests are stricter than before, not weaker. Seeding the empty
+cells changes nothing for a cell that has items. No new findings.
+
+**Checks run** (from `model-bench/`, with a fresh `PYTHONPYCACHEPREFIX` each time):
+- **Suite and lint:** `3013 passed, 5 deselected, 2 xfailed`; `ruff check` clean.
+  `tests/test_decision_stats.py` alone gives 177 passed.
+- **Mutants** (`scratchpad/p17/mutate.py`): eight in all, each run against the full suite. After
+  each run the file was restored and checked with `cmp`. Afterwards the `sha256` matched the
+  pre-run value and `git status` showed the same three files modified.
+- **Differential** (`scratchpad/p17/p17diffplug.py`, a pytest plugin): it wrapped every
+  `pair_items` call in the test file and ran `042d3838`'s module on the same input. Over 21
+  calls, all 25 cells that the old module populated matched exactly, comparing `outcomes`,
+  `over_limit`, and `parity_cell` at DE 1.0/K 0 and DE 2.0/K 1. `latency`, `scored_n` and
+  `drops` were identical. The only extra keys were verdict cells holding `()` and `0`.
+
+CPG: considered, not relevant — no `cpg_modelbench` is loaded; the module was mutated and
+executed directly.
+
+### Dispositions
+
+- **P16-m1: fixed.** Removing the seed from both dicts turns 15 tests red. Removing it from
+  `outcomes` only gives 12 red, from `over_limit` only 4 red, and seeding every cell but the last
+  14 red. The `dict.fromkeys(cells, [])` shared-list trap gives 3 red, including the new
+  `test_every_verdict_cell_is_present_even_with_no_paired_item`.
+- **P16-m2: fixed.** `mdd_reuse` at `n` gives 1 red, and `U` from the table shrunk to
+  `n_effective` gives 1 red. Both are caught by `test_only_the_detection_limits_take_the_design_effect`.
+- **P16-n1: fixed.** `p <= alpha` → `<` gives 1 red, `test_a_p_worse_exactly_at_alpha_is_worse`.
+- **P16-n3: fixed.** The §Q3.3 test now has all five n = 75 cells. The expected values are the
+  note's, from table line 325 (8.8, 8.8, 9.4, 13.3, 16.3), and `decision_stats.mdd` computes
+  them. A fresh stdlib script (`scratchpad/p17/cell.py`, `python3 -I`) gives 9.4 at ψ̂ = 0.10
+  and 16.3 at ψ̂ = 0.30. It enumerates the trinomial with an integer exact tail and shares no
+  code with the module. My Pass 16 run already reproduced all four rows.
+- **P16-n2, P16-n4:** not for the implementer, and unchanged. They stand with `teco` (U3c.2
+  brief) and `data-scientist`.
+
+### Fix interaction
+
+- **The helpers do not weaken any test.** `_cells()`/`_limits()` take their keys from
+  `classification.PER_KIND_VERDICT_METRICS`. That is the scorer's declaration, not
+  `decision_stats`' private mapping, so a wrong key the module seeds still fails the
+  exact-`dict` comparison. Every rewritten assertion keeps its earlier keys and values and now
+  also requires the three empty cells, so each is stricter. No comparison became vacuous: in the
+  `_cells()`-only cases, any pair that lands in a verdict cell or a pooled metric breaks
+  equality. The A2/A3 mutants show those assertions still fail when the empties are missing.
+- **Seeding is neutral for cells that have items.** `setdefault` appends to the seeded list and
+  `.get(metric, 0)` adds to the seeded 0, so values are unchanged. The differential confirms it
+  on every test input. The only behavioural difference is dict key order, with verdict cells
+  first, and no consumer depends on it.
+
+### Growth-stops check (`model-bench/docs/HISTORY.md`)
+
+`HISTORY.md` is read by lookup, so one appended entry per delivered change is correct. The new
+entry is a single 14-line block. It does not restate the U3c.1 entry, and it cites P16 IDs only.
+Its claims check out: the three understanding/`False` items, the `design_effect = 2.0`, `k = 1`
+test, the `(5, 0)` at `alpha = 1/32` case, every n = 75 cell, the four mutants killed, and 177
+tests.
+
+### Findings
+
+None.
+
+### Proposed REVIEW.md lines
+
+None.

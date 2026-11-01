@@ -127,12 +127,17 @@ def _mdd(n, psi_hat, *, power_target=decision_stats.MDD_POWER):
 @pytest.mark.parametrize(
     ("n", "psi_hat", "pp"),
     [
-        # Note §Q3.3's MDD₈₀ table, rows n = 50 and n = 100; the "ψ̂ ≤ 0.05" column at 0 and 0.05.
+        # Note §Q3.3's MDD₈₀ table, rows n = 50, 75, 100; the "ψ̂ ≤ 0.05" column at 0 and 0.05.
         (50, 0.0, 13.1),
         (50, 0.05, 13.1),
         (50, 0.10, 13.1),
         (50, 0.20, 16.4),
         (50, 0.30, 19.9),
+        (75, 0.0, 8.8),
+        (75, 0.05, 8.8),
+        (75, 0.10, 9.4),
+        (75, 0.20, 13.3),
+        (75, 0.30, 16.3),
         (100, 0.0, 6.7),
         (100, 0.05, 6.7),
         (100, 0.10, 8.2),
@@ -296,6 +301,29 @@ def test_parity_cell_takes_n_for_the_limit_after_the_design_effect():
     assert line.mdd == expected
 
 
+def test_only_the_detection_limits_take_the_design_effect():
+    # Note §Q3.2: "only the detection limit takes designEffect"; §Q3.3/§Q3.5: both limits are
+    # stated at n = floor(n_c / designEffect). Review P16-m2.
+    pairs = _pairs(3, 6, 4, 88)  # n_c = 101 -> n_effective = 50 at DE 2
+    plain, inflated = _cell(pairs, design_effect=1.0, k=1), _cell(pairs, design_effect=2.0, k=1)
+    psi = 10 / 101
+    assert inflated.n_effective == 50
+    assert inflated.mdd_reuse == decision_stats.mdd(
+        50, psi, alpha=decision_stats.FR1_ALPHA, power_target=decision_stats.MDD_POWER ** 0.5
+    )
+    assert inflated.mdd_reuse != plain.mdd_reuse  # the inflation moved the reuse limit
+    assert inflated.U == plain.U
+    assert (inflated.p_worse, inflated.state) == (plain.p_worse, plain.state)
+
+
+def test_a_p_worse_exactly_at_alpha_is_worse():
+    # Note §Q3.1: "worse iff p_worse ≤ 0.05" — the boundary is inclusive. p_worse(5, 0) = 1/32.
+    # Review P16-n1.
+    line = decision_stats.parity_cell(_pairs(0, 5, 0, 45), design_effect=1.0, k=0, alpha=1 / 32)
+    assert line.p_worse == 1 / 32
+    assert line.state == "worse"
+
+
 def test_parity_cell_decision_ignores_the_design_effect():
     # Note §Q3.2: "only the detection limit takes designEffect".
     pairs = _pairs(0, 5, 0, 45)
@@ -440,6 +468,17 @@ _FA_U = "falseAdvanceRateByUnderstanding"
 _FS_T = "falseSuspendRateByTurns"
 
 
+def _cells(**present):
+    """`PairedItems.outcomes` as it must read: every verdict cell (`()` when empty, P16-m1)
+    plus the given metrics' pairs."""
+    return {**dict.fromkeys(classification.PER_KIND_VERDICT_METRICS, ()), **present}
+
+
+def _limits(**present):
+    """`PairedItems.over_limit`: every verdict cell at 0 plus the given counts."""
+    return {**dict.fromkeys(classification.PER_KIND_VERDICT_METRICS, 0), **present}
+
+
 def _input(item_id, *, stratum="eval", expected=False, path="understanding", tier="clear_suspend"):
     return {"itemId": item_id, "stratum": stratum, "expected": expected, "path": path, "tier": tier}
 
@@ -507,7 +546,9 @@ def _pair(incumbent, candidate):
 def test_pair_items_pairs_two_answered_eval_items_on_every_declared_metric():
     item = _input("e1")  # label False: an advance is a false advance
     paired = _pair([_inc(item, False, 800.0)], [_decided(item, True, 20.0)])
-    assert paired.outcomes == {_FA_U: ((True, False),), "falseAdvanceRate": ((True, False),)}
+    assert paired.outcomes == _cells(
+        **{_FA_U: ((True, False),), "falseAdvanceRate": ((True, False),)}
+    )
     assert paired.latency == (("e1", 800.0, 20.0),)
     assert paired.scored_n == 1
     assert paired.drops == {}
@@ -556,13 +597,15 @@ def test_a_guard_decision_failure_lands_in_the_incumbents_cell():
     failed = _failed(item)
     assert dict(failed.scoreable) == {}
     paired = _pair([_inc(item, False)], [failed])  # incumbent suspends a True label: an error
-    assert paired.outcomes == {_FS_T: ((True, True),), "falseSuspendRate": ((True, True),)}
+    assert paired.outcomes == _cells(
+        **{_FS_T: ((True, True),), "falseSuspendRate": ((True, True),)}
+    )
 
 
 def test_a_side_check_decision_failure_is_dropped_from_the_side_check_and_counted():
     side = _input("s1", stratum="side-check")
     paired = _pair([_inc(side, False)], [_failed(side)])
-    assert paired.outcomes == {}
+    assert paired.outcomes == _cells()
     assert paired.latency == () and paired.scored_n == 0
     assert paired.drops == {("candidate", "side-check decision failure"): 1}
 
@@ -570,7 +613,7 @@ def test_a_side_check_decision_failure_is_dropped_from_the_side_check_and_counte
 def test_an_answered_side_check_item_pairs_on_its_side_check_metric_only():
     side = _input("s1", stratum="side-check")
     paired = _pair([_inc(side, True)], [_decided(side, False)])
-    assert paired.outcomes == {"sideCheckFalseAdvanceRate": ((False, True),)}
+    assert paired.outcomes == _cells(sideCheckFalseAdvanceRate=((False, True),))
     # The side check does not affect pass/fail (v1.3 §3.5): no scored n, no FR-2 latency.
     assert paired.latency == () and paired.scored_n == 0
 
@@ -588,7 +631,7 @@ def test_load_withholding_in_either_arm_drops_the_item_pairwise(inc_withheld, ca
     paired = _pair(
         [_inc(item, False, withheld=inc_withheld)], [_decided(item, True, withheld=cand_withheld)]
     )
-    assert paired.outcomes == {} and paired.latency == () and paired.scored_n == 0
+    assert paired.outcomes == _cells() and paired.latency == () and paired.scored_n == 0
     assert paired.drops == drops
 
 
@@ -596,7 +639,7 @@ def test_a_load_withheld_decision_failure_is_dropped_not_paired():
     item = _input("e1")
     failed = _score(item, None, _timing(5000.0, "load"), failed_call="decision")
     paired = _pair([_inc(item, False)], [failed])
-    assert paired.outcomes == {} and paired.drops == {("candidate", "load"): 1}
+    assert paired.outcomes == _cells() and paired.drops == {("candidate", "load"): 1}
 
 
 @pytest.mark.parametrize("why", ["timeout", "no_response"])
@@ -606,7 +649,7 @@ def test_guard_chat_call_withholding_in_either_arm_drops_the_item_pairwise(why):
         [_inc(a, False, withheld=why), _inc(b, False)],
         [_decided(a, True), _withheld_handoff(b, why)],
     )
-    assert paired.outcomes == {} and paired.latency == () and paired.scored_n == 0
+    assert paired.outcomes == _cells() and paired.latency == () and paired.scored_n == 0
     assert paired.drops == {("incumbent", why): 1, ("candidate", why): 1}
 
 
@@ -616,7 +659,7 @@ def test_a_handed_off_over_limit_item_pairs_as_any_hand_off_with_its_own_wall_cl
     paired = _pair([_inc(item, False, 800.0)], [_over_limit_handoff(item, True, 900.0)])
     assert paired.outcomes[_FA_U] == ((True, False),)
     assert paired.latency == (("e1", 800.0, 900.0),)
-    assert paired.over_limit == {_FA_U: 1, "falseAdvanceRate": 1}
+    assert paired.over_limit == _limits(**{_FA_U: 1, "falseAdvanceRate": 1})
 
 
 def test_a_decisions_surface_over_limit_item_pairs_as_a_guard_decision_failure():
@@ -625,20 +668,34 @@ def test_a_decisions_surface_over_limit_item_pairs_as_a_guard_decision_failure()
     paired = _pair([_inc(item, False, 800.0)], [_failed(item, 30.0, over_limit=True)])
     assert paired.outcomes[_FA_U] == ((False, False),)
     assert paired.latency == (("e1", 800.0, 830.0),)
-    assert paired.over_limit == {_FA_U: 1, "falseAdvanceRate": 1}
+    assert paired.over_limit == _limits(**{_FA_U: 1, "falseAdvanceRate": 1})
 
 
 def test_a_withheld_over_limit_hand_off_is_dropped_as_chat_withholding():
     item = _input("e1")
     paired = _pair([_inc(item, False)], [_withheld_handoff(item, "timeout", over_limit=True)])
-    assert paired.outcomes == {} and paired.drops == {("candidate", "timeout"): 1}
+    assert paired.outcomes == _cells() and paired.drops == {("candidate", "timeout"): 1}
 
 
 def test_over_limit_counts_are_zero_on_every_paired_metric_when_there_are_none():
     # Plan3 §3.6: `overLimit 0/n` still prints, so the count exists at 0 for every cell.
     item = _input("e1")
     paired = _pair([_inc(item, False)], [_decided(item, False, by="handoff")])
-    assert paired.over_limit == {_FA_U: 0, "falseAdvanceRate": 0}
+    assert paired.over_limit == _limits(falseAdvanceRate=0)
+
+
+def test_every_verdict_cell_is_present_even_with_no_paired_item():
+    # Review P16-m1: three understanding/False items still yield all four FR-1 cells, empty ones
+    # as `()` with over-limit 0, so no cell can silently vanish from the bar.
+    items = [_input(f"e{i}") for i in range(3)]
+    paired = _pair([_inc(i, False) for i in items], [_decided(i, False) for i in items])
+    for cell in classification.PER_KIND_VERDICT_METRICS:
+        assert cell in paired.outcomes and cell in paired.over_limit
+    assert len(paired.outcomes[_FA_U]) == 3
+    for cell in set(classification.PER_KIND_VERDICT_METRICS) - {_FA_U}:
+        assert paired.outcomes[cell] == ()
+        assert paired.over_limit[cell] == 0
+    assert _cell(paired.outcomes[_FS_T]).n == 0
 
 
 def test_pair_items_refuses_arms_over_different_items():
