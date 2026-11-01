@@ -1,0 +1,38 @@
+[project]
+name = "decision-models"
+version = "0.1.0"
+description = "Build synthetic, labelled datasets and fitted candidates for typed decision models; local-only and human-started."
+requires-python = ">=3.12"
+# No runtime dependencies, deliberately: docs/plans/typed-decision-models.md §3.4 (stdlib core,
+# model-bench's install-forever posture). FR-8's import allowlist (stdlib + `decisionmodels`,
+# tests/test_fr8_isolation.py) makes adding one a visible, failing change. A `[train]` extra is
+# added only if U8 goes ahead.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1,<10",
+    "ruff>=0.14,<0.15",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The component root on sys.path, so `pytest` from `decision-models/` imports `decisionmodels`
+# with or without the editable install `setup.sh` makes.
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# model-bench's set: pyflakes + pycodestyle + import order. No behavioral rewrites.
+select = ["E", "F", "W", "I"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["decisionmodels*"]

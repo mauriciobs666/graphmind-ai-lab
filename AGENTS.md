@@ -63,6 +63,7 @@ engineering** (Claude Code and OpenCode artifacts).
   (`embedder`, `guard-judge`, `nlq-generator`, `tool-caller`, `chat-responder`) shipped, gated, and
   live-verified. Requirements/plan live at the **repo root**, not `model-bench/docs/`; working
   state is in `model-bench/AGENTS.md`, delivery record in `model-bench/docs/HISTORY.md`.
+- `decision-models/` — Synthetic, labelled datasets and fitted candidates for `model-bench/` (`docs/requirements/typed-decision-models.md`).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
   cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
@@ -96,6 +97,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
+| `decision-models/` | `decision-models/README.md` · `decision-models/AGENTS.md` · `docs/requirements/typed-decision-models.md` · `docs/plans/typed-decision-models4.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
 | `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` · `deprecated/opencode/agents/severino/README.md` |
 
