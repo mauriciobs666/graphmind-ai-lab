@@ -368,3 +368,12 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 
     Re-check: teco's own, by suite plus mutants; minors only.
   - **Carry into the U5.6 brief:** keep `interrupted` outcomes out of `earlier_no_attempt`; build `Expected` with absolute paths; the re-ingest path never calls `audit_run`/`combine`.
+- 2026-11-01: Committed `5fa693c0` (U3e.4) and `a9374c8b` (U5.5 plus Passes 8–9). U5.5b dispatched → fresh tdd-engineer a4320724f193a743d. U6.6 is held until U5.5b lands, because both edit `decision-models/docs/HISTORY.md`.
+- 2026-11-01: U5.5b delivered (tdd-engineer a4320724f193a743d, 122.7k tokens / 39 tools).
+  - teco's re-run: 666 passed, 2 xfailed; ruff clean.
+  - 5 mutants killed.
+  - teco's mutant (a missing `requestShape` defaulted to foreground) → 2 red; file restored and cmp'd.
+  - Re-check is teco's own (minors only), so there is no Pass 10.
+  - Committed. **U5.5 accepted.**
+  - Carry into the U5.6 brief: `audit_run` now requires `launch=Launch(fail_bound=…)`, plus Pass 9's three items.
+  - Next: U6.6 (coder), then U5.6.

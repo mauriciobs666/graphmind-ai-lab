@@ -124,9 +124,15 @@ def clean_run() -> Run:
     )
 
 
+#: plan6 §3.4's `launchFailBound` default, as `init` records it.
+BOUND = timedelta(hours=6)
+LAUNCH = audit.Launch(fail_bound=BOUND)
+
+
 def audit_of(tmp_path: Path, run: Run, *, expected: audit.Expected = EXPECTED,
-             earlier: int = 0, **kwargs: Any) -> audit.Audit:
-    return audit.audit_run(run.stage(tmp_path), expected, earlier_no_attempt=earlier, **kwargs)
+             earlier: int = 0, launch: audit.Launch = LAUNCH, **kwargs: Any) -> audit.Audit:
+    return audit.audit_run(run.stage(tmp_path), expected, earlier_no_attempt=earlier,
+                           launch=launch, **kwargs)
 
 
 def found(result: audit.Audit) -> list[tuple[str, str]]:
@@ -435,7 +441,7 @@ def test_the_kill_shape_is_incomplete(tmp_path: Path, notification: bool) -> Non
     no `finished`; also with F5's `stopped` notification from a restart."""
     run = clean_run()
     drop_tool_result(run)
-    assert run.meta is not None
+    assert run.meta is not None and run.meta["requestShape"] == "foreground"
     del run.meta["finished"]
     if notification:
         run.driver.append(stopped_notification())
@@ -552,6 +558,24 @@ def test_an_unknown_completion_shape_halts(tmp_path: Path, edit) -> None:
     assert found(result) == [(audit.ENVIRONMENTAL, "spawnShapeUnknown")]
 
 
+@pytest.mark.parametrize("edit", [
+    lambda meta: meta.update(requestShape="detached"),
+    lambda meta: meta.pop("requestShape"),
+])
+def test_an_in_flight_run_whose_meta_is_not_foreground_halts(tmp_path: Path, edit) -> None:
+    """P9-F1: the meta row has no completion condition, and the meta is written at spawn, so
+    H3a's killed run (`requestShape: "foreground"`, no `finished`) still re-issues."""
+    run = clean_run()
+    drop_tool_result(run)
+    assert run.meta is not None
+    del run.meta["finished"]
+    edit(run.meta)
+    result = audit_of(tmp_path, run)
+    assert chosen(result) == (audit.HALT, audit.ENVIRONMENTAL, "spawnShapeUnknown")
+    assert found(result) == [(audit.ENVIRONMENTAL, "spawnShapeUnknown"),
+                             (audit.INCOMPLETE, "incomplete")]
+
+
 def test_the_spawns_result_is_matched_by_its_tool_use_id(tmp_path: Path) -> None:
     """P8-F3 (P1): a driver `tool_result` for another id is not the spawn's."""
     run = clean_run()
@@ -658,7 +682,7 @@ T0 = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
 def launch_failed(tmp_path: Path, *, earlier: int = 0, **launch: Any) -> audit.Audit:
     missing = tmp_path / "project" / f"{SESSION}.jsonl"
     return audit.audit_run(missing, EXPECTED, earlier_no_attempt=earlier,
-                           launch=audit.Launch(**launch))
+                           launch=audit.Launch(**{"fail_bound": BOUND, **launch}))
 
 
 def test_no_transcript_is_launch_failed_uncapped(tmp_path: Path) -> None:
@@ -670,6 +694,8 @@ def test_no_transcript_is_launch_failed_uncapped(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("after, reason", [
     (timedelta(hours=6, minutes=1), "launchFailing"),
+    (timedelta(hours=6, seconds=1), "launchFailing"),
+    (timedelta(hours=6), "launchFailed"),
     (timedelta(hours=5, minutes=59), "launchFailed"),
 ])
 def test_launches_producing_nothing_past_the_bound_halt(
@@ -697,8 +723,33 @@ def test_a_prompt_only_transcript_is_launch_failed_or_never_spawned_by_exit_code
 ) -> None:
     run = clean_run()
     prompt_only(run)
-    result = audit_of(tmp_path, run, launch=audit.Launch(exit_code=exit_code, at=T0))
+    launch = audit.Launch(exit_code=exit_code, at=T0, fail_bound=BOUND)
+    result = audit_of(tmp_path, run, launch=launch)
     assert chosen(result) == outcome
+
+
+@pytest.mark.parametrize("exit_code, outcome", [
+    (1, (audit.REISSUE, audit.LAUNCH_FAILED, "launchFailed")),
+    (0, (audit.REISSUE, audit.NEVER_SPAWNED, "neverSpawned")),
+])
+def test_an_empty_driver_transcript_is_launch_failed_or_never_spawned_by_exit_code(
+    tmp_path: Path, exit_code: int, outcome: tuple
+) -> None:
+    """P9-F4 (M17): an empty file is a transcript with no `Agent` call, not a missing one."""
+    run = clean_run()
+    run.driver = []
+    launch = audit.Launch(exit_code=exit_code, at=T0, fail_bound=BOUND)
+    result = audit_of(tmp_path, run, launch=launch)
+    assert chosen(result) == outcome
+
+
+def test_the_launch_fail_bound_is_required(tmp_path: Path) -> None:
+    """P9-F4: the bound recorded at `init` is the caller's to pass; no default stands in for it."""
+    with pytest.raises(TypeError, match="fail_bound"):
+        audit.Launch(exit_code=1, at=T0)  # type: ignore[call-arg]
+    with pytest.raises(TypeError, match="launch"):
+        audit.audit_run(tmp_path / "missing.jsonl", EXPECTED,  # type: ignore[call-arg]
+                        earlier_no_attempt=0)
 
 
 def test_a_launch_failure_records_no_run_and_no_status(tmp_path: Path) -> None:
@@ -1150,7 +1201,8 @@ def test_the_bounds_axes_against_the_audits_own_bounds_code(
     file_path = path.replace("<x>", exchange) if isinstance(path, str) else path
     insert_before_reply(run, *[json.loads(json.dumps(e).replace("/campaign", str(tree)))
                                for e in tool_call("toolu_p0001", name, {"file_path": file_path})])
-    result = audit.audit_run(run.stage(tree / "t"), expected, earlier_no_attempt=0)
+    result = audit.audit_run(run.stage(tree / "t"), expected, earlier_no_attempt=0,
+                             launch=LAUNCH)
     assert result.reason == reason
     assert found(result) == ([] if reason is None else [(audit.ENVIRONMENTAL, reason)])
 
@@ -1203,6 +1255,18 @@ def test_a_write_after_the_hand_back_is_counted(tmp_path: Path) -> None:
     assert (audit.RUN_ATTRIBUTABLE, "toolOutOfBounds") in found(result)
 
 
+def test_a_hand_back_refused_by_input_validation_is_counted(tmp_path: Path) -> None:
+    """P9-F3: the hand-back is exempt only from the bounds checks and `hookMissing`, so the
+    validation row counts it (attempt 1's recorded validation error, re-keyed)."""
+    run = clean_run()
+    assert run.agent is not None
+    run.agent = run.agent[:-1]
+    run.append(tool_use("toolu_v0001", HANDBACK, {"result": "done"}), recorded("toolu_v0001"))
+    result = audit_of(tmp_path, run)
+    assert chosen(result) == (audit.COUNT, audit.RUN_ATTRIBUTABLE, "inputInvalid")
+    assert found(result) == [(audit.RUN_ATTRIBUTABLE, "inputInvalid")]
+
+
 def test_a_rejected_hand_back_halts_as_guard_rejected(tmp_path: Path) -> None:
     run = clean_run()
     assert run.agent is not None
@@ -1214,6 +1278,34 @@ def test_a_rejected_hand_back_halts_as_guard_rejected(tmp_path: Path) -> None:
 
 
 # == Precedence ==============================================================================
+
+def guard_denied(run: Run) -> None:
+    """U6.7's D1 (a guard deny) planted before the reply: a `guardRejected` row."""
+    insert_before_reply(run, tool_use("toolu_g0001", "Write", {"file_path": ANS, "content": "ok"}),
+                        recorded("toolu_g0001"))
+
+
+def test_a_refusal_with_a_guard_deny_halts_as_a_safeguards_stop(tmp_path: Path) -> None:
+    """P9-F2: plan6's halt rows decide the reason in table order, and the reason decides what the
+    stakeholder may do at `resolve` (`--skip-batch` is for a safeguards flag, plan6 §3.5)."""
+    run = clean_run()
+    guard_denied(run)
+    insert_before_reply(run, refusal())
+    result = audit_of(tmp_path, run)
+    assert chosen(result) == (audit.HALT, audit.ENVIRONMENTAL, "safeguardStop")
+    assert found(result) == [(audit.ENVIRONMENTAL, "safeguardStop"),
+                             (audit.ENVIRONMENTAL, "guardRejected")]
+
+
+def test_a_background_spawn_with_a_guard_deny_halts_as_a_background_spawn(tmp_path: Path) -> None:
+    run = clean_run()
+    background(run, notified=False)
+    guard_denied(run)
+    result = audit_of(tmp_path, run)
+    assert chosen(result) == (audit.HALT, audit.ENVIRONMENTAL, "backgroundSpawn")
+    assert found(result) == [(audit.ENVIRONMENTAL, "backgroundSpawn"),
+                             (audit.ENVIRONMENTAL, "guardRejected")]
+
 
 def test_a_halt_row_beats_a_counted_row_that_comes_first_in_the_table(tmp_path: Path) -> None:
     """P8-F3: the counted row precedes the halt row in table order, so only the tiers halt it."""
@@ -1282,7 +1374,7 @@ def test_a_truncated_final_line_of_a_killed_run_is_read_as_truncation(
     path = driver if which == "driver" else (
         driver.with_suffix("") / "subagents" / f"agent-{AGENT}.jsonl")
     path.write_text(path.read_text("utf-8") + '{"parentUuid":"a00', "utf-8")
-    result = audit.audit_run(driver, EXPECTED, earlier_no_attempt=0)
+    result = audit.audit_run(driver, EXPECTED, earlier_no_attempt=0, launch=LAUNCH)
     assert chosen(result) == (audit.REISSUE, audit.INCOMPLETE, "incomplete")
 
 
@@ -1291,7 +1383,7 @@ def test_an_unreadable_transcript_line_halts(tmp_path: Path) -> None:
     driver = run.stage(tmp_path)
     agent_file = driver.with_suffix("") / "subagents" / f"agent-{AGENT}.jsonl"
     agent_file.write_text(agent_file.read_text("utf-8") + "{not json\n", "utf-8")
-    result = audit.audit_run(driver, EXPECTED, earlier_no_attempt=0)
+    result = audit.audit_run(driver, EXPECTED, earlier_no_attempt=0, launch=LAUNCH)
     assert chosen(result) == (audit.HALT, audit.ENVIRONMENTAL, "transcriptUnreadable")
 
 

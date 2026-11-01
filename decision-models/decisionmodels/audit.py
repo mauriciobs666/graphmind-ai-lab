@@ -14,7 +14,8 @@ No transcript file, or a child that exited non-zero leaving neither an `Agent` c
 **Completion** is F2's foreground shape only: the driver's `tool_result` matched by the spawn's
 `tool_use_id` has `toolUseResult.status: "completed"`, and the meta has `requestShape:
 "foreground"` and `finished: true`. `async_launched` or a `background` meta is `backgroundSpawn`;
-any other shape with a result is `spawnShapeUnknown`. With no matched result and no error
+any other shape with a result, or a meta `requestShape` other than `foreground` even in flight
+(the meta is written at spawn), is `spawnShapeUnknown`. With no matched result and no error
 `<synthetic>` in either transcript the run is `incomplete`, and every tool use with no
 `tool_result` is **in flight**: no other row reads it, so a killed run re-issues.
 
@@ -173,15 +174,16 @@ class Expected:
         return self.spawn_template.replace("{request_path}", self.request_path)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Launch:
-    """The launch being audited, from the runner and the ledger (plan6 §3.2, §3.4)."""
+    """The launch being audited, from the runner and the ledger (plan6 §3.2, §3.4). `fail_bound`
+    is the `launchFailBound` recorded at `init`, so it has no default (P9-F4)."""
 
+    fail_bound: timedelta
     exit_code: int = 0
     at: datetime | None = None
     earlier_failures: tuple[datetime, ...] = ()
     last_produced: datetime | None = None
-    fail_bound: timedelta = timedelta(hours=6)
 
 
 @dataclass(frozen=True)
@@ -369,7 +371,7 @@ class _Findings:
 
 
 def audit_run(driver_transcript: Path, expected: Expected, *, earlier_no_attempt: int,
-              launch: Launch = Launch(), interrupted: bool = False) -> Audit:
+              launch: Launch, interrupted: bool = False) -> Audit:
     """Locate and audit the run spawned for `expected.request_path` (module docstring)."""
     found = _Findings(earlier_no_attempt, interrupted)
     if not driver_transcript.is_file():
@@ -457,14 +459,15 @@ def _tool_uses(entries: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
 
 def _check_completion(found: _Findings, matched: tuple[Mapping, Mapping] | None,
                       meta: Mapping[str, Any] | None) -> None:
-    """Plan6 §3.4's completion rows: only F2's foreground shape is a completion."""
+    """Plan6 §3.4's completion rows: only F2's foreground shape is a completion. The meta's
+    `requestShape` is read whenever a meta exists, in flight too: it is written at spawn (P9-F1)."""
     outcome = matched[0].get("toolUseResult") if matched is not None else None
     status = outcome.get("status") if isinstance(outcome, dict) else None
     shape = meta.get("requestShape") if meta is not None else None
     if status == "async_launched" or shape == "background":
         found.add("backgroundSpawn", f"status {status!r}, requestShape {shape!r}")
-    elif matched is not None and meta is not None and (
-            status != "completed" or shape != "foreground" or meta.get("finished") is not True):
+    elif meta is not None and (shape != "foreground" or matched is not None and (
+            status != "completed" or meta.get("finished") is not True)):
         found.add("spawnShapeUnknown", f"status {status!r}, requestShape {shape!r}, "
                                        f"finished {meta.get('finished')!r}")
 
@@ -588,11 +591,11 @@ def _check_guard(found: _Findings, expected: Expected, entries: Sequence[Mapping
             rejected.append(call_id)
         elif decision == ("accept", "hook") and call_id in guarded:
             allowed.append(call)
-        elif call.get("name") == HANDBACK:
-            continue  # exempt from hookMissing (plan6 §3.4 "Terminal shape")
         elif (entry is not None and decision is None and block.get("is_error") is True
               and call_id not in attached):
             invalid.append(call_id)
+        elif call.get("name") == HANDBACK:
+            continue  # exempt from hookMissing only (plan6 §3.4 "Terminal shape"; P9-F3)
         else:
             unhooked.append(call_id)
     if rejected:

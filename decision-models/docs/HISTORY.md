@@ -5,36 +5,38 @@
 ## 2026-11-01 — typed-decision-models U5.5 — transcript audit
 
 **What:** `docs/plans/typed-decision-models6.md` v1.5 §3.3 (guard bounds), §3.4 (audit rows,
-precedence, in-flight rule) and §5 U5.5, over `docs/plans/typed-decision-models4.md` §3.3's
-location rule and remaining rows and §3.7's `runs[]` record and token rule; plus impl review
-Pass 8's P8-F3–F6 (`docs/reviews/typed-decision-models4-impl.md`). P8-F1/F2 are settled by
-plan6 (foreground only; one final `SubagentHandback` is a reply).
+precedence, in-flight rule) and §5 U5.5, over `docs/plans/typed-decision-models4.md` §3.3's location
+rule and remaining rows and §3.7's `runs[]` record and token rule; plus impl review Pass 8's
+P8-F3–F6 and Pass 9's P9-F1–F4 (fix round U5.5b) (`docs/reviews/typed-decision-models4-impl.md`).
+P8-F1/F2 are settled by plan6 (foreground only; one final `SubagentHandback` is a reply).
 
-- `decisionmodels/audit.py`: `audit_run(driver_transcript, Expected, *, earlier_no_attempt,
-  launch=Launch(), interrupted=False)` locates the run through the driver's `Agent` `tool_use`
-  and `.meta.json` `toolUseId` and returns an `Audit`: every matching row as a `Finding` in table
-  order, the chosen class, and `RunFacts`. `Expected.guard_command` is the declared guard command
-  (P8-F4).
+- `decisionmodels/audit.py`: `audit_run(driver_transcript, Expected, *, earlier_no_attempt, launch,
+  interrupted=False)` locates the run through the driver's `Agent` `tool_use` and `.meta.json`
+  `toolUseId` and returns an `Audit`: every matching row as a `Finding` in table order, the chosen
+  class, and `RunFacts`. `Expected.guard_command` is the declared guard command (P8-F4). `Launch` is
+  keyword-only and `fail_bound` (the `launchFailBound` recorded at `init`) has no default, nor has
+  `launch` (P9-F4).
 - **Rows shipped:** `safeguardStop`, `backgroundSpawn`, `guardRejected` (a guard deny or a blocked
   guard failure, keyed on `permissionDecision` `reject`/`hook`), `guardBreach` (an allowed call
   outside the guard's bounds, recomputed with the audit's own `realpath` canonicalization),
-  `inputInvalid` (counted: no decision, `is_error`, no attachment), `hookMissing` (any other
-  decision, incl. D3's `accept`/`config`), `driverModelMismatch`, `syntheticError` (either
-  transcript), `rateLimit`, `spawnShapeUnknown`, `incomplete`, `neverSpawned`, `launchFailed`
-  (uncapped) and `launchFailing` (past `Launch.fail_bound`), then plan4's location, driver,
-  injected-context and counted rows (`maxTurns`, `toolOutOfBounds` for hand-back misuse,
-  `pathOutOfBounds`). `hookDenied` is removed.
-- **Precedence:** halts, usage stop, `spawnShapeUnknown`, re-issues, counted; table order within
-  a tier. In-flight tool uses (no result while the spawn has none) are read by no row, so a killed
-  run is `incomplete`. An `interrupted` incomplete is not capped. A final line with no newline
-  that does not parse is truncation (P8-F5).
-- **Fixtures** (`tests/fixtures/transcripts/`): the clean run moved to H1's foreground shape
-  (driver guard entry, `completed` result, `requestShape`, a Sonnet driver);
-  `guard-decisions.jsonl` holds the U6.7 D1/D2/D3 `tool_result` entries and attempt 1's
-  validation error in their recorded key sets (probe report §10.3, §7), ids and paths replaced.
-  `tests/test_audit.py`: 164 tests. `README.md` line 45 reflowed (P8-F6); `AGENTS.md`.
+  `inputInvalid` (counted: no decision, `is_error`, no attachment; a hand-back too, P9-F3),
+  `hookMissing` (any other decision, incl. D3's `accept`/`config`), `driverModelMismatch`,
+  `syntheticError` (either transcript), `rateLimit`, `spawnShapeUnknown` (a non-`foreground` meta
+  even in flight, P9-F1), `incomplete`, `neverSpawned`, `launchFailed` (uncapped) and
+  `launchFailing` (past `Launch.fail_bound`), then plan4's location, driver, injected-context and
+  counted rows (`maxTurns`, `toolOutOfBounds` for hand-back misuse, `pathOutOfBounds`). `hookDenied`
+  is removed.
+- **Precedence:** halts, usage stop, `spawnShapeUnknown`, re-issues, counted; table order within a
+  tier, where the halt rows' order picks the reason (P9-F2). In-flight tool uses (no result while
+  the spawn has none) are read by no row, so a killed run is `incomplete`. An `interrupted`
+  incomplete is not capped. A final line with no newline that does not parse is truncation (P8-F5).
+- **Fixtures** (`tests/fixtures/transcripts/`): the clean run moved to H1's foreground shape (driver
+  guard entry, `completed` result, `requestShape`, a Sonnet driver); `guard-decisions.jsonl` holds
+  the U6.7 D1/D2/D3 `tool_result` entries and attempt 1's validation error in their recorded key
+  sets (probe report §10.3, §7), ids and paths replaced. `tests/test_audit.py`: 174 tests.
+  `README.md` line 45 reflowed (P8-F6); `AGENTS.md`.
 
-**Verified:** `pytest -q` from `decision-models/`, no deselection: 656 passed, 2 xfailed (baseline
+**Verified:** `pytest -q` from `decision-models/`, no deselection: 666 passed, 2 xfailed (baseline
 568/2); `ruff check .` clean. Mutants ran in a private copy, each restored `cmp`-equal;
 failures per mutant: `guardRejected` counted 4; deny counted and failure halted, told apart by text
 (the rejected alternative) 3; `hookMissing` reading in-flight tool uses 20; in-flight ignoring the
@@ -46,7 +48,9 @@ separator 6; driver bound unchecked 1; result matched ignoring `tool_use_id` (P1
 the guard 1; any decision as the guard's 1; any hook event 2; `inputInvalid` despite an attachment
 1; hand-back not exempt 2; hand-back count unchecked 2; hand-back not a terminal reply 4; driver
 model unchecked 2; driver `<synthetic>` ignored 2; `launchFailed` capped 1; launch clock never
-resets 1; non-zero exit as never spawned 1; `interrupted` ignored 1; no truncation tolerance 2; any
+resets 1; launch bound `>=` (M9) 1; empty driver transcript as missing (M17) 1; in-flight meta
+unchecked 2; first four halt rows reversed 2; hand-back exempt before `inputInvalid` 1; non-zero
+exit as never spawned 1; `interrupted` ignored 1; no truncation tolerance 2; any
 unparseable final line as truncation 1; empty transcript skipped 1. Accepting `async_launched` in
 the shape check survives (0): equivalent, as the background row is tested first.
 
