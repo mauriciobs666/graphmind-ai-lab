@@ -179,3 +179,91 @@ Made-up count 0 in all six.
 
 - `teco` routes S5b (fail branch, AC-5): ministral stays as the second accepted exception.
 - If the stakeholder wants another attempt at qwen, the decision to change the *prompt* (for example an explicit "report only values present in tool output" line) restarts both phases per §5; the observed failure is the model reporting facts, not command choice.
+
+## Acceptance
+
+S6 acceptance, fail branch (plan §6.2), run 2026-11-01 14:28-14:33 -03:00 by `qa-engineer`. Evidence: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/0226db56-34ec-4a4c-977f-2380bada0e33/scratchpad/s6/` (call it `s6/`). The S4 sections above are unchanged. Start state (`s6/lms-ps-start.txt`): qwen 20480 ctx, parallel 1, no TTL; embedder 2048, no TTL; nothing else loaded; `:8200` HTTP 200. Nothing was loaded or unloaded in this run.
+
+| AC | Result |
+|---|---|
+| AC-1 | not applicable (fail branch); preflight OK recorded |
+| AC-4 | pass (ministral named; foreign-model refusal names qwen); diff non-empty, none of it ours |
+| AC-7 / FR-5 | pass: grep empty; 5 of 6 places match, 1 optional item (manual) out of S6 scope |
+| AC-6 | information: fits, no spill beyond about 218-268 MiB host-pinned shared; single readings |
+
+### AC-1 (fail branch)
+
+Not applicable — `tank` did not pass (Outcome: fail above). Pass-branch steps 1-6 not run. One preflight against the loaded qwen copy (`s6/ac1-preflight.txt`):
+
+```
+$ opencode/agents/tank/scripts/model-preflight.sh qwen/qwen3-4b-2507
+OK: qwen/qwen3-4b-2507 loaded, context 20480, parallel 1
+exit=0
+```
+
+### AC-4
+
+`ensure_demo_models.sh --print-set` (`s6/ac4-printset.txt`, exit 0):
+`{"api_root": "http://localhost:1234", "chat": ["mistralai/ministral-3-3b"], "embedding": "text-embedding-qwen3-embedding-0.6b"}` — names ministral.
+
+Mutation check before running: the script header and `scripts/ensure_demo_models.py` entry say it "stops (exit 1) if any model OUTSIDE the set is loaded ... it never unloads or reloads anything" and loads only after that check; qwen was loaded, so the run reaches the refusal first. `lms ps` before and after is identical (`s6/lms-ps-after-ac4.txt`). Run (`s6/ac4-run.txt`):
+
+```
+ensure_demo_models: demo models: chat=mistralai/ministral-3-3b  embedding=text-embedding-qwen3-embedding-0.6b  (LM Studio at http://localhost:1234)
+ensure_demo_models: ERROR: refusing to continue:
+  - model(s) outside the demo set are loaded: qwen/qwen3-4b-2507
+    They would compete for the GPU with the demo's models. This step never unloads;
+    ...
+exit=1
+```
+
+`git diff --stat 185e326b..HEAD -- falkor-chat/server falkor-chat/scripts` (`s6/ac4-diff.txt`, HEAD f6d2797e): **non-empty**, 20 files changed, 2752 insertions, 120 deletions (scripts: `bootstrap_schema.sh`, `ensure_demo_models.py`, `ensure_demo_models.sh`, `generate_guard_decision_vectors.py`, `test_queries.sh`; server: `api.py`, `mcp.py`, `schemas.py`, `services.py`, `storefront_api.py`, decision-contract data, and 7 test files). Attribution by `git log 185e326b..HEAD -- falkor-chat/server falkor-chat/scripts` (`s6/ac4-log.txt`): 8 commits, 1554d560 (model-bench U4.1), 7490f634 (K-101 MCP half), f3e0015e (K-099, embedder 2048), 16f76f46 (K-101 service half), 0402d9c9 (K-099 items 1-2), 3fe94041 (typed-decision-models U3b.2), 6d4f5c05 (K-099 item 3), 24c51058 (live-specs L5s). **None belongs to this coordination**: the commits touching only `opencode/`/`docs/` are fe9383c5, 91573696, b37b7367, 33017e29, and none of the 8 is among them. So the literal "diff is empty" criterion is not met on this range, for reasons outside the change under test; the change's own commits touch no `falkor-chat/server` or `falkor-chat/scripts` path. (The `ensure_demo_models` edits by K-099 are by other sessions; they alter the embedder-context handling, not the chat-model/foreign-model refusal verified above.) Recommendation: the criterion should be read as "no commit of this change touches those paths", or the base should be re-pinned per commit set.
+
+### AC-7 / FR-5 (fail branch)
+
+`grep -rni nemotron opencode/agents/tank opencode/docs/BACKLOG.md` printed nothing (exit 1 = no match). Plan §2.3 places against S5b's *Done* ("README reads as one present-tense statement of the two exceptions; qwen entry stays provisioned"):
+
+| Place (§2.3) | Verdict | Quote |
+|---|---|---|
+| `tank/README.md` Prerequisites | matches | "serving `tank`'s model, `mistralai/ministral-3-3b`"; "**Load ministral by hand, before a run:** ... `lms load mistralai/ministral-3-3b -c 20480 --parallel 1 --gpu max --identifier mistralai/ministral-3-3b -y`"; "**Unload it before a demo and before returning to everyday use**". No nemotron, no "trial pending" (grep for "pending" empty) |
+| README `--title` paragraph | matches | "reliably fails against `mistralai/ministral-3-3b`'s strict-alternation chat template" (ministral stays, so unchanged is correct) |
+| README Configuration reference | matches | `provider.lmstudio.models`: "(`mistralai/ministral-3-3b`, `qwen/qwen3-4b-2507`)"; `agent.tank.model`: "`lmstudio/mistralai/ministral-3-3b` (default)" |
+| README Choosing a model | matches | "ministral-3-3b is `tank`'s model ... the `qwen/qwen3-4b-2507` trial failed (qwen made up findings in all three TP-001 runs; `docs/test-reports/standard-local-model-report.md`). It is the second accepted exception to the one-chat-model rule, alongside the salesperson demo, so running `tank` means a second chat model in memory." |
+| `opencode.json` | matches | `agent.tank.model` = "lmstudio/mistralai/ministral-3-3b"; provider map has both ministral and "qwen/qwen3-4b-2507" (qwen left provisioned, as S5b says) |
+| `scripts/health-check.sh`, `bring-up.sh`, `tear-down.sh` | matches | health-check.sh: "500s on ministral-3-3b's chat template"; bring-up.sh/tear-down.sh: "this model's chat template — see health-check.sh's header note" (unchanged, correct on ministral) |
+| `opencode/docs/BACKLOG.md` nemotron item | matches | no "nemotron" in the file; remaining item is the scheduler wiring |
+| `opencode/docs/plans/devops-opencode-headless.md` §7 | matches (n/a on this branch) | still "keep `ministral-3-3b` as the shipped default"; not superseded on the fail branch; document is `archived`, nemotron remarks stay by design |
+| frozen `devops-opencode-headless-report.md` | matches | "try nemotron" remarks kept (lines 375, 437, 586) |
+| `opencode/docs/manuals/local-llm.md` Step 1 | not an S5b item | still says "Before clicking Load, set the Context Length to at least `16384`" with an example of ministral; S7 (optional, `tico`) owns the per-model-defaults note, and the preflight minimum is 20480, so the manual's 16384 is below it. Flagged, not a defect against S5b |
+
+One non-blocking observation: the README load command and S5b both use 20480; the plan §4 S5b text says "<min>", consistent.
+
+### AC-6 (information, not a gate)
+
+Both models were already loaded as required (qwen 20480 / parallel 1, embedder 2048, no TTL on either; identifiers equal their keys). Not reloaded. The `--gpu max` flag is not shown by `lms ps`, so the earlier load flags are taken from the loader's account, not observed.
+
+Method (as the fit report): `nvidia-smi --query-gpu=memory.used,memory.total`; `powershell.exe Get-Counter` for `\GPU Process Memory(*)\Dedicated Usage` and `Shared Usage`, per process, entries above 50 MiB only, script `s6/measure.sh`. The NVIDIA adapter's LUID this boot is `0x00012fe0` (the fit report's `0x00011343` is from another boot); `0x00012c32` is the other adapter (WindowsTerminal/explorer/dwm shared memory, not LM Studio) and is excluded below. Readings (single sample each, MiB):
+
+| Reading | nvidia-smi used/total | llama-server (pid 11012) dedicated / shared | LM Studio pid 16144 dedicated / shared | LM Studio pid 1916 dedicated |
+|---|---|---|---|---|
+| idle (`meas-idle.txt`) | 5728 / 6141 | 5353 / 218 | 353 / <50 | <50 |
+| after one qwen `tank` check (`meas-after-tank.txt`) | 5823 / 6141 | 5353 / 218 | 353 / <50 | 118 |
+| after one `search_documents` via :8200 (`meas-after-search.txt`) | 5809 / 6141 | 4713 / <50 | 1025 / 268 | 71 |
+
+Sum of dedicated on the NVIDIA LUID: 5706+ / 5824 / 5809 (limit 6141). Sum of shared on that LUID: 218 / 218 / 268.
+
+What was run for the "after tank" reading: `model-preflight.sh qwen/qwen3-4b-2507` (OK), then `cd opencode/agents/tank && opencode run --agent tank -m lmstudio/qwen/qwen3-4b-2507 --title "tank health-check" "Run the default health/hygiene check: ... Report what you find." </dev/null` (the same message `health-check.sh` sends; `health-check.sh` itself would have run the preflight against ministral and refused). Exit 0; the report was produced (output `s6/tank-qwen.out`; its content was not scored, S4 already did that). The search was `search_documents` through the `:8200` MCP server (returned a result list).
+
+**Verdict: fits.** Dedicated total stays at or under 5824 of 6141 MiB in every reading, and shared usage stays at 218-268 MiB, the size of the constant pinned host buffer the fit report saw on a clean load (112 MiB there; 368 MiB in its spill case), with no growth after the tank run. The search shifted dedicated memory from llama-server (-640) to the embedder's process (+672), the same WDDM paging the fit report described, with no net spill. The plan's expected "likely spills" outcome (§2.2) did not occur at idle or after these two operations. Caveats: one sample per reading; the plan's overlap case (concurrent `tank` plus extraction) was not measured; I did not read a shared-usage baseline at zero load, so "pinned buffer" is an inference from the fit report.
+
+### End state
+
+`lms ps` (and `:8200` HTTP 200) at the end:
+
+```
+IDENTIFIER                             MODEL                                  STATUS    SIZE         CONTEXT    PARALLEL    LOAD CONFIG    DEVICE    TTL
+qwen/qwen3-4b-2507                     qwen/qwen3-4b-2507                     IDLE      2.50 GB      20480      1           LM Studio      Local        
+text-embedding-qwen3-embedding-0.6b    text-embedding-qwen3-embedding-0.6b    IDLE      639.15 MB    2048       -           LM Studio      Local        
+```
+
+`laya` and ministral not loaded; nothing else unloaded; storefront demo not started; no docker or pip command run by me.
