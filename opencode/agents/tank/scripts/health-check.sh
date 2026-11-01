@@ -15,6 +15,8 @@ TANK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Project-scoped opencode.json is only loaded from its own directory
 # (verified live, plan §2.3) — cd there rather than relying on --dir.
 cd "$TANK_DIR"
+# FR-7 model preflight (standard-local-model §3.3): refuse before opencode if the model copy is wrong.
+"$SCRIPT_DIR/model-preflight.sh" || exit 1
 # --title supplies the session title up front, which skips OpenCode's own
 # background auto-title LLM call entirely (verified live, 2026-09-13: with
 # no --title, every run also fires a second `agent=title small=true` call

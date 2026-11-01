@@ -20,6 +20,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TANK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$TANK_DIR"
+# FR-7 model preflight (standard-local-model §3.3): refuse before opencode if the model copy is wrong.
+"$SCRIPT_DIR/model-preflight.sh" || exit 1
 # --title avoids OpenCode's background auto-title call, which errors against
 # this model's chat template — see health-check.sh's header note for detail.
 exec opencode run --agent tank --title "tank bring-up: ${SLUG}" "Bring up the '${SLUG}' environment."
