@@ -10,9 +10,12 @@ _CON = re.compile(r"GRAPH\.CONSTRAINT CREATE <key> UNIQUE NODE (\w+) PROPERTIES 
 def parse_ddl(text: str | None = None) -> list[tuple]:
     """Statements in file order: ``("index", label, prop, cypher)`` / ``("constraint", label, prop)``.
 
-    Raises ``ValueError`` on any statement that is neither shape (no silent skips)."""
+    Raises ``ValueError`` on any statement that is neither shape (inline comments, lower-case keywords,
+    multi-property constraints, trailing junk, a missing final ``;``): no silent skips."""
     text = DDL_V1.read_text() if text is None else text
     body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("//"))
+    if body.strip() and not body.rstrip().endswith(";"):
+        raise ValueError("final statement lacks its terminating ';'")
     out: list[tuple] = []
     for stmt in (s.strip() for s in body.split(";")):
         if not stmt:

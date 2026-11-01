@@ -16,20 +16,25 @@ from ccg.store import DDL_V1, parse_ddl
 HOST, PORT = "127.0.0.1", 6390
 POLL_TIMEOUT_S = 60
 
-#: section 1.6, index column: label -> indexed properties
-EXPECTED_INDEXES = {
-    "Repo": {"repoId"}, "Unit": {"unitId"}, "File": {"fileId", "path"}, "SkippedFile": {"path", "repoId"},
-    "Symbol": {"symbolId", "nameNorm", "qname"}, "CallSite": {"callSiteId"},
-    "Param": {"pointId"}, "Ret": {"pointId"}, "Cond": {"pointId"}, "Name": {"nameKey"},
-    "ContractPoint": {"cpId", "keyNorm"}, "Link": {"linkId"},
-}
-#: section 1.6, UNIQUE column
-EXPECTED_CONSTRAINTS = {
-    "Unit": "unitId", "File": "fileId", "Symbol": "symbolId", "CallSite": "callSiteId", "Param": "pointId",
-    "Ret": "pointId", "Cond": "pointId", "Name": "nameKey", "ContractPoint": "cpId", "Link": "linkId",
-}
-EXPECTED_INDEX_PAIRS = {(l, p) for l, ps in EXPECTED_INDEXES.items() for p in ps}
-EXPECTED_CONSTRAINT_PAIRS = set(EXPECTED_CONSTRAINTS.items())
+PLAN = Path(__file__).resolve().parents[2] / "docs" / "plans" / "connected-code-graph-p0-graph.md"
+
+
+def parse_plan_table(text):
+    """Section 1.6's table -> (index pairs, constraint pairs). Drift between plan and DDL is red."""
+    sec = text.split("### 1.6", 1)[1].split("\n###", 1)[0].split("\n## ", 1)[0]
+    rows = [l for l in sec.splitlines() if l.startswith("|")][2:]  # header + separator
+    idx, con = set(), set()
+    for row in rows:
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        labels = re.findall(r"`(\w+)`", cells[0])
+        for label in labels:
+            idx |= {(label, p) for p in re.findall(r"`(\w+)`", cells[1])}
+            con |= {(label, p) for p in re.findall(r"`(\w+)`", cells[2])}
+    return idx, con
+
+
+EXPECTED_INDEX_PAIRS, EXPECTED_CONSTRAINT_PAIRS = parse_plan_table(PLAN.read_text())
+EXPECTED_CONSTRAINTS = dict(EXPECTED_CONSTRAINT_PAIRS)
 
 
 def static_problems(stmts):
@@ -130,7 +135,7 @@ def apply_ddl(db, key, stmts, *, between=None, timeout_max=0):
             n += 1
     deadline = time.monotonic() + POLL_TIMEOUT_S
     while True:
-        cons = [(r[1], r[2], r[4]) for r in g.query("CALL db.constraints()").result_set]
+        cons = [(r[1], r[2], r[4]) for r in q("CALL db.constraints()").result_set]
         assert not [c for c in cons if c[2] == "FAILED"], cons
         if len(cons) == n and all(c[2] == "OPERATIONAL" for c in cons):
             return q, cons
@@ -138,9 +143,6 @@ def apply_ddl(db, key, stmts, *, between=None, timeout_max=0):
         time.sleep(0.2)
 
 
-def live_indexes(g):
-    rows = g.query("CALL db.indexes()").result_set
-    return rows
 
 
 def run_against(db, stmts, *, load=True):
@@ -160,7 +162,7 @@ def run_against(db, stmts, *, load=True):
                 loaded[label] = prop
 
         q, cons = apply_ddl(db, key, stmts, between=between, timeout_max=timeout_max)
-        rows = live_indexes(g)
+        rows = q("CALL db.indexes()").result_set
         got = []
         for r in rows:  # label, properties, types, options, language, stopwords, entitytype, status
             label, props, types, entity, status = r[0], r[1], r[2], r[6], r[7]
@@ -170,7 +172,8 @@ def run_against(db, stmts, *, load=True):
         assert len(got) == len(set(got)), f"duplicate live index entries: {got}"
         assert set(got) == EXPECTED_INDEX_PAIRS, (
             f"missing {sorted(EXPECTED_INDEX_PAIRS - set(got))}, extra {sorted(set(got) - EXPECTED_INDEX_PAIRS)}")
-        assert {(c[0], c[1][0]) for c in cons} == EXPECTED_CONSTRAINT_PAIRS and all(len(c[1]) == 1 for c in cons)
+        assert all(len(c[1]) == 1 for c in cons) and {(c[0], c[1][0]) for c in cons} == EXPECTED_CONSTRAINT_PAIRS, (
+            f"constraint set differs: {sorted((c[0], c[1][0]) for c in cons)}")
         # the constraint really enforces: a duplicate id is refused
         with pytest.raises(Exception):
             q("CREATE (:Link {linkId: $v})", {"v": "Link-1"})
@@ -186,27 +189,125 @@ def test_ddl_applies_to_empty_key_indexes_match_table_and_constraints_reach_oper
     assert len(run_against(db, parse_ddl())) == 17
 
 
-@pytest.mark.live
-@pytest.mark.parametrize("mutant", ["drop_index", "extra_index", "drop_constraint", "constraint_first"])
-def test_live_check_fails_on_a_broken_ddl(db, mutant):
+def _mutant(name):
     base = parse_ddl()
-    if mutant == "drop_index":
-        stmts = [s for s in base if s[:3] != ("index", "Param", "pointId")]
-    elif mutant == "extra_index":
-        stmts = base[:1] + [("index", "Repo", "bogus", "CREATE INDEX FOR (n:Repo) ON (n.bogus)")] + base[1:]
-    elif mutant == "drop_constraint":
-        stmts = [s for s in base if s[:3] != ("constraint", "Link", "linkId")]
-    else:
-        cons = [s for s in base if s[0] == "constraint"]
-        stmts = cons[:1] + [s for s in base if s[0] == "index"] + cons[1:]
-    with pytest.raises(Exception):  # AssertionError from the contract check, or the engine refusing the order
-        if mutant == "constraint_first":
-            # the engine itself must refuse a constraint with no index, before any data
-            key = fresh_key(db)
-            try:
-                db.connection.execute_command("GRAPH.CONSTRAINT", "CREATE", key, "UNIQUE", "NODE", cons[0][1], "PROPERTIES", 1, cons[0][2])
-            finally:
-                if db.connection.exists(key):
-                    db.select_graph(key).delete()
-        else:
-            run_against(db, stmts)
+    cons = [s for s in base if s[0] == "constraint"]
+    idx = [s for s in base if s[0] == "index"]
+    return {
+        "drop_index": [s for s in base if s[:3] != ("index", "Param", "pointId")],
+        "drop_unconstrained_index": [s for s in base if s[:3] != ("index", "SkippedFile", "repoId")],
+        "extra_index": base[:1] + [("index", "Repo", "bogus", "CREATE INDEX FOR (n:Repo) ON (n.bogus)")] + base[1:],
+        "drop_constraint": [s for s in base if s[:3] != ("constraint", "Link", "linkId")],
+        "constraint_first": cons[:1] + idx + cons[1:],
+    }[name]
+
+
+#: mutant -> (exception type, message fragment): the failure must be the *intended* one
+MUTANT_FAILURES = {
+    "drop_index": ("ResponseError", "missing supporting exact-match index"),
+    "drop_unconstrained_index": ("AssertionError", "missing [('SkippedFile', 'repoId')], extra []"),
+    "extra_index": ("AssertionError", "missing [], extra [('Repo', 'bogus')]"),
+    "drop_constraint": ("AssertionError", "constraint set differs"),
+    "constraint_first": ("AssertionError", "follows a constraint statement"),
+}
+
+
+@pytest.mark.live
+@pytest.mark.parametrize("mutant", sorted(MUTANT_FAILURES))
+def test_live_check_fails_on_a_broken_ddl_for_the_intended_reason(db, mutant):
+    exc_type, fragment = MUTANT_FAILURES[mutant]
+    with pytest.raises(Exception) as info:
+        run_against(db, _mutant(mutant))
+    assert type(info.value).__name__ == exc_type, repr(info.value)
+    assert fragment in str(info.value), str(info.value)
+
+
+@pytest.mark.live
+def test_engine_refuses_a_constraint_without_an_index(db):
+    key = fresh_key(db)
+    try:
+        with pytest.raises(Exception, match="missing supporting exact-match index"):
+            db.connection.execute_command("GRAPH.CONSTRAINT", "CREATE", key, "UNIQUE", "NODE", "Unit", "PROPERTIES", 1, "unitId")
+    finally:
+        if db.connection.exists(key):
+            db.select_graph(key).delete()
+
+
+@pytest.mark.live
+def test_failed_constraint_state_fails_the_apply(db):
+    """Two Links with one id loaded before the constraints: the Link constraint goes FAILED and apply_ddl raises."""
+    key = fresh_key(db)
+
+    def load_duplicates(q):
+        q("CREATE (:Link {linkId: 'dup'}), (:Link {linkId: 'dup'})")
+
+    try:
+        with pytest.raises(AssertionError, match="FAILED"):
+            apply_ddl(db, key, parse_ddl(), between=load_duplicates)
+    finally:
+        assert re.fullmatch(r"ccg_p0slice__build_ddl\d+", key)
+        if db.connection.exists(key):
+            db.select_graph(key).delete()
+
+
+# ------------------------------------------------------------------- pure: TIMEOUT_MAX branch (D16)
+
+class _Res:
+    def __init__(self, rows):
+        self.result_set = rows
+
+
+class _RecGraph:
+    def __init__(self, calls, n_constraints):
+        self.calls, self.n = calls, n_constraints
+
+    def query(self, cypher, params=None, timeout=None):
+        self.calls.append((cypher, timeout))
+        if cypher == "CALL db.constraints()":
+            return _Res([["UNIQUE", l, [p], "NODE", "OPERATIONAL"] for l, p in sorted(EXPECTED_CONSTRAINT_PAIRS)])
+        return _Res([])
+
+
+class _RecDb:
+    def __init__(self):
+        self.calls, self.raw = [], []
+        self.connection = self
+
+    def select_graph(self, key):
+        return _RecGraph(self.calls, 10)
+
+    def execute_command(self, *args):
+        self.raw.append(args)
+
+
+@pytest.mark.parametrize("timeout_max", [0, 1000])
+def test_every_statement_carries_the_timeout_when_timeout_max_is_nonzero(timeout_max):
+    db = _RecDb()
+    apply_ddl(db, "ccg_p0slice__build_ddl1", parse_ddl(), between=lambda q: q("CREATE (:Unit {unitId: 'u'})"), timeout_max=timeout_max)
+    assert len(db.calls) == 17 + 1 + 1 and len(db.raw) == 10  # indexes, the load query, one poll; constraints are raw commands
+    assert {t for _, t in db.calls} == ({1000} if timeout_max else {None})
+
+
+# ------------------------------------------------------------------- pure: parser negatives (reject, never skip)
+
+@pytest.mark.parametrize("text", [
+    "CREATE INDEX FOR (n:Repo) ON (n.repoId); // trailing comment",   # inline comment
+    "create index for (n:Repo) on (n.repoId);",                        # lower-case keywords
+    "GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE File PROPERTIES 2 fileId path;",  # PROPERTIES 2
+    "CREATE INDEX FOR (n:Repo) ON (n.repoId); junk",                   # junk after a statement
+    "CREATE INDEX FOR (n:Repo) ON (n.repoId)",                         # final statement without ';'
+    "CREATE INDEX FOR (n:Repo) ON (n.repoId);\nCREATE INDEX FOR (n:Unit) ON (n.unitId)",
+], ids=["inline-comment", "lowercase", "properties-2", "junk-after", "no-final-semicolon", "second-lacks-semicolon"])
+def test_parser_rejects(text):
+    with pytest.raises(ValueError):
+        parse_ddl(text)
+
+
+def test_parser_accepts_whole_line_comments_and_blank_lines():
+    assert parse_ddl("// c\n\nCREATE INDEX FOR (n:Repo) ON (n.repoId);\n// end\n") == [
+        ("index", "Repo", "repoId", "CREATE INDEX FOR (n:Repo) ON (n.repoId)")]
+
+
+def test_plan_table_parse_is_the_spec_not_a_transcription():
+    assert len(EXPECTED_INDEX_PAIRS) == 17 and len(EXPECTED_CONSTRAINT_PAIRS) == 10
+    assert ("SkippedFile", "repoId") in EXPECTED_INDEX_PAIRS and ("Cond", "pointId") in EXPECTED_CONSTRAINT_PAIRS
