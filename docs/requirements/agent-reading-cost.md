@@ -213,3 +213,9 @@ What already exists:
 - 2026-11-01 — Which documents do gate re-runs and plan↔code checks use? → As of that unit's
   commit. (AC-2, AC-13)
 - 2026-11-01 — Ready for design? → Yes, on the final readback. (Status)
+- 2026-11-01 — May a new family's plan version be committed when its gate is dispatched, an
+  exception to docs-only commit-once? → Yes, for new plan families only. (FR-7, FR-8)
+- 2026-11-01 — During the measurement windows, may gate agents be resumed across units? → Yes;
+  the counter attributes each resumed leg to its own unit. (FR-5, AC-1, AC-16)
+- 2026-11-01 — Which recorded gate passes are replayed? → Every pass with at least one blocker or
+  major. (AC-2)

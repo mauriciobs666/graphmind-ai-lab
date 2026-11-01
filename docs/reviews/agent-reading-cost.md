@@ -300,3 +300,474 @@ No restated history otherwise.
 ### Proposed REVIEW.md lines
 
 Unchanged from Pass 1.
+
+## Pass 3
+
+**Scope.** This pass reviews the implementation plan `docs/plans/agent-reading-cost.md` **v1.1**
+(`architect`, untracked, 7,269 words) against `docs/requirements/agent-reading-cost.md` (Ready for
+design, `53a21487`), root `AGENTS.md`, root `REVIEW.md` and `falkor-chat/REVIEW.md`. Feasibility
+claims were checked against falkor-chat source, live `ws:agent-team`, `~/.claude/projects`
+transcripts, the C-1001 ledger and review, and `git grep`. Nothing was run against
+`ws:team-docs`, because it does not exist yet.
+
+**Verdict: needs changes.** There are no blockers and four majors. M3-1 and M3-2 break the
+replay and token-count designs on the actual U20–U32 record. M3-3 leaves FR-8's consistency
+sweep unable to see the commit rule it changes. M3-4 is a sequencing gap. Twelve minors, three
+nits.
+
+CPG: used cpg_falkorchat — confirmed that `IngestionPipeline` has one production construction
+site (`app.py:619`); the graph is stale, so the result was cross-checked against source.
+
+### Coverage and scope
+
+- **Every FR and AC maps to a unit and a test.** *Verified* against §3 and §4:
+  - FR-1 → B1/B4/B5/C1 (AC-12) · FR-2 → B6 (AC-13) · FR-3 → C1 (AC-5) · FR-4 → C2/C3 (AC-11)
+  - FR-5 → A2 (AC-14) · FR-6 → B1/B4/B6 (AC-6) · FR-7 → B1 `versions`/C4 (AC-7)
+  - FR-8 → C4 (AC-7) · FR-13 → D2/D3 (AC-2–AC-4) · FR-14 → A5/D3 (AC-1, AC-16)
+- **Units without a requirement:**
+  - B2 and B3 are enabling infrastructure for FR-1 and FR-6, which is acceptable.
+  - E1 is not covered by any requirement (m3-9).
+- **Out of scope is respected.** C-1001 is read-only. Reviews, ledgers, `HISTORY.md` and
+  `BACKLOG.md` are kept out of `search`. `HISTORY.md` stays reachable by address only, which is
+  consistent with FR-1. Existing families keep rule 5 (§2.8 point 4). No Kiro steering file is
+  touched.
+- **Stakeholder answers are reflected faithfully:**
+  - Q1: §2.3 has one workspace, path tags and `--component`/`--all`.
+  - Q2: §2.8 commits each version at gate dispatch, for new families only.
+  - Q3: §4 replays every pass with a blocker or major.
+  - Q4: A4 makes no reader-visible change before A5.
+  - Q5: the Phase A precondition plus the §5 contingency.
+  - Q2's placement is M3-3 below. Q3's replay count is unverified (M3-1).
+
+### Major
+
+**M3-1 — `ar replay prepare` assumes one gate pass is one spawned agent whose first user entry
+is its brief. The U20–U32 record contradicts that.** *Verified* in the transcripts and the
+ledger:
+- `agent-a72f2b8992f574958` gated S01 Pass 1. S05 Pass 1 then arrived as a SendMessage leg *while
+  S01 was running* (19:56), followed by S05 Passes 2 and 3 (21:56, 22:05). §2.9 step 1 would
+  hand all four replays the S01 brief, with base commits taken from the file's start.
+- U22's `graph-dba` gate is marked "resumed".
+- U26, U28 and U30 have no gate id in `docs/plans/connected-code-graph-coordination.md`.
+- Original briefs name the main tree's absolute root ("repo root `/home/mauricio/prg/…`"). A
+  replay run in a worktree would read today's files, which defeats AC-2's as-of fidelity.
+- Docs-only deliverables, and other documents the gate read, were uncommitted at gate time
+  (docs-only batching), so "newest commit before the start" is not what the gate saw. Builders
+  also wrote some files through Bash, which a `Write`/`Edit` replay cannot reconstruct.
+
+*Fix:*
+- Make the replay unit an (agent id, leg). The brief is the leg's user text, and the base commit
+  comes from the leg's timestamp.
+- Recover missing gate ids from the parent session's `Agent` `tool_use` ids.
+- Rewrite the repo root path in the brief to the worktree.
+- B7's probes must include a docs-only pass (S04 or S05) and a resumed leg, not only U27.
+- State how a halted reconstruction is counted in AC-2's denominator.
+- A3(f) owns whether a cold spawn is comparable with a resumed leg.
+
+**M3-2 — FR-5's "a run is one `agent-<id>`" cannot attribute an agent that served several
+units.** *Verified*: `a72f…` is the U20 gate and also the U24 gate (ledger rows U20 and U24).
+§2.6 would give both units the same three-leg total. "A gate is its own run" does not prevent
+this, because cross-unit resumes are current `teco` practice. Q4 also forbids changing that
+practice during A4.
+
+*Fix:* `ar tokens` attributes **legs** (split at each string user entry). Each record carries
+`--unit` per leg range. A2 adds a fixture with one agent serving two units, and its expected
+figures are written by hand.
+
+**M3-3 — The docs-only commit-once rule lives in five places. C4 edits one, and its sweep cannot
+see the rest.** *Verified*: the rule is stated in:
+- `claude/AGENTS.md:241-249`;
+- `claude/teco/teco.md:146` and `:175`;
+- `claude/tico/tico.md` (consult rule, l.44, and "Coordinating a docs-only chain");
+- `claude/docs/manuals/agent-team.md:390`, `:466`.
+
+`docs/requirements/commit-granularity.md` is `archived`. C4's pattern matches none of the
+commit-rule wording, so FR-8 ("every … prompt … that relies on the rule agrees") fails silently.
+`tico`, which runs the requirements → plan → review chains, is the agent that would break Q2.
+
+*Fix:*
+- C4 names all five homes.
+- Add a second unfiltered pattern: `docs-only (chain|batch)|terminal state|commit(s|ted)? once`.
+- Ask `tico` to log the Q2 exception in this requirements document's decision log, since it
+  amends a standing convention. Today it is recorded only in the plan.
+
+**M3-4 — B4's live acceptance depends on K-102 (B3), but B3 is not in B4's Depends column.**
+*Verified* live: `ws:agent-team` has 14 `failed` documents.
+- 11 have an unembedded chunk, so the embed itself failed.
+- 3 are fully embedded, so something after the embed failed them, most likely extraction.
+
+Turning extraction off on 8201 removes only the second class. `:8200` keeps extracting on the
+same one-model GPU (`falkor-chat/AGENTS.md`; K-070). A ~3,000-unit rebuild can then end with
+units left uncovered for K-102's reason rather than B4's.
+
+*Fix:* B4 depends on B3's RCA. B3's RCA must cover the embed-failure class. Alternatively, B4's
+acceptance becomes "zero uncovered after `ar sync --reconcile`", with the first-pass uncovered
+count recorded.
+
+### Minor
+
+**m3-1 — B2 names `app.py:292` as a construction site. It is not code.** *Verified*: lines
+285–296 are the `::` example in `create_app`'s docstring. Source and `cpg_falkorchat` both show
+one production site, `app.py:619`. *Fix:* gate only `_build_default_app` and leave
+`create_app`'s injected parameter alone.
+
+**m3-2 — `start_team_docs.sh` duplicates `start_agent_team.sh`.** *Verified*: the existing
+script already takes `FALKORCHAT_WS_ID` and `AGENT_TEAM_PORT`, and its own example uses
+`AGENT_TEAM_PORT=8201`. *Fix:* pass the flag through `start_agent_team.sh`, or write a wrapper
+of a few lines. Skip the Agent-roster seed only if it causes harm.
+
+**m3-3 — The serialization order is not encoded.** *Verified* in the §3 table: after C2, units
+C1, C3 and C4 have no mutual dependency, yet C3 and C4 both edit `claude/AGENTS.md`. C4's text
+hedges ("or its §2.7 home if C3 has already moved it"). *Fix:* fix the order in the Depends
+column, e.g. C2 → C4 → C3 → C1.
+
+**m3-4 — The item-id regex rejects the plan's own examples.** *Verified* by running it:
+`P0-08` → `P0`, `N2-1` → `N2`, `P2-M1` → `P2`. A trailing period is also absorbed (`S09.`).
+AC-13's aliases come from `P0-08`. *Fix:* the B1 tests must include a coverage probe over id
+shapes: multi-segment ids, letter-after-dash ids and sentence-final punctuation. The regex
+itself is the implementer's choice.
+
+**m3-5 — AC-11's no-loss check only verifies verbatim moves, and has no control.** `ar find`
+matches exact text. C3 is not specified as a pure relocation the way C2 is. *Fix:* C3 also
+relocates first and rewords in a later commit. The control is a planted removed paragraph with
+no manifest row, which must turn the check red.
+
+**m3-6 — The root history home contradicts root `AGENTS.md`.** That file says
+`docs/HISTORY.md` is `cpg/`'s own log and that other entries go elsewhere. The plan sends root
+`AGENTS.md` history and C2's manifest there. Also, `salesperson/` has no `docs/HISTORY.md` (its
+home is falkor-chat's). *Fix:* pick the home explicitly. If it stays `docs/HISTORY.md`, C2
+rewrites the `cpg/` ownership statement.
+
+**m3-7 — Lazy sync makes `ar search` block.** Each search parses ~155 files and may wait up to
+60 s per changed unit under the lock. The hash-compare label already makes freshness explicit.
+Two related gaps:
+- `limit` is capped at 200 (`schemas.MAX_LIST_LIMIT`), which bounds the over-fetch a scoped
+  search can use. B5 should state that ceiling.
+- Every REST delete leaves an audit node (`repository.delete_document`).
+
+*Fix:* search posts changed units and does not wait for them. `--rebuild` drops and
+re-bootstraps the graph rather than deleting one document at a time.
+
+**m3-8 — The retention precondition is not met today, and the date estimate is inferred.**
+*Verified*:
+- No `cleanupPeriodDays` is set in `~/.claude/settings*.json`.
+- The oldest transcript is 18 days old (2026-10-14), not ~30, so the "late November" estimate is
+  unsupported.
+- Headless runs from another directory land under another project slug (seen for the scratchpad
+  probes), so D2's worktree replays escape the default `--projects-dir`.
+
+*Fix:* the A2-dispatch check copies at once if the setting is absent. The replay worktree's
+slug is passed to `ar tokens`.
+
+**m3-9 — E1 has no requirement.** §2.5 says "No acceptance criterion depends on symbols". *Fix:*
+file E1 as a trigger-gated backlog item rather than a unit of this plan.
+
+**m3-10 — AC-4's test invents a rule.** "≥1 mutant per changed function" is not "the same rule
+applied before retrieval". *Fix:* take the after-rule from A5's recorded before practice.
+
+**m3-11 — The C4 sweep is 2,467 hits across 382 files.** *Verified* by running the pattern
+verbatim at the repo root. One table row per hit is impractical. *Fix:* rule per file (each
+archived file is no-change as a block, with the list of hits), keeping the sweep unfiltered.
+
+**m3-12 (growth-stops) — Restated facts and rationale.**
+- §1 restates falkor-chat live-spec behaviour (chunk sizes, search fields, REST routes) instead
+  of citing `falkor-chat/docs/SERVER.md` §1.4 and §2.2 (root `REVIEW.md`, live-spec rule).
+- §1's `AGENTS.md` word table duplicates A5's start counts and is already off
+  (`decision-models/AGENTS.md` is 665 at HEAD, not 631).
+- §2.3's per-component-workspace argument and "This is still the corpus extension…" argue a
+  settled Q1.
+- §7 restates §3.
+
+*Fix:* cite, or drop. Growth from v1.0 to v1.1 cannot be classified, because v1.0 was not
+retained.
+
+### Nit
+
+- Nested runs: `.meta.json` carries `parentAgentId` (seen on a `spawnDepth: 2` file), which is
+  simpler than scanning for `toolUseId`.
+- `runs.jsonl` records should carry the counter's commit sha, so the baseline is pinned
+  (`falkor-chat/REVIEW.md`).
+- §2.3/§5 should cite the open K-070, K-091 and K-064 (the extract/embed swap and the
+  update-detection signals that sync will trigger).
+
+### Methodology risks for A3's `data-scientist` gate (named, not adjudicated)
+
+- **Agents serving several units, and resumed legs.** These affect both the FR-5 attribution
+  (M3-2) and AC-2's comparability (M3-1).
+- **Unit mix shifts between the windows.** The baseline is the next C-1001 units; the after
+  window covers later phases. Docs-only and code units differ, and roles have small n per window.
+- **The headline is dominated by cache reads.** U24 is 13.2M of 14.15M, a figure I reproduced
+  exactly from the transcript. A reading cut may show up mainly in priced-down cache reads.
+- **Uncontrolled changes during the A4 window.** Other features may change what agents read.
+  A5 should log them.
+- **AC-2 selection bias.** Only passes that can be reconstructed get replayed.
+- **AC-3's before window mixes two families** with different review regimes.
+
+### What's solid
+
+- Text always comes from git or the file, and never from the index. FR-6 holds by construction,
+  and as-of-commit becomes one `--at`.
+- One workspace with path tags is the right call, given one workspace per process. *Verified*:
+  `config.WS_ID` is a process constant, and `get_context()` returns it.
+- The extraction flag is feasible as described. *Verified*: with `ingestion_pipeline=None`, no
+  extract job is scheduled and `pendingJobs` counts embeds only (`background.py:208-227`). Update
+  detection falls back to the embed worker's repository.
+- FR-5's per-message rule is grounded. *Verified*: U24 recomputes to 14,153,036, and resumes
+  append to the same file.
+- Deriving the plan↔code link from git rather than storing it is proportionate. The commit
+  subjects and step-table shape exist as described (`6f4e34f9`, `p0-2.md` §3).
+- Making C2 a pure relocation turns no-loss into a diff.
+
+### Open questions
+
+- M3-2: may `teco` keep resuming gate agents across units during the measurement windows, or
+  must the counter split legs? The fix above assumes the counter splits them.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, `## Always check`. Source: M3-1, M3-2.
+
+- (addition) A plan that counts, replays or attributes past agent runs checks its run unit
+  against real transcripts and ledgers: resumed legs, one agent serving several units, missing
+  ids, and briefs that carry absolute paths.
+
+## Pass 4
+
+**Scope.** This pass reviews the plan `docs/plans/agent-reading-cost.md` **v1.2** (untracked,
+6,402 words, down from 7,269), with the requirements decision log's three new entries
+(uncommitted).
+
+**Verdict: needs changes.** There is one major, N4-1: the replay verification of M3-1's fix
+does not fit how gates actually read files. There are four new minors and one nit. Nothing found
+here touches Phase A, so A2 and A3 can start.
+
+CPG: considered, not relevant — the one code change is the single `app.py:619` site, which was
+checked in Pass 3. This pass checks transcripts, scripts and sweeps.
+
+### Pass 3 dispositions
+
+- **M3-1** — fixed in part.
+  - Fixed, rechecked against §2.9 and B7:
+    - the replay unit is now one leg;
+    - missing gate ids are recovered through `tool_use`;
+    - the root path is rewritten;
+    - a docs-only probe and a resumed-leg probe are added;
+    - the AC-2 denominator is stated.
+  - Not fixed: the layered-tree verification (N4-1).
+- **M3-2** — fixed. §2.6 legs, attribution and A2's two-unit fixture match the stakeholder's
+  per-leg decision. Residue: N4-2.
+- **M3-3** — fixed in part.
+  - Fixed: C4 writes into the rule's homes, adds a second sweep, and has the decision-log
+    precondition (entry present).
+  - Not fixed: the sweep pattern I proposed misses one home (N4-3).
+- **M3-4** — fixed. B4 now depends on "B3 (RCA)", and its acceptance is zero uncovered after
+  `--reconcile`. B3's RCA covers both failure classes and the `:8200` decision.
+- **m3-1** — fixed. §1, §2.3 and B2 cite `:619` only.
+- **m3-2** — fixed. The wrapper's exports survive `start_agent_team.sh`'s `exec uvicorn`, which
+  runs with no `env -i`. Residue: N4-5.
+- **m3-3** — fixed. C2 → C4 → C3 → C1 is encoded in the Depends column.
+- **m3-4** — fixed. §4 item 2 has an id-shape coverage probe.
+- **m3-5** — fixed. Every file moves in two commits, and AC-11 has a planted-paragraph control.
+- **m3-6** — fixed. The manifests go to `agent-reading/docs/HISTORY.md`, and `salesperson/`
+  history goes to falkor-chat. Residue: N4-4.
+- **m3-7** — fixed. Search no longer waits, the 200 ceiling is stated, and `--rebuild` uses
+  `GRAPH.DELETE` (guarded in C1).
+- **m3-8** — fixed. The copy happens at once when the setting is absent, and replay cost uses the
+  worktree's slug.
+- **m3-9** — fixed. The connected-code-graph `SymbolSource` moves to the backlog (§6).
+- **m3-10** — fixed. AC-4 follows A5's recorded before practice.
+- **m3-11** — fixed. The rule-5 sweep is ruled per file.
+- **m3-12** — fixed. §1 cites `falkor-chat/docs/SERVER.md` §1.4, §1.12 and §2.2. The word table
+  and the §7 restatement are gone, and the §2.3 argument is trimmed.
+- **Nits** — fixed: `parentAgentId`, the counter sha in records, and the K-070/K-064/K-091 cites.
+- **Open question** (cross-unit resumes during the windows?) → yes, attributed per leg. Folded
+  into §2.6 and A4, and logged.
+
+### Growth-stops check
+
+The plan shrank by 867 words. New text is rework answering Pass 3: §2.6 legs, §2.9 replay, C4's
+two sweeps. It replaces the earlier text and is not stacked on it. The revision note is one dated
+line. There is no finding→resolution table. No restated history was found.
+
+### New findings
+
+**N4-1 (major) — Gates mostly read files through Bash, so the `Read`-results layer of the
+replay verifies almost nothing.** *Verified* in six U20–U32 gate transcripts:
+
+| Gate | `Read` calls | Bash file reads (`cat`, `sed -n`, `head`, …) |
+|---|---|---|
+| U27 `a582…` | 1 | 58 |
+| U21 `a52a…` | 2 | 49 |
+| U23 `a82b…` | 5 | 66 |
+| U22 `a4d1…` | 1 | 51 |
+| U32 `a596…` | 4 | 96 |
+| `a72f…` | 7 | 40 |
+
+This leaves two possible readings of §2.9 step 3, and both fail:
+- **Only `Read` counts as "read".** Then nearly every file falls through to the builder layer
+  plus the base commit, unchecked. That is the uncommitted-docs gap of M3-1 again.
+- **Bash reads count as "read".** Then nearly every pass halts as not reconstructable, and under
+  §2.9's denominator rule AC-2 cannot be met.
+
+A further problem: the gate's own later reads of the review document show its own edits, not
+the state at the start of the leg.
+
+*Fix:*
+- Verify against every capture made before the leg's first own write:
+  - a `Read` whose `toolUseResult.file` has `numLines == totalLines` gives the whole raw content
+    (that field is present, so line-number prefixes need no stripping);
+  - partial reads and Bash `cat`/`sed`/`grep` outputs are line-level consistency checks.
+- Per pass, list the files that are verified, consistent and never captured.
+- B7's four probes report those rates. The stakeholder rules on D2's feasibility from them
+  before D2 is dispatched.
+
+**N4-2 (minor) — The leg rule splits every spawn in two.** *Verified*: all 273 subagent
+transcripts on disk carry a harness `<system-reminder>` string user entry about 16 ms after the
+spawn prompt. By §2.6's definition, `a72f…` therefore has five legs, and A2's done-condition
+("splits into its four legs") turns red. *Fix:* entries starting with `<system-reminder>` do not
+open a leg. Add a fixture for it.
+
+**N4-3 (minor) — The commit-rule sweep misses a home.** *Verified*:
+- `claude/teco/coordination-techniques.md:254-257` and `claude/teco/teco.md:125` state
+  "docs-only-chain batching" exceptions. The hyphen defeats C4's pattern, which I proposed in
+  Pass 3.
+- `docs-only[- ](chain|batch)|terminal (state|commit)|commit(s|ted)? once` gives 122 hits in 46
+  files. It adds `coordination-techniques.md`.
+- §1 also says "five live homes" but lists four files.
+
+*Fix:* use the widened pattern, list the homes by file and section (including `tico.md`'s
+"Commit at document boundaries", l.68), and update the count.
+
+**N4-4 (minor) — "History of a repo-wide convention is cited, not moved" is assumed, not
+checked.** *Inferred* from §2.7. Not every history clause in root `AGENTS.md` has a requirements
+document behind it. The context-file bullet's precedent cites `claude/cobb/kaizen/history.md`. An
+item with no such home would simply be dropped, which breaks AC-11's "no information lost".
+*Fix:* C2's manifest lists each cited-not-moved item with the address it resolves to (`ar get`).
+An item that has no such address is moved like any other.
+
+**N4-5 (minor) — A fresh `ws:team-docs` has no actor to ingest as.** *Traced, not run.*
+- `services.py:1326-1329` raises `UnknownActorError` when `ctx.actor` (default `u1`) is neither a
+  `User` nor an `Agent`.
+- `start_agent_team.sh` seeds only `Agent` nodes, and no script creates `User u1` for that
+  workspace. `ws:agent-team`'s `u1` exists, but no script created it.
+- v1.1's actor check was dropped.
+- `--rebuild` (`GRAPH.DELETE` plus `create_workspace.sh`) also drops the Agent roster.
+
+*Fix:* the wrapper sets `FALKORCHAT_USER_ID` to a seeded agent id, or seeds a `User`.
+`--rebuild` re-runs the same seed. B2 gets a test: an ingest on a fresh workspace returns 201.
+
+**N4-6 (nit) — Three guard copies.** `guard-destructive-ops.sh` exists in `devops`, `graph-dba`
+and `qa-engineer`. C1 should name which copies gain `ar sync --rebuild`.
+
+### Proposed REVIEW.md lines
+
+Pass 3's proposal stands. Add to it, from N4-1: "…and a reconstruction from transcripts is
+checked against every tool the agent actually read with (Bash included), not only `Read`."
+
+## Pass 5
+
+**Scope.** This pass reviews the plan `docs/plans/agent-reading-cost.md` **v1.3** (untracked,
+6,808 words, up from 6,402). Its claims were checked against the six gate transcripts sampled in
+Pass 4, `falkor-chat/docs/QUERIES.md` §2, `seed_demo.sh`, `start_agent_team.sh`,
+`bootstrap_schema.sh` and `claude/scripts/`.
+
+**Verdict: approve with suggestions.** There are no blockers and no majors. Four new minors
+follow (N5-1 to N5-4). N5-1 is the one to settle before B7 starts.
+
+CPG: considered, not relevant — no code-level claim changed since Pass 4; this pass checks
+transcripts, scripts and documents.
+
+### Pass 4 dispositions
+
+- **N4-1** — fixed. §2.9 step 3 now takes captures from Bash as well as `Read`, ignores captures
+  made after the gate's own writes, and sorts every file into four classes. B7's probes report
+  the rates, and the stakeholder rules before D2 runs (§3 table "sh rules on D2"). §4 item 6
+  tests each rule. Residue: N5-1.
+- **N4-2** — fixed. §2.6 says `<system-reminder>` never opens a leg, and §4 item 1 has a fixture
+  for it.
+- **N4-3** — fixed. §1 lists five files, including `coordination-techniques.md` and `tico.md`
+  l.68. C4 uses the widened pattern. I re-ran it and got 122 hits in 46 files, which matches
+  "about 120 in 46".
+- **N4-4** — fixed in part. The manifest now gives an `ar get` address for every item that is
+  cited rather than moved. The fallback home is N5-3.
+- **N4-5** — fixed in part. B2 has `seed_team_docs.sh`, which ensures a `User ar-sync` the same
+  way as `QUERIES.md` §2 and `seed_demo.sh` step 1. It has a positive and a negative test, and
+  `--rebuild` re-seeds. Residue: N5-2.
+- **N4-6** — fixed. *Verified*: `claude/scripts/guard-destructive-ops.sh` is the shared core.
+  The `devops`, `graph-dba` and `qa-engineer` hooks `exec` it, and `guard-broad-bash.sh:67`
+  calls it for `coder` and `tdd-engineer`.
+
+### Growth-stops check
+
+The plan grew by 406 words, and all of it is rework. Most of it is mechanism the fixes need:
+§2.9's capture rules, B2's seed script, B7's rate reporting and stakeholder ruling, C1's guard
+path, and §4's tests. One part restates facts (N5-4).
+
+### New findings
+
+**N5-1 (minor) — The closed Bash read set parses few gate commands, and a pass whose deliverable
+was never captured still counts as replayed.** *Verified* by classifying every Bash call in the
+six gates:
+
+| Gate | Single closed-set command (a leading `cd` allowed) | Several chained reads, output concatenated | Piped, multi-line or scripted |
+|---|---|---|---|
+| `a72f…` | 2 | 1 | 40 |
+| `a582…` (U27) | 9 | 3 | 55 |
+| `a52a…` | 0 | 1 | 52 |
+| `a82b…` | 7 | 3 | 56 |
+| `a4d1…` | 6 | 4 | 35 |
+| `a596…` | 13 | 9 | 93 |
+
+The common shape is `cd …; f=…; sed -n a,bp $f; /usr/bin/grep -n X $f | cut -c1-200`. It has a
+shell variable, several reads whose outputs run together, an absolute `grep` path and a `cut`
+that truncates lines. Code gates also execute files (`bash $S status`, pytest, scripts copied to
+a scratch directory) without printing them. Those files never reach any class, so the
+never-captured list undercounts.
+
+AC-2 still stays honest on the input side: the rates are shown to the stakeholder before D2. On
+the output side, a pass counts as replayed even when its deliverable is never captured, and only
+"contradicted" blocks it.
+
+*Fix:*
+- Parse the dominant shape: `;`/`&&` sequences, `var=path` assignments, `/usr/bin/grep`, and
+  `| head`/`| cut -c` as truncating filters. Split concatenated output only where the command
+  shapes allow it.
+- List files the gate executed, or that unparsed commands mention, as never captured.
+- D2 reports AC-2 per class. A pass counts only when its deliverable files are verified or
+  consistent, unless the stakeholder's B7 ruling says otherwise.
+
+**N5-2 (minor) — `start_team_docs.sh` seeds before FalkorDB is guaranteed to be up.** *Traced,
+not run.*
+- The wrapper runs `seed_team_docs.sh` (`create_workspace.sh` plus the `User` ensure) before it
+  `exec`s `start_agent_team.sh`.
+- `start_agent_team.sh`'s step 1 is the step that starts FalkorDB.
+- `bootstrap_schema.sh:406` exits when `PING` gets no answer.
+
+So a cold bring-up fails, including the one `ensure-environment.sh` runs.
+
+*Fix:* the wrapper first waits for `PING` the way `start_agent_team.sh` step 1 does, or runs
+`start_falkordb.sh`. Add a B2 check that bring-up succeeds with FalkorDB down.
+
+**N5-3 (minor) — `claude/cobb/kaizen/history.md` is the wrong home for convention history
+(§2.7).** Root `AGENTS.md` says modules use `<module>/docs/` and that `kaizen/` is for agent
+folders only. `cobb`'s history is a dated log of `cobb`'s own maintenance actions. Moving older
+convention prose into it backdates content into a log of someone else's actions. The same
+applies to the `claude/` row.
+
+*Fix:*
+- `claude/` history → `claude/docs/HISTORY.md`. The `claude/docs/` tree already exists, and the
+  module convention says "adopt when first needed".
+- Repo-wide convention history that has no existing record → carried verbatim in C2's manifest
+  entry in `agent-reading/docs/HISTORY.md`, which is already the manifest home and is read by
+  lookup.
+
+`cobb`'s history keeps only `cobb`'s own entries.
+
+**N5-4 (minor, growth-stops) — §1 restates rules that §2.6 and §2.9 now own.** The new
+"Transcripts" bullets (Bash-vs-`Read` counts, `toolUseResult.file`, the 16 ms reminder) repeat
+facts that §2.6 (the leg rule) and §2.9 step 3 state as design. Their evidence is in this
+review (Pass 4, N4-1 and N4-2). *Fix:* cut the three bullets to one clause citing Pass 4.
+
+### Proposed REVIEW.md lines
+
+Pass 4's proposal stands. Nothing is added.
