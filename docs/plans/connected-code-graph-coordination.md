@@ -299,3 +299,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-01 S17 DDL unit delivered (graph-dba a9e3b7f487c1d546c; I re-ran cpg suite 1383 passed + live DDL test 5 passed), committed d0f19026. Gate: analyst a1298392a90a84779 Pass 10 dispatched. S17-L1 loader unit (load.py/assemble.py + tests, D1-D2,D4,D6-D11, SkippedFile lookup, zero-retry) dispatched: tdd-engineer a0e4832543d001631 in-flight. S17-L2 (impact.py: M2 labelling, bfs-v1 guards, D8 read) follows L1 (shared live tests).
 
 - 2026-11-01 S17 DDL gate Pass 10: approve with suggestions (m1-m5 test hardening, n1 zero-retry -> L1). Fixes sent to graph-dba a9e3b7f487c1d546c (test_ddl_live.py + store/__init__.py only). Analyst a1298392a90a84779 now carries ~200k tokens: next gates dispatch fresh or via short re-check.
+
+- 2026-11-01 S17 DDL Pass 10 fixes verified (my run: ddl tests 14 passed default / 8 live; my drift mutant on the plan table killed) and committed. Note graph-dba reported apply_ddl polled without the timeout before; fixed.
