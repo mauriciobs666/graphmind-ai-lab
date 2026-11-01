@@ -792,3 +792,79 @@ CPG: considered, not relevant — the code under review is new, untracked spike 
 **Stopping condition for Pass 2.** No Pass 2 is needed if all of these hold, each checkable mechanically: (a) the notes' 33-file list has a named exclusion rule per file and a recorded spec ruling for §4.1 rule 4 (finding 1); (b) mutants M1, M2, M10 turn `pytest spikes/vertical-slice/tests` red (finding 2); (c) spec3 §5.3 carries the `complexity` ruling and the empty-span sentences (findings 3 and 4) — these two are `architect`'s, not S11's. Findings 5 to 8 are take-or-leave.
 
 **Open questions.** Is `src/i18n/` supposed to be in the slice (the S12 AC-1 chain does not touch it)? If the answer is "no, never", finding 1 reduces to the rule-4 wording.
+
+---
+
+### S12 (P0-11b)
+
+> Step S12 (P0-11b only): `cpg/spikes/vertical-slice/{assemble.py, tests/test_assemble.py}` (untracked). Contracts: `docs/plans/connected-code-graph-p0-2.md` S12 row, SL-1/SL-2/SL-7; bundle spec3 §6, §1.8, F-13; EP2 §1.1, §2; proposal §3.4.
+
+#### Pass 1
+
+**Scope & verdict: approve with suggestions.** No blocker: SL-1 and SL-2 reproduce on the real bundles, `assemble.py` hard-codes none of their values, and the step-8a reuse is correct. One major (an unresolved alternative is dropped and the link stays `confirmed`) and one major test gap (26 of my 61 mutants survive, nearly all in output-field plumbing). Evidence: static read of both files against the contracts above; reruns by me: `spikes/vertical-slice/tests` **172 passed** (38.53 s), `cpg/` suite **1313 passed**; `assemble.py` on the two real run1 bundles; hop lines checked with `git show defca60f:<file>`; 61 valid mutants on copies under the scratchpad (`.../scratchpad/mutants.py`, `mutants2.py`, `mutants3.py`; results `mut_results.txt`, `mut2_results.txt`; four more were discarded: M16 and M17 are equivalent mutants, N16 and N22 did not apply).
+
+CPG: considered, not relevant -- new untracked spike code that no loaded graph indexes; I read and ran it.
+
+**Delegate's claims re-measured**
+- Real run: `links=11 providers=61 consumers=11 unmatched=0`, all 11 links `confirmed`, 0 `unresolvedConsumers`, 1 dropped provider alternative (a `tests/` handler). Matches the claim.
+- **SL-1 holds.** One link keyed `GET /shop/api/health`, provider `build_storefront_router.health`, consumer `salesperson/src/api/endpoints.ts::getHealth`; chain `apiFetch` (`a0.path`/`a0.method`) -> `apiFetch` (`p0.path`/`p0.method`, `viaLine` 108) -> `buildUrl` (`p0`) -> `fetch` (`a0`/`a1.method`). Source lines at `defca60f`: endpoints.ts 17, client.ts 107, 108, 73, 118 -- each holds the expected text.
+- **SL-2 holds in its bundle-level form.** Three `/health` providers (`create_app.health` `app`; `build_router.health` `mounted` twice, one condition `dev_surface`; storefront `mounted`, condition `shop is not None`); only the storefront one links. I patched the `storefront_api.py::API_PREFIX` constant record to `/x/api`: 0 links, 11 unmatched consumers, provider key `GET /x/api/health`. See finding 5 for what this proxy is not.
+- No hard-coding: `grep -i 'shop|health|storefront|salesperson|apiFetch|buildUrl|API_PREFIX|endpoints'` over `assemble.py` matches only a docstring word. The recognizer names `fetch`, `include_router`, `FastAPI` and the decorator verbs are the intended hard-coded recognizers.
+- "24 mutants all killed" is the delegate's own set; mine overlaps it and 26 of 61 survive (finding 2).
+- Reuse (question 1): `read_bundle`, `link_id`, `mask_http_segments`, `PROVIDER`/`CONSUMER` imported, not copied; `_FIXED` re-lists the four placeholders (harmless, but `keynorm._PLACEHOLDERS` is private). `normalize_key` is not in `ccg.keynorm` (that file holds only 8a), so there is no copy to diverge from. Against spec3 §6: steps 1, 3-8 and 8a conform (NFC+strip, verb uppercase or `*`, leading `/`, decode-then-collapse/dot-resolve in RFC order with a single decode pass, whole-segment parameter rewrite, trailing `/` kept, consumer `{?}`). Step 2 is not in `normalize_key` (finding 6).
+
+**Findings**
+
+*Major*
+
+1. **An unresolved alternative is silently dropped, and the link stays `confirmed`.** `consumers()` builds keys from `a != UNKNOWN` (`assemble.py:400-403`), and `_verbs_at` does the same for verbs (`:418-421`). I ran it on the `web_bundle` mini-bundle (`.../scratchpad/probe1.py`): a method value set `[GET, unknown]` yields keys `['GET /shop/api/health']`, and a path value set `[template(/shop/api/health), unknown]` yields the same, with `unresolvedConsumers == []`, so the link is `confirmed/key-match`. Proposal §3.4 says "both keys known and matching -> confirmed; partially known keys -> possible", and spec3 §7 `partial-key` is "a partly known key". Today's corpus has no such site (all 11 resolve fully), so SL-1 is unaffected; the failure appears when P1 packs meet a ternary or `??` default.
+   *Fix:* when a slot's alternatives include an `UNKNOWN` element, emit the resolved keys with a per-site flag (e.g. `partialAlternatives: true`) and have `assemble` cap that site's status at `possible/partial-key`; test with the two mini-bundle cases above. The same applies to a verb that falls through to `*` (already `possible` via `match_keys`), so only the "known alternative plus unknown" shape needs the new flag.
+
+2. **Output-field plumbing is under-pinned: 26 of 61 valid mutants survive.** Killed 35. Survivors, grouped (every one passes all 145 tests of `test_assemble.py`; `-x`, run from a scratchpad copy):
+   - link-record fields: `sites[].line` (+1), `provider.line` (handler `lineStart` instead of the decorator line; +1), `consumerKey` (first key instead of this one), `candidateCount` overwritten per added site, mount `sites[].line`, mount `conditions[].siteId` (symbolId), consumer record `line` (+1) and `urlPath`; `consumer.path` taken from the provider.
+   - `unmatchedConsumers[].siteId` (symbolId), `unresolvedConsumers[].path`, `droppedProviderAlternatives[].handlerId`.
+   - semantics: verb taken from the *last* hop of the chain instead of the first; `api_route`/`route` verb `*` -> `GET`; unknown verb text -> `GET` instead of `*`; a provider mounted only by `FastAPI` (`how: "app"`) counted `possible`; mount de-dup off; `keys` unsorted; sites unsorted; NFC off; `_is_path_prefix` without `[`; `MAX_ALTERNATIVES` 64 -> 2; `MAX_REF_DEPTH` 8 -> 1.
+   - The real-bundle SL-1 test asserts qnames and hop lines, but not `sites[0].line == 17`, `provider.line`, `consumer.path`, `candidateCount`, or any mount `sites[].line`. `candidateCount` is killed only for a single-site link.
+   *Fix (a coverage probe, not a list):* one table test over **every key of every output record kind** (`link`, `link.provider`, `link.consumer`, `link.sites[]`, `liftedVia[]`, `providers[]`, `mounts[]`, `consumers[]`, `unmatched`, `unresolved`, `dropped`) mapping the field to the input record field it must equal; build the mini-bundle with all-distinct line numbers and ids so a swapped source cannot coincide, and fail on any output key that is not in the table. Add the two-layer-verb case (outer `POST`, inner `GET`: first on the chain wins), a two-key site that links both keys, and a two-site link with `candidateCount` per site key. Note the verbs-in-wrong-order survivor is a gap-decision-1 case: the decision is implemented but not pinned.
+
+*Minor*
+
+3. **Providers in `tests/` files and a test-file mount raise confidence.** `test_input_bound_parity.py:538` includes the dev router (`build_router.health` carries two `mounted` entries, one from a test); 5 of the 61 providers sit under `tests/` (e.g. `GET /_limiter`, `GET /legacy/thing`), and the 2 `possible` providers are both test-defined. A router mounted only from a test would be `confirmed`. Fine for the slice; tag provider and mount records with a `isTest` flag (path or `testKind`) now so P1 does not inherit it.
+4. **A provider with an unresolved include prefix vanishes** (`providers()` `dropped`, `:498-500`) instead of surfacing as a partial key. It is recorded in `droppedProviderAlternatives`, so nothing is hidden, but a consumer cannot match it. Spec3 §6 defines `{#}` only for a screen failure and `{?}` only for consumers; the provider "unresolved part" form does not exist. Spec gap for `-spec4`/S17 (not SL-7-forced: the slice has 1 such alternative, in a test).
+5. **SL-2 counterfactual is a bundle-record patch, not the plan's re-run.** p0-2 SL-2: "the slice is re-run on a staged copy whose `API_PREFIX` is `"/x/api"`". `test_sl2_counterfactual_staged_api_prefix` rewrites the `constant` record in memory; it proves composition, not extraction (that S11 carries the constant through). S14 should still run the staged-copy re-extraction; say so in the S14 row or the test's docstring.
+6. **`normalize_key` is not the whole writer-side normalizer.** Step 2 lives in `url_path_of`, called only from `consumers()`: `normalize_key("GET https://h.example/x/y?q=1")` returns `GET /https:/h.example/x/y?q=1`, and `GET //h/x` gives `GET /h/x`. Harmless in the slice (providers never carry a scheme), but S49's `normalize` must apply step 2 itself and must not copy this function as the oracle. Add a one-line docstring warning.
+7. **Link-level choices the spec leaves open (all defensible; none changes SL-1/SL-2):** `Link.keyNorm` is the provider key, though a `possible` link's consumer key differs (graph/BF6 say only "keyNorm"); `candidateCount` is `len(cands)` of the first (site, key) that creates the link; a `fetch` seed is matched by bare `calleeName == "fetch"` with no `resolution` check (one external seed in this corpus). Record all three for S17.
+
+*Nit*
+8. `normalize_key(form=...)` raises `KeyError` on a bad form (keynorm raises `ValueError`); `symbol_of` is unused.
+
+**Gap decisions (question 3)**
+Defensible for a slice, recorded as recognizer-local: verb from the first call on the chain whose `method` slot resolves, bare `fetch(url)` = GET else `*` (Fetch API semantics, not spec; but see finding 1 for mixed sets); wholly-unresolved url yields no link and is listed; partial unresolved piece becomes `{?}` (spec3 §6 step 8); `{}` one non-empty segment, `{**}` one-or-more (spec3 and EP2 define the placeholders, not the matching; proposal §3.4 names only the matchers), `{#}` only against `{?}` (spec3 §1.8; mutant N02, `{#}` treated as `{}`, is killed), a `*` verb gives `possible`; mount classification (factory include / `FastAPI` call / unmounted capped at `possible`) and the double mount are slice rules the spec does not contain; symbol-hop line = the parameter's line (matches SL-1's source-line check). **Spec defects that should be SL-7 candidates: none.** I confirm "no SL-7 candidates" in the narrow sense that the assembler read only record kinds and fields already in bundle-v1 (`callsite.targets/calleeName`, `valueSet kw.prefix/a1.method`, `data`, `decorator.args`, `controlledBy`, `constant`), so no field was added, removed or retyped. Findings 4 and 7 are spec-silent items for `-spec4`/S17, not deltas.
+
+**What's solid.** Imports instead of copies for bundle reading, link ids and step 8a; the keyNorm oracle (K1-K22, K30-K33, K42-K48) is run through the whole writer pipeline and as fixed points; RFC-order decode-then-dot-resolve with the single-pass `%2%45` case (K48); role lifting is a deterministic fixpoint with a cycle and depth guard and explicit chain predecessors; the SL-1 chain is asserted against `git show` source lines, not only against the bundle; link-id anchor swaps, hop `siteId`, `ord`, `viaLine`, `matcher`, status/reason and hop `verbPath` are all killed by tests; determinism is checked under reversed bundle order.
+
+**Open questions.** None blocking. Suggest `teco` routes findings 1 and 2 (code: one flag; tests: the probe table) as a follow-up round to `coder` before S13 consumes the output; 3-8 may ride along or go to S14/S17 notes.
+
+#### S12 Pass 2
+
+**Verdict: approve.** S12 can be committed. Re-checked against the tree: `spikes/vertical-slice/tests` 189 passed (reran: 162 in `test_assemble.py` plus S11's), `cpg/` suite 1313 passed, real run1 still `links=11 providers=61 consumers=11 unmatched=0`. Mutants on scratchpad copies (`.../scratchpad/mutants_p2.py`, `mutants_p2b.py`, `p2_results.txt`).
+
+**Dispositions**
+- Finding 1 (dropped unresolved alternative stays confirmed): fixed. `partialAlternatives` = `verb_partial or UNKNOWN in alts` (`assemble.py:407`), cap at `:608`. Mutants: cap removed, flag verb-only, flag url-only: all killed.
+- Finding 2 (plumbing): fixed in substance. Of my 26 survivors, 23 are now killed (M05, M10, M23, M26, M30, M31, M35, M36, M37, M40, M41, N03, N04, N06, N07, N09, N10, N11, N12, N13, N14, N17, N18, N21, N23 -- all re-run, all killed). Still surviving: see below.
+- Finding 6 (docstring) and 8 (`symbol_of` removed, `ValueError` on bad form): fixed (grep and `test_bad_form_raises_a_clear_value_error`).
+- Findings 3, 4, 5, 7: deferred to S14/S17 as agreed.
+
+**Survivors judged**
+- M16 (`{**}` zero-or-more): equivalent. `c[i:]` is never empty at that point (`i < len(c)`), so `or ['']` is dead; this is my mutant's flaw, not a test gap.
+- M17 (drop `elif ps == PROVIDER`): equivalent. `{#}` then falls to `ps != cs` and returns `None` for every consumer segment except a literal `{#}`, which a consumer key cannot contain.
+- M39 (drop `sites.sort`): near-equivalent. Sites are appended in sorted callsite order and keys are sorted, so the sort changes order only if one callsite yielded two slots with different keys; harmless and the determinism test covers reversed input.
+- The coder's "N/A" M19, M32, N16, N22: I do not accept "N/A". M19, M32 (and N16/N22 in their old text) did not match the new source; I re-adapted N16 and N22. N22a (condition `line` +1): killed. **N16a (symbol-hop line falls back to `lineStart + 1` when no `param` record carries the index): survives**, a real but low-stakes gap (the fallback `:352-353` is unpinned). Minor: add one case with a `p<i>` path and no param record.
+
+**Interaction checks (ran probes `probe2.py`, `probe3.py`)**
+- Partial cap against unmounted-router cap: both only lower `confirmed` to `possible`, one shared branch, so no double-downgrade or reason clash. Unmounted provider plus `[/orphan, unknown]` url: `possible/partial-key`, `partialAlternatives: True`. Removing either cap alone is killed (N24, N27).
+- Two-key site against `candidateCount`: `candidateCount` is still set by the first (site, key) that creates the link. With consumer `GET|POST /x` and providers `api_route /x` and `get /x`, link A reports `candidateCount 2` although its POST key had only one candidate; link B reports 2. Deterministic (keys sorted) and pinned (N23 killed), but the number is "candidates for the first key", not per key or per link. New finding, minor, spec-silent: tell S17 whether `candidateCount` is per site key; no code change needed for S12.
+
+**New findings:** none above minor (N16a gap; `candidateCount` definition).
+
+**Commit:** yes. The two files are the only S12 change; keep the deferred items (3, 4, 5, 7, plus the `candidateCount` note) in the S14/S17 hand-off.
