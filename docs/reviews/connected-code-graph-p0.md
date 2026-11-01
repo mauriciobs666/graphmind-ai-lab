@@ -868,3 +868,84 @@ Defensible for a slice, recorded as recognizer-local: verb from the first call o
 **New findings:** none above minor (N16a gap; `candidateCount` definition).
 
 **Commit:** yes. The two files are the only S12 change; keep the deferred items (3, 4, 5, 7, plus the `candidateCount` note) in the S14/S17 hand-off.
+
+## Pass 4 — S15 freeze gate (2026-11-01)
+
+### Scope & verdict
+
+**Scope:** S11-S14 against SL-1..SL-7 (`docs/plans/connected-code-graph-p0-2.md` §4.4, D5), contract `docs/plans/connected-code-graph-bundle-spec3.md`, S14 report `docs/test-reports/connected-code-graph-p0-slice-report.md`, code `cpg/spikes/vertical-slice/*`, `cpg/ccg/`. `graph-dba`'s section (SL-3/SL-5/graph model) is folded in below. Method: cpg suite from `cpg/` (1313 passed) and the slice suite (254 passed, 11 live deselected); independent re-assembly of the stored bundles (`run1`, `run2`, `s14a`, `s14cf`) with `assemble.py`, `git show defca60f` line checks, bundle diffs; 20 mutants on scratchpad copies. **I did not run the live tests** (they `RENAME` onto `ccg_p0slice` while `graph-dba` read it) and did not re-run the sandboxed extractions (reproduced from stored artifacts).
+
+**Verdict: freeze v1, as `-spec4`.** SL-1..SL-7 all pass (SL-4 and SL-5 time on rulings below). SL-7 lists deltas, so D5 requires `-spec4` to record them; the schema file, `bundle.py` and `bundleSchemaVersion` `"1.0"` do not change (`git diff cafb1a20..HEAD -- cpg/ccg cpg/tests` is empty). The freeze takes effect when `-spec4` is accepted; hold that for the user's answer to Q3 (the only `-spec4` sentence that needs a stakeholder call).
+
+CPG: considered, not relevant — the subject is untracked spike code and spec documents; no loaded `cpg_*` graph indexes `cpg/`. I read and ran the code.
+
+### SL verdicts (independently re-derived unless noted)
+
+| # | Verdict | Evidence I executed |
+|---|---|---|
+| SL-1 | **PASS** | `assemble.py` on `s14a`: one `GET /shop/api/health` link, `confirmed/key-match/exact`; 4 hops `getHealth` call (17, `a0.path`/`a0.method`) → `apiFetch` (107) → `buildUrl` (73) → `fetch` (118, `a0`/`a1.method`); each line's text read from `git show defca60f:<path>`; handler decorator at `storefront_api.py:954`. |
+| SL-2 | **PASS** | 3 `/health` providers (`GET /shop/api/health` with condition `shop is not None`; `api.py::build_router.health` with `dev_surface`; `app.py::create_app.health`, `how: app`). Counterfactual: `s14cf` vs `s14a` bodies differ in exactly 3 records (file hash, module fingerprint, `API_PREFIX` constant); assembling it gives `links=0 unmatched=11`, 0 keys with `/shop/api`, `GET /x/api/health`, and the `endpoints.ts:17` consumer unmatched. Artifact-checked, extraction not re-run (m4). |
+| SL-3 | **PASS** | `graph-dba` re-ran it live (10/10 `OPERATIONAL`, Snapshot, RENAME, no build key). I read `load.py`: sequence matches graph note §3.5; mutants L1-L9 all killed. |
+| SL-4 | **PASS, with a ruling** | AC-1 `data` rows present in `s14a` (`fetch.a0←buildUrl.r`, `buildUrl@108.a0←p0.path`, `fetch.a1.method←p0.method`, `buildUrl ret←p0`, all `confirmed/intra-flow`). Contract mode and value outcomes as S14. Ruling in Q4 and M2. |
+| SL-5 | **PASS** | Density: `graph-dba`. Time: ruling in Q2. |
+| SL-6 | **PASS** | Bodies of `run1`/`run2`/`s14a` bundles `diff`-identical for both units; headers differ only in `builtAt`, `sandboxAuditIds`. Links identical (`assemble` output). `s13-measurements.json` `run1` vs `s14a`: only timings, memory deltas and Snapshot `builtAt` differ. One host, one Python: cross-host determinism is untested. |
+| SL-7 | **PASS (accounting complete)** | No bundle field/record added, removed or retyped (git above); 0 `qname` mismatches (S14 `probe_s14.py` recompute not re-run; S11 Pass 1 had my own 0-diff re-derivation). Spec-text deltas below force `-spec4`. |
+
+### S15 record
+
+**Contract:** `docs/plans/connected-code-graph-bundle-spec3.md`, amended by `-spec4` (to be written; `Supersedes:` `-spec3`).
+
+**`-spec4` content (SL-7 deltas; none changes a field, type or id):** (1) §4.1 rule 4 vs `jssrc2cpg` file selection, 33 of 74 sp sources absent, 5 production — wording per the user's Q3 answer; spec3 §1 makes a mismatch on a [P-slice] rule (§4.0-§4.2) an SL-7 delta, so this is forced. (2) §5.3 `complexity = 1 + count(cond records)` (S11 Pass 1 finding 3). (3) §5.3 empty file: `lastChanged*` falls back to the path's last commit; module span `1..max(1, lineCount)` (finding 4). (4) §5.5 expression-bodied arrow functions: a synthesized `ret` at ordinal 0 (S4). (5) §5.10 `use == def` legal (Q6). (6) §10 drop the "five" Protocol-stub count (Q10). (7) §1.13 / §4.2 note the host Python dependency of spans (S5), as a writer rule. Not `-spec4`: SL-4 wording (plan), `candidateCount` and the G1-G8 graph rulings (S17).
+
+**S10 encodes the [pre-freeze] items of spec3 §1:** yes, mapped item by item to tests that exist and pass (mapped by test name and code read; depth re-mutated only where noted). §1.1 `test_access_path_ascii_ident_and_kw_head`, `test_quoted_field_segments_have_one_encoding`, `test_kw_head_needs_its_field_in_bundle_py_alone`; §1.2 `test_name_norm_is_recomputed`, `..._formula_...`; §1.3 schema `element1`-`element4` plus `_nest` conditionals (`test_value_set_schema_conditionals`); §1.4 `test_controlled_by_cond_to_cond_is_allowed_but_not_a_self_edge`; §1.5 ordinal/line-order test and strict name sort; §1.6 the §1.6.3 probes, gate-sentinel and allow-list tests; §1.7.1-§1.7.3 token-screen, grammar, name-rule, SA-6 probe, AV/BV parsed from the spec; §1.7.4 `test_w1_argv_arrays_never_bind`; §1.7.5 schema fields only (the validator holds no key; the HMAC rule is writer-side, untestable by S10); §1.8 `ccg/keynorm.py` + `test_keynorm.py`; §1.10 policy text, no code; §1.11 is S17's; §1.12 `bundle.py` is the reference validator and the schema description and README say so (but see m3).
+
+**Frozen, untested (spec3 §10 [P-later], with first testable phase):** Java/Kotlin/C#/Go/C/C++ grammar, §4.3 signatures, `.h` language test, non-Python receivers (§5.4), rule 8 table rows, Go interface specs, primary-constructor owned regions, non-symbol target substitution — **P2**. `fieldAccess` — **P1** (B1 fixtures; the slice emitted 0). `configEntry.bindValue` and `launchFact` (spec3 §1.6, §1.7, [pre-freeze] but never produced: 0 records in either bundle; S10's tests are the only evidence) — **P1**, first writer. `data_entity`, `config_key`, `schemaEntry` — **P3**. `library_api`, `rpc` — **P2**. `secretSighting` — **P5**.
+
+**[P-slice] items the slice did not exercise (S14 §5), so frozen untested as well:** shell `qname` grammar (P1 shell extractor); ancestor-plus-line locator conversion (no converter exists; first user S35/S39); rule 8 TS type-alias row (P1, if one appears); `ownedRegions` (P1 fixture, S17 DDL test); value-set caps and `value-set-cap` (every value set has one alternative; P1 fixtures with multi-alternative sets); `file` kinds/roles other than `code`/`primary` (P1); vendored-path exclusion (vacuous).
+
+### Findings
+
+**M1 (major, process). The freeze is conditional on `-spec4`.** See the record. Evidence: spec3 §1 freeze condition; S14 §2.7 S1-S5; S11 Pass 1 stopping condition (c) ("spec3 carries the `complexity` ruling and the empty-span sentences") is still unmet. Fix: `architect` writes `-spec4` after Q3 is answered; `teco` records "freeze v1 = `-spec4`".
+
+**M2 (major, P1 gate; agrees with `graph-dba` F2). Value-mode items are all reported `confirmed`, though 21 of 21 rest on function-level continuation.** Traced in `impact.py:_expand`: `HAS_* <-` takes any reached point (not only a `Ret`) to `("Symbol", ·, value)`, which continues `CALLS <-`. The mechanism, not the data, over-approximates: S14 §6.8's V2 confirms path matching changes states (79→62) but never items. FR-8 (decision 2026-10-22, "over-list, flag doubt") says doubt must be flagged; here it is stamped `confirmed`. It does not block the freeze (the `data` records carry everything the proper rows need; `graph-dba` showed the Ret→…→Param path exists in the graph). Fix for P1/S17: label such continuations `possible`/`function-level-continuation` until `arg(i)` and Ret-summary rows exist; add a fixture where the changed value does not reach the callee's return and the caller must not be `confirmed`; do not score impact precision before that.
+
+**m1 (minor). Mutant I7 survives**: `impact.py:341` `not cost[:2] < best[key].cost[:2]` → `<=` passes all 227 tests (`mut/run.py`). No test has a zero-distance cycle, and real data cannot reach one because `CONTROLLED_BY` is not walked; spec3 §1.4 G-3 expects cond→cond 2-cycles in the P1 BFS. Add a hand-built two-point `DATA` cycle with matching paths (not a cycle through `CALLS`, which adds distance) asserting termination and the state count; carry it to S20's synthetic graph.
+
+**m2 (minor). N16a still unpinned**: mutant A1 (`sym["lineStart"] + 1` fallback, `assemble.py:~352`) survives all 227 tests. Add one hand-built case with a `p<i>` path and no `param` record.
+
+**m3 (minor). The contract citations are stale**: `ccg/bundle.py:261`, `ccg/keynorm.py:3`, `cpg/README.md` (lines 51, 76-108) and the schema's top-level `description` name `-spec`/`-spec2` ("BS2") as the contract, and README says "read together until `-spec3` consolidates them"; both are `superseded`. Doc-only edit (comment, README, schema `description` string) after `-spec4`; rerun the suite to confirm no test pins the description.
+
+**m4 (minor). SL-2 evidence is one-shot**: the counterfactual script is not kept (S14 §8); a reviewer can reproduce only from `s14cf`. Keep the staged-copy hook (a `--patch` flag or a recipe in `S11-notes.md`). Related P1 carry (verified in `a.json`): the bare `@app.get("/health")` sits in the `else` of `if dev_surface` (`app.py` ~494), yet its mount record has `conditions: []`; and `api.py::build_router.health` is `confirmed` partly through an unconditional test-file mount (`tests/test_input_bound_parity.py:538`). SL-2's text is met; the mount-condition model needs the negated branch and an `isTest` marker (S12 findings 3/4).
+
+**n1 (nit).** `load.py:504` `with_props = any(...)` would `SET e = null` for a mixed group (none exists today); pass an explicit zero-retry object to the driver (`graph-dba` F8, agreed).
+
+### S13 gate and carry-overs
+
+**S13: approve with suggestions.** Read `load.py` and `impact.py` in full; the sequence, R-B key guard, 6379 refusal, 20k ceiling, created-count check and constraint polling are correct. Mutants: L1-L9 and I1-I6, I8, I9 killed by the pure tests in under a second each; I7 survives (m1). `candidateCount`: `assemble.py:618` sets it from the first (site, key) that creates the link; mutant A2 (constant 1) is killed because a test pins that first-pair value, so S17's redefinition (Q8) must change that test. S12 N16a: m2.
+
+### `graph-dba` section: dispositions
+
+SL-3 PASS, SL-5 density PASS, "no graph-side blocker": **agreed** (I read `load.py` for SL-3; density not re-measured). SL-5 time: **agreed PASS**, reading in Q2. G1-G8 rulings: **agreed**, all S17 content. F1 (contract walk should read `CONSUMES <-`/`ON <-`): **agreed**, confirmed by `_expand` (no `CONSUMES`/`ON` reader); P1 fixture. F2: **agreed, strengthened** (M2). F3 (the ~40 s in `normalize.py` is schema validation, not blame): **accepted on its cProfile evidence; I did not re-run it.** It corrects S14's attribution and means the "4.2x" widest reading is a validator cost. F4: see Q3. F5-F9: **agreed**, none blocks. **Disagreements:** (a) Q3: a spec carve-out alone leaves the engine unable to tell "not found" from "not mapped" (FR-7a), so the carve-out needs a recorded signal; that is a user choice (Q3). (b) Q6 wording: `graph-dba` cites `test_querygen.py:844`; I did not re-verify the line and the spec sentence needs no citation.
+
+### Q1-Q10
+
+None except Q3 blocks the freeze verdict; Q3 blocks `-spec4`'s effective date.
+
+- **Q1 anchors.** Not blocking. §8.2 says "every anchor of a link or impact the slice computed or asserted". The 11 link contract points were computed and walked (S13), and the recognizers were tuned until `unmatched=0`. Recommend GC include the 11 contract points and S13's 6 value-walk anchors (contamination-safe; the cost is held-out items under `storefront_api.py`/`Repository`), excluding hops as written. GC makes the final call before S47.
+- **Q2 "projection stage": the plan text decides.** S11's row names "the per-method projection" and a "per-method projection-time histogram"; graph note §6.3 says "the projection's build cost is one of the things it must time"; K7 says "the projection's build cost"; the S11 row times "parse, extract and normalize separately", and projection is a part of extract, never of normalize. So the reading is `projectionMs` (0.006-0.028x), and `extract.sc` wall (0.99-1.19x) passes too. SL-5 time PASS. K7's underlying worry (refresh latency) is separate: record it as a P1 perf item (F3), not a freeze criterion.
+- **Q3 `src/i18n` / rule 4: not decided by the plan text; a genuine stakeholder scope call.** What the plan does decide: D15 ("the check adopts per-file only where it holds") — the per-file rule is not adopted for JS over all sources; and FR-8's posture forbids silent omission. What it does not decide: whether production TS (`src/i18n/`, 5 files) and TS tests/e2e (28 files) belong in the graph (Python tests are in it), and how an omitted file is declared. Options for the user: (A) include them (the P1 extractor overrides the frontend's default ignores; I have not verified that `jssrc2cpg` allows it); (B) exclude by design and `-spec4` rule 4 reads "every file the frontend parsed", plus the engine reports skipped files as "not mapped"; (C) the emitter adds `file` + `<module>` for skipped sources (no function symbols, so callers of `formatCurrency` still have empty targets). My recommendation: A for production code, B for tests/e2e, with the skipped-file list recorded (an optional header field is an additive minor bump, allowed after the freeze).
+- **Q4.** Ruled: the clause is met as a filter on the `DATA` hops that occur (fan-out 17/4/3/3/1/0/0), not as the mechanism that yields the callers; the plan's own row list (no `arg(i)`) cannot yield them otherwise. Reword at the next plan edit; M2 carries the consequence.
+- **Q5.** S17: adopt G1, G3, G8 and `PROVIDES <-`; add F1's `CONSUMES <-`; state the `bfs-v1` baseline.
+- **Q6.** Legal, kept; one `-spec4` sentence in §5.10.
+- **Q7.** Frozen untested; first test is S17's DDL fixture.
+- **Q8.** S17 defines it per link (providers matching this link's key for this consumer symbol, order-independent) or drops it; update the pinning test.
+- **Q9.** Agreed: `app.py::create_app.health`; spec3 §4 (line ~1288) already names it.
+- **Q10.** Drop the number "five" from spec3 §10; the definition is not stated there and all 7 heuristic hits have symbols.
+
+### What's solid
+
+Re-derived chain, counterfactual and determinism from stored artifacts; bundle schema untouched since S10/S16; the pure test suites kill 18 of 20 of my mutants, including every load-sequence and BFS-direction mutant; the report is candid about its own caveats (§6.8, §2.4), which is what made M2 findable.
+
+### Proposed REVIEW.md lines
+
+Under `## Always check` in root `REVIEW.md`, source: M2 and Q4. "A walk or query that reports a status (`confirmed`) is checked with a planted case where the evidence for that status is absent; a status stamped from the traversal's shape rather than its evidence is a finding."
