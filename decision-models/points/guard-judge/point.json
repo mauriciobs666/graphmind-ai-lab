@@ -1,0 +1,117 @@
+{
+  "role": "guard-judge",
+  "kind": "predicate",
+  "answerKey": "advance",
+  "expected": [true, false],
+  "inputFields": {
+    "condition": {"type": "string", "minLength": 1},
+    "understanding": {
+      "type": "object",
+      "allowEmpty": true,
+      "fields": {
+        "request": {"type": "string", "minLength": 1},
+        "known": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "missing": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "turns": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "fields": {
+          "role": {"type": "enum", "values": ["user", "assistant"]},
+          "displayName": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "path": {"type": "enum", "values": ["understanding", "turns"]}
+  },
+  "seedBindings": [
+    {"field": "condition", "equalsAxis": "condition"},
+    {"field": "path", "equalsAxis": "evidenceKind"},
+    {"field": "understanding", "presentWhen": {"axis": "evidenceKind", "value": "understanding"}},
+    {"field": "turns", "presentWhen": {"axis": "evidenceKind", "value": "turns"}},
+    {"field": "turns", "lengthAxis": "turnCount"},
+    {"field": "understanding", "member": "missing", "emptinessAxis": "missingForm",
+     "emptyFor": ["empty", "indirect", "unlisted", "ambiguous"],
+     "nonEmptyFor": ["immaterial", "listed"]}
+  ],
+  "design": {
+    "designStratumAxis": "evidenceKind",
+    "stratified": [
+      {"axis": "evidenceKind", "values": [
+        {"value": "understanding", "weight": 1},
+        {"value": "turns", "weight": 1}
+      ]},
+      {"axis": "intendedAnswer", "values": [
+        {"value": true, "weight": 1},
+        {"value": false, "weight": 1}
+      ]},
+      {"axis": "difficulty", "values": [
+        {"value": "clear", "weight": 2},
+        {"value": "near-miss", "weight": 1}
+      ]}
+    ],
+    "balanced": [
+      {"axis": "condition", "values": [
+        {"id": "cond_00", "weight": 9, "text": "the user has provided enough information to research their request"},
+        {"id": "cond_01", "weight": 2, "text": "the user has said which product or service the request is about"},
+        {"id": "cond_02", "weight": 2, "text": "the user has given the date or time window the request concerns"},
+        {"id": "cond_03", "weight": 2, "text": "the user has confirmed the address the request applies to"},
+        {"id": "cond_04", "weight": 2, "text": "the user has chosen one of the options that were offered"},
+        {"id": "cond_05", "weight": 2, "text": "the user has stated a budget for the request"},
+        {"id": "cond_06", "weight": 2, "text": "the user has described the problem in enough detail to start troubleshooting it"},
+        {"id": "cond_07", "weight": 2, "text": "the user has agreed to the proposed next step"},
+        {"id": "cond_08", "weight": 2, "text": "the user has identified which existing order or booking the request concerns"},
+        {"id": "cond_09", "weight": 2, "text": "the user has said how they want to be contacted"}
+      ]},
+      {"axis": "domain", "values": [
+        {"id": "dom_01", "weight": 1, "text": "a neighbourhood bakery that takes custom cake orders"},
+        {"id": "dom_02", "weight": 1, "text": "an online shop selling consumer electronics"},
+        {"id": "dom_03", "weight": 1, "text": "a travel agency planning holidays and business trips"},
+        {"id": "dom_04", "weight": 1, "text": "the internal IT help desk of a small accounting firm"},
+        {"id": "dom_05", "weight": 1, "text": "a car rental branch at a regional airport"},
+        {"id": "dom_06", "weight": 1, "text": "the appointment desk of a veterinary clinic"},
+        {"id": "dom_07", "weight": 1, "text": "a home-renovation contractor quoting small jobs"},
+        {"id": "dom_08", "weight": 1, "text": "a university library's research help service"},
+        {"id": "dom_09", "weight": 1, "text": "a bicycle repair and parts shop"},
+        {"id": "dom_10", "weight": 1, "text": "a mobile phone plan provider's customer service"},
+        {"id": "dom_11", "weight": 1, "text": "a furniture store that delivers and assembles"},
+        {"id": "dom_12", "weight": 1, "text": "the enrolment office of a language school"}
+      ]}
+    ],
+    "conditional": [
+      {"axis": "turnCount", "cases": [
+        {"when": {"evidenceKind": "turns"}, "values": [
+          {"value": 1, "weight": 1}, {"value": 2, "weight": 1}, {"value": 3, "weight": 1},
+          {"value": 4, "weight": 1}, {"value": 5, "weight": 1}, {"value": 6, "weight": 1},
+          {"value": 7, "weight": 1}, {"value": 8, "weight": 1}, {"value": 9, "weight": 1},
+          {"value": 10, "weight": 1}
+        ]}
+      ]},
+      {"axis": "missingForm", "cases": [
+        {"when": {"evidenceKind": "understanding", "intendedAnswer": true, "difficulty": "clear"},
+         "values": [{"value": "empty", "weight": 5}, {"value": "immaterial", "weight": 1}]},
+        {"when": {"evidenceKind": "understanding", "intendedAnswer": true, "difficulty": "near-miss"},
+         "values": [{"value": "immaterial", "weight": 1}, {"value": "indirect", "weight": 1}]},
+        {"when": {"evidenceKind": "understanding", "intendedAnswer": false, "difficulty": "clear"},
+         "values": [{"value": "listed", "weight": 7}, {"value": "unlisted", "weight": 1}]},
+        {"when": {"evidenceKind": "understanding", "intendedAnswer": false, "difficulty": "near-miss"},
+         "values": [{"value": "listed", "weight": 7}, {"value": "ambiguous", "weight": 1}]}
+      ]}
+    ]
+  },
+  "cells": {
+    "by": ["evidenceKind", "label"],
+    "count": 4,
+    "evalPerCell": 100,
+    "evalFloorPerCell": 50
+  },
+  "screen": {
+    "anywhere": ["near-miss"],
+    "metaPosition": ["intended", "difficulty", "clear", "advance", "suspend", "true", "false", "yes", "no",
+                     "empty", "immaterial", "indirect", "listed", "unlisted", "ambiguous"]
+  }
+}

@@ -35,6 +35,8 @@ cd decision-models && .venv/bin/pytest -q # run the suite from the component dir
 
 ## Status
 
-The scaffold (U5.1) and the guard contract copies (U5.2): the guard input renderer and the
-`input_hash` leakage key, pinned by byte-copies of model-bench's golden vectors. The layout the
+The scaffold (U5.1), the guard contract copies (U5.2: the guard input renderer and the
+`input_hash` leakage key, pinned by byte-copies of model-bench's golden vectors), and the
+decision points' definitions with seed generation (U5.3: `points/<role>/` rubric, generator
+template and design per point; `decisionmodels/seeds.py`). The layout the
 later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in `docs/HISTORY.md`.

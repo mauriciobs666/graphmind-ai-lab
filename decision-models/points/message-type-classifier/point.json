@@ -1,0 +1,67 @@
+{
+  "role": "message-type-classifier",
+  "kind": "choice",
+  "answerKey": "type",
+  "expected": ["order", "question", "complaint", "escalation", "other"],
+  "inputFields": {
+    "text": {"type": "string", "minLength": 1},
+    "priorTurn": {
+      "type": "object",
+      "nullable": true,
+      "fields": {
+        "speaker": {"type": "string", "minLength": 1},
+        "text": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "seedBindings": [
+    {"field": "priorTurn", "presentWhen": {"axis": "threadPosition", "value": "follow-up"}}
+  ],
+  "design": {
+    "designStratumAxis": null,
+    "stratified": [
+      {"axis": "intendedAnswer", "values": [
+        {"value": "order", "weight": 1},
+        {"value": "question", "weight": 1},
+        {"value": "complaint", "weight": 1},
+        {"value": "escalation", "weight": 1},
+        {"value": "other", "weight": 1}
+      ]},
+      {"axis": "difficulty", "values": [
+        {"value": "clear", "weight": 2},
+        {"value": "near-miss", "weight": 1}
+      ]},
+      {"axis": "threadPosition", "values": [
+        {"value": "opening", "weight": 2},
+        {"value": "follow-up", "weight": 3}
+      ]}
+    ],
+    "balanced": [
+      {"axis": "domain", "values": [
+        {"id": "dom_01", "weight": 1, "text": "a neighbourhood bakery that takes custom cake orders"},
+        {"id": "dom_02", "weight": 1, "text": "an online shop selling consumer electronics"},
+        {"id": "dom_03", "weight": 1, "text": "a pastry and snack shop that delivers in its city"},
+        {"id": "dom_04", "weight": 1, "text": "a pet supplies store with home delivery"},
+        {"id": "dom_05", "weight": 1, "text": "a car rental branch at a regional airport"},
+        {"id": "dom_06", "weight": 1, "text": "a clothing boutique that also sells online"},
+        {"id": "dom_07", "weight": 1, "text": "a florist that delivers bouquets for events"},
+        {"id": "dom_08", "weight": 1, "text": "a bookshop that orders titles on request"},
+        {"id": "dom_09", "weight": 1, "text": "a bicycle repair and parts shop"},
+        {"id": "dom_10", "weight": 1, "text": "a mobile phone plan provider's customer service"},
+        {"id": "dom_11", "weight": 1, "text": "a furniture store that delivers and assembles"},
+        {"id": "dom_12", "weight": 1, "text": "a meal-kit subscription service"}
+      ]}
+    ],
+    "conditional": []
+  },
+  "cells": {
+    "by": ["label"],
+    "count": 5,
+    "evalPerCell": 60,
+    "evalFloorPerCell": 52
+  },
+  "screen": {
+    "anywhere": ["near-miss"],
+    "metaPosition": ["intended", "difficulty", "clear", "order", "question", "complaint", "escalation", "other", "type"]
+  }
+}

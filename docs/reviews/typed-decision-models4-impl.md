@@ -396,3 +396,374 @@ were extracted from source by AST, so no falkor-chat import ran. Scratch script:
 | `TURN_TEXT_MAX_CHARS=401` | 854 | 0 | 551 |
 
 **`input_hash` against model-bench's:** 20,000 random nested items, 0 mismatches.
+
+## Pass 3 — U5.3 points, rubrics, seeds (2026-11-01)
+
+### Scope & verdict
+
+**Reviewed:** the uncommitted U5.3 work against `b8555aca`. It is new `decisionmodels/points.py` and
+`seeds.py`, `points/**` (three `point.json`, `rubric.md` and `generator.md` files, plus
+`points/common/`), and `tests/test_points.py` and `test_seeds.py`. The edits to `AGENTS.md`,
+`README.md` and `docs/HISTORY.md` are reviewed too. The baseline is plan4 §4.1's U5.3 row, plus
+§3.2, §3.4, §3.6 and §3.7, and note §Q1.1–§Q1.3. Rubric wording, seed design and leakage method
+belong to `data-scientist`'s parallel review in `docs/reviews/typed-decision-models-ml.md`; this
+pass covers code, contracts, tests and docs only.
+
+**Verdict: approve with suggestions.** There is no blocker. I checked these by running them:
+- The live tree gives 161 passed, and `ruff check .` is clean.
+- `AGENTS.md` is 484 words.
+- The coordinator's `_restricted` mutant reddens 4 tests (C0).
+
+All mutation ran in a private copy under the scratchpad (`u53-gate/copy/`), with `model-bench/`
+symlinked in. I confirmed that the copy's `decisionmodels` is the one imported. Every mutant was
+restored and checked equal with `cmp`, and a final sha256 over the copy showed it unchanged. The live
+tree was never written: a sha256 over its 29 `decision-models/` files is unchanged at the end. No git
+command changed the tree. One major finding goes to the plan, not to U5.3's code: P3-F1.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; both modules (425 lines) and both test files were read in full.
+
+### Findings
+
+**P3-F1 — major — a later draw can silently reuse a `seedId` for a different seed, and no unit is
+assigned the guard.** *Owner: `architect`, for the plan4 §5 U5.6 and U5.9 rows, via `teco`. The
+build goes to `coder`.* `_seed_id` hashes (role, RNG seed, restriction, position), not `count`
+(`seeds.py:373-376`). I ran it: a top-up `draw_seeds(role, 37, 42, design_stratum=None)` after a
+round-1 draw with RNG seed 42 shares **all 37 ids** with round 1, and all 37 have different axes. This
+held for every point. Message type and join-in have no design stratum, so their top-ups are always
+unrestricted. Guard draws restricted to a stratum shared 0 ids. The docstring makes distinct RNG
+seeds "the caller's (U5.8, U5.9)", but plan4 §5's U5.6 and U5.9 rows test no such thing. The cost of
+a reused id is silent: splits are assigned "by `seedId`" with one item per seed (plan4 §3.6, plan2
+§3.5). **Fix:** add a U5.6 row in which the ledger refuses a draw whose RNG seed it already holds for
+the role, and refuses any `seedId` already in the ledger. Name the planted case: a second draw with a
+reused RNG seed is refused. Do not fold `count` into the hash instead, because an identical repeat
+draw would still collide.
+
+**P3-F2 — minor — a restricted draw cannot be reproduced from its own record, and no test notices.**
+*Owner: `coder`.* Mutant X1 makes `SeedDraw.to_record` write `"designStratum": None`, and the suite
+stays at 161 passed. The record round-trip test (`test_seeds.py:68-74`) covers only unrestricted
+draws. The restricted test (`:77-79`) re-calls `draw_seeds` with a literal stratum and never goes
+through the record. A top-up draw is exactly the restricted case. **Fix:** route the restricted
+reproduction through `json.loads(json.dumps(first.to_record()))`, as the unrestricted test does. Then
+confirm X1 goes red.
+
+**P3-F3 — minor — the within-draw collision guard can never fail in the suite.** *Owner: `coder`.*
+Mutant X3 deletes the `RuntimeError` check at `seeds.py:421-422`, and the suite gives 161 passed.
+Root `REVIEW.md` counts a check that cannot fail as a finding. **Fix:** monkeypatch
+`seeds._seed_id` to a constant and assert `RuntimeError` on a 2-seed draw.
+
+**P3-F4 — minor — the guarantee that "seeds reproduce from the recorded RNG seed" holds only within
+one Python version.** *Owner: `coder`.* `seeds.py` uses `Random.shuffle`, and it also uses
+`Random.random`. Python guarantees across versions only the seeder and `random()`'s sequence
+(Python docs, `random` "Notes on Reproducibility", checked). `shuffle` uses `_randbelow`, which is not
+covered. `SeedDraw.to_record` records no interpreter version. **Fix:** record
+`pythonVersion` (`major.minor`) in the draw record. Qualify the docstring and the `AGENTS.md` line to
+say reproduction holds on the same Python minor version. The recorded seeds remain the source of
+truth. `PINNED_DIGESTS` would redden on an interpreter that shuffles differently. That is the right
+signal, and the `AGENTS.md` line should say so.
+
+**P3-F5 — minor — the side-check shingle test turns into a skip when the pack moves.** *Owner:
+`coder`.* It skips on `_SIDE_CHECK.is_file()` (`test_points.py:374`). The skip itself is real and
+visible: with `model-bench/` removed, the `-ra` summary shows `SKIPPED [1] tests/test_points.py:375`
+next to the two contract skips. But a renamed `guard-judge-understanding` pack, with `model-bench/`
+still present, would also skip, and the note §Q1.4 gate would quietly stop running. The contract
+test applies v1.3 §3.2.2's rule instead: skip only when `model-bench/` is absent. **Fix:** skip on
+`_MODEL_BENCH.is_dir()`, and fail when model-bench is present but the items file is missing.
+
+**P3-F6 — minor — the switch-over from the provisional field list is only half mechanised.**
+*Owner: `coder` (U5.2b).* `test_the_input_fields_match_the_leakage_key` uses
+`INPUT_FIELDS_BY_ROLE.get(role, PLANNED…)`. When U5.2b adds rows, they are compared automatically.
+Mutant X13 adds a matching join-in row and stays green; X14 adds it in a different order and goes
+red. But if U5.2b adds no row, nothing reddens, and the provisional list stays in force.
+`test_guard_is_the_one_role_hashing_defines_so_far` does not assert that the others are absent, so
+it cannot fail when they land. **Fix:** replace it with a
+`pytest.mark.xfail(strict=True)` check, per non-guard role, that the role is in
+`INPUT_FIELDS_BY_ROLE`. When U5.2b lands the rows, the strict XPASS reddens and forces the
+provisional fallback to be deleted. Compare as sets, so that tuple order between `point.json` and
+model-bench's row is not churn.
+
+**P3-F7 — nit — the plan does not say how §3.7's `promptSha256` maps to the composed line-2
+text.** *Owner: `architect`, via `teco`. `coder` applies it in U5.8 and U5.10.* §3.2's request line 2
+is `{"rubric"}` or `{"instructions"}`. `Point.rubric` and `Point.generator_instructions` each
+compose the body with the `points/common/` answer section. That matches §3.2 and §3.4's spawn
+template ("Follow the instructions on line 2, write the answer where the header says"). The answer
+sections match §3.2's answer format: line 1 `bodySha256`, `{"key","answer"}` or `{"key","item"}`
+lines, and `.k.jsonl` parts. But §3.7 hashes `rubric` and `requestTemplate.{generator,labeler}`
+separately, and U5.9's tranche relabels "under the new rubric hash". Whether `rubric` covers
+`rubric_body` or the composed text is unstated. **Fix:** state it in plan4 §3.7. One option is
+`rubric` = `rubric_body`, `requestTemplate.labeler` = `label-answer.md`, and
+`requestTemplate.generator` = the composed generator text. `Point` already exposes both parts
+separately.
+
+**Questions asked, settled by execution:**
+1. *Is the `points/` boundary sound?* **Yes.** `points/` holds no code, so the AST allowlist has
+   nothing to check. The text scan covers every file under `points/`, `point.json` included, and
+   `test_the_points_data_is_all_scanned` pins the file set. The positive controls go red:
+   - a side-check sentence planted in `rubric.md` (Q1a, Q1b);
+   - "falkor-chat" in a `point.json` axis text (Q1c);
+   - `redis-cli` in `points/common/` (Q1d).
+
+   The skip is real and visible, not a silent pass; its scope is P3-F5.
+2. *Does line 2 match plan4 §3.2 and §3.4?* **Yes**, for the composed text; the open hashing
+   question is P3-F7.
+3. *Are `seedId`s unique and collision-safe?* Within a draw they are unique and guarded, but the
+   guard is untested (P3-F3). Across draws with distinct RNG seeds, ids differed in every run
+   (`test_different_rng_seeds_give_different_draws`). With a reused RNG seed, all ids collide
+   (P3-F1).
+
+   `ID_PATTERN` fullmatches every minted and defined id (`cond_00`, `dom_07`, `cue_01`,
+   `pur_01`, `sd_` plus 12 digits), which is the form note §Q1.2 "Hits" names for U5.8. Two
+   cautions for U5.8's screen, which are not U5.3 defects. First, the pattern is lowercase-only and
+   unanchored, so `DOM_07` or `dom-07` would pass. Second, `Seed.axes` sends `conditionId`,
+   `domainId`, `cueId` and `purposeId` to the generator, which is where a leaked id would come from.
+   Whether the generator needs the ids at all is a method question, raised for `data-scientist`.
+4. *Is the provisional field list's switch-over mechanised?* Only half; see P3-F6.
+5. *Are the digest pins documented?* **Yes.** `test_seeds.py:101-103` labels them regression pins,
+   and `AGENTS.md` says that a design or algorithm change re-pins them deliberately. The interpreter
+   caveat is P3-F4.
+6. *What did my own data-plumbing mutants show?* Of 15 (Appendix C), 11 went red. Of the four
+   survivors, X1 is P3-F2 and X3 is P3-F3. X9 lets a `bool` through an enum: it is equivalent today,
+   because no enum holds ints. X5 drops the blank line between the rubric and the answer section:
+   it is cosmetic, so it is not reported.
+
+**Docs.**
+- `HISTORY.md`: the entry's counts reproduce (161 passed; 54 → 161).
+- `AGENTS.md` grew from 319 to 484 words. The growth is new scope: two invariants about `points/`
+  and seeds, which are present-tense rules a reader needs. "Current state" was rewritten, not
+  appended to, and no line is over 700 characters. One clause belongs in the test docstrings rather
+  than the context file: "Expected answer spaces, fields and counts in the tests are written from
+  the plans… never read back." This is a nit, with no finding filed.
+- The README Status was replaced in place, consistent with Pass 2's judgement call 4.
+
+### Prior findings (dispositions)
+
+Rechecked at `b8555aca` and in the tree:
+- P1-F1: fixed. String-literal planted cases exist for `falkordb-dev`, `falkor_chat`, `falkorchat`
+  (`test_fr8_isolation.py:195-206`).
+- P1-F2: fixed. The README and `AGENTS.md` say "static tripwire", and the bytes scan and alias
+  tracking are in place (`:87-88`, `:133-134`).
+- P1-F3: fixed. The `AGENTS.md` FR-8 bullet names the side-check items.
+- P1-F4: not fixed, carried. The coordination ledger carries it to the U5.10 brief.
+- P1-F5: fixed. `redis` is letter-bounded, and there is a "predisposition" control (`:41-42`,
+  `:248`).
+- P1-F6: fixed. The root bullet cites `docs/requirements/typed-decision-models.md`.
+- P2-F1: fixed. `test_render_guard_item_keeps_turn_order_through_normalization_and_the_cap`
+  (`test_decision_contract.py:112`).
+- P2-F2: fixed. The `HISTORY.md` U5.2 entry records the recovered restore and cites Pass 2.
+- P2-F3: not fixed, carried. The ledger carries it to the U4 brief (`normalize-turns.jsonl`).
+- P2-F4: fixed. "Current state" is one sentence at `b8555aca`.
+
+**Growth-stops check on this document:** Pass 3 adds words only for new scope, the new unit U5.3.
+Prior findings take one line each above, and Passes 1–2 are unchanged: their pre-Pass-3 text is
+byte-identical to `HEAD` (`cmp`).
+
+### What's solid
+
+- Every expected count in `test_seeds.py` is derived by hand in the test, with the arithmetic shown
+  (for example, 880 → 147 clear / 73 near-miss).
+- `test_draw_seeds_has_no_intent_parameter` pins plan4 §3.6's rule that the sampler names no
+  label.
+- The schema checker refuses unexpected nested fields (X7 goes red), and `maxItems` is enforced
+  (X10 goes red).
+- Seed bindings catch an item that strays from its seed: a wrong turn count goes red (X6).
+- Reproduction is checked under three `PYTHONHASHSEED` values in subprocesses.
+- Dropping the id field breaks 6 tests (X15).
+
+### Appendix C — Pass 3 mutants
+
+These ran in the private copy, with the full suite after each, and were restored and checked equal
+with `cmp`.
+
+| ID | Mutation | Result |
+|---|---|---|
+| C0 | the coordinator's: `_restricted(...)` bypassed | 4 failed |
+| X1 | `SeedDraw.to_record` writes `designStratum: None` | **161 passed** (P3-F2) |
+| X2 | `_seed_id` ignores the restriction | 3 failed (via the digest pins) |
+| X3 | within-draw collision check removed | **161 passed** (P3-F3) |
+| X4 | `_seed_id` ignores the role | 3 failed |
+| X5 | no separator between the rubric and the answer section | **161 passed** (cosmetic) |
+| X6 | `lengthAxis` binding ignored | 1 failed |
+| X7 | nested unexpected fields allowed | 1 failed |
+| X8 | `allowEmpty` admits any object | 3 failed |
+| X9 | `bool` allowed in an enum | **161 passed** (equivalent today) |
+| X10 | `maxItems` ignored | 1 failed |
+| X11 | conditional pool assigned in reverse | 1 failed |
+| X12 | no final shuffle | 3 failed |
+| X13 | hashing gains a matching join-in row | 161 passed (expected; P3-F6) |
+| X14 | hashing gains a reordered join-in row | 1 failed |
+| X15 | `<axis>Id` not set | 6 failed |
+| Q1a | side-check request sentence planted in the guard rubric | 1 failed |
+| Q1b | side-check `known` entry planted in the guard rubric | 1 failed |
+| Q1c | "falkor-chat" in a join-in `point.json` axis text | 2 failed |
+| Q1d | `redis-cli` in `points/common/generate-answer.md` | 1 failed |
+| — | `model-bench/` symlink removed | 158 passed, 3 skipped (all three listed by `-ra`) |
+
+## Pass 4 — U5.3 fix round (2026-11-01)
+
+**Verdict: approve with suggestions.** The suite reproduces the reported state: 330 passed, 2
+xfailed, 1 failed, and `ruff check .` is clean. The one failure is the known `input-hash.jsonl`
+equality test. The live copy is a strict byte prefix of model-bench's: 4 of 10 lines, and the 6
+added lines are join-in and message-type rows.
+
+Every mutant ran in a private copy (`scratchpad/u53-gate2/copy/`, with `model-bench/` symlinked
+in), with that one test deselected. Each was restored and checked equal with `cmp`, and a final
+sha256 over the copy matched. A sha256 over the 29 live `decision-models/` files was unchanged at
+the end. No git command changed the tree. Method content is `data-scientist`'s Pass 2.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; `seeds.py`, `points.py` and the changed tests were read in full.
+
+### Pass 3 findings
+
+- **P3-F1:** fixed in the plan. Plan5 §3.2 rules that the ledger refuses a held RNG seed or
+  `seedId`, and the U5.6 and U5.9 rows carry planted cases. `seeds.py` stays pure, as proposed.
+- **P3-F2:** fixed. `test_a_restricted_draw_reproduces_from_its_own_record` round-trips through
+  JSON for both strata. It also asserts the conditional axes' `None` pattern: `missingForm` on
+  `understanding`, `turnCount` on `turns`. Mutant X1 (record drops `designStratum`) now reddens 2
+  tests (it was 0 in Pass 3).
+- **P3-F3:** fixed. A monkeypatched constant `_seed_id` raises `RuntimeError`, and deleting the
+  check reddens 1 test (it was 0). The test still means something under the new allocation: a
+  2-seed draw still reaches the guard.
+- **P3-F4:** fixed. The record carries `pythonVersion`, and `_digest` excludes it. Writing `"3.99"`
+  reddens only `test_a_draw_records_its_python_version`; all three pins stay green, so the exclusion
+  works.
+- **P3-F5:** fixed. With `model-bench/` present but the pack missing, the test fails
+  (`test_points.py:512: AssertionError`). With `model-bench/` absent, it skips and the `-ra`
+  summary lists the skip. `test_a_moved_side_check_pack_fails_rather_than_skips` catches the skip
+  exception correctly.
+- **P3-F6:** fixed. A mismatched join-in row reddens 2 tests (an `AssertionError` that the
+  `raises=KeyError` xfail does not absorb, plus the tuple test). A matching row in a different
+  order also reddens 2: the strict XPASS and the order-sensitive tuple test, which plan5 §3.4
+  deletes at U5.2b. Neither stays xfailed.
+- **P3-F7:** fixed in the plan. Plan5 §3.3 hashes `rubric` from `rubric_body` and
+  `requestTemplate.labeler` from `label_answer_section`.
+
+### New findings
+
+**P4-F1 — minor — a wrong-kind item reports a `missingForm` error, so plan5 §3.5 would count it as
+`formMismatch` too.** *Owner: `coder` for the code; `architect`, via `teco`, for the precedence
+rule (plan5 v1.3).*
+
+What I ran: a schema-valid `turns` item (`understanding: {}`, `path: "turns"`) against real
+`understanding` seeds. It yields **four** errors, not two. Three are on `evidenceKind`: `path`,
+`understanding` empty, and `turns` present. The fourth is on `missingForm`:
+"understanding.missing: expected a list".
+
+Why it matters:
+- The fourth error is always redundant. `missing` is a required field, so a missing list passes
+  the schema only when `understanding` is `{}`, which is exactly the case the `presentWhen`
+  binding already reports.
+- Under plan5 §3.5, one wrong-kind item would carry both `bindingMismatch` and `formMismatch`. It
+  would inflate `dropped.formMismatch` and that form's 5% halt with items that never attempted the
+  form.
+- The path is unpinned: mutant P4 (return `[]` there) gives 330 passed.
+
+**Fix:**
+- `_emptiness_errors` returns `[]` when the field is not a non-empty mapping, because the
+  `presentWhen` binding owns that case.
+- Add the four-error case to `test_points.py`, asserting that only `evidenceKind` errors remain.
+- Plan5 §3.5 states the per-item precedence: any non-form binding error makes the item a
+  `bindingMismatch`, never also a `formMismatch`.
+
+**P4-F2 — minor — the expected-mean tolerance is about 10 standard errors, so a 5% start bias
+passes.** *Owner: `coder`.* `_tolerance(size) = 0.1 + 0.02·size`. Over 1,500 fixed RNG seeds, the
+standard error for a ⅓ share at size 1 is about 0.012, so the size-1 tolerance of 0.12 is about 10
+of them. With the digest pins excluded:
+- largest remainder reddens 59 tests;
+- a fixed half start reddens 58;
+- a start scaled by 0.9 reddens 3;
+- a start scaled by 0.95 or 0.97 reddens **0**. At 0.95 the bias is about 0.035 per seed on a ⅓
+  share, roughly 3 standard errors.
+
+Plan5's U5.3 row is met: largest remainder reddens. But the tests cannot see a small bias. The
+seeds are fixed, so a tight bound is not flaky.
+
+**Fix:** add an exact test of `allocate` alone. Stub `rng.random()` with the grid
+`(k + 0.5)/N` for `k < N`, where `N = 12·W`, and assert with `Fraction` that the mean share
+equals the quota. I prototyped it over 9 weight vectors × totals 0–29:
+- the real `allocate` gives 0 failures;
+- the 0.97 mutant gives 165 failures.
+
+After that, the draw-level mean tests check only composition, and their tolerance can drop to
+about 4 standard errors. One limit: a bias of about 0.1% (×0.999) slips between the grid points.
+
+**P4-F3 — minor — a third check that can never fail: the conditional-case overlap guard.** *Owner:
+`coder`.* Mutant P2 deletes the `ValueError` at `seeds.py:196-197`, and the suite gives 330 passed.
+This is the P3-F3 class again: a guard with no test that can trip it. **Fix:** plant two
+overlapping cases in a scratch design and assert the `ValueError`.
+
+**P4-F4 — minor — the `HISTORY.md` entry says message type's pin is unchanged, but all three
+pins moved.** *Owner: `coder`.* Compared with the Pass 3 tree (`u53-gate/copy`):
+- message type moved from `12995ec1…` to `299beb51…`, although its `design` is byte-equal;
+- guard moved from `50e5ff2e…` to `341d8815…`;
+- join-in moved from `679bce0f…` to `26109599…`.
+
+Systematic rounding changes every allocation, so the move is expected. The other figures do
+reproduce: 330 passed / 2 xfailed / 1 failed, and `AGENTS.md` at 528 words. **Fix:** "all three
+re-pinned; message type's design is unchanged, but the allocation change moved its pin".
+
+**P4-F5 — minor — the `input-hash.jsonl` red should be fixed by re-scheduling, not by tolerating
+appends.** *Owner: `teco`, for sequencing; `architect` only if plan4 §4.3's order needs amending.*
+The copy must stay strictly equal. Prefix tolerance would also let an appended *guard* row, which
+is a new pinned behaviour, lag silently.
+
+Re-copying alone does not fix it either. The six new rows are join-in and message-type rows, and
+`hashing.INPUT_FIELDS_BY_ROLE` has no rows for those roles. `test_input_hash_matches_input_hash_jsonl`
+would therefore raise `ValueError` on them.
+
+The real cost is timing. U5.2b sits after U5.10, so the decision-models suite would carry a
+deselected red through U5.4–U5.10, and every gate would run blind on that test.
+
+**Fix:** split U5.2b. A hashing half (rows, re-copy, retiring the P3-F6 xfails) runs right after
+U4.1. A renderer half follows the U4 unit that lands the renderers. Until then, gate commands
+deselect by explicit node id, and the ledger records it. The `AGENTS.md` instruction "A red
+equality test means re-copy … then fix the code" should say the re-copy happens in the unit that
+adds the matching rows.
+
+**P4-F6 — nit — `allocate` mixes a float start with integer edges.** *Owner: `coder`.* An integer
+start, `j = int(rng.random() * W)`, with `ceil` done in integers gives identical shares. I checked
+this on 20,000 random (weights, total, seed) cases with 0 differences. It also removes a
+float-rounding edge that has a negligible but non-zero chance of shifting a unit at an interval
+boundary. Consider it; the RNG stream and the pins are unchanged.
+
+**Checked and sound:**
+- **Conditional axes.** A mutant matching `when` on its first key only reddens 48 tests, so
+  plan5's "never a value outside their row" is pinned.
+- **Your mutant and the delegate's are consistent with mine.** Your `turnCount` weight mutant
+  turned 9 red, and the delegate's largest-remainder mutant turned 32 red against my 59 (my
+  implementation differs).
+- **My own data-plumbing mutants:**
+  - P3 (version scope) is pinned;
+  - P4 (emptiness non-list path) survived, see P4-F1;
+  - P2 (overlap guard) survived, see P4-F3.
+- **`AGENTS.md` (484 → 528 words).** Growth-stops formally covers requirements, plans and
+  reviews; judged by the context-file rule instead, this passes:
+  - the seeds bullet was replaced in place;
+  - the never-swap-in-largest-remainder rule is a durable invariant;
+  - the new `hashing.py` xfail bullet is a present-tense trap, which U5.2b deletes along with the
+    xfails.
+- **`HISTORY.md`.** Rewriting the not-yet-gated U5.3 entry in place is correct. Its only wrong
+  figure is P4-F4.
+
+**Growth-stops check on this document:** Pass 4 records one line per Pass 3 finding. Its new text
+covers six new findings only. Passes 1–3 are byte-identical to their pre-Pass-4 text (`cmp`).
+
+### Appendix D — Pass 4 mutants
+
+These ran in the private copy, with the full suite after each and the `input-hash.jsonl` equality
+test deselected. Baseline: 330 passed, 2 xfailed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| A1 | largest remainder in `allocate` | 59 failed |
+| A2 | start ×0.9 | 4 failed (3 with the pins deselected) |
+| A3 | start ×0.8 | 24 failed |
+| A4 | start fixed at W/2 | 58 failed |
+| A5 | start `u^1.25` | 8 failed (7 with the pins deselected) |
+| — | start ×0.95 / ×0.97, pins deselected | **0 failed** (P4-F2) |
+| X1 | draw record drops `designStratum` | 2 failed |
+| X3 | collision check removed | 1 failed |
+| P1 | conditional `when` matches its first key only | 48 failed |
+| P2 | case-overlap check removed | **330 passed** (P4-F3) |
+| P3 | `pythonVersion` written as `"3.99"` | 1 failed (version test only; pins green) |
+| P4 | emptiness binding ignores a non-list `missing` | **330 passed** (P4-F1) |
+| P5 | `hashing` gains a mismatched join-in row | 2 failed, 1 xfailed |
+| P6 | `hashing` gains a matching, reordered join-in row | 2 failed, 1 xfailed |

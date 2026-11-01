@@ -1,0 +1,83 @@
+{
+  "role": "join-in-judge",
+  "kind": "predicate",
+  "answerKey": "reply",
+  "expected": [true, false],
+  "inputFields": {
+    "agentName": {"type": "string", "minLength": 1},
+    "priorTurns": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "fields": {
+          "role": {"type": "enum", "values": ["user", "assistant"]},
+          "displayName": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "newMessage": {
+      "type": "object",
+      "fields": {
+        "role": {"type": "enum", "values": ["user"]},
+        "displayName": {"type": "string", "minLength": 1},
+        "text": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "seedBindings": [],
+  "design": {
+    "designStratumAxis": null,
+    "stratified": [
+      {"axis": "intendedAnswer", "values": [
+        {"value": true, "weight": 1},
+        {"value": false, "weight": 1}
+      ]},
+      {"axis": "difficulty", "values": [
+        {"value": "clear", "weight": 2},
+        {"value": "near-miss", "weight": 1}
+      ]}
+    ],
+    "balanced": [
+      {"axis": "purpose", "values": [
+        {"id": "pur_01", "weight": 1, "text": "a shop's customer-support thread where staff and an assistant agent both answer customers"},
+        {"id": "pur_02", "weight": 1, "text": "a small team planning a product launch with a project-assistant agent"},
+        {"id": "pur_03", "weight": 1, "text": "friends planning a weekend trip with a travel-assistant agent"},
+        {"id": "pur_04", "weight": 1, "text": "a study group preparing for an exam with a tutoring agent"},
+        {"id": "pur_05", "weight": 1, "text": "a restaurant's staff channel with a stock-keeping agent"},
+        {"id": "pur_06", "weight": 1, "text": "a neighbourhood association organising a street fair with a scheduling agent"},
+        {"id": "pur_07", "weight": 1, "text": "a hiring team coordinating interviews with a calendar agent"},
+        {"id": "pur_08", "weight": 1, "text": "a book club choosing its next title with a recommendations agent"},
+        {"id": "pur_09", "weight": 1, "text": "an office team handling a printer and network problem with a help-desk agent"},
+        {"id": "pur_10", "weight": 1, "text": "a family coordinating a relative's birthday party with a shopping agent"}
+      ]}
+    ],
+    "conditional": [
+      {"axis": "cue", "cases": [
+        {"when": {"intendedAnswer": true}, "values": [
+          {"id": "cue_01", "weight": 1, "text": "the new message names the agent in plain text but does not @mention it"},
+          {"id": "cue_02", "weight": 1, "text": "the new message asks a question of the room, addressed to nobody in particular"},
+          {"id": "cue_04", "weight": 1, "text": "the new message responds to the agent's most recent turn in the thread"}
+        ]},
+        {"when": {"intendedAnswer": false}, "values": [
+          {"id": "cue_01", "weight": 1, "text": "the new message names the agent in plain text but does not @mention it"},
+          {"id": "cue_02", "weight": 1, "text": "the new message asks a question of the room, addressed to nobody in particular"},
+          {"id": "cue_03", "weight": 1, "text": "the new message is part of an exchange between the human participants"},
+          {"id": "cue_04", "weight": 1, "text": "the new message responds to the agent's most recent turn in the thread"},
+          {"id": "cue_05", "weight": 1, "text": "the new message is social small talk addressed to the room or to another person, not to the agent"}
+        ]}
+      ]}
+    ]
+  },
+  "cells": {
+    "by": ["label"],
+    "count": 2,
+    "evalPerCell": 100,
+    "evalFloorPerCell": 100
+  },
+  "screen": {
+    "anywhere": ["near-miss"],
+    "metaPosition": ["intended", "difficulty", "clear", "reply", "true", "false", "yes", "no"]
+  }
+}
