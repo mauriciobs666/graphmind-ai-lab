@@ -586,26 +586,34 @@ distills — on request, and folded into every certification pass (§4):
    `ws:agent-team` with nothing recording it happened unless the manifest is
    marked *before* the pair runs, not only after. For each claim touched by
    the edit, look up its manifest entry by file path + heading (or, within a
-   heading that holds several split-sibling claims, by the claim's own
-   `title`):
-   - **Existing claim, text changed** — first, set the manifest entry's
-     `verified` field to the string `"pending"` (leaving its `documentId`
-     field untouched, still pointing at the *old* id) — this is the in-flight
-     marker a later pass checks for, below. Only then run
-     `delete_document(documentId)` (the old id), then
-     `ingest_document(text=<new claim text>, title=<same "<family-slug> —
-     <claim-title>" convention Stage 6 used for a split sibling, or the plain
-     heading text for a claim that was never split; ≤ 200 characters —
-     shorten `<claim-title>`, never the family slug, if it would go over>,
-     produced_by='cobb')`
+   heading that holds several split-sibling claims, by the claim's recorded
+   `title` in the manifest):
+   - **Decide the claim's title once, before any write, and record it.**
+     Build it from the `"<family-slug> — <claim-title>"` convention Stage 6
+     used for a split sibling, or the plain heading text for a claim that
+     was never split. If it would exceed 200 characters (the
+     `ingest_document` bound; a longer title is refused), shorten
+     `<claim-title>`, never the family slug. That one string is the claim's
+     **recorded title**: it goes into the manifest entry's `title` in the
+     same write that sets `verified: "pending"` (below), it is the `title=`
+     of the `ingest_document` call, and it is what the orphan sweep matches.
+     Never rebuild it from the convention after that write — a shortened
+     title is not reproducible.
+   - **Existing claim, text changed** — first, in one manifest write, set
+     the entry's `title` to the recorded title and its `verified` field to
+     the string `"pending"` (leaving its `documentId` field untouched, still
+     pointing at the *old* id) — this is the in-flight marker a later pass
+     checks for, below. Only then run `delete_document(documentId)` (the old
+     id), then `ingest_document(text=<new claim text>, title=<the recorded
+     title, as now written in the manifest>, produced_by='cobb')`
      against `ws:agent-team`. Overwrite the manifest entry's `documentId`
      with the new id, but leave `verified` at `"pending"` — the final flip to
      `true` happens only in the last bullet below, after a byte-exact check,
      never write `true` before that check runs.
    - **New claim** (a heading, or a new split sibling, that never existed
-     before) — no prior id, so skip the delete: `ingest_document` directly
-     (same title convention and 200-character bound as above),
-     then add a fresh entry to the manifest under its file/heading with
+     before) — no prior id, so skip the delete: decide the recorded title
+     first (above), `ingest_document` directly with it, then add a fresh
+     entry to the manifest under its file/heading with that same `title` and
      `verified: "pending"` until the last bullet below confirms it.
    - **Claim removed** (a heading deleted or merged away, nothing replaces
      it) — `delete_document(documentId)` and remove that entry from the
@@ -673,9 +681,11 @@ distills — on request, and folded into every certification pass (§4):
      `limit`, run `list_documents(current_only=True, limit=<the same,
      count-confirmed value, e.g. 1000>)`, scanned client-side (this tool has
      no server-side title filter) for a document whose `title` exactly
-     matches this claim's expected title (the same `"<family-slug> —
-     <claim-title>"` or plain-heading convention the "New claim" bullet
-     above already uses for `title=`) and whose `documentId` isn't the
+     matches the manifest entry's recorded `title` — never one rebuilt from
+     the convention: that `title` was written in the same write as
+     `"pending"`, before the interrupted `ingest_document` ran, so it is
+     exactly the title that call used, shortened or not — and whose
+     `documentId` isn't the
      manifest's stale tracked id. **Found one** → a case-(b) orphan
      *candidate*, not yet confirmed — **verify before writing anything to
      the manifest**, the same byte-exact discipline the "pending-entry-

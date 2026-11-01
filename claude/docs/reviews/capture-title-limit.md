@@ -180,3 +180,36 @@ call.
 At `SKILL.md:599`, the backticks around `<claim-title>` close the code span that opens at `:596`.
 In rendered view, `<claim-title>` becomes a bare HTML-like tag. The raw text agents read is
 unaffected. Dropping those backticks, as F3 did, would make the two consistent.
+
+## Pass 3
+
+**Rechecked:** `git diff -- skills/agent-maintenance/SKILL.md claude/cobb/kaizen` (uncommitted). The
+scope was narrow: the F5 done-condition and the rendering nit. **Verdict: approve.**
+
+- **F5 — fixed; the done-condition holds.** Traced by reading the whole sync/recovery block, l.587–720.
+  - A new bullet at l.591–601 decides the title once, before any write, and makes it the
+    **recorded title**.
+  - "Existing claim" (l.602–608) writes `title` in the same manifest write as `verified: "pending"`,
+    then ingests with "the recorded title, as now written in the manifest".
+  - "New claim" (l.613–617) ingests with the recorded title and records that same `title`.
+  - The orphan sweep (l.683–688) matches "the manifest entry's recorded `title` — never one rebuilt
+    from the convention".
+  - The split-sibling lookup (l.589–590) uses the "recorded `title` in the manifest". The lookup runs
+    before the new write, so it finds the entry under its previous recorded title. That is
+    consistent.
+  - A shortened title therefore reaches the manifest before the delete/ingest pair and comes back
+    out of it unchanged on an interrupted run.
+  - An unfiltered `grep -n "title\|convention"` over l.560–820 finds no remaining site that rebuilds
+    the title.
+- **Nit — fixed.** At l.596, `<claim-title>` now sits in prose, outside the code span.
+- **K-060 — confirmed pre-existing, not introduced here.** The "New claim" step's order (ingest,
+  then add the manifest entry) dates to `2f0b367b` (2026-09-19, K-030 Stage 9), per `git log -S
+  "then add a fresh entry to the manifest"`. This change keeps that order and only adds the title.
+  I did not review the fix.
+- **Kaizen entry — conforms.** It is a dated **What / Why / Not changed / Plan items** entry, and the
+  K-060 row was added to the plan.
+
+**Nit (new, take or leave):** case (a)'s "call `ingest_document` directly" (l.~716) does not name
+the title it uses. The universal rule at l.600, "Never rebuild it from the convention after that
+write", already binds it to the recorded title. Adding "with the recorded `title`" there would make
+it explicit at the point of use. This does not block the done-condition.
