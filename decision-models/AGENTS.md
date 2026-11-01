@@ -16,7 +16,8 @@ reconciliation, halts), `runner.py` (`driver run`, `pause [--now]`, `resume`), `
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
 definitions, spawn templates, `guard_hook.py` and `settings.json`. Later plan4 §4.1 and plan6 §4
-units are unbuilt, and U5.7's live smoke has not run (`docs/HISTORY.md`).
+units are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+`docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
 
@@ -41,8 +42,8 @@ units are unbuilt, and U5.7's live smoke has not run (`docs/HISTORY.md`).
   into `promptSha256` and byte-copied by `install`, so an edit is a dataset-version change, and a
   spawn template has no trailing newline (the audit compares it byte for byte). `guard_hook.py` is
   the only bound on a call: stdlib only, exit 1 with no decision when it cannot judge (the wiring's
-  `onFailure: "block"` blocks), never imports `decisionmodels`. Its command uses an unexpanded
-  `$CLAUDE_PROJECT_DIR`, unverified in a live transcript until the smoke.
+  `onFailure: "block"` blocks), never imports `decisionmodels`. Its command is shell-form with
+  `$CLAUDE_PROJECT_DIR`, which the live smoke showed expands; the record keeps it unexpanded.
 - **`points/<role>/` is data, reviewed as data.** `point.json` (answer space, input-field schema,
   seed bindings, seed design and its weights, cells and sizes, screen tokens), `rubric.md`,
   `generator.md`; `points/common/` holds the answer-file section appended to each
@@ -73,8 +74,8 @@ units are unbuilt, and U5.7's live smoke has not run (`docs/HISTORY.md`).
 - **The audit locates a run only through the driver's `Agent` `tool_use` and `.meta.json`
   `toolUseId`**, never through what it checks, and fails closed (plan6 §3.4): only F2's
   foreground shape completes, and a tool use the guard did not allow with its own entry halts
-  (`guardRejected`, `hookMissing`). Its bounds code never imports `guard_hook.py`. `maxTurns` is
-  provisional until U5.7's smoke. Fixtures (`tests/fixtures/transcripts/`) are hand-built in the
+  (`guardRejected`, `hookMissing`). Its bounds code never imports `guard_hook.py`. `maxTurns` is the
+  smoke-recorded cut-short shape (`tests/test_audit.py`'s `max_turns_run`). Fixtures (`tests/fixtures/transcripts/`) are hand-built in the
   probe report's recorded key sets, never copies of real transcript content.
 - **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
   message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.

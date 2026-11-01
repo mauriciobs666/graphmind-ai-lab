@@ -15,9 +15,10 @@ and every refusal comes before any file is written or any event appended:
    §3.3 "Version floor");
 1. reads `~/.claude/settings.json` and refuses on `runner.forbidden_settings_refusal` (the same
    function `run` applies), then digests it with `runner.user_settings_digests`;
-2. checks the sources: each definition's frontmatter has exactly its role's keys and the pinned
-   values (`definition_error`, plan6 §3.3 "Definition check"; `hooks` is refused by name);
-   `settings.json` wires the guard exactly once with `onFailure: "block"` (`guard_command`) and pins
+2. checks the sources: each definition's frontmatter has exactly its role's keys, none repeated,
+   its role's `name` and the pinned values (`definition_error`, plan6 §3.3 "Definition check";
+   `hooks` is refused by name); `settings.json` wires the guard exactly once with
+   `onFailure: "block"` (`guard_command`) and pins
    `autoContinueAtUsageLimit: false`;
 3. byte-copies each source into `exchange/.claude/` (definitions into `agents/`, plus the guard,
    its spawn templates and `settings.json`), then re-reads every installed file and compares its
@@ -68,7 +69,8 @@ def sha256(data: bytes) -> str:
 
 
 def frontmatter(text: str) -> dict[str, str]:
-    """The `key: value` lines between the leading `---` lines of an agent definition."""
+    """The `key: value` lines between the leading `---` lines of an agent definition. A repeated
+    key refuses: this parser would keep the last, and Claude Code's choice is unverified."""
     lines = text.split("\n")
     if not lines or lines[0] != "---" or "---" not in lines[1:]:
         raise CampaignRefused("an agent definition has no frontmatter")
@@ -77,6 +79,8 @@ def frontmatter(text: str) -> dict[str, str]:
         key, sep, value = line.partition(":")
         if not sep:
             raise CampaignRefused(f"a frontmatter line is not `key: value`: {line!r}")
+        if key.strip() in fields:
+            raise CampaignRefused(f"repeats the frontmatter key `{key.strip()}`")
         fields[key.strip()] = value.strip()
     return fields
 
@@ -94,7 +98,8 @@ DRIVER_PINS = {"model": "claude-sonnet-5-5", "maxTurns": "3",
 def definition_error(role: str, fields: Mapping[str, str]) -> str | None:
     """Why a definition's frontmatter is refused (plan6 §3.3 "Definition check"), or `None`: a
     key outside the role's set (`hooks` by name; Claude Code ignores an unknown key, so a misspelt
-    one would install silently), a missing key, or a broken pinned value."""
+    one would install silently), a missing key, a `name` other than the role's agent type (the
+    guard keys on `agent_type`), or a broken pinned value."""
     if "hooks" in fields:
         return "carries `hooks`: the guard is wired in settings only"
     keys, pins = (DRIVER_KEYS, DRIVER_PINS) if role == "driver" else (SUBAGENT_KEYS,
@@ -103,6 +108,8 @@ def definition_error(role: str, fields: Mapping[str, str]) -> str | None:
         return f"has keys outside its set: {unknown}"
     if missing := sorted(keys - set(fields)):
         return f"lacks {missing}"
+    if fields["name"] != f"dm-{role}":
+        return f"`name` must be `dm-{role}`"
     for key, value in pins.items():
         if fields[key] != value:
             return f"`{key}` must be `{value}`"
@@ -162,7 +169,10 @@ def _read_sources(agents_dir: Path) -> dict[str, bytes]:
         if "{" not in sources[name].decode("utf-8", "replace") or sources[name].endswith(b"\n"):
             raise CampaignRefused(f"{name} must hold its slots and no trailing newline ({role})")
     for role, name in DEFINITIONS.items():
-        error = definition_error(role, frontmatter(sources[name].decode("utf-8")))
+        try:
+            error = definition_error(role, frontmatter(sources[name].decode("utf-8")))
+        except CampaignRefused as exc:
+            error = str(exc)
         if error is not None:
             raise CampaignRefused(f"{name} {error}")
     _project_settings_errors(sources[SETTINGS].decode("utf-8"))

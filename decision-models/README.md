@@ -48,7 +48,7 @@ campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
 `decisionmodels/driver.py`), and the unattended runner with its stop switch (U6.3:
 `decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`), and the three agent
 definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
-live smoke has not been run). Labelling requests render guard items only until U5.2b-render.
+live smoke ran, `docs/test-reports/live-smoke-report.md`). Labelling requests render guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
 
@@ -104,7 +104,7 @@ campaign lock (it refuses while a `run` holds it) and, before writing anything:
   one with no parsable `claude --version`, or none on `PATH`; `run` makes the same check before
   every launch, after the pause check;
 - refuses a definition whose frontmatter lacks a key of its role's set, has another key (Claude Code
-  ignores a misspelt one) or breaks a pin (plan6 §3.3 "Definition check");
+  ignores a misspelt one), repeats a key, has a `name` other than its role's agent type, or breaks a pin (plan6 §3.3 "Definition check");
 - refuses a `~/.claude/settings.json` that has a forbidden key, with the same check `run` makes
   (`runner.forbidden_settings_refusal`), and records the digest of every other recorded key
   (`runner.user_settings_digests`); it prints the recorded **key names**, never a value, so the
@@ -135,34 +135,28 @@ prompt. A subagent may `Read` strictly inside `exchange/req/` and `Write` strict
 `SubagentHandback`; nothing else. Each call is logged to `store/hook-log.jsonl` (agent type, tool
 and tool-use id, decision; never a path or prompt).
 
-### The label smoke (human-started, not yet run)
+### The label smoke (human-started; run once, 2026-11-01)
 
 ```bash
 .venv/bin/python -m decisionmodels.driver smoke-fixture --out ~/dm-campaigns/items.jsonl   # 50 items
 .venv/bin/python -m decisionmodels.driver init --point guard-judge --phase smoke \
     --root ~/dm-campaigns/smoke --fixture ~/dm-campaigns/items.jsonl
 .venv/bin/python -m decisionmodels.driver install --root ~/dm-campaigns/smoke
-.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/smoke   # once, by hand
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/smoke   # by hand, not the timer
 ```
 
-It spends real tokens (one Sonnet driver session and one Sonnet labelling run of 50 items), so a
-person starts it, once, through `driver run`, never the timer. The fixture is 50 guard
+It spends real tokens, so a person starts it through `driver run`. The fixture is 50 guard
 `understanding` items whose rendering is exactly the 6,000-character cap in double-escaped pt-BR,
-the costliest line for Read's 25,000-token cap. It records, in `docs/HISTORY.md`:
+the costliest line for Read's 25,000-token cap. A second batch uses a second smoke campaign
+installed with `--agents-dir` from a copy whose `dm-labeler.md` has `maxTurns: 2`.
 
-- the first spawn's foreground shape (`status: "completed"`, `requestShape: "foreground"`);
-- that the batch ingests with no void, every page Read succeeds, and the largest page's tokens
-  (the transcript's usage deltas around each Read) are at most 22,500; over that, the smoke fails
-  and the 40,000-character page constant goes to the architect;
-- a second batch, in a second smoke campaign installed with `--agents-dir` from a copy whose
-  `dm-labeler.md` has `maxTurns: 2`: the cut-short shape and its terminal entry, which U5.5 then
-  swaps for its provisional `maxTurns` fixture;
-- whether `SubagentHandback` appears in a transcript, and whether a hook sees it;
-- that the guard's `hook_success` `command` equals the recorded `guardCommand` verbatim (the
-  unexpanded `$CLAUDE_PROJECT_DIR` string), that no guard entry is missing, and that the
-  injected-context rows (no `instructions`, no `gitStatus`, no MCP attachment) pass;
-- any `Agent` input key beyond `description`, `prompt` and `subagent_type`, which the guard would
-  deny, and any safeguards or usage-limit shape met.
+What the run showed is in `docs/test-reports/live-smoke-report.md` and `docs/HISTORY.md`: the first
+spawn was foreground; the 50-item batch ingested with no void and no `Read` error (the labeler read
+the pages in parallel, so the per-page token bound is judged without per-Read usage deltas, plan6
+§3.3 and §4); the `maxTurns: 2` copy gave the cut-short shape that `tests/test_audit.py`'s
+`max_turns_run` now holds; the guard command's `$CLAUDE_PROJECT_DIR` expanded and its
+`hook_success.command` equalled `guardCommand`; `SubagentHandback` was not seen. The usage-limit
+and subagent-safeguards shapes are still unprobed.
 
 ### `run`, `pause` and `resume`
 

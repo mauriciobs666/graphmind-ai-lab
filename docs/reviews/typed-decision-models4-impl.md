@@ -2365,3 +2365,83 @@ Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c
 - **D1:** two `maxTurns` lines → installs. **D2:** `name: dm-labelerx` → installs. **D3:** `omitClaudeMd: "true"` → refused.
 
 **Growth-stops check:** Pass 16 adds two nits and re-opens no earlier finding. Passes 1–15 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 17 — P16-n2 fix, U5.5 `maxTurns` fixture swap, plan6 v1.14 (2026-11-01)
+
+**Verdict: approve with suggestions.** All four parts conform to what they cite, and the new code and fixture are pinned. The one finding is stale prose.
+- **P17-m1 (minor):** `README.md` and the always-loaded `AGENTS.md` still say the smoke has not run, that `$CLAUDE_PROJECT_DIR` is unverified and that the `maxTurns` row is provisional. The same tree's HISTORY, plan6 v1.14 and the swapped fixture say the opposite.
+- **P17-n1 and P17-n2 (nits):** the unstripped-key variant of the repeat check is unpinned, and plan6 v1.14's "margin stands" wording hides that `P_max + 4` has no slack at three answer `Write`s.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against the commits it follows. That is (1) `install.py` and `tests/test_install.py` for P16-n2, against plan6 v1.14 §3.3 and the §5 U5.7 row; (2) `tests/test_audit.py`'s `max_turns_run`, against `decision-models/docs/test-reports/live-smoke-report.md` Batch 2; (3) plan6 v1.14's diff (§2 L1–L6, §3.3 "`maxTurns` margin", the §3.4 row and the §4/§5 U5.7 rows); (4) the `audit.py` docstring, the `README.md` line and the `HISTORY.md` entries.
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **1146 passed, 2 xfailed**; `ruff check` clean.
+- **Mutants and probes:** private copy `scratchpad/p17/repo/`, fresh `PYTHONPYCACHEPREFIX` per run, no `-I`. Baseline 1141 passed + 5 skipped. Each file was restored and `cmp` reported equal. 12 mutants and 6 probe tests, which I added to the copy only (Appendix P).
+- **Live tree:** no git command that changes it; I wrote only this review. The reviewed files' sha256 values are in `scratchpad/p17/live-sha256.txt`. The smoke report is `qa-engineer`'s and was read, not run.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Answers to the gate's questions
+
+**(1) P16-n2 conforms, and it is pinned.**
+- `frontmatter()` refuses a repeated key and `definition_error` pins `name` to `dm-<role>`, which gives `dm-driver`, `dm-generator` and `dm-labeler` as the plan says. `_read_sources` turns a parser refusal into `<file> <reason>`, so the refusal names the file.
+- Every refusal comes before any write. Probe P3 (a driver with `name` twice) refuses with the file name and leaves no `exchange/.claude`, and the planted-definition test asserts the same for each of its cases.
+- **Mutants:** dropping the name check (Q1) gives 3 red, a prefix-only check (Q2) 3, a labeler-only check (Q3) 62, no repeat check (Q5) 2, an identical repeat tolerated (Q6) 1, the file name lost (Q7) 2, and the wrong key named (Q8) 2. The one survivor is Q4 (P17-n1).
+- Probes P1, P2 and P4: a repeat written `maxTurns : 2` is refused, `maxturns` is refused as unknown, and `name: dm-labeler # x` is refused.
+
+**(2) The `max_turns_run` fixture matches the report's shape; the old shape classifies the same.**
+- **Against Batch 2:** a header `Read` for turn 1, nine parallel page `Read`s for turn 2 (the last at offset 50, as the report says), each guard-allowed and answered, no `Write`, no `SubagentHandback`, and the transcript ending on a user `tool_result`. The driver's `Agent` result is `completed` with `canContinueAgent: false`, `toolsUsed: ["Read"]` and the NOTE text. The meta has `finished: true`, and the test asserts all of that. The nine tool uses share one message id, as the Pass 5 reading says a real parallel message does.
+- **One inconsistency, a nit within the report:** the fixture copies the report's `tool_uses: 11` and `totalToolUseCount=11`, but it holds 10 tool uses (1 + 9), and the report itself describes 1 + 9. The audit reads neither number.
+- **The old provisional shape:** probe O1 runs the baseline fixture (`clean_run().agent[:-2]`) against the current code: `(count, run-attributable, maxTurns)`, one finding, ending on a user entry, as before. `audit.py`'s logic did not change, only its docstring, and both shapes go through `_terminal`, which reads the last assistant entry. For the real shape that is one of nine same-id entries holding one `Read`, with nine `tool_result`s after it. So it is not a hand-back and not terminal.
+- **Mutants:** reading the first assistant entry instead of the last (R6) gives 156 red, and gating the row on the driver's `canContinueAgent` (R5) gives 2. The row's existing mutants stay red.
+
+**(3) Plan6 v1.14: it holds, with one wording point (P17-n2).**
+- **L1 to L6 are faithful to the smoke report,** each checked against it: the verbatim and unexpanded `hook_success.command` and the accepted `timeout: 30` (L1); the clean batch, no `is_error`, the nine parallel Reads and 4 turns of 14 (L2); no `SubagentHandback` and a harness text frame that is not a tool call (L3); the cut-short shape under `maxTurns: 2` and its void classification (L4); three spawns before `retryCapExceeded` (L5); the driver's `Agent` input keys (L6).
+- **The F-1 acceptance rewrite holds up.** It replaces "usage deltas around each Read", which a parallel reader makes unmeasurable, with "no `Read` `is_error` at the 25,000-token cap", the recorded aggregate, and a proportional estimate of at most 22,500. Each of these can fail. I recomputed the estimate: 164,763 × 38,004 / 321,716 is about 19,460, and the page sizes (37,991 for six pages, 38,004 at most) make the proportion nearly exact. The aggregate also contains the turn's output tokens, so the true figure is lower. The measured 1.95 characters per token agrees with plan4's 2.0, which is the source of the 40,000-character page budget.
+- **The F-3 ruling, "the margin stands", is right but loosely worded.** `P_max` is 10 for labelling with the header page included, so a serial reader makes at most 10 `Read`s, 3 `Write`s and 1 reply: exactly 14, the pinned `maxTurns`, with no slack. The smoke's 4 of 14 is the parallel case, and a typical serial 50-item batch is 12. The report's own "header + 10 pages + Write + reply ≈ 12" miscounts (13), and the plan quietly corrects it to nine pages. The "three `Write`s" are an assumption nothing bounds, because parts are cut "when one Write would be too long". A cut-short run is a counted void, so the plan's "not a halt" holds.
+
+**(4) Docs: the edits are accurate, and the sweep found stale prose (P17-m1).**
+- The `audit.py` docstring matches the code (the row reads the last assistant entry and does not read the driver's note), and the README line states the same rules as `definition_error`. HISTORY records the swap, the new rows and the mutants.
+
+### Findings
+
+**P17-m1 — minor — five statements in `README.md` and `AGENTS.md` are false after the smoke and the fixture swap.** *Owner: `coder` (or `teco` in the close pass). Verified by an unfiltered sweep for `provisional`, `smoke`, `unverified` and `has not run` over `decision-models/` and plan6.*
+- `AGENTS.md:19` says "U5.7's live smoke has not run". `AGENTS.md:45` says the guard's command "uses an unexpanded `$CLAUDE_PROJECT_DIR`, unverified in a live transcript until the smoke". `AGENTS.md:77` says "`maxTurns` is provisional until U5.7's smoke".
+- `README.md:138` titles a section "The label smoke (human-started, not yet run)", and `README.md:154–161` still states the old acceptance (the largest page's tokens from "the transcript's usage deltas around each Read", and a "provisional `maxTurns` fixture").
+- **Why it matters.** `AGENTS.md` is loaded in full into every session, and root `AGENTS.md` makes it answer "what is true now": all three claims are now untrue, and they contradict the same tree's HISTORY, plan6 v1.14 and `audit.py`'s docstring. A later agent would doubt a verified fact (L1) or re-run the smoke.
+- **Fix:** replace each entry in place, citing `docs/HISTORY.md` and `docs/test-reports/live-smoke-report.md` in a clause, not adding a new paragraph. Reword the README's smoke section to plan6 v1.14's acceptance (no `is_error`, the aggregate, the estimate).
+
+**P17-n1 — nit — the repeat check's key normalisation is unpinned.** *Owner: `coder`. Verified by mutant Q4 (0 red) and a probe that kills it.*
+- Comparing the raw key, while storing the stripped one, leaves the suite green: a repeat written `maxTurns : 2` would then overwrite the first value silently. The planted cases all repeat the identical spelling.
+- **Fix:** add the space-before-colon variant to `DEFINITION_PLANTS`, with the expected refusal text written in the test (probe P1).
+
+**P17-n2 — nit — plan6 v1.14's "margin" wording, and one fixture count.** *Owner: `architect`; `coder` for the second part. Verified by arithmetic from §3.2 of plan4 and the report.*
+- Say that `P_max + 4` is the serial worst case with no slack at three answer `Write`s, that the `Write` count is an assumption (parts are cut when one `Write` would be too long), and that the measured 4 of 14 is the parallel case. The rule does not change.
+- `max_turns_run` sets `tool_uses: 11` and `totalToolUseCount=11` while holding 10 tool uses. Make the fixture agree with itself, or say in a comment that the numbers are the report's.
+
+### Appendix P — Pass 17 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p17/`: `mutants.py`, `mutate.py`, `probes/test_p17_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1141 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+
+| ID | Mutation | Red |
+|---|---|---|
+| Q1 / Q2 / Q3 | name check dropped / prefix-only / compared with the labeler's for every role | 3 / 3 / 62 |
+| Q4 | repeat check on the raw key (no strip) | **0**; 1 with probe P1 |
+| Q5 / Q6 | repeat check dropped / an identical repeat tolerated | 2 / 1 |
+| Q7 / Q8 | the refusal loses the file name / names the wrong key | 2 / 2 |
+| R1 | `_terminal`: no assistant entry counts as terminal | **0** (outside this diff; the row's code is unchanged) |
+| R4 | the `maxTurns` row ignores a synthetic error | **0** (outside this diff) |
+| R5 | the row gated on the driver's `canContinueAgent` | 2 |
+| R6 | `_terminal` reads the first assistant entry, not the last | 156 |
+
+**Probes** (pytest functions added to the copy's `tests/` only, under `fake_claude`):
+- **O1:** the baseline provisional fixture against the current audit → `(count, run-attributable, maxTurns)`, one finding.
+- **O2:** the entry kinds of `clean_run` (context for the fixture's shape).
+- **P1:** a repeat written `maxTurns : 2` → refused with "repeats the frontmatter key `maxTurns`".
+- **P2:** `maxturns: 2` → refused as an unknown key.
+- **P3:** `name` twice on the driver → refused with the file name first, and no `exchange/.claude`.
+- **P4:** `name: dm-labeler # x` → refused.
+
+R1 and R4 survive but sit in code this round did not change (the row's condition already existed); I report them as context, not as findings.
+
+**Growth-stops check:** Pass 17 adds one minor and two nits and re-opens no earlier finding. Passes 1–16 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.

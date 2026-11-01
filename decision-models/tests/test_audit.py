@@ -1053,16 +1053,62 @@ def test_a_non_error_synthetic_does_not_hide_an_incomplete_run(tmp_path: Path) -
 
 # == Run-attributable rows ===================================================================
 
-def test_a_tool_result_with_the_max_turns_shape_is_counted(tmp_path: Path) -> None:
-    """Provisional shape until U5.7's smoke records the real one (plan4 §3.3, §4.1 U5.7): the
-    driver holds a `tool_result`, and the subagent's last conversation entry is not a final
-    `end_turn` reply."""
+MAX_TURNS_NOTE = ("NOTE: this agent stopped at its 2-turn limit before finishing. It was still "
+                  "calling tools and had produced no report.")
+
+
+def max_turns_run() -> Run:
+    """The `maxTurns: 2` cut-short shape U5.7's live smoke recorded (`docs/test-reports/
+    live-smoke-report.md`, Batch 2): the subagent's turn 1 is the header `Read`, its turn 2 nine
+    parallel page `Read`s (persisted as the `tool_use`s, then each one's guard entry and result),
+    all allowed and answered, and the transcript ends on the last user `tool_result`: no final
+    assistant entry, no `Write`, no `SubagentHandback`. The driver's `Agent` result is `completed`
+    with `canContinueAgent: false` and the harness NOTE."""
     run = clean_run()
     assert run.agent is not None
-    run.agent = run.agent[:-2]
+    cut = next(n for n, e in enumerate(run.agent) if e.get("type") == "assistant"
+               and e["message"]["id"] == "msg_s0002")
+    pages = [(f"toolu_p{n:04d}", {"file_path": REQ, "offset": 2 + 6 * n, "limit": 6})
+             for n in range(9)]
+    entries = [tool_use(call, "Read", read, message_id="msg_s0002") for call, read in pages]
+    for call, _ in pages:
+        entries += [guard_entry(call, "Read"), _envelope(
+            type="user", permissionDecision=dict(ACCEPT_HOOK), message={"role": "user", "content": [
+                {"tool_use_id": call, "type": "tool_result", "content": "x"}]})]
+    run.agent = run.agent[:cut] + entries
+    uses = 1 + len(pages)          # the header Read and the nine pages: what the fixture holds
+    result = spawn_result(run)
+    result["message"]["content"][0]["content"] = [{"type": "text", "text": (
+        f"{MAX_TURNS_NOTE}\n<usage>subagent_tokens: 4836\ntool_uses: {uses}\n"
+        "duration_ms: 13563</usage>")}]
+    result["toolUseResult"].update(status="completed", canContinueAgent=False,
+                                   toolsUsed=["Read"], totalToolUseCount=uses)
+    return run
+
+
+def test_a_tool_result_with_the_max_turns_shape_is_counted(tmp_path: Path) -> None:
+    run = max_turns_run()
+    assert run.agent is not None
+    last = run.agent[-1]                      # the shape itself, as recorded
+    assert last["type"] == "user" and last["message"]["content"][0]["type"] == "tool_result"
+    names = {block["name"] for e in run.agent if e.get("type") == "assistant"
+             for block in e["message"]["content"] if block.get("type") == "tool_use"}
+    assert names == {"Read"}
+    assert spawn_result(run)["toolUseResult"]["status"] == "completed"
+    assert run.meta is not None and run.meta["finished"] is True
     result = audit_of(tmp_path, run)
     assert chosen(result) == (audit.COUNT, audit.RUN_ATTRIBUTABLE, "maxTurns")
     assert found(result) == [(audit.RUN_ATTRIBUTABLE, "maxTurns")]
+
+
+def test_the_max_turns_shape_with_a_final_reply_is_clean(tmp_path: Path) -> None:
+    """The positive control: the same run, ended by an `end_turn` reply, is not cut short."""
+    run = max_turns_run()
+    assert run.agent is not None
+    clean = clean_run()
+    assert clean.agent is not None
+    run.agent += clean.agent[-2:]
+    assert chosen(audit_of(tmp_path, run)) == (audit.CLEAN, None, None)
 
 
 # == The guard bound (plan6 §3.3, §3.4) =====================================================

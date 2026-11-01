@@ -2,6 +2,43 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U5.7 definition check: repeated key and wrong `name`
+
+`install.frontmatter` refuses a repeated key (it kept the last, and Claude Code's choice is
+unverified) and `definition_error` a `name` other than `dm-driver`/`dm-generator`/`dm-labeler`,
+both before any write (plan6 v1.14 §3.3; review Pass 16 D1/D2). Tests plant labeler `maxTurns: 14`
+then `2`, a repeated driver `model`, and three wrong names (`dm-labelerx` among them); the shipped
+`agents/` still pass. Mutants (repeat check off, no raise, name check off, name prefix-only) each
+redden `tests/test_install.py`; `install.py` restored `cmp`-equal. Suite 1141 → 1146 passed,
+2 xfailed.
+
+## 2026-11-01 — typed-decision-models U5.7 live smoke outcome; U5.5's `maxTurns` fixture swapped
+
+**What:** the human-started smoke ran (`docs/test-reports/live-smoke-report.md`, against commit
+f14aeefa, Claude Code 2.1.316). Figures below are that report's.
+
+- **Batch 1** (50 `pt_br_item_at_cap` items, `maxTurns: 14`): ingested, no void; first spawn
+  `completed` / `foreground`; the guard's `hook_success.command` equals `guardCommand` verbatim and
+  `$CLAUDE_PROJECT_DIR` expanded (no `hookMissing`); `timeout: 30` accepted; the driver's `Agent`
+  input held only `description`, `prompt` and `subagent_type`; no `SubagentHandback` call in
+  either transcript, so whether it is hooked is unobserved. The subagent made 4 assistant messages
+  (the page Reads in one parallel message), the driver 2. No Read errored, but the largest page's
+  tokens could not be measured per Read (parallel Reads); the report estimates about 19,460 by
+  proportion, against the 22,500 bound (finding F-1).
+- **Batch 2** (`maxTurns: 2` copy of `dm-labeler`): three attempts, each void `maxTurns`
+  run-attributable, then dropped as `retryCapExceeded` (50 items). The recorded shape: a header
+  `Read`, then nine parallel page `Read`s, all guard-allowed; the subagent transcript ends on a user
+  `tool_result` with no final reply, `Write` or `SubagentHandback`; the driver's `Agent` result
+  is `completed`, `canContinueAgent: false`, with the note "this agent stopped at its 2-turn limit
+  before finishing".
+- `tests/test_audit.py`: the provisional `maxTurns` fixture (the clean run truncated after its
+  `Write`) is replaced by `max_turns_run`, built in that shape, with the same assertions
+  (counted, `run-attributable`, `maxTurns`, one finding) plus checks of the shape itself and a
+  positive control (the same run ended by an `end_turn` reply is clean). `audit.py`'s docstring no
+  longer calls the row provisional; the row's code is unchanged and does not read the driver's note.
+- Mutants of the row (condition removed, condition inverted, class changed to environmental) each
+  redden `tests/test_audit.py`; `audit.py` restored `cmp`-equal.
+
 ## 2026-11-01 — typed-decision-models U5.7 — agent definitions, guard and `driver install` (smoke not run)
 
 **What:** `docs/plans/typed-decision-models6.md` v1.11 §3.2 "User settings", §3.3 and the U5.7 rows

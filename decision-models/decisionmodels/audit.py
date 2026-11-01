@@ -49,9 +49,12 @@ Choices this module makes where the plans leave room, each failing closed:
 - two `tool_use`s naming the request (`toolUseRepeated`) and an unparseable line other than a
   final line with no newline (a write a kill cut short, P8-F5) halt;
 - a run with no recorded effort is `effortOverride`;
-- **`maxTurns` is provisional** until U5.7's smoke records its shape: a completed run whose last
-  assistant entry is neither an `end_turn` reply nor exactly one `SubagentHandback` followed only
-  by its `tool_result`. More than one hand-back, or one that is not the last tool use, is
+- **`maxTurns`** is a completed run whose last assistant entry is neither an `end_turn` reply nor
+  exactly one `SubagentHandback` followed only by its `tool_result`. U5.7's live smoke recorded
+  the real shape (`docs/test-reports/live-smoke-report.md`, Batch 2; `tests/test_audit.py`'s
+  `max_turns_run`): the transcript ends on a user `tool_result` after parallel `Read`s, and the
+  driver's result is `completed` with a "stopped at its 2-turn limit" note, which the row does not
+  read. More than one hand-back, or one that is not the last tool use, is
   `toolOutOfBounds`, counted.
 
 **The U5.6 seam.** `ingest.ingest_answer` returns only answer-check outcomes; this module's
