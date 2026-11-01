@@ -339,3 +339,20 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - Gate skipped explicitly: there is no new rule, only one stated behaviour (already analyst-verified as built in Pass 27) and a print nit. Committed.
   - Plan4 §3.9 cites §Q6 for the print and restates no template, so no plan change is needed.
   - **U3e.4** (pluralize the family line in `report.py` `_family_design_effect_line`, plus tests at `test_decision_bar.py:935` and `test_decision_bar_fr10.py:746`, and a k = 1 FR-10 case) is queued on the U2.4 tdd-engineer acbd9b52e033bedb0 after it delivers, to serialize `model-bench/`.
+- 2026-11-01: U5.5 fix round delivered (tdd-engineer aa6a62c59d3f9b9bd, 303.7k tokens / 70 tools).
+  - teco's re-run: 656 passed, 2 xfailed (568 before); ruff clean.
+  - 36 mutants, 1 survivor (equivalent, by the report).
+  - teco's mutant (Read and Write bound folders swapped) → 115 failed in `test_audit.py`; file restored and cmp'd. teco's first attempt ran system python3, which has no pytest, and was discarded.
+  - Calls made by the implementer: the `Launch` interface (U5.6 builds `earlier_failures` and `last_produced`); the plan6 cite 'line 46' is 1-based line 48; four halt classes are `ENVIRONMENTAL`; a new `inputInvalid` class name.
+
+  Gate → `analyst` a045d38ef791e1ace, impl Pass 9 in `docs/reviews/typed-decision-models4-impl.md`. Any further fix round goes to a fresh engineer (303k).
+- 2026-11-01: U2.4 delivered (tdd-engineer acbd9b52e033bedb0, 103.2k tokens / 37 tools).
+  - teco's re-run: 3625 passed, 5 deselected, 2 xfailed (3619 before); ruff clean.
+  - 7 mutants killed.
+  - teco's mutant (swallow the corpus-embed failure and continue scoring) → 4 red; file restored and cmp'd.
+  - README's closed list of exit-3 causes was extended, which teco accepts.
+
+  Gate → `analyst` a02c86cb14ba399b7, impl Pass 28. U3e.4 (the plural fix) goes to the same tdd-engineer after the U2.4 commit, so the gate's diff stays clean.
+- 2026-11-01: Pass 28 (U2.4; analyst a02c86cb14ba399b7) → **approve with suggestions**. U2.4 is committed with Pass 28.
+  - **P28-m1:** a pre-existing gap; U2.4 is faithful to §3.1. `LMStudio.embed` doesn't validate a 200 body's vector count or type, so the corpus and item embed paths can raise `ValueError`/`TypeError` outside the exit-code contract. It is **out of this feature's scope**: only the embedder role embeds, and the new-ability packs don't. Reported as a follow-up for model-bench's BACKLOG (ruling: `architect`; fix: `tdd-engineer`) rather than chased here.
+  - **P28-n1** (README wrap) is folded into U3e.4 on tdd-engineer acbd9b52e033bedb0.

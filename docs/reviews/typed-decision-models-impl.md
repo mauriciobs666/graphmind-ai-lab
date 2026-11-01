@@ -3588,3 +3588,92 @@ cells` / `1 classes`.**
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 28 — U2.4 the `prime` guard (2026-11-01)
+
+*2026-11-01. Gate of U2.4, uncommitted in `model-bench/`. Files: `modelbench/runner.py`
+(`_drive_single_call_items`), the new `tests/test_runner_prime_guard.py`, `docs/BACKLOG.md`
+(R-21), `docs/HISTORY.md` and `README.md`. Read against plan5 §3.1 and §4's U2.4 row
+(`docs/plans/typed-decision-models5.md`). `decision-models/` was not opened.*
+
+**Verdict: approve with suggestions.** The guard is what §3.1 rules: it catches the two classes,
+raises `RunRefused(exitCode=3)` `from exc`, does not re-probe, names the corpus embed, ends with
+"nothing was scored", and lets every other exception through. Every check in the U2.4 row is
+pinned by a test. There is one minor, which the plan's own wording leaves open and which predates
+this unit, and one nit.
+
+**Checks run** (from `model-bench/`, with a private `PYTHONPYCACHEPREFIX`):
+- **Suite:** `3625 passed, 5 deselected, 2 xfailed`, and ruff is clean. The new file has 6 tests,
+  as `HISTORY.md` says.
+- **Probes,** in `scratchpad/p28/`:
+  - Three malformed 2xx embed bodies were passed through the real `LMStudio.embed` parse, then
+    through `cli.main run` on a cache miss (P28-m1).
+  - A `sha256` snapshot of the whole workspace root was taken before and after a refused
+    (timeout) run.
+- No mutants of my own. The implementer's 7 and teco's one cover the guard's branches.
+
+CPG: considered, not relevant — no model-bench CPG is loaded. The call path was read directly.
+
+### The checks asked for
+
+- **The catch set and exit 3 match.** `_warm_up` (`runner.py:1808-1824`) maps exactly
+  `LMStudioCallTimeout` and `LMStudioCallFailed` to exit 3, with no re-probe. U2.4 mirrors it.
+- **Transport failures cannot escape.**
+  - `embed` posts through `_raw_post`, whose ladder ends in only those two classes: HTTP error,
+    timeout, `URLError`, `HTTPException` and `OSError`.
+  - `_parse_json` maps an undecodable body to `LMStudioCallFailed`, and a missing `data` list
+    also raises `LMStudioCallFailed`.
+  - `LMStudioUnreachable` is raised only on the GET paths (`lmstudio.py:627`, `:666`).
+- **A malformed 2xx body can still escape** (P28-m1).
+- **"Stores nothing" holds on disk.**
+  - After a refused run, the whole root's file tree and bytes are identical to before.
+  - `runner.py` has no write call at all. Only `cli`'s `store` writes, and the refusal returns
+    before it.
+  - This holds for any `prime` failure, because `prime` runs before the first item.
+- **The README is accurate.** The new exit-3 cause, "failing the embedder's corpus embed before any
+  item", matches the code. It applies only on a cache miss, which the sentence does not need to
+  say. One line is over width (P28-n1).
+
+### Findings
+
+**P28-m1 (minor; `architect` for the ruling, then `tdd-engineer`). A malformed 2xx embed body
+still ends `run` in a traceback.**
+- Evidence: `LMStudio.embed` (`lmstudio.py:827-831`) silently drops entries without an
+  `embedding` list, and checks neither the vector count against `len(texts)` nor the element
+  type. `retrieval.prime` then fails outside the catch set. Through the real parse and
+  `cli.main`:
+
+  | 2xx body | Result |
+  |---|---|
+  | `{"data": [{}, {}]}` | uncaught `ValueError` (zip shorter) |
+  | one vector for a 2-document corpus | uncaught `ValueError` (zip shorter) |
+  | a non-numeric embedding | uncaught `TypeError` |
+
+  Nothing is stored in any of these cases.
+- **Why it matters:** the closed exit-code contract is broken by a server answering 200 with the
+  wrong shape. That is the same contract-breaking-body case `decide()` already maps to
+  `LMStudioCallFailed(status=None)`. The defect predates U2.4, and §3.1's "other exceptions pass
+  through" makes U2.4 faithful as written.
+- **Fix:** have `embed` raise `LMStudioCallFailed(status=None)` when the vector count is not
+  `len(texts)` or an entry is not a non-empty list of numbers, matching `decide()`'s taxonomy.
+  The U2.4 guard then covers the corpus case with no runner change.
+- **Test:** the per-item `embed` site (`runner.py:515`) consumes the same parse, so state its
+  disposition in the ruling. Write one probe over the axes: body shape (missing key, short count,
+  wrong type) × call site (corpus, item).
+
+**P28-n1 (nit; the same implementer). The rewrapped exit-3 line is too long.**
+- `README.md:225` is 148 characters. Rewrap it to the file's ≤ 101.
+
+### Growth-stops
+
+- **`docs/BACKLOG.md`:** R-21 was rewritten in place. It drops only the delivered `prime` pointer,
+  and its open "Unruled, for `architect`" ask is kept. The pointer's content is recorded in the new
+  `HISTORY.md` entry, so nothing was discarded.
+- **`HISTORY.md`:** one new entry, read by lookup. Its counts reproduce (6 tests; suite
+  3619 → 3625).
+- **`README.md`:** one exit-3 cause inserted in place. `AGENTS.md` is unchanged and nothing in it
+  is now wrong.
+
+### Proposed REVIEW.md lines
+
+None.

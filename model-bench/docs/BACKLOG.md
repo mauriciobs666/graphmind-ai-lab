@@ -189,8 +189,4 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   and exits 3 unless `probe()` answers `"api-v0"`; an error response does not. No driver
   implements that. `status is None` alone does not mark a connection failure: `chat()` raises it
   on a malformed 200 body too, though re-probing that case is harmless. **Unruled, for
-  `architect`:** the decisions/handoff kept failures and the multi-turn `tool-caller` turn. A
-  related pointer, not yet in scope (impl review P20-m2): the embedder's `prime` corpus embed
-  (`runner._drive_single_call_items` → `scoring/retrieval.py`) has no catch, so an outage there
-  ends `run_pack` in a traceback. The next between-item probe usually meets an outage first and
-  refuses through `runner._between_item_residency`.
+  `architect`:** the decisions/handoff kept failures and the multi-turn `tool-caller` turn.

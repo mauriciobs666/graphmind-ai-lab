@@ -2,6 +2,28 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U2.4 — the `prime` guard (P20-m2)
+
+**What:** plan5 §3.1 and §4's U2.4 row (`docs/plans/typed-decision-models5.md`): `prime` gets its
+own guard, outside R-21, under the warm-up rule.
+
+- **`runner._drive_single_call_items`** wraps its `prime(...)` call. `LMStudioCallTimeout` and
+  `LMStudioCallFailed` raise `RunRefused(exitCode=3)` `from exc`, with the message `corpus embed of
+  '<model>' failed before any item (<exc>); nothing was scored`. There is no re-probe. Any other
+  exception passes through. `cli` stores nothing, as for every refusal. A corpus cache hit makes
+  no call, so it is unaffected.
+- **Docs:** the R-21 backlog item drops its `prime` pointer. README's exit-3 list names the
+  corpus embed.
+
+**Tests:** new `tests/test_runner_prime_guard.py`, 6 tests, offline. Through `cli.main` with the
+real `retrieval` scorer over an on-disk fixture pack, a cache-miss corpus `embed` raising each
+class exits 3, prints the message and leaves no `results/`. Each class's refusal chains the stub's
+exception. A cache hit spends its one stub response on the item and stores both arms. A
+`RuntimeError` from `prime` propagates as the same object (`RunRefused` is a `RuntimeError`, so
+it is checked by identity). Mutants, full suite, each red: `except Exception` (1 failed), catch
+removed (4), timeout only (2), failed only (2), `from None` (2), exit 4 (4), message tail changed
+(2). Suite 3619 → 3625 passed, 5 deselected, 2 xfailed; ruff clean.
+
 ## 2026-11-01 — typed-decision-models U3e.3 — family-pooled design effect
 
 **What:** plan4 v1.3 §3.9 and §5's U3e.3 row (`docs/plans/typed-decision-models4.md`), on the

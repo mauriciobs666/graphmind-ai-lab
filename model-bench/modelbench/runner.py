@@ -467,13 +467,24 @@ def _drive_single_call_items(
     scorer = _load_item_scorer(pack)
     prime = getattr(scorer, "prime", None)
     if prime is not None:  # NEW — S3 spec §3.2: the corpus-embedding hook, once before the loop
-        prime(
-            lmstudio=lmstudio,
-            model_info=model_info,
-            call_surface=call_surface,
-            timeout_s=cfg.requestTimeoutSeconds,
-            pack=pack,
-        )
+        # typed-decision-models plan5 §3.1 (U2.4): `prime` runs before any item and the run
+        # cannot continue without it, so a failed corpus embed takes the warm-up rule — exit 3,
+        # no re-probe. The catch is the runner's (scorers do not know `RunRefused`); any other
+        # exception passes through.
+        try:
+            prime(
+                lmstudio=lmstudio,
+                model_info=model_info,
+                call_surface=call_surface,
+                timeout_s=cfg.requestTimeoutSeconds,
+                pack=pack,
+            )
+        except (LMStudioCallTimeout, LMStudioCallFailed) as exc:
+            raise RunRefused(
+                f"corpus embed of {model_info.id!r} failed before any item ({exc}); "
+                "nothing was scored",
+                exitCode=3,
+            ) from exc
     prompt_config = pack.prompt_config()
     resident = baseline_residency
     results: list[ItemResult] = []

@@ -221,8 +221,8 @@ cover the chat arm alone. Exit codes are unchanged.
 *whatever the scores*, including a `compare` that finds every stored record invalid (that prints
 `INVALID RESULTS EXCLUDED` and still exits `0`, because it is a report, not a failure). `2` bad
 arguments/usage. `3` LM Studio unreachable, reachable without its native `/api/v0` catalog, not
-answering the warm-up call within `--first-call-timeout`, or gone when re-probed after a scored
-call timed out; on a decision-point pack also a failed explicit load or instance-config read.
+answering the warm-up call within `--first-call-timeout`, failing the embedder's corpus embed
+before any item, or gone when re-probed after a scored call timed out; on a decision-point pack also a failed explicit load or instance-config read.
 `4` an invalid pack — a `validate` failure, a load error, an unmet `environment.requires`, a
 `callSurface` the model's catalog type contradicts, or (after `run`'s artifacts are already
 written) a `tool-caller` conversation censored by a tool-dispatch failure — a data-quality finding
