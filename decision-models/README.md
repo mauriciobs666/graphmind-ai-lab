@@ -14,7 +14,8 @@ Method: `docs/plans/typed-decision-models-ml.md`.
 ## What this component is, and is not
 
 - **Zero runtime dependencies, local-only, human-started.** Python 3.12 stdlib, a host venv, no CI
-  hook, no scheduler. It runs because a person typed a command.
+  hook. It runs because a person typed a command, or because a user-level timer they installed
+  started `driver run` (plan6 §3.2; the timer is U6.4's, not installed yet).
 - **No hosted API client.** Generation and labelling are done by Claude Code subagents through
   file exchange, driven from a campaign directory (plan4 §3); nothing in `decisionmodels/` calls
   a hosted API or holds a key.
@@ -44,7 +45,9 @@ template and design per point; `decisionmodels/seeds.py`), and the request/answe
 type (U5.2b-hash), and the transcript audit (U5.5: `decisionmodels/audit.py` locates a subagent
 run from the driver's transcript and classes it per plan6 §3.4 over plan4 §3.3), and the
 campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
-`decisionmodels/driver.py`). Labelling requests render guard items only until U5.2b-render.
+`decisionmodels/driver.py`), and the unattended runner with its stop switch (U6.3:
+`decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`). Labelling requests render
+guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
 
@@ -80,5 +83,48 @@ or `AGENTS.md`. Run these from `decision-models/`:
 - **`resolve`** is the only way past a halt. Retry re-issues the halted batch under a new name;
   `--skip-batch` (a safeguards stop only) drops it and counts it as `safeguardSkipped`; a
   re-pin records the new model (a generation or labelling restart) or instructions set.
-- `install` (U5.7), `run`, `pause` and `resume` (U6.3) and `finalize` (U5.10) are not built
-  yet, so no batch is spawned today.
+- `install` (U5.7) and `finalize` (U5.10) are not built yet. `run` refuses a campaign that has
+  no `install` record, so no batch is spawned today.
+
+### `run`, `pause` and `resume`
+
+```bash
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/pilot   # the timer's command
+.venv/bin/python -m decisionmodels.driver pause --root ~/dm-campaigns/pilot  # after this batch
+.venv/bin/python -m decisionmodels.driver pause --now --root ~/dm-campaigns/pilot  # at once
+.venv/bin/python -m decisionmodels.driver resume --root ~/dm-campaigns/pilot
+```
+
+- **`run`** loops: reconcile and pick the next batch, record `issued` with a fresh session id,
+  start one `claude -p --agent dm-driver` session in `exchange/` (its own process group, a
+  minimal environment, `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`), wait up to `batchTimeout`
+  (killing the group on expiry: SIGTERM, then, 30 s later, SIGKILL to any process of the group
+  still alive), then ingest. The child's
+  stdout, stderr and exit code land in `store/runs/<sessionId>.json`, `.err` and `.exit`.
+- It **exits 0** when the phase is done, on a halt, on a usage stop, while `store/pause` exists,
+  after a launch that produced nothing (`launchFailed`: the next fire tries again), and when
+  another `run` or an orphaned child holds `store/driver.lock` (one line: "another `driver run`
+  holds store/driver.lock"). Its last line says why (`stopped: done`, `stopped: halted (…)`, …).
+- It **refuses** (exit 1, nothing appended to the ledger) a root inside a git work tree or under
+  a `CLAUDE.md`/`AGENTS.md`, a campaign with no `install` record, and, checked before every
+  launch, `~/.claude/settings.json` with an `env` or `hooks` key, with
+  `autoContinueAtUsageLimit: true`, or whose `permissions`/`modelSettings` differ from what
+  `install` recorded (`model`, `theme` and other edits are fine). The reason, with a timestamp,
+  goes to `store/refusal`, and `status` shows it until a launch succeeds:
+  ``REFUSED: 2026-11-02T09:00:00+00:00 launch refused: ~/.claude/settings.json has the `hooks`
+  key``.
+  Fix the cause; the next fire launches and deletes the file. The root refusal is the exception:
+  `run` checks it before taking the lock and writes nothing, and `status` checks the root
+  itself, printing `REFUSED: <reason>` (no timestamp) for as long as the cause is there.
+- **`pause`** creates `store/pause` (no lock, no ledger): a running `run` finishes its batch and
+  exits, and every fire exits 0 at once, before the settings check (so pausing to edit
+  `~/.claude/settings.json` refuses nothing), until **`resume`** deletes the file. `status` shows
+  `PAUSED`.
+- **`pause --now`** also sends SIGTERM to the runner named in `store/runner.json`, only if that
+  process is alive with the recorded start time. The runner kills its child's group, records
+  `interrupted {batch}` (that batch's re-issue is not counted toward the no-attempt cap) and
+  exits; the next `run` after `resume` reconciles the batch. Ctrl-C on a hand-started `run` does
+  the same.
+- **An orphan** (a child whose runner died) holds the lock until it exits, so every fire exits
+  on the lock; `pause --now` does not signal it. Stop it by disabling the timer and killing the
+  `claude` process by hand; `status`'s "last issued" names the session to look for.

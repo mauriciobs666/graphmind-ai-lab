@@ -2,6 +2,72 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.3 — `driver run`, the unattended runner
+
+**What:** `docs/plans/typed-decision-models6.md` v1.8 §3.1, §3.2 and the §4/§5 U6.3 rows, over
+U5.6's library (`campaign.py`) and the contracts impl review Passes 10–11 left for the runner
+(`docs/reviews/typed-decision-models4-impl.md`).
+
+- `decisionmodels/runner.py`: the loop (one `Campaign` per process; `next` → `issue` → launch →
+  wait → `.exit` → `ingest`), exiting 0 on `next`'s stop, on `IngestResult.stop` and after a
+  `launchFailed` outcome. The child is §3.2's command verbatim (no `--fallback-model`, no
+  `--setting-sources`), in `exchange/`, in its own session and process group, stdin
+  `/dev/null`, stdout/stderr in `store/runs/<sid>.json`/`.err`, environment = the allowlist plus
+  `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, and the lock's descriptor via `pass_fds`. On
+  `batchTimeout` the group gets SIGTERM, then, after 30 s, SIGKILL if any member of the group
+  (not only the leader) is left; the wait ends as soon as the group is empty. `.exit` is written
+  atomically after `wait()` and before `ingest`. `store/pause` is checked first in each
+  iteration, so a paused fire exits 0 whatever the settings hold. User-settings refusals
+  (`env`/`hooks` key, `autoContinueAtUsageLimit: true`, a `permissions`/`modelSettings` hash
+  other than `install`'s) are checked before every `next` and append nothing; a refusal after
+  the lock writes `store/refusal` (ISO 8601 timestamp, reason) for `status`, and a successful
+  launch deletes it. The root and no-campaign refusals precede the lock and write nothing;
+  `status` prints a root refusal it computes live (`campaign.py`). A signal before a launch
+  issues nothing (`stopped: signalled`).
+  `store/driver.lock` is held with `LOCK_NB` (held → one line, exit 0); `store/runner.json`
+  records `{runnerPid, runnerStartTime}` (field 22 of `/proc/<pid>/stat`) before any launch.
+  SIGTERM (`pause --now`) and SIGINT kill a running child group, append `interrupted {batch}`
+  once (`Campaign.record_interrupted`, U5.6's API) and exit without ingesting. `pause [--now]`
+  and `resume` touch only `store/pause` (and signal the runner only if its PID is alive with the
+  recorded start time). The root refusal is `root_refusal`'s, as at `init`.
+- `decisionmodels/campaign.py`: `record_expectations` takes optional `driver_template` and
+  `user_settings_sha256`, recorded as `driverTemplate`/`userSettingsSha256` in the
+  `expectations` event; `run` refuses without them. `status` adds a `REFUSED:` line for a root
+  refusal. `decisionmodels/driver.py`: `run`, `pause
+  [--now]`, `resume`.
+- **Calls made here:** `run` stops after a `launchFailed` outcome (§3.2 "Scheduling": a fire into
+  a spent window or a broken environment costs one launch, never a hot loop until
+  `launchFailBound`); settings are checked before `next`, so a refusal writes nothing at all;
+  refusals exit 1, every stop exits 0; the user-settings hash is sha256 over the canonical JSON
+  (sorted keys, no whitespace) of whichever of `permissions`/`modelSettings` is present, and a
+  missing settings file is `{}`; a launch that cannot start (`OSError`) writes its error to
+  `.err`, no `.exit`, and ingests as `launchFailed`; SIGINT is handled as `pause --now` without
+  the pause file; `runner.json` is left in place (the start time guards a recycled PID);
+  `pause --now` does not wait for the runner to exit.
+- `tests/test_runner.py` (38 functions, 45 tests) with a fake `claude` on a `PATH` of its own and
+  a fake `HOME`; nothing calls the real CLI. `README.md` (`run`, `pause`, `resume`, refusals in
+  `status`), `AGENTS.md`.
+
+**Verified:** `pytest -q` from `decision-models/`: 854 passed, 2 xfailed (819/2 before);
+`ruff check .` clean. 33 mutants of `runner.py`, run in a private copy with a fresh
+`PYTHONPYCACHEPREFIX`, each restored `cmp`-equal: 32 redden (allowlist leaks
+`ANTHROPIC_API_KEY` 1; `--fallback-model` 1; child-only kill 2; non-atomic `.exit` 1; `.exit`
+after ingest 3; fresh `Campaign` per iteration 1; `interrupted` twice 1; lock not passed 2; no
+SIGKILL 1; no timeout 1; shared process group 3; blocking lock 2; each settings refusal 1–6;
+start-time checks 1–2; no stop after `launchFailed` 2; stdin inherited 1; settings checked once
+1; …). The one survivor, dropping the exit on `IngestResult.stop`, is equivalent: the same
+instance's `next` stops on the same halt or usage stop.
+
+**Pass 12 fix round** (`docs/reviews/typed-decision-models4-impl.md` P12-m1–m3, P12-n1–n3): the
+group SIGKILL above, the pause before the settings check, `status`'s root refusal, a signal before
+a launch issuing nothing, `pause --now` tolerating a runner that exits after the start-time check,
+and the halt reason on the ingest path; the timeout test's fake ignores SIGTERM first, with a 3 s
+`batchTimeout`. Ten new tests (six red against the pre-fix code). `pytest -q`: 864 passed, 2
+xfailed; `ruff check .` clean; `tests/test_runner.py` 4/4 green under 64 busy loops on 8 CPUs.
+Mutants in a private copy, each restored `cmp`-equal: the review's R16, R35, R28, R20, R10, R11,
+R6 and the coder's M25 now redden, and so do 8 of the round's own; R29 survives, equivalent under
+the fix (the new signalled check after `next` stops the launch it guarded).
+
 ## 2026-11-01 — typed-decision-models U6.8 — dataset contract vector copy re-made
 
 **What:** `docs/plans/typed-decision-models6.md` v1.8 §4's U6.8 row:

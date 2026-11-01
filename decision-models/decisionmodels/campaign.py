@@ -577,14 +577,24 @@ class Campaign:
     # -- expectations, seeds and batches ----------------------------------------------------------
 
     def record_expectations(self, *, guard_command: str,
-                            roles: Mapping[str, Mapping[str, Any]]) -> None:
+                            roles: Mapping[str, Mapping[str, Any]],
+                            driver_template: str | None = None,
+                            user_settings_sha256: str | None = None) -> None:
         """The declared expectations `install` writes (plan4 §3.5; U5.7): per role (`generator`,
         `labeler`) its `agentType`, `model`, `effort`, `spawnTemplate` and `instructions`
-        (`[path, sha256]` pairs), plus the guard's `command`."""
+        (`[path, sha256]` pairs), plus the guard's `command`. `driver run` also needs
+        `driverTemplate` (plan6 §3.3's message, `{agent_type}` and `{spawn_prompt}` slots) and
+        `userSettingsSha256` (`runner.user_settings_sha256`, plan6 §3.2), and refuses without
+        them."""
         if set(roles) != set(ROLE_OF_KIND.values()):
             raise CampaignRefused("expectations need exactly the generator and labeler roles")
-        self._append({"event": "expectations", "guardCommand": guard_command,
-                      "roles": {role: dict(spec) for role, spec in roles.items()}})
+        event: dict[str, Any] = {"event": "expectations", "guardCommand": guard_command,
+                                 "roles": {role: dict(spec) for role, spec in roles.items()}}
+        if driver_template is not None:
+            event["driverTemplate"] = driver_template
+        if user_settings_sha256 is not None:
+            event["userSettingsSha256"] = user_settings_sha256
+        self._append(event)
 
     def fresh_rng_seed(self) -> int:
         """plan5 §3.2: `secrets.randbits(32)`, redrawn while the ledger holds the value."""
@@ -948,6 +958,11 @@ class Campaign:
             lines.append(f"HALTED: {_halt_text(state.halt)}; clear with `driver resolve`")
         if self.pause_path.exists():
             lines.append("PAUSED: store/pause exists; `driver resume` removes it")
+        # `run` refuses this root before taking the lock, so it writes no `store/refusal`: the
+        # reason is computed here, live (plan6 §3.2, "`status` prints it").
+        root = root_refusal(self.root)
+        if root is not None:
+            lines.append(f"REFUSED: {root}")
         refusal = self.store / "refusal"
         if refusal.is_file():
             lines.append(f"REFUSED: {refusal.read_text('utf-8').strip()}")

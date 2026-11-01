@@ -1696,3 +1696,323 @@ Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c
 | A1 / A32 (coder's) | `attempt` → 1 / a non-event line accepted | 1 / 1 |
 
 **Growth-stops check:** Pass 11 gives one line per Pass 10 finding, and its only new finding is a nit. Passes 1–10 are byte-identical to the pre-pass copy (`cmp` on the prefix).
+
+## Pass 12 — U6.3 driver run (2026-11-01)
+
+**Verdict: approve with suggestions.** The runner implements plan6 §3.2 and every §5 U6.3 row, and the code has no blocker and no major.
+- **The one major, P12-M1, is the plan's,** not the code's: the user-settings refusals miss keys the plan's own threat model excludes elsewhere. It goes to `architect` and should be settled before U5.7 builds `install`, because `install` records the hash.
+- **The three minors have tested fixes,** each a few lines plus its probe as a test: a group SIGKILL the runner skips, a paused fire that refuses, and a root refusal `status` never shows. They suit one short `coder` round. A `teco` line check suffices for that round if the fixes are taken as written: the probes become tests and turn red against today's code (Appendix K).
+- **Suite:** 854 passed, 2 xfailed, as claimed.
+- **Mutants:** 30 in all, my 29 plus the coder's M25. 16 redden on the suite as it stands, and the probes kill 7 of the 14 survivors. Of the other 7:
+  - R16, the group SIGKILL, is killed only by P1 inverted against the fixed code;
+  - R6 needs P12-n2's timestamp assertion, which I did not run;
+  - R3, R22, R27, R36 and R37 are harmless or equivalent (Appendix K).
+
+### Scope
+
+- **Reviewed:** the uncommitted U6.3 diff against `c2328164`. I read `runner.py` and `test_runner.py` whole, and the `campaign.py`, `driver.py`, `README.md`, `AGENTS.md` and `HISTORY.md` diffs. I also read `campaign.py`'s `next`, `issue`, `ingest`, `_launch`, `_observed_exit`, `locked`, `root_refusal` and `status`, and `audit.py`'s interrupted cap.
+- **Specs:** plan6 v1.8 §3.1–§3.3, the §4 U6.3 row and the §5 U6.3 row (the acceptance list); plan4 §3.5 and §4.3; Passes 10–11 and the coordination ledger's U6.3 carries. For the settings keys, I checked the Claude Code settings docs (`code.claude.com/docs/en/settings` and `/settings-reference`).
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **854 passed, 2 xfailed**, which reproduces the claim. `ruff check` is clean.
+  - `tests/test_runner.py` alone: 5/5 green unloaded, 3/3 green under 16 busy loops on 8 CPUs, 4/4 green as four parallel runs under 32 busy loops, and red under 64 busy loops (P12-n1).
+- **Mutants:** run in a private copy (scratchpad `p12/repo/`, since lost in a session crash, Appendix K), with a fresh `PYTHONPYCACHEPREFIX` per run, without `-I`, and `.venv/bin/pytest` run from the copy's `decision-models/`. A probe test confirmed that the copy imports its own package. Baseline: 849 passed + 5 skipped (the model-bench byte-copy tests skip there). Every mutated file was restored and checked with `cmp`, which reported equal. I ran 29 mutants of my own plus a re-run of the coder's M25 (Appendix K).
+- **Suggested fixes** were applied in a second private copy (`repo2`, also lost in the crash). There the full suite stays green and the matching probes turn red (Appendix K).
+- **Live tree:** I ran no git command that changes the tree, and I wrote only this review. Before the crash, the sha256 of every reviewed file matched the snapshot I took at the start of the pass; that snapshot was lost with the scratchpad, and teco's post-crash re-run (854 passed, 2 xfailed, ruff clean) is the only later check. I never touched the real `~/.claude`: every probe runs under the tests' fake `HOME` and fake `claude`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded (Pass 10/11 checked `GRAPHS`); the unit's two new files were read in full.
+
+### Findings
+
+**P12-M1 — major — plan6 §3.2's user-settings refusals miss the settings-file twins of what the plan itself excludes.** *Owner: `architect` (plan6 §3.2 and the §5 U5.7 row), before U5.7 builds `install`. Not a U6.3 code defect: the code implements the plan's list exactly (ruling 2). Checked against the docs; the effect on the child is inferred, because the brief rules out live CLI calls.*
+- Plan6 drops `--fallback-model`, every `ANTHROPIC_*` variable (billing and routing) and `CLAUDE_CODE_EFFORT_LEVEL` (effort). It calls the guard "the only bound" (§3.3) and refuses only an `env`/`hooks` key, `autoContinueAtUsageLimit: true`, and a `permissions`/`modelSettings` hash.
+- The settings reference lists user-settings keys that do the same things, and none of them is refused or hashed:
+  - `fallbackModel` ("Scope: Any file"; "`--fallback-model` takes precedence over this key");
+  - `apiKeyHelper` ("Generate the API credential with your own command");
+  - `disableAllHooks` ("Turn off hooks … at once");
+  - top-level `effortLevel` (`CLAUDE_CODE_EFFORT_LEVEL` and `--effort` override it);
+  - `outputStyle` ("changes Claude's role, tone, and output format").
+- **Why it matters.** The audit catches some of these only after the run has happened. A guard switched off by `disableAllHooks` shows as `hookMissing`, but only after an unguarded run. A model change shows as a model-pin halt. An `apiKeyHelper` billing switch leaves no trace in the transcript, so nothing ever catches it.
+- **Suggested direction, for the architect to choose:** invert the hash. Hash the whole settings object minus a named set of cosmetic keys (`model`, `theme`, `editorMode`, `verbose`, …), which keeps the stakeholder's "a `theme` or `model` edit does not refuse". Or add the five keys above to the refusals. Either way, U5.7's `install` records whatever `run` compares, and the §5 U6.3 row gains one planted case per key. I have not run either design: the runner's hash function is the only code that changes, and the plan decides which keys it covers.
+
+**P12-m1 — minor — the timeout and `pause --now` kill skip the group SIGKILL whenever the leader exits within the grace, and nothing pins that SIGKILL or the grace.** *Owner: `coder`. Verified by a probe and by mutants.*
+- `_kill_group` (`runner.py:276-282`) sends SIGTERM to the group, then waits on the **leader** only, and SIGKILLs the group only if the leader is still alive at the grace. A descendant that survives SIGTERM therefore outlives the run. It holds the lock too, since it inherits the `pass_fds` descriptor, as a libuv child inherits any non-CLOEXEC fd. So every later fire exits on the lock.
+- **Probe P1:** the leader dies on SIGTERM; its grandchild ignores SIGTERM and inherits fds. After `run` returns, the grandchild is alive and the next `run` prints `LOCK_HELD`. Plan6 §6 accepts an orphan as rare *because it needs the runner to die*; this path needs no runner death.
+- Plan6 §3.2 step 4 says "SIGTERM to the group, then SIGKILL after 30 s". The module docstring, `README.md` and `HISTORY.md` repeat that, so all three overstate what the code does.
+- **The tests miss it** because the timeout test's grandchild dies on SIGTERM:
+  - R16 (SIGKILL to the leader only) gives 0 red;
+  - R35 (grace ignored, so SIGKILL straight after SIGTERM) gives 0 red. The test's `1 <= elapsed` bound is the batch timeout, not the timeout plus the grace.
+- **Fix** (serves plan6 §3.2 step 4 and the §5 "killed as a group" row; tested in `repo2`): after the SIGTERM, poll until the grace ends, reaping the leader with `child.poll()` and probing `os.killpg(pgid, 0)`. If the group is not empty by then, SIGKILL it.
+  - Tests: P1 inverted (the TERM-ignoring grandchild is dead after `run` returns) and P11 (`elapsed >= timeout + grace`).
+  - With the fix the suite stays green and P1 turns red. P11 kills R35 (Appendix K).
+- Carry for U6.4: under a systemd unit with `KillMode=control-group`, leftover processes are killed when the service stops. Under cron, the WSL2 fallback, nothing kills them. That makes this fix the only guard there.
+
+**P12-m2 — minor — a paused campaign with drifted user settings refuses (exit 1) instead of exiting 0 at once.** *Owner: `coder`. Verified by probe P2.*
+- The settings check runs before `next` (call 4), so it also runs before the pause check. Probe P2 sets `store/pause` and adds a `hooks` key. `run` then exits 1 and writes `store/refusal`.
+- That contradicts plan6 §3.2: "A fire while paused exits at once" and "`run` exits 0 when … `store/pause` exists". Pausing in order to edit your settings is the natural sequence. Under U6.4's timer, each fire in that window would then fail and overwrite `REFUSED`.
+- **Fix** (tested in `repo2`): check `camp.pause_path.exists()` at the top of each iteration, before the settings check, and stop with `stopped: paused`. That check reads nothing, so call 4's "a refusal writes nothing" still holds. With the fix the suite stays green and P2 turns red.
+- **Related gap (R28 gives 0 red):** the call-4 placement itself is unpinned. In the fixture, `next` writes nothing, so moving the settings check after `next` keeps the ledger byte-equal. Probe P12 plants an issued attempt that `next` would reconcile, and R28 then reddens it (Appendix K). Add P12 to serve the §5 row's "no ledger write".
+
+**P12-m3 — minor — a root refusal never reaches `status`, although `README.md` and `driver.py`'s docstring say it does.** *Owner: `coder`. Verified by probe P3.*
+- `Runner.run` raises the root and no-campaign refusals before `_refusing`, so they go to stderr only (call 5). The no-campaign case is fine, because `status` refuses the same way.
+- The root case is not. Probe P3 plants `AGENTS.md` in the campaign's parent, and `status` then prints `batches: 1 pending` with no `REFUSED` line.
+- A timer-driven campaign stalls silently, with the reason only in the scheduler's log, if a `.git`, `CLAUDE.md` or `AGENTS.md` later appears in any ancestor, the home directory included.
+- `README.md` lists the root refusal with "The reason, with a timestamp, goes to `store/refusal`". The docstring says "`run` … leaves the reason in `store/refusal`". Both claims are false for this case.
+- **Fix** (tested in `repo2`): `status` computes `root_refusal(self.root)` live and prints it as a `REFUSED:` line. That is read-only and always current, with no write before the lock. With the fix the suite stays green and P3 turns red. Then correct the README sentence.
+
+**P12-n1 — nit — the timeout test is load-sensitive.** *Owner: `coder`. Verified by running it.*
+- The test fails under 64 busy loops on 8 CPUs, 4 of 4 runs. It passed every run under up to 32 busy loops.
+- Cause, from the failed run's ledger: the fake `claude` is still starting when the 1 s `batchTimeout` expires. It has not yet set `SIG_IGN`, because it first imports `test_campaign` to stage. So the SIGTERM kills it before it records the call. The outcome is `launchFailed {exitCode: -15}`, and `made.calls()[0]` raises `IndexError`.
+- **Fix:** have the fake apply `ignore_term` as its first statement, and give the test a 3 s `batchTimeout` with the watchdog and the upper bound scaled to match (Appendix K reports the run).
+
+**P12-n2 — nit — branches no test pins.** *Owner: `coder`, in the same round. Each verified by a mutant giving 0 red.*
+- **SIGINT** (R20). The README promises "Ctrl-C … does the same", and probe P4 shows it does: one `interrupted`, exit 0. P4 kills R20.
+- **A signal that lands between batches** (R29). Probe P5 shows `stopped: signalled` with no `interrupted`, and kills R29.
+- **M25** (see ruling below). Probe P8 kills it.
+- **The hash's canonical form** (R10 `sort_keys=False`, R11 default separators):
+  - plan6 §3.2 says "canonical JSON", and `install` (U5.7) will record this value;
+  - P9 (reordered `permissions` keys hash equal) and P10 (the sha256 of a hand-written canonical string) kill both;
+  - without P9, a hand edit that reorders keys would refuse every launch.
+- **The `store/refusal` timestamp format** (R6: epoch seconds pass `refusal[:4].isdigit()`). Assert `datetime.fromisoformat` on the first token.
+- **Never-pinned, harmless:** R3 (`runner.json` written non-atomically; `pause --now` reads a torn record as "no runner"), R22 (`pause --now` sends SIGINT) and R27 (`store/refusal` deleted before `Popen` succeeds). I propose no test for these.
+
+**P12-n3 — nit — small behaviours worth a line.** *Owner: `coder`, optional.*
+- **A signal during `next`/`issue` still launches a child,** which is then killed about 50 ms later. Probe P6 shows `launched session …` and then `interrupted` with no call recorded. Checking `self.signalled` after `issue` and before `Popen`, and returning after `record_interrupted`, would skip the launch. It is harmless today: no `.exit` means `launchFailed`, which is uncapped.
+- **`_signal_runner` calls `os.kill` unguarded** (`runner.py:322`). A runner that exits between the start-time check and the kill gives `ProcessLookupError` and a traceback after `store/pause` was already created. This is inferred from reading; I did not race it.
+- **The halt reason is lost on the ingest path.** `_batch` returns the bare `result.stop`, so the run prints `stopped: halted ` with no reason (probe P8's output). The reconciliation path prints `halted (<reason> (<class>) on <batch>)`.
+
+### Rulings on the coder's calls
+
+1. **`driverTemplate` and `userSettingsSha256` in the `expectations` event; `run` refuses without them.** Right.
+   - The `expectations` event is plan4 §3.5's "declared expectations, written at `install`, never learned from a run". U5.7's row owns writing both values ("the driver template …", "the user-settings record at install").
+   - Both are pinned at their write site: R8 (template value) gives 1 red, and R9 (hash value) gives 21.
+   - **Carry to U5.7:** compute `promptSha256.spawnTemplate.driver` from the same `driverTemplate` string it records, so the text has one source. Record the hash with `runner.user_settings_sha256`, not a second implementation.
+2. **The hash covers `permissions` and `modelSettings` only; an absent key is not `null`; a missing file is `{}`.** This matches plan6 §3.2's list exactly. It fits the stakeholder's rule: `theme`, `model`, `verbose` and `autoContinueAtUsageLimit: false` edits launch (the test is parametrized).
+   - "Missing file = `{}`" matches Claude Code, which creates no settings file until one is needed (settings docs).
+   - Refusing a non-object or unparsable file is right. Under `-p`, Claude Code silently skips a broken file (docs), and the child would then run with none of the user's rules.
+   - The list itself is too narrow: P12-M1, owned by the plan.
+   - The canonical form is unpinned: P12-n2, P9/P10.
+3. **`run` stops after a `launchFailed` outcome.** Right. It follows plan6 §3.2 "Scheduling", where a fire costs at most one short turn.
+   - It keeps `launchFailing` reachable: one fire per 30 minutes crosses the 6 h bound.
+   - Pinned: the coder's M24 gives 2 red. No later unit owns it, but U6.4's cadence sets the retry interval.
+4. **Settings checked at the top of each iteration, before `next`.** Right for "a refusal appends nothing". `next` can append a reconciliation outcome or a `cut`, so the check has to come first.
+   - Two gaps remain: the placement is unpinned (R28, probe P12), and the pause must be honoured before the check (P12-m2).
+5. **`store/refusal` only after the lock; the root and no-campaign refusals go to stderr only.** Acceptable for the no-campaign case, because `status` refuses the same way. Not for the root case: P12-m3.
+   - With that fix, `status` shows every refusal a timer-driven user can hit, apart from an uncaught exception. An example is a `PermissionError` reading `settings.json`, which ends in a traceback with no `REFUSED` line; this is inferred from reading, and I did not run it. U6.4's scheduler log is the backstop.
+6. **Exit codes: a refusal exits 1; every stop exits 0** (a held lock, a pause, `launchFailed`, a signal). Right.
+   - Exit 1 is the case a human must act on, and systemd marks the unit failed for it.
+   - A signal is an operator's stop: SIGTERM from `systemctl stop` or `pause --now`.
+   - Pinned: R25 gives 2 red. P12-m2 is the one place where this rule and the code disagree.
+7. **SIGINT is treated as SIGTERM; no ingest after `interrupted`.** Right. Ctrl-C reaches only the runner's process group, because the child has its own session, so the runner must kill the child itself.
+   - Probe P4 shows one `interrupted` and exit 0. It is unpinned in the suite (R20; P12-n2).
+   - Not ingesting is right, because the next `run` reconciles with the real `.exit` value.
+8. **`runner.json` never deleted; child stdin `/dev/null`; an `OSError` at launch writes `.err` and no `.exit`.** All three are right.
+   - The start-time check is what makes a stale `runner.json` safe (row test). Deleting the file at exit would add a write that a crash skips anyway.
+   - `/dev/null` is pinned by the coder's M31.
+   - No `.exit` means "never observed", which is U5.6's `launchFailed` with `exitCode: null`. The missing-binary test pins it.
+   - **`pause --now` racing a child that is just exiting** (probe P7, made deterministic): `.exit` holds the true code `0`, one `interrupted` is appended, and the next `run` ingests the batch normally. That is correct: `interrupted` only lifts the cap.
+- **M25 is not strictly equivalent.** Without the explicit exit, the next iteration re-runs the settings check before `next` reports the halt. So a halting batch whose child (or the user) edits the settings exits 1 with `REFUSED` instead of `stopped: halted`, exit 0 (probe P8 kills M25). Keep the branch and add P8 (P12-n2).
+- **The ledger's carries are right.**
+  - U5.7: `install` records the template and the hash, under `Campaign.locked()`.
+  - U6.4: set `PATH` and `LANG` explicitly; refusals exit 1. U6.4 should also record the unit's `KillMode` (P12-m1).
+
+### What's solid
+
+- **Every §5 U6.3 row has a test, and runs against a fake `claude` under a fake `HOME`.**
+  - Environment and argv: the planted `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `CLAUDE_CODE_EFFORT_LEVEL` and `CLAUDE_CODE_FORK_SUBAGENT` are all absent, and the expected argv is built independently from the template.
+  - The settings refusals, each with the ledger byte-equal and the `REFUSED` line in `status`.
+  - Single flight, pause in flight, `pause --now` with exactly one `interrupted` and the uncounted reconcile, the orphan, the stranger PID and the root.
+  - These mutants redden: R1, R2, R4, R5, R7, R8, R9, R14, R15, R17, R21, R25, R30, R31, R32 and R34.
+- **The U5.6 contracts are honoured, each pinned:**
+  - one `Campaign` per process (the coder's M6);
+  - `.exit` written atomically, in decimal, before `ingest` (R4, R5 and the coder's M4/M5);
+  - `cwd=exchange_dir` (M30);
+  - `interrupted` written once (M7);
+  - the lock passed through `pass_fds` (M8).
+- **The values a later unit reads are pinned against independently computed values:**
+  - `runner.json` against `/proc/<pid>/stat` read by the test (R1, R2);
+  - `.exit` against `-signal.SIGTERM`/`-SIGKILL` and the planted exit 3 (R4, R5);
+  - the `expectations` keys through the argv and the refusal paths (R8, R9).
+- **Signal handling is sound.** The handler only sets a flag, so no ledger append can be torn by a signal. Handlers are installed before `runner.json` is written, so `pause --now` can never kill the runner with SIGTERM's default action. The child is in its own session, so Ctrl-C at a terminal never hits it directly.
+- **Docs:**
+  - `AGENTS.md` grew 721 → 792 words, edited in place, with no line over 700 characters.
+  - The README section and the HISTORY entry are new scope.
+  - Their claims match the code except the two P12-m1/m3 sentences named there.
+
+### Open questions
+
+- **P12-M1's direction,** for `architect` via `teco`: hash everything except a cosmetic allowlist, or extend the refusal list? Either way it must be settled before U5.7's `install` fixes the recorded value. Whether a user-level `disableAllHooks` also disables the project-level guard wiring was not confirmed in the docs excerpt I read; U5.7's smoke could plant it.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*. Source: P12-m1 (R16 and R35 survive because the fixture's descendant dies on the first signal) and P12-n1 (a 1 s timeout races the fixture's own start-up).
+
+- Addition: "For code that stops a process tree (a group kill, a grace period, a timeout), plant a descendant that survives the first signal and assert it is gone afterwards; assert the grace by elapsed time. Run timing-dependent tests under CPU oversubscription before calling them stable."
+
+No existing line is now enforced elsewhere, so no prune is proposed. Pass 10's proposed field-mutation line is still pending feature close; this pass applied it (R1–R9).
+
+### Appendix K — Pass 12 mutants and probes
+
+**Files lost.** The scratchpad holding this pass's files was wiped in a session crash after the runs finished: `p12/mutants.py`, `p12/mutate.py`, `p12/probes/test_p12_probes.py`, `p12/probes/test_p12_fixcheck.py`, the two private copies, the logs and the sha256 snapshot. The tables below are transcribed from the run output recorded in my session transcript. Nothing was re-run after the crash.
+- To reproduce, rebuild a private copy as Scope describes, then re-plant each mutant from its description and each probe from the list below.
+- Rules for every run: each mutant ran the full suite in the copy and was restored, and `cmp` reported equal. Baseline: 849 passed + 5 skipped, 2 xfailed. With the probe file present: 861 passed + 5 skipped.
+
+| ID | Mutation (`runner.py` unless noted) | Red (suite) | Red (+ probes) |
+|---|---|---|---|
+| R1 | `runnerPid` + 1 | 2 | — |
+| R2 | start time read from field 23 (write and check) | 1 | — |
+| R3 | `runner.json` written non-atomically | **0** | 0 (harmless) |
+| R4 / R5 | `.exit` without newline / `abs(returncode)` | 4 / 2 | — |
+| R6 | `store/refusal` stamped in epoch seconds | **0** | 0 (P12-n2) |
+| R7 | stamp after the reason | 5 | — |
+| R8 / R9 (`campaign.py`) | `driverTemplate` + `" "` / `userSettingsSha256` reversed, at the write site | 1 / 21 | — |
+| R10 / R11 | hash `sort_keys=False` / default separators | **0 / 0** | 2 / 1 (P9, P10) |
+| R14 | refused keys by truthiness | 3 | — |
+| R15 | missing settings file refuses | 1 | — |
+| R16 | SIGKILL to the leader only | **0** | 0; red against P1 inverted on the fixed code |
+| R17 | SIGTERM to the leader only | 1 | — |
+| R20 | SIGINT not handled | **0** | 1 (P4) |
+| R21 | `process_group=0` instead of a new session | 1 | — |
+| R22 | `pause --now` sends SIGINT | **0** | 0 (harmless) |
+| R25 | held lock exits 1 | 2 | — |
+| R27 | `store/refusal` deleted before `Popen` succeeds | **0** | 0 (harmless) |
+| R28 | settings checked after `next()` | **0** | 1 (P12) |
+| R29 | `while True` (a signal between batches is ignored) | **0** | 1 (P5) |
+| R30 | straight to SIGKILL | 1 | — |
+| R31 | `batchTimeout` × 60 | 1 | — |
+| R32 | `LC_ALL` dropped | 1 | — |
+| R34 | stdout/stderr swapped | 1 | — |
+| R35 | grace ignored (`wait(timeout=0.001)`) | **0** | 1 (P11) |
+| R36 | signalled after `issue`: return without launching | **0** | not re-run (P12-n3's design, not a defect) |
+| R37 | stdout opened in append mode | **0** | not re-run (equivalent: fresh session ids) |
+| M25 (coder's) | no exit on `IngestResult.stop` | **0** | 1 (P8) |
+
+**Probes** (pytest functions in the copy's `tests/`, using `test_runner`'s `Bench`, fake `claude` and fake `HOME`). Each asserts today's behaviour, so a fix turns it red:
+- P1: leader dies on SIGTERM; a grandchild spawned with `close_fds=False` ignores SIGTERM. After `run` (timeout 1 s, grace 0.5 s), the grandchild is alive 1 s later, and the next `run` prints `LOCK_HELD`. Observed: alive, `LOCK_HELD`.
+- P2: `pause`, then a `hooks` key, then `run` → exit 1 and `store/refusal` written.
+- P3: `AGENTS.md` in the root's parent, then `run` → exit 1. `status` then prints `point …`, `batches: 1 pending` and no `REFUSED` line.
+- P4: SIGINT to a `driver run` process mid-batch → exit 0, `stopped: interrupted bat_0001`, one `interrupted`.
+- P5: SIGTERM delivered inside `ingest` (monkeypatched) with two batches → `stopped: signalled`, one launch, no `interrupted`.
+- P6: SIGTERM delivered inside `issue` → `launched session …`, then `interrupted: killing …`, with 0 calls recorded by the fake.
+- P7: `Popen.wait` patched to report one timeout after the child exited 0, with SIGTERM raised at that moment → `.exit` `0`, one `interrupted`; the second run's outcomes are `[ingested]`.
+- P8: the child halts the batch (`opus-driver`) and writes a `hooks` key → exit 0, `stopped: halted ` (no reason), no `store/refusal`.
+- P9: `permissions`/`modelSettings` with reordered keys hash equal.
+- P10: the hash equals the sha256 of `{"modelSettings":{"effort":"high"},"permissions":{"allow":["Read"],"deny":["Bash"]}}` for a settings object that also holds `theme`.
+- P11: leader ignores SIGTERM; timeout 1 s, grace 1.5 s → elapsed ≥ 2.5 s.
+- P12: an `issued` attempt planted with `next()` + `issue()`, then a `hooks` key, then `run` → exit 1 and the ledger byte-equal.
+
+**Suggested fixes, applied in `repo2`** (the code is in P12-m1/m2/m3):
+- the polling group kill;
+- the pause check before the settings check;
+- `status` printing `root_refusal`.
+
+Results:
+- Full suite plus probes: 856 passed + 5 skipped. Exactly P1, P2 and P3 failed, each for the intended reason ("grandchild was killed", `0 == 1`, a `REFUSED:` line present).
+- P1 inverted (the grandchild is dead and the next run is not `LOCK_HELD`) passes on the fixed code.
+- With the fixed code's group SIGKILL changed to `os.kill(child.pid, …)`, P1 inverted fails and P11 passes. P1 inverted thus kills R16.
+- A stray probe grandchild left alive by one mutant run was found with `pgrep` and killed.
+
+**P12-n1's fix,** applied in `repo2`'s `test_runner.py`:
+- the fake sets `SIG_IGN` right after reading its plan;
+- `batchTimeout` 3 s;
+- watchdog 20 s;
+- bounds `3 <= elapsed < 18`.
+
+The timeout test passed 4 of 4 runs under 64 busy loops, at 5.8–8.1 s each. Unfixed, it failed 4 of 4 under the same load, with ledger `outcome reissued launchFailed {exitCode: -15}`.
+
+**Growth-stops check:** Pass 12 gives no disposition lines because no earlier finding is re-opened, and every finding in it is new. Passes 1–11 are unchanged: `git diff` against `HEAD` shows a single hunk, purely additive, starting after Pass 11's last line.
+
+## Pass 13 — U6.3 fix round re-gate (2026-11-01)
+
+**Verdict: approve.** Every Pass 12 code finding is fixed and each fix is pinned by a test that turns red under the mutant that undoes it. I found no new defect in the way the round's fixes interact. There are two nits.
+
+### Scope
+
+- **Reviewed:** the uncommitted fix round against `c2328164`, diff-scoped: `runner.py`'s `_loop`, `_stopped`, `_batch`, `_kill_group`, `_group_alive` and `_signal_runner`; `campaign.py`'s `status`; `driver.py`'s docstring; `tests/test_runner.py`'s fixture and the new tests; and the README and HISTORY claims about them. Settings-key scope (P12-M1) is out of scope: plan6 v1.10 / U6.3b owns it.
+- **Suite:** run on the live tree from `decision-models/` with a fresh `PYTHONPYCACHEPREFIX`: **864 passed, 2 xfailed**; `ruff check` clean. `tests/test_runner.py` alone: 3/3 green unloaded (45 tests, 11 s), and 2/2 green under 64 busy loops on 8 CPUs (about 57 s each). Pass 12's P12-n1 failure under that same load is gone.
+- **Mutants and probes:** private copy `scratchpad/p13/repo/` (this pass's own, built fresh), a fresh `PYTHONPYCACHEPREFIX` per run, no `-I`. Baseline 859 passed + 5 skipped. Every file was restored and `cmp` reported equal. 19 mutants, and 6 probe tests that I added to the copy only (Appendix L).
+- **Live tree:** no git command that changes it; I wrote only this review. The reviewed files' sha256 values are in `scratchpad/p13/live-sha256.txt`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Disposition of Pass 12
+
+- **P12-m1** (group SIGKILL): fixed. L1 (SIGKILL to the leader only) gives 1 red, L3 (`_group_alive` always false) 2, L4 (always true, so the grace is always waited out) 2, L5 (leader never reaped) 2, and L20 (grace ignored) 2.
+- **P12-m2** (pause before settings): fixed. L6 gives 1 red, and L15 (settings after `next`) gives 1.
+- **P12-m3** (root refusal in `status`): fixed. L10 gives 1 red. The README and the `driver.py` docstring now say that the root refusal writes nothing and `status` computes it.
+- **P12-n1** (load-sensitive timeout test): fixed. It passes 2/2 under 64 busy loops.
+- **P12-n2:** fixed, with these results:
+  - L19 (no SIGINT) gives 1 red.
+  - L17 and L18 (hash canonical form) give 1 red each.
+  - L16 (epoch timestamp) gives 5.
+  - M25 gives 1.
+  - R29 survives the suite: see question (b).
+  - R3, R22 and R27 stay unpinned, as I advised.
+- **P12-n3:**
+  - The signal during `next` is fixed (L7 gives 1 red); see question (a).
+  - The unguarded `os.kill` is fixed (L11 gives 1).
+  - The lost halt reason is fixed (L13 gives 1). The usage-stop reason is the same code path and is unpinned (P13-n1).
+
+### Answers to the gate's questions
+
+**(a) Checking `signalled` after `next()`, before `issue`: sound, and better than my suggestion.** Verified by running.
+- It leaves no `issued` event to unwind, so there is no `interrupted` to write and nothing for the next run to reconcile. `test_a_signal_while_next_runs_launches_nothing` pins it: 0 calls, 0 `issued`, and L7 reddens it.
+- **The window that remains.** A signal landing after the check and before `issue` still launches, and then kills, a child. Probe A1 plants the signal just before `issue`: exit 0, one `interrupted`, one launch, and the next run ingests the batch to `ingested`. The residue is a harmless, bounded launch (plan6 §3.2 counts an `interrupted` re-issue toward nothing). No test pins this window, and I do not ask for one.
+- **A `next()` that appended events.** Breaking after `next` leaves whatever `next` reconciled. Probe A2 (a signal after `next` on a campaign with a pending batch, then a second run) gives `ingested` with the first run's ledger bytes as a prefix. `next` appending a `cut` was not exercised: the fixture has no overflowing batch. That `prepare` is idempotent after a `cut` is inferred from `fold`, where the batch's entries shrink to `keep`.
+
+**(b) R29 (`while True`) is not equivalent, but the difference is benign.** The coder is right that the suite cannot see it.
+- **Same:** with a second batch pending, the new post-`next` check breaks at once, so `stopped: signalled`, no launch and no ledger change are identical.
+- **Different, probe B1:** a signal lands in the last ingest, and the user settings have drifted by then. With the guard, `run` stops `signalled` and exits 0. Under R29 the next iteration re-checks the settings and exits 1 with `REFUSED`. The probe kills R29 (1 red, in a copy that holds the probe).
+- **Different, message only:** with nothing pending after a signal, R29 prints `stopped: done`; the guard prints `signalled`.
+- **Ruling:** an exit-0 operator stop turning into a refusal is the same class as P12-m2, but it needs a signal and a settings edit in the same few milliseconds. Taking B1 as a test is optional; I report no finding.
+
+**(c) The fixture change leaves no test vacuous.** I checked each kill-path mutant against the new fixture.
+- The `grandchild` plan now resets SIGTERM to the default, because the leader's `SIG_IGN` is set first. The timeout test's grandchild therefore dies on a group SIGTERM, but it no longer distinguishes a group SIGTERM from a leader-only one. That job belongs to the pause-now test, and L2 (SIGTERM to the leader only) gives 1 red there.
+- `stubborn_grandchild` ignores SIGTERM from before its `exec` and holds the lock fd, which the test asserts through `/proc/<pid>/status` (`SigIgn`) and `/proc/<pid>/fd`. That makes the test meaningful: L1 reddens it, and it fails if the descendant ever stops being stubborn.
+- The `ignores_sigterm` assertion is independent of the runner.
+- The timeout test's `3 + 1 <= elapsed` bound is `batchTimeout` plus grace, and L20 reddens it.
+
+**(d) Interactions of the round's fixes: none defective.** Checked by running or by L-mutants:
+- **Pause check × settings check × `next`'s own pause check.** The loop-top check returns `stopped: paused (store/pause exists)`, the same text `next` would give, so nothing a caller reads changed. A paused campaign with no install record now exits 0 instead of refusing, which fits "a fire while paused exits at once".
+- **`_group_alive` × `child.poll()`.** The loop reaps the leader before probing, so a zombie leader is not counted as a member forever. Without it (L5), a leader that dies on SIGTERM costs the whole grace. L4 and L5 each give 2 red, through the default-grace tests `pause_now` and SIGINT (their `finish(timeout=15)` is shorter than the 30 s grace), not through a timing assertion. Those two tests therefore guard the fast path only while the grace default stays above 15 s; the 30 s constant is pinned.
+- **Probe D1** (the leader never exits, a stubborn descendant, a 2 s timeout, a 0.5 s grace) gives the second launch and then a `halted incomplete` stop at 5.1 s, and the descendant is dead. That is the group kill working through the timeout path, not only the signal path.
+- **`status` root refusal × `init`.** A valid campaign never has a root refusal, because `init` refuses the same root, so the line cannot appear on a healthy campaign. No test pins the absence of the line; I report none.
+
+### New findings
+
+**P13-n1 — nit — the usage-stop reason in `stopped: usage-stop (...)` is unpinned.** *Owner: `coder`, optional. Verified by mutant L14, which gives 0 red.*
+- `_batch` builds the stop detail from `result.outcome["reason"]` for a non-halt stop. Dropping it leaves the suite green, since `test_a_usage_stop_launches_once_and_exits` asserts only `"usage-stop" in out`. One `==` on the printed line would pin it.
+
+**P13-n2 — nit — the README's kill sentence says "30 s later, SIGKILL to any process of the group still alive", and the code stops waiting early when the group is empty.** *Owner: `coder`, optional. Verified by reading `_kill_group`.*
+- The sentence is true. Saying "once every process of the group has gone, the run does not wait out the 30 s" would also state the fast path that L4 and L5 guard.
+
+### Appendix L — Pass 13 mutants and probes
+
+Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p13/`: `mutants.py`, `mutate.py`, `probes/test_p13_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 859 passed + 5 skipped, 2 xfailed (865 with the probe file). Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+
+| ID | Mutation (`runner.py` unless noted) | Red |
+|---|---|---|
+| L1 | group SIGKILL becomes `child.kill()` | 1 |
+| L2 | group SIGTERM becomes leader only | 1 |
+| L3 / L4 | `_group_alive` always false / always true | 2 / 2 |
+| L5 | `child.poll()` removed from the poll loop | 2 |
+| L6 | the loop-top pause check removed | 1 |
+| L7 | the post-`next` `signalled` check removed | 1 |
+| L9 (R29) | `while True` | **0**; 1 with probe B1 |
+| L10 (`campaign.py`) | `status` root-refusal line removed | 1 |
+| L11 | `ProcessLookupError` guard in `_signal_runner` removed | 1 |
+| L13 / L14 | halt reason / usage-stop reason dropped from the ingest stop | 1 / **0** (P13-n1) |
+| L15 | settings checked after `next` | 1 |
+| L16 | refusal stamp in epoch seconds | 5 |
+| L17 / L18 | hash `sort_keys=False` / default separators | 1 / 1 |
+| L19 | SIGINT not handled | 1 |
+| L20 | grace ignored | 2 |
+| M25 | no exit on `IngestResult.stop` | 1 |
+
+**Probes** (pytest functions added to the copy's `tests/` only, using `test_runner`'s `Bench`, fake `claude` and fake `HOME`; all pass on the live code):
+- **A1:** SIGTERM delivered just before `issue` → exit 0, one `interrupted`; a second run ingests the batch.
+- **A2:** SIGTERM after `next`, then a second run → the batch is ingested, and the first run's ledger bytes are a prefix of the final ledger.
+- **B1:** a signal in the last ingest plus a settings drift → `stopped: signalled`, exit 0. Fails under L9.
+- **B2:** a signal in the last ingest, one batch → `stopped: signalled`.
+- **C1:** `pause --now` with the default 30 s grace → the runner returns in 0.09 s when the leader dies on SIGTERM.
+- **D1:** a leader that never exits plus a stubborn descendant, 2 s timeout, 0.5 s grace → the descendant is dead and the run stops after the second incomplete.
+
+**Growth-stops check:** Pass 13 gives one disposition line per Pass 12 finding and two new nits. Passes 1–12 are unchanged: `git diff` of this review shows one purely additive hunk at the end.

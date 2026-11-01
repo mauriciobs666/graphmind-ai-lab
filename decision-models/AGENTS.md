@@ -12,8 +12,9 @@ the design.
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts) and `driver.py` (CLI: `init`, `resolve`, `status`). Later plan4 §4.1 and
-plan6 §4 units are unbuilt (`docs/HISTORY.md`).
+reconciliation, halts), `runner.py` (`driver run`, `pause [--now]`, `resume`) and `driver.py`
+(CLI: `init`, `resolve`, `run`, `pause`, `resume`, `status`). Later plan4 §4.1 and plan6 §4 units
+are unbuilt (`docs/HISTORY.md`).
 
 ## Load-bearing invariants
 
@@ -58,7 +59,10 @@ plan6 §4 units are unbuilt (`docs/HISTORY.md`).
   `store/`; a re-ingest never calls `audit_run`/`combine` and appends nothing; a re-issued name
   is retired, so a late answer raises `AnswerRefused` (`campaign.py`'s docstring).
 - **`next`/`ingest` are library entry points for `driver run`**, never subcommands (plan6
-  §3.2). `next` checks `store/pause` before reading anything.
+  §3.2). `next` checks `store/pause` before reading anything. `run` uses **one** `Campaign` per
+  process (the usage-stop memory is the instance's), holds `store/driver.lock` for its life and
+  passes it to the child, and writes `store/runs/<sid>.exit` atomically before `ingest`
+  (`runner.py`'s docstring). The child's environment is an allowlist; widening it is a plan change.
 - **The audit locates a run only through the driver's `Agent` `tool_use` and `.meta.json`
   `toolUseId`**, never through what it checks, and fails closed (plan6 §3.4): only F2's
   foreground shape completes, and a tool use the guard did not allow with its own entry halts
@@ -73,5 +77,7 @@ plan6 §4 units are unbuilt (`docs/HISTORY.md`).
 
 - Run the suite **from `decision-models/`**: `.venv/bin/pytest -q`, `.venv/bin/ruff check .`.
   `pythonpath = ["."]` lets it run without the editable install.
-- No network and no LM Studio in the default suite; tests write under `tmp_path`.
+- No network and no LM Studio in the default suite; tests write under `tmp_path`. Runner tests
+  launch only the fake `claude` `tests/test_runner.py` writes, under a fake `HOME`: never the real
+  CLI or `~/.claude`.
 - U5.x units serialize on `docs/HISTORY.md` (plan4 §4.3): one entry per unit, most recent first.
