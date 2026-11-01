@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-101
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-102
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -119,6 +119,18 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > front door (REST's current 201 for it becomes a 400). K-074 is folded in here.
 - **Owner:** `tdd-engineer`.
 - **Test strategy:** the RCA's parity test first, then each known gap flipped to its fix with literal-value tests.
+
+### K-102 — 11 `ws:agent-team` documents sit in `failed` with unembedded chunks, invisible to semantic search (🔵 proposed — found during K-099, 2026-10-31)
+
+> A read-only query on `ws:agent-team` (`MATCH (d:Document)--(c:Chunk) WHERE c.embedding IS NULL`)
+> returns 11 documents, each `status: failed` with one unembedded chunk, created 2026-10-24 →
+> 2026-10-31 21:38 — agents' raw learnings captures, so `search_documents` never returns them
+> (full-text/`get_document` still do). None falls in K-099's ~21 s embedder gap (2026-10-31
+> 22:04:18–39); the cause is undiagnosed — candidates are LM Studio model swaps evicting the
+> embedder mid-ingest (a one-model-at-a-time GPU; cf. K-070/K-073) or the extract job failing the
+> document after its embed. Two asks: root-cause why they failed, and decide whether a failed
+> document's chunks are re-embedded (a retry/repair path) or left as-is.
+- **Owner:** `analyst` (RCA), then an implementer.
 
 ### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 
