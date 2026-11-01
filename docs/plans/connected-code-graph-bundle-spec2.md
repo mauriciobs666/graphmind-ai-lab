@@ -1,6 +1,6 @@
 # Connected code graph — fact-bundle spec, pre-freeze amendments (v1 candidate)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-bundle-spec.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
+> **Status:** superseded · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-bundle-spec.md` · **Version:** 1.3 · **Superseded by:** `docs/plans/connected-code-graph-bundle-spec3.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
 
 *2026-10-29 (v1.0): S58 advisory dispositions, S10 gate rulings, S06 eval-protocol Q2; written before S15.*
 *2026-10-30 (v1.1): re-gate round. Analyst BS-M1/M2, BS-m1–m9 and nits; graph-dba G-1–G-4, S-1, S-2; security Pass 2 P2-1–P2-8. One argv rule now closes BS-M1, BS-M2 and P2-1 together. T6 is adopted before the freeze. Two recommendations are declined in part: "no `@` after the first character" and "W5 writer-only". Dispositions are in §5.*

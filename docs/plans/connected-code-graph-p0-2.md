@@ -1,10 +1,11 @@
 # Connected code graph — phase P0 implementation plan (successor)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.2 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.3 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
 
 *2026-10-29 (v1.0): successor to plan v1.3 (the "plan v1.4" that `docs/plans/connected-code-graph-p0-ml.md` §11 addresses). Absorbs the S05 ML note's step outputs, the S03/S04 specs' downstream items, the coordination ledger's carry-forwards, S04 Pass 3 errata, and S06's hand-offs (eval-protocol v1.0, §14 here; its gate is in flight). Disposition table: §16.*
 *2026-10-30 (v1.1): folded eval-protocol v1.2 §14/§15, `docs/plans/connected-code-graph-bundle-spec2.md` v1.3 §3–§4 and `docs/plans/connected-code-graph-egress-spec2.md` v1.2 §3 (which replaces errata E1–E2), plus the ledger's routings to 2026-10-30; traceability in §16.1.*
 *2026-10-30 (v1.2): review Pass 3 (P3-1–P3-11, n-a–n-d, the recount) and `docs/plans/connected-code-graph-eval-protocol2-ml.md` §3 (F-8, step 8a) folded, plus S10 follow-up notes for `-spec3`; traceability rows P3-*, EP2-*, R-* in §16.1.*
+*2026-11-01 (v1.3): D5, the S15 and S16 rows aligned with `-spec3` (consolidation before S15; an SL-7-forced change is a `-spec4`).*
 
 ## 0. Goal & scope
 
@@ -160,18 +161,16 @@ S25's gate. Fetching corpora and running truth tools is hosted download of publi
 sandbox. Rejected: the OpenTelemetry demo "because it has every language".
 
 **D5 — The slice freezes by the proposal's binary rule.** Unchanged: freeze iff all of S14's
-SL-1–SL-7 pass; otherwise v1 stays provisional until P1 exit. The bundle spec's own §1 states the
-freeze condition and controls its details (no partial freeze, SQ-P0-2), **as amended by
-`docs/plans/connected-code-graph-bundle-spec2.md` ("`-spec2`")**: the contract S15 freezes is the
-bundle spec v1.3 **plus `-spec2` v1.3**, read together (`-spec2` §0; `bundleSchemaVersion` stays
-`"1.0"`). The successor name in the spec's §1 bullet 3 is replaced: the consolidated contract is
-**`docs/plans/connected-code-graph-bundle-spec3.md`** ("`-spec3`"), `Supersedes:` both the spec and
-`-spec2`. S16 writes it if S15 forces a change; otherwise `architect` writes it before P0 exit. **It
-is required, and P0 exit checks it** (`-spec2` §0, F-5). **Added (bundle spec §1, §10; `-spec2`
-§1.13, §4.1):** a freeze covers the **[P-later]** rules untested, so S15's gate record names every
-[P-later] item of bundle spec §10, **and `-spec2` §1.6 and §1.7**, as **"frozen, untested"**, with the
-first phase able to test it. The graph model is recorded the same way, in a
-note that `Extends:` the graph note (S17).
+SL-1–SL-7 pass; otherwise v1 stays provisional until P1 exit. The contract S15 freezes is
+**`docs/plans/connected-code-graph-bundle-spec3.md`** ("`-spec3`"): the consolidation of the bundle
+spec v1.3 and `-spec2` v1.3, delivered by S16 **before S15** and required, gated and checked at P0
+exit (`bundleSchemaVersion` stays `"1.0"`). Its §1 states the freeze condition (no partial freeze,
+SQ-P0-2). **An SL-7-forced change is not folded into `-spec3`:** `-spec3` has been executed against,
+so collision rule 5 makes the change a successor, `docs/plans/connected-code-graph-bundle-spec4.md`,
+with `Supersedes:` `-spec3`. A freeze covers the **[P-later]** rules untested, so S15's gate record
+names every [P-later] item of `-spec3` §10 **and §1.6 and §1.7** as **"frozen, untested"**, with
+the first phase able to test it. The graph model is recorded the same way, in a note that
+`Extends:` the graph note (S17).
 
 **D6 — Offline sandbox: egress spec §7 controls.** The backends, the escape axes A1–A7, the
 refusal conditions (C1, C2, N1, N2), the flag policy, the argv audit and the `/tmp` exec decision
@@ -378,8 +377,8 @@ re-decide it.
 | S12 | P0-11a, P0-11b | | `coder` | D (P0-11a); M (P0-11b) | **P0-11a:** `cpg/ccg/keynorm.py`, `cpg/tests/test_keynorm.py`. **P0-11b:** `cpg/spikes/vertical-slice/{assemble.py, tests/test_assemble.py}` | `-spec2` §1.7.1 (`screen_fails`), §1.8; `docs/plans/connected-code-graph-eval-protocol2-ml.md` ("EP2") §1.1, §2; P0-11b also S11 bundles, proposal §3.3–§3.4 | **P0-11a (durable, dispatchable as soon as S10's follow-up round is accepted):** `cpg/ccg/keynorm.py` holds the **one shared step-8a function**, `mask_http_segments(path, placeholder)` — a pure function over a path already normalized by the steps EP2's `http` rule and BS2 §1.8 place before 8a (their order is theirs, not restated here) that replaces every literal segment `s` with `screen_fails(s)` (imported from `ccg.bundle`, never copied) by the given placeholder (`{#}` or `{?}`), leaving the verb, empty segments and the four placeholders untouched (EP2 §1.1). `test_keynorm.py` passes **EP2 §2's K1–K22 and K30–K32 in provider form**. Neither `assemble.py` nor `match_keys.py` reimplements it (§2 D19). **P0-11b:** **the `http` `keyNorm` step 8a** in `assemble.py` **imports `mask_http_segments`**, with T6 and the provider `{#}` placeholder (matches only `{?}`, always `possible`). SL-1 and SL-2 pass on the real bundles, unchanged by step 8a. Unit tests on hand-made mini-bundles pass. | an (P0-11a, code review + mutation spot-check); (in S15) for P0-11b | P0-11a: S10's follow-up round. P0-11b: S11, P0-11a |
 | S13 | P0-12 | | `coder` | M, **R** | `cpg/spikes/vertical-slice/{load.py, impact.py, tests/test_live_slice.py}` | S12 output; graph note §3.4, §3.5, §6.2–§6.4 | SL-3–SL-6 pass against `ccg_p0slice` on the dedicated instance; loads obey §2 D16. | (in S15) | S12, S01 |
 | S14 | P0-12 | | `coder` | Doc | `docs/test-reports/connected-code-graph-p0-slice-report.md` | S11–S13 | Every SL criterion pass/fail with evidence; densities, timings, the determinism diff; every SL-7 delta. The `Link` count by status, BFS peak frontier and field-path state count (M4); the hop count of every `Link` chain. **The proving-repo anchors the slice touched, as locators in bundle spec §3.5 form, by eval-protocol §8.2's definition of "touched" — wrapper and chain hops excluded.** The bundle spec §10 [P-slice] items each marked exercised or not. | — | S13 |
-| S15 | gate | | `analyst` + `graph-dba` | gate | a `## Pass N` in `docs/reviews/connected-code-graph-p0.md`; `teco` records freeze or provisional in the ledger | S14 | Verdict given. Freeze iff SL-1–SL-7 all pass (§2 D5). **The record names the bundle spec plus `-spec2` as the contract, checks that S10 encodes every [pre-freeze] item of `-spec2` §1, and lists every bundle spec §10 [P-later] item and `-spec2` §1.6/§1.7 as "frozen, untested", with its first testable phase** (or "provisional, untested" if v1 does not freeze). | — | S14, S10's follow-up |
-| S16 | P0-13 | | `architect`; `tdd-engineer` for the test re-point | C, CC | **`docs/plans/connected-code-graph-bundle-spec3.md`**, `Supersedes:` the bundle spec **and** `-spec2`; `cpg/tests/test_bundle.py` (re-point); `cpg/tests/test_ids.py` if its vectors differ | S14; `-spec2`; S10's follow-up notes (below) | **Not optional; always runs** (`-spec2` §0, F-5), in one of two modes. **Change mode** (S15 forces a change): `-spec3` encodes the spec as amended by `-spec2` and every SL-7 delta, and S10's files are updated. **Consolidation mode** (no change): the two documents consolidated, no content change, before P0 exit. **In both modes (P3-2):** `tdd-engineer` re-points `SPEC_TEXT` and `SPEC2_TEXT` in `cpg/tests/test_bundle.py` at `-spec3` (one source; the `-spec2` constant retired), checks that `test_ids.py`'s hard-coded golden vectors (`SPEC_CONSTRUCTORS`, `SPEC_SHAPES`) equal `-spec3` §3.6's, and the default suite passes; a transcription slip in the 22 golden vectors, AV-1–AV-68 or BV-1–BV-28 is then a red test. `-spec3` is gated, and the base specs gain `Superseded by:`. **`-spec3` notes from S10's follow-up (each reconciled in `-spec3`, not a new step):** `-spec2` §1.1's depth example is non-canonical under §1.1's own rule; lookaround stays in the schema's `(?!\n)` guards and in the path pattern; T4 is nearly redundant; and S10's allow-list grid observes **85,536 cells (18 representatives)** against `-spec2` §1.6.3's stated **71,280**, so the spec figure is reconciled. | an | S15 |
+| S15 | gate | | `analyst` + `graph-dba` | gate | a `## Pass N` in `docs/reviews/connected-code-graph-p0.md`; `teco` records freeze or provisional in the ledger | S14, S16 | Verdict given. Freeze iff SL-1–SL-7 all pass (§2 D5). **The record names `-spec3` as the contract, checks that S10 encodes every [pre-freeze] item of `-spec3` §1, and lists every [P-later] item of `-spec3` §10 and its §1.6/§1.7 as "frozen, untested", with its first testable phase** (or "provisional, untested" if v1 does not freeze). | — | S14, S16, S10's follow-up |
+| S16 | P0-13 | | `architect`; `tdd-engineer` for the test re-point | C, CC | **`docs/plans/connected-code-graph-bundle-spec3.md`**, `Supersedes:` the bundle spec **and** `-spec2`; `cpg/tests/test_bundle.py` (re-point); `cpg/tests/test_ids.py` if its vectors differ | S14; `-spec2`; S10's follow-up notes | **Not optional; always runs, before S15** (`-spec2` §0, F-5): `-spec3` is the consolidation of the two documents, gated, and S15 is not dispatched until it is accepted. A change forced by S15 (an SL-7 delta) is a `-spec4` that `Supersedes:` `-spec3`, written after S15. `-spec3` includes F-13 (RFC 3986 order for `keyNorm` steps 5–6) and its consumer list (§13 there). **Code half (P3-2), `tdd-engineer`:** re-point `SPEC_TEXT` and `SPEC2_TEXT` in `cpg/tests/test_bundle.py` at `-spec3` (one source; the `-spec2` constant retired); check that `test_ids.py`'s hard-coded golden vectors (`SPEC_CONSTRUCTORS`, `SPEC_SHAPES`) equal `-spec3` §3.6's; renumber `cpg/tests/test_keynorm.py`'s step labels (decode = step 5); the default suite passes. A transcription slip in the 22 golden vectors, AV-1–AV-68 or BV-1–BV-28 is then a red test. **Parsers to change (gate m5):** `_probe_counts` read the removed "Observed on" table, so the three probe tests take their counts from `-spec3` §1.6.3's pass-condition formulas (17,280; 6,480; 675; 85,536), parsed and never retyped; `_spec_secret_tokens` reads the 15 substring words from §1.7.3, not the old §5.17 row; `ALLOW_LIST_ENTRIES` may be asserted against §1.6.3's list. | an | S15 |
 | S17 | P0-14 | | `graph-dba` | CC, **R** | `docs/plans/connected-code-graph-p0-graph.md` §1 "Graph model v1"; `cpg/ccg/store/ddl_v1.cypher`; `cpg/tests/test_ddl_live.py` | graph note §3.2, §3.4, §6; S14; bundle spec §9, §12 | Model v1 with deltas is written, and it **states a disposition for bundle spec §9 and each of BF2–BF15** (graph-side rulings in review §S03 graph-dba check; BF16 is a proposal edit, S50). It **includes the `ownedRegions` anchor rule** (narrowest containing interval, span or owned region; a span match beats an owned-region match, then the deeper `parentId` chain; bundle spec §9.1, §13.3 P3-1). It **states the load rule under `TIMEOUT_MAX`** (an explicit `timeout` on every load query when the cap is nonzero; §2 D16) and the batch ceiling from S23. **`-spec2` F-11 and §1.11:** `Cond` as a `CONTROLLED_BY` source (one Cond→Cond edge group); `defaultHash` never carried; F-2 recorded as closed (no cross-entry `valueHash` equality; any future cross-entry hash is bundle-only); **G-1 resolved by carrying only the role-relevant gated `launchFact` fields — `port`, `mountPath`, `service`, argv[0] and the role-relevant pairs — and never the whole of `args`** (security P3-1), or else rendering file and line only, with S33 told which; P2-8's screened `keyPath` property; S-1's `pointId` indexes on `Param`/`Ret`/`Cond` in `ddl_v1.cypher` (S-2 routing). The DDL applies to an empty key, `db.indexes()` matches it, the post-load constraints reach `OPERATIONAL`. | an | S15, S23 |
 | S20 | P0-15 | | `graph-dba` | M, **RX** | `cpg/spikes/store/{synth.py, bfs.py, bench_reach.py}`; p0-graph note §2 | graph note Q7, V8, §6.2, §6.4 | BFS vs `algo.SSpaths` benchmarked on a 1,000-file synthetic v2 graph, loaded per §2 D16; the 20-repeat FR-19 diff for both; the decision by §4.5's rule. The BFS keeps a visited set seeded with the anchor, so cond→cond `CONTROLLED_BY` cycles terminate (`-spec2` F-12, G-3), and the synthetic graph includes such a cycle. | an | S01, S09 |
 | S21 | P0-15 | | `graph-dba` | M, **RX** | `cpg/spikes/store/swap_probe.py`; p0-graph note §3–§4 | graph note Q4, V2, V10, G13 | `MULTI`/`RENAME` rollback and the telemetry cap/disable probed and recorded with commands and outputs, **including when `telemetry{<key>}` disappears after `GRAPH.DELETE`** (one sighting of asynchronous removal, review §S03 graph-dba check). | an | S20, S09 |
@@ -402,7 +401,7 @@ re-decide it.
 | S37 | P0-29 | | `qa-engineer` | GT, D | `cpg/fixtures/system1/fx-web/**`, `expected/fx-web.yaml` | S35 | The repo matches S35's fx-web rows. | (in S39) | S35 |
 | S38 | P0-30 | | `qa-engineer` | GT, D | `cpg/fixtures/system1/fx-lib/**`, `expected/fx-lib.yaml` | S35 | The repo matches S35's fx-lib rows. | (in S39) | S35 |
 | S39 | P0-31 | | `qa-engineer` | D | `cpg/fixtures/system1/expected/cross.yaml`, `cpg/fixtures/materialize.py`, `cpg/ccg/schemas/fixture-manifest-v1.schema.json`, `cpg/tests/test_fixtures.py` | S36–S38, S08, S10 | Materializer deterministic (same commit SHAs every run). Every locator resolves. Manifests validate. The `live` test parses each repo in the sandbox and passes §2 D15's content check. S35's AC-25 assertion column is tested. | an + ds | S36, S37, S38, S08, S10, **S08's follow-up round** (P3-10) |
-| S40 | P0-32 | | GC (`qa-engineer`) runs; `data-scientist` checks | GT | `cpg/eval/{EVAL_COMMIT, eval-manifest.yaml, kit-manifest.json}`; master kit and per-role `BRIEF.md`s outside the repo (§6.2) | eval-protocol §2.4, §3.3, §13.1, Appendix B; tooling from S48 | Commit pinned. Kit exported, content-checked (§6.2) and hashed. A brief per role and stratum — **five strata** (`http`, `mcp`, `scripts`, `wiring`, `flow`) — into which **eval-protocol Appendix B is pasted verbatim, and nothing else from that note** (M3; not §3/§4, which carry JSON examples). The flow-anchor list drawn by `export_kit.py --draw-flow-anchors` with a recorded seed (eval-protocol §3.6). `eval-manifest.yaml` carries eval-protocol §3.3's fields, incl. the prompt-bearing Markdown glob list, **plus `units` (each with `ports`, filled from source, §2.4), `cypherMcpTools` and the §2.4 grain table (incl. the Kiro `toolsSettings`/`includeMcpJson`/fallback rows)**, listed by `export_kit.py --list-units` and `--list-cypher-tools`; the method owner checks `ports`. **Per EP2 §1.5, `eval-manifest.yaml` records both protocol documents' paths and versions, and `screen: {bs2Version, bundlePySha256}`** (diagnostic, not a stop condition). | an + ds | S03, S06, S48 |
+| S40 | P0-32 | | GC (`qa-engineer`) runs; `data-scientist` checks | GT | `cpg/eval/{EVAL_COMMIT, eval-manifest.yaml, kit-manifest.json}`; master kit and per-role `BRIEF.md`s outside the repo (§6.2) | eval-protocol §2.4, §3.3, §13.1, Appendix B; tooling from S48 | Commit pinned. Kit exported, content-checked (§6.2) and hashed. A brief per role and stratum — **five strata** (`http`, `mcp`, `scripts`, `wiring`, `flow`) — into which **eval-protocol Appendix B is pasted verbatim, and nothing else from that note** (M3; not §3/§4, which carry JSON examples). The flow-anchor list drawn by `export_kit.py --draw-flow-anchors` with a recorded seed (eval-protocol §3.6). `eval-manifest.yaml` carries eval-protocol §3.3's fields, incl. the prompt-bearing Markdown glob list, **plus `units` (each with `ports`, filled from source, §2.4), `cypherMcpTools` and the §2.4 grain table (incl. the Kiro `toolsSettings`/`includeMcpJson`/fallback rows)**, listed by `export_kit.py --list-units` and `--list-cypher-tools`; the method owner checks `ports`. **Per EP2 §1.5, `eval-manifest.yaml` records both protocol documents' paths and versions, and `screen: {specVersion, bundlePySha256}`** (diagnostic, not a stop condition). | an + ds | S03, S06, S48 |
 | S41 | P0-33a…e | | `teco` runs the launcher; headless KA session, one per stratum (§6.1) | GT | `roles/KA-<stratum>/out/KA.jsonl`, appended as it goes | role root (§6.2); eval-protocol Appendix B (in the brief) | The provider-first key covers its stratum. The session's audit is clean (§6.5). Five sessions. | (in S45) | S54 |
 | S42 | P0-34a…e | | `teco` runs the launcher; headless KB session, one per stratum | GT | `roles/KB-<stratum>/out/KB.jsonl`, appended as it goes | role root; eval-protocol Appendix B (in the brief) | The consumer-first key covers its stratum. The audit is clean. Five sessions. | (in S45) | S54 |
 | S43 | P0-35 | | `teco` runs the launcher; headless QW session | GT | `roles/QW/out/QW.jsonl` | role root; eval-protocol §10.1; Appendix B's QW part (in the brief) | The bilingual impact questions written natively, with gold, in eval-protocol §10.1's counts (48 questions). The audit is clean. | (in S47) | S54 |
@@ -441,8 +440,8 @@ rounds are in flight.
   every contact source — S14, S30, S34 and S56 — so the contact set is complete before S47 closes
   it** (P3-1; eval-protocol §8.2, §8.4). This ties the ground-truth chain's end to the slice and
   contract chains.
-- **After S15:** **S16 always runs** (§3 S16): in change mode S30, S33 and S34 wait on it; in
-  consolidation mode they do not, and S16 only has to finish before P0 exit. S17 also waits on S23;
+- **Before S15:** **S16 always runs** (§3 S16) and must be accepted before S15. **After S15:** an
+  SL-7-forced change makes a `-spec4`, which S30, S33 and S34 wait on; otherwise they do not. S17 also waits on S23;
   S30 also waits on S27; S33 waits on S17 and S20; then S31 → S32 and S34.
 - **Close:** S50 → S51.
 
@@ -667,12 +666,12 @@ controls.
   The two SL-5 bounds are this plan's engineering choice, so that the freeze has a number to hold
   to; the reviewer may challenge either at S15.
 - **S15, the gate.** `analyst` reviews S11–S14; `graph-dba` checks SL-3 and SL-5.
-  - **All pass:** v1 (the spec plus `-spec2`) freezes. If SL-7 lists deltas, the freeze applies to
-    the amended schema, which S16's `-spec3` records.
+  - **All pass:** v1 (`-spec3`) freezes. If SL-7 lists deltas, a `-spec4` records the amended
+    schema and the freeze applies to it.
   - **Any fail:** v1 stays provisional until P1 exit; the P1 plan carries the freeze.
-  - **Either way:** the record names the bundle spec plus `-spec2` as the contract, confirms S10
-    encodes every `-spec2` [pre-freeze] item, lists the [P-later] items and `-spec2` §1.6/§1.7
-    "frozen, untested" (or "provisional, untested"), and S16 writes `-spec3` if anything changed;
+  - **Either way:** the record names `-spec3` (or `-spec4`) as the contract, confirms S10 encodes
+    every [pre-freeze] item of §1, lists the [P-later] items and §1.6/§1.7
+    "frozen, untested" (or "provisional, untested");
     S17, S28, S30 and S33 proceed — marked "against provisional v1" if v1 did not
     freeze, and re-checked at P1 exit.
 
@@ -886,7 +885,7 @@ S35 fixes, as a numbered table, every planted item. The categories that **must**
 | `cpg/sandbox/scripts/cpg-content-check.sc` | S08's follow-up round only | S11, S25, S28, S39 run it through the runner; none edits it (§2 D15, P3-7) |
 | **Runner-consumer rule** (P3-10) | — | Every step that runs `offline-run.sh` (S11, S24 item 5, S25, S28, S39) depends on S08's follow-up round, so all of P0's measured runs use one runner |
 | `cpg/ccg/keynorm.py`, `cpg/tests/test_keynorm.py` | S12's P0-11a only | S12's P0-11b, S49's `match_keys.py` and the P1 assembler import `mask_http_segments`; none edits or copies it (§2 D19) |
-| `cpg/tests/test_bundle.py` | S10 (incl. its follow-up round) → S16 | S16 re-points `SPEC_TEXT`/`SPEC2_TEXT` at `-spec3`, in both modes (P3-2) |
+| `cpg/tests/test_bundle.py` | S10 (incl. its follow-up round) → S16 | S16 re-points `SPEC_TEXT`/`SPEC2_TEXT` at `-spec3` (P3-2) |
 | `cpg/infra/README.md` | S01 only | — |
 | `claude/graph-dba/falkordb-quirks.md` | S07 (done) → S23 | strictly sequential; nobody else writes it in P0 |
 | `docs/plans/connected-code-graph-p0-graph.md` | S20 (§2) → S21 (§3–§4) → S22 (§5) → S23 (§6) → S17 (§1) | one owner, sequential; S17 waits for S23 |
@@ -908,7 +907,7 @@ S35 fixes, as a numbered table, every planted item. The categories that **must**
 |---|---|---|
 | S03 | the encoder table of bundle spec §11 as amended by `-spec2` §1.12 and §4.1 (tuples, hash, golden vectors, records, order, `qname` grammar, `repoId`, locators incl. `config`/`unit`, `keyNorm` incl. step 8a, reason codes, graph mapping, argv and `bindValue` gates) | S09, S10 (+ follow-up), S11, S12, S25 (brief excerpt), S56 (point names), S35/S39, S06/S40/S52, S33, S17 — per bundle spec §11 and `-spec2` §4.1 |
 | S04 | the argv audit format, escape axes, flag lists, `joern --script` form — with `docs/plans/connected-code-graph-egress-spec2.md` (directive rule, `@AUDIT_ID@`, closed runner environment) | S08 (+ follow-up); S11, S25, S28 (scripts through the runner; output stems via `@AUDIT_ID@`) |
-| **S15** | **whether bundle schema v1 and the graph model freeze** (and any SL-7 deltas) | S16, S17, S28 (projection script version), S30, S33, S34 |
+| **S15** | **whether bundle schema v1 and the graph model freeze** (and any SL-7 deltas) | S17, S28 (projection script version), S30, S33, S34 |
 | S20 | BFS vs `algo.SSpaths`, and per-level latencies | S22, S33, S17 |
 | S22 | the `TIMEOUT_MAX` default and the lock ttl; the load-under-cap rule | S17, S50 |
 | S23 | the batch ceiling (§2 D16) | S17; P1 loader |
@@ -1341,8 +1340,7 @@ greps (S26, S56, S57), and `analyst`'s independent checks of the adjudication lo
 | Doc | `teco` check (S07, S51), or `analyst` (S50) | the edit |
 | Advisory (S58) | none; `architect` dispositions each finding | the security-expert report |
 
-**P0 exit** (`teco`) means all of: (1) every row of §3 is gated — **S16 included, in whichever mode
-it ran** (it always runs, P3-8);
+**P0 exit** (`teco`) means all of: (1) every row of §3 is gated — **S16 included** (it always runs, P3-8);
 (2) every §8 row points to a recorded decision; (3) S15's freeze outcome, with its "frozen,
 untested" list, is in the ledger; (4) S58's dispositions are recorded (done, in `-spec2`); (5)
 **`docs/plans/connected-code-graph-bundle-spec3.md` exists, is gated, and `Supersedes:` the bundle
@@ -1559,8 +1557,8 @@ evidence-chain length (for ML §3.6's 0.98 revisit) → P1's first AC-5 gate, S4
 distribution being a prior only; `Link` counts under runtime-built URLs at scale → P1. **Later than
 P1:** the `security-expert` HMAC and canary review before P5; the Arduino slot after P2.
 
-**Follow-ups owned by `architect`:** BF16 into proposal §3.8 (S50); `-spec3` (S16, or before P0
-exit; required); the proposal's `Extended by:` pointer to this document (S50); `-spec2` F-3/F-4/F-12
+**Follow-ups owned by `architect`:** BF16 into proposal §3.8 (S50); `-spec3` (S16, before S15;
+required); the proposal's `Extended by:` pointer to this document (S50); `-spec2` F-3/F-4/F-12
 and G-1's rendering in S33. (Eval-protocol Q2 and S58's dispositions are done, in `-spec2`.)
 
 **Follow-ups owned by others:** `data-scientist` — `-spec2` F-8 is **delivered by
@@ -1766,7 +1764,7 @@ step (or section) whose done-condition encodes the fix, so `teco` can grep it th
 | EP2-3 | §3 S12: writes the shared 8a function in `cpg/ccg/`; K1–K22, K30–K32 provider form; SL-1/SL-2 unchanged | EP2 §3, §1.1 | §3 S12 P0-11a "K1–K22 and K30–K32"; §9.1 `keynorm.py` row |
 | EP2-4 | m4 / Q1: file and module for the shared function; S12 → S49 ordering | EP2 §1.1, §4 Q1, §5 m4 | §2 D19 (`cpg/ccg/keynorm.py`, `mask_http_segments`; S49 after P0-11a); §5.2 `keynorm.py` row |
 | EP2-5 | §3 S14, S30, S34: none | EP2 §3 | nothing to place |
-| EP2-6 | §3 S40: manifest records both documents' versions and `screen: {bs2Version, bundlePySha256}` | EP2 §3, §1.5 | §3 S40 "Per EP2 §1.5" |
+| EP2-6 | §3 S40: manifest records both documents' versions and `screen: {specVersion, bundlePySha256}` | EP2 §3, §1.5 | §3 S40 "Per EP2 §1.5" |
 | EP2-7 | §3 S41–S44, S52: none | EP2 §3 | nothing to place |
 | EP2-8 | §3 S45: `normalize` applies EP2's `http` rule; 8a rewrites are V3 replace-and-log; method owner reviews | EP2 §3, §1.1 | §3 S45 "EP2's `http` `keyNorm` rule"; Deps |
 | EP2-9 | §3 S47: C through `normalize_contract` before `anchorId`; gold stored normalized, rewrites logged and counted; unserved-gold check; `protocol` string; `--check-report` two probes | EP2 §3, §1.2, §1.4, §1.5 | §3 S47 "`normalize_contract`", "`protocol` string", "two probes" |
