@@ -100,6 +100,17 @@
   goes to `teco` (`docs/plans/connected-code-graph-coordination.md` is the state of record).
   Owner: `teco`.
 
+- **C-324 — Decide what to do with the `cpg_deprecated_salesperson` worked example in the CPG
+  skills.** 🔵 The graph is deleted (2026-09-18) and the component it described is gone from the
+  repo (removed after commit `3a686012`), yet five live skill files still use it as their
+  illustrative example of a frozen/retired-component graph and of the `:CpgBuildInfo` key set:
+  `skills/joern-cpg/references/cpg-model.md`, `skills/cpg-analysis/references/freshness.md` (two
+  places), and comments in `skills/joern-cpg/scripts/git-provenance.sh` and `pipeline.sh`. The
+  findings they cite (labels absent on `pysrc2cpg` graphs; marker key set) were observed there, so
+  the call is whether to keep them as provenance, reword them to cite `cpg_falkorchat` evidence
+  only, or trim. Only prose and comments, no behavior. Owner: unassigned (skills are `graph-dba`'s
+  and `cobb`'s to judge).
+
 ### Deferred ⚪
 
 - **C-323 — Bulk repath of the remaining module-anchored references to full root-anchoring (S5).**
