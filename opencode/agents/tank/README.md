@@ -14,17 +14,19 @@ Full design and rationale: `opencode/docs/plans/devops-opencode-headless.md`. Se
 
 - [OpenCode](https://opencode.ai/) installed (`npm install -g opencode-ai`) and on your `PATH`.
 - [LM Studio](https://lmstudio.ai/) installed, with the local server running at
-  `http://localhost:1234/v1`, serving `tank`'s model (`mistralai/ministral-3-3b` until the
-  `qwen/qwen3-4b-2507` trial decides). General walkthrough:
-  [`opencode/docs/manuals/local-llm.md`](../../docs/manuals/local-llm.md); confirm with
-  `curl http://localhost:1234/v1/models`.
-  - **Once, on the LM Studio host, for qwen:** save its per-model defaults (*My Models →
-    `qwen/qwen3-4b-2507` → ⚙*): Context Length = `TANK_MIN_CONTEXT_LENGTH` and parallel =
-    `TANK_REQUIRED_PARALLEL` (both in `scripts/model-preflight.sh`). Every load path uses them,
-    JIT included, so `tank` and falkor-chat's `:8200` share one copy at that context. With one
-    slot their requests queue (`docs/plans/standard-local-model.md` R2).
-  - **Explicit qwen loads:** never pass `-c` or `--parallel`; always pass `--identifier
-    qwen/qwen3-4b-2507`; never load it while `lms ps` already lists it.
+  `http://localhost:1234/v1`, serving `tank`'s model, `mistralai/ministral-3-3b`. General
+  walkthrough: [`opencode/docs/manuals/local-llm.md`](../../docs/manuals/local-llm.md); confirm
+  with `curl http://localhost:1234/v1/models`.
+  - **Load ministral by hand, before a run:** ministral has no per-model default to rely on, so
+    load it at a context of at least `TANK_MIN_CONTEXT_LENGTH` (20480) and parallel
+    `TANK_REQUIRED_PARALLEL` (1), both in `scripts/model-preflight.sh`:
+    `lms load mistralai/ministral-3-3b -c 20480 --parallel 1 --gpu max --identifier
+    mistralai/ministral-3-3b -y`. Never load it while `lms ps` already lists it.
+  - **Unload it before a demo and before returning to everyday use:** falkor-chat's
+    `ensure_demo_models` refuses any ministral context other than 8192
+    (`falkor-chat/scripts/ensure_demo_models.py`), and the preflight in turn refuses a ministral
+    loaded at the demo's 8192. The two setups cannot share one copy; switch with `lms unload
+    mistralai/ministral-3-3b`.
   - **Preflight:** each outer script runs `scripts/model-preflight.sh` before `opencode run` and
     exits 1 with a fix-it message when the copy breaks the above. It only reads; it never loads
     or unloads. `TANK_MODEL_PREFLIGHT=0` skips it (for an LM Studio without `/api/v1`).
@@ -146,10 +148,11 @@ See [`opencode.json`](opencode.json). Key pieces (same shape as the retired `sev
 
 ## Choosing a model
 
-`mistralai/ministral-3-3b` is the shipped default — it completed the deny+report flow correctly
-and quickly in live testing (plan §2.3). A trial of `qwen/qwen3-4b-2507` is pending under
-`docs/requirements/standard-local-model.md`; select it per run with `opencode run -m
-lmstudio/qwen/qwen3-4b-2507`.
+`mistralai/ministral-3-3b` is `tank`'s model: it completed the deny+report flow correctly and
+quickly in live testing (plan §2.3), and the `qwen/qwen3-4b-2507` trial failed (qwen made up
+findings in all three TP-001 runs; `docs/test-reports/standard-local-model-report.md`). It is
+the second accepted exception to the one-chat-model rule, alongside the salesperson demo, so
+running `tank` means a second chat model in memory.
 
 ## Troubleshooting
 
@@ -165,6 +168,6 @@ roles are supported`, slow reasoning models, slow JIT-loaded first response) are
 | A run hangs indefinitely with no output | Something in `permission.bash` resolved to `"ask"` — that hangs forever with no human present (verified live, plan §2.3). This shouldn't happen with the shipped table (`allow`/`deny` only); if you've edited it, check for a stray `"ask"`. |
 | `tank` refuses a bring-up/teardown you expected to work | Check the exact error it reported — `not a known environment` (fix `environments.json`), `already running, not started by me`, `not something I brought up`, or `marker present but stale` (see [The state marker](#the-state-marker)) all mean exactly what they say; `tank` never guesses past a refusal. |
 | Outer script exits 1 with `REFUSED: <k> copies of <id> loaded (<ids>)` | More than one copy of the model is loaded. Unload the extra one(s): `lms unload <id:n>`. |
-| `REFUSED: <id> loaded at <c>, tank needs >= <min>` | The copy was loaded with a smaller context. When nothing else is using it, `lms unload <id>` and let the per-model default reload it (Prerequisites). |
+| `REFUSED: <id> loaded at <c>, tank needs >= <min>` | The copy was loaded with a smaller context. When nothing else is using it, `lms unload <id>` and reload it by hand as in Prerequisites. |
 | `REFUSED: <id> loaded with parallel <p>, tank needs <required>` | Same fix as the row above. |
 | `<id> not in LM Studio` / `not reachable at <root>` | Fix the id in `opencode.json`, or start LM Studio's server. |
