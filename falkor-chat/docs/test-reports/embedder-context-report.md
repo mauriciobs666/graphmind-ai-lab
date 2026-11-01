@@ -185,3 +185,155 @@ exit=0
 
 A second run printed `nothing to do` and `embedder context 4096 (lms ps)`, exit 0. The VRAM and
 paging re-measure (K-099 item 4) is not part of this report.
+
+## Measurement: VRAM and paging
+
+K-099 item 4: re-measure against `docs/test-reports/salesperson-single-model-fit-report.md`
+("fit report", 2026-10-21) with the embedder at 4096, plus a same-day A/B at 8192. Stakeholder
+authorization (2026-10-31): unload `qwen/qwen3-4b-2507` and measure.
+
+**Method — replicated from the fit report:**
+- Instruments: `nvidia-smi` `memory.used`, plus the Windows counters `\GPU Process Memory(*)\Dedicated Usage`
+  and `\Shared Usage`, per process, on the NVIDIA adapter, via `powershell.exe Get-Counter`.
+  The adapter LUID is now `0x00012fe0` (it was `0x00011343` in the fit report; it changes across
+  reboots).
+- Order: load ministral alone, read; add the embedder, read immediately; 4 sequential chats, read;
+  1 embed then a batch of 5, read; 2 chats, read.
+- Harness: scratch `bench.py`, a re-implementation of the fit report's described harness (its
+  `bench.py` was not preserved). Chats go to `POST /api/v0/chat/completions` with temperature 0,
+  `max_tokens` 256, a synthetic bakery catalog system prompt with a per-request nonce first, and
+  "three recommendations" as the ask. Embeds send one short Portuguese sentence to
+  `POST /api/v0/embeddings`.
+- Not replicated: the fit report's exact prompt text. This run's prompt token count is recorded
+  per request instead.
+- Runtime differs: `cuda12-avx2@2.67.0` today, against 2.59.0 in the fit report. LM Studio is app
+  `0.4.26+4`.
+
+**Blocked attempt (21:40 local).** The harness permission check denied this agent's
+`lms unload qwen/qwen3-4b-2507`. At that point qwen was resident alone (context 16384,
+`ttlMs` 36000000, i.e. JIT-loaded) at 4869 MiB dedicated. The user then unloaded qwen
+themselves, and the run below started from an empty LM Studio.
+
+**Prompt size differs from the fit report.** This harness's prompt measured **~6,370 tokens**
+(`usage.prompt_tokens`), about twice the fit report's ~3,100–3,170. So TTFT is not comparable
+across the two reports; it is comparable within this run's A/B. KV memory is allocated for the
+full 8192-token context at load either way, so the memory readings are unaffected.
+
+### Run, embedder at 4096 (2026-10-31, local time)
+
+`lms ps --json` was recorded before and after every load and unload, and between steps. No model
+other than the two demo models appeared at any point.
+
+| step | `lms ps --json` (identifier: contextLength) |
+|---|---|
+| arrival 21:42:17 | `[]` |
+| after `lms load mistralai/ministral-3-3b -c 8192 --gpu max --identifier mistralai/ministral-3-3b -y` (5.16 s, 4.18 GiB) 21:42:35 | ministral: 8192 (parallel 4) |
+| after `ensure_demo_models.sh` (loaded embedder `-c 4096`; printed `embedder context 4096 (lms ps)`; exit 0) 21:42:54 | ministral: 8192, embedder: 4096 |
+| after round 1 / after embeds / after round 2 | unchanged |
+
+GPU memory (MiB; `llama-server` = ministral, pid 11760; the embedder runs in an LM Studio process,
+pid 5840; ded = Dedicated Usage, sh = Shared Usage):
+
+| reading | `nvidia-smi` used | ministral ded / sh | embedder proc ded / sh | adapter ded / sh |
+|---|---|---|---|---|
+| empty | 137 | — | — | 135 / 17 |
+| ministral alone | 5461 | **5351** / 112 | — | 5465 / 129 |
+| + embedder 4096, immediately | 5826 | **4391** / 176 | **1377** / 324 | 5822 / 518 |
+| after round 1 (4 chats) | 5839 | 5291 / 176 | 435 / — | 5787 / 190 |
+| after embeddings (1 + 5) | 5837 | 4395 / 176 | 1385 / 324 | 5828 / 515 |
+| after round 2 (2 chats) | 5829 | 5291 / 176 | 425 / 324 | 5778 / 515 |
+
+Throughput:
+- Round 1 (4 chats, prompt 6371–6375 tokens, 256 completion tokens each): 37.46 / 37.43 / 37.44 /
+  37.37 tok/s. TTFT 2.552 s (the first after load), then 1.582 / 1.583 / 1.582 s.
+- Embeddings: the first after the chats took 0.850 s. A batch of 5 then took 0.039 / 0.059 /
+  0.019 / 0.018 / 0.018 s.
+- Round 2 (2 chats right after the embeddings): 37.44 / 37.45 tok/s, TTFT 1.589 / 1.581 s.
+
+The swap pattern is the fit report's: whenever the embedder runs, WDDM moves part of ministral out
+of VRAM (5351 → 4391–4395 MiB dedicated, **~960 MiB**), and it moves back for the next chat.
+
+### Same-day A/B: embedder at 8192
+
+Ministral was reloaded fresh first, so both arms start from a clean ministral load. After the
+4096 arm, ministral sat at 5291/176 MiB instead of its clean-load 5351/112, the same drift the
+fit report saw after paging.
+
+| step | `lms ps --json` (identifier: contextLength) |
+|---|---|
+| before `lms unload text-embedding-qwen3-embedding-0.6b` 21:44:41 | ministral: 8192, embedder: 4096 |
+| after it 21:44:42 (ministral read 5291 ded / 176 sh, `nvidia-smi` 5332) | ministral: 8192 |
+| after `lms unload mistralai/ministral-3-3b` 21:45:04 (`nvidia-smi` 106) | `[]` |
+| after `lms load mistralai/ministral-3-3b -c 8192 --gpu max --identifier … -y` 21:45:15 | ministral: 8192 |
+| after `lms load text-embedding-qwen3-embedding-0.6b -c 8192 --gpu max --identifier … -y` (609.54 MiB) 21:45:25 | ministral: 8192, embedder: 8192 |
+| after round 1 / after embeds / after round 2 | unchanged |
+
+GPU memory, in MiB. `llama-server` (ministral) is pid 2204; the embedder runs in LM Studio process pid 13456.
+
+| reading | `nvidia-smi` used | ministral ded / sh | embedder proc ded / sh | adapter ded / sh |
+|---|---|---|---|---|
+| ministral alone | 5408 | **5351** / 112 | — | 5412 / 128 |
+| + embedder 8192, immediately | 5840 | **3653** / 176 | **2130** / 484 | 5832 / 676 |
+| after round 1 (4 chats) | 5869 | 5291 / 176 | 465 / — | 5787 / 188 |
+| after embeddings (1 + 5) | 5886 | 3691 / 176 | 2138 / 484 | 5885 / 676 |
+| after round 2 (2 chats) | 5843 | 5291 / 176 | 439 / — | 5847 / 190 |
+
+Throughput, with the same prompts (6371–6376 tokens) as the 4096 arm:
+- Round 1: 37.42 / 37.12 / 37.31 / 37.35 tok/s. TTFT 3.143 s (the first after load), then
+  1.582 / 1.584 / 1.581 s.
+- Embeddings: the first after the chats took **2.127 s**. The batch of 5 took 0.092 / 0.017 /
+  0.017 / 0.016 / 0.017 s.
+- Round 2: 37.15 / 37.28 tok/s, TTFT 1.594 / 1.585 s.
+- Wall time for round 2's first chat was 9.40 s, against 8.52 s at 4096. Steady-state chats ran
+  8.15–8.56 s in both arms. The page-in shows up in wall time, not in LM Studio's TTFT stat.
+
+### Restore and end state
+
+| step | `lms ps --json` (identifier: contextLength) |
+|---|---|
+| before `lms unload text-embedding-qwen3-embedding-0.6b` 21:47:14 | ministral: 8192, embedder: 8192 |
+| after it 21:47:15 | ministral: 8192 |
+| after `ensure_demo_models.sh` (loaded embedder `-c 4096`; `embedder context 4096 (lms ps)`; exit 0) 21:47:21 | ministral: 8192 (parallel 4), embedder: 4096 — both idle, `ttlMs` null |
+
+End-state counters, idle: `nvidia-smi` 5819/6141. Ministral (pid 2204) 4395 ded / 176 sh, and the
+embedder process (pid 9460) 1377 / 324. The embedder holds its VRAM right after a load, as in both
+arms, until the next chat pages it out. qwen was not reloaded, and no model other than the two
+demo models appeared during the run.
+
+### Comparison
+
+All figures are in MiB. "Evicted" means ministral's clean-load dedicated usage minus its usage
+while the embedder is resident.
+
+| figure | fit report, 2026-10-21, embedder 8192 | today, embedder 8192 (A/B) | today, embedder 4096 |
+|---|---|---|---|
+| ministral alone, ded / sh | 5353 / 112 | 5351 / 112 | 5351 / 112 |
+| embedder process while active, ded / sh | 2130 / 484 (2136 after embeds) | **2130 / 484** (2138 after embeds) | **1377 / 324** (1385 after embeds) |
+| ministral while embedder active, ded | 3689 (3693 after embeds) | 3653 (3691 after embeds) | **4391** (4395 after embeds) |
+| ministral evicted when the embedder runs | ~1,664 | 1,698 (1,660 after embeds) | **960** (956 after embeds) |
+| embedder process after chats, ded | 547 | 465 / 439 | 435 / 425 |
+| `nvidia-smi` used, both resident | 5839 | 5840–5886 | 5826–5839 |
+| first embed after chats, s (1 sample) | 1.385 | 2.127 | 0.850 |
+| generation tok/s | 38.5–40.5 (prompt ~3.1k) | 37.12–37.42 (prompt ~6.4k) | 37.37–37.46 (prompt ~6.4k) |
+
+Sources:
+- The fit report column is from `docs/test-reports/salesperson-single-model-fit-report.md`: the
+  "+ embedder" table, the Throughput section and the Verdict.
+- The two "today" columns are from this section's tables.
+- Today's 8192 arm reproduces the fit report's embedder figures exactly (2130 / 484), so the
+  instrument and method carried over.
+
+### Headline
+
+**Yes. Loading the embedder at 4096 reduced both, but did not remove the oversubscription.**
+These are same-day A/B figures on the same box, runtime and prompts.
+- **Embedder VRAM while active:** 2130 → **1377 MiB** dedicated (**−753 MiB, −35%**), plus
+  484 → 324 MiB shared.
+- **Ministral paged out whenever the embedder runs:** ~1,660–1,700 → **~960 MiB**
+  (**about −700 to −740 MiB, roughly −43%**). It still swaps back in for each chat, so the pair
+  still fits only through WDDM paging, now with a smaller swap.
+- **Not changed:** generation speed (37.1–37.5 tok/s in both arms), steady-state TTFT
+  (1.58 s at a 6.4k prompt in both) and total `nvidia-smi` use (~5.8 GiB of 6.0 in both).
+- **Timing, one sample per arm, so indicative only:** the first embedding after a chat took
+  0.85 s at 4096 against 2.13 s at 8192. The first chat after the embeddings took 8.52 s wall
+  against 9.40 s.
