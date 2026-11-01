@@ -248,3 +248,47 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 - 2026-11-01: Pass 25 (U3e.1) → approve w/ suggestions (analyst a02c86cb14ba399b7, 88.0k tokens / 28 tools). P25-m1 (`validate_pack` accepts a missing `provider` that `from_pack` refuses; same gap exists for the labeler) and P25-n1 (mutants X2 and X3 survive) → same coder ac2d3c0dea925d41a. Generator = labeler is not a pack-contract refusal (plan2 §3.5 and plan4 §3.7 put it at generation; the importer repeats it); no finding. Feature-close REVIEW.md candidate if it recurs: a loader's refusals must be a subset of `validate_pack`'s, pinned by one probe.
 - 2026-11-01: U6.2 delivered (devops a350c1b9e32b6e8d2, 241.3k tokens / 39 tools; report §9, now 14,355 words). Within spend: 5 Sonnet sessions, 1 killed. Gates (a), (b), (e) pass. (c) passes but surfaced a precedence defect: a killed driver transcript has no guard `hook_success` on `Agent`. (d) is undecidable as run, because the user settings have no `hooks` key. **(f) fails:** under `-p` a hook `allow` is the permission decision, so the out-of-bounds Write succeeded and the guard is the only bound. teco verified the planted file exists and the 28 `permissionDecision` entries all read accept/hook. Rework → fresh `architect` a2ac5b19e6660c0d9, plan6 v1.3; the original architect is past 250k. The U5.5 fix round stays held until v1.3 is gated.
 - 2026-11-01: U3e.1 **accepted** (fix round by coder ac2d3c0dea925d41a, now at 166.8k tokens / 78 tool uses). On teco's re-run: 3587 passed, 5 deselected, 2 xfailed, ruff clean. Mutants: X2, X3 and Y1–Y6 are killed. teco's own mutant (the shared check reads `model` for every key) → 7 red; file restored and cmp'd. Committed with Pass 25. Next model-bench unit: U3e.2 (tdd-engineer). U6.6 stays held behind the plan6 v1.3 gate.
+- 2026-11-01: U3e.2 dispatched to `tdd-engineer` a4e2a09c3ebd5986f (plan4 §3.9 design effect and its §5 row; ML note §Q6 is authoritative on the formula). Review gate: `analyst` impl, plus `data-scientist` on the formula if the gate flags it.
+- 2026-11-01: Plan6 v1.3 delivered (architect a2ac5b19e6660c0d9, 7,025 words): guard is the only bound (§3.3, canonical paths, fail-closed, `onFailure: block`), `permissionDenied` re-keyed on `permissionDecision`, new `guardBreach` halt, in-flight rule (killed run → REISSUE incomplete), `--setting-sources project` dropped so gate (d) is moot, new U6.7 guard-deny probe (devops; gates (g)/(h)) before U5.5. Re-gate → fresh `analyst` (Pass 3; ae890cc951e37e264 is past 250k). U6.7 spend → stakeholder.
+- 2026-11-01: **Stakeholder approved the U6.7 spend** (one short Sonnet session), to run after the plan6 v1.3 gate passes.
+- 2026-11-01: U3e.2 delivered (tdd-engineer a4e2a09c3ebd5986f, 152.3k tokens / 54 tools): on teco's re-run, 3601 passed, 5 deselected, 2 xfailed (3587 before), and ruff is clean. The engineer's 7 mutants (M1–M6, incl. M3a/M3b) are all killed. teco's own mutant (the ids reversed against the outcomes in `_cell_design_effect`) → 2 red; file restored and cmp'd. Gate → `analyst` a02c86cb14ba399b7, impl Pass 26 (resumed; it holds the model-bench decision-bar context).
+- 2026-11-01: Plan6 Pass 3 (analyst abfd24f0ca646f750, 182.7k tokens / 40 tools) → **needs changes**: P3-M1 (a fail-closed guard deny is counted as `hookDenied`, so a broken guard drains the campaign silently), P3-M2 (U6.7 gates (g)/(h) can pass with the hook inert), P3-m1–m3, two nits, and growth-stops (+1,099 words, §2 restates report §9, status lines in the plan). Stopping condition: v1.4 closes by a teco line check (see Pass 3). Falsifier: a new major in §3.3/§3.4 means remove features instead (non-zero exit + `onFailure: block`). Two proposed root `REVIEW.md` lines are held for feature close. v1.4 goes to the same architect a2ac5b19e6660c0d9. U6.7 stays held behind it.
+- 2026-11-01: Pass 26 (U3e.2; analyst a02c86cb14ba399b7, 147.8k tokens / 51 tools) → **approve with suggestions**. It is in `docs/reviews/typed-decision-models-impl.md`, which is correct: teco's brief named the plan4 impl doc by mistake. P26-m1 (FR-10 `KeyError` on a stored record whose id is not in the pack), P26-m2 (incumbent-worse discordance is not pinned) and P26-n2 (README wrap) go to the same tdd-engineer a4e2a09c3ebd5986f, not to a fresh coder as the gate suggested: it holds the context and is at 152k. P26-n1 (`DE 1.00` printed when no ICC was estimable), the §Q6 n₀ line, the ANOVA ICC on a rare binary outcome, and a cap or m₀ ≈ 3 for the real run layout go to a fresh `data-scientist` a615087b155a2f402, in parallel (method note only; disjoint files).
+- 2026-11-01: **Paused by the stakeholder (out of credits).** In flight at pause:
+  - (a) plan6 v1.4 on architect a2ac5b19e6660c0d9, against Pass 3's stopping condition;
+  - (b) the U3e.2 fix round (P26-m1, m2, n2) on tdd-engineer a4e2a09c3ebd5986f;
+  - (c) the design-effect method rulings on data-scientist a615087b155a2f402 (note v1.12 → v1.13?).
+
+  **Resume:** first `git status`/`git diff`, then check the on-disk state:
+  - plan6's version line;
+  - Pass 26 and the model-bench diff;
+  - the note's version line.
+
+  `SendMessage` each id if it still resolves. Otherwise use the **cold-start fallback**: brief a fresh delegate of the same type from that same on-disk state.
+  - (a): Pass 3 in `docs/reviews/typed-decision-models6.md` plus the plan;
+  - (b): Pass 26 in `docs/reviews/typed-decision-models-impl.md` plus `git diff -- model-bench/`;
+  - (c): Pass 26's four data-scientist questions.
+
+  Held uncommitted:
+  - U5.5 (decision-models audit plus the Pass 8 review);
+  - plan6 v1.3 → v1.4, review Pass 3, report §9;
+  - U3e.2 (model-bench) plus Pass 26;
+  - this ledger.
+
+  Queued: the U3e.2 commit after (b) is verified and (c) rules; U6.7 (spend approved) after the plan6 line check; the U5.5 fix round; U6.6; U2.4; then the decision-models chain.
+- 2026-11-01: **Resumed by the stakeholder.** All three in-flight units had delivered.
+- 2026-11-01: Plan6 v1.4 delivered (architect a2ac5b19e6660c0d9, 176.7k tokens / 11 tools; 6,988 words, down from 7,025). It adopts the falsifier's alternative: the guard exits 1 on an internal error, and `onFailure: block` makes that one halting class, `guardError`. **teco line check against Pass 3's stopping condition: met.**
+  - P3-M1: the `guardError` row in §3.4, plus the U5.5 fixture pair.
+  - P3-M2: `d1.txt`/`d2.txt`/`d3.txt` at the kit root, every Write attempted, (g)/(h) requiring the `tool_use` plus a hook-log line, and (i) D3 as the positive control.
+  - P3-m1: the in-flight rule covers every call.
+  - P3-m2: a pre-hook validation row, disjoint from both the in-flight and the guard-failure rows.
+  - P3-m3: the audit doesn't import the guard; a shared table of bounds cases.
+  - Growth: §2 is citations; the U6.2 row reads 'Delivered (report §9)'.
+
+  Accepted without a Pass 4. Open dependency: if (h) finds no distinguishing attachment, the work returns to the architect (fallback: a marked deny).
+- 2026-11-01: U3e.2 fix round delivered (tdd-engineer a4e2a09c3ebd5986f, 177.1k tokens / 24 tools).
+  - teco's re-run: 3605 passed, 5 deselected, 2 xfailed; ruff clean. G1 and G2 are killed.
+  - teco's mutant (the FR-10 call site's `strata` silently admitting the ghost id) → 1 red; file restored and cmp'd.
+
+  **U3e.2 accepted as built against note v1.12 / plan4 §3.9**, and committed with Pass 26. The engineer's fix round was not re-gated: those findings were minors, and teco re-verified them by suite and mutant.
+- 2026-11-01: Note v1.13 delivered (data-scientist a615087b155a2f402, 93.3k tokens / 20 tools; 9,581 → 10,027 words). It rules a **method change**: one ICC pooled per family (the FR-1 cells; a point's FR-10 classes) with each cell's own Kish m₀. A fallback prints 'not estimable (<reason>) — DE 1.00' on a family line, and each line prints only `DE <x.xx>`. n₀ is stated in §Q6. No cap below m₀. m₀ is about 3.7 for guard, 3.1 for message type and 6.3 for join-in. Next: a note re-gate (`analyst`, `docs/reviews/typed-decision-models-ml.md`). Then the §3.9 amendment (architect; plan4 has been executed against, so in a successor or extending plan) and a code unit **U3e.3** (tdd-engineer), with the DS's mutants: per-cell instead of pooled, sums of squares about the grand mean, n₀ = N/g. U2.4 waits behind U3e.3.

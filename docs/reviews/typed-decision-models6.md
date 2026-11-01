@@ -277,3 +277,143 @@ Any further defect in the runner's internals (signals, `/proc`, lock handoff) th
 
 Target: root `REVIEW.md`, *Always check*. Source: P2-M1, and Pass 1 M2 together with the P2-m2 residue.
 - **Addition:** In a plan for unattended operation, every refusal or halt the plan adds is checked against what an ordinary user action on the same machine changes (config edits, logins, other sessions). Each refusal must also show up in a status command, not only in a run's exit line.
+
+## Pass 3 (2026-11-01)
+
+**Scope.** Plan6 v1.3 (7,025 words, uncommitted) against v1.2 at `276d0869` (`git diff`). I checked it against:
+- report §9 (all subsections);
+- the U6.2 headless transcripts, the kit's `hook-log.jsonl`, and the attempt-1 transcripts;
+- the local transcript corpus under `~/.claude/projects/`, for `permissionDecision` shapes and parallel tool-use ordering;
+- `code.claude.com/docs/en/hooks` and `/permission-modes`, read 2026-11-01;
+- the installed 2.1.316 bundle, by `grep -a`.
+
+I ran no `claude` session. My scripts were read-only and live in the scratchpad (`p3scan.py`, `p3pd.py`, `p3err.py`, `p3par.py`).
+
+**Verdict: needs changes.** There are two majors:
+- **P3-M1:** the guard's new fail-closed `deny` turns a broken guard into counted voids, which drain silently.
+- **P3-M2:** U6.7's gates can pass without testing anything.
+
+Both come from v1.3's own fixes, as do three of the four minors. The design premises hold: `onFailure: "block"` and "deny/ask rules after `allow`" are both confirmed. See the stopping condition.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the evidence is transcripts, docs and the CLI bundle.
+
+### Earlier findings
+
+- **P2-M1, P2-M2, P2-m1–m3, P2-n1:** fixed at v1.2 (`teco` line check, ledger 2026-11-01). §3.7 is unchanged in v1.3, with a 0-word delta. §3.2's named-key refusals stand, and v1.3 adds a correct reason to the hash clause.
+- **Folded in since Pass 2:** U6.2's spend approval was used, and the row is now delivered. U6.7 needs a new approval, which is an open item, not a finding.
+
+### The six checks
+
+1. **`onFailure: "block"`: holds.**
+   - **Docs** (verified): `"onFailure": "block"` exists on `command` hooks from v2.1.295. A failure is one of: cannot start, exits other than 0 or 2, times out, or prints invalid or schema-failing JSON. With `block`, any of these "does what exit code 2 does": on `PreToolUse` it blocks the call. It is ignored for async hooks and on `Stop`/`SubagentStop`.
+   - **Bundle** (verified, 2.1.316): the command-hook schema has `onFailure: U(["continue","block"])`, with the same description ("the failure counts as exit code 2"). The handler sets `blocked: true` with "timed out"/"failed; blocking because onFailure is \"block\"".
+   - **Deny/ask after `allow`:** the hooks page says "Deny and ask rules are still evaluated regardless of what the hook returns" (verified, docs only; not probed).
+   - **Unstated exception:** `allow` also does not skip "actions no mode auto-approves" or network-path reads. Neither applies to `Read`/`Write`/`Agent` here, except an explicit ask rule, which §3.2's hash already covers. No finding.
+2. **In-flight rule: holds for completed runs; fails on one shape of killed run.**
+   - **Completed runs** (verified on H1, H2, H4 and H6): every driver `Agent` and all 13 subagent tool uses have a guard entry and a `tool_result`, so the in-flight set is empty. That is also true by construction, because the first conjunct needs the `Agent` result to be absent.
+   - **H3a** (verified): the in-flight set is exactly the driver's `Agent`. All 11 subagent tool uses are paired.
+   - **The driver's `hook_success` is buffered** until the `tool_result` is written. H1 shows it after two `tools-used` lines, stamped 33.7 s, written with the result at 47.3 s. So an in-flight call never has a guard entry, and the stated trade-off is real.
+   - **The defect:** "the last `tool_use`" misses parallel calls. See P3-m1.
+   - **The trade-off:** I judge it acceptable, and it can be narrowed (P3-n1).
+3. **`permissionDenied` / `guardBreach`: consistent, total, one gap.**
+   - All 28 recorded values are `{"decision":"accept","source":"hook","reasonType":"hook"}`: 24 subagent `tool_result`s and the driver's 4 `Agent` results. H3a's driver has none. (Verified; §2's "the driver's included" is right.)
+   - In the corpus, tool errors after a hook `allow` still carry `accept`/`hook` (41 `is_error` cases). So the re-keyed row does not misfire on tool failures.
+   - The rows partition the guard decision: allow + overridden → `permissionDenied`; allow + out of bounds → `guardBreach`; no entry → `hookMissing`; deny → `hookDenied` (tier 5); allow + in bounds + foreign part → plan4's narrowed row.
+   - The precedence is still a total order: tiers, then table order. `audit.py` already breaks ties that way.
+   - **Gaps:** the absent-`permissionDecision` clause needs a `tool_result` to exist (P3-m1). Pre-hook tool errors fall to `hookMissing` (P3-m2). A hooked hand-back is not exempt from `permissionDenied`, and its `permissionDecision` has never been observed (P3-n1).
+4. **U6.7: routes are present, discrimination is not guaranteed.**
+   - Each gate failure returns to `architect` before U5.5.
+   - "Inside the kit, outside `ans/`" is the right axis: `acceptEdits` allows a new file in the working directory. But a path under `<kit>/.claude/` (a protected path) or an existing file such as `hook.py` (refused by `Write`'s read-first check, before any hook runs) would also leave the file absent or unchanged without the hook doing anything.
+   - Gate (h) does not require D2's `Write` ever to have been attempted. See P3-M2.
+5. **Same-revision interactions.** Checked against each other:
+   - fail-closed `deny` × `hookDenied`: P3-M1;
+   - `onFailure` × `hookMissing`: a blocked failure leaves no guard entry, so it halts. That is consistent;
+   - in-flight × `permissionDenied`: P3-m1;
+   - `guardBreach` × U5.7's bound tests: P3-m3.
+   - Dropping `--setting-sources` × the `hooks` refusal: plugin hooks (`enabledPlugins`, not refused) still load. They cannot override a guard `deny` (precedence deny > ask > allow), and a plugin deny or ask halts as `permissionDenied`. That is loud, so this is a nit (P3-n1).
+6. **Growth-stops.** The plan grew by 1,099 words. By section: §2 +185, §3.3 +212, §3.4 +404, §5 +246, §4 +25 (U6.2 −195, U6.7 +208), §7 +47.
+   - **New scope:** U6.7; the guard as the only bound (canonical paths, fail-closed); the in-flight rule; the two new rows; and their §5 rows. All of these answer a failed gate.
+   - **Rework growth:** about 100 words in §2 and about 120 elsewhere. See P3-n2.
+   - **§2 is no longer citations only.** The H-lines restate §9's facts in prose.
+
+### New findings
+
+**P3-M1 — major — fail-closed `deny` makes a broken guard drain the campaign silently.** *Owner: `architect` (§3.3 "fail closed", §3.4 `hookDenied`). Traced through plan4 §3.3's cap rule. Inferred, because there is no live run.*
+- v1.3 makes a missing or unknown `agent_type`, a missing `tool_input`, or any exception print a normal `deny` with exit 0.
+- §3.4 classes every denying guard entry as `hookDenied`, which is run-attributable and counted. After 3 counted attempts, a batch's items drop as `retryCapExceeded` (plan4 §3.3), with no halt.
+- So a guard defect, or a CLI release that renames `agent_type`, voids every batch as the model's fault and empties the campaign into `dropped` while the timer keeps firing.
+- In v1.2, the same crash exited non-zero, left no guard entry and halted as `hookMissing`. The new path is quieter than the one it replaced.
+- In the same revision, the failures the guard does not catch (`onFailure: "block"`) still halt. One root cause gets two classes.
+
+**Fix:** the guard's fail-closed denies carry a structured marker, for example `permissionDecisionReason` starting `guardError:`. The transcript records the guard's stdout verbatim (verified in every U6.2 guard entry). §3.4 then classes a marked deny as **environmental: halt, `guardError`**.
+- U5.7: each fail-closed path prints the marker.
+- U5.5: a marked deny → `HALT guardError`, and an unmarked out-of-bounds deny → counted `hookDenied`. A mutant that ignores the marker reddens.
+
+**P3-M2 — major — U6.7's gates (g) and (h) can pass without the hook having done anything.** *Owner: `architect` (§4 U6.7). Protected paths verified from the docs. That the read-first error comes before the hook is inferred from attempt-1's hooked validation case (P3-m2). The skipped call is inferred.*
+- Gate (h) is "the file does not exist". That also holds if:
+  - the subagent never attempts D2, for example because it stops after D1's deny;
+  - the path is protected, such as `<kit>/.claude/…`, where `acceptEdits` prompts and `--permission-prompts none` denies;
+  - the path is an existing file. `Write` then fails its read-first check before any hook runs; the corpus has a `Write` "modified since read" error with no `PreToolUse` attachment.
+- Gate (g) does require D1's `hook_success`, but it has no control showing that `acceptEdits` would have allowed D1's path.
+
+**Fix:**
+- Name the paths: new files at the kit root, for example `<kit>/d1.txt` and `<kit>/d2.txt`, not under `.claude/`, deleted before the run.
+- Tell the subagent to attempt every listed `Write` whatever the earlier results.
+- Add **D3**, a third path for which the hook exits 0 with no output. Its file must exist, with `permissionDecision.source` other than `hook`. D3 is the positive control: if D3's file is absent, (g) and (h) prove nothing. It also records the "permission flow decided" shape that §3.4's guard-entry bullet asserts. This is the variant report §9.7(3) asks for, in the same session at no extra spend.
+- Gates (g) and (h) also require D1's and D2's `tool_use` in the transcript and a hook-log line for each, with D2's exit code 1.
+
+**P3-m1 — minor — "the last `tool_use`" misses parallel calls, and a killed run can still halt.** *Owner: `architect` (§3.4 in-flight bullet, `permissionDenied` row). Verified that parallel calls are persisted this way in the corpus. Inferred that `-p` persists them the same way.*
+- In the corpus's subagent transcripts, 10 hooked parallel pairs were persisted as `TU0 TU1 HS0 TR0 HS1 TR1`, and 193 hookless pairs as `TU0 TU1 TR0 TR1`.
+- A kill after `TU1` leaves `TU0` with no guard entry and no result. `TU0` is not "the last `tool_use`", so it falls to `hookMissing` and the batch halts. That is gate (c)'s defect again, for a labeller that reads two pages at once.
+- The `permissionDenied` row's "`permissionDecision` is absent" also reads a missing `tool_result` as an absent field.
+
+**Fix:**
+- In flight = **every** `tool_use` with no `tool_result`, in a run whose `Agent` result is absent. Completed runs stay unaffected, because the first conjunct is unchanged.
+- `permissionDenied` requires a `tool_result` entry.
+- U5.5: a killed shape `TU0 TU1` with no attachments → `REISSUE incomplete`.
+
+**P3-m2 — minor — a pre-hook tool error is read as a skipped guard and halts.** *Owner: `architect` (§3.4 guard-entry bullet, `hookMissing`). Verified on 16 of 16 corpus instances.*
+- When a tool input fails validation (`InputValidationError`, `Write`/`Edit` precondition errors), the result is a `tool_result` with `is_error`, **no** `permissionDecision` and no `PreToolUse` attachment.
+- Example: attempt-1 `c5ce5291` line 46, an `Agent` call in a session hooked on `*`, whose other `Agent` call has its entry.
+- §3.4's "the guard did not decide, so the permission flow did" is false here: neither ran, and the call did nothing. A `Write` truncated at the output limit (no `content`) would therefore halt the campaign as `hookMissing`.
+- A really skipped guard is a different shape: the permission flow then records `permissionDecision` with `source: "config"` (12,134 corpus instances).
+
+**Fix:** a tool use with no guard entry whose `tool_result` has `is_error` and no `permissionDecision` is run-attributable, because the call never ran. Seed the U5.5 fixture from line 46's keys.
+
+**P3-m3 — minor — `guardBreach` can share the guard's defects, and the bounds tests miss the sibling-prefix axis.** *Owner: `architect` (§3.4 `guardBreach`, §5 U5.5/U5.7). Inferred from reading. The sibling-prefix case is verified from H6's path.*
+- "As the audit recomputes them" does not forbid importing the guard's own bounds function. With shared code, the canonicalization defect the plan fears would be missed by both. That voids §3.4's "Any run that completes shows such a call as `guardBreach`".
+- U5.5's only breach fixture is outside `exchange/` entirely.
+- H6's own planted path, `…/dm-probe-headless-outside/…`, string-prefixes the kit folder `…/dm-probe-headless`. So `ans-x/…` against `ans/` is a real axis. U5.7 lists `..`, a symlink, `req/` and relative paths, but not this one.
+
+**Fix:**
+- State that the audit's bounds code does not import `guard_hook.py`.
+- Give U5.5 and U5.7 the same **axis table**, not a list of shapes: relative/absolute × `..` × symlinked file/directory × sibling prefix (`ans-x/`) × the bound directory itself × empty/non-string. Each axis needs a planted case in both suites, with its expected value written in the test.
+
+**P3-n1 — nit — four small seams.**
+- **Trade-off can be narrowed.** The guard logs every call to `hook-log.jsonl`, including calls that were never persisted (H3a's `f010`). A session-scoped "any out-of-bounds allow" scan of that log is not a one-to-one join, and it would see a breach that a kill cut short.
+- **Hand-back.** Exempt it from `permissionDenied`, as from `guardBreach`, or have U5.7's smoke record its `permissionDecision`.
+- **Plugins.** §3.2's "no user-level hook exists at any launch" overstates: `enabledPlugins` hooks are not refused. The consequences are loud (check 5).
+- **Hook timeout.** The default command-hook timeout is 600 s (docs). Set an explicit `timeout` in the wiring so that a hung guard blocks within seconds.
+
+**P3-n2 — nit — growth-stops residue.**
+- §2's H-lines restate report §9 in prose. H3a alone carries five facts. Cut each H-line to one line citing its §9.x subsection, as n1 did for F1–F7.
+- "Cited here as H1–H6" lists no H4.
+- "F6 does not occur under `-p`" overstates §9.3, which says it "does not prove it".
+- The U6.2 row's "(a), (b) and (e) pass … (f) fails …" is a gate-disposition list. The same is true of "U6.2 saw none" (§3.3), "U6.2 showed exactly one entry" (§3.4) and "U6.2 appended its §9" (§3.6). Leave the row as "Delivered (report §9)".
+- §7's bullets restate §3.3/§3.4 (+47 words).
+
+### Stopping condition
+
+Every remaining finding except P3-m2 comes from v1.3's own fixes, and P3-m2 came to light through v1.3's guard-entry definition. **v1.4 passes as approve with suggestions by a `teco` line check, with no Pass 4,** if all of the following hold:
+1. **P3-M1:** fail-closed denies carry a marker that §3.4 classes as a halt, with the U5.5 marked/unmarked fixture pair.
+2. **P3-M2:** U6.7 names new kit-root paths and has D3 as a positive control, and (g)/(h) require D1/D2's `tool_use` and hook-log lines.
+3. **P3-m1–m3:** each is ruled in at most two sentences plus its fixture row.
+4. **No other new mechanism** is added in §3.3, §3.4 or U6.7.
+
+**Falsifier:** if a line check finds a new major in §3.3 or §3.4, the guard design is still moving. The response is then to remove features, not to write v1.5. The candidate is the in-script fail-closed path: let the guard exit non-zero on internal error, so that `onFailure: "block"` gives the single, halting class. That depends on gate (h).
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, *Always check*.
+- **Addition (source: P3-M1):** A fail-closed path is traced to its consumer. The guard's own failure must reach a class that halts and is distinguishable from a policy decision. A fail-closed default that the consumer counts as the actor's fault turns a broken guard into silent attrition.
+- **Addition (source: P3-m1, P3-m2, and gate (c) in report §9.1):** A row that keys on a missing record (no hook entry, no result, no field) is checked against every producer of that absence: a kill, batched or parallel writes, and validation before the recorder runs. Checking only the producer that motivated the row is not enough.

@@ -1,10 +1,10 @@
 # Typed Decision Models — Harness Spawn-Mode Probe — Evidence Record
 
-> **Status:** active · **Owner:** `devops` · **Tracks:** U6.1 (`docs/plans/typed-decision-models6.md` §3.6)
+> **Status:** active · **Owner:** `devops` · **Tracks:** U6.1, U6.2 (`docs/plans/typed-decision-models6.md` §3.6, §4)
 
 ## 1. Summary and fact index
 
-This record keeps the evidence from the 2026-11-01 harness probe, which `docs/plans/typed-decision-models6.md` §2 (facts F1–F7) cites. The probe asked how an **interactive** `claude --agent` session launches, ends and loses subagents. It ran on Claude Code 2.1.316 in a trusted scratch folder outside the repo, driven through tmux on a real TTY. The kit is reproduced in the appendices so the probe can be rerun. §9 is reserved for U6.2's headless (`claude -p`) results.
+This record keeps the evidence from the 2026-11-01 harness probe, which `docs/plans/typed-decision-models6.md` §2 (facts F1–F7) cites. The probe asked how an **interactive** `claude --agent` session launches, ends and loses subagents. It ran on Claude Code 2.1.316 in a trusted scratch folder outside the repo, driven through tmux on a real TTY. The kit is reproduced in the appendices so the probe can be rerun. §9 holds U6.2's headless (`claude -p`) rerun, with its own verdicts (§9.1) and kit (Appendix J).
 
 Every path in this document that begins with `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/` is the **original session scratchpad** where the probe ran. That folder is ephemeral. The kit's files hard-code these paths, so a rerun from a different folder must rewrite them (Appendix I).
 
@@ -488,9 +488,323 @@ attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date
 5. **Attempt 1 aborted** at the Model-switch dialog (§3). Nothing was selected, and no `/config` setting was changed. The coordinator pinned the driver to `claude-sonnet-5-5` (Appendix B, line 5), and attempt 2 reran from a clean slate.
 6. **Optional step 2b was run** (launch B2).
 
-## 9. Headless probe (U6.2) — reserved
+## 9. Headless probe (U6.2)
 
-> **Reserved for U6.2** (`docs/plans/typed-decision-models6.md` §4, U6.2 row). U6.2 appends its `claude -p` results for H1–H5 here, with the same per-spawn columns as `read_results.py`, guard `hook_success` per tool use, and whether `SubagentHandback` is hooked. Nothing below this note and above the appendices belongs to U6.1.
+U6.2 reruns the kit under `claude -p`, the way plan6 §3.2's runner launches a batch (`docs/plans/typed-decision-models6.md` §4, U6.2 row). `devops` ran it on 2026-11-01, 14:55–14:59 UTC, on the same host and CLI as §2 (`claude` 2.1.316, Claude Pro login).
+
+- **Kit.** A fresh folder, `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/`, the original session scratchpad again (Appendix J). It differs from Appendices A–H as plan6 requires:
+  - the driver mirrors §3.3's `dm-driver`: `model: claude-sonnet-5-5`, `tools: Agent(probe-sub)`, `maxTurns: 3`, no `initialPrompt`, and the `-p` message as its only instruction;
+  - **neither agent definition carries `hooks`**; `hook.py` (byte-identical to Appendix E, still allow-all) is wired only in project `settings.json`, for `PreToolUse` (matcher `*`), `Stop` and `SubagentStop`;
+  - `run_case.sh` launches one case.
+- **Folder trust.** The folder was **never trusted**: no interactive session ever ran in it. That matches a fresh campaign `exchange/`, and it makes gate (b) a test of `-p` in an untrusted folder.
+- **Command.** Each case ran §3.2's command verbatim, with the kit folder as working directory, plus only the case's extra flag. `run_case.sh` records it in `runs/<case>.cmd`; H1's record, verbatim:
+
+````text
+case=h1
+session=e8c91fd8-2aff-49fc-a519-e49221a734be
+start=2026-11-01T14:55:26.566Z
+env: PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/mauricio USER=mauricio LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+argv: /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id e8c91fd8-2aff-49fc-a519-e49221a734be --strict-mcp-config --mcp-config /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
+````
+
+- **Environment (M3).** `setsid env -i <allowlist> [case variables] claude …`. The allowlist is §3.2's, with each variable passed only if set in the launching shell: `PATH`, `HOME`, `USER` and `LANG` were set; `LC_ALL`, `TZ` and `TMPDIR` were unset, so they were omitted. `PATH` was fixed to `/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin`. No `CLAUDE*` or `ANTHROPIC_*` variable reached any child except the case's own `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+- **Process group.** `setsid` makes the child its own process-group leader (pid = pgid), as §3.2's runner does.
+- **Spend.** Five Sonnet driver sessions, each with one subagent: H1, H2, H4 and H6 short (3–4 subagent tool uses each), and H3a killed after 11 subagent tool uses. H3b was not run (§9.4).
+
+### 9.1 Verdicts
+
+These are `devops`' readings of the evidence below. Under plan6 §4, `teco` reads them against the gates, and each failure returns to `architect`.
+
+| Case | Result | Evidence |
+|---|---|---|
+| **H1** allowlist + `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` | **pass**: foreground | §9.2 row H1: `completed`, `requestShape` `foreground`, `finished` `True`, no notification, `END_TURN`, `guard/tu` `3tu:1`, `err-results` `0`. §9.3: exit 0, `subtype` `success`, `permission_denials=0`, `started_in_background=0`. |
+| **H2** allowlist only | **recorded**: background, and `-p` waits for it | §9.2 row H2: `async_launched`, `background`, `launchedWithDefaults` `True`, `finished` `True`, completion by `<task-notification>`. §9.4: the driver's first `Stop` came before the subagent's first tool call, but the process stayed up, ran the subagent to completion, ran a second driver turn on the notification, then exited 0. Nothing was lost; the shape is still `async_launched`. |
+| **H3a** H1, process group SIGKILLed mid-run | **pass**: incomplete shape | §9.2 row H3A: `NO RESULT`, meta without `finished`, subagent last entry a `tool_result`. §9.4: the group held exactly one process (`claude`); exit 137; no further hook events. |
+| **H3b** H1, only the parent PID SIGKILLed | **not run** | §9.4: the H3a snapshot shows a one-process group, so the parent PID *is* the group and the subagent runs in-process; a second killed run would exceed the coordinator's spend cap. Available on request. |
+| **H4** H1 + `--setting-sources project` | **partial**: authentication works; user-hook silencing **not observable** | §9.2 row H4 is identical in shape to H1; exit 0; project-settings hooks fired. The user's `~/.claude/settings.json` has **no `hooks` key**, so there was no user-level hook to stop. Planting one would mean editing that file, which is outside this unit's bounds. §9.4. |
+| **H5** transcript path for `--session-id` | **pass** | §9.5 path listing: every run's driver transcript is `<slug>/<session-id>.jsonl` for the UUID passed, with subagents under `<slug>/<session-id>/subagents/`. |
+| **H6** H1 + one planted out-of-bounds `Write` | **premise false**: no deny happened | §9.4: the `Write` to `…/dm-probe-headless-outside/h6-outside.txt` **succeeded** (file written, `tool_result` not an error, `permission_denials=0`). Every subagent `tool_result` entry in every run carries `permissionDecision: {"decision": "accept", "source": "hook", "reasonType": "hook"}` (§9.6). A `PreToolUse` `allow` decides the permission itself, so `--permission-prompts none` never sees a guard-allowed tool. |
+
+| Gate (plan6 §4) | Result | Why |
+|---|---|---|
+| **(a)** H1 foreground, authenticates, no denied `tool_result`, exactly one guard `hook_success` per tool use | **pass** | H1 row; the driver's `Agent` call also has exactly one (§9.2 driver-session line `[1]`). |
+| **(b)** settings hooks fire in the subagent under `-p` | **pass** | `settings` `PreToolUse` with `agent_type` `probe-sub` on every subagent tool call in all five runs (§9.3 counts), in a folder never trusted. |
+| **(c)** H3 group kill leaves no `tool_result`; does the subagent outlive its parent? | **pass on its criterion**, plus **one new finding for `architect`** | No `tool_result`, so §3.4's incomplete row; the subagent cannot outlive the parent (one process). **New:** the killed driver transcript also has **no guard `hook_success` for its `Agent` `tool_use`**: it ends at `asst[tool_use]:Agent` (§9.6), although the hook fired (hook log). In H1 the attachment is written just before the `tool_result`, so a kill before the result loses it. If plan4's `hookMissing` halt is checked on the driver's `Agent` call, §3.4's precedence (halts before re-issues) turns every killed or timed-out batch into a halt instead of an incomplete re-issue. |
+| **(d)** H4 decides the `--setting-sources` clause and the user-settings refusals | **not decidable from this run** | Authentication works with the flag. Whether it stops user-level hooks could not be observed (no user hooks exist). The driver's recorded effort was `medium` in **all** runs, H1 included, although user settings set `modelSettings."claude-sonnet-5".effortLevel: "high"`; that key evidently does not apply to `claude-sonnet-5-5`, so it cannot show whether user settings loaded. |
+| **(e)** H5 path is `<slug>/<session-id>.jsonl` | **pass** | §9.5. |
+| **(f)** H6's permission-denied shape recorded for the `permissionDenied` fixture | **fail: no such shape exists here** | §3.4's row presumes a denial "for a tool use the guard allowed". Under `-p` with a `PreToolUse` `allow`, the permission system is never asked. Recording a real auto-deny shape needs a hook that returns **no** decision for the planted path: one more short run with a kit change, not done here. |
+
+### 9.2 Results table (verbatim)
+
+`results-headless.txt`: the output of the headless kit's `read_results.py` (Appendix J), run once after all cases, copied byte for byte. It adds three things to U6.1's columns:
+- `guard/tu`: the subagent's distinct tool uses, then the set of `PreToolUse` `hook_success` counts per tool use (`3tu:1` = 3 tool uses, each with exactly 1);
+- `err-results`: subagent `tool_result` blocks with `is_error`;
+- one `driver session` line per run: assistant models and efforts, guard `hook_success` count on the driver's `Agent` `tool_use`, and the exit code.
+
+The `hook-log HB` column is `no` throughout: no `SubagentHandback` occurred in any run.
+
+````text
+project dir: /home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
+spawn  rib-key  toolUseResult.status  requestShape  launchedWithDefaults  finished  notification(kind/status)               terminal                   hook-log HB  guard/tu  err-results
+-----  -------  --------------------  ------------  --------------------  --------  --------------------------------------  -------------------------  -----------  --------  -----------
+H1     -        completed             foreground    absent                True      none                                    END_TURN                   no           3tu:1     0          
+H2     -        async_launched        background    True                  True      queue-operation:enqueue/completed;user  END_TURN                   no           3tu:1     0          
+H4     -        completed             foreground    absent                True      none                                    END_TURN                   no           3tu:1     0          
+H6     -        completed             foreground    absent                True      none                                    END_TURN                   no           4tu:1     0          
+H3A    -        NO RESULT             foreground    absent                absent    none                                    NONE(asst[tool_use]:Read)  no           11tu:1    0          
+
+H1: session=e8c91fd8-2aff-49fc-a519-e49221a734be tool_use=toolu_01LBXUoAoLJwRYZjrxsvJcf5 agent=aaad4365b789f9f79 input_keys=['description', 'prompt', 'subagent_type']
+    result_keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'har
+    meta=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId'] mtime=11:55:47
+    last2: user:tool_result | asst[end_turn]:text
+    hook entries in transcript for SubagentHandback: n/a
+    notification tags: []
+H2: session=190af10c-564c-42fd-899b-70c94074a8b3 tool_use=toolu_013DrBVjLajbwJvm1hdpKyNU agent=a1185f3aee8edba26 input_keys=['description', 'prompt', 'subagent_type']
+    result_keys=['agentId', 'canContinueAgent', 'canReadOutputFile', 'description', 'isAsync', '
+    meta=['agentType', 'description', 'finished', 'isBuiltIn', 'launchedWithDefaults', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId'] mtime=11:56:36
+    last2: user:tool_result | asst[end_turn]:text
+    hook entries in transcript for SubagentHandback: n/a
+    notification tags: [['duration_ms', 'note', 'result', 'status', 'subagent_tokens', 'summary', 'task-id', 'task-notification', 'tool-use-id', 'tool_uses', 'usage']]
+H4: session=b6099403-f45b-4815-b6bc-d2905e3006e6 tool_use=toolu_01J7yHS8rrjh7ce3emTjVipQ agent=a9a85bbf821ee7c7a input_keys=['description', 'prompt', 'subagent_type']
+    result_keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'har
+    meta=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId'] mtime=11:57:23
+    last2: user:tool_result | asst[end_turn]:text
+    hook entries in transcript for SubagentHandback: n/a
+    notification tags: []
+H6: session=973830b1-cde9-4e33-95b9-761cbd851e26 tool_use=toolu_01FfpSqmHhbgPkgr9uPBvH4j agent=a4bb00daba55a54a0 input_keys=['description', 'prompt', 'subagent_type']
+    result_keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'har
+    meta=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId'] mtime=11:57:47
+    last2: user:tool_result | asst[end_turn]:text
+    hook entries in transcript for SubagentHandback: n/a
+    notification tags: []
+H3A: session=43b56824-55dd-453e-818c-e6f20144a754 tool_use=toolu_016gBtvSXXhPVk5XTdhFWQhC agent=acc9fba6143d3b5a0 input_keys=['description', 'prompt', 'subagent_type']
+    result_keys=None
+    meta=['agentType', 'description', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId'] mtime=11:58:28
+    last2: asst[tool_use]:Read | user:tool_result
+    hook entries in transcript for SubagentHandback: n/a
+    notification tags: []
+
+driver session e8c91fd8-2aff-49fc-a519-e49221a734be: assistant models=['claude-sonnet-5-5'] efforts=['medium'] guard hook_success on Agent tool_use=[1] exit=0
+driver session 190af10c-564c-42fd-899b-70c94074a8b3: assistant models=['claude-sonnet-5-5'] efforts=['medium'] guard hook_success on Agent tool_use=[1] exit=0
+driver session b6099403-f45b-4815-b6bc-d2905e3006e6: assistant models=['claude-sonnet-5-5'] efforts=['medium'] guard hook_success on Agent tool_use=[1] exit=0
+driver session 973830b1-cde9-4e33-95b9-761cbd851e26: assistant models=['claude-sonnet-5-5'] efforts=['medium'] guard hook_success on Agent tool_use=[1] exit=0
+driver session 43b56824-55dd-453e-818c-e6f20144a754: assistant models=['claude-sonnet-5-5'] efforts=['medium'] guard hook_success on Agent tool_use=[0] exit=137
+
+hook-log counts (src, event, agent_type, tool_name):
+     5  ('settings', 'PreToolUse', 'probe-driver', 'Agent')
+    20  ('settings', 'PreToolUse', 'probe-sub', 'Read')
+     5  ('settings', 'PreToolUse', 'probe-sub', 'Write')
+     5  ('settings', 'Stop', 'probe-driver', None)
+     4  ('settings', 'SubagentStop', 'probe-sub', None)
+````
+
+### 9.3 Run outcomes and hook-log counts
+
+`runs/summary.txt` gives one line per run from `runs/<case>.exit`, `.cmd`, `.json` and `.err`. It holds keys, enum values and counts only; the `result` text (`"done"` in every run that finished) and the usage and cost blocks are left out. Verbatim:
+
+````text
+h1: exit=0 start=14:55:26.566 end=14:55:52.707 stdout_bytes=1931 stderr_bytes=0 type=result subtype=success is_error=False num_turns=2 stop_reason=end_turn terminal_reason=completed permission_denials=0 safety_stops=0 api_error_status=None subagent_stats.requested={'background': 0, 'foreground': 0, 'unset': 1} started_in_background=0 completed=1 killed={'parent': 0, 'user': 0, 'system': 0}
+h2: exit=0 start=14:56:26.794 end=14:56:38.589 stdout_bytes=2019 stderr_bytes=0 type=result subtype=success is_error=False num_turns=1 stop_reason=end_turn terminal_reason=completed permission_denials=0 safety_stops=0 api_error_status=None subagent_stats.requested={'background': 0, 'foreground': 0, 'unset': 1} started_in_background=1 completed=1 killed={'parent': 0, 'user': 0, 'system': 0}
+h4: exit=0 start=14:57:08.176 end=14:57:24.653 stdout_bytes=1932 stderr_bytes=0 type=result subtype=success is_error=False num_turns=2 stop_reason=end_turn terminal_reason=completed permission_denials=0 safety_stops=0 api_error_status=None subagent_stats.requested={'background': 0, 'foreground': 0, 'unset': 1} started_in_background=0 completed=1 killed={'parent': 0, 'user': 0, 'system': 0}
+h6: exit=0 start=14:57:32.647 end=14:57:48.847 stdout_bytes=1934 stderr_bytes=0 type=result subtype=success is_error=False num_turns=2 stop_reason=end_turn terminal_reason=completed permission_denials=0 safety_stops=0 api_error_status=None subagent_stats.requested={'background': 0, 'foreground': 0, 'unset': 1} started_in_background=0 completed=1 killed={'parent': 0, 'user': 0, 'system': 0}
+h3a: exit=137 start=14:58:24.375 end=14:58:51.581 stdout_bytes=0 stderr_bytes=0
+````
+
+stderr was empty for every run. H3a's stdout is empty: `--output-format json` evidently writes its single result object only at exit, so a killed run leaves no stdout at all. For §3.4's `launchFailed` evidence this means a killed run's stdout is empty, not malformed.
+
+Hook-log counts are the closing block of §9.2: 39 lines in all, every one from `settings`. Per run there is one driver `PreToolUse:Agent`, one `PreToolUse` per subagent tool use, one subagent `SubagentStop` and one driver `Stop` (two in H2, none in the killed H3a).
+
+**F6 does not recur under `-p`.** There is no `SubagentStop` with `agent_type` `probe-driver` in any run. This fits §6.2's inference that the foreign events were the interactive prompt-suggestion side query, which `-p` does not run, but it does not prove it.
+
+### 9.4 Per-case observations
+
+Hook-log lines below are fields from `hook-log.jsonl` (`runs/hook-timeline.txt`): UTC time, session prefix, `src`, event, `agent_type`, tool, and file path with the kit folder shown as `<kit>`.
+
+**H2: background under `-p`.**
+
+````text
+14:56:29.625 190af10c settings PreToolUse   probe-driver Agent 
+14:56:31.239 190af10c settings Stop         probe-driver - 
+14:56:31.618 190af10c settings PreToolUse   probe-sub    Read <kit>/req/h2.txt
+14:56:33.636 190af10c settings PreToolUse   probe-sub    Read <kit>/req/h2.txt
+14:56:35.756 190af10c settings PreToolUse   probe-sub    Write <kit>/ans/h2.txt
+14:56:36.693 190af10c settings SubagentStop probe-sub    - 
+14:56:38.061 190af10c settings Stop         probe-driver - 
+````
+
+The process exited at 14:56:38.589 with code 0. So `-p` does not end the session, or drop the background run, when the driver's turn ends. Its driver transcript (§9.6) shows a second, harness-enqueued turn: an `isMeta` user entry, then the `<task-notification>` user entry (`origin.kind: "task-notification"`, `<status>completed</status>`, with `<tool-use-id>`), then a second `end_turn`. The JSON result still reports `num_turns: 1`. For the audit, the run's shape is F1's: `async_launched`, `requestShape` `background`. That is §3.4's `backgroundSpawn` halt, whatever the answer file holds.
+
+**H3a: process-group SIGKILL.** `run_case.sh` started the child under `setsid`. A watch loop polled the hook log every second and, at 10 `/long/` reads, checked three things before killing: the PID's `comm` is `claude`, its command line contains `--agent probe-driver` and this run's session id, and pid = pgid. It then ran `kill -KILL -- -<pgid>` at 14:58:51.535 UTC. The process group just before the kill (`runs/h3a.ps-before`, cut to 120 columns):
+
+````text
+    PID    PGID    PPID STAT COMMAND         COMMAND
+3416011 3416011 3416009 Ssl  claude          /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id 43b56
+````
+
+````text
+14:58:28.800 43b56824 settings PreToolUse   probe-driver Agent 
+14:58:30.763 43b56824 settings PreToolUse   probe-sub    Read <kit>/req/h3a.txt
+14:58:32.879 43b56824 settings PreToolUse   probe-sub    Read <kit>/req/h3a.txt
+14:58:34.622 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f001.txt
+14:58:36.249 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f002.txt
+14:58:37.844 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f003.txt
+14:58:39.462 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f004.txt
+14:58:43.483 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f005.txt
+14:58:44.998 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f006.txt
+14:58:46.579 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f007.txt
+14:58:48.229 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f008.txt
+14:58:49.752 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f009.txt
+14:58:51.455 43b56824 settings PreToolUse   probe-sub    Read <kit>/long/f010.txt
+````
+
+- The group held **one** process, the `claude` CLI itself, with no child processes. The driver and its subagent run in one process, so killing the parent PID alone (H3b) is the same event as the group kill. The only possible children are short-lived hook commands.
+- Exit 137 at 14:58:51.581. Six seconds later the group was empty. The `/long/` count stayed at 10 over a further 10 s, and no answer file was written.
+- The subagent transcript holds 11 tool uses: 2 Reads of the request and `f001`–`f009`. The hook fired for `f010` 80 ms before the kill, but that `tool_use` was never persisted. **A hook-log `PreToolUse` can name a tool use that is absent from the transcript.**
+- The driver transcript ends at the `Agent` `tool_use`, with no `hook_success` and no `tool_result` (§9.6). See gate (c).
+
+**H4: `--setting-sources project`.** Exit 0, `subtype` `success`, and the same shape as H1 in every column. Project-settings hooks fired for the driver and the subagent. User settings on this host (keys only): `agentPushNotifEnabled`, `autoContinueAtUsageLimit` (`false`), `autoMode`, `editorMode`, `includeCoAuthoredBy`, `inputNeededNotifEnabled`, `model` (`opus`), `modelSettings`, `permissions` (`allow`, `defaultMode: auto`), `remoteControlAtStartup`, `skipDangerousModePermissionPrompt`, `theme` and `verbose`. There is no `hooks` or `env` key, and `settings.local.json` holds only `permissions`.
+- Neither the explicit `--permission-mode` and pinned `model:` nor the effort shows whether the user file loaded: effort was `medium` with and without the flag.
+- What H4 does establish: authentication does not depend on loading user settings.
+- What it cannot establish: whether user-level hooks stop firing. That needs a planted user-level hook, which is a `~/.claude/settings.json` edit, so the stakeholder or `cobb` must decide on it.
+
+**H6: planted out-of-bounds `Write`.** The request told the subagent to write `ok` first to `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt`, outside the working directory and so outside `acceptEdits`' edit bounds, then to its answer path.
+- Both `Write`s succeeded. The outside file exists (2 bytes), and neither `tool_result` is an error.
+- The JSON result has `permission_denials: []`.
+- The subagent transcript shows why. Each tool use is followed by the guard's `hook_success`, then a `user` `tool_result` entry with a top-level `permissionDecision` of `{"decision": "accept", "source": "hook", "reasonType": "hook"}`.
+- The same holds for every subagent tool use in every run (§9.6). A `PreToolUse` hook returning `permissionDecision: "allow"` **is** the permission decision. The permission system, and with it `--permission-prompts none`, never evaluates a guard-allowed tool.
+- Two consequences, for `architect`:
+  - §3.4's `permissionDenied` row cannot fire while the guard answers `allow`.
+  - The guard's own bounds check is the **only** bound on subagent writes. The `acceptEdits` working-directory boundary is not a second line of defence.
+
+### 9.5 Transcript paths (H5)
+
+Every file under the headless project dir `/home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless/` after all runs (`runs/transcript-paths.txt`). Each driver transcript is named for the UUID passed in `--session-id` (§9.3 `start=` lines and §9.2 `driver session` lines). The slug is the working directory's path with every non-alphanumeric character replaced by `-`.
+
+````text
+./190af10c-564c-42fd-899b-70c94074a8b3.jsonl
+./190af10c-564c-42fd-899b-70c94074a8b3/subagents/agent-a1185f3aee8edba26.jsonl
+./190af10c-564c-42fd-899b-70c94074a8b3/subagents/agent-a1185f3aee8edba26.meta.json
+./43b56824-55dd-453e-818c-e6f20144a754.jsonl
+./43b56824-55dd-453e-818c-e6f20144a754/subagents/agent-acc9fba6143d3b5a0.jsonl
+./43b56824-55dd-453e-818c-e6f20144a754/subagents/agent-acc9fba6143d3b5a0.meta.json
+./973830b1-cde9-4e33-95b9-761cbd851e26.jsonl
+./973830b1-cde9-4e33-95b9-761cbd851e26/subagents/agent-a4bb00daba55a54a0.jsonl
+./973830b1-cde9-4e33-95b9-761cbd851e26/subagents/agent-a4bb00daba55a54a0.meta.json
+./b6099403-f45b-4815-b6bc-d2905e3006e6.jsonl
+./b6099403-f45b-4815-b6bc-d2905e3006e6/subagents/agent-a9a85bbf821ee7c7a.jsonl
+./b6099403-f45b-4815-b6bc-d2905e3006e6/subagents/agent-a9a85bbf821ee7c7a.meta.json
+./e8c91fd8-2aff-49fc-a519-e49221a734be.jsonl
+./e8c91fd8-2aff-49fc-a519-e49221a734be/subagents/agent-aaad4365b789f9f79.jsonl
+./e8c91fd8-2aff-49fc-a519-e49221a734be/subagents/agent-aaad4365b789f9f79.meta.json
+````
+
+### 9.6 Key-and-shape excerpts
+
+These use the same extractor and the same exclusions as §7: types, keys, enum values, ids and counts only. They contain no message text, tool input or output, hook `content`/`stdout`, or attachment body. The `environment`, `session_context` and `credential_org` attachments appear only as type names in the counts.
+
+**Per session and subagent** (extractor output, verbatim):
+
+````text
+## project dir -tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
+
+### session 190af10c-564c-42fd-899b-70c94074a8b3
+entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'last-prompt', 'queue-operation', 'system', 'tools-used', 'user']
+attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date': 1, 'environment': 1, 'hook_success': 1, 'model': 1, 'prompt_snapshot': 2, 'session_context': 1}
+- Agent tool_use id=toolu_013DrBVjLajbwJvm1hdpKyNU input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+  toolUseResult keys=['agentId', 'canContinueAgent', 'canReadOutputFile', 'description', 'isAsync', 'outputFile', 'prompt', 'resolvedModel', 'status'] status='async_launched' isAsync=True agentId=a1185f3aee8edba26
+- Agent tool_use id=toolu_013DrBVjLajbwJvm1hdpKyNU input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+- notification entry type=queue-operation origin=null tags=['duration_ms', 'note', 'result', 'status', 'subagent_tokens', 'summary', 'task-id', 'task-notification', 'tool-use-id', 'tool_uses', 'usage'] status=completed task-id=a1185f3aee8edba26 has tool-use-id=True
+- notification entry type=user origin={"kind": "task-notification", "producer": "session-task", "runId": "0mvxydn0o-36f5cd00"} tags=['duration_ms', 'note', 'result', 'status', 'subagent_tokens', 'summary', 'task-id', 'task-notification', 'tool-use-id', 'tool_uses', 'usage'] status=completed task-id=a1185f3aee8edba26 has tool-use-id=True
+
+  subagent agent-a1185f3aee8edba26: meta keys=['agentType', 'description', 'finished', 'isBuiltIn', 'launchedWithDefaults', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId']
+   meta values: {'agentType': 'probe-sub', 'description': 'probe headless', 'finished': True, 'isBuiltIn': False, 'launchedWithDefaults': True, 'requestNonInteractive': True, 'requestShape': 'background', 'spawnDepth': 1}
+   tool_uses=3 hook_success attachments=3 (distinct toolUseIDs 3) hookEvents=[('PreToolUse', True)]
+   hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
+   last2: user:tool_result | assistant[stop_reason=end_turn]:text
+
+### session 43b56824-55dd-453e-818c-e6f20144a754
+entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'queue-operation', 'tools-used', 'user']
+attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date': 1, 'environment': 1, 'model': 1, 'prompt_snapshot': 1, 'session_context': 1}
+- Agent tool_use id=toolu_016gBtvSXXhPVk5XTdhFWQhC input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+
+  subagent agent-acc9fba6143d3b5a0: meta keys=['agentType', 'description', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId']
+   meta values: {'agentType': 'probe-sub', 'description': 'probe headless', 'isBuiltIn': False, 'requestNonInteractive': True, 'requestShape': 'foreground', 'spawnDepth': 1}
+   tool_uses=11 hook_success attachments=11 (distinct toolUseIDs 11) hookEvents=[('PreToolUse', True)]
+   hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
+   last2: assistant[stop_reason=tool_use]:Read | user:tool_result
+
+### session 973830b1-cde9-4e33-95b9-761cbd851e26
+entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'last-prompt', 'queue-operation', 'system', 'tools-used', 'user']
+attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date': 1, 'environment': 1, 'hook_success': 1, 'model': 1, 'prompt_snapshot': 2, 'session_context': 1}
+- Agent tool_use id=toolu_01FfpSqmHhbgPkgr9uPBvH4j input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+  toolUseResult keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'harnessSectionHash', 'harnessTailCount', 'prompt', 'resolvedModel', 'status', 'toolStats', 'toolsUsed', 'totalDurationMs', 'totalTokens', 'totalToolUseCount', 'usage'] status='completed' isAsync=<absent> agentId=a4bb00daba55a54a0
+- Agent tool_use id=toolu_01FfpSqmHhbgPkgr9uPBvH4j input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+
+  subagent agent-a4bb00daba55a54a0: meta keys=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId']
+   meta values: {'agentType': 'probe-sub', 'description': 'probe headless', 'finished': True, 'isBuiltIn': False, 'requestNonInteractive': True, 'requestShape': 'foreground', 'spawnDepth': 1}
+   tool_uses=4 hook_success attachments=4 (distinct toolUseIDs 4) hookEvents=[('PreToolUse', True)]
+   hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
+   last2: user:tool_result | assistant[stop_reason=end_turn]:text
+
+### session b6099403-f45b-4815-b6bc-d2905e3006e6
+entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'last-prompt', 'queue-operation', 'system', 'tools-used', 'user']
+attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date': 1, 'environment': 1, 'hook_success': 1, 'model': 1, 'prompt_snapshot': 2, 'session_context': 1}
+- Agent tool_use id=toolu_01J7yHS8rrjh7ce3emTjVipQ input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+  toolUseResult keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'harnessSectionHash', 'harnessTailCount', 'prompt', 'resolvedModel', 'status', 'toolStats', 'toolsUsed', 'totalDurationMs', 'totalTokens', 'totalToolUseCount', 'usage'] status='completed' isAsync=<absent> agentId=a9a85bbf821ee7c7a
+- Agent tool_use id=toolu_01J7yHS8rrjh7ce3emTjVipQ input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+
+  subagent agent-a9a85bbf821ee7c7a: meta keys=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId']
+   meta values: {'agentType': 'probe-sub', 'description': 'probe headless', 'finished': True, 'isBuiltIn': False, 'requestNonInteractive': True, 'requestShape': 'foreground', 'spawnDepth': 1}
+   tool_uses=3 hook_success attachments=3 (distinct toolUseIDs 3) hookEvents=[('PreToolUse', True)]
+   hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
+   last2: user:tool_result | assistant[stop_reason=end_turn]:text
+
+### session e8c91fd8-2aff-49fc-a519-e49221a734be
+entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'last-prompt', 'queue-operation', 'system', 'tools-used', 'user']
+attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date': 1, 'environment': 1, 'hook_success': 1, 'model': 1, 'prompt_snapshot': 2, 'session_context': 1}
+- Agent tool_use id=toolu_01LBXUoAoLJwRYZjrxsvJcf5 input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+  toolUseResult keys=['agentId', 'agentType', 'canContinueAgent', 'content', 'harnessNoteCount', 'harnessSectionHash', 'harnessTailCount', 'prompt', 'resolvedModel', 'status', 'toolStats', 'toolsUsed', 'totalDurationMs', 'totalTokens', 'totalToolUseCount', 'usage'] status='completed' isAsync=<absent> agentId=aaad4365b789f9f79
+- Agent tool_use id=toolu_01LBXUoAoLJwRYZjrxsvJcf5 input keys=['description', 'prompt', 'subagent_type'] description='probe headless' run_in_background=<absent>
+
+  subagent agent-aaad4365b789f9f79: meta keys=['agentType', 'description', 'finished', 'isBuiltIn', 'requestNonInteractive', 'requestShape', 'spawnDepth', 'toolUseId']
+   meta values: {'agentType': 'probe-sub', 'description': 'probe headless', 'finished': True, 'isBuiltIn': False, 'requestNonInteractive': True, 'requestShape': 'foreground', 'spawnDepth': 1}
+   tool_uses=3 hook_success attachments=3 (distinct toolUseIDs 3) hookEvents=[('PreToolUse', True)]
+   hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
+   last2: user:tool_result | assistant[stop_reason=end_turn]:text
+````
+
+**Driver transcript entry sequences** (`runs/driver-sequences.txt`): entry types in file order. Pure bookkeeping types are left out (`api-request*`, `atis-latch`, `tools-used`, `cost-state`, `agent-setting`, `last-prompt`, `file-history-snapshot`, `mode`, `permission-mode`). Attachments are shown as `att:<type>(<hookEvent>)`, assistant entries as `asst[<stop_reason>]:<blocks>`, and user entries by block types; `str` marks a string content.
+
+````text
+e8c91fd8: queue-operation:enqueue > queue-operation:dequeue > user:str > att:environment > att:model > att:agent_listing_delta > att:session_context > att:date > att:credential_org > att:prompt_snapshot > asst[tool_use]:Agent > att:hook_success(PreToolUse) > user:tool_result > att:prompt_snapshot > asst[end_turn]:text > system
+190af10c: queue-operation:enqueue > queue-operation:dequeue > user:str > att:environment > att:model > att:agent_listing_delta > att:session_context > att:date > att:credential_org > att:prompt_snapshot > asst[tool_use]:Agent > att:hook_success(PreToolUse) > user:tool_result > att:prompt_snapshot > asst[end_turn]:text > system > queue-operation:enqueue > queue-operation:dequeue > user:str(isMeta) > user:str(task-notification) > asst[end_turn]:text > system
+b6099403: queue-operation:enqueue > queue-operation:dequeue > user:str > att:environment > att:model > att:agent_listing_delta > att:session_context > att:date > att:credential_org > att:prompt_snapshot > asst[tool_use]:Agent > att:hook_success(PreToolUse) > user:tool_result > att:prompt_snapshot > asst[end_turn]:text > system
+973830b1: queue-operation:enqueue > queue-operation:dequeue > user:str > att:environment > att:model > att:agent_listing_delta > att:session_context > att:date > att:credential_org > att:prompt_snapshot > asst[tool_use]:Agent > att:hook_success(PreToolUse) > user:tool_result > att:prompt_snapshot > asst[end_turn]:text > system
+43b56824: queue-operation:enqueue > queue-operation:dequeue > user:str > att:environment > att:model > att:agent_listing_delta > att:session_context > att:date > att:credential_org > att:prompt_snapshot > asst[tool_use]:Agent
+````
+
+In H2 the three string user entries have these key sets, in order: the `-p` prompt (`promptSource`, `turnOrigin`, `turnPosition`, …); an `isMeta: true` entry whose content holds only `system-reminder` / `tools-used-before-summary` tags, with keys `queueSkipAttachments` and `turnCompanion`; and the `<task-notification>` entry, which has an `origin` key.
+
+**`permissionDecision` on subagent `tool_result` entries** (`runs/permission-decisions.txt`): a count per distinct value, per session. No `tool_result` entry lacked one.
+
+````text
+190af10c {'{"decision": "accept", "reasonType": "hook", "source": "hook"}': 3}
+43b56824 {'{"decision": "accept", "reasonType": "hook", "source": "hook"}': 11}
+973830b1 {'{"decision": "accept", "reasonType": "hook", "source": "hook"}': 4}
+b6099403 {'{"decision": "accept", "reasonType": "hook", "source": "hook"}': 3}
+e8c91fd8 {'{"decision": "accept", "reasonType": "hook", "source": "hook"}': 3}
+````
+
+One more difference from the interactive run: under `-p` the foreground meta has `requestNonInteractive: true` (interactive S3 had `false`), and the foreground `toolUseResult` key set is identical to S3's. An audit row must not key on `requestNonInteractive`.
+
+### 9.7 Deviations and limits
+
+1. **H3b not run.** H3a's process snapshot shows the subagent has no process of its own (§9.4). The coordinator's cap was one killed run.
+2. **H4's user-hook question not tested.** No user-level hook exists on this host, and planting one would edit `~/.claude/settings.json`, which is out of bounds (§9.4).
+3. **H6's auto-deny shape not recorded.** The kit hook's `allow` pre-empts the permission system, exactly as plan6 specified the kit ("the kit's hook allows it"). Capturing a real deny needs a variant hook that returns no decision for the planted path, a further short run (§9.1, gate (f)).
+4. **Unset allowlist variables omitted.** `LC_ALL`, `TZ` and `TMPDIR` were unset in the launching shell, so they were not passed. A runner launched from a timer may differ.
+5. **The kit hook is allow-all and logs every event.** The production guard denies out-of-bounds calls. Every finding above about `allow` is therefore exactly the production guard's behaviour for a call it allows.
+6. **The out-of-bounds file** `…/dm-probe-headless-outside/h6-outside.txt` was left in place as evidence, in the session scratchpad.
 
 ## Appendices — the probe kit
 
@@ -1200,4 +1514,437 @@ For example, `f001.txt` is `File 1 of a chain.` followed by `Next: …/dm-probe/
 - **Environment.** Launch from a clean environment (§2) if the launching shell is itself inside a Claude Code session.
 - **Kill threshold.** Count **3** hook lines per chain Read (§8, item 2) when choosing the kill threshold.
 - **Clean slate.** Follow `RUN.md` "Rerunning". `read_results.py` lists every spawn in the project dir, so a dirty dir mixes runs.
+
+## Appendix J — the headless kit (U6.2)
+
+The kit used for §9, copied byte for byte from `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/` (the original session scratchpad). Paths inside the files point there, and Appendix I's path-rewrite rule applies.
+
+Unchanged from the U6.1 kit, and checked with `cmp`:
+- `hook.py` is identical to Appendix E;
+- `empty-mcp.json` is identical to Appendix G.
+
+Run outputs are not kit files: `hook-log.jsonl`, `ans/`, `runs/` (except `run_case.sh`'s own records quoted in §9), `results-headless.txt` and the `-outside` folder.
+
+To rerun:
+1. Recreate the tree: the files below, `hook.py`, `empty-mcp.json`, `long/`, and empty `ans/` and `runs/` folders.
+2. Make an empty sibling folder `<kit>-outside/` for H6.
+3. Do **not** trust the folder.
+4. Run the cases from the kit folder, in this order:
+   - `./run_case.sh h1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`
+   - `./run_case.sh h2`
+   - `./run_case.sh h4 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 -- --setting-sources project`
+   - `./run_case.sh h6 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`
+   - `./run_case.sh h3a CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, then a `kill -KILL -- -<pgid>` at about 10 `/long/` hook lines, after checking the PID's command line (§9.4)
+5. Run `python3 read_results.py`.
+
+Each case returns at once; `runs/<case>.exit` appears when the child exits. `req/h3b.txt` exists for the unrun H3b, which is the same as H3a but kills only the PID.
+
+`run_case.sh`:
+
+````bash
+#!/usr/bin/env bash
+# Launch one U6.2 case headless, the way plan6 §3.2's runner would.
+# Usage: run_case.sh <case> [VAR=value ...] [-- extra claude flags ...]
+#   <case>  names req/<case>.txt; outputs go to runs/<case>.{json,err,pid,exit,cmd}
+# The child gets ONLY the §3.2 allowlist (PATH HOME USER LANG LC_ALL TZ TMPDIR,
+# each only if set here) plus the VAR=value pairs given. It runs in its own
+# process group (setsid), so pid == pgid. Returns at once; runs/<case>.exit
+# appears when the child exits.
+set -euo pipefail
+K=$(cd "$(dirname "$0")" && pwd)
+case_=$1; shift
+extra_env=(); while [ $# -gt 0 ] && [ "$1" != "--" ]; do extra_env+=("$1"); shift; done
+[ $# -gt 0 ] && shift
+[ -f "$K/req/$case_.txt" ] || { echo "no req/$case_.txt" >&2; exit 2; }
+[ ! -e "$K/runs/$case_.pid" ] || { echo "runs/$case_.pid exists: case already run" >&2; exit 2; }
+uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
+spawn="Read $K/req/$case_.txt with offset 1, limit 1. Its \`pages\` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply \`done\`."
+msg=$(python3 -c 'import sys; t=open(sys.argv[1]).read(); print(t.replace("{agent_type}","probe-sub").replace("{spawn_prompt}",sys.argv[2]), end="")' "$K/driver-message.txt" "$spawn")
+allow=("PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin" "HOME=$HOME" "USER=$USER")
+for v in LANG LC_ALL TZ TMPDIR; do [ -n "${!v:-}" ] && allow+=("$v=${!v}"); done
+cmd=(/home/mauricio/.local/bin/claude -p --agent probe-driver --session-id "$uuid" --strict-mcp-config
+     --mcp-config "$K/empty-mcp.json" --permission-mode acceptEdits --permission-prompts none
+     --output-format json "$@" "$msg")
+{ printf 'case=%s\nsession=%s\nstart=%s\nenv:' "$case_" "$uuid" "$(date -u +%FT%T.%3NZ)"
+  for a in "${allow[@]}" "${extra_env[@]}"; do printf ' %s' "${a%%=*}=${a#*=}"; done
+  printf '\nargv:'; for a in "${cmd[@]:0:${#cmd[@]}-1}"; do printf ' %q' "$a"; done; printf ' <driver message>\n'
+} > "$K/runs/$case_.cmd"
+cd "$K"
+( setsid env -i "${allow[@]}" "${extra_env[@]}" "${cmd[@]}" > "runs/$case_.json" 2> "runs/$case_.err" < /dev/null &
+  cpid=$!; echo "$cpid" > "runs/$case_.pid"
+  set +e; wait "$cpid"; rc=$?
+  printf '%s %s\n' "$rc" "$(date -u +%FT%T.%3NZ)" > "runs/$case_.exit" ) &
+for _ in $(seq 50); do [ -s "runs/$case_.pid" ] && break; sleep 0.1; done
+echo "case=$case_ session=$uuid pid=$(cat "runs/$case_.pid")"
+````
+
+`driver-message.txt`:
+
+````text
+Subagent type: {agent_type}
+Spawn prompt (between the marker lines):
+<<<SPAWN-PROMPT
+{spawn_prompt}
+SPAWN-PROMPT>>>
+````
+
+`.claude/agents/probe-driver.md`:
+
+````markdown
+---
+name: probe-driver
+description: Headless driver for the dm spawn-mode probe (U6.2). Mirrors plan6 §3.3's dm-driver. Makes exactly one Agent call per session.
+tools: Agent(probe-sub)
+model: claude-sonnet-5-5
+maxTurns: 3
+---
+
+You are a probe driver. The message names a subagent type and a spawn prompt.
+Make exactly one Agent call. Its input has exactly three keys:
+`subagent_type` (the type the message names), `description` (always
+`probe headless`) and `prompt` (the spawn prompt, copied character for
+character, without the marker lines). Add no other key. Make no other tool
+call. When the Agent call returns, whatever it says, reply exactly `done`.
+````
+
+`.claude/agents/probe-sub.md`:
+
+````markdown
+---
+name: probe-sub
+description: Probe subagent for the headless dm spawn-mode probe (U6.2). Reads one request file and writes the files it names. Spawned only by probe-driver.
+tools: Read, Write
+model: claude-sonnet-5-5
+effort: high
+maxTurns: 200
+omitClaudeMd: true
+permissionMode: acceptEdits
+---
+
+You carry out one request file. Line 1 of the request file is a JSON header;
+its `answer` field is the absolute path to write your answer to. Line 2 holds
+your instructions. Follow them exactly, using only Read and Write, on only the
+paths they name. Then reply `done`.
+````
+
+`.claude/settings.json`:
+
+````json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+          }
+        ]
+      }
+    ]
+  }
+}
+````
+
+`req/h1.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h1.txt"}
+Write the single word ok to the answer path. Do nothing else.
+````
+
+`req/h2.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h2.txt"}
+Write the single word ok to the answer path. Do nothing else.
+````
+
+`req/h3a.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3a.txt"}
+Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
+````
+
+`req/h3b.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3b.txt"}
+Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
+````
+
+`req/h4.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h4.txt"}
+Write the single word ok to the answer path. Do nothing else.
+````
+
+`req/h6.txt`:
+
+````text
+{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h6.txt"}
+First write the single word ok to /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt. Then, whatever that Write returned, write the single word ok to the answer path. Do nothing else.
+````
+
+`long/f001.txt` … `long/f090.txt` follow Appendix H's pattern exactly, with `dm-probe-headless` in place of `dm-probe` in the `Next:` paths. This was checked byte for byte against all 90 files.
+
+`read_results.py`:
+
+````python
+#!/usr/bin/env python3
+"""Summarise the headless dm spawn-mode probe (U6.2; adapted from the U6.1 kit). Stdlib only; reads nothing but this
+probe folder's own project dir under ~/.claude/projects/ and ./hook-log.jsonl.
+
+Usage: python3 read_results.py [--project-dir DIR]
+"""
+import argparse
+import glob
+import json
+import os
+import re
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SPAWN_RE = re.compile(r"/req/(h\w+)\.txt")
+TAG_RE = re.compile(r"<([a-z_-]+)>")
+
+
+def project_dir(arg):
+    if arg:
+        return arg
+    root = os.path.expanduser("~/.claude/projects")
+    enc = re.sub(r"[^A-Za-z0-9]", "-", HERE)
+    d = os.path.join(root, enc)
+    if os.path.isdir(d):
+        return d
+    # Do not read anything else: only list names that look like this folder.
+    cands = [n for n in os.listdir(root) if n.endswith("scratchpad-dm-probe-headless")]
+    raise SystemExit(f"project dir not found: {d}\ncandidates (pass one with --project-dir): {cands}")
+
+
+def load(path):
+    out, bad = [], 0
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = f.read().split("\n")
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
+            out.append((json.loads(line), line))
+        except ValueError:
+            bad += 1
+    return out, bad
+
+
+def blocks(d):
+    m = d.get("message")
+    c = m.get("content") if isinstance(m, dict) else None
+    return c if isinstance(c, list) else []
+
+
+def describe(d):
+    m = d.get("message") if isinstance(d.get("message"), dict) else {}
+    if d.get("type") == "assistant":
+        tools = [b.get("name") for b in blocks(d) if b.get("type") == "tool_use"]
+        kinds = sorted({b.get("type") for b in blocks(d)})
+        s = f"asst[{m.get('stop_reason')}]"
+        if tools:
+            s += ":" + "+".join(tools)
+        elif kinds:
+            s += ":" + "+".join(kinds)
+        if m.get("model") == "<synthetic>":
+            s += "(synthetic)"
+        return s
+    if d.get("type") == "user":
+        kinds = sorted({b.get("type") for b in blocks(d)}) or ["text"]
+        return "user:" + "+".join(kinds)
+    return d.get("type", "?")
+
+
+def terminal(conv):
+    for d in reversed(conv):
+        if d.get("type") != "assistant":
+            continue
+        tools = [b.get("name") for b in blocks(d) if b.get("type") == "tool_use"]
+        if "SubagentHandback" in tools:
+            return "HANDBACK"
+        if (d.get("message") or {}).get("stop_reason") == "end_turn":
+            return "END_TURN"
+        return "NONE(" + describe(d) + ")"
+    return "NONE"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--project-dir")
+    a = ap.parse_args()
+    pd = project_dir(a.project_dir)
+    print(f"project dir: {pd}")
+
+    hooklog = []
+    hp = os.path.join(HERE, "hook-log.jsonl")
+    if os.path.exists(hp):
+        hooklog = [r for r, _ in load(hp)[0]]
+
+    metas = {}
+    for mp in glob.glob(os.path.join(pd, "*", "subagents", "agent-*.meta.json")):
+        try:
+            m = json.load(open(mp, encoding="utf-8"))
+        except ValueError:
+            continue
+        metas[m.get("toolUseId")] = (mp, m)
+
+    spawns = []  # dicts
+    sessions = []
+    for sp in sorted(glob.glob(os.path.join(pd, "*.jsonl")), key=os.path.getmtime):
+        entries, bad = load(sp)
+        sid = os.path.basename(sp)[:-6]
+        uses = {}
+        for d, _ in entries:
+            for b in blocks(d):
+                if b.get("type") == "tool_use" and b.get("name") in ("Agent", "Task"):
+                    inp = b.get("input") or {}
+                    mt = SPAWN_RE.search(str(inp.get("prompt", "")))
+                    uses[b["id"]] = {
+                        "tag": mt.group(1).upper() if mt else "?",
+                        "session": sid, "bad_lines": bad, "id": b["id"],
+                        "keys": sorted(inp.keys()),
+                        "rib": inp.get("run_in_background", "-"),
+                        "result": None, "notif": [],
+                    }
+        for d, raw in entries:
+            for b in blocks(d):
+                if b.get("type") == "tool_result" and b.get("tool_use_id") in uses:
+                    uses[b["tool_use_id"]]["result"] = d.get("toolUseResult")
+            for tid, u in uses.items():
+                if f"<tool-use-id>{tid}</tool-use-id>" in raw and "task-notification" in raw:
+                    kind = d.get("type")
+                    if kind == "queue-operation":
+                        kind += ":" + str(d.get("operation"))
+                    elif kind == "attachment":
+                        kind += ":" + str((d.get("attachment") or {}).get("type"))
+                    st = re.search(r"<status>([^<]*)</status>", raw.replace("\\n", "\n"))
+                    tags = sorted(set(TAG_RE.findall(raw.replace("\\n", "\n"))))
+                    u["notif"].append((kind, st.group(1) if st else None, tags))
+        spawns.extend(uses.values())
+        models = sorted({str((d.get("message") or {}).get("model")) for d, _ in entries if d.get("type") == "assistant"})
+        efforts = sorted({str(d.get("effort")) for d, _ in entries if d.get("type") == "assistant"})
+        dg = {t: 0 for t in uses}
+        for d, _ in entries:
+            a = d.get("attachment") or {}
+            if d.get("type") == "attachment" and a.get("type") == "hook_success" and a.get("toolUseID") in dg:
+                dg[a["toolUseID"]] += 1
+        rc = "?"
+        for ex in glob.glob(os.path.join(HERE, "runs", "*.cmd")):
+            if f"session={sid}" in open(ex).read():
+                ef = ex[:-4] + ".exit"
+                rc = open(ef).read().split()[0] if os.path.exists(ef) else "no exit file"
+        sessions.append(f"driver session {sid}: assistant models={models} efforts={efforts} "
+                        f"guard hook_success on Agent tool_use={sorted(dg.values())} exit={rc}")
+
+    rows = []
+    notes = []
+    for u in spawns:
+        r = u["result"]
+        status = (r.get("status") if isinstance(r, dict) else ("str" if r else "NO RESULT"))
+        mp, m = metas.get(u["id"], (None, None))
+        g = (lambda k: ("absent" if k not in m else str(m[k]))) if m else (lambda k: "no meta")
+        conv, last2, term, hb_hook_tx, aid = [], "no transcript", "-", "-", None
+        guard, errs = "-", "-"
+        if mp:
+            aid = os.path.basename(mp)[len("agent-"):-len(".meta.json")]
+            tp = mp[: -len(".meta.json")] + ".jsonl"
+            if os.path.exists(tp):
+                ents, bad = load(tp)
+                conv = [d for d, _ in ents if d.get("type") in ("user", "assistant")]
+                last2 = " | ".join(describe(d) for d in conv[-2:]) + (f" (+{bad} unparseable)" if bad else "")
+                term = terminal(conv)
+                tu_ids = []
+                for d in conv:
+                    for b in blocks(d):
+                        if b.get("type") == "tool_use" and b.get("id") not in tu_ids:
+                            tu_ids.append(b.get("id"))
+                per = {t: 0 for t in tu_ids}
+                for d, _ in ents:
+                    a = d.get("attachment") or {}
+                    if d.get("type") == "attachment" and a.get("type") == "hook_success" \
+                            and a.get("hookEvent") == "PreToolUse" and a.get("toolUseID") in per:
+                        per[a["toolUseID"]] += 1
+                vals = sorted(set(per.values()))
+                guard = f"{len(tu_ids)}tu:" + ("/".join(map(str, vals)) if vals else "-")
+                errs = str(sum(1 for d in conv for b in blocks(d)
+                               if b.get("type") == "tool_result" and b.get("is_error")))
+                hb_ids = {b["id"] for d in conv for b in blocks(d)
+                          if b.get("type") == "tool_use" and b.get("name") == "SubagentHandback"}
+                hs = [d for d, _ in ents if d.get("type") == "attachment"
+                      and (d.get("attachment") or {}).get("toolUseID") in hb_ids
+                      and str((d.get("attachment") or {}).get("type", "")).startswith("hook")]
+                hb_hook_tx = ("n/a" if not hb_ids else
+                              ",".join(sorted({str(h["attachment"].get("type")) for h in hs})) or "none")
+        hb_log = sorted({h.get("src", "?") for h in hooklog
+                         if h.get("tool_name") == "SubagentHandback" and aid
+                         and h.get("agent_id") and (aid in h["agent_id"] or h["agent_id"] in aid)})
+        notif = ";".join(f"{k}/{s}" for k, s, _ in u["notif"]) or "none"
+        rows.append([u["tag"], str(u["rib"]), status, g("requestShape"), g("launchedWithDefaults"),
+                     g("finished"), notif[:38], term, ",".join(hb_log) or "no", guard, errs])
+        notes.append(f"{u['tag']}: session={u['session']} tool_use={u['id']} agent={aid} "
+                     f"input_keys={u['keys']}\n    result_keys="
+                     f"{sorted(r.keys()) if isinstance(r, dict) else r!r:.80}\n"
+                     f"    meta={'absent' if not m else sorted(m.keys())}"
+                     f"{'' if not mp else ' mtime=' + time.strftime('%H:%M:%S', time.localtime(os.path.getmtime(mp)))}\n"
+                     f"    last2: {last2}\n    hook entries in transcript for SubagentHandback: {hb_hook_tx}\n"
+                     f"    notification tags: {[t for _, _, t in u['notif']][:1]}"
+                     + (f"\n    driver transcript unparseable lines: {u['bad_lines']}" if u['bad_lines'] else ""))
+
+    hdr = ["spawn", "rib-key", "toolUseResult.status", "requestShape", "launchedWithDefaults",
+           "finished", "notification(kind/status)", "terminal", "hook-log HB", "guard/tu", "err-results"]
+    w = [max(len(str(x)) for x in col) for col in zip(hdr, *rows)] if rows else [len(h) for h in hdr]
+    fmt = "  ".join("{:<%d}" % n for n in w)
+    print(fmt.format(*hdr))
+    print(fmt.format(*["-" * n for n in w]))
+    for row in rows:
+        print(fmt.format(*row))
+    print()
+    for n in notes:
+        print(n)
+    print()
+    for s in sessions:
+        print(s)
+    print()
+    # Hook visibility summary: which wiring fired, in which agent, for which tool.
+    from collections import Counter
+    c = Counter((h.get("src"), h.get("event"), h.get("agent_type"), h.get("tool_name")) for h in hooklog)
+    print("hook-log counts (src, event, agent_type, tool_name):")
+    for k, v in sorted(c.items(), key=lambda kv: [str(x) for x in kv[0]]):
+        print(f"  {v:4d}  {k}")
+    if not hooklog:
+        print("  (hook-log.jsonl empty or missing: hooks did not run — folder untrusted?)")
+
+
+if __name__ == "__main__":
+    main()
+````
 
