@@ -1,6 +1,6 @@
 # Connected code graph — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** C-1001 (M10) · **Last updated:** 2026-10-28
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** C-1001 (M10) · **Last updated:** 2026-11-01
 
 ## Intent
 
@@ -737,3 +737,20 @@ None.
   its view is"? → **Yes** (FR-7). File a backlog item? → **Yes**, C-1001 in `docs/BACKLOG.md`.
 - 2026-10-28 — Readback **confirmed** by the stakeholder; no open questions. Status → **Ready for
   design**.
+- 2026-11-01 — Phase P2 (generality): keep it where it was? → **No: P2 is deferred to last** (scheduled last, not descoped; see the entry below on keeping the feature open).
+  Order P0 → P1 → P3 → P4 → P5 → P2, then the optional Arduino slot (still needs P2's C/C++
+  extractor); see `docs/plans/connected-code-graph.md` v3.4 §4 and §4.1 (FR-1, AC-26).
+- 2026-11-01 — Which acceptance criteria close only at the P2 exit? → **AC-6, AC-7, AC-17 (queue
+  name), AC-22, AC-23 and the final close of AC-8**, as plan §4.1 states; they stay open until P2 is
+  built. Stakeholder confirmed AC-8's final close at the P2 exit and AC-23 staying there.
+- 2026-11-01 — Does a language added at P2 ship only an extractor? → **No: per added language P2
+  also ships its share of the five use cases** (test-run importers, trace parsers, security packs),
+  so AC-22 holds across it; sizing is deferred to P2 planning (AC-22).
+- 2026-11-01 — Are AC-7's gRPC, messaging and SQL strata acceptable as P2-only? → **Yes** (the
+  OpenTelemetry demo remains the candidate; first contact reported as-is). The wording of AC-6, AC-7
+  and AC-23 does not change (AC-6, AC-7, AC-23).
+- 2026-11-01 — If P2 never runs, may the P2-dependent ACs and languages be dropped? → **No: the
+  feature stays open until P2 is built.** P2 is only scheduled last and nothing is descoped. Affects
+  AC-5 (OpenTelemetry strata), AC-6, AC-7, AC-8, AC-13 (topic and library-signature kinds), AC-17,
+  AC-22, AC-23 and FR-1's non-Python/TS languages; closures per `docs/plans/connected-code-graph.md`
+  v3.4 §4.1.

@@ -641,3 +641,220 @@ taking its sizing as authoritative gets ~25–30 GB instead of the plan's ~18 GB
 correction for `graph-dba`.
 
 **Stakeholder questions:** none.
+
+## Pass 4
+
+*2026-11-01.* **Reviewed:** plan v3.4's P2-deferral edit (working-tree diff against HEAD, 55+/19−): §4 table
+and ordering notes, new §4.1, and the cross-references in §2.2 (B5, P2-1), §2.3 (Arduino row), §2.4
+(FR-26/AC-22), §4 Arduino row, §5.3, K4, K13 and the §6 digest. I read the requirements ACs the
+moves touch (AC-3, 5–8, 12–15, 17, 19, 22, 23), ran unfiltered `P2` / `P3` / `after P` / `before P` /
+`generality` sweeps over the plan, and swept the five extending notes and the `-coordination`
+ledger for old-order claims.
+
+**Verdict: needs changes.** The edit's own mechanics are clean, and the core argument holds: AC-7
+cannot close before P2, and P3–P5 need none of P2's extractors for their own ACs, with the two
+exceptions below. But the move exposes two gates that P2 used to precede and no longer does (one
+major, one smaller), and the "P2 never runs" outcome is stated for AC-8 only.
+
+CPG: considered, not relevant — document-consistency review against the requirements text; no code-level claim.
+
+### Findings
+
+**P4-1 (major) — AC-13 is gated at P3 and closed at P5 for contract kinds only P2 builds.**
+*Verified: AC-13 text (`docs/requirements/connected-code-graph.md`, AC-13), plan §4 P3/P5/P2 rows, §3.4 line ~547, grep of "library_api".*
+- AC-13 requires one planted change of *each* kind: endpoint, **message topic**, table/column or
+  label, MCP tool, **shared-library signature**. The topic pack (Kafka/RabbitMQ/in-house) and the
+  shared-library + version-skew pack are P2 deliverables (§4 P2 row; §3.4).
+- The P3 row gates AC-13 "except its security element" and P5 closes it. Neither phase can plant or
+  answer the topic and library-signature kinds. Under the old order P2 preceded P3, so this was
+  sound; now it is a sequencing defect. §4.1 lists six ACs and omits AC-13. The §4 sentence "Every
+  AC is gated in the phase that builds everything it needs (B5)" is false for it.
+- *Change (`architect`):* gate AC-13 per kind: endpoint, table/label, MCP tool at P3 (+ security at
+  P5); topic and library signature at the P2 exit, added to the P2 ACs column and to §4.1. State in
+  §4.1 that AC-13 stays open without P2. Then re-sweep every other AC against the P2-only set (topic,
+  rpc, library_api, multi-repo groupings, five non-Python/TS languages) with a table: AC × the
+  link-kind or language it plants. I checked AC-3, 12, 14, 15, 17, 19; the sweep should be the
+  architect's, over all 28, not mine.
+
+**P4-2 (major) — AC-19 (P3 ✓) and AC-9b (P1 ✓) need a multi-repo manifest the P2 row claims.**
+*Verified: P3/P1/P2 rows, §3.2 "System manifest", AC-19 text; the intent of the P2 phrase is inferred.*
+- AC-19 needs a system of ≥3 repositories with an un-merged change in one; AC-9b needs one
+  repository failing while others update. The P2 row delivers "multi-repo manifest with groupings".
+  §3.2 makes the manifest (repositories, exclusions, groupings) the system's only input from P1.
+- Ambiguous: either the manifest reader is P1 and only *groupings* are P2 (then say so in both
+  rows), or a multi-repo manifest really is P2 and AC-19 at P3 is another reordering defect.
+  The P0(g) fixture system has three repos, so the gate could run, but only if P1/P3 own the
+  repo-list part.
+- *Change (`architect`):* split the phrase: P1 owns "repo list + exclusions + per-codebase policy";
+  P2 owns "component groupings" only. Check Q-R10 / `Unit.componentId` (§3.2) for what P3 needs.
+
+**P4-3 (major) — "P2 never runs" is resolved for AC-8 only.**
+*Verified: §4.1 and the ordering notes; the requirements doc has no counterpart (grep "P2" finds nothing).*
+- If P2 is skipped, AC-6, AC-7, AC-17, AC-22, AC-23 and AC-8 are never closed. FR-1's required
+  languages (Java, Kotlin, C#, Go, C/C++) and the FR-27 conventions requirement go undelivered. The
+  plan says P2 is "optional", but the requirements call these required. That is a scope decision
+  recorded only in a plan and the `-coordination` ledger (the ledger itself still says "(c)
+  requirements doc note" is open).
+- AC-8 is honest: the requirement says "closed only when all of it is built", and the plan keeps it
+  open for the four fetch-capable frontends. The same statement is missing for the rest.
+- *Change:* (`architect`) add one sentence to §4.1 stating that with P2 omitted the listed ACs are
+  descoped, not met, and which FR/AC they sit under. (`tico`) record the stakeholder decision in the
+  requirements decision log, naming the FRs whose delivery is now conditional. Stakeholder to confirm
+  that "P2 optional" means those ACs may be formally dropped.
+
+**P4-4 (minor) — §4.1 claims AC-6's P1 kinds are "re-run at P5"; the P5 row has no AC-6.**
+*Verified: P5 row ACs list.* Either add "AC-6 (P1 kinds re-run)" to P5 or drop the claim. Also
+name the AC-6 kinds for P3's data and config values (a runtime-built query string), since P3 adds
+new link kinds.
+
+**P4-5 (minor) — K4 now surfaces last; no early executable check.** *Inferred.*
+Rule-pack format v1 freezes at P0 on a *paper* test (P0(d)). P3's and P5's many packs (test, data,
+cache, security, risky-config, infrastructure signature) are written against it, and the first
+real "someone other than the author" test (AC-23) is after all of them. A format flaw then forces
+a migration of every pack. The plan accepts this ("What is lost"), but a cheap hedge exists: run
+the in-house-bus pack of the P0(d) paper test as a *fixture* test by a second author at P3 exit,
+non-closing, on the fixture system's topic link kind. Owner: `architect`, with the stakeholder
+deciding whether to pay for it.
+
+**P4-6 (minor) — AC-22 fixture-unit gate: adequate as a partial gate, with two conditions.**
+*Verified: §5.1 "AC-22 is the 'adds one directory, touches nothing else' test", §4 P5 row.*
+- Sound: the requirement says "language *or protocol*", so a pack satisfies the diff-shape half, and
+  the plan correctly keeps the real-language half at P2. A fixture pack cannot show a test-run
+  importer or trace parser, so "all five use cases answer across it" is only partly exercised.
+- Conditions: (a) name the planted failing input that makes the check red, e.g. a fixture unit
+  whose diff also edits one existing file; it must fail the contract test. Without that the P5
+  gate cannot be shown to fail. (b) Inside P2, the unit that witnesses AC-22 must be a language added
+  after the P2 core changes (controlled download path, groupings), because the core changes touch
+  existing units and would taint the "touches nothing else" diff.
+
+**P4-7 (minor) — P3 and P5 rows do not say "Python/TS only".** *Verified.*
+Only the §4 intro (line ~1005) says P3–P5 stack on Python/TS. Rows still read "per-language traces",
+"per-test runtime importers", "security packs". Say "Python/TS (+shell/config)" in those rows, and
+list JaCoCo and Go-cover importers (§3.3) as P2 work, so P3 is not read as owing them.
+
+### Item 5 — is the per-language use-case scope new?
+
+A consequence, not new scope. Under the old order P3/P5 built importers, trace parsers and security
+packs after P2's languages existed. Now they exist only for Python/TS, so the other languages'
+share must land with their extractors. Two cautions: it makes P2 materially larger (five languages ×
+test importer, trace parser, security packs, risky-config), and it is sized "at P2 planning" with no
+estimate. State that it is a consequence in the P2 row, and that P2 may itself split per language
+(P4-3's optionality then applies per language).
+
+### Other checks
+
+- **Sweep for old-order references (unfiltered):** `P2` (all hits mapped), `after P2`, `before P3`,
+  `P3 exit`, `P3 needs`, `generality`. Remaining old-order text: none in the plan other than the
+  items above. Edited correctly: B5, P2-1, Arduino rows (§2.3 and §4), FR-26/AC-22, §5.3, K4, K13.
+  The §6 digest still reads "Digest (v3.1):" while carrying v3.4 content; relabel (nit).
+  Extending notes: ML note 642 and P0 plan 814/817/1523/1533 use "P2" as a phase name only, and the
+  bundle-spec and egress-spec likewise; none states a position, so none needs an edit. The
+  `-coordination` ledger line 261 still says "Not yet applied" and "(c) requirements doc note"
+  open; `teco`'s to update.
+- **P3–P5 deliverables depending on P2 extractors/packs:** none beyond P4-1 and P4-2 (checked P3,
+  P4, P5 rows and the §3.6–§3.8 operators; the review operator lists "topic" and "library"
+  contract kinds, which is P4-1 restated).
+- **AC-6/AC-7 not closing before P2 (§4.1):** AC-7 — agreed. It needs gRPC, messaging and a SQL
+  database; first contact is single-shot, so an early partial contact would waste it. The claim that
+  the demo's SQL services are not Python/TS is *inferred* and unchecked; the plan itself defers it to
+  P0 pre-registration. AC-6 — sound but conservative: the requirement's "e.g." list makes
+  "topic read from config" an example, so the plan's reading (the kind must close) is a choice, the
+  safe one.
+- **AC-8 at P2 exit:** consistent with the requirement ("closed only when all of it is built");
+  the controlled download path is the last outbound path added. If P2 never runs the plan keeps it
+  open, correctly (P4-3). The §5.3 assertions on the four fetch-capable frontends are vacuous
+  until P2; the plan already says so.
+- **Growth-stops:** the edit rewrote B5, P2-1, K4, K13, the digest and the ordering notes in place,
+  and adds no finding→resolution prose. Growth is new scope (§4.1, ~30 lines). Rework items:
+  (a) the v3.4 revision note stacks a fifth line under v3.1–v3.3 instead of replacing the previous
+  line, as root `AGENTS.md` requires; the stack is pre-existing, but v3.4 continues it. (b) §4.1's
+  heading ("Effect of deferring P2") and its bold question paragraph narrate the change and the
+  coordination question; the plan should state the current design ("AC closure with P2 last")
+  without the Q&A. (c) The AC-closure fact now sits in the P2 row, the P5 row, §4.1, B5, P2-1 and the
+  digest; make §4.1 the one home and have the others cite it (nit).
+
+### Proposed REVIEW.md lines
+
+None.
+
+**Stakeholder questions:** one — does "P2 optional" allow formally descoping AC-6/7/17/22/23 and the
+non-Python/TS FR-1 languages (P4-3)?
+
+## Pass 5
+
+*2026-11-01.* **Reviewed:** plan v3.4 as revised against Pass 4 (working tree, 58+/25− against HEAD): §4 rows
+and notes, §4.1, §5.1, K4/K13, the digest, the requirements decision log (lines 740–753), and the P0 plan's
+fixture section (lines 808–845). I re-ran the unfiltered sweeps (`optional`, `descop`, `P2`, `Digest`).
+
+**Verdict: approve with suggestions.** All seven Pass 4 findings and the growth-stops points are fixed. One new
+major remains, from my own re-sweep: AC-19 at P3 needs a third repository the fixture can only build with the
+Java extractor. It is a small fix, not a design change.
+
+CPG: considered, not relevant — document-consistency review; no code-level claim.
+
+### Pass 4 dispositions
+
+- **P4-1 — fixed.** AC-13 is split by kind (P3: endpoint, table/label, MCP tool; P5: security element for those;
+  P2: topic and library signature, all elements). P3, P5, P2 rows and §4.1 agree, and the P3 review-operator
+  text names the P2 dependency.
+- **P4-2 — fixed.** P1 owns repo list, exclusions and policy; P2 owns groupings only (P2 row, §4.1 intro). But see P5-1.
+- **P4-3 — fixed, consistent.** Sweep for `optional|descop` finds only the Arduino slot and unrelated uses. The
+  revision note, ordering note, K13, digest and §4.1 close all say "scheduled last, not descoped". The
+  requirements decision log (lines 740–753) carries the answer. The "AC-8 stays open" sentence is gone.
+- **P4-4 — fixed.** The "re-run at P5" claim is dropped from §4.1. P3 gains an AC-6 kind (see P5-3).
+- **P4-5 — fixed in intent, premise wrong.** See P5-2.
+- **P4-6 — fixed.** The planted failing input is in the P5 row and §5.1 (a new unit plus a one-line edit to an
+  existing file must fail); the P2 witness-language ordering is stated in §4.1.
+- **P4-7 — fixed.** P3 and P5 rows say Python/TS; JaCoCo and Go cover moved to P2.
+- **Growth-stops — fixed.** The revision note is now a single v3.4 line, though the v3–v3.3 notes still stack
+  above it (pre-existing, outside this edit). §4.1 is retitled and has no Q&A narrative. The digest label is
+  "Digest:". The closure fact is in §4.1; the B5 row still restates the AC-7/AC-22 points (nit, acceptable as a cross-reference row).
+
+### My re-sweep of the 28 ACs against what only P2 builds
+
+I grouped them by what they plant on. AC-1–4, 9/9a/9b, 10, 11, 12, 14–16, 18, 20, 21/21a, 24, 25: Python/TS/shell/config
+cases in the proving repo or fixtures; no P2 dependency (AC-12's config, schema-mismatch, wiring and
+infrastructure causes are not broker or gRPC). **Agree** with the architect's eight (AC-5, 6, 7, 8, 13, 17, 22, 23).
+Two additions: **AC-26** (needs P2's C/C++ extractor; already the Arduino slot, but §4.1's claim that "every other
+AC closes at its row in §4" is then slightly off: name it), and **AC-19** (P5-1).
+
+### New findings
+
+**P5-1 (major) — AC-19 is gated at P3, but the fixture's third repo is Java.**
+*Verified: P0 plan §4.7 repos (lines 827–832), P0 table row "AC-19 multi-repo overlay | P3" (line 823), §4.1 intro.*
+- §4.1 says AC-19 "runs on the three-repo fixture system without P2". The fixture is `fx-svc` (Python), `fx-web`
+  (TS) and `fx-lib` (Java: shared library, in-house bus, gRPC `.proto`). Without the Java extractor, `fx-lib`
+  is never built, so the fixture has two mappable repos, and AC-19 requires at least three. The proving repo is
+  one monorepo.
+- *Change:* (`architect`, with the P0 plan owner) either add a third Python/TS/config repo to the P0(g)
+  fixture for the P3 overlay gate and AC-9b, or gate AC-19 per part (two repos at P3, three at P2 exit) and add
+  it to §4.1. Then correct the §4.1 sentence.
+
+**P5-2 (minor) — the K4 hedge's premise is false: there is no Python in-house bus.**
+*Verified: P0 plan lines 827–832; P0 table line 814.*
+- P3's hedge says the second author writes "the P0(d) in-house-bus pack for the fixture system's Python bus".
+  The fixture's in-house bus is in `fx-lib` (Java); the Python/TS pieces are a Kafka producer (`fx-svc`) and
+  consumer (`fx-web`). The topic link kind is also tabled "gateable in P2".
+- *Change:* retarget the hedge to the Kafka producer/consumer pair across `fx-svc` and `fx-web`, written as
+  a pack by a second author, keeping it non-closing; or add a Python bus to the fixture. State that the
+  topic link needs the engine's shared-state pattern (§3.4), which P3 already builds for config values.
+  Also have K4's mitigation cell cite the P3 hedge.
+
+**P5-3 (minor) — the new P3 AC-6 kind has no planted fixture.**
+*Verified: P0 plan table lines 811–817.*
+- The kind itself is sound: P3 builds embedded SQL/Cypher parsing, the plan records "runtime-built" labels
+  at `querygen.py:488`, and the reason code exists (§3.4/§3.6). But the P0(g) fixture's AC-6 rows list only
+  the four P1 kinds and the P2 topic kind. AC-6 needs at least 3 planted instances per kind in different shapes
+  (§5.2).
+- *Change:* add an "AC-6: query or label built at runtime, P3" row to the P0 fixture table (≥3 shapes).
+  Owner: the P0 plan's owner.
+
+### Settled?
+
+Not yet. P5-1 should be fixed before the P1 plan is written, since the fixture is a P0 deliverable; P5-2
+and P5-3 are edits of the same kind. None needs a stakeholder decision. After that, no further pass is needed:
+a `teco` check that §4.1 and the P0 fixture table agree is enough.
+
+### Proposed REVIEW.md lines
+
+None.

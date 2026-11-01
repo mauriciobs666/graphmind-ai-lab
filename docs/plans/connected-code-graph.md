@@ -1,6 +1,6 @@
 # Connected code graph — requirements review & architecture proposal
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.3 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md`, `docs/plans/connected-code-graph-p0.md`, `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-bundle-spec.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.4 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md`, `docs/plans/connected-code-graph-p0.md`, `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-bundle-spec.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
 
 **This is an architecture *proposal*.** The requirements it answers
 (`docs/requirements/connected-code-graph.md`) are `Ready for design` (2026-10-28), and their AC
@@ -26,9 +26,7 @@ folded in as decided (FR-9, FR-13, FR-14, FR-15, FR-21, FR-29, AC-8, AC-21a, AC-
 stakeholder questions.*
 *Revision 2026-10-28 (v3.2): review Pass 3 P3-1. A resolved call's other same-name candidates are
 never dropped. They stay *possible* and are folded away in rendering (decision log 2026-10-28).*
-*Revision 2026-10-28 (v3.3): Arduino `.ino` sketches added as C++ (FR-1, AC-26) — §3.2, an
-optional slot in §4 gating no phase, §5.1, K14–K15; opening paragraph now says the requirements are
-`Ready for design`.*
+*Revision 2026-11-01 (v3.4): P2 (generality) is scheduled last, not descoped (order P0 → P1 → P3 → P4 → P5 → P2); AC closure points are in §4.1.*
 
 ## 0. Goal & scope
 
@@ -176,7 +174,7 @@ item in it is now a decision.
 | **B2** flow schema too weak for AC-1's wrapper | Adopted graph note §6.3: `Param`/`Ret`/`Cond` points and `DATA {fromPath,toPath}` access paths (depth 3); role lifting at build time with `LIFTED_VIA` evidence; a **per-method projection** of Joern's DDG/CDG instead of whole-program `reachableBy`; **P0 vertical slice** before the bundle schema freezes | §3.3, §4 P0(b) |
 | **B3** AC-1/AC-2 grounding wrong; binding shapes missing | §1 re-grounded against `storefront_api.py:937`, `app.py:521-524`, the URL-binding consumers and the launch-script ports; **router-mount prefix composition** and **URL (host, port, path) → launch entry → unit** bindings added to the pack design, to the P0 paper test and to P1's packs | §1, §3.4, §4 |
 | **B4** egress outside the broker | The broker now covers **every** outbound connection, build time included. Local-only builds run in a no-network sandbox with each frontend's fetch flags off (Kotlin's `--jar4import-url` forbidden outright); the permitted fetches and hosted-default downloads are decided (V3-Q4/Q5 → FR-9); P0(a) measures fitness with fetching off; AC-8 runs a full refresh | §3.12, §4 P0(a), §5.3 |
-| **B5** phases contradict gates | AC-7 is **per-stratum** first contact, verdict at P3 exit; AC-22 re-asserted at P5 exit; review-stage `teco` integration at P3; fixture system + P1 ground-truth strata are P0 deliverables | §4 |
+| **B5** phases contradict gates | AC-7 is **per-stratum** first contact, verdict at P2 exit (P2 runs after P5, §4.1); AC-22 closed at P2 exit, re-asserted on a fixture unit at P5 exit; review-stage `teco` integration at P3; fixture system + P1 ground-truth strata are P0 deliverables | §4 |
 | **B6** verdict lost across a swap; log and patch not atomic | Adopted graph note §6.4: `verdictLogOffset` on the snapshot; a lock shared by the `verdict` command and the swap; replay past the offset before `RENAME`; fsync then patch-and-advance in one query; self-healing replay | §3.8 |
 | m1 `Name` hop | Compound hop with the `DISMISSED` anti-join, never a BFS node; resolved sites also carry `CALLS_NAME`; P0 measures resolved-call precision against one threshold (0.95) that drives both the rendering rule (folded vs listed, never dropped; P3-1) and indexer adoption (P2-5) | §3.6, §3.7, §4 P0(a) |
 | m2 identity hash orphans verdicts | `symbolId = h(lang, repoId, qname[, signature only for overloading languages])`, no `unitId` (graph note §6.4); now matches decided FR-29/AC-21a (SQ-C) | §3.3, §3.8 |
@@ -187,7 +185,7 @@ item in it is now a decision.
 | m7 decision batching | Done by `tico` (S1–S38) | — |
 | n1 test-name anchor | Added | §3.6 step 1 |
 | n2 requirements hygiene | Closed in the requirements (2026-10-26 housekeeping entry) | — |
-| **P2-1** AC-8 closed before its egress paths exist | AC-8 gated per part and re-run (full sandboxed refresh + queries, logging proxy) at the exit of P1, P2, P3, P4 and P5; closed at P5 | §4, §5.3 |
+| **P2-1** AC-8 closed before its egress paths exist | AC-8 gated per part and re-run (full sandboxed refresh + queries, logging proxy) at the exit of P1, P3, P4, P5 and P2; closed at P2 exit (the last phase to add an outbound path) | §4, §5.3 |
 | **P2-2** four ACs out of line with FRs | (a) AC-8 now tests every FR-9 rule (SQ-A) → §5.3; (b) AC-24 binds the model actually used (SQ-B) → §3.12, §5.2; (c) signature change keeps the note where sameness is provable (SQ-C) → §3.8; (d) FR-14 aligned by `tico` → §3.7 already matches | §3.8, §3.12, §5.2, §5.3 |
 | **P2-3** lock not grantable; PX expiry reopens B6 | Lock grants on the one key for `ccg_verdict` and `ccg_build`; PX sized above worst replay + swap; post-`RENAME` offset check and remainder replay; B6 test with mid-swap expiry | §3.5, §3.8, §5.1 |
 | **P2-4** AC-18 and AC-9 closed too early | AC-9 closed at P4 (verdicts exist), AC-18 at P5 (every answer kind exists) | §4 |
@@ -243,7 +241,7 @@ item in it is now a decision.
 | SQ-F configurable raw-query time limit (FR-21 exception) | `TIMEOUT_MAX` | §3.5 |
 | SQ-G unscored advisory → own stated severity, else high | Severity rule | §3.7 security |
 | 2026-10-28 P3-1: other candidates of a resolved call stay *possible*, folded away | Rendering rule, never a facts filter | §3.7, §5.1 |
-| 2026-10-28: Arduino `.ino` sketches mapped as C++ only; device links (serial/USB, Bluetooth, device↔service) out, addable later as FR-26 units; AC-26 gates no phase | A sketch is one C++ unit via an in-house preprocessor; no new vocabulary; optional slot after P2 | §3.2, §4 |
+| 2026-10-28: Arduino `.ino` sketches mapped as C++ only; device links (serial/USB, Bluetooth, device↔service) out, addable later as FR-26 units; AC-26 gates no phase | A sketch is one C++ unit via an in-house preprocessor; no new vocabulary; optional slot after P2 (which now runs after P5) | §3.2, §4 |
 
 ### 2.4 New or changed FR/AC → where v3 handles them
 
@@ -265,7 +263,7 @@ item in it is now a decision.
 | FR-23 cap default 2; AC-19 | §3.9 |
 | FR-24 content only, agent/CI identity, raw for all-repo readers; AC-20 | §3.10 |
 | FR-25 by credential; AC-21 | §3.5, §3.6, §5.3 |
-| FR-26 vocabulary bound; AC-22 | §3.3, §4 P2/P5 |
+| FR-26 vocabulary bound; AC-22 | §3.3, §4 P5/P2 |
 | FR-28/29 owners, immediate, either side, confirmation expiry, rename/move/unprovable signature change; AC-21a | §3.8 |
 | AC-5, AC-6, AC-7, AC-24 (evaluation) | §5.2 |
 | FR-1 Arduino `.ino` sketches as one C++ program; AC-26 (not phase-blocking) | §3.2 Arduino sketches, §4 optional slot, §5.1 |
@@ -1001,28 +999,32 @@ P1 delivers (`teco`'s documentation-impact scan).
 
 Foundation first: P0 settles every contract all five use cases depend on, and **proves the
 riskiest one end to end** (B2's vertical slice) before freezing it. P1 delivers impact, including
-data flow, control dependencies and plain language (S35), on this repo. P2 proves generality
-before more use cases are stacked on top. Every AC is gated in the phase that builds everything it
-needs (B5). An AC that spans phases is gated per part and closed at a named exit. All code lands in
+data flow, control dependencies and plain language (S35), on this repo. P3–P5 stack the remaining use cases on
+Python/TS. P2 (generality) is scheduled last (§4.1). Every AC is gated in the phase that builds everything it
+needs (B5), except the ACs that need what only P2 builds (§4.1). An AC that spans phases is gated per part and closed at a named exit. All code lands in
 `cpg/` (S34). Each phase gets its own implementation plan once requirements reach
 `Ready for design`, named per root `AGENTS.md`'s filename grammar.
 
 | Phase | Delivers | ACs gated (✓ = closed at this phase's exit) |
 |---|---|---|
-| **P0: Foundation contracts, spikes, ground truth** | (a) **Frontend fitness**, all 7 FR-1 languages, **with dependency fetching off** (the local-only configuration) **and on** (B4). Measures parse success, line fidelity, **fallback call recall** (gate ≥ ~0.98) and **name-match fan-out** (ML m4), **resolved-call precision** (gate ≥ 0.95 observed; review m1), decorator/annotation shape, value-set recovery, and per-file density and build time of the **flow projection**. Output: the §3.2 table measured, plus `flowAvailable` and the indexer decision per language. (b) **Vertical slice (B2):** real bundles for `falkor-chat/server` + `salesperson/`, value sets, projection, two-level field-sensitive lifting, mount-prefix composition, and the AC-1 link computed end to end with its chain. **Bundle schema v1 and the graph model freeze only when the slice passes**; otherwise they stay provisional until P1 exit. (c) **Store spikes:** stateful BFS vs `algo.SSpaths` incl. the FR-19 repeat-diff; `MULTI`/`RENAME` rollback; telemetry cap; the four ACL users plus the lock grants; `TIMEOUT_MAX` sizing; the verdict lock, its ttl and replay, incl. a mid-swap expiry (B6, P2-3). The **dedicated instance** is brought up by `devops`. (d) **Rule-pack format v1**, proven on paper against FastAPI (incl. mount composition), fetch-with-wrapper, FastMCP + URL binding with framework-default ports, Kafka, and an invented in-house bus. (e) **Egress broker contract and the offline build sandbox**. (f) **Evaluation protocol** (ML note §4, §8): splits, pre-registration (per stratum for AC-7), the hit rule, the noise bound by distance band, and the AC-5 fail procedure. (g) **Fixture system** (3 repos, every link kind and status, planted unprovable kinds ×3, B1's four assertions). **P1's held-out strata** (HTTP, MCP, scripts, flow-shaped impacts) are written by **two isolated key-writing agents** for capture–recapture (S36, ML §8.2), plus the **bilingual impact cells** of the AC-24 set. (h) Canonical answer schema (interpretation, recipe, stamp, provenance). | none (contracts and data); de-risks all |
+| **P0: Foundation contracts, spikes, ground truth** | (a) **Frontend fitness**, all 7 FR-1 languages, **with dependency fetching off** (the local-only configuration) **and on** (B4). Measures parse success, line fidelity, **fallback call recall** (gate ≥ ~0.98) and **name-match fan-out** (ML m4), **resolved-call precision** (gate ≥ 0.95 observed; review m1), decorator/annotation shape, value-set recovery, and per-file density and build time of the **flow projection**. Output: the §3.2 table measured, plus `flowAvailable` and the indexer decision per language. (b) **Vertical slice (B2):** real bundles for `falkor-chat/server` + `salesperson/`, value sets, projection, two-level field-sensitive lifting, mount-prefix composition, and the AC-1 link computed end to end with its chain. **Bundle schema v1 and the graph model freeze only when the slice passes**; otherwise they stay provisional until P1 exit. (c) **Store spikes:** stateful BFS vs `algo.SSpaths` incl. the FR-19 repeat-diff; `MULTI`/`RENAME` rollback; telemetry cap; the four ACL users plus the lock grants; `TIMEOUT_MAX` sizing; the verdict lock, its ttl and replay, incl. a mid-swap expiry (B6, P2-3). The **dedicated instance** is brought up by `devops`. (d) **Rule-pack format v1**, proven on paper against FastAPI (incl. mount composition), fetch-with-wrapper, FastMCP + URL binding with framework-default ports, Kafka, and an invented in-house bus. (e) **Egress broker contract and the offline build sandbox**. (f) **Evaluation protocol** (ML note §4, §8): splits, pre-registration (per stratum for AC-7), the hit rule, the noise bound by distance band, and the AC-5 fail procedure. (g) **Fixture system** (4 repos: `fx-svc` Python, `fx-web` TS, `fx-job` Python/config, `fx-lib` Java, which gates only at P2; every link kind and status, planted unprovable kinds ×3 including a query or label built at runtime for P3, B1's four assertions). **P1's held-out strata** (HTTP, MCP, scripts, flow-shaped impacts) are written by **two isolated key-writing agents** for capture–recapture (S36, ML §8.2), plus the **bilingual impact cells** of the AC-24 set. (h) Canonical answer schema (interpretation, recipe, stamp, provenance). | none (contracts and data); de-risks all |
 | **P1: Impact on this repo, every client** | Unit discovery; Joern extractor + flow projection for Python and TS; extractors for shell, JSON/YAML/TOML/Compose/`.mcp.json`/Kiro, prompts, example configs; packs: FastAPI (mount composition), fetch + lifting, FastMCP, MCP URL binding + launch facts (uvicorn defaults, env defaults, Dockerfile), `.mcp.json` launch chain, Compose; linker; store with swap, stamp, ACL users; refresh (on demand) with stale-kept and not-mapped; answer engine (code-location and contract-point anchors, stateful BFS, impact + reverse question, distance/grouping, evidence, staleness); `ccg` MCP server, CLI, `raw_query`; **egress broker** with local allow-list and offline local-only builds; **plain-language front** (parsers first, schema-constrained interpretation, cache, ambiguity options, aggregate-only summary) and Markdown reports for impact. **`teco` v1:** impact in architect/implementer briefs (a `cobb` unit). Noise measured from here on. | AC-1 ✓, AC-2 ✓, AC-4 ✓, AC-5 on the HTTP/MCP/scripts/flow strata, AC-6 for the P1 kinds (runtime-built URL, dynamic import, example config, prompt mention), AC-8 part 1 (full refresh + queries in the sandbox: offline Python/TS builds, git-remote fetch only, system-wide local model calls in a mixed-system fixture, hosted override refused), AC-9 (code-snapshot stamp), AC-9b ✓, AC-10 (impact stages), AC-11 (impact), AC-16 ✓ (impact, all four clients), AC-17 (code location, contract point), AC-18 (impact answers), AC-21 ✓, AC-24 smoke (impact cells, EN+PT), AC-25 ✓ |
-| **P2: Generality** | Extractors for Java, Kotlin, C#, Go, C/C++ (offline flags, per P0), with the hosted-default **controlled download path** (no import-name service); packs: gRPC, Kafka/RabbitMQ (+1 broker), shared libraries + version skew, topic-from-config binding; multi-repo manifest with groupings; an in-house convention pack written by someone other than the format's author; **OpenTelemetry demo first contact for its HTTP, gRPC, messaging and library strata** with the pack set pre-registered (S14, ML §8.1). | AC-5 on those strata, AC-6 ✓ (adds a topic read from config), AC-8 re-run (the four fetch-capable frontends offline under local-only; controlled path only for hosted-default), AC-7 (non-data strata), AC-17 (queue name), AC-22 for impact (a unit added touching nothing else), AC-23 ✓ |
-| **P3: Data, tests, change, review** | Embedded SQL/Cypher parsing, schema/migration extractors, NoSQL/cache packs, config-value shared state; test packs + kinds; per-test runtime importers, function-level `RAN`, stale-run handling, coverage aggregates; change anchors (diff, commit range, branch; optional PR adapter via the broker, allow-listed under local-only); overlays (cap 2) + **review delta**; review operator (contracts, test impact, config/wiring); test map, tests-for-a-change, risk score (security relevance from pack marks; finding-based relevance arrives in P5); schedule, staleness-threshold and CI triggers. **`teco` v2:** review answer at the analyst gate, test map at QA dispatch. **OpenTelemetry demo first contact for its SQL/cache stratum**, so **AC-7 is decided at P3 exit** (B5.1). | AC-3 ✓, AC-5 data stratum (proving repo), AC-7 ✓, AC-8 re-run (PR add-on), AC-9a ✓, AC-10 (review, QA stages), AC-11 (review, test map), AC-13 except its security element, AC-14 ✓, AC-17 (branch), AC-19 ✓ |
-| **P4: Trust & governance** | Verdict log, `verdict` command, lock + replay (B6), expiry incl. confirmations and orphans; owners file + identity (OS user / IdP adapter via broker, allow-listed under local-only); access provider, content-only redaction, agent/CI principals, raw access for all-repo readers. | AC-8 re-run (IdP and access-check adapters), AC-9 ✓ (decision-state stamp now non-trivial), AC-20 ✓, AC-21a ✓ |
-| **P5: RCA & security, and closure** | Failure-evidence anchors (per-language traces, log templates, tiered matching, symptom → lexical anchors), infrastructure-signature pack, RCA operator + deterministic ranker + feedback + "no match"; security packs (sources, sinks, sanitizers, auth checks, sensitive marks), build-time `reachableBy` findings, missing-auth, risky-config, git-history secret scan with HMAC fingerprints (local), local OSV matching with two-level reachability fed by the allow-listed OSV refresh job, severity rules, finding verdicts; security element of the review delta. **`teco` v3:** RCA and security stages. **Closure:** AC-22 re-asserted with all five use cases across a newly added unit; AC-24's full gate. | AC-8 ✓ (re-run with the full outbound surface), AC-10 ✓, AC-11 ✓ (RCA, security), AC-12 ✓, AC-13 ✓ (security element), AC-15 ✓, AC-17 ✓ (stack trace, test name), AC-18 ✓ (every answer kind), AC-22 ✓, AC-24 ✓, AC-5 ✓ (all strata re-run on fresh held-out items) |
-| **Optional slot (any time after P2): Arduino sketches** | Sketch-folder discovery rule; the sketch preprocessor (join, `Arduino.h` include, prototypes, line map); the C/C++ normalizer's line-map rewrite; optional pre-provisioned core include paths from the manifest's policy (§3.2). Measures parse success, line fidelity and fallback call recall on the AC-26 fixtures, with and without core headers. Builds on P2's C/C++ extractor; needs nothing from P3–P5. | AC-26 ✓ — **gates no phase** (decision log 2026-10-28); the AC-8 no-download assertion is re-run with this unit included |
+| **P3: Data, tests, change, review** | Embedded SQL/Cypher parsing, schema/migration extractors, NoSQL/cache packs, config-value shared state; test packs + kinds; per-test runtime importers for Python/TS (lcov, Cobertura, coverage.py; JaCoCo and Go cover are P2), function-level `RAN`, stale-run handling, coverage aggregates; change anchors (diff, commit range, branch; optional PR adapter via the broker, allow-listed under local-only); overlays (cap 2) + **review delta**; review operator (contracts, test impact, config/wiring; the topic and library-signature contract kinds need P2's packs); test map, tests-for-a-change, risk score (security relevance from pack marks; finding-based relevance arrives in P5); schedule, staleness-threshold and CI triggers. **`teco` v2:** review answer at the analyst gate, test map at QA dispatch. All of P3 is Python/TS (+ shell/config); the demo's SQL/cache stratum is contacted at P2 exit (§4.1). **K4 hedge (non-closing):** at P3 exit a second author, working from the pack-format document alone, writes the Kafka producer/consumer pack (the P0(d) paper pack) for the fixture's `fx-svc` and `fx-web` and checks its topic links; any need for an engine change is a K4 finding. It gates nothing and does not count toward AC-23. | AC-3 ✓, AC-5 data stratum (proving repo), AC-6 (adds a query or label built at runtime), AC-8 re-run (PR add-on), AC-9a ✓, AC-10 (review, QA stages), AC-11 (review, test map), AC-13 for the endpoint, table/label and MCP-tool kinds except the security element, AC-14 ✓, AC-17 (branch), AC-19 ✓ |
+| **P4: Trust & governance** | Verdict log, `verdict` command, lock + replay (B6), expiry incl. confirmations and orphans; owners file + identity (OS user / IdP adapter via broker, allow-listed under local-only); access provider, content-only redaction, agent/CI principals, raw access for all-repo readers. | AC-8 re-run (IdP and access-check adapters), AC-9 ✓ (decision-state stamp now non-trivial), AC-20 ✓, AC-21a (all but the overloading-language half, §4.1) |
+| **P5: RCA & security, and closure** | Failure-evidence anchors (Python/TS traces, log templates, tiered matching, symptom → lexical anchors), infrastructure-signature pack, RCA operator + deterministic ranker + feedback + "no match"; security packs for Python/TS (sources, sinks, sanitizers, auth checks, sensitive marks), build-time `reachableBy` findings, missing-auth, risky-config, git-history secret scan with HMAC fingerprints (local), local OSV matching with two-level reachability fed by the allow-listed OSV refresh job, severity rules, finding verdicts; security element of the review delta. **`teco` v3:** RCA and security stages. **Closure:** AC-22 re-asserted with all five use cases across a newly added fixture-only pack. The gate has a planted failing input: the same unit with its diff also editing one existing file must fail the contract test (§5.1). AC-24's full gate. | AC-8 (re-run with the full outbound surface of P1–P5), AC-10 ✓, AC-11 ✓ (RCA, security), AC-12 ✓, AC-13 (security element for the P3 kinds), AC-15 ✓, AC-17 (stack trace, test name), AC-18 ✓ (every answer kind), AC-22 (fixture unit), AC-24 ✓, AC-5 ✓ (proving-repo strata re-run on fresh held-out items) |
+| **P2: Generality** | Extractors for Java, Kotlin, C#, Go, C/C++ (offline flags, per P0), with the hosted-default **controlled download path** (no import-name service); packs: gRPC, Kafka/RabbitMQ (+1 broker), shared libraries + version skew, topic-from-config binding; manifest component groupings (the repo list, exclusions and policy are P1); an in-house convention pack written by someone other than the format's author; **OpenTelemetry demo first contact for its HTTP, gRPC, messaging and library strata** with the pack set pre-registered (S14, ML §8.1). **Runs after P5 (§4.1):** each added language also ships its share of the five use cases (test-run importer including JaCoCo and Go cover, trace parser, security packs) so AC-22 holds across it. The SQL/cache stratum uses the P3 packs. | AC-5 (OpenTelemetry strata), AC-6 ✓, AC-7 ✓, AC-8 ✓, AC-13 ✓, AC-17 ✓, AC-21a ✓, AC-22 ✓, AC-23 ✓ — what each closes is in §4.1 |
+| **Optional slot (any time after P2, so after P5): Arduino sketches** | Sketch-folder discovery rule; the sketch preprocessor (join, `Arduino.h` include, prototypes, line map); the C/C++ normalizer's line-map rewrite; optional pre-provisioned core include paths from the manifest's policy (§3.2). Measures parse success, line fidelity and fallback call recall on the AC-26 fixtures, with and without core headers. Builds on P2's C/C++ extractor; needs nothing from P3–P5. | AC-26 ✓ — **gates no phase** (decision log 2026-10-28); the AC-8 no-download assertion is re-run with this unit included |
 
 **Ordering notes:**
 - **Verdicts (P4) after P3.** Their ids and fingerprints are emitted from P1 (bundle schema v1),
   so nothing is retrofitted. P4 is deliberately small and could be merged into P3 if planning
   prefers fewer phases.
+- **P2 runs after P5 (stakeholder decision 2026-11-01); it is scheduled last, not descoped.** Order: P0 → P1 → P3 →
+  P4 → P5 → P2 → Arduino slot. No phase P3–P5 depends on P2's extractors, packs or manifest. The
+  phase number is a name, not a position. §4.1 is the one home of the AC-closure facts.
 - **ACs closed late on purpose (P2-1, P2-4).**
-  - AC-8 re-runs at every phase that adds an outbound path and closes at P5.
+  - AC-8 re-runs at every phase that adds an outbound path (P1, P3, P4, P5, P2) and closes at P2
+    (§4.1).
   - AC-9's decision-state half closes at P4, when verdicts exist.
   - AC-18 closes at P5, when every answer kind exists.
 - **Plain language in P1 (S35).** It brings the broker and the local allow-list forward. Its gate
@@ -1032,7 +1034,38 @@ needs (B5). An AC that spans phases is gated per part and closed at a named exit
 - **The "outside the mapped code" branch** depends on the infrastructure-signature pack (P5).
   Nothing before P5 claims RCA.
 - **Arduino is optional and late on purpose.** It is a personal-project need. AC-26 blocks no
-  phase exit, and no other phase depends on the slot. It can land after P2, or after P5.
+  phase exit, and no other phase depends on the slot. It needs P2's C/C++ extractor, so it runs
+  after P2, which runs after P5.
+
+### 4.1 AC closure with P2 last
+
+Before P2 only Python, TypeScript, shell and config languages have extractors. The packs are HTTP,
+MCP, fetch, Compose and the P3 data and test packs. There is no gRPC, broker, shared-library or
+topic-from-config pack and no component groupings. The manifest's repo list, exclusions and policy
+are P1 (§3.2), so AC-9b (P1) and AC-19 (P3) run on the fixture system's three Python/TS/config repos without P2; `fx-lib` (Java) is built only at P2.
+
+A sweep of all 28 ACs against what only P2 builds (topic, rpc and `library_api` link kinds,
+groupings, the five other languages) finds these nine. AC-26 needs P2's C/C++ extractor and is the
+Arduino slot, after P2. Every other AC plants its cases on Python, TypeScript, shell or config in
+the proving repo and fixtures, and closes at its row in §4.
+
+| AC | Gated before P2 | Closes at P2 exit |
+|---|---|---|
+| AC-5 | Proving-repo strata: HTTP/MCP/scripts/flow (P1), data (P3), all re-run at P5 on fresh items. | The OpenTelemetry strata, reported under AC-7 |
+| AC-6 | P1 kinds (runtime-built URL, dynamic import, example config, prompt mention); P3 adds a query or label built at runtime. | The topic read from config; AC-6 is not met without it |
+| AC-7 | Nothing. The requirement names gRPC, messaging and SQL on one codebase. Two required languages are met by Python/TS, but gRPC and messaging need P2's packs, and the demo's SQL services are probably not Python/TS (check in the P0 stratum pre-registration). First contact is single-shot with the configuration frozen, so no stratum is contacted early. | All strata, one verdict |
+| AC-8 | Re-run at P1, P3, P4, P5 (sandbox, proxy). The assertions on the four fetch-capable frontends are vacuous until P2. | The controlled download path is the last outbound path added |
+| AC-13 | Endpoint, table/label and MCP-tool kinds at P3; the security element for those kinds at P5. | The topic and shared-library-signature kinds, all elements |
+| AC-17 | Code location, contract point, branch (P3), stack trace and test name (P5). | The queue name |
+| AC-21a | Everything except the overloading-language half: Python keeps the earlier-verdict note (P4). | A signature change in an overloading language (Java) drops it; ✓ at P2 exit |
+| AC-22 | Contract test at P5 on a fixture pack, with a planted failing input (§5.1). | A real language added with all five use cases answering across it |
+| AC-23 | Nothing. The non-closing K4 hedge at P3 is not this gate. | Closes |
+
+The witness for AC-22 inside P2 is a language added after P2's core changes (controlled download
+path, groupings) land, in its own change, so that the "touches nothing else" diff is not tainted by
+core edits. P2 is scheduled last, not descoped (stakeholder decision 2026-11-01): the feature stays
+open until P2 is built, and the ACs in the right-hand column stay open until then. The cost of P2 last is that a pack-format flaw (K4) is
+found late; the P0(d) paper test, the P1 fixture system and the P3 hedge are the early warnings.
 
 ## 5. Test & evaluation strategy
 
@@ -1045,8 +1078,9 @@ The method is the ML note's (§4, §8). This section records only what binds the
   per rule. Each normalizer has a per-frontend golden test, which is where Joern upgrades get
   caught. The projection has golden `DATA`/`CONTROLLED_BY` sets for small methods per language.
 - **Contract.** The bundle, graph and canonical-answer schemas are versioned and validated in CI.
-  AC-22 is the "adds one directory, touches nothing else" test.
-- **Integration (on the 3-repo fixture system, P0(g)):**
+  AC-22 is the "adds one directory, touches nothing else" test. Its fixture gate has a planted
+  failing input: the same new unit plus a one-line edit to an existing file must fail it.
+- **Integration (on the 4-repo fixture system, P0(g); items on `fx-lib` gate at P2):**
   - every link kind and status;
   - **B1's four assertions:** writer W change lists reader R; RCA from R lists W; renaming the
     entity lists R and W; W does not list another writer W2;
@@ -1055,7 +1089,7 @@ The method is the ML note's (§4, §8). This section records only what binds the
   - stale-kept and not-mapped units;
   - **a verdict issued during a running build is present after the swap** (B6). So is one issued
     while the lock **expires mid-swap**, caught by the post-`RENAME` remainder replay (P2-3);
-  - a signature change in Python keeps the earlier-verdict note, and one in Java drops it
+  - a signature change in Python keeps the earlier-verdict note, and one in Java drops it (the Java half gates at P2 exit, §4.1)
     (SQ-C);
   - a taint finding's verdict survives an edit to a middle hop of its chain, and expires on an
     edit at either end (P2-7);
@@ -1142,7 +1176,7 @@ The method is the ML note's (§4, §8). This section records only what binds the
 
 - **AC-8** (every FR-9 rule, SQ-A). One sandboxed scenario runs a **full refresh plus queries**,
   with all egress through a logging proxy. It is re-run at the exit of every phase that adds an
-  outbound path, P1–P5, against that phase's full feature set (P2-1). It asserts:
+  outbound path (P1, P3, P4, P5, then P2), against that phase's full feature set (P2-1). It asserts:
   - a local-only codebase makes **zero connections outside the allow-list**, and the only allowed
     ones are its own git remotes, the separate vulnerability-database job, and any allow-listed
     IdP / access-check / PR service, whose request bodies carry nothing beyond repository names
@@ -1173,7 +1207,7 @@ The method is the ML note's (§4, §8). This section records only what binds the
 | K1 | **Joern frontend quality outside Python is unmeasured**, worst offline (C#, Go, Kotlin without a classpath) | Noise, or call-level fallback for whole languages | P0(a) measured with fetching on and off; `flowAvailable`; indexers per language |
 | K2 | **Dynamic wiring dominates in some codebases** | Floods of *possible* links | Bindings, convention packs, the runtime oracle, noise by distance band. Workplace statistics were declined (S38), so this is checked on this repo and the demo only. **Risk accepted.** |
 | K3 | **Summary-composition taint is an approximation** | Security misses across complex flows | Stated in answers; within-unit `reachableBy`; AC-15 sets with the never-unreachable gate |
-| K4 | **The rule-pack format is not expressive enough** (mount composition, URL binding, in-house buses) | AC-23 fails or code creeps into packs | P0(d) paper test; P2 second-author test; bundle-query escape hatch |
+| K4 | **The rule-pack format is not expressive enough** (mount composition, URL binding, in-house buses) | AC-23 fails or code creeps into packs | P0(d) paper test; P2 second-author test (last, so a format flaw is found late); bundle-query escape hatch |
 | K5 | **Unbounded edge families and the cost of flow points** (`DATA` fan-out under field paths, `RAN` volume, name products) | Memory, BFS state blow-up | `Name` indirection, direct facts only, depth-3 paths, P0 density measurement; the peak at preview cap 2 is ~18 GB (graph note §6.4) |
 | K6 | **Overlay latency in the `teco` flow** (Joern on changed units) | Slow dispatches | Changed units only; bundle cache; base-snapshot impact first, overlay as follow-up |
 | K7 | **The projection's build cost is unmeasured** (B2) | Long refreshes | Timed in the P0 vertical slice; schema freeze waits for it |
@@ -1182,7 +1216,7 @@ The method is the ML note's (§4, §8). This section records only what binds the
 | K10 | **Ground-truth cost**: two key agents, 75+ items per gate, 40+ bugs, ~140 questions bilingual, ~100 security cases | Evaluation is the bottleneck | Mechanical derivation where possible (`.proto`, Compose); mutation for bugs; strata per phase |
 | K11 | **Offline local-only precision** (S18): no dependency downloads | More *possible* items for Java/Kotlin/C#/Go | Pre-provisioned caches documented per codebase; P0 measures the gap |
 | K12 | **A first-run AC-5 failure is likely even for a good system** (~47% pass at true recall 0.99, ML §8.2) | Repeated gate cycles | The decided fail procedure (new blind list); plan for it in P1's schedule |
-| K13 | **Scope** | Long road to workplace value | Impact with flow and plain language in P1; generality in P2 |
+| K13 | **Scope** | Long road to workplace value | Impact with flow and plain language in P1; generality in P2, scheduled last |
 | K14 | **Arduino core and library headers missing under local-only** (nothing downloaded) | `c2cpg` resolution degrades: overloads and library types unresolved, more *possible* items | Pre-provisioned core include paths per codebase; `headers-unavailable` reason; AC-26 needs only the sketch's own cross-file calls; measured with and without headers (§4 optional slot) |
 | K15 | **Sketch preprocessing drifts from Arduino's**, or the line map drifts (wrong prototypes, off-by-n lines after the inserted text) | Missed cross-file calls, or evidence pointing at the wrong `.ino` line (FR-20) | Golden line-map tests over every generated line; drop anything that maps to *generated*; never rely on `#line` in `c2cpg`; reversal trigger to `arduino-cli` preprocessing (§3.2) |
 
@@ -1215,7 +1249,7 @@ The method is the ML note's (§4, §8). This section records only what binds the
 **For the stakeholder (via `tico`):** nothing open. v3's five questions and Pass 2's seven are
 decided and folded in (§2.3).
 
-Digest (v3.1):
+Digest:
 - **Programs are mapped at build time.** Joern maps each unit, offline when local-only, and
   projects its data flow and control dependencies onto parameters, returns and conditions. Shell,
   config, prompts, SQL and git history have their own small extractors.
@@ -1235,6 +1269,7 @@ Digest (v3.1):
 - **One egress broker** governs every outbound connection, build included.
 - **The code lives in `cpg/`.**
 - **Phases:** P0 contracts, vertical slice and ground truth → P1 flow-aware impact with every
-  client on this repo → P2 generality → P3 data, tests, change, review (AC-7 decided) → P4 trust
-  and governance → P5 RCA, security, closure. Arduino sketches (AC-26) take an optional slot
-  after P2 and gate no phase.
+  client on this repo → P3 data, tests, change, review → P4 trust
+  and governance → P5 RCA, security, closure → P2 generality (scheduled last; its ACs
+  close here, §4.1). Arduino sketches (AC-26) take an optional slot
+  after P2, which now follows P5, and gate no phase.
