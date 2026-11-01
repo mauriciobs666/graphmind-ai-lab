@@ -1,6 +1,6 @@
 # One standard local chat model (qwen) — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-31 · **Reviews:** `docs/reviews/standard-local-model.md`
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-31 · **Reviews:** `docs/reviews/standard-local-model.md`
 
 ## Intent
 Stop the dev machine (6 GB laptop GPU, LM Studio on Windows) from constantly juggling two local

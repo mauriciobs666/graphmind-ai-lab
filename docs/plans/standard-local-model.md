@@ -1,6 +1,6 @@
 # One standard local chat model (qwen) — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Reviews:** `docs/reviews/standard-local-model.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Reviews:** `docs/reviews/standard-local-model.md`
 
 *2026-10-31 — v1.3: revised in place for review Passes 5–6 (P3 sized in concurrent calls per ingest event, reporting `k*` against a pass depth `D` the stakeholder sets; reverse-order overlap check; `parallel` refused, not warned).*
 

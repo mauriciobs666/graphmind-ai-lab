@@ -1,6 +1,6 @@
 # Standard local model — FR-4 trial report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** —
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** —
 
 **Outcome (FR-4 / AC-2): fail.** qwen made up results in all three TP-001 runs (FR-4(a), which fails the trial outright). FR-4(b) is met (qwen 3/3 clean on TP-002 and TP-003, ministral 2/3 and 3/3). No run was void; 18/18 slots scored.
 

@@ -1,6 +1,6 @@
 # Standard local model — FR-4 trial test plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** —
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** —
 
 ## 1. Scope & objective
 

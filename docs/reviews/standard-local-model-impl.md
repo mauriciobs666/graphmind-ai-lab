@@ -1,6 +1,6 @@
 # standard-local-model — implementation gate (S1/S2 Pass 1; S3–S6 Pass 2)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (standard-local-model S1-S6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (standard-local-model S1-S6)
 
 CPG: considered, not relevant — shell scripts and docs only.
 

@@ -1,6 +1,6 @@
 # One standard local chat model (qwen) — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** —
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** —
 
 ## Pass 1
 

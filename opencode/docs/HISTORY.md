@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `opencode` component. Most recent first.
 
+## 2026-11-01 — Standard local model: qwen trialled for `tank`, failed; ministral stays; `tank` gets a model preflight
+
+Coordination: `docs/plans/standard-local-model-coordination.md`; requirements
+`docs/requirements/standard-local-model.md`; plan `docs/plans/standard-local-model.md`; reviews
+`docs/reviews/standard-local-model.md` (requirements/plan, Passes 1-6) and
+`docs/reviews/standard-local-model-impl.md` (Passes 1-2, approve with suggestions); trial and
+acceptance in `docs/test-reports/standard-local-model-report.md`.
+
+**Trial outcome: `fail` (FR-4/AC-2).** `qwen/qwen3-4b-2507` made up findings in all three
+TP-001 (health check) runs under every definition of "unsupported" the review tried (13, 10, 6 or
+4 across the three runs; every run at least one). It met FR-4(b) (3/3 clean refusals on TP-002
+and TP-003), but those texts echo the prompt's own examples, so the fail rests on FR-4(a).
+Ministral also embellishes (8 unsupported findings on the same rows under the strict
+definition), so the finding is that qwen failed the absolute bar, not that it is worse.
+`tank` keeps `mistralai/ministral-3-3b`, the second accepted exception to the one-chat-model
+rule alongside the salesperson demo (AC-5). The nemotron provider entry is removed; the qwen
+entry stays provisioned in `opencode/agents/tank/opencode.json`.
+
+**What shipped.**
+- `opencode/agents/tank/scripts/model-preflight.sh`, called by `health-check.sh`, `bring-up.sh`
+  and `tear-down.sh` before `opencode run`: refuses unless exactly one copy of the model is
+  loaded with context >= `TANK_MIN_CONTEXT_LENGTH` (20480) and parallel ==
+  `TANK_REQUIRED_PARALLEL` (1). **A copy off that parallel refuses every `tank` run**, and a
+  ministral loaded at the demo's 8192 is refused by design. Reads only; `TANK_MODEL_PREFLIGHT=0`
+  bypasses. Tests: `opencode/agents/tank/tests/model-preflight.sh` (45).
+- `N` = 20480, settled in S3: TP-001's peak prompt is 16,147 tokens; at 16384 a run exited 0 with
+  a truncated final step (`reason: length`).
+- FR-7 mechanism: LM Studio per-model defaults (qwen: context 20480, `numParallelSessions` 1)
+  are honoured by JIT loads, so `tank` and falkor-chat's `:8200` share one copy. With one slot
+  their requests queue: 21 concurrent extraction calls all finished in 116 s with no client
+  disconnect (S0, depth 8 chosen); an 8-chunk ingest during a `tank` run queued ~30-34 s and
+  reached `ready` (S3, a weaker overlap than planned: the `tank` run had finished before it
+  needed to wait). OpenCode aborts a request queued ~300 s and retries automatically; a run
+  can exit 0 with `reason: length`, so score the final step's `reason`.
+- Docs: `opencode/agents/tank/README.md` (Prerequisites: load ministral by hand at 20480 /
+  parallel 1, unload before a demo; Choosing a model; Troubleshooting), the manual
+  `opencode/docs/manuals/local-llm.md` (floor 20480, "Using `tank` with ministral"),
+  `falkor-chat/README.md` (one clause).
+
+**Measured, not gated.** AC-6: qwen + embedder (2048) fit the 6 GiB GPU with no spill
+(dedicated 5.7-5.8 GiB of 6141 MiB, shared 218-268 MiB; single readings, `tank` overlap not
+measured); conditional on the embedder staying explicit at 2048. AC-4: no commit of this change
+touches `falkor-chat/server` or `falkor-chat/scripts`; the demo was not re-run end to end.
+
 ## 2026-09-13 — `tank`: headless, local-model OpenCode DevOps agent shipped
 
 Closes this coordination — no formal M-number here, tracked as M0 per the plan's own

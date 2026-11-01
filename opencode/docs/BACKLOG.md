@@ -16,4 +16,4 @@
   step 9): a cron entry or systemd timer calling `opencode/agents/tank/scripts/health-check.sh`
   (and, less routinely, `bring-up.sh`/`tear-down.sh`) on a schedule. No design work done yet —
   the outer scripts are already the intended hook point, so this is mostly a deployment/ops task
-  once someone wants `tank` running unattended on a timer rather than invoked by hand.
+  once someone wants `tank` running unattended on a timer rather than invoked by hand. Constraint from the standard-local-model trial: `tank` needs its model loaded by hand at the preflight minimum, and with one slot a queued request is aborted by OpenCode at ~300 s and retried, so a scheduled run must not overlap heavy `:8200` extraction.
