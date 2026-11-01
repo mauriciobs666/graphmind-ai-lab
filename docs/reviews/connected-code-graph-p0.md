@@ -1052,3 +1052,48 @@ Growth-stops: the rewrite replaced the OPEN block and the Q-A text in place; no 
 - **Pass 6 n1 (seven vs eight deltas):** not re-checked; nit.
 
 **Freeze statement.** The freeze may be recorded effective on acceptance of `-spec4`. The single remaining condition is process, not content: the code, schema, tests and citation edits are uncommitted, so the freeze record must cite the commit that lands them (with or before acceptance).
+
+## Pass 8 — S17 graph model v1 (2026-11-01)
+
+**Scope:** `docs/plans/connected-code-graph-p0-graph.md` (184 lines) and the `Extended by:` header edit in `docs/plans/connected-code-graph-graph.md` (the only diff there; `Status` stays `active`, correct for an extension) against the S17 row of `docs/plans/connected-code-graph-p0-2.md` and the frozen schema (spec3 + spec4; freeze commit `88eb134d` exists and is the schema-freeze commit). The DDL, `test_ddl_live.py` and loader are not delivered; I judge only whether the note suffices to build them. **Not verified live:** `ccg_p0slice` is not on the instance the `cypher` tool reaches (it lists no such graph), so the node/edge/constraint counts and the self-edge instance are taken from the slice report (the self-edge source line `test_querygen.py:844` and the mount sites `app.py:485/521` match `git show defca60f`; the counts are inferred).
+
+**Verdict: approve with suggestions.** No blocker; two majors.
+
+CPG: considered, not relevant — a graph-model design note; the subject graph is a bundle-derived slice graph, not a `cpg_*` code graph.
+
+**Done-condition checklist (read against the row)**
+| Clause | Where | Result |
+|---|---|---|
+| Disposition for spec3 §9 and BF2-BF15 | §2 (14 rows, BF2..BF15, none missing) + "adopted except as amended" | present |
+| `ownedRegions` anchor rule | §1.4, D7 | present; narrowest interval, span beats owned region, then `depth`; fetches all symbols of the file, which is right |
+| D16 load rule + S23 batch ceiling | §4 | rule present; **ceiling is a placeholder** (M2 below) |
+| F-11 (`Cond` as `CONTROLLED_BY` source), `defaultHash` never carried, F-2 closed | §1.5, §1.5, §1.5 | present |
+| G-1 | §1.5 | present, partly (m3) |
+| P2-8 `keyPath` | §1.5 | present |
+| S-1 `pointId` indexes | D10, §4 | stated; the DDL file is the undelivered part |
+
+**Representability.** Every frozen record in spec3 §9.1 plus §1.11 and spec4 maps: `header` (Unit, `skippedFiles` -> `SkippedFile`, §1.3), `file`, `symbol` (extras D7), `param`/`ret`/`cond`, `callsite`, `data` (D8/D12, self-edge kept), `controlledBy`, `dependency`, `testMarker`, `configEntry`, `launchFact`, `schemaEntry`, `secretSighting`; no-node records stay no-node. The synthesized `ret` (spec4 §2) is an ordinary `Ret`. The not-carried list (BF13) covers every remaining field.
+
+**`candidateCount` (D6): coherent, no frozen field orphaned.** `git grep candidateCount` finds it in no bundle spec: only the graph note's `Link` template (`docs/plans/connected-code-graph-graph.md:353`), the slice report §6.5/Q8 and assembler code/tests; it is an assembler output, not a bundle field. Dropping it is consistent with spec3 BF6 (one Link per provider anchor), and §5 lists the tests/loader sites that must change (mutant A2). See m1 for the formula.
+
+### Findings
+
+**M1 (major). The "mapped / not mapped / not found" lookup has no repo scope.** §1.3's queries match on `path` alone (`File {path:$p}`, `SkippedFile {path:$p}`), and `SkippedFile` carries `unitId` but no `repoId`. The store holds many repos; `src/index.ts` or `README.md` exists in several, so repo A's path answers "mapped" for repo B's skipped file, which is exactly the FR-7a confusion the field exists to prevent. *Fix:* both queries take `repoId`; give `SkippedFile` a `repoId` property and index `(repoId, path)` (or keep `path` and filter on `repoId` after the seek); add one test with the same path in two repos, one mapped and one skipped. Verified by reading §1.3 and spec3 §9.1 (`File` has `repoId`).
+
+**M2 (major, process). The batch ceiling is not from S23.** The S17 row depends on S23 and says "the batch ceiling from S23"; S23 has delivered nothing (no `cpg/spikes/store/`, no stall probe in the tree), so §4 uses `BATCH_MAX` 20,000 "until S23 records a ceiling". That is honest and workable, but that clause of the done-condition is only provisionally met. `teco` should either record S17 as closed on that clause with an explicit carry to S23, or hold the clause. The DDL/loader must read the ceiling from one constant.
+
+**m1 (minor). D6's formula is ambiguous where open item 6.3 says it is.** "Sibling Links whose `VIA` source is the same consumer symbol and `VIA.consumerKey` equal" is per `VIA` edge, not per Link, since one Link can be reached by sites with different keys (6.3 says so). State: render count = number of Links sharing the (consumer symbol, `consumerKey`) of the `VIA` edge being rendered, self included; and keep a test where one Link is reached by two keys with different counts. Also say that the source of `VIA` is a `CallSite`, so "consumer symbol" is reached through `HAS_CALL`.
+
+**m2 (minor). The M2 (value-mode) labelling is not falsifiable on its `confirmed` side.** §3.3 labels continuations `possible`/`function-level-continuation` and keeps `HAS_RETURN <-` and anchor-`Symbol` `CALLS <-` `confirmed`. §5 only flips the existing `buildUrl` assertion to `possible`; that kills a "label as confirmed" mutant but not "label everything `possible`", and Pass 4 M2 asked for a planted case where the value does not reach the callee's return and the caller must not be `confirmed`. Add to §5: (a) a hand-built graph where a `Ret` is reached, asserting `confirmed`; (b) the planted non-reaching case asserting `possible`; (c) a `viaData` test. Mechanism read; no mutant run (no code yet).
+
+**m3 (minor). Visited-set / `bfs-v1` baseline falsifiability.** The rule "re-expanded only on a strictly smaller `(possible, distance)`" is exactly my Pass 4 mutant I7 (`<` vs `<=`, survived 227 tests). §1.1 defers the DATA-cycle case to the S20 synthetic graph, but S20 builds `cpg/spikes/store/bfs.py`, a benchmark implementation, not `impact.py`'s `bfs-v1`. Add to §5 the two-point `DATA` cycle with matching paths (asserting termination and state count) against `impact.py`, plus tests for the 10,000 `RESULTSET_SIZE` raise and the level-64 guard ("fails loudly" is untested otherwise). The 21 items and 79 vs 62-65 states are reproducible from `test_live_slice.py` (cited S14 §6.8).
+
+**m4 (minor). G-1 wording.** The row asks for `port`, `mountPath`, `service`, argv[0] "and the role-relevant pairs" and "S33 told which". §1.5 lists `launchKind, protocol, port, envVar, mountPath, service, argv0`, omits the pairs and never says S33's rendering consequence (what renders when a field is absent). `argv0` is not a bundle field name in spec3 §1.6; say it is the loader's derivation from the gated `command`/`args[0]` and that the derivation reads the already-gated value, not raw argv.
+
+**m5 (minor). Sufficiency for the undelivered parts, and doc hygiene.** The note is enough to write the DDL, loader deltas D1-D8 and `test_ddl_live.py`, except: (a) the index/constraint set is spread over D10, §1.3 and §4; give one table (label, property, kind, before/after load) so `db.indexes()` can be compared mechanically; (b) D5 `MOUNTED_BY` needs mount facts as ids that the assembler does not emit (item 4): mark it explicitly out of the first loader slice. Hygiene: §5 cites test line numbers ("around line 635", 922-947, 509...), which drift; cite test names only. §3.3 restates S14's numbers (a fact with a home); cite, do not copy. Growth-stops: the note is new and states only the change against the graph note; no finding/resolution table; the `Extended by:` pointer is the one edit to an executed-against document, as the collision rule allows.
+
+### What's solid
+Successor-not-edit handling; the three-query lookup order with no `OR` filters and `SkippedFile` kept out of `DEFINES`/`HAS_FILE`; the `ownedRegions` rule fetching all symbols instead of a span predicate; D8's default-elision with an explicit coalescing obligation on `impact.py`; the M2 consequence stated up front, including the assertion that must change.
+
+### Open question for `teco`
+M2: close S17 with the ceiling carried to S23, or hold that clause?

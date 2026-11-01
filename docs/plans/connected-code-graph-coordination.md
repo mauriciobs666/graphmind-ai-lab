@@ -289,3 +289,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-01 **FREEZE effective** (S15): schema v1 + graph model v1 frozen as spec3 + spec4, commit 88eb134d (schema, validator, tests, citation fixes, review Pass 7 approve). tdd-engineer a090a07ec848ab67c done; analyst a1298392a90a84779 done. Next: S17 (graph-dba), then S35-S39 fixtures (carry fx-job rows), devops S53/F-1.
 
 - 2026-11-01 S17 note delivered by graph-dba af73ed7cf2aef95c2: docs/plans/connected-code-graph-p0-graph.md (path per S17 row; Extended-by pointer added to the graph note). candidateCount dropped from Link (sibling-Link count via VIA.consumerKey). Gate -> analyst a1298392a90a84779 (Pass 8) dispatched. Remaining S17 row parts (ddl_v1.cypher, test_ddl_live.py, loader changes; need live __build_ key) not yet dispatched.
+
+- 2026-11-01 S17 gate Pass 8: approve with suggestions (M1 lookup repo scope, M2 batch ceiling provisional -> carried to S23, m1-m5). Revision sent to graph-dba af73ed7cf2aef95c2; then short re-check by analyst a1298392a90a84779, commit, then dispatch DDL/test/loader remainder.
