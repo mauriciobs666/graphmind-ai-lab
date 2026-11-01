@@ -1,6 +1,6 @@
 # Typed Decision Models (Jev/Laya-style "System 1") — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-10-31
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-01
 
 ## Intent
 
@@ -288,3 +288,10 @@ answer that was never logged here or acted on. (FR-6, FR-8, AC-4)
 sizes, pilot first; spent point by point (guard → message type → join-in) across usage windows,
 stopping at a point boundary if usage runs out.** Replaces the API-cost basis of the 2026-10-30
 (P5-M3b) "full design size accepted" entry. (no FR change)
+2026-11-01 — (Plan4 Q-1) May the labelling driver be relaunched unattended at each new usage
+window? → **Yes: unattended relaunch per usage window is OK.** Extends the 2026-10-31 (Q4) entry;
+mechanism in `docs/plans/typed-decision-models6.md` §3.1. (no FR change; FR-6, FR-8 unchanged)
+2026-11-01 — What happens when the Opus generator is flagged by a safety filter during a
+campaign? → **Each flag halts the campaign and nothing from that run is counted; the stakeholder
+decides each time to retry, skip the batch, or move generation to another model; no automatic
+model fallback.** Mechanism: `docs/plans/typed-decision-models6.md` §3.5. (FR-8)

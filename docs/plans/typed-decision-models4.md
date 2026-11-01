@@ -505,11 +505,9 @@ hand-built from §2's shapes, plus one trimmed real transcript as a shape check.
 
 ## 6. Risks & open questions
 
-**Stakeholder question (non-blocking).**
-- **Q-1:** may the driver be restarted unattended at each new usage window (a scheduler or
-  `mcp-monitor` relaunching the session), or does a human start every window? This plan designs
-  the human-started form. Because state is on disk and reconciliation is idempotent, an
-  unattended relaunch could be added later without changing U5.
+**Stakeholder question Q-1** (unattended relaunch per usage window): answered yes, 2026-11-01
+(`docs/requirements/typed-decision-models.md` decision log); the unattended form is designed in
+`docs/plans/typed-decision-models6.md` §3.1–§3.2.
 
 **Risks** (adding to plan2 §6 and plan3 §6):
 - **R-17: environmental halts stall a campaign.** A Claude Code update can change transcript shape
