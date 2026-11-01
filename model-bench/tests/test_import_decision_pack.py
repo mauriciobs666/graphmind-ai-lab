@@ -339,10 +339,40 @@ def test_the_vector_generation_is_complete(role):
     forms = generation["dropped"]["formMismatch"]
     assert isinstance(forms, dict) and all(_is_int(n) for n in forms.values())
     assert _is_int(generation["dropped"]["bindingMismatch"])
-    (run,) = generation["runs"]
-    assert set(run) == _RUN_KEYS
-    assert set(run["tokens"]) == {"input", "cacheWrite", "cacheRead", "output"}
-    assert [set(i) for i in run["instructions"]] == [{"path", "sha256"}]
+    runs = generation["runs"]
+    assert len(runs) == 2
+    for run in runs:
+        assert set(run) == _RUN_KEYS
+        assert set(run["tokens"]) == {"input", "cacheWrite", "cacheRead", "output"}
+        assert [set(i) for i in run["instructions"]] == [{"path", "sha256"}]
+
+
+def _json_type(value: Any) -> str:
+    """plan6 §3.7's JSON type, as `json.loads` gives it; a boolean is never an integer."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    return {float: "number", str: "string", list: "array", dict: "object"}[type(value)]
+
+
+#: plan6 §3.7: the keys on which the incomplete run, a type exemplar, differs from the ingested one.
+_TYPE_EXEMPLAR_KEYS = {
+    "voidClass", "voidReason", "claudeCodeVersion", "model", "sessionContextSha256", "thinking",
+    "effort",
+}
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_the_vector_runs_differ_in_type_exactly_on_the_exemplar_keys(role):
+    """U6.8 (impl review P29-M1): U5.10 compares each output run against the union of types the
+    line's runs show per key, so the incomplete run must widen exactly §3.7's seven keys."""
+    ingested, incomplete = _SHAPE_BY_ROLE[role]["generation"]["runs"]
+    assert (ingested["status"], incomplete["status"]) == ("ingested", "incomplete")
+    differing = {k for k in _RUN_KEYS if _json_type(ingested[k]) != _json_type(incomplete[k])}
+    assert differing == _TYPE_EXEMPLAR_KEYS
 
 
 def test_the_guard_line_carries_a_form_entry_and_the_others_none():

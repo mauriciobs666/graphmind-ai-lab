@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.8 — dataset contract vector copy re-made
+
+**What:** `docs/plans/typed-decision-models6.md` v1.8 §4's U6.8 row:
+`tests/fixtures/decision-contract/dataset-shape.jsonl` re-copied byte for byte from model-bench's
+canonical file, which gained each line's second, incomplete `runs[]` entry (§3.7's type exemplar;
+model-bench `docs/HISTORY.md` has the detail). `cmp`-equal; the guarded-equality test in
+`tests/test_decision_contract.py` is green. Suite 819 passed, 2 xfailed (unchanged); ruff clean.
+
 ## 2026-11-01 — typed-decision-models U5.6 — campaign ledger and driver CLI
 
 **What:** `docs/plans/typed-decision-models6.md` (v1.8) §4's U5.6 row and §5 U5.6 row over plan4

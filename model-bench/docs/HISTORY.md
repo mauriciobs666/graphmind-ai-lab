@@ -2,6 +2,21 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-11-01 — typed-decision-models U6.8 — the dataset vector's incomplete run
+
+**What:** `docs/plans/typed-decision-models6.md` v1.8 §3.7 and §4's U6.8 row (impl review
+P29-M1, Pass 30). Each line of `tests/fixtures/decision-contract/dataset-shape.jsonl` gains a
+second `runs[]` entry, a type exemplar for U5.10's union-of-types comparison: `runId` `run_0002`,
+`batchId` `bat_0002`, `status`/`voidClass`/`voidReason` `"incomplete"`, the five transcript facts
+`null`, `tokens` all 0, every other key as run 1's. decision-models' byte-copy re-made.
+
+**Tests:** `tests/test_import_decision_pack.py` — `test_the_vector_generation_is_complete` checks
+both runs (was `(run,) =`); new `test_the_vector_runs_differ_in_type_exactly_on_the_exemplar_keys`
+(3, one per role) asserts the two runs differ in JSON type on exactly §3.7's seven keys. Mutants,
+each restored `cmp`-equal: run 2's `model` a string → 3 failed; run 2's `agentId` `null` (a key
+outside the seven) → 3 failed; the completeness test reverted to `(run,) =` → 3 failed. Suite
+3651 → 3654 passed (5 deselected, 2 xfailed); ruff clean.
+
 ## 2026-11-01 — typed-decision-models U6.6 — dataset contract vector and `labelVotes`-key refusal
 
 **What:** `docs/plans/typed-decision-models6.md` v1.5 §3.7 (amending

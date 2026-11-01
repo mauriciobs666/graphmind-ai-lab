@@ -454,3 +454,10 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - The coder's three calls are upheld.
   - P11-n1 (README: name the safe repair) was a one-sentence fix, made by teco.
   - **U5.6 accepted.** Committed with plan6 v1.8, Passes 10–11 and the ledger.
+- 2026-11-01: Committed `6837ddbb` (U5.6). **U6.8** dispatched → `coder` aa56dba590fccf80c (plan6 v1.8 §3.7 + §4 U6.8 row). Gate: teco check (mechanical fixture change, plan-stated values, mutants named in the row) — no analyst pass. U6.3 next after U6.8 lands (both touch decision-models HISTORY).
+- 2026-11-01: **U6.8 accepted** (coder aa56dba590fccf80c, 67k / 15).
+  - teco checks:
+    - The canonical file and the copy are `cmp`-equal.
+    - Each line equals the baseline with run 2 removed. Run 2's value differences are ids, status, tokens and the seven §3.7 keys.
+    - model-bench: 3654 passed, 5 deselected, 2 xfailed. decision-models: 819 passed, 2 xfailed.
+  - The coder's three mutants (row-named `model` string, a key outside the seven, `(run,) =` revert) each gave 3 red.
