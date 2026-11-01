@@ -1,8 +1,8 @@
 # Typed Decision Models — Implementation Plan, Headless Driver and Probe-Informed Audit
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.5 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.7 · **Extends:** `docs/plans/typed-decision-models4.md` · **Reviews:** `docs/reviews/typed-decision-models6.md`
 
-*2026-11-01 — v1.5: U6.7 evidence (report §10; gates (g), (h)); every hook reject halts as one class `guardRejected`, rows keyed on `permissionDecision`; `hookDenied`, `guardError` and `permissionDenied` removed.*
+*2026-11-01 — v1.7: P30-m1, U5.10's run fixtures are ones `audit_run` produces and the vector's second run is a type exemplar; P30-n1.*
 
 ## 1. Goal & scope
 
@@ -248,8 +248,8 @@ Plan4 §3.7 defines `generation.json` and the item keys. These two shapes comple
   Its values are non-negative ints summing to `votesPerItem` (3). A JSON boolean is never a key, so the predicate spelling is fixed here, lowercase.
 
 **Contract vector.** One file, `model-bench/tests/fixtures/decision-contract/dataset-shape.jsonl`, owned by model-bench. It has one line per decision point (3), each line `{"role", "generation", "items", "splits"}`:
-- `generation` is a complete plan4 §3.7 object, with every key including `promptSha256.spawnTemplate.driver` and `dropped.safeguardSkipped`. It also carries plan5 §3.5's `dropped.formMismatch: {<form>: n}` and `dropped.bindingMismatch`, and one `runs[]` entry.
-- `items` holds three items, one per split, carrying every item key.
+- `generation` is a complete plan4 §3.7 object, with every key including `promptSha256.spawnTemplate.driver` and `dropped.safeguardSkipped`. It also carries plan5 §3.5's `dropped.formMismatch: {<form>: n}` and `dropped.bindingMismatch`, and two `runs[]` entries. One is ingested. The other, `incomplete`, is a type exemplar rather than one real record: `voidClass` and `voidReason` are strings, and `claudeCodeVersion`, `model`, `sessionContextSha256`, `thinking` and `effort` are `null`.
+- `items` holds three items, one per split, carrying every item key. Message type's show `priorTurn` both `null` and an object.
 - `splits` follows the shape above.
 
 `decision-models/tests/fixtures/decision-contract/dataset-shape.jsonl` is a byte-copy, under the existing guarded-equality test (`decision-models/tests/test_decision_contract.py`).
@@ -257,11 +257,16 @@ Plan4 §3.7 defines `generation.json` and the item keys. These two shapes comple
 Who checks what:
 - **The importer's tests** read the canonical file. Each line's items pass the importer's item projection and `_eval_ids`.
 - **The importer** gains one refusal: `labelVotes` keys ≠ the answer space. Today it accepts any keys summing to 3.
-- **U5.10** checks its `finalize` output on its fixture campaign against the copy, for each role. Key sets must be equal, recursively for `generation.json`, as must the JSON value types, the `labelVotes` key set and the `splits.json` key set. Three containers are the exception: `dropped.formMismatch` (its keys are the forms that dropped), `runs[]` and each run's `instructions` list (their lengths come from the data). For those, only the value type of each entry is compared, against the vector's entry. The `items.jsonl` and split lists are compared per entry in the same way. U5.10's fixtures include one campaign where a form dropped and one where none did.
+- **U5.10** checks its `finalize` output on its fixture campaign against the copy's line for the same role.
+  - **Outside the data-sized containers,** key sets must be equal, recursively for `generation.json`, and so must each value's JSON type. The types are object, array, string, integer, other number, boolean and null, as `json.loads` gives them; a boolean is never an integer.
+  - **The data-sized containers** are `dropped.formMismatch` (its keys are the forms that dropped), `runs[]`, each run's `instructions`, `items.jsonl` and the three split lists. Each output entry is compared against all of the line's entries of the same container, never one chosen entry, so the vector stays the shape's one home and no key is named here. An object entry's key set must equal theirs, and each of its values must have a type that some vector entry shows for that key. A scalar entry's type must be one the vector's entries show.
+  - **An entry is compared one level deep.** Below it, only each run's `tokens` key set, its `instructions` entries (by this rule) and each item's `labelVotes` key set are compared. Input-field shapes are `input_field_errors`' check.
+  - **An output entry with no counterpart is refused,** never passed vacuously: its container is empty on the vector's line, as a `formMismatch` entry on a join-in line would be.
+  - U5.10's fixtures include one campaign where a form dropped and one where none did.
 
 ## 4. Units
 
-These change plan4 §4.1's U5.5–U5.7 rows and add seven units. Every code unit gets an `analyst` code gate. U5.x and U6.x serialize on `decision-models/docs/HISTORY.md` (plan4 §4.3).
+These change plan4 §4.1's U5.5–U5.7 rows and add eight units. Every code unit gets an `analyst` code gate. U5.x and U6.x serialize on `decision-models/docs/HISTORY.md` (plan4 §4.3).
 
 | Unit | Owner | Brief | Done when |
 |---|---|---|---|
@@ -275,10 +280,11 @@ These change plan4 §4.1's U5.5–U5.7 rows and add seven units. Every code unit
 | **U6.4** unattended schedule | `devops` | §3.2 "Scheduling": install the timer (a systemd user timer, else cron) for one campaign root. Document in `decision-models/README.md` how to install and disable it, `pause [--now]`/`resume`, and how to read `status`. | On a smoke campaign:<br>- two consecutive fires: the first runs a batch, and the second, fired while the first is running, exits 0 on the lock;<br>- `pause`, issued while a run is active, lets the batch finish, and the run then exits;<br>- a fire after that exits at once;<br>- disabling the timer removes it from the scheduler's list. |
 | **U6.5** requirements decision log | `tico` | Append Q-1 → "unattended relaunch per usage window OK" (stakeholder, 2026-11-01), with the FR/AC it affects, to `docs/requirements/typed-decision-models.md`'s decision log. The generator-flag rule in §3.5 gets its own entry. | The entries exist, one question → one answer each. |
 | **U6.6** dataset contract vector | `coder` (model-bench, then the decision-models copy) | §3.7: `dataset-shape.jsonl`, the importer tests that read it, the importer's `labelVotes`-key refusal, and the byte-copy with its guarded-equality test. | Both suites green. A planted `labelVotes` key `"True"` is refused by the importer. Removing `rngSeed` from the canonical file reddens the decision-models equality test until the copy is re-made. |
+| **U6.8** the vector's incomplete run | `coder` (model-bench, then the decision-models copy) | §3.7's second `runs[]` entry, added to each line of the canonical file: `runId` `run_0002`, `batchId` `bat_0002`, `status`, `voidClass` and `voidReason` all `"incomplete"`, `tokens` all 0, and the keys §3.7 does not name as run 1's. `test_the_vector_generation_is_complete` checks every run, not one (`(run,) =` today). Then the byte re-copy. | Both suites green, and the copies are `cmp`-equal. A new model-bench test asserts that each line's two runs differ in type exactly on §3.7's seven keys. Setting the new run's `model` to a string reddens it. |
 
 **Order:**
 - U6.7 → U5.5 fix round → U5.6 → U6.3 → U5.7 (with its smoke) → U6.4 → U5.8 onward, per plan4 §4.3.
-- U6.6 runs any time before U5.10, and U5.10's brief adds §3.7's check.
+- U6.6, then U6.8, run any time before U5.10, and U5.10's brief adds §3.7's check.
 - U6.5 can run at any time.
 - The guard pilot's live windows (U5p) use `driver run` under U6.4's timer, with no human start per window. Its first spent window is §3.4's usage-shape red check.
 
@@ -292,8 +298,8 @@ These rows replace plan4 §5's U5.5 "No `tool_result` is incomplete" clause and 
 | U5.6 | `issued` carries `sessionId`, and reconciliation reads only that transcript: a planted second driver session in the same directory is ignored. `next` returns `stop` while `store/pause` exists and serves again once it is gone, with the ledger byte-equal across the pause. `init` records `batchTimeout` and `launchFailBound`. `resolve --skip-batch` drops the batch's seeds or items into `dropped.safeguardSkipped` and re-issues nothing. Ledger byte-equal after each planted re-ingest, per the carried ruling. |
 | U6.3 | These tests use a fake `claude` executable on `PATH`, written by the test. Nothing calls the real CLI.<br>- **Environment and argv:** the child receives exactly the allowlisted environment plus the variable, so a planted `ANTHROPIC_API_KEY` and `CLAUDE_CODE_EFFORT_LEVEL` are absent. The argv equals §3.2's command, and `--fallback-model` is absent.<br>- **User settings** (a fake `HOME`): `autoContinueAtUsageLimit: true`, an `env` key, a `hooks` key or a `permissions` edit each refuse the launch with no ledger write, and `status` prints the reason. A `theme` or `model` edit does not refuse.<br>- **Single-flight:** a second `run` against a live runner's lock exits 0 without launching.<br>- **Timeout:** a child that sleeps past `batchTimeout` is killed as a group, and the batch is ingested.<br>- **Pause (M2):** `pause` succeeds while a fake child holds the lock, and the run exits after that batch. `pause --now` stops the runner and its child, and the ledger gains exactly one `interrupted`. The next `run` reconciles the batch without counting it toward the cap.<br>- **Orphan:** a fake child outlives a SIGKILLed runner. A new `run` exits 0 on the lock without launching or signalling. Once the child ends, the next `run` reconciles. `pause --now` with a `runner.json` naming a live process with a different start time signals nothing.<br>- **Root:** a root inside a git work tree is refused. |
 | U5.7 | Plan4's U5.7 row, plus: `dm-driver` pins `claude-sonnet-5-5`, has no `Bash` and has `maxTurns: 3`. No definition carries `hooks`. `settings.json` wires `guard_hook.py` once, with `onFailure: "block"`, and `install` refuses a copy without it. **Bounds axes** (P3-m3), shared with U5.5, each a planted case with its expected value written in the test: relative or absolute × `..` × a symlinked file or directory × a sibling prefix (`ans-x/`) × the bound directory itself × an empty or non-string path. An unknown or missing `agent_type`, a missing `tool_input`, and a planted exception each exit 1 with no decision. The guard allows `SubagentHandback` only for the two subagent roles, if §3.3's condition holds. `promptSha256.spawnTemplate.driver` is recorded. `install` records the user-settings hash and keys. |
-| U6.6 | As its done-condition in §4. |
-| U5.10 | Plan4's row, plus §3.7's shape check of `finalize` output against `dataset-shape.jsonl`'s copy. A planted `labelVotes` key `"True"` reddens it, and so does a missing `rngSeed`. |
+| U6.6, U6.8 | As their done-conditions in §4. |
+| U5.10 | Plan4's row, plus §3.7's shape check of `finalize` output against `dataset-shape.jsonl`'s copy.<br>- **Passes:** the fixture campaigns' runs come from `audit_run` on `tests/test_audit.py`-style transcripts, among them an incomplete run whose agent transcript is cut after the prompt entry (four facts `null`) and a `spawnPromptMismatch` void from an empty agent transcript (all five `null`). A message-type campaign holds an opening and a follow-up item.<br>- **Reddens:** a planted `labelVotes` key `"True"`, a missing `rngSeed`, a run's `attempt` written as `"1"`, and an item's `genRound` written as `true`.<br>- **Refused for no counterpart:** a `formMismatch` entry on a join-in output.<br>- **Mutants:** comparing against the vector's first entry only, or passing an entry with no counterpart, each redden. |
 
 ## 6. Risks & open questions
 
@@ -308,9 +314,9 @@ These rows replace plan4 §5's U5.5 "No `tool_result` is incomplete" clause and 
 
 ## 7. Ready to implement
 
-Plan: `docs/plans/typed-decision-models6.md` v1.4 (extends plan4), closed by `teco`'s line check against review Pass 3.
+Plan: `docs/plans/typed-decision-models6.md` v1.7 (extends plan4).
 - The campaign driver becomes `driver run`: a stdlib runner that launches one `claude -p --agent dm-driver` session per batch, with `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, an environment allowlist, refusals on named user settings (shown by `status`), a runner-chosen `--session-id`, a timeout, and an `flock` lock passed to the child. Pausing is a lock-free `store/pause` file, and a 30-minute user timer starts the runner.
 - `dm-driver` is pinned to `claude-sonnet-5-5` and loses `Bash`. The guard, the only bound on tool use, is wired once with `onFailure: "block"` (§3.3).
 - The audit rows and their precedence are §3.4's.
 - Generator flags halt, with a stakeholder choice of retry, skip or model move. `splits.json` and `labelVotes` get a contract vector (U6.6).
-- **Start order:** U6.7 → U5.5 fix round → U5.6 → U6.3 → U5.7 smoke → U6.4. U6.5 and U6.6 run at any time, with U6.6 before U5.10.
+- **Start order:** U6.7 → U5.5 fix round → U5.6 → U6.3 → U5.7 smoke → U6.4. U6.5, U6.6 and U6.8 run at any time, with U6.6 then U6.8 before U5.10.

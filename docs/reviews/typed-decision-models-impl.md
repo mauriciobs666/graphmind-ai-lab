@@ -3828,3 +3828,107 @@ forbids.**
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 30 — plan6 v1.6 §3.7, U6.8 and U5.10 rows, re-checking P29-M1 (2026-11-01)
+
+*2026-11-01. Read: `git diff -- docs/plans/typed-decision-models6.md`, which is v1.6 and
+uncommitted. The re-check was executed, not argued. The real `decisionmodels.audit` `combine` and
+`run_record` were driven through `tests/test_audit.py`'s fixture helpers (imported read-only, with
+no bytecode written). Their records were then checked with a throwaway implementation of v1.6's
+rule against the vector as U6.8 amends it, built in `scratchpad/p30/` (`runs.py`, `rule.py`). No
+repo file was edited except this one.*
+
+**Verdict on v1.6 §3.7 and the U6.8 and U5.10 rows: approve with suggestions.** The union rule
+passes every record the real code produces, and it refuses each planted defect. Both of U5.10's
+named mutants redden. One minor remains: the vector's stated provenance for its second run cannot
+be produced. There is also one growth nit.
+
+CPG: considered, not relevant — no decision-models or model-bench CPG is loaded.
+
+### Execution
+
+- **What `run_record` actually gives** (`role`, `attempt` and `requestSha256` are fixed by the
+  caller):
+
+  | Run | `status` / `voidClass` / `voidReason` | Five transcript facts |
+  |---|---|---|
+  | clean, ingested | `ingested` / null / null | all set |
+  | answer-check `Void` | `void` / `run-attributable` / `outOfSpace` | all set |
+  | `inputInvalid`, counted | `void` / `run-attributable` / `inputInvalid` | all set |
+  | kill shape, full agent transcript | `incomplete` ×3 | all set |
+  | in flight, agent transcript cut to 1 entry | `incomplete` ×3 | `claudeCodeVersion` string, other four null |
+  | cut to 2 entries | `incomplete` ×3 | `model`, `thinking`, `effort` null |
+  | cut to 4 entries | `incomplete` ×3 | `model` null |
+  | in flight, agent transcript empty (0 entries) | `void` / `driver` / `spawnPromptMismatch` | all five null |
+  | second incomplete (cap) | `void` / `driver` / `incomplete` | all set |
+  | in flight with no agent file; never spawned | no record (`run_record` → `None`) | — |
+
+- **The v1.6 rule against the U6.8-amended vector.** The faithful output carries all eight records
+  above as `runs[]`. The guard has three `formMismatch` forms. Message type's eval split holds both
+  an opening item (`priorTurn: null`) and a follow-up item (object). Result: **pass on all three
+  lines.**
+- **Refused, as §5's U5.10 row requires:** `"True"` vote key; missing `rngSeed`; `attempt: "1"`;
+  `genRound: true`; a join-in `formMismatch` entry (no counterpart). Also refused:
+  - a string form count;
+  - an extra item key `split`, and a missing `seedId`;
+  - `status: null`;
+  - a renamed `tokens` key;
+  - an `instructions` entry without `sha256`;
+  - an integer in a split list.
+- **Mutants.** "First entry only": every faithful output reddens, on `runs.voidClass` (string not in
+  `[null]`). This is also what the v1.5 single-run vector would have done, so U6.8's edit is
+  necessary. "No counterpart passes": only the join-in `formMismatch` case flips to pass. Each
+  mutant reddens exactly where U5.10's row says it should.
+- **Below the depth limit:** a string `labelVotes` count, a `null` token count and a follow-up
+  `priorTurn` lacking `text` all pass the rule. None of them reaches a pack silently.
+  - **The vote count:** the importer refuses it (`_project_eval_item`'s counts check, verified in
+    Pass 29).
+  - **The token count:** the importer never reads `tokens`.
+  - **The `priorTurn`:** the input-field shape is `input_field_errors`' check, which runs first at
+    generation ingest (plan5 §3.5) and voids the run.
+  - **What the importer reads** is all covered by the rule at full depth:
+    - `generator`/`labeler`, `labelBatchCap` and `itemCount` are outside the data-sized
+      containers;
+    - every item key's type is checked one level deep;
+    - `labelVotes` keys are checked;
+    - `splits.eval` entries are checked.
+  - So the depth limit leaves no realistic shape that the importer depends on unchecked.
+
+### Dispositions
+
+- **P29-M1 — fixed.** Union per key across the role line's entries, plus U6.8's incomplete run:
+  every real `run_record` shape and both `priorTurn` shapes pass (executed above).
+
+### Findings
+
+**P30-m1 (minor; `architect`). The second run's stated provenance, and U5.10's "Passes" fixture,
+cannot be produced by the real audit.**
+- **Evidence (executed, table above):** v1.6 §3.7 says the incomplete run is "`run_record` on a
+  transcript cut before the subagent's first reply" with all five facts `null`. A transcript cut
+  after its first entry still has `claudeCodeVersion` as a string. All five are `null` only when
+  the agent transcript is empty, and that run audits as a `spawnPromptMismatch` driver halt with
+  `status: "void"`, not `incomplete`. U5.10's row asks for "an incomplete run with the five
+  transcript facts null", which `audit_run` cannot yield. U5.10 would then have to hand-build a
+  record, which is exactly the drift the vector exists to stop.
+- **Not affected:** the union. It is per key, so the vector's run 2 works as a type exemplar, and
+  U6.8's row values (`incomplete` ×3, five nulls, zero tokens) can stay as written.
+- **Fix:** drop the parenthetical provenance from §3.7, or make it "the five facts `null`, as an
+  empty subagent transcript gives them". Change U5.10's "Passes" bullet to two real runs:
+  - an incomplete run cut after the prompt entry (`model`, `sessionContextSha256`, `thinking` and
+    `effort` null);
+  - a void run from an empty subagent transcript (all five null).
+
+**P30-n1 (nit; `architect`). Growth-stops.** The +346 words is verified (6,803 → 7,149). Measured
+from the diff:
+- **New scope (≈ +160):** the U6.8 row (≈ +100) and the U5.10 test row (≈ +60, new tests).
+- **Rework answering P29-M1 (≈ +190):** §3.7's comparison rule (≈ +150, the architect's ~150) and
+  the vector description (≈ +40).
+
+Most of the rework is precision the old rule lacked, and it cannot be cut without losing the fix.
+The exception is the 31-word bullet "A union, not a named list of nullable keys, because…". It
+argues against a review option rather than stating the design. Cut it, or fold it to a clause
+("the vector is the shape's one home"). The provenance clause is corrected by P30-m1 anyway.
+
+### Proposed REVIEW.md lines
+
+None.

@@ -390,3 +390,17 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
   - **P29-M1** (§3.7's value-type comparison is unpassable as worded: run `null`s vs void-run strings, and no rule for which vector item an output item is compared against) → fresh `architect` a7b930e4646af8d40, plan6 v1.6, before U5.10. It does not block U6.6.
   - Any vector edit becomes a named follow-up unit.
 - 2026-11-01: U6.6 fixes for P29-m1/n1 (coder a716b52aa329c0705; comment, docstring and AGENTS text only; `model-bench/AGENTS.md` at 2,495 words). teco's re-run: counts unchanged. **U6.6 accepted** and committed with Pass 29. Next: U5.6 (decision-models).
+- 2026-11-01: Committed `0d05d16e` (U6.6). U5.6 dispatched → `coder` a62d2b080d46a77de (plan6/plan5/plan4 U5.6 rows, the carried ledger rulings, Pass 9's caller items, the required `Launch`; baseline 671). Gate: `analyst` impl (decision-models, Pass 10 in `docs/reviews/typed-decision-models4-impl.md`). Plan6 v1.6 (P29-M1) is with architect a7b930e4646af8d40, which touches only the plan.
+- 2026-11-01: Plan6 v1.6 delivered (architect a7b930e4646af8d40, 78.5k tokens / 16 tools; 6,803 → 7,149 words).
+  - §3.7's rule is now a union of types per key across a role line's container entries, one level deep, with a no-counterpart refusal.
+  - New unit **U6.8** (`coder`; the vector gains an `incomplete` second run; re-copy), U6.6 → U6.8 → before U5.10.
+  - The U5.10 row now has fixtures and mutants.
+  - Re-check by executing → the finding's own reviewer, analyst a3586603054d41c8e (Pass 30), rather than a teco line check: the rule is new and non-trivial.
+  - U6.8 is held until U5.6 lands (both touch `decision-models/` HISTORY and the fixtures area).
+  - The architect flagged §7's stale 'v1.4' line, which teco will fix at commit.
+- 2026-11-01: Pass 30 (analyst a3586603054d41c8e, 157k tokens / 14 tools). P29-M1 is **fixed**: the analyst executed the real `audit.combine`/`run_record` rather than re-arguing. Verdict on v1.6 §3.7 plus the U6.8 and U5.10 rows: **approve with suggestions**.
+  - P30-m1 (minor): the second run's stated origin can't be reached. A transcript cut before the first reply keeps `claudeCodeVersion`, and the all-null run audits `void`. The U5.10 'Passes' fixtures must be real `audit_run` outputs.
+  - P30-n1 (nit): the 31-word bullet that argues against a review option.
+  - Both are routed to architect a7b930e4646af8d40 for v1.7, which also takes the §7 'v1.4' fix. The re-check is a teco line check: the fixes are textual and the union rule is unchanged.
+  - Plan6, Pass 30 and the ledger commit together after v1.7.
+- 2026-11-01: Plan6 v1.7 delivered (architect a7b930e4646af8d40, 87k tokens / 6 tools; 7,149 → 7,145 words). P30-m1 fixed: the vector's second run is now a type exemplar, and U5.10's 'Passes' fixtures are `audit_run` outputs. teco checked these against `audit.py` `_facts` (`claudeCodeVersion` comes from `conversation[0]`) and `_check_run` (`spawnPromptMismatch` maps to DRIVER). P30-n1 cut; §7 now says v1.7. Teco line check passed. **Plan6 v1.7 accepted**; U6.8 and U5.10 are buildable. Committed with Pass 30.
