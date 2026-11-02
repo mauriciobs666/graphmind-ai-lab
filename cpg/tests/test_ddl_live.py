@@ -62,7 +62,7 @@ def static_problems(stmts):
 def test_ddl_file_matches_section_1_6_statically():
     assert static_problems(parse_ddl()) == []
     stmts = parse_ddl()
-    assert sum(s[0] == "index" for s in stmts) == 17 and sum(s[0] == "constraint" for s in stmts) == 10
+    assert sum(s[0] == "index" for s in stmts) == 18 and sum(s[0] == "constraint" for s in stmts) == 11
 
 
 def test_ddl_header_documents_order_and_apply_protocol():
@@ -81,8 +81,9 @@ def test_static_check_catches_each_mutation():
     drop_idx = [s for s in base if s[:3] != ("index", "Param", "pointId")]
     extra_idx = base[:1] + [("index", "Repo", "bogus", "CREATE INDEX FOR (n:Repo) ON (n.bogus)")] + base[1:]
     drop_con = [s for s in base if s[:3] != ("constraint", "Link", "linkId")]
+    drop_dep = [s for s in base if s[1:3] != ("Dependency", "depId")]
     swapped = [s for s in base if s[0] == "constraint"][:1] + [s for s in base if s[0] == "index"] + [s for s in base if s[0] == "constraint"][1:]
-    for mutant in (drop_idx, extra_idx, drop_con, swapped):
+    for mutant in (drop_idx, extra_idx, drop_con, drop_dep, swapped):
         assert static_problems(mutant)
 
 
@@ -186,7 +187,7 @@ def run_against(db, stmts, *, load=True):
 
 @pytest.mark.live
 def test_ddl_applies_to_empty_key_indexes_match_table_and_constraints_reach_operational(db):
-    assert len(run_against(db, parse_ddl())) == 17
+    assert len(run_against(db, parse_ddl())) == 18
 
 
 def _mutant(name):
@@ -284,7 +285,7 @@ class _RecDb:
 def test_every_statement_carries_the_timeout_when_timeout_max_is_nonzero(timeout_max):
     db = _RecDb()
     apply_ddl(db, "ccg_p0slice__build_ddl1", parse_ddl(), between=lambda q: q("CREATE (:Unit {unitId: 'u'})"), timeout_max=timeout_max)
-    assert len(db.calls) == 17 + 1 + 1 and len(db.raw) == 10  # indexes, the load query, one poll; constraints are raw commands
+    assert len(db.calls) == 18 + 1 + 1 and len(db.raw) == 11  # indexes, the load query, one poll; constraints are raw commands
     assert {t for _, t in db.calls} == ({1000} if timeout_max else {None})
 
 
@@ -309,5 +310,6 @@ def test_parser_accepts_whole_line_comments_and_blank_lines():
 
 
 def test_plan_table_parse_is_the_spec_not_a_transcription():
-    assert len(EXPECTED_INDEX_PAIRS) == 17 and len(EXPECTED_CONSTRAINT_PAIRS) == 10
+    assert len(EXPECTED_INDEX_PAIRS) == 18 and len(EXPECTED_CONSTRAINT_PAIRS) == 11
+    assert ("Dependency", "depId") in EXPECTED_INDEX_PAIRS and ("Dependency", "depId") in EXPECTED_CONSTRAINT_PAIRS
     assert ("SkippedFile", "repoId") in EXPECTED_INDEX_PAIRS and ("Cond", "pointId") in EXPECTED_CONSTRAINT_PAIRS

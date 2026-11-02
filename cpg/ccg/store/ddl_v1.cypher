@@ -21,10 +21,10 @@
 //   4. Never apply PART 2 before PART 1 has fully run; never put constraints on the empty key
 //      "to save a step" (the backfill-free path is the point of loading first).
 // Deferred to the phase that loads the label/edge (section 1.6): ConfigEntry/SchemaEntry/Mark/
-// Dependency/Finding/LogTemplate id indexes, READS/WRITES/DISMISSED linkId relationship
+// Finding/LogTemplate id indexes, READS/WRITES/DISMISSED linkId relationship
 // indexes, full-text index. SkippedFile has indexes only, no constraint (section 1.3).
 
-// ---- PART 1: indexes (17), empty key, before the load -------------------------------------
+// ---- PART 1: indexes (18), empty key, before the load -------------------------------------
 CREATE INDEX FOR (n:Repo) ON (n.repoId);
 CREATE INDEX FOR (n:Unit) ON (n.unitId);
 CREATE INDEX FOR (n:File) ON (n.fileId);
@@ -42,8 +42,9 @@ CREATE INDEX FOR (n:Name) ON (n.nameKey);
 CREATE INDEX FOR (n:ContractPoint) ON (n.cpId);
 CREATE INDEX FOR (n:ContractPoint) ON (n.keyNorm);
 CREATE INDEX FOR (n:Link) ON (n.linkId);
+CREATE INDEX FOR (n:Dependency) ON (n.depId);
 
-// ---- PART 2: UNIQUE constraints (10), after the load, polled to OPERATIONAL ---------------
+// ---- PART 2: UNIQUE constraints (11), after the load, polled to OPERATIONAL ---------------
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Unit PROPERTIES 1 unitId;
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE File PROPERTIES 1 fileId;
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Symbol PROPERTIES 1 symbolId;
@@ -54,3 +55,4 @@ GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Cond PROPERTIES 1 pointId;
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Name PROPERTIES 1 nameKey;
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE ContractPoint PROPERTIES 1 cpId;
 GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Link PROPERTIES 1 linkId;
+GRAPH.CONSTRAINT CREATE <key> UNIQUE NODE Dependency PROPERTIES 1 depId;

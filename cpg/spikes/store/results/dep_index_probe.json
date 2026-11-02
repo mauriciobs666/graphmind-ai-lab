@@ -1,0 +1,134 @@
+[
+ {
+  "dependencies": 1000,
+  "indexed": true,
+  "constrained": false,
+  "nodeLoadSeconds": 0.006,
+  "edgeLoadSeconds": 0.01,
+  "perBatchSeconds": [
+   0.01
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Node By Index Scan",
+   "Argument"
+  ],
+  "indicesMb": 0
+ },
+ {
+  "dependencies": 1000,
+  "indexed": false,
+  "constrained": false,
+  "nodeLoadSeconds": 0.003,
+  "edgeLoadSeconds": 0.133,
+  "perBatchSeconds": [
+   0.132
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Filter",
+   "Node By Label Scan",
+   "Argument"
+  ]
+ },
+ {
+  "dependencies": 5000,
+  "indexed": true,
+  "constrained": false,
+  "nodeLoadSeconds": 0.026,
+  "edgeLoadSeconds": 0.049,
+  "perBatchSeconds": [
+   0.049
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Node By Index Scan",
+   "Argument"
+  ],
+  "indicesMb": 0
+ },
+ {
+  "dependencies": 5000,
+  "indexed": false,
+  "constrained": false,
+  "nodeLoadSeconds": 0.015,
+  "edgeLoadSeconds": 3.167,
+  "perBatchSeconds": [
+   3.167
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Filter",
+   "Node By Label Scan",
+   "Argument"
+  ]
+ },
+ {
+  "dependencies": 20000,
+  "indexed": true,
+  "constrained": false,
+  "nodeLoadSeconds": 0.102,
+  "edgeLoadSeconds": 0.193,
+  "perBatchSeconds": [
+   0.193
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Node By Index Scan",
+   "Argument"
+  ],
+  "indicesMb": 2
+ },
+ {
+  "dependencies": 20000,
+  "indexed": false,
+  "constrained": false,
+  "nodeLoadSeconds": 0.06,
+  "edgeLoadSeconds": 52.289,
+  "perBatchSeconds": [
+   52.288
+  ],
+  "planOperators": [
+   "Update",
+   "Create",
+   "Apply",
+   "Unwind",
+   "Cartesian Product",
+   "Node By Index Scan",
+   "Argument",
+   "Filter",
+   "Node By Label Scan",
+   "Argument"
+  ]
+ }
+]

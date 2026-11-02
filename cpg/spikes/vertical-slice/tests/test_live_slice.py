@@ -333,7 +333,7 @@ def test_indexes_precede_every_write_and_cover_the_point_labels():
         assert f"CREATE INDEX FOR (n:{label}) ON (n.pointId)" in stmts
     assert "CREATE INDEX FOR (n:File) ON (n.path)" in stmts and "CREATE INDEX FOR (n:Symbol) ON (n.qname)" in stmts
     assert {l for l, _ in L.constraint_statements()} == {
-        "Symbol", "CallSite", "ContractPoint", "Link", "Name", "Unit", "File", "Param", "Ret", "Cond"}
+        "Symbol", "CallSite", "ContractPoint", "Link", "Name", "Unit", "File", "Param", "Ret", "Cond", "Dependency"}
     for label, prop in L.constraint_statements():  # a constraint needs its index first
         assert f"CREATE INDEX FOR (n:{label}) ON (n.{prop})" in stmts
 
@@ -933,10 +933,10 @@ def _report_json(rep):
 def test_sl3_load_integrity(store, real, loaded):
     run = loaded["run"]
     cons = store.constraints(L.FINAL_KEY)
-    assert len(cons) == len(L.constraint_statements()) == 10
+    assert len(cons) == len(L.constraint_statements()) == 11
     assert {(c["label"], c["properties"][0]) for c in cons} == set(L.constraint_statements())
     assert all(c["type"] == "UNIQUE" and c["entity"] == "NODE" for c in cons)
-    assert [c["status"] for c in cons] == ["OPERATIONAL"] * 10  # none FAILED, none pending
+    assert [c["status"] for c in cons] == ["OPERATIONAL"] * 11  # none FAILED, none pending
     snaps = run("MATCH (s:Snapshot) RETURN s")
     assert len(snaps) == 1
     props = snaps[0][0].properties

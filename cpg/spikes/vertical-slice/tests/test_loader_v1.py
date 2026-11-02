@@ -23,14 +23,14 @@ from test_live_slice import FakeStore, _mini_rows, h, mini_bundle, mini_facts  #
 
 def test_index_statements_are_the_ddl_files_indexes_in_file_order():
     assert L.index_statements() == [s[3] for s in parse_ddl() if s[0] == "index"]
-    assert len(L.index_statements()) == 17 and "CREATE INDEX FOR (n:SkippedFile) ON (n.repoId)" in L.index_statements()
+    assert len(L.index_statements()) == 18 and "CREATE INDEX FOR (n:SkippedFile) ON (n.repoId)" in L.index_statements()
 
 
 def test_constraints_applied_are_the_ddl_files_constraints_in_file_order():
     store = FakeStore()
     L.load_build(store, _mini_rows(), L.BUILD_PREFIX + "x", L.LoadReport(), poll_interval=0)
     applied = [(o[2], o[3]) for o in store.ops if o[0] == "constraint"]
-    assert applied == [(s[1], s[2]) for s in parse_ddl() if s[0] == "constraint"] and len(applied) == 10
+    assert applied == [(s[1], s[2]) for s in parse_ddl() if s[0] == "constraint"] and len(applied) == 11
 
 
 def test_live_store_creates_constraints_by_the_raw_command_never_the_falkordb_py_helper(monkeypatch):

@@ -1,0 +1,56 @@
+[
+ {
+  "probe": "ping-stall-read-cartesian-self-join-filter",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_stall 'MATCH (a:N), (b:N) WHERE a.v + b.v > 0 RETURN count(*)'",
+   "PING every 10 ms from a second connection"
+  ],
+  "observed": {
+   "read": {
+    "rows": 49000000,
+    "seconds": 7.78
+   },
+   "pings": 770,
+   "maxPingMs": 13.3,
+   "pingsOver100ms": 0,
+   "pingsOver1s": 0,
+   "slowestPingStartedAtS": 6.016
+  }
+ },
+ {
+  "probe": "ping-stall-read-unwind-range-count",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_stall 'UNWIND range(1, 30000000) AS y RETURN count(y)'",
+   "PING every 10 ms from a second connection"
+  ],
+  "observed": {
+   "read": {
+    "rows": 30000000,
+    "seconds": 2.73
+   },
+   "pings": 280,
+   "maxPingMs": 3.0,
+   "pingsOver100ms": 0,
+   "pingsOver1s": 0,
+   "slowestPingStartedAtS": 0.09
+  }
+ },
+ {
+  "probe": "ping-stall-read-label-scan-with-expression",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_stall 'MATCH (a:N) UNWIND range(1, 3000) AS k WITH a, k WHERE a.v + k > 0 RETURN count(*)'",
+   "PING every 10 ms from a second connection"
+  ],
+  "observed": {
+   "read": {
+    "rows": 21000000,
+    "seconds": 2.99
+   },
+   "pings": 306,
+   "maxPingMs": 29.1,
+   "pingsOver100ms": 0,
+   "pingsOver1s": 0,
+   "slowestPingStartedAtS": 0.904
+  }
+ }
+]

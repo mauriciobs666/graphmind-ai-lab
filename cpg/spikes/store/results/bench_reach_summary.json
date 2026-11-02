@@ -1,0 +1,302 @@
+{
+ "full": {
+  "4": {
+   "anchors": 50,
+   "bfsRepeatIdentical": "50/50",
+   "itemsMedianByClass": {
+    "hub": 5147,
+    "low": 2,
+    "mid": 22.5
+   },
+   "max": 10.0914,
+   "maxStates": 213515,
+   "p50": 0.0145,
+   "p95": 3.3814,
+   "repeatsPerAnchor": [
+    20
+   ],
+   "splits": 5
+  },
+  "6": {
+   "anchors": 50,
+   "bfsRepeatIdentical": "50/50",
+   "itemsMedianByClass": {
+    "hub": 19045,
+    "low": 3,
+    "mid": 40.5
+   },
+   "max": 53.4913,
+   "maxStates": 567700,
+   "p50": 0.0268,
+   "p95": 10.9937,
+   "repeatsPerAnchor": [
+    5,
+    20
+   ],
+   "splits": 5
+  }
+ },
+ "impact": {
+  "algorithm": "bfs-v1",
+  "file": "cpg/spikes/vertical-slice/impact.py",
+  "hasFunctionState": true,
+  "lastCommit": "cb1b2214",
+  "sha256": "434801296c9e85d4ba9593af78cd70d609bb43e50a4871040f528d84b8282171",
+  "workingTreeModified": false
+ },
+ "perLevelMs": {
+  "max": 20228.634,
+  "n": 22660,
+  "p50": 1.121,
+  "p95": 417.394,
+  "p99": 1687.283
+ },
+ "perReadMs": {
+  "CONTROLLED_BY": {
+   "max": 748.36,
+   "n": 3525,
+   "p50": 0.598,
+   "p95": 21.33,
+   "p99": 23.248
+  },
+  "DATA": {
+   "max": 939.765,
+   "n": 18335,
+   "p50": 32.205,
+   "p95": 160.368,
+   "p99": 537.563
+  },
+  "HAS_CALL": {
+   "max": 738.942,
+   "n": 43395,
+   "p50": 7.819,
+   "p95": 9.317,
+   "p99": 11.104
+  },
+  "HAS_COND": {
+   "max": 628.65,
+   "n": 3965,
+   "p50": 0.585,
+   "p95": 8.645,
+   "p99": 9.887
+  },
+  "HAS_PARAM": {
+   "max": 38.843,
+   "n": 1730,
+   "p50": 0.545,
+   "p95": 8.735,
+   "p99": 9.868
+  },
+  "HAS_RETURN": {
+   "max": 311.503,
+   "n": 3975,
+   "p50": 0.541,
+   "p95": 7.92,
+   "p99": 9.438
+  },
+  "TO": {
+   "max": 4.99,
+   "n": 7565,
+   "p50": 0.491,
+   "p95": 2.901,
+   "p99": 3.457
+  },
+  "other": {
+   "max": 935.296,
+   "n": 18905,
+   "p50": 0.864,
+   "p95": 63.663,
+   "p99": 270.969
+  }
+ },
+ "perReadMsAll": {
+  "max": 939.765,
+  "n": 101395,
+  "p50": 3.913,
+  "p95": 61.787,
+  "p99": 223.995
+ },
+ "segment": {
+  "1": {
+   "anchors": 50,
+   "bfsP50": 0.0012,
+   "bfsP95": 0.0329,
+   "bfsRepeatIdentical": "50/50",
+   "chainAgreeOnCommon": "10859/10859",
+   "decisionRule": "n/a (depth < 3)",
+   "distanceAgreeOnCommon": "10859/10859",
+   "itemSetEqual": "50/50",
+   "perClass": {
+    "hub": {
+     "anchors": 15,
+     "bfsItemsMedian": 448,
+     "bfsP95": 0.1277,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 15,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 448,
+     "sspathsP95": 0.2047,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 0
+    },
+    "low": {
+     "anchors": 15,
+     "bfsItemsMedian": 1,
+     "bfsP95": 0.0011,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 15,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 1,
+     "sspathsP95": 0.0006,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 0
+    },
+    "mid": {
+     "anchors": 20,
+     "bfsItemsMedian": 7.0,
+     "bfsP95": 0.0015,
+     "bfsRepeatIdentical": 20,
+     "itemSetEqual": 20,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 7.0,
+     "sspathsP95": 0.0013,
+     "sspathsRepeatIdentical": 20,
+     "sspathsTruncated": 0
+    }
+   },
+   "repeatsPerAnchor": [
+    20
+   ],
+   "sspathsP50": 0.0008,
+   "sspathsP95": 0.0482,
+   "sspathsRepeatIdentical": "50/50",
+   "statusAgreeOnCommon": "10859/10859"
+  },
+  "3": {
+   "anchors": 50,
+   "bfsP50": 0.0048,
+   "bfsP95": 3.7026,
+   "bfsRepeatIdentical": "50/50",
+   "chainAgreeOnCommon": "42951/44400",
+   "decisionRule": {
+    "adopt": false,
+    "bfsP95": 3.7026,
+    "rule1_repeats_identical": true,
+    "rule2_item_set_equal": false,
+    "rule3_p95_30pct_lower": true,
+    "sspathsP95": 0.6376
+   },
+   "distanceAgreeOnCommon": "44356/44400",
+   "itemSetEqual": "35/50",
+   "perClass": {
+    "hub": {
+     "anchors": 15,
+     "bfsItemsMedian": 19045,
+     "bfsP95": 5.2959,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 0,
+     "missingFraction": 0.8523,
+     "sspathsItemsMedian": 2756,
+     "sspathsP95": 0.6741,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 15
+    },
+    "low": {
+     "anchors": 15,
+     "bfsItemsMedian": 3,
+     "bfsP95": 0.0042,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 15,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 3,
+     "sspathsP95": 0.0019,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 0
+    },
+    "mid": {
+     "anchors": 20,
+     "bfsItemsMedian": 40.5,
+     "bfsP95": 0.0128,
+     "bfsRepeatIdentical": 20,
+     "itemSetEqual": 20,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 40.5,
+     "sspathsP95": 0.026,
+     "sspathsRepeatIdentical": 20,
+     "sspathsTruncated": 0
+    }
+   },
+   "repeatsPerAnchor": [
+    20
+   ],
+   "sspathsP50": 0.0041,
+   "sspathsP95": 0.6376,
+   "sspathsRepeatIdentical": "50/50",
+   "statusAgreeOnCommon": "44400/44400"
+  },
+  "5": {
+   "anchors": 50,
+   "bfsP50": 0.0078,
+   "bfsP95": 6.2869,
+   "bfsRepeatIdentical": "50/50",
+   "chainAgreeOnCommon": "47857/49340",
+   "decisionRule": {
+    "adopt": false,
+    "bfsP95": 6.2869,
+    "rule1_repeats_identical": true,
+    "rule2_item_set_equal": false,
+    "rule3_p95_30pct_lower": true,
+    "sspathsP95": 0.6514
+   },
+   "distanceAgreeOnCommon": "49296/49340",
+   "itemSetEqual": "35/50",
+   "perClass": {
+    "hub": {
+     "anchors": 15,
+     "bfsItemsMedian": 29630,
+     "bfsP95": 6.9417,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 0,
+     "missingFraction": 0.9034,
+     "sspathsItemsMedian": 2756,
+     "sspathsP95": 1.0273,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 15
+    },
+    "low": {
+     "anchors": 15,
+     "bfsItemsMedian": 4,
+     "bfsP95": 0.0062,
+     "bfsRepeatIdentical": 15,
+     "itemSetEqual": 15,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 4,
+     "sspathsP95": 0.0045,
+     "sspathsRepeatIdentical": 15,
+     "sspathsTruncated": 0
+    },
+    "mid": {
+     "anchors": 20,
+     "bfsItemsMedian": 141.0,
+     "bfsP95": 0.067,
+     "bfsRepeatIdentical": 20,
+     "itemSetEqual": 20,
+     "missingFraction": 0.0,
+     "sspathsItemsMedian": 141.0,
+     "sspathsP95": 0.1774,
+     "sspathsRepeatIdentical": 20,
+     "sspathsTruncated": 0
+    }
+   },
+   "repeatsPerAnchor": [
+    5,
+    20
+   ],
+   "sspathsP50": 0.0071,
+   "sspathsP95": 0.6514,
+   "sspathsRepeatIdentical": "50/50",
+   "statusAgreeOnCommon": "49340/49340"
+  }
+ },
+ "timeoutMax": 0
+}

@@ -1,0 +1,223 @@
+[
+ {
+  "probe": "rollback-i-clean",
+  "commands": [
+   "MULTI",
+   "RENAME ccg_p0spike__swap_live ccg_p0spike__swap_prev",
+   "RENAME ccg_p0spike__swap_build ccg_p0spike__swap_live",
+   "EXEC"
+  ],
+  "observed": {
+   "execReplies": [
+    "True",
+    "True"
+   ],
+   "markersAfter": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   },
+   "buildExists": false
+  }
+ },
+ {
+  "probe": "rollback-ii-build-absent",
+  "commands": [
+   "MULTI",
+   "RENAME ccg_p0spike__swap_live ccg_p0spike__swap_prev",
+   "RENAME ccg_p0spike__swap_build ccg_p0spike__swap_live",
+   "EXEC"
+  ],
+  "observed": {
+   "execReplies": [
+    "True",
+    "server:ResponseError"
+   ],
+   "markersAfter": {
+    "live": null,
+    "build": null,
+    "prev": "old"
+   },
+   "liveExists": false,
+   "prevExists": true,
+   "rolledBack": false
+  }
+ },
+ {
+  "probe": "rollback-ii-b-eval-guard-build-absent",
+  "commands": [
+   "EVAL <exists-guarded 2x RENAME> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "refused: build absent",
+   "markersAfter": {
+    "live": "old",
+    "build": null,
+    "prev": null
+   }
+  }
+ },
+ {
+  "probe": "rollback-ii-c-eval-guard-happy",
+  "commands": [
+   "EVAL <exists-guarded 2x RENAME> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "swapped",
+   "markersAfter": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   }
+  }
+ },
+ {
+  "probe": "rollback-ii-d-prev-exists",
+  "commands": [
+   "MULTI",
+   "RENAME ccg_p0spike__swap_live ccg_p0spike__swap_prev",
+   "RENAME ccg_p0spike__swap_build ccg_p0spike__swap_live",
+   "EXEC"
+  ],
+  "observed": {
+   "execReplies": [
+    "True",
+    "True"
+   ],
+   "markersAfter": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   }
+  }
+ },
+ {
+  "probe": "rollback-iii-0-control-no-swap",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_live <7000x7000 self-join, ~12 s>"
+  ],
+  "observed": {
+   "reader": {
+    "markers": [
+     "old",
+     "old"
+    ],
+    "count": 49000000,
+    "seconds": 12.27
+   },
+   "swapReplies": [],
+   "swapMs": 0.0,
+   "readerStillRunningWhenSwapReturned": true,
+   "markersRightAfterSwap": {
+    "live": "old",
+    "build": "new",
+    "prev": null
+   },
+   "maxPingMs": 5.69,
+   "pings": 1198,
+   "pingsOver1s": 0,
+   "slowPings[startOffsetS, ms]": [],
+   "swapIssuedAtS": 1.806
+  }
+ },
+ {
+  "probe": "rollback-iii-reader-in-flight-multi",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_live <7000x7000 self-join, ~12 s>",
+   "MULTI",
+   "RENAME ccg_p0spike__swap_live ccg_p0spike__swap_prev",
+   "RENAME ccg_p0spike__swap_build ccg_p0spike__swap_live",
+   "EXEC"
+  ],
+  "observed": {
+   "reader": {
+    "markers": [
+     "old",
+     "old"
+    ],
+    "count": 49000000,
+    "seconds": 12.14
+   },
+   "swapReplies": [
+    "True",
+    "True"
+   ],
+   "swapMs": 0.53,
+   "readerStillRunningWhenSwapReturned": true,
+   "markersRightAfterSwap": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   },
+   "maxPingMs": 26.85,
+   "pings": 1183,
+   "pingsOver1s": 0,
+   "slowPings[startOffsetS, ms]": [],
+   "swapIssuedAtS": 1.804
+  }
+ },
+ {
+  "probe": "rollback-iii-b-reader-in-flight-plain-rename",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_live <7000x7000 self-join, ~12 s>",
+   "RENAME ccg_p0spike__swap_build ccg_p0spike__swap_live"
+  ],
+  "observed": {
+   "reader": {
+    "markers": [
+     "old",
+     "old"
+    ],
+    "count": 49000000,
+    "seconds": 11.92
+   },
+   "swapReplies": [
+    "True"
+   ],
+   "swapMs": 0.44,
+   "readerStillRunningWhenSwapReturned": true,
+   "markersRightAfterSwap": {
+    "live": "new",
+    "build": null,
+    "prev": null
+   },
+   "maxPingMs": 8.98,
+   "pings": 1163,
+   "pingsOver1s": 0,
+   "slowPings[startOffsetS, ms]": [],
+   "swapIssuedAtS": 1.804
+  }
+ },
+ {
+  "probe": "rollback-iii-c-reader-in-flight-eval",
+  "commands": [
+   "GRAPH.RO_QUERY ccg_p0spike__swap_live <7000x7000 self-join, ~12 s>",
+   "EVAL <exists-guarded 2x RENAME> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reader": {
+    "markers": [
+     "old",
+     "old"
+    ],
+    "count": 49000000,
+    "seconds": 12.03
+   },
+   "swapReplies": [
+    "'swapped'"
+   ],
+   "swapMs": 0.71,
+   "readerStillRunningWhenSwapReturned": true,
+   "markersRightAfterSwap": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   },
+   "maxPingMs": 15.76,
+   "pings": 1170,
+   "pingsOver1s": 0,
+   "slowPings[startOffsetS, ms]": [],
+   "swapIssuedAtS": 1.806
+  }
+ }
+]

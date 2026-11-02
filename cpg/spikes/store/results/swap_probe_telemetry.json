@@ -1,0 +1,259 @@
+[
+ {
+  "probe": "telemetry-graph-config-names",
+  "commands": [
+   "GRAPH.CONFIG GET *"
+  ],
+  "observed": {
+   "names": [
+    "TIMEOUT",
+    "TIMEOUT_DEFAULT",
+    "TIMEOUT_MAX",
+    "CACHE_SIZE",
+    "ASYNC_DELETE",
+    "OMP_THREAD_COUNT",
+    "THREAD_COUNT",
+    "RESULTSET_SIZE",
+    "VKEY_MAX_ENTITY_COUNT",
+    "MAX_QUEUED_QUERIES",
+    "QUERY_MEM_CAPACITY",
+    "DELTA_MAX_PENDING_CHANGES",
+    "NODE_CREATION_BUFFER",
+    "CMD_INFO",
+    "MAX_INFO_QUERIES",
+    "EFFECTS_THRESHOLD",
+    "BOLT_PORT",
+    "DELAY_INDEXING",
+    "IMPORT_FOLDER",
+    "TEMP_FOLDER",
+    "JS_HEAP_SIZE",
+    "JS_STACK_SIZE"
+   ]
+  }
+ },
+ {
+  "probe": "telemetry-redis-config",
+  "commands": [
+   "CONFIG GET *telemetry*"
+  ],
+  "observed": {
+   "reply": []
+  }
+ },
+ {
+  "probe": "telemetry-set-TELEMETRY",
+  "commands": [
+   "GRAPH.CONFIG SET TELEMETRY 0"
+  ],
+  "observed": {
+   "error": "ResponseError: Unknown configuration field"
+  }
+ },
+ {
+  "probe": "telemetry-set-TELEMETRY_ENABLED",
+  "commands": [
+   "GRAPH.CONFIG SET TELEMETRY_ENABLED 0"
+  ],
+  "observed": {
+   "error": "ResponseError: Unknown configuration field"
+  }
+ },
+ {
+  "probe": "telemetry-set-QUERY_TELEMETRY",
+  "commands": [
+   "GRAPH.CONFIG SET QUERY_TELEMETRY 0"
+  ],
+  "observed": {
+   "error": "ResponseError: Unknown configuration field"
+  }
+ },
+ {
+  "probe": "telemetry-set-TELEMETRY_MAX_LEN",
+  "commands": [
+   "GRAPH.CONFIG SET TELEMETRY_MAX_LEN 0"
+  ],
+  "observed": {
+   "error": "ResponseError: Unknown configuration field"
+  }
+ },
+ {
+  "probe": "telemetry-set-TELEMETRY_STREAM_MAXLEN",
+  "commands": [
+   "GRAPH.CONFIG SET TELEMETRY_STREAM_MAXLEN 0"
+  ],
+  "observed": {
+   "error": "ResponseError: Unknown configuration field"
+  }
+ },
+ {
+  "probe": "modules",
+  "commands": [
+   "MODULE LIST"
+  ],
+  "observed": {
+   "reply": "[['name', 'graph', 'ver', 41811, 'path', '/var/lib/falkordb/bin/falkordb.so', 'args', ['MAX_QUEUED_QUERIES', '25', 'TIMEOUT', '1000', 'RESULTSET_SIZE', '10000']], ['name', 'vectorset', 'ver', 1, 'path', '', 'args', []]]"
+  }
+ },
+ {
+  "probe": "telemetry-config-MAX_INFO_QUERIES-10",
+  "commands": [
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 10",
+   "60 x GRAPH.QUERY RETURN $i",
+   "XLEN telemetry{ccg_p0spike__swap_cfg}",
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 1000"
+  ],
+  "observed": {
+   "original": 1000,
+   "setReply": "'OK'",
+   "valueAfterSet": 10,
+   "streamExists": true,
+   "xlenAfter60Queries": 10,
+   "graphInfoQueries": "no section found",
+   "valueAtEnd": 1000
+  }
+ },
+ {
+  "probe": "telemetry-config-MAX_INFO_QUERIES-1",
+  "commands": [
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 1",
+   "60 x GRAPH.QUERY RETURN $i",
+   "XLEN telemetry{ccg_p0spike__swap_cfg}",
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 1000"
+  ],
+  "observed": {
+   "original": 1000,
+   "setReply": "'OK'",
+   "valueAfterSet": 1,
+   "streamExists": true,
+   "xlenAfter60Queries": 1,
+   "graphInfoQueries": "no section found",
+   "valueAtEnd": 1000
+  }
+ },
+ {
+  "probe": "telemetry-config-MAX_INFO_QUERIES-0",
+  "commands": [
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 0",
+   "60 x GRAPH.QUERY RETURN $i",
+   "XLEN telemetry{ccg_p0spike__swap_cfg}",
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 1000"
+  ],
+  "observed": {
+   "original": 1000,
+   "setReply": "'OK'",
+   "valueAfterSet": 0,
+   "streamExists": false,
+   "xlenAfter60Queries": null,
+   "graphInfoQueries": "no section found",
+   "valueAtEnd": 1000
+  }
+ },
+ {
+  "probe": "telemetry-config-CMD_INFO-0",
+  "commands": [
+   "GRAPH.CONFIG SET CMD_INFO 0",
+   "60 x GRAPH.QUERY RETURN $i",
+   "XLEN telemetry{ccg_p0spike__swap_cfg}",
+   "GRAPH.CONFIG SET CMD_INFO 1"
+  ],
+  "observed": {
+   "original": 1,
+   "setError": "ResponseError: Failed to set config value CMD_INFO to 0",
+   "streamExists": true,
+   "xlenAfter60Queries": 63,
+   "graphInfoQueries": "no section found",
+   "valueAtEnd": 1
+  }
+ },
+ {
+  "probe": "telemetry-zero-with-existing-stream",
+  "commands": [
+   "30 x GRAPH.QUERY",
+   "GRAPH.CONFIG SET MAX_INFO_QUERIES 0",
+   "10 x GRAPH.QUERY",
+   "XLEN",
+   "GRAPH.SLOWLOG",
+   "restore"
+  ],
+  "observed": {
+   "xlenBefore": 33,
+   "streamExistsAfter10MoreQueries": true,
+   "xlenAfter": 0,
+   "slowlogStillWorks": "[]",
+   "valueAtEnd": 1000
+  }
+ },
+ {
+  "probe": "telemetry-created-lazily",
+  "commands": [
+   "GRAPH.QUERY ccg_p0spike__swap_tel (3 writes)",
+   "EXISTS telemetry{ccg_p0spike__swap_tel}",
+   "TYPE telemetry{ccg_p0spike__swap_tel}",
+   "TTL telemetry{ccg_p0spike__swap_tel}"
+  ],
+  "observed": {
+   "secondsUntilStreamExists": 0.9421447930017166,
+   "type": "stream",
+   "ttl": -1
+  }
+ },
+ {
+  "probe": "telemetry-carries-parameters",
+  "commands": [
+   "GRAPH.QUERY ccg_p0spike__swap_tel ... CYPHER secret=..",
+   "XREVRANGE telemetry{ccg_p0spike__swap_tel} + - COUNT 5"
+  ],
+  "observed": {
+   "secondsUntilParameterVisible": 2.9952877159994387
+  }
+ },
+ {
+  "probe": "telemetry-cap",
+  "commands": [
+   "1,200 x GRAPH.QUERY ccg_p0spike__swap_tel 'RETURN $i'",
+   "XLEN telemetry{ccg_p0spike__swap_tel}"
+  ],
+  "observed": {
+   "xlen": 1004
+  }
+ },
+ {
+  "probe": "telemetry-xtrim-holds",
+  "commands": [
+   "XTRIM telemetry{ccg_p0spike__swap_tel} MAXLEN 10",
+   "XLEN telemetry{ccg_p0spike__swap_tel}",
+   "30 x GRAPH.QUERY ccg_p0spike__swap_tel 'RETURN $i'",
+   "XLEN telemetry{ccg_p0spike__swap_tel}"
+  ],
+  "observed": {
+   "xlenAfterTrim": 10,
+   "xlenAfter30MoreQueries": 40
+  }
+ },
+ {
+  "probe": "telemetry-del-recreated",
+  "commands": [
+   "DEL telemetry{ccg_p0spike__swap_tel}",
+   "EXISTS telemetry{ccg_p0spike__swap_tel}",
+   "GRAPH.QUERY ccg_p0spike__swap_tel 'RETURN 1'",
+   "EXISTS telemetry{ccg_p0spike__swap_tel}"
+  ],
+  "observed": {
+   "goneRightAfterDel": true,
+   "secondsUntilRecreated": 2.0618874130013864
+  }
+ },
+ {
+  "probe": "telemetry-rename",
+  "commands": [
+   "RENAME ccg_p0spike__swap_tel ccg_p0spike__swap_tel2",
+   "EXISTS telemetry{ccg_p0spike__swap_tel} telemetry{ccg_p0spike__swap_tel2}"
+  ],
+  "observed": {
+   "oldStreamExistsRightAfter": false,
+   "newStreamExistsRightAfter": false,
+   "secondsUntilNewStreamAppears": 2.901414582000143,
+   "oldStreamExistsAfterQueryOnNew": false
+  }
+ }
+]

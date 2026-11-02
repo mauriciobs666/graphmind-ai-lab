@@ -38,7 +38,7 @@ Loaded and read live (38,121 nodes, 90,867 edges, 10 `UNIQUE` constraints `OPERA
 | D7 | `Symbol` extras | Carried, unindexed: `complexity`, `lang`, `signature` (overloading languages only), `depth` (nesting depth, computed by the loader from `parentId`, for the anchor tie-break), `ownedRegions` (flat int list `[s0,e0,s1,e1,…]`, absent when empty; pair decoding works in this build: `[i IN range(0,size(o)-1,2) \| [o[i],o[i+1]]]`). `parentId` is not stored. `File` carries `lang`, `contentHash`, `kind` and `role` (orthogonal, BF7), unindexed. |
 | D8 | `DATA`, `CALLS` status | `status`/`reason` stored **only when not the default** (`confirmed`/`intra-flow` for `DATA`, `confirmed`/`resolved-call` for `CALLS`); a reader coalesces absent to the default. The slice stores both on all 16,424 `DATA` edges (4 are `possible`/`field-truncated`); the bundle always carries both. (BF13: +56 B per edge, +42 % on a probe.) |
 | D9 | `DEPENDS_ON` | adds `scope`. |
-| D10 | Constraints | 10, not 7: the graph note's `Symbol`, `CallSite`, `ContractPoint`, `Link`, `Name`, `Unit`, `File` plus `Param`, `Ret`, `Cond` on `pointId` (S-1). The full index and constraint set is the table in §1.6. |
+| D10 | Constraints | 11, not 7: the graph note's `Symbol`, `CallSite`, `ContractPoint`, `Link`, `Name`, `Unit`, `File` plus `Param`, `Ret`, `Cond` on `pointId` (S-1) and `Dependency` on `depId` (the loader matches `DEPENDS_ON` targets by it; measured in `cpg/spikes/store/MEASUREMENTS.md`). The full index and constraint set is the table in §1.6. |
 | D11 | `Name.nameKey` | `h(["name", lang, calleeName])`, constrained (BF14); `lang`, `name` readable and unconstrained. `<dynamic>` sites get no `CALLS_NAME`. |
 | D12 | `DATA` self-edge | `use == def` is legal and **kept** (spec4 §2). Slice instance: `tests/test_querygen.py:844`, `tail = tail.split(…)[0]` in a loop (loop-carried). Every traversal carries a visited set (§3.1). |
 | D13 | Path grammar | spec3 §5.1 (`recv`, `kw.<n>`, quoted field segments) replaces the graph note's four forms. `arg(i, path)` becomes `arg(head, path)`: `a<i>` binds the callee `Param` by `index` after the receiver, `recv` to index `-1`, `kw.<n>` by `Param.name` (including `**kwargs`). |
@@ -108,8 +108,9 @@ Range indexes are created on the empty build key **before** the load (edge loadi
 | `Name` | `nameKey` | `nameKey` |
 | `ContractPoint` | `cpId`, `keyNorm` | `cpId` |
 | `Link` | `linkId` | `linkId` |
+| `Dependency` | `depId` | `depId` |
 
-Deferred to the phase that loads the label or edge: `ConfigEntry`/`SchemaEntry`/`Mark`/`Dependency`/`Finding`/
+Deferred to the phase that loads the label or edge: `ConfigEntry`/`SchemaEntry`/`Mark`/`Finding`/
 `LogTemplate` id indexes, the `READS`/`WRITES`/`DISMISSED` `linkId` relationship indexes, and the full-text index.
 
 ## 2. Disposition of spec3 §9 and BF2-BF15
@@ -211,3 +212,7 @@ Cited by test name; paths are under `cpg/spikes/vertical-slice/` unless stated.
 2. **Not in this note's delivery:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/tests/test_ddl_live.py` and the loader changes
    D1-D8; they follow from §1 and need a live `__build_` key.
 3. **`MOUNTED_BY`** waits on the assembler emitting mount ids (D5), P1.
+4. **S20/S21 measurements (2026-11-02), inputs to S23's decisions table:** `cpg/spikes/store/MEASUREMENTS.md`. BFS
+   (`bfs-v1`) beats `algo.SSpaths` (item sets differ on every hub anchor, reply cut at 10,000 rows); `MULTI` swap
+   without a guard does not roll back; `MAX_INFO_QUERIES 0` disables telemetry; `GRAPH.DELETE` removes it at once;
+   `Dependency(depId)` indexed (§1.6, D10).

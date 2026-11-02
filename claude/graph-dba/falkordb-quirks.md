@@ -1215,3 +1215,57 @@ to the general fact here.
   enough, and a leading comment defeats the sniff. Also: in `falkordb-py` 1.6.x,
   `Graph.explain`/`Graph.profile` take no `timeout` parameter (only `query, params`), unlike
   `query`/`ro_query`. (Verified 2026-07-24/25, surfaced reviewing an MCP read-tool design.)
+- **`algo.SSpaths` is not "best path per node", and a reply is cut at `RESULTSET_SIZE` silently** (verified
+  2026-11-02, module `41811`, 454k-node / 2.4M-edge synthetic graph `ccg_p0spike`, `cpg/spikes/store/`;
+  refines the graph note's V8). `CALL algo.SSpaths({sourceNode:a, relTypes:['CALLS','HAS_CALL'],
+  relDirection:'incoming', weightProp:'w', maxLen:6, pathCount:N})` returns up to `N` *paths in total*, several
+  per end node (a node reached by a heavier path as well appears twice), in no per-node order; `pathCount:100`
+  returned 100 paths ending on 0 distinct `Symbol`s. With `pathCount` 10,000 and 1,000,000 alike the reply was
+  exactly 10,000 rows, with no error or flag. On a hub anchor (3,804 callers) it reached 3,210 of the 29,746 items
+  a level-synchronous BFS found (85-90 % missing at 3 and 5 call hops, 15 of 15 hub anchors); on 35 of 50
+  non-hub anchors the item sets were equal. `weightProp` must exist on every edge type listed (a `w` was stored on
+  `CALLS` and `HAS_CALL`); `maxLen` counts edges; it cannot see the arrival state, so a state-dependent label
+  (function-level continuation) is not expressible. Verify: the query above on any hub symbol vs a client BFS;
+  compare `count(DISTINCT end)` to the BFS item count and look at `size(result_set)`. Repeats were identical
+  (20/20) -- determinism was not the problem, completeness was.
+- **The engine's default read `TIMEOUT` is 1000 ms (a module argument), `TIMEOUT_DEFAULT` and `TIMEOUT_MAX` are
+  0** (`MODULE LIST` -> graph args `MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000`; verified 2026-11-02).
+  A read that passes no `timeout` is killed at that default (`ResponseError: Query timed out`); the BFS
+  benchmark crashed once on a 1,000-id hub-frontier read, concurrently with niced pytest runs. It was not
+  reproduced in 5 reruns without load (worst read 85 ms), so the cause is unconfirmed. Rule: every
+  program-issued read passes an explicit `timeout`. Verify: `GRAPH.CONFIG GET TIMEOUT`.
+- **`MULTI; RENAME live prev; RENAME build live; EXEC` is not a safe swap form: a failing second `RENAME` does
+  not roll back the first** (verified 2026-11-02, module `41811`, Redis 8.x, scratch graphs
+  `ccg_p0spike__swap_*`). With `build` absent, EXEC replied `[True, ResponseError]`; `live` was gone and `prev`
+  held the old graph (no rollback). With `prev` present, `RENAME live prev` overwrites it silently. The form is
+  safe only behind a guard: one `EVAL "if redis.call('EXISTS',KEYS[2])==0 then return 'refused: build absent'
+  end redis.call('RENAME',KEYS[1],KEYS[3]) redis.call('RENAME',KEYS[2],KEYS[1]) return 'swapped'" 3 live build
+  prev` replied `refused: build absent` and left `live` intact (`EVAL` over graph keys works as admin; the ACL
+  matrix is S22's). With a ~12 s `GRAPH.RO_QUERY` in flight on `live`, `MULTI/EXEC`, a plain `RENAME` and the
+  `EVAL` all returned in 0.44-0.71 ms, the reader finished on the old snapshot (both marker reads `old`,
+  49,000,000 rows), and a `PING` loop on a second warm connection peaked at 5.7-27 ms (re-confirms the
+  2026-10-29 entry above). Verify: `ccg_p0spike__swap_*` probe `cpg/spikes/store/swap_probe.py --only rollback`.
+- **`GRAPH.CONFIG SET MAX_INFO_QUERIES n` caps -- and with 0 disables -- the `telemetry{<graph>}` stream; `CMD_INFO`
+  cannot be changed at runtime** (verified 2026-11-02, module `41811`, scratch graphs `ccg_p0spike__swap_*`).
+  Defaults `MAX_INFO_QUERIES 1000`, `CMD_INFO 1`. After 60 queries: `MAX_INFO_QUERIES 10` -> `XLEN` 10; `1` -> 1; `0`
+  -> no stream created for a new graph, and on a graph whose stream already held 33 entries it was trimmed to 0
+  (the empty stream key stays). `GRAPH.CONFIG SET CMD_INFO 0` (and `1`) -> `Failed to set config value`: it is a
+  load-time module argument (not tested: it needs a restart). The setting is instance-wide and not persisted by
+  the command; restoring was verified (`GRAPH.CONFIG GET` -> 1000). `GRAPH.SLOWLOG` still answered (an empty list). An
+  admin `XTRIM telemetry{g} MAXLEN 10` holds for the moment (`XLEN` 10) and the stream regrows with later
+  queries (40 after 30 more); `DEL telemetry{g}` is recreated by the next query (0.56 s). The stream appears
+  about 1 s after a graph's first query, a parameter value was visible in it after about 3 s, `TTL` -1.
+- **`telemetry{<graph>}` is removed synchronously by `GRAPH.DELETE`; the earlier "asynchronous removal" sighting did
+  not reproduce** (verified 2026-11-02, module `41811`, `ASYNC_DELETE 1`, 32 trials in four shapes: settled
+  stream; query immediately before delete with no stream yet; a 600k-node graph; stream present plus a query
+  immediately before delete). `EXISTS telemetry{g}` was 0 at the first poll after `GRAPH.DELETE` returned
+  (<= 9 ms; 47-63 ms for the 600k-node graph, i.e. the delete's own time), polled every 10 ms; the key never
+  reappeared in the 6-8 s watched afterwards. So `GRAPH.DELETE` leaves no parameter history behind; `RENAME` still
+  does (old stream gone, new one only after the next query).
+- **An un-indexed `MATCH (b:Label {id: r.t})` inside an `UNWIND` edge load is a label scan per row, quadratic in the
+  label's size** (verified 2026-11-02, module `41811`, scratch graphs `ccg_p0spike__dep_*`): loading N
+  `(:Unit)-[:DEPENDS_ON]->(:Dependency)` edges against N `Dependency` nodes took 0.13 s / 3.2 s / 52.3 s at
+  N = 1,000 / 5,000 / 20,000 with no index (plan: `Filter` over `Node By Label Scan`) and 0.01 / 0.05 / 0.19 s
+  with a `Dependency(depId)` index (`Node By Index Scan`; index 2 MB at 20,000). A nonzero `TIMEOUT_MAX` also caps writes (entry above), so such a batch
+  would exceed any cap under ~52 s (inferred, not run). Every label an edge batch matches by id needs its index before the
+  load. Verify: `cpg/spikes/store/dep_index_probe.py`.

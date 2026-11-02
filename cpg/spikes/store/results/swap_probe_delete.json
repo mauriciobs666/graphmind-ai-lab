@@ -1,0 +1,330 @@
+[
+ {
+  "probe": "telemetry-after-graph-delete-settled",
+  "commands": [
+   "GRAPH.QUERY ... ; (variant: settled) GRAPH.DELETE <g>; poll EXISTS telemetry{<g>} every 10 ms, up to 30 s"
+  ],
+  "observed": {
+   "ASYNC_DELETE": [
+    "ASYNC_DELETE",
+    1
+   ],
+   "trials": [
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.001,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.009,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    }
+   ],
+   "gone_after_s": [
+    0.001,
+    0.003,
+    0.003,
+    0.004,
+    0.004,
+    0.004,
+    0.004,
+    0.009
+   ],
+   "neverGone": 0,
+   "reappeared": 0
+  }
+ },
+ {
+  "probe": "telemetry-after-graph-delete-query-just-before-delete",
+  "commands": [
+   "GRAPH.QUERY ... ; (variant: query-just-before-delete) GRAPH.DELETE <g>; poll EXISTS telemetry{<g>} every 10 ms, up to 30 s"
+  ],
+  "observed": {
+   "ASYNC_DELETE": [
+    "ASYNC_DELETE",
+    1
+   ],
+   "trials": [
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.002,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": false,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    }
+   ],
+   "gone_after_s": [
+    0.002,
+    0.002,
+    0.002,
+    0.002,
+    0.002,
+    0.002,
+    0.003,
+    0.003
+   ],
+   "neverGone": 0,
+   "reappeared": 0
+  }
+ },
+ {
+  "probe": "telemetry-after-graph-delete-large-graph-settled",
+  "commands": [
+   "GRAPH.QUERY ... ; (variant: large-graph-settled) GRAPH.DELETE <g>; poll EXISTS telemetry{<g>} every 10 ms, up to 30 s"
+  ],
+  "observed": {
+   "ASYNC_DELETE": [
+    "ASYNC_DELETE",
+    1
+   ],
+   "trials": [
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.056,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.054,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.051,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.063,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.047,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.062,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.059,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.047,
+     "reappeared": false,
+     "streamStillThere30s": false
+    }
+   ],
+   "gone_after_s": [
+    0.047,
+    0.047,
+    0.051,
+    0.054,
+    0.056,
+    0.059,
+    0.062,
+    0.063
+   ],
+   "neverGone": 0,
+   "reappeared": 0
+  }
+ },
+ {
+  "probe": "telemetry-after-graph-delete-settled-then-query-just-before-delete",
+  "commands": [
+   "GRAPH.QUERY ... ; (variant: settled-then-query-just-before-delete) GRAPH.DELETE <g>; poll EXISTS telemetry{<g>} every 10 ms, up to 30 s"
+  ],
+  "observed": {
+   "ASYNC_DELETE": [
+    "ASYNC_DELETE",
+    1
+   ],
+   "trials": [
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.001,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.004,
+     "reappeared": false,
+     "streamStillThere30s": false
+    },
+    {
+     "streamExistedBeforeDelete": true,
+     "graphGoneRightAfter": true,
+     "secondsUntilStreamGone": 0.003,
+     "reappeared": false,
+     "streamStillThere30s": false
+    }
+   ],
+   "gone_after_s": [
+    0.001,
+    0.003,
+    0.003,
+    0.003,
+    0.003,
+    0.004,
+    0.004,
+    0.004
+   ],
+   "neverGone": 0,
+   "reappeared": 0
+  }
+ }
+]
