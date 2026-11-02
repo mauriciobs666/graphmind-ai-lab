@@ -19,6 +19,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import pytest
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 HERE = Path(__file__).resolve().parents[1]
 CPG = HERE.parents[1]
@@ -122,9 +124,9 @@ class MemoryReader:
                 owners += [(dst, r["t"], r["s"]) for r in lst]
         link_status = {n["linkId"]: n["status"] for n in rows.nodes["Link"]}
         return cls(
-            calls=[(r["t"], r["s"], r["p"]["status"]) for r in g.get(("CallSite", "CALLS", "Symbol"), [])],
+            calls=[(r["t"], r["s"], r.get("p", {}).get("status", "confirmed")) for r in g.get(("CallSite", "CALLS", "Symbol"), [])],
             owners=owners,
-            data=[(s, r["s"], d, r["t"], r["p"]["fromPath"], r["p"]["toPath"], r["p"]["status"])
+            data=[(s, r["s"], d, r["t"], r["p"]["fromPath"], r["p"]["toPath"], r["p"].get("status", "confirmed"))
                   for (s, et, d), lst in g.items() if et == "DATA" for r in lst],
             to=[(r["t"], r["s"], link_status[r["s"]]) for r in g.get(("Link", "TO", "Symbol"), [])],
             via=[(r["t"], r["s"], r["p"]["status"]) for r in g.get(("CallSite", "VIA", "Link"), [])],
@@ -241,7 +243,11 @@ def test_live_store_uses_one_connection_with_retries_off_and_a_socket_timeout_of
     monkeypatch.setenv("CCG_CONFIG_DIR", str(tmp_path))
     L.LiveStore("127.0.0.1", 6390)
     assert seen["host"] == "127.0.0.1" and seen["port"] == 6390
-    assert seen["retry"] is None  # a retried write could run twice
+    # a retried write could run twice. retry=None is NOT zero retries: redis-py then installs its own
+    # default policy, so the loader passes an explicit zero-retry object (S17 note section 4 / 5 Retries)
+    retry = seen["retry"]
+    assert isinstance(retry, Retry) and retry._retries == 0
+    assert isinstance(retry._backoff, NoBackoff)
     assert seen["socket_timeout"] >= 120  # "minutes": a client timeout abandons the answer, not the work
     assert seen["password"] == "s3cret"  # read from the file, stripped
     assert L.LiveStore("127.0.0.1", 6390, pw="given") and seen["password"] == "given"
@@ -326,9 +332,10 @@ def test_indexes_precede_every_write_and_cover_the_point_labels():
     for label in ("Param", "Ret", "Cond"):  # S-1: pointId range indexes are the edge-load anchors
         assert f"CREATE INDEX FOR (n:{label}) ON (n.pointId)" in stmts
     assert "CREATE INDEX FOR (n:File) ON (n.path)" in stmts and "CREATE INDEX FOR (n:Symbol) ON (n.qname)" in stmts
-    assert set(L.CONSTRAINED) == {"Symbol", "CallSite", "ContractPoint", "Link", "Name", "Unit", "File", "Param", "Ret", "Cond"}
-    for label in L.CONSTRAINED:  # a constraint needs its index first
-        assert f"CREATE INDEX FOR (n:{label}) ON (n.{L.ID_PROP[label]})" in stmts
+    assert {l for l, _ in L.constraint_statements()} == {
+        "Symbol", "CallSite", "ContractPoint", "Link", "Name", "Unit", "File", "Param", "Ret", "Cond"}
+    for label, prop in L.constraint_statements():  # a constraint needs its index first
+        assert f"CREATE INDEX FOR (n:{label}) ON (n.{prop})" in stmts
 
 
 def test_constraints_are_polled_until_operational():
@@ -445,12 +452,13 @@ def test_build_rows_maps_every_record_field_by_field():
     assert n["Repo"] == [{"repoId": "repo", "headCommit": "c" * 40}]
     assert n["Unit"] == [{"unitId": h(1), "repoId": "repo", "rootPath": "svc", "language": "python", "builtCommit": "c" * 40,
                           "builtTree": "t" * 40, "builtAt": "2026-01-02T03:04:05Z", "buildStatus": "fresh"}]
-    assert n["File"] == [{"fileId": h(10), "repoId": "repo", "unitId": h(1), "path": "svc/a.py", "kind": "code", "role": "primary"}]
+    assert n["File"] == [{"fileId": h(10), "repoId": "repo", "unitId": h(1), "path": "svc/a.py", "kind": "code", "role": "primary",
+                          "lang": "python", "contentHash": "0" * 64}]
     f, g, g_js = n["Symbol"]
     assert g_js["symbolId"] == h(22)
     assert f == {"symbolId": h(20), "repoId": "repo", "unitId": h(1), "kind": "function", "name": "f", "nameNorm": "f",
                  "qname": "svc/a.py::f", "path": "svc/a.py", "lineStart": 3, "lineEnd": 8, "fingerprint": "f" * 64,
-                 "ownedRegions": [4, 5, 7, 7]}
+                 "ownedRegions": [4, 5, 7, 7], "lang": "python", "complexity": 1, "depth": 0}
     assert "ownedRegions" not in g and "lastChangedAt" not in g  # absent stays absent, never null
     assert n["Param"] == [{"pointId": h(30), "index": 0, "name": "x", "line": 3}]
     assert n["Ret"] == [{"pointId": h(31), "line": 8}]
@@ -469,8 +477,7 @@ def test_build_rows_edges_field_by_field_and_loader_side_drops():
     assert e[("File", "DEFINES", "Symbol")] == [{"s": h(10), "t": h(t)} for t in (20, 21, 22)]
     assert e[("Symbol", "HAS_PARAM", "Param")] == [{"s": h(20), "t": h(30)}]
     assert e[("Symbol", "HAS_CALL", "CallSite")] == [{"s": h(20), "t": h(40)}, {"s": h(20), "t": h(41)}]
-    assert e[("CallSite", "CALLS", "Symbol")] == [
-        {"s": h(40), "t": h(21), "p": {"status": "confirmed", "reason": "resolved-call"}}]
+    assert e[("CallSite", "CALLS", "Symbol")] == [{"s": h(40), "t": h(21)}]  # D8: the default status/reason is not stored
     assert rows.dropped["calls-target-not-in-snapshot"] == 1
     nk = rows.nodes["Name"][0]["nameKey"]
     assert e[("CallSite", "CALLS_NAME", "Name")] == [{"s": h(40), "t": nk}]
@@ -478,11 +485,11 @@ def test_build_rows_edges_field_by_field_and_loader_side_drops():
     assert e[("Name", "RESOLVES_TO", "Symbol")] == [{"s": nk, "t": h(21)}]  # the python `g`, not the javascript one
     data = {k: v for k, v in e.items() if k[1] == "DATA"}
     assert data[("CallSite", "DATA", "Param")] == [
-        {"s": h(40), "t": h(30), "p": {"fromPath": "p0.k", "toPath": "a0", "status": "confirmed", "reason": "intra-flow"}}]
+        {"s": h(40), "t": h(30), "p": {"fromPath": "p0.k", "toPath": "a0"}}]  # D8
     assert data[("Ret", "DATA", "CallSite")][0]["p"]["toPath"] == "ret"
     # a call site that feeds itself with different paths is a real fact (loop-carried), kept
     assert data[("CallSite", "DATA", "CallSite")] == [
-        {"s": h(40), "t": h(40), "p": {"fromPath": "r", "toPath": "recv", "status": "confirmed", "reason": "intra-flow"}}]
+        {"s": h(40), "t": h(40), "p": {"fromPath": "r", "toPath": "recv"}}]
     assert rows.dropped["data-endpoint-missing"] == 1
     # G-4: the cond->cond self-edge is dropped and the repeated (point, cond) pair written once
     assert e[("CallSite", "CONTROLLED_BY", "Cond")] == [{"s": h(40), "t": h(32)}]
@@ -503,10 +510,11 @@ def test_snapshot_is_deterministic_and_keys_the_build():
 def test_link_facts_become_nodes_and_edges_with_lifted_chain_props():
     cp_key = "GET /x"
     facts = {
-        "providers": [{"handlerId": h(21), "key": cp_key}, {"handlerId": h(77), "key": cp_key}],
+        "providers": [{"handlerId": h(21), "key": cp_key, "status": "possible", "reason": "partial-key"},
+                      {"handlerId": h(77), "key": cp_key, "status": "confirmed", "reason": "key-match"}],
         "consumers": [{"siteId": h(40), "keys": [cp_key, "GET /y"], "partialAlternatives": True}],
         "links": [{"id": h(70), "kind": "http", "keyNorm": cp_key, "status": "confirmed", "reason": "key-match",
-                   "matcher": "exact", "candidateCount": 2, "provider": {"anchorId": h(21)},
+                   "matcher": "exact", "provider": {"anchorId": h(21)},
                    "sites": [{"siteId": h(40), "consumerKey": cp_key, "status": "confirmed", "reason": "key-match",
                               "liftedVia": [{"ord": 0, "kind": "callsite", "id": h(40), "line": 6, "urlPath": "a0"},
                                             {"ord": 1, "kind": "symbol", "id": h(20), "line": 3, "urlPath": "p0.path",
@@ -520,9 +528,10 @@ def test_link_facts_become_nodes_and_edges_with_lifted_chain_props():
     assert set(cps) == {cp_key, "GET /y"} and cps[cp_key]["kind"] == "http" and cps[cp_key]["key"] == cp_key
     assert cps[cp_key]["cpId"] == contract_point_id("http", cp_key)
     assert rows.nodes["Link"] == [{"linkId": h(70), "kind": "http", "status": "confirmed", "reason": "key-match",
-                                   "matcher": "exact", "candidateCount": 2}]
+                                   "matcher": "exact"}]  # D6: no candidateCount on Link
     e = rows.edges
-    assert e[("Symbol", "PROVIDES", "ContractPoint")] == [{"s": h(21), "t": cps[cp_key]["cpId"]}]
+    assert e[("Symbol", "PROVIDES", "ContractPoint")] == [
+        {"s": h(21), "t": cps[cp_key]["cpId"], "p": {"status": "possible", "reason": "partial-key"}}]
     assert e[("Link", "TO", "Symbol")] == [{"s": h(70), "t": h(21)}]
     assert e[("Link", "ON", "ContractPoint")] == [{"s": h(70), "t": cps[cp_key]["cpId"]}]
     assert [r["p"]["consumerKey"] for r in e[("CallSite", "VIA", "Link")]] == [cp_key, "GET /y"]  # two keys, two edges
@@ -873,7 +882,7 @@ def facts_snapshot(store, real):
     """Everything SL-6 compares, from one loaded graph: link set, link edges, BFS answers."""
     run = run_on(store)
     snap = {
-        "links": run("MATCH (l:Link) RETURN l.linkId, l.kind, l.status, l.reason, l.matcher, l.candidateCount ORDER BY l.linkId"),
+        "links": run("MATCH (l:Link) RETURN l.linkId, l.kind, l.status, l.reason, l.matcher ORDER BY l.linkId"),
         "via": run("MATCH (c:CallSite)-[v:VIA]->(l:Link) RETURN l.linkId, c.callSiteId, v.status, v.reason, v.consumerKey ORDER BY l.linkId, c.callSiteId, v.consumerKey"),
         "to": run("MATCH (l:Link)-[:TO]->(s:Symbol) RETURN l.linkId, s.symbolId ORDER BY l.linkId"),
         "lifted": run("MATCH (l:Link)-[r:LIFTED_VIA]->(t) RETURN l.linkId, r.siteId, r.ord, labels(t)[0], coalesce(t.callSiteId, t.symbolId), r.line, r.urlPath, r.verbPath ORDER BY l.linkId, r.siteId, r.ord"),
@@ -921,10 +930,10 @@ def _report_json(rep):
 def test_sl3_load_integrity(store, real, loaded):
     run = loaded["run"]
     cons = store.constraints(L.FINAL_KEY)
-    assert len(cons) == len(L.CONSTRAINED)
-    assert {(c["label"], c["properties"][0]) for c in cons} == {(l, L.ID_PROP[l]) for l in L.CONSTRAINED}
+    assert len(cons) == len(L.constraint_statements()) == 10
+    assert {(c["label"], c["properties"][0]) for c in cons} == set(L.constraint_statements())
     assert all(c["type"] == "UNIQUE" and c["entity"] == "NODE" for c in cons)
-    assert [c["status"] for c in cons] == ["OPERATIONAL"] * len(L.CONSTRAINED)  # none FAILED, none pending
+    assert [c["status"] for c in cons] == ["OPERATIONAL"] * 10  # none FAILED, none pending
     snaps = run("MATCH (s:Snapshot) RETURN s")
     assert len(snaps) == 1
     props = snaps[0][0].properties
@@ -1002,8 +1011,9 @@ def test_sl4_contract_mode_lists_the_endpoints_caller_confirmed_at_distance_one(
         (("CallSite", site), ("VIA", "<-", "confirmed")),
         (("Symbol", get_health), ("HAS_CALL", "<-", "confirmed")),
     ]
-    link = run("MATCH (l:Link {linkId: $i}) RETURN l.kind, l.status, l.reason, l.matcher, l.candidateCount", {"i": link_id})[0]
+    link = run("MATCH (l:Link {linkId: $i}) RETURN l.kind, l.status, l.reason, l.matcher, keys(l)", {"i": link_id})[0]
     assert link[:4] == ["http", "confirmed", "key-match", "exact"]
+    assert "candidateCount" not in link[4]  # D6: N is derived per VIA edge at render time
     rendered = I.render_item(run, it)
     hops = [x["lifted"] for x in rendered if "lifted" in x]
     qn = lambda name: _qn_id(real, "salesperson/src/api/client.ts::" + name)  # noqa: E731
@@ -1190,13 +1200,14 @@ def test_sl4_ac1_data_rows_are_in_the_graph(store, real, loaded):
     bu = _qn_id(real, "salesperson/src/api/client.ts::buildUrl")
     q = ("MATCH (u:CallSite {calleeName: $uc})<-[:HAS_CALL]-(:Symbol {symbolId: $us}) "
          "MATCH (u)-[d:DATA {fromPath: $fp, toPath: $tp}]->(x) WHERE labels(x)[0] = $xl AND ($xc IS NULL OR x.calleeName = $xc) "
-         "RETURN count(d), min(d.status), min(d.reason)")
+         "RETURN count(d), min(coalesce(d.status, 'confirmed')), min(coalesce(d.reason, 'intra-flow'))")  # D8: sparse
     rows = run(q, {"uc": "fetch", "us": api, "fp": "r", "tp": "a0", "xl": "CallSite", "xc": "buildUrl"})
     assert rows == [[1, "confirmed", "intra-flow"]]
     assert run(q, {"uc": "buildUrl", "us": api, "fp": "p0.path", "tp": "a0", "xl": "Param", "xc": None}) == [[1, "confirmed", "intra-flow"]]
     assert run(q, {"uc": "fetch", "us": api, "fp": "p0.method", "tp": "a1.method", "xl": "Param", "xc": None}) == [[1, "confirmed", "intra-flow"]]
     ret = run("MATCH (:Symbol {symbolId: $b})-[:HAS_RETURN]->(r:Ret)-[d:DATA {fromPath: 'p0', toPath: 'ret'}]->(p:Param) "
-              "WHERE p.index = 0 RETURN r.pointId, p.pointId, d.status, d.reason ORDER BY r.pointId", {"b": bu})
+              "WHERE p.index = 0 RETURN r.pointId, p.pointId, coalesce(d.status, 'confirmed'), coalesce(d.reason, 'intra-flow') "
+              "ORDER BY r.pointId", {"b": bu})
     recs = [r for b in real["ordered"] for r in b]
     rets = {r["id"] for r in recs if r["type"] == "ret" and r["symbolId"] == bu}
     p0 = next(r["id"] for r in recs if r["type"] == "param" and r["symbolId"] == bu and r["index"] == 0)

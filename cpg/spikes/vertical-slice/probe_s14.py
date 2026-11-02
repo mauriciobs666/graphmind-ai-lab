@@ -211,11 +211,13 @@ def pslice_section(bundles: dict, facts: dict) -> dict:
 
 
 def links_section(facts: dict) -> dict:
+    import render  # D6: candidateCount left the Link; N is derived per VIA edge
+    via = [(l["consumer"]["anchorId"], s["siteId"], l["id"], s["consumerKey"]) for l in facts["links"] for s in l["sites"]]
     rows = []
     for l in facts["links"]:
         for s in l["sites"]:
             rows.append({"keyNorm": l["keyNorm"], "consumer": l["consumer"]["qname"].split("::")[1], "status": l["status"],
-                         "liftedViaHops": len(s["liftedVia"]), "candidateCount": l["candidateCount"],
+                         "liftedViaHops": len(s["liftedVia"]), "candidateCount": render.candidate_count(via, s["siteId"], l["id"], s["consumerKey"]),
                          "sitesOnLink": len(l["sites"]),
                          "chain": [(h.get("callee") or h["qname"].split("::")[1]) + f"@{h['path'].split('/')[-1]}:{h['line']}"
                                    for h in s["liftedVia"]]})

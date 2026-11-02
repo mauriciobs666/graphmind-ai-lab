@@ -1159,3 +1159,36 @@ M2: close S17 with the ceiling carried to S23, or hold that clause?
 - **n2 (nit).** The default suite deselects the live tests, so a gate record should say which command ran.
 
 **Sufficiency:** the DDL file satisfies the done-condition clause "applies to an empty key, `db.indexes()` matches it, post-load constraints reach `OPERATIONAL`" (executed). The untested edges are m2/m3.
+
+## Pass 11 — S17-L1 loader to graph model v1 (2026-11-01, uncommitted diff over `a7932184`)
+
+**Scope:** `cpg/spikes/vertical-slice/` `load.py`, `assemble.py`, `impact.py`, `probe_s14.py`, new `lookup.py`, `render.py`, tests `test_loader_v1.py`, `test_assemble.py`, `test_live_slice.py`, against `docs/plans/connected-code-graph-p0-graph.md` D1-D2, D4, D6-D11, §1.3, §1.6, §4, §5 and `docs/plans/connected-code-graph-bundle-spec4.md` §1. Out of scope (L2): value-mode labelling, bfs-v1 guards, `MOUNTED_BY`. **Verdict: approve with suggestions.** No blocker, no major. CPG: considered, not relevant — the subject is a spike loader and its tests, which no loaded `cpg_*` graph indexes.
+
+**Executed.** `cd cpg && .venv/bin/python -m pytest -q`: 1393 passed, 8 deselected. `-m live` on `test_loader_v1.py`: 3 passed; `-m live` on `test_live_slice.py`: 11 passed (rebuilds `ccg_p0slice`; no `falkordb-dev` contact; the credential was read by the loader, never printed). Live probe: `LiveStore(...).conn.connection_pool.connection_kwargs["retry"]` is `Retry`, `_retries == 0`, `NoBackoff`, `socket_timeout` 300 (the test only checks a fake `FalkorDB`; the real pass-through holds).
+
+**Mutants** (a `-p` plugin in the scratchpad `p11/mut.py` patching module constants; no repo file edited):
+| Mutant | Result |
+|---|---|
+| `SKIPPED_CYPHER` / `MAPPED_CYPHER` / `ANCHOR_CYPHER` without `repoId` | each killed (`test_lookup_is_repo_scoped...`) |
+| `CANDIDATE_COUNT_CYPHER` without the `consumerKey` join | killed |
+| `zero_retry` -> `Retry(NoBackoff(), 1)` | killed |
+| lookup order swapped (SkippedFile before File) | **survives** (n1) |
+| `count(DISTINCT l)` -> `count(l)` in the D6 Cypher | **survives** (n2) |
+
+**Fidelity, checked against the note.** D1 (edge props, optional ones absent via `is not None`; assembler gives `None` or a string), D2 (`VIA {status, reason, consumerKey}`), D4 (`PROVIDES {status, reason}`, both always present from the assembler, `assemble.py:525`), D6 (`candidateCount` gone from `Link`, assembler, `probe_s14`, tests; `render.py` matches the note's definition, self included, same consumer symbol via `HAS_CALL`, equal `consumerKey`), D7 (`depth` by `_symbol_depths`, order-independent, cycle-safe; `parentId` not stored; `File.lang/contentHash`), D8 (each of `status`/`reason` dropped on its own; `impact.py` coalesces; sparse readback proven live), D9 (`scope` on the edge), D10/§1.6 (statements and constraints come from `parse_ddl`; 17 indexes, 10 constraints; raw `GRAPH.CONSTRAINT`, live-store test proves the helper is not called), D11 (unchanged `name_key`), §1.3 (`SkippedFile {repoId, unitId, path, reason}`, `SKIPS`, no `DEFINES`/`HAS_FILE`; edge matched by `(unitId, path)`), §4 (zero-retry object, `BATCH_MAX` one constant). **Repo scope:** all three reads in `lookup.py` carry `repoId`; the only other `File {path` readers in `cpg/` are tests. **Lost symbols:** `EXTRA_INDEXES`, `CONSTRAINED` removed; a sweep of `cpg/` finds no importer left (only an archived test report prose cites `CONSTRAINED`). `Link.candidateCount` has no remaining reader outside docs.
+
+**Findings**
+
+**m1 (minor, verified by running). Lookup order is not pinned.** §1.3 fixes "mapped, then not mapped, then not found". No fixture has one path in both `File` and `SkippedFile` of the same repo (for example two units), so swapping the first two queries passes. *Fix:* add that case to the scope test, expecting `mapped`.
+
+**m2 (minor, verified by running). The D6 Cypher's `DISTINCT` is untested.** In the live fixture every (site, link) pair is a single edge per symbol, so `count(l)` equals `count(DISTINCT l)`; only the pure-Python test covers "a Link counted once however many sites reach it". Two sites of one symbol reaching one Link under the same key would inflate N in the store. *Fix:* in the live fixture add a second `symA` site reaching `L1` with key `GET /x` and expect the same N (2), compared with the row helper.
+
+**m3 (minor, read, not measured). `Dependency` is loaded without an index.** `ID_PROP["Dependency"] = "depId"` makes the `DEPENDS_ON` edge statement `MATCH (b:Dependency {depId: r.t})`, but §1.6 and `ddl_v1.cypher` (17 indexes, pinned by `test_ddl_live.py`) defer the `Dependency` id index "to the phase that loads the label". This change is that phase, so either the table and DDL gain `Dependency.depId` (the DDL header says edge loading `MATCH`es by index) or the load is deferred. Cost is a label scan per edge row; small now, and the slice bundles carry no dependency record, so no live run exercises it.
+
+**n1 (nit). No real-bundle coverage of the new shapes.** The slice bundles have no `skippedFiles` and no `dependency` records, and all links have N = 1; those shapes are proven only on hand-built bundles (pure tests and 3 live tests). Honest, and §1.3 says so for `SkippedFile`; say it in the gate record rather than reading "1393 green" as slice evidence for them.
+
+**n2 (nit).** `test_impact_reader_coalesces...` asserts query substrings; the behavioural proof is the live shapes test. Keep both; name the second as the real check.
+
+**What's solid:** zero-retry verified on the real connection; DDL read from one home; raw constraint command; repo scoping on every read, with three killed mutants; D8 per-field sparse storage with a mixed-batch empty-map fix; the `FakeStore`-based pure tests are field-by-field.
+
+**Open question:** none. m3 needs a one-line ruling by `graph-dba` (add the index to §1.6/DDL, or defer `Dependency` loading).

@@ -620,7 +620,7 @@ def test_unmounted_provider_caps_the_link_at_possible():
     assert (link["status"], link["reason"]) == ("possible", "partial-key")
 
 
-def test_candidate_count_counts_the_providers_a_site_key_reaches():
+def test_link_carries_no_candidate_count_each_site_still_records_its_consumer_key():
     web = Mini()
     s = web.sym("web/a.ts::go")
     web.call(s, "fetch", 3, [], a0=const("/x"), a1__method=const("GET"))
@@ -632,7 +632,8 @@ def test_candidate_count_counts_the_providers_a_site_key_reaches():
         srv.dec(h, "app.get", route)
     out = run(web.r, srv.r)
     assert sorted(l["keyNorm"] for l in out["links"]) == ["GET /x", "GET /{}"]
-    assert {l["candidateCount"] for l in out["links"]} == {2}
+    assert all("candidateCount" not in l for l in out["links"])  # D6: derived per VIA edge, one home (render helper)
+    assert {s["consumerKey"] for l in out["links"] for s in l["sites"]} == {"GET /x"}
 
 
 def test_whole_object_flow_carries_the_method_path_through_a_wrapper():
@@ -919,32 +920,32 @@ def test_probe_links_every_field(probe):
     def site(sid, line, key, status, reason, matcher):
         return dict(siteId=sid, line=line, consumerKey=key, status=status, reason=reason, matcher=matcher)
 
-    exp = {  # (consumer, handler): keyNorm, status, reason, matcher, candidateCount, provider line, sites
-        (I["save"], hs["items"]): ("POST /v1/items", "confirmed", "key-match", "exact", 2, 620,
+    exp = {  # (consumer, handler): keyNorm, status, reason, matcher, provider line, sites
+        (I["save"], hs["items"]): ("POST /v1/items", "confirmed", "key-match", "exact", 620,
                                    [site(I["s311"], 311, "POST /v1/items", "confirmed", "key-match", "exact")]),
-        (I["save"], hs["item_id"]): ("POST /v1/{}", "confirmed", "key-match", "path-template", 2, 630,
+        (I["save"], hs["item_id"]): ("POST /v1/{}", "confirmed", "key-match", "path-template", 630,
                                      [site(I["s311"], 311, "POST /v1/items", "confirmed", "key-match", "path-template"),
                                       site(I["s312"], 312, "POST /v1/other", "confirmed", "key-match", "path-template")]),
-        (I["save"], hs["other"]): ("POST /v1/other", "confirmed", "key-match", "exact", 2, 670,
+        (I["save"], hs["other"]): ("POST /v1/other", "confirmed", "key-match", "exact", 670,
                                    [site(I["s312"], 312, "POST /v1/other", "confirmed", "key-match", "exact")]),
-        (I["half"], hs["items"]): ("POST /v1/items", "possible", "partial-key", "exact", 2, 620,
+        (I["half"], hs["items"]): ("POST /v1/items", "possible", "partial-key", "exact", 620,
                                    [site(I["s391"], 391, "POST /v1/items", "possible", "partial-key", "exact")]),
-        (I["half"], hs["item_id"]): ("POST /v1/{}", "possible", "partial-key", "path-template", 2, 630,
+        (I["half"], hs["item_id"]): ("POST /v1/{}", "possible", "partial-key", "path-template", 630,
                                      [site(I["s391"], 391, "POST /v1/items", "possible", "partial-key", "path-template")]),
-        (I["list2"], hs["a"]): ("GET /v1/a", "confirmed", "key-match", "exact", 1, 640,
+        (I["list2"], hs["a"]): ("GET /v1/a", "confirmed", "key-match", "exact", 640,
                                 [site(I["s361"], 361, "GET /v1/a", "confirmed", "key-match", "exact")]),
-        (I["list2"], hs["b"]): ("GET /v1/b", "confirmed", "key-match", "exact", 1, 650,
+        (I["list2"], hs["b"]): ("GET /v1/b", "confirmed", "key-match", "exact", 650,
                                 [site(I["s361"], 361, "GET /v1/b", "confirmed", "key-match", "exact")]),
     }
     assert set(by) == set(exp)
-    for k, (key, status, reason, matcher, cc, pline, sites) in exp.items():
+    for k, (key, status, reason, matcher, pline, sites) in exp.items():
         l = by[k]
-        has_exactly(l, ["type", "id", "kind", "keyNorm", "provider", "consumer", "sites", "candidateCount", "status",
+        has_exactly(l, ["type", "id", "kind", "keyNorm", "provider", "consumer", "sites", "status",
                         "reason", "matcher"], "link")
         has_exactly(l["provider"], ["anchorId", "qname", "path", "line", "mounts"], "link.provider")
         has_exactly(l["consumer"], ["anchorId", "qname", "path"], "link.consumer")
         assert (l["type"], l["kind"], l["id"], l["keyNorm"]) == ("link", "http", link_id("http", key, k[1], k[0]), key)
-        assert (l["status"], l["reason"], l["matcher"], l["candidateCount"]) == (status, reason, matcher, cc)
+        assert (l["status"], l["reason"], l["matcher"]) == (status, reason, matcher)
         assert l["provider"]["line"] == pline and l["provider"]["path"] == S2
         assert l["provider"]["qname"].startswith(f"{S2}::make.") and l["provider"]["mounts"]
         assert l["consumer"]["path"] == W1 and l["consumer"]["qname"].startswith(f"{W1}::")

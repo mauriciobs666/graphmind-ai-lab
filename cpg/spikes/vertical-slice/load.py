@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # cpg/
 
 from ccg.bundle import read_bundle  # noqa: E402
 from ccg.ids import contract_point_id, name_key, tuple_id  # noqa: E402
+from ccg.store import parse_ddl  # noqa: E402
 
 SYSTEM = "p0slice"
 FINAL_KEY = f"ccg_{SYSTEM}"
@@ -79,14 +80,16 @@ def _ident(name: str) -> str:
 ID_PROP = {
     "Repo": "repoId", "Unit": "unitId", "File": "fileId", "Symbol": "symbolId", "CallSite": "callSiteId",
     "Param": "pointId", "Ret": "pointId", "Cond": "pointId", "Name": "nameKey",
-    "ContractPoint": "cpId", "Link": "linkId",
+    "ContractPoint": "cpId", "Link": "linkId", "Dependency": "depId",
 }
-NODE_ORDER = ("Repo", "Unit", "File", "Symbol", "Param", "Ret", "Cond", "CallSite", "Name", "ContractPoint", "Link")
+#: ``SkippedFile`` has no id property (S17 section 1.3): it is written by :func:`node_statement` and matched
+#: by ``(unitId, path)`` as an edge target; its indexes are the DDL's ``path`` and ``repoId``
+NODE_ORDER = ("Repo", "Unit", "File", "Symbol", "Param", "Ret", "Cond", "CallSite", "Name", "ContractPoint", "Link",
+              "Dependency", "SkippedFile")
 
-#: extra indexes beyond each label's id property (graph note §3.4 step 1)
-EXTRA_INDEXES = (("File", "path"), ("Symbol", "nameNorm"), ("Symbol", "qname"), ("ContractPoint", "keyNorm"))
-#: labels whose id property gets a ``UNIQUE`` constraint after the load (graph note §3.4 step 3 + S-1)
-CONSTRAINED = ("Symbol", "CallSite", "ContractPoint", "Link", "Name", "Unit", "File", "Param", "Ret", "Cond")
+#: D8: a reader coalesces an absent ``status`` / ``reason`` to these, so the loader stores only a non-default
+DEFAULT_STATUS = {"CALLS": {"status": "confirmed", "reason": "resolved-call"},
+                  "DATA": {"status": "confirmed", "reason": "intra-flow"}}
 
 #: keep Cypher fixed text for the few relationship groups a bundle can produce, ordered
 EDGE_ORDER = (
@@ -101,10 +104,12 @@ EDGE_ORDER = (
     ("Symbol", "PROVIDES", "ContractPoint"), ("CallSite", "CONSUMES", "ContractPoint"),
     ("CallSite", "VIA", "Link"), ("Link", "TO", "Symbol"), ("Link", "ON", "ContractPoint"),
     ("Link", "LIFTED_VIA", "CallSite"), ("Link", "LIFTED_VIA", "Symbol"),
+    ("Unit", "DEPENDS_ON", "Dependency"), ("Unit", "SKIPS", "SkippedFile"),
 )
 
+#: ``parentId`` is deliberately absent (D7): the loader turns it into ``depth``
 _SYMBOL_PROPS = ("kind", "name", "nameNorm", "qname", "path", "lineStart", "lineEnd", "fingerprint",
-                 "lastChangedAt", "lastChangedCommit")
+                 "lastChangedAt", "lastChangedCommit", "complexity", "lang", "signature")
 
 
 def _clean(props: dict[str, Any]) -> dict[str, Any]:
@@ -115,6 +120,28 @@ def _clean(props: dict[str, Any]) -> dict[str, Any]:
             continue
         out[k] = v.strip() if isinstance(v, str) else v
     return out
+
+
+def _symbol_depths(parents: dict[str, str | None]) -> dict[str, int]:
+    """Nesting depth per symbol id from ``parentId``: a root (no parent, or a parent outside the snapshot)
+    is 0. Order-independent; a parent cycle (invalid input) terminates instead of looping."""
+    depth: dict[str, int] = {}
+    for sid in parents:
+        chain, cur = [], sid
+        while cur in parents and cur not in depth and cur not in chain:
+            chain.append(cur)
+            cur = parents[cur]
+        base = depth[cur] if cur in depth else -1  # an unknown parent (or a cycle) puts the chain's head at 0
+        for node in reversed(chain):
+            base += 1
+            depth[node] = base
+    return depth
+
+
+def _non_default(etype: str, status: str, reason: str) -> dict[str, str]:
+    """D8: the ``status`` / ``reason`` of a ``CALLS`` / ``DATA`` edge that differ from the default, each on its own."""
+    default = DEFAULT_STATUS[etype]
+    return {k: v for k, v in (("status", status), ("reason", reason)) if v != default[k]}
 
 
 def _flatten_regions(regions: list[list[int]]) -> list[int]:
@@ -181,6 +208,7 @@ def build_rows(bundles: list[list[dict]], facts: dict, *, system_id: str = SYSTE
     sym_unit: dict[str, str] = {}
     by_name: dict[tuple[str, str], list[str]] = defaultdict(list)
     headers: list[dict] = []
+    parents: dict[str, str | None] = {}
 
     # pass 1: index every point and symbol, so edges can find both ends whichever bundle holds them
     for records in bundles:
@@ -194,8 +222,11 @@ def build_rows(bundles: list[list[dict]], facts: dict, *, system_id: str = SYSTE
                 sym_path[r["id"]] = r["path"]
                 sym_unit[r["id"]] = header["unitId"]
                 by_name[(r["lang"], r["name"])].append(r["id"])
+                parents[r["id"]] = r.get("parentId")
             elif t in ("param", "ret", "cond", "callsite"):
                 point_label[r["id"]] = {"param": "Param", "ret": "Ret", "cond": "Cond", "callsite": "CallSite"}[t]
+
+    depths = _symbol_depths(parents)
 
     # pass 2: nodes and the edges that follow from one record
     repo_head: dict[str, str] = {}
@@ -212,17 +243,22 @@ def build_rows(bundles: list[list[dict]], facts: dict, *, system_id: str = SYSTE
         _add_edge(rows, seen_edges, ("Unit", unit_id), "IN_REPO", ("Repo", repo_id))
         rows.units.append({"unitId": unit_id, "rootPath": header["unit"]["rootPath"], "language": header["unit"]["lang"]})
         rows.files[unit_id] = 0
+        for skipped in header.get("skippedFiles", ()):  # S17 section 1.3: a coverage fact, one source (the header)
+            rows.nodes["SkippedFile"].append({"repoId": repo_id, "unitId": unit_id, "path": skipped["path"],
+                                              "reason": skipped["reason"]})
+            _add_edge(rows, seen_edges, ("Unit", unit_id), "SKIPS", ("SkippedFile", skipped["path"]))
         for r in records:
             t = r["type"]
             if t == "file":
                 rows.files[unit_id] += 1
                 _add_node(rows, seen_nodes, "File", {
                     "fileId": r["id"], "repoId": r["repoId"], "unitId": unit_id, "path": r["path"],
-                    "kind": r["kind"], "role": r["role"]})
+                    "kind": r["kind"], "role": r["role"], "lang": r["lang"], "contentHash": r["contentHash"]})
                 _add_edge(rows, seen_edges, ("Unit", unit_id), "HAS_FILE", ("File", r["id"]))
             elif t == "symbol":
                 props = {"symbolId": r["id"], "repoId": r["repoId"], "unitId": unit_id}
                 props.update({k: r.get(k) for k in _SYMBOL_PROPS})
+                props["depth"] = depths[r["id"]]
                 if r.get("ownedRegions"):
                     props["ownedRegions"] = _flatten_regions(r["ownedRegions"])
                 _add_node(rows, seen_nodes, "Symbol", props)
@@ -247,12 +283,17 @@ def build_rows(bundles: list[list[dict]], facts: dict, *, system_id: str = SYSTE
                         rows.dropped["calls-target-not-in-snapshot"] += 1
                         continue
                     _add_edge(rows, seen_edges, ("CallSite", r["id"]), "CALLS", ("Symbol", target["symbolId"]),
-                              {"status": r["status"], "reason": r["reason"]}, key=(r["status"], r["reason"]))
+                              _non_default("CALLS", r["status"], r["reason"]), key=(r["status"], r["reason"]))
                 if r["calleeName"] != "<dynamic>":
                     lang = sym_lang[sid]
                     nk = name_key(lang, r["calleeName"])
                     _add_node(rows, seen_nodes, "Name", {"nameKey": nk, "lang": lang, "name": r["calleeName"]})
                     _add_edge(rows, seen_edges, ("CallSite", r["id"]), "CALLS_NAME", ("Name", nk))
+            elif t == "dependency":
+                _add_node(rows, seen_nodes, "Dependency", {"depId": r["depId"], "ecosystem": r["ecosystem"], "package": r["package"]})
+                _add_edge(rows, seen_edges, ("Unit", unit_id), "DEPENDS_ON", ("Dependency", r["depId"]),
+                          {"version": r["version"], "manifestPath": r["manifestPath"], "line": r["line"], "scope": r["scope"]},
+                          key=(r["manifestPath"], r["line"], r["scope"]))
             elif t == "data":
                 _add_data(rows, seen_edges, point_label, r)
             elif t == "controlledBy":
@@ -284,7 +325,7 @@ def _add_data(rows: GraphRows, seen: set, point_label: dict, r: dict) -> None:
     if ul not in ("CallSite", "Ret", "Cond") or dl not in ("Param", "CallSite"):
         rows.dropped["data-endpoint-missing"] += 1
         return
-    props = {"fromPath": r["fromPath"], "toPath": r["toPath"], "status": r["status"], "reason": r["reason"]}
+    props = {"fromPath": r["fromPath"], "toPath": r["toPath"], **_non_default("DATA", r["status"], r["reason"])}
     _add_edge(rows, seen, (ul, use), "DATA", (dl, dfn), props, key=(r["fromPath"], r["toPath"]))
 
 
@@ -316,7 +357,8 @@ def _add_link_facts(rows: GraphRows, seen_nodes: dict, seen_edges: set, facts: d
         if p["handlerId"] not in symbol_ids:
             rows.dropped["provider-handler-missing"] += 1
             continue
-        _add_edge(rows, seen_edges, ("Symbol", p["handlerId"]), "PROVIDES", ("ContractPoint", cp(p["key"])))
+        _add_edge(rows, seen_edges, ("Symbol", p["handlerId"]), "PROVIDES", ("ContractPoint", cp(p["key"])),
+                  {"status": p["status"], "reason": p["reason"]})
     for c in facts["consumers"]:
         for key in c["keys"]:
             status = "possible" if c["partialAlternatives"] else "confirmed"
@@ -326,7 +368,7 @@ def _add_link_facts(rows: GraphRows, seen_nodes: dict, seen_edges: set, facts: d
         lid = link["id"]
         _add_node(rows, seen_nodes, "Link", {
             "linkId": lid, "kind": link["kind"], "status": link["status"], "reason": link["reason"],
-            "matcher": link["matcher"], "candidateCount": link["candidateCount"]})
+            "matcher": link["matcher"]})  # D6: no candidateCount; N is derived per VIA edge (render.py)
         _add_edge(rows, seen_edges, ("Link", lid), "TO", ("Symbol", link["provider"]["anchorId"]))
         _add_edge(rows, seen_edges, ("Link", lid), "ON", ("ContractPoint", cp(link["keyNorm"])))
         for site in link["sites"]:
@@ -356,9 +398,13 @@ def batches(rows: list, size: int = BATCH_MAX) -> Iterator[list]:
 
 
 def index_statements() -> list[str]:
-    out = [f"CREATE INDEX FOR (n:{_ident(label)}) ON (n.{_ident(ID_PROP[label])})" for label in NODE_ORDER]
-    out += [f"CREATE INDEX FOR (n:{_ident(label)}) ON (n.{_ident(prop)})" for label, prop in EXTRA_INDEXES]
-    return out
+    """Part 1 of ``ccg/store/ddl_v1.cypher`` (S17 section 1.6), in file order: the DDL file is the one home."""
+    return [s[3] for s in parse_ddl() if s[0] == "index"]
+
+
+def constraint_statements() -> list[tuple[str, str]]:
+    """Part 2 of the DDL file, in file order: ``(label, property)`` of each ``UNIQUE`` constraint."""
+    return [(_ident(s[1]), _ident(s[2])) for s in parse_ddl() if s[0] == "constraint"]
 
 
 def node_statement(label: str) -> str:
@@ -366,9 +412,11 @@ def node_statement(label: str) -> str:
 
 
 def edge_statement(src: str, etype: str, dst: str, with_props: bool) -> str:
-    s, t = ID_PROP[src], ID_PROP[dst]
+    s = ID_PROP[src]
+    # a SkippedFile has no id: it is matched by (unit, path), the unit id being the edge's source id
+    target = "unitId: r.s, path: r.t" if dst == "SkippedFile" else f"{_ident(ID_PROP[dst])}: r.t"
     text = (f"UNWIND $rows AS r MATCH (a:{_ident(src)} {{{_ident(s)}: r.s}}) "
-            f"MATCH (b:{_ident(dst)} {{{_ident(t)}: r.t}}) CREATE (a)-[e:{_ident(etype)}]->(b)")
+            f"MATCH (b:{_ident(dst)} {{{target}}}) CREATE (a)-[e:{_ident(etype)}]->(b)")
     return text + " SET e = r.p" if with_props else text
 
 
@@ -392,6 +440,14 @@ class Store(Protocol):
     def used_memory(self) -> int: ...
 
 
+def zero_retry():
+    """An explicit zero-retry policy. ``retry=None`` is the client default, which redis-py replaces with its
+    own retrying policy: a retried write could run twice (S17 note section 4)."""
+    from redis.backoff import NoBackoff
+    from redis.retry import Retry
+    return Retry(NoBackoff(), 0)
+
+
 def password() -> str:
     path = Path(os.environ.get("CCG_CONFIG_DIR", Path.home() / ".config" / "ccg")) / "falkordb-admin.pass"
     return path.read_text().strip()
@@ -405,7 +461,7 @@ class LiveStore:
             raise LoadError(f"port {FORBIDDEN_PORT} is falkordb-dev; this loader never touches it")
         from falkordb import FalkorDB
         self.db = FalkorDB(host=host, port=port, password=pw if pw is not None else password(),
-                           socket_timeout=SOCKET_TIMEOUT_S, socket_connect_timeout=10, retry=None)
+                           socket_timeout=SOCKET_TIMEOUT_S, socket_connect_timeout=10, retry=zero_retry())
         self.conn = self.db.connection
         self.conn.ping()
 
@@ -420,7 +476,10 @@ class LiveStore:
         return graph.query(cypher, params, timeout) if timeout else graph.query(cypher, params)
 
     def create_unique_constraint(self, key, label, prop):
-        self.db.select_graph(check_key(key)).create_node_unique_constraint(_ident(label), _ident(prop))
+        # the raw command, never falkordb-py's create_node_unique_constraint: that helper silently creates a
+        # missing range index first, which would mask a gap in ddl_v1.cypher (falkordb-quirks.md, 2026-11-01)
+        self.conn.execute_command("GRAPH.CONSTRAINT", "CREATE", check_key(key), "UNIQUE", "NODE",
+                                  _ident(label), "PROPERTIES", 1, _ident(prop))
 
     def constraints(self, key):
         res = self.db.select_graph(check_key(key)).query("CALL db.constraints()")
@@ -503,6 +562,8 @@ def load_build(store: Store, rows: GraphRows, build_key: str, report: LoadReport
         src, etype, dst = group
         with_props = any("p" in r for r in group_rows)
         for chunk in batches(group_rows, batch_size):
+            if with_props:  # a row without props is a driver error in a mixed batch; an empty map sets nothing
+                chunk = [r if "p" in r else {**r, "p": {}} for r in chunk]
             res = _write(store, build_key, edge_statement(src, etype, dst, with_props), {"rows": chunk}, timeout, report)
             created = getattr(res, "relationships_created", None)
             if created is not None and created != len(chunk):
@@ -512,9 +573,10 @@ def load_build(store: Store, rows: GraphRows, build_key: str, report: LoadReport
     report.seconds["edges"] = clock() - t0
 
     t0 = clock()
-    for label in CONSTRAINED:
-        store.create_unique_constraint(build_key, label, ID_PROP[label])
-    report.constraints = poll_constraints(store, build_key, expected=len(CONSTRAINED), interval=poll_interval,
+    constraints = constraint_statements()
+    for label, prop in constraints:
+        store.create_unique_constraint(build_key, label, prop)
+    report.constraints = poll_constraints(store, build_key, expected=len(constraints), interval=poll_interval,
                                           timeout=poll_timeout, sleep=sleep, clock=clock)
     report.seconds["constraints"] = clock() - t0
 

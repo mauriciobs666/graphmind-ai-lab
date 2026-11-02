@@ -116,7 +116,7 @@ class CypherReader:
     def calls_in(self, symbol_ids):
         return [tuple(r) for r in self._rows(
             "UNWIND $ids AS i MATCH (c:CallSite)-[e:CALLS]->(s:Symbol {symbolId: i}) "
-            "RETURN i, c.callSiteId, e.status", symbol_ids)]
+            "RETURN i, c.callSiteId, coalesce(e.status, 'confirmed')", symbol_ids)]
 
     def owner_of(self, label, ids):
         rel = OWNER_REL[label]
@@ -129,7 +129,7 @@ class CypherReader:
             return []
         return [tuple(r) for r in self._rows(
             f"UNWIND $ids AS i MATCH (u)-[d:DATA]->(p:{label} {{{ID_PROP[label]}: i}}) "
-            "RETURN i, labels(u)[0], coalesce(u.callSiteId, u.pointId), d.fromPath, d.toPath, d.status", ids)]
+            "RETURN i, labels(u)[0], coalesce(u.callSiteId, u.pointId), d.fromPath, d.toPath, coalesce(d.status, 'confirmed')", ids)]
 
     def to_in(self, symbol_ids):
         return [tuple(r) for r in self._rows(

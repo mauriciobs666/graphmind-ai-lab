@@ -615,7 +615,7 @@ def assemble(bundles: list[list[dict]]) -> dict:
                                  "line": p["line"], "mounts": p["mounts"]},
                     "consumer": {"anchorId": site["symbolId"],
                                  "qname": corpus.symbols[site["symbolId"]]["qname"], "path": site["path"]},
-                    "sites": [], "candidateCount": len(cands),
+                    "sites": [],
                 })
                 link["sites"].append({
                     "siteId": site["siteId"], "line": site["line"], "consumerKey": ckey, "status": status,
