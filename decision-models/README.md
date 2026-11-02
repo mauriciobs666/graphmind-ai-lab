@@ -14,8 +14,8 @@ Method: `docs/plans/typed-decision-models-ml.md`.
 ## What this component is, and is not
 
 - **Zero runtime dependencies, local-only, human-started.** Python 3.12 stdlib, a host venv, no CI
-  hook. It runs because a person typed a command, or because a user-level timer they installed
-  started `driver run` (plan6 §3.2; the timer is U6.4's, not installed yet).
+  hook. It runs because a person typed a command: campaigns are started by hand with
+  `driver run --root <campaign>`, and no timer ships.
 - **No hosted API client.** Generation and labelling are done by Claude Code subagents through
   file exchange, driven from a campaign directory (plan4 §3); nothing in `decisionmodels/` calls
   a hosted API or holds a key.
@@ -142,7 +142,7 @@ and tool-use id, decision; never a path or prompt).
 .venv/bin/python -m decisionmodels.driver init --point guard-judge --phase smoke \
     --root ~/dm-campaigns/smoke --fixture ~/dm-campaigns/items.jsonl
 .venv/bin/python -m decisionmodels.driver install --root ~/dm-campaigns/smoke
-.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/smoke   # by hand, not the timer
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/smoke   # by hand
 ```
 
 It spends real tokens, so a person starts it through `driver run`. The fixture is 50 guard
@@ -161,7 +161,7 @@ and subagent-safeguards shapes are still unprobed.
 ### `run`, `pause` and `resume`
 
 ```bash
-.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/pilot   # the timer's command
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/pilot   # by hand, once per window
 .venv/bin/python -m decisionmodels.driver pause --root ~/dm-campaigns/pilot  # after this batch
 .venv/bin/python -m decisionmodels.driver pause --now --root ~/dm-campaigns/pilot  # at once
 .venv/bin/python -m decisionmodels.driver resume --root ~/dm-campaigns/pilot
@@ -174,7 +174,7 @@ and subagent-safeguards shapes are still unprobed.
   still alive), then ingest. The child's
   stdout, stderr and exit code land in `store/runs/<sessionId>.json`, `.err` and `.exit`.
 - It **exits 0** when the phase is done, on a halt, on a usage stop, while `store/pause` exists,
-  after a launch that produced nothing (`launchFailed`: the next fire tries again), and when
+  after a launch that produced nothing (`launchFailed`: the next `run` tries again), and when
   another `run` or an orphaned child holds `store/driver.lock` (one line: "another `driver run`
   holds store/driver.lock"). Its last line says why (`stopped: done`, `stopped: halted (…)`, …).
 - It **refuses** (exit 1, nothing appended to the ledger) a root inside a git work tree or under
@@ -189,11 +189,11 @@ and subagent-safeguards shapes are still unprobed.
   `status` shows it until a launch succeeds:
   ``REFUSED: 2026-11-02T09:00:00+00:00 launch refused: ~/.claude/settings.json has the
   forbidden `hooks` setting; remove it``.
-  Fix the cause; the next fire launches and deletes the file. The root refusal is the exception:
+  Fix the cause; the next `run` launches and deletes the file. The root refusal is the exception:
   `run` checks it before taking the lock and writes nothing, and `status` checks the root
   itself, printing `REFUSED: <reason>` (no timestamp) for as long as the cause is there.
 - **`pause`** creates `store/pause` (no lock, no ledger): a running `run` finishes its batch and
-  exits, and every fire exits 0 at once, before the settings check (so pausing to edit
+  exits, and every `run` exits 0 at once, before the settings check (so pausing to edit
   `~/.claude/settings.json` refuses nothing), until **`resume`** deletes the file. `status` shows
   `PAUSED`.
 - **`pause --now`** also sends SIGTERM to the runner named in `store/runner.json`, only if that
@@ -201,6 +201,15 @@ and subagent-safeguards shapes are still unprobed.
   `interrupted {batch}` (that batch's re-issue is not counted toward the no-attempt cap) and
   exits; the next `run` after `resume` reconciles the batch. Ctrl-C on a hand-started `run` does
   the same.
-- **An orphan** (a child whose runner died) holds the lock until it exits, so every fire exits
-  on the lock; `pause --now` does not signal it. Stop it by disabling the timer and killing the
+- **An orphan** (a child whose runner died) holds the lock until it exits, so every `run` exits
+  on the lock; `pause --now` does not signal it. Stop it by killing the
   `claude` process by hand; `status`'s "last issued" names the session to look for.
+
+### Running a campaign by hand
+
+No timer ships: a person starts each window with `driver run --root <campaign>` (a stakeholder
+decision; the cron scheduler was declined). `pause --root R` lets the batch in flight finish and
+`resume --root R` re-opens; `pause --now` also stops the runner and its child. Reading `status`:
+`batches: N pending/...` is progress; `PAUSED` means `store/pause`; `REFUSED:` is the last launch
+refusal (cleared by the next successful launch); a halt prints its reason and needs `resolve`;
+`last issued` names the session to look for after a crash.
