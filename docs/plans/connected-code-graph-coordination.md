@@ -310,3 +310,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-01: S35 delivered (qa-engineer ab9c21193d0f3ace3, docs/test-plans/connected-code-graph-fixtures.md, 105 planted rows claimed, unverified). Gates in-flight: analyst a2a01cc97ba665bfb, data-scientist a142f377a7bca2679. OI-2: fx-job needs an S-number (to assign at S36-S39 dispatch).
 - 2026-11-01: S35 data-scientist gate: approve with suggestions (docs/reviews/connected-code-graph-fixtures-ml.md): M1 AC-25 count/sort discriminators, M2 closed-world + hard negatives, M3 P1-gateable shapes; minors m1-m7. Revision to wait for analyst gate a2a01cc97ba665bfb, then one qa-engineer pass.
 - 2026-11-01: S17-L1 gated (analyst Pass 11: approve with suggestions; m1 lookup-order pin, m2 DISTINCT fixture, m3 Dependency index ruling for graph-dba) and committed. m1/m2 fold into L2 brief; m3 to graph-dba at S20.
+- 2026-11-01: S17-L2 dispatched, tdd-engineer a2a5de9ff4440b682 (in-flight).
