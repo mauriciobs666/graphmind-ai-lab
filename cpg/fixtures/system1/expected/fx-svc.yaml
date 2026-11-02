@@ -1,0 +1,1922 @@
+# fx-svc fixture manifest (S36). Generated rows follow docs/test-plans/connected-code-graph-fixtures.md v1.2 section 5.
+manifest:
+  repoId: fx-svc
+  formatVersion: 1
+  plan: docs/test-plans/connected-code-graph-fixtures.md
+  planVersion: '1.2'
+  step: S36
+  stratum: fixture-dev
+  locatorForm: 'bundle spec3 3.5 / 1.9: repoId + repo-relative path + qname (starts path + ''::''); config entry = keyPath; unit = rootPath + lang'
+  treeState: 'H0: the tree under fx-svc/ is the initial commit; the history ops below produce H1..H4 and the branches'
+units:
+- unitId: svc
+  repoId: fx-svc
+  rootPath: .
+  lang: python
+  vendoredDirs: []
+  gate: P1
+  steadyState: built
+- unitId: svc-common
+  repoId: fx-svc
+  rootPath: common/
+  lang: python
+  vendoredDirs: []
+  gate: P2
+  steadyState: built
+- unitId: svc-legacy
+  repoId: fx-svc
+  rootPath: legacy/
+  lang: python
+  vendoredDirs: []
+  gate: P1
+  steadyState: unbuildable (buildFailure from H2 to HEAD, no earlier refresh in SC-STEADY, not mapped)
+- unitId: svc-tools
+  repoId: fx-svc
+  rootPath: tools/
+  lang: python
+  vendoredDirs: []
+  gate: P1
+  steadyState: never built
+buildFailure:
+- unitId: svc-legacy
+  rootPath: legacy/
+  from: H2
+  until: HEAD
+  cause: legacy/broken.py (syntax error), added at H2
+history:
+  repo: fx-svc
+  author: fixed (materializer)
+  linear: true
+  baseTree: cpg/fixtures/system1/fx-svc/** (all files)
+  commits:
+  - id: H0
+    date: '2026-01-05'
+    message: initial tree
+    ops: []
+  - id: H1
+    date: '2026-02-10'
+    message: 'build point: legacy builds'
+    allowEmpty: true
+    ops: []
+  - id: H2
+    date: '2026-02-15'
+    message: forced build failure on legacy
+    ops:
+    - op: add_file
+      path: legacy/broken.py
+      content: "def broken(:\n    pass\n"
+  - id: H3
+    date: '2026-02-20'
+    message: price gains region
+    ops:
+    - op: replace_text
+      path: core/flow.py
+      from: 'def price(item, qty):'
+      to: 'def price(item, qty, *, region=None):'
+  - id: H4
+    date: '2026-03-10'
+    message: comment-only edit (HEAD, out of window)
+    ops:
+    - op: replace_text
+      path: core/flow.py
+      from: '# Pricing flow.'
+      to: '# Pricing flow, reviewed.'
+  branches:
+  - name: ov-svc
+    base: H4
+    changeSet: CS-SVC
+    serves:
+    - OV-4
+    ops:
+    - op: replace_text
+      path: db/schema.sql
+      from: '    total NUMERIC NOT NULL,'
+      to: '    grand_total NUMERIC NOT NULL,'
+  - name: tf-mid
+    base: H4
+    serves:
+    - TF-1
+    ops:
+    - op: replace_text
+      path: api/ops.py
+      from: '    return cmd.strip()
+
+        '
+      to: "    cleaned = cmd.strip()\n    return cleaned.replace(\"\\n\", \" \")\n"
+  - name: tf-sink
+    base: H4
+    serves:
+    - TF-2
+    ops:
+    - op: replace_text
+      path: api/ops.py
+      from: subprocess.run(cmd, shell=True)
+      to: subprocess.run(cmd, shell=True, check=True)
+  - name: tf-src
+    base: H4
+    serves:
+    - TF-3
+    ops:
+    - op: replace_text
+      path: api/ops.py
+      from: '    return exec_cmd(normalize(cmd))'
+      to: "    cmd = cmd[:256]\n    return exec_cmd(normalize(cmd))"
+rows:
+- id: LNK-01
+  kind: http
+  item: GET /api/health, literal in the consumer
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Health.tsx
+    qname: app/src/ui/Health.tsx::Health
+  keyNorm: GET /api/health
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: exact literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-02
+  kind: mcp_tool
+  item: get_item, literal callTool("get_item"); server picked by URL binding
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::get_item
+  consumer:
+  - repoId: fx-web
+    path: app/src/mcp/client.ts
+    qname: app/src/mcp/client.ts::loadItem
+  keyNorm: get_item
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: exact literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-03
+  kind: env_var
+  item: FX_SVC_URL, literal os.environ["FX_SVC_URL"]; Compose sets it for service job
+  provider:
+  - repoId: fx-svc
+    path: deploy/compose.yaml
+    keyPath: services.job.environment.FX_SVC_URL
+  consumer:
+  - repoId: fx-job
+    path: job/api_client.py
+    qname: job/api_client.py::ApiClient.__init__
+  keyNorm: FX_SVC_URL
+  status: confirmed
+  reason: key-match
+  gate: P3
+  shape: exact literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-36
+  kind: http
+  item: 'POST /api/v1/orders, literal fetch("/api/v1/orders", {method: "POST"}) (also the AC-25 link of DF-3)'
+  provider:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::create_order
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/OrderTotal.tsx
+    qname: app/src/ui/OrderTotal.tsx::OrderTotal
+  keyNorm: POST /api/v1/orders
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: exact literal
+  serves:
+  - LNK
+  - DF-3
+  stratum: fixture-dev
+- id: LNK-04
+  kind: http
+  item: 'GET /api/v1/orders/{}: path from constants ORDER_PATH and SAMPLE_ORDER; provider is a router prefix=/v1/orders mounted at /api (mount composition)'
+  provider:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::read_order
+  consumer:
+  - repoId: fx-web
+    path: app/src/api/orders.ts
+    qname: app/src/api/orders.ts::getOrder
+  aux:
+  - repoId: fx-web
+    path: app/src/api/endpoints.ts
+  keyNorm: GET /api/v1/orders/1001
+  providerKeyNorm: GET /api/v1/orders/{}
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: constant across files
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-05
+  kind: topic
+  item: kafka:orders.created, name in TOPIC_ORDERS imported from bus/constants.py
+  provider:
+  - repoId: fx-svc
+    path: bus/producer.py
+    qname: bus/producer.py::publish_created
+  consumer:
+  - repoId: fx-web
+    path: app/src/bus/consumer.ts
+    qname: app/src/bus/consumer.ts::onOrderCreated
+  aux:
+  - repoId: fx-svc
+    path: bus/constants.py
+  keyNorm: kafka:orders.created
+  status: confirmed
+  reason: key-match
+  gate: P2
+  shape: constant across files
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-06
+  kind: mcp_tool
+  item: list_orders, name held in a constant module on each side
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
+  consumer:
+  - repoId: fx-web
+    path: app/src/mcp/client.ts
+    qname: app/src/mcp/client.ts::loadOrders
+  aux:
+  - repoId: fx-svc
+    path: mcp/names.py
+  - repoId: fx-web
+    path: app/src/mcp/names.ts
+  keyNorm: list_orders
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: constant across files
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-37
+  kind: http
+  item: GET /api/search, Python path in job/paths.py::SEARCH_PATH
+  provider:
+  - repoId: fx-svc
+    path: api/search.py
+    qname: api/search.py::search
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::search_reports
+  keyNorm: GET /api/search
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: constant across files
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-07
+  kind: http
+  item: GET /api/files/{}, TS template ${API_PREFIX}/files/${README}, README = readme.txt constant
+  provider:
+  - repoId: fx-svc
+    path: api/files.py
+    qname: api/files.py::read_file
+  consumer:
+  - repoId: fx-web
+    path: app/src/api/files.ts
+    qname: app/src/api/files.ts::fetchFile
+  keyNorm: GET /api/files/readme.txt
+  providerKeyNorm: GET /api/files/{}
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: template literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-08
+  kind: http
+  item: GET /api/items/{}, Python f-string f"{BASE}/items/{ITEM_ID}"; BASE (ends /api) and ITEM_ID = 42 are module constants
+  provider:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::fetch_item
+  keyNorm: GET /api/items/42
+  providerKeyNorm: GET /api/items/{}
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: template literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-38
+  kind: http
+  item: GET /api/items/{}, TS template ${API_PREFIX}/items/${RELATED_ID} with RELATED_ID = 7
+  provider:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Related.tsx
+    qname: app/src/ui/Related.tsx::Related
+  keyNorm: GET /api/items/7
+  providerKeyNorm: GET /api/items/{}
+  status: confirmed
+  reason: key-match
+  gate: P1
+  shape: template literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-09
+  kind: topic
+  item: kafka:orders.shipped, name f"{PREFIX}.shipped" with a constant prefix
+  provider:
+  - repoId: fx-svc
+    path: bus/producer.py
+    qname: bus/producer.py::publish_shipped
+  consumer:
+  - repoId: fx-web
+    path: app/src/bus/consumer.ts
+    qname: app/src/bus/consumer.ts::onOrderShipped
+  keyNorm: kafka:orders.shipped
+  status: confirmed
+  reason: key-match
+  gate: P2
+  shape: template literal
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-10
+  kind: http
+  item: GET /api/search, TS wrapper request() reached by a two-level field path api.search.query (AC-1 lifting chain)
+  provider:
+  - repoId: fx-svc
+    path: api/search.py
+    qname: api/search.py::search
+  consumer:
+  - repoId: fx-web
+    path: app/src/api/index.ts
+    qname: app/src/api/index.ts::api.search.query
+  aux:
+  - repoId: fx-web
+    path: app/src/api/client.ts
+    qname: app/src/api/client.ts::request
+  keyNorm: GET /api/search
+  status: confirmed
+  reason: lifted-role
+  gate: P1
+  shape: client wrapper
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-11
+  kind: http
+  item: POST /api/v1/orders, Python wrapper ApiClient.post
+  provider:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::create_order
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::requeue
+  aux:
+  - repoId: fx-job
+    path: job/api_client.py
+    qname: job/api_client.py::ApiClient.post
+  keyNorm: POST /api/v1/orders
+  status: confirmed
+  reason: lifted-role
+  gate: P1
+  shape: client wrapper
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-12
+  kind: mcp_tool
+  item: reindex, TS callTool(name) wrapper
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::reindex
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Admin.tsx
+    qname: app/src/ui/Admin.tsx::onReindex
+  aux:
+  - repoId: fx-web
+    path: app/src/mcp/client.ts
+    qname: app/src/mcp/client.ts::callTool
+  keyNorm: reindex
+  status: confirmed
+  reason: lifted-role
+  gate: P1
+  shape: client wrapper
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-13
+  kind: http
+  item: GET /api/items/{} (constant DEFAULT_ITEM = 1); base URL is VITE_API_BASE, set by Compose service web to service api (Env/Compose binding)
+  provider:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  consumer:
+  - repoId: fx-web
+    path: app/src/api/items.ts
+    qname: app/src/api/items.ts::getDefaultItem
+  aux:
+  - repoId: fx-svc
+    path: deploy/compose.yaml
+    keyPath: services.web.environment.VITE_API_BASE
+  keyNorm: GET /api/items/1
+  providerKeyNorm: GET /api/items/{}
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  shape: config-bound base URL
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-14
+  kind: http
+  item: GET /api/health; base URL base_url in config/job.yaml, read by job/settings.py
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::preflight
+  keyNorm: GET /api/health
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  shape: config-bound base URL
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-15
+  kind: http
+  item: POST /job/trigger; base URL os.environ.get("FX_JOB_URL", "http://localhost:8300"); fx-job Compose port is 8300
+  provider:
+  - repoId: fx-job
+    path: job/trigger_server.py
+    qname: job/trigger_server.py::trigger
+  consumer:
+  - repoId: fx-svc
+    path: clients/jobs.py
+    qname: clients/jobs.py::trigger_job
+  aux:
+  - repoId: fx-svc
+    path: deploy/compose.yaml
+    keyPath: services.job.ports
+  keyNorm: POST /job/trigger
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  shape: config-bound base URL
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-17
+  kind: http
+  item: 'fetch(`/api/items/${id}`) where id is a component prop: key GET /api/items/{?}. True target: read_item'
+  provider:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Item.tsx
+    qname: app/src/ui/Item.tsx::ItemView
+  keyNorm: GET /api/items/{?}
+  providerKeyNorm: GET /api/items/{}
+  status: possible
+  reason: partial-key
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+  trueTarget:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+- id: LNK-18
+  kind: http
+  item: 'URL binding: http://localhost:8200/mcp (consumer); ports 8000 and 8200 are launch configs of one unit (svc: .mcp.json and Compose)'
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::main
+  consumer:
+  - repoId: fx-web
+    path: app/src/mcp/client.ts
+    qname: app/src/mcp/client.ts::connect
+  aux:
+  - repoId: fx-svc
+    path: .mcp.json
+    keyPath: mcpServers.fx-svc
+  - repoId: fx-svc
+    path: deploy/compose.yaml
+    keyPath: services.api
+  keyNorm: POST /mcp
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-19
+  kind: script_tool
+  item: scripts/refresh.sh sets MCP_URL=http://localhost:8200/mcp (bound to unit svc) and runs mcp-call reindex (literal tool name)
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::reindex
+  consumer:
+  - repoId: fx-svc
+    path: scripts/refresh.sh
+    qname: scripts/refresh.sh::<script>
+  keyNorm: reindex
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-20
+  kind: script_tool
+  item: scripts/dyn.sh runs eval "mcp-call $TOOL", no binding; candidates are every mcp_tool provider in the system, including fx-job second reindex (NC-5)
+  provider:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::get_item
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::reindex
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
+  - repoId: fx-job
+    path: job/mcp_admin.py
+    qname: job/mcp_admin.py::reindex
+  consumer:
+  - repoId: fx-svc
+    path: scripts/dyn.sh
+    qname: scripts/dyn.sh::<script>
+  status: possible
+  reason: shell-dynamic
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-21
+  kind: launch
+  item: .mcp.json server fx-svc to scripts/run-mcp.sh to python -m fx_svc.mcp.server to unit svc
+  provider:
+  - repoId: fx-svc
+    rootPath: .
+    lang: python
+  consumer:
+  - repoId: fx-svc
+    path: .mcp.json
+    keyPath: mcpServers.fx-svc
+  aux:
+  - repoId: fx-svc
+    path: scripts/run-mcp.sh
+    qname: scripts/run-mcp.sh::<script>
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-22
+  kind: launch
+  item: 'Compose service api: build context to unit svc, port 8000'
+  provider:
+  - repoId: fx-svc
+    rootPath: .
+    lang: python
+  consumer:
+  - repoId: fx-svc
+    path: deploy/compose.yaml
+    keyPath: services.api
+  status: confirmed
+  reason: binding-confirmed
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-23
+  kind: rpc
+  item: '/acme.fxlib.Pricing/Quote: .proto service, Java impl, Python stub call with a literal method'
+  provider:
+  - repoId: fx-lib
+    path: pricing/src/main/java/com/acme/fxlib/PricingService.java
+    qname: pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote
+    signature: (QuoteRequest,StreamObserver<QuoteReply>)
+  consumer:
+  - repoId: fx-svc
+    path: clients/pricing.py
+    qname: clients/pricing.py::quote
+  aux:
+  - repoId: fx-lib
+    path: pricing/src/main/proto/pricing.proto
+  keyNorm: /acme.fxlib.Pricing/Quote
+  status: confirmed
+  reason: key-match
+  gate: P2
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-26
+  kind: data_entity
+  item: 'sql:column:orders.total: written by INSERT, read by SELECT total in another repository'
+  provider:
+  - repoId: fx-svc
+    path: db/orders.py
+    qname: db/orders.py::insert_order
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::render_row
+  keyNorm: sql:column:orders.total
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-27
+  kind: data_entity
+  item: 'cypher:label:Order: CREATE (:Order {id: 1}) and MATCH (o:Order)'
+  provider:
+  - repoId: fx-svc
+    path: db/graph.py
+    qname: db/graph.py::link_order
+  consumer:
+  - repoId: fx-svc
+    path: db/graph.py
+    qname: db/graph.py::neighbors
+  keyNorm: cypher:label:Order
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-28
+  kind: config_key
+  item: 'pydantic-settings:db.pool_size: db.pool_size in config/app.yaml, read through Settings.db_pool_size'
+  provider:
+  - repoId: fx-svc
+    path: config/app.yaml
+    keyPath: db.pool_size
+  consumer:
+  - repoId: fx-svc
+    path: db/orders.py
+    qname: db/orders.py::connect
+  aux:
+  - repoId: fx-svc
+    path: db/settings.py
+    qname: db/settings.py::Settings
+  keyNorm: pydantic-settings:db.pool_size
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-30
+  kind: call
+  item: 'repo.save(o) where repo: Repo = Depends(get_repo); SqlRepo.save and MemRepo.save both exist. True target: SqlRepo.save, both in the candidate set'
+  consumer:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::create_order
+  status: possible
+  reason: name-match
+  gate: P1
+  shape: DI or reflection
+  serves:
+  - LNK
+  candidates:
+  - repoId: fx-svc
+    path: db/repo.py
+    qname: db/repo.py::SqlRepo.save
+  - repoId: fx-svc
+    path: db/repo.py
+    qname: db/repo.py::MemRepo.save
+  stratum: fixture-dev
+  trueTarget:
+  - repoId: fx-svc
+    path: db/repo.py
+    qname: db/repo.py::SqlRepo.save
+- id: LNK-39
+  kind: call
+  item: 'service locator: registry.get(kind).run(evt); AuditPlugin.run and MailPlugin.run exist. True target: AuditPlugin.run'
+  consumer:
+  - repoId: fx-svc
+    path: plugins/loader.py
+    qname: plugins/loader.py::dispatch
+  status: possible
+  reason: name-match
+  gate: P1
+  shape: DI or reflection
+  serves:
+  - LNK
+  candidates:
+  - repoId: fx-svc
+    path: plugins/audit.py
+    qname: plugins/audit.py::AuditPlugin.run
+  - repoId: fx-svc
+    path: plugins/mail.py
+    qname: plugins/mail.py::MailPlugin.run
+  stratum: fixture-dev
+  trueTarget:
+  - repoId: fx-svc
+    path: plugins/audit.py
+    qname: plugins/audit.py::AuditPlugin.run
+- id: LNK-40
+  kind: call
+  item: 'store.load(item_id) with store = Depends(get_store); DbStore.load and CacheStore.load exist. True target: DbStore.load'
+  consumer:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  status: possible
+  reason: name-match
+  gate: P1
+  shape: DI or reflection
+  serves:
+  - LNK
+  candidates:
+  - repoId: fx-svc
+    path: state/stores.py
+    qname: state/stores.py::DbStore.load
+  - repoId: fx-svc
+    path: state/stores.py
+    qname: state/stores.py::CacheStore.load
+  stratum: fixture-dev
+  trueTarget:
+  - repoId: fx-svc
+    path: state/stores.py
+    qname: state/stores.py::DbStore.load
+- id: LNK-32
+  kind: rpc
+  item: 'getattr(stub, method_name)(req): method name is a parameter. True target: /acme.fxlib.Pricing/Quote'
+  consumer:
+  - repoId: fx-svc
+    path: clients/pricing.py
+    qname: clients/pricing.py::quote_dynamic
+  status: possible
+  reason:
+    edge: runtime-built
+    link: unknown-key
+  gate: P2
+  shape: DI or reflection
+  serves:
+  - LNK
+  stratum: fixture-dev
+  trueKeyNorm: /acme.fxlib.Pricing/Quote
+- id: LNK-33
+  kind: library_api
+  item: 'skew: fx-job pins fx-svc-common==1.4 (typed against job/stubs/fx_svc_common_1_4.pyi); calls fmt_money(amount,locale); provider 2.1 is fmt_money(amount,*,locale)'
+  provider:
+  - repoId: fx-svc
+    path: common/fx_svc_common/fmt.py
+    qname: common/fx_svc_common/fmt.py::fmt_money
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::render_row
+  keyNorm: python:fx_svc_common.fmt.fmt_money(amount,*,locale)
+  status: possible
+  reason: name-only-provider
+  gate: P2
+  shape: version skew
+  serves:
+  - LNK
+  note: versionSkew
+  stratum: fixture-dev
+- id: LNK-34
+  kind: library_api
+  item: 'skew: round_money(amount) in 1.4, round_money(amount,*,mode) in 2.1'
+  provider:
+  - repoId: fx-svc
+    path: common/fx_svc_common/fmt.py
+    qname: common/fx_svc_common/fmt.py::round_money
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::requeue
+  keyNorm: python:fx_svc_common.fmt.round_money(amount,*,mode)
+  status: possible
+  reason: name-only-provider
+  gate: P2
+  shape: version skew
+  serves:
+  - LNK
+  note: versionSkew
+  stratum: fixture-dev
+- id: LNK-35
+  kind: library_api
+  item: 'skew: split_money(amount,parts) in 1.4, split_money(amount,parts,*,remainder) in 2.1'
+  provider:
+  - repoId: fx-svc
+    path: common/fx_svc_common/split.py
+    qname: common/fx_svc_common/split.py::split_money
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::fetch_item
+  keyNorm: python:fx_svc_common.split.split_money(amount,parts,*,remainder)
+  status: possible
+  reason: name-only-provider
+  gate: P2
+  shape: version skew
+  serves:
+  - LNK
+  note: versionSkew
+  stratum: fixture-dev
+- id: LNK-41
+  kind: library_api
+  item: 'skew control: fmt_date(ts) has the same signature in 1.4 and 2.1; the versionSkew note is present on the link'
+  provider:
+  - repoId: fx-svc
+    path: common/fx_svc_common/fmt.py
+    qname: common/fx_svc_common/fmt.py::fmt_date
+  consumer:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::render_row
+  keyNorm: python:fx_svc_common.fmt.fmt_date(ts)
+  status: confirmed
+  reason: key-match
+  gate: P2
+  serves:
+  - LNK
+  note: versionSkew
+  stratum: fixture-dev
+- id: LNK-42
+  kind: http
+  item: GET /legacy/fee fetched by legacy_fee; svc-legacy is unbuildable and never built in the steady state
+  provider:
+  - repoId: fx-svc
+    path: legacy/app.py
+    qname: legacy/app.py::fee
+  consumer:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::legacy_fee
+  keyNorm: GET /legacy/fee
+  status: possible
+  reason: target-not-mapped
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: LNK-43
+  kind: http
+  item: GET /tools/run fetched by run_tool; svc-tools is never built
+  provider:
+  - repoId: fx-svc
+    path: tools/app.py
+    qname: tools/app.py::run
+  consumer:
+  - repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::run_tool
+  keyNorm: GET /tools/run
+  status: possible
+  reason: target-not-mapped
+  gate: P1
+  serves:
+  - LNK
+  stratum: fixture-dev
+- id: KN-1
+  kind: http
+  item: 'consumer literal as written: /api/v1/%2E%2E/health'
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Probe.tsx
+    qname: app/src/ui/Probe.tsx::probeEncoded
+  keyNorm: GET /api/health
+  providerKeyNorm: GET /api/health
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - KN
+  - LNK
+  literal: /api/v1/%2E%2E/health
+  stratum: fixture-dev
+- id: KN-2
+  kind: http
+  item: 'consumer literal as written: /api/items/%2E%2E/%2E%2E/api/health'
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Probe.tsx
+    qname: app/src/ui/Probe.tsx::probeDeep
+  keyNorm: GET /api/health
+  providerKeyNorm: GET /api/health
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - KN
+  - LNK
+  literal: /api/items/%2E%2E/%2E%2E/api/health
+  stratum: fixture-dev
+- id: KN-3
+  kind: http
+  item: 'consumer literal as written: /api/%68ealth'
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Probe.tsx
+    qname: app/src/ui/Probe.tsx::probeUnreserved
+  keyNorm: GET /api/health
+  providerKeyNorm: GET /api/health
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - KN
+  - LNK
+  literal: /api/%68ealth
+  stratum: fixture-dev
+- id: KN-4
+  kind: http
+  item: 'consumer literal as written: /api/files/a%2fb'
+  provider:
+  - repoId: fx-svc
+    path: api/files.py
+    qname: api/files.py::read_file
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Probe.tsx
+    qname: app/src/ui/Probe.tsx::probeReserved
+  keyNorm: GET /api/files/a%2Fb
+  providerKeyNorm: GET /api/files/{}
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - KN
+  - LNK
+  literal: /api/files/a%2fb
+  stratum: fixture-dev
+- id: KN-5
+  kind: http
+  item: 'consumer literal as written: /api/hooks/x7k2%2Dq9w4%2Dm1p8%2Dz3v6'
+  provider:
+  - repoId: fx-svc
+    path: api/hooks.py
+    qname: api/hooks.py::receive_hook
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Probe.tsx
+    qname: app/src/ui/Probe.tsx::probeToken
+  keyNorm: GET /api/hooks/{?}
+  providerKeyNorm: GET /api/hooks/{}
+  status: possible
+  reason: partial-key
+  gate: P1
+  serves:
+  - KN
+  - LNK
+  literal: /api/hooks/x7k2%2Dq9w4%2Dm1p8%2Dz3v6
+  stratum: fixture-dev
+- id: AC6-URL-1
+  kind: http
+  item: 'Python f-string with a call result: f"{get_base()}/{ROUTES[name]}"; value set runtime-built'
+  consumer:
+  - repoId: fx-svc
+    path: clients/jobs.py
+    qname: clients/jobs.py::call_named
+  status: possible
+  reason:
+    edge: runtime-built
+    link: unknown-key
+  gate: P1
+  shape: runtime-built key
+  serves:
+  - AC-6
+  trueKeyNorm: GET /api/search
+  stratum: fixture-dev
+  whyUnprovable: 'get_base() reads a runtime registry; name is a parameter. True: GET /api/search'
+- id: AC6-DYN-1
+  kind: library_api
+  item: Python importlib.import_module(name)
+  consumer:
+  - repoId: fx-svc
+    path: plugins/loader.py
+    qname: plugins/loader.py::load_plugin
+  status: possible
+  reason: dynamic-import
+  gate: P1
+  shape: dynamic import
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: 'name comes from a config value absent from the repository. True: svc:plugins/audit.py'
+  trueTarget:
+  - repoId: fx-svc
+    path: plugins/audit.py
+- id: AC6-DYN-2
+  kind: library_api
+  item: Python __import__("plugins." + name)
+  consumer:
+  - repoId: fx-svc
+    path: plugins/loader.py
+    qname: plugins/loader.py::load_legacy
+  status: possible
+  reason: dynamic-import
+  gate: P1
+  shape: dynamic import
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: the suffix is a parameter
+- id: AC6-EX-1
+  kind: launch
+  item: .mcp.example.json server entry for fx-svc (File.role = example)
+  consumer:
+  - repoId: fx-svc
+    path: .mcp.example.json
+    keyPath: mcpServers.fx-svc
+  status: possible
+  reason: example-config
+  gate: P1
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: 'the file is an example, not the deployed config. True: unit svc'
+  trueTarget:
+  - repoId: fx-svc
+    rootPath: .
+    lang: python
+- id: AC6-EX-2
+  kind: http
+  item: VITE_REPORTS_BASE set only in deploy/compose.example.yaml; consumer of GET /api/reports/{}
+  provider:
+  - repoId: fx-svc
+    path: api/reports.py
+    qname: api/reports.py::report_view
+  consumer:
+  - repoId: fx-web
+    path: app/src/ui/Reports.tsx
+    qname: app/src/ui/Reports.tsx::Reports
+  aux:
+  - repoId: fx-svc
+    path: deploy/compose.example.yaml
+    keyPath: services.web.environment.VITE_REPORTS_BASE
+  keyNorm: GET /api/reports/{}
+  status: possible
+  reason: example-config
+  gate: P1
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: 'the only binding is an example config. True: svc:api/reports.py::report_view'
+  trueTarget:
+  - repoId: fx-svc
+    path: api/reports.py
+    qname: api/reports.py::report_view
+- id: AC6-EX-3
+  kind: env_var
+  item: FX_DB_URL set only in svc:.env.example, read in db/orders.py::connect
+  consumer:
+  - repoId: fx-svc
+    path: db/orders.py
+    qname: db/orders.py::connect
+  aux:
+  - repoId: fx-svc
+    path: .env.example
+  status: possible
+  reason: example-config
+  gate: P3
+  serves:
+  - AC-6
+  trueKeyNorm: FX_DB_URL
+  stratum: fixture-dev
+  whyUnprovable: 'the only writer is an example file. Gate P3: env_var is a P3 kind'
+- id: AC6-PM-1
+  kind: mcp_tool
+  item: 'Markdown prose: "call the get_item tool" in prompts/agent.md'
+  consumer:
+  - repoId: fx-svc
+    path: prompts/agent.md
+    qname: prompts/agent.md::<document>
+  status: possible
+  reason: prompt-mention
+  gate: P1
+  shape: prompt mention
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: 'a prompt names a tool; it does not call it. True: get_item'
+  trueTarget:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::get_item
+- id: AC6-PM-2
+  kind: mcp_tool
+  item: 'Markdown table cell: | reindex | rebuilds the index | in prompts/tools.md'
+  consumer:
+  - repoId: fx-svc
+    path: prompts/tools.md
+    qname: prompts/tools.md::<document>
+  status: possible
+  reason: prompt-mention
+  gate: P1
+  shape: prompt mention
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: same
+  trueTarget:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::reindex
+- id: AC6-PM-3
+  kind: mcp_tool
+  item: Python triple-quoted SYSTEM_PROMPT naming list_orders
+  consumer:
+  - repoId: fx-svc
+    path: prompts/system.py
+    qname: prompts/system.py::<module>
+  status: possible
+  reason: prompt-mention
+  gate: P1
+  shape: prompt mention
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: same
+  trueTarget:
+  - repoId: fx-svc
+    path: mcp/server.py
+    qname: mcp/server.py::list_orders
+- id: AC6-TOP-1
+  kind: topic
+  item: name from an env var os.environ["ORDERS_TOPIC"], set in no file of the repository
+  consumer:
+  - repoId: fx-svc
+    path: bus/producer.py
+    qname: bus/producer.py::publish_dynamic
+  status: possible
+  reason: config-derived
+  gate: P2
+  serves:
+  - AC-6
+  trueKeyNorm: kafka:orders.created
+  stratum: fixture-dev
+  whyUnprovable: 'the value is absent. True: kafka:orders.created'
+- id: AC6-QL-1
+  kind: data_entity
+  item: 'SQL table from an f-string: f"SELECT count(*) FROM {table}"'
+  consumer:
+  - repoId: fx-svc
+    path: db/dynamic.py
+    qname: db/dynamic.py::count_rows
+  status: possible
+  reason: runtime-built
+  gate: P3
+  serves:
+  - AC-6
+  trueKeyNorm: sql:table:orders
+  stratum: fixture-dev
+  whyUnprovable: 'table is a parameter. True: sql:table:orders'
+- id: AC6-QL-2
+  kind: data_entity
+  item: 'Cypher label by %-format: "MATCH (n:%s)" % label'
+  consumer:
+  - repoId: fx-svc
+    path: db/dynamic.py
+    qname: db/dynamic.py::match_label
+  status: possible
+  reason: runtime-built
+  gate: P3
+  serves:
+  - AC-6
+  trueKeyNorm: cypher:label:Order
+  stratum: fixture-dev
+  whyUnprovable: 'label is a parameter. True: cypher:label:Order'
+- id: TW-1
+  kind: library_api
+  item: importlib.import_module("plugins.audit"), a literal
+  consumer:
+  - repoId: fx-svc
+    path: plugins/loader.py
+    qname: plugins/loader.py::load_audit
+  status: confirmed
+  reason: key-match
+  gate: P1
+  serves:
+  - TW
+  stratum: fixture-dev
+  twinOf: AC6-DYN
+- id: TW-3
+  kind: call
+  item: 'AuditPlugin().run(evt): the receiver''s type is known from its constructor'
+  consumer:
+  - repoId: fx-svc
+    path: plugins/loader.py
+    qname: plugins/loader.py::fixed_dispatch
+  status: confirmed
+  reason: resolved-call
+  gate: P1
+  serves:
+  - TW
+  stratum: fixture-dev
+  twinOf: LNK-30/39/40
+- id: B1F-W
+  kind: b1
+  item: self.entries[k] = v
+  status: confirmed
+  reason: resolved-receiver
+  gate: P1
+  serves:
+  - B1-1
+  - B1-3
+  - B1-4
+  entity:
+    kind: field
+    keyNorm: state/cache.py::OrderCache.entries
+  role: writer W
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: state/cache.py
+    qname: state/cache.py::OrderCache.put
+- id: B1F-R
+  kind: b1
+  item: reader
+  status: confirmed
+  reason: resolved-receiver
+  gate: P1
+  serves:
+  - B1-1
+  - B1-2
+  - B1-3
+  entity:
+    kind: field
+    keyNorm: state/cache.py::OrderCache.entries
+  role: reader R
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: state/cache.py
+    qname: state/cache.py::OrderCache.get
+- id: B1F-W2
+  kind: b1
+  item: del self.entries[k]
+  status: confirmed
+  reason: resolved-receiver
+  gate: P1
+  serves:
+  - B1-2
+  - B1-3
+  - B1-4
+  entity:
+    kind: field
+    keyNorm: state/cache.py::OrderCache.entries
+  role: other writer W2
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: state/cache.py
+    qname: state/cache.py::OrderCache.evict
+- id: B1F-RU
+  kind: b1
+  item: cache.entries[key] with cache an untyped parameter
+  status: possible
+  reason: field-name-match
+  gate: P1
+  serves:
+  - B1-1 (listed after the confirmed reader)
+  - B1-3
+  entity:
+    kind: field
+    keyNorm: ?.entries
+  role: reader through an untyped parameter
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::peek
+- id: B1S-D
+  kind: b1
+  item: definition (DDL) of sql:table:orders
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - B1-3
+  entity:
+    kind: data_entity
+    keyNorm: sql:table:orders
+  role: definition (DDL)
+  schemaEntry:
+    repoId: fx-svc
+    path: db/schema.sql
+    objectKey: sql:table:orders
+  stratum: fixture-dev
+- id: B1S-W
+  kind: b1
+  item: INSERT INTO orders
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - B1-1
+  - B1-3
+  - B1-4
+  entity:
+    kind: data_entity
+    keyNorm: sql:table:orders
+  role: writer W (INSERT INTO orders)
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: db/orders.py
+    qname: db/orders.py::insert_order
+- id: B1S-W2
+  kind: b1
+  item: DELETE FROM orders
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - B1-2
+  - B1-3
+  - B1-4
+  entity:
+    kind: data_entity
+    keyNorm: sql:table:orders
+  role: other writer W2 (DELETE FROM orders)
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: db/orders.py
+    qname: db/orders.py::archive_orders
+- id: DF-1
+  kind: impact-forward
+  item: apply_discount uses base_price's return
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - A25-1..3
+  - A25-4 via RV-1
+  distance: 1
+  direct: true
+  group: fx-svc / core / 1
+  changed:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::base_price
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::apply_discount
+- id: DF-2
+  kind: impact-forward
+  item: 'create_order uses apply_discount''s result: a changed return value used two calls away'
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - A25-1..3
+  distance: 2
+  direct: false
+  group: fx-svc / api / 2
+  changed:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::base_price
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::create_order
+- id: DF-4
+  kind: impact-forward
+  item: 'accept_quote passes the discount through an untyped parameter: discount.apply_discount(...) (name-match)'
+  status: possible
+  reason: name-match
+  gate: P1
+  serves:
+  - A25-1..3
+  - A25-3 pair with DF-2
+  distance: 2
+  direct: false
+  group: fx-svc / api / 2
+  changed:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::base_price
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: api/orders.py
+    qname: api/orders.py::accept_quote
+- id: CD-1
+  kind: impact-forward
+  item: 'a call guarded inside eligible: if o.total > LIMIT: audit(o)'
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - A25-1..3
+  - A25-4 via RV-2
+  distance: 1
+  direct: true
+  group: fx-svc / core / 1
+  changed:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::eligible
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::audit
+- id: CD-2
+  kind: impact-forward
+  item: 'a call in another function guarded by the condition: finalize runs if eligible(o): notify(o, bus)'
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - A25-1..3
+  distance: 1
+  direct: true
+  group: fx-svc / core / 1
+  changed:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::eligible
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::notify
+- id: CD-3
+  kind: impact-forward
+  item: notify reaches the bus only under that guard
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - A25-1..3
+  distance: 2
+  direct: false
+  group: fx-svc / bus / 2
+  changed:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::eligible
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: bus/producer.py
+    qname: bus/producer.py::publish_created
+- id: CD-4
+  kind: impact-forward
+  item: the same guard covers the getattr dispatch in publish_alert (reached through bus.publish_alert on an untyped parameter)
+  status: possible
+  reason: name-match
+  gate: P1
+  serves:
+  - A25-1..3
+  - A25-3 pair with CD-3
+  distance: 2
+  direct: false
+  group: fx-svc / bus / 2
+  changed:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::eligible
+  stratum: fixture-dev
+  locator:
+    repoId: fx-svc
+    path: bus/producer.py
+    qname: bus/producer.py::publish_alert
+- id: RV-1
+  kind: impact-reverse
+  item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
+  gate: P1
+  serves:
+  - A25-4
+  - A25-1..3 on each of the 4
+  stratum: fixture-dev
+  subject:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::base_price
+  dependencies:
+  - locator:
+      repoId: fx-svc
+      path: core/rules.py
+      qname: core/rules.py::is_member
+    distance: 1
+    group: fx-svc / core / 1
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: core/hooks.py
+      qname: core/hooks.py::find_hook
+    distance: 1
+    group: fx-svc / core / 1
+    status: possible
+    reason: name-match
+  - locator:
+      repoId: fx-svc
+      path: db/orders.py
+      qname: db/orders.py::load_rate
+    distance: 1
+    group: fx-svc / db / 1
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: db/orders.py
+      qname: db/orders.py::connect
+    distance: 2
+    group: fx-svc / db / 2
+    status: confirmed
+- id: RV-2
+  kind: impact-reverse
+  item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
+  gate: P1
+  serves:
+  - A25-4
+  - A25-1..3 on each of the 4
+  stratum: fixture-dev
+  subject:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::eligible
+  dependencies:
+  - locator:
+      repoId: fx-svc
+      path: core/rules.py
+      qname: core/rules.py::tier_of
+    distance: 1
+    group: fx-svc / core / 1
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: core/hooks.py
+      qname: core/hooks.py::find_hook
+    distance: 1
+    group: fx-svc / core / 1
+    status: possible
+    reason: name-match
+  - locator:
+      repoId: fx-svc
+      path: db/orders.py
+      qname: db/orders.py::load_rate
+    distance: 2
+    group: fx-svc / db / 2
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: state/cache.py
+      qname: state/cache.py::OrderCache.get
+    distance: 1
+    group: fx-svc / state / 1
+    status: confirmed
+- id: RV-3
+  kind: impact-reverse
+  item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
+  gate: P1
+  serves:
+  - A25-4
+  - A25-1..3 on each of the 3
+  stratum: fixture-dev
+  subject:
+    repoId: fx-web
+    path: app/src/ui/OrderTotal.tsx
+    qname: app/src/ui/OrderTotal.tsx::OrderTotal
+  dependencies:
+  - locator:
+      repoId: fx-svc
+      path: api/orders.py
+      qname: api/orders.py::create_order
+    distance: 1
+    group: fx-svc / api / 1
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: core/flow.py
+      qname: core/flow.py::apply_discount
+    distance: 2
+    group: fx-svc / core / 2
+    status: confirmed
+  - locator:
+      repoId: fx-svc
+      path: core/flow.py
+      qname: core/flow.py::base_price
+    distance: 3
+    group: fx-svc / core / 3
+    status: confirmed
+  note: cross-repository; subject in fx-web, the three dependencies in fx-svc
+- id: MR-PY
+  kind: call
+  item: rules = cast(Rules, PremiumRules()); rules.fee(x) resolves to Rules.fee
+  status: possible
+  reason: resolution-unverified
+  gate: P1
+  serves:
+  - P3-1
+  stratum: fixture-dev
+  trueCallee:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::PremiumRules.fee
+  resolvedCallee:
+    repoId: fx-svc
+    path: core/rules.py
+    qname: core/rules.py::Rules.fee
+  consumer:
+  - repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::price_with
+  callsite:
+    name: fee
+    ordinal: 0
+- id: AB-1
+  kind: scenario
+  item: svc-legacy builds at H1 and fails at every later commit (H2 onward, never reverted); the scenario builds H1, then H4
+  gate: P1
+  serves:
+  - AC-9b
+  scenario: SC-FAIL-UNIT
+  unit:
+    repoId: fx-svc
+    rootPath: legacy/
+    lang: python
+  expected: the other units update; the answer crossing svc-legacy states 'from the previous refresh' (H1) with the failure reason (stale-kept)
+  stratum: fixture-dev
+- id: AB-2
+  kind: scenario
+  item: svc-tools is never built (excluded from the build set)
+  gate: P1
+  serves:
+  - AC-9b
+  scenario: SC-NEVER-UNIT
+  unit:
+    repoId: fx-svc
+    rootPath: tools/
+    lang: python
+  expected: svc-tools is reported 'not mapped' in the unit report; its link is LNK-43
+  stratum: fixture-dev
+- id: OV-1
+  kind: overlay
+  item: 'CS-JOB: listed, reader of sql:table:order_report (written by fx-job)'
+  consumer:
+  - repoId: fx-svc
+    path: api/reports.py
+    qname: api/reports.py::report_view
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - AC-19
+  changeSet: CS-JOB
+  listed: true
+  stratum: fixture-dev
+- id: OV-3
+  kind: overlay
+  item: 'CS-JOB: NOT listed: svc health, web Health, and svc clients/jobs.py::trigger_job (LNK-15''s caller of POST /job/trigger, which CS-JOB does not edit)'
+  consumer:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  - repoId: fx-web
+    path: app/src/ui/Health.tsx
+    qname: app/src/ui/Health.tsx::Health
+  - repoId: fx-svc
+    path: clients/jobs.py
+    qname: clients/jobs.py::trigger_job
+  gate: P3
+  serves:
+  - AC-19
+  changeSet: CS-JOB
+  listed: false
+  stratum: fixture-dev
+- id: SQC-PY
+  kind: signature-change
+  item: H3 edits svc:core/flow.py::price(item, qty) to price(item, qty, *, region=None)
+  gate: P4
+  serves:
+  - SQ-C
+  changed:
+    repoId: fx-svc
+    path: core/flow.py
+    qname: core/flow.py::price
+  seededVerdictOn:
+    edgeKind: name-match
+    from:
+      repoId: fx-svc
+      path: api/orders.py
+      qname: api/orders.py::estimate
+    to:
+      repoId: fx-svc
+      path: core/flow.py
+      qname: core/flow.py::price
+    callText: pricer.price(item, qty)
+  expected: the earlier-verdict note is kept
+  stateBefore: H1
+  stateAfter: H3
+  stratum: fixture-dev
+- id: TF-1
+  kind: taint-edit
+  item: body of the middle hop, plus one added line
+  gate: P5
+  serves:
+  - P2-7
+  branch: tf-mid
+  expected: the verdict survives
+  stratum: fixture-dev
+  edited:
+    repoId: fx-svc
+    path: api/ops.py
+    qname: api/ops.py::normalize
+  chain:
+    source:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::run_cmd
+    middle:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::normalize
+    sink:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::exec_cmd
+- id: TF-2
+  kind: taint-edit
+  item: 'end: the sink'
+  gate: P5
+  serves:
+  - P2-7
+  branch: tf-sink
+  expected: the verdict expires
+  stratum: fixture-dev
+  edited:
+    repoId: fx-svc
+    path: api/ops.py
+    qname: api/ops.py::exec_cmd
+  chain:
+    source:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::run_cmd
+    middle:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::normalize
+    sink:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::exec_cmd
+- id: TF-3
+  kind: taint-edit
+  item: 'end: the source'
+  gate: P5
+  serves:
+  - P2-7
+  branch: tf-src
+  expected: the verdict expires
+  stratum: fixture-dev
+  edited:
+    repoId: fx-svc
+    path: api/ops.py
+    qname: api/ops.py::run_cmd
+  chain:
+    source:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::run_cmd
+    middle:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::normalize
+    sink:
+      repoId: fx-svc
+      path: api/ops.py
+      qname: api/ops.py::exec_cmd
+- id: SK-12
+  kind: omitted-file
+  item: Python tests stay in the graph; the pattern is JS/TS only; the file has no HTTP client call
+  gate: P1
+  serves:
+  - SK
+  path:
+    repoId: fx-svc
+    path: tests/test_api.py
+  expectedOverrideOn: file record; not listed
+  expectedOverrideOff: same
+  stratum: fixture-dev
+- id: SK-13
+  kind: omitted-file
+  item: 'other language: no pattern in v1'
+  gate: P1
+  serves:
+  - SK
+  path:
+    repoId: fx-svc
+    path: scripts/run.test.sh
+  expectedOverrideOn: file record; not listed
+  expectedOverrideOff: same
+  stratum: fixture-dev
+- id: NC-1
+  kind: negative-control
+  item: docs/README.md has a fenced curl localhost:8000/api/items/1 snippet (documentation snippets are not callers)
+  consumer:
+  - repoId: fx-svc
+    path: docs/README.md
+  gate: P1
+  serves:
+  - LNK
+  expected: no CONSUMES, no link
+  stratum: fixture-dev
+- id: NC-6
+  kind: negative-control
+  item: read_item logs "GET /api/items/1 ok"
+  consumer:
+  - repoId: fx-svc
+    path: api/items.py
+    qname: api/items.py::read_item
+  gate: P1
+  serves:
+  - LNK
+  expected: no CONSUMES from that literal
+  stratum: fixture-dev
+- id: FT-1
+  kind: field-depth
+  item: return self.a.b.c.d (recv + 4 fields, over the cap)
+  consumer:
+  - repoId: fx-svc
+    path: state/cache.py
+    qname: state/cache.py::OrderCache.limit_deep
+  status: possible
+  reason: field-truncated
+  gate: P1
+  serves:
+  - FT
+  stratum: fixture-dev
+- id: FT-2
+  kind: field-depth
+  item: return self.a.b.c (recv + 3 fields, exactly the cap)
+  consumer:
+  - repoId: fx-svc
+    path: state/cache.py
+    qname: state/cache.py::OrderCache.limit_edge
+  status: confirmed
+  reason: intra-flow
+  gate: P1
+  serves:
+  - FT
+  stratum: fixture-dev

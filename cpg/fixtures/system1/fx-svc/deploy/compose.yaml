@@ -1,0 +1,18 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+  web:
+    image: fx-web:latest
+    environment:
+      VITE_API_BASE: http://api:8000
+      VITE_JOB_BASE: http://job:8300
+  job:
+    image: fx-job:latest
+    ports:
+      - "8300:8300"
+    environment:
+      FX_SVC_URL: http://api:8000

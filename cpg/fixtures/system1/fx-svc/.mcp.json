@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fx-svc": {
+      "command": "scripts/run-mcp.sh",
+      "args": ["--port", "8200"]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+requests
+pyyaml
+mcp
+fx-svc-common==1.4

@@ -1,0 +1,19 @@
+{
+  "name": "fx-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.0.0",
+    "kafkajs": "2.2.4",
+    "react": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.3",
+    "typescript": "5.5.4",
+    "vite": "5.4.0"
+  }
+}

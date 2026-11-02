@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package acme.fxlib;
+
+option java_multiple_files = true;
+option java_package = "com.acme.fxlib.proto";
+
+service Pricing {
+  rpc Quote (QuoteRequest) returns (QuoteReply);
+}
+
+message QuoteRequest {
+  int32 quantity = 1;
+  string sku = 2;
+  string currency = 3;
+}
+
+message QuoteReply {
+  string total = 1;
+}

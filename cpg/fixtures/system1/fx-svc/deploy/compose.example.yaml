@@ -1,0 +1,5 @@
+services:
+  web:
+    image: fx-web:latest
+    environment:
+      VITE_REPORTS_BASE: http://reports.example.internal

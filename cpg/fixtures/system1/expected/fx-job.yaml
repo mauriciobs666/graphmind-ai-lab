@@ -1,0 +1,80 @@
+# fx-job expected manifest (S35b). Source of truth: docs/test-plans/connected-code-graph-fixtures.md v1.2.
+# Format is this builder's proposal: the S39 schema (fixture-manifest-v1) does not exist yet and may rename keys.
+# Locators: element "repoId:path::qname"; shorthand svc=fx-svc web=fx-web lib=fx-lib job=fx-job is expanded in `loc`.
+# Rows that join fx-job to another repository list BOTH locators (P provider, C consumer); locators in other
+# repositories are verified by S39 against those trees, not here.
+version: 1
+repo: fx-job
+shorthands: {svc: fx-svc, web: fx-web, lib: fx-lib, job: fx-job}
+
+units:
+  - {unitId: job, repoId: fx-job, rootPath: ".", lang: python, vendoredDirs: [], gates: "P1 (P3 for AC-19, AC-9b)"}
+
+build:
+  steady: built            # SC-STEADY: fx-job builds at H4
+  scenarios:
+    SC-FAIL-REPO: {H1: built, H2: failed}
+    SC-NEVER-REPO: never-built
+
+history:   # section 8; linear; fixed author/committer; the materializer (S39) applies it, nothing here runs git
+  H0: {date: 2026-01-05, content: "the tree at this path, minus the H4 comment line in job/run_report.py"}
+  H1: {date: 2026-02-10, content: "no tree change for fx-job; a successful build point (job builds)"}
+  H2:
+    date: 2026-02-15
+    content: "adds job/broken.py (a syntax error, e.g. 'def broken(:') and a forced buildFailure marker on unit job"
+    buildFailure: {unit: job, repoId: fx-job, marker: forced, cause: job/broken.py}
+  H3:
+    date: 2026-02-20
+    content: "reverts H2: removes job/broken.py and the buildFailure marker"
+  H4:
+    date: 2026-03-10
+    content: "comment-only edit to job/run_report.py: adds the line '# Reviewed for the quarterly audit.' (line 2, after the module docstring); HEAD tree = this tree"
+    comment_only: [{path: job/run_report.py, added_line: "# Reviewed for the quarterly audit."}]
+branches:
+  ov-job:   # off H4; un-merged change set CS-JOB (section 5.8). Edits are exact-string replacements.
+    edits:
+      - path: job/run_report.py
+        qname: "job/run_report.py::write_report"
+        replace:
+          old: '"INSERT INTO order_report (order_id, total_text) VALUES (?, ?)",'
+          new: '"INSERT INTO order_report (order_id, total_text, generated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",'
+      - path: job/trigger_server.py
+        qname: "job/trigger_server.py::status"
+        replace:
+          old: 'return {"running": _state["running"], "runs": _state["runs"]}'
+          new: 'return {"state": "running" if _state["running"] else "idle", "runs": _state["runs"]}'
+
+rows:
+  # ---- LNK (link rows with a job locator) ----
+  - {id: LNK-03, prefix: LNK, kind: env_var, key: "FX_SVC_URL", P: "svc:deploy/compose.yaml @services.job.environment.FX_SVC_URL", C: "job:job/api_client.py::ApiClient.__init__", st: confirmed, reason: key-match, gate: P3, shape: exact literal, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-08, prefix: LNK, kind: http, key: "GET /api/items/{}", P: "svc:api/items.py::read_item", C: "job:job/run_report.py::fetch_item", st: confirmed, reason: key-match, gate: P1, shape: template literal, serves: [LNK], stratum: fixture-dev, note: 'f"{BASE}/items/{ITEM_ID}", BASE="/api", ITEM_ID=42'}
+  - {id: LNK-11, prefix: LNK, kind: http, key: "POST /api/v1/orders", P: "svc:api/orders.py::create_order", C: "job:job/run_report.py::requeue", wrapper: "job:job/api_client.py::ApiClient.post", st: confirmed, reason: lifted-role, gate: P1, shape: client wrapper, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-14, prefix: LNK, kind: http, key: "GET /api/health", P: "svc:api/health.py::health", C: "job:job/run_report.py::preflight", binding: "job:config/job.yaml @base_url (read by job/settings.py::load_settings)", st: confirmed, reason: binding-confirmed, gate: P1, shape: config-bound base URL, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-15, prefix: LNK, kind: http, key: "POST /job/trigger", P: "job:job/trigger_server.py::trigger", C: "svc:clients/jobs.py::trigger_job", st: confirmed, reason: binding-confirmed, gate: P1, shape: config-bound base URL, serves: [LNK], stratum: fixture-dev, note: "provider side only; the Compose port 8300 and FX_JOB_URL default live in fx-svc"}
+  - {id: LNK-16, prefix: LNK, kind: http, key: "GET /job/status", P: "job:job/trigger_server.py::status", C: "web:app/src/ui/JobStatus.tsx::JobStatus", competing_launch: "job:scripts/dev.sh (port 8000)", st: possible, reason: port-shared, gate: P1, true_target: "job:job/trigger_server.py::status", serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-20, prefix: LNK, kind: script_tool, key: "reindex", P: ["svc:mcp/server.py::get_item", "svc:mcp/server.py::reindex", "svc:mcp/server.py::list_orders", "job:job/mcp_admin.py::reindex"], C: "svc:scripts/dyn.sh::<script>", st: possible, reason: shell-dynamic, gate: P1, serves: [LNK], stratum: fixture-dev, note: "job locator is a provider candidate only (NC-5)"}
+  - {id: LNK-26, prefix: LNK, kind: data_entity, key: "sql:column:orders.total", P: "svc:db/orders.py::insert_order", C: "job:job/run_report.py::render_row", st: confirmed, reason: key-match, gate: P3, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-29, prefix: LNK, kind: config_key, key: "settings.get(section + '.' + key)", C: "job:job/settings.py::lookup", st: possible, reason: runtime-built, gate: P3, shape: runtime-built key, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-33, prefix: LNK, kind: library_api, key: "python:fx_svc_common.fmt.fmt_money(amount,*,locale)", P: "svc:common/fx_svc_common/fmt.py::fmt_money", C: "job:job/run_report.py::render_row", pin: "fx-svc-common==1.4 (requirements.txt)", stub: "job/stubs/fx_svc_common_1_4.pyi", call: "fmt_money(row[0], LOCALE)", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-34, prefix: LNK, kind: library_api, key: "round_money", P: "svc:common/fx_svc_common/fmt.py::round_money", C: "job:job/run_report.py::requeue", call: "round_money(order[\"total\"])", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-35, prefix: LNK, kind: library_api, key: "split_money", P: "svc:common/fx_svc_common/split.py::split_money", C: "job:job/run_report.py::fetch_item", call: "split_money(item[\"price\"], 3)", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-37, prefix: LNK, kind: http, key: "GET /api/search", P: "svc:api/search.py::search", C: "job:job/run_report.py::search_reports", const: "job:job/paths.py::SEARCH_PATH", st: confirmed, reason: key-match, gate: P1, shape: constant across files, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-41, prefix: LNK, kind: library_api, key: "fmt_date", P: "svc:common/fx_svc_common/fmt.py::fmt_date", C: "job:job/run_report.py::render_row", call: "fmt_date(ts)", st: confirmed, reason: key-match, versionSkew_note: true, gate: P2, serves: [LNK], stratum: fixture-dev}
+  # ---- AC6 ----
+  - {id: AC6-QL-3, prefix: AC6, kind: data_entity, shape_syntax: "SQL by concatenation: \"SELECT \" + cols + \" FROM \" + tbl", C: "job:job/dynq.py::dump_table", st: possible, reason: runtime-built, gate: P3, tag: runtime-built query, serves: [AC-6], stratum: fixture-dev, note: "both parts are parameters; no true target"}
+  # ---- TW ----
+  - {id: TW-2, prefix: TW, kind: http, key: "GET /api/health", P: "svc:api/health.py::health", twin_of: AC6-URL, C: "job:job/run_report.py::health_probe", st: confirmed, reason: key-match, gate: P1, serves: [TW], stratum: fixture-dev, note: 'f"{BASE}/health", BASE="/api" module constant'}
+  # ---- B1 ----
+  - {id: B1S-R, prefix: B1, entity: "sql:table:orders", role: reader R (other repository), locator: "job:job/run_report.py::load_orders", st: confirmed, reason: key-match, gate: P3, serves: [B1-1, B1-2, B1-3], stratum: fixture-dev}
+  # ---- NC ----
+  - {id: NC-2, prefix: NC, planted: "comment '# TODO call POST /api/v1/orders'", locator: "job:job/run_report.py", expected: "no CONSUMES, no link", gate: P1, serves: [LNK], stratum: fixture-dev}
+  - {id: NC-5, prefix: NC, planted: "second mcp_tool 'reindex'", locator: "job:job/mcp_admin.py::reindex", expected: "LNK-12 and LNK-19 each have exactly one provider, svc:mcp/server.py::reindex; LNK-20 lists both", gate: P1, serves: [LNK], stratum: fixture-dev}
+  # ---- AB ----
+  - {id: AB-3, prefix: AB, scenario: SC-FAIL-REPO, planted: "fx-job builds at H1, fails at H2", affected: ["job:job/run_report.py::load_orders", "job:job/run_report.py::render_row"], expected: "impact answer states these are from the previous refresh, and why; fx-svc and fx-web are current", gate: P3, serves: [AC-9b], stratum: fixture-dev}
+  - {id: AB-4, prefix: AB, scenario: SC-NEVER-REPO, planted: "fx-job never built", links: [LNK-15, LNK-16], expected: "LNK-15 and LNK-16 possible, target-not-mapped; a query for a path in fx-job answers 'not mapped', not 'not found'", gate: P3, serves: [AC-9b], stratum: fixture-dev}
+  # ---- OV (AC-19) ----
+  - {id: OV-1, prefix: OV, change_set: CS-JOB, branch: ov-job, edits: ["job:job/run_report.py::write_report", "job:job/trigger_server.py::status"], listed: "svc:api/reports.py::report_view", note: "reader of sql:table:order_report, written by write_report", st: confirmed, reason: key-match, gate: P3, serves: [AC-19], stratum: fixture-dev}
+  - {id: OV-2, prefix: OV, change_set: CS-JOB, branch: ov-job, listed: "web:app/src/ui/JobPanel.tsx::JobPanel", note: "consumer of GET /job/status via VITE_JOB_BASE=http://job:8300 (Compose)", st: confirmed, reason: binding-confirmed, gate: P3, serves: [AC-19], stratum: fixture-dev}
+  - {id: OV-3, prefix: OV, change_set: CS-JOB, branch: ov-job, not_listed: ["svc:api/health.py::health", "web:app/src/ui/Health.tsx::Health", "svc:clients/jobs.py::trigger_job"], st: none, reason: none, gate: P3, serves: [AC-19], stratum: fixture-dev, note: "negative control"}
+  - {id: OV-4, prefix: OV, change_set: CS-SVC, branch: ov-svc, listed: "job:job/run_report.py::render_row", note: "LNK-26's reader of sql:column:orders.total; the column is removed and a new one added in svc:db/schema.sql", st: confirmed, reason: key-match, gate: P3, serves: [AC-19], stratum: fixture-dev}
+  - {id: OV-5, prefix: OV, change_set: CS-JOB, branch: ov-job, listed: "web:app/src/ui/JobStatus.tsx::JobStatus", order: "after OV-2", note: "other consumer of GET /job/status (LNK-16)", st: possible, reason: port-shared, gate: P3, serves: [AC-19], stratum: fixture-dev}

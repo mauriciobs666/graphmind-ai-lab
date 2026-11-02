@@ -1,0 +1,63 @@
+# fx-lib expected manifest (S38). Source of truth: docs/test-plans/connected-code-graph-fixtures.md v1.2.
+# Format follows fx-job.yaml (this wave's proposal); the S39 schema (fixture-manifest-v1) does not exist yet and may rename keys.
+# Locators: element "repoId:path::qname" with the shorthand lib=fx-lib svc=fx-svc web=fx-web job=fx-job expanded in-line;
+# a Java locator carries its bundle spec3 section 4.3 signature directly after the qname. Locators in other
+# repositories are listed for the joined row and verified by S39 against those trees, not here.
+version: 1
+repo: fx-lib
+shorthands: {svc: fx-svc, web: fx-web, lib: fx-lib, job: fx-job}
+
+units:
+  - {unitId: lib-pricing, repoId: fx-lib, rootPath: "pricing/", lang: java, vendoredDirs: [], gates: "P2 only"}
+  - {unitId: lib-cli, repoId: fx-lib, rootPath: "quote-cli/", lang: java, vendoredDirs: [], gates: "P2 only"}
+
+build:
+  steady: built            # SC-STEADY: both units build, from P2 (no Java earlier)
+  scenarios: {}            # fx-lib takes no part in the AB scenarios or the AC-19 overlay
+
+# Contract definitions that have no lang token (spec3 section 3.3): anchored on the code that implements them.
+schemaEntries:
+  - {objectKey: "/acme.fxlib.Pricing/Quote", kind: rpc, path: pricing/src/main/proto/pricing.proto, line: 9, implemented_by: "lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)", stratum: fixture-dev}
+
+history:   # section 8; linear; fixed author/committer; the materializer (S39) applies it, nothing here runs git
+  # fx-lib is touched by H0, H1, H3 only (section 8 table). The tree at this path is the HEAD tree (H3 = HEAD for fx-lib).
+  # `pre_h3_edits` turns the HEAD tree into the H0/H1 tree: exact-string replacements, each `old` occurring once in the file.
+  H0:
+    date: 2026-01-05
+    content: "the tree at this path with pre_h3_edits applied (Pricing.quote(int,String) exists; the 3-argument overload does not)"
+  H1:
+    date: 2026-02-10
+    content: "no tree change for fx-lib; a successful build point (both units build, P2 and later)"
+  H3:
+    date: 2026-02-20
+    content: "applies the reverse of pre_h3_edits: Pricing.quote(int,String) becomes quote(int,String,Currency); HEAD tree = this tree"
+pre_h3_edits:
+  - path: pricing/src/main/java/com/acme/fxlib/Pricing.java
+    qname: "pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote"
+    old: |2-
+          public static BigDecimal quote(int qty, String sku, Currency currency) {
+    new: |2-
+          public static BigDecimal quote(int qty, String sku) {
+              Currency currency = DEFAULT_CURRENCY;
+  - path: quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java
+    qname: "quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.quoteDefault"
+    old: 'return Pricing.quote(1, "SKU-1", Pricing.DEFAULT_CURRENCY);'
+    new: 'return Pricing.quote(1, "SKU-1");'
+
+rows:
+  - {id: LNK-23, prefix: LNK, kind: rpc, key: "/acme.fxlib.Pricing/Quote", P: "lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)", P_line: 14, declared_in: "lib:pricing/src/main/proto/pricing.proto", C: "svc:clients/pricing.py::quote", st: confirmed, reason: key-match, gate: P2, serves: [LNK], stratum: fixture-dev, note: "provider side only; the Python stub call with the literal method lives in fx-svc"}
+  - {id: LNK-24, prefix: LNK, kind: topic, key: "inhouse-fxbus:price.updated", P: "lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.publish(String,Object)", P_line: 25, publish_call_site: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency) line 27: FxBus.publish(\"price.updated\", ...)", C: "lib:pricing/src/main/java/com/acme/fxlib/bus/AuditListener.java::AuditListener.onPrice(PriceEvent)", C_line: 15, consumer_form: "annotation @FxSubscribe(\"price.updated\") on onPrice", st: confirmed, reason: key-match, gate: P2, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-25, prefix: LNK, kind: library_api, key: "java:com.acme.fxlib.Pricing.quote(int,String,Currency)", P: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)", P_line: 25, C: "lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.quoteDefault()", C_line: 28, same_version: "both poms are 1.0.0, quote-cli depends on fxlib-pricing 1.0.0", distinct_overload: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency,Locale) line 32 (called only from PricingService in its own unit; no consumer in lib-cli)", st: confirmed, reason: key-match, gate: P2, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-31, prefix: LNK, kind: call, C: "lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.main(String[])", C_line: 23, call: "Class.forName(cfg).getMethod(\"quote\")", true_target: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)", st: possible, reason: name-match, gate: P2, shape: DI or reflection, serves: [LNK], stratum: fixture-dev}
+  - {id: AC6-TOP-3, prefix: AC6, kind: topic, shape_syntax: "Java system property: System.getProperty(\"bus.topic\")", C: "lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.subscribeConfigured(String)", C_line: 50, st: possible, reason: config-derived, gate: P2, serves: [AC-6], stratum: fixture-dev, note: "the property is set at launch outside the repository; no true target named by the plan"}
+  - id: SQC-JAVA
+    prefix: SQC
+    change: "H3 edits Pricing.quote(int,String) to quote(int,String,Currency)"
+    before: {commit: H1, locator: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String)"}
+    after: {commit: H3, locator: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)", P_line: 25}
+    seeded_verdict_on: {edge: name-match, from: "lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.renderLegacy()", from_line: 32, call: "handle.quote(qty, sku)", receiver_type: "com.vendor.handles.Handle, from a jar absent from the classpath (unresolved)", to: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String)"}
+    expected: "the old id (signature (int,String)) is gone; the earlier-verdict note is dropped"
+    state_before: H1
+    gate: P2
+    serves: [SQ-C]
+    stratum: fixture-dev

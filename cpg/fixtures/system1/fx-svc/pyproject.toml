@@ -1,0 +1,12 @@
+[project]
+name = "fx-svc"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "fastmcp", "kafka-python", "pydantic-settings", "requests"]
+
+[tool.setuptools]
+package-dir = {"fx_svc" = "."}
+packages = [
+  "fx_svc", "fx_svc.api", "fx_svc.mcp", "fx_svc.core", "fx_svc.db", "fx_svc.bus",
+  "fx_svc.state", "fx_svc.clients", "fx_svc.plugins", "fx_svc.prompts",
+]
