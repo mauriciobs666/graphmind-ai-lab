@@ -1,0 +1,70 @@
+[
+ {
+  "pathCount": 0,
+  "rows_count": 3521,
+  "distinctEnds": 3521,
+  "distinctSymbolEnds": 0,
+  "minLen": 1,
+  "maxLen": 1,
+  "seconds": 0.036
+ },
+ {
+  "pathCount": 100,
+  "rows_count": 100,
+  "distinctEnds": 100,
+  "distinctSymbolEnds": 0,
+  "minLen": 1,
+  "maxLen": 1,
+  "seconds": 0.007
+ },
+ {
+  "pathCount": 10000,
+  "rows_count": 10000,
+  "distinctEnds": 8920,
+  "distinctSymbolEnds": 3210,
+  "minLen": 1,
+  "maxLen": 3,
+  "seconds": 0.104
+ },
+ {
+  "pathCount": 30000,
+  "rows_count": 30000,
+  "distinctEnds": 21497,
+  "distinctSymbolEnds": 3210,
+  "minLen": 1,
+  "maxLen": 3,
+  "seconds": 0.251
+ },
+ {
+  "pathCount": 100000,
+  "rows_count": 100000,
+  "distinctEnds": 54021,
+  "distinctSymbolEnds": 19666,
+  "minLen": 1,
+  "maxLen": 5,
+  "seconds": 0.555
+ },
+ {
+  "pathCount": 300000,
+  "rows_count": 300000,
+  "distinctEnds": 98824,
+  "distinctSymbolEnds": 19666,
+  "minLen": 1,
+  "maxLen": 5,
+  "seconds": 1.004
+ },
+ {
+  "pathCount": 1000000,
+  "rows_count": 946532,
+  "distinctEnds": 142811,
+  "distinctSymbolEnds": 29746,
+  "minLen": 1,
+  "maxLen": 6,
+  "seconds": 2.092
+ },
+ {
+  "rowReturning_pathCount": 1000000,
+  "rows": 10000,
+  "distinctSymbols": 4251
+ }
+]

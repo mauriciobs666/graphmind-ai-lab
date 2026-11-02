@@ -4,14 +4,14 @@ Contract: ``docs/plans/connected-code-graph-p0.md`` §4.5 (S21), ``docs/plans/co
 graph note ``docs/plans/connected-code-graph-graph.md`` Q4, V2, V10, G13.
 
 Keys: only ``ccg_p0spike__swap_*`` graphs and their companion ``telemetry{ccg_p0spike__swap_*}`` streams are written
-(:func:`guard` checks every key of every command this module sends). The telemetry config probes use
-``GRAPH.CONFIG GET`` and ``CONFIG GET`` only; a ``SET`` is attempted solely on parameter names that the build does not
-list, to confirm it rejects them (a rejected ``SET`` changes nothing).
+(:func:`guard` checks every key of every command this module sends). The telemetry probes read ``GRAPH.CONFIG``/``CONFIG``,
+attempt a ``SET`` on names the build does not list (rejected, changes nothing), and set ``MAX_INFO_QUERIES``
+(instance-wide) for the length of one probe, always restoring the original value in a ``finally``.
 
 Every probe returns ``{"probe", "commands", "observed"}`` and :func:`main` writes them to
 ``results/swap_probe.json`` next to this file; ``MEASUREMENTS.md`` quotes them.
 
-Usage: ``python swap_probe.py [--only rollback|telemetry|delete]``
+Usage: ``python swap_probe.py [--only rollback|telemetry|delete|stall]``
 """
 
 from __future__ import annotations
@@ -31,6 +31,17 @@ import synth as S  # noqa: E402  (SpikeStore: zero-retry connection + the spike 
 
 PREFIX = "ccg_p0spike__swap_"
 _SWAP = re.compile(rf"(telemetry\{{)?{PREFIX}[A-Za-z0-9_]+(\}})?")
+
+
+#: the first guarded swap probed (S21): only a missing ``build`` is refused
+OLD_SCRIPT = ("if redis.call('EXISTS', KEYS[2]) == 0 then return 'refused: build absent' end "
+              "redis.call('RENAME', KEYS[1], KEYS[3]) redis.call('RENAME', KEYS[2], KEYS[1]) return 'swapped'")
+#: the tightened swap (KEYS = live, build, prev): refuses before any ``RENAME`` unless ``build`` and ``live`` exist and
+#: ``prev`` does not. A first build (no ``live``) uses a plain ``RENAME build live``, not this script.
+SWAP_SCRIPT = ("if redis.call('EXISTS', KEYS[2]) == 0 then return 'refused: build absent' end "
+               "if redis.call('EXISTS', KEYS[1]) == 0 then return 'refused: live absent' end "
+               "if redis.call('EXISTS', KEYS[3]) == 1 then return 'refused: prev present' end "
+               "redis.call('RENAME', KEYS[1], KEYS[3]) redis.call('RENAME', KEYS[2], KEYS[1]) return 'swapped'")
 
 
 def guard(key: str) -> str:
@@ -123,29 +134,28 @@ def probe_rollback(p: Probe) -> list[dict]:
                             "liveExists": p.exists(live), "prevExists": p.exists(prev),
                             "rolledBack": p.exists(live) and not p.exists(prev)}})
 
-    # (ii-b) the same absent-build swap guarded by one EVAL (EXISTS first): the script refuses before any RENAME
-    p.wipe(live, build, prev)
-    p.make(live, "old")
-    script = ("if redis.call('EXISTS', KEYS[2]) == 0 then return 'refused: build absent' end "
-              "redis.call('RENAME', KEYS[1], KEYS[3]) redis.call('RENAME', KEYS[2], KEYS[1]) return 'swapped'")
-    try:
-        r = p.cmd("EVAL", script, 3, live, build, prev, keys=(live, build, prev))
-        r = r.decode() if isinstance(r, bytes) else r
-    except Exception as exc:  # noqa: BLE001 -- recorded verbatim
-        r = f"{type(exc).__name__}: {exc}"
-    out.append({"probe": "rollback-ii-b-eval-guard-build-absent", "commands": [f"EVAL <exists-guarded 2x RENAME> 3 {live} {build} {prev}"],
-                "observed": {"reply": r, "markersAfter": p.state(live, build, prev)}})
-    # and on the happy path, same script
-    p.wipe(live, build, prev)
-    p.make(live, "old")
-    p.make(build, "new")
-    try:
-        r = p.cmd("EVAL", script, 3, live, build, prev, keys=(live, build, prev))
-        r = r.decode() if isinstance(r, bytes) else r
-    except Exception as exc:  # noqa: BLE001
-        r = f"{type(exc).__name__}: {exc}"
-    out.append({"probe": "rollback-ii-c-eval-guard-happy", "commands": [f"EVAL <exists-guarded 2x RENAME> 3 {live} {build} {prev}"],
-                "observed": {"reply": r, "markersAfter": p.state(live, build, prev)}})
+    # (ii-b..) the EVAL swap, old and tightened script, in four starting states
+    def eval_case(script_name, script, case, setup):
+        p.wipe(live, build, prev)
+        setup()
+        try:
+            r = p.cmd("EVAL", script, 3, live, build, prev, keys=(live, build, prev))
+            r = r.decode() if isinstance(r, bytes) else r
+        except Exception as exc:  # noqa: BLE001 -- recorded verbatim
+            r = f"{type(exc).__name__}: {exc}"
+        out.append({"probe": f"rollback-eval-{script_name}-{case}", "commands": [f"EVAL <{script_name}> 3 {live} {build} {prev}"],
+                    "observed": {"reply": r, "markersAfter": p.state(live, build, prev)}})
+
+    cases = {
+        "build-absent": lambda: p.make(live, "old"),
+        "happy": lambda: (p.make(live, "old"), p.make(build, "new")),
+        "prev-present": lambda: (p.make(live, "old"), p.make(build, "new"), p.make(prev, "older")),
+        "live-absent-first-build": lambda: p.make(build, "new"),
+    }
+    for script_name, script_text in (("old", OLD_SCRIPT), ("tight", SWAP_SCRIPT)):
+        for case, setup in cases.items():
+            eval_case(script_name, script_text, case, setup)
+    script = SWAP_SCRIPT
 
     # (ii-d) the existing-prev case: RENAME live prev over an existing prev overwrites it silently
     p.wipe(live, build, prev)

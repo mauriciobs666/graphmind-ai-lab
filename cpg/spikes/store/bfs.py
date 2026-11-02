@@ -2,7 +2,7 @@
 
 Which BFS is benchmarked
 ------------------------
-The walk is **``cpg/spikes/vertical-slice/impact.py`` ``walk()``**, the working-tree version carrying S17-L2's
+The walk is **``cpg/spikes/vertical-slice/impact.py`` ``walk()``** (committed ``cb1b2214``) carrying S17-L2's
 ``function`` state kind (a function entered from a ``Param``/``Cond``/``CallSite`` continues only at function level:
 its ``CALLS <-`` / ``TO <-`` hops are ``possible`` with reason ``function-level-continuation``). Nothing of the walk is
 re-implemented here; :func:`impact_provenance` records the file's SHA-256 so a result names the exact source.

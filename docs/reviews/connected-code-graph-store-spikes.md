@@ -252,3 +252,144 @@ BFS reference for this anchor (recorded): 29,746 items at D=3 and 30,591 at D=5.
 | DDL: `Dependency` index line removed | `test_ddl_live.py` | killed |
 | DDL: `Dependency` index line removed | `test_loader_v1.py` | killed |
 | m4 probe (endpoint-label index coverage) on the DDL without `Dependency` | ad-hoc | reports `{'Dependency'}`; on today's DDL, none |
+
+## Pass 2 (2026-11-02)
+
+**Scope.** The uncommitted fixes on top of `4da8e51f`: diffs of `MEASUREMENTS.md`, `bench_reach.py`, `bfs.py`,
+`swap_probe.py`, `tests/test_store_spikes.py`, `test_loader_v1.py`, `p0-graph.md` and `falkordb-quirks.md`; the new
+`sspaths_agg_check.py` and `recheck_claims.py`; the new `results/*.json` files and the re-run `swap_probe_rollback.json`.
+I did reads only on `ccg_p0spike`. Nothing was written to the instance, and no live tests ran.
+
+**Verdict: approve with suggestions.** No blocker or major remains open. The stopping signal is at the end of this pass.
+
+**Correction to Pass 1.** Pass 1 said, in *What's solid* and in B1's "Why it matters", that the remedy
+(aggregation plus a larger `pathCount`) "fails rule 2 anyway". **That was wrong.** I extrapolated from `pathCount`
+300k, a sweep that had not saturated. At 1,000,000 the aggregated form equals the BFS's item set on 50 of 50 anchors
+(recomputed below). The BFS decision still follows, but for a different reason: the aggregated form returns no chain.
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| `results/sspaths_aggregated.json`, recomputed from the records | 50/50 `setEqual`; 50/50 repeats identical, 20 per anchor; pooled p95 **0.5346 s** (hub 1.889 s, mid 0.0017 s, low 0.0005 s) vs BFS D=3 **3.7026 s** from `bench_reach.jsonl`; its `bfsItems` equal the benchmark's D=3 counts on 50/50 anchors |
+| Aggregated form, my own run (hub `S0450.05`, `pathCount` 1,000,000) | 19,969 `Symbol`-ending paths, 13,430 items, set equal to a fresh BFS, 0.10 s |
+| "No chain, status or distance" | true by construction: `sspaths_agg_check.QUERY` returns `count(*), collect(DISTINCT e.symbolId)` and nothing else |
+| `sspaths_pathcount_probe.json` vs my Pass-1 Appendix B | the 0 to 300,000 rows match; 1,000,000 gives 946,532 paths (< budget), 29,746 symbols, length up to 6; row-returning at 1,000,000 gives 10,000 rows and 4,251 symbols |
+| Rebuilt `ccg_p0spike` (container started 10:26, `RestartCount 0`, `OOMKilled false` on the new container) | 453,905 nodes, 2,399,308 edges, 330 MB, 11 constraints `OPERATIONAL` (the benchmarked graph had 10; `Dependency` is now one of them); `ccg_p0slice` absent; no swap or dep keys left; `MAX_INFO_QUERIES` 1000, `TIMEOUT_MAX` 0 |
+| Digests on the rebuilt graph, 4 anchors not in `recheck_digests.json` | D=5 hub `S0014.18`, mid `S0156.30`, low `S0113.00`: BFS and SSpaths digests equal the recorded ones (6/6); `full` levels 4 `S0048.27`: equal. `recheck_digests.json` adds 10/10 more |
+| Suites, from `cpg/` | touched suites **158 passed, 29 deselected**; the default `cpg` suite **1504 passed, 8 deselected** |
+| Mutants on a fresh scratch copy | 8 killed, 1 survives the non-live suite (P2-m2) |
+
+### Dispositions
+
+- **B1 — fixed.** All four sites now name `pathCount` as a global, weight-ordered budget and `RESULTSET_SIZE` as a separate row cap: `MEASUREMENTS.md` §1, quirks, `p0-graph.md` §6 (now a pointer), `bench_reach.py:42`. The per-`pathCount` table matches the probe file and my Pass-1 run.
+- **M1 — fixed.** `SWAP_SCRIPT` checks `EXISTS` on all three keys before its first `RENAME` (`swap_probe.py:41-44`). `swap_probe_rollback.json` shows the old script and the tight script in four starting states each, and the record matches the file in all 8 cells. The old script overwrites `prev` (`older` lost) and fails with `no such key` when `live` is absent; both of my Pass-1 inferences are now measured. The tight script refuses `build absent`, `live absent` and `prev present` with markers unchanged.
+- **m1 — fixed.** `synth_build_record.json`, `recheck_{digests,ping,timeout}.json` and `sspaths_pathcount_probe.json` exist, and the numbers in the text match them (83.7 ms; PING 4.6–6.5 ms; 423,508,696 B). The first two builds' 41 s is marked "unrecorded". **Residual:** no script that is kept produces `sspaths_pathcount_probe.json`; `bench_reach.py` only cites it.
+- **m2 — fixed.** 2.06 s, 2.90 s and 3.0–29.1 ms are quoted from their files, and the vacuous shape is now stated.
+- **m3 — fixed.** The `truncated` (`>=`→`>`), `missingFraction` and `chainAgree`→`distanceAgree` mutants of `summarize` are killed, as is deleting the `prev`-present or `live`-absent guard (static text test). A remaining gap is reported as P2-m2.
+- **m4 — fixed.** `test_every_edge_endpoint_label_has_an_index_on_its_id_property` is killed both by removing the `Dependency` index line and by renaming `ID_PROP["Dependency"]`.
+- **m5 — fixed.** §6 item 4 is a single pointer. Growth-stops: this is rework that replaces text, with no growth.
+- **m6 — not fixed, deferred.** The duplicate TIMEOUT entry remains. Folding it is handed to S23 in `MEASUREMENTS.md`'s header, along with "S23 must not re-add" the early entries. That is acceptable as an explicit hand-off.
+- **Nits — fixed:**
+  - `swap_probe.py` docstring and Usage line;
+  - `bfs.py` "committed `cb1b2214`";
+  - the splits wording (5 at levels 4, 5 at levels 6);
+  - "all with `ASYNC_DELETE 1`";
+  - the D=5 weighting note;
+  - the redundant `assert … or …` removed;
+  - the key-name drift, which is noted for the ledger. **Residual:** the reservation table in `p0-2.md` §5.1 is unchanged; that is `teco`'s.
+
+### New findings
+
+#### P2-m1 (minor) — `pathCountExhausted` measures the wrong count, and the record reads it backwards
+
+**Evidence.** `sspaths_agg_check.answer` returns `"exhausted": r[0] < pc`. But `r[0]` is `count(*)` *after*
+`WHERE e:Symbol`, so it counts only the paths that end on a `Symbol`. It is below `pc` even when the engine used up
+the whole budget. The flag is `True` on 50/50 records. `MEASUREMENTS.md` §1 calls this "the budget was never exhausted
+by a hub (largest path count 473,266 Symbol-ending paths)". Only the top hub is known to be under budget, from the
+unfiltered probe (946,532 < 1,000,000). The item-set equality itself is checked directly, so the 50/50 result stands.
+
+**Fix.** Count before the filter (`WITH collect(last(nodes(path))) AS ends, count(*) AS n …`). If that is not done,
+rename the flag `symbolPathsBelowBudget` and reword the sentence.
+
+#### P2-m2 (minor) — a mutant that breaks the swap's `RENAME` order survives the non-live suite
+
+**Evidence (run).** I swapped the two `RENAME`s in `SWAP_SCRIPT` (`build`→`live` first, then `live`→`prev`). That
+version destroys the old `live` and leaves `prev` = new. `test_swap_script_checks_all_three_keys_before_its_first_rename`
+still passes, because it is a text-order check: 58 passed. Only `test_live_swap_script_refuses_before_moving_anything[happy]`
+(`-m live`) would catch it, and I did not run it. Neither `MEASUREMENTS.md` nor `results/` shows that this test ran;
+the four-state evidence comes from the probe, not the test.
+
+**Fix.** Run the live test once under a swap reservation and record the result. Optionally add one assertion to the
+static test: the text `RENAME', KEYS[1], KEYS[3]` comes before `RENAME', KEYS[2], KEYS[1]`.
+
+#### P2-m3 (minor) — the quirks `SSpaths` entry claims a little more than was measured
+
+- "Returning rows instead, **any** `N` above 10,000 gave exactly 10,000 rows and 4,251 symbols": only `N` = 1,000,000
+  was measured in row-returning form. The row count follows from `RESULTSET_SIZE`; the 4,251 does not generalize.
+- "the row-returning form reached 10–15 % of the BFS's items": those are the pooled figures (14.8 % at D=3, 9.7 % at
+  D=5). Per anchor the range is 2.7–23.4 % (D=3) and 2.2–15.1 % (D=5).
+
+**Fix.** Write "at `N` = 1,000,000" and "pooled 10–15 % (per anchor 2–23 %)".
+
+#### P2-m4 (minor, inferred) — how `pathCount` relates to memory is not yet a rule
+
+At `pathCount` 1,000,000 the top hub had only 946,532 paths in total, so a budget of 3,000,000 could not produce
+more paths. If that query caused the OOM, memory grows with the *budget* (allocated up front), not with the paths
+found. I inferred this and did not test it, because testing it risks a second instance loss. `MEASUREMENTS.md`
+correctly says "nothing proves 3,000,000 alone caused it". The quirks rule "never raise it past what the container
+can hold" cannot be applied without a number.
+
+**Fix (`graph-dba`, S23).** State the safe ceiling that was observed (1,000,000 → peak 797 MB on this 330 MB graph,
+2 GB container). Mark budget-proportional allocation as a hypothesis to probe on a disposable instance, never on the
+shared one.
+
+### The decision still follows
+
+The aggregated form passes rule 2 (50/50) and rule 3 (pooled p95 0.53 s against 3.70 s). It cannot pass rule 1 as the
+plan words it ("20/20 repeats identical, **chains included**"): it returns no chain, status or distance.
+
+The chain is a requirement of its own:
+- **FR-20 / AC-18** (`docs/requirements/connected-code-graph.md:170`, `:427`) require every item's full chain.
+- **FR-19**, which the follow-up message cited, is the repeatability requirement. The chain requirement is FR-20, not FR-19.
+
+Bringing the chain back means returning paths. That brings back either the 10,000-row cap or a per-node reduction in
+the query. Even untruncated, `SSpaths`' cheapest path disagreed with `bfs-v1`'s chain on 38 mid-anchor items: per-edge
+weights cannot express the function-level state rule.
+
+So **keep the BFS**. Whether an item-set-only `SSpaths` pre-pass is worth a guarded path budget is an open design
+point for `architect`/S23. `MEASUREMENTS.md` already frames it that way, and the OOM is the cost to weigh.
+
+The OOM itself is recorded: in the quirks `SSpaths` entry (exit 137, `OOMKilled true`, all keys lost), in
+`MEASUREMENTS.md` §1 "Instance loss", and in `sspaths_agg_check.py`'s docstring. What I could check (inferred
+consistency) is that the container is new, `ccg_p0slice` is gone, and `used_memory_peak` is 798.77 MB. The OOM
+itself cannot be re-observed.
+
+### Interactions between the fixes made in this revision
+
+- **The rebuild used the new DDL** (11 constraints instead of the benchmark's 10). Traversal does not touch constraints, and 27 re-digests match (10 anchors × 2 sides theirs, 3 × 2 + 1 `full` mine). No effect.
+- **The rollback re-run overwrote `swap_probe_rollback.json`.** The iii numbers changed (0.39–0.46 ms; PING 4.1–6.7 ms, control 11.1 ms), and both `MEASUREMENTS.md` and quirks quote the new run. They are consistent. Pass 1's m2 point holds the other way round: the earlier figures now exist only in git history (`4da8e51f`).
+- **The aggregated check compares against a fresh BFS on the same rebuilt graph,** so it is internally consistent. Its BFS counts also equal the old benchmark's counts on all 50 anchors.
+- **The OOM made the Pass-1 open question worse.** `ccg_p0slice` no longer exists at all, so every `-m live` slice test is red, not only `test_sl3_load_integrity`. Any unit that reads `ccg_p0slice` (R-B) is blocked until it is reloaded. That is `teco`'s call, unchanged.
+
+### Stopping signal (falsifiable)
+
+This approval stands until one of these happens:
+1. `test_live_swap_script_refuses_before_moving_anything` (`-m live`, under a swap reservation) fails any of its 4 cases.
+2. The same test passes with P2-m2's swapped-`RENAME` mutant applied.
+3. Recomputing `sspaths_aggregated.json` or `bench_reach.jsonl` gives a figure that differs from `MEASUREMENTS.md`.
+4. A re-digest of a recorded anchor on `ccg_p0spike` differs.
+
+Run (1) and (2) once and record them; that closes P2-m2.
+
+### Proposed REVIEW.md lines
+
+**The Pass-1 line is still wanted, unchanged.** This pass adds another instance of the class it targets: my own
+Pass-1 claim that the remedy fails was drawn from a cap sweep that had not saturated. So, to the line's sentence "A
+number equal to two caps proves neither", add: "and a sweep that has not reached the parameter where the result
+stops changing proves no negative".
+
+One addition, root `REVIEW.md` → **Always check**. Source: the OOM in this pass (the `pathCount` 3,000,000 read lost
+`ccg_p0slice`, which belongs to another unit).
+- (addition) A live probe that sweeps a parameter which scales memory or time on a shared instance states its
+  ceiling and stop rule before it runs; a probe without one is a finding.

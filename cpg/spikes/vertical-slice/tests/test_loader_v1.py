@@ -26,6 +26,15 @@ def test_index_statements_are_the_ddl_files_indexes_in_file_order():
     assert len(L.index_statements()) == 18 and "CREATE INDEX FOR (n:SkippedFile) ON (n.repoId)" in L.index_statements()
 
 
+def test_every_edge_endpoint_label_has_an_index_on_its_id_property():
+    """An edge batch MATCHes both ends by id; an un-indexed label is a label scan per row (quadratic: Dependency, 52 s at
+    20,000 rows, ``cpg/spikes/store/MEASUREMENTS.md``). Guards the next label a phase adds to ``EDGE_ORDER``."""
+    stmts = set(L.index_statements())
+    missing = {label for group in L.EDGE_ORDER for label in (group[0], group[2])
+               if label != "SkippedFile" and f"CREATE INDEX FOR (n:{label}) ON (n.{L.ID_PROP[label]})" not in stmts}
+    assert missing == set()
+
+
 def test_constraints_applied_are_the_ddl_files_constraints_in_file_order():
     store = FakeStore()
     L.load_build(store, _mini_rows(), L.BUILD_PREFIX + "x", L.LoadReport(), poll_interval=0)

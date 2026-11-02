@@ -11,7 +11,8 @@ alone (latency, repeat-diff); ``bfs.py`` says which ``impact.py`` it is.
 
 ``SSpaths`` call: ``relTypes ['CALLS','HAS_CALL']``, ``relDirection 'incoming'``, ``weightProp 'w'`` (confirmed 1,
 possible 1000, on both edge types), ``maxLen 2 * D``, ``pathCount`` = :data:`PATH_COUNT`. The engine returns **paths**,
-not best-path-per-node, and a reply is cut at ``RESULTSET_SIZE``; :func:`items_from_paths` keeps, per end symbol, the
+not best-path-per-node; ``pathCount`` is a global, weight-ordered path budget, and ``RESULTSET_SIZE`` (also 10,000)
+separately caps the rows of a reply; :func:`items_from_paths` keeps, per end symbol, the
 lightest returned path and labels it by ``bfs-v1``'s rule (hop 1 by its own edge status, every later hop ``possible``
 by function-level continuation), so the two sides are compared on one vocabulary.
 
@@ -38,7 +39,10 @@ import synth as S  # noqa: E402
 
 GRAPH = "ccg_p0spike"
 READ_TIMEOUT_MS = 60_000  # explicit on every read: the engine's default read TIMEOUT is 1,000 ms (measured; a hub-frontier read exceeds it)
-PATH_COUNT = 10_000  # = RESULTSET_SIZE: a larger pathCount returns the same 10,000 rows (measured, MEASUREMENTS.md)
+# pathCount is a global path budget (count(*) = pathCount while paths remain, results/sspaths_pathcount_probe.json); this value
+# equals RESULTSET_SIZE, so in the row-returning benchmark either cap alone would give 10,000 rows. See sspaths_agg_check.py.
+PATH_COUNT = 10_000
+TRUNCATED_AT = 10_000  # a reply of this many rows may have been cut (RESULTSET_SIZE or pathCount)
 SEGMENT_DEPTHS = (1, 3, 5)  # call hops D; bfs levels = 2 * D; SSpaths maxLen = 2 * D
 FULL_LEVELS = (4, 6)  # 6 levels = distance <= 3 (the §6.4 depth-3 cap)
 SSPATHS_QUERY = (
@@ -80,7 +84,7 @@ def sspaths_answer(graph, anchor: str, depth: int, *, pc: int = PATH_COUNT, time
     t_query = time.perf_counter() - t0
     items = items_from_paths(anchor, rows)
     return {"items": items, "digest": B.digest(items), "seconds": time.perf_counter() - t0, "queryseconds": t_query,
-            "rows": len(rows), "nItems": len(items), "truncated": len(rows) >= 10_000}
+            "rows": len(rows), "nItems": len(items), "truncated": len(rows) >= TRUNCATED_AT}
 
 
 # ---------------------------------------------------------------------------------------------

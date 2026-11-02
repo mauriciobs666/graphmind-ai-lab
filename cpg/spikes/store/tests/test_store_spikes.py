@@ -235,7 +235,6 @@ def test_items_from_paths_prefers_fewer_possible_hops_then_distance_then_length(
     p_short_possible_first = row(["A", "z", "C"], ["CALLS", "HAS_CALL"], ["possible", CONF])
     item = R.items_from_paths("A", [p_short_possible_first, p_long])
     c = next(r for r in item if r[0] == "C")
-    assert c[5] == ["A", "z", "C"] or c[5] == ["A", "x", "B", "y", "C"]
     # both have one possible hop; the shorter distance wins
     assert c[5] == ["A", "z", "C"] and c[2] == 1
 
@@ -463,3 +462,101 @@ def test_live_small_synth_loads_equals_generator_counts_and_both_walks_agree(liv
         for k in (key, build):
             if st.exists(k):
                 st.delete(k)
+
+
+# ---------------------------------------------------------------------------------------------
+# Gate follow-ups (m3): the truncation flag, summarize(), the EVAL swap guard.
+# ---------------------------------------------------------------------------------------------
+
+
+class _FakeRes:
+    def __init__(self, n):
+        self.result_set = [[["A", "c1", "B"], ["CALLS", "HAS_CALL"], ["confirmed", "confirmed"], 2.0] for _ in range(n)]
+
+
+class _FakeGraph:
+    def __init__(self, n):
+        self.n = n
+
+    def ro_query(self, cypher, params, timeout=None):
+        return _FakeRes(self.n)
+
+
+@pytest.mark.parametrize("rows,truncated", [(9_999, False), (10_000, True), (10_001, True), (0, False)])
+def test_sspaths_answer_flags_a_reply_that_reached_the_row_cap(rows, truncated):
+    got = R.sspaths_answer(_FakeGraph(rows), "A", 3)
+    assert got["truncated"] is truncated and got["rows"] == rows and R.TRUNCATED_AT == 10_000
+
+
+def _seg(depth, cls, indeg, bfs_items, ss_items, missing, extra, equal, truncated, bfs_s, ss_s, repeats=2):
+    return {"kind": "segment", "depth": depth, "anchor": {"symbolId": f"{cls}{indeg}", "class": cls, "indegree": indeg}, "repeats": repeats,
+            "bfs": {"identical": True, "nItems": bfs_items, "seconds": bfs_s, "reads": {"HAS_CALL": [1.0, 2.0], "other": [10.0]},
+                    "levelMs": [5.0, 6.0], "splits": 0, "states": 7, "levels": 3},
+            "sspaths": {"identical": True, "nItems": ss_items, "truncated": truncated, "seconds": ss_s},
+            "compare": {"bfsItems": bfs_items, "sspathsItems": ss_items, "common": bfs_items - missing, "missingFromSSpaths": missing,
+                        "extraInSSpaths": extra, "itemSetEqual": equal, "statusAgree": bfs_items - missing,
+                        "distanceAgree": bfs_items - missing - 1, "chainAgree": bfs_items - missing - 2}}
+
+
+def test_summarize_reproduces_hand_computed_figures(tmp_path):
+    import json
+    recs = [
+        {"kind": "meta", "impact": {"sha256": "x"}, "timeoutMax": 0},
+        _seg(3, "hub", 900, 100, 40, 60, 0, False, True, [4.0, 5.0], [1.0, 1.0]),
+        _seg(3, "hub", 800, 50, 30, 25, 5, False, True, [2.0, 3.0], [1.0, 1.0]),
+        _seg(3, "low", 1, 4, 4, 0, 0, True, False, [0.1, 0.1], [0.05, 0.05]),
+        {"kind": "full", "levels": 4, "anchor": {"symbolId": "h", "class": "hub", "indegree": 9}, "repeats": 2,
+         "bfs": {"identical": True, "nItems": 9, "seconds": [1.0, 3.0], "splits": 2, "states": 77, "levels": 5,
+                 "reads": {"DATA": [20.0]}, "levelMs": [7.0]}},
+        {"kind": "end"},
+    ]
+    path = tmp_path / "b.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in recs))
+    out = R.summarize(path)
+    d3 = out["segment"][3]
+    assert d3["anchors"] == 3 and d3["itemSetEqual"] == "1/3" and d3["bfsRepeatIdentical"] == "3/3"
+    assert d3["statusAgreeOnCommon"] == "69/69" and d3["distanceAgreeOnCommon"] == "66/69" and d3["chainAgreeOnCommon"] == "63/69"
+    hub = d3["perClass"]["hub"]
+    assert hub["missingFraction"] == round(85 / 150, 4)            # missing / BFS items, not extra / anything
+    assert hub["sspathsTruncated"] == 2 and hub["itemSetEqual"] == 0 and hub["bfsItemsMedian"] == 75.0
+    assert d3["perClass"]["low"]["itemSetEqual"] == 1 and d3["perClass"]["low"]["missingFraction"] == 0.0
+    assert d3["bfsP95"] == 5.0 and d3["sspathsP95"] == 1.0         # nearest rank over 6 samples
+    assert d3["decisionRule"]["rule2_item_set_equal"] is False and d3["decisionRule"]["adopt"] is False
+    assert out["full"][4]["splits"] == 2 and out["full"][4]["maxStates"] == 77 and out["full"][4]["max"] == 3.0
+    assert out["perReadMs"]["HAS_CALL"]["n"] == 6 and out["perReadMs"]["DATA"]["max"] == 20.0
+    assert out["perReadMsAll"]["n"] == 10 and out["perLevelMs"]["n"] == 7
+
+
+def test_swap_script_checks_all_three_keys_before_its_first_rename():
+    text = W.SWAP_SCRIPT
+    first_rename = text.index("redis.call('RENAME'")
+    for guard_text in ("EXISTS', KEYS[2]) == 0 then return 'refused: build absent'",
+                       "EXISTS', KEYS[1]) == 0 then return 'refused: live absent'",
+                       "EXISTS', KEYS[3]) == 1 then return 'refused: prev present'"):
+        assert guard_text in text and text.index(guard_text) < first_rename
+    assert text.count("redis.call('RENAME'") == 2 and "refused" not in W.OLD_SCRIPT.replace("refused: build absent", "")
+
+
+@pytest.mark.live
+@pytest.mark.parametrize("case,expect,after", [
+    ("happy", "swapped", {"live": "new", "build": None, "prev": "old"}),
+    ("build-absent", "refused: build absent", {"live": "old", "build": None, "prev": None}),
+    ("live-absent", "refused: live absent", {"live": None, "build": "new", "prev": None}),
+    ("prev-present", "refused: prev present", {"live": "old", "build": "new", "prev": "older"}),
+])
+def test_live_swap_script_refuses_before_moving_anything(live_store, case, expect, after):
+    p = W.Probe(live_store)
+    live, build, prev = (W.PREFIX + n + "t" for n in ("live", "build", "prev"))
+    p.wipe(live, build, prev)
+    try:
+        if case != "live-absent":
+            p.make(live, "old")
+        if case != "build-absent":
+            p.make(build, "new")
+        if case == "prev-present":
+            p.make(prev, "older")
+        got = p.cmd("EVAL", W.SWAP_SCRIPT, 3, live, build, prev, keys=(live, build, prev))
+        assert (got.decode() if isinstance(got, bytes) else got) == expect
+        assert dict(zip((("live", "build", "prev")), p.state(live, build, prev).values())) == after
+    finally:
+        p.wipe(live, build, prev)

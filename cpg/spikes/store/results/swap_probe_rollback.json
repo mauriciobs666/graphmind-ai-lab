@@ -44,9 +44,9 @@
   }
  },
  {
-  "probe": "rollback-ii-b-eval-guard-build-absent",
+  "probe": "rollback-eval-old-build-absent",
   "commands": [
-   "EVAL <exists-guarded 2x RENAME> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+   "EVAL <old> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
   ],
   "observed": {
    "reply": "refused: build absent",
@@ -58,9 +58,9 @@
   }
  },
  {
-  "probe": "rollback-ii-c-eval-guard-happy",
+  "probe": "rollback-eval-old-happy",
   "commands": [
-   "EVAL <exists-guarded 2x RENAME> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+   "EVAL <old> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
   ],
   "observed": {
    "reply": "swapped",
@@ -68,6 +68,90 @@
     "live": "new",
     "build": null,
     "prev": "old"
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-old-prev-present",
+  "commands": [
+   "EVAL <old> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "swapped",
+   "markersAfter": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-old-live-absent-first-build",
+  "commands": [
+   "EVAL <old> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "ResponseError: no such key script: fc424d6747fafe8063f12d2288053247b7d3c96a, on @user_script:1.",
+   "markersAfter": {
+    "live": null,
+    "build": "new",
+    "prev": null
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-tight-build-absent",
+  "commands": [
+   "EVAL <tight> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "refused: build absent",
+   "markersAfter": {
+    "live": "old",
+    "build": null,
+    "prev": null
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-tight-happy",
+  "commands": [
+   "EVAL <tight> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "swapped",
+   "markersAfter": {
+    "live": "new",
+    "build": null,
+    "prev": "old"
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-tight-prev-present",
+  "commands": [
+   "EVAL <tight> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "refused: prev present",
+   "markersAfter": {
+    "live": "old",
+    "build": "new",
+    "prev": "older"
+   }
+  }
+ },
+ {
+  "probe": "rollback-eval-tight-live-absent-first-build",
+  "commands": [
+   "EVAL <tight> 3 ccg_p0spike__swap_live ccg_p0spike__swap_build ccg_p0spike__swap_prev"
+  ],
+  "observed": {
+   "reply": "refused: live absent",
+   "markersAfter": {
+    "live": null,
+    "build": "new",
+    "prev": null
    }
   }
  },
@@ -103,7 +187,7 @@
      "old"
     ],
     "count": 49000000,
-    "seconds": 12.27
+    "seconds": 11.96
    },
    "swapReplies": [],
    "swapMs": 0.0,
@@ -113,8 +197,8 @@
     "build": "new",
     "prev": null
    },
-   "maxPingMs": 5.69,
-   "pings": 1198,
+   "maxPingMs": 11.1,
+   "pings": 1168,
    "pingsOver1s": 0,
    "slowPings[startOffsetS, ms]": [],
    "swapIssuedAtS": 1.806
@@ -136,21 +220,21 @@
      "old"
     ],
     "count": 49000000,
-    "seconds": 12.14
+    "seconds": 11.85
    },
    "swapReplies": [
     "True",
     "True"
    ],
-   "swapMs": 0.53,
+   "swapMs": 0.46,
    "readerStillRunningWhenSwapReturned": true,
    "markersRightAfterSwap": {
     "live": "new",
     "build": null,
     "prev": "old"
    },
-   "maxPingMs": 26.85,
-   "pings": 1183,
+   "maxPingMs": 5.94,
+   "pings": 1161,
    "pingsOver1s": 0,
    "slowPings[startOffsetS, ms]": [],
    "swapIssuedAtS": 1.804
@@ -169,20 +253,20 @@
      "old"
     ],
     "count": 49000000,
-    "seconds": 11.92
+    "seconds": 11.89
    },
    "swapReplies": [
     "True"
    ],
-   "swapMs": 0.44,
+   "swapMs": 0.4,
    "readerStillRunningWhenSwapReturned": true,
    "markersRightAfterSwap": {
     "live": "new",
     "build": null,
     "prev": null
    },
-   "maxPingMs": 8.98,
-   "pings": 1163,
+   "maxPingMs": 4.1,
+   "pings": 1161,
    "pingsOver1s": 0,
    "slowPings[startOffsetS, ms]": [],
    "swapIssuedAtS": 1.804
@@ -201,23 +285,23 @@
      "old"
     ],
     "count": 49000000,
-    "seconds": 12.03
+    "seconds": 12.04
    },
    "swapReplies": [
     "'swapped'"
    ],
-   "swapMs": 0.71,
+   "swapMs": 0.39,
    "readerStillRunningWhenSwapReturned": true,
    "markersRightAfterSwap": {
     "live": "new",
     "build": null,
     "prev": "old"
    },
-   "maxPingMs": 15.76,
-   "pings": 1170,
+   "maxPingMs": 6.7,
+   "pings": 1178,
    "pingsOver1s": 0,
    "slowPings[startOffsetS, ms]": [],
-   "swapIssuedAtS": 1.806
+   "swapIssuedAtS": 1.803
   }
  }
 ]

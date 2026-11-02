@@ -212,7 +212,4 @@ Cited by test name; paths are under `cpg/spikes/vertical-slice/` unless stated.
 2. **Not in this note's delivery:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/tests/test_ddl_live.py` and the loader changes
    D1-D8; they follow from §1 and need a live `__build_` key.
 3. **`MOUNTED_BY`** waits on the assembler emitting mount ids (D5), P1.
-4. **S20/S21 measurements (2026-11-02), inputs to S23's decisions table:** `cpg/spikes/store/MEASUREMENTS.md`. BFS
-   (`bfs-v1`) beats `algo.SSpaths` (item sets differ on every hub anchor, reply cut at 10,000 rows); `MULTI` swap
-   without a guard does not roll back; `MAX_INFO_QUERIES 0` disables telemetry; `GRAPH.DELETE` removes it at once;
-   `Dependency(depId)` indexed (§1.6, D10).
+4. S20/S21 measurements: `cpg/spikes/store/MEASUREMENTS.md` (S23's input); `Dependency(depId)` added (§1.6, D10).

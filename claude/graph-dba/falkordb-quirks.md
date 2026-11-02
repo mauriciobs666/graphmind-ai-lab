@@ -1215,36 +1215,44 @@ to the general fact here.
   enough, and a leading comment defeats the sniff. Also: in `falkordb-py` 1.6.x,
   `Graph.explain`/`Graph.profile` take no `timeout` parameter (only `query, params`), unlike
   `query`/`ro_query`. (Verified 2026-07-24/25, surfaced reviewing an MCP read-tool design.)
-- **`algo.SSpaths` is not "best path per node", and a reply is cut at `RESULTSET_SIZE` silently** (verified
-  2026-11-02, module `41811`, 454k-node / 2.4M-edge synthetic graph `ccg_p0spike`, `cpg/spikes/store/`;
-  refines the graph note's V8). `CALL algo.SSpaths({sourceNode:a, relTypes:['CALLS','HAS_CALL'],
-  relDirection:'incoming', weightProp:'w', maxLen:6, pathCount:N})` returns up to `N` *paths in total*, several
-  per end node (a node reached by a heavier path as well appears twice), in no per-node order; `pathCount:100`
-  returned 100 paths ending on 0 distinct `Symbol`s. With `pathCount` 10,000 and 1,000,000 alike the reply was
-  exactly 10,000 rows, with no error or flag. On a hub anchor (3,804 callers) it reached 3,210 of the 29,746 items
-  a level-synchronous BFS found (85-90 % missing at 3 and 5 call hops, 15 of 15 hub anchors); on 35 of 50
-  non-hub anchors the item sets were equal. `weightProp` must exist on every edge type listed (a `w` was stored on
-  `CALLS` and `HAS_CALL`); `maxLen` counts edges; it cannot see the arrival state, so a state-dependent label
-  (function-level continuation) is not expressible. Verify: the query above on any hub symbol vs a client BFS;
-  compare `count(DISTINCT end)` to the BFS item count and look at `size(result_set)`. Repeats were identical
-  (20/20) -- determinism was not the problem, completeness was.
+- **`algo.SSpaths` is not "best path per node": `pathCount` is a global, weight-ordered path budget, and a
+  row-returning reply is separately cut at `RESULTSET_SIZE`** (verified 2026-11-02, module `41811`, 454k-node /
+  2.4M-edge synthetic graph `ccg_p0spike`, `cpg/spikes/store/MEASUREMENTS.md` §1; corrects the first version of this
+  entry and refines the graph note's V8). `CALL algo.SSpaths({sourceNode:a, relTypes:['CALLS','HAS_CALL'],
+  relDirection:'incoming', weightProp:'w', maxLen:6, pathCount:N})` yields up to `N` paths *in total*, several per
+  end node, nearest-weight first. With the aggregation inside the query (`WITH last(nodes(path)) AS e, length(path)
+  AS l RETURN count(*), count(DISTINCT e), ...`, one reply row, so `RESULTSET_SIZE` cannot bind) on a hub (3,804
+  callers): `count(*)` = `N` for N = 100 / 10,000 / 30,000 / 100,000 / 300,000, with 0 / 3,210 / 3,210 / 19,666 /
+  19,666 distinct `Symbol` ends against 29,746 BFS items (longest path 1, 3, 3, 5, 5 edges); `N` = 1,000,000 returned
+  946,532 paths (all of them) and all 29,746 symbols in 2.1 s; `pathCount: 0` returned only the 3,521 length-1 paths.
+  Returning rows instead, any `N` above 10,000 gave exactly 10,000 rows and 4,251 symbols, silently: the benchmark set
+  both caps to 10,000 and so could not tell them apart. On 15 of 15 hub anchors the row-returning form reached 10-15 %
+  of the BFS's items; with aggregation and `N` = 1,000,000 the item sets equalled the BFS's on 50 of 50 anchors (no
+  chain returned). **`N` = 3,000,000 on the top hub OOM-killed the 2 GB container** (exit 137, `OOMKilled true`): with
+  no persistence every key was lost; `used_memory_peak` was 797 MB at `N` = 1,000,000. `weightProp` must exist on every
+  listed edge type (`w` was stored on `CALLS` and `HAS_CALL`); `maxLen` counts edges; the weight is per edge, so a
+  state-dependent label is not expressible. Verify: the aggregated query above on any hub, `pathCount` stepped as in
+  `cpg/spikes/store/results/sspaths_pathcount_probe.json`; never raise it past what the container can hold.
 - **The engine's default read `TIMEOUT` is 1000 ms (a module argument), `TIMEOUT_DEFAULT` and `TIMEOUT_MAX` are
   0** (`MODULE LIST` -> graph args `MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000`; verified 2026-11-02).
   A read that passes no `timeout` is killed at that default (`ResponseError: Query timed out`); the BFS
   benchmark crashed once on a 1,000-id hub-frontier read, concurrently with niced pytest runs. It was not
-  reproduced in 5 reruns without load (worst read 85 ms), so the cause is unconfirmed. Rule: every
+  reproduced in 5 reruns without load (worst read 83.7 ms, `results/recheck_timeout.json`), so the cause is unconfirmed. Rule: every
   program-issued read passes an explicit `timeout`. Verify: `GRAPH.CONFIG GET TIMEOUT`.
 - **`MULTI; RENAME live prev; RENAME build live; EXEC` is not a safe swap form: a failing second `RENAME` does
   not roll back the first** (verified 2026-11-02, module `41811`, Redis 8.x, scratch graphs
   `ccg_p0spike__swap_*`). With `build` absent, EXEC replied `[True, ResponseError]`; `live` was gone and `prev`
-  held the old graph (no rollback). With `prev` present, `RENAME live prev` overwrites it silently. The form is
-  safe only behind a guard: one `EVAL "if redis.call('EXISTS',KEYS[2])==0 then return 'refused: build absent'
-  end redis.call('RENAME',KEYS[1],KEYS[3]) redis.call('RENAME',KEYS[2],KEYS[1]) return 'swapped'" 3 live build
-  prev` replied `refused: build absent` and left `live` intact (`EVAL` over graph keys works as admin; the ACL
-  matrix is S22's). With a ~12 s `GRAPH.RO_QUERY` in flight on `live`, `MULTI/EXEC`, a plain `RENAME` and the
-  `EVAL` all returned in 0.44-0.71 ms, the reader finished on the old snapshot (both marker reads `old`,
-  49,000,000 rows), and a `PING` loop on a second warm connection peaked at 5.7-27 ms (re-confirms the
-  2026-10-29 entry above). Verify: `ccg_p0spike__swap_*` probe `cpg/spikes/store/swap_probe.py --only rollback`.
+  held the old graph (no rollback). With `prev` present, `RENAME live prev` overwrites it silently. A swap script that
+  guards only `build` (`EVAL "if EXISTS KEYS[2]==0 return 'refused: build absent'; RENAME KEYS[1] KEYS[3]; RENAME KEYS[2]
+  KEYS[1]" 3 live build prev`) refuses a missing `build` but **also overwrites an existing `prev`** (`prev` = old,
+  `older` lost) and, with `live` absent (first build), raises `no such key` with nothing moved. The script that is
+  safe in all four states checks `EXISTS` on all three keys before its first `RENAME` (`refused: build absent` /
+  `refused: live absent` / `refused: prev present`, markers unchanged; `swap_probe.SWAP_SCRIPT`); a first build uses a
+  plain `RENAME build live`. `EVAL` over graph keys works as admin (the ACL matrix is S22's). With a ~12 s
+  `GRAPH.RO_QUERY` in flight on `live`, `MULTI/EXEC`, a plain `RENAME` and the `EVAL` all returned in 0.39-0.46 ms, the
+  reader finished on the old snapshot (both marker reads `old`, 49,000,000 rows), and a `PING` loop on a second warm
+  connection peaked at 4.1-6.7 ms (re-confirms the 2026-10-29 entry above). Verify: `ccg_p0spike__swap_*` probe
+  `cpg/spikes/store/swap_probe.py --only rollback`.
 - **`GRAPH.CONFIG SET MAX_INFO_QUERIES n` caps -- and with 0 disables -- the `telemetry{<graph>}` stream; `CMD_INFO`
   cannot be changed at runtime** (verified 2026-11-02, module `41811`, scratch graphs `ccg_p0spike__swap_*`).
   Defaults `MAX_INFO_QUERIES 1000`, `CMD_INFO 1`. After 60 queries: `MAX_INFO_QUERIES 10` -> `XLEN` 10; `1` -> 1; `0`
@@ -1253,7 +1261,7 @@ to the general fact here.
   load-time module argument (not tested: it needs a restart). The setting is instance-wide and not persisted by
   the command; restoring was verified (`GRAPH.CONFIG GET` -> 1000). `GRAPH.SLOWLOG` still answered (an empty list). An
   admin `XTRIM telemetry{g} MAXLEN 10` holds for the moment (`XLEN` 10) and the stream regrows with later
-  queries (40 after 30 more); `DEL telemetry{g}` is recreated by the next query (0.56 s). The stream appears
+  queries (40 after 30 more); `DEL telemetry{g}` is recreated by the next query (2.06 s in the recorded run). The stream appears
   about 1 s after a graph's first query, a parameter value was visible in it after about 3 s, `TTL` -1.
 - **`telemetry{<graph>}` is removed synchronously by `GRAPH.DELETE`; the earlier "asynchronous removal" sighting did
   not reproduce** (verified 2026-11-02, module `41811`, `ASYNC_DELETE 1`, 32 trials in four shapes: settled

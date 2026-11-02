@@ -1,0 +1,66 @@
+{
+ "anchors": 10,
+ "allSame": true,
+ "rows": [
+  {
+   "anchor": "S0689.14",
+   "class": "hub",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0504.02",
+   "class": "hub",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0959.03",
+   "class": "hub",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0048.27",
+   "class": "mid",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0220.09",
+   "class": "mid",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0368.29",
+   "class": "mid",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0709.34",
+   "class": "mid",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0025.07",
+   "class": "low",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0298.03",
+   "class": "low",
+   "bfsSame": true,
+   "sspathsSame": true
+  },
+  {
+   "anchor": "S0467.07",
+   "class": "low",
+   "bfsSame": true,
+   "sspathsSame": true
+  }
+ ]
+}

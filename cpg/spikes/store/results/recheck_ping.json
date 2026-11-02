@@ -1,0 +1,41 @@
+{
+ "rows": [
+  {
+   "delayAfterGoS": 0.3,
+   "pingMs": 6.5,
+   "reply": "PONG",
+   "readSeconds": 4.09
+  },
+  {
+   "delayAfterGoS": 0.1,
+   "pingMs": 5.2,
+   "reply": "PONG",
+   "readSeconds": 3.98
+  },
+  {
+   "delayAfterGoS": 0.05,
+   "pingMs": 6.3,
+   "reply": "PONG",
+   "readSeconds": 4.19
+  },
+  {
+   "delayAfterGoS": 0.02,
+   "pingMs": 5.5,
+   "reply": "PONG",
+   "readSeconds": 4.13
+  },
+  {
+   "delayAfterGoS": 0.005,
+   "pingMs": 4.7,
+   "reply": "PONG",
+   "readSeconds": 4.07
+  },
+  {
+   "delayAfterGoS": 0.0,
+   "pingMs": 4.6,
+   "reply": "PONG",
+   "readSeconds": 4.06
+  }
+ ],
+ "maxPingMs": 6.5
+}

@@ -1,0 +1,156 @@
+{
+ "batches": 160,
+ "constraints": [
+  [
+   "Dependency",
+   "OPERATIONAL"
+  ],
+  [
+   "Link",
+   "OPERATIONAL"
+  ],
+  [
+   "ContractPoint",
+   "OPERATIONAL"
+  ],
+  [
+   "Name",
+   "OPERATIONAL"
+  ],
+  [
+   "Cond",
+   "OPERATIONAL"
+  ],
+  [
+   "Ret",
+   "OPERATIONAL"
+  ],
+  [
+   "Param",
+   "OPERATIONAL"
+  ],
+  [
+   "CallSite",
+   "OPERATIONAL"
+  ],
+  [
+   "Symbol",
+   "OPERATIONAL"
+  ],
+  [
+   "File",
+   "OPERATIONAL"
+  ],
+  [
+   "Unit",
+   "OPERATIONAL"
+  ]
+ ],
+ "edgeTotal": 2399308,
+ "edges": {
+  "CallSite-CALLS-Symbol": 157093,
+  "CallSite-CALLS_NAME-Name": 261385,
+  "CallSite-CONTROLLED_BY-Cond": 51770,
+  "CallSite-DATA-CallSite": 848682,
+  "CallSite-DATA-Param": 349307,
+  "Cond-CONTROLLED_BY-Cond": 10609,
+  "Cond-DATA-CallSite": 123798,
+  "Cond-DATA-Param": 9903,
+  "File-DEFINES-Symbol": 34826,
+  "Name-RESOLVES_TO-Symbol": 34798,
+  "Param-CONTROLLED_BY-Cond": 20789,
+  "Ret-CONTROLLED_BY-Cond": 13029,
+  "Ret-DATA-CallSite": 78194,
+  "Symbol-HAS_CALL-CallSite": 261385,
+  "Symbol-HAS_COND-Cond": 52158,
+  "Symbol-HAS_PARAM-Param": 69566,
+  "Symbol-HAS_RETURN-Ret": 21011,
+  "Unit-HAS_FILE-File": 1000,
+  "Unit-IN_REPO-Repo": 5
+ },
+ "maxBatch": 20000,
+ "memory": {
+  "amortized_edge_attributes_by_type_sz_mb": [
+   "IN_REPO",
+   0,
+   "HAS_FILE",
+   0,
+   "DEFINES",
+   0,
+   "HAS_CALL",
+   3,
+   "HAS_PARAM",
+   0,
+   "HAS_RETURN",
+   0,
+   "HAS_COND",
+   0,
+   "CALLS",
+   3,
+   "CALLS_NAME",
+   0,
+   "RESOLVES_TO",
+   0,
+   "DATA",
+   53,
+   "CONTROLLED_BY",
+   0
+  ],
+  "amortized_edge_block_sz_mb": 20,
+  "amortized_node_attributes_by_label_sz_mb": [
+   "Repo",
+   0,
+   "Unit",
+   0,
+   "File",
+   0,
+   "SkippedFile",
+   0,
+   "Symbol",
+   9,
+   "CallSite",
+   33,
+   "Param",
+   4,
+   "Ret",
+   0,
+   "Cond",
+   3,
+   "Name",
+   0,
+   "ContractPoint",
+   0,
+   "Link",
+   0,
+   "Dependency",
+   0
+  ],
+  "amortized_node_block_sz_mb": 3,
+  "amortized_unlabeled_nodes_attributes_sz_mb": 0,
+  "indices_sz_mb": 63,
+  "label_matrices_sz_mb": 10,
+  "relation_matrices_sz_mb": 116,
+  "total_graph_sz_mb": 330
+ },
+ "nodeTotal": 453905,
+ "nodes": {
+  "CallSite": 261385,
+  "Cond": 52158,
+  "File": 1000,
+  "Name": 13953,
+  "Param": 69566,
+  "Repo": 1,
+  "Ret": 21011,
+  "Symbol": 34826,
+  "Unit": 5
+ },
+ "seconds": {
+  "constraints": 0.2989078899991,
+  "edges": 33.1465491439958,
+  "indexes": 0.017772057006368414,
+  "nodes": 3.7022912690008525,
+  "rename": 0.00041233699448639527
+ },
+ "timeoutMax": 0,
+ "usedMemoryDeltaBytes": 423508696
+}
