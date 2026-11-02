@@ -1,0 +1,13 @@
+# Captured 2026-11-01 on WSL2 (Python 3.12.3, redis-py, httpx, OpenJDK 21): one failure provoked per line, last stderr line, verbatim.
+# id<TAB>line. Used as sampleSource: captured in docs/plans/connected-code-graph-rule-pack-spec.md section 8.
+python-connection-refused	ConnectionRefusedError: [Errno 111] Connection refused
+python-dns-failure	socket.gaierror: [Errno -2] Name or service not known
+python-timeout	TimeoutError: timed out
+python-oom-kill	MemoryError
+python-tls-error	ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1000)
+python-third-party-redis	redis.exceptions.ConnectionError: Error 111 connecting to localhost:1. Connection refused.
+python-third-party-httpx	httpx.ConnectError: [Errno 111] Connection refused
+jvm-connection-refused	java.net.ConnectException: Connection refused
+jvm-dns-failure	java.net.UnknownHostException: nonexistent.invalid
+jvm-timeout	java.net.SocketTimeoutException: Read timed out
+jvm-oom-kill	java.lang.OutOfMemoryError: Java heap space

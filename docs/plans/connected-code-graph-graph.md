@@ -617,7 +617,7 @@ directions:
 Store `WRITES` as entity → writer and AC-3's contract walk loses the writers. Add a mirrored
 `WRITTEN_BY` and a plain incoming walk from writer W reaches the entity, then **every other
 writer** W2. That is a false impact (W's value change does not affect W2), and it grows with every
-hot table or topic. Either way a rule about *how you arrived* at the entity is needed. Once that
+hot table or config key. Either way a rule about *how you arrived* at the entity is needed. Once that
 rule exists, mirror edges buy nothing but RAM.
 
 **Fix (graph + engine):**
@@ -630,10 +630,10 @@ rule exists, mirror edges buy nothing but RAM.
    parameterized read per (edge type, direction) the table allows from that state. The state
    machine is part of the algorithm whose name and version the answer publishes in its recipe
    (FR-19, S1).
-4. **Shared state is one pattern** covering data entities, message topics, class fields, env
-   vars and config keys. Writer `−WRITES→` CP `←READS−` reader. A publisher `WRITES` a topic CP and
-   a subscriber `READS` it. Config `WRITES` an `env_var`/`config_key` CP and code `READS` it. B1's
-   fix therefore covers messaging and config-value causes (FR-12) with no extra edge type.
+4. **Shared state is one pattern** covering data entities, class fields, env
+   vars and config keys. Writer `−WRITES→` CP `←READS−` reader. A publisher `PROVIDES` a topic CP and
+   a subscriber `CONSUMES` it (a `Link`, bundle spec §7.2). Config `WRITES` an `env_var`/`config_key` CP and code `READS` it. B1's
+   fix therefore covers config-value causes (FR-12) with no extra edge type; topics use the contract path.
 5. **Request direction on links:** a consumer call site reached in state `arg(i, …)`
    (its request argument changed) continues `VIA →`, `TO →`, then `HAS_PARAM →` to the handler
    parameter the pack maps that argument to (`Link.paramMap`). This is the value path. The contract

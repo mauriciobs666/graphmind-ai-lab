@@ -170,7 +170,7 @@ item in it is now a decision.
 
 | Finding | Resolution | Where |
 |---|---|---|
-| **B1** writer→reader impact and RCA→writer lost | Adopted graph note §6.1–§6.2. Storage stays dependent → dependency; traversal direction is chosen **per (operator, edge type, arrival state)** from its normative table; shared state (data, topics, fields, config values) is one pattern; four fixture assertions | §3.1 rule 8, §3.7, §5.1 |
+| **B1** writer→reader impact and RCA→writer lost | Adopted graph note §6.1–§6.2. Storage stays dependent → dependency; traversal direction is chosen **per (operator, edge type, arrival state)** from its normative table; shared state (data, fields, config values) is one pattern, topics use the contract path (`PROVIDES`/`CONSUMES` with a `Link`); four fixture assertions | §3.1 rule 8, §3.7, §5.1 |
 | **B2** flow schema too weak for AC-1's wrapper | Adopted graph note §6.3: `Param`/`Ret`/`Cond` points and `DATA {fromPath,toPath}` access paths (depth 3); role lifting at build time with `LIFTED_VIA` evidence; a **per-method projection** of Joern's DDG/CDG instead of whole-program `reachableBy`; **P0 vertical slice** before the bundle schema freezes | §3.3, §4 P0(b) |
 | **B3** AC-1/AC-2 grounding wrong; binding shapes missing | §1 re-grounded against `storefront_api.py:937`, `app.py:521-524`, the URL-binding consumers and the launch-script ports; **router-mount prefix composition** and **URL (host, port, path) → launch entry → unit** bindings added to the pack design, to the P0 paper test and to P1's packs | §1, §3.4, §4 |
 | **B4** egress outside the broker | The broker now covers **every** outbound connection, build time included. Local-only builds run in a no-network sandbox with each frontend's fetch flags off (Kotlin's `--jar4import-url` forbidden outright); the permitted fetches and hosted-default downloads are decided (V3-Q4/Q5 → FR-9); P0(a) measures fitness with fetching off; AC-8 runs a full refresh | §3.12, §4 P0(a), §5.3 |
@@ -545,9 +545,9 @@ steps.
 library unit `PROVIDES library_api` keyed by qualified name + signature hash. Consumers `CONSUMES`
 it through their manifest and imports. Version skew is a note on the link.
 
-**Shared state: one pattern (B1).** Data entities, message topics, class fields, env vars and
-config keys are all contract points: writers `WRITES` them, readers `READS` them.
-- Publishers write a topic and subscribers read it.
+**Shared state: one pattern (B1).** Data entities, class fields, env vars and config keys are all
+contract points: writers `WRITES` them, readers `READS` them.
+- Message topics are not shared state: publishers `PROVIDES` a topic and subscribers `CONSUMES` it, with a `Link` (bundle spec §7.2).
 - Config entries write a `config_key`/`env_var` and code reads it. That is how a config value
   becomes an RCA cause (FR-12) and an impact source.
 - Schema sources (DDL, migrations) attach by `DEFINED_BY`.
@@ -1257,7 +1257,7 @@ Digest:
   embedded SQL/Cypher parsing and router-mount composition make shipped and in-house conventions
   the same kind of thing.
 - **One generic linker** joins providers and consumers by key and by URL/env/launch bindings. It
-  treats data, topics, fields and config values as shared state, and materializes security
+  treats data, fields and config values as shared state, links topics as `PROVIDES`/`CONSUMES`, and materializes security
   findings and review deltas.
 - **One FalkorDB snapshot graph per system**, on a dedicated instance: ~3–4 GB at 10k files,
   ~18 GB peak with two previews. It stores direct facts with hashed ids, edges one way, and is
