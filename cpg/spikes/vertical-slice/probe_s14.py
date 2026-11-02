@@ -233,7 +233,7 @@ def links_section(facts: dict) -> dict:
 
 
 class Gate:
-    """V2 what-if: a ``HAS_*`` <- step from a non-``Ret`` point reports the function but ends there."""
+    """V2 what-if: a ``HAS_*`` <- step from a non-``Ret`` point reports the function but ends there (the state is `function` since S17-L2, `value` before)."""
 
     def __enter__(self):
         self.orig = I._expand
@@ -241,7 +241,7 @@ class Gate:
         def gated(reader, frontier):
             out = []
             for frm, node, st, edge, dp, dd in self.orig(reader, frontier):
-                if edge.type in I.OWNER_REL.values() and edge.direction == "<-" and frm[0] != "Ret" and st == I.VALUE:
+                if edge.type in I.OWNER_REL.values() and edge.direction == "<-" and frm[0] != "Ret" and st in (I.VALUE, I.FUNCTION):
                     st = I.END
                 out.append((frm, node, st, edge, dp, dd))
             return out

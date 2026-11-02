@@ -326,3 +326,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-01: S17-L2 gate Pass 12: approve with suggestions (M1 probe_s14 V2 Gate no-op, m1 <=/< pin, m2 reason stamp pin). Fix sent to a2a5de9ff4440b682; commit after. Plan wording owed (graph note 3.3/5: 20 of 21 buildUrl items, function state, lexicographic cost, Item.via_data/reason) - assign to graph-dba with S20.
 - 2026-11-01: S20+S21 dispatched to graph-dba (id in next line); keys ccg_p0spike/ccg_p0spike__* authorised for spikes; also carries Dependency-index ruling (L1 Pass 11 m3).
   S20+S21 graph-dba agent id acc60bd9bf633bd99 (in-flight).
+- 2026-11-01: S17-L2 accepted (Pass 12 fixes verified: spikes suite 296 passed by me; 3 pin mutants killed per implementer). V2 gate now live; 6.8 numbers re-recorded in implementer report (V0 98/84/84/82/81/83 states, V2 19/5/5/3/2/4) - to fold into graph note 3.3/6.8 by graph-dba. Committed.

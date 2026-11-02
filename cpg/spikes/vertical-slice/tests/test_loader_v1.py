@@ -396,3 +396,35 @@ def test_candidate_count_cypher_agrees_with_the_row_helper(live_store):
         assert b.run(R.CANDIDATE_COUNT_CYPHER, {"site": i["s1"], "link": i["L1"], "key": "GET /x"}) == [[2]]
         assert b.run(R.CANDIDATE_COUNT_CYPHER, {"site": i["s2"], "link": i["L1"], "key": "GET /y"}) == [[2]]
         assert b.run(R.CANDIDATE_COUNT_CYPHER, {"site": i["s3"], "link": i["L1"], "key": "GET /x"}) == [[1]]
+
+
+@pytest.mark.live
+def test_lookup_order_is_mapped_then_skipped_then_not_found_a_path_in_both_sets_of_one_repo_is_mapped(live_store):
+    both, only_skipped = "svc/both.py", "svc/only_skipped.py"
+    bundles = [_unit_bundle(1, "repoA", mapped=[both], skipped=[both, only_skipped], symbols=[("f", 1, 5)])]
+    with Build(live_store, "order", L.build_rows(bundles, mini_facts())) as b:
+        assert b.run("MATCH (f:File {path: $p, repoId: 'repoA'}) RETURN count(f)", {"p": both}) == [[1]]
+        assert b.run("MATCH (s:SkippedFile {path: $p, repoId: 'repoA'}) RETURN count(s)", {"p": both}) == [[1]]  # in both
+        assert K.lookup_path(b.run, "repoA", both) == {"state": "mapped", "unitId": h(101)}
+        assert K.lookup_path(b.run, "repoA", only_skipped) == {"state": "not mapped", "unitId": h(101), "reason": "test"}
+        assert K.lookup_path(b.run, "repoA", "svc/nowhere.py") == {"state": "not found"}
+
+
+@pytest.mark.live
+def test_candidate_count_counts_a_link_once_when_two_sites_of_one_symbol_reach_it_under_the_same_key(live_store):
+    """D6's ``count(DISTINCT l)``: s1 and s4 (both symA) reach L1 under 'GET /x'; s1 also reaches L2."""
+    rows = L.GraphRows()
+    rows.snapshot = {"snapshotId": "d6dup"}
+    i = {k: h(700 + n) for n, k in enumerate(["symA", "s1", "s4", "L1", "L2"])}
+    rows.nodes["Symbol"] = [{"symbolId": i["symA"]}]
+    rows.nodes["CallSite"] = [{"callSiteId": i["s1"]}, {"callSiteId": i["s4"]}]
+    rows.nodes["Link"] = [{"linkId": i["L1"]}, {"linkId": i["L2"]}]
+    rows.edges[("Symbol", "HAS_CALL", "CallSite")] = [{"s": i["symA"], "t": i["s1"]}, {"s": i["symA"], "t": i["s4"]}]
+    via = [("s1", "L1"), ("s1", "L2"), ("s4", "L1")]
+    rows.edges[("CallSite", "VIA", "Link")] = [{"s": i[s], "t": i[l], "p": {"status": "confirmed", "reason": "key-match", "consumerKey": "GET /x"}}
+                                               for s, l in via]
+    flat = [(i["symA"], i[s], i[l], "GET /x") for s, l in via]
+    with Build(live_store, "d6dup", rows) as b:
+        for s, l, n in (("s1", "L1", 2), ("s1", "L2", 2), ("s4", "L1", 2)):
+            got = b.run(R.CANDIDATE_COUNT_CYPHER, {"site": i[s], "link": i[l], "key": "GET /x"})
+            assert got == [[n]] == [[R.candidate_count(flat, i[s], i[l], "GET /x")]], (s, l)

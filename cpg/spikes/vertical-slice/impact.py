@@ -16,6 +16,12 @@ Only the rows of §6.2 the slice needs are implemented, and nothing else is foll
 ``PROVIDES <-`` (contract)      the contract point -> its providers (the start of a contract walk)
 ==============================  =====================================================================
 
+Function-level continuation (``docs/plans/connected-code-graph-p0-graph.md`` 3.3, finding M2): ``bfs-v1`` has
+no ``arg(i)``/``Ret``-summary rows, so a function entered from a call site, parameter or condition
+(``HAS_CALL|PARAM|COND <-``, state ``function``) is only *assumed* to pass the change on. Its ``CALLS <-`` and
+``TO <-`` hops are ``possible`` with reason ``function-level-continuation``. A function entered from a ``Ret``
+(``HAS_RETURN <-``, state ``value``) and a ``CALLS <-``/``TO <-`` from the anchor itself stay ``confirmed``.
+
 Not followed: ``CALLS_NAME``/``RESOLVES_TO`` (the name hop), ``CONTROLLED_BY``, ``READS``/``WRITES``,
 ``BOUND_BY``, ``CALLS ->`` into a callee, ``HAS_PARAM ->``, the request-direction ``VIA ->``.
 
@@ -52,6 +58,8 @@ VALUE = ("value", "")
 CONTRACT = ("contract", "")
 KEY = ("key", "")
 END = ("end", "")
+FUNCTION = ("function", "")  # a function entered from a non-Ret point: it continues only at function level
+FUNCTION_LEVEL = "function-level-continuation"
 
 
 class ImpactError(RuntimeError):
@@ -162,9 +170,13 @@ class Edge:
     type: str
     direction: str  # "<-" against the stored direction, "->" along it
     status: str
+    reason: str | None = None
 
     def as_dict(self) -> dict:
-        return {"type": self.type, "dir": self.direction, "status": self.status}
+        out = {"type": self.type, "dir": self.direction, "status": self.status}
+        if self.reason:
+            out["reason"] = self.reason
+        return out
 
 
 @dataclass
@@ -186,6 +198,16 @@ class Item:
     @property
     def hops(self) -> int:
         return len(self.chain) - 1
+
+    @property
+    def via_data(self) -> bool:
+        """Whether the best path holds a ``DATA`` hop (never read as "path-matched" for a function-level item)."""
+        return any(s["edge"] and s["edge"]["type"] == "DATA" for s in self.chain)
+
+    @property
+    def reason(self) -> str | None:
+        """``function-level-continuation`` when a hop of the best path rests on it, else ``None``."""
+        return next((s["edge"]["reason"] for s in self.chain if s["edge"] and s["edge"].get("reason")), None)
 
 
 @dataclass
@@ -242,16 +264,18 @@ class Result:
 
         An impacted symbol is one entered from one of its points (``HAS_* <-``): a function whose body
         holds a reached point. The anchor and a provider reached by ``PROVIDES <-`` (the contract's own
-        side) are not items.
+        side) are not items; nor is the anchor, however a cycle re-enters it. A symbol entered in two states
+        (`value` and `function`) is one item, on its cheaper arrival.
         """
-        out = []
+        picked: dict[str, tuple[Cost, Key]] = {}
         for k in sorted(self.best):
             e = self.best[k]
-            if k[0] != "Symbol" or e.edge is None or e.edge.type not in OWNER_REL.values():
+            if k[0] != "Symbol" or e.edge is None or e.edge.type not in OWNER_REL.values() or k[:2] == self.anchor[:2]:
                 continue
-            poss, dist, length = e.cost  # one state per impacted symbol: the HAS_* step fixes it (value, or end)
-            out.append(Item(k[1], dist, poss, "possible" if poss else "confirmed", length, self.chain(k)))
-        return out
+            if k[1] not in picked or e.cost < picked[k[1]][0]:
+                picked[k[1]] = (e.cost, k)
+        return [Item(k[1], c[1], c[0], "possible" if c[0] else "confirmed", c[2], self.chain(k))
+                for c, k in (picked[i] for i in sorted(picked))]
 
 
 def _stable(key: Key | None) -> str:
@@ -260,6 +284,11 @@ def _stable(key: Key | None) -> str:
 
 def _status_hops(status: str) -> int:
     return 0 if status == "confirmed" else 1
+
+
+def _edge(type_: str, direction: str, status: str, from_kind: str) -> Edge:
+    """An edge whose possible status comes from leaving a function-level state carries the reason."""
+    return Edge(type_, direction, status, FUNCTION_LEVEL if from_kind == "function" else None)
 
 
 def _expand(reader: Reader, frontier: list[Key]) -> list[tuple[Key, Node, State, Edge, int, int]]:
@@ -284,19 +313,22 @@ def _expand(reader: Reader, frontier: list[Key]) -> list[tuple[Key, Node, State,
                 out.append((k, node, state, edge, dposs, ddist))
 
         if label == "Symbol":
-            if kind == "value":
+            if kind in ("value", "function"):
                 for sid, cs, status in reader.calls_in(ids):  # CALLS <-
-                    emit(sid, ("CallSite", cs), ("path", "r"), Edge("CALLS", "<-", status), _status_hops(status), 1)
-            if kind in ("value", "contract"):
-                mode = VALUE if kind == "value" else CONTRACT
+                    if kind == "function":
+                        status = "possible"
+                    emit(sid, ("CallSite", cs), ("path", "r"), _edge("CALLS", "<-", status, kind), _status_hops(status), 1)
+            if kind in ("value", "function", "contract"):
+                mode = CONTRACT if kind == "contract" else VALUE
                 for sid, link, status in reader.to_in(ids):  # TO <-
-                    emit(sid, ("Link", link), mode, Edge("TO", "<-", "confirmed"), 0, 0)
+                    status = "possible" if kind == "function" else "confirmed"
+                    emit(sid, ("Link", link), mode, _edge("TO", "<-", status, kind), _status_hops(status), 0)
             if kind == "key":
                 for sid, cp in reader.provides_out(ids):  # PROVIDES ->
                     emit(sid, ("ContractPoint", cp), CONTRACT, Edge("PROVIDES", "->", "confirmed"), 0, 0)
         elif label in POINTS:
             for pid, sid in reader.owner_of(label, ids):  # HAS_* <-
-                to_state = END if kind == "contract" else VALUE
+                to_state = END if kind == "contract" else VALUE if label == "Ret" else FUNCTION
                 emit(pid, ("Symbol", sid), to_state, Edge(OWNER_REL[label], "<-", "confirmed"), 0, 0)
             if kind in ("value", "path") and label in DEF_LABELS:
                 for did, ulabel, uid, from_path, to_path, status in reader.data_in(label, ids):  # DATA <-

@@ -578,10 +578,11 @@ def test_call_chain_distances_hops_and_chain_nodes_are_exact():
 
 def test_the_visited_set_stops_a_cycle_and_counts_states():
     res = I.walk(chain_graph(), ("Symbol", "A"))
-    assert res.levels == 6  # level 6 offers only the anchor's own state again, which is not an improvement
-    assert res.frontier_sizes == [1, 1, 1, 1, 1, 1]
+    # the anchor re-entered by the cycle is a new (function-level) state, whose own call site is no improvement
+    assert res.levels == 7
+    assert res.frontier_sizes == [1, 1, 1, 1, 1, 1, 1]
     assert res.peak_frontier == 1
-    assert res.state_count == 6 and res.states_by_kind() == {"path": 3, "value": 3}
+    assert res.state_count == 7 and res.states_by_kind() == {"function": 3, "path": 3, "value": 1}
     assert res.field_path_states == 0
 
 
@@ -657,10 +658,12 @@ def test_path_state_after_a_data_hop_is_the_uses_to_path():
 
 
 def test_possible_hops_rank_before_distance_and_a_better_path_wins():
-    # D is reached by a possible direct call (poss 1, dist 1) and by a confirmed two-call route (poss 0, dist 2)
+    # D is reached by a possible direct call (poss 1, dist 1) and by a confirmed two-call route (poss 0, dist 2):
+    # B's `Ret` carries the call's result, so the continuation out of B is not function-level
     g = MemoryReader(
         calls=[("A", "cD", "possible"), ("A", "cB", "confirmed"), ("B", "cD2", "confirmed")],
-        owners=[("CallSite", "cD", "D"), ("CallSite", "cB", "B"), ("CallSite", "cD2", "D")],
+        owners=[("CallSite", "cD", "D"), ("CallSite", "cB", "B"), ("CallSite", "cD2", "D"), ("Ret", "rB", "B")],
+        data=[("Ret", "rB", "CallSite", "cB", "r", "ret", "confirmed")],
     )
     d = _sym(I.walk(g, ("Symbol", "A")).items())["D"]
     assert (d.status, d.possible_hops, d.distance) == ("confirmed", 0, 2)
@@ -1141,7 +1144,16 @@ def test_sl4_value_mode_from_buildurl_lists_apifetch_and_its_endpoints_callers_t
     items = _sym(res.items())
     want = _closure(real, bu)
     assert {k: v.distance for k, v in items.items()} == want  # item set and distances, field by field
-    assert all(i.status == "confirmed" and i.possible_hops == 0 and i.hops == 2 * i.distance for i in items.values())
+    # M2 / section 3.3: the direct callers of the anchor stay confirmed; every item further out rests on a
+    # function-level continuation (no `arg(i)`/`Ret` rows yet): `possible`, with the reason, never `confirmed`
+    direct = {k for k, i in items.items() if i.distance == 1}
+    assert direct == {api}
+    assert items[api].status == "confirmed" and items[api].possible_hops == 0 and items[api].reason is None
+    far = [i for i in items.values() if i.distance > 1]
+    assert len(far) == len(items) - 1 == 20
+    assert all(i.status == "possible" and i.possible_hops >= 1 and i.reason == "function-level-continuation" for i in far)
+    assert all(i.hops == 2 * i.distance for i in far if not i.via_data)  # a DATA detour only ever lengthens the chain
+    assert any(i.via_data for i in far) and not items[api].via_data
     assert items[api].distance == 1
     callers_of_api = {sym for b in real["ordered"] for r in b if r["type"] == "callsite" and r["symbolId"] != api
                       for sym in [r["symbolId"]] if any(t["symbolId"] == api for t in r["targets"])}
