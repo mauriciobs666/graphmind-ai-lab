@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# ccg-truth-smoke — S24 smoke test of every ground-truth tool in the `ccg-toolchain-truth`
+# image (docs/plans/connected-code-graph-p0-ml.md §5.2, §11 N0).
+#
+#   ccg-truth-smoke              # every language
+#   ccg-truth-smoke java go      # just these
+#   ccg-truth-smoke --list
+#
+# For each language it copies smoke/<lang>/ (a few files: one interface or base class, one
+# override, one call through it) to a fresh scratch dir under $TMPDIR (never /home/ccg or
+# /work), indexes it with the language's primary tool, and reads the result back:
+#   SCIP tools: `scip print --json`; the index must contain the smoke documents, an
+#               `is_implementation` relationship from the override to the interface method,
+#               and a call-site REFERENCE to the interface method (not just its definition).
+#   Go:         `callgraph -algo=vta` output; must hold the edge smoke.total -> (smoke.Circle).Area
+#               (the interface call resolved to its implementation, with a file:line:col).
+# `go-scip-go` exercises the Go FALLBACK (scip-go, static targets only); it is a fallback
+# check and is reported, not a substitute for the callgraph line.
+#
+# Needs no network (run it under `docker run --network none`). Exit status = number of
+# languages that FAILED. Output: one `smoke <lang>: PASS|FAIL …` line each.
+set -uo pipefail
+
+SMOKE="${CCG_TRUTH_SMOKE_DIR:-/opt/truth/smoke}"
+LANGS_ALL=(python typescript java kotlin csharp go cpp go-scip-go)
+
+if [ "${1:-}" = "--list" ]; then printf '%s\n' "${LANGS_ALL[@]}"; exit 0; fi
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0; fi
+LANGS=("$@"); [ "${#LANGS[@]}" -gt 0 ] || LANGS=("${LANGS_ALL[@]}")
+
+ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ccg-truth-smoke.XXXXXX")"
+trap 'rm -rf "$ROOT"' EXIT
+export HOME="$ROOT/home" DOTNET_CLI_HOME="$ROOT/home" GOCACHE="$ROOT/gocache" GOPATH="$ROOT/gopath" \
+       GOFLAGS=-mod=mod npm_config_cache="$ROOT/npm"
+mkdir -p "$HOME"
+
+# check_scip <index> <iface-method-suffix> <impl-method-suffix> <doc-suffix>...
+# Prints "<tool> <version>; <docs> documents; <occs> occurrences" on success.
+check_scip() {
+  scip print --json "$1" | python3 -c '
+import json, re, sys
+iface, impl, docs = sys.argv[1], sys.argv[2], sys.argv[3:]
+norm = lambda sym: re.sub(r"\([0-9a-f]{16}\)", "()", sym)   # scip-clang adds a signature hash
+d = json.load(sys.stdin)
+ti = d["metadata"]["tool_info"]
+documents = d.get("documents", [])
+paths = [x["relative_path"] for x in documents]
+for want in docs:
+    if not any(p.endswith(want) for p in paths):
+        sys.exit("missing document *%s (indexed: %s)" % (want, paths))
+# an implementation relationship: impl method -> interface method
+rel = False
+for doc in documents:
+    for s in doc.get("symbols", []):
+        if norm(s["symbol"]).endswith(impl):
+            for r in s.get("relationships", []):
+                if r.get("is_implementation") and norm(r["symbol"]).endswith(iface):
+                    rel = True
+if not rel:
+    sys.exit("no is_implementation relationship %s -> %s" % (impl, iface))
+# a call-site reference (role bit 1 = Definition is NOT set) to the interface method
+refs = [o for doc in documents for o in doc["occurrences"]
+        if norm(o["symbol"]).endswith(iface) and not (o.get("symbol_roles", 0) & 1)]
+if not refs:
+    sys.exit("no reference occurrence of %s (only its definition)" % iface)
+print("%s %s; %d documents; %d occurrences; implementation relationship yes; %d call-site reference(s)"
+      % (ti["name"], ti.get("version", "?"), len(documents), sum(len(x["occurrences"]) for x in documents), len(refs)))
+' "$2" "$3" "${@:4}"
+}
+
+run_lang() {
+  local lang="$1" w="$ROOT/$1" log="$ROOT/$1.log"
+  mkdir -p "$w"
+  case "$lang" in
+    python)
+      cp -r "$SMOKE/python/." "$w/" && cd "$w" \
+        && scip-python index . --project-name smoke --project-version 1 --output "$w/index.scip" >"$log" 2>&1 \
+        && check_scip "$w/index.scip" 'shapes/Shape#area().' 'shapes/Circle#area().' shapes.py ;;
+    typescript)
+      cp -r "$SMOKE/typescript/." "$w/" && cd "$w" \
+        && scip-typescript index --output "$w/index.scip" >"$log" 2>&1 \
+        && check_scip "$w/index.scip" '/Shape#area().' '/Circle#area().' shapes.ts ;;
+    java)
+      cp -r "$SMOKE/java/." "$w/" && cd "$w" \
+        && javac -cp "$SCIP_JAVAC_JAR" -d "$w/out" "-Xplugin:scip -sourceroot:$w -targetroot:$w/targetroot" ./*.java >"$log" 2>&1 \
+        && scip-java aggregate --targetroot="$w/targetroot" --output="$w/index.scip" >>"$log" 2>&1 \
+        && check_scip "$w/index.scip" 'Shape#area().' 'Circle#area().' Shape.java Circle.java Main.java ;;
+    kotlin)
+      cp -r "$SMOKE/kotlin/." "$w/" && cd "$w" \
+        && SCIP_SOURCEROOT="$w" SCIP_TARGETROOT="$w/targetroot" kotlinc-scip -d "$w/out" shapes.kt >"$log" 2>&1 \
+        && scip-java aggregate --targetroot="$w/targetroot" --output="$w/index.scip" >>"$log" 2>&1 \
+        && check_scip "$w/index.scip" 'Shape#area().' 'Circle#area().' shapes.kt ;;
+    csharp)
+      cp -r "$SMOKE/csharp/." "$w/" && cd "$w" \
+        && scip-dotnet index Smoke.csproj --output "$w/index.scip" >"$log" 2>&1 \
+        && check_scip "$w/index.scip" 'IShape#Area().' 'Circle#Area().' Shapes.cs ;;
+    cpp)
+      cp -r "$SMOKE/cpp/." "$w/" && cd "$w" \
+        && cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >"$log" 2>&1 \
+        && scip-clang --compdb-path build/compile_commands.json --jobs 2 --index-output-path "$w/index.scip" >>"$log" 2>&1 \
+        && { grep -q 'num errored TUs: 0)' "$log" || { echo "scip-clang reported errored translation units (header resolution?)" >&2; false; }; } \
+        && check_scip "$w/index.scip" 'Shape#area().' 'Circle#area().' shape.h shape.cpp main.cpp \
+        && { scip print --json "$w/index.scip" | grep -q '_mm_add_ps' && scip print --json "$w/index.scip" | grep -q 'std/atomic#' \
+             || { echo "scip-clang index lacks the system-header symbols (_mm_add_ps / std::atomic): headers not resolved" >&2; false; }; } ;;
+    go)
+      cp -r "$SMOKE/go/." "$w/" && cd "$w" \
+        && callgraph -algo=vta -format='{{.Caller}} -> {{.Callee}} @ {{.Filename}}:{{.Line}}:{{.Column}}' . >"$w/callgraph.txt" 2>"$log" \
+        && line="$(grep -E '^smoke\.total -> \(smoke\.Circle\)\.Area @ .*main\.go:[0-9]+:[0-9]+$' "$w/callgraph.txt" | head -1)" \
+        && [ -n "$line" ] \
+        && echo "callgraph -algo=vta: $line ($(wc -l <"$w/callgraph.txt") edges in all)" ;;
+    go-scip-go)
+      cp -r "$SMOKE/go/." "$w/" && cd "$w" \
+        && scip-go --output "$w/index.scip" >"$log" 2>&1 \
+        && scip print --json "$w/index.scip" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+docs = d.get("documents", [])
+refs = [o for x in docs for o in x["occurrences"] if o["symbol"].endswith("Shape#Area.") and not (o.get("symbol_roles", 0) & 1)]
+rel = [r for x in docs for sy in x.get("symbols", []) if sy["symbol"].endswith("Circle#Area().")
+       for r in sy.get("relationships", []) if r.get("is_implementation") and r["symbol"].endswith("Shape#Area.")]
+if not docs or not refs or not rel:
+    sys.exit("scip-go: %d documents, %d reference(s) to Shape#Area, %d implementation relationship(s)" % (len(docs), len(refs), len(rel)))
+print("%s %s (fallback: static targets + implementation relationships); %d documents; %d call-site reference(s) to the interface method"
+      % (d["metadata"]["tool_info"]["name"], d["metadata"]["tool_info"].get("version", "?"), len(docs), len(refs)))' ;;
+    *) echo "unknown language '$lang' (see --list)" >&2; return 2 ;;
+  esac
+}
+
+fails=0
+for lang in "${LANGS[@]}"; do
+  start=$SECONDS
+  if out="$(run_lang "$lang" 2>"$ROOT/$lang.err")"; then
+    printf 'smoke %s: PASS (%s) [%ss]\n' "$lang" "$out" "$((SECONDS - start))"
+  else
+    fails=$((fails + 1))
+    printf 'smoke %s: FAIL [%ss] %s\n' "$lang" "$((SECONDS - start))" "$(cat "$ROOT/$lang.err" 2>/dev/null | head -3)"
+    tail -n 12 "$ROOT/$lang.log" 2>/dev/null | sed 's/^/    | /'
+  fi
+done
+echo "ccg-truth-smoke: $((${#LANGS[@]} - fails))/${#LANGS[@]} passed"
+exit "$fails"

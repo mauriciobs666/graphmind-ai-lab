@@ -2,7 +2,7 @@
 #
 # Joern v4.0.579 plus every frontend's toolchain, for P0's sandboxed `--network none`
 # builds and the frontend-fitness runs (docs/plans/connected-code-graph-p0.md §4.1, §7).
-# Built by ./build.sh, which tags it ccg-toolchain:<sha256(Dockerfile)[:12]>. Results
+# Built by ./build.sh, which tags it ccg-toolchain:<sha256(build context)[:12]>. Results
 # and usage: ./README.md.
 #
 # PINNING. Every input is pinned so the content-hash tag is a real identity:
@@ -18,17 +18,19 @@
 # RUN time: no frontend is wrapped with a fetch flag, ENABLE_DEPENDENCY_RESOLVER_V2 is
 # never set, and GOTOOLCHAIN=local stops `go` from downloading a newer toolchain.
 #
-# The build context is EMPTY on purpose (build.sh pipes this file on stdin): nothing is
-# COPYed from the host, so this file is the only build input and its hash is the tag.
+# The build context is NOT the host tree: build.sh pipes a deterministic tar of exactly
+# this file plus smoke/ and truth-npm/ on stdin, so those three are the only build inputs
+# and the tag is the hash of that tar (build.sh). Only the `truth` target COPYs from it.
 #
-# LAYOUT (S24 extends it without touching the S02 layers):
+# LAYOUT
 #   stage `apt-base`     base + snapshot-only apt sources + apt-snapshot-install
 #   stage `fetch`        S02 downloads (verified, unpacked)
-#   [S24-STAGE]          S24 adds its own download stage(s) here, e.g. `truth-fetch`
-#   stage `toolchain`    S02 runtime: apt, COPY --from=fetch, ENV, ccg-versions
-#   [S24-LAYER]          S24 adds its ground-truth layer here (COPY --from=truth-fetch, RUN,
-#                        plus a /usr/local/lib/ccg-versions.d/<name>.sh drop-in)
-#   tail                 non-root user + workdir — always last, S24 does not edit it
+#   stage `truth-fetch`  S24 downloads: truth tools, checksummed / lockfile-pinned
+#   stage `toolchain`    S02 runtime (the image the sandbox runs): apt, COPY --from=fetch,
+#                        ENV, ccg-versions, non-root user + workdir. NOT touched by S24's
+#                        tools: no Node, no indexers, no clang in it.
+#   stage `truth`        FROM toolchain, last: the truth tools + smoke projects, as root
+#                        and back to ccg. Image ccg-toolchain-truth:<same hash>.
 # Any package/dependency cache a truth tool populates must NOT land under /home/ccg or
 # /work (the paths a sandboxed fetch-off run inherits) — see README "Caches".
 
@@ -134,9 +136,113 @@ RUN fetch-verify "https://builds.dotnet.microsoft.com/dotnet/Sdk/${DOTNET_SDK_VE
  && mkdir -p /opt/dotnet && tar -C /opt/dotnet -xzf dotnet.tgz && rm dotnet.tgz
 
 # =================================================================================
-# [S24-STAGE] — S24 inserts its ground-truth download stage(s) here
-# (e.g. `FROM apt-base AS truth-fetch`), reusing the fetch-verify pattern above.
+# stage truth-fetch (S24; ML note §5.2, §9): the ground-truth tools, downloaded and
+# verified here and copied into the `truth` target only. Built FROM fetch (an apt-base
+# descendant) for fetch-verify, curl and the Go toolchain. Every input is pinned:
+#   - release assets by upstream sha256 (TOFU-pinned for assets upstream publishes no
+#     digest for: scip-clang, the scip-code Maven jars, the scip-dotnet nupkg — where
+#     Maven Central's own .sha1 was cross-checked);
+#   - npm tools by a committed package-lock.json (truth-npm/<tool>/), installed with
+#     `npm ci`, so every transitive package is pinned by its sha512 integrity;
+#   - Go modules by the module proxy + sumdb (go.sum is verified against sum.golang.org).
+# Everything lands under /opt/truth; no cache is copied forward.
 # =================================================================================
+FROM fetch AS truth-fetch
+RUN apt-snapshot-install xz-utils
+WORKDIR /dl
+
+# Node.js 24 LTS ("Krypton", maintenance LTS line: the oldest LTS the npm indexers' engines
+# cover; v26 became LTS only on 2026-10-28) — nodejs.org SHASUMS256.txt.
+ARG NODE_VERSION=24.22.2
+ARG NODE_SHA256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
+RUN fetch-verify "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" node.txz sha256 "${NODE_SHA256}" \
+ && mkdir -p /opt/truth/node && tar -C /opt/truth/node --strip-components=1 -xJf node.txz && rm node.txz
+
+# scip-python 0.6.8 and scip-typescript 0.6.0: the committed lockfiles (truth-npm/) fix
+# every transitive package. `--ignore-scripts`: no package may run code at install time.
+ARG SCIP_PYTHON_VERSION=0.6.8
+ARG SCIP_TYPESCRIPT_VERSION=0.6.0
+COPY truth-npm /dl/truth-npm
+RUN export PATH=/opt/truth/node/bin:$PATH \
+ && for t in scip-python scip-typescript; do \
+      mkdir -p /opt/truth/npm/$t && cp /dl/truth-npm/$t/package.json /dl/truth-npm/$t/package-lock.json /opt/truth/npm/$t/ \
+      && (cd /opt/truth/npm/$t && npm ci --ignore-scripts --no-audit --no-fund) || exit 1; \
+    done \
+ && /opt/truth/npm/scip-python/node_modules/.bin/scip-python --version | grep -qF "${SCIP_PYTHON_VERSION}" \
+ && /opt/truth/npm/scip-typescript/node_modules/.bin/scip-typescript --version | grep -qF "${SCIP_TYPESCRIPT_VERSION}" \
+ && rm -rf /root/.npm
+
+# scip CLI v0.10.0 — GitHub release asset digest.
+ARG SCIP_VERSION=v0.10.0
+ARG SCIP_SHA256=eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0
+RUN fetch-verify "https://github.com/sourcegraph/scip/releases/download/${SCIP_VERSION}/scip-linux-amd64.tar.gz" scip.tgz sha256 "${SCIP_SHA256}" \
+ && mkdir -p /opt/truth/bin && tar -C /opt/truth/bin -xzf scip.tgz scip && rm scip.tgz
+
+# scip-java v0.13.2 (the org.scip-code rewrite: `index`/`aggregate`/`snapshot`) — the
+# standalone jar from the GitHub release, sha256 published; plus its javac and Kotlin
+# compiler plugins from Maven Central (the `-all` jars are the self-contained ones; the thin
+# scip-javac jar fails with ClassNotFoundException: ScipOptions).
+ARG SCIP_JAVA_VERSION=0.13.2
+ARG SCIP_JAVA_SHA256=5248136592d19ea2c468f64ebd18587d32de7c961536ff19346f8a025af1d13c
+ARG SCIP_JAVAC_SHA256=5bb0d844f4b96becc25f01d64537832dd13c090c1e231472cfd209c70d988ade
+ARG SCIP_KOTLINC_SHA256=464553a424af9145ec5996b8a32b6e2c5f4ee5c307264a7244568e8f48095ce0
+RUN mkdir -p /opt/truth/scip-java \
+ && fetch-verify "https://github.com/sourcegraph/scip-java/releases/download/v${SCIP_JAVA_VERSION}/scip-java-v${SCIP_JAVA_VERSION}" \
+      /opt/truth/scip-java/scip-java.jar sha256 "${SCIP_JAVA_SHA256}" \
+ && fetch-verify "https://repo1.maven.org/maven2/org/scip-code/scip-javac/${SCIP_JAVA_VERSION}/scip-javac-${SCIP_JAVA_VERSION}-all.jar" \
+      /opt/truth/scip-java/scip-javac.jar sha256 "${SCIP_JAVAC_SHA256}" \
+ && fetch-verify "https://repo1.maven.org/maven2/org/scip-code/scip-kotlinc/${SCIP_JAVA_VERSION}/scip-kotlinc-${SCIP_JAVA_VERSION}-all.jar" \
+      /opt/truth/scip-java/scip-kotlinc.jar sha256 "${SCIP_KOTLINC_SHA256}"
+
+# The Kotlin compiler in its EMBEDDABLE packaging (same version as S02's kotlinc, 2.4.21).
+# scip-kotlinc is built against kotlin-compiler-embeddable (relocated org.jetbrains.kotlin.
+# com.intellij.*); the CLI kotlinc's compiler jar is not relocated, so the plugin dies there
+# with NoClassDefFoundError .../FlyweightCapableTreeStructure. Gradle runs the embeddable
+# one, so this is the same pairing `scip-java index` uses; here it is installed offline.
+# Jars from Maven Central, sha256 pinned (cross-checked against Central's .sha1).
+# Must equal S02's kotlinc (build.txt); a bump of one without the other fails the build here.
+ARG KOTLIN_EMBEDDABLE_VERSION=2.4.21
+RUN grep -q "^${KOTLIN_EMBEDDABLE_VERSION}" /opt/kotlinc/build.txt \
+ && mkdir -p /opt/truth/kotlinc-embeddable && cd /opt/truth/kotlinc-embeddable \
+ && M=https://repo1.maven.org/maven2 \
+ && fetch-verify $M/org/jetbrains/kotlin/kotlin-compiler-embeddable/${KOTLIN_EMBEDDABLE_VERSION}/kotlin-compiler-embeddable-${KOTLIN_EMBEDDABLE_VERSION}.jar kotlin-compiler-embeddable-${KOTLIN_EMBEDDABLE_VERSION}.jar sha256 ef19419c765e7ac8404465fa026ca8fc4dbb8a822de0fc79aa53c8dce29f1d02 \
+ && fetch-verify $M/org/jetbrains/kotlin/kotlin-stdlib/${KOTLIN_EMBEDDABLE_VERSION}/kotlin-stdlib-${KOTLIN_EMBEDDABLE_VERSION}.jar kotlin-stdlib-${KOTLIN_EMBEDDABLE_VERSION}.jar sha256 bd8250210584cb659847dce9cda660f8e9906e5def7fbebcea93dc6dcb6a88a3 \
+ && fetch-verify $M/org/jetbrains/kotlin/kotlin-script-runtime/${KOTLIN_EMBEDDABLE_VERSION}/kotlin-script-runtime-${KOTLIN_EMBEDDABLE_VERSION}.jar kotlin-script-runtime-${KOTLIN_EMBEDDABLE_VERSION}.jar sha256 a658cf5902a1525a06c264a5e42b437e97a6679ddeef8ca641246f270cf6a013 \
+ && fetch-verify $M/org/jetbrains/kotlin/kotlin-reflect/1.6.10/kotlin-reflect-1.6.10.jar kotlin-reflect-1.6.10.jar sha256 3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203 \
+ && fetch-verify $M/org/jetbrains/kotlin/kotlin-daemon-embeddable/${KOTLIN_EMBEDDABLE_VERSION}/kotlin-daemon-embeddable-${KOTLIN_EMBEDDABLE_VERSION}.jar kotlin-daemon-embeddable-${KOTLIN_EMBEDDABLE_VERSION}.jar sha256 7b3ef24674e5bcffcadfc4e43202ea314194939ecbcdd90a4770b2f1b04e0d07 \
+ && fetch-verify $M/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar kotlinx-coroutines-core-jvm-1.8.0.jar sha256 9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5 \
+ && fetch-verify $M/org/jetbrains/annotations/13.0/annotations-13.0.jar annotations-13.0.jar sha256 ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478
+
+# scip-go v0.2.9 (the Go fallback, static targets only) — GitHub release asset digest.
+ARG SCIP_GO_VERSION=v0.2.9
+ARG SCIP_GO_SHA256=4ec4e45ecdbe6f43055ed555254e049f46f28389ade438db3d59679651fa1292
+RUN fetch-verify "https://github.com/sourcegraph/scip-go/releases/download/${SCIP_GO_VERSION}/scip-go-linux-amd64.tar.gz" scip-go.tgz sha256 "${SCIP_GO_SHA256}" \
+ && tar -C /opt/truth/bin -xzf scip-go.tgz scip-go && rm scip-go.tgz
+
+# callgraph (golang.org/x/tools/cmd/callgraph) v0.52.0 — built from the module proxy,
+# verified against the Go checksum database. Statically linked; GOPATH/GOMODCACHE in /tmp.
+ARG CALLGRAPH_VERSION=v0.52.0
+RUN GOBIN=/opt/truth/bin GOPATH=/tmp/gopath CGO_ENABLED=0 /opt/go/bin/go install "golang.org/x/tools/cmd/callgraph@${CALLGRAPH_VERSION}" \
+ && rm -rf /tmp/gopath
+
+# scip-clang v0.4.1 — GitHub release binary (no digest published; sha256 pinned here).
+ARG SCIP_CLANG_VERSION=v0.4.1
+ARG SCIP_CLANG_SHA256=a434d26a079fd80e1996ba79276cb1ef86b2b2ad28b13e24386285db32c59046
+RUN fetch-verify "https://github.com/sourcegraph/scip-clang/releases/download/${SCIP_CLANG_VERSION}/scip-clang-x86_64-linux" \
+      /opt/truth/bin/scip-clang sha256 "${SCIP_CLANG_SHA256}" && chmod 0755 /opt/truth/bin/scip-clang
+
+# uv 0.13.6 — GitHub release asset digest.
+ARG UV_VERSION=0.13.6
+ARG UV_SHA256=f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+RUN fetch-verify "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" uv.tgz sha256 "${UV_SHA256}" \
+ && tar -C /opt/truth/bin --strip-components=1 -xzf uv.tgz uv-x86_64-unknown-linux-gnu/uv uv-x86_64-unknown-linux-gnu/uvx && rm uv.tgz
+
+# scip-dotnet 0.2.16 — the .nupkg from nuget.org (installed in `truth`, which has the SDK).
+ARG SCIP_DOTNET_VERSION=0.2.16
+ARG SCIP_DOTNET_SHA512=51468f4029ea21615819768ab608e27813f4591d2e1fc2f9e69c2a86d3891ffdc497ecc2179fdc5d75f7d28617adf2986626c38ee9f692753caf5db5da2f9e5b
+RUN mkdir -p /opt/truth/nupkg \
+ && fetch-verify "https://api.nuget.org/v3-flatcontainer/scip-dotnet/${SCIP_DOTNET_VERSION}/scip-dotnet.${SCIP_DOTNET_VERSION}.nupkg" \
+      "/opt/truth/nupkg/scip-dotnet.${SCIP_DOTNET_VERSION}.nupkg" sha512 "${SCIP_DOTNET_SHA512}"
 
 # =================================================================================
 # stage toolchain (S02)
@@ -218,8 +324,11 @@ v git         git --version
 for d in /usr/local/lib/ccg-versions.d/*.sh; do
   [ -e "$d" ] || continue
   if ! bash -n "$d"; then echo "!! $d: FAILED (syntax)"; fail=$((fail + 1)); continue; fi
+  # Each drop-in runs in its own subshell and reports its OWN failure count through an EXIT
+  # trap, so a drop-in's `exit 0` (or `set -e` abort) cannot hide the count it accumulated.
   # shellcheck source=/dev/null
-  . "$d" || true      # a drop-in's own v/jarv calls count failures; don't double-count
+  ( fail=0; trap 'rc=$?; if [ "$fail" -gt 0 ]; then exit "$fail"; fi; exit "$rc"' EXIT; . "$d" )
+  fail=$((fail + $?))
 done
 if [ "$fail" -ne 0 ]; then echo "ccg-versions: $fail check(s) FAILED"; exit 1; fi
 echo "ccg-versions: all checks passed"
@@ -228,14 +337,7 @@ RUN mkdir -p /usr/local/lib/ccg-versions.d \
  && chmod 0755 /usr/local/bin/ccg-versions
 
 # =================================================================================
-# [S24-LAYER] — S24 inserts its ground-truth layer here (COPY --from=truth-fetch …,
-# RUN …). Install truth tools under /opt; keep their caches out of /home/ccg and /work.
-# apt work goes through `apt-snapshot-install` (this stage is FROM apt-base). Register
-# the tools' version checks as /usr/local/lib/ccg-versions.d/<name>.sh (see above).
-# =================================================================================
-
-# =================================================================================
-# tail (S02) — always last. Non-root: the base's `ubuntu` user is renamed rather than
+# tail (S02) — last in the `toolchain` stage. Non-root: the base's `ubuntu` user is renamed rather than
 # a new one added, so the container user is uid/gid 1000 — the same as this lab's host
 # user, which lets the sandbox's rw output mount be written without a chown. `-G ''`
 # drops the base user's supplementary groups (adm, sudo, …): ccg is in group ccg only.
@@ -246,5 +348,85 @@ USER ccg
 WORKDIR /work
 # Drop the base's /__cacert_entrypoint.sh (it rewrites the JVM truststore and exports
 # JAVA_TOOL_OPTIONS when USE_SYSTEM_CA_CERTS is set), so default runs match S08's.
+ENTRYPOINT []
+CMD ["ccg-versions"]
+
+# =================================================================================
+# stage truth (S24; ML note §5.2, §9) — image ccg-toolchain-truth:<hash>. FROM toolchain
+# so the sandbox image (`toolchain`) carries none of this: no Node, no indexers, no clang.
+# apt work goes through `apt-snapshot-install` (toolchain is FROM apt-base). Tools live
+# under /opt/truth; build-time caches are removed and never land in /home/ccg or /work.
+# Truth runs happen with network, OUTSIDE the sandbox (ML §9); this image grants none.
+# =================================================================================
+FROM toolchain AS truth
+ARG SCIP_DOTNET_VERSION=0.2.16
+USER root
+
+LABEL ccg-toolchain-truth=1 \
+      org.opencontainers.image.title="ccg-toolchain-truth" \
+      org.opencontainers.image.description="ccg-toolchain + SCIP / callgraph ground-truth indexers for C-1001 P0 frontend fitness"
+
+# python3 + venv + pip (scip-python shells out to `pip list`; the corpus venv).
+RUN apt-snapshot-install python3 python3-venv python3-pip
+
+COPY --from=truth-fetch /opt/truth /opt/truth
+
+# scip-dotnet as a dotnet tool under /opt/truth (HOME=/root for the build, then wiped: the
+# NuGet cache must not be left anywhere a run inherits).
+RUN HOME=/root DOTNET_CLI_HOME=/root dotnet tool install scip-dotnet --version "${SCIP_DOTNET_VERSION}" \
+      --tool-path /opt/truth/scip-dotnet --add-source /opt/truth/nupkg \
+ && rm -rf /root/.nuget /root/.dotnet /root/.local /opt/truth/nupkg \
+ && find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} + \
+ && ln -s /opt/truth/npm/scip-python/node_modules/.bin/scip-python /opt/truth/bin/scip-python \
+ && ln -s /opt/truth/npm/scip-typescript/node_modules/.bin/scip-typescript /opt/truth/bin/scip-typescript \
+ && printf '#!/bin/sh\nexec java -jar /opt/truth/scip-java/scip-java.jar "$@"\n' > /opt/truth/bin/scip-java \
+ && chmod 0755 /opt/truth/bin/scip-java
+
+# kotlinc-scip <kotlinc args>: the embeddable Kotlin compiler with the scip-kotlinc plugin.
+# Required env: SCIP_SOURCEROOT, SCIP_TARGETROOT. Shards land in $SCIP_TARGETROOT; aggregate
+# them with `scip-java aggregate --targetroot=... --output=index.scip`.
+COPY <<'EOT' /opt/truth/bin/kotlinc-scip
+#!/usr/bin/env bash
+set -euo pipefail
+: "${SCIP_SOURCEROOT:?kotlinc-scip: set SCIP_SOURCEROOT}" "${SCIP_TARGETROOT:?kotlinc-scip: set SCIP_TARGETROOT}"
+d=/opt/truth/kotlinc-embeddable
+cp="$(printf '%s:' "$d"/*.jar)"; cp="${cp%:}"; stdlib="$(ls "$d"/kotlin-stdlib-*.jar)"
+exec java -cp "$cp" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -cp "$stdlib" \
+  -Xplugin="$SCIP_KOTLINC_JAR" -P "plugin:scip-kotlinc:sourceroot=$SCIP_SOURCEROOT" -P "plugin:scip-kotlinc:targetroot=$SCIP_TARGETROOT" "$@"
+EOT
+RUN chmod 0755 /opt/truth/bin/kotlinc-scip
+
+ENV PATH=/opt/truth/bin:/opt/truth/node/bin:/opt/truth/scip-dotnet:${PATH} \
+    SCIP_JAVAC_JAR=/opt/truth/scip-java/scip-javac.jar \
+    SCIP_KOTLINC_JAR=/opt/truth/scip-java/scip-kotlinc.jar \
+    CCG_TRUTH_SMOKE_DIR=/opt/truth/smoke
+
+# Smoke projects (smoke/<lang>/) and their runner; `ccg-truth-smoke` indexes each one and
+# reads the index back with `scip print --json` (`callgraph` output for Go).
+COPY smoke /opt/truth/smoke
+RUN install -m 0755 /opt/truth/smoke/ccg-truth-smoke /usr/local/bin/ccg-truth-smoke \
+ && rm /opt/truth/smoke/ccg-truth-smoke
+
+# Version checks, run by ccg-versions after the S02 ones (each drop-in in its own subshell).
+COPY <<'EOT' /usr/local/lib/ccg-versions.d/50-truth.sh
+v node          node --version
+v npm           npm --version
+v scip-python   scip-python --version
+v scip-typescript scip-typescript --version
+v scip-java     bash -c 'scip-java --version; sha256sum /opt/truth/scip-java/scip-java.jar | cut -c1-16'
+v scip-javac    bash -c 'sha256sum "$SCIP_JAVAC_JAR" | cut -c1-16'
+v scip-kotlinc  bash -c 'sha256sum "$SCIP_KOTLINC_JAR" | cut -c1-16; ls /opt/truth/kotlinc-embeddable | grep compiler'
+v scip-dotnet   scip-dotnet --version
+v callgraph     bash -c 'go version -m "$(command -v callgraph)" | grep -E "^\s*(path|mod)\s"'
+v scip-go       scip-go --version
+v scip-clang    scip-clang --version
+v scip          scip --version
+v uv            uv --version
+v python3       python3 --version
+EOT
+RUN chmod 0644 /usr/local/lib/ccg-versions.d/50-truth.sh
+
+USER ccg
+WORKDIR /work
 ENTRYPOINT []
 CMD ["ccg-versions"]
