@@ -295,3 +295,4 @@ mechanism in `docs/plans/typed-decision-models6.md` §3.1. (no FR change; FR-6, 
 campaign? → **Each flag halts the campaign and nothing from that run is counted; the stakeholder
 decides each time to retry, skip the batch, or move generation to another model; no automatic
 model fallback.** Mechanism: `docs/plans/typed-decision-models6.md` §3.5. (FR-8)
+2026-11-01 — (Narrows the 2026-11-01 Plan4 Q-1 entry) Does "unattended relaunch per usage window" include a cron or systemd scheduler that starts each window? → **No scheduler: the batch loop within a window runs unattended, and a human starts `driver run --root <campaign>` at each usage window.** Mechanism in `docs/plans/typed-decision-models6.md` v1.15 §1 and §3.2 "Starting a window". (no FR change; FR-6, FR-8 unchanged)
