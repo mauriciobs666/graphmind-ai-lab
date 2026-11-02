@@ -82,7 +82,7 @@ def smoke(tmp_path: Path, *, items: int = 2, clock: Clock | None = None,
 
 
 def fresh(camp: Campaign) -> Campaign:
-    """The same root as the next timer fire sees it: a new `run`, so a new instance."""
+    """The same root as the next run sees it: a new `run`, so a new instance."""
     return Campaign(camp.root, claude_dir=camp.claude_dir, clock=camp.clock)
 
 
@@ -463,7 +463,7 @@ def test_an_environmental_void_halts_and_counts_nothing(tmp_path: Path) -> None:
 def test_ten_usage_stops_count_nothing_and_never_halt(tmp_path: Path) -> None:
     camp = smoke(tmp_path)
     for _ in range(10):
-        camp = fresh(camp)                              # one timer fire per spent window
+        camp = fresh(camp)                              # one run per spent window
         action = serve(camp)
         session = camp.issue(action)
         stage(camp, session, action.opaque, "rate-limit")
@@ -482,9 +482,9 @@ def test_next_stops_on_a_usage_stop_its_reconciliation_meets(tmp_path: Path) -> 
     stage(camp, session, action.opaque, "rate-limit")
     before = ledger(camp)
     assert camp.next() == Stop("usage-stop", "rateLimit")
-    assert camp.next() == Stop("usage-stop", "rateLimit")   # this fire launches nothing more
+    assert camp.next() == Stop("usage-stop", "rateLimit")   # this run launches nothing more
     assert len(ledger(camp)) > len(before) and outcomes(camp)[-1]["outcome"] == "usage-stop"
-    assert isinstance(fresh(camp).next(), Serve)        # the next fire serves again
+    assert isinstance(fresh(camp).next(), Serve)        # the next run serves again
 
 
 def test_a_usage_stop_run_ingests_ends_the_runner_loop_after_one_launch(tmp_path: Path) -> None:

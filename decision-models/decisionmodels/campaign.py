@@ -25,8 +25,8 @@ the first pending batch. `issue` then records `issued` and writes the request. *
 remembered by the `Campaign` instance whose `ingest` recorded it (`Campaign.usage_stop`), whether
 `run`'s step 5 or `next`'s own reconciliation called it, and that instance's `next` then returns
 `Stop("usage-stop")`, so plan6 §3.2's "exit when `next` returns stop" launches once per spent
-window. The memory is deliberately the instance's, never the ledger's: each timer fire is a new
-`run` with a new instance, which serves the batch again, and that one launch is how a fire learns
+window. The memory is deliberately the instance's, never the ledger's: each `run`
+is a new instance, which serves the batch again, and that one launch is how a run learns
 whether the window has reset (plan6 §3.2 "Scheduling"). `ingest` also returns
 `IngestResult.stop` for a halt or a usage stop.
 

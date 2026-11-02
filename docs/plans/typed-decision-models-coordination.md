@@ -537,3 +537,5 @@ the shared `model-bench/docs/HISTORY.md`). The U1a live probe waits for stakehol
 
 2026-11-01 — Plan6 **v1.15** (architect a625868abc8979916): scheduler removed (§1 Q-1 now 'unattended run loop within a window, human relaunch per window', §3.2 'Starting a window', U6.4 row/order/§6 bullets deleted). Plan-only edit, committed. Open, small: U6.5 (`tico`) must append a narrowing entry naming Q-1 in `docs/requirements/typed-decision-models.md`; optional comment rewording ('timer fire' → 'run') in `campaign.py:28`, `tests/test_campaign.py:85,466`, HISTORY 279. **Paused at the stakeholder's request** ('pause when appropriate'); next unit on resume: U5.8. Nothing in flight.
 
+2026-11-01 — U6.5 done (tico a30a9f3a57d0954c3; narrowing Q-1 entry at the end of the requirements decision log, `d76a16c7`) and the 'timer fire' → 'run' comment rewording done (coder a8a7b91485e7d0b87; comments/docs only, suite 1147 passed / 2 xfailed re-run by me). Nothing in flight; paused for the session. Resume: U5.8. Runner 'fire' vocabulary (`runner.py`, `test_runner.py`) deliberately left as plan §3.2 wording.
+

@@ -276,7 +276,7 @@ Pass 10's findings (`docs/reviews/typed-decision-models4-impl.md`).
     is not a non-empty string, or that is not a JSON object; no key has a default.
   - P10-m1 (option b): a `Campaign` instance remembers a usage stop its own `ingest` recorded and
     its `next` returns `Stop("usage-stop")`, so plan6 §3.2's loop launches once per spent window.
-    The memory is the instance's, not the ledger's: the next timer fire is a new instance and
+    The memory is the instance's, not the ledger's: the next run is a new instance and
     serves again, which is plan6 §3.2's "a fire within a spent window costs at most one short
     driver turn".
   - P10-m2: `store/runs/<sessionId>.exit` is ASCII `-?[0-9]+` with optional whitespace; an empty
