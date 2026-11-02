@@ -1192,3 +1192,51 @@ M2: close S17 with the ceiling carried to S23, or hold that clause?
 **What's solid:** zero-retry verified on the real connection; DDL read from one home; raw constraint command; repo scoping on every read, with three killed mutants; D8 per-field sparse storage with a mixed-batch empty-map fix; the `FakeStore`-based pure tests are field-by-field.
 
 **Open question:** none. m3 needs a one-line ruling by `graph-dba` (add the index to §1.6/DDL, or defer `Dependency` loading).
+
+## Pass 12 — S17-L2 `bfs-v1` function-level continuation (2026-11-01, uncommitted diff over `c3e12152`)
+
+**Scope:** `cpg/spikes/vertical-slice/impact.py`, new `tests/test_impact_v1.py`, edits to `tests/test_live_slice.py` and `tests/test_loader_v1.py`, against `docs/plans/connected-code-graph-p0-graph.md` §3.3, §5, D8 and Pass 11 (M2, m1, m2). **Verdict: approve with suggestions.** One major (a broken probe), no blocker. CPG: considered, not relevant — a spike module no loaded `cpg_*` graph indexes.
+
+**Executed.** `cd cpg && .venv/bin/python -m pytest -q spikes/vertical-slice/tests`: 294 passed, 17 deselected. `-m live` on `test_impact_v1.py`, `test_live_slice.py`, `test_loader_v1.py`: 17 passed (`ccg_p0slice`, `__build_*` only; `falkordb-dev` untouched; the credential was read by the loader, not printed). Live read-only walks of `ccg_p0slice` with the baseline `impact.py` (from `c3e12152`) and the new one: `buildUrl` 21 items both, old 21 confirmed, new 20 possible + 1 confirmed, levels 9 to 12, states 64 to 83 (`function` 21 new); `apiFetch` 20 items all confirmed in both, levels 7 to 10, states 61 to 80.
+
+**My mutants** (copy of `cpg/` under the scratchpad `m12/`, one edit to `impact.py` each, run on `test_impact_v1.py` + `test_live_slice.py`):
+| Mutant | Result |
+|---|---|
+| function-state `CALLS <-` keeps stored status | killed |
+| label every `CALLS <-` possible (value too) | killed |
+| `Ret` enters `function` | killed |
+| `TO <-` from function stays confirmed | killed |
+| reason dropped from the edge | killed |
+| reason stamped on every possible edge (not only function-level) | **survives** (m2) |
+| cap `>=` / default 65 / `> max+1` | each killed (exact 64 passes, 65 raises) |
+| re-expansion on equal cost (`<=`) | killed, but only by the cycle test (m1) |
+| skip every visited key (no re-expansion) | killed by the strictly-smaller test |
+| anchor counted as its own item | killed |
+| `via_data` also true for `CALLS` | killed |
+| `RESULTSET_SIZE` check `>` for `>=` | killed |
+
+**Rulings on the implementer's choices**
+1. **`function` state: sound, faithful to §3.3.** Entry by `HAS_CALL|PARAM|COND <-`, `HAS_RETURN <-` into `value`, `CALLS <-`/`TO <-` possible with the reason from `function`, confirmed from anchor or `value`: this is the M2 rule read literally (traced in `_expand`; mutants above). The `TO <-` hop carrying the reason is pinned by a chain-type assertion. The cost is a new state kind (states +19/+21 on the slice), which the plan does not mention.
+2. **20 of 21 is the rule, not a deviation.** §3.3 has two sentences that cannot both hold: the labelling rule keeps `CALLS <-` from an anchor `Symbol` confirmed, and `apiFetch` is `buildUrl`'s direct caller. The consequence sentence ("the 21 `buildUrl` items become `possible`") is the loose one. Keep the code; fix the sentence (below).
+3. **`hops == 2*distance` for `via_data` items: acceptable.** A `DATA` detour adds chain steps with no distance; the plan never promised it. The new test restricts it to non-`via_data` items and asserts `via_data` is present on some far item.
+4. **Cost tuple `(possible hops, distance, level)`, no weight: equivalent to the plan's weight 1,000** while distance stays below 1,000; the level cap 64 guarantees it. Only the plan's wording is off.
+5. **Edited tests preserve intent.** Cycle test: still exact on levels, frontier sizes, state count and kinds; the anchor re-entered as a `function` state is a new key whose call site is no improvement, so the extra level is explained. Rank-before-distance: without `Ret`+`DATA` the "confirmed" two-call route would now be possible and the test would stop exercising rank-before-distance; with it the test again discriminates the order (direct possible (1,1) vs confirmed (0,2); traced by running the fixture, the swap mutant itself not run). The SL-4 edit is a strengthening (direct caller pinned confirmed, 20 far items possible with the reason).
+6. **Guards: right, with one weak pin (m1).** `<` not `<=`, DATA cycle and self-edge, `RESULTSET_SIZE` on all 7 readers and a later chunk, cap exactly 64 pass / 65 raise: all have a killing test.
+
+**Findings**
+
+**M1 (major, verified by running). `probe_s14.py`'s V2 what-if is now a no-op.** `Gate` (`probe_s14.py:244`) ends a non-`Ret` `HAS_*` step by rewriting `st == I.VALUE` to `END`; those steps now enter `FUNCTION`, so the condition never fires. Live: `bfs_section` returns identical items and states for `V0_as_built` and `V2_what_if_gate` on all six walks (e.g. `value buildUrl` 21 items, 83 states, both). §3.3 says the §6.8 measurement is "reproducible from `probe_s14.py`"; today it reproduces nothing, silently, and no test covers `Gate`. *Fix (coder):* match `st == I.FUNCTION` (or `st[0] in ("value","function")` with `frm[0] != "Ret"`), and add a test that V2 has fewer states than V0 on a hand graph. Also re-run and re-record §6.8 numbers: V0 states changed (64 to 83).
+
+**m1 (minor, verified by mutant). The strictly-smaller test does not pin `<` against `<=`.** §5 assigns that job to it ("the survivor mutant I7"); my `<=` mutant passes `test_a_strictly_smaller_arrival_is_re_expanded...` and is killed only by the cycle test. Equal-cost arrival never occurs in its fixture. *Fix:* give that fixture a second route to `n` at equal cost and later level, and assert `frontier_sizes`/`state_count`.
+
+**m2 (minor, verified by mutant). Reason stamping is pinned one way only.** Mutant "stamp `function-level-continuation` on every possible edge" survives; the D8 live test reads `status` of the stored-possible `CALLS` from the anchor but not `reason`. *Fix:* assert `items["P"].reason is None` there (and in a pure test).
+
+**n1 (nit).** `Edge.reason` is set only for the function-level case; a stored `reason` (`name-match`) is never read, so a stored-possible hop in a function state loses it. Pre-existing reader shape; say so if ever surfaced.
+
+**Plan wording to change (for `graph-dba`/`architect`, §3.3 and §5)**
+- §3.3 "the 21 `buildUrl` items become `possible`" to "20 of the 21 (`apiFetch`, the direct caller of the anchor, stays `confirmed`)".
+- §3.3 name the `function` state and the `HAS_RETURN <-` into `value` exception; list the state-count effect (slice: +19/+21).
+- §3.3 "weight 1,000" to "lexicographic (possible hops, distance)"; the code carries no weight.
+- §3.3/§5 `viaData` is `Item.via_data`, and `Item.reason` exists; §5 (a)-(c) are satisfied by `test_impact_v1.py` (name them).
+- §3.3 "reproducible from `probe_s14.py`" holds only after M1 is fixed.
+- §5 "strictly-smaller-cost re-expansion test pins `<`" is true of the cycle test, not yet of the named one (m1).
