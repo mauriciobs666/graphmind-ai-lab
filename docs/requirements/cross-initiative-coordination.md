@@ -1,130 +1,92 @@
 # Cross-initiative coordination — Feature Requirements
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Version:** 2
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Version:** 4 · **Extends:** `claude/docs/requirements/coordination-graph.md` · **Last updated:** 2026-11-03 · **Reviews:** `docs/reviews/cross-initiative-coordination.md`
 
 ## Intent
-Multiple `teco`-led initiatives can now be in flight on this repo at the same time, each
-tracked in its own coordination ledger, each scoped to its own initiative. Nothing today gives
-any one of them visibility into what the others are doing. The trigger: while scoping the
-falkor-chat "business entities in workflows" work into sibling requirement documents, this
-`tico` instance discovered — only by manually reading another `teco` instance's coordination
-ledger on request — a second, independently-running initiative (`document-ingestion`) touching
-adjacent ground (structured/extracted entity data). No conflict existed this time, but nothing
-structural caught the overlap; it was found by a one-off manual check, not by anything that
-would catch it by default next time.
-
-The stakeholder's own framing was "we need a project manager" — but the gap isn't in how one
-initiative gets coordinated (that's `teco`'s job today, and stays that way); it's the absence of
-any shared view *across* initiatives. The stakeholder's preferred shape for closing that gap is
-a shared, checked-on-demand registry of what's in flight, not a new standing watcher role —
-lighter-weight than a new agent, consistent with catching an overlap earlier next time rather
-than only by chance.
+`claude/docs/requirements/coordination-graph.md` already puts a mirror of every coordination
+ledger in the graph (file authoritative, rebuildable, drift visible, in-flight view across
+components, per-unit lookup). This document adds only what that one does not cover, for two needs:
+(1) **overlap** — a new idea, ledger or plan touching ground another in-flight initiative already
+covers, today found only by chance (the `document-ingestion` overlap that opened this topic);
+(2) **parallel runs** — telling which units can be dispatched now without colliding.
 
 ## Problem & current state
-Today, `teco` writes one coordination ledger per initiative (`<component>/docs/plans/<slug>-
-coordination.md`), and each ledger is self-contained — it records that initiative's own units,
-owners, and status, with no pointer to or awareness of any other initiative's ledger. There is no
-single place listing what's currently in flight across the repo. Finding out that two initiatives
-touch adjacent ground currently depends entirely on a person or agent happening to already know
-about both and thinking to compare them — exactly what happened this session, and only because
-the stakeholder mentioned the other initiative directly.
+Ledgers record a unit's owner, status and deliverable but not what it needs or what it touches;
+dependencies live in the plan's step table. Nothing says an agent must check what is in flight
+before starting related work. The in-flight view from `coordination-graph.md` shows initiatives
+and units, but not whether two initiatives overlap, nor which queued units are safe to run now.
 
 ## User stories
-- As the stakeholder, I want to know when a new requirements idea or a new `teco`-coordinated
-  initiative overlaps with something already in flight, so I can decide whether to merge, sequence,
-  or run them independently — before real design/build work happens twice or diverges.
-- As a `tico` instance opening a new requirements interview, I want to check what's currently
-  being built or coordinated elsewhere in the repo, so I can catch an adjacent-scope situation at
-  the idea stage, before any build coordination even exists for it.
-- As a `teco` instance about to open a new coordination ledger, I want to check the same shared
-  view before I start, so I don't duplicate or silently diverge from another initiative's work.
-- As an `architect` designing a plan, I want to check it too, so a schema/interface overlap that
-  wasn't visible at the requirements or kickoff stage still gets one more chance to surface before
-  code gets written.
-- As the stakeholder, I want any overlap that's found to come to me, not be silently resolved or
-  silently ignored by whichever agent found it — matching how this session's actual overlap was
-  handled (investigated, then brought to me).
+- As the stakeholder, I want any overlap between a new idea or initiative and one in flight raised
+  to me, so I decide to merge, sequence or run independently.
+- As a `tico`, `teco` or `architect`, I want to check what is in flight for overlap before I
+  start, so adjacent work surfaces early.
+- As a `teco`, I want to know which queued units are ready to run in parallel without colliding.
 
 ## Functional requirements
-- **FR-1** — A single, shared record exists of currently in-flight `teco`-coordinated
-  initiatives, reachable by any agent instance, repo-wide (not scoped to one component).
-- **FR-2** — An initiative is added to the record automatically when it reaches the point `teco`
-  already writes it a coordination ledger (teco's existing 3-units-or-gated threshold) — no
-  separate manual registration step for the stakeholder or another agent to remember.
-- **FR-3** — An initiative's record entry is removed once that initiative's coordinated work is
-  done — the record reflects what's live now, not a history of everything ever coordinated.
-- **FR-4** — A `tico` instance consults the record during a requirements interview, to check
-  whether the idea under discussion overlaps with something already in flight.
-- **FR-5** — A `teco` instance consults the record before opening a new coordination ledger, to
-  check whether the initiative it's about to start overlaps with one already in flight.
-- **FR-6** — An `architect` instance consults the record while producing a plan, to check whether
-  the design touches ground another in-flight initiative also touches.
-- **FR-7** — When any of the above finds a plausible overlap with another in-flight initiative, it
-  stops and raises the question to the stakeholder rather than deciding unilaterally how to
-  proceed (merge, sequence, run independently, or treat as coincidental).
-- **FR-8** — An entry carries enough information for another agent to judge, without reading the
-  full initiative, whether it might overlap with what it's about to do (at minimum: what the
-  initiative is, and a pointer to its coordination ledger for the full detail).
+Terms and mechanisms not defined here come from `coordination-graph.md`: ledger mirror and
+freshness (its FR-2 to FR-5), the in-flight view (FR-6), leaving the view when `archived` (FR-9),
+and "touched areas" as files, graph keys or facts (FR-13, FR-14).
+
+- **FR-1** — Each in-flight entry carries a one-line description of what the initiative is, so
+  overlap can be judged without reading the ledger. (Its ledger path is already required by
+  `coordination-graph.md` AC-5.)
+- **FR-2** — `tico` (requirements interview), `teco` (before opening a ledger) and `architect`
+  (while planning) check the in-flight view for overlap with the work in hand. `teco`'s own
+  ledger-opening conditions apply (`claude/teco/teco.md`).
+- **FR-3** — On a plausible overlap the finder stops and raises it to the stakeholder; it never
+  decides to merge, sequence or run independently.
+- **FR-4** — A ledger unit carries, as recorded facts, the units it **needs** and the **areas it
+  touches**, in the same sense as `coordination-graph.md` FR-14. A unit whose facts are missing or
+  unparseable stays visible in the in-flight view, is excluded from FR-5, and is listed with what
+  is missing; it is never silently dropped. An explicit "none" is a recorded fact, not a missing
+  one.
+- **FR-5** — A ready-now view lists units that are `queued` and whose needs are all met, and flags
+  any that share a touched area with a unit already running. A need is met when that unit is
+  `accepted`, including a unit in another ledger, and including one whose ledger is archived (its
+  status is read from the record, not only from the in-flight view). A need that cannot be found,
+  or whose status is unknown, is listed as unresolvable and the unit is not ready. A unit is
+  running while `in-flight`, `delivered`, `gated` or `paused`. Two units overlap as in
+  `coordination-graph.md` FR-13(b). It flags; it does not decide.
+- **FR-6** — Any reader can obtain the current text of a ledger's doc-impact scan list and of its
+  closing report from the view, each addressable on its own. Whether the view points to the file, holds a copy, or both is optional and
+  unprescribed. A copy is never authoritative and shows its sync time (its FR-5).
+- **FR-7** — Applies to ledgers opened after this ships. Existing ledgers gain FR-4 facts as each
+  is next touched, starting with the `connected-code-graph` ledger; `teco` records them.
 
 ## Out of scope
-- An actively-scanning watcher that proactively flags overlaps on its own — the stakeholder chose
-  a checked-on-demand shared record instead of a standing monitoring role.
-- Registering a `tico` requirements interview itself as an entry — the record tracks
-  `teco`-coordinated initiatives (FR-1/FR-2's threshold); a still-`Interviewing` requirements doc
-  is not listed. (This means two concurrent `tico` interviews colliding with each other is **not**
-  caught by this mechanism — a `tico` instance checks the record for existing *build* initiatives,
-  but nothing yet checks one interview against another interview. Noted, not solved here.)
-- Any automatic conflict resolution — merging documents, re-sequencing work, or deciding one
-  initiative supersedes another are all stakeholder calls (FR-7), never made by the agent that
-  found the overlap.
-- An automated similarity/matching algorithm that decides what counts as "overlap" — judging
-  whether two initiatives are actually related is a human/agent reading call, not a scored match.
-- Any change to how a single initiative's own units get sequenced, delegated, or reviewed — that
-  is `teco`'s existing job, entirely unchanged by this feature.
-- The record's concrete storage mechanism/format (a doc, a graph, something else) and exact entry
-  schema — an architect design decision.
+- An actively-scanning watcher that flags overlaps on its own.
+- Registering a still-`Interviewing` requirements document. Two concurrent interviews colliding
+  is not caught by this mechanism. Noted, not solved here.
+- Automatic conflict resolution of any kind (FR-3); an automated similarity score for overlap.
+- Any change to how a single initiative's units are sequenced, delegated or reviewed.
+- Everything `coordination-graph.md` already specifies (mirror, freshness, in-flight view).
+- Block format, ingest trigger, graph home, schema, write path and any file-reading service for
+  FR-6: `architect` decisions; a file-reading service is a new capability and `security-expert`
+  should weigh its path scoping first.
+- Editing the agent definitions that carry the FR-2 and FR-4 duties (`tico`, `teco`, `architect`):
+  routed through `cobb`, and FR-2 and FR-4 for new ledgers depend on it.
 
 ## Acceptance criteria
-- **AC-1** (FR-1, FR-2) — Given a `teco` instance opens a coordination ledger for a new
-  initiative, when that happens, then an entry for it appears in the shared record without a
-  separate manual step.
-- **AC-2** (FR-3) — Given an initiative's coordinated work is complete, when that happens, then
-  its entry is no longer present in the shared record.
-- **AC-3** (FR-4, FR-5, FR-6) — Given two initiatives with genuinely overlapping scope, when a
-  `tico` interview, a `teco` kickoff, or an `architect` plan for a third, related piece of work
-  checks the record, then the existing overlapping entry/entries are discoverable from that check
-  alone (without already knowing to look for them).
-- **AC-4** (FR-7) — Given a plausible overlap is found via the record, when that happens, then the
-  finder raises it to the stakeholder and does not resolve it unilaterally.
-- **AC-5** (FR-1) — Given initiatives exist in more than one component, when the record is
-  consulted, then all of them are visible from the same single record — not one record per
-  component.
+- **AC-1** (FR-1) — Given an in-flight initiative, when the view is queried, then its entry shows a
+  one-line description and its ledger path.
+- **AC-2** (FR-2, FR-3) — Given two initiatives with overlapping scope, when a `tico` interview, a
+  `teco` kickoff and an `architect` plan for a third, related piece of work each runs its check,
+  then each surfaces the existing initiative and raises it to the stakeholder without resolving it.
+- **AC-3** (FR-4) — Given a unit with a malformed `needs` fact, when the view is queried, then the
+  unit appears, is absent from the ready-now view, and is listed with what is missing.
+- **AC-4** (FR-5) — Given running unit R (`in-flight`) and queued units: A (all needs `accepted`,
+  shares an area with R), B (all needs `accepted`, shares no area), C (one need not `accepted`), D
+  (needs only a `accepted` unit in another ledger) and E (needs a unit that cannot be found), then
+  the view lists A, B and D; flags A against R and neither B nor D; does not list C; and lists E as
+  unresolvable. Repeating with R `delivered`, `gated` or `paused` still flags A; with R `accepted`
+  it does not. A need on a unit of an archived ledger counts as met.
+- **AC-5** (FR-6) — Given a closing report edited in the file, when a reader asks the view for it,
+  then it obtains the edited text, and any copy shown carries its sync time.
+- **AC-6** (FR-7) — Given the `connected-code-graph` ledger after `teco` records FR-4 facts, then
+  its units, status and needs are queryable from the view.
 
 ## Open questions
-1. Exact boundary of "the ledger" now that it moves fully into the graph: just the unit table
-   (Unit/Owner/Agent id/Status/Deliverable/Gate→verdict/Cost), or the whole coordination doc
-   (also the documentation-impact scan list and the closing narrative report)? Unresolved —
-   session paused before this was asked.
-2. Given the full ledger now lives in the graph with queryable detail, does the original
-   lightweight registry concept (FR-1/FR-8: minimal entry + pointer to a markdown ledger) still
-   exist as a separate, smaller index, or does it collapse — the ledger nodes themselves double
-   as the cross-initiative record this document was originally about? Unresolved.
-3. Do already-open/historical coordination docs (many exist today, e.g.
-   `falkor-chat/docs/plans/workflow-salesperson-demo-coordination.md`) get migrated into the
-   graph, or does this apply prospectively only, to coordinations opened after this ships?
-   Unresolved.
-4. FR-1–FR-8 and the Out-of-scope/Preferences sections below still describe the **v1, pointer-
-   based** registry and have not yet been rewritten for the broadened scope — pending resolution
-   of open questions 1–3 above.
-
-## Preferences (non-binding — for the architect)
-- Storage location: the stakeholder suggested co-locating the record in the same FalkorDB graph
-  already used for `kaizen_team` (possibly under a broader name reflecting that it holds
-  everything concerning the agent team, not just kaizen entries) rather than a new graph or a doc.
-  Rationale offered: both are shared, checked-on-demand state across the agent team, and the
-  graph already exists. This is a preference, not a requirement — the storage mechanism/format
-  remains an architect design decision (see Out of scope); the architect should also weigh that
-  `kaizen_team` is already live and written to by every agent's kaizen capture, so any rename has
-  a blast radius beyond this feature.
+None.
 
 ## Decision log
 2026-08-23 — Opened. Stakeholder framed the need as "our work units are getting bigger, we need
@@ -172,3 +134,41 @@ re-examination in this pass, not carried forward as settled.
 a pointer to a markdown ledger as before? → Fully into the graph — confirmed. Exact boundary (just
 the unit rows vs. the whole coordination doc including the doc-impact scan list and closing
 report) still open; paused before that question was put, session paused by stakeholder request.
+2026-11-02 — Overturns the 2026-08-29 "fully into the graph" entry. Is the graph the home of the
+ledger, or derived from it? → The markdown ledger in git is the source of truth; the graph is
+derived by incremental ingest on file change. Reason: keeps git history and review and makes the
+graph rebuildable. Affects FR-2, FR-4, AC-6, AC-7.
+2026-11-02 — What of the ledger is machine-readable (former Q1)? → A block per unit (id, owner,
+status, deliverable, gate verdict, needs, resources); prose stays free text. FR-3.
+2026-11-02 — Does a separate small registry survive (former Q2)? → No; the ledger-derived
+initiative nodes are the registry. FR-1, FR-9.
+2026-11-02 — Migrate existing ledgers (former Q3)? → No; prospective only, with the
+`connected-code-graph` ledger as first adopter. FR-10, AC-9.
+2026-11-02 — Does the graph support parallel dispatch (new)? → Yes: dependencies and resources are
+queryable, a ready-now view flags collisions, and never decides. FR-3, FR-6, AC-8.
+2026-11-02 — Prose as a text property on the node, or a pointer to the file (new)? → Pointer only;
+no copy of the prose in the graph, any reader obtains the current text from the record. A
+file-reading service is optional. Refines FR-3's "stays free text in the file". FR-9, FR-11, AC-10.
+2026-11-02 — Overturns the previous entry ("Pointer only"). Pointer or copy of the prose? → No
+preference; both valid and both optional, left to the architect. The requirement is only that a
+reader can obtain the current text from the record, and that a copy is never authoritative. FR-11,
+AC-10.
+2026-11-02 — The analyst review (`docs/reviews/cross-initiative-coordination.md` Pass 1) found
+that `claude/docs/requirements/coordination-graph.md` already covers the ledger mirror. Merge,
+extend or supersede? → Extend: this document keeps only the delta (overlap check, unit needs and
+areas, ready-now view, prose access). FR-1 to FR-7 and AC-1 to AC-6 replace v3's.
+2026-11-02 — Overturns the 2026-08-23 "Detection mechanism" and "Registry scope" entries as
+wording only: the in-flight view of `coordination-graph.md` is the registry, with no separate
+index. The 2026-08-29 "Fully into the graph" entry was already overturned above; the
+file-as-truth rule now lives in `coordination-graph.md` FR-2 to FR-5.
+2026-11-02 — Which statuses count as running? → `in-flight`, `delivered` and `gated`; a unit holds
+its areas until accepted. FR-5.
+2026-11-02 — When is a need met? → When the needed unit is `accepted`; a need on a unit in another
+ledger counts. FR-5.
+2026-11-02 — Also overturns the 2026-08-23 "Registration ownership" and "Entry lifecycle"
+entries: entries now come from the file sync, and leave when the ledger is `archived`
+(`coordination-graph.md` FR-9).
+2026-11-02 — A need on a unit whose ledger is archived? → Counts as met; its status is read from
+the record. A need that cannot be found is listed as unresolvable. FR-5.
+2026-11-02 — Does a `paused` unit hold its areas? → Yes. FR-5.
+2026-11-03 — Readback of v4 delivered; confirm and flip to Ready for design? → Confirmed by the stakeholder. Status flipped to Ready for design (latest `analyst` verdict: approve with suggestions, Pass 2). The last edit round after Pass 2 was not re-reviewed. FR-1 to FR-7.
