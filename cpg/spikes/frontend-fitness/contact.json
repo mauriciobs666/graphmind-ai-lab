@@ -5,7 +5,7 @@
    "corpusFiles": 46,
    "files": {
     "src/api/client.ts": {
-     "artifacts": 14,
+     "artifacts": 10,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -38,7 +38,7 @@
      ]
     },
     "src/api/endpoints.ts": {
-     "artifacts": 13,
+     "artifacts": 8,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -74,42 +74,42 @@
    "root": "salesperson"
   },
   "python": {
-   "contactFiles": 15,
+   "contactFiles": 7,
    "corpusFiles": 107,
    "files": {
     "falkorchat/api.py": {
-     "artifacts": 5,
+     "artifacts": 3,
      "evidence": [
       {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/api.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/api.py",
-       "source": "docs"
+       "artifact": "docs/test-reports/connected-code-graph-p0-slice-report.md",
+       "form": "base",
+       "match": "api.py",
+       "source": "slice"
       },
       {
        "artifact": "cpg/spikes/vertical-slice/tests/test_assemble.py",
        "form": "base",
        "match": "api.py",
        "source": "tests"
+      },
+      {
+       "artifact": "docs/plans/connected-code-graph-rule-pack-spec.md",
+       "form": "base",
+       "match": "api.py",
+       "source": "docs"
       }
      ],
      "forms": [
-      "base",
-      "path"
+      "base"
      ],
      "sources": [
+      "slice",
       "tests",
       "docs"
      ]
     },
     "falkorchat/app.py": {
-     "artifacts": 10,
+     "artifacts": 6,
      "evidence": [
       {
        "artifact": "cpg/spikes/vertical-slice/tests/test_assemble.py",
@@ -124,7 +124,7 @@
        "source": "tests"
       },
       {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
+       "artifact": "docs/plans/connected-code-graph-rule-pack-spec.md",
        "form": "path",
        "match": "falkor-chat/server/falkorchat/app.py",
        "source": "docs"
@@ -142,92 +142,11 @@
       "docs"
      ]
     },
-    "falkorchat/config.py": {
-     "artifacts": 3,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "qname",
-       "match": "falkorchat.config",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec2.md",
-       "form": "qname",
-       "match": "falkorchat.config",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "qname",
-       "match": "falkorchat.config",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "qname"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "falkorchat/embedding.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/embedding.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/embedding.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "path"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "falkorchat/guards.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/guards.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/guards.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "path"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
     "falkorchat/mcp.py": {
-     "artifacts": 3,
+     "artifacts": 2,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-rule-pack-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/mcp.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph.md",
        "form": "path",
        "match": "falkor-chat/server/falkorchat/mcp.py",
        "source": "docs"
@@ -249,56 +168,8 @@
       "docs"
      ]
     },
-    "falkorchat/querygen.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-graph.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/querygen.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/querygen.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "path"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "falkorchat/services.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/services.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/services.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "path",
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
     "falkorchat/storefront_api.py": {
-     "artifacts": 11,
+     "artifacts": 6,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -321,67 +192,30 @@
      ],
      "forms": [
       "base",
-      "path",
-      "qname"
+      "path"
      ],
      "sources": [
       "golden",
+      "slice",
       "tests",
       "docs"
      ]
     },
     "falkorchat/tools.py": {
-     "artifacts": 3,
+     "artifacts": 1,
      "evidence": [
       {
        "artifact": "cpg/tests/test_ids.py",
        "form": "path",
        "match": "falkor-chat/server/falkorchat/tools.py",
        "source": "tests"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/tools.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/tools.py",
-       "source": "docs"
       }
      ],
      "forms": [
-      "base",
       "path"
      ],
      "sources": [
-      "tests",
-      "docs"
-     ]
-    },
-    "tests/conftest.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "rel",
-       "match": "tests/conftest.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "rel",
-       "match": "tests/conftest.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "rel"
-     ],
-     "sources": [
-      "docs"
+      "tests"
      ]
     },
     "tests/eval/__init__.py": {
@@ -401,30 +235,6 @@
       "slice"
      ]
     },
-    "tests/test_fusion.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/tests/test_fusion.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/tests/test_fusion.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "path"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
     "tests/test_input_bound_parity.py": {
      "artifacts": 1,
      "evidence": [
@@ -441,29 +251,12 @@
      "sources": [
       "docs"
      ]
-    },
-    "tests/test_querygen.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-p0-graph.md",
-       "form": "rel",
-       "match": "tests/test_querygen.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
     }
    },
    "root": "falkor-chat/server"
   }
  },
- "derivedFrom": "7a2ec1eeb7366e5d07be074162bd2f7309388dfc",
+ "derivedFrom": "ebe66607cbbc432249305d5fb9e9c236cbef8293",
  "flowAnchors": {
   "javascript": [
    "src/api/client.ts",
@@ -510,11 +303,11 @@
  },
  "searchSources": {
   "cpg-other": 79,
-  "docs": 16,
+  "docs": 1,
   "fixtures": 135,
   "golden": 3,
   "packs": 8,
-  "slice": 15,
+  "slice": 16,
   "tests": 27
  },
  "version": 1

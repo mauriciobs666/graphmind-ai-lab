@@ -72,7 +72,7 @@ def test_contact_json_evidence_is_rederivable_from_head():
     d = json.load(open(CONTACT_JSON))
     for corpus, c in d["corpora"].items():
         for f, x in c["files"].items():
-            assert not re.search(r"(-ml|-coordination)\.md$|docs/(reviews|test-reports)/|(HISTORY|BACKLOG)\.md$|test_frontend_fitness", x["evidence"][0]["artifact"])
+            assert not re.search(r"(-ml|-coordination)\.md$|docs/reviews/|(HISTORY|BACKLOG)\.md$|test_frontend_fitness", x["evidence"][0]["artifact"])
             assert 1 <= len(x["evidence"]) <= 3
             assert len({e["artifact"] for e in x["evidence"]}) == len(x["evidence"])
             for e in x["evidence"]:
@@ -99,7 +99,7 @@ def test_repo_rooted_path_and_absolute_prefix(tmp_path):
 
 
 def test_path_normalisation_dot_slash_and_trailing_punctuation(tmp_path):
-    got, _ = _derive(tmp_path, {"docs/plans/connected-code-graph-x.md":
+    got, _ = _derive(tmp_path, {"docs/plans/connected-code-graph-rule-pack-spec.md":
                                 "see ./falkor-chat/server/falkorchat/beta.py. And (falkor-chat/server/falkorchat/sub/gamma.py), done\n"})
     assert got["python"] == {"falkorchat/beta.py", "falkorchat/sub/gamma.py"}
 
@@ -120,7 +120,7 @@ def test_marker_found_after_a_non_boundary_first_occurrence(tmp_path):
 
 
 def test_corpus_relative_path_and_qname_suffix(tmp_path):
-    got, d = _derive(tmp_path, {"docs/plans/connected-code-graph-y.md": "`falkorchat/alpha.py:12`, `src/api/client.ts::apiFetch`\n"})
+    got, d = _derive(tmp_path, {"docs/plans/connected-code-graph-rule-pack-spec.md": "`falkorchat/alpha.py:12`, `src/api/client.ts::apiFetch`\n"})
     assert got["python"] == {"falkorchat/alpha.py"} and got["javascript"] == {"src/api/client.ts"}
     assert d["corpora"]["python"]["files"]["falkorchat/alpha.py"]["forms"] == ["rel"]
 
@@ -141,7 +141,7 @@ def test_root_level_file_needs_repo_rooted_form(tmp_path):
 
 
 def test_corpus_unique_basename_with_symbol_or_line(tmp_path):
-    got, _ = _derive(tmp_path, {"docs/test-plans/connected-code-graph-r.md": "`alpha.py::f` and `Panel.tsx:40`, but beta.py alone\n"})
+    got, _ = _derive(tmp_path, {"docs/plans/connected-code-graph-rule-pack-spec.md": "`alpha.py::f` and `Panel.tsx:40`, but beta.py alone\n"})
     assert got["python"] == {"falkorchat/alpha.py"} and got["javascript"] == {"src/ui/Panel.tsx"}
 
 
@@ -169,13 +169,38 @@ def test_dotted_qname_needs_a_boundary(tmp_path):
 EXPECTED_SOURCE = {
     "cpg/fixtures/s/f.yaml": "fixtures", "cpg/tests/golden/g.json": "golden", "cpg/spikes/vertical-slice/probe.py": "slice",
     "cpg/spikes/vertical-slice/tests/test_v.py": "tests", "cpg/tests/test_z.py": "tests", "cpg/spikes/store/tests/test_s.py": "tests",
-    "cpg/packs/p/pack.yaml": "packs", "docs/plans/connected-code-graph-p.md": "docs", "docs/requirements/connected-code-graph-q.md": "docs",
-    "docs/test-plans/connected-code-graph-t.md": "docs", "cpg/ccg/mod.py": "cpg-other"}
+    "cpg/packs/p/pack.yaml": "packs", "docs/plans/connected-code-graph-rule-pack-spec.md": "docs", "docs/test-reports/connected-code-graph-p0-slice-report.md": "slice", "cpg/ccg/mod.py": "cpg-other"}
+
+
+def test_slice_report_read_only_in_section_4(tmp_path):
+    rep = ("# r\n\n## 3. x\nfalkor-chat/server/falkorchat/alpha.py\n\n## 4. Proving-repo anchors the slice touched (eval-protocol 8.2)\n"
+           "falkor-chat/server/falkorchat/beta.py\nsalesperson/src/api/client.ts\n\n## 5. Bundle spec items\nfalkor-chat/server/falkorchat/sub/gamma.py\n")
+    got, d = _derive(tmp_path, {"docs/test-reports/connected-code-graph-p0-slice-report.md": rep})
+    assert got["python"] == {"falkorchat/beta.py"} and got["javascript"] == {"src/api/client.ts"}
+    assert d["corpora"]["python"]["files"]["falkorchat/beta.py"]["sources"] == ["slice"]
+    early = "## 5. earlier\nx\n## 4. Proving-repo anchors the slice touched\nfalkor-chat/server/falkorchat/beta.py\n## 5. next\nfalkor-chat/server/falkorchat/alpha.py\n"
+    got, _ = _derive(tmp_path / "e", {"docs/test-reports/connected-code-graph-p0-slice-report.md": early})      # the end marker is searched after the heading
+    assert got["python"] == {"falkorchat/beta.py"}
+    got, _ = _derive(tmp_path / "b", {"docs/test-reports/connected-code-graph-p0-slice-report.md": "## 3. x\nfalkor-chat/server/falkorchat/alpha.py\n"})           # no section 4: nothing
+    assert got["python"] == set()
+    got, _ = _derive(tmp_path / "c", {"docs/test-reports/connected-code-graph-p0-slice-report.md": "## 4. Proving-repo anchors the slice touched\nfalkor-chat/server/falkorchat/alpha.py\n"})  # to EOF
+    assert got["python"] == {"falkorchat/alpha.py"}
+
+
+def test_only_the_rule_pack_spec_among_plans_requirements_and_test_plans(tmp_path):
+    text = "falkor-chat/server/falkorchat/alpha.py\n"
+    got, _ = _derive(tmp_path, {"docs/plans/connected-code-graph-bundle-spec3.md": text, "docs/plans/connected-code-graph.md": text,
+                                "docs/plans/connected-code-graph-graph.md": text, "docs/requirements/connected-code-graph.md": text,
+                                "docs/test-plans/connected-code-graph-fixtures.md": text, "docs/plans/connected-code-graph-answer-spec.md": text})
+    assert got["python"] == set()
+    got, _ = _derive(tmp_path / "rp", {"docs/plans/connected-code-graph-rule-pack-spec.md": text})
+    assert got["python"] == {"falkorchat/alpha.py"}
 
 
 def test_each_search_source_is_searched(tmp_path):
     for art in EXPECTED_SOURCE:
-        got, d = _derive(tmp_path / art.replace("/", "_"), {art: "falkor-chat/server/falkorchat/alpha.py\n"})
+        got, d = _derive(tmp_path / art.replace("/", "_"), {art: ("## 4. Proving-repo anchors the slice touched\n" if "slice-report" in art else "")
+                                                         + "falkor-chat/server/falkorchat/alpha.py\n"})
         assert got["python"] == {"falkorchat/alpha.py"}, art
         assert mc.source_of(art) == EXPECTED_SOURCE[art]
         assert d["searchSources"][EXPECTED_SOURCE[art]] >= 1
@@ -188,14 +213,14 @@ def test_out_of_scope_artifacts_are_not_searched(tmp_path):
                                 "docs/reviews/connected-code-graph-r.md": text, "docs/test-reports/connected-code-graph-rep.md": text,
                                 "docs/plans/connected-code-graph-p0-ml.md": text, "docs/reviews/connected-code-graph-x-ml.md": text,
                                 "docs/plans/connected-code-graph-coordination.md": text, "docs/HISTORY.md": text, "docs/BACKLOG.md": text,
-                                "cpg/HISTORY.md": text, "cpg/BACKLOG.md": text, "cpg/tests/test_frontend_fitness.py": text,
+                                "cpg/HISTORY.md": text, "cpg/notes-coordination.md": text, "cpg/notes-ml.md": text, "cpg/BACKLOG.md": text, "cpg/tests/test_frontend_fitness.py": text,
                                 "falkor-chat/server/falkorchat/beta.py": text})
     assert got["python"] == set()
 
 
 def test_evidence_capped_at_three_and_prefers_path_form(tmp_path):
     extra = {f"cpg/tests/test_{i}.py": "falkorchat/alpha.py\n" for i in range(5)}
-    extra["docs/plans/connected-code-graph-z.md"] = "falkor-chat/server/falkorchat/alpha.py\n"
+    extra["docs/plans/connected-code-graph-rule-pack-spec.md"] = "falkor-chat/server/falkorchat/alpha.py\n"
     _, d = _derive(tmp_path, extra)
     x = d["corpora"]["python"]["files"]["falkorchat/alpha.py"]
     assert len(x["evidence"]) == 3 and x["artifacts"] == 6 and x["evidence"][0]["form"] == "path"

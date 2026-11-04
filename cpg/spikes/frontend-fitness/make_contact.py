@@ -29,7 +29,7 @@ REPO = os.environ.get("CONTACT_REPO") or subprocess.run(["git", "-C", HERE, "rev
 OUT = os.path.join(HERE, "contact.json")
 VERSION = 1
 SELF_DIR = "cpg/spikes/frontend-fitness/"
-# Not development sources (ML v1.8 R6): the measurement, synthetic snippets, this check's own test (mutation inputs)
+# Not development sources (ML v1.8/v1.9 R6): the measurement, synthetic snippets, this check's own test (mutation inputs)
 SELF_EXCLUDE = {"cpg/tests/test_contact.py", "cpg/tests/test_frontend_fitness.py"}
 LOG_NAMES = {"HISTORY.md", "BACKLOG.md"}              # logs, derivative of the sources
 MAX_BYTES = 2_000_000
@@ -57,11 +57,30 @@ def source_of(p):
         return "slice"
     if re.match(r"cpg/tests/[^/]+$", p) or re.match(r"cpg/.*/tests/", p):
         return "tests"
-    if re.match(r"docs/(plans|requirements|test-plans)/connected-code-graph[^/]*\.md$", p):
+    if p == RULE_PACK_SPEC:                               # S30's walkthroughs: the one plan that is a development source
         return "docs"
+    if p == SLICE_REPORT:                                 # S14's contact list: only its section 4 is read (scope_text)
+        return "slice"
     if p.startswith("cpg/"):
         return "cpg-other"
     return None
+RULE_PACK_SPEC = "docs/plans/connected-code-graph-rule-pack-spec.md"
+SLICE_REPORT = "docs/test-reports/connected-code-graph-p0-slice-report.md"
+SLICE_SECTION = ("## 4. Proving-repo anchors the slice touched", "## 5.")
+
+
+def scope_text(p, text):
+    """The slice report is read only between its section-4 heading and the next `## 5.` heading."""
+    if p != SLICE_REPORT:
+        return text
+    text = "\n" + text
+    a = text.find("\n" + SLICE_SECTION[0])
+    if a < 0:
+        return ""
+    b = text.find("\n" + SLICE_SECTION[1], a + 1)
+    return text[a:b] if b >= 0 else text[a:]
+
+
 SOURCES = ["fixtures", "golden", "slice", "tests", "packs", "docs", "cpg-other"]
 
 TOKEN = re.compile(r"[A-Za-z0-9_@+./-]+")
@@ -213,7 +232,7 @@ def derive(tree_root=None, treeish="HEAD", repo=None):
             continue
         src = source_of(art)
         nsearched[src] += 1
-        text = data.decode("utf-8", "ignore")
+        text = scope_text(art, data.decode("utf-8", "ignore"))
         rel_ok = src != "fixtures" and "fixtures" not in os.path.basename(art)
         for tm in TOKEN.finditer(text):
             tok = tm.group(0)
