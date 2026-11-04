@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.7 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.8 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.7): S25 gate (F2, F4, F9) folded in: the post-pilot C# and C++ C5 classes ruled an exception on fresh evidence (§3.2), the circularity stratum extended to Python with a named producer (§3.1, R6), and the C++ clause figures corrected to the harness's. Earlier content (v1.4–v1.6) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.8): S59 gate G1 and G2 folded in: flow-method files are not contact for the call-site strata, the stratum floor is counted on the final truth, and `contact.json`'s sources are fixed (§3.1, R6). Earlier content (v1.4–v1.7) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -194,6 +194,19 @@ What reading the real plan and system changed:
     ≥ 0.98 with ≥ 50 internal sites (fewer: *insufficient*, flagged, not passed). Python's labelled
     sample has about 250 reference-internal sites, so a non-contact stratum of 50 is likely; TS/JS's
     census has about 190 in all. AC-5's re-run on fresh items at P5 is the held-out check.
+  - **Stratum floor and flow files.** The ≥ 50 floor counts internal sites of the **final truth**
+    (`final2`) outside contact files, inside the labelled prefix: recall exists only for labelled
+    sites, so Python's 240 labelled rows (stopped by §4.3) are the base, not the 500-row reference.
+    Counts from the reference are forecasts (non-contact internal sites: Python 93 of the labelled
+    prefix, TS/JS 165). If the final count is below 50 and no Joern output has been opened, the
+    labeller may continue in ordinal order to the 500 cap (a stop that depends on the stratum count
+    and not on Joern keeps the prefix a uniform sample); otherwise *insufficient*. The S56
+    flow-method files are **not** contact for these call-site strata: being hand-labelled blind is
+    not tuning, as with the S25/S26 labels, and P1 debugs flow against them only after P0(a). "Flow
+    anchor" contact (eval-protocol §8.2) belongs to the later evaluation strata, which S47 adds; it
+    is recorded in `contact.json` apart (below) and not applied here. Applying it would take Python
+    to 52 and TS/JS to 69 and make a floor of 50 the deciding quantity for a contact that has not
+    happened.
 
 ### 3.2 External corpora: one per language for Java, Kotlin, C#, Go, C/C++
 
@@ -1128,10 +1141,23 @@ adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended.
   the strata of §3.1. *Producer (proposed; `architect` assigns the step id and row):* a new step
   after S11 and S14, before S27, owned by `graph-dba`, who built the extractor and knows what the
   slice touched; checked by `analyst`; not the S57 custodian, who must stay clear of Joern artifacts.
-  Output: `cpg/spikes/frontend-fitness/contact.json`, the files of the two corpora that any committed
-  development artifact other than `cpg/spikes/frontend-fitness/` names by path or by a defined
-  symbol's qualified name (fixtures, golden bundles, tests, rule packs), plus S06's own list. The
-  same file is the input to S47's contact set.
+  Output: `cpg/spikes/frontend-fitness/contact.json`, with these keys.
+  - `files`: the files of the two corpora that a **development source** names by path or by a
+    defined symbol's qualified name, plus S06's own list. Development sources are the primary
+    artifacts that shaped or encode what was built: code, tests of the system under test, fixtures,
+    golden bundles, rule packs, and the specs, plans and requirements that name a file as an input or
+    example. **Not sources:** `cpg/spikes/frontend-fitness/` (the measurement), every `-ml.md` note
+    and `docs/reviews/`, `docs/test-reports/` (documents that measure or review rather than build),
+    the coordination ledger, `HISTORY.md` and `BACKLOG.md` (logs, derivative of the sources), and
+    `cpg/tests/test_frontend_fitness.py` (synthetic snippets). Deriving with and without the excluded
+    ones gave the same list on 2026-11-04 (S59 G2); excluding them keeps the check from drifting when
+    those documents are edited.
+  - `derivedFrom`: the git SHA of the tree the derivation read, and `--check` reads that tree, so a
+    later commit cannot change the list.
+  - `flowAnchors`: the distinct paths of `sample/<lang>-flow.jsonl` (the draw defines the methods;
+    labels may be unfinished), per corpus. Recorded for S47 (eval-protocol §8.2), **not** part of
+    `files` and not applied to §3.1's strata.
+  The same file is the input to S47's contact set.
 - **R7. Inverse-sampling cap interacts with the C/C++ macro kind.** If macro-invocation sites are
   mostly `notACall`, they consume ordinals without adding internal sites. `notACall` sites count
   toward the 500 cap, and the report gives their share. On googletest 17 of the 500 sample sites are
