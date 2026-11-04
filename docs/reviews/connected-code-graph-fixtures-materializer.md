@@ -80,3 +80,23 @@ Re-gate closes when, run on copies, **every** mutant in the §1 table marked sur
 3. Is AC-25 bound to S33's answer fields (OI-1) only at P1? The neutral builder here is the reference answer; this gate judged it only as a falsifiable column, not as an engine check.
 
 Growth-stops: no `requirements/`, `plans/` or `reviews/` document was revised by the delivered commit (its only docs change is one ledger line); nothing to report.
+
+## Pass 2 (2026-11-04) — commit 227dd218
+
+**Verdict: approve with suggestions. S39 is accepted.** Executed: offline suite 73 passed (2 deselected); `-m live` 2 passed, per-unit (callable, found) = job 15/15, lib-cli 3/3, lib-pricing 5/5, svc 65/64, svc-common 4/4, svc-legacy 1/1, svc-tools 1/1, web 33/33, equal to `UNIT_FLOORS`. Probe counts reproduced with `-s`: F-2 35 mutants (semantic 20, anchor 6, pin-only 9), F-3 447, F-4 22, each 0 survivors. Plan edit in the commit is one insertion (LNK-04 "; the `/api` mount in `svc:api/app.py`"). Mutants ran on copies in `scratchpad/p2`.
+
+CPG: considered, not relevant — fixture trees and tests.
+
+| Finding | Disposition |
+|---|---|
+| F-1 | Fixed. Builders e (drop last dependency → exactly A25-4 on RV-1..3), f, g (direct/distance) added; T1, T2, T4 each red on the new builder tests. |
+| F-2 | Fixed. M25, M3b, M3d red by semantic test and pin; M2, M3c red by the SHA pin only (no semantic test names them). Nine probe mutants are pin-only: the pin is the sole detector for those content edits, so it must be updated deliberately with any branch change. |
+| F-3 | Fixed for status/reason/gate/distance/group and HTTP verb keys. M20, M21 and a plan-side reason edit (N1) red; `plan_row_table` reads only the plan file (`PLAN_TEXT`), never manifest text, so it cannot be satisfied by deriving from what it checks. Residual: F-9. |
+| F-4 | Fixed. M1 and N3 (parameter order swapped, all three files) red via derivation from `fmt.py`/`split.py`. |
+| F-5 | Closed per teco ruling (S39-only, `UNIT_FLOORS` exact on callable count, live run matches). S11/S25/S28 inheriting the weak floor is recorded in the test module docstring. |
+| F-6 | Fixed. `aux: fx-svc:api/app.py` on LNK-04 in fx-svc and cross; `PLANTER_FINDINGS = {}`; suite green. |
+| F-7 | Fixed in part. 20 SHAs pinned (N7: a changed branch time reddens); modes asserted ⊆ {100644, 100755} but the exec expectation is read from the same source bits. The `40`/`43` literals remain (nit). |
+| F-8 | Not changed (nit). |
+
+### F-9 [minor, verified: N8] non-HTTP keys of single-held rows are untied to the plan
+The key tie covers verb-prefixed HTTP keys and KN rows. Changing the topic key `inhouse-fxbus:price.updated` to `...updated2` in fx-lib (single holder) stays green (73 passed); an sql key held by two manifests (N9) is caught by cross. Keys feed TP-010's `{kind, keyNorm}`. **Fix:** require every non-empty manifest key to occur verbatim (or via `_key_in_plan_row`) in its plan row, and extend `_mutations` to mutate every keyed row; condition: N8 red and the probe count rises accordingly. Not gating S39; owed before TP-010 consumes keys.
