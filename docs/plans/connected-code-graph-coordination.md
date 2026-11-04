@@ -448,3 +448,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-04: S57 javascript phase 2 assembled (final.jsonl 523 = labels 523, basis agreed 266/audit-confirmed 214/adjudicated 43; agreement 479/522 = 0.9176; e_h 0, conservative bound 0.0339; reference error 43/522 = 0.0824). I re-checked line counts and basis counts. Held uncommitted pending the analyst transcript+evidence check (all 7 languages, one pass). Open: AS site basis audit-confirmed vs label-only; census reference error vs the 43 not reconciled.
 
 - 2026-11-04: S57 go decisions delivered (330): audit AI 0/60, AE 0/60, AS 1/28 (ord 49, timeNow assigned in tests); 9 label errors among 35 adjudicated; e_h point 0.0268 (conservative 0.0768) -- not noise-limited. ds (a8ac8bfc0e0859c74) resumed to run the 3-site sibling sweep and a capped 15-site func-variable check, then custodian a8f86b6e69772aafd does phase 2.
+
+- 2026-11-04: S57 go sweep done (ords 27/69/360 confirmed; no overturns; function-value check found 0 further sites to look at), decisions 333 lines. go custodian a8f86b6e69772aafd resumed for phase 2.
