@@ -1,5 +1,5 @@
 # Paper pack: extracted mechanically from the YAML block of section 4 of
-# docs/plans/connected-code-graph-rule-pack-spec.md (v1.3); the one added line is `status: paper`
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
 # (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
 packFormat: 1
 id: fastmcp

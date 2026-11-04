@@ -1,6 +1,6 @@
 """S31: ``rule-pack-v1.schema.json``, its validator, the reason registry and the three real packs.
 
-Contract: ``docs/plans/connected-code-graph-rule-pack-spec.md`` (v1.3, accepted). The spec test
+Contract: ``docs/plans/connected-code-graph-rule-pack-spec.md`` (v1.4). The spec test
 (``test_rule_pack_spec.py``) makes the *spec's* claims falsifiable and owns ``check_pack``, the
 spec-side closure checker. This file tests the *shipped* contract: ``ccg/schemas/rule-pack-v1.schema.json``
 plus ``ccg.rulepack.validate_pack`` (the RE2-subset, registry and cross-field checks JSON Schema cannot
@@ -8,12 +8,12 @@ carry). Where the two disagree, the schema and validator win (spec §12.1, S31);
 spec's own reading and is not imported here, except for the extraction helpers (``PACKS``, ``BLOCKS``),
 so every pack and negative example is taken mechanically from the spec's YAML blocks.
 
-Topic knock-on (``teco`` ruling O-16, ``docs/plans/connected-code-graph-rule-pack-spec.md`` §12.2):
-``PROVIDES topic`` joins the ``On`` sets of ``runtime-built`` and ``config-derived``, so ``onUnknown:
-config-derived`` is valid on a ``provides`` of kind ``topic`` as well as on a ``consumes`` of kind
-``topic``, and the ``provides`` default ``onUnknown`` is ``config-derived`` for ``topic`` (``drop``
-for every other kind). Spec §1.4 ("valid only on a ``consumes``"), the §1.4 default and N-27 still say
-the old thing; the spec is frozen, so this file is the record of the change until the spec's next edit.
+Topic cells (spec v1.4, from ``teco`` ruling O-16): ``PROVIDES topic`` is a cell of ``runtime-built`` and ``config-derived``, so
+``onUnknown: config-derived`` is valid on a ``consumes`` or a ``provides`` of kind ``topic``, and the ``provides`` default
+``onUnknown`` is ``config-derived`` for ``topic`` (``drop`` for every other kind). ``envPorts.excludeVars`` is optional (§1.6).
+
+Validator-only ruling (not in the spec): one slot carries one ``onUnknown`` mode, so a ``firstOf`` whose nested expressions
+name different modes is rejected.
 
 Leaves left to the P1 conformance test: ``UNEXERCISED_UNTIL_P1`` in ``test_rule_pack_leaf_mutation.py`` (P3-1 harness).
 """
@@ -408,19 +408,24 @@ def test_the_registry_cells_for_a_topic_publisher_exist_and_spec3_stays_frozen()
             assert "PROVIDES" not in on
 
 
-def test_the_spec_checker_and_the_shipped_validator_still_disagree_on_config_derived_on_a_topic_publisher():
-    """P4-5, RETIRE WITH THE SPEC v1.4 ROUND. Spec 1.4 (v1.3 text) and N-27 say `onUnknown: config-derived` is valid only on a
-    `consumes`; `check_rule` in test_rule_pack_spec.py is its executable twin and rejects it. The shipped validator accepts it on
-    `provides topic` (teco ruling O-16). When v1.4 changes the spec text and `check_rule` together, this test goes red: delete it,
-    the module docstring's Topic knock-on paragraph and the matching note on `default_on_unknown`."""
-    def mutate(p):
-        p["rules"][0]["extract"]["topic"].update(onUnknown="config-derived")
+def test_the_spec_checker_and_the_shipped_validator_both_accept_config_derived_on_a_topic_publisher():
+    """Spec v1.4 (O-16): `onUnknown: config-derived` is valid on a `provides` of kind `topic`; the checker and the validator agree."""
     pack = copy.deepcopy(PACKS["kafka"])
-    mutate(pack)
-    assert errors(pack) == []  # the validator accepts
-    with pytest.raises(AssertionError, match="N-27"):
-        spec.check_pack(pack)  # the spec checker rejects it, by its N-27 assertion
+    pack["rules"][0]["extract"]["topic"].update(onUnknown="config-derived")
+    assert errors(pack) == []
+    spec.check_pack(pack)
     assert rulepack.default_on_unknown("provides", "topic") == "config-derived"
+
+
+@pytest.mark.parametrize("path,value", [(("id",), "fastapi\n"), (("version",), "0.1.0\n")])
+def test_an_anchored_pattern_rejects_a_trailing_newline(path, value):
+    """Python's `$` matches before a final newline; the JSON Schema `pattern` means the whole string (ECMA 262), so the validator must too."""
+    assert accepted("fastapi", lambda p: p.update({path[0]: value}))
+
+
+def test_envports_without_excludevars_is_valid():
+    """Spec 1.6 (v1.4): `excludeVars` is optional."""
+    assert accepted("fastmcp", lambda p: p["launch"]["envPorts"][0].pop("excludeVars")) == []
 
 
 @pytest.mark.parametrize("edge,kind,expected", [
@@ -941,14 +946,14 @@ def aliased_query(alias, ref="$dec.args.a0"):
 
 
 @pytest.mark.parametrize("alias,ok", [("dec2", True), ("d_1", True), ("", False), ("Dec", False), ("TY", False), ("1d", False),
-                                      ("d-x", False), ("d x", False), ("t y", False), ("_d", False)])
+                                      ("d-x", False), ("d x", False), ("t y", False), ("_d", False), ("h2\n", False)])
 def test_a_query_alias_is_a_lowercase_token(alias, ok):
     assert (accepted("paper-inhouse-bus", aliased_query(alias)) == []) is ok
 
 
 @pytest.mark.parametrize("ref,ok", [("$dec.args.a0", True), ("$dec.args.kw.x", True), ("$dec.targetId", True),
                                     ("xdec.args.a0", False), ("xdec.args.a0$h.id", False), ("$dec.args.a0!! junk", False), ("$dec.args.a0 junk", False),
-                                    ("$dec.args.", False), ("$Dec.id", False), ("dec", False), ("$dec", False)])
+                                    ("$dec.args.", False), ("$dec.args.a0\n", False), ("$Dec.id", False), ("dec", False), ("$dec", False)])
 def test_a_query_yield_reference_is_a_dollar_alias_field_path(ref, ok):
     """P4-2: the validator's `args.` branch checks only that the record has `args`, so the schema pattern is the only guard."""
     assert (accepted("paper-inhouse-bus", aliased_query("h", ref)) == []) is ok
@@ -1186,11 +1191,6 @@ def spec_rejects(pack: dict) -> bool:
     return False
 
 
-# Where the validator is deliberately laxer than the spec test's checker: that checker indexes `e["excludeVars"]` without a guard,
-# but spec 1.6 gives `envPorts` no "required" rule for it and an adopter with nothing to exclude has nothing to list.
-KNOWN_LAXER = [("fastmcp", ("delete", ("launch", "envPorts", 0), "excludeVars"))]
-
-
 def single_edits(pack: dict):
     """Every mutant with one key deleted, or one scalar replaced by a value of no valid type or range."""
     for path in spec.dict_positions(pack):
@@ -1223,7 +1223,7 @@ def test_the_validator_rejects_every_single_edit_the_specs_own_checker_rejects()
                 if not errors(mutant, negatives=negs):
                     missed.append((pid, what))
     assert checked > 3000 and rejected_by_spec > 1000
-    assert missed == KNOWN_LAXER, missed[:8]
+    assert missed == [], missed[:8]
 
 
 def test_the_differential_probe_can_fail(monkeypatch):

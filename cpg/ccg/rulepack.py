@@ -41,6 +41,19 @@ class PackError(ValueError):
 
 # ---------------------------------------------------------------- loading
 
+def _pattern(validator, pattern, instance, schema):
+    """JSON Schema ``pattern`` (ECMA 262): an anchored pattern covers the whole string. Python's ``$`` also matches before a
+    final newline, so an anchored pattern is applied with ``fullmatch``; an unanchored one searches."""
+    if not isinstance(instance, str):
+        return
+    anchored = pattern.startswith("^") and pattern.endswith("$")
+    if not (re.fullmatch(pattern, instance) if anchored else re.search(pattern, instance)):
+        yield jsonschema.ValidationError(f"{instance!r} does not match {pattern!r}")
+
+
+_Validator = jsonschema.validators.extend(jsonschema.Draft202012Validator, {"pattern": _pattern})
+
+
 @functools.cache
 def load_schema() -> dict:
     return json.loads(SCHEMA_PATH.read_text())
@@ -235,7 +248,7 @@ def pack_errors(pack: dict, *, dirname: str | None = None, negatives: list[str] 
 
     ``dirname`` is the pack's directory name (N-2); ``negatives`` are log lines no ``signatures`` regex may match (N-22).
     """
-    validator = jsonschema.Draft202012Validator(load_schema())
+    validator = _Validator(load_schema())
     errs = [f"{_where(e.absolute_path)}: {e.message[:200]}" for e in sorted(validator.iter_errors(pack), key=lambda e: list(map(str, e.absolute_path)))]
     if errs:
         return errs  # the semantic checks below assume the structure the schema guarantees

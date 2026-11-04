@@ -374,7 +374,7 @@ def check_rule(r, queries, where):
     for slot, e in r.get("extract", {}).items():
         check_expr(e, f"{where}.extract.{slot}")
         if e.get("onUnknown") == "config-derived":
-            assert any(k == "consumes" and v["kind"] == "topic" for em in r["emit"] for k, v in em.items()), "N-27"
+            assert any(k in ("consumes", "provides") and v["kind"] == "topic" for em in r["emit"] for k, v in em.items()), "N-27"
     assert r["emit"], f"{where}: emit []"
     for em in r["emit"]:
         assert len(em) == 1
@@ -544,7 +544,9 @@ def check_pack(p: dict) -> None:
         for e in p["launch"].get("envPorts", []):
             only(e, {"envVar", "excludeVars", "adoptedBy"}, "envPorts")
             enum(e["adoptedBy"], ("envPorts", "adoptedBy"), "envPorts")
-            check_matcher(e["envVar"], "envPorts"); check_matcher(e["excludeVars"], "envPorts")
+            check_matcher(e["envVar"], "envPorts")
+            if "excludeVars" in e:
+                check_matcher(e["excludeVars"], "envPorts")
         for e in p["launch"].get("mountPaths", []):
             only(e, {"call", "path", "app", "pathMatch"}, "mountPaths")
             check_call(e["call"], "mountPaths.call")
@@ -678,7 +680,7 @@ NEGATIVES = [
     ("N-26 planted key", lambda p: p["rules"][0]["emit"][0]["provides"].update(planted=1)),
     ("N-23 link matcher", lambda p: p.update(link=[{"kind": "http", "matcher": "fuzzy"}])),
     ("N-25 form enum", lambda p: p.update(launch={"targetArg": [{"index": 0, "form": "dotted"}]})),
-    ("N-27 config-derived on provides", lambda p: p["rules"][0]["extract"].update(route={"arg": "a0", "onUnknown": "config-derived"})),
+    ("N-27 config-derived on a provides of kind http", lambda p: p["rules"][0]["extract"].update(route={"arg": "a0", "onUnknown": "config-derived"})),
     ("N-28 empty firstOf", lambda p: p["rules"][0]["extract"].update(route={"firstOf": []})),
 ]
 
@@ -690,6 +692,30 @@ def test_negative_examples_are_rejected_by_the_checker(name, mutate):
     mutate(p)
     with pytest.raises(AssertionError):
         check_pack(p)
+
+
+def test_n27_config_derived_on_a_consumes_of_http_is_rejected_by_the_checker():
+    import copy
+    p = copy.deepcopy(PACKS["fetch"])
+    p["rules"][0]["extract"].update(url={"lifted": "url", "onUnknown": "config-derived"})
+    with pytest.raises(AssertionError, match="N-27"):
+        check_pack(p)
+
+
+def test_config_derived_on_a_provides_of_kind_topic_is_accepted_by_the_checker():
+    """Spec 1.4 (v1.4, O-16): `config-derived` is valid on a `consumes` or a `provides` of kind `topic`."""
+    import copy
+    p = copy.deepcopy(PACKS["kafka"])
+    p["rules"][0]["extract"]["topic"]["onUnknown"] = "config-derived"
+    check_pack(p)
+
+
+def test_envports_without_excludevars_is_accepted_by_the_checker():
+    """Spec 1.6 (v1.4): `excludeVars` is optional."""
+    import copy
+    p = copy.deepcopy(PACKS["fastmcp"])
+    del p["launch"]["envPorts"][0]["excludeVars"]
+    check_pack(p)
 
 
 # N-26: one out-of-range value per enum / typed leaf / body-kind rule, on the pack that carries it.

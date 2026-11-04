@@ -129,10 +129,10 @@ def run_all(workers: int = 6) -> dict[str, bool]:
 
 
 # Classification from the slow run. Regenerate by running the slow test and moving leaves.
-# UNEXERCISED_UNTIL_P1: values only a runtime reading the pack can test. The spec 12.1 P1 conformance row (fastapi and fetch
-# over s14a against assemble.py, plus its named fixtures) covers the fastapi: and fetch: ones; the fastmcp: ones (imports
-# gates, callee names, the tool-call key, launch defaults and flags, URL-source patterns) have NO conformance row in 12.1 yet:
-# P1 needs one for fastmcp over s14a (the 25 mcp_tool providers) and for the launch/config extractor, which S14 did not run.
+# UNEXERCISED_UNTIL_P1: values only a runtime reading the pack can test. The spec 12.1 P1 pack-runtime conformance test covers
+# them: the fastapi: and fetch: ones by the fastapi/fetch rows over s14a against assemble.py (plus its named fixtures), the
+# fastmcp: ones (import gates, callee names, the tool-call key, launch defaults and flags, URL-source patterns) by the
+# `fastmcp` row, whose launch/config extractor is first exercised there. Each must flip a result when mutated.
 UNEXERCISED_UNTIL_P1: set[str] = {
     "fastapi:mounts[0].call.callee",
     "fastapi:mounts[0].prefix.arg",
