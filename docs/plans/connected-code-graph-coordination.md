@@ -428,3 +428,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-04: ML note v1.9 committed (ba24b19a): contact source set = code/tests/fixtures/golden/packs + rule-pack spec + slice report §4 only; config.py dropped; 7 Python + 2 TS/JS files. graph-dba (afb0cd04a9b75fcff) implementing in make_contact.py, in-flight. Next: S57.
 
 - 2026-11-04: S59 re-done per ML v1.9, verified (--check ok, test_contact 30 passed, graph-dba reports full suite 3241 passed, 47 mutants killed bar 2 equivalent). contact.json derivedFrom ebe66607; 7 Python + 2 TS/JS. S59 accepted. Next: S57 design (data-scientist).
+
+- 2026-11-04: ML note v1.10 committed: S57 procedure in §5.4 (data-scientist decides judged items; qa-engineer custodians per language prepare queues/assemble). Part F (flow audit) deferred: needs flowcheck nErrors 0 (Python/Go empty-pairs methods outstanding). JS labeller-scripts not kept (no provenance). Dispatching 7 custodians for parts A-E.
