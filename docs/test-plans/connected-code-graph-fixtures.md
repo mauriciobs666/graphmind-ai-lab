@@ -151,7 +151,7 @@ answer must contain.
 | LNK-12 | mcp_tool | `reindex`, TS `callTool(name)` wrapper | P `svc:mcp/server.py::reindex` · C `web:app/src/ui/Admin.tsx::onReindex` (wrapper `web:app/src/mcp/client.ts::callTool`) | c | lifted-role | P1 | client wrapper | LNK |
 | LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding) | P `svc:api/items.py::read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | binding-confirmed | P1 | config-bound base URL | LNK |
 | LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml` (origin `http://api:8000`, the Compose service `api` of LNK-22, so it binds to unit `svc` alone), read by `job/settings.py` | P `svc:api/health.py::health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
-| LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | binding-confirmed | P1 | config-bound base URL | LNK |
+| LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 (`job` Compose service: build context `../../fx-job`, port 8300, unit `job`) | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | binding-confirmed | P1 | config-bound base URL | LNK |
 | LNK-16 | http | `GET /job/status` fetched from `http://localhost:8000`; `fx-svc` (Compose) **and** `fx-job` (`scripts/dev.sh`) both claim 8000. True target: `job:job/trigger_server.py::status` | P `job:job/trigger_server.py::status` · C `web:app/src/ui/JobStatus.tsx::JobStatus` | p | port-shared | P1 | | LNK |
 | LNK-17 | http | `` fetch(`/api/items/${id}`) `` where `id` is a component prop: key `GET /api/items/{?}`. True target: `read_item` | P `svc:api/items.py::read_item` · C `web:app/src/ui/Item.tsx::ItemView` | p | partial-key | P1 | | LNK |
 | LNK-18 | http | URL binding: `http://localhost:8200/mcp` (consumer); ports 8000 and 8200 are launch configs of **one** unit (`svc`: `.mcp.json` and Compose) | P `svc:mcp/server.py::main` (`POST /mcp`) · C `web:app/src/mcp/client.ts::connect` | c | binding-confirmed | P1 | | LNK |
@@ -178,6 +178,8 @@ answer must contain.
 | LNK-42 | http | `GET /legacy/fee` fetched by `legacy_fee`; `svc-legacy` is unbuildable and never built in the steady state | P `svc:legacy/app.py::fee` · C `svc:api/orders.py::legacy_fee` | p | target-not-mapped | P1 | | LNK |
 | LNK-43 | http | `GET /tools/run` fetched by `run_tool`; `svc-tools` is never built | P `svc:tools/app.py::run` · C `svc:api/orders.py::run_tool` | p | target-not-mapped | P1 | | LNK |
 | LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
+
+A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15, OV-2) is a P1 check owed to the S30 owner.
 
 Reasons for the skew rows (LNK-33..35, 41), LNK-32 and LNK-31 are this plan's decisions (OI-3): bundle spec3 §7.2
 has no skew code, and `versionSkew` is a property on the link (graph note `Link.versionSkew`). The skew shape is
@@ -342,7 +344,7 @@ columns it writes to `order_report`) and `job:job/trigger_server.py::status` (th
 | ID | change set | affected code (other repositories) | st | reason | gate | serves |
 |---|---|---|---|---|---|---|
 | OV-1 | `CS-JOB` | listed: `svc:api/reports.py::report_view`, reader of `sql:table:order_report` (written by fx-job; LNK-44) | c | key-match | P3 | AC-19, LNK-44 |
-| OV-2 | `CS-JOB` | listed: `JobPanel`, consumer of `GET /job/status` through `VITE_JOB_BASE` = `http://job:8300` (Compose) | c | binding-confirmed | P3 | AC-19 |
+| OV-2 | `CS-JOB` | listed: `JobPanel`, consumer of `GET /job/status` through `VITE_JOB_BASE` = `http://job:8300` (Compose; `job` Compose service: build context `../../fx-job`, port 8300, unit `job`) | c | binding-confirmed | P3 | AC-19 |
 | OV-3 | `CS-JOB` | **not listed:** `svc:api/health.py::health`, `web:app/src/ui/Health.tsx::Health`, and `svc:clients/jobs.py::trigger_job` (LNK-15's caller of `POST /job/trigger`, which `CS-JOB` does not edit) | none | none | P3 | AC-19 |
 | OV-4 | `CS-SVC` | listed: `job:job/run_report.py::render_row` (LNK-26's reader of `sql:column:orders.total`): the column is removed and a new one added | c | key-match | P3 | AC-19 |
 | OV-5 | `CS-JOB` | listed **after** OV-2: `web:app/src/ui/JobStatus.tsx::JobStatus`, the other consumer of `GET /job/status` (LNK-16) | p | port-shared | P3 | AC-19 |

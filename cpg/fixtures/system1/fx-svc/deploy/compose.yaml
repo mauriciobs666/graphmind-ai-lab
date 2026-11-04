@@ -12,6 +12,9 @@ services:
       VITE_JOB_BASE: http://job:8300
   job:
     image: fx-job:latest
+    build:
+      context: ../../fx-job
+      dockerfile: Dockerfile
     ports:
       - "8300:8300"
     environment:
