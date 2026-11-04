@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.6 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.5): S25 pilot results folded in (C5's by-construction exclusions and the type-and-constructor clause, §3.2, §5.2) and the S56 flow brief signed off (direct pairs, point classes, JS/TS tests, §6.4, §7.3, §8.4); the C#, C++, TS/JS and brief rulings are priors with stopping conditions. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.6): TS/JS a1 frame restricted to non-test files and labelled as a census (stakeholder decision; §3.1); earlier v1.5 and v1.4 content (C5 exclusions, macro-argument mapping, S56 flow rulings) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -156,6 +156,42 @@ What reading the real plan and system changed:
   confirms).
 - `node_modules/`, `dist/`, `test-results/`, `*.egg-info/` and generated files are outside the
   frame. These are proving-repo code; §10 R6 covers the contact this creates.
+- **TS/JS a1 frame is non-test files only, and is a census (stakeholder decision).** The frame drops
+  the files bundle spec4 §1 lists as `test` (`*.test.<ext>`, `*.spec.<ext>`, `e2e/`, `__tests__/`),
+  since the bundle has no symbol for them by design; the 4,097-site frame was 87% such files (3,574
+  sites; 444 of the old 500-site sample). What is left is **523 sites in 40 files**. Rules for this
+  case only:
+  - **Census, not a draw.** All 523 sites are labelled, in §4.4 hash order (so ordinals, resume and
+    reproducibility are unchanged), with no stop at 150 internal sites and no 500 cap. A sample of
+    500 of 523 would add sampling error for no saving, and the extra 23 sites are 4.6% more work. A
+    census has no sampling error: the observed recall is the corpus's value, and §8.1 and §8.3 apply
+    unchanged to the observed figures and their floors (n ≥ 100 internal, n_P ≥ 60). Their Wilson
+    intervals are then a conservative statement about this corpus, not sampling error. Expected
+    internal sites: about 190 (20 of the 56 prod sites in the old sample; Wilson 95% on the share
+    gives 128 to 255), so the 100 floor is likely met; unmeasured.
+  - **C3's 2,000-site floor is waived for this case.** That floor bounds sampling error of a
+    sample, and a census has none; what C3 also guards (a frame large enough to hold the weak-spot
+    idioms) is carried by §6.4 and by this being the P1 target code. The 5k–60k line bound is not
+    waived and still holds.
+  - **Labelling.** The 500-site `labels/javascript.jsonl` is superseded (444 of its sites are test
+    sites and it was drawn to the old stop rule) and is kept out of the truth. A fresh `qa-engineer`
+    labels all 523 in one dispatch under the regenerated brief (N = 523, one dispatch; append-and-resume,
+    R5, covers the length). There is no second pass for "the 22 over 500": the old cap does not apply.
+    The 56 prod sites the old labeller also labelled are used only as a test-retest check of label
+    agreement between two blind labellers, reported in §5.1 step 4, never as a second vote.
+  - **Reference.** `scip-typescript` indexed the whole corpus and is unchanged; only the frame,
+    sample, private file, brief and `ref.jsonl` mapping are regenerated (a re-map of the existing index,
+    no tool re-run). C5's 50-site pilot was drawn from the old frame; it is re-drawn from the
+    523-site frame and re-run before any Joern run on the corpus.
+  - **Claims.** AC-8 (egress) is untouched. For AC-5, TS/JS fitness now describes the prod code the
+    bundle contains; recall on test code is unmeasured and irrelevant by design. Python keeps its
+    tests.
+  - **Circularity.** The 40 files are the proving repo's prod code, which is also P1's target and has
+    development contact (R6). The fitness figure is therefore not held-out. *Stopping condition:*
+    S06's contact list is applied to the 40 files; sites in listed files are reported as a separate
+    stratum, and TS/JS passes §8.1 only if the non-contact stratum alone has observed recall ≥ 0.98
+    with ≥ 50 internal sites (fewer: *insufficient*, flagged, not passed). AC-5's re-run on fresh
+    items at P5 is the held-out check.
 
 ### 3.2 External corpora: one per language for Java, Kotlin, C#, Go, C/C++
 
@@ -1047,13 +1083,6 @@ that those caches are not mounted into the sandbox.
 
 ## 10. Risks and open questions
 
-**Open question (TS/JS call-site frame, for the coordinator).** 3,574 of the TS/JS frame's 4,097 sites,
-444 of its 500 sample sites and 89 of its 109 reference-internal sample sites are in files that match
-bundle spec4's `test` pattern. If the Joern frontend does not see test files (not verified by me),
-a1's TS/JS recall is measured almost wholly on code the bundle excludes by design; restricting the
-frame to non-test files leaves 523 sites, below C3's 2,000. Answering it changes what the TS/JS fixed
-corpus measures, so it is a scope decision. No labelling has started on it.
-
 **Open questions.** The v1.0 questions Q1 (who writes the golden flow sets) and Q2 (where
 adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended. What remains for
 `architect` is whether to add those steps in plan v1.4, and the §8.3 precision proposal.
@@ -1076,7 +1105,7 @@ adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended.
 - **R5. Labeller session length** (§4.3). The 500 cap makes a worst-case session up to 500 sites.
   Mitigation: append-and-resume. A language that still ends below 100 internal sites (an
   internal share near 0.20) is *insufficient*, which counts as a fail under §8.1.
-- **R6. Contact with the proving repo.** S26 labels call edges in `falkor-chat/server/` and
+- **R6. Contact with the proving repo** (the TS/JS census of §3.1 sharpens it). S26 labels call edges in `falkor-chat/server/` and
   `salesperson/`, in a file builders can read. These are call edges, not impact keys, so the
   contamination of AC-5 is low. Even so, S06's development-contact rule should list the files the
   Python and TS samples touch, with the same treatment as the slice's (S06 is mine; I will carry it
