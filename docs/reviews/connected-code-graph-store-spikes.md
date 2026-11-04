@@ -393,3 +393,184 @@ One addition, root `REVIEW.md` → **Always check**. Source: the OOM in this pas
 `ccg_p0slice`, which belongs to another unit).
 - (addition) A live probe that sweeps a parameter which scales memory or time on a shared instance states its
   ceiling and stop rule before it runs; a probe without one is a finding.
+
+## Pass 3 (2026-11-04) — S22 + S23 (commit `7c5ce861`)
+
+**Scope.** `cpg/spikes/store/{acl_probe,lock_replay,timeout_probe,stall_probe}.py`, `tests/{test_lock_replay,test_stall_probe}.py`,
+the five new `results/*.json`, `MEASUREMENTS.md` §4–§5, the quirks diff, and `p0-graph.md` §3.3/§4/§5/§6. The contract is the
+p0-2 S22/S23 rows and §4.5. On the instance I used only `ccg_p0spike*` keys. Writes came only from the tests I ran: their
+own keys and temporary ACL users, all removed afterwards (checked: `--scan` shows only `ccg_p0slice`, `ACL USERS` shows only `default`).
+
+**Verdict: approve with suggestions.** One major (P3-1) is a text fix in the quirks file and `MEASUREMENTS.md`. Every §6
+decision value follows from its measurement.
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| §6 rows recomputed from `results/*.json` | rows 1, 4, 13 and 11 match Pass 1/2's recomputes; row 5: 10 × 537.6 = 5,376 → 10,000; row 6/7 match `timeout_probe.json` (kills at 3.014 / 3.018 / 1.005 s, 0 committed; 60000 rejected; backfills 1.16 / 1.647 s at cap 800); row 8: totals 0.448–0.464 s, 3 × 0.464 = 1.392 → 2,000 ms; row 10: `acl_matrix.json` selector diffs empty for 4/4 users, `flat+get`/`spec` leak `DEL` for build/verdict, `spec` loses the release; row 12: 13–21 / 29–36 ms; rows 14/15 match `stall_probe.json` (73.1 ms at 100k; 182 / 485 ms; 28,169–28,604 then 27,506 edges/s; 27.0 ms during 49.6 s) |
+| §6 rows with no JSON | row 3's 797 MB (carried, `INFO`, unrecorded); row 9's "21 mutants, all killed" (no list or record anywhere); §5's 917 MB peak (consistent with today's `used_memory_peak` 874.40 MiB = 916.9 MB) |
+| `test_lock_replay.py -m live`, twice | **8 passed** both runs (11.9 s / 12.0 s), keys cleaned up |
+| P2-m2 closure: `test_store_spikes.py -m live -k live_swap_script` | **4 passed**; the swapped-RENAME mutant is now red in both the non-live (new order assertion) and live tests |
+| Suites (from `cpg/`) | store tests + `test_loader_v1.py` **96 passed, 18 deselected**; default `cpg` suite **2273 passed, 1 skipped, 10 deselected** |
+| My mutants, scratch copy `…/scratchpad/p3mut` (Appendix D) | 11 run: 8 killed (4 of them only by the live tests), 3 survive (P3-3) |
+| FalkorDB docs, `TIMEOUT_DEFAULT` (docs.falkordb.com configuration page) | it applies to reads **and writes** and may be set up to `TIMEOUT_MAX` (P3-4) |
+
+### Carried dispositions
+
+- **P2-m1 — fixed.** The flag is renamed `symbolPathsBelowBudget`, and the docstring and §1 say it shows nothing about exhaustion.
+- **P2-m2 — fixed, and run here.** There is now a static order assertion. The live 4-case test passes, and the RENAME-order mutant fails it (above).
+- **P2-m3 — fixed.** "at `N` = 1,000,000", "pooled 10–15 % (per anchor 2–23 %)".
+- **P2-m4 — fixed.** The ceiling is stated as 1,000,000, and memory growth with the budget is marked as a hypothesis for a disposable instance.
+- **m6 — fixed.** The duplicate TIMEOUT entry is folded into the existing entry at line 1143.
+
+### Findings
+
+#### P3-1 (major) — the incident's "only minutes-long behaviour" contradicts the incident's own record
+
+**Evidence.**
+- **What is claimed.** `MEASUREMENTS.md` §5 and the new quirks stall entry offer the un-indexed write as the explanation:
+  "100k rows over a 20k-node label would take tens of minutes while `PING` still answers … would look like an unresponsive
+  instance" (marked inferred).
+- **The record rules it out.** The incident (`docs/reviews/connected-code-graph-p0-impl.md`, "Incident during this check")
+  states that `GRAPH.EXPLAIN` of that write showed `Node By Index Scan` on **both** endpoints. It also says the server did
+  not answer `PING`, or `HELLO` on a new connection. A slow write with `PING` still answering would not cause that.
+- **The arithmetic is overstated.** At 4.96 ms/row (`stall_probe.json`, 10k rows in 49.55 s), 100k rows take about
+  8 minutes, not tens of minutes.
+- **Hypotheses not considered:**
+  - memory pressure: it was a RAM probe, on a 6 GB VM, in a container with a 2 GB cap;
+  - the S21 in-process new-connection artefact (§2), which matches a "new connection does not answer" symptom.
+
+**Why it matters.** The quirks file is the team's durable knowledge base. It now points the next investigator at a cause
+the incident had already excluded.
+
+**Fix (`graph-dba`).**
+- Replace the inference with: "not reproduced; the incident write was index-backed; open hypotheses: memory pressure, a
+  client-side new-connection stall (S21)".
+- Keep row 15 as "not reproduced, cause open".
+
+#### P3-2 (minor) — the 100k hard ceiling equals the size of the unexplained incident
+
+Row 14 sets the hard ceiling at 100,000 rows. That was the incident's write size, and that write stalled the instance for
+minutes for a cause that is still not known. This probe measured 100k only on an idle instance with ~59 MB in use.
+`BATCH_MAX` stays 20,000, so nothing breaks today. **Fix:** state the condition next to the ceiling ("idle instance;
+the S03-check incident stall was at this size, cause open"), or set the ceiling at the last size below the incident (50,000)
+until the cause is known. That choice is the owner's.
+
+#### P3-3 (minor) — the "21 mutants, all killed" claim has no record, and the stall measurement path has no test
+
+- Row 9 cites "21 mutants of the lock, ACL-rule and stall code, all killed", but nothing records which mutants. That makes
+  it an unrecorded figure, under `MEASUREMENTS.md`'s own convention.
+- My mutants of the stall **measurement** path all survive the suite, because `test_stall_probe.py` tests only
+  `summarize_pings`:
+  - the sampler pinging `falkordb-dev` (6379) instead of 6390;
+  - the sampler interval changed from 5 ms to 500 ms;
+  - the "during" window collapsed to `[t1, t1]`.
+- **The recorded run is not affected.** Its own data is a positive control: the worst `PING` grows with write size
+  (11.7 → 485 ms), and the sample counts imply about 5.8 ms per sample (609 in 3.54 s). A rerun, though, is unprotected.
+
+**Fix.** Record the 21 mutants (name + killing test), or drop the number from row 9. Add a check to the probe's own
+output, asserted in `run()` and not in a unit test: during the 500k step, `during.max_ms` must exceed `baseline.max_ms`.
+
+#### P3-4 (minor) — "an explicit `timeout` is not needed to avoid a kill" holds only while `TIMEOUT_DEFAULT` is 0
+
+The measurement is right for the recorded state (`timeoutDefault 0`, a kill at the cap: 3.014 s). The FalkorDB docs say
+`TIMEOUT_DEFAULT` applies to reads **and writes** and may be set to any value up to `TIMEOUT_MAX`. An operator who sets
+it to, say, 1,000 would kill every load query that passes no `timeout` at 1 s. The explicit `timeout` is what protects
+against that.
+
+D16 (§4) still requires the explicit `timeout`, so the loader rule is not weakened. Only its stated reason is incomplete:
+"S22: without one the cap applies anyway". **Fix.** Add "with `TIMEOUT_DEFAULT` 0" to the quirks headline, §4's
+parenthesis and §6 row 6. Keep D16's explicit `timeout`.
+
+#### P3-5 (minor) — the TIMEOUT_MAX sizing: the "tenth" clause holds only at 10,000, and one read already broke it
+
+- §4.5's rule is "the smallest round value ≥ 10× the worst p99 per-level read, with each per-level read ≤ a tenth of it".
+  At 10,000 the clause holds: the max recorded read is 939.8 ms. At the noted alternative of 6,000 it fails (939.8 > 600)
+  unless the BFS chunk shrinks. That is the real argument for 10,000, and the record should say so.
+- "939.8 ms is the largest read" also leaves out the S20 read that was **killed** at 1,000 ms under load, which is absent
+  from the records because it crashed the run. So one read has already exceeded the tenth.
+
+**Fix.** In §4 / row 5, state that 6,000 would violate the tenth clause, and record the killed read as the known exception.
+
+#### P3-6 (minor) — the telemetry-removal fact now reads two ways
+
+- The quirks entry heading (line 1282) still says "removed **synchronously** … the sighting did not reproduce". The
+  2026-11-04 text appended under it says the removal lags by 13–36 ms and that the `--scan` sighting reproduced.
+- `MEASUREMENTS.md` §2 says "not reproduced"; §5 says "reproduces".
+
+The fact holds parameter values (the G13 retention concern), so a reader who stops at the heading gets the wrong rule.
+**Fix.** Rewrite the heading and §2's sentence to the current fact (a lag of tens of ms, poll). This is the "rewrite,
+don't append" rule. The single `--scan` sighting on the ~1M-edge graph is unrecorded; mark it as such.
+
+#### P3-7 (minor) — the proposal's `~ccg_<system>*` pattern crosses systems that share a prefix (for S50; inferred)
+
+- `ccg_build`'s pattern is `~ccg_<s>*`, with flat `+graph.query +rename +expire`. With `<s>` = `shop`, it also matches
+  every `ccg_shopify…` key.
+- So one system's build credential can write to, rename or expire another system's graphs. This is Redis glob semantics;
+  I did not run it.
+- The matrix's foreign key, `ccg_p0spike__zforeign`, cannot collide with `ccg_p0spike__acl*`, so the probe could not show this.
+
+**Fix (S50).** Use `~ccg_<s> ~ccg_<s>__*` plus the lock selector, or forbid system names that are prefixes of each other.
+
+#### P3-8 (minor) — the §3.3 rewrite is S17-L2 material bundled into this commit
+
+The new state counts in §3.3 ("98 / 84 / 84 / 82 / 81 / 83", "19 / 5 / 5 / 3 / 2 / 4", "+19 / +21") are not the slice
+report §6.8 figures (79 / 65 / 65 / 63 / 62). They have no file in `results/`, and re-deriving them needs a live walk on
+`ccg_p0slice`, which this gate may not touch.
+
+Growth-stops: this is rework plus new measured facts, and the plan note has become those facts' only home. The rest of
+the note's growth is compliant: §4 rework in place, §5 replaces text with test names, and §6 is the S23 deliverable
+(new scope, a table its contract requires).
+
+**Fix.** Put the counts in a result file, or cite the run that produced them. `teco` should route §3.3 to the S17-L2
+owner's gate, not this one.
+
+#### Nits
+
+- `acl_probe.SWAP_LUA` is the old `build`-only script, not `swap_probe.SWAP_SCRIPT`. The ACL needs are the same (`EXISTS`, `RENAME`), but the matrix should run the adopted script.
+- §4 says `node_batch … timeout 10000` took 0.012 s; the file says 0.013. It also says peak 373 MB; `memoryLog` max is 371.4 MB.
+- `timeout_probe` describes cap 800 as "below the uncapped backfill times", but the constraint took 0.206 s uncapped. The full-text index (1.697 s) is the one probe that shows a backfill outliving the cap. The constraint shows it only because it ran slower under the cap (1.16 s).
+- `PATCH_QUERY`'s `CASE` keeps a **null** offset null forever (`null < $off` is null). Every `:Snapshot` must carry `verdictLogOffset`, so this belongs in the loader rule (the `:Snapshot` is written last, D16).
+
+### Is "no stall reproduced" an overreach?
+
+The finding itself is sound: 9 single writes, `PING` from a separate process, and the instance answered throughout. The
+overreach is only the explanation offered for the incident (P3-1). "About 1 ms of worst `PING` per 1,000 edges" is a
+real, linear head-of-line cost at commit. It belongs with the ceiling (P3-2), not with the incident.
+
+### Stopping condition (falsifiable)
+
+This approval stands until any of these happens:
+1. A third `test_lock_replay.py -m live` run, or one under concurrent load, fails any of its 8 tests.
+2. Any §6 value recomputed from `results/*.json` differs from the table.
+3. A re-run of `acl_probe.py` shows any non-empty selector-variant diff.
+4. A P1 measurement shows a per-read p99 over 1,000 ms at the `bfs-v1` chunk size under `TIMEOUT_MAX` 10,000. This would break the tenth clause the sizing rests on.
+
+P3-1 should be fixed before S23 is accepted, because the quirks file is read whole by every `graph-dba` session.
+
+### Proposed REVIEW.md lines
+
+Target: root `REVIEW.md`, **Always check**. Source: P3-1, plus Pass 1 B1 / Pass 2's correction (the same class:
+a cause asserted without checking the evidence that already exists).
+- (addition) An explanation offered for an incident that was not reproduced is checked against the incident's own
+  record (its EXPLAIN output, its symptoms). An inference that the record contradicts is a finding.
+
+The Pass 1 and Pass 2 proposals stand as written.
+
+### Appendix D — Pass 3 mutants (scratch copy, `PYTHONPATH` pinned; live runs exclude the ACL-matrix test)
+
+| Mutant | Non-live | Live |
+|---|---|---|
+| `RELEASE_LUA` → unconditional `DEL` | survives (the fake re-implements compare-and-delete) | **killed** (2 fail) |
+| `Lock` ttl silently × 10 | survives | **killed** (5 fail) |
+| `Lock.acquire` drops `px` (never expires) | survives | **killed** (5 fail) |
+| `PATCH_QUERY` offset made non-monotonic | survives | **killed** (1 fail) |
+| `swap` remainder replay removed | **killed** | **killed** |
+| `catch_up` skips the last entry | **killed** | **killed** |
+| `Log._repair` disabled | **killed** | survives (no live torn-tail test; non-live covers it) |
+| `acl_rules` selector: flat `+del` on `ccg_build` | **killed** | — |
+| stall sampler pings port 6379 | **survives** | — (no live test) |
+| stall sampler interval 5 → 500 ms | **survives** | — |
+| stall "during" window → `[t1, t1]` | **survives** | — |
+| (P2-m2) `SWAP_SCRIPT` RENAME order swapped | **killed** | **killed** |
