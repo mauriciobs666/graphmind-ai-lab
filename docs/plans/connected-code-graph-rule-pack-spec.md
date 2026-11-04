@@ -1,8 +1,8 @@
 # Connected code graph — rule-pack spec (format v1, five paper packs, infrastructure signatures, severity rules)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-rule-pack-spec.md`, `docs/reviews/connected-code-graph-rule-pack-spec-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-rule-pack-spec.md`, `docs/reviews/connected-code-graph-rule-pack-spec-ml.md`
 
-*Revision 2026-11-01 (v1.3): third-pass wording fixes ("supported", dedupe, near-miss lead-in), the `when` vocabulary table, S32's test-owned vectors, O-15/O-16 restated; the `data-scientist` consult the S30 row requires is held by the methodology review, not reopened.*
+*Revision 2026-11-04 (v1.4): topic cells (`provides` default, `config-derived`, N-27, §5), registry row tokens, `excludeVars` optional, `fastmcp` conformance row, pack-file shape, from S31's delivery and gate Pass 4.*
 
 This is step S30 (unit P0-22) of `docs/plans/connected-code-graph-p0-2.md` (§4.2, "the rule-pack
 spec"). It fixes the pack file format S31 turns into `cpg/ccg/schemas/rule-pack-v1.schema.json`, and
@@ -158,16 +158,17 @@ product of its parts (at most 64 alternatives); `ref` is the referenced `constan
 all have exactly one alternative (slice report §5), so the product and cap paths are unexercised.
 
 `onUnknown`, per slot:
-- `drop` (default for `provides`, `writes`): an alternative with an unresolved piece is omitted and
+- `drop` (default for `provides` of every kind but `topic`, and for `writes`): an alternative with an unresolved piece is omitted and
   listed in the rule's **diagnostics** (S14 §6.2: bundle spec §6 has no provider-side unresolved
   form; a diagnostic is not a registry code and reaches no graph element).
 - `partial` (default for `consumes`, `reads`): the unresolved segment becomes `{?}` (spec §6 step 8),
   the fact is `possible`, reason `partial-key`. Only `http` has a placeholder in spec §6; for any other
   kind `partial` means `runtime-built`.
-- `runtime-built`: no key; the fact is `possible`, reason `runtime-built` (only where spec §7.2 lists the
-  code for the emitted edge).
-- `config-derived` (valid only on a `consumes` of kind `topic`, the one place spec §7.2 lists the
-  code; N-27): as `runtime-built`, with reason `config-derived`, when the unresolved argument's
+- `runtime-built`: no key; the fact is `possible`, reason `runtime-built` (only where the registry (§1.9)
+  lists the code for the emitted edge: spec3 §7.2's `CONSUMES`, `READS`/`WRITES`, plus `PROVIDES topic`).
+- `config-derived` (default for `provides` of kind `topic`, and valid on a `consumes` or a `provides` of
+  kind `topic` only: spec3 §7.2 lists the code on `CONSUMES topic`, and §1.9's `PROVIDES topic` cell
+  (O-16) adds the publisher side; N-27): as `runtime-built`, with reason `config-derived`, when the unresolved argument's
   point has a spec §5.13 `fieldAccess` read; otherwise `runtime-built`. The name itself is never read:
   a pack cannot extract a configuration value (N-20), and `bindValue`'s grammar admits only ports, hosts and URLs.
 
@@ -276,7 +277,7 @@ launch:
 
 Shapes: `command` is any §1.3 matcher over the emitted `command` string; `port` is an int,
 `protocol` a string; `flags` a list of strings; `form` is `module-attr` (the only member in v1);
-`adoptedBy` is `same-file-launch` (the only member); `excludeVars` is a list of matchers; `pathMatch`
+`adoptedBy` is `same-file-launch` (the only member); `excludeVars` is an optional list of matchers (absent is none excluded); `pathMatch`
 is `exact` or `prefix`; `fromCall` is a `callsite` clause.
 
 - `frameworkDefaults`: a `command` launch whose emitted `command` matches and whose emitted `args` hold
@@ -289,7 +290,10 @@ is `exact` or `prefix`; `fromCall` is a `callsite` clause.
   matches resolve nothing. Without a `command` constraint any `command` launch qualifies; a false unit
   needs an in-repo `x.py` for an `x:y` argument.
 - `envPorts`: an `env-default` launch fact whose `envVar` matches and is not in `excludeVars`
-  contributes `(port, unit)` for the unit launched by a `command` launch **in the same file**.
+  contributes `(port, unit)` for the unit launched by a `command` launch **in the same file**. `excludeVars` is
+  optional: an exclusion list is pack content, not format, and a pack whose adopter has nothing to exclude has
+  nothing to list. A pack that adopts `*PORT` with no exclusion adopts `FALKORDB_PORT` (§4.4 step 5), so the
+  shipped `fastmcp` pack keeps its list, which `test_env_port_heuristic_claims` pins.
 - `mountPaths`: a mount call whose `app` argument is fed by a call matching `fromCall` declares a
   unit mount path (`path` alternatives), conditions recorded as for `mounts`. `pathMatch` is how a
   consumer URL's path is compared: `exact` or `prefix` (§1.3).
@@ -359,7 +363,7 @@ evaluator, about the relational select subset above.
 ### 1.9 The reason registry file (S31 owns it)
 
 N-9 and N-17 need a machine-readable registry, and spec §7 is prose. **S31 creates
-`cpg/ccg/registry/reasons.yaml`** (row shape `{code, status, on: [<edge or record>...], kinds?: [..]}`,
+`cpg/ccg/registry/reasons.yaml`** (row shape `{code, status, on: [<token>...]}`; a token is an edge or record name (`CONSUMES`) or `<EDGE> <kind>` (`PROVIDES topic`), because one code can differ by kind across edges and a row-level `kinds?` cannot say so,
 `status` ∈ `confirmed`, `possible`, `none`), seeded by a test that parses spec §7.2 and §7.3 (as S10
 parses spec3's vectors), plus the rows spec §7 leaves to this document, with the `On` sets the packs
 need and spec §7.2's column does not list (spec §7.4: "S30's severity rule table adds the others"):
@@ -715,11 +719,10 @@ codes read as written. Topics are not B1 shared state (proposal §3.3, graph not
 **Preconditions for S32's topic assertions.** (1) *Keyless and pattern keys have no home in
 graph model D4* (`ContractPoint {cpId, kind, key, keyNorm}`): §5.2 step 2's keyless `CONSUMES` and the
 `regex`/`glob` keys of §5.2 step 3 and §6 cannot be asserted until `graph-dba`/S17 rules (O-15, open). (2) *A
-publisher whose topic is built at runtime or read from config* (`onUnknown: drop` on `provides`, §1.4)
-yields no fact: spec §7.2 lists `runtime-built` and `config-derived` on `CONSUMES`/`READS`/`WRITES`
-only, so no registry code covers a possible `PROVIDES topic`, and the subscribers' links to it do not
-appear (AC-6 wants each shown as possible). **Decided (O-16):** S31's registry gains the cells. Until
-S31 lands them and O-15 is ruled, S32 asserts only the literal-key facts (§5.2 step 1, §6 step 1).
+publisher whose topic is built at runtime or read from config* is a possible `PROVIDES topic`
+(`onUnknown` defaults to `config-derived` for it, §1.4; spec3 §7.2 lists the codes on `CONSUMES`/`READS`/`WRITES`
+and `CONSUMES topic` only, so the `PROVIDES topic` cells are §1.9's, O-16, shipped in `reasons.yaml`). Until
+O-15 is ruled, S32 asserts only the literal-key facts (§5.2 step 1, §6 step 1).
 
 ### 5.1 Snippet and records (invented; shapes are spec §5.6, §5.8, §5.13)
 
@@ -1308,7 +1311,8 @@ Each fragment is a malformed pack (or rule) that `rule-pack-v1.schema.json`, or 
 writes beside it, must reject. The five paper packs of §2–§6, the infrastructure-signature pack and
 the severity pack must pass (S31/S32 done-condition): **S31 extracts the pack YAML blocks from this
 document mechanically** (every fenced block whose first key is `packFormat`, as S10 extracts spec3's
-vectors), never by hand copy. Where the check needs the registry (§1.9) or a sample, it is the
+vectors), never by hand copy. A pack file is its block verbatim plus one added `status: paper` line (and a
+leading comment); `tests/test_rule_pack_schema.py` pins the equality. Where the check needs the registry (§1.9) or a sample, it is the
 validator's, not pure JSON Schema.
 
 | # | Malformed | Clause violated |
@@ -1339,7 +1343,7 @@ validator's, not pure JSON Schema.
 | N-24 | a severity row whose `level` disagrees with its `rank` (`rank: 3, level: low`), a second row for one (finding, rank), or an `id` other than the derived one | §9.1 |
 | N-25 | a matcher `{basename: x, exact: y}`; `urlBindings` with a `scope` outside a `callsite` source; `targetArg: {form: dotted}`; `envPorts: {adoptedBy: any}` | §1.3, §1.6: one matcher; closed enums |
 | N-26 | **generated probe:** for every object the schema defines, one planted unknown key; for every enum and every typed leaf, one out-of-range value | §1.1: unknown keys rejected everywhere (schema-walking, not an enumerated list) |
-| N-27 | `onUnknown: config-derived` on a `provides`, or on a `consumes` of kind `http`; a `reason` whose registry `On` set lacks the emission's edge (`reason: config-derived` on a `PROVIDES`) | §1.4, §1.9 |
+| N-27 | `onUnknown: config-derived` on a `provides` of a kind other than `topic`, or on a `consumes` of kind `http`; a `reason` whose registry `On` set lacks the emission's edge and kind (`reason: config-derived` on `PROVIDES http`) | §1.4, §1.9 |
 | N-28 | a `firstOf` with no entries, or an empty `anyOf`; a rule on `match: {query: q}` where `q` has no `handler` column | §1.2, §1.7 |
 
 Positive controls beside them: the three packs of §2–§4 are valid, and a variation of each with one
@@ -1395,7 +1399,7 @@ client snippet are invented and name no proving-repo anchor.
 |---|---|
 | S31 (`tdd-engineer`) | `cpg/ccg/schemas/rule-pack-v1.schema.json` and `cpg/tests/test_rule_pack_schema.py` from §1 and §10 (each N-n rejected); **`cpg/ccg/registry/reasons.yaml`** (§1.9) and its parse-from-spec test; `cpg/packs/{fastapi,fetch,fastmcp}/pack.yaml` extracted mechanically from the YAML blocks of §2, §3, §4 (§10 preamble). The schema file carries the RE2-subset and registry checks as validator code beside the JSON Schema. **p0-2 §3's S31 row gains the registry file** (a `teco` edit). |
 | S32 (`tdd-engineer`) | `kafka` (§5) and `paper-inhouse-bus` (§6) extracted, asserting the literal-key topic facts only until the preconditions of §5 (O-15, O-16) are ruled; `infra-signatures` from §8.1–§8.2 (the `signatures` list is the file's body; §8's negatives, cross-runtime and mixed-blob cases are its tests, with the mutation check); `severity-rules` from §9.1's block, passing §9.3's 44 vectors plus the test's `EXTRA_VECTORS` (X1 to X11) and the mutation check. |
-| P1 pack runtime | a conformance test: run `fastapi` and `fetch` over `s14a` and compare to `assemble.py`'s `providers` (61) and consumers (11) and their hops. Expected differences: the two handlers of §2.3 (`inner.get`, `_probe_rest_app`'s `router.post`) are `possible/partial-key`, not `confirmed`. Fixtures: a factory with `APIRouter(prefix=…)` mounted with another prefix, and a function holding `FastAPI()` plus a local `APIRouter()`, must give `possible`. The `fetch` lifting emits only resolved leaves (§1.6); `assemble.py` emits every resolved slot (O-13). |
+| P1 pack runtime | a conformance test: run `fastapi`, `fetch` and `fastmcp` over `s14a` and compare to `assemble.py`'s `providers` (61) and consumers (11) and their hops. Expected differences: the two handlers of §2.3 (`inner.get`, `_probe_rest_app`'s `router.post`) are `possible/partial-key`, not `confirmed`. Fixtures: a factory with `APIRouter(prefix=…)` mounted with another prefix, and a function holding `FastAPI()` plus a local `APIRouter()`, must give `possible`. The `fetch` lifting emits only resolved leaves (§1.6); `assemble.py` emits every resolved slot (O-13). **`fastmcp` row:** the `tool` rule over `s14a` yields `PROVIDES mcp_tool`, `confirmed/key-match`, for the 25 `mcp.py` decorators (§4.1) and for the look-alikes O-8 names, each listed rather than silently included; the `tool-call` rule yields `CONSUMES mcp_tool`. S14 did not run the launch/config extractor, so this run is its first exercise: over §4.3's records it must give the `(8200, unit)` port, the `/mcp` mount path and the `confirmed` `Link` of §4.4. The 14 `fastmcp:` leaves of `UNEXERCISED_UNTIL_P1` in `cpg/tests/test_rule_pack_leaf_mutation.py` (import gates, callee names, the tool-call key, launch defaults and flags, URL-source patterns) belong to this row: each must flip a result when mutated. |
 | S47 (GC) | §11 as S30's contact list. |
 | S27 | §7(c). |
 
@@ -1430,7 +1434,6 @@ client snippet are invented and name no proving-repo anchor.
   the finding's status the more uncertain reason's). Owner: `graph-dba` shapes both, with S17.
 - **O-16.** **Decided** (`teco` ruling, 2026-11-01): a publisher with an unresolved topic (§5) gets a
   registry code by adding `PROVIDES topic` to the `On` sets of `runtime-built` and `config-derived` as
-  §1.9 registry cells; spec §7.2 stays frozen. S31 implements the cells (`reasons.yaml`); the `provides`
-  default `onUnknown: drop`, §1.4's "valid only on a `consumes`" and N-27 change with them (S31/S32,
-  for `topic` only).
+  §1.9 registry cells; spec3 §7.2 stays frozen. Shipped in `reasons.yaml`; §1.4, N-27 and the spec
+  test's `check_rule` agree (v1.4).
   Related, owner ML §8.3: whether `connection-refused` should split into `connection-lost` (§8.2).
