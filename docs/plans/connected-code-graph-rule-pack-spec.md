@@ -1,8 +1,8 @@
 # Connected code graph — rule-pack spec (format v1, five paper packs, infrastructure signatures, severity rules)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-rule-pack-spec.md`, `docs/reviews/connected-code-graph-rule-pack-spec-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-rule-pack-spec.md`, `docs/reviews/connected-code-graph-rule-pack-spec-ml.md`
 
-*Revision 2026-11-04 (v1.4): topic cells (`provides` default, `config-derived`, N-27, §5), registry row tokens, `excludeVars` optional, `fastmcp` conformance row, pack-file shape, from S31's delivery and gate Pass 4.*
+*Revision 2026-11-04 (v1.5): a slot has one `onUnknown` mode, mixed nested modes rejected (§1.4, N-29); ruling on gate Pass 4 P4-4.*
 
 This is step S30 (unit P0-22) of `docs/plans/connected-code-graph-p0-2.md` (§4.2, "the rule-pack
 spec"). It fixes the pack file format S31 turns into `cpg/ccg/schemas/rule-pack-v1.schema.json`, and
@@ -171,6 +171,10 @@ all have exactly one alternative (slice report §5), so the product and cap path
   (O-16) adds the publisher side; N-27): as `runtime-built`, with reason `config-derived`, when the unresolved argument's
   point has a spec §5.13 `fieldAccess` read; otherwise `runtime-built`. The name itself is never read:
   a pack cannot extract a configuration value (N-20), and `bindValue`'s grammar admits only ports, hosts and URLs.
+
+**A slot has one mode.** Every `onUnknown` nested in one slot (through `firstOf`) must name the same mode; an expression with none takes it (N-29). Status and reason come from the slot's
+resolution (N-17); with `[drop, partial]` an unresolved alternative would be omitted or `possible` by which `firstOf` branch produced it, so the
+validator could not say whether `confirmed` is sound, and "the first one rules" would make the second annotation dead text.
 
 A rule may emit `confirmed` only when every slot its `key` uses is resolved in that alternative
 (N-17). When an argument's value set is `unknown point-derived`, the value arrives through `data`
@@ -1345,6 +1349,7 @@ validator's, not pure JSON Schema.
 | N-26 | **generated probe:** for every object the schema defines, one planted unknown key; for every enum and every typed leaf, one out-of-range value | §1.1: unknown keys rejected everywhere (schema-walking, not an enumerated list) |
 | N-27 | `onUnknown: config-derived` on a `provides` of a kind other than `topic`, or on a `consumes` of kind `http`; a `reason` whose registry `On` set lacks the emission's edge and kind (`reason: config-derived` on `PROVIDES http`) | §1.4, §1.9 |
 | N-28 | a `firstOf` with no entries, or an empty `anyOf`; a rule on `match: {query: q}` where `q` has no `handler` column | §1.2, §1.7 |
+| N-29 | a slot whose nested `firstOf` expressions carry different `onUnknown` modes (`[drop, partial]` or `[partial, drop]`), with or without `status: confirmed` | §1.4: a slot has one mode |
 
 Positive controls beside them: the three packs of §2–§4 are valid, and a variation of each with one
 rule removed is valid (`rules` is optional for every kind, §1.1; `fetch`'s variation keeps its

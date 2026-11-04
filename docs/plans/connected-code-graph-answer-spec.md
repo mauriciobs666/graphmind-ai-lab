@@ -1,8 +1,8 @@
 # Connected code graph: canonical answer spec, schema v1 (S33)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P0) · **Version:** 1.2 · **Reviews:** `docs/reviews/connected-code-graph-answer-spec.md`, `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P0) · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-answer-spec.md`, `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-04 (v1.2): `facts_bytes` excludes `interpretation.lookups` for a resolved answer (§6); ranked did-you-mean options (§3); plants, `$defs` list and base documents completed.*
+*2026-11-04 (v1.3): rulings on gate findings F5, F6, F9, AC-16 raw leg: identity strip names `rootPath`, `urlPath`, `scope.paths[]` (§6); V16 span rule (§8); V15 extension case-sensitive; AC-16 raw leg compares item sets (§3, §4.1, C3).*
 
 **Goal.** Specify the canonical answer document (`answerSchemaVersion` `"1.0"`) so that S34
 (`tdd-engineer`: `cpg/ccg/schemas/answer-v1.schema.json`, `cpg/ccg/answer.py`, `cpg/tests/test_answer.py`,
@@ -129,8 +129,8 @@ Scope:   { repoIds: [string, ...] } | { paths: [string, ...] }          absent =
 - **`rcaMarks`** is named by `docs/plans/connected-code-graph-p0-2.md` §4.2. A mark is the investigator's feedback on a hypothesis (`ruled-out` | `confirmed`,
   proposal §3.7): a **request input** (inside `facts_bytes`, §6). v1 fixes the name and an empty value; P5 defines the shape
   (proposed `{hypothesisId: 32-hex, mark}`, sorted by `hypothesisId`; additive, §9) and expresses the ranker's score in integers (carry-over C9).
-- **AC-16 is pin-and-replay** (ML §3.2 item 4): the request a plain-language client echoes is submitted through MCP, CI script and raw recipe, and `facts_bytes` (§6) must be
-  equal across all four. A client that interpreted differently fails AC-24, not AC-16.
+- **AC-16 is pin-and-replay** (ML §3.2 item 4): the request a plain-language client echoes is submitted through MCP, CI script and raw recipe. `facts_bytes` (§6) must be
+  equal across the client's answer, MCP and CI; the **raw-recipe leg is weaker by decision**: re-running `recipe.queries` yields rows, never an answer document (the walk's cost order, grouping and canonicalization are the engine's), so it is compared on the item set derivable from the rows (subject ids with `status` and chain `(kind, id)`; EP `docs/plans/connected-code-graph-eval-protocol-ml.md` §10.6), and the report says so. A client that interpreted differently fails AC-24, not AC-16.
 
 ## 4. `recipe`, `stamp`, `staleness`, `depthBound`
 
@@ -144,7 +144,7 @@ Scope:   { repoIds: [string, ...] } | { paths: [string, ...] }          absent =
 - `queries` is every **parameterized, read-only** query text the engine ran for this answer (anchor resolution, one per
   (edge type, direction) walked, `LIFTED_VIA` expansion, `candidateCount`), duplicates removed, each with a `name`
   (`^[a-z_]+(:[A-Za-z]+)?$`, e.g. `to_in`, `owner_of:CallSite`), sorted by `name`, names unique. Parameter values are not carried:
-  FR-19's re-run takes the anchors from `interpretation`. **That a raw client re-running `queries` reproduces the facts is the P1 engine's
+  FR-19's re-run takes the anchors from `interpretation`. **That a raw client re-running `queries` reproduces the item set (subject ids, `status`, chain ids; rows, not an answer document, so not `facts_bytes`) is the P1 engine's
   contract, not something the slice's readers can yet deliver:** its reads do not return `Param`/`Ret`/`Cond` `path`/`repo`/`unit` (those nodes carry only
   `pointId`, `line` and a little else, `load.py`), `LIFTED_QUERY` returns no `unit`, `repo` or `siteId`, and no `Reader` method reads an edge's `reason`
   (carry-over C3). The golden's `recipe.queries` is therefore a hand-built fixture (§11).
@@ -283,7 +283,7 @@ Group: {kind: "other-possible-callees" | "runtime-built-access", key: 32-hex, re
 
 **Bytes.** The canonical bytes of an answer are **one line**: `ccg.bundle.canonical_line(answer)`, i.e. `json.dumps(answer, ensure_ascii=False,
 separators=(",", ":"), sort_keys=True)` encoded UTF-8, plus one `\n`. Every string is NFC; identity strings (ids, `qname`, `path`, `keyPath`,
-`calleeName`, `keyNorm`, `name`) are also stripped (`-spec3` §8.1); free-text fields (`code`, `reason` of a unit) are not stripped. No `null`, no
+`calleeName`, `keyNorm`, `name`, plus `rootPath`, `urlPath` and the `scope.paths[]` elements: path data AC-24 compares field by field; a leading or trailing space is not meaningful in a repo-relative POSIX `rootPath` (bundle header `unit.rootPath`) or a normalized URL path (`-spec3` §6 `http` step 4)) are also stripped (`-spec3` §8.1; the engine strips or normalizes at emission, a violation fails loudly); free-text fields (`code`, `reason` of a unit) are not stripped. No `null`, no
 float, no `true`/`false` in an integer field, no duplicate key on read. `canonical_line` is plain `json.dumps` and normalizes nothing, so the validator **rejects**
 (does not repair) a non-NFC string or an unstripped identity string. Object key order is the sort, so only **array** order needs a rule. **Coverage probe:** the set of arrays
 is derived from the schema (every `"type": "array"` property, including inside `$defs`, `oneOf` branches and `$ref` targets), and each must have a row below or
@@ -415,7 +415,8 @@ The schema is **necessary, not sufficient** (as `bundle-v1.schema.json`'s descri
 | V12 | F-4: with the §7.3 tokenizer, no screen unit of any F-4 field fails `screen_fails`; unparseable text is an error | 7.3 |
 | V13 | F-12: chain simple in `(kind, id, state, accessPath)`; no item subject equals a request anchor | 7.4 |
 | V14 | F-3: every string property is engine-minted, `x-ccg-minted` or `x-ccg-data` (a test over the schema, not a per-document check) | 7.2 |
-| V15 | Id recompute: where the language is determined by the extension alone (`.py` python; `.ts .tsx .mts .cts .js .jsx .mjs .cjs` javascript; `.go` go; `.sh .bash` shell; `-spec3` §3.3), `symbolId == ids.symbol_id(lang, repoId, qname)` for every symbol subject and symbol anchor. Overloading languages (need `signature`) and `.h`/extensionless files (need content) are skipped. Both golden symbols reproduce | 5.1 |
+| V15 | Id recompute: where the language is determined by the extension alone (`.py` python; `.ts .tsx .mts .cts .js .jsx .mjs .cjs` javascript; `.go` go; `.sh .bash` shell; `-spec3` §3.3), `symbolId == ids.symbol_id(lang, repoId, qname)` for every symbol subject and symbol anchor. The extension match is **case-sensitive**: `A.PY` is skipped (a skip never rejects; the frontend's treatment of upper-case extensions is unverified, so no recompute is claimed). Overloading languages (need `signature`) and `.h`/extensionless files (need content) are skipped likewise. Both golden symbols reproduce | 5.1 |
+| V16 | Symbol subject span: `lineStart <= lineEnd`; `ownedRegions`, when present, has even length, each pair `s <= e`, and the flat list is non-decreasing (the "ascending" of §6). Regions need not lie inside `[lineStart, lineEnd]` (H1's span test reads both; a fixture plants `lineStart/lineEnd` away from the regions) | 5.1 |
 
 Order is **not** a validity rule: `dumps` canonicalizes (sorts per §6) then validates, and `is_canonical(data: bytes)` is `data == dumps(loads(data))`.
 
@@ -509,7 +510,7 @@ For `teco` to attach to `docs/plans/connected-code-graph-p0-2.md`'s "For P1" lis
 |---|---|---|
 | C1 | The `CONTROLLED_BY` cycle test and mutant of §7.4(3), added with the `CONTROLLED_BY` row | P1 BFS implementer |
 | C2 | The renderer tests of §7.1 and §7.2 | P1 renderer / MCP unit |
-| C3 | The three reads of §4.1 (owner join, lifted unit/repo/siteId, edge `reason`) | P1 BFS implementer, with `graph-dba` |
+| C3 | The three reads of §4.1 (owner join, lifted unit/repo/siteId, edge `reason`), enough for the raw leg's item-set derivation (AC-16, §3) | P1 BFS implementer, with `graph-dba` |
 | C4 | Count `depthBound.unexplored` and record the default bound >= 2 (§4.4) | P1 BFS implementer; S50 records the bound |
 | C5 | Gate-harness assertions: `stamp.snapshotId` equals the pinned gate snapshot and `verdictLogOffset == 0`; `interpretation.request` equals the submitted request; each hit's chain **replayed against the gate snapshot** (each hop's `(kind, id)` exists and an edge of `edgeType`/`dir` joins consecutive hops; positive control: a fabricated-chain item scores a miss); subject span and `qname` re-read by `symbolId` from the snapshot, a mismatch being a harness error; `mask_identifier` applied to both sides of the H1 config comparison with masked comparisons listed; every AC-24 repeat carries `provenance.cacheHit == false`, a `true` voids the item; the cache is empty for the gate snapshot | GC / S47 gate harness (`data-scientist` owns the EP §5.2/§10.4 amendments) |
 | C6 | The `algorithm.version` value and bump rule for P1's added rows (§4.1); the P1 plan records `function-level-continuation`'s retirement with the `arg(i)` rows (§10.3) | P1 plan (`architect`) |
