@@ -13,7 +13,12 @@ symbol's qualified name (`<path>::name` is a path match; `api.py::build_router.h
 by its corpus-unique basename; the Python dotted form `falkorchat.storefront_api.f` or `falkorchat.app:app` is
 resolved to the module file by longest-prefix).
 
-Usage: make_contact.py [--check] [--summary] [--out PATH] [--tree-root DIR]  (--summary: counts against the local frame/, not committed)   (--tree-root: read files from a directory copy
+`derivedFrom` is the commit SHA whose tree was read (HEAD at generation); --check re-derives from exactly that tree, so a later
+commit to any file cannot move the list, and fails if that commit is unreachable (not an ancestor of HEAD) or the derivation differs.
+Generating in the commit that adds contact.json is therefore safe: it records the parent (HEAD before that commit).
+`flowAnchors` reads the committed `sample/<lang>-flow.jsonl` -- the one file of sample/ that is read -- and is NOT part of `files`.
+
+Usage: make_contact.py [--check] [--summary] [--out PATH] [--tree-root DIR] [--from SHA]  (--summary: counts against the local frame/, not committed)   (--tree-root: read files from a directory copy
 of the artifact tree instead of HEAD; used by the mutation tests).
 """
 import json, os, re, subprocess, sys
@@ -24,7 +29,9 @@ REPO = os.environ.get("CONTACT_REPO") or subprocess.run(["git", "-C", HERE, "rev
 OUT = os.path.join(HERE, "contact.json")
 VERSION = 1
 SELF_DIR = "cpg/spikes/frontend-fitness/"
-SELF_EXCLUDE = {"cpg/tests/test_contact.py"}          # this check's own test: its strings are mutation inputs
+# Not development sources (ML v1.8 R6): the measurement, synthetic snippets, this check's own test (mutation inputs)
+SELF_EXCLUDE = {"cpg/tests/test_contact.py", "cpg/tests/test_frontend_fitness.py"}
+LOG_NAMES = {"HISTORY.md", "BACKLOG.md"}              # logs, derivative of the sources
 MAX_BYTES = 2_000_000
 SKIP_EXT = (".jpg", ".png", ".svg", ".ico", ".lock", ".gz", ".zip", ".pyc", ".woff", ".woff2")
 
@@ -37,6 +44,9 @@ PY_PKG = "falkorchat"
 
 # search sources, in evidence-priority order; first matching rule wins for an artifact
 def source_of(p):
+    base = p.rsplit("/", 1)[-1]
+    if base in LOG_NAMES or base.endswith("-ml.md") or base.endswith("-coordination.md"):
+        return None
     if p.startswith("cpg/fixtures/"):
         return "fixtures"
     if p.startswith("cpg/packs/"):
@@ -47,7 +57,7 @@ def source_of(p):
         return "slice"
     if re.match(r"cpg/tests/[^/]+$", p) or re.match(r"cpg/.*/tests/", p):
         return "tests"
-    if re.match(r"docs/(plans|reviews|test-plans|test-reports)/connected-code-graph[^/]*\.md$", p):
+    if re.match(r"docs/(plans|requirements|test-plans)/connected-code-graph[^/]*\.md$", p):
         return "docs"
     if p.startswith("cpg/"):
         return "cpg-other"
@@ -67,8 +77,8 @@ def norm_token(t):
     return t
 
 
-def git_blobs(treeish="HEAD"):
-    out = subprocess.run(["git", "-C", REPO, "ls-tree", "-r", "-z", treeish], capture_output=True, text=True, check=True).stdout
+def git_blobs(treeish="HEAD", repo=None):
+    out = subprocess.run(["git", "-C", repo or REPO, "ls-tree", "-r", "-z", treeish], capture_output=True, text=True, check=True).stdout
     ents = []
     for e in out.split("\0"):
         if not e:
@@ -78,8 +88,8 @@ def git_blobs(treeish="HEAD"):
     return ents
 
 
-def read_blobs(ents, want):
-    proc = subprocess.Popen(["git", "-C", REPO, "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def read_blobs(ents, want, repo=None):
+    proc = subprocess.Popen(["git", "-C", repo or REPO, "cat-file", "--batch"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     res = {}
     for path, sha in ents:
         if path not in want:
@@ -93,7 +103,7 @@ def read_blobs(ents, want):
     return res
 
 
-def load_tree(tree_root=None):
+def load_tree(tree_root=None, treeish="HEAD", repo=None):
     """-> {path: bytes} for every candidate file; path list of the whole tree."""
     if tree_root:
         allp = []
@@ -102,12 +112,12 @@ def load_tree(tree_root=None):
             for f in sorted(fn):
                 allp.append(os.path.relpath(os.path.join(dp, f), tree_root).replace(os.sep, "/"))
         def rd(ps):
-            return {p: open(os.path.join(tree_root, p), "rb").read() for p in ps}
+            return {p: open(os.path.join(tree_root, p), "rb").read() for p in ps if os.path.exists(os.path.join(tree_root, p))}
         return sorted(allp), rd
-    ents = git_blobs()
+    ents = git_blobs(treeish, repo)
     allp = sorted(p for p, _ in ents)
     def rd(ps):
-        return read_blobs(ents, set(ps))
+        return read_blobs(ents, set(ps), repo)
     return allp, rd
 
 
@@ -144,8 +154,36 @@ def resolve_dotted(tail, mods):
     return None
 
 
-def derive(tree_root=None):
-    allp, rd = load_tree(tree_root)
+def resolve_sha(treeish="HEAD", repo=None):
+    r = subprocess.run(["git", "-C", repo or REPO, "rev-parse", "--verify", "--quiet", treeish + "^{commit}"], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def norm_flow_path(p, root):
+    """sample/<lang>-flow.jsonl `path` -> corpus-relative, forward slashes, no ./ or repo-root prefix"""
+    p = p.replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    if p.startswith(root + "/"):
+        p = p[len(root) + 1:]
+    return p
+
+
+def flow_anchors(rd, universe_rel):
+    out = {}
+    for name, c in CORPORA.items():
+        f = "cpg/spikes/frontend-fitness/sample/%s-flow.jsonl" % name
+        txt = rd([f]).get(f, b"").decode("utf-8", "ignore")
+        paths = set()
+        for l in txt.splitlines():
+            if l.strip():
+                paths.add(norm_flow_path(json.loads(l)["path"], c["root"]))
+        out[name] = sorted(paths)
+    return out
+
+
+def derive(tree_root=None, treeish="HEAD", repo=None):
+    allp, rd = load_tree(tree_root, treeish, repo)
     uni = corpus_universe(allp, rd)
     # full-path and relative-path lookup tables
     full, rel = {}, {}
@@ -205,7 +243,8 @@ def derive(tree_root=None):
                 hits.setdefault(p, {}).setdefault(art, set()).add((PY_PKG + dm.group(1), "qname"))
 
     order = {s: i for i, s in enumerate(SOURCES)}
-    out = {"version": VERSION,
+    out = {"version": VERSION, "derivedFrom": None if tree_root else resolve_sha(treeish, repo),
+           "flowAnchors": flow_anchors(rd, None),
            "rule": "file listed iff a committed artifact outside cpg/spikes/frontend-fitness/ names it by path or by a defined symbol's qname",
            "searchSources": {s: nsearched[s] for s in SOURCES},
            "s06": {"ownListOnDisk": False,
@@ -273,6 +312,23 @@ def summary(obj):
         print(name, json.dumps(row))
 
 
+def check(path, repo=None):
+    """-> (ok, message). Re-derives from the tree named by the file's own `derivedFrom`."""
+    if not os.path.exists(path):
+        return False, "contact.json missing"
+    text = open(path).read()
+    sha = json.loads(text).get("derivedFrom")
+    if not sha or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return False, "derivedFrom missing or not a full sha"
+    if resolve_sha(sha, repo) != sha:
+        return False, "derivedFrom %s is unreachable (not a commit here)" % sha
+    if subprocess.run(["git", "-C", repo or REPO, "merge-base", "--is-ancestor", sha, "HEAD"]).returncode != 0:
+        return False, "derivedFrom %s is not an ancestor of HEAD" % sha
+    if render(derive(treeish=sha, repo=repo)) != text:
+        return False, "contact.json differs from its derivation at %s" % sha
+    return True, "ok"
+
+
 def main(argv):
     tree_root = None
     out = OUT
@@ -280,15 +336,15 @@ def main(argv):
         tree_root = argv[argv.index("--tree-root") + 1]
     if "--out" in argv:
         out = argv[argv.index("--out") + 1]
-    obj = derive(tree_root)
+    if "--check" in argv:
+        ok, msg = check(out)
+        sys.stderr.write(msg + "\n")
+        return 0 if ok else 1
+    treeish = argv[argv.index("--from") + 1] if "--from" in argv else "HEAD"
+    obj = derive(tree_root, treeish)
     text = render(obj)
     if "--summary" in argv:
         summary(obj); return 0
-    if "--check" in argv:
-        cur = open(out).read() if os.path.exists(out) else ""
-        if cur != text:
-            sys.stderr.write("contact.json drifted from its derivation\n"); return 1
-        return 0
     open(out, "w").write(text)
     return 0
 

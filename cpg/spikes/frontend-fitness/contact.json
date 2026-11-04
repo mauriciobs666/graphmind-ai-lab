@@ -5,7 +5,7 @@
    "corpusFiles": 46,
    "files": {
     "src/api/client.ts": {
-     "artifacts": 18,
+     "artifacts": 14,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -38,7 +38,7 @@
      ]
     },
     "src/api/endpoints.ts": {
-     "artifacts": 19,
+     "artifacts": 13,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -74,11 +74,11 @@
    "root": "salesperson"
   },
   "python": {
-   "contactFiles": 23,
+   "contactFiles": 15,
    "corpusFiles": 107,
    "files": {
     "falkorchat/api.py": {
-     "artifacts": 8,
+     "artifacts": 5,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
@@ -101,8 +101,7 @@
      ],
      "forms": [
       "base",
-      "path",
-      "rel"
+      "path"
      ],
      "sources": [
       "tests",
@@ -110,7 +109,7 @@
      ]
     },
     "falkorchat/app.py": {
-     "artifacts": 16,
+     "artifacts": 10,
      "evidence": [
       {
        "artifact": "cpg/spikes/vertical-slice/tests/test_assemble.py",
@@ -173,103 +172,46 @@
      ]
     },
     "falkorchat/embedding.py": {
-     "artifacts": 3,
-     "evidence": [
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/embedding.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/embedding.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "embedding.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "path",
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "falkorchat/executor.py": {
      "artifacts": 2,
      "evidence": [
       {
-       "artifact": "cpg/tests/test_frontend_fitness.py",
-       "form": "qname",
-       "match": "falkorchat.executor",
-       "source": "tests"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "executor.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "qname"
-     ],
-     "sources": [
-      "tests",
-      "docs"
-     ]
-    },
-    "falkorchat/guards.py": {
-     "artifacts": 3,
-     "evidence": [
-      {
        "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
        "form": "path",
-       "match": "falkor-chat/server/falkorchat/guards.py",
+       "match": "falkor-chat/server/falkorchat/embedding.py",
        "source": "docs"
       },
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
        "form": "path",
-       "match": "falkor-chat/server/falkorchat/guards.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "guards.py",
+       "match": "falkor-chat/server/falkorchat/embedding.py",
        "source": "docs"
       }
      ],
      "forms": [
-      "base",
       "path"
      ],
      "sources": [
       "docs"
      ]
     },
-    "falkorchat/llm.py": {
-     "artifacts": 1,
+    "falkorchat/guards.py": {
+     "artifacts": 2,
      "evidence": [
       {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "llm.py",
+       "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
+       "form": "path",
+       "match": "falkor-chat/server/falkorchat/guards.py",
+       "source": "docs"
+      },
+      {
+       "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
+       "form": "path",
+       "match": "falkor-chat/server/falkorchat/guards.py",
        "source": "docs"
       }
      ],
      "forms": [
-      "base"
+      "path"
      ],
      "sources": [
       "docs"
@@ -307,25 +249,8 @@
       "docs"
      ]
     },
-    "falkorchat/modelconfig.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "modelconfig.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
     "falkorchat/querygen.py": {
-     "artifacts": 3,
+     "artifacts": 2,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-graph.md",
@@ -335,12 +260,6 @@
       },
       {
        "artifact": "docs/plans/connected-code-graph.md",
-       "form": "path",
-       "match": "falkor-chat/server/falkorchat/querygen.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph.md",
        "form": "path",
        "match": "falkor-chat/server/falkorchat/querygen.py",
        "source": "docs"
@@ -355,7 +274,7 @@
      ]
     },
     "falkorchat/services.py": {
-     "artifacts": 3,
+     "artifacts": 2,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
@@ -368,16 +287,9 @@
        "form": "path",
        "match": "falkor-chat/server/falkorchat/services.py",
        "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "base",
-       "match": "services.py",
-       "source": "docs"
       }
      ],
      "forms": [
-      "base",
       "path",
       "rel"
      ],
@@ -386,7 +298,7 @@
      ]
     },
     "falkorchat/storefront_api.py": {
-     "artifacts": 16,
+     "artifacts": 11,
      "evidence": [
       {
        "artifact": "cpg/tests/golden/answer-ac1.json",
@@ -410,8 +322,7 @@
      "forms": [
       "base",
       "path",
-      "qname",
-      "rel"
+      "qname"
      ],
      "sources": [
       "golden",
@@ -420,7 +331,7 @@
      ]
     },
     "falkorchat/tools.py": {
-     "artifacts": 5,
+     "artifacts": 3,
      "evidence": [
       {
        "artifact": "cpg/tests/test_ids.py",
@@ -443,8 +354,7 @@
      ],
      "forms": [
       "base",
-      "path",
-      "rel"
+      "path"
      ],
      "sources": [
       "tests",
@@ -452,7 +362,7 @@
      ]
     },
     "tests/conftest.py": {
-     "artifacts": 3,
+     "artifacts": 2,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
@@ -462,12 +372,6 @@
       },
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec3.md",
-       "form": "rel",
-       "match": "tests/conftest.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
        "form": "rel",
        "match": "tests/conftest.py",
        "source": "docs"
@@ -481,72 +385,24 @@
      ]
     },
     "tests/eval/__init__.py": {
-     "artifacts": 3,
+     "artifacts": 1,
      "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0.md",
-       "form": "path",
-       "match": "falkor-chat/server/tests/eval/__init__.py",
-       "source": "docs"
-      },
       {
        "artifact": "cpg/spikes/vertical-slice/S11-notes.md",
        "form": "rel",
        "match": "tests/eval/__init__.py",
        "source": "slice"
-      },
-      {
-       "artifact": "docs/test-reports/connected-code-graph-p0-slice-report.md",
-       "form": "rel",
-       "match": "tests/eval/__init__.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "path",
-      "rel"
-     ],
-     "sources": [
-      "slice",
-      "docs"
-     ]
-    },
-    "tests/test_app.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-rule-pack-spec.md",
-       "form": "path",
-       "match": "falkor-chat/server/tests/test_app.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "path"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "tests/test_ensure_demo_models_script.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "rel",
-       "match": "tests/test_ensure_demo_models_script.py",
-       "source": "docs"
       }
      ],
      "forms": [
       "rel"
      ],
      "sources": [
-      "docs"
+      "slice"
      ]
     },
     "tests/test_fusion.py": {
-     "artifacts": 4,
+     "artifacts": 2,
      "evidence": [
       {
        "artifact": "docs/plans/connected-code-graph-bundle-spec.md",
@@ -559,38 +415,19 @@
        "form": "path",
        "match": "falkor-chat/server/tests/test_fusion.py",
        "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0-impl.md",
-       "form": "path",
-       "match": "falkor-chat/server/tests/test_fusion.py",
-       "source": "docs"
       }
      ],
      "forms": [
       "base",
-      "path",
-      "rel"
+      "path"
      ],
      "sources": [
       "docs"
      ]
     },
     "tests/test_input_bound_parity.py": {
-     "artifacts": 4,
+     "artifacts": 1,
      "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0.md",
-       "form": "base",
-       "match": "test_input_bound_parity.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/reviews/connected-code-graph-rule-pack-spec.md",
-       "form": "base",
-       "match": "test_input_bound_parity.py",
-       "source": "docs"
-      },
       {
        "artifact": "docs/plans/connected-code-graph-rule-pack-spec.md",
        "form": "rel",
@@ -599,7 +436,6 @@
       }
      ],
      "forms": [
-      "base",
       "rel"
      ],
      "sources": [
@@ -607,77 +443,12 @@
      ]
     },
     "tests/test_querygen.py": {
-     "artifacts": 2,
+     "artifacts": 1,
      "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-p0.md",
-       "form": "base",
-       "match": "test_querygen.py",
-       "source": "docs"
-      },
       {
        "artifact": "docs/plans/connected-code-graph-p0-graph.md",
        "form": "rel",
        "match": "tests/test_querygen.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "tests/test_services.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/test-reports/connected-code-graph-p0-slice-report.md",
-       "form": "rel",
-       "match": "tests/test_services.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "tests/test_storefront_api.py": {
-     "artifacts": 2,
-     "evidence": [
-      {
-       "artifact": "docs/reviews/connected-code-graph-rule-pack-spec.md",
-       "form": "base",
-       "match": "test_storefront_api.py",
-       "source": "docs"
-      },
-      {
-       "artifact": "docs/test-reports/connected-code-graph-p0-slice-report.md",
-       "form": "rel",
-       "match": "tests/test_storefront_api.py",
-       "source": "docs"
-      }
-     ],
-     "forms": [
-      "base",
-      "rel"
-     ],
-     "sources": [
-      "docs"
-     ]
-    },
-    "tests/test_tools.py": {
-     "artifacts": 1,
-     "evidence": [
-      {
-       "artifact": "docs/test-reports/connected-code-graph-p0-slice-report.md",
-       "form": "rel",
-       "match": "tests/test_tools.py",
        "source": "docs"
       }
      ],
@@ -692,6 +463,46 @@
    "root": "falkor-chat/server"
   }
  },
+ "derivedFrom": "7a2ec1eeb7366e5d07be074162bd2f7309388dfc",
+ "flowAnchors": {
+  "javascript": [
+   "src/api/client.ts",
+   "src/api/hooks.ts",
+   "src/components/message/DeadTurnNotice.tsx",
+   "src/components/message/optimistic.ts",
+   "src/components/sheets/ResetControl.tsx",
+   "src/i18n/format.ts",
+   "src/session/storage.ts",
+   "src/views/ChatView.tsx",
+   "src/views/OrderPanel.tsx",
+   "src/views/PresenterResetAllControl.tsx"
+  ],
+  "python": [
+   "falkorchat/chunking.py",
+   "falkorchat/extraction.py",
+   "falkorchat/guards.py",
+   "falkorchat/llm.py",
+   "falkorchat/modelconfig.py",
+   "falkorchat/retry.py",
+   "falkorchat/services.py",
+   "falkorchat/storefront_api.py",
+   "falkorchat/tools.py",
+   "tests/eval/nlq_scoring.py",
+   "tests/eval/test_nlq_golden_set_integrity.py",
+   "tests/test_create_workspace_script.py",
+   "tests/test_embedding_migration.py",
+   "tests/test_executor_agent.py",
+   "tests/test_executor_process.py",
+   "tests/test_logging_config.py",
+   "tests/test_modelconfig.py",
+   "tests/test_process_input.py",
+   "tests/test_provenance.py",
+   "tests/test_repository.py",
+   "tests/test_services.py",
+   "tests/test_storefront.py",
+   "tests/test_storefront_api.py"
+  ]
+ },
  "rule": "file listed iff a committed artifact outside cpg/spikes/frontend-fitness/ names it by path or by a defined symbol's qname",
  "s06": {
   "note": "S06 (eval-protocol v1.2 s8.2) records a contact RULE and delegates the lists to S14 (docs/test-reports/connected-code-graph-p0-slice-report.md), S30 (docs/plans/connected-code-graph-rule-pack-spec.md) and S56's flow methods (labels/<lang>-flow.jsonl, inside frontend-fitness: not read here); the first two are covered by the 'docs' source below, S56 is not (S47 adds it).",
@@ -699,12 +510,12 @@
  },
  "searchSources": {
   "cpg-other": 79,
-  "docs": 39,
+  "docs": 16,
   "fixtures": 135,
   "golden": 3,
   "packs": 8,
   "slice": 15,
-  "tests": 28
+  "tests": 27
  },
  "version": 1
 }

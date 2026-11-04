@@ -53,20 +53,31 @@ def _derive(tmp_path, extra):
 
 
 # ---------------------------------------------------------------- the committed file
-def test_contact_json_matches_rederivation():
-    assert os.path.exists(CONTACT_JSON), "run make_contact.py"
-    assert open(CONTACT_JSON).read() == mc.render(mc.derive()), "contact.json drifted: re-run make_contact.py and review the diff"
+def test_contact_json_matches_rederivation_at_its_derivedfrom_tree():
+    ok, msg = mc.check(CONTACT_JSON)
+    assert ok, msg
+
+
+def test_contact_json_shape_and_flow_anchors_kept_apart():
+    d = json.load(open(CONTACT_JSON))
+    assert re.fullmatch(r"[0-9a-f]{40}", d["derivedFrom"])
+    assert set(d["flowAnchors"]) == {"python", "javascript"}
+    for lang, paths in d["flowAnchors"].items():
+        assert paths == sorted(set(paths)) and paths
+        assert not any(p.startswith(("./", "falkor-chat/", "salesperson/")) for p in paths)
+    assert "flowAnchors" not in d["corpora"]["python"] and "flowAnchors" not in d["corpora"]["javascript"]
 
 
 def test_contact_json_evidence_is_rederivable_from_head():
     d = json.load(open(CONTACT_JSON))
     for corpus, c in d["corpora"].items():
         for f, x in c["files"].items():
+            assert not re.search(r"(-ml|-coordination)\.md$|docs/(reviews|test-reports)/|(HISTORY|BACKLOG)\.md$|test_frontend_fitness", x["evidence"][0]["artifact"])
             assert 1 <= len(x["evidence"]) <= 3
             assert len({e["artifact"] for e in x["evidence"]}) == len(x["evidence"])
             for e in x["evidence"]:
                 assert not e["artifact"].startswith("cpg/spikes/frontend-fitness/")
-                body = subprocess.run(["git", "show", "HEAD:" + e["artifact"]], capture_output=True, text=True, cwd=FF).stdout
+                body = subprocess.run(["git", "show", d["derivedFrom"] + ":" + e["artifact"]], capture_output=True, text=True, cwd=FF).stdout
                 assert e["match"] in body, (f, e)
 
 
@@ -109,7 +120,7 @@ def test_marker_found_after_a_non_boundary_first_occurrence(tmp_path):
 
 
 def test_corpus_relative_path_and_qname_suffix(tmp_path):
-    got, d = _derive(tmp_path, {"docs/reviews/connected-code-graph-y.md": "`falkorchat/alpha.py:12`, `src/api/client.ts::apiFetch`\n"})
+    got, d = _derive(tmp_path, {"docs/plans/connected-code-graph-y.md": "`falkorchat/alpha.py:12`, `src/api/client.ts::apiFetch`\n"})
     assert got["python"] == {"falkorchat/alpha.py"} and got["javascript"] == {"src/api/client.ts"}
     assert d["corpora"]["python"]["files"]["falkorchat/alpha.py"]["forms"] == ["rel"]
 
@@ -130,7 +141,7 @@ def test_root_level_file_needs_repo_rooted_form(tmp_path):
 
 
 def test_corpus_unique_basename_with_symbol_or_line(tmp_path):
-    got, _ = _derive(tmp_path, {"docs/test-reports/connected-code-graph-r.md": "`alpha.py::f` and `Panel.tsx:40`, but beta.py alone\n"})
+    got, _ = _derive(tmp_path, {"docs/test-plans/connected-code-graph-r.md": "`alpha.py::f` and `Panel.tsx:40`, but beta.py alone\n"})
     assert got["python"] == {"falkorchat/alpha.py"} and got["javascript"] == {"src/ui/Panel.tsx"}
 
 
@@ -158,8 +169,8 @@ def test_dotted_qname_needs_a_boundary(tmp_path):
 EXPECTED_SOURCE = {
     "cpg/fixtures/s/f.yaml": "fixtures", "cpg/tests/golden/g.json": "golden", "cpg/spikes/vertical-slice/probe.py": "slice",
     "cpg/spikes/vertical-slice/tests/test_v.py": "tests", "cpg/tests/test_z.py": "tests", "cpg/spikes/store/tests/test_s.py": "tests",
-    "cpg/packs/p/pack.yaml": "packs", "docs/plans/connected-code-graph-p.md": "docs", "docs/reviews/connected-code-graph-r.md": "docs",
-    "docs/test-plans/connected-code-graph-t.md": "docs", "docs/test-reports/connected-code-graph-rep.md": "docs", "cpg/ccg/mod.py": "cpg-other"}
+    "cpg/packs/p/pack.yaml": "packs", "docs/plans/connected-code-graph-p.md": "docs", "docs/requirements/connected-code-graph-q.md": "docs",
+    "docs/test-plans/connected-code-graph-t.md": "docs", "cpg/ccg/mod.py": "cpg-other"}
 
 
 def test_each_search_source_is_searched(tmp_path):
@@ -174,6 +185,10 @@ def test_out_of_scope_artifacts_are_not_searched(tmp_path):
     text = "falkor-chat/server/falkorchat/alpha.py\n"
     got, _ = _derive(tmp_path, {"cpg/spikes/frontend-fitness/labels/x.jsonl": text, "cpg/spikes/frontend-fitness/README.md": text,
                                 "cpg/tests/test_contact.py": text, "docs/plans/salesperson-ui.md": text, "README.md": text,
+                                "docs/reviews/connected-code-graph-r.md": text, "docs/test-reports/connected-code-graph-rep.md": text,
+                                "docs/plans/connected-code-graph-p0-ml.md": text, "docs/reviews/connected-code-graph-x-ml.md": text,
+                                "docs/plans/connected-code-graph-coordination.md": text, "docs/HISTORY.md": text, "docs/BACKLOG.md": text,
+                                "cpg/HISTORY.md": text, "cpg/BACKLOG.md": text, "cpg/tests/test_frontend_fitness.py": text,
                                 "falkor-chat/server/falkorchat/beta.py": text})
     assert got["python"] == set()
 
@@ -197,6 +212,100 @@ def test_evidence_lists_distinct_artifacts(tmp_path):
     _, d = _derive(tmp_path, {"cpg/tests/t1.py": both, "cpg/tests/t2.py": both})
     ev = d["corpora"]["python"]["files"]["falkorchat/alpha.py"]["evidence"]
     assert [e["artifact"] for e in ev] == ["cpg/tests/t1.py", "cpg/tests/t2.py"]
+
+
+def _flow(rows):
+    return "".join(json.dumps({"path": r, "ordinal": i}) + "\n" for i, r in enumerate(rows))
+
+
+def test_flow_anchors_separate_normalised_distinct_and_per_corpus(tmp_path):
+    sd = "cpg/spikes/frontend-fitness/sample/"
+    got, d = _derive(tmp_path, {
+        sd + "python-flow.jsonl": _flow(["./falkorchat/beta.py", "falkor-chat/server/falkorchat/beta.py", "falkorchat\\sub\\gamma.py",
+                                         "tests/test_delta.py", "falkorchat/alpha.py"]),
+        sd + "javascript-flow.jsonl": _flow(["src/ui/Panel.tsx", "./src/ui/Panel.tsx", "salesperson/src/api/client.ts"]),
+        sd + "python-flow.brief.md": "falkorchat/zzz.py", sd + "javascript-flow-tier2.jsonl": _flow(["src/other.ts"])})
+    assert d["flowAnchors"]["python"] == ["falkorchat/alpha.py", "falkorchat/beta.py", "falkorchat/sub/gamma.py", "tests/test_delta.py"]
+    assert d["flowAnchors"]["javascript"] == ["src/api/client.ts", "src/ui/Panel.tsx"]
+    assert got["python"] == set() and got["javascript"] == set()         # flow anchors are not contact `files`
+
+
+def test_flow_sample_not_a_contact_source(tmp_path):
+    got, _ = _derive(tmp_path, {"cpg/spikes/frontend-fitness/sample/python-flow.jsonl": _flow(["falkorchat/alpha.py"])})
+    assert got["python"] == set()
+
+
+def _git(repo, *a):
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", str(repo), *a], capture_output=True, text=True, check=True).stdout.strip()
+
+
+def _repo(tmp_path):
+    r = tmp_path / "r"
+    r.mkdir()
+    _git(r, "init", "-q")
+    for p, t in {**BASE, "cpg/tests/t.py": "falkor-chat/server/falkorchat/alpha.py\n"}.items():
+        (r / p).parent.mkdir(parents=True, exist_ok=True); (r / p).write_text(t)
+    _git(r, "add", "-A"); _git(r, "commit", "-qm", "c1")
+    return r
+
+
+def test_derived_from_pins_the_tree_read(tmp_path):
+    r = _repo(tmp_path)
+    sha1 = _git(r, "rev-parse", "HEAD")
+    out = tmp_path / "contact.json"
+    out.write_text(mc.render(mc.derive(repo=str(r))))
+    assert json.loads(out.read_text())["derivedFrom"] == sha1
+    assert mc.check(str(out), str(r)) == (True, "ok")
+    # a later commit that adds a source naming another file, and edits an excluded document, cannot drift the check
+    (r / "cpg/tests/t2.py").write_text("falkor-chat/server/falkorchat/beta.py\n")
+    (r / "docs/reviews").mkdir(parents=True); (r / "docs/reviews/connected-code-graph-x.md").write_text("falkor-chat/server/falkorchat/beta.py\n")
+    _git(r, "add", "-A"); _git(r, "commit", "-qm", "c2")
+    assert mc.check(str(out), str(r)) == (True, "ok")
+    assert set(mc.derive(repo=str(r))["corpora"]["python"]["files"]) == {"falkorchat/alpha.py", "falkorchat/beta.py"}   # HEAD differs, pinned tree does not
+
+
+def test_cli_from_and_check(tmp_path):
+    r = _repo(tmp_path)
+    sha1 = _git(r, "rev-parse", "HEAD")
+    (r / "cpg/tests/t2.py").write_text("falkor-chat/server/falkorchat/beta.py\n"); _git(r, "add", "-A"); _git(r, "commit", "-qm", "c2")
+    env = dict(os.environ, CONTACT_REPO=str(r))
+    out = tmp_path / "c.json"
+    run = lambda *a: subprocess.run([sys.executable, MC_PATH, *a], env=env, capture_output=True, text=True)
+    assert run("--out", str(out), "--from", sha1).returncode == 0
+    d = json.loads(out.read_text())
+    assert d["derivedFrom"] == sha1 and set(d["corpora"]["python"]["files"]) == {"falkorchat/alpha.py"}
+    assert run("--out", str(out), "--check").returncode == 0
+    assert run("--out", str(out)).returncode == 0                      # default: HEAD
+    d2 = json.loads(out.read_text())
+    assert d2["derivedFrom"] == _git(r, "rev-parse", "HEAD") and set(d2["corpora"]["python"]["files"]) == {"falkorchat/alpha.py", "falkorchat/beta.py"}
+    out.write_text(out.read_text().replace('"artifacts": 1', '"artifacts": 9'))
+    assert run("--out", str(out), "--check").returncode == 1
+
+
+def test_check_fails_on_difference_unreachable_missing_or_foreign_sha(tmp_path):
+    r = _repo(tmp_path)
+    out = tmp_path / "contact.json"
+    good = json.loads(mc.render(mc.derive(repo=str(r))))
+    def put(o):
+        out.write_text(mc.render(o))
+        return mc.check(str(out), str(r))
+    assert put(good) == (True, "ok")
+    bad = json.loads(json.dumps(good)); bad["corpora"]["python"]["files"]["falkorchat/alpha.py"]["artifacts"] += 1
+    assert put(bad)[0] is False
+    bad = json.loads(json.dumps(good)); bad["flowAnchors"]["python"].append("falkorchat/beta.py")
+    assert put(bad)[0] is False
+    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = "0" * 40
+    assert "unreachable" in put(bad)[1]
+    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = None
+    assert put(bad)[0] is False
+    # a commit that is not an ancestor of HEAD
+    _git(r, "checkout", "-q", "-b", "side"); (r / "x.txt").write_text("x"); _git(r, "add", "-A"); _git(r, "commit", "-qm", "side")
+    side = _git(r, "rev-parse", "HEAD"); _git(r, "checkout", "-q", "-"); 
+    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = side
+    ok, msg = put(bad)
+    assert ok is False and "ancestor" in msg
+    out.unlink()
+    assert mc.check(str(out), str(r))[0] is False
 
 
 def test_deterministic(tmp_path):
