@@ -438,3 +438,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-04: S57 go (330 items) and csharp (409 items) queues delivered; data-scientists dispatched: go a8ac8bfc0e0859c74, csharp (id in dispatch result). Go custodian glanced at ~1 row of python.queue.jsonl (firewall slip, no effect on Go decisions) -- flag for the analyst transcript check. java/cpp/kotlin custodians in-flight.
 
 - 2026-11-04: S57 cpp queue (346 items) delivered; data-scientist dispatched (cpp). Disclosed firewall slip: the cpp custodian read the first record of python.queue.jsonl for field-name precedent (no cpp decision affected) -- analyst transcript check to rule on it. Java and kotlin custodians in-flight.
+
+- 2026-11-04: S57 java queue (361 items) delivered; data-scientist dispatched (java a9409e91f0729da9b). cpp ds a68966c1a811edee2, csharp ds a1a0d412f384076db. Kotlin custodian a95293459acc82622 still in-flight.
