@@ -1,0 +1,26 @@
+{
+ "documentsIndexed": 137,
+ "exitStatus": 0,
+ "lang": "java",
+ "pilot": {
+  "coverage": 0.92,
+  "coverageIfStructuralSilentsExcluded": 0.92,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 4,
+  "silentTagged": {},
+  "silentWithStructuralReason": 0,
+  "withReference": 46
+ },
+ "pilotKinds": {
+  "declared": 3,
+  "external": 40,
+  "internal": 3,
+  "silent": 4
+ },
+ "recordedAtEpoch": 1793818932,
+ "recordedAtUtc": "2026-11-04T19:02:12Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-java",
+ "toolVersion": "0.13.2"
+}

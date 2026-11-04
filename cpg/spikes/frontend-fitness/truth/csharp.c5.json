@@ -1,0 +1,29 @@
+{
+ "documentsIndexed": 1209,
+ "exitStatus": 0,
+ "lang": "csharp",
+ "pilot": {
+  "coverage": 0.86,
+  "coverageIfStructuralSilentsExcluded": 1.0,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 7,
+  "silentTagged": {
+   "generic-callee": 6,
+   "nameof": 1
+  },
+  "silentWithStructuralReason": 7,
+  "withReference": 43
+ },
+ "pilotKinds": {
+  "declared": 2,
+  "external": 19,
+  "internal": 22,
+  "silent": 7
+ },
+ "recordedAtEpoch": 1793818933,
+ "recordedAtUtc": "2026-11-04T19:02:13Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-dotnet",
+ "toolVersion": "0.2.16"
+}

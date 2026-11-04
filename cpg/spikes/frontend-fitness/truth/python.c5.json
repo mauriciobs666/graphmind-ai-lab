@@ -1,0 +1,25 @@
+{
+ "documentsIndexed": 107,
+ "exitStatus": 0,
+ "lang": "python",
+ "pilot": {
+  "coverage": 0.9,
+  "coverageIfStructuralSilentsExcluded": 0.9,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 5,
+  "silentTagged": {},
+  "silentWithStructuralReason": 0,
+  "withReference": 45
+ },
+ "pilotKinds": {
+  "external": 12,
+  "internal": 33,
+  "silent": 5
+ },
+ "recordedAtEpoch": 1793818932,
+ "recordedAtUtc": "2026-11-04T19:02:12Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-python",
+ "toolVersion": "0.6.8"
+}

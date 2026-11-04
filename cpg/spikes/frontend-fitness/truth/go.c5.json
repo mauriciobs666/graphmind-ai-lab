@@ -1,0 +1,28 @@
+{
+ "documentsIndexed": 112,
+ "exitStatus": 0,
+ "lang": "go",
+ "pilot": {
+  "coverage": 0.9,
+  "coverageIfStructuralSilentsExcluded": 0.9184,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 5,
+  "silentTagged": {
+   "builtin": 1
+  },
+  "silentWithStructuralReason": 1,
+  "withReference": 45
+ },
+ "pilotKinds": {
+  "dispatch": 2,
+  "external": 23,
+  "internal": 20,
+  "silent": 5
+ },
+ "recordedAtEpoch": 1793818935,
+ "recordedAtUtc": "2026-11-04T19:02:15Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "callgraph-vta",
+ "toolVersion": "v0.52.0"
+}

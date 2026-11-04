@@ -1,0 +1,470 @@
+version: 1
+seedVersion: ccg-p0a-v1
+note: Everything under frame/, sample/ and truth/ is a pure function of this file plus `run_fitness.py fetch <lang>`; `run_fitness.py verify`
+  re-derives and compares.
+corpora:
+  python:
+    repo: proving
+    project: graphmind-ai-lab / falkor-chat/server
+    rootPath: falkor-chat/server
+    commit: 0caf85e3ccb757801d15d6babe55a63477a486dd
+    srcDigest: 365761fbdd26604c538f12beceb05811a8d77a32c8dd4ad01abc624a484800d6
+    language: python
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      note: proving repo (no licence file; D4 fixed corpus)
+    lastCommitDate: '2026-11-04'
+    dialect: Python 3.12 (`requires-python >=3.12`)
+    truth:
+      tool: scip-python 0.6.8 (`scip-python index --project-name falkorchat`)
+      workCopyBuild: '`uv venv --seed; uv pip install -e ".[dev]"` (work copy)'
+      joernFrontendLanguage: pythonsrc
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 63378
+        targetShare: 1.0
+        frameFiles: 106
+        frameFileCodeLines(cloc-style): 56434
+        frameSites: 17358
+        framefilesWithParseErrors: 0
+        nonBlankLinesByLanguage:
+          python: 63378
+      C6_idioms: {}
+      C8_tests:
+      - tests
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-python
+        toolVersion: 0.6.8
+        exitStatus: 0
+        documentsIndexed: 107
+        pilot:
+          pilotSites: 50
+          withReference: 45
+          silent: 5
+          coverage: 0.9
+          coverageIfStructuralSilentsExcluded: 0.9
+          silentTagged: {}
+        verdict: PASS
+        recordedAtUtc: '2026-11-04T19:02:12Z'
+      frameKinds:
+        method: 7973
+        other: 11
+        plain: 9374
+  javascript:
+    repo: proving
+    project: graphmind-ai-lab / salesperson
+    rootPath: salesperson
+    commit: 0caf85e3ccb757801d15d6babe55a63477a486dd
+    srcDigest: c19064973cce6f18cadc258c03aa1110f1101a4362117e73ce4ebc45f04f98a2
+    language: javascript
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      note: proving repo (no licence file; D4 fixed corpus)
+    lastCommitDate: '2026-11-04'
+    dialect: TypeScript 5 / React (Vite), `target es2023`
+    truth:
+      tool: scip-typescript 0.6.0 over tsconfig.app.json, tsconfig.node.json and a work-copy tsconfig over `tests/`
+      workCopyBuild: '`npm ci --ignore-scripts` (work copy)'
+      joernFrontendLanguage: jssrc
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 7266
+        targetShare: 0.7363
+        frameFiles: 74
+        frameFileCodeLines(cloc-style): 6163
+        frameSites: 4097
+        framefilesWithParseErrors: 0
+        nonBlankLinesByLanguage:
+          javascript: 7266
+          python: 2408
+          shell: 194
+      C6_idioms: {}
+      C8_tests:
+      - tests
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-typescript
+        toolVersion: 0.6.0
+        exitStatus: 0
+        documentsIndexed: 74
+        pilot:
+          pilotSites: 50
+          withReference: 49
+          silent: 1
+          coverage: 0.98
+          coverageIfStructuralSilentsExcluded: 0.98
+          silentTagged: {}
+        verdict: PASS
+        recordedAtUtc: '2026-11-04T19:02:12Z'
+      frameKinds:
+        ctor: 62
+        jsx: 172
+        method: 1773
+        other: 13
+        plain: 2022
+        qualified: 55
+  go:
+    project: labstack/echo
+    url: https://github.com/labstack/echo
+    commit: 7af8fac5354e53294c8d14fdd7dd4006dbaffd52
+    srcDigest: 1f81c2730423a37d324041a12a2e849b6a56dd7aa370d0e7209dd215e71f8ec6
+    language: go
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      spdx: MIT
+      file: LICENSE
+      head: 'The MIT License (MIT) Copyright (c) 2022 LabStack Permission is hereby granted, '
+    lastCommitDate: '2026-10-30'
+    dialect: Go modules (`go.mod`, module `github.com/labstack/echo/v5`)
+    truth:
+      tool: callgraph (golang.org/x/tools) v0.52.0, `-algo=vta -test`
+      workCopyBuild: '`go mod download; callgraph -algo=vta -test ./...`'
+      joernFrontendLanguage: golang
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 40328
+        targetShare: 1.0
+        frameFiles: 113
+        frameFileCodeLines(cloc-style): 36388
+        frameSites: 13362
+        framefilesWithParseErrors: 0
+        nonBlankLinesByLanguage:
+          go: 40328
+      C6_idioms:
+        generatedFilesExcludedFromFrame: 0
+        interfacesWith>=1Method: 15
+        interfacesWith>=2InCorpusImplementers(name-based method-set check): 14
+        interfacesWith>=2Methods&>=2Implementers: 3
+        namedInterfaces: 15
+      C8_tests: test files in-tree (see README)
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: callgraph-vta
+        toolVersion: v0.52.0
+        exitStatus: 0
+        documentsIndexed: 112
+        pilot:
+          pilotSites: 50
+          withReference: 45
+          silent: 5
+          coverage: 0.9
+          coverageIfStructuralSilentsExcluded: 0.9184
+          silentTagged:
+            builtin: 1
+        verdict: PASS
+        recordedAtUtc: '2026-11-04T19:02:15Z'
+      frameKinds:
+        method: 10295
+        other: 416
+        plain: 2651
+  java:
+    project: spring-petclinic/spring-petclinic-rest
+    url: https://github.com/spring-petclinic/spring-petclinic-rest
+    commit: 5180cc9bd0163393c4e628bedc1bc4c27cfaab1b
+    srcDigest: 1ab47bb1758f960cc5981e3c7f1c7a7649ac090aceaebe50cf047e92a2ef1d2a
+    language: java
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      spdx: Apache-2.0
+      file: LICENSE.txt
+      head: Apache License Version 2.0, January 2004 http://www.apache.org/licenses/ TERMS A
+    lastCommitDate: '2026-11-02'
+    dialect: Java 17 (Spring Boot 3, Maven)
+    truth:
+      tool: scip-javac + scip-java aggregate 0.13.2
+      workCopyBuild: '`mvn generate-sources`; `mvn dependency:build-classpath`; `javac --release 17 -Xplugin:scip`; `scip-java aggregate`'
+      joernFrontendLanguage: javasrc
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 7575
+        targetShare: 0.9915
+        frameFiles: 109
+        frameFileCodeLines(cloc-style): 5836
+        frameSites: 3693
+        framefilesWithParseErrors: 0
+        nonBlankLinesByLanguage:
+          java: 7575
+          shell: 65
+      C6_idioms:
+        diAnnotationsOnFields: 26
+        diAnnotationsOnTypesCtorsOrBeanMethods: 36
+        interfaces: 27
+        interfacesWithInCorpusImplementation: 13
+      C8_tests:
+      - src/test
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-java
+        toolVersion: 0.13.2
+        exitStatus: 0
+        documentsIndexed: 137
+        pilot:
+          pilotSites: 50
+          withReference: 46
+          silent: 4
+          coverage: 0.92
+          coverageIfStructuralSilentsExcluded: 0.92
+          silentTagged: {}
+        verdict: PASS
+        recordedAtUtc: '2026-11-04T19:02:12Z'
+      frameKinds:
+        ctor: 345
+        method: 2654
+        plain: 562
+        qualified: 132
+  csharp:
+    project: ThreeMammals/Ocelot
+    url: https://github.com/ThreeMammals/Ocelot
+    commit: 8b8fde19ed6cafdba9e737c551360a24046eb4e5
+    srcDigest: 39cec60d5df9d8d7eb400b0d6c21c64329e6628aeeda7be016455b0383ad28a0
+    language: csharp
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      spdx: MIT
+      file: LICENSE.md
+      head: The MIT License (MIT), Open Source Software, Copyright © 2016-2026 Tom Gardham-P
+    lastCommitDate: '2026-10-31'
+    dialect: .NET 8/9/10 (`TargetFrameworks net8.0;net9.0;net10.0`)
+    truth:
+      tool: scip-dotnet 0.2.16
+      workCopyBuild: '`dotnet restore` (inside scip-dotnet) over `Ocelot.slnx`, `Ocelot.Samples.slnx`, the `samples/*.sln` files'
+      joernFrontendLanguage: csharpsrc
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 62678
+        targetShare: 0.9945
+        frameFiles: 765
+        frameFileCodeLines(cloc-style): 55567
+        frameSites: 24414
+        framefilesWithParseErrors: 8
+        nonBlankLinesByLanguage:
+          csharp: 62678
+          python: 43
+          shell: 303
+      C6_idioms:
+        attributeRoutedActions: 22
+        csprojFiles: 22
+        solutions:
+        - Ocelot.Samples.slnx
+        - Ocelot.slnx
+        - acceptance/Authentication/WindowsAuthApp/WindowsAuthWebApp.slnx
+        - samples/Eureka/OcelotEureka.sln
+        - samples/GraphQL/OcelotGraphQL.sln
+        - samples/Kubernetes/OcelotKube.sln
+        - samples/ServiceDiscovery/Ocelot.Samples.ServiceDiscovery.sln
+        - samples/ServiceFabric/Ocelot.Samples.ServiceFabric.sln
+      C8_tests:
+      - manual/Tests
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-dotnet
+        toolVersion: 0.2.16
+        exitStatus: 0
+        documentsIndexed: 1209
+        pilot:
+          pilotSites: 50
+          withReference: 43
+          silent: 7
+          coverage: 0.86
+          coverageIfStructuralSilentsExcluded: 1.0
+          silentTagged:
+            generic-callee: 6
+            nameof: 1
+        verdict: FAIL (raw coverage < 0.90)
+        recordedAtUtc: '2026-11-04T19:02:13Z'
+      frameKinds:
+        ctor: 3432
+        method: 9634
+        other: 175
+        plain: 6583
+        qualified: 4590
+  cpp:
+    project: google/googletest
+    url: https://github.com/google/googletest
+    commit: a8380b01a25ebdb130097b607b3afed2a58d04ba
+    srcDigest: e43abab51494db90b7ee5a3edf57fd21ab7c257b95c05fe3c9c45a93bcaa0e27
+    language: cpp
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      spdx: BSD-3-Clause
+      file: LICENSE
+      head: Copyright 2008, Google Inc. All rights reserved. Redistribution and use in sourc
+    lastCommitDate: '2026-10-30'
+    dialect: C++17 (googletest >= 1.17 requires C++17)
+    truth:
+      tool: scip-clang v0.4.1 (bundled Clang/LLVM 21.1.8)
+      workCopyBuild: '`cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Dgtest_build_tests=ON -Dgmock_build_tests=ON` + full `cmake --build -j2` with
+        gcc 13 (no clang), then `scip-clang --jobs 2` from the project root'
+      joernFrontendLanguage: c
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 75153
+        targetShare: 0.9219
+        frameFiles: 156
+        frameFileCodeLines(cloc-style): 54356
+        frameSites: 28490
+        framefilesWithParseErrors: 66
+        nonBlankLinesByLanguage:
+          cpp: 75153
+          python: 6111
+          shell: 254
+      C6_idioms:
+        functionLikeMacroDefinitions: 596
+        functionLikeMacrosInvokedBeyondTheirDefinition: 402
+        overrideSpecifiers: 462
+        virtualKeywordOccurrences: 169
+      C8_tests:
+      - googletest/test
+      - googlemock/test
+      exclusion_greps:
+        brokerClients: no hit
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-clang
+        toolVersion: 0.4.1
+        exitStatus: 0
+        documentsIndexed: 142
+        pilot:
+          pilotSites: 50
+          withReference: 28
+          silent: 22
+          coverage: 0.56
+          coverageIfStructuralSilentsExcluded: 0.6829
+          silentTagged:
+            error-region: 4
+            preproc-branch: 6
+        verdict: FAIL (raw coverage < 0.90)
+        recordedAtUtc: '2026-11-04T19:08:00Z'
+      frameKinds:
+        ctor: 296
+        macro-shaped: 8556
+        method: 6487
+        other: 126
+        plain: 9310
+        qualified: 3715
+  kotlin:
+    language: kotlin
+    status: blocked-needs-decision
+    why: 'no Kotlin corpus pinned: C5 (the reference run) needs a Gradle build of an external Kotlin repository, which the harness permission
+      layer refused to run (auto-mode classifier, "Code from External"); the pipeline stops here by design.'
+    candidatesCensused: see rejectedCandidates.kotlin; the best static fit so far is mokksy/mokksy (Apache-2.0, Kotlin 2.2.21, 15.5k code lines,
+      153 suspend funs) but it is Kotlin Multiplatform with wasmJs/macosArm64 targets (webMain/nativeMain sources would be reference-silent).
+    truth:
+      tool: scip-kotlinc 0.13.2 via kotlinc-scip (kotlin-compiler-embeddable 2.4.21) + scip-java aggregate
+      joernFrontendLanguage: kotlin
+rejectedCandidates:
+  csharp:
+  - project: dotnet-architecture/eShopOnWeb
+    commit: 4da8212117e87d808d4bbc7da6286fd2147ce606
+    c5: 'FAIL: pilot coverage 0.80 raw (40/50); all 10 silent sites were generic-named callees (8: `new List<..>`, `new EfRepository<Basket>`,
+      `.Produces<..>`) or `nameof` (2)'
+    artifacts: cpg/.ccg-work/frontend-fitness/rejected/csharp.*
+  - project: ivanpaulovich/clean-architecture-manga
+    reason: 'not run: polyglot multi-service sample (accounts-api, identity-server, wallet-spa, nginx) -> ML §3.3 rule 3 / C2; net7.0'
+  - project: ardalis/CleanArchitecture
+    reason: 'not run: 27 % C# (JS), 0 attribute-routed actions (C6), OpenTelemetry in 8 manifests'
+  - project: collinbarrett/FilterLists
+    reason: 'not run: 0 attribute-routed actions (C6)'
+  cpp:
+  - project: google/leveldb
+    commit: bb74ef739973a70ca9f0d90788a1da89b788c0ad
+    c5: 'FAIL: pilot coverage 0.66 (33/50), built with tests ON (googletest/benchmark submodules fetched into the work copy); C7 also fails (C++11)'
+    artifacts: cpg/.ccg-work/frontend-fitness/rejected/cpp-leveldb/
+  - project: gabime/spdlog
+    reason: 'not run: include/spdlog/sinks/kafka_sink.h imports a Kafka client -> ML §3.3 rule 4'
+  - project: jbeder/yaml-cpp
+    reason: 'not run: 82.9k code lines (> 60k, C3)'
+  - project: odygrd/quill
+    reason: 'not run: 69.2k code lines (> 60k, C3)'
+  - project: pistacheio/pistache
+    reason: 'not run: its tests need libcurl (CMake find_package(CURL REQUIRED)); the truth image has no libcurl/openssl headers; building without
+      tests would leave the test files reference-silent'
+  go:
+  - project: gin-gonic/gin
+    reason: 'not run: C6 (8 interface types with >= 2 in-corpus implementers by the name-based method-set check, < 10)'
+  - project: caddyserver/caddy
+    reason: 'not run: 98.0k code lines (> 60k, C3); go.mod + 8 source files reference opentelemetry (flag, ML §3.3)'
+  kotlin:
+  - project: zalando/zally
+    reason: 'not run: 72 % Kotlin (JS UI + Go CLI in the repo root, C2); 0 suspend funs (C6)'
+  - project: JetBrains/kotlin-compiler-server
+    reason: 'not run: Kotlin 2.5.0-Beta2 (outside any plugin range S24 proved), compose-wasm + AWS dependencies'
+  - project: Trendyol/kediatR
+    reason: 'not run: 2.6k code lines (< 5k, C3)'
+  - project: ajalt/clikt
+    reason: 'not run: 15 suspend funs (< 20, C6); Kotlin Multiplatform'
+  - project: just-ai/jaicf-kotlin
+    reason: 'not run: Gradle 6.8.2 / Kotlin 1.4.21 do not build on JDK 21 (C4, C7)'
+  - project: JetBrains/Exposed
+    reason: 'not run: 123.7k code lines (> 60k, C3)'
+  - project: javalin/javalin
+    reason: 'not run: 0 suspend funs (C6)'
+  - project: square/kotlinpoet
+    reason: 'not run: 2 suspend funs (C6)'
+  - project: mokksy/mokksy
+    commit: 57891fed2b6eb46c232087ae57b7ba36670c008b
+    c5: 'ATTEMPTED: `scip-java index --build-tool=gradle` fails in buildSrc (generatePrecompiledScriptPluginAccessors, Gradle 9.8.1) in the truth
+      image; the follow-up plain Gradle build was refused by the permission layer and not run'
+  - project: mokksy/ai-mocks
+    reason: 'not run: Kotlin Multiplatform (commonMain 235 files, wasm/native targets)'
+  - project: ktorio/ktor-samples
+    reason: 'not run: a directory of independent sample projects (own Gradle builds), one is an OpenTelemetry sample'
+cppBuildDecision:
+  decision: gcc compilation database, not a clang build
+  what: The C/C++ reference is scip-clang over a compile_commands.json produced by `cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` and a full `cmake
+    --build -j2` with the image gcc 13.3.0; no clang is installed or used to build (S24 removed apt clang; scip-clang carries its own Clang/LLVM
+    21.1.8). Joern parses the corpus as-is (c2cpg takes the source tree, not the database), so the Joern runs do not depend on this choice.
+  see: 'README.md "C/C++: gcc compilation database, not a clang build"'

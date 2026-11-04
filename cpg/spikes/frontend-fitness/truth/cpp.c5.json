@@ -1,0 +1,29 @@
+{
+ "documentsIndexed": 142,
+ "exitStatus": 0,
+ "lang": "cpp",
+ "pilot": {
+  "coverage": 0.56,
+  "coverageIfStructuralSilentsExcluded": 0.6829,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 22,
+  "silentTagged": {
+   "error-region": 4,
+   "preproc-branch": 6
+  },
+  "silentWithStructuralReason": 9,
+  "withReference": 28
+ },
+ "pilotKinds": {
+  "declared": 1,
+  "external": 10,
+  "internal": 17,
+  "silent": 22
+ },
+ "recordedAtEpoch": 1793819280,
+ "recordedAtUtc": "2026-11-04T19:08:00Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-clang",
+ "toolVersion": "0.4.1"
+}

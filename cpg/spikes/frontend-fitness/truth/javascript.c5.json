@@ -1,0 +1,26 @@
+{
+ "documentsIndexed": 74,
+ "exitStatus": 0,
+ "lang": "javascript",
+ "pilot": {
+  "coverage": 0.98,
+  "coverageIfStructuralSilentsExcluded": 0.98,
+  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "pilotSites": 50,
+  "silent": 1,
+  "silentTagged": {},
+  "silentWithStructuralReason": 0,
+  "withReference": 49
+ },
+ "pilotKinds": {
+  "external": 35,
+  "internal": 9,
+  "local": 5,
+  "silent": 1
+ },
+ "recordedAtEpoch": 1793818932,
+ "recordedAtUtc": "2026-11-04T19:02:12Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-typescript",
+ "toolVersion": "0.6.0"
+}

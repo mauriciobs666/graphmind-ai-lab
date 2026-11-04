@@ -1,0 +1,59 @@
+# Site matcher table (ML §7.1)
+
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** C-1001 (P0, S25)
+
+How a frame site (`frame/<lang>.jsonl`) is matched to a Joern `CALL`. **Observed**, not assumed: every row below was
+read off a Joern v4.0.579 CPG of a small synthetic probe project per language (`matcher-probe.sc`; probe sources
+under `cpg/.ccg-work/frontend-fitness/probe/`, not committed; never a corpus), and then confirmed by running
+`measure.sc` over each probe's own frame (8–11 sites each). The rule is transcribed in `measure.sc`'s `nameOk`.
+
+**Rule (ML §7.1).** Same file; Joern's call **line** equals the frame's `nameLine` (after the per-language offset below);
+Joern's call **name** is accepted by the kind rule; if several calls match, the one whose **column** is nearest the
+frame's `column` (the callee expression's first character) wins, a call with no column (`-1`) sorts last, then the
+lower node id. Nothing else is compared.
+
+## Position conventions (observed)
+
+| Frontend | `--language` | Joern line | Joern column | Offset applied to the frame value |
+|---|---|---|---|---|
+| Python `pysrc2cpg` | `pythonsrc` | 1-based | 1-based | none |
+| JS/TS `jssrc2cpg` | `jssrc` | 1-based | **0-based** | column − 1 |
+| Java `javasrc2cpg` | `javasrc` | 1-based | 1-based (no column for `<init>`: `-1`) | none |
+| Kotlin `kotlin2cpg` | `kotlin` | 1-based | **0-based** | column − 1 |
+| C# `csharpsrc2cpg` | `csharpsrc` | **0-based** | **0-based** | line − 1, column − 1 |
+| Go `gosrc2cpg` | `golang` | 1-based | 1-based | none |
+| C/C++ `c2cpg` | `c` | 1-based | 1-based | none |
+
+A chain `a.b().c()` yields two Joern calls (`b` with code `a.b()`, `c` with code `a.b().c()`) that **share** line and
+column (the start of the whole expression), exactly like the two frame sites; their names tell them apart.
+
+## Call name per frame kind
+
+| Language | plain / method / qualified | constructor (`new X`, `X(…)`, `super(…)`, `this(…)`) | Other kinds |
+|---|---|---|---|
+| Python | `name` = `calleeName` (`m` for `b.m()`, `f` for `f(2)`, `h` for a function value `h(3)`, `len` for a builtin) | `name` = the class name (`B` for `B(1)`; resolved to `B.__init__`) | decorators are out of the frame |
+| JS/TS | `name` = `calleeName` | **`<operator>.new`** with `code` = `new X(…)`; the matcher requires `code` to start with `new ` and contain `calleeName` (the index therefore keeps this one operator call) | tagged template `` tag`x` ``: `name` = `tag` (also synthesized `push`/`__ecma.Array.factory` calls on the same line, never matched). **JSX `<Cmp/>`: no CALL at all, so every JSX site is unmatched by construction** (counted *absent in Joern*) |
+| Java | `name` = `calleeName` | `<init>` (`new Base(1)` has no column: `-1`; `super(1)`/`this()` carry a column); the matcher accepts `<init>` or the type name | — |
+| Kotlin | `name` = `calleeName`, **or `<init>`**: `B(3)` is a plain-looking frame site and Joern names the call `<init>` | same | trailing lambda `run { 1 }`: one call (the frame dedupes the `call_expression(call_expression, annotated_lambda)` pair to one site). **A delegation-specifier call `class A : B(x)`: no CALL, unmatched by construction** |
+| C# | `name` = `calleeName` (`G` for `b.G<int>()`, type arguments dropped, as the frame's `calleeName`; `nameof` for `nameof(b)`) | `<init>` (`new B(2)`, `new List<int>()`) | the `: base(1)` initializer is not a frame site |
+| Go | `name` = `calleeName` (`A` for `i.A()` and `t.A()`; a call through a function variable `fn(t)` is `fn`) | none (no constructors) | conversion `int(3)` and builtin `len("ab")` are CALLs named `int` / `len` (labelled `notACall` / external); **a generic instantiation call `g[int](1)` has the EMPTY name**, so it is unmatched by construction (the frame emits it from `type_conversion_expression`) |
+| C/C++ | `name` = `calleeName`; a template call keeps its arguments in the name (`tf<int>`), so the matcher also accepts `calleeName + "<"…` | `name` = the type name (`new B(1)` is a call `B`, resolved to the constructor, beside `<operator>.alloc`/`<operator>.new`); a temporary `B(5)` is also `B` | **function-like macro `M(2)`: a CALL named `M` with dispatch `INLINED` (unresolved), beside the calls its expansion makes at the same position** |
+
+## Resolved targets and name-match candidates (what `measure.sc` records)
+
+* `res` = the matched CALL's `CALL` edges to METHOD nodes (`_callOut`), each with file, line, `fullName`, `ext`
+  (`isExternal`) and `vendored` (a directory segment of its file is in the corpus's effective `vendoredDirs`). A target that
+  is `ext` or `vendored` is **external** for every metric (ML §2, §7.1); a call to an external stub still has `res`
+  entries (e.g. `java.util.List.add:…`, `<unresolvedNamespace>.nameof`), so consumers must filter on `ext`.
+* `nm` = the count of non-external, non-vendored METHODs whose `name` equals `calleeName` (name-only, corpus-wide; the
+  P1 fallback). For a constructor kind the candidates are the methods named like the type (`calleeName`); the candidate
+  set does not include `<init>` methods of other classes. `nmList` (sampled sites only) lists them.
+* The census match rate (matched frame sites ÷ frame sites) and the unmatched-by-construction classes above are reported
+  per configuration; **a matcher error is fixed and the run repeated until zero remain** (ML §7.1); no metric is computed
+  before that (S27).
+
+## Known unmatched-by-construction classes (not matcher errors)
+
+JSX component use (JS/TS), Kotlin delegation-specifier constructor calls, Go generic instantiation calls, C++ calls that
+`c2cpg` does not model (parse-error regions: tree-sitter ERROR nodes mean the frame itself is incomplete there). These
+count as *absent in Joern* once S27 has inspected them one by one.
