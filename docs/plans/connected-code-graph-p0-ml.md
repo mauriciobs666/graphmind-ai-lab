@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.8 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.9 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.8): S59 gate G1 and G2 folded in: flow-method files are not contact for the call-site strata, the stratum floor is counted on the final truth, and `contact.json`'s sources are fixed (§3.1, R6). Earlier content (v1.4–v1.7) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.9): `contact.json` sources aligned with eval-protocol §8.2: the slice report counts for its §4 only, worked-example documents do not (§3.1, R6). Earlier content (v1.4–v1.8) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -197,15 +197,16 @@ What reading the real plan and system changed:
   - **Stratum floor and flow files.** The ≥ 50 floor counts internal sites of the **final truth**
     (`final2`) outside contact files, inside the labelled prefix: recall exists only for labelled
     sites, so Python's 240 labelled rows (stopped by §4.3) are the base, not the 500-row reference.
-    Counts from the reference are forecasts (non-contact internal sites: Python 93 of the labelled
-    prefix, TS/JS 165). If the final count is below 50 and no Joern output has been opened, the
+    Counts from the reference are forecasts (non-contact internal sites under R6's sources: Python 123 of the
+    labelled prefix (ordinals ≤ 240) and 241 of the 500 rows, TS/JS 165; 104 and 185 for Python if
+    eval-protocol Q1 widens the slice contact to the scale-probe files). If the final count is below 50 and no Joern output has been opened, the
     labeller may continue in ordinal order to the 500 cap (a stop that depends on the stratum count
     and not on Joern keeps the prefix a uniform sample); otherwise *insufficient*. The S56
     flow-method files are **not** contact for these call-site strata: being hand-labelled blind is
     not tuning, as with the S25/S26 labels, and P1 debugs flow against them only after P0(a). "Flow
     anchor" contact (eval-protocol §8.2) belongs to the later evaluation strata, which S47 adds; it
     is recorded in `contact.json` apart (below) and not applied here. Applying it would take Python
-    to 52 and TS/JS to 69 and make a floor of 50 the deciding quantity for a contact that has not
+    to 52 and TS/JS to 69 (counts measured before v1.9) and make a floor of 50 the deciding quantity for a contact that has not
     happened.
 
 ### 3.2 External corpora: one per language for Java, Kotlin, C#, Go, C/C++
@@ -1143,10 +1144,23 @@ adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended.
   slice touched; checked by `analyst`; not the S57 custodian, who must stay clear of Joern artifacts.
   Output: `cpg/spikes/frontend-fitness/contact.json`, with these keys.
   - `files`: the files of the two corpora that a **development source** names by path or by a
-    defined symbol's qualified name, plus S06's own list. Development sources are the primary
-    artifacts that shaped or encode what was built: code, tests of the system under test, fixtures,
-    golden bundles, rule packs, and the specs, plans and requirements that name a file as an input or
-    example. **Not sources:** `cpg/spikes/frontend-fitness/` (the measurement), every `-ml.md` note
+    defined symbol's qualified name, plus S06's own list. Development sources are the artifacts
+    that shaped or encode what was built: code, tests of the system under test, fixtures, golden
+    bundles and rule packs (eval-protocol §8.2's `cpg/tests/golden/*` and fixture rows), plus exactly
+    two documents, each for a stated part: **the slice report's §4** ("Proving-repo anchors the slice
+    touched", S14's contact list, a named exception to the measuring-documents rule below), whose
+    files are those of its four strict locators: `salesperson/src/api/client.ts` (`buildUrl`) and the
+    modules of the three `/health` providers (`storefront_api.py`, `api.py`, `app.py`); and the
+    **rule-pack spec** (S30's walkthroughs). The slice report's other sections are not read: its
+    scale-probe and link-consumer files (`executor.py`, `llm.py`, `modelconfig.py`, `test_app.py`,
+    `test_ensure_demo_models_script.py`, `test_services.py`, `test_storefront_api.py`,
+    `test_tools.py`) are eval-protocol Q1's open items, were walked and not tuned against, and
+    enter only if Q1 widens the set (the floor of §3.1 holds either way). **Worked examples are not
+    contact** (eval-protocol §8.2): the bundle specs, the graph note, the main plan and the other
+    plans name `config.py`, `embedding.py`, `guards.py`, `services.py`, `querygen.py`,
+    `conftest.py`, `test_fusion.py` and `test_querygen.py` to illustrate grammars, so a file named
+    only there is not contact; `config.py` (0 reference-internal sites) goes with them. **Not
+    sources:** `cpg/spikes/frontend-fitness/` (the measurement), every `-ml.md` note
     and `docs/reviews/`, `docs/test-reports/` (documents that measure or review rather than build),
     the coordination ledger, `HISTORY.md` and `BACKLOG.md` (logs, derivative of the sources), and
     `cpg/tests/test_frontend_fitness.py` (synthetic snippets). Deriving with and without the excluded
