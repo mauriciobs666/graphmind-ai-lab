@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.6 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.7 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.6): TS/JS a1 frame restricted to non-test files and labelled as a census (stakeholder decision; §3.1); earlier v1.5 and v1.4 content (C5 exclusions, macro-argument mapping, S56 flow rulings) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.7): S25 gate (F2, F4, F9) folded in: the post-pilot C# and C++ C5 classes ruled an exception on fresh evidence (§3.2), the circularity stratum extended to Python with a named producer (§3.1, R6), and the C++ clause figures corrected to the harness's. Earlier content (v1.4–v1.6) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -186,12 +186,14 @@ What reading the real plan and system changed:
   - **Claims.** AC-8 (egress) is untouched. For AC-5, TS/JS fitness now describes the prod code the
     bundle contains; recall on test code is unmeasured and irrelevant by design. Python keeps its
     tests.
-  - **Circularity.** The 40 files are the proving repo's prod code, which is also P1's target and has
-    development contact (R6). The fitness figure is therefore not held-out. *Stopping condition:*
-    S06's contact list is applied to the 40 files; sites in listed files are reported as a separate
-    stratum, and TS/JS passes §8.1 only if the non-contact stratum alone has observed recall ≥ 0.98
-    with ≥ 50 internal sites (fewer: *insufficient*, flagged, not passed). AC-5's re-run on fresh
-    items at P5 is the held-out check.
+  - **Circularity (TS/JS and Python alike).** The 40 TS/JS files and the Python corpus
+    (`falkor-chat/server/`) are the proving repo's code, which is also P1's target and has
+    development contact (R6), so neither figure is held-out. *Stopping condition, both languages:*
+    the contact list (R6) is applied to the corpus; sites in listed files are reported as a separate
+    stratum, and the language passes §8.1 only if the non-contact stratum alone has observed recall
+    ≥ 0.98 with ≥ 50 internal sites (fewer: *insufficient*, flagged, not passed). Python's labelled
+    sample has about 250 reference-internal sites, so a non-contact stratum of 50 is likely; TS/JS's
+    census has about 190 in all. AC-5's re-run on fresh items at P5 is the held-out check.
 
 ### 3.2 External corpora: one per language for Java, Kotlin, C#, Go, C/C++
 
@@ -220,8 +222,22 @@ harness tags it from the source alone (no Joern, no label) into one of these cla
 - **C/C++:** a site under a non-guard `#if`/`#ifdef`/`#else` group (the compilation database builds
   one configuration) and a site whose callee is itself a macro.
 - **Limits:** the excluded sites are ≤ 10 of the 50 (a judgment, not derived: more means the
-  reference is blind to too much of the frame for the noise estimate). A class is added only by a
-  revision of this note made before the pilot it would apply to. An excluded site stays in the
+  reference is blind to too much of the frame for the noise estimate). A class is added by a
+  revision of this note made before the pilot it would apply to. The C# and C++ classes arrived
+  after the Ocelot, eShopOnWeb and googletest pilots, on a structural diagnosis of those pilots'
+  silent sites, so a pilot cannot test them; they stand as a ruled exception because they are
+  re-evidenced on data they were not derived from: three fresh-seed pilots by the S25 gate (C#
+  adjusted 1.00, 1.00, 1.00; C++ 0.894, 0.957, 0.915) and the 500-site samples (C# 422/426 =
+  0.991; C++ 417/461 = 0.905 without the type-and-constructor clause, 427/462 = 0.924 with it). A
+  later class needs the same: a fresh-seed pilot or the sample, both Joern-independent, passing
+  0.90. One fresh pilot below 0.90 is not a failure: at 46 sites and a true 0.92, P(adjusted < 0.90)
+  is about 0.3, so one in three is expected, and the sample-level figure decides. *Stopping
+  condition:* the exception is withdrawn, and the corpus returns to C5 FAIL for the coordinator, if
+  the sample-level adjusted coverage of C# or C++ recomputed from the final `ref.jsonl` is below
+  0.90. eShopOnWeb and leveldb stay `FAIL` as recorded under the rule in force when they were
+  piloted; eShopOnWeb would pass the amended rule (40/40) and is not reinstated, because Ocelot is
+  the pick, is labelled, and reinstating after the fact would choose a corpus by its result;
+  leveldb also fails C7. An excluded site stays in the
   sample, is labelled, and is adjudicated like any silent site when the label says internal or
   `unsure` (§5.1 step 3).
 - **Effect on label noise.** Noise is estimated only where both sources speak, so each class is a
@@ -257,15 +273,16 @@ does emit the callee's symbol at these macro-argument sites, but at the macro in
 position mapping reports them silent. §5.2's macro-argument rule recovers 15 of the 22 (13 untagged
 sites: 11). The remaining 7: the 5 uncompiled-branch sites, an `EXPECT_CALL(..).WillOnce` chain and
 a `std::numeric_limits<float>::quiet_NaN` call. Pilot: 28 + 15 = 43 of 50 raw (0.86), 43 of 45
-adjusted (0.956, Wilson [0.85, 0.99]); 4 of the 15 rest on the type-and-constructor clause of §5.2,
-and without it the pilot is 39/50 raw and 39/44 = 0.886 adjusted, below 0.90. The pilot (n = 45) is
+adjusted (0.956, Wilson [0.85, 0.99]); 3 of the 15 rest on the type-and-constructor clause of §5.2,
+and without it the pilot is 40/50 raw and 40/45 = 0.889 adjusted, below 0.90. The pilot (n = 45) is
 too small to carry the verdict alone; the 500-site sample, which the committed `ref.jsonl` gives
 and which does not depend on the pilot, sets it. Over the 500 sample sites: 196 silent strictly;
 the rule recovers 123 of them (a name-and-window match, whose false-match rate is unmeasured; 10 rest
 on the type-and-constructor clause) and leaves 73: 29 under non-guard `#if`, 9 macro-callee sites
 outside `#if`, 3 `ambiguous` and 32 in no class. Comparable share 427/500 (0.854); adjusted
-coverage 427/462 = 0.924 (Wilson [0.90, 0.94]), and 417/462 = 0.903 without the clause. The
-verdict therefore passes with or without the clause, and the pilot's marginal pass is not relied on.
+coverage 427/462 = 0.924 (Wilson [0.90, 0.94]), and 417/461 = 0.905 (Wilson [0.87, 0.93]) without
+the clause, where one more formerly covered site becomes a by-construction exclusion. The verdict
+passes with or without the clause, narrowly without it, and the pilot's marginal pass is not relied on.
 Decision: googletest stays, the mapping rule and the class list above apply.
 Rejected: changing criteria to find another corpus. Every other candidate in `corpora.yaml` fails a
 criterion that guards something real (spdlog: a Kafka client, §3.3 rule 4; yaml-cpp 82.9k and quill
@@ -561,7 +578,7 @@ the pair `P/X#` and `P/X#X(h).` that `scip-clang` emits at one token counts as o
 in-corpus entity. False-match risk: a window mention of the type that is not the site's call, for
 example `X` as a type argument beside a call named `X`; the labelled target would still be the same
 class, so the cost is a falsely agreeing site, not a wrong target. The clause applies to 10 of the 500
-sample sites and 4 of the pilot's. Stopping condition: at S57, if ≥ 3 of those 10 sites are
+sample sites and 3 of the pilot's. Stopping condition: at S57, if ≥ 3 of those 10 sites are
 adjudicated as reference errors, the clause is withdrawn and they become `ambiguous`. The strict position
 mapping applies everywhere else. The agreement rate is reported separately for `relaxed` sites.
 
@@ -1107,9 +1124,14 @@ adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended.
   internal share near 0.20) is *insufficient*, which counts as a fail under §8.1.
 - **R6. Contact with the proving repo** (the TS/JS census of §3.1 sharpens it). S26 labels call edges in `falkor-chat/server/` and
   `salesperson/`, in a file builders can read. These are call edges, not impact keys, so the
-  contamination of AC-5 is low. Even so, S06's development-contact rule should list the files the
-  Python and TS samples touch, with the same treatment as the slice's (S06 is mine; I will carry it
-  there).
+  contamination of AC-5 is low. Even so, the contact list must exist before S27 reads
+  the strata of §3.1. *Producer (proposed; `architect` assigns the step id and row):* a new step
+  after S11 and S14, before S27, owned by `graph-dba`, who built the extractor and knows what the
+  slice touched; checked by `analyst`; not the S57 custodian, who must stay clear of Joern artifacts.
+  Output: `cpg/spikes/frontend-fitness/contact.json`, the files of the two corpora that any committed
+  development artifact other than `cpg/spikes/frontend-fitness/` names by path or by a defined
+  symbol's qualified name (fixtures, golden bundles, tests, rule packs), plus S06's own list. The
+  same file is the input to S47's contact set.
 - **R7. Inverse-sampling cap interacts with the C/C++ macro kind.** If macro-invocation sites are
   mostly `notACall`, they consume ordinals without adding internal sites. `notACall` sites count
   toward the 500 cap, and the report gives their share. On googletest 17 of the 500 sample sites are
