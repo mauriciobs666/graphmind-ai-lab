@@ -333,3 +333,306 @@ def test_flow_population_length_and_parameter_bounds(tmp_path):
     (tmp_path / "m.py").write_text(src)
     got = sorted(p["qname"].split("::")[1] for p in rf.flow_population("python", tmp_path, {}))
     assert got == ["l25", "l5"]        # 4 and 26 lines out; no parameter / `self` only out
+
+
+# ---------------------------------------------------------------- ML §5.2 macro-argument rule, §3.2 C5 classes
+
+def _occ(sym, c0=0, c1=1):
+    return {"sym": sym, "c0": c0, "c1": c1, "roles": 0}
+
+
+PRINT = "cxx . . $ testing/Print()."
+PRINT2 = "cxx . . $ testing/Print(0123456789abcdef)."
+
+
+def test_macro_window_symbols_distinct_names_and_bounds():
+    occ = {("t.cc", 4): [_occ(PRINT)],                     # before the window start (invocation on line 5)
+           ("t.cc", 5): [_occ("cxx . . $ testing/EXPECT_EQ#"), _occ("local 7"), _occ("cxx . . $ testing/Other().")],
+           ("t.cc", 6): [_occ(PRINT)], ("t.cc", 7): [_occ(PRINT)],
+           ("t.cc", 8): [_occ(PRINT2)],                    # after the site's name line (7)
+           ("u.cc", 6): [_occ(PRINT2)]}                    # another file
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 7, "Print") == [PRINT]       # one symbol, three occurrences
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 8, "Print") == sorted([PRINT, PRINT2])   # end line is inclusive
+    assert rf.macro_window_symbols(occ, "t.cc", 4, 7, "Print") == [PRINT]       # start line is inclusive (same symbol)
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 5, "Print") == []            # window of one line: nothing named Print
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 7, "Nope") == []             # name must equal the callee name
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 7, "7") == []                # a local is never a candidate
+    near = {("t.cc", 5): [_occ("cxx . . $ testing/PrintAll()."), _occ("cxx . . $ testing/Pri()."), _occ("cxx . . $ testing/Print().")]}
+    assert rf.macro_window_symbols(near, "t.cc", 5, 5, "Print") == ["cxx . . $ testing/Print()."]   # equality, not prefix
+
+
+CPP_SRC = (
+    "#ifndef T_H\n"
+    "#define T_H\n"
+    "int Print(int x) { return x; }\n"
+    "void f() {\n"
+    "  g(Print(1));\n"
+    "  EXPECT_EQ(\"é\", Print(2));\n"
+    "  OUTER(1,\n"
+    "        INNER(Print(3)));\n"
+    "  EXPECT_EQ(1, MY_M(4));\n"
+    "  Print(5).run();\n"
+    "}\n"
+    "#endif\n"
+)
+
+
+def _cpp_rows(tmp_path, src=CPP_SRC, name="t.cc"):
+    (tmp_path / name).write_text(src)
+    return {(r["line"], r["callText"]): r for r in rf.iter_frame("cpp", tmp_path, {})}
+
+
+def test_site_node_offset_is_code_points_not_bytes(tmp_path, monkeypatch):
+    monkeypatch.setattr(rf, "src_dir", lambda lang: tmp_path)
+    rows = _cpp_rows(tmp_path)
+    for key in [(5, "Print"), (6, "Print"), (8, "Print"), (9, "MY_M"), (10, "Print")]:
+        r = rows[key]
+        node, off, _, data = rf._site_node("cpp", r, {})
+        assert data[off:off + len(key[1])].decode() == key[1]
+        assert node.type == "identifier" and node.text.decode() == key[1]
+
+
+def test_macro_invocation_start_outermost_and_args_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(rf, "src_dir", lambda lang: tmp_path)
+    rows = _cpp_rows(tmp_path)
+    st = lambda key: rf.macro_invocation_start("cpp", rows[key], {})  # noqa: E731
+    assert st((5, "Print")) is None            # g is not macro-shaped
+    assert st((6, "Print")) == 6               # EXPECT_EQ on the same line
+    assert st((8, "Print")) == 7               # OUTER (line 7) encloses INNER (line 8): the outermost wins
+    assert st((8, "INNER")) == 7               # INNER itself is macro-shaped, still inside OUTER's arguments
+    assert st((7, "OUTER")) is None            # a macro invocation is not inside its own arguments
+    assert st((10, "Print")) is None
+    assert rf.macro_invocation_start("c", rows[(6, "Print")], {}) is None   # C++ only
+
+
+def test_site_tags_closed_classes_cpp(tmp_path, monkeypatch):
+    monkeypatch.setattr(rf, "src_dir", lambda lang: tmp_path)
+    src = ("#ifndef G\n#define G\nvoid f() {\n  a();\n#if WIN\n  b();\n#else\n  c();\n#endif\n  MY_M(1);\n}\n#endif\n")
+    rows = _cpp_rows(tmp_path, src)
+    tg = lambda key: rf.site_tags("cpp", rows[key], {})  # noqa: E731
+    assert tg((4, "a")) == []                                  # the include guard is not a non-guard group
+    assert tg((6, "b")) == ["preproc-branch"] and tg((8, "c")) == ["preproc-branch"]
+    assert tg((10, "MY_M")) == ["macro-callee"]
+    assert set(rf.CLOSED_CLASSES["cpp"]) == {"preproc-branch", "macro-callee"}
+
+
+def test_site_tags_csharp_and_go_classes():
+    row = lambda text, name: {"callText": text, "calleeName": name}  # noqa: E731
+    assert rf.site_tags("csharp", row("a.B<int>", "B"), {}) == ["generic-callee"]
+    assert rf.site_tags("csharp", row("new C<T>", "C"), {}) == ["generic-callee"]
+    assert rf.site_tags("csharp", row("nameof", "nameof"), {}) == ["nameof"]
+    assert rf.site_tags("csharp", row("a.B", "B"), {}) == []
+    assert rf.site_tags("go", row("len", "len"), {}) == ["builtin"]
+    assert rf.site_tags("go", row("a.len", "len"), {}) == ["builtin"]      # name-based class, as the pilot's
+    assert rf.site_tags("go", row("foo", "foo"), {}) == []
+    assert rf.site_tags("java", row("List<String>", "x"), {}) == []        # no class outside the closed list
+
+
+def _mk_scip(extra_occ, sym_defs=None):
+    """A one-header, one-test SCIP index: `Print` is defined at lib.h:3 (0-based line 2)."""
+    doc_h = {"relative_path": "t.h", "occurrences": [{"symbol": PRINT, "symbol_roles": 1, "range": [2, 4, 9]}]}
+    doc_t = {"relative_path": "t.cc", "occurrences": extra_occ}
+    return {"metadata": {"tool_info": {"name": "scip-clang", "version": "0"}}, "documents": [doc_h, doc_t]}
+
+
+def _refmap(tmp_path, monkeypatch, src, occ, lang="cpp"):
+    (tmp_path / "t.h").write_text("int Print(int x) { return x; }\n\n")
+    (tmp_path / "t.cc").write_text(src)
+    monkeypatch.setattr(rf, "src_dir", lambda l: tmp_path)
+    monkeypatch.setattr(rf, "corpus_cfg", lambda l: {})
+    frame = [r for r in rf.iter_frame(lang, tmp_path, {}) if r["path"] == "t.cc"]
+    by_key = {r["siteKey"]: r for r in frame}
+    sample = [{"ordinal": i, "siteId": f"{i:016x}", "path": r["path"], "line": r["line"], "column": r["column"], "callText": r["callText"]}
+              for i, r in enumerate(frame, 1)]
+    priv = [{"siteKey": r["siteKey"]} for r in frame]
+    rows = rf.refmap_scip(lang, _mk_scip(occ), sample, priv, "0", by_key)
+    return {(r["site"]["line"], r["site"]["callText"]): r for r in rows}
+
+
+def _ref_occ(line1, c0, c1, sym=PRINT):
+    return {"symbol": sym, "symbol_roles": 0, "range": [line1 - 1, c0, c1]}
+
+
+SRC_MACRO = "void f() {\n  EXPECT_EQ(1,\n            Print(2));\n}\n"
+
+
+def test_refmap_macro_argument_one_symbol_is_relaxed_reference(tmp_path, monkeypatch):
+    # scip-clang puts the callee's symbol at the macro invocation's columns (line 2, `EXPECT_EQ`)
+    r = _refmap(tmp_path, monkeypatch, SRC_MACRO, [_ref_occ(2, 2, 11)])[(3, "Print")]
+    assert r["static"]["kind"] == "internal" and r["static"]["path"] == "t.h" and r["static"]["defLine"] == 3
+    assert r.get("relaxed") is True and "ambiguous" not in r and "byConstruction" not in r
+    # the macro invocation line itself is in the window (its first line), and so is the site's own line
+    r = _refmap(tmp_path, monkeypatch, SRC_MACRO, [_ref_occ(3, 2, 7)])[(3, "Print")]
+    assert r.get("relaxed") is True
+
+
+def test_refmap_macro_argument_window_bounds_and_name(tmp_path, monkeypatch):
+    src = "void f() {\n  EXPECT_EQ(1,\n            Print(2));\n  other();\n}\n"
+    before = _refmap(tmp_path, monkeypatch, src, [_ref_occ(1, 2, 11)])[(3, "Print")]    # line before the invocation
+    after = _refmap(tmp_path, monkeypatch, src, [_ref_occ(4, 2, 7)])[(3, "Print")]      # line after the site's name line
+    for r in (before, after):
+        assert r["static"] == {"kind": "silent"} and "relaxed" not in r and "ambiguous" not in r
+    other = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 2, 11, "cxx . . $ testing/Other().")])[(3, "Print")]
+    assert other["static"] == {"kind": "silent"} and "relaxed" not in r
+
+
+def test_refmap_macro_argument_two_symbols_is_silent_ambiguous(tmp_path, monkeypatch):
+    r = _refmap(tmp_path, monkeypatch, SRC_MACRO, [_ref_occ(2, 2, 11), _ref_occ(3, 2, 7, PRINT2)])[(3, "Print")]
+    assert r["static"] == {"kind": "silent"} and r.get("ambiguous") is True and "relaxed" not in r
+    # the same symbol twice is one symbol
+    r = _refmap(tmp_path, monkeypatch, SRC_MACRO, [_ref_occ(2, 2, 11), _ref_occ(2, 20, 25)])[(3, "Print")]
+    assert r.get("relaxed") is True and "ambiguous" not in r
+
+
+def test_refmap_macro_rule_applies_everywhere_classes_tag_only_what_stays_silent(tmp_path, monkeypatch):
+    # ML §3.2: a site leaves the C5 denominator only if still silent after §5.2's mapping, so the rule applies to a macro-callee
+    # site and to a site under a non-guard #if (a compiled branch has occurrences)
+    src = "void f() {\n  EXPECT_EQ(1, MY_M(2));\n}\n"
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 2, 11, "cxx . . $ testing/MY_M().")])[(2, "MY_M")]
+    assert r["static"]["kind"] == "external" and r.get("relaxed") is True and "byConstruction" not in r
+    r = _refmap(tmp_path, monkeypatch, src, [])[(2, "MY_M")]
+    assert r["static"] == {"kind": "silent"} and r["byConstruction"] == ["macro-callee"] and "relaxed" not in r
+    pad = "int pad1; int pad2; int pad3; int pad4; int pad5; int pad6; int pad7; int pad8;\n"
+    src = pad + "#if WIN\nvoid f() {\n  EXPECT_EQ(1, Print(2));\n}\n#endif\n"
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(4, 2, 11)])[(4, "Print")]
+    assert r["static"]["kind"] == "internal" and r.get("relaxed") is True and "byConstruction" not in r
+    r = _refmap(tmp_path, monkeypatch, src, [])[(4, "Print")]                    # an uncompiled branch: no occurrence at all
+    assert r["static"] == {"kind": "silent"} and r["byConstruction"] == ["preproc-branch"]
+    # a site outside any macro argument is never relaxed
+    src = "void f() {\n  g(Print(2));\n}\n"
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 2, 3)])[(2, "Print")]
+    assert r["static"] == {"kind": "silent"} and "relaxed" not in r and "byConstruction" not in r
+    # a strict match is kept as is: no relaxed flag
+    r = _refmap(tmp_path, monkeypatch, SRC_MACRO, [_ref_occ(3, 12, 17)])[(3, "Print")]
+    assert r["static"]["kind"] == "internal" and "relaxed" not in r
+
+
+CTOR = "cxx . . $ testing/Double#Double(ba8836b59fb42830)."
+CTOR2 = "cxx . . $ testing/Double#Double(0123456789abcdef)."
+TYPE = "cxx . . $ testing/Double#"
+
+
+def test_macro_window_merges_a_type_symbol_into_its_constructor_only():
+    occ = {("t.cc", 5): [_occ(TYPE), _occ(CTOR)]}
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 5, "Double") == [CTOR]
+    assert rf.macro_window_symbols(occ, "t.cc", 5, 5, "Double", merge_type_ctor=False) == sorted([TYPE, CTOR])
+    assert rf.macro_window_symbols({("t.cc", 5): [_occ(TYPE)]}, "t.cc", 5, 5, "Double") == [TYPE]      # a lone type stays
+    assert rf.macro_window_symbols({("t.cc", 5): [_occ(CTOR), _occ(CTOR2)]}, "t.cc", 5, 5, "Double") == sorted([CTOR, CTOR2])
+    nested = "cxx . . $ testing/Double#Inner#Double(0123456789abcdef)."      # a nested type's constructor is another target
+    assert rf.macro_window_symbols({("t.cc", 5): [_occ(TYPE), _occ(nested)]}, "t.cc", 5, 5, "Double") == sorted([TYPE, nested])
+    scoped = "cxx . . $ testing/Double#sub/Double(0123456789abcdef)."       # a scoped (not member) descriptor is not its constructor
+    assert rf.macro_window_symbols({("t.cc", 5): [_occ(TYPE), _occ(scoped)]}, "t.cc", 5, 5, "Double") == sorted([TYPE, scoped])
+    # a constructor of ANOTHER type with the same name does not absorb the type
+    other = "cxx . . $ testing/Other#Double(0123456789abcdef)."
+    assert rf.macro_window_symbols({("t.cc", 5): [_occ(TYPE), _occ(other)]}, "t.cc", 5, 5, "Double") == sorted([TYPE, other])
+
+
+def test_refmap_macro_argument_constructor_pair_is_one_symbol_flagged(tmp_path, monkeypatch):
+    src = "void f() {\n  EXPECT_EQ(1,\n            Double(2));\n}\n"
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 2, 11, TYPE), _ref_occ(2, 2, 11, CTOR)])[(3, "Double")]
+    assert r.get("relaxed") is True and r.get("typeCtorMerged") is True and "ambiguous" not in r
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 2, 11, CTOR)])[(3, "Double")]
+    assert r.get("relaxed") is True and "typeCtorMerged" not in r
+
+
+def test_refmap_error_region_is_informational_not_a_class(tmp_path, monkeypatch):
+    src = "void f( {\n  Print(2);\n}\n"                     # tree-sitter ERROR region, no occurrence
+    r = _refmap(tmp_path, monkeypatch, src, [])[(2, "Print")]
+    assert rf.site_tags("cpp", {"path": "t.cc", "line": 2, "column": 3, "callText": "Print", "calleeName": "Print", "kind": "plain"}, {}) == ["error-region"]
+    assert r["static"] == {"kind": "silent"} and "byConstruction" not in r
+
+
+def test_refmap_byconstruction_only_on_silent_rows(tmp_path, monkeypatch):
+    src = "void f() {\n  a(Print(2));\n}\n"
+    r = _refmap(tmp_path, monkeypatch, src, [_ref_occ(2, 4, 9)])[(2, "Print")]
+    assert r["static"]["kind"] == "internal" and "byConstruction" not in r
+
+
+def _prow(sid, kind, **kw):
+    d = {"static": {"kind": kind}}
+    d.update(kw)
+    return sid, d
+
+
+def test_pilot_coverage_raw_adjusted_cap_and_strict():
+    pilot = [{"siteId": f"s{i}", "path": "x", "line": 1, "column": 1, "callText": "f", "calleeName": "f"} for i in range(50)]
+    rows = {}
+    for i in range(50):
+        rows[f"s{i}"] = {"static": {"kind": "internal"}}
+    for i in range(0, 3):
+        rows[f"s{i}"] = {"static": {"kind": "internal"}, "relaxed": True}           # covered by §5.2's rule
+    for i in range(3, 10):
+        rows[f"s{i}"] = {"static": {"kind": "silent"}, "byConstruction": ["generic-callee"]}
+    rows["s10"] = {"static": {"kind": "silent"}, "byConstruction": ["nameof", "generic-callee"]}   # two classes, one site
+    rows["s11"] = {"static": {"kind": "silent"}, "ambiguous": True}
+    rows["s12"] = {"static": {"kind": "silent"}}
+    c = rf.pilot_coverage("csharp", pilot, rows)
+    assert (c["silent"], c["withReference"], c["coverage"]) == (10, 40, 0.8)
+    assert c["relaxed"] == 3 and c["coverageStrict"] == round(37 / 50, 4)
+    assert c["ambiguous"] == 1
+    assert c["excluded"] == 8 and c["excludedByClass"] == {"generic-callee": 8, "nameof": 1}
+    assert c["adjustedDenominator"] == 42 and c["adjustedCoverage"] == round(40 / 42, 4)
+    assert c["exclusionCapExceeded"] is False and c["exclusionCap"] == 10
+    rows["s13"] = {"static": {"kind": "silent"}, "byConstruction": ["generic-callee"]}
+    rows["s14"] = {"static": {"kind": "silent"}, "byConstruction": ["generic-callee"]}
+    c = rf.pilot_coverage("csharp", pilot, rows)
+    assert c["excluded"] == 10 and c["exclusionCapExceeded"] is False       # exactly 10 of 50 is allowed
+    for i in range(15, 16):
+        rows[f"s{i}"] = {"static": {"kind": "silent"}, "byConstruction": ["generic-callee"]}
+    c = rf.pilot_coverage("csharp", pilot, rows)
+    assert c["excluded"] == 11 and c["exclusionCapExceeded"] is True       # the cap is a flag, never silently clipped
+    assert c["coverage"] == round(37 / 50, 4)                               # raw is untouched
+
+
+# ---------------------------------------------------------------- C# generic audit draw (ML §3.2, prefix ccg-p0a-v1-gen|)
+
+def _gen_inputs():
+    pub = [{"ordinal": i, "siteId": f"{i:016x}", "callText": t} for i, t in
+           enumerate(["a.B<int>", "x.y", "nameof", "new C<T>", "p.q<int>", "z"], 1)]
+    priv = [{"ordinal": i, "siteKey": f"f.cs:{i}:1:{p['callText']}", "calleeName": p["callText"].split(".")[-1].split("<")[0].replace("new ", "")}
+            for i, p in enumerate(pub, 1)]
+    return pub, priv
+
+
+def test_gen_audit_order_is_hash_sort_over_class_sites_only(monkeypatch):
+    monkeypatch.setattr(rf, "corpus_cfg", lambda l: {"commit": "abc"})
+    pub, priv = _gen_inputs()
+    ref = [{"ordinal": i, "static": {"kind": "silent"}, "byConstruction": ["generic-callee"]} for i in (1, 3, 5)]
+    ref += [{"ordinal": 4, "static": {"kind": "internal"}}, {"ordinal": 2, "static": {"kind": "silent"}},
+            {"ordinal": 6, "static": {"kind": "silent"}, "byConstruction": ["generic-callee"]}]
+    got = rf.build_gen_audit("csharp", pub, priv, ref)
+    # ordinal 4 is a class site the reference speaks on, 6 is silent but not in a class text-wise, 2 is silent in no class
+    assert sorted(g["ordinal"] for g in got) == [1, 3, 5]
+    seed = "ccg-p0a-v1-gen|csharp|abc"
+    want = sorted((rf.sha256hex(seed + "|" + pr["siteKey"]), pr["siteKey"], pr["ordinal"]) for pr in priv if pr["ordinal"] in (1, 3, 5))
+    assert [g["ordinal"] for g in got] == [w[2] for w in want]
+    assert [g["hash"] for g in got] == [w[0] for w in want] and [g["rank"] for g in got] == [1, 2, 3]
+    assert {g["ordinal"]: g["classes"] for g in got}[3] == ["nameof"]
+    assert not ({"static", "res", "label"} & set(got[0]))
+    with pytest.raises(SystemExit):
+        rf.build_gen_audit("go", pub, priv, ref)
+
+
+def test_gen_audit_select_all_internal_and_first_k_external():
+    order = [{"rank": i, "ordinal": i, "siteId": f"{i:016x}", "hash": "h", "classes": ["generic-callee"]} for i in range(1, 11)]
+    ext = {"kind": "external", "package": "p"}
+    intl = {"kind": "internal", "path": "a", "qname": None, "defLine": 1}
+    decl = {"kind": "declared", "path": "a", "qname": None, "defLine": 2}
+    labels = {}
+    for i in range(1, 11):
+        labels[i] = {"ordinal": i, "callees": [intl] if i in (2, 9) else [decl] if i == 5 else [ext], "notACall": i == 10}
+    got = rf.gen_audit_select(order, [labels[i] for i in labels], k=3)
+    assert [(g["ordinal"], g["stratum"]) for g in got] == [(1, "external"), (2, "internal"), (3, "external"), (4, "external"), (5, "internal"), (9, "internal")]
+    assert rf.gen_audit_select(order, [labels[i] for i in labels], k=40)[-1]["ordinal"] == 9 and len(rf.gen_audit_select(order, list(labels.values()), k=40)) == 9
+
+
+def test_adjudication_input_carries_stratum_tags_of_the_reference(tmp_path):
+    adj = _load_adj()
+    labels = [_label(1, [INT("a.py", 3)]), _label(2, [INT("a.py", 3)]), _label(3, [], notACall=True)]
+    refs = [_ref(1, INT("a.py", 3), relaxed=True), _ref(2, {"kind": "silent"}, ambiguous=True),
+            _ref(3, {"kind": "silent"}, byConstruction=["builtin"])]
+    _write(tmp_path, "python", labels, refs)
+    rows, _ = adj.build("python", tmp_path)
+    ref = {r["ordinal"]: r["reference"] for r in rows}
+    assert ref[1]["relaxed"] is True and ref[2]["ambiguous"] is True and ref[3]["byConstruction"] == ["builtin"]
+    assert "relaxed" not in ref[2] and "byConstruction" not in ref[1]

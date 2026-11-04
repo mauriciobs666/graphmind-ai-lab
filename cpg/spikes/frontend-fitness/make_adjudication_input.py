@@ -14,7 +14,8 @@ no other language's file. The site coordinates it needs come from `truth/<lang>.
 field (the same four public fields the labeller was shown). Standard library only.
 
 Output line (no Joern columns):
-  {ordinal, siteId, site{path,line,column,callText}, status, reasons[], label{...}, reference{...},
+  {ordinal, siteId, site{path,line,column,callText}, status, reasons[], label{...}, reference{... + relaxed / ambiguous /
+   byConstruction when the reference row carries them: the strata of ML §5.1 step 4},
    inCorpusLabel[], inCorpusReference[], declaredLabel[]}
   status  "agreed"             same in-corpus target set (or both without one): the proposed truth
           "needs-adjudication" at least one reason below
@@ -171,7 +172,8 @@ def build(lang: str, root: Path) -> tuple[list[dict], dict]:
             "ordinal": lab["ordinal"], "siteId": lab["siteId"], "site": ref.get("site"),
             "status": "needs-adjudication" if reasons else "agreed", "reasons": reasons,
             "label": {k: lab[k] for k in ("callees", "notACall", "dynamic", "confidence", "evidence")},
-            "reference": {"static": ref["static"], "impls": ref.get("impls", []), "tool": ref.get("tool"), "toolVersion": ref.get("toolVersion")},
+            "reference": {"static": ref["static"], "impls": ref.get("impls", []), "tool": ref.get("tool"), "toolVersion": ref.get("toolVersion"),
+                          **{k: ref[k] for k in ("relaxed", "ambiguous", "byConstruction") if k in ref}},   # strata of ML §5.1 step 4
             "inCorpusLabel": sorted([list(x) for x in l_inc]), "declaredLabel": sorted([list(x) for x in l_dec]),
             "inCorpusReference": sorted([list(x) for x in r_inc]),
         })

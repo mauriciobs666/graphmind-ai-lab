@@ -57,3 +57,13 @@ column (the start of the whole expression), exactly like the two frame sites; th
 JSX component use (JS/TS), Kotlin delegation-specifier constructor calls, Go generic instantiation calls, C++ calls that
 `c2cpg` does not model (parse-error regions: tree-sitter ERROR nodes mean the frame itself is incomplete there). These
 count as *absent in Joern* once S27 has inspected them one by one.
+
+## Not this table: the reference-side by-construction classes (C5)
+
+The classes above are about **Joern** (`measure.sc`, S27). ML §3.2's C5 classes are about the **reference tool** being silent
+and are tagged by `run_fitness.py` from the source alone, never from a Joern result (`byConstruction` in `truth/<lang>.ref.jsonl`):
+Go `builtin`; C# `generic-callee` (a `<` in the callee text) and `nameof`; C++ `preproc-branch` (non-guard `#if` group) and
+`macro-callee` (an all-caps identifier callee). The two lists overlap in kind only: a C# generic call is silent in `scip-dotnet`
+yet matched by name in Joern (row "C# `G` for `b.G<int>()`" above), and Go's generic instantiation is the reverse case.
+**Not observed:** how `c2cpg` positions a call written inside a macro's argument list on a corpus; the probe has only the
+top-level `M(2)` row. S27's census match rate will show it; no matcher rule was added for it here.

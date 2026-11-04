@@ -9,9 +9,9 @@ measurement script. **No Joern run on any corpus has been made.** Order inside S
 first Joern run (ML §3.2); the C5 records below are all earlier than any Joern output, and the only Joern runs so far are
 on seven tiny synthetic probe projects (`matcher-table.md`).
 
-**State (2026-11-04): 5 of 7 languages are drawn; 2 need a decision before S26/S56 may start there (§5):**
-Python, TS/JS, Go and Java passed C5; **C#** and **C++** failed C5 for structural reasons (draws exist, provisional);
-**Kotlin** has no corpus (§5).
+**State (2026-11-04): 6 of 7 languages are drawn and pass C5 under ML v1.4 (§3.2, §5.2); Kotlin has no corpus (§5).**
+Python, TS/JS, Go, Java pass raw; **C#** (0.86 raw, 43/43 adjusted) and **C++** (0.86 raw, 43/45 adjusted) pass after
+the by-construction exclusions and the macro-argument rule (§4, §5).
 
 ## 1. Layout
 
@@ -26,7 +26,8 @@ Python, TS/JS, Go and Java passed C5; **C#** and **C++** failed C5 for structura
 | `sample/<lang>.jsonl`, `sample/<lang>.brief.md` | what the labeller gets (500 sites; the filled brief, pasted as-is) | S26 labeller |
 | `sample/<lang>.private.jsonl` | harness-only (kind, node type, frame size, `siteKey`) | **not** labellers |
 | `sample/<lang>-flow.jsonl` | the golden-flow draw (ML §6.4): up to 30 methods with source text | S56 labeller |
-| `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the C5 record, the reference answer for every sampled ordinal | **not** labellers; S57 |
+| `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the C5 record (raw and adjusted), the reference answer for every sampled ordinal | **not** labellers; S57 |
+| `truth/csharp.gen-audit.jsonl` | the hash order (`ccg-p0a-v1-gen|`) of the 74 reference-silent generic/`nameof` sites of the C# sample: the S57 audit draw (`genaudit`, §2) | **not** labellers; S57 |
 | `labels/ adjudication/ results/` | empty (`.gitkeep`): later steps write them | later steps |
 
 Scratch (gitignored, `cpg/.ccg-work/`): `corpora/<lang>/src` (the clean `git archive` tree; the labeller's and Joern-off's
@@ -35,7 +36,7 @@ tree), `frontend-fitness/{truth-work,truth-out,rejected,probe*}`. Rejected-candi
 Reproduce: `run_fitness.py fetch <lang>` (needs only `corpora.yaml`), then `frame`, `draw`, `flowdraw`, `c5pilot`,
 `brief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...`. `run_fitness.py verify` re-derives every frame,
 sample, private, flow and brief file and compares: it passes for all six pinned corpora (and `srcDigest` equality).
-Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (24 tests).
+Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (41 tests).
 
 ## 2. Definitions this harness fixes (where ML leaves a choice)
 
@@ -66,6 +67,26 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
   `impls`) or `{kind: silent}`. `impls` = the SCIP `is_implementation` closure (Go: every in-corpus edge target). A
   definition that is not a file of the clean corpus tree (generated or fetched) is **external**, as in the labeller's view.
   scip-python reports a builtin function as an undefined `local N` symbol; the mapper turns it into `external`.
+  Additive row keys (ML §5.2, §11 N1): `relaxed: true` (the macro-argument rule matched, `static` is that symbol),
+  `ambiguous: true` (rule saw several symbols; `static` stays `silent`), `typeCtorMerged: true` (the single symbol came from
+  a type + constructor pair, below) and, on a still-`silent` row only, `byConstruction: [class…]` (the closed ML §3.2 list:
+  Go `builtin`; C# `generic-callee`, `nameof`; C++ `preproc-branch`, `macro-callee`), tagged from the source alone.
+  `make_adjudication_input.py` copies the three flags into `reference` (the strata of ML §5.1 step 4).
+* **Macro-argument rule (C/C++, `refmap_scip`).** For a site the strict position mapping leaves silent and that sits in the
+  argument list of a macro-shaped call (all-caps identifier callee, tree-sitter), take the non-local, non-definition
+  occurrences from the first line of the **outermost** such invocation to the site's name line (both inclusive) whose
+  last descriptor name equals the callee name: one distinct symbol is the reference (`relaxed`), several are `ambiguous`.
+  Applied to every still-silent site; `preproc-branch` / `macro-callee` are tagged afterwards on the sites that stay silent
+  (ML §3.2: "still reference-silent after §5.2's mapping"). **One refinement of ours:** the type symbol `P/X#` and its
+  constructor `P/X#X(h).` at one token count as one symbol (as the strict mapping prefers the method-like symbol); flagged
+  `typeCtorMerged`; without it the googletest pilot is 11 relaxed + 3 ambiguous (39/50 raw), with it 15 + 0.
+* **C5 record (`truth/<lang>.c5.json`, `pilot`).** `coverage` = raw (the §5.2 mapping, `relaxed` counted), `coverageStrict` =
+  without the rule, `adjustedCoverage` = `withReference / (50 − excluded)` where `excluded` = silent sites with a
+  `byConstruction` class (a site counts once, `excludedByClass` tallies each class), `exclusionCapExceeded` = more than 10.
+  `error-region` (tree-sitter ERROR node) is informational (`silentInformationalTags`), not a class.
+* **`genaudit csharp`** (ML §3.2): the reference-silent sampled sites in a C# class, hash-sorted with seed
+  `ccg-p0a-v1-gen|csharp|<sha>` (§4.4's rule). `genaudit csharp --select` (S57, needs `labels/`) writes
+  `adjudication/csharp.gen-audit.jsonl`: every such site the label calls internal/declared plus the first 40 it calls external.
 
 ## 3. Per language (observed)
 
@@ -73,10 +94,10 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
 |---|---|---|---|---|---|
 | Python | proving repo `falkor-chat/server` @ `0caf85e3` | 17,358 / 104 | scip-python 0.6.8 | **0.90** (45/50) PASS | 254 internal, 178 external, 66 silent, 2 local |
 | TS/JS | proving repo `salesperson` @ `0caf85e3` | 4,097 / 68 | scip-typescript 0.6.0 (+ a work-copy tsconfig over `tests/`) | **0.98** PASS | 109 internal, 370 external, 21 local |
-| Go | `labstack/echo` @ `7af8fac5` (MIT, module `echo/v5`) | 13,362 / 112 | callgraph VTA v0.52.0 `-test` | **0.90** (0.918 without builtins) PASS | 150 internal, 11 dispatch, 268 external, 71 silent |
+| Go | `labstack/echo` @ `7af8fac5` (MIT, module `echo/v5`) | 13,362 / 112 | callgraph VTA v0.52.0 `-test` | **0.90** raw (45/50), 45/49 = 0.918 adjusted (1 `builtin`) PASS | 150 internal, 11 dispatch, 268 external, 71 silent |
 | Java | `spring-petclinic/spring-petclinic-rest` @ `5180cc9b` (Apache-2.0) | 3,693 / 64 | scip-java 0.13.2 (manual: `javac -Xplugin:scip` + `aggregate`) | **0.92** PASS | 62 internal + 38 declared, 317 external, 83 silent |
-| C# | `ThreeMammals/Ocelot` @ `8b8fde19` (MIT) | 24,414 / 547 | scip-dotnet 0.2.16 | **0.86** FAIL (§5.1) | 218 internal + 15 declared, 189 external, 78 silent |
-| C++ | `google/googletest` @ `a8380b01` (BSD-3) | 28,490 / 132 | scip-clang 0.4.1, gcc compdb | **0.56** FAIL (§5.2) | 192 internal, 109 external, 196 silent |
+| C# | `ThreeMammals/Ocelot` @ `8b8fde19` (MIT) | 24,414 / 547 | scip-dotnet 0.2.16 | **0.86** raw (43/50), 43/43 = 1.00 adjusted (6 `generic-callee`, 1 `nameof`) PASS | 218 internal + 15 declared, 189 external, 78 silent (74 in a class: 62 generic, 12 `nameof`) |
+| C++ | `google/googletest` @ `a8380b01` (BSD-3) | 28,490 / 132 | scip-clang 0.4.1, gcc compdb | **0.86** raw (43/50; 0.56 strict), 43/45 = 0.956 adjusted (5 `preproc-branch`, one of them also `macro-callee`) PASS | 305 internal, 119 external, 3 local, 73 silent (123 `relaxed`, 3 `ambiguous`; 196 silent strictly) |
 | Kotlin | none (§5.3) | — | scip-kotlinc 0.13.2 (S24-proved) | — | — |
 
 C1/C2/C3/C6-C8 and the exclusion greps are in `corpora.yaml` (all six: no OpenTelemetry/`microservices-demo`/broker
@@ -104,24 +125,22 @@ with the image's **gcc 13.3.0**; `scip-clang` (its own bundled Clang/LLVM 21.1.8
   (5 GB container cap, one `docker stats` sample of 0.68 GB mid-build; peak not measured); leveldb 40 s.
 * **What a different choice would change.** "Parse as-is" (no database) makes C/C++ single-source (no reference), which
   ML §5.2 allows only for a tool that fails S24; that would drop the label-noise estimate for C/C++. A clang-built database
-  would only change which `#if` branch and which compiler built-ins `scip-clang` sees. **The 0.56 pilot is not evidently
-  caused by this choice**: of googletest's 22 silent pilot sites, 4 are in tree-sitter ERROR regions and 6 under
-  non-guard `#if` groups (9 distinct); the other 13 were not classified one by one. On leveldb's silent sites I inspected,
-  calls inside test-macro arguments (`ASSERT_TRUE(db->Put(..))`) carry only occurrences at the macro invocation's columns
-  (`testing/internal/EqHelper#Compare` at columns 2-19), and files outside the compilation database (Windows port,
-  benchmarks) are silent by construction. No AC-8-relevant claim and no language scope changes.
+  would only change which `#if` branch and which compiler built-ins `scip-clang` sees. **The 0.56 strict pilot was not caused by
+  this choice**: `scip-clang` emits the callee's symbol at a macro-argument site, but at the macro invocation's columns
+  (`testing/internal/EqHelper#Compare` at columns 2-19 on leveldb), so only ML §5.2's macro-argument rule recovers it (15 of
+  the 22 silent googletest pilot sites); the rest are 5 sites in uncompiled `#if` branches and 2 others (an `EXPECT_CALL(..)
+  .WillOnce` chain, `std::numeric_limits<float>::quiet_NaN`). No AC-8-relevant claim and no language scope changes.
 
-## 5. Open decisions (the three that gate S26/S56 for their language)
+## 5. Rulings (ML v1.4) and the open decision
 
-1. **C# C5 (0.86 on Ocelot, 0.80 on eShopOnWeb).** `scip-dotnet` 0.2.16 emits **no occurrence for a generic-named callee**
-   (`F<T>(…)`, `new C<T>(…)`, including in-corpus generics) and none for `nameof`. All 7 silent pilot sites on Ocelot are
-   such sites (6 generic, 1 `nameof`); all 10 on eShopOnWeb. Excluding them the pilot is 1.00, but the rule is the raw
-   90 % and "the tool is never swapped". Options: (a) keep Ocelot and amend C5 for C# to count generic/`nameof` sites as
-   reference-silent by construction (silent + hand-internal sites are adjudicated anyway, ML §5.1 step 3); (b) mark C#
-   single-source. Draws, brief and `ref` exist for Ocelot; **do not start S26 for C# until ruled.**
-2. **C++ C5 (0.56 on googletest, 0.66 on leveldb).** See §4; same remedy question for `data-scientist`. googletest meets
-   every other criterion (leveldb also fails C7: C++11). Its frame is 30 % macro-shaped sites (8,556 of 28,490), the R7 risk
-   in ML §10. **Do not start S26 for C++ until ruled.**
+1. **C# C5, ruled: Ocelot kept.** `scip-dotnet` 0.2.16 emits no occurrence for a generic-named callee (`F<T>(…)`,
+   `new C<T>(…)`, in-corpus generics included) or for `nameof`; those sites are the closed by-construction class of ML §3.2.
+   Ocelot pilot: 7 silent, all in the class (6 generic, 1 `nameof`), so 43/43 adjusted (0.86 raw). On the 500 sampled sites
+   78 are silent, 74 of them in the class. S57 audits that blind stratum from source (`truth/csharp.gen-audit.jsonl`).
+2. **C++ C5, ruled: googletest kept** with ML §5.2's macro-argument rule and the §3.2 classes. Pilot 43/50 raw, 43/45
+   adjusted; over the 500 sampled sites the rule recovers 123 of the 196 strictly silent (ML's prior says 125),
+   leaving 73 silent, 3 of them `ambiguous` (per-translation-unit anonymous-namespace symbols of one name, e.g.
+   `gtest_unittest.cc` is also compiled into `gtest_all_test.cc`), and 38 of the 73 in a class. Stopping conditions (ML §3.2) are S57's.
 3. **Kotlin has no corpus.** The reference needs a Gradle build of an external Kotlin repository; the harness permission
    layer refused that action ("Code from External"), after `scip-java index --build-tool=gradle` had already failed on
    `mokksy/mokksy` in `buildSrc`. Eleven candidates are rejected on stated criteria in `corpora.yaml`; the best static fit
@@ -141,5 +160,5 @@ with the image's **gcc 13.3.0**; `scip-clang` (its own bundled Clang/LLVM 21.1.8
 * Joern's `CALL` positions are not uniform across frontends (JS/Kotlin columns and C# lines+columns are 0-based);
   `matcher-table.md` records this and `measure.sc` applies it. `measure.sc` ran only on the seven probes (every probe site
   matched except JSX, Kotlin delegation and Go generic instantiation, the by-construction classes); it has not seen a corpus.
-* Deviations to rule on: C5's Go pilot counts builtin calls (`len`, `append`) as sites that can never carry a callgraph edge
-  (raw 0.90, 0.918 without); `frame/` is 27 MB (reproducible from `corpora.yaml`; consider not committing it).
+* Go's builtin class (`len`, `append`) is now a tagged by-construction class beside the raw 0.90 (45/49 = 0.918 adjusted); the
+  earlier deviation is moot. `frame/` is 27 MB (reproducible from `corpora.yaml`; consider not committing it).

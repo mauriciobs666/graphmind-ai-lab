@@ -3,26 +3,33 @@
  "exitStatus": 0,
  "lang": "cpp",
  "pilot": {
-  "coverage": 0.56,
-  "coverageIfStructuralSilentsExcluded": 0.6829,
-  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
-  "pilotSites": 50,
-  "silent": 22,
-  "silentTagged": {
-   "error-region": 4,
-   "preproc-branch": 6
+  "adjustedCoverage": 0.9556,
+  "adjustedDenominator": 45,
+  "ambiguous": 0,
+  "coverage": 0.86,
+  "coverageStrict": 0.56,
+  "excluded": 5,
+  "excludedByClass": {
+   "macro-callee": 1,
+   "preproc-branch": 5
   },
-  "silentWithStructuralReason": 9,
-  "withReference": 28
+  "exclusionCap": 10,
+  "exclusionCapExceeded": false,
+  "note": "ML \u00a73.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than 10 excluded sites means the reference is blind to too much of the frame (a C5 failure). `coverage` is the raw figure, always reported beside it",
+  "pilotSites": 50,
+  "relaxed": 15,
+  "silent": 7,
+  "silentInformationalTags": {},
+  "withReference": 43
  },
  "pilotKinds": {
   "declared": 1,
   "external": 10,
-  "internal": 17,
-  "silent": 22
+  "internal": 32,
+  "silent": 7
  },
- "recordedAtEpoch": 1793819280,
- "recordedAtUtc": "2026-11-04T19:08:00Z",
+ "recordedAtEpoch": 1793823088,
+ "recordedAtUtc": "2026-11-04T20:11:28Z",
  "seedPrefix": "ccg-p0a-v1-c5|",
  "tool": "scip-clang",
  "toolVersion": "0.4.1"

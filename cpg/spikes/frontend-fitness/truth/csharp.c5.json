@@ -3,16 +3,23 @@
  "exitStatus": 0,
  "lang": "csharp",
  "pilot": {
+  "adjustedCoverage": 1.0,
+  "adjustedDenominator": 43,
+  "ambiguous": 0,
   "coverage": 0.86,
-  "coverageIfStructuralSilentsExcluded": 1.0,
-  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
-  "pilotSites": 50,
-  "silent": 7,
-  "silentTagged": {
+  "coverageStrict": 0.86,
+  "excluded": 7,
+  "excludedByClass": {
    "generic-callee": 6,
    "nameof": 1
   },
-  "silentWithStructuralReason": 7,
+  "exclusionCap": 10,
+  "exclusionCapExceeded": false,
+  "note": "ML \u00a73.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than 10 excluded sites means the reference is blind to too much of the frame (a C5 failure). `coverage` is the raw figure, always reported beside it",
+  "pilotSites": 50,
+  "relaxed": 0,
+  "silent": 7,
+  "silentInformationalTags": {},
   "withReference": 43
  },
  "pilotKinds": {
@@ -21,8 +28,8 @@
   "internal": 22,
   "silent": 7
  },
- "recordedAtEpoch": 1793818933,
- "recordedAtUtc": "2026-11-04T19:02:13Z",
+ "recordedAtEpoch": 1793823089,
+ "recordedAtUtc": "2026-11-04T20:11:29Z",
  "seedPrefix": "ccg-p0a-v1-c5|",
  "tool": "scip-dotnet",
  "toolVersion": "0.2.16"

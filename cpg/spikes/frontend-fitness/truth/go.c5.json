@@ -3,15 +3,22 @@
  "exitStatus": 0,
  "lang": "go",
  "pilot": {
+  "adjustedCoverage": 0.9184,
+  "adjustedDenominator": 49,
+  "ambiguous": 0,
   "coverage": 0.9,
-  "coverageIfStructuralSilentsExcluded": 0.9184,
-  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
-  "pilotSites": 50,
-  "silent": 5,
-  "silentTagged": {
+  "coverageStrict": 0.9,
+  "excluded": 1,
+  "excludedByClass": {
    "builtin": 1
   },
-  "silentWithStructuralReason": 1,
+  "exclusionCap": 10,
+  "exclusionCapExceeded": false,
+  "note": "ML \u00a73.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than 10 excluded sites means the reference is blind to too much of the frame (a C5 failure). `coverage` is the raw figure, always reported beside it",
+  "pilotSites": 50,
+  "relaxed": 0,
+  "silent": 5,
+  "silentInformationalTags": {},
   "withReference": 45
  },
  "pilotKinds": {
@@ -20,8 +27,8 @@
   "internal": 20,
   "silent": 5
  },
- "recordedAtEpoch": 1793818935,
- "recordedAtUtc": "2026-11-04T19:02:15Z",
+ "recordedAtEpoch": 1793823090,
+ "recordedAtUtc": "2026-11-04T20:11:30Z",
  "seedPrefix": "ccg-p0a-v1-c5|",
  "tool": "callgraph-vta",
  "toolVersion": "v0.52.0"

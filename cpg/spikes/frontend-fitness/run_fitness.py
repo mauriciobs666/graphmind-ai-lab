@@ -16,6 +16,7 @@ Stages (each is idempotent, writes under cpg/spikes/frontend-fitness/ or cpg/.cc
   c5pilot  <lang>   first 50 of the c5 hash sort of the frame   -> truth/<lang>.c5-pilot.jsonl
   brief    <lang>   fill ML §6.5's template                     -> sample/<lang>.brief.md
   refmap   <lang>   map a SCIP JSON / callgraph output to sites -> truth/<lang>.ref.jsonl | c5 json
+  genaudit csharp   the hash-sorted generic/nameof sites of the sample (ML §3.2, ccg-p0a-v1-gen|) -> truth/csharp.gen-audit.jsonl
   verify            re-derive every frame/sample/flow file from corpora.yaml alone; exit 1 on drift
   joern    <lang>   print (do not run) the runner command lines of the P0-18b Joern runs
 
@@ -45,7 +46,7 @@ CORPORA = WORK / "corpora"
 
 LANGS = ["python", "javascript", "java", "kotlin", "csharp", "go", "cpp"]
 SEED_PREFIX = {"sample": "ccg-p0a-v1|", "sym": "ccg-p0a-v1-sym|", "flow": "ccg-p0a-v1-flow|",
-               "c5": "ccg-p0a-v1-c5|", "spur": "ccg-p0a-v1-spur|"}
+               "c5": "ccg-p0a-v1-c5|", "spur": "ccg-p0a-v1-spur|", "gen": "ccg-p0a-v1-gen|"}
 CAP = 500
 
 # Bundle spec §5.0 default; a corpus may replace it in corpora.yaml (`vendoredDirs`).
@@ -1372,6 +1373,11 @@ def cmd_flowdraw(lang: str) -> dict:
 SCIP_HASH = re.compile(r"^[0-9a-f]{16}$")
 GO_BUILTINS = {"append", "cap", "clear", "close", "complex", "copy", "delete", "imag", "len", "make", "max", "min",
                "new", "panic", "print", "println", "real", "recover"}
+# ML §3.2 C5: sites that are reference-silent by construction (closed list; tagged from the source alone, only on a
+# site still silent after §5.2's mapping). A class is added only by a revision of the ML note.
+CLOSED_CLASSES = {"go": ("builtin",), "csharp": ("generic-callee", "nameof"), "cpp": ("preproc-branch", "macro-callee")}
+EXCLUSION_CAP = 10          # ML §3.2: the excluded sites are <= 10 of the 50
+
 
 
 def scip_name(symbol: str) -> str:
@@ -1507,7 +1513,26 @@ def refmap_scip(lang: str, scip_json: dict, sample: list[dict], priv: list[dict]
                     stack.append(y)
         return sorted(seen)
 
+    def static_of(sym: str, site_path: str) -> tuple[dict, list]:
+        if sym.startswith("local "):
+            # a local with no definition in its document is how scip-python reports a builtin function
+            # (len, isinstance, ...); a local that is defined there is a variable holding a callable.
+            st = {"kind": "local"} if (site_path, sym) in local_defs else {"kind": "external", "package": "unresolved-local-no-definition"}
+            return st, []
+        rec = def_record(sym)
+        if rec is None:
+            return {"kind": "external", "package": scip_package(sym)}, []
+        st = {"kind": "declared" if rec["declared"] else "internal", "path": rec["path"], "qname": rec["qname"], "defLine": rec["defLine"]}
+        impls = []
+        for y in closure(sym):
+            yr = def_record(y)
+            if yr is not None:
+                impls.append({"path": yr["path"], "qname": yr["qname"], "defLine": yr["defLine"]})
+        impls.sort(key=lambda r: (r["path"], r["defLine"]))
+        return st, impls
+
     out = []
+    ts_cache: dict = {}
     for pub, pr in zip(sample, priv):
         fr = frame_by_key[pr["siteKey"]]
         nl, nc, name = fr["nameLine"], fr["nameColumn"], fr["calleeName"]
@@ -1518,29 +1543,35 @@ def refmap_scip(lang: str, scip_json: dict, sample: list[dict], priv: list[dict]
             exact = [c for c in cands if text[c["c0"]:c["c1"]] == name]
         # prefer a method-like symbol (ends with ").") over a type reference at the same token
         exact.sort(key=lambda c: (0 if c["sym"].endswith(").") else 1, c["sym"]))
-        if not exact:
-            st, impls = {"kind": "silent"}, []
+        flags: dict = {}
+        if exact:
+            st, impls = static_of(exact[0]["sym"], fr["path"])
+            tags: list[str] = []
         else:
-            sym = exact[0]["sym"]
-            if sym.startswith("local "):
-                # a local with no definition in its document is how scip-python reports a builtin function
-                # (len, isinstance, ...); a local that is defined there is a variable holding a callable.
-                st = {"kind": "local"} if (fr["path"], sym) in local_defs else {"kind": "external", "package": "unresolved-local-no-definition"}
-                impls = []
-            else:
-                rec = def_record(sym)
-                if rec is not None:
-                    st = {"kind": "declared" if rec["declared"] else "internal", "path": rec["path"], "qname": rec["qname"], "defLine": rec["defLine"]}
-                    impls = []
-                    for y in closure(sym):
-                        yr = def_record(y)
-                        if yr is not None:
-                            impls.append({"path": yr["path"], "qname": yr["qname"], "defLine": yr["defLine"]})
-                    impls.sort(key=lambda r: (r["path"], r["defLine"]))
-                else:
-                    st, impls = {"kind": "external", "package": scip_package(sym)}, []
-        out.append({"ordinal": pub["ordinal"], "siteId": pub["siteId"], "site": _site_of(pub, fr), "static": st, "impls": impls,
-                    "tool": scip_json.get("metadata", {}).get("tool_info", {}).get("name", "scip"), "toolVersion": tool_version})
+            st, impls = {"kind": "silent"}, []
+            tags = site_tags(lang, fr, ts_cache)
+            if lang == "cpp":
+                # ML §5.2 "C/C++ macro-argument sites": window from the outermost enclosing macro invocation to the site.
+                # Applied to every still-silent site; the by-construction classes (§3.2) are tagged afterwards, on the
+                # sites that stay silent ("still reference-silent after §5.2's mapping").
+                start = macro_invocation_start(lang, fr, ts_cache)
+                if start is not None:
+                    syms = macro_window_symbols(occ_by_path_line, fr["path"], start, nl, name)
+                    if len(syms) == 1:
+                        st, impls = static_of(syms[0], fr["path"])
+                        flags["relaxed"] = True
+                        if len(macro_window_symbols(occ_by_path_line, fr["path"], start, nl, name, merge_type_ctor=False)) > 1:
+                            flags["typeCtorMerged"] = True
+                    elif len(syms) > 1:
+                        flags["ambiguous"] = True
+        row = {"ordinal": pub["ordinal"], "siteId": pub["siteId"], "site": _site_of(pub, fr), "static": st, "impls": impls,
+               "tool": scip_json.get("metadata", {}).get("tool_info", {}).get("name", "scip"), "toolVersion": tool_version}
+        row.update(flags)
+        if st["kind"] == "silent":
+            cl = [t for t in tags if t in CLOSED_CLASSES.get(lang, ())]
+            if cl:
+                row["byConstruction"] = cl
+        out.append(row)
     return out
 
 
@@ -1610,78 +1641,204 @@ def refmap_go(callgraph_text: str, module_path: str, sample: list[dict], priv: l
         else:
             st = {"kind": "dispatch"}
             impls = [{"path": t["path"], "qname": t["qname"], "defLine": t["defLine"]} for t in tg if t["kind"] in ("internal", "declared")]
-        out.append({"ordinal": pub["ordinal"], "siteId": pub["siteId"], "site": _site_of(pub, fr), "static": st, "impls": impls,
-                    "tool": "callgraph-vta", "toolVersion": tool_version})
+        row = {"ordinal": pub["ordinal"], "siteId": pub["siteId"], "site": _site_of(pub, fr), "static": st, "impls": impls,
+               "tool": "callgraph-vta", "toolVersion": tool_version}
+        if st["kind"] == "silent":
+            cl = [t for t in site_tags("go", fr, {}) if t in CLOSED_CLASSES["go"]]
+            if cl:
+                row["byConstruction"] = cl
+        out.append(row)
     return out
 
 
 PP_COND = {"preproc_if", "preproc_ifdef", "preproc_elif", "preproc_else", "preproc_elifdef"}
 
 
+def csharp_generic_classes(row: dict) -> list[str]:
+    """C# by-construction classes read from the callee text alone: `scip-dotnet` emits no occurrence for a callee with a
+    type-argument list (`F<T>(...)`, `new C<T>(...)`) or for `nameof` (ML §3.2)."""
+    tags = []
+    if row.get("calleeName") == "nameof":
+        tags.append("nameof")
+    if "<" in row["callText"]:
+        tags.append("generic-callee")
+    return tags
+
+
+def _site_node(lang: str, row: dict, cache: dict):
+    """(node at the callee's first character, its byte offset, parse tree root) for a frame/pilot row."""
+    path = row["path"]
+    ent = cache.get(path)
+    if ent is None:
+        data = (src_dir(lang) / path).read_bytes()
+        ent = cache[path] = (data, parse_file(lang, path, data)[1], Lines(data))
+    data, t, L = ent
+    off = L.starts[row["line"] - 1] + len("".join(L.text_lines()[row["line"] - 1][: row["column"] - 1]).encode("utf-8"))
+    return t.root_node.descendant_for_byte_range(off, off + 1), off, t.root_node, data
+
+
+def macro_invocation_start(lang: str, row: dict, cache: dict) -> Optional[int]:
+    """ML §5.2: first line (1-based) of the OUTERMOST macro-shaped call whose argument list contains the site, or None."""
+    if lang != "cpp":
+        return None
+    node, off, _, _ = _site_node(lang, row, cache)
+    outer, x = None, node
+    while x is not None and x.parent is not None:
+        p = x.parent
+        if p.type == "call_expression":
+            fn, args = p.child_by_field_name("function"), p.child_by_field_name("arguments")
+            if fn is not None and args is not None and _kind_from_callee("cpp", fn) == "macro-shaped" \
+                    and args.start_byte <= off < args.end_byte:
+                outer = p
+        x = p
+    return None if outer is None else outer.start_point[0] + 1
+
+
+def macro_window_symbols(occ_by_path_line: dict, path: str, start_line: int, name_line: int, name: str,
+                         merge_type_ctor: bool = True) -> list[str]:
+    """ML §5.2: distinct symbols of the non-local, non-definition occurrences in lines start_line..name_line (both inclusive)
+    whose last descriptor name equals the site's callee name. (`occ_by_path_line` holds reference occurrences only.)
+    A constructor call has two occurrences at one token, the type `P/X#` and the constructor `P/X#X(<hash>).`; they are one
+    reference, so the type symbol is dropped when its constructor is in the window (as the strict mapping prefers the
+    method-like symbol at a token)."""
+    syms = set()
+    for ln in range(start_line, name_line + 1):
+        for c in occ_by_path_line.get((path, ln), ()):
+            if not c["sym"].startswith("local ") and scip_name(c["sym"]) == name:
+                syms.add(c["sym"])
+    if merge_type_ctor:
+        for t in [x for x in syms if x.endswith("#")]:
+            if any(u != t and u.startswith(t) and u.endswith(").") and "/" not in u[len(t):] and "#" not in u[len(t):] for u in syms):
+                syms.discard(t)
+    return sorted(syms)
+
+
 def site_tags(lang: str, row: dict, cache: dict) -> list[str]:
-    """Why a reference may legitimately be silent at a frame site (structure, not tool quality):
-       cpp: 'preproc-branch' (under a non-guard #if/#ifdef/#else group: the compilation database builds ONE
-            configuration, the tree-sitter frame sees every branch), 'error-region' (tree-sitter ERROR node);
-       csharp: 'generic-callee' (scip-dotnet emits no occurrence for a generic-named callee: `F<T>(...)`,
-            `new C<T>(...)`), 'nameof'; go: 'builtin'; every language: nothing else is tagged."""
+    """Why a reference may legitimately be silent at a frame site (structure, not tool quality). The closed list of ML §3.2
+       (CLOSED_CLASSES): go 'builtin'; csharp 'generic-callee', 'nameof'; cpp 'preproc-branch' (under a non-guard
+       #if/#ifdef/#else group: the compilation database builds ONE configuration, the tree-sitter frame sees every branch),
+       'macro-callee' (the callee is itself a macro). Informational, not a class: cpp 'error-region' (tree-sitter ERROR node)."""
     tags = []
     if lang == "csharp":
-        if row["calleeName"] == "nameof":
-            tags.append("nameof")
-        if "<" in row["callText"]:
-            tags.append("generic-callee")
+        tags += csharp_generic_classes(row)
     if lang == "go" and row["calleeName"] in GO_BUILTINS:
         tags.append("builtin")
     if lang == "cpp":
-        path = row["path"]
-        tree = cache.get(path)
-        if tree is None:
-            data = (src_dir(lang) / path).read_bytes()
-            tree = cache[path] = (data, parse_file(lang, path, data)[1])
-        data, t = tree
-        L = Lines(data)
-        off = L.starts[row["line"] - 1] + len(("".join(L.text_lines()[row["line"] - 1][: row["column"] - 1])).encode("utf-8"))
-        n = t.root_node.descendant_for_byte_range(off, off + 1)
+        n, _, root, data = _site_node(lang, row, cache)
         guard = None
-        for c in t.root_node.children:
+        for c in root.children:
             if c.type in ("preproc_ifdef", "preproc_if") and (c.end_byte - c.start_byte) > 0.8 * len(data):
                 guard = c
         x, in_pp, in_err = n, False, False
         while x is not None:
-            if x.type in PP_COND and x is not guard:
+            if x.type in PP_COND and (guard is None or x != guard):
                 in_pp = True
             if x.type == "ERROR":
                 in_err = True
             x = x.parent
         if in_pp:
             tags.append("preproc-branch")
+        if row.get("kind") == "macro-shaped":
+            tags.append("macro-callee")
         if in_err:
             tags.append("error-region")
     return tags
 
 
 def pilot_coverage(lang: str, pilot: list[dict], rows_by_site: dict[str, dict]) -> dict:
-    """C5: share of the 50-site pilot with a reference occurrence. For Go, builtin calls (len, append, ...)
-    can never carry a call-graph edge and are reported apart (denominator excludes them)."""
+    """C5 (ML §3.2): share of the 50-site pilot with a reference occurrence under §5.2's mapping (`coverage`, raw; a
+    `relaxed` macro-argument match counts), and the adjusted figure that leaves the sites tagged into a closed
+    by-construction class out of the denominator (`byConstruction` on a silent row). Raw stays next to adjusted."""
     n = len(pilot)
-    silent = [p for p in pilot if rows_by_site[p["siteId"]]["static"]["kind"] == "silent"]
+    rows = [rows_by_site[p["siteId"]] for p in pilot]
+    silent = [r for r in rows if r["static"]["kind"] == "silent"]
     covered = n - len(silent)
-    res = {"pilotSites": n, "withReference": covered, "silent": len(silent), "coverage": round(covered / n, 4) if n else None}
+    relaxed = sum(1 for r in rows if r.get("relaxed"))
+    by_class: dict[str, int] = {}
+    excluded = 0
+    for r in silent:
+        cl = r.get("byConstruction") or []
+        excluded += 1 if cl else 0
+        for c in cl:
+            by_class[c] = by_class.get(c, 0) + 1
+    den = n - excluded
+    res = {"pilotSites": n, "withReference": covered, "silent": len(silent),
+           "coverage": round(covered / n, 4) if n else None,
+           "relaxed": relaxed, "coverageStrict": round((covered - relaxed) / n, 4) if n else None,
+           "ambiguous": sum(1 for r in rows if r.get("ambiguous")),
+           "excluded": excluded, "excludedByClass": dict(sorted(by_class.items())),
+           "exclusionCap": EXCLUSION_CAP, "exclusionCapExceeded": excluded > EXCLUSION_CAP,
+           "adjustedDenominator": den, "adjustedCoverage": round(covered / den, 4) if den else None}
     cache: dict = {}
-    breakdown: dict[str, int] = {}
-    structural = 0
-    for p in silent:
-        tg = site_tags(lang, p, cache)
-        for t in tg:
-            breakdown[t] = breakdown.get(t, 0) + 1
-        if tg:
-            structural += 1
-    res["silentTagged"] = dict(sorted(breakdown.items()))
-    res["silentWithStructuralReason"] = structural
-    den = n - structural
-    res["coverageIfStructuralSilentsExcluded"] = round((covered) / den, 4) if den else None
-    res["note"] = "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute"
+    info: dict[str, int] = {}
+    for p, r in zip(pilot, rows):
+        if r["static"]["kind"] == "silent":
+            for t in site_tags(lang, p, cache):
+                if t not in CLOSED_CLASSES.get(lang, ()):
+                    info[t] = info.get(t, 0) + 1
+    res["silentInformationalTags"] = dict(sorted(info.items()))
+    res["note"] = ("ML §3.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than "
+                   f"{EXCLUSION_CAP} excluded sites means the reference is blind to too much of the frame (a C5 failure). "
+                   "`coverage` is the raw figure, always reported beside it")
     return res
+
+
+# ------------------------------------------------------------------ C# generic-site audit draw (ML §3.2, prefix ccg-p0a-v1-gen|)
+
+GEN_AUDIT_K = 40
+
+
+def gen_audit_path(lang): return HERE / "truth" / f"{lang}.gen-audit.jsonl"
+
+
+def build_gen_audit(lang: str, sample: list[dict], priv: list[dict], ref: list[dict]) -> list[dict]:
+    """The hash-sorted order (ML §4.4 rule, seed `ccg-p0a-v1-gen|<lang>|<sha>`) of the sampled sites in the blind C# stratum:
+    reference-silent sites in a by-construction class (a type-argument callee, `nameof`; `byConstruction` on the ref row).
+    It reads the reference but no label and no Joern output. S57 takes, in this order, every site the label calls internal
+    plus the first GEN_AUDIT_K the label calls external (gen_audit_select)."""
+    if lang != "csharp":
+        raise SystemExit("the generic-site audit draw is defined for C# only (ML §3.2)")
+    blind = {r["ordinal"] for r in ref if r["static"]["kind"] == "silent" and r.get("byConstruction")}
+    items = []
+    for pub, pr in zip(sample, priv):
+        cl = csharp_generic_classes({"callText": pub["callText"], "calleeName": pr["calleeName"]})
+        if cl and pub["ordinal"] in blind:
+            items.append({"ordinal": pub["ordinal"], "siteId": pub["siteId"], "siteKey": pr["siteKey"], "classes": cl})
+    order = hash_sort(items, seed_for("gen", lang, corpus_cfg(lang)["commit"]))
+    return [{"rank": i, "ordinal": it["ordinal"], "siteId": it["siteId"], "hash": h, "classes": it["classes"]}
+            for i, (h, it) in enumerate(order, 1)]
+
+
+def gen_audit_select(order: list[dict], labels: list[dict], k: int = GEN_AUDIT_K) -> list[dict]:
+    """The sites S57 checks from source: every class site labelled internal (`internal`/`declared`), and the first `k`, in
+    hash order, labelled external (all callees external). `notACall` and empty-callee labels are in neither stratum."""
+    by_ord = {l["ordinal"]: l for l in labels}
+    out, n_ext = [], 0
+    for o in order:
+        l = by_ord.get(o["ordinal"])
+        if l is None or l.get("notACall") or not l.get("callees"):
+            continue
+        kinds = {c["kind"] for c in l["callees"]}
+        if kinds & {"internal", "declared"}:
+            out.append({**o, "stratum": "internal"})
+        elif n_ext < k:
+            n_ext += 1
+            out.append({**o, "stratum": "external"})
+    return out
+
+
+def cmd_genaudit(lang: str, select: bool) -> dict:
+    sample, priv = read_jsonl(sample_path(lang)), read_jsonl(private_path(lang))
+    order = build_gen_audit(lang, sample, priv, read_jsonl(HERE / "truth" / f"{lang}.ref.jsonl"))
+    if not select:
+        n = write_jsonl(gen_audit_path(lang), order)
+        return {"lang": lang, "classSites": n, "path": str(gen_audit_path(lang).relative_to(HERE))}
+    # S57 (run by data-scientist, with labels in hand): write adjudication/<lang>.gen-audit.jsonl
+    labels = read_jsonl(HERE / "labels" / f"{lang}.jsonl")
+    chosen = gen_audit_select(order, labels)
+    n = write_jsonl(HERE / "adjudication" / f"{lang}.gen-audit.jsonl", chosen)
+    return {"lang": lang, "selected": n, "internal": sum(1 for c in chosen if c["stratum"] == "internal"),
+            "external": sum(1 for c in chosen if c["stratum"] == "external")}
 
 
 # ------------------------------------------------------------------ brief (ML §6.5)
@@ -1904,6 +2061,9 @@ def cmd_joern(lang: str) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("genaudit")
+    s.add_argument("lang", choices=["csharp"])
+    s.add_argument("--select", action="store_true", help="S57 only (needs labels/): write the sites to check from source")
     for c in ("fetch", "census", "frame", "draw", "flowdraw", "c5pilot", "brief", "joern"):
         s = sub.add_parser(c)
         s.add_argument("lang", choices=LANGS)
@@ -1937,6 +2097,8 @@ def main(argv=None) -> int:
         r = cmd_brief(a.lang)
     elif a.cmd == "joern":
         r = cmd_joern(a.lang)
+    elif a.cmd == "genaudit":
+        r = cmd_genaudit(a.lang, a.select)
     elif a.cmd == "refmap":
         r = cmd_refmap(a.lang, a.tool_output, a.tool_version, a.mode, a.module_path, a.repo_prefix, a.exit_status, a.documents_indexed)
     elif a.cmd == "verify":
