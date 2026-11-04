@@ -280,3 +280,50 @@ S31 closes at the next pass when all of these hold: (1) `bdist_wheel` of `cpg/` 
 
 Target: root `REVIEW.md`, heading *Always check*. Source: P4-2 (the alias test and the yield pattern); Pass 3 P3-2 is the same class.
 - "A test that names a schema keyword (`pattern`, `minItems`, `required`) is checked by dropping that keyword from a copy of the schema; if the suite stays green, the input the test plants is also rejected by a second rule, and the test does not guard the keyword. Plant the input where only that keyword can reject it."
+
+## Pass 5 (S31 fix round `a0d609df`, v1.4 alignment `301f2311`, S32 delivery `70768789`)
+
+CPG: considered, not relevant — validators, YAML packs and tests checked by running mutants and against the spec text; no loaded graph indexes `cpg/ccg/`.
+
+**Verdict: approve with suggestions. S31 is accepted. S32 is accepted** on the same terms: no blocker or major; three minors, none gating. Suite: `cd cpg && .venv/bin/python -m pytest -q` over the schema, spec, topic-facts and signature-pins files = 885 passed (25 s). `CCG_LEAF_MUTATION=1` over `test_rule_pack_leaf_mutation.py` = 3 passed (369 s): survivors equal the 24-leaf `UNEXERCISED_UNTIL_P1` set. Scratch work is under `scratchpad/analyst_s31/` only.
+
+### Pass 4 stopping condition, re-checked
+
+| # | Condition | Outcome (what I ran) |
+|---|---|---|
+| 1 | wheel lists `reasons.yaml`; tree-derived test | Met. I built a wheel from a copy (`setuptools`): `ccg/registry/reasons.yaml` is in it. `test_every_data_file_under_ccg_is_covered_by_a_package_data_glob` goes red when I delete the glob (mutant `W`). The builder could not build a wheel; the test makes that unnecessary. |
+| 2 | P4-2 plants | Met. `aliased_query` joins an unyielded alias; `TY`, `t y`, `_d` and the yield refs `xdec.args.a0`, `$dec.args.a0!! junk` are cases of the new tests. |
+| 3 | dangling `lifted`; survivors = 24 | Met. `role.slot` is out of the survivor set; mutant `L` (kind check off) is red. |
+| 4 | mutants `R`, `N` | Met. Both red, on the new P4-4 negatives. |
+| 5 | P4-5 pin | Met and retired: the v1.4 round changed `check_rule` and the test is gone (`grep` of `cpg/tests`: nothing). |
+
+**Trailing-newline change (`_pattern`, `rulepack.py`).** It applies `fullmatch` only to a pattern that starts with `^` and ends with `$`. I listed every schema `pattern` (9): all nine are anchored at both ends, none has a top-level `|` (every `|` sits in a group), so `fullmatch` equals ECMA's whole-string match for all of them; the unanchored ones, had there been any, search as before. The schema file is unchanged, so another ECMA validator (`$` strict) behaves the same as this one now. Verified: `id`/`version` with a trailing `\n` rejected; reverting to the stock validator (mutant `F`) is red. **One residue, minor (P5-3):** Python's `\w` and `\d` are Unicode, ECMA's are ASCII: `kw.pé` and `a1٣` pass here and would fail elsewhere (run). Add `re.ASCII` to the `fullmatch`/`search` calls, with one test per class.
+
+### S32 checks
+
+- **Packs = spec text + `status: paper`:** I compared all seven myself (fenced blocks of the spec against the files, comment lines removed): `fastapi`, `fetch`, `fastmcp`, `kafka`, `paper-inhouse-bus`, `severity-rules` differ by exactly that line; `infra-signatures` = §8.1 header + `status: paper` + the 45 entries of the §8.2 list (parsed and textual equality both true); `negatives.yaml` equals the §8.2 `# negatives` block.
+- **`load_pack` and negatives:** a pack with `signatures` and no `negatives.yaml` raises `PackError` (run); an empty `shared`, a class without near-misses, an unknown class, and an emptied class are each refused; a loosened `timeout` regex is refused by the real near-miss line (run). Mutant `X` (check off) is red. P4-6 is closed.
+- **The 51 N negatives:** my script (built from the N table, not the test lists) rejects 51 and accepts only its own positive control; the 35 + 16 split is in `scratchpad/analyst_s31/neg.py`, `neg4.py`.
+- **Mutants (17 on spec text, pack files, `negatives.yaml` and the probe TSV, copies only; then 10 again with the pack-equality tests excluded):** all killed except S8 below. With equality excluded, severity edits (a base value, a penalty, the flow adjustment, the dev glob, the test-path regex) die on `test_vectors_reproduce_and_name_the_derived_row`; the example cap on the registry/`example-config` test; an authored sample on `test_captured_samples_are_the_recorded_lines`; `sampleSource` on `test_signature_inventory_and_grammar`; the kafka callee on `test_every_producer_callee_and_import_gate_provides`. Deleting a TSV `alt` line dies on the pins test. These are silent-argument edits and each has a test other than the text-equality one.
+
+### Findings
+
+**P5-1 (minor, verified). Runtime-detection patterns are pinned for positives only, so a widening survives.** Mutant `S8` (`go` pattern's second arm `\.go:\d+ \+0x` → `\.go:\d+`) passes all four files: `DETECT` holds only matching lines, and the no-marker test has no `file.go:N` line. `    server.go:42 listening on :8080` then detects as `go` (run). The signatures have near-miss negatives; the five `runtimes` patterns have none. **Fix:** per runtime, one or two near-miss lines the pattern must not match (a `.go:N` line without an offset, a `.java:N` line without `at `), asserted beside `DETECT`; mutant `S8` is the planted case.
+
+**P5-2 (minor, inferred from reading, plus one search). The signature probes are a regression pin, not validation, and no row owns the validation.** `infra_probes.tsv` lines are sampled from the regexes, so they can never disagree with them; the pin's real power is the "delete each arm" test, which I confirmed (mutant `P6` red) and which is a sound change detector (`arms` handles nested groups and character classes; its own test plants both). What it cannot say is that any regex matches what a runtime prints: the spec itself calls 34 of 45 entries `authored, hence unvalidated`, and the 11 captures are dev data. I searched `rule-pack-spec` §12.1, `p0-2` and the eval protocol for a row that validates authored entries against independently recorded logs and found none (only the S32 row, which asks for the pins). The leaf harness then files every `infra-signatures` leaf as KILLED, which reads as "verified"; here it means "changes are visible". **Fix (no S32 code change):** record one open item in the spec (§12 open questions), owner `data-scientist` or `qa-engineer`: an independent log set per runtime (provoked, not regex-derived) against which the 45 entries are scored, before any report calls an entry supported.
+
+**P5-3 (minor, verified).** The `\w`/`\d` Unicode residue above.
+
+**P5-4 (nit).** `test_rule_pack_topic_facts.on_unknown` re-implements the `provides topic → config-derived` default beside `rulepack.default_on_unknown`. Import the function (or assert the two agree in one line) so a future change cannot split them.
+
+### Leaves: UNEXERCISED_UNTIL_P1 and the four new packs
+
+The 24 survivors are the earlier 25 minus `fetch:liftings[0].role.slot`, now caught statically (P4-3); no `kafka`, `paper-inhouse-bus`, `infra-signatures` or `severity-rules` leaf is classed P1-owned, and none should be (the §12.1 P1 row covers `fastapi`, `fetch`, `fastmcp` only). Whether any of their KILLED leaves is killed by a circular test: `kafka`/`bus` leaves by the topic-facts evaluator, whose expected keys and reasons are literals written in the test (not read from the pack); severity by the spec's authored vectors (S1 to S5 above); `infra-signatures` regex/sample/library leaves by the frozen TSV (P5-2: pinned, not validated). The pack files themselves are tied to the spec by the equality tests, so a leaf edit in either place is caught.
+
+### Growth-stops
+
+No plan or requirements text is touched by these three commits except the ledger; this Pass adds one block, with the Pass 4 findings dispositioned in the table above. Passes.
+
+### Stopping condition
+
+S31 and S32 are closed. P5-1 and P5-3 are carried into the next pack-format round; P5-2 needs an owner in the spec's open questions (`teco` routes it). They do not gate P1.
