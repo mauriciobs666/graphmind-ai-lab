@@ -1,0 +1,56 @@
+# Negative controls (test data, not pack content): extracted mechanically from the `# negatives` block of section 8.2 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4). `ccg.rulepack.load_pack` reads `shared` and `near-miss` (N-22);
+# tests/test_rule_pack_spec.py reads the other keys. tests/test_rule_pack_schema.py pins the equality.
+# negatives
+shared:
+  - 'ValueError: invalid literal for int()'
+  - 'KeyError: "id"'
+  - 'TypeError: x is not a function'
+  - 'NullPointerException at com.acme.Foo(Foo.java:12)'
+  - 'System.InvalidOperationException: Sequence contains no elements'
+  - 'panic: runtime error: index out of range [3] with length 3'
+  - 'AssertionError: expected 3 got 4'
+near-miss:
+  timeout:
+    - 'ValueError: Test timed out waiting for user input'
+    - 'RuntimeError: request timed out after retries (app-level)'
+    - 'INFO retrying after timeout (attempt 2)'
+    - 'tests/test_gateway_timeout_handler.py PASSED'
+  oom-kill:
+    - 'ERROR: container exit code 1370'
+    - 'tests/test_oom_kill_handler.py PASSED'
+    - 'redis.exceptions.ResponseError: oom-kill'
+    - 'tests/test_memory_error_handler.py PASSED'
+  connection-refused:
+    - 'Network is unreachable (cached)'
+    - 'tests/test_connection_refused_handler.py PASSED'
+    - 'INFO connection pool reset scheduled'
+    - 'WARN refused to merge the pull request'
+  dns-failure:
+    - 'ValueError: could not resolve ambiguous name'
+    - 'INFO lookup table updated: no such key'
+    - 'INFO name resolution cache warmed'
+  tls-error:
+    - 'ValueError: certificate expiry must be in the future'
+    - 'INFO ssl_mode=require parsed'
+    - 'ERROR: CertificateStore.load() returned no entries'
+  third-party-exception:
+    - 'psycopg2.errors.UniqueViolation: duplicate key value'
+    - 'redis.exceptions.ResponseError: WRONGTYPE Operation against a key'
+    - 'requests.exceptions.InvalidURL: Invalid URL'
+known-false-matches:               # app text the bare phrases still match; S32 asserts they DO match (documented imprecision)
+  - {line: 'WARNING: Connection refused handled gracefully by retry wrapper', ids: [any-connection-refused]}
+  - {line: 'INFO exit code 137 handled', ids: [any-oom-kill]}
+dedupe:                           # one pair per (block, line, class); third-party collapses and keeps its library
+  - {line: 'psycopg2.OperationalError: connection to server at "db" port 5432 failed: Connection refused', pairs: [{class: connection-refused, libraries: [psycopg]}]}
+cross-runtime:                    # a line, and the exact set of ids that may match it, all entries applying
+  - {line: 'httpx.ConnectError: [Errno -2] Name or service not known', ids: [python-dns-failure, python-third-party-httpx]}
+  - {line: 'psycopg2.OperationalError: connection to server at "db" (172.18.0.2), port 5432 failed: Connection refused', ids: [python-third-party-psycopg, any-connection-refused]}
+mixed-blob:                       # per-block narrowing: both services' signatures survive
+  evidence: |
+    api-1  | Traceback (most recent call last):
+    api-1  |   File "/app/x.py", line 3, in main
+    api-1  | ConnectionRefusedError: [Errno 111] Connection refused
+    web-1  | Error: connect ECONNREFUSED 127.0.0.1:5432
+    web-1  |     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1555:16)
+  ids: [python-connection-refused, any-connection-refused, node-connection-refused]

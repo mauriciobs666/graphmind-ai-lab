@@ -1,0 +1,207 @@
+# S32 pins for the infrastructure-signature pack (spec section 8.2). Columns: id, kind, value (tab-separated).
+#   alt     a line the entry's regex must match; together the lines of an entry cover every alternative of its regex, at any group
+#           depth (tests/test_rule_pack_signature_pins.py deletes each alternative in turn and requires a line to stop matching).
+#           Lines are SAMPLED FROM THE REGEX by a generator: a regression pin that makes an edit to a regex visible, never validation
+#           of what the runtime prints (the spec's `authored` caveat applies to all of them).
+#   sample  the entry's `sample` verbatim (pins authored samples, which no other check reads beyond 'matches its own regex').
+#   library the entry's `library` verbatim (the dedupe examples of section 8.1 name two; this pins all).
+python-connection-refused	alt	[Errno 61]
+python-connection-refused	alt	[Errno 101]
+python-connection-refused	alt	[Errno 104]
+python-connection-refused	alt	[Errno 111]
+python-connection-refused	alt	[Errno 113]
+python-connection-refused	alt	ConnectionResetError
+python-connection-refused	alt	ConnectionRefusedError
+python-connection-refused	sample	ConnectionRefusedError: [Errno 111] Connection refused
+python-dns-failure	alt	[Errno -2] Name or service not known
+python-dns-failure	alt	[Errno -3] No address associated with hostname
+python-dns-failure	alt	[Errno -5] Temporary failure in name resolution
+python-dns-failure	alt	socket.gaierror
+python-dns-failure	alt	nodename nor servname provided
+python-dns-failure	sample	socket.gaierror: [Errno -2] Name or service not known
+python-timeout	alt	PoolTimeout
+python-timeout	alt	ReadTimeout
+python-timeout	alt	[Errno 110]
+python-timeout	alt	TimeoutError
+python-timeout	alt	ConnectTimeout
+python-timeout	alt	socket.timeout
+python-timeout	sample	TimeoutError: timed out
+python-oom-kill	alt	MemoryError
+python-oom-kill	sample	MemoryError
+python-tls-error	alt	ssl.SSLError
+python-tls-error	alt	ssl.CertificateError
+python-tls-error	alt	SSLCertVerificationError
+python-tls-error	alt	CERTIFICATE_VERIFY_FAILED
+python-tls-error	sample	ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1000)
+python-third-party-redis	alt	redis.exceptions.TimeoutError
+python-third-party-redis	alt	redis.exceptions.ConnectionError
+python-third-party-redis	alt	redis.exceptions.BusyLoadingError
+python-third-party-redis	sample	redis.exceptions.ConnectionError: Error 111 connecting to localhost:1. Connection refused.
+python-third-party-redis	library	redis
+python-third-party-psycopg	alt	psycopg.OperationalError
+python-third-party-psycopg	sample	psycopg2.OperationalError: could not connect to server
+python-third-party-psycopg	library	psycopg
+python-third-party-sqlalchemy	alt	sqlalchemy.exc.OperationalError
+python-third-party-sqlalchemy	sample	sqlalchemy.exc.OperationalError: (psycopg2.OperationalError)
+python-third-party-sqlalchemy	library	sqlalchemy
+python-third-party-pymongo	alt	pymongo.errors.AutoReconnect
+python-third-party-pymongo	alt	pymongo.errors.ServerSelectionTimeoutError
+python-third-party-pymongo	sample	pymongo.errors.ServerSelectionTimeoutError: db:27017
+python-third-party-pymongo	library	pymongo
+python-third-party-kafka	alt	kafka.errors.KafkaTimeoutError
+python-third-party-kafka	alt	kafka.errors.NoBrokersAvailable
+python-third-party-kafka	sample	kafka.errors.NoBrokersAvailable: NoBrokersAvailable
+python-third-party-kafka	library	kafka-python
+python-third-party-botocore	alt	botocore.exceptions.ConnectTimeoutError
+python-third-party-botocore	alt	botocore.exceptions.EndpointConnectionError
+python-third-party-botocore	sample	botocore.exceptions.EndpointConnectionError: Could not connect
+python-third-party-botocore	library	botocore
+python-third-party-requests	alt	requests.exceptions.ReadTimeout
+python-third-party-requests	alt	requests.exceptions.ConnectTimeout
+python-third-party-requests	alt	requests.exceptions.ConnectionError
+python-third-party-requests	sample	requests.exceptions.ConnectionError: HTTPConnectionPool
+python-third-party-requests	library	requests
+python-third-party-httpx	alt	httpx.PoolTimeout
+python-third-party-httpx	alt	httpx.ReadTimeout
+python-third-party-httpx	alt	httpx.ConnectError
+python-third-party-httpx	alt	httpx.ConnectTimeout
+python-third-party-httpx	sample	httpx.ConnectError: [Errno 111] Connection refused
+python-third-party-httpx	library	httpx
+node-connection-refused	alt	ECONNRESET
+node-connection-refused	alt	ENETUNREACH
+node-connection-refused	alt	ECONNREFUSED
+node-connection-refused	alt	EHOSTUNREACH
+node-connection-refused	sample	Error: connect ECONNREFUSED 127.0.0.1:5432
+node-dns-failure	alt	EAI_AGAIN
+node-dns-failure	alt	ENOTFOUND
+node-dns-failure	sample	Error: getaddrinfo ENOTFOUND db.internal
+node-timeout	alt	ETIMEDOUT
+node-timeout	alt	ESOCKETTIMEDOUT
+node-timeout	alt	UND_ERR_CONNECT_TIMEOUT
+node-timeout	alt	UND_ERR_HEADERS_TIMEOUT
+node-timeout	sample	Error: connect ETIMEDOUT 10.0.0.5:443
+node-oom-kill	alt	JavaScript heap out of memory
+node-oom-kill	alt	FATAL ERROR: Allocation failed
+node-oom-kill	sample	FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+node-tls-error	alt	CERT_HAS_EXPIRED
+node-tls-error	alt	SELF_SIGNED_CERT_IN_CHAIN
+node-tls-error	alt	DEPTH_ZERO_SELF_SIGNED_CERT
+node-tls-error	alt	ERR_TLS_CERT_ALTNAME_INVALID
+node-tls-error	alt	UNABLE_TO_VERIFY_LEAF_SIGNATURE
+node-tls-error	alt	UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+node-tls-error	sample	code: UNABLE_TO_VERIFY_LEAF_SIGNATURE
+node-third-party	alt	MongoNetworkError
+node-third-party	alt	KafkaJSConnectionError
+node-third-party	alt	MaxRetriesPerRequestError
+node-third-party	alt	MongoServerSelectionError
+node-third-party	alt	KafkaJSNumberOfRetriesExceeded
+node-third-party	sample	MongoServerSelectionError: connect ECONNREFUSED
+jvm-connection-refused	alt	java.net.NoRouteToHostException
+jvm-connection-refused	alt	java.net.SocketException: Connection reset
+jvm-connection-refused	alt	java.net.ConnectException: Connection refused
+jvm-connection-refused	sample	java.net.ConnectException: Connection refused
+jvm-dns-failure	alt	java.net.UnknownHostException
+jvm-dns-failure	sample	java.net.UnknownHostException: nonexistent.invalid
+jvm-timeout	alt	ConnectTimeoutException
+jvm-timeout	alt	java.net.SocketTimeoutException
+jvm-timeout	alt	java.net.http.HttpTimeoutException
+jvm-timeout	alt	java.util.concurrent.TimeoutException
+jvm-timeout	sample	java.net.SocketTimeoutException: Read timed out
+jvm-oom-kill	alt	java.lang.OutOfMemoryError
+jvm-oom-kill	sample	java.lang.OutOfMemoryError: Java heap space
+jvm-tls-error	alt	javax.net.ssl.SSLHandshakeException
+jvm-tls-error	alt	PKIX path building failed
+jvm-tls-error	alt	javax.net.ssl.SSLPeerUnverifiedException
+jvm-tls-error	alt	sun.security.validator.ValidatorException
+jvm-tls-error	sample	javax.net.ssl.SSLHandshakeException: PKIX path building failed
+jvm-third-party-postgresql	alt	PSQLException: Connection to  refused
+jvm-third-party-postgresql	alt	PSQLException: The connection attempt failed
+jvm-third-party-postgresql	sample	org.postgresql.util.PSQLException: Connection to db:5432 refused.
+jvm-third-party-postgresql	library	postgresql
+jvm-third-party-hikari	alt	HikariPool$PoolInitializationException
+jvm-third-party-hikari	alt	java.sql.SQLTransientConnectionException
+jvm-third-party-hikari	sample	java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available
+jvm-third-party-hikari	library	hikaricp
+jvm-third-party-redis	alt	JedisConnectionException
+jvm-third-party-redis	alt	io.lettuce.core.RedisConnectionException
+jvm-third-party-redis	sample	redis.clients.jedis.exceptions.JedisConnectionException: Could not get a resource
+jvm-third-party-redis	library	jedis-lettuce
+jvm-third-party-kafka	alt	org.apache.kafka.common.errors.TimeoutException
+jvm-third-party-kafka	alt	org.apache.kafka.common.errors.DisconnectException
+jvm-third-party-kafka	sample	org.apache.kafka.common.errors.TimeoutException: Failed to update metadata
+jvm-third-party-kafka	library	kafka-clients
+dotnet-connection-refused	alt	SocketException (61)
+dotnet-connection-refused	alt	actively refused it
+dotnet-connection-refused	alt	SocketException (111)
+dotnet-connection-refused	alt	SocketException (10061)
+dotnet-connection-refused	sample	System.Net.Sockets.SocketException (111): Connection refused
+dotnet-dns-failure	alt	SocketException: Name or service not known
+dotnet-dns-failure	alt	HttpRequestException: Temporary failure in name resolution
+dotnet-dns-failure	alt	No such host is known
+dotnet-dns-failure	sample	System.Net.Sockets.SocketException: No such host is known.
+dotnet-timeout	alt	SocketException (110)
+dotnet-timeout	alt	HttpClient.Timeout of
+dotnet-timeout	alt	SocketException (10060)
+dotnet-timeout	alt	System.TimeoutException
+dotnet-timeout	alt	connected party did not properly respond
+dotnet-timeout	sample	System.TimeoutException: The operation has timed out.
+dotnet-oom-kill	alt	System.OutOfMemoryException
+dotnet-oom-kill	sample	System.OutOfMemoryException: Insufficient memory
+dotnet-tls-error	alt	RemoteCertificateNameMismatch
+dotnet-tls-error	alt	The remote certificate is invalid
+dotnet-tls-error	alt	System.Security.Authentication.AuthenticationException
+dotnet-tls-error	sample	AuthenticationException: The remote certificate is invalid
+dotnet-third-party	alt	Npgsql.NpgsqlException
+dotnet-third-party	alt	Confluent.Kafka.KafkaException
+dotnet-third-party	alt	Microsoft.Data.SqlClient.SqlException
+dotnet-third-party	alt	StackExchange.Redis.RedisConnectionException
+dotnet-third-party	sample	Npgsql.NpgsqlException (0x80004005): Failed to connect to 10.0.0.1:5432
+go-connection-refused	alt	dial tcp a: connect: no route to host
+go-connection-refused	alt	read tcp : connection reset by peer
+go-connection-refused	alt	dial tcp a: connect: connection refused
+go-connection-refused	alt	dial tcp a: connect: network is unreachable
+go-connection-refused	sample	dial tcp 127.0.0.1:5432: connect: connection refused
+go-dns-failure	alt	lookup a: no such host
+go-dns-failure	alt	lookup a: server misbehaving
+go-dns-failure	sample	dial tcp: lookup db on 127.0.0.11:53: no such host
+go-timeout	alt	i/o timeout
+go-timeout	alt	Client.Timeout exceeded
+go-timeout	alt	context deadline exceeded
+go-timeout	sample	Get "http://x": context deadline exceeded
+go-oom-kill	alt	runtime: out of memory
+go-oom-kill	alt	fatal error: out of memory
+go-oom-kill	sample	fatal error: runtime: out of memory
+go-tls-error	alt	x509: certificate
+go-tls-error	alt	tls: bad certificate
+go-tls-error	alt	tls: failed to verify
+go-tls-error	alt	tls: handshake failure
+go-tls-error	alt	x509: failed to verify
+go-tls-error	sample	x509: certificate signed by unknown authority
+go-third-party	alt	pq: sorry, too many clients already
+go-third-party	alt	server selection error
+go-third-party	alt	redis: connection pool timeout
+go-third-party	alt	pq: the database system is starting up
+go-third-party	alt	kafka: client has run out of available brokers
+go-third-party	sample	redis: connection pool timeout
+any-connection-refused	alt	Connection refused
+any-connection-refused	alt	Connection reset by peer
+any-connection-refused	alt	ECONNREFUSED
+any-connection-refused	alt	connection refused
+any-connection-refused	alt	connection reset by peer
+any-connection-refused	alt	curl: (7) Failed to connect
+any-connection-refused	sample	curl: (7) Failed to connect to localhost port 8200
+any-dns-failure	alt	Could not resolve host
+any-dns-failure	sample	curl: (6) Could not resolve host: svc
+any-timeout	alt	curl: (28)
+any-timeout	alt	Gateway Timeout
+any-timeout	alt	upstream request timeout
+any-timeout	sample	504 Gateway Time-out
+any-oom-kill	alt	OOMKilled
+any-oom-kill	alt	Exited (137)
+any-oom-kill	alt	exit code 137
+any-oom-kill	alt	Out of memory: Killed process
+any-oom-kill	sample	container exited with code 137 (OOMKilled)
+any-tls-error	alt	curl: (35)
+any-tls-error	alt	curl: (60)
+any-tls-error	alt	SSL certificate problem
+any-tls-error	sample	curl: (60) SSL certificate problem: self signed certificate

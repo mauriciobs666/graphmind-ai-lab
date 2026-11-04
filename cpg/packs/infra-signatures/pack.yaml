@@ -1,0 +1,67 @@
+# Paper pack: extracted mechanically from the YAML blocks of sections 8.1 (header) and 8.2 (the `signatures` list) of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: infra-signatures
+version: 0.1.0
+kind: infra-signatures
+vocabVersion: "1.0"
+status: paper
+runtimes:                       # detection narrows, per evidence block; see below
+  - {runtime: python, regex: 'Traceback \(most recent call last\):|^\s+File ".*", line \d+, in '}
+  - {runtime: node,   regex: '^\s+at .+:\d+:\d+\)?$|node:internal'}
+  - {runtime: jvm,    regex: '^\s+at [\w.$]+\([\w$]+\.(?:java|kt|scala):\d+\)|^Caused by: [\w.$]+'}
+  - {runtime: dotnet, regex: '^\s+at [^ ]+\(.*\) in .+:line \d+'}
+  - {runtime: go,     regex: '^goroutine \d+ \[|^\s+\S+\.go:\d+ \+0x'}
+signatures:
+# python
+- {id: python-connection-refused, class: connection-refused, runtime: python, regex: 'ConnectionRefusedError|ConnectionResetError|\[Errno (?:111|61|113|101|104)\]', sample: 'ConnectionRefusedError: [Errno 111] Connection refused', sampleSource: captured}
+- {id: python-dns-failure, class: dns-failure, runtime: python, regex: 'socket\.gaierror|\[Errno -(?:2|3|5)\] (?:Name or service not known|Temporary failure in name resolution|No address associated with hostname)|nodename nor servname provided', sample: 'socket.gaierror: [Errno -2] Name or service not known', sampleSource: captured}
+- {id: python-timeout, class: timeout, runtime: python, regex: 'socket\.timeout|\bTimeoutError\b|\b(?:Read|Connect|Pool)Timeout\b|\[Errno 110\]', sample: 'TimeoutError: timed out', sampleSource: captured}
+- {id: python-oom-kill, class: oom-kill, runtime: python, regex: '\bMemoryError\b', sample: 'MemoryError', sampleSource: captured}
+- {id: python-tls-error, class: tls-error, runtime: python, regex: 'ssl\.SSLError|SSLCertVerificationError|CERTIFICATE_VERIFY_FAILED|ssl\.CertificateError', sample: 'ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate (_ssl.c:1000)', sampleSource: captured}
+- {id: python-third-party-redis, class: third-party-exception, runtime: python, library: redis, regex: 'redis\.exceptions\.(?:ConnectionError|TimeoutError|BusyLoadingError)', sample: 'redis.exceptions.ConnectionError: Error 111 connecting to localhost:1. Connection refused.', sampleSource: captured}
+- {id: python-third-party-psycopg, class: third-party-exception, runtime: python, library: psycopg, regex: 'psycopg2?\.OperationalError', sample: 'psycopg2.OperationalError: could not connect to server'}
+- {id: python-third-party-sqlalchemy, class: third-party-exception, runtime: python, library: sqlalchemy, regex: 'sqlalchemy\.exc\.OperationalError', sample: 'sqlalchemy.exc.OperationalError: (psycopg2.OperationalError)'}
+- {id: python-third-party-pymongo, class: third-party-exception, runtime: python, library: pymongo, regex: 'pymongo\.errors\.(?:ServerSelectionTimeoutError|AutoReconnect)', sample: 'pymongo.errors.ServerSelectionTimeoutError: db:27017'}
+- {id: python-third-party-kafka, class: third-party-exception, runtime: python, library: kafka-python, regex: 'kafka\.errors\.(?:NoBrokersAvailable|KafkaTimeoutError)', sample: 'kafka.errors.NoBrokersAvailable: NoBrokersAvailable'}
+- {id: python-third-party-botocore, class: third-party-exception, runtime: python, library: botocore, regex: 'botocore\.exceptions\.(?:EndpointConnectionError|ConnectTimeoutError)', sample: 'botocore.exceptions.EndpointConnectionError: Could not connect'}
+- {id: python-third-party-requests, class: third-party-exception, runtime: python, library: requests, regex: 'requests\.exceptions\.(?:ConnectionError|ConnectTimeout|ReadTimeout)', sample: 'requests.exceptions.ConnectionError: HTTPConnectionPool'}
+- {id: python-third-party-httpx, class: third-party-exception, runtime: python, library: httpx, regex: 'httpx\.(?:ConnectError|ConnectTimeout|ReadTimeout|PoolTimeout)', sample: 'httpx.ConnectError: [Errno 111] Connection refused', sampleSource: captured}
+# node
+- {id: node-connection-refused, class: connection-refused, runtime: node, regex: '\b(?:ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH)\b', sample: 'Error: connect ECONNREFUSED 127.0.0.1:5432'}
+- {id: node-dns-failure, class: dns-failure, runtime: node, regex: '\b(?:ENOTFOUND|EAI_AGAIN)\b', sample: 'Error: getaddrinfo ENOTFOUND db.internal'}
+- {id: node-timeout, class: timeout, runtime: node, regex: '\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT)\b', sample: 'Error: connect ETIMEDOUT 10.0.0.5:443'}
+- {id: node-oom-kill, class: oom-kill, runtime: node, regex: 'JavaScript heap out of memory|FATAL ERROR: .*Allocation failed', sample: 'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory'}
+- {id: node-tls-error, class: tls-error, runtime: node, regex: '\b(?:UNABLE_TO_VERIFY_LEAF_SIGNATURE|UNABLE_TO_GET_ISSUER_CERT_LOCALLY|CERT_HAS_EXPIRED|DEPTH_ZERO_SELF_SIGNED_CERT|SELF_SIGNED_CERT_IN_CHAIN|ERR_TLS_CERT_ALTNAME_INVALID)\b', sample: 'code: UNABLE_TO_VERIFY_LEAF_SIGNATURE'}
+- {id: node-third-party, class: third-party-exception, runtime: node, regex: '\b(?:MongoServerSelectionError|MongoNetworkError|KafkaJSConnectionError|KafkaJSNumberOfRetriesExceeded|MaxRetriesPerRequestError)\b', sample: 'MongoServerSelectionError: connect ECONNREFUSED'}
+# jvm
+- {id: jvm-connection-refused, class: connection-refused, runtime: jvm, regex: 'java\.net\.(?:ConnectException: Connection refused|NoRouteToHostException|SocketException: Connection reset)', sample: 'java.net.ConnectException: Connection refused', sampleSource: captured}
+- {id: jvm-dns-failure, class: dns-failure, runtime: jvm, regex: 'java\.net\.UnknownHostException', sample: 'java.net.UnknownHostException: nonexistent.invalid', sampleSource: captured}
+- {id: jvm-timeout, class: timeout, runtime: jvm, regex: 'java\.net\.SocketTimeoutException|java\.net\.http\.HttpTimeoutException|java\.util\.concurrent\.TimeoutException|ConnectTimeoutException', sample: 'java.net.SocketTimeoutException: Read timed out', sampleSource: captured}
+- {id: jvm-oom-kill, class: oom-kill, runtime: jvm, regex: 'java\.lang\.OutOfMemoryError', sample: 'java.lang.OutOfMemoryError: Java heap space', sampleSource: captured}
+- {id: jvm-tls-error, class: tls-error, runtime: jvm, regex: 'javax\.net\.ssl\.SSL(?:HandshakeException|PeerUnverifiedException)|sun\.security\.validator\.ValidatorException|PKIX path building failed', sample: 'javax.net.ssl.SSLHandshakeException: PKIX path building failed'}
+- {id: jvm-third-party-postgresql, class: third-party-exception, runtime: jvm, library: postgresql, regex: 'PSQLException: (?:Connection to .* refused|The connection attempt failed)', sample: 'org.postgresql.util.PSQLException: Connection to db:5432 refused.'}
+- {id: jvm-third-party-hikari, class: third-party-exception, runtime: jvm, library: hikaricp, regex: 'HikariPool\$PoolInitializationException|java\.sql\.SQLTransientConnectionException', sample: 'java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available'}
+- {id: jvm-third-party-redis, class: third-party-exception, runtime: jvm, library: jedis-lettuce, regex: 'JedisConnectionException|io\.lettuce\.core\.RedisConnectionException', sample: 'redis.clients.jedis.exceptions.JedisConnectionException: Could not get a resource'}
+- {id: jvm-third-party-kafka, class: third-party-exception, runtime: jvm, library: kafka-clients, regex: 'org\.apache\.kafka\.common\.errors\.(?:TimeoutException|DisconnectException)', sample: 'org.apache.kafka.common.errors.TimeoutException: Failed to update metadata'}
+# dotnet
+- {id: dotnet-connection-refused, class: connection-refused, runtime: dotnet, regex: 'SocketException \((?:111|61|10061)\)|actively refused it', sample: 'System.Net.Sockets.SocketException (111): Connection refused'}
+- {id: dotnet-dns-failure, class: dns-failure, runtime: dotnet, regex: 'No such host is known|(?:SocketException|HttpRequestException)[^:]*: (?:Name or service not known|Temporary failure in name resolution)', sample: 'System.Net.Sockets.SocketException: No such host is known.'}
+- {id: dotnet-timeout, class: timeout, runtime: dotnet, regex: 'System\.TimeoutException|SocketException \((?:110|10060)\)|connected party did not properly respond|HttpClient\.Timeout of', sample: 'System.TimeoutException: The operation has timed out.'}
+- {id: dotnet-oom-kill, class: oom-kill, runtime: dotnet, regex: 'System\.OutOfMemoryException', sample: 'System.OutOfMemoryException: Insufficient memory'}
+- {id: dotnet-tls-error, class: tls-error, runtime: dotnet, regex: 'System\.Security\.Authentication\.AuthenticationException|The remote certificate is invalid|RemoteCertificateNameMismatch', sample: 'AuthenticationException: The remote certificate is invalid'}
+- {id: dotnet-third-party, class: third-party-exception, runtime: dotnet, regex: 'Npgsql\.NpgsqlException|StackExchange\.Redis\.RedisConnectionException|Microsoft\.Data\.SqlClient\.SqlException|Confluent\.Kafka\.KafkaException', sample: 'Npgsql.NpgsqlException (0x80004005): Failed to connect to 10.0.0.1:5432'}
+# go
+- {id: go-connection-refused, class: connection-refused, runtime: go, regex: 'dial tcp \S+: connect: (?:connection refused|no route to host|network is unreachable)|read tcp .*: connection reset by peer', sample: 'dial tcp 127.0.0.1:5432: connect: connection refused'}
+- {id: go-dns-failure, class: dns-failure, runtime: go, regex: 'lookup \S+.*: (?:no such host|server misbehaving)', sample: 'dial tcp: lookup db on 127.0.0.11:53: no such host'}
+- {id: go-timeout, class: timeout, runtime: go, regex: 'context deadline exceeded|i/o timeout|Client\.Timeout exceeded', sample: 'Get "http://x": context deadline exceeded'}
+- {id: go-oom-kill, class: oom-kill, runtime: go, regex: 'fatal error: (?:runtime: )?out of memory|runtime: out of memory', sample: 'fatal error: runtime: out of memory'}
+- {id: go-tls-error, class: tls-error, runtime: go, regex: 'x509: (?:certificate|failed to verify)|tls: (?:failed to verify|handshake failure|bad certificate)', sample: 'x509: certificate signed by unknown authority'}
+- {id: go-third-party, class: third-party-exception, runtime: go, regex: 'redis: connection pool timeout|pq: (?:the database system is starting up|sorry, too many clients already)|kafka: client has run out of available brokers|server selection error', sample: 'redis: connection pool timeout'}
+# any (container, kernel, CLI)
+- {id: any-connection-refused, class: connection-refused, runtime: any, regex: 'curl: \(7\) Failed to connect|[Cc]onnection refused|\bECONNREFUSED\b|[Cc]onnection reset by peer', sample: 'curl: (7) Failed to connect to localhost port 8200'}
+- {id: any-dns-failure, class: dns-failure, runtime: any, regex: 'Could not resolve host', sample: 'curl: (6) Could not resolve host: svc'}
+- {id: any-timeout, class: timeout, runtime: any, regex: 'Gateway Time-?out|upstream request timeout|curl: \(28\)', sample: '504 Gateway Time-out'}
+- {id: any-oom-kill, class: oom-kill, runtime: any, regex: 'OOMKilled|Out of memory: Killed process|exit(?:ed)?(?: with)? code 137\b|Exited \(137\)', sample: 'container exited with code 137 (OOMKilled)'}
+- {id: any-tls-error, class: tls-error, runtime: any, regex: 'SSL certificate problem|curl: \((?:35|60)\)', sample: 'curl: (60) SSL certificate problem: self signed certificate'}

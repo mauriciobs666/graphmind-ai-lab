@@ -83,14 +83,65 @@ def load_yaml(text: str):
     return yaml.load(text, Loader=_StrictLoader)
 
 
+NEGATIVES_FILE = "negatives.yaml"
+
+
+def signature_classes() -> list[str]:
+    """The closed ``class`` set of a signature (spec 8.1), read from the schema."""
+    return list(load_schema()["$defs"]["signature"]["properties"]["class"]["enum"])
+
+
+def negative_lines(path: Path) -> list[str]:
+    """The lines no ``signatures`` regex may match (N-22) from a pack's negatives file: its ``shared`` lines and every class's
+    ``near-miss`` lines. The file is test data in the pack's directory; a file that would check nothing is an error, so an
+    empty ``shared``, a class without near-misses or an unknown class raises ``PackError``."""
+    try:
+        data = load_yaml(Path(path).read_text())
+    except yaml.YAMLError as e:
+        raise PackError([f"negatives {path}: {e}"]) from e
+    errs: list[str] = []
+
+    def strings(where, v):
+        if not (isinstance(v, list) and v and all(isinstance(x, str) and x for x in v)):
+            errs.append(f"negatives {where}: a non-empty list of non-empty strings is required")
+            return []
+        return v
+
+    if not isinstance(data, dict):
+        raise PackError([f"negatives {path}: a mapping with 'shared' and 'near-miss' is required"])
+    lines = strings("shared", data.get("shared"))
+    near = data.get("near-miss")
+    if not isinstance(near, dict):
+        errs.append("negatives near-miss: a mapping from signature class to lines is required")
+    else:
+        classes = signature_classes()
+        for c in near:
+            if c not in classes:
+                errs.append(f"negatives near-miss.{c}: not a signature class")
+        for c in classes:
+            lines += strings(f"near-miss.{c}", near.get(c))
+    if errs:
+        raise PackError(errs)
+    return lines
+
+
 def load_pack(path: Path) -> dict:
-    """Load ``cpg/packs/<id>/pack.yaml`` and validate it against its directory name; raises ``PackError``."""
+    """Load ``cpg/packs/<id>/pack.yaml`` and validate it against its directory name; raises ``PackError``.
+
+    A pack with ``signatures`` is also checked against the near-miss and shared negatives of ``negatives.yaml`` beside it
+    (N-22); without that file the pack is rejected, since the check would otherwise silently not run."""
     path = Path(path)
     try:
         pack = load_yaml(path.read_text())
     except yaml.YAMLError as e:
         raise PackError([f"{path}: {e}"]) from e
-    validate_pack(pack, dirname=path.parent.name)
+    negatives = None
+    if isinstance(pack, dict) and pack.get("signatures"):
+        neg_path = path.parent / NEGATIVES_FILE
+        if not neg_path.is_file():
+            raise PackError([f"{path}: a pack with signatures needs {NEGATIVES_FILE} beside it (N-22 negatives)"])
+        negatives = negative_lines(neg_path)
+    validate_pack(pack, dirname=path.parent.name, negatives=negatives)
     return pack
 
 

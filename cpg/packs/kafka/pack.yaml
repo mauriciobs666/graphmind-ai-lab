@@ -1,0 +1,28 @@
+# Paper pack: extracted mechanically from the YAML block of section 5 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: kafka
+version: 0.1.0
+kind: protocol
+vocabVersion: "1.0"
+status: paper
+vocab:
+  - {kind: topic, transport: kafka, keyNorm: "kafka:<name>; name as written, case kept (spec §6, topic row)", example: "kafka:orders.created"}
+link: [{kind: topic, matcher: exact}]
+rules:
+  - id: produce
+    match: {callsite: {callee: {regex: 'send|send_and_wait|produce'}}}
+    scope: {imports: [{module: {prefix: kafka}}, {module: {prefix: aiokafka}}, {module: {prefix: confluent_kafka}}]}
+    extract: {topic: {arg: a0}}
+    emit: [{provides: {kind: topic, key: "kafka:{topic}"}}]
+  - id: consume-positional
+    match: {callsite: {callee: {regex: 'KafkaConsumer|AIOKafkaConsumer'}}}
+    scope: {imports: [{module: {prefix: kafka}}, {module: {prefix: aiokafka}}]}
+    extract: {topic: {arg: a0, onUnknown: config-derived}}
+    emit: [{consumes: {kind: topic, key: "kafka:{topic}"}}]
+  - id: consume-pattern
+    match: {callsite: {callee: subscribe, args: [{arg: kw.pattern}]}}
+    scope: {imports: [{module: {prefix: kafka}}, {module: {prefix: aiokafka}}]}
+    extract: {pattern: {arg: kw.pattern}}
+    emit: [{consumes: {kind: topic, key: "kafka:{pattern}", keyForm: regex}}]

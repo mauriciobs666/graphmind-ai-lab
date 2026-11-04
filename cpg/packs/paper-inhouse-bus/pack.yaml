@@ -1,0 +1,33 @@
+# Paper pack: extracted mechanically from the YAML block of section 6 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: paper-inhouse-bus
+version: 0.1.0
+kind: protocol
+vocabVersion: "1.0"
+status: paper
+vocab:
+  - {kind: topic, transport: inhouse-paper-inhouse-bus,
+     keyNorm: "inhouse-paper-inhouse-bus:<name>; name as written, case kept (spec §6, topic row)",
+     example: "inhouse-paper-inhouse-bus:billing.invoice.paid"}
+link: [{kind: topic, matcher: exact}]
+queries:
+  - id: handler-ns                                  # the worked example of §1.7
+    from:
+      - {as: dec,  record: decorator, where: {name: {regex: '(?:[A-Za-z_][A-Za-z0-9_]*\.)?on'}}}
+      - {as: h,    record: symbol,    where: {id: "$dec.targetId"}}
+      - {as: ty,   record: symbol,    where: {id: "$h.parentId"}}
+      - {as: ns,   record: decorator, where: {targetId: "$ty.id", name: {regex: '(?:[A-Za-z_][A-Za-z0-9_]*\.)?component'}}}
+    yield: {handler: "$h.id", topic: "$dec.args.a0", ns: "$ns.args.a0"}
+rules:
+  - id: publish
+    match: {callsite: {callee: publish}}
+    scope: {imports: [{module: {exact: acmebus}}]}
+    extract: {topic: {arg: a0}}
+    emit: [{provides: {kind: topic, key: "inhouse-paper-inhouse-bus:{topic}"}}]
+  - id: subscribe
+    match: {query: handler-ns}
+    scope: {imports: [{module: {exact: acmebus}}]}
+    extract: {ns: {yield: ns}, topic: {yield: topic}}
+    emit: [{consumes: {kind: topic, key: "inhouse-paper-inhouse-bus:{ns}.{topic}", keyForm: glob}}]

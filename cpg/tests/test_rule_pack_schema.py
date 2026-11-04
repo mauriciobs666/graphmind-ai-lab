@@ -123,7 +123,7 @@ def test_validate_pack_raises_a_pack_error_naming_every_problem():
     assert len(ei.value.messages) >= 2
 
 
-@pytest.mark.parametrize("pid", ["fastapi", "fetch", "fastmcp"])
+@pytest.mark.parametrize("pid", ["fastapi", "fetch", "fastmcp", "kafka", "paper-inhouse-bus"])
 def test_a_variation_with_one_rule_removed_is_valid(pid):
     assert accepted(pid, lambda p: p.update(rules=p["rules"][1:])) == []
 
@@ -346,16 +346,25 @@ def test_regexes_inside_the_re2_subset_are_accepted(rx):
 
 # ---------------------------------------------------------------- the three real packs (cpg/packs/*/pack.yaml)
 
-REAL_PACKS = ["fastapi", "fetch", "fastmcp"]
+REAL_PACKS = sorted(PACKS)  # all seven (S31 shipped three, S32 the other four)
+NEGATIVES_FILE = "negatives.yaml"  # beside infra-signatures/pack.yaml: the spec's section 8 negatives block, for N-22
 
 
 def spec_block_text(pid: str) -> str:
-    """The pack's YAML block exactly as the spec writes it (every fenced block whose first key is ``packFormat``)."""
+    """The pack's YAML exactly as the spec writes it: the one fenced block whose first key is ``packFormat`` -- for
+    ``infra-signatures``, that header block followed by ``signatures:`` and the section 8.2 list block (the file's body)."""
     for _line, body in spec.yaml_blocks():
         d = yaml.safe_load(body)
         if isinstance(d, dict) and d.get("id") == pid and "packFormat" in d:
-            return body
+            if pid != "infra-signatures":
+                return body
+            sig_block = next(b for _l, b in spec.yaml_blocks() if isinstance(yaml.safe_load(b), list) and "class" in yaml.safe_load(b)[0])
+            return body.rstrip("\n") + "\nsignatures:\n" + sig_block
     raise AssertionError(pid)
+
+
+def without_comment_lines(text: str) -> str:
+    return "\n".join(ln for ln in text.splitlines() if not ln.startswith("#")).strip()
 
 
 @pytest.mark.parametrize("pid", REAL_PACKS)
@@ -371,7 +380,7 @@ def test_the_pack_file_is_the_spec_block_plus_status_paper(pid):
     body = [ln for ln in text.splitlines() if not ln.startswith("#")]
     assert body.count("status: paper") == 1
     body.remove("status: paper")
-    assert "\n".join(body).strip() == spec_block_text(pid).strip()
+    assert "\n".join(body).strip() == without_comment_lines(spec_block_text(pid))
     assert rulepack.load_yaml(text) == {**PACKS[pid], "status": "paper"}
 
 
@@ -379,6 +388,15 @@ def test_the_pack_file_is_the_spec_block_plus_status_paper(pid):
 def test_the_pack_file_is_marked_paper(pid):
     assert rulepack.load_pack(CPG / "packs" / pid / "pack.yaml")["status"] == "paper"
 
+
+def test_the_packs_directory_holds_exactly_the_seven_spec_packs():
+    """No pack directory beyond the spec's seven, and no file in one beyond its pack (plus the infra negatives)."""
+    assert len(REAL_PACKS) == 7
+    on_disk = {p.name for p in (CPG / "packs").iterdir()}
+    assert on_disk == set(REAL_PACKS)
+    for pid in REAL_PACKS:
+        files = {p.name for p in (CPG / "packs" / pid).iterdir()}
+        assert files == {"pack.yaml"} | ({NEGATIVES_FILE} if pid == "infra-signatures" else set()), (pid, files)
 
 
 # ---------------------------------------------------------------- the topic knock-on (O-16)
@@ -1341,3 +1359,283 @@ def test_every_data_file_under_ccg_is_covered_by_a_package_data_glob():
     assert data, "the tree has data files (schemas, registry, store DDL)"
     shipped = {p.relative_to(pkg) for g in declared for p in pkg.glob(g) if p.is_file()}
     assert data <= shipped, sorted(map(str, data - shipped))
+
+
+# ================================================================ S32: the four remaining packs and their checks
+# kafka, paper-inhouse-bus, infra-signatures (+ its negatives file) and severity-rules, as files under cpg/packs/.
+
+PACK_DIR = CPG / "packs"
+CLASSES = rulepack.signature_classes()
+
+
+def stage(tmp_path: Path, pid: str, mutate=None, *, negatives="keep") -> Path:
+    """Copy ``packs/<pid>/`` into ``tmp_path`` (dirname preserved), applying ``mutate`` to the loaded pack; returns pack.yaml.
+    ``negatives``: "keep" copies the negatives file, "drop" leaves it out, any other value is written as its text."""
+    d = tmp_path / pid
+    d.mkdir(parents=True)
+    pack = rulepack.load_yaml((PACK_DIR / pid / "pack.yaml").read_text())
+    if mutate:
+        mutate(pack)
+    (d / "pack.yaml").write_text(yaml.safe_dump(pack, sort_keys=False))
+    src = PACK_DIR / pid / NEGATIVES_FILE
+    if negatives == "keep" and src.exists():
+        (d / NEGATIVES_FILE).write_text(src.read_text())
+    elif negatives not in ("keep", "drop"):
+        (d / NEGATIVES_FILE).write_text(negatives)
+    return d / "pack.yaml"
+
+
+def load_errors(tmp_path: Path, pid: str, mutate=None, **kw) -> list[str]:
+    try:
+        rulepack.load_pack(stage(tmp_path, pid, mutate, **kw))
+    except rulepack.PackError as e:
+        return e.messages
+    return []
+
+
+def test_the_pack_file_negatives_are_the_spec_negatives_block_verbatim():
+    text = (PACK_DIR / "infra-signatures" / NEGATIVES_FILE).read_text()
+    block = next(b for _l, b in spec.yaml_blocks() if "near-miss" in b and b.lstrip().startswith("# negatives"))
+    assert without_comment_lines(text) == without_comment_lines(block)
+    assert rulepack.load_yaml(text) == spec.negatives()
+
+
+def test_load_pack_runs_the_near_miss_checks_of_the_negatives_file(tmp_path):
+    """Carried P4-6: load_pack passes the pack directory's negatives to the validator, so N-22 holds for the file itself."""
+    def broaden(p):
+        next(s for s in p["signatures"] if s["id"] == "python-timeout").update(regex="TimeoutError|timed out")
+    errs = load_errors(tmp_path, "infra-signatures", broaden)
+    assert any("signatures" in e and "matches the negative" in e for e in errs), errs
+
+
+def test_the_unmutated_infra_pack_loads_with_its_negatives(tmp_path):
+    assert load_errors(tmp_path, "infra-signatures") == []
+
+
+@pytest.mark.parametrize("name", ["python-timeout", "any-oom-kill", "any-connection-refused", "python-oom-kill", "go-timeout"])
+def test_a_broadened_regex_of_the_8_2_list_is_rejected_by_load_pack_through_the_file_negatives(tmp_path, name):
+    broadened = {
+        "python-timeout": lambda rx: rx + "|timed out",
+        "any-oom-kill": lambda rx: rx.replace(r"137\b", "137"),
+        "any-connection-refused": lambda rx: rx + "|refused",
+        "python-oom-kill": lambda rx: rx + "|memory",
+        "go-timeout": lambda rx: ".*",
+    }[name]
+
+    def edit(p):
+        s = next(s for s in p["signatures"] if s["id"] == name)
+        s["regex"] = broadened(s["regex"])
+    assert any("matches the negative" in e for e in load_errors(tmp_path, "infra-signatures", edit))
+
+
+def test_an_infra_pack_without_a_negatives_file_is_rejected_not_silently_unchecked(tmp_path):
+    errs = load_errors(tmp_path, "infra-signatures", negatives="drop")
+    assert any("negatives" in e for e in errs), errs
+
+
+@pytest.mark.parametrize("name,text", [
+    ("not a mapping", "- a\n- b\n"),
+    ("empty file", ""),
+    ("no shared", "near-miss: {connection-refused: [x], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x]}\n"),
+    ("empty shared", "shared: []\nnear-miss: {connection-refused: [x], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x]}\n"),
+    ("shared line not a string", "shared: [1]\nnear-miss: {connection-refused: [x], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x]}\n"),
+    ("no near-miss", "shared: [x]\n"),
+    ("near-miss not a mapping", "shared: [x]\nnear-miss: [x]\n"),
+    ("a class without near-misses", "shared: [x]\nnear-miss: {connection-refused: [x], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x]}\n"),
+    ("a class with an empty list", "shared: [x]\nnear-miss: {connection-refused: [], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x]}\n"),
+    ("an unknown class", "shared: [x]\nnear-miss: {connection-refused: [x], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x], latency: [x]}\n"),
+    ("a near-miss line not a string", "shared: [x]\nnear-miss: {connection-refused: [1], dns-failure: [x], timeout: [x], oom-kill: [x], tls-error: [x], third-party-exception: [x]}\n"),
+])
+def test_a_malformed_negatives_file_is_rejected(tmp_path, name, text):
+    errs = load_errors(tmp_path, "infra-signatures", negatives=text)
+    assert errs and all("negatives" in e for e in errs), (name, errs)
+
+
+def test_a_negatives_file_with_only_the_required_keys_is_accepted(tmp_path):
+    ok = "shared: [x]\nnear-miss: {" + ", ".join(f"{c}: [x]" for c in CLASSES) + "}\n"
+    assert load_errors(tmp_path, "infra-signatures", negatives=ok) == []
+
+
+def test_every_near_miss_class_of_the_file_is_a_signature_class():
+    near = rulepack.load_yaml((PACK_DIR / "infra-signatures" / NEGATIVES_FILE).read_text())["near-miss"]
+    assert set(near) == set(CLASSES)
+
+
+# ---------------------------------------------------------------- section 10 negatives that apply to the four new packs, against the files
+
+def lines_of(name: str) -> list:
+    return [t for t in (MORE_NEGATIVES + [(n, p, m) for n, p, m in spec.RANGE_NEGATIVES]) if t[0] == name]
+
+
+NEW_PACKS = ("kafka", "paper-inhouse-bus", "infra-signatures", "severity-rules")
+
+
+def on_rule(i, **fields):
+    def m(p):
+        p["rules"][i]["emit"][0][next(iter(p["rules"][i]["emit"][0]))].update(fields)
+    return m
+
+
+# (name, pid, mutate, fragment the message must carry): each applies the spec's N-n to a pack that carries the construct.
+FILE_NEGATIVES = [
+    ("N-1 packFormat", "kafka", lambda p: p.update(packFormat=2), "packFormat"),
+    ("N-1 packFormat absent", "severity-rules", lambda p: p.pop("packFormat"), "packFormat"),
+    ("N-2 id is not the directory", "paper-inhouse-bus", lambda p: p.update(id="kafka"), "directory"),
+    ("N-2 uppercase id", "infra-signatures", lambda p: p.update(id="Infra-Signatures"), "id"),
+    ("N-3 kind plugin", "kafka", lambda p: p.update(kind="plugin"), "kind"),
+    ("N-4 emit []", "kafka", lambda p: p["rules"][0].update(emit=[]), "emit"),
+    ("N-5 two subjects", "kafka", lambda p: p["rules"][0].update(match={"callsite": {}, "decorator": {}}), "match"),
+    ("N-6 lookahead", "kafka", lambda p: p["rules"][0]["match"]["callsite"].update(callee={"regex": "(?=x)abc"}), "lookaround"),
+    ("N-6 backreference", "kafka", lambda p: p["rules"][1]["match"]["callsite"].update(callee={"regex": r"(a)\1"}), "backreference"),
+    ("N-7 regex of 257 characters", "kafka", lambda p: p["rules"][0]["match"]["callsite"].update(callee={"regex": "a" * 257}), "regex"),
+    ("N-7 signature regex of 257 characters", "infra-signatures", lambda p: p["signatures"][0].update(regex="a" * 257, sample="a" * 257), "signatures.0.regex"),
+    ("N-8 two matchers", "kafka", lambda p: p["rules"][0]["match"]["callsite"].update(callee={"exact": "x", "glob": "y"}), "callee"),
+    ("N-9 invented reason", "kafka", on_rule(0, reason="looks-fine"), "reason"),
+    ("N-10 undeclared kind", "kafka", on_rule(0, kind="widget"), "widget"),
+    ("N-10 undeclared kind on a link", "paper-inhouse-bus", lambda p: p.update(link=[{"kind": "widget", "matcher": "exact"}]), "widget"),
+    ("N-11 vocab entry without keyNorm", "kafka", lambda p: p["vocab"][0].pop("keyNorm"), "keyNorm"),
+    ("N-12 arg grammar", "kafka", lambda p: p["rules"][0]["extract"].update(t={"arg": "arg0"}), "arg"),
+    ("N-13 duplicate rule ids", "kafka", lambda p: p["rules"][1].update(id="produce"), "duplicate"),
+    ("N-13 duplicate rule ids (bus)", "paper-inhouse-bus", lambda p: p["rules"][1].update(id="publish"), "duplicate"),
+    ("N-14 write key in a query", "paper-inhouse-bus", lambda p: p["queries"][0].update(**{"set": {"x": 1}}), "queries"),
+    ("N-14 secretSighting record", "paper-inhouse-bus", lambda p: p["queries"][0]["from"][1].update(record="secretSighting"), "record"),
+    ("N-14 five bindings", "paper-inhouse-bus", lambda p: p["queries"][0]["from"].append({"as": "z", "record": "symbol", "where": {"id": "$ns.id"}}), "from"),
+    ("N-14 join on a non-id field", "paper-inhouse-bus", lambda p: p["queries"][0]["from"][1].update(where={"id": "$dec.name"}), "join"),
+    ("N-14 no join equality after the first", "paper-inhouse-bus", lambda p: p["queries"][0]["from"][1].update(where={"name": {"regex": "x"}}), "join equality"),
+    ("N-14 no handler column when a rule anchors on it", "paper-inhouse-bus", lambda p: p["queries"][0]["yield"].pop("handler"), "handler"),
+    ("N-17 confirmed with the default-config-derived key slot", "kafka", on_rule(0, status="confirmed"), "confirmed"),
+    ("N-17 confirmed beside a possible code", "kafka", on_rule(0, status="confirmed", reason="partial-key"), "partial-key"),
+    ("N-18 level severe", "severity-rules", lambda p: p["rows"][0].update(level="severe"), "level"),
+    ("N-18 rank 4", "severity-rules", lambda p: p["rows"][0].update(rank=4), "rank"),
+    ("N-19 transport uppercase", "kafka", lambda p: p["vocab"][0].update(transport="Kafka"), "transport"),
+    ("N-19 other pack's inhouse transport", "paper-inhouse-bus", lambda p: p["vocab"][0].update(transport="inhouse-other"), "inhouse-paper-inhouse-bus"),
+    ("N-20 config value", "kafka", lambda p: p["rules"][0]["extract"].update(v={"config": "value"}), "config"),
+    ("N-21 repoId", "kafka", lambda p: p.update(repoId="x"), "repoId"),
+    ("N-21 repoId (infra)", "infra-signatures", lambda p: p.update(repoId="x"), "repoId"),
+    ("N-21 repoId (severity)", "severity-rules", lambda p: p.update(repoId="x"), "repoId"),
+    ("N-22 class latency", "infra-signatures", lambda p: p["signatures"][0].update(**{"class": "latency"}), "class"),
+    ("N-22 sample its regex does not match", "infra-signatures", lambda p: p["signatures"][3].update(sample="all fine"), "sample"),
+    ("N-22 sampleSource guessed", "infra-signatures", lambda p: p["signatures"][0].update(sampleSource="guessed"), "sampleSource"),
+    ("N-22 regex matches a near-miss", "infra-signatures", lambda p: p["signatures"][0].update(regex=p["signatures"][0]["regex"] + "|connection"), "matches the negative"),
+    ("N-22 regex matches a shared negative", "infra-signatures", lambda p: p["signatures"][0].update(regex=p["signatures"][0]["regex"] + "|KeyError"), "matches the negative"),
+    ("N-23 link matcher", "kafka", lambda p: p.update(link=[{"kind": "topic", "matcher": "fuzzy"}]), "matcher"),
+    ("N-24 level disagrees with rank", "severity-rules", lambda p: p["rows"][0].update(level="low"), "level"),
+    ("N-24 second row for one (finding, rank)", "severity-rules", lambda p: p["rows"].append(dict(p["rows"][0])), "second row"),
+    ("N-24 id other than the derived one", "severity-rules", lambda p: p["rows"][1].update(id="INJ-1"), "derived"),
+    ("N-25 matcher with two operands", "kafka", lambda p: p["rules"][0]["scope"]["imports"][0].update(module={"prefix": "kafka", "exact": "kafka"}), "module"),
+    ("N-27 config-derived on a consumes of kind http (a kind swap)", "kafka", lambda p: (p["vocab"].clear(), p["link"].clear(), p["rules"][1]["emit"][0]["consumes"].update(kind="http")), "config-derived"),
+    ("N-27 reason not valid on the edge and kind", "kafka", on_rule(0, reason="unknown-key"), "not valid on"),
+    ("N-28 empty firstOf", "kafka", lambda p: p["rules"][0]["extract"].update(topic={"firstOf": []}), "firstOf"),
+    ("N-28 empty anyOf", "kafka", lambda p: p["rules"][0].update(match={"anyOf": []}), "anyOf"),
+    ("N-28 query without a handler column", "paper-inhouse-bus", lambda p: p["queries"][0]["yield"].pop("handler"), "handler"),
+]
+
+
+@pytest.mark.parametrize("name,pid,mutate,fragment", FILE_NEGATIVES, ids=[n for n, *_ in FILE_NEGATIVES])
+def test_a_section_10_negative_is_rejected_for_the_new_pack_file(tmp_path, name, pid, mutate, fragment):
+    errs = load_errors(tmp_path, pid, mutate)
+    assert errs, f"{name} was accepted"
+    assert any(fragment in e for e in errs), (fragment, errs)
+
+
+@pytest.mark.parametrize("name,pid,mutate", [t for t in spec.RANGE_NEGATIVES if t[1] in NEW_PACKS] + [t for t in MORE_NEGATIVES if t[1] in NEW_PACKS],
+                         ids=lambda v: v if isinstance(v, str) and " " in v else None)
+def test_the_spec_and_s31_negative_lists_hold_for_the_new_pack_files(tmp_path, name, pid, mutate):
+    assert load_errors(tmp_path, pid, mutate), f"{name} was accepted by the file"
+
+
+@pytest.mark.parametrize("pid", NEW_PACKS)
+def test_a_pack_file_in_another_directory_is_rejected(tmp_path, pid):
+    d = tmp_path / "elsewhere"
+    d.mkdir()
+    for f in (PACK_DIR / pid).iterdir():
+        (d / f.name).write_text(f.read_text())
+    with pytest.raises(rulepack.PackError, match="directory name"):
+        rulepack.load_pack(d / "pack.yaml")
+
+
+# ---------------------------------------------------------------- the severity pack file: the 44 vectors, X1 to X11 and the mutation check
+
+def sev_formula() -> dict:
+    return rulepack.load_pack(PACK_DIR / "severity-rules" / "pack.yaml")["formula"]
+
+
+def sev_rows() -> list[dict]:
+    return rulepack.load_pack(PACK_DIR / "severity-rules" / "pack.yaml")["rows"]
+
+
+def test_the_severity_pack_file_passes_the_44_vectors_and_x1_to_x11():
+    assert len(spec.vector_rows()) == 44 and len(spec.EXTRA_VECTORS) == 11
+    assert spec.run_vectors(sev_formula()) == []
+
+
+def test_the_severity_pack_file_names_the_derived_row_for_every_vector():
+    rows = {(r["finding"], r["rank"]): r["id"] for r in sev_rows()}
+    for vid, kind, f, want, row in spec.vector_rows() + spec.extra_vector_rows():
+        got = spec.rank(sev_formula(), kind, f)
+        assert got == want and rows[(kind, got)] == row, vid
+    assert {row for *_, row in spec.vector_rows()} == {r["id"] for r in sev_rows()}
+
+
+def test_every_mutant_of_the_severity_pack_file_fails_a_vector():
+    survivors = [n for n, m, order in spec.mutants(sev_formula()) if not spec.run_vectors(m, order)]
+    assert not survivors, survivors
+
+
+WHEN_VALUES = {"source": ["network", "local"], "sink": ["exec", "data"], "sanitizer": ["none", "partial"], "entry": ["network", "internal"],
+               "operation": ["write", "read"], "authCheck": ["none", "partial"], "state": ["head", "removed"],
+               "fileRole": ["primary", "example", "doc"], "configuration": ["host-compromise", "exposed-service", "exposed-app", "hygiene"],
+               "secrets": ["K", "P", "G"]}
+
+
+def formula_entries(formula: dict):
+    """(label, list-in-formula-getter, index, entry) for every caps, base, adjust and penalties entry."""
+    for i, e in enumerate(formula["caps"]):
+        yield f"caps[{i}]", (lambda f: f["caps"]), i, e
+    for kind in ("injection", "authorization", "configuration", "secrets"):
+        for section, entries in formula[kind].items():
+            for i, e in enumerate(entries):
+                yield f"{kind}.{section}[{i}]", (lambda f, k=kind, s=section: f[k][s]), i, e
+
+
+def when_mutants(formula: dict):
+    """Every `when` of the pack, edited one clause at a time: the clause dropped; an enumerated value swapped for another of
+    its set; a boolean flipped; a path or basename matcher widened to match anything and narrowed to match nothing; then the
+    whole entry removed."""
+    for label, get, i, e in formula_entries(formula):
+        m = copy.deepcopy(formula)
+        del get(m)[i]
+        yield f"{label} removed", m
+        for k, v in e["when"].items():
+            kind = label.split(".")[0]
+            options = ([not v] if isinstance(v, bool)
+                       else [{"regex": ".*"}, {"regex": "zz-never-zz"}] if isinstance(v, dict)
+                       else [o for o in WHEN_VALUES.get(k, WHEN_VALUES.get(kind, [])) if o != v] if k != "class" else
+                       [o for o in WHEN_VALUES[kind] if o != v])
+            m = copy.deepcopy(formula)
+            del get(m)[i]["when"][k]
+            yield f"{label}.when.{k} dropped", m
+            for o in options:
+                m = copy.deepcopy(formula)
+                get(m)[i]["when"][k] = o
+                yield f"{label}.when.{k}={o}", m
+
+
+def test_the_when_mutant_generator_covers_every_entry_and_every_clause():
+    f = sev_formula()
+    entries = list(formula_entries(f))
+    clauses = sum(len(e["when"]) for *_, e in entries)
+    names = [n for n, _ in when_mutants(f)]
+    assert len(entries) == 1 + (4 + 2) + (4 + 2) + (4 + 1) + (6 + 1 + 1)  # caps, then base and penalties of each kind (secrets adds adjust)
+    assert sum(n.endswith(" removed") for n in names) == len(entries)
+    assert sum(n.endswith(" dropped") for n in names) == clauses
+    assert len(names) > len(entries) + clauses  # value swaps and matcher edits beyond the drops
+
+
+# `when` mutants no vector can tell apart: the clause is redundant with another in the same entry or unreachable.
+EQUIVALENT_WHEN_MUTANTS: set[str] = set()
+
+
+def test_every_when_clause_of_the_severity_pack_file_is_pinned_by_a_vector():
+    survivors = sorted(n for n, m in when_mutants(sev_formula()) if not spec.run_vectors(m))
+    assert set(survivors) == EQUIVALENT_WHEN_MUTANTS, survivors

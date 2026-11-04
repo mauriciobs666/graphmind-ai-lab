@@ -1,0 +1,66 @@
+# Paper pack: extracted mechanically from the YAML block of section 9.1 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.4); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: severity-rules
+version: 0.1.0
+kind: severity
+vocabVersion: "1.0"
+status: paper
+formula:
+  caps: [{when: {fileRole: example}, max: 0}]
+  injection:
+    base:
+      - {when: {source: network, sink: exec}, value: 3}
+      - {when: {source: network, sink: data}, value: 2}
+      - {when: {source: local, sink: exec}, value: 2}
+      - {when: {source: local, sink: data}, value: 1}
+    penalties:
+      - {when: {chainConfirmed: false}, value: 1}
+      - {when: {sanitizer: partial}, value: 1}
+  authorization:
+    base:
+      - {when: {entry: network, operation: write}, value: 3}
+      - {when: {entry: network, operation: read}, value: 2}
+      - {when: {entry: internal, operation: write}, value: 2}
+      - {when: {entry: internal, operation: read}, value: 1}
+    penalties:
+      - {when: {chainConfirmed: false}, value: 1}
+      - {when: {authCheck: partial}, value: 1}
+  configuration:
+    base:
+      - {when: {class: host-compromise}, value: 3}
+      - {when: {class: exposed-service}, value: 2}
+      - {when: {class: exposed-app}, value: 1}
+      - {when: {class: hygiene}, value: 0}
+    penalties:
+      - {when: {basename: {regex: '(?:.*[._-])?(?:dev|local|test|override)(?:[._-].*)?'}}, value: 1}
+  secrets:
+    base:
+      - {when: {state: head, class: K}, value: 3}
+      - {when: {state: head, class: P}, value: 2}
+      - {when: {state: head, class: G}, value: 1}
+      - {when: {state: removed, class: K}, value: 2}
+      - {when: {state: removed, class: P}, value: 1}
+      - {when: {state: removed, class: G}, value: 0}
+    adjust:
+      - {when: {state: head, flow: true}, value: 1}
+    penalties:
+      - {when: {path: {regex: '(?:.*/)?(?:tests?|__tests__|e2e)/.*'}}, value: 1}
+rows:
+  - {id: INJ-1, finding: injection, rank: 3, level: critical}
+  - {id: INJ-2, finding: injection, rank: 2, level: high}
+  - {id: INJ-3, finding: injection, rank: 1, level: medium}
+  - {id: INJ-4, finding: injection, rank: 0, level: low}
+  - {id: AUTHZ-1, finding: authorization, rank: 3, level: critical}
+  - {id: AUTHZ-2, finding: authorization, rank: 2, level: high}
+  - {id: AUTHZ-3, finding: authorization, rank: 1, level: medium}
+  - {id: AUTHZ-4, finding: authorization, rank: 0, level: low}
+  - {id: RCFG-1, finding: configuration, rank: 3, level: critical}
+  - {id: RCFG-2, finding: configuration, rank: 2, level: high}
+  - {id: RCFG-3, finding: configuration, rank: 1, level: medium}
+  - {id: RCFG-4, finding: configuration, rank: 0, level: low}
+  - {id: SEC-1, finding: secrets, rank: 3, level: critical}
+  - {id: SEC-2, finding: secrets, rank: 2, level: high}
+  - {id: SEC-3, finding: secrets, rank: 1, level: medium}
+  - {id: SEC-4, finding: secrets, rank: 0, level: low}
