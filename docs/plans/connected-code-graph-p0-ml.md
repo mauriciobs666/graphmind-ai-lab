@@ -221,10 +221,16 @@ does emit the callee's symbol at these macro-argument sites, but at the macro in
 position mapping reports them silent. §5.2's macro-argument rule recovers 15 of the 22 (13 untagged
 sites: 11). The remaining 7: the 5 uncompiled-branch sites, an `EXPECT_CALL(..).WillOnce` chain and
 a `std::numeric_limits<float>::quiet_NaN` call. Pilot: 28 + 15 = 43 of 50 raw (0.86), 43 of 45
-adjusted (0.956). Over the 500 sample sites: 196 silent strictly; the rule recovers 125 of them
-(a name-and-window match, whose false-match rate is unmeasured), the other 71 being 37 under
-non-guard `#if`, 9 macro-callee sites outside `#if` and 25 neither; adjusted coverage 429/454
-= 0.945. Decision: googletest stays, the mapping rule and the class list above apply.
+adjusted (0.956, Wilson [0.85, 0.99]); 4 of the 15 rest on the type-and-constructor clause of §5.2,
+and without it the pilot is 39/50 raw and 39/44 = 0.886 adjusted, below 0.90. The pilot (n = 45) is
+too small to carry the verdict alone; the 500-site sample, which the committed `ref.jsonl` gives
+and which does not depend on the pilot, sets it. Over the 500 sample sites: 196 silent strictly;
+the rule recovers 123 of them (a name-and-window match, whose false-match rate is unmeasured; 10 rest
+on the type-and-constructor clause) and leaves 73: 29 under non-guard `#if`, 9 macro-callee sites
+outside `#if`, 3 `ambiguous` and 32 in no class. Comparable share 427/500 (0.854); adjusted
+coverage 427/462 = 0.924 (Wilson [0.90, 0.94]), and 417/462 = 0.903 without the clause. The
+verdict therefore passes with or without the clause, and the pilot's marginal pass is not relied on.
+Decision: googletest stays, the mapping rule and the class list above apply.
 Rejected: changing criteria to find another corpus. Every other candidate in `corpora.yaml` fails a
 criterion that guards something real (spdlog: a Kafka client, §3.3 rule 4; yaml-cpp 82.9k and quill
 69.2k lines: C3's memory ceiling, unmeasured for Joern; pistache: needs a libcurl the truth image
@@ -513,7 +519,14 @@ matched to the site by file, line and callee name. A site with no reference occu
 non-local, non-definition occurrence in the window from the first line of its outermost enclosing
 macro invocation to the site's name line, whose last descriptor name equals the site's callee name.
 One distinct symbol in the window: that is the site's `static`, with `relaxed: true`. Two or more
-distinct symbols: `silent`, tagged `ambiguous`, and not counted as covered. The strict position
+distinct symbols: `silent`, tagged `ambiguous`, and not counted as covered. **Type and constructor:**
+the pair `P/X#` and `P/X#X(h).` that `scip-clang` emits at one token counts as one symbol (flagged
+`typeCtorMerged`): the brief's target for a constructor call is the type, so both name the same
+in-corpus entity. False-match risk: a window mention of the type that is not the site's call, for
+example `X` as a type argument beside a call named `X`; the labelled target would still be the same
+class, so the cost is a falsely agreeing site, not a wrong target. The clause applies to 10 of the 500
+sample sites and 4 of the pilot's. Stopping condition: at S57, if ≥ 3 of those 10 sites are
+adjudicated as reference errors, the clause is withdrawn and they become `ambiguous`. The strict position
 mapping applies everywhere else. The agreement rate is reported separately for `relaxed` sites.
 
 ### 5.3 Census truths (no labeller)
