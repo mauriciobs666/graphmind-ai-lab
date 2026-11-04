@@ -1700,9 +1700,29 @@ def csharp_generic_classes(row: dict) -> list[str]:
     tags = []
     if row.get("calleeName") == "nameof":
         tags.append("nameof")
-    if "<" in row["callText"]:
+    if _ends_in_type_arguments(row["callText"]):
         tags.append("generic-callee")
     return tags
+
+
+def _ends_in_type_arguments(call_text: str) -> bool:
+    """True iff the callee text ends in a balanced `<...>` list that follows an identifier (`a.B<int>`, `new C<T>`,
+    `F<Func<int, int>>`). A `<` elsewhere (a comparison in an argument, a generic argument inside a receiver call) does not
+    make the callee generic."""
+    t = call_text.rstrip()
+    if not t.endswith(">"):
+        return False
+    depth = 0
+    for i in range(len(t) - 1, -1, -1):
+        c = t[i]
+        if c == ">":
+            depth += 1
+        elif c == "<":
+            depth -= 1
+            if depth == 0:
+                before = t[:i].rstrip()
+                return bool(before) and (before[-1].isalnum() or before[-1] == "_")
+    return False
 
 
 def _site_node(lang: str, row: dict, cache: dict):
@@ -1785,6 +1805,28 @@ def site_tags(lang: str, row: dict, cache: dict) -> list[str]:
     return tags
 
 
+def c5_rows(lang: str, pilot: list[dict], rows_by_site: dict[str, dict]) -> list[dict]:
+    """The per-site C5 pilot answers (truth/<lang>.c5-rows.jsonl): everything `pilot_coverage` reads, so the figures in
+    truth/<lang>.c5.json re-derive from committed files alone (this file + truth/<lang>.c5-pilot.jsonl). `tags` are the
+    site tags of a silent site outside the closed classes (the informational counts); they need the corpus to compute."""
+    cache: dict = {}
+    out = []
+    for p in pilot:
+        r = rows_by_site[p["siteId"]]
+        silent = r["static"]["kind"] == "silent"
+        out.append({"pilotOrdinal": p["pilotOrdinal"], "siteId": p["siteId"], "kind": r["static"]["kind"],
+                    "relaxed": bool(r.get("relaxed")), "ambiguous": bool(r.get("ambiguous")),
+                    "typeCtorMerged": bool(r.get("typeCtorMerged")), "byConstruction": list(r.get("byConstruction") or []),
+                    "tags": [t for t in site_tags(lang, p, cache) if t not in CLOSED_CLASSES.get(lang, ())] if silent else []})
+    return out
+
+
+def c5_rows_by_site(rows: list[dict]) -> dict[str, dict]:
+    """Rows as `pilot_coverage` reads them, rebuilt from truth/<lang>.c5-rows.jsonl."""
+    return {r["siteId"]: {"static": {"kind": r["kind"]}, "relaxed": r["relaxed"], "ambiguous": r["ambiguous"],
+                          "byConstruction": r["byConstruction"], "tags": r["tags"]} for r in rows}
+
+
 def pilot_coverage(lang: str, pilot: list[dict], rows_by_site: dict[str, dict]) -> dict:
     """C5 (ML §3.2): share of the 50-site pilot with a reference occurrence under §5.2's mapping (`coverage`, raw; a
     `relaxed` macro-argument match counts), and the adjusted figure that leaves the sites tagged into a closed
@@ -1813,9 +1855,8 @@ def pilot_coverage(lang: str, pilot: list[dict], rows_by_site: dict[str, dict]) 
     info: dict[str, int] = {}
     for p, r in zip(pilot, rows):
         if r["static"]["kind"] == "silent":
-            for t in site_tags(lang, p, cache):
-                if t not in CLOSED_CLASSES.get(lang, ()):
-                    info[t] = info.get(t, 0) + 1
+            for t in (r["tags"] if "tags" in r else [t for t in site_tags(lang, p, cache) if t not in CLOSED_CLASSES.get(lang, ())]):
+                info[t] = info.get(t, 0) + 1
     res["silentInformationalTags"] = dict(sorted(info.items()))
     res["note"] = ("ML §3.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than "
                    f"{EXCLUSION_CAP} excluded sites means the reference is blind to too much of the frame (a C5 failure). "
@@ -1826,6 +1867,9 @@ def pilot_coverage(lang: str, pilot: list[dict], rows_by_site: dict[str, dict]) 
 # ------------------------------------------------------------------ C# generic-site audit draw (ML §3.2, prefix ccg-p0a-v1-gen|)
 
 GEN_AUDIT_K = 40
+
+
+def c5_rows_path(lang): return HERE / "truth" / f"{lang}.c5-rows.jsonl"
 
 
 def gen_audit_path(lang): return HERE / "truth" / f"{lang}.gen-audit.jsonl"
@@ -2156,7 +2200,51 @@ FLOW_SOURCES = {"data": {"param", "call"}, "control": {"cond"}}
 FLOW_SINKS = {"data": {"call", "ret", "cond"}, "control": {"call", "ret", "cond"}}
 
 
-def _flow_endpoint_errs(e, role: str, kind: str, m: dict, text: str, ctext: str) -> list[str]:
+RETURN_TYPES = {"return_statement", "return_expression"}
+_FACT_CACHE: dict = {}
+
+
+def flow_src_dir(lang: str) -> Path:
+    return src_dir(lang)
+
+
+def method_facts(lang: str, m: dict) -> Optional[dict]:
+    """Structure of a flow-sample method from the corpus tree-sitter parse (harness side, not the labeller's):
+    `params` = the text of each declared parameter (receiver excluded; a C# `this` parameter is shifted out),
+    `reliable` = False when the method's parse holds an error node (a macro in the signature, or a macro-named "function"): then the index/ordinal
+    checks are skipped. `returns` = the method's own `return`s (nested functions and lambdas excluded). None when the corpus file or
+    the method cannot be found."""
+    f = flow_src_dir(lang) / m["path"]
+    key = (str(f), m["qname"], m["lineStart"])
+    if key in _FACT_CACHE:
+        return _FACT_CACHE[key]
+    facts = None
+    if f.is_file():
+        data = f.read_bytes()
+        k, tree = parse_file(lang, m["path"], data)
+        for d in enumerate_defs(lang, m["path"], data, k, tree.root_node):
+            if d.qname == m["qname"] and d.lineStart == m["lineStart"]:
+                params = [t for t in (_txt(c) for c in _params_of(lang, d.node)) if t not in ("*", "/")]     # python separators are not parameters
+                if lang == "csharp" and params and re.match(r"this\s", params[0]):
+                    params = params[1:]
+                nested = FN_TYPES[lang] | ANON_TYPES[lang]
+                rets = 0
+                stack = list(d.node.children)
+                while stack:
+                    x = stack.pop()
+                    if x.type in nested:
+                        continue
+                    rets += x.type in RETURN_TYPES
+                    stack.extend(x.children)
+                nn = _name_node(lang, d.node)
+                macro_named = lang == "cpp" and nn is not None and re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", _txt(nn)) is not None     # `MACRO(args) {` parsed as a function
+                facts = {"params": params, "returns": rets, "reliable": not d.node.has_error and not macro_named}
+                break
+    _FACT_CACHE[key] = facts
+    return facts
+
+
+def _flow_endpoint_errs(e, role: str, kind: str, m: dict, text: str, ctext: str, facts: Optional[dict] = None) -> list[str]:
     if not isinstance(e, dict) or e.get("point") not in FLOW_ENDPOINTS:
         return [f"{role}: bad point"]
     p = e["point"]
@@ -2172,8 +2260,19 @@ def _flow_endpoint_errs(e, role: str, kind: str, m: dict, text: str, ctext: str)
     if "line" in e and not (m["lineStart"] <= e["line"] <= m["lineEnd"]):
         errs.append(f"{role}: line {e['line']} outside {m['lineStart']}-{m['lineEnd']}")
     if p == "param":
-        if e["index"] < -1 or not isinstance(e["name"], str) or not e["name"]:
+        nm = e["name"]
+        if e["index"] < -1 or not isinstance(nm, str) or not nm:
             errs.append(f"{role}: bad param index/name")
+        else:
+            bare = nm.lstrip("*&.")
+            word = r"(?<![\w$])" + re.escape(bare) + r"(?![\w$])"
+            if not bare or not (re.search(word, text) or (e["index"] == -1 and bare == "this")):
+                errs.append(f"{role}: param name {nm!r} is not a word of the method")
+            elif facts is not None and facts["reliable"] and e["index"] >= 0:
+                if e["index"] >= len(facts["params"]):
+                    errs.append(f"{role}: param index {e['index']} beyond the {len(facts['params'])} declared parameter(s)")
+                elif not re.search(word, facts["params"][e["index"]]):
+                    errs.append(f"{role}: param {e['index']} is not named {nm!r}")
     elif p == "call":
         nm = e["calleeName"]
         if not isinstance(nm, str) or not nm or e["ordinal"] < 0:
@@ -2183,6 +2282,8 @@ def _flow_endpoint_errs(e, role: str, kind: str, m: dict, text: str, ctext: str)
     elif p == "ret":
         if e["ordinal"] < 0:
             errs.append(f"{role}: bad ret ordinal")
+        elif facts is not None and facts["reliable"] and e["ordinal"] >= max(facts["returns"], 1):
+            errs.append(f"{role}: ret ordinal {e['ordinal']} beyond the method's {facts['returns']} return(s)")
     else:
         c = e["code"]
         if not isinstance(c, str) or not c.strip() or len(c) > 200 or ws(c) not in ctext:
@@ -2193,7 +2294,10 @@ def _flow_endpoint_errs(e, role: str, kind: str, m: dict, text: str, ctext: str)
 def cmd_flowcheck(lang: str) -> dict:
     """Schema-validate labels/<lang>-flow.jsonl against sample/<lang>-flow.jsonl (opens only those two files).
     Checks ordinal order and resumability, endpoint shapes, kind/endpoint compatibility, lines in span, evidence
-    length, source != sink, duplicate pairs; counts pairs. Advisory counts (ML §8.4's 120-pair floor) are not errors."""
+    length (a citation has a digit or >= 3 word characters; one with no digit is only counted, `evidenceNoLine`), source != sink, duplicate pairs; counts pairs. Advisory counts (ML §8.4's 120-pair floor) are not errors.
+    Param names/indices and `ret` ordinals are checked against the corpus parse (`method_facts`, the fetched tree);
+    without it those checks are skipped and `structural` < `labelled`, which keeps `complete` false. `complete` also
+    needs every method to carry a pair (S56's done-condition: >= 1 pair per method); `withoutPair` stays visible."""
     sample = read_jsonl(flow_path(lang))
     rows = []
     errs: list[str] = []
@@ -2206,7 +2310,8 @@ def cmd_flowcheck(lang: str) -> dict:
             except json.JSONDecodeError as ex:
                 errs.append(f"line {i}: not JSON ({ex.msg})")
                 break
-    stats = {"data": 0, "control": 0, "unsure": 0, "withPair": 0, "withoutPair": 0}
+    stats = {"data": 0, "control": 0, "unsure": 0, "withPair": 0, "withoutPair": 0, "evidenceNoLine": 0}
+    structural = 0
     for k, (i, o) in enumerate(rows):
         pre = f"line {i}"
         if k >= len(sample):
@@ -2220,6 +2325,8 @@ def cmd_flowcheck(lang: str) -> dict:
             errs.append(f"{pre}: expected ordinal {m['ordinal']} {m['qname']}")
             continue
         text, ctext = m["source"], ws(m["source"])
+        facts = method_facts(lang, m)
+        structural += facts is not None
         seen = set()
         if not isinstance(o["pairs"], list):
             errs.append(f"{pre}: pairs not a list")
@@ -2234,7 +2341,13 @@ def cmd_flowcheck(lang: str) -> dict:
                 continue
             if not isinstance(p["evidence"], str) or not p["evidence"].strip() or len(p["evidence"]) > 300:
                 errs.append(f"{pp}: evidence missing or > 300 chars")
-            ee = _flow_endpoint_errs(p["source"], "source", p["kind"], m, text, ctext) + _flow_endpoint_errs(p["sink"], "sink", p["kind"], m, text, ctext)
+            elif not re.search(r"\d", p["evidence"]):
+                if len(re.findall(r"\w", p["evidence"])) < 3:
+                    errs.append(f"{pp}: evidence is not a citation (no digit and fewer than 3 word characters)")
+                else:
+                    stats["evidenceNoLine"] += 1
+            ee = (_flow_endpoint_errs(p["source"], "source", p["kind"], m, text, ctext, facts)
+                  + _flow_endpoint_errs(p["sink"], "sink", p["kind"], m, text, ctext, facts))
             errs += [f"{pp}: {e}" for e in ee]
             key = (p["kind"], jdump(p["source"]), jdump(p["sink"]))
             if p["source"] == p["sink"]:
@@ -2254,7 +2367,8 @@ def cmd_flowcheck(lang: str) -> dict:
             if not (isinstance(u, dict) and set(u) == {"line", "construct"} and type(u["line"]) is int and isinstance(u["construct"], str) and 0 < len(u["construct"]) <= 120):
                 errs.append(f"{pre}: bad unlisted entry")
     pairs = stats["data"] + stats["control"]
-    return {"lang": lang, "methods": len(sample), "labelled": len(rows), "complete": len(rows) == len(sample) and not errs,
+    return {"lang": lang, "methods": len(sample), "labelled": len(rows), "structural": structural,
+            "complete": len(rows) == len(sample) and not errs and stats["withoutPair"] == 0 and structural == len(rows),
             "pairs": pairs, **stats, "belowFloor120": pairs < 120, "errors": errs[:60], "nErrors": len(errs)}
 
 
@@ -2278,6 +2392,16 @@ def firewall_scan() -> list[str]:
                     bad.append(f"{p.name}:{i}: forbidden key {sorted(ks & {'static', 'impls', 'tool', 'toolVersion', 'targets', 'resolved', 'res', 'nm', 'joern', 'truth'})}")
                     break
     return bad
+
+
+_ROOT_PREFIX = re.compile(r"/[^\s`'\"]*?(?:/cpg)?(?=/(?:spikes/frontend-fitness|\.ccg-work)/)")
+
+
+def same_modulo_root(committed: str, generated: str) -> bool:
+    """A brief embeds absolute paths (sample file, corpus root, label file). Equal when the texts are equal after the checkout
+    root in front of `[/cpg]/spikes/frontend-fitness/` and `[/cpg]/.ccg-work/` is replaced by a placeholder on both sides, so a
+    relocated checkout (or a copy of the spike directory) verifies; only the root moves, any other difference in a path or in the text still differs."""
+    return _ROOT_PREFIX.sub("<ROOT>", committed) == _ROOT_PREFIX.sub("<ROOT>", generated)
 
 
 def cmd_verify(langs: list[str]) -> dict:
@@ -2307,13 +2431,13 @@ def cmd_verify(langs: list[str]) -> dict:
                 problems.append(f"{lang}: flow sample differs")
             if lang in CENSUS_LANGS and (not flow_tier2_path(lang).exists() or build_flow_tier2(lang) != read_jsonl(flow_tier2_path(lang))):
                 problems.append(f"{lang}: flow tier-2 sample differs")
-        if brief_path(lang).exists() and brief_path(lang).read_text(encoding="utf-8") != fill_brief(lang):
+        if brief_path(lang).exists() and not same_modulo_root(brief_path(lang).read_text(encoding="utf-8"), fill_brief(lang)):
             problems.append(f"{lang}: brief differs")
         if validate_brief(brief_path(lang).read_text(encoding="utf-8") if brief_path(lang).exists() else "", lang):
             problems.append(f"{lang}: brief invalid")
         if flow_brief_path(lang).exists():
             ftxt = flow_brief_path(lang).read_text(encoding="utf-8")
-            if ftxt != fill_flow_brief(lang):
+            if not same_modulo_root(ftxt, fill_flow_brief(lang)):
                 problems.append(f"{lang}: flow brief differs")
             if validate_flow_brief(lang, ftxt):
                 problems.append(f"{lang}: flow brief invalid")
@@ -2324,9 +2448,11 @@ def cmd_verify(langs: list[str]) -> dict:
 # ------------------------------------------------------------------ refmap command (C5 and ref.jsonl)
 
 def cmd_refmap(lang: str, tool_out: Path, tool_version: str, mode: str, module_path: str = "", repo_prefix: str = "",
-               exit_status: int = 0, docs_indexed: Optional[int] = None) -> dict:
-    """mode 'c5' maps the 50-site pilot and writes truth/<lang>.c5.json; mode 'ref' maps every sampled ordinal
-    and writes truth/<lang>.ref.jsonl."""
+               exit_status: int = 0, docs_indexed: Optional[int] = None, rows_only: bool = False) -> dict:
+    """mode 'c5' maps the 50-site pilot and writes truth/<lang>.c5.json and truth/<lang>.c5-rows.jsonl (the per-site
+    answers); with `rows_only` it writes only the rows file, keeps the c5.json (and its recordedAt, which gates the
+    Joern run) and reports whether the recomputed `pilot` block equals the committed one. Mode 'ref' maps every
+    sampled ordinal and writes truth/<lang>.ref.jsonl."""
     frame = read_jsonl(frame_path(lang))
     by_key = {r["siteKey"]: r for r in frame}
     if mode == "c5":
@@ -2344,7 +2470,13 @@ def cmd_refmap(lang: str, tool_out: Path, tool_version: str, mode: str, module_p
         tool_version = tool_version or j.get("metadata", {}).get("tool_info", {}).get("version", "")
     if mode == "c5":
         by_site = {r["siteId"]: r for r in rows}
-        cov = pilot_coverage(lang, pil, by_site)
+        crow = c5_rows(lang, pil, by_site)
+        cov = pilot_coverage(lang, pil, c5_rows_by_site(crow))
+        write_jsonl(c5_rows_path(lang), crow)
+        if rows_only:
+            old = json.loads((HERE / "truth" / f"{lang}.c5.json").read_text())["pilot"]
+            return {"lang": lang, "rows": len(crow), "pilotEqualsCommitted": cov == old,
+                    "differs": sorted(k for k in set(cov) | set(old) if cov.get(k) != old.get(k))}
         rec = {"lang": lang, "tool": rows[0]["tool"] if rows else None, "toolVersion": tool_version, "exitStatus": exit_status,
                "documentsIndexed": ndocs, "seedPrefix": "ccg-p0a-v1-c5|", "pilot": cov,
                "pilotKinds": {k: sum(1 for r in rows if r["static"]["kind"] == k) for k in sorted({r["static"]["kind"] for r in rows})},
@@ -2421,6 +2553,7 @@ def main(argv=None) -> int:
     s.add_argument("--module-path", default="")
     s.add_argument("--repo-prefix", default="")
     s.add_argument("--documents-indexed", type=int)
+    s.add_argument("--rows-only", action="store_true", help="c5 mode: write only truth/<lang>.c5-rows.jsonl and compare with the committed c5.json")
     s = sub.add_parser("verify")
     s.add_argument("langs", nargs="*", default=LANGS)
     a = ap.parse_args(argv)
@@ -2449,7 +2582,7 @@ def main(argv=None) -> int:
     elif a.cmd == "genaudit":
         r = cmd_genaudit(a.lang, a.select)
     elif a.cmd == "refmap":
-        r = cmd_refmap(a.lang, a.tool_output, a.tool_version, a.mode, a.module_path, a.repo_prefix, a.exit_status, a.documents_indexed)
+        r = cmd_refmap(a.lang, a.tool_output, a.tool_version, a.mode, a.module_path, a.repo_prefix, a.exit_status, a.documents_indexed, a.rows_only)
     elif a.cmd == "verify":
         r = cmd_verify([l for l in a.langs if (frame_path(l)).exists()])
         print(json.dumps(r, indent=1))

@@ -657,6 +657,10 @@ def flowenv(tmp_path, monkeypatch):
     monkeypatch.setattr(rf, "flow_label_path", lambda l: tmp_path / "labels" / f"{l}-flow.jsonl")
     monkeypatch.setattr(rf, "flow_brief_path", lambda l: tmp_path / "sample" / f"{l}-flow.brief.md")
     (tmp_path / "sample" / "x").write_text("")
+    for i in (1, 2, 3):                                     # the "corpus": m<i>.py holds FSRC at lines 10-13, as the sample says
+        (tmp_path / "src").mkdir(exist_ok=True)
+        (tmp_path / "src" / f"m{i}.py").write_text("\n" * 9 + FSRC + "\n")
+    monkeypatch.setattr(rf, "flow_src_dir", lambda l: tmp_path / "src")
     for l in FLOW_LANGS:
         (tmp_path / "sample" / f"{l}-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in _flow_sample()))
     return tmp_path
@@ -780,8 +784,9 @@ def _check(flowenv, rows, lang="python"):
 
 def test_flowcheck_accepts_valid_and_reports_counts(flowenv):
     r = _check(flowenv, [_lab(1, [GOOD_PAIR, CTRL]), _lab(2, [], noPairReason="no branch reaches a call"), _lab(3, [GOOD_PAIR], unlisted=[{"line": 11, "construct": "walrus"}])])
-    assert r["nErrors"] == 0 and r["complete"] is True and r["pairs"] == 3 and r["data"] == 2 and r["control"] == 1
-    assert r["unsure"] == 1 and r["withPair"] == 2 and r["withoutPair"] == 1 and r["belowFloor120"] is True
+    assert r["nErrors"] == 0 and r["complete"] is False and r["pairs"] == 3 and r["data"] == 2 and r["control"] == 1     # a method without a pair is not "complete"
+    assert r["unsure"] == 1 and r["withPair"] == 2 and r["withoutPair"] == 1 and r["belowFloor120"] is True and r["structural"] == 3
+    assert _check(flowenv, [_lab(1, [GOOD_PAIR, CTRL]), _lab(2, [GOOD_PAIR]), _lab(3, [GOOD_PAIR])])["complete"] is True
     assert _check(flowenv, [_lab(1)])["complete"] is False and _check(flowenv, [_lab(1)])["nErrors"] == 0     # resumable
     assert rf.cmd_flowcheck("go")["labelled"] == 0
 
@@ -821,11 +826,74 @@ def _pair(**over):
     ("bad-unlisted", [_lab(1, unlisted=[{"line": 11}])], "unlisted"),
     ("more-lines-than-methods", [_lab(1), _lab(2), _lab(3), _lab(4)], "more lines than methods"),
     ("unknown-top-key", [_lab(1, extra=1)], "keys"),
+    # F1: values a later join counts as misses
+    ("param-name-not-in-method", [_lab(1, [_pair(source={"point": "param", "index": 0, "name": "zzz_nonexistent"})])], "not a word of the method"),
+    ("param-garbage-name-and-index-7", [_lab(1, [_pair(source={"point": "param", "index": 7, "name": "zzz_nonexistent"})])], "not a word of the method"),
+    ("param-index-99", [_lab(1, [_pair(source={"point": "param", "index": 99, "name": "req"})])], "beyond the 2 declared"),
+    ("param-index-2-of-2", [_lab(1, [_pair(source={"point": "param", "index": 2, "name": "flag"})])], "beyond the 2 declared"),
+    ("param-name-of-another-index", [_lab(1, [_pair(source={"point": "param", "index": 1, "name": "req"})])], "param 1 is not named"),
+    ("ret-ordinal-5", [_lab(1, [dict(CTRL, sink={"point": "ret", "ordinal": 5, "line": 12})])], "beyond the method's 2 return"),
+    ("ret-ordinal-2-of-2", [_lab(1, [dict(CTRL, sink={"point": "ret", "ordinal": 2, "line": 12})])], "beyond the method's 2 return"),
+    ("evidence-dot", [_lab(1, [_pair(evidence=".")])], "not a citation"),
+    ("evidence-two-letters", [_lab(1, [_pair(evidence="if")])], "not a citation"),
 ])
 def test_flowcheck_rejects(flowenv, name, rows, frag):
     r = _check(flowenv, rows)
     assert r["nErrors"] >= 1 and any(frag in e for e in r["errors"]), (name, r["errors"])
     assert r["complete"] is False
+
+
+def test_flowcheck_accepts_boundary_values_the_f1_checks_must_not_reject(flowenv):
+    ok = [_pair(source={"point": "param", "index": 1, "name": "flag"}), _pair(evidence=":30"), _pair(evidence="L45-46", sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": 12}),
+          dict(CTRL, sink={"point": "ret", "ordinal": 1, "line": 13}), _pair(source={"point": "param", "index": 0, "name": "req"})]
+    assert _check(flowenv, [_lab(1, [ok[0]]), _lab(2, [ok[1], ok[2]]), _lab(3, [ok[3], ok[4]])])["nErrors"] == 0
+    r = _check(flowenv, [_lab(1, [_pair(evidence="no line cited here")])])
+    assert r["nErrors"] == 0 and r["evidenceNoLine"] == 1                       # counted, not an error
+
+
+def test_flowcheck_thirty_methods_of_empty_pairs_is_not_complete(flowenv):
+    rows = [dict(r, source=FSRC) for r in _flow_sample(30)]
+    (flowenv / "sample" / "python-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (flowenv / "src").mkdir(exist_ok=True)
+    for i in range(1, 31):
+        (flowenv / "src" / f"m{i}.py").write_text("\n" * 9 + FSRC + "\n")
+    r = _check(flowenv, [_lab(i, [], noPairReason="nothing flows") for i in range(1, 31)])
+    assert r["labelled"] == 30 and r["nErrors"] == 0 and r["withoutPair"] == 30 and r["complete"] is False
+
+
+def test_flowcheck_without_the_corpus_cannot_be_complete(flowenv, monkeypatch):
+    monkeypatch.setattr(rf, "flow_src_dir", lambda l: flowenv / "nowhere")
+    r = _check(flowenv, [_lab(1), _lab(2), _lab(3)])
+    assert r["structural"] == 0 and r["nErrors"] == 0 and r["complete"] is False
+
+
+def test_flowcheck_skips_index_and_ordinal_when_the_parse_is_unreliable(flowenv, monkeypatch):
+    real = rf.method_facts
+    monkeypatch.setattr(rf, "method_facts", lambda lang, m: dict(real(lang, m), reliable=False))
+    bad = _pair(source={"point": "param", "index": 99, "name": "req"})
+    assert _check(flowenv, [_lab(1, [bad])])["nErrors"] == 0
+    assert _check(flowenv, [_lab(1, [_pair(source={"point": "param", "index": 0, "name": "zzz_nonexistent"})])])["nErrors"] == 1      # the name word check needs no parse
+    assert _check(flowenv, [_lab(1, [dict(CTRL, sink={"point": "ret", "ordinal": 5, "line": 12})])])["nErrors"] == 0                  # nor is a ret ordinal judged against a parse we distrust
+
+
+def test_method_facts_counts_returns_and_params_per_language(tmp_path, monkeypatch):
+    monkeypatch.setattr(rf, "flow_src_dir", lambda l: tmp_path)
+    def facts(lang, name, code, qn):
+        (tmp_path / name).write_text(code)
+        return rf.method_facts(lang, {"path": name, "qname": f"{name}::{qn}", "lineStart": 1})
+    f = facts("python", "a.py", "def f(a, *, b):\n    def g():\n        return 1\n    return a\n", "f")
+    assert f["params"] == ["a", "b"] and f["returns"] == 1 and f["reliable"]            # nested return and the bare `*` separator do not count
+    f = facts("kotlin", "a.kt", "fun f(a: Int): Int {\n  if (a > 1) return 2\n  return a\n}\n", "f")
+    assert f["returns"] == 2 and len(f["params"]) == 1
+    f = facts("go", "a.go", "package p\nfunc f(a, b int) int {\n  return a\n}\n", "f")
+    assert f is None                                                                    # lineStart 1 is not the func's line: no silent match
+    (tmp_path / "b.cs").write_text("class C {\n static int F(this string s, int x) { return x; }\n static int G(int x) { return x; }\n}\n")
+    ext = rf.method_facts("csharp", {"path": "b.cs", "qname": "b.cs::C.F", "lineStart": 2})
+    assert ext["params"] == ["int x"] and ext["returns"] == 1                           # the extension `this` parameter is the receiver, index -1
+    assert rf.method_facts("csharp", {"path": "b.cs", "qname": "b.cs::C.G", "lineStart": 3})["params"] == ["int x"]
+    (tmp_path / "c.go").write_text("package p\nfunc f(a, b int) int {\n  return a\n}\n")
+    g = rf.method_facts("go", {"path": "c.go", "qname": "c.go::f", "lineStart": 2})
+    assert g["params"] == ["a", "b"] and g["returns"] == 1                              # grouped Go names are one parameter each
 
 
 def test_flowcheck_boundaries_whitespace_length_and_complete(flowenv):
@@ -1011,3 +1079,344 @@ def test_verify_checks_the_tier2_flow_sample(tmp_path, monkeypatch):
     assert "javascript: flow tier-2 sample differs" in rf.cmd_verify(["javascript"])["problems"]
     alt.unlink()
     assert "javascript: flow tier-2 sample differs" in rf.cmd_verify(["javascript"])["problems"]
+
+
+# ---------------------------------------------------------------- C5 pilot answers are committed: figures re-derive from files alone (gate review F3, F10)
+
+C5_LANGS = ["python", "javascript", "java", "kotlin", "csharp", "go", "cpp"]
+
+
+@pytest.mark.parametrize("lang", C5_LANGS)
+def test_c5_figures_rederive_from_committed_files_only(lang, monkeypatch):
+    monkeypatch.setattr(rf, "WORK", Path("/nonexistent-ccg-work"))
+    monkeypatch.setattr(rf, "CORPORA", Path("/nonexistent-ccg-work/corpora"))
+    monkeypatch.setattr(rf, "site_tags", lambda *a, **k: pytest.fail("pilot_coverage must not parse the corpus when the rows carry tags"))
+    pilot = rf.read_jsonl(FF / "truth" / f"{lang}.c5-pilot.jsonl")
+    rows = rf.read_jsonl(rf.c5_rows_path(lang))
+    rec = json.loads((FF / "truth" / f"{lang}.c5.json").read_text())
+    assert [r["pilotOrdinal"] for r in rows] == [p["pilotOrdinal"] for p in pilot] == list(range(1, 51))
+    assert [r["siteId"] for r in rows] == [p["siteId"] for p in pilot]
+    got = rf.pilot_coverage(lang, pilot, rf.c5_rows_by_site(rows))
+    assert got == rec["pilot"]
+    assert {k: sum(1 for r in rows if r["kind"] == k) for k in sorted({r["kind"] for r in rows})} == rec["pilotKinds"]
+
+
+@pytest.mark.parametrize("lang", C5_LANGS)
+def test_c5_rows_stay_out_of_the_labeller_visible_tree(lang):
+    assert (FF / "truth" / f"{lang}.c5-rows.jsonl").exists() and not list((FF / "sample").glob("*c5*"))
+    assert not list((FF / "frame").glob("*c5*"))
+    for r in rf.read_jsonl(rf.c5_rows_path(lang)):
+        assert set(r) == {"pilotOrdinal", "siteId", "kind", "relaxed", "ambiguous", "typeCtorMerged", "byConstruction", "tags"}
+
+
+def test_c5_rows_change_moves_the_recomputed_figures():
+    pilot = rf.read_jsonl(FF / "truth" / "cpp.c5-pilot.jsonl")
+    rows = rf.read_jsonl(rf.c5_rows_path("cpp"))
+    base = rf.pilot_coverage("cpp", pilot, rf.c5_rows_by_site(rows))
+    i = next(k for k, r in enumerate(rows) if r["kind"] == "internal")
+    rows[i] = dict(rows[i], kind="silent")
+    moved = rf.pilot_coverage("cpp", pilot, rf.c5_rows_by_site(rows))
+    assert moved["withReference"] == base["withReference"] - 1 and moved["silent"] == base["silent"] + 1 and moved != base
+
+
+def test_c5_rows_builder_records_what_pilot_coverage_reads(monkeypatch):
+    monkeypatch.setattr(rf, "site_tags", lambda lang, p, cache: ["generic-callee", "error-region"])
+    pilot = [{"pilotOrdinal": 1, "siteId": "a"}, {"pilotOrdinal": 2, "siteId": "b"}]
+    rows = rf.c5_rows("csharp", pilot, {"a": {"static": {"kind": "silent"}, "byConstruction": ["generic-callee"]},
+                                         "b": {"static": {"kind": "internal"}, "relaxed": True, "typeCtorMerged": True}})
+    assert rows[0] == {"pilotOrdinal": 1, "siteId": "a", "kind": "silent", "relaxed": False, "ambiguous": False,
+                       "typeCtorMerged": False, "byConstruction": ["generic-callee"], "tags": ["error-region"]}
+    assert rows[1]["tags"] == [] and rows[1]["relaxed"] is True and rows[1]["typeCtorMerged"] is True
+
+
+@pytest.mark.parametrize("lang", C5_LANGS)
+def test_corpora_yaml_c5_pilot_block_equals_c5_json(lang):
+    import yaml
+    y = yaml.safe_load((FF / "corpora.yaml").read_text())["corpora"][lang]["evidence"]["C5"]["pilot"]
+    rec = json.loads((FF / "truth" / f"{lang}.c5.json").read_text())["pilot"]
+    rec.pop("note", None)
+    assert y == rec
+
+
+# ---------------------------------------------------------------- gate review F5/F6/F11: pinned values asserted from literals, not from the tables that generate them
+
+LIT_OPS = {"python": "`and`, `or`", "javascript": "`&&`, `||` and `??`", "java": "`&&`, `||`",
+           "kotlin": "`&&`, `||` and the elvis operator `?:` (Kotlin's null-coalescing operator; the infix functions `and`/`or` do not short-circuit and do not count)",
+           "csharp": "`&&`, `||` and `??`", "go": "`&&`, `||`", "cpp": "`&&`, `||`"}
+
+
+@pytest.mark.parametrize("lang", FLOW_LANGS)
+def test_flow_brief_operator_sentence_is_the_literal_per_language_list(flowenv, lang):
+    t = rf.fill_flow_brief(lang)
+    assert f"The short-circuit operators of {rf.LANG_LABEL[lang]} are {LIT_OPS[lang]}." in t
+    assert (rf.validate_flow_brief(lang, t.replace(LIT_OPS[lang], LIT_OPS["python"] if lang != "python" else LIT_OPS["java"], 1)) != [])
+
+
+def test_flow_brief_kotlin_names_the_elvis_symbol_and_go_both_operators(flowenv):
+    k = rf.fill_flow_brief("kotlin")
+    assert "elvis operator `?:`" in k and "`?.`" not in k.split("short-circuit operators of Kotlin")[1][:200]
+    g = rf.fill_flow_brief("go")
+    assert "are `&&`, `||`." in g and "`??`" not in g.split("short-circuit operators of Go")[1][:60]
+    assert "`??`" not in rf.fill_flow_brief("java").split("short-circuit operators of Java")[1][:60]
+
+
+GO_PREDECLARED_FUNCS = ["append", "cap", "clear", "close", "complex", "copy", "delete", "imag", "len", "make", "max", "min", "new",
+                        "panic", "print", "println", "real", "recover"]      # the Go spec's predeclared functions, typed here
+
+
+@pytest.mark.parametrize("name", GO_PREDECLARED_FUNCS)
+def test_go_every_predeclared_function_is_tagged_builtin(name):
+    assert rf.site_tags("go", {"callText": name, "calleeName": name}, {}) == ["builtin"]
+
+
+@pytest.mark.parametrize("name", ["Len", "newer", "printf", "foo", "string", "int", "error", "nil"])
+def test_go_other_names_are_not_builtin(name):
+    assert rf.site_tags("go", {"callText": name, "calleeName": name}, {}) == []
+
+
+def test_go_builtin_tag_is_by_callee_name_even_for_a_method_of_that_name():      # documented in matcher-table.md; pinned so a change is deliberate
+    assert rf.site_tags("go", {"callText": "x.max", "calleeName": "max"}, {}) == ["builtin"]
+
+
+@pytest.mark.parametrize("text,name,tags", [
+    ("_repo.Setup(x => x.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync", "ReturnsAsync", []),        # review F6: receiver argument, not the callee
+    ("list.Where(x => x < 3).ToList", "ToList", []),
+    ("a < b", "b", []),
+    ("svc.Get<IFoo>().ShouldNotBeNull", "ShouldNotBeNull", []),
+    ("a.B<int>", "B", ["generic-callee"]),
+    ("new C<T>", "C", ["generic-callee"]),
+    ("Run<Func<int, int>>", "Run", ["generic-callee"]),
+    ("x.Map<(int, string)>", "Map", ["generic-callee"]),                                                       # a tuple type argument holds parentheses
+    ("list.Where(x => x > 3).Select<int, string>", "Select", ["generic-callee"]),
+    ("a.B<int", "B", []),
+    ("<", "x", []),
+    ("(a + b) <c>", "c", []),                  # a '<' that does not follow an identifier is no type-argument list
+    ("<int>", "int", []),
+    ("a.B <int>", "B", ["generic-callee"]),     # whitespace-collapsed text may keep a space before the list
+])
+def test_csharp_generic_callee_tag_needs_a_type_argument_list_on_the_callee(text, name, tags):
+    assert rf.site_tags("csharp", {"callText": text, "calleeName": name}, {}) == tags
+
+
+# ---- compare(): `declared` labels, `impls`, notACall
+
+def _cmp(adj, label_callees, static, impls=(), **lab):
+    return adj.compare(_label(1, label_callees, **lab), _ref(1, static, impls))
+
+
+def test_compare_declared_label_agrees_with_a_declared_reference_and_differs_otherwise():
+    adj = _load_adj()
+    decl = lambda p, l: {"kind": "declared", "path": p, "qname": None, "defLine": l}  # noqa: E731
+    ref_decl = {"kind": "declared", "path": "a.py", "qname": "a.py::P.f", "defLine": 10}
+    assert _cmp(adj, [decl("a.py", 10)], ref_decl) == []
+    assert _cmp(adj, [decl("a.py", 11)], ref_decl) == ["disagree-targets"]
+    assert _cmp(adj, [decl("a.py", 10), INT("a.py", 30)], ref_decl) == ["disagree-targets"]
+    assert _cmp(adj, [decl("a.py", 10)], {"kind": "silent"}) == ["reference-silent"]
+    assert _cmp(adj, [INT("a.py", 10)], ref_decl) == []                     # internal vs declared at the same (path, defLine): same target
+
+
+def test_compare_dispatch_impls_must_match_the_label_set_exactly():
+    adj = _load_adj()
+    impls = [{"path": "a.py", "qname": "a.py::A.f", "defLine": 3}, {"path": "b.py", "qname": "b.py::B.f", "defLine": 8}]
+    disp = {"kind": "dispatch"}
+    assert _cmp(adj, [INT("a.py", 3), INT("b.py", 8)], disp, impls) == []
+    assert _cmp(adj, [INT("a.py", 3)], disp, impls) == ["disagree-targets"]
+    assert _cmp(adj, [INT("a.py", 3), INT("b.py", 9)], disp, impls) == ["disagree-targets"]
+    assert _cmp(adj, [{"kind": "external", "package": "x"}], disp, impls) == ["label-external-reference-internal"]
+    assert _cmp(adj, [INT("a.py", 3)], disp, []) == ["label-internal-reference-external"]       # without the impls the same label has no counterpart
+    d = {"kind": "declared", "path": "a.py", "qname": "q", "defLine": 3}
+    assert _cmp(adj, [INT("a.py", 3), INT("b.py", 8)], d, impls[1:]) == []                     # declared static + impls union
+
+
+def test_compare_declared_and_impls_reach_the_output_rows(tmp_path):
+    adj = _load_adj()
+    impls = [{"path": "b.py", "qname": "b.py::B.f", "defLine": 8}]
+    lab = _label(1, [{"kind": "declared", "path": "a.py", "qname": None, "defLine": 3}, INT("b.py", 8)])
+    _write(tmp_path, "java", [lab], [_ref(1, {"kind": "declared", "path": "a.py", "qname": "a.py::A.f", "defLine": 3}, impls)])
+    rows, _ = adj.build("java", tmp_path)
+    assert rows[0]["status"] == "agreed" and rows[0]["declaredLabel"] == [["a.py", 3]]
+    assert rows[0]["inCorpusLabel"] == [["b.py", 8]] and rows[0]["inCorpusReference"] == [["a.py", 3], ["b.py", 8]]
+
+
+@pytest.mark.parametrize("static,impls,reason", [
+    ({"kind": "external", "package": "fmt"}, [], ["label-notacall-reference-call"]),                       # review F11
+    ({"kind": "dispatch"}, [], ["label-notacall-reference-call"]),
+    ({"kind": "internal", "path": "a.py", "qname": "q", "defLine": 3}, [], ["disagree-targets"]),
+    ({"kind": "dispatch"}, [{"path": "a.py", "qname": "q", "defLine": 3}], ["disagree-targets"]),
+    ({"kind": "silent"}, [], []),
+])
+def test_compare_notacall_agrees_only_with_a_silent_reference(static, impls, reason):
+    assert _cmp(_load_adj(), [], static, impls, notACall=True) == reason
+
+
+def test_compare_notacall_unsure_and_dynamic_reasons_stay():
+    adj = _load_adj()
+    assert _cmp(adj, [], {"kind": "external", "package": "fmt"}, notACall=True, confidence="unsure", dynamic=True) == ["unsure", "dynamic", "label-notacall-reference-call"]
+
+
+def test_notacall_against_an_external_reference_needs_adjudication_end_to_end(tmp_path):
+    adj = _load_adj()
+    _write(tmp_path, "go", [_label(1, [], notACall=True)], [_ref(1, {"kind": "external", "package": "fmt"})])
+    rows, summary = adj.build("go", tmp_path)
+    assert rows[0]["status"] == "needs-adjudication" and summary["reasonCounts"] == {"label-notacall-reference-call": 1}
+
+
+# ---- <anon> exclusion in the flow population
+
+def test_flow_population_excludes_a_function_nested_in_an_anonymous_scope(tmp_path):
+    (tmp_path / "b.js").write_text("foo(function () {\n  function inner(a) {\n    if (a) {\n      g(a);\n    }\n    h(a);\n    k(a);\n  }\n});\n")
+    (tmp_path / "a.js").write_text("function named(a) {\n  if (a) {\n    g(a);\n  }\n  h(a);\n  k(a);\n}\n")
+    data = (tmp_path / "b.js").read_bytes()
+    key, tree = rf.parse_file("javascript", "b.js", data)
+    ds = rf.enumerate_defs("javascript", "b.js", data, key, tree.root_node)
+    assert [d.qname for d in ds] == ["b.js::<anon>#1.inner"] and ds[0].lineEnd - ds[0].lineStart + 1 == 7 and ds[0].nparams == 1    # the planted method is in the population before the filter
+    assert [m["qname"] for m in rf.flow_population("javascript", tmp_path, {})] == ["a.js::named"]
+
+
+# ---- make_adjudication_input.py firewall: a proof over its AST and over a run, not a bound (gate review F5(d))
+
+FS_ATTRS = {"read_text", "read_bytes", "write_text", "write_bytes", "glob", "rglob", "iterdir", "listdir", "scandir", "walk",
+            "open", "readlines", "read", "fromfile", "loadtxt"}
+DYNAMIC_NAMES = {"eval", "exec", "compile", "__import__", "getattr", "setattr", "globals", "locals", "vars", "input", "breakpoint"}
+
+
+def _allowed_path_expr(node, allowed_dirs, allowed_names):
+    """`root / "<dir>" / f"{lang}<suffix>"` and nothing else: returns (dir, literal pieces) or None."""
+    if not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div)):
+        return None
+    last = node.right
+    mid = node.left
+    if not (isinstance(mid, ast.BinOp) and isinstance(mid.op, ast.Div) and isinstance(mid.left, ast.Name) and mid.left.id == "root"):
+        return None
+    if not (isinstance(mid.right, ast.Constant) and mid.right.value in allowed_dirs):
+        return None
+    if not (isinstance(last, ast.JoinedStr) and len(last.values) == 2 and isinstance(last.values[0], ast.FormattedValue)
+            and isinstance(last.values[0].value, ast.Name) and last.values[0].value.id == "lang"
+            and isinstance(last.values[1], ast.Constant)):
+        return None
+    return mid.right.value, last.values[1].value
+
+
+def _adjudication_ast_violations(path):
+    """Everything that could make make_adjudication_input.py read a file other than labels/<lang>.jsonl and
+    truth/<lang>.ref.jsonl, found by walking its AST. Empty list = the module's reads are closed."""
+    tree = ast.parse(path.read_text())
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+    bad = []
+    for c in calls:                      # 1. nothing that reaches another file or builds a path/dynamic call
+        f = c.func
+        if isinstance(f, ast.Attribute) and f.attr in FS_ATTRS:
+            bad.append(f"file-system method {f.attr}")
+        if isinstance(f, ast.Name) and f.id in DYNAMIC_NAMES:
+            bad.append(f"dynamic call {f.id}")
+    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names} | \
+               {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    if not imported <= {"__future__", "argparse", "json", "sys", "pathlib"}:
+        bad.append(f"imports {sorted(imported)}")
+    if [n for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr in {"__dict__", "__builtins__", "__globals__"}]:
+        bad.append("introspection")
+    opens = [c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "open"]     # 2. exactly two, on a parameter
+    if not (len(opens) == 2 and all(isinstance(c.args[0], ast.Name) and c.args[0].id in {"path", "tmp"} for c in opens)):
+        bad.append(f"{len(opens)} open() calls or a built path")
+    reads = [c for c in calls if isinstance(c.func, ast.Name) and c.func.id == "read_jsonl"]   # 3. each call site: closed path shape
+    seen = set()
+    for c in reads:
+        got = _allowed_path_expr(c.args[0], {"labels", "truth"}, {"lang"})
+        if got is None or not (isinstance(c.args[1], ast.Constant) and c.args[1].value == got[0]):
+            bad.append(f"read_jsonl path {ast.dump(c.args[0])[:60]}")
+        else:
+            seen.add(got)
+    if seen != {("labels", ".jsonl"), ("truth", ".ref.jsonl")} or len(reads) != 2:
+        bad.append(f"read sites {sorted(seen)}")
+    for c in calls:                      # 4. a Path is built from __file__ only (the default --root)
+        if isinstance(c.func, ast.Name) and c.func.id == "Path" and not (len(c.args) == 1 and isinstance(c.args[0], ast.Name) and c.args[0].id == "__file__"):
+            bad.append("Path() from something other than __file__")
+    return bad
+
+
+def test_adjudication_script_reads_only_labels_and_truth_ref_proved_over_the_ast():
+    assert _adjudication_ast_violations(FF / "make_adjudication_input.py") == []
+
+
+def test_adjudication_script_opens_exactly_the_two_inputs_and_one_output_when_run(tmp_path, monkeypatch):
+    import builtins
+    import pathlib
+    adj = _load_adj()
+    _write(tmp_path, "go", [_label(1, [])], [_ref(1, {"kind": "silent"})])
+    (tmp_path / "results").mkdir()
+    (tmp_path / "results" / "go.json").write_text("{}")
+    (tmp_path / "sample").mkdir()
+    (tmp_path / "sample" / "go.jsonl").write_text("{}")
+    opened = []
+    real_open = builtins.open
+    monkeypatch.setattr(builtins, "open", lambda f, *a, **k: (opened.append(str(f)), real_open(f, *a, **k))[1])
+    for m in ("read_text", "read_bytes", "iterdir", "glob", "rglob"):
+        monkeypatch.setattr(pathlib.Path, m, lambda self, *a, _m=m, **k: pytest.fail(f"Path.{_m} used"))
+    assert adj.main(["go", "--root", str(tmp_path)]) == 0
+    assert sorted(opened) == sorted([str(tmp_path / "labels" / "go.jsonl"), str(tmp_path / "truth" / "go.ref.jsonl"),
+                                     str(tmp_path / "adjudication" / "go.input.tmp")])
+
+
+def test_adjudication_firewall_proof_rejects_planted_computed_path_reads(tmp_path):
+    """The proof's own check, against planted variants of the script: each must fail the AST test above."""
+    src = (FF / "make_adjudication_input.py").read_text()
+    plants = {
+        "read_text": src.replace("def label_targets", "def _x(root):\n    return (root / ('res' + 'ults') / 'a.json').read_text()\n\n\ndef label_targets", 1),
+        "glob": src.replace("def label_targets", "def _x(root):\n    return list(root.glob('*'))\n\n\ndef label_targets", 1),
+        "third-open": src.replace("def label_targets", "def _x(root):\n    return open(root / ('res' + 'ults'))\n\n\ndef label_targets", 1),
+        "computed-dir": src.replace('root / "truth" / f"{lang}.ref.jsonl", "truth"', 'root / ("tr" + "uth") / f"{lang}.ref.jsonl", "truth"', 1),
+        "os-import": src.replace("import json\n", "import json\nimport os\n", 1),
+    }
+    for name, text in plants.items():
+        assert text != src, name
+        p = tmp_path / f"{name}.py"
+        p.write_text(text)
+        assert _adjudication_ast_violations(p), name
+
+
+# ---------------------------------------------------------------- gate review F8: verify survives a relocated checkout
+
+def test_same_modulo_root_moves_only_the_checkout_root():
+    a = "x `/home/u/prg/lab/cpg/spikes/frontend-fitness/sample/go.jsonl` y `/home/u/prg/lab/cpg/.ccg-work/corpora/go/src` z"
+    b = a.replace("/home/u/prg/lab", "/srv/other/place")
+    assert rf.same_modulo_root(a, b) and rf.same_modulo_root(a, a)
+    assert rf.same_modulo_root(a, b.replace("/cpg/", "/"))                                       # a copy of the spike directory alone
+    assert not rf.same_modulo_root(a, b.replace("sample/go.jsonl", "sample/python.jsonl"))              # a different file is a difference
+    assert not rf.same_modulo_root(a, b.replace("corpora/go/src", "corpora/go/src2"))
+    assert not rf.same_modulo_root(a, b + " edited")
+    assert not rf.same_modulo_root(a, b.replace("/cpg/spikes", "/cpg/spike"))
+    assert rf.same_modulo_root("(and/or) `/` separators", "(and/or) `/` separators") and not rf.same_modulo_root("a/b", "a/c")
+
+
+def test_verify_accepts_briefs_written_under_another_checkout_root(tmp_path, monkeypatch):
+    langs = [l for l in ("python", "go") if rf.src_dir(l).exists() and rf.frame_path(l).exists()]
+    if not langs:
+        pytest.skip("corpora not fetched")
+    for l in langs:
+        for src, name in ((rf.brief_path(l), f"{l}.brief.md"), (rf.flow_brief_path(l), f"{l}-flow.brief.md")):
+            text = src.read_text(encoding="utf-8")
+            root = re.search(r"(/[^\s`]*?)/cpg/spikes/frontend-fitness/", text).group(1)           # the root the committed brief was written under
+            (tmp_path / name).write_text(text.replace(root, "/srv/relocated/checkout"))
+    monkeypatch.setattr(rf, "brief_path", lambda l: tmp_path / f"{l}.brief.md")
+    monkeypatch.setattr(rf, "flow_brief_path", lambda l: tmp_path / f"{l}-flow.brief.md")
+    assert "/srv/relocated/checkout" in (tmp_path / f"{langs[0]}.brief.md").read_text()
+    assert [p for p in rf.cmd_verify(langs)["problems"] if "brief" in p] == []
+    p = tmp_path / f"{langs[0]}.brief.md"
+    p.write_text(p.read_text().replace("/srv/relocated/checkout/cpg/spikes/frontend-fitness/labels", "/srv/relocated/checkout/cpg/spikes/frontend-fitness/labelz", 1))
+    assert f"{langs[0]}: brief differs" in rf.cmd_verify(langs)["problems"]
+
+
+def test_pilot_coverage_counts_informational_tags_from_rows_and_from_the_corpus_when_absent(monkeypatch):
+    pilot = [{"siteId": f"s{i}", "pilotOrdinal": i + 1} for i in range(4)]
+    rows = {"s0": {"static": {"kind": "silent"}, "tags": ["error-region"]},
+            "s1": {"static": {"kind": "silent"}, "tags": ["error-region", "other"]},
+            "s2": {"static": {"kind": "internal"}, "tags": ["error-region"]},                 # covered: not counted
+            "s3": {"static": {"kind": "silent"}, "tags": []}}
+    monkeypatch.setattr(rf, "site_tags", lambda *a, **k: pytest.fail("rows carry tags"))
+    assert rf.pilot_coverage("cpp", pilot, rows)["silentInformationalTags"] == {"error-region": 2, "other": 1}
+    rows2 = {k: {kk: vv for kk, vv in v.items() if kk != "tags"} for k, v in rows.items()}
+    monkeypatch.setattr(rf, "site_tags", lambda lang, p, cache: ["error-region", "preproc-branch"])
+    assert rf.pilot_coverage("cpp", pilot, rows2)["silentInformationalTags"] == {"error-region": 3}     # the closed class is not informational
+    out = rf.c5_rows_by_site([{"siteId": "a", "kind": "silent", "relaxed": False, "ambiguous": False, "typeCtorMerged": False,
+                               "byConstruction": [], "tags": ["error-region"]}])
+    assert out["a"]["tags"] == ["error-region"]

@@ -62,8 +62,21 @@ count as *absent in Joern* once S27 has inspected them one by one.
 
 The classes above are about **Joern** (`measure.sc`, S27). ML §3.2's C5 classes are about the **reference tool** being silent
 and are tagged by `run_fitness.py` from the source alone, never from a Joern result (`byConstruction` in `truth/<lang>.ref.jsonl`):
-Go `builtin`; C# `generic-callee` (a `<` in the callee text) and `nameof`; C++ `preproc-branch` (non-guard `#if` group) and
-`macro-callee` (an all-caps identifier callee). The two lists overlap in kind only: a C# generic call is silent in `scip-dotnet`
+Go `builtin`; C# `generic-callee` (the callee text **ends** in a balanced type-argument list that follows an identifier:
+`a.B<int>`, `new C<T>`, `F<Func<int, int>>`; a `<` elsewhere, e.g. `list.Where(x => x < 3).ToList` or a generic argument inside a
+receiver call, does not tag) and `nameof`; C++ `preproc-branch` (non-guard `#if` group) and `macro-callee` (an all-caps identifier
+callee).
+
+Two constants the ML note does not state, fixed by the harness (`site_tags`) and pinned by tests:
+
+* **Go `builtin` is tagged by `calleeName` alone** against the closed list of the Go spec's predeclared functions (`append cap clear
+  close complex copy delete imag len make max min new panic print println real recover`, 18). `callText` is not looked at, so a
+  method `x.max()` that is reference-silent would be tagged too and leave the denominator. All 22 builtin sites in the Go sample
+  and the one in the pilot are bare names, so the choice has changed no figure; requiring `callText == calleeName` is the
+  tightening if a corpus ever has such a method.
+* **The C++ include-guard rule.** A top-level `#if`/`#ifdef` whose byte span covers more than **0.8** of the file (`> 0.8 * len(file)`)
+  is treated as an include guard: its branches are not `preproc-branch`. Any other `preproc_if`/`ifdef`/`elif`/`else` ancestor of
+  the site is. 0.8 is the harness's choice (a guard wraps the whole file bar the license header; the constant is not in ML §3.2). The two lists overlap in kind only: a C# generic call is silent in `scip-dotnet`
 yet matched by name in Joern (row "C# `G` for `b.G<int>()`" above), and Go's generic instantiation is the reverse case.
 **Not observed:** how `c2cpg` positions a call written inside a macro's argument list on a corpus; the probe has only the
 top-level `M(2)` row. S27's census match rate will show it; no matcher rule was added for it here.

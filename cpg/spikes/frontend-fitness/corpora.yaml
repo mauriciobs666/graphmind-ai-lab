@@ -48,12 +48,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 107
         pilot:
-          pilotSites: 50
-          withReference: 45
-          silent: 5
+          adjustedCoverage: 0.9
+          adjustedDenominator: 50
+          ambiguous: 0
           coverage: 0.9
-          coverageIfStructuralSilentsExcluded: 0.9
-          silentTagged: {}
+          coverageStrict: 0.9
+          excluded: 0
+          excludedByClass: {}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 5
+          silentInformationalTags: {}
+          withReference: 45
         verdict: PASS
         recordedAtUtc: '2026-11-04T19:02:12Z'
       frameKinds:
@@ -109,12 +117,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 74
         pilot:                           # re-drawn from the 523-site prod frame, reference re-mapped (no tool re-run)
-          pilotSites: 50
-          withReference: 50
-          silent: 0
-          coverage: 1.0
           adjustedCoverage: 1.0
+          adjustedDenominator: 50
+          ambiguous: 0
+          coverage: 1.0
+          coverageStrict: 1.0
           excluded: 0
+          excludedByClass: {}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 0
+          silentInformationalTags: {}
+          withReference: 50
         verdict: PASS
         recordedAtUtc: '2026-11-04T20:44:41Z'
       frameKinds:
@@ -174,13 +190,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 112
         pilot:
-          pilotSites: 50
-          withReference: 45
-          silent: 5
+          adjustedCoverage: 0.9184
+          adjustedDenominator: 49
+          ambiguous: 0
           coverage: 0.9
-          coverageIfStructuralSilentsExcluded: 0.9184
-          silentTagged:
-            builtin: 1
+          coverageStrict: 0.9
+          excluded: 1
+          excludedByClass: {"builtin": 1}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 5
+          silentInformationalTags: {}
+          withReference: 45
         verdict: PASS
         recordedAtUtc: '2026-11-04T19:02:15Z'
       frameKinds:
@@ -238,12 +261,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 137
         pilot:
-          pilotSites: 50
-          withReference: 46
-          silent: 4
+          adjustedCoverage: 0.92
+          adjustedDenominator: 50
+          ambiguous: 0
           coverage: 0.92
-          coverageIfStructuralSilentsExcluded: 0.92
-          silentTagged: {}
+          coverageStrict: 0.92
+          excluded: 0
+          excludedByClass: {}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 4
+          silentInformationalTags: {}
+          withReference: 46
         verdict: PASS
         recordedAtUtc: '2026-11-04T19:02:12Z'
       frameKinds:
@@ -310,14 +341,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 1209
         pilot:
-          pilotSites: 50
-          withReference: 43
-          silent: 7
+          adjustedCoverage: 1.0
+          adjustedDenominator: 43
+          ambiguous: 0
           coverage: 0.86
-          coverageIfStructuralSilentsExcluded: 1.0
-          silentTagged:
-            generic-callee: 6
-            nameof: 1
+          coverageStrict: 0.86
+          excluded: 7
+          excludedByClass: {"generic-callee": 6, "nameof": 1}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 7
+          silentInformationalTags: {}
+          withReference: 43
         verdict: 'PASS under ML v1.4 §3.2: raw 0.86 (43/50); adjusted 43/43 = 1.00 after 7 by-construction exclusions (6 generic-callee, 1 nameof)'
         recordedAtUtc: '2026-11-04T19:02:13Z'
       frameKinds:
@@ -380,15 +417,21 @@ corpora:
         exitStatus: 0
         documentsIndexed: 142
         pilot:
+          adjustedCoverage: 0.9556
+          adjustedDenominator: 45
+          ambiguous: 0
+          coverage: 0.86
+          coverageStrict: 0.56
+          excluded: 5
+          excludedByClass: {"macro-callee": 1, "preproc-branch": 5}
+          exclusionCap: 10
+          exclusionCapExceeded: false
           pilotSites: 50
-          withReference: 28
-          silent: 22
-          coverage: 0.56
-          coverageIfStructuralSilentsExcluded: 0.6829
-          silentTagged:
-            error-region: 4
-            preproc-branch: 6
-        verdict: 'PASS under ML v1.4 §3.2/§5.2 (macro-argument rule): raw 0.86 (43/50), 0.56 strict (28/50, the figures above); adjusted 43/45 = 0.956 after 5 by-construction exclusions (5 preproc-branch, one also macro-callee)'
+          relaxed: 15
+          silent: 7
+          silentInformationalTags: {}
+          withReference: 43
+        verdict: 'PASS under ML v1.4 §3.2/§5.2 (macro-argument rule): raw 0.86 (43/50), 0.56 strict (28/50); adjusted 43/45 = 0.956 after 5 by-construction exclusions (5 preproc-branch, one also macro-callee)'
         recordedAtUtc: '2026-11-04T19:08:00Z'
       frameKinds:
         ctor: 296
@@ -467,12 +510,20 @@ corpora:
         exitStatus: 0
         documentsIndexed: 272
         pilot:
-          pilotSites: 50
-          withReference: 50
-          silent: 0
+          adjustedCoverage: 1.0
+          adjustedDenominator: 50
+          ambiguous: 0
           coverage: 1.0
-          coverageIfStructuralSilentsExcluded: 1.0
-          silentTagged: {}
+          coverageStrict: 1.0
+          excluded: 0
+          excludedByClass: {}
+          exclusionCap: 10
+          exclusionCapExceeded: false
+          pilotSites: 50
+          relaxed: 0
+          silent: 0
+          silentInformationalTags: {}
+          withReference: 50
         verdict: PASS
         recordedAtUtc: '2026-11-04T20:20:05Z'
       frameKinds:

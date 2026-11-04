@@ -28,8 +28,8 @@ the by-construction exclusions and the macro-argument rule (§4, §5).
 | `sample/<lang>-flow.jsonl` | the golden-flow draw (ML §6.4): up to 30 methods with source text (TS/JS: 12, no test files; plus `javascript-flow-tier2.jsonl`, 3 methods) | S56 labeller |
 | `flow-brief.template.md` (+ `flow-brief.patch.md`, how `flowbrief` was added) | the S56 labeller brief template (ML §6.4); only the text between its two BRIEF markers is used | harness, `data-scientist` |
 | `sample/<lang>-flow.brief.md` | the filled S56 brief (`flowbrief <lang>`: template + per-language slots + a redacted bundle-spec excerpt), pasted as is | S56 labeller |
-| `labels/<lang>-flow.jsonl` | the S56 labeller's output; `flowcheck <lang>` schema-checks it (opens only this file and `sample/<lang>-flow.jsonl`; exit 1 on any error; `belowFloor120` is advisory) | `data-scientist`, S28 |
-| `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the C5 record (raw and adjusted), the reference answer for every sampled ordinal | **not** labellers; S57 |
+| `labels/<lang>-flow.jsonl` | the S56 labeller's output; `flowcheck <lang>` schema-checks it (opens this file and `sample/<lang>-flow.jsonl`, and re-parses each method in the fetched corpus tree to bound `param` index/name and `ret` ordinal; exit 1 on any error; `belowFloor120` and `evidenceNoLine` are advisory; `complete` needs every method labelled, no error, a pair per method and the structural check run for every method) | `data-scientist`, S28 |
+| `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5-rows.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the reference's per-site answers on it (`kind`, `relaxed`, `ambiguous`, `typeCtorMerged`, `byConstruction`, informational `tags`), the C5 record (raw and adjusted) and the reference answer for every sampled ordinal. `c5.json`'s `pilot` block is recomputed from the first two files alone (`pilot_coverage`, no `.ccg-work/`; a test does it), and `corpora.yaml`'s `C5.pilot` blocks equal it | **not** labellers; S57 |
 | `truth/csharp.gen-audit.jsonl` | the hash order (`ccg-p0a-v1-gen|`) of the 74 reference-silent generic/`nameof` sites of the C# sample: the S57 audit draw (`genaudit`, §2) | **not** labellers; S57 |
 | `labels/ adjudication/ results/` | empty (`.gitkeep`): later steps write them | later steps |
 | `labels/superseded/` | `javascript.pre-census.jsonl` (the 500-site labels drawn before ML v1.6: 444 test sites, old stop rule) and `javascript/` (its labeller scripts); kept out of the truth, used only for the test-retest check on the 56 shared prod sites (ML §3.1) | `data-scientist` |
@@ -38,9 +38,13 @@ Scratch (gitignored, `cpg/.ccg-work/`): `corpora/<lang>/src` (the clean `git arc
 tree), `frontend-fitness/{truth-work,truth-out,rejected,probe*}`. Rejected-candidate artifacts live under `rejected/`.
 
 Reproduce: `run_fitness.py fetch <lang>` (needs only `corpora.yaml`), then `frame`, `draw`, `flowdraw`, `c5pilot`,
-`brief`, `flowbrief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...`. `run_fitness.py verify` re-derives every frame,
-sample, private, flow and brief file and compares: it passes for all six pinned corpora (and `srcDigest` equality).
-Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (see the suite).
+`brief`, `flowbrief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...` (`--mode c5 --rows-only` rewrites only `c5-rows.jsonl` and says whether the recomputed
+pilot block equals the committed `c5.json`). `run_fitness.py verify` re-derives every frame, sample, private, flow and brief
+file and compares: it passes for all seven pinned corpora (and `srcDigest` equality). The briefs embed the absolute checkout
+path (sample file, corpus root, label file); `verify` compares them with that root normalised on both sides, so a relocated
+checkout verifies (only the root moves; any other difference in a path still fails). Everything else is re-derived from
+`corpora.yaml` plus the fetched tree.
+Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (246 tests, 2026-11-04; `CCG_FF_DIR=<copy>` points the suite at a copy of this directory for mutation testing).
 
 ## 2. Definitions this harness fixes (where ML leaves a choice)
 
@@ -54,7 +58,9 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
   `call_expression.function`, `new T`. `calleeName`/`nameLine`/`nameColumn` = the last identifier outside type arguments.
 * **Not in the frame (blind spots, add to ML R2):** Kotlin `this(…)`/`super(…)` secondary-constructor delegation, C#
   `new(...)` target-typed creation, implicit calls, and every call inside a tree-sitter ERROR region the grammar cannot
-  recover (googletest: 10.5 % of frame sites sit in ERROR nodes; recorded per corpus as `framefilesWithParseErrors`).
+  recover (`framefilesWithParseErrors` records the files with parse errors per corpus). A call that tree-sitter does parse
+  inside an ERROR node **is** in the frame: 59 of the 500 sampled C++ sites (11.8 %) carry the informational `error-region` tag,
+  8 of them reference-silent (analyst count 2026-11-04; the 59 re-run by `site_tags` over the sample).
 * **Files:** spec3 §3.3 extensions minus declaration files (`.d.ts`, `.pyi`); **Kotlin `.kts` build scripts are not
   frame files** (their calls are Gradle-DSL calls into the Gradle API; `kotlin2cpg` takes `.kt`); C/C++ `.h` are parsed as
   C++, `.c` as C. A file is generated if its first five lines match `generated|do not edit` (case-insensitive) or its path
@@ -83,7 +89,9 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
   Applied to every still-silent site; `preproc-branch` / `macro-callee` are tagged afterwards on the sites that stay silent
   (ML §3.2: "still reference-silent after §5.2's mapping"). **One refinement of ours:** the type symbol `P/X#` and its
   constructor `P/X#X(h).` at one token count as one symbol (as the strict mapping prefers the method-like symbol); flagged
-  `typeCtorMerged`; without it the googletest pilot is 11 relaxed + 3 ambiguous (39/50 raw), with it 15 + 0.
+  `typeCtorMerged`; without it the googletest pilot is 12 relaxed + 3 ambiguous (40/50 raw, 40/45 = 0.889 adjusted), with it 15 + 0
+  (43/50, 43/45; the 3 merged pilot sites are in `truth/cpp.c5-rows.jsonl`). On the 500-site sample 10 sites carry the flag: 417/461
+  = 0.9046 adjusted without it (one formerly covered site, under `#if`, becomes an exclusion), 427/462 = 0.924 with it.
 * **C5 record (`truth/<lang>.c5.json`, `pilot`).** `coverage` = raw (the §5.2 mapping, `relaxed` counted), `coverageStrict` =
   without the rule, `adjustedCoverage` = `withReference / (50 − excluded)` where `excluded` = silent sites with a
   `byConstruction` class (a site counts once, `excludedByClass` tallies each class), `exclusionCapExceeded` = more than 10.
@@ -156,10 +164,20 @@ with the image's **gcc 13.3.0**; `scip-clang` (its own bundled Clang/LLVM 21.1.8
 ## 6. Firewall and what is not here
 
 * `sample/` and `frame/` carry no Joern output, no reference truth and no adjudication key; `verify` scans their JSON keys,
-  and the brief is ML §6.5 verbatim plus the spec3 §4.1 and the language's §4.2 excerpt (it names Joern only to forbid it).
+  and the brief is ML §6.5 verbatim plus the spec3 §4.1 and the language's §4.2 excerpt. **What the S26 briefs
+  (`sample/<lang>.brief.md`) actually say:** they name Joern three times (the prohibition, and two sentences inside the
+  verbatim spec excerpt: "Joern resolves `embedder.embed(…)` to the `Protocol` stub" and "how Joern's frontends model these is not
+  verified here") and carry review step ids ("S03", "S25", "N1", "N4", "N5", "analyst F2"; the C++ brief also "S06"). That
+  differs from the flow briefs, which mention Joern exactly once (enforced by `validate_flow_brief`). The labels for all
+  seven languages were written under these briefs, so they are not regenerated; the first excerpt sentence tells a blind
+  labeller how the comparison tool treats Protocol stubs, which is the `declared` decision, so S57 reads the `declared`
+  stratum (44 Java, 21 Kotlin, 11 C# labels) with that exposure in mind. A regenerated brief (TS/JS) should redact both
+  sentences as `flow_spec_excerpt` does (analyst F7).
   `sample/*.private.jsonl` and `frame/` hold harness-only fields and must stay out of every labeller's reach (ML §6.2).
 * `make_adjudication_input.py` imports only `argparse json sys pathlib`, opens two files (a reader limited to `labels/` and
-  `truth/`, and one writer limited to `adjudication/`), and is asserted so by `test_adjudication_script_static_firewall`.
+  `truth/`, and one writer limited to `adjudication/`), and is asserted so over its AST (every `open` on a parameter, each
+  `read_jsonl` call's path of the shape `root/<labels|truth>/<lang>…`, no `read_text`/`glob`/`os`/dynamic call, planted
+  variants fail) and over a run (the files opened are exactly the two inputs and the output tmp).
   `declared` labels are passed through unmapped (rule 8 needs source it must not open).
 * **Not produced by S25:** the census truths of ML §5.3 (definitions, value sets, decorators; S27 builds them from the same
   tree-sitter), the metrics of ML §7 (Wilson intervals, McNemar), `labels/`, `adjudication/`, `results/`.

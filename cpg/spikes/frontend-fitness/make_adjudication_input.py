@@ -22,6 +22,7 @@ Output line (no Joern columns):
   reasons "disagree-targets"   in-corpus sets differ (label vs reference static + impls)
           "reference-silent"   the label lists an in-corpus target and the reference found none
           "label-external-reference-internal" / "label-internal-reference-external"
+          "label-notacall-reference-call"  the label says not a call; the reference resolved the site (external, local, or dispatch without in-corpus target)
           "unsure"             label.confidence == "unsure" (or dynamic with no listed target)
           A label line that violates ML §6.5's schema rejects the whole file (stderr "REJECTED", exit 2).
           "dynamic"            label.dynamic is true
@@ -129,9 +130,10 @@ def compare(label: dict, ref: dict) -> list[str]:
     if label["dynamic"]:
         reasons.append("dynamic")
     if label["notACall"]:
-        # a site the labeller calls "not a call" agrees with a silent reference; anything else is a disagreement
-        if kind not in ("silent",) and r_inc:
-            reasons.append("disagree-targets")
+        # a site the labeller calls "not a call" agrees only with a silent reference: a reference that resolved the
+        # site (in-corpus target set, or an external package) says it is a call
+        if kind != "silent":
+            reasons.append("disagree-targets" if r_inc else "label-notacall-reference-call")
         return reasons
     if l_all != r_inc:
         if l_all and kind == "silent":
