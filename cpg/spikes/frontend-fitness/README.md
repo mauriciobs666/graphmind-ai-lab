@@ -9,8 +9,8 @@ measurement script. **No Joern run on any corpus has been made.** Order inside S
 first Joern run (ML §3.2); the C5 records below are all earlier than any Joern output, and the only Joern runs so far are
 on seven tiny synthetic probe projects (`matcher-table.md`).
 
-**State (2026-11-04): 6 of 7 languages are drawn and pass C5 under ML v1.4 (§3.2, §5.2); Kotlin has no corpus (§5).**
-Python, TS/JS, Go, Java pass raw; **C#** (0.86 raw, 43/43 adjusted) and **C++** (0.86 raw, 43/45 adjusted) pass after
+**State (2026-11-04): 7 of 7 languages are drawn and pass C5 under ML v1.4 (§3.2, §5.2).**
+Python, TS/JS, Go, Java, Kotlin pass raw; **C#** (0.86 raw, 43/43 adjusted) and **C++** (0.86 raw, 43/45 adjusted) pass after
 the by-construction exclusions and the macro-argument rule (§4, §5).
 
 ## 1. Layout
@@ -19,7 +19,7 @@ the by-construction exclusions and the macro-argument rule (§4, §5).
 |---|---|---|
 | `corpora.yaml` | the pinned corpora (SHA, `srcDigest` of the fetched tree), C1-C8 evidence, C5 verdicts, rejected candidates, the C++ build decision | harness, `data-scientist` |
 | `run_fitness.py` | the harness: `fetch census frame draw flowdraw c5pilot brief refmap verify joern` (`--help`) | harness |
-| `truth_run.sh`, `truth-scripts/{java,cpp}.sh` | reference-truth runs in the `ccg-toolchain-truth` image (network on, outside the sandbox) | harness |
+| `truth_run.sh`, `truth-scripts/{java,cpp,kotlin}.sh`, `truth-scripts/kotlin-cp.init.gradle` | reference-truth runs in the `ccg-toolchain-truth` image (network on, outside the sandbox) | harness |
 | `make_adjudication_input.py` | N4's input script. Opens only `labels/` and `truth/`; run by `data-scientist`, never by `graph-dba` | S57 |
 | `measure.sc`, `matcher-probe.sc`, `matcher-table.md` | Joern-side per-site answers (P0-18b); the probe that produced the matcher table | harness |
 | `frame/<lang>.jsonl` | the tree-sitter census frame (ML §4.1): every syntactic call site | **not** labellers |
@@ -98,7 +98,7 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
 | Java | `spring-petclinic/spring-petclinic-rest` @ `5180cc9b` (Apache-2.0) | 3,693 / 64 | scip-java 0.13.2 (manual: `javac -Xplugin:scip` + `aggregate`) | **0.92** PASS | 62 internal + 38 declared, 317 external, 83 silent |
 | C# | `ThreeMammals/Ocelot` @ `8b8fde19` (MIT) | 24,414 / 547 | scip-dotnet 0.2.16 | **0.86** raw (43/50), 43/43 = 1.00 adjusted (6 `generic-callee`, 1 `nameof`) PASS | 218 internal + 15 declared, 189 external, 78 silent (74 in a class: 62 generic, 12 `nameof`) |
 | C++ | `google/googletest` @ `a8380b01` (BSD-3) | 28,490 / 132 | scip-clang 0.4.1, gcc compdb | **0.86** raw (43/50; 0.56 strict), 43/45 = 0.956 adjusted (5 `preproc-branch`, one of them also `macro-callee`) PASS | 305 internal, 119 external, 3 local, 73 silent (123 `relaxed`, 3 `ambiguous`; 196 silent strictly) |
-| Kotlin | none (§5.3) | — | scip-kotlinc 0.13.2 (S24-proved) | — | — |
+| Kotlin | `amirroid/KtorAdmin` @ `f205b671` (MIT) | 7,754 / 260 | scip-kotlinc 0.13.2 via `kotlinc-scip` per module (§5.3) | **1.00** (50/50) PASS | 139 internal + 37 declared, 324 external, 0 silent |
 
 C1/C2/C3/C6-C8 and the exclusion greps are in `corpora.yaml` (all six: no OpenTelemetry/`microservices-demo`/broker
 hit; Ocelot 55.6k and googletest 54.4k code lines against the 60k ceiling; echo's C6 is the name-based approximation
@@ -131,7 +131,7 @@ with the image's **gcc 13.3.0**; `scip-clang` (its own bundled Clang/LLVM 21.1.8
   the 22 silent googletest pilot sites); the rest are 5 sites in uncompiled `#if` branches and 2 others (an `EXPECT_CALL(..)
   .WillOnce` chain, `std::numeric_limits<float>::quiet_NaN`). No AC-8-relevant claim and no language scope changes.
 
-## 5. Rulings (ML v1.4) and the open decision
+## 5. Rulings (ML v1.4) and the Kotlin record
 
 1. **C# C5, ruled: Ocelot kept.** `scip-dotnet` 0.2.16 emits no occurrence for a generic-named callee (`F<T>(…)`,
    `new C<T>(…)`, in-corpus generics included) or for `nameof`; those sites are the closed by-construction class of ML §3.2.
@@ -141,11 +141,13 @@ with the image's **gcc 13.3.0**; `scip-clang` (its own bundled Clang/LLVM 21.1.8
    adjusted; over the 500 sampled sites the rule recovers 123 of the 196 strictly silent (ML's prior says 125),
    leaving 73 silent, 3 of them `ambiguous` (per-translation-unit anonymous-namespace symbols of one name, e.g.
    `gtest_unittest.cc` is also compiled into `gtest_all_test.cc`), and 38 of the 73 in a class. Stopping conditions (ML §3.2) are S57's.
-3. **Kotlin has no corpus.** The reference needs a Gradle build of an external Kotlin repository; the harness permission
-   layer refused that action ("Code from External"), after `scip-java index --build-tool=gradle` had already failed on
-   `mokksy/mokksy` in `buildSrc`. Eleven candidates are rejected on stated criteria in `corpora.yaml`; the best static fit
-   is `mokksy/mokksy` (Kotlin Multiplatform with wasm/native targets, so `webMain`/`nativeMain` files would be
-   reference-silent). Needs the human's permission for the Gradle build and a choice of corpus.
+3. **Kotlin, `amirroid/KtorAdmin`.** JVM-only Gradle (modules `KtorAdminLibrary`, `sample`, `templates/fluent`), corpus Kotlin 2.4.20.
+   Reference = `./gradlew assemble testClasses` (exit 0), an init script printing each module's main + test compile classpath and
+   source roots, `kotlinc-scip` once per module, `scip-java aggregate`; pilot 50/50, 272 documents. Deviations for ML §3.2
+   C7 / §5.2: (a) the compiler is the S24-proved embeddable 2.4.21 (and its serialization plugin 2.4.21), not the corpus's
+   2.4.20; (b) `kotlinc-scip` per module, not `scip-java index --build-tool=gradle` (which failed in `buildSrc` on
+   `mokksy/mokksy`); (c) KSP-generated sources under `build/generated/ksp` are fed to `kotlinc-scip` but are not corpus files, so a
+   definition there is external to the labeller's clean tree. The Kotlin property-accessor qname blind spot (§2) still applies.
 
 ## 6. Firewall and what is not here
 

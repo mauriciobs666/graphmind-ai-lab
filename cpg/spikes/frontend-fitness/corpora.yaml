@@ -316,7 +316,7 @@ corpora:
           silentTagged:
             generic-callee: 6
             nameof: 1
-        verdict: FAIL (raw coverage < 0.90)
+        verdict: 'PASS under ML v1.4 §3.2: raw 0.86 (43/50); adjusted 43/43 = 1.00 after 7 by-construction exclusions (6 generic-callee, 1 nameof)'
         recordedAtUtc: '2026-11-04T19:02:13Z'
       frameKinds:
         ctor: 3432
@@ -386,7 +386,7 @@ corpora:
           silentTagged:
             error-region: 4
             preproc-branch: 6
-        verdict: FAIL (raw coverage < 0.90)
+        verdict: 'PASS under ML v1.4 §3.2/§5.2 (macro-argument rule): raw 0.86 (43/50), 0.56 strict (28/50, the figures above); adjusted 43/45 = 0.956 after 5 by-construction exclusions (5 preproc-branch, one also macro-callee)'
         recordedAtUtc: '2026-11-04T19:08:00Z'
       frameKinds:
         ctor: 296
