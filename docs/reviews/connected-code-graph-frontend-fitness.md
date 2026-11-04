@@ -147,3 +147,38 @@ S06 contact list: unscheduled, see F4. S47 depends on S56 (p0-2 rows S47, S56) a
 Target: root `REVIEW.md`, heading "Always check". Source: F1 (and F5).
 - A validator for hand-written labels or endpoints is probed with one planted well-formed but wrong value per field (nonexistent name, out-of-range index, empty citation) and one all-empty file; a field it only type-checks, whose value a later step joins on, is a finding.
 - A pinned value in a generated prompt or brief is asserted from a literal in the test, not from the table that generates it.
+
+## Pass 2 (S25 fix round `2b1120ce`, S59 `46cd8219`; HEAD `25964de8`)
+
+All re-checks on a relocated copy of `git archive HEAD` (scratchpad `p2/`), TS/JS and label content excluded. Baseline: `verify` on all seven languages from the relocated path: no problems; `test_frontend_fitness.py` 246 passed, `test_contact.py` passes at the real path.
+
+### Verdict
+
+**S25 (seven languages, labels excluded): approve.** The five-item stopping condition of §1 holds: (1) every planted `flowcheck` shape is rejected and a 30-method empty-pairs file is `complete: false`; (2) `c5-rows.jsonl` exists for all seven, regenerates byte-identical from the retained tool outputs, and `refmap --rows-only` reports `pilotEqualsCommitted: true` for C++, C#, Kotlin and Go; (3) ML v1.7 §3.2 records the exception with a withdrawal condition (sample-level adjusted coverage below 0.90) and keeps eShopOnWeb failed, with reasons I accept; (4) ML v1.7 §3.1 and R6 name the producer and extend the stratum to Python; the plan row is still unwritten (see G3); (5) my 12 re-run mutants: 11 killed by the suite, 1 survives (p07, below).
+
+**S59 (contact list): approve with suggestions.** `contact.json` re-derives; the open point is G1, which should be ruled before S27.
+
+### Dispositions (one line each)
+
+- **F1** fixed, deviation accepted. Planted on the fixed code: unknown name, index 99, index/name mismatch, `ret` ordinal 5, `evidence "."`, empty-pairs file: all rejected; a valid pair passes; a digit-less real citation ("passed to append") is advisory (`evidenceNoLine`). The digit-less rule is reasonable for `L45`-style labels. It is not noise: the committed Java flow labels carry 230 digit-less evidences and 16 evidence errors, Python and Go one method with no pair each, so `complete` is false for those three. Label content is `data-scientist`'s check, not this gate.
+- **F2** fixed (ML v1.7 §3.2). **F3** fixed (above). **F4** fixed in ML v1.7; plan row S59 is not in `p0-2.md` yet (G3).
+- **F5** fixed except p07: the elvis symbol, Go `||`, Go `new`, `declared`, `impls`, `<anon>` mutants are killed by named tests; the computed-path read is killed when it is a read (the new AST proof forbids `read_text` and the rest and passes the five planted variants). p07 only calls `.exists()` on a computed `results/` path; it leaks existence, not content. Accept; add `exists`/`is_file`/`stat` to `FS_ATTRS` if cheap.
+- **F6** fixed, deviation accepted: "balanced `<…>` ending the callee and following an identifier" rejects the receiver-argument and lambda-comparison sites and `Foo<int>.Bar`, accepts `a.B<int>`, `new List<T>`, `F<Func<int, int>>`. My mutant p09 is killed.
+- **F7** README corrected (three mentions stated); S26 briefs untouched, fine since S26 is done. **F8** fixed (relocated `verify` clean; the normaliser replaces only the checkout root, but its lazy prefix can swallow an altered path component directly in front of `/spikes/frontend-fitness/`: a nit). **F9** fixed (ML and README now 3 / 40/45 / 417/461). **F10** fixed (cpp block 43; java/python `c5.json` gained the adjusted keys; README 246). **F11** fixed (`label-notacall-reference-call`).
+- **F12** not applied, accepted: the six flow label files already exist, so a brief edit now would not match what was labelled; the `catch` ambiguity stays for S28's adjudicator. **F13** documented only, accepted (no effect on data).
+
+### New findings
+
+**G1 (major, S59) — S56 flow-method files are outside `contact.json`, and including them nearly removes Python's non-contact margin.** EP §8.2 lists S56's golden flow methods as contact "as a flow anchor"; `contact.json` states S47 will add them. ML v1.7 §3.1 passes a language only if the non-contact stratum has ≥ 50 internal sites. **Run** (reference-internal sites, labelled prefix 1..240 for Python; TS/JS full census): Python non-contact 93 with `contact.json` alone, **52** if the 23 flow-sample files are added; TS/JS 165 → 69. Python is then two sites above the floor on the reference count; the floor is on the final truth, which differs. Fix: `data-scientist` rules now whether the call-site strata exclude flow-method files (EP §8.2 reads "as a flow anchor", and S25/S26 labels are "not contact" in the same table), and `contact.json` records the ruling either way.
+
+**G2 (minor, S59) — sources.** The coordination ledger is not a legitimate source: it is a log, and whatever it records is in the S14/S30 documents; the same holds for ML v1.7, my review and `test_frontend_fitness.py` (synthetic snippets name `falkorchat.executor`). **Run:** deriving with those four excluded gives an identical file list for both corpora. Keeping them makes `--check` and the drift test fail on any later commit that edits them and names a new corpus file (this Pass 2 included, if it did). Recommend excluding them, or recording `derivedFrom: <sha>` and checking against that tree. Over-listing is in the safe direction: one file (`config.py`) is listed only through bundle-spec worked examples that EP §8.2 calls "not contact", and `tests/conftest.py` through a generic example sentence.
+
+**G3 (minor) — the S59 row.** ML says `architect` assigns the step id and row; `docs/plans/connected-code-graph-p0-2.md` has none and S27's inputs do not list `contact.json`. The ledger decision satisfies the condition above; the row must exist before S27 is dispatched.
+
+### S59 checks
+
+- **Re-derivation:** `make_contact.py --check` exits 0 at HEAD; counts Python 23 of 107 (22 of 104 in the frame), TS/JS 2 of 46 (2 of 40); `--summary` gives internal reference sites non-contact 164 of 254 (Python) and 165 of 181 (TS/JS).
+- **HEAD-blob-only:** by reading, the default path uses only `git ls-tree` and `git cat-file --batch` on HEAD; `--tree-root` reads a directory by design and is used by the mutation tests. Not traced at syscall level.
+- **Spot checks.** Listed: `executor.py`, `llm.py`, `modelconfig.py` (one review probe, `docs/reviews/connected-code-graph-p0-impl.md:1413`, which cites `llm.py:81`, `executor.py:181`, `modelconfig.py:236`: genuine), `tests/test_services.py` (slice report rows 248-250), `tests/test_app.py` (`docs/reviews/connected-code-graph-rule-pack-spec.md:39`, `tests/test_app.py:835-845`), `src/api/client.ts`. Unlisted (basename search over the same sources, zero hits): `repository.py`, `storefront.py`, `trigger.py`, `db.py`, `schemas.py`; `tests/test_api.py` has hits only as `fx-svc:tests/test_api.py` in fixture-named documents, correctly ignored.
+- **Mutants (8 on copies, real repo as `CONTACT_REPO`):** boundary `/`→`/:x` (c1), JS `__tests__` pattern dropped (c2), shortest-prefix dotted resolution (c3), fixtures guard off (c4), ambiguous basename (c5), self-dir exclusion off (c6): all killed, c1, c2, c3 and c5 change no real output and are caught by synthetic-tree tests. Survivors: c7 (`node_modules` exclusion, equivalent on HEAD, unpinned) and c8 (trailing `-`/`/` strip). Nits.
+- **Limitations list:** no bare-symbol or directory matches, drift, S56 files: the first two are bounds on a list that over-lists elsewhere and are fine; S56 is G1.
