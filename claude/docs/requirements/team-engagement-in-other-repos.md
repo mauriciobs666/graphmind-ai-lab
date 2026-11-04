@@ -26,6 +26,7 @@ The agents are installed user-level (`~/.claude/agents` symlinks to this repo's 
 - FR-5a: A learning from a new project can be told apart from this repo's own (project-specific vs. general), so `cobb` can judge which to promote; mechanism TBD (design).
 - FR-5b: A project can be marked, by the stakeholder, as **not feeding** the shared pool; learnings from such a project are not written to it.
 - FR-6: The team's skills are available in every new project automatically, with no per-project setup.
+- FR-7: The shared machinery (learnings pool, skills, MCP tools) stays maintained in the team repo as its single copy; a new project uses it from there and carries no copy of its own.
 
 ## Out of scope
 - Stack-specific support beyond the stack already used in this repo; the first new project uses the same stack.
@@ -37,6 +38,7 @@ The agents are installed user-level (`~/.claude/agents` symlinks to this repo's 
 - AC-3 (FR-5, FR-5a): Given a learning captured during AC-2, then it appears in the shared pool attributable to the new project, with no hand-wiring of the pool for that project.
 - AC-5 (FR-2b, FR-3): Given a project after kickoff, then it has no `REVIEW.md` or graph tooling until I (or `teco`) request one; when requested, it is added without redoing or overwriting the kickoff files.
 - AC-6 (FR-5b): Given a project marked as not feeding the pool, when an agent captures a learning during work, then nothing from that project is written to the shared pool.
+- AC-7 (FR-7): Given a new project after kickoff and build, then it contains no copy of the team's skills, pool or MCP tool definitions of its own beyond a reference to the team repo's, and a change made once in the team repo is what the new project uses.
 - AC-4 (FR-6): Given an empty repo with no setup of its own, when an agent needs one of the team's skills, then it finds and uses it.
 
 ## Open questions
@@ -58,3 +60,4 @@ None.
 2026-11-03 — May project-specific or private content reach the shared pool? → Shared by default, with a per-project opt-out (FR-5b, AC-6).
 2026-11-03 — Kickoff docs layout: full skeleton or as needed? → Only as needed, as today (AC-1).
 2026-11-03 — Readback confirmed by stakeholder; analyst verdict approve with suggestions, folded in → Status flipped to Ready for design.
+2026-11-03 — Should the new project carry its own copy of the shared machinery? → No: it uses the pool, skills and MCP tools from the team repo (FR-7, AC-7).
