@@ -1496,7 +1496,7 @@ What the fold changed, in one line each:
 - **Stakeholder decisions:** Q5's reading, the fresh-item floor E12, the flow-boundary rule E11 (§12).
 - **For P1:** depth bound ≥ 2 (Q1), the prompt glob list (Q3), the gate harness's floor, exposure
   record and four-field pre-registration comparison, and the `coreTreeHash` `*.md` condition (§15).
-- **Also for P1/S50:** the answer spec's carry-over items C1-C9 (`docs/plans/connected-code-graph-answer-spec.md`, "Carry-over to P1/S50"); the EP §10.4/§5.2 amendments they name (`data-scientist`, before S47/S49); the S22/S23 ACL findings for proposal §3.5 (`docs/plans/connected-code-graph-p0-graph.md` §6).
+- **Also for P1/S50:** the answer spec's carry-over items C1-C9 (`docs/plans/connected-code-graph-answer-spec.md`, "Carry-over to P1/S50"); the EP §10.4/§5.2 amendments they name (`data-scientist`, before S47/S49); the S22/S23 ACL findings for proposal §3.5 (`docs/plans/connected-code-graph-p0-graph.md` §6); the gate harness and AC-16 pin-and-replay code (EP v1.3 §5.2.1, §10.6, `docs/plans/connected-code-graph-eval-protocol-ml.md`), and S47 depends on EP v1.3 accepted (`CAP` is pre-registered with the held-out ambiguity set).
 
 ## 15. Ready to implement
 
