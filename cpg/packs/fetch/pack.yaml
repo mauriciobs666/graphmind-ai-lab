@@ -1,0 +1,20 @@
+# Paper pack: extracted mechanically from the YAML block of section 3 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.3); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: fetch
+version: 0.1.0
+kind: framework
+vocabVersion: "1.0"
+status: paper
+link: [{kind: http, matcher: path-template}]
+liftings:
+  - id: fetch-url
+    role: {kind: http, slot: url}
+    seeds: [{call: {callee: fetch, resolution: [external, unresolved]}, arg: a0}]
+    companions: [{role: verb, arg: a1.method, bareDefault: GET, unknown: "*"}]
+rules:
+  - id: http-client
+    match: {lifted: {lifting: fetch-url}}
+    extract: {url: {lifted: url}, verb: {lifted: verb}}
+    emit: [{consumes: {kind: http, key: "{verb} {url}"}}]

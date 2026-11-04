@@ -1,0 +1,27 @@
+# Paper pack: extracted mechanically from the YAML block of section 2 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.3); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: fastapi
+version: 0.1.0
+kind: framework
+vocabVersion: "1.0"
+status: paper
+link: [{kind: http, matcher: path-template}]
+mounts:
+  - {id: include-router, call: {callee: include_router}, scope: {imports: [{module: {prefix: fastapi}}]},
+     child: {arg: a0, resolves: factory-call}, prefix: {arg: kw.prefix, default: ""},
+     roots: [{call: {callee: FastAPI}, how: app, notWith: [{callee: APIRouter}]}],
+     constructorPrefix: [{call: {callee: APIRouter}, arg: kw.prefix}],
+     unmounted: {status: possible, reason: partial-key}, recordConditions: true}
+rules:
+  - id: route
+    match: {decorator: {form: decorator, name: {regex: '[A-Za-z_][A-Za-z0-9_]*\.(get|post|put|patch|delete|head|options|trace)'}}}
+    scope: {imports: [{module: {prefix: fastapi}}]}
+    extract: {verb: {group: 1, upper: true}, route: {firstOf: [{arg: a0}, {arg: kw.path}]}}
+    emit: [{provides: {kind: http, key: "{verb} {mount}{route}"}}]
+  - id: route-any-method
+    match: {decorator: {form: decorator, name: {regex: '[A-Za-z_][A-Za-z0-9_]*\.(api_route|route)'}}}
+    scope: {imports: [{module: {prefix: fastapi}}]}
+    extract: {verb: {literal: "*"}, route: {firstOf: [{arg: a0}, {arg: kw.path}]}}
+    emit: [{provides: {kind: http, key: "{verb} {mount}{route}"}}]

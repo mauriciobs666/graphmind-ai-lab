@@ -1,0 +1,46 @@
+# Reason-code registry (docs/plans/connected-code-graph-rule-pack-spec.md section 1.9; bundle spec3 section 7).
+#
+# One row per code: {code, status, "on"}. status is confirmed | possible | none. `"on"` lists where the code may
+# appear (the key is quoted: a bare `on` is the boolean True in YAML 1.1). A token is a bare edge or record name (`CONSUMES`, `Link`, `callsite`), or `<EDGE> <kind>` for an
+# edge restricted to one contract kind (`CONSUMES topic`, `PROVIDES topic`, `READS field`); the validator reads
+# only the four pack-emitted edges (PROVIDES, CONSUMES, READS, WRITES) and ignores the rest. A kind restriction
+# lives in the token because one code can mean different kinds on different edges (`runtime-built`: CONSUMES of
+# any kind, PROVIDES only of kind topic).
+#
+# Seeded by tests/test_rule_pack_schema.py::test_the_registry_file_is_the_seeded_registry from spec3 7.2 and 7.3,
+# spec section 1.9's table, the O-16 cells (PROVIDES topic on runtime-built and config-derived), spec3 7.4's
+# advisory-unscored and spec4's skippedFiles codes. A code absent here is not valid in a pack (N-9).
+- {code: resolved-call, status: confirmed, "on": [CALLS, callsite]}
+- {code: verdict-confirmed, status: confirmed, "on": [CALLS, Link, READS, WRITES]}
+- {code: intra-flow, status: confirmed, "on": [DATA]}
+- {code: resolved-receiver, status: confirmed, "on": ["READS field", "WRITES field"]}
+- {code: key-match, status: confirmed, "on": [CONSUMES, Link, PROVIDES]}
+- {code: lifted-role, status: confirmed, "on": [CONSUMES]}
+- {code: binding-confirmed, status: confirmed, "on": [Link]}
+- {code: name-match, status: possible, "on": [CALLS_NAME, callsite]}
+- {code: resolution-unverified, status: possible, "on": ["CALLS_NAME candidates of a resolved site"]}
+- {code: field-truncated, status: possible, "on": [DATA, fieldAccess]}
+- {code: field-name-match, status: possible, "on": ["READS field", "WRITES field"]}
+- {code: shell-dynamic, status: possible, "on": ["shell DATA", callsite]}
+- {code: runtime-built, status: possible, "on": [CONSUMES, READS, WRITES, valueSet, "PROVIDES topic"]}
+- {code: dynamic-import, status: possible, "on": ["CONSUMES library_api", "call reach"]}
+- {code: example-config, status: possible, "on": [Link, BOUND_BY, Finding]}
+- {code: prompt-mention, status: possible, "on": ["callsite (mention)", CONSUMES]}
+- {code: partial-key, status: possible, "on": [Link, PROVIDES, CONSUMES]}
+- {code: name-only-provider, status: possible, "on": [Link]}
+- {code: unknown-key, status: possible, "on": [Link]}
+- {code: binding-narrowed, status: possible, "on": [Link]}
+- {code: port-shared, status: possible, "on": [Link]}
+- {code: target-not-mapped, status: possible, "on": ["Link (TO_UNIT)"]}
+- {code: "flow-unavailable:<lang>", status: possible, "on": ["impact items"]}
+- {code: config-derived, status: possible, "on": ["CONSUMES topic", "PROVIDES topic"]}
+- {code: headers-unavailable, status: possible, "on": [CALLS_NAME]}
+- {code: possibly-reachable, status: possible, "on": ["dependency Finding"]}
+- {code: point-derived, status: none, "on": [valueSet]}
+- {code: unresolved-ref, status: none, "on": [valueSet]}
+- {code: spread-argument, status: none, "on": [valueSet]}
+- {code: value-set-cap, status: none, "on": [valueSet]}
+- {code: "severity-rule:<id>", status: none, "on": [Finding]}
+- {code: advisory-unscored, status: none, "on": [Finding]}
+- {code: test, status: none, "on": [header.skippedFiles]}
+- {code: frontend-ignore, status: none, "on": [header.skippedFiles]}

@@ -1,0 +1,38 @@
+# Paper pack: extracted mechanically from the YAML block of section 4 of
+# docs/plans/connected-code-graph-rule-pack-spec.md (v1.3); the one added line is `status: paper`
+# (no pack runtime or extractor is behind it yet). tests/test_rule_pack_schema.py pins the equality.
+packFormat: 1
+id: fastmcp
+version: 0.1.0
+kind: framework
+vocabVersion: "1.0"
+status: paper
+link: [{kind: mcp_tool, matcher: exact}]
+launch:
+  frameworkDefaults: [{command: {basename: uvicorn}, port: 8000, protocol: http}]
+  portFlags: [{command: {basename: uvicorn}, flags: ["--port"]}]
+  targetArg: [{index: 0, form: module-attr}]
+  envPorts:
+    - envVar: {regex: '(?:[A-Z][A-Z0-9]*_)*PORT'}
+      excludeVars: [{regex: '(?:REDIS|POSTGRES|PG|MYSQL|MONGO|KAFKA|FALKORDB|DB|DATABASE|AMQP|RABBITMQ|NATS)_(?:[A-Z0-9]+_)*PORT'}]
+      adoptedBy: same-file-launch
+  mountPaths:
+    - {call: {callee: mount}, path: {arg: a0},
+       app: {arg: a1, fromCall: {externalTarget: {glob: '**FastMCP.streamable_http_app'}}}, pathMatch: prefix}
+urlBindings:
+  - id: mcp-http
+    kinds: [mcp_tool]
+    urlSources:
+      - {config: {keyPath: {regex: 'mcpServers\.[^.]+\.url'}}}
+      - {callsite: {callee: streamablehttp_client}, arg: a0, scope: file}
+rules:
+  - id: tool
+    match: {decorator: {form: decorator, name: {regex: '[A-Za-z_][A-Za-z0-9_]*\.tool'}}}
+    scope: {imports: [{module: {prefix: mcp.server.fastmcp}}, {module: {prefix: fastmcp}}]}
+    extract: {tool: {firstOf: [{arg: kw.name}, {arg: a0}, {target: name}]}}
+    emit: [{provides: {kind: mcp_tool, key: "{tool}"}}]
+  - id: tool-call
+    match: {callsite: {callee: call_tool}}
+    scope: {imports: [{module: {prefix: mcp}}]}
+    extract: {tool: {arg: a0}}
+    emit: [{consumes: {kind: mcp_tool, key: "{tool}"}}]

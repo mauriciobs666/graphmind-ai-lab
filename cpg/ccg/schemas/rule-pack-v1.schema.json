@@ -1,0 +1,2063 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "urn:ccg:rule-pack-v1",
+ "title": "ccg rule pack v1: one cpg/packs/<id>/pack.yaml, loaded as data",
+ "description": "docs/plans/connected-code-graph-rule-pack-spec.md (format v1, section 1 and section 10). Unknown keys are rejected at every object. This schema is necessary but NOT sufficient: ccg/rulepack.py adds the RE2 subset of regex, the reason registry (ccg/registry/reasons.yaml), core-or-declared kinds, id = directory name, cross-references (lifting, query, slot), query joins, onUnknown defaults and the topic cells (O-16), signature samples and negatives, and the severity row derivation. A consumer that validates with this schema alone is not a validator.",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "packFormat": {
+   "const": 1
+  },
+  "id": {
+   "type": "string",
+   "pattern": "^[a-z][a-z0-9-]{0,39}$"
+  },
+  "version": {
+   "type": "string",
+   "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+  },
+  "kind": {
+   "enum": [
+    "framework",
+    "protocol",
+    "data-store",
+    "test-framework",
+    "security",
+    "infra-signatures",
+    "severity"
+   ]
+  },
+  "vocabVersion": {
+   "const": "1.0"
+  },
+  "status": {
+   "enum": [
+    "paper"
+   ]
+  },
+  "rules": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/rule"
+   }
+  },
+  "mounts": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/mount"
+   }
+  },
+  "liftings": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/lifting"
+   }
+  },
+  "embedded": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/embedded"
+   }
+  },
+  "launch": {
+   "$ref": "#/$defs/launch"
+  },
+  "urlBindings": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/urlBinding"
+   }
+  },
+  "vocab": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/vocab"
+   }
+  },
+  "link": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/link"
+   }
+  },
+  "queries": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/query"
+   }
+  },
+  "runtimes": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/runtimeEntry"
+   }
+  },
+  "signatures": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/signature"
+   }
+  },
+  "formula": {
+   "$ref": "#/$defs/formula"
+  },
+  "rows": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/row"
+   }
+  }
+ },
+ "required": [
+  "packFormat",
+  "id",
+  "version",
+  "kind",
+  "vocabVersion"
+ ],
+ "allOf": [
+  {
+   "if": {
+    "properties": {
+     "kind": {
+      "const": "severity"
+     }
+    },
+    "required": [
+     "kind"
+    ]
+   },
+   "then": {
+    "required": [
+     "formula",
+     "rows"
+    ],
+    "not": {
+     "anyOf": [
+      {
+       "required": [
+        "rules"
+       ]
+      },
+      {
+       "required": [
+        "runtimes"
+       ]
+      },
+      {
+       "required": [
+        "signatures"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "kind": {
+      "const": "infra-signatures"
+     }
+    },
+    "required": [
+     "kind"
+    ]
+   },
+   "then": {
+    "required": [
+     "runtimes",
+     "signatures"
+    ],
+    "not": {
+     "anyOf": [
+      {
+       "required": [
+        "rules"
+       ]
+      },
+      {
+       "required": [
+        "formula"
+       ]
+      },
+      {
+       "required": [
+        "rows"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "if": {
+    "properties": {
+     "kind": {
+      "enum": [
+       "severity",
+       "infra-signatures"
+      ]
+     }
+    },
+    "required": [
+     "kind"
+    ]
+   },
+   "else": {
+    "not": {
+     "anyOf": [
+      {
+       "required": [
+        "formula"
+       ]
+      },
+      {
+       "required": [
+        "rows"
+       ]
+      },
+      {
+       "required": [
+        "runtimes"
+       ]
+      },
+      {
+       "required": [
+        "signatures"
+       ]
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "$defs": {
+  "matcher": {
+   "description": "spec 1.3: one matcher per field; a bare string means exact; a list is any-of. The RE2 subset of `regex` is validator code (ccg.rulepack).",
+   "oneOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/matcher"
+     }
+    },
+    {
+     "$ref": "#/$defs/matcherObject"
+    }
+   ]
+  },
+  "matcherObject": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "exact": {
+     "type": "string"
+    },
+    "template": {
+     "type": "string"
+    },
+    "glob": {
+     "type": "string"
+    },
+    "prefix": {
+     "type": "string"
+    },
+    "basename": {
+     "type": "string"
+    },
+    "regex": {
+     "type": "string",
+     "maxLength": 256
+    },
+    "ignoreCase": {
+     "type": "boolean"
+    }
+   },
+   "oneOf": [
+    {
+     "required": [
+      "exact"
+     ]
+    },
+    {
+     "required": [
+      "template"
+     ]
+    },
+    {
+     "required": [
+      "glob"
+     ]
+    },
+    {
+     "required": [
+      "prefix"
+     ]
+    },
+    {
+     "required": [
+      "regex"
+     ]
+    },
+    {
+     "required": [
+      "basename"
+     ]
+    }
+   ],
+   "dependentSchemas": {
+    "ignoreCase": {
+     "required": [
+      "regex"
+     ]
+    }
+   }
+  },
+  "argPath": {
+   "type": "string",
+   "pattern": "^(a\\d+|kw\\.[A-Za-z_]\\w*|recv)(\\.[A-Za-z_]\\w*)*$"
+  },
+  "id": {
+   "type": "string",
+   "pattern": "^[a-z][a-z0-9-]*$"
+  },
+  "kind": {
+   "type": "string",
+   "pattern": "^[a-z][a-z0-9_]*$"
+  },
+  "fileRole": {
+   "enum": [
+    "primary",
+    "example",
+    "doc"
+   ]
+  },
+  "verb": {
+   "enum": [
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+    "TRACE",
+    "CONNECT",
+    "*"
+   ]
+  },
+  "emitStatus": {
+   "enum": [
+    "confirmed",
+    "possible"
+   ]
+  },
+  "args": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "arg": {
+      "$ref": "#/$defs/argPath"
+     },
+     "value": {
+      "$ref": "#/$defs/matcher"
+     }
+    },
+    "required": [
+     "arg"
+    ]
+   }
+  },
+  "decoratorClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "form": {
+     "$ref": "#/$defs/matcher"
+    },
+    "name": {
+     "$ref": "#/$defs/matcher"
+    },
+    "args": {
+     "$ref": "#/$defs/args"
+    },
+    "target": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "$ref": "#/$defs/matcher"
+      },
+      "name": {
+       "$ref": "#/$defs/matcher"
+      },
+      "parentKind": {
+       "$ref": "#/$defs/matcher"
+      }
+     },
+     "minProperties": 1
+    }
+   },
+   "minProperties": 1
+  },
+  "callClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "callee": {
+     "$ref": "#/$defs/matcher"
+    },
+    "callKind": {
+     "$ref": "#/$defs/matcher"
+    },
+    "resolution": {
+     "$ref": "#/$defs/matcher"
+    },
+    "externalTarget": {
+     "$ref": "#/$defs/matcher"
+    },
+    "args": {
+     "$ref": "#/$defs/args"
+    }
+   },
+   "minProperties": 1
+  },
+  "callsiteClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "callee": {
+     "$ref": "#/$defs/matcher"
+    },
+    "callKind": {
+     "$ref": "#/$defs/matcher"
+    },
+    "resolution": {
+     "$ref": "#/$defs/matcher"
+    },
+    "externalTarget": {
+     "$ref": "#/$defs/matcher"
+    },
+    "target": {
+     "$ref": "#/$defs/matcher"
+    },
+    "args": {
+     "$ref": "#/$defs/args"
+    }
+   },
+   "minProperties": 1
+  },
+  "configClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "format": {
+     "$ref": "#/$defs/matcher"
+    },
+    "keyPath": {
+     "$ref": "#/$defs/matcher"
+    },
+    "bindValue": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "launchClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "$ref": "#/$defs/matcher"
+    },
+    "command": {
+     "$ref": "#/$defs/matcher"
+    },
+    "args": {
+     "$ref": "#/$defs/args"
+    },
+    "port": {
+     "$ref": "#/$defs/matcher"
+    },
+    "envVar": {
+     "$ref": "#/$defs/matcher"
+    },
+    "mountPath": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "symbolClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "$ref": "#/$defs/matcher"
+    },
+    "name": {
+     "$ref": "#/$defs/matcher"
+    },
+    "qname": {
+     "$ref": "#/$defs/matcher"
+    },
+    "parentKind": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "markerClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "framework": {
+     "$ref": "#/$defs/matcher"
+    },
+    "kindHint": {
+     "$ref": "#/$defs/matcher"
+    },
+    "evidence": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "liftedClause": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "lifting": {
+     "$ref": "#/$defs/id"
+    }
+   },
+   "required": [
+    "lifting"
+   ]
+  },
+  "subjectMatch": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "decorator": {
+     "$ref": "#/$defs/decoratorClause"
+    },
+    "callsite": {
+     "$ref": "#/$defs/callsiteClause"
+    },
+    "config": {
+     "$ref": "#/$defs/configClause"
+    },
+    "launch": {
+     "$ref": "#/$defs/launchClause"
+    },
+    "symbol": {
+     "$ref": "#/$defs/symbolClause"
+    },
+    "marker": {
+     "$ref": "#/$defs/markerClause"
+    },
+    "lifted": {
+     "$ref": "#/$defs/liftedClause"
+    },
+    "query": {
+     "$ref": "#/$defs/id"
+    },
+    "evidence": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1,
+   "maxProperties": 1
+  },
+  "match": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/subjectMatch"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "anyOf": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "$ref": "#/$defs/subjectMatch"
+       }
+      }
+     },
+     "required": [
+      "anyOf"
+     ]
+    }
+   ]
+  },
+  "scope": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "imports": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "module": {
+        "$ref": "#/$defs/matcher"
+       },
+       "names": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       }
+      },
+      "required": [
+       "module"
+      ]
+     }
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "notPath": {
+     "$ref": "#/$defs/matcher"
+    },
+    "role": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/fileRole"
+     }
+    }
+   }
+  },
+  "expr": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "arg": {
+     "$ref": "#/$defs/argPath"
+    },
+    "literal": {
+     "type": "string"
+    },
+    "group": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 9
+    },
+    "target": {
+     "enum": [
+      "name",
+      "qname"
+     ]
+    },
+    "config": {
+     "enum": [
+      "keyPath",
+      "bindValue"
+     ]
+    },
+    "field": {
+     "type": "string",
+     "minLength": 1
+    },
+    "yield": {
+     "type": "string",
+     "minLength": 1
+    },
+    "lifted": {
+     "enum": [
+      "url",
+      "verb"
+     ]
+    },
+    "firstOf": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/expr"
+     }
+    },
+    "upper": {
+     "const": true
+    },
+    "onUnknown": {
+     "enum": [
+      "drop",
+      "partial",
+      "runtime-built",
+      "config-derived"
+     ]
+    },
+    "default": {
+     "type": "string"
+    }
+   },
+   "oneOf": [
+    {
+     "required": [
+      "arg"
+     ]
+    },
+    {
+     "required": [
+      "literal"
+     ]
+    },
+    {
+     "required": [
+      "group"
+     ]
+    },
+    {
+     "required": [
+      "target"
+     ]
+    },
+    {
+     "required": [
+      "config"
+     ]
+    },
+    {
+     "required": [
+      "field"
+     ]
+    },
+    {
+     "required": [
+      "yield"
+     ]
+    },
+    {
+     "required": [
+      "lifted"
+     ]
+    },
+    {
+     "required": [
+      "firstOf"
+     ]
+    }
+   ],
+   "dependentRequired": {
+    "upper": [
+     "group"
+    ]
+   }
+  },
+  "contractEmission": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "key": {
+     "type": "string",
+     "minLength": 1
+    },
+    "keyForm": {
+     "enum": [
+      "literal",
+      "glob",
+      "regex",
+      "template"
+     ]
+    },
+    "status": {
+     "$ref": "#/$defs/emitStatus"
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "required": [
+    "kind",
+    "key"
+   ]
+  },
+  "emission": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "provides": {
+     "$ref": "#/$defs/contractEmission"
+    },
+    "consumes": {
+     "$ref": "#/$defs/contractEmission"
+    },
+    "reads": {
+     "$ref": "#/$defs/contractEmission"
+    },
+    "writes": {
+     "$ref": "#/$defs/contractEmission"
+    },
+    "test": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "enum": [
+        "unit",
+        "integration",
+        "e2e"
+       ]
+      }
+     },
+     "required": [
+      "kind"
+     ]
+    },
+    "mark": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "as": {
+       "enum": [
+        "source",
+        "sink",
+        "sanitizer",
+        "auth-check",
+        "sensitive"
+       ]
+      },
+      "class": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "required": [
+      "as",
+      "class"
+     ]
+    },
+    "finding": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "finding": {
+       "enum": [
+        "injection",
+        "authorization",
+        "configuration",
+        "secrets"
+       ]
+      },
+      "class": {
+       "type": "string",
+       "minLength": 1
+      },
+      "target": {
+       "enum": [
+        "config",
+        "symbol"
+       ]
+      }
+     },
+     "required": [
+      "finding",
+      "class",
+      "target"
+     ]
+    },
+    "launches": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "target": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "required": [
+      "target"
+     ]
+    }
+   },
+   "minProperties": 1,
+   "maxProperties": 1
+  },
+  "rule": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "match": {
+     "$ref": "#/$defs/match"
+    },
+    "scope": {
+     "$ref": "#/$defs/scope"
+    },
+    "extract": {
+     "type": "object",
+     "additionalProperties": {
+      "$ref": "#/$defs/expr"
+     }
+    },
+    "emit": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/emission"
+     }
+    }
+   },
+   "required": [
+    "id",
+    "match",
+    "emit"
+   ]
+  },
+  "mount": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "id": {
+       "$ref": "#/$defs/id"
+      },
+      "call": {
+       "$ref": "#/$defs/callClause"
+      },
+      "scope": {
+       "$ref": "#/$defs/scope"
+      },
+      "child": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "arg": {
+         "$ref": "#/$defs/argPath"
+        },
+        "resolves": {
+         "enum": [
+          "factory-call"
+         ]
+        }
+       },
+       "required": [
+        "arg",
+        "resolves"
+       ]
+      },
+      "prefix": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "arg": {
+         "$ref": "#/$defs/argPath"
+        },
+        "default": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "arg"
+       ]
+      },
+      "roots": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "call": {
+          "$ref": "#/$defs/callClause"
+         },
+         "how": {
+          "enum": [
+           "app"
+          ]
+         },
+         "notWith": {
+          "type": "array",
+          "items": {
+           "$ref": "#/$defs/callClause"
+          }
+         }
+        },
+        "required": [
+         "call",
+         "how"
+        ]
+       }
+      },
+      "constructorPrefix": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "call": {
+          "$ref": "#/$defs/callClause"
+         },
+         "arg": {
+          "$ref": "#/$defs/argPath"
+         }
+        },
+        "required": [
+         "call",
+         "arg"
+        ]
+       }
+      },
+      "unmounted": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "status": {
+         "$ref": "#/$defs/emitStatus"
+        },
+        "reason": {
+         "type": "string",
+         "minLength": 1
+        }
+       },
+       "required": [
+        "status",
+        "reason"
+       ]
+      },
+      "recordConditions": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "id",
+      "call"
+     ],
+     "dependentRequired": {
+      "prefix": [
+       "child"
+      ]
+     }
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "id": {
+       "$ref": "#/$defs/id"
+      },
+      "kind": {
+       "enum": [
+        "class-decorator"
+       ]
+      },
+      "decorator": {
+       "$ref": "#/$defs/decoratorClause"
+      },
+      "scope": {
+       "$ref": "#/$defs/scope"
+      },
+      "prefix": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "arg": {
+         "$ref": "#/$defs/argPath"
+        }
+       },
+       "required": [
+        "arg"
+       ]
+      },
+      "recordConditions": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "id",
+      "kind",
+      "decorator",
+      "prefix"
+     ]
+    }
+   ]
+  },
+  "lifting": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "role": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "kind": {
+       "$ref": "#/$defs/kind"
+      },
+      "slot": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "required": [
+      "kind",
+      "slot"
+     ]
+    },
+    "seeds": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "call": {
+        "$ref": "#/$defs/callClause"
+       },
+       "arg": {
+        "$ref": "#/$defs/argPath"
+       }
+      },
+      "required": [
+       "call",
+       "arg"
+      ]
+     }
+    },
+    "companions": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "role": {
+        "enum": [
+         "verb"
+        ]
+       },
+       "arg": {
+        "$ref": "#/$defs/argPath"
+       },
+       "bareDefault": {
+        "$ref": "#/$defs/verb"
+       },
+       "unknown": {
+        "$ref": "#/$defs/verb"
+       }
+      },
+      "required": [
+       "role",
+       "arg"
+      ]
+     }
+    }
+   },
+   "required": [
+    "id",
+    "role",
+    "seeds"
+   ]
+  },
+  "embedded": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "call": {
+     "$ref": "#/$defs/callClause"
+    },
+    "arg": {
+     "$ref": "#/$defs/argPath"
+    },
+    "language": {
+     "enum": [
+      "sql",
+      "cypher"
+     ]
+    },
+    "scope": {
+     "$ref": "#/$defs/scope"
+    }
+   },
+   "required": [
+    "call",
+    "arg",
+    "language"
+   ]
+  },
+  "launch": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "frameworkDefaults": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "$ref": "#/$defs/matcher"
+       },
+       "port": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535
+       },
+       "protocol": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "required": [
+       "command",
+       "port",
+       "protocol"
+      ]
+     }
+    },
+    "portFlags": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "$ref": "#/$defs/matcher"
+       },
+       "flags": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "string",
+         "minLength": 1
+        }
+       }
+      },
+      "required": [
+       "command",
+       "flags"
+      ]
+     }
+    },
+    "targetArg": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "command": {
+        "$ref": "#/$defs/matcher"
+       },
+       "index": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 99
+       },
+       "form": {
+        "enum": [
+         "module-attr"
+        ]
+       }
+      },
+      "required": [
+       "index",
+       "form"
+      ]
+     }
+    },
+    "envPorts": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "envVar": {
+        "$ref": "#/$defs/matcher"
+       },
+       "excludeVars": {
+        "type": "array",
+        "items": {
+         "$ref": "#/$defs/matcher"
+        }
+       },
+       "adoptedBy": {
+        "enum": [
+         "same-file-launch"
+        ]
+       }
+      },
+      "required": [
+       "envVar",
+       "adoptedBy"
+      ]
+     }
+    },
+    "mountPaths": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "call": {
+        "$ref": "#/$defs/callClause"
+       },
+       "path": {
+        "$ref": "#/$defs/expr"
+       },
+       "app": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "arg": {
+          "$ref": "#/$defs/argPath"
+         },
+         "fromCall": {
+          "$ref": "#/$defs/callClause"
+         }
+        },
+        "required": [
+         "arg",
+         "fromCall"
+        ]
+       },
+       "pathMatch": {
+        "enum": [
+         "exact",
+         "prefix"
+        ]
+       }
+      },
+      "required": [
+       "call",
+       "path",
+       "app",
+       "pathMatch"
+      ]
+     }
+    }
+   }
+  },
+  "urlBinding": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "kinds": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/kind"
+     }
+    },
+    "urlSources": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "oneOf": [
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "config": {
+          "$ref": "#/$defs/configClause"
+         }
+        },
+        "required": [
+         "config"
+        ]
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "callsite": {
+          "$ref": "#/$defs/callsiteClause"
+         },
+         "arg": {
+          "$ref": "#/$defs/argPath"
+         },
+         "scope": {
+          "enum": [
+           "file",
+           "unit"
+          ]
+         }
+        },
+        "required": [
+         "callsite",
+         "arg"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "required": [
+    "id",
+    "kinds",
+    "urlSources"
+   ]
+  },
+  "vocab": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "keyNorm": {
+     "type": "string",
+     "minLength": 1
+    },
+    "example": {
+     "type": "string",
+     "minLength": 1
+    },
+    "transport": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]*$"
+    }
+   },
+   "required": [
+    "kind",
+    "keyNorm",
+    "example"
+   ]
+  },
+  "link": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "$ref": "#/$defs/kind"
+    },
+    "matcher": {
+     "enum": [
+      "exact",
+      "path-template",
+      "glob",
+      "prefix",
+      "regex"
+     ]
+    }
+   },
+   "required": [
+    "kind",
+    "matcher"
+   ]
+  },
+  "query": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/id"
+    },
+    "from": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "as": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+       },
+       "record": {
+        "enum": [
+         "callsite",
+         "cond",
+         "configEntry",
+         "constant",
+         "controlledBy",
+         "data",
+         "decorator",
+         "dependency",
+         "fieldAccess",
+         "file",
+         "import",
+         "launchFact",
+         "param",
+         "ret",
+         "schemaEntry",
+         "symbol",
+         "testMarker",
+         "valueSet"
+        ]
+       },
+       "where": {
+        "type": "object",
+        "additionalProperties": {
+         "$ref": "#/$defs/matcher"
+        }
+       }
+      },
+      "required": [
+       "as",
+       "record",
+       "where"
+      ]
+     },
+     "maxItems": 4
+    },
+    "yield": {
+     "type": "object",
+     "minProperties": 1,
+     "propertyNames": {
+      "pattern": "^[a-z]\\w*$"
+     },
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^\\$[a-z][a-z0-9_]*\\.[A-Za-z_]\\w*(\\.[A-Za-z_]\\w*)*$"
+     }
+    }
+   },
+   "required": [
+    "id",
+    "from",
+    "yield"
+   ]
+  },
+  "runtimeEntry": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "runtime": {
+     "enum": [
+      "python",
+      "node",
+      "jvm",
+      "dotnet",
+      "go",
+      "any"
+     ]
+    },
+    "regex": {
+     "type": "string",
+     "maxLength": 256
+    }
+   },
+   "required": [
+    "runtime",
+    "regex"
+   ]
+  },
+  "signature": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^(python|node|jvm|dotnet|go|any)-[a-z][a-z0-9-]*$"
+    },
+    "class": {
+     "enum": [
+      "connection-refused",
+      "dns-failure",
+      "timeout",
+      "oom-kill",
+      "tls-error",
+      "third-party-exception"
+     ]
+    },
+    "runtime": {
+     "enum": [
+      "python",
+      "node",
+      "jvm",
+      "dotnet",
+      "go",
+      "any"
+     ]
+    },
+    "regex": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 256
+    },
+    "sample": {
+     "type": "string"
+    },
+    "sampleSource": {
+     "enum": [
+      "captured",
+      "runtime-source",
+      "authored"
+     ]
+    },
+    "library": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "required": [
+    "id",
+    "class",
+    "runtime",
+    "regex",
+    "sample"
+   ]
+  },
+  "when-injection": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "source": {
+     "enum": [
+      "network",
+      "local"
+     ]
+    },
+    "sink": {
+     "enum": [
+      "exec",
+      "data"
+     ]
+    },
+    "sanitizer": {
+     "enum": [
+      "none",
+      "partial"
+     ]
+    },
+    "chainConfirmed": {
+     "type": "boolean"
+    },
+    "fileRole": {
+     "$ref": "#/$defs/fileRole"
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "basename": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "when-authorization": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "entry": {
+     "enum": [
+      "network",
+      "internal"
+     ]
+    },
+    "operation": {
+     "enum": [
+      "write",
+      "read"
+     ]
+    },
+    "authCheck": {
+     "enum": [
+      "none",
+      "partial"
+     ]
+    },
+    "chainConfirmed": {
+     "type": "boolean"
+    },
+    "fileRole": {
+     "$ref": "#/$defs/fileRole"
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "basename": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "when-configuration": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "class": {
+     "enum": [
+      "host-compromise",
+      "exposed-service",
+      "exposed-app",
+      "hygiene"
+     ]
+    },
+    "fileRole": {
+     "$ref": "#/$defs/fileRole"
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "basename": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "when-secrets": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "state": {
+     "enum": [
+      "head",
+      "removed"
+     ]
+    },
+    "class": {
+     "enum": [
+      "K",
+      "P",
+      "G"
+     ]
+    },
+    "flow": {
+     "type": "boolean"
+    },
+    "fileRole": {
+     "$ref": "#/$defs/fileRole"
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "basename": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "when-caps": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "fileRole": {
+     "$ref": "#/$defs/fileRole"
+    },
+    "path": {
+     "$ref": "#/$defs/matcher"
+    },
+    "basename": {
+     "$ref": "#/$defs/matcher"
+    }
+   },
+   "minProperties": 1
+  },
+  "cap": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "when": {
+     "$ref": "#/$defs/when-caps"
+    },
+    "max": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    }
+   },
+   "required": [
+    "when",
+    "max"
+   ]
+  },
+  "formula": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "caps": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/cap"
+     }
+    },
+    "injection": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "base": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-injection"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      },
+      "penalties": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-injection"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      }
+     },
+     "required": [
+      "base"
+     ]
+    },
+    "authorization": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "base": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-authorization"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      },
+      "penalties": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-authorization"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      }
+     },
+     "required": [
+      "base"
+     ]
+    },
+    "configuration": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "base": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-configuration"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      },
+      "penalties": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-configuration"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      }
+     },
+     "required": [
+      "base"
+     ]
+    },
+    "secrets": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "base": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-secrets"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      },
+      "adjust": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-secrets"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      },
+      "penalties": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "when": {
+          "$ref": "#/$defs/when-secrets"
+         },
+         "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+         }
+        },
+        "required": [
+         "when",
+         "value"
+        ]
+       }
+      }
+     },
+     "required": [
+      "base"
+     ]
+    }
+   },
+   "required": [
+    "injection",
+    "authorization",
+    "configuration",
+    "secrets"
+   ]
+  },
+  "row": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^(INJ|AUTHZ|RCFG|SEC)-[1-4]$"
+    },
+    "finding": {
+     "enum": [
+      "injection",
+      "authorization",
+      "configuration",
+      "secrets"
+     ]
+    },
+    "rank": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 3
+    },
+    "level": {
+     "enum": [
+      "critical",
+      "high",
+      "medium",
+      "low"
+     ]
+    }
+   },
+   "required": [
+    "id",
+    "finding",
+    "rank",
+    "level"
+   ]
+  }
+ }
+}
