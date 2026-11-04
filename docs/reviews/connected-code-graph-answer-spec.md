@@ -119,3 +119,49 @@ Re-gate returns **approve** iff all of R1-R6 hold; a failing one is **needs chan
 - **R4.** Every "routed to / P1 / S50" clause maps to a row or list line that exists in `docs/plans/connected-code-graph-p0-2.md` (a grep I run), or to a listed carry-over; zero unowned in M4's table.
 - **R5.** §11 names a base document that validates for each mutant test, the literal `c482b1cf54631b37eb4572dc86a68fb1` (or the value `ids.tuple_id(["verdictLog"])` gives when I re-run it), and the axis-planted classification test.
 - **R6.** The golden values in §11 still re-derive as above (I re-run `derive`), with `snapshotId` and `candidateCount` pinned.
+
+## Pass 2 (2026-11-04): v1.1 (`f8eb03e1`, 516 lines)
+
+**Verdict: needs changes, one small major (N1).** Every Pass 1 finding is closed; R1-R6 hold. N1 is a fact-boundary edit that v1.1's mixed-case addition introduced. **S34 may start now on everything except `facts_bytes` and test 11**; those wait for the one-line N1 ruling, because the `facts_bytes` boundary is a major bump (§9) once S34 pins it.
+
+CPG: considered, not relevant — a contract specification; checked against documents, `cpg/ccg/*`, the slice bundles.
+
+### Dispositions (executed against the tree)
+
+- **B1** fixed. Ran the §7.3 tokenizer (`[#…?]` alternative first, then `bundle._KEYPATH_PART`; namespace split off for `config_key`): `server.[#].port` units `server`,`port` pass; `a.[#…].b` pass; `[#]` no units; `spring:server.port` units `server`,`port` pass; `a["x.y"]` and `ports[0]` as stated; the 25-letter segment fails; `spring:server.[#]` passes; `a.[#` does not tokenize (error). All match §7.3's vectors. Mutants are named.
+- **M1** fixed. §7.4 now says the guard declaration and chain rule prove nothing on real output, keeps the anchor rule as the one real check, and routes the `CONTROLLED_BY` cycle test to C1 with its mutant.
+- **M2** fixed. Re-swept every array in §2-§5 (`items`, `groups`, `members`, `units`, `anchors`, `scope.repoIds`/`paths`, `options`, `lookups`, `queries`, `lifted`, `bound`, `chain`, `ownedRegions`, `rcaMarks`): each has a §6 row; options and `entryId` uniqueness, reject-not-repair NFC and `AnswerError` on an unresolvable `unitId` are stated; test 1 iterates the schema-derived set.
+- **M3** fixed as a statement: §4.1 and C3 name the three missing reads; the golden recipe is declared hand-built.
+- **M4** fixed. Walked every routed clause: S50 records the bound (row verified), S52 owns the headless prompts (row verified); C1-C9 own the rest. The list is **not yet attached** to `docs/plans/connected-code-graph-p0-2.md` (grep: no hit); `teco` must attach it. EP §10.4/§5.2 amendments (status predicate, pin-and-replay, harness assertions) are `data-scientist`'s per C5/C7 but have no p0-2 row and are not yet in the EP files (grep); route one before S47/S49, not before S34.
+- **M5** fixed. Bases `B-golden` .. `B-stale` named, each test asserts its base validates; literals re-derived (below); four per-axis plants.
+- **m1** fixed (`Hop.state` in §9's additive list, `function` cited). **m2** fixed (§6 "for one fixed request"). **m3** fixed (`mask_http_segments`, `field_kind` set). **m4** fixed: `skipped-file`/`not-found` vocabulary, mixed case, DS answered. **m5** fixed: `snapshotId` and `candidateCount 1` pinned; `s13-measurements.json` and report line 109 record `baa84a25…`. **m6** fixed (`DATA_FIELDS` notation, `Launch.protocol` added, `flow-unavailable` carried by the first crossing hop).
+
+### R1-R6
+
+R1 ran (above). R2 re-swept (above). R3 holds (§7.4). R4: every routed clause maps to a C-row or an existing S-row (C-list unattached, see M4). R5 holds. R6 re-derived by running: `ids.tuple_id(["verdictLog"])` = `c482b1cf54631b37eb4572dc86a68fb1`; `["sampling", 0]` = `47fd480a42bc193ca9c0312bc64a1602`; the `cacheKey` tuple in §11 = `af4162af32e1185ce460b4c6135e257d`; `snapshotId` `baa84a25a28c1bf05a44b58f870e2fb9` (loader formula and measurements file); `candidateCount` 1 (`render.candidate_count` over the loaded `VIA` rows); the walk, ids, spans and four lifted ords as in Pass 1; `symbol_id` recompute reproduces `8ae57f34…` (javascript) and `a6c26487…` (python).
+
+### New findings
+
+- **N1 (major, verified by reading §3, §6, §3 AC-16 text) The mixed case breaks pin-and-replay.** `lookups` sit in `interpretation` outside `provenance`, so they are inside `facts_bytes`. AC-16 submits the echoed `request` as a structured ask; a structured request names no path, so the replayed answer has no `lookups` and `facts_bytes` differ from the plain-language answer's. §3 requires equality across all four paths. **Fix (one line, §6 and test 11):** `facts_bytes` removes `interpretation.provenance` **and** `interpretation.lookups` (they disclose the question's failed names, not facts of the request), and test 11 adds: dropping `lookups` leaves `facts_bytes` equal. Record it in §9's "changed `facts_bytes` boundary" as settled pre-S34.
+- **n1 (minor).** Classification plants cover nested object, array item, `$ref`, `oneOf`; REVIEW.md also names `anyOf`/`allOf` and map values. The schema will use `if`/`then` for per-kind `Hop` fields, so add a `then`/`allOf` plant.
+- **n2 (minor).** No base document is stated to hold a *symbol anchor*, so V15's positive control for anchors and test 6 ("symbol anchor without `qname`") have no valid base. Say `B-mixed` or `B-amb` carries one with a recomputable id. "Both golden symbols reproduce" is true (I ran it) but only the subject is a V15 target.
+- **n3 (minor).** Did-you-mean `options` are sorted by canonical bytes, so a ranker's order is lost; acceptable, but say so.
+- **n4 (nit).** `§7.2` lists `$defs` names as exhaustive but omits `Request`, `Recipe`, `Stamp`, `DepthBound`; and says `repoId` is "minted by pattern" without giving the pattern. Give it, since the classification test needs one.
+
+### Judgment of the changes made against the ds review
+
+- **`anchors[].line` / `lookups[].line` dropped:** correct. Removes the only informative field from the facts boundary and matches EP §4.2's gold shape; no other section reads it (swept).
+- **V15 id recompute:** sound and runs (both symbols reproduce); skips overloading languages and `.h`, and omits `.pyi` (declaration files answer "not found" anyway). Needs n2's base.
+- **`lookups[].state` vocabulary:** `skipped-file` / `not-found` removes the `not-mapped` collision. Good.
+- **Mixed case:** the right idea (no silent drop) but introduces N1.
+- **Did-you-mean for `unknown-name`/`no-anchor`:** consistent with ML §3.1 (a) and the `status != "resolved"` predicate; bounded by C7 (harness side, correctly outside the answer).
+- **V1 reject-not-repair:** consistent with §6 and `canonical_line` (plain `json.dumps`); test 6 covers non-NFC and unstripped.
+- **Same-revision fixes against each other:** cacheKey (8 inputs) vs §9's "cacheKey input list is major" vs vector: consistent; `quantization` conditional vs `endpoint`: consistent; fence order vs vector (`...[+N]` inside the span, escape after truncate): consistent; only N1 conflicts.
+
+### Growth-stops (441 to 516 lines)
+
+New scope, about 55 lines: provenance widening (`grammarHash`, `samplingHash`, `resolverVersion`, normalization), did-you-mean, mixed case, V15, base documents, literal vectors. Rework residue, about 20 lines: (1) the carry-over table restates facts whose home is §4.1, §4.4, §7.1-§7.4, §4.2 (C1-C4, C8); each in-place sentence should cite `C-n` and keep one home; (2) `facts_bytes` boundary is stated in §3 (rcaMarks, AC-16 paragraph), §6 and test 11 (DS flagged §6 as the home); (3) "closes the former open item" (§7.3 last bullet) is change history, and "re-run 2026-11-04" stamps recur; (4) §11 "Ready to implement" restates the reading order. The revision note is one dated line, no finding-resolution table, the consult-question section was removed after answers: compliant. Report rework growth as minor; not blocking.
+
+### Stopping condition for Pass 3
+
+Approve iff: (a) §6 and test 11 state that `facts_bytes` excludes `provenance` and `lookups`, with the lookups-removal assertion; (b) `grep -n "C1\|carry-over" docs/plans/connected-code-graph-p0-2.md` shows the C-list attached (teco), or the spec's reading order tells S34 it is not needed; (c) n2's base named. n1, n3, n4 and the growth residue may be folded at the next ordinary revision.
