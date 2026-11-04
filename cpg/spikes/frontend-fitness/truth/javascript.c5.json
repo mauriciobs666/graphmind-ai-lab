@@ -3,23 +3,29 @@
  "exitStatus": 0,
  "lang": "javascript",
  "pilot": {
-  "coverage": 0.98,
-  "coverageIfStructuralSilentsExcluded": 0.98,
-  "note": "the C5 rule is the raw `coverage`; the structural figure is evidence for the gate, not a substitute",
+  "adjustedCoverage": 1.0,
+  "adjustedDenominator": 50,
+  "ambiguous": 0,
+  "coverage": 1.0,
+  "coverageStrict": 1.0,
+  "excluded": 0,
+  "excludedByClass": {},
+  "exclusionCap": 10,
+  "exclusionCapExceeded": false,
+  "note": "ML \u00a73.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than 10 excluded sites means the reference is blind to too much of the frame (a C5 failure). `coverage` is the raw figure, always reported beside it",
   "pilotSites": 50,
-  "silent": 1,
-  "silentTagged": {},
-  "silentWithStructuralReason": 0,
-  "withReference": 49
+  "relaxed": 0,
+  "silent": 0,
+  "silentInformationalTags": {},
+  "withReference": 50
  },
  "pilotKinds": {
-  "external": 35,
-  "internal": 9,
-  "local": 5,
-  "silent": 1
+  "external": 14,
+  "internal": 23,
+  "local": 13
  },
- "recordedAtEpoch": 1793818932,
- "recordedAtUtc": "2026-11-04T19:02:12Z",
+ "recordedAtEpoch": 1793825081,
+ "recordedAtUtc": "2026-11-04T20:44:41Z",
  "seedPrefix": "ccg-p0a-v1-c5|",
  "tool": "scip-typescript",
  "toolVersion": "0.6.0"

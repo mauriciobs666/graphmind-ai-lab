@@ -851,3 +851,163 @@ def test_flowcheck_cli_exit_codes_and_not_json(flowenv, capsys):
     assert rf.main(["flowcheck", "python"]) == 0
     (flowenv / "labels" / "python-flow.jsonl").write_text(json.dumps(_lab(2)) + "\n")
     assert rf.main(["flowcheck", "python"]) == 1
+
+
+# ---------------------------------------------------------------- TS/JS prod-only census (ML v1.6 §3.1, bundle spec4 §1 `test` pattern)
+
+@pytest.mark.parametrize("rel,expected", [
+    ("src/a.ts", False), ("src/a.test.ts", True), ("src/a.spec.tsx", True), ("src/a.test.js", True), ("src/a.spec.mjs", True),
+    ("e2e/a.ts", True), ("src/e2e/a.ts", True), ("src/__tests__/a.ts", True), ("src/__tests__/deep/er/a.ts", True),
+    ("tests/a.ts", False), ("src/test/a.ts", False), ("src/attest.ts", False), ("src/e2e.ts", False), ("src/__tests__.ts", False),
+    ("src/a.test.json", False), ("src/__tests__", False), ("src/a.test.ts.bak", False), ("src/a.spec", False), ("src/test.ts", False), ("src/a.tests.ts", False), ("src/a.test.d.ts", False),   # declaration files leave the frame earlier
+])
+def test_is_test_file_javascript_pattern(rel, expected):
+    assert rf.is_test_file("javascript", rel) is expected
+
+
+@pytest.mark.parametrize("lang", ["python", "java", "kotlin", "csharp", "go", "cpp"])
+def test_is_test_file_is_javascript_only(lang):
+    for rel in ("a.test.ts", "e2e/a.py", "src/__tests__/a.go", "tests/test_a.py", "a.spec.js"):
+        assert rf.is_test_file(lang, rel) is False
+
+
+PLANTED = {"src/a.ts": "export function a(x: number) { return f(x); }\n",
+           "src/a.test.ts": "it('x', () => { g(1); h(2); });\n",
+           "src/b.spec.tsx": "it('y', () => { g(3); });\n",
+           "e2e/flow.ts": "run(1);\n",
+           "src/__tests__/c.ts": "check(2);\n",
+           "tests/kept.ts": "keep(3);\n"}
+
+
+def _plant(tmp_path, files=PLANTED):
+    for rel, txt in files.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(txt)
+    return tmp_path
+
+
+def test_frame_drops_planted_test_files_for_javascript_only(tmp_path):
+    root = _plant(tmp_path)
+    got = sorted({r["path"] for r in rf.iter_frame("javascript", root, {})})
+    assert got == ["src/a.ts", "tests/kept.ts"]                 # `tests/` is not in the closed pattern
+    py = tmp_path / "py"
+    (py / "tests").mkdir(parents=True)
+    (py / "tests" / "test_a.py").write_text("f(1)\n")
+    (py / "a.test.py").write_text("g(1)\n")
+    assert sorted({r["path"] for r in rf.iter_frame("python", py, {})}) == ["a.test.py", "tests/test_a.py"]    # Python keeps tests
+
+
+def test_flow_population_drops_planted_test_files(tmp_path):
+    body = "export function m(a: number) {\n  if (a) {\n    f(a);\n  }\n  return a;\n}\n"
+    _plant(tmp_path, {"src/m.ts": body, "src/m.test.ts": body, "e2e/m.ts": body, "src/__tests__/m.ts": body})
+    pop = rf.flow_population("javascript", tmp_path, {})
+    assert [p["path"] for p in pop] == ["src/m.ts"]
+    pyp = tmp_path / "py"
+    pyp.mkdir()
+    (pyp / "test_m.py").write_text("def m(a):\n    x = 1\n    if a:\n        f(a)\n    return a\n")
+    assert [p["path"] for p in rf.flow_population("python", pyp, {})] == ["test_m.py"]
+
+
+def test_flow_population_line_bounds_parameters(tmp_path):
+    def fn(n):
+        return "export function m%d(a: number) {\n  if (a) {\n    f(a);\n  }\n%s  return a;\n}\n" % (n, "  x();\n" * (n - 6))
+    (tmp_path / "m.ts").write_text("".join(fn(n) for n in (6, 25, 26, 60, 61)))
+    names = lambda lo, hi: sorted(p["qname"].split("::")[1] for p in rf.flow_population("javascript", tmp_path, {}, lo, hi))  # noqa: E731
+    assert names(5, 25) == ["m25", "m6"]
+    assert names(26, 60) == ["m26", "m60"]
+
+
+def test_build_sample_is_census_for_javascript_and_capped_elsewhere(tmp_path, monkeypatch):
+    (tmp_path / "f.ts").write_text("\n".join(f"a{i}();" for i in range(7)) + "\n")
+    monkeypatch.setattr(rf, "src_dir", lambda l: tmp_path)
+    monkeypatch.setattr(rf, "corpus_cfg", lambda l: {"commit": "abc"})
+    monkeypatch.setattr(rf, "CAP", 3)
+    rows = list(rf.iter_frame("javascript", tmp_path, {}))
+    assert len(rows) == 7
+    pub, priv = rf.build_sample("javascript", rows)
+    assert [p["ordinal"] for p in pub] == list(range(1, 8)) and len(priv) == 7
+    pub2, _ = rf.build_sample("python", rows)
+    assert len(pub2) == 3
+    want = [h[:16] for h, _ in rf.hash_sort(rows, rf.seed_for("sample", "python", "abc"))[:3]]
+    assert [p["siteId"] for p in pub2] == want                                      # the cap is a prefix of the §4.4 order
+    assert [p["siteId"] for p in pub] == [h[:16] for h, _ in rf.hash_sort(rows, rf.seed_for("sample", "javascript", "abc"))]
+
+
+def test_census_brief_has_n_and_no_stop_rule():
+    if not rf.sample_path("javascript").exists():
+        pytest.skip("javascript sample not drawn")
+    n = len(rf.read_jsonl(rf.sample_path("javascript")))
+    t = rf.fill_brief("javascript")
+    assert rf.validate_brief(t, "javascript") == []
+    assert f"a census of {n} sites" in t and f"ordinal **{n}**" in t
+    assert "**150**" not in t and "whichever comes first" not in t and "{CAP}" not in t
+    assert any("stop rule" in e for e in rf.validate_brief(t + "\n**150**, or after ordinal **500**, whichever comes first.", "javascript"))
+    if rf.sample_path("python").exists():
+        py = rf.fill_brief("python")
+        assert "**150**" in py and "whichever comes first" in py and rf.validate_brief(py, "python") == []
+
+
+def test_census_brief_fails_loudly_if_the_template_stop_rule_drifts(monkeypatch):
+    if not rf.sample_path("javascript").exists():
+        pytest.skip("javascript sample not drawn")
+    monkeypatch.setattr(rf, "brief_template", lambda: "x {CAP} y\n")
+    with pytest.raises(SystemExit):
+        rf.fill_brief("javascript")
+
+
+def test_committed_javascript_census_invariants():
+    names = [rf.frame_path("javascript"), rf.sample_path("javascript"), rf.private_path("javascript"), rf.flow_path("javascript"),
+             rf.flow_tier2_path("javascript"), FF / "truth" / "javascript.ref.jsonl", FF / "truth" / "javascript.c5-pilot.jsonl"]
+    if not all(p.exists() for p in names):
+        pytest.skip("javascript artifacts absent")
+    frame, sample, priv, flow, tier2, ref, pilot = (rf.read_jsonl(p) for p in names)
+    assert len(frame) == 523 and len({r["path"] for r in frame}) == 40
+    assert not [r for r in frame if rf.is_test_file("javascript", r["path"])]
+    assert [s["ordinal"] for s in sample] == list(range(1, 524)) and len({s["siteId"] for s in sample}) == 523
+    assert {p["siteKey"] for p in priv} == {r["siteKey"] for r in frame}            # the census is the whole frame
+    sha = rf.corpus_cfg("javascript")["commit"]
+    order = rf.hash_sort(frame, rf.seed_for("sample", "javascript", sha))
+    assert [p["siteKey"] for p in priv] == [r["siteKey"] for _, r in order]       # §4.4 hash order
+    assert [r["ordinal"] for r in ref] == list(range(1, 524)) and [r["siteId"] for r in ref] == [s["siteId"] for s in sample]
+    assert len(flow) == 12 and len(tier2) == 3 and not [m for m in flow + tier2 if rf.is_test_file("javascript", m["path"])]
+    assert all(5 <= m["lineEnd"] - m["lineStart"] + 1 <= 25 for m in flow) and all(26 <= m["lineEnd"] - m["lineStart"] + 1 <= 60 for m in tier2)
+    assert len(pilot) == 50 and {p["siteKey"] for p in pilot} <= {r["siteKey"] for r in frame}
+    pk = [p["siteKey"] for p in pilot]
+    assert pk == [r["siteKey"] for _, r in rf.hash_sort(frame, rf.seed_for("c5", "javascript", sha))[:50]]
+
+
+def test_cmd_brief_validates_with_the_language(monkeypatch, tmp_path):
+    monkeypatch.setattr(rf, "brief_path", lambda l: tmp_path / f"{l}.brief.md")      # a mutant must not write the real brief
+    stop = "text **150**, or after ordinal **9**, whichever comes first.\n**Output.** **Writing a target.** **Appendix: `qname` grammar** ### 4.1 Common grammar"
+    monkeypatch.setattr(rf, "fill_brief", lambda lang: stop)
+    with pytest.raises(SystemExit):
+        rf.cmd_brief("javascript")
+
+
+def test_tier2_flow_draw_is_26_to_60_lines_at_most_three_in_hash_order(tmp_path, monkeypatch):
+    def fn(n):
+        return "export function m%d(a: number) {\n  if (a) {\n    f(a);\n  }\n%s  return a;\n}\n" % (n, "  x();\n" * (n - 6))
+    (tmp_path / "m.ts").write_text("".join(fn(n) for n in (25, 26, 30, 40, 60, 61)))
+    monkeypatch.setattr(rf, "src_dir", lambda l: tmp_path)
+    monkeypatch.setattr(rf, "corpus_cfg", lambda l: {"commit": "abc"})
+    got = rf.build_flow_tier2("javascript")
+    pop = rf.flow_population("javascript", tmp_path, {}, 26, 60)
+    assert len(pop) == 4 and len(got) == 3 and [g["ordinal"] for g in got] == [1, 2, 3]
+    assert [g["qname"] for g in got] == [m["qname"] for _, m in rf.hash_sort(pop, rf.seed_for("flow", "javascript", "abc"))[:3]]
+    names = {g["qname"].split("::")[1] for g in got}
+    assert not (names & {"m25", "m61"})
+    assert all(26 <= g["lineEnd"] - g["lineStart"] + 1 <= 60 for g in got)
+
+
+def test_verify_checks_the_tier2_flow_sample(tmp_path, monkeypatch):
+    if not (rf.src_dir("javascript").exists() and rf.flow_tier2_path("javascript").exists()):
+        pytest.skip("javascript artifacts absent")
+    assert [p for p in rf.cmd_verify(["javascript"])["problems"] if "tier-2" in p] == []
+    rows = rf.read_jsonl(rf.flow_tier2_path("javascript"))[:2]
+    alt = tmp_path / "t2.jsonl"
+    alt.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    monkeypatch.setattr(rf, "flow_tier2_path", lambda l: alt)
+    assert "javascript: flow tier-2 sample differs" in rf.cmd_verify(["javascript"])["problems"]
+    alt.unlink()
+    assert "javascript: flow tier-2 sample differs" in rf.cmd_verify(["javascript"])["problems"]

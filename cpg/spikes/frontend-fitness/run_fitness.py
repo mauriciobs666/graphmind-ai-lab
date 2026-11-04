@@ -50,6 +50,11 @@ LANGS = ["python", "javascript", "java", "kotlin", "csharp", "go", "cpp"]
 SEED_PREFIX = {"sample": "ccg-p0a-v1|", "sym": "ccg-p0a-v1-sym|", "flow": "ccg-p0a-v1-flow|",
                "c5": "ccg-p0a-v1-c5|", "spur": "ccg-p0a-v1-spur|", "gen": "ccg-p0a-v1-gen|"}
 CAP = 500
+# ML §3.1 (v1.6): TS/JS is a CENSUS of the prod code: every frame site is labelled, in hash order, no cap, no stop rule.
+CENSUS_LANGS = {"javascript"}
+# Bundle spec4 §1 `test` pattern (closed; JS/TS only): `*.test.<ext>`, `*.spec.<ext>`, a directory segment `e2e` or `__tests__`.
+# The frame and the flow population leave those files out (the bundle has no symbol for them by design).
+TEST_DIR_SEGMENTS = {"e2e", "__tests__"}
 
 # Bundle spec §5.0 default; a corpus may replace it in corpora.yaml (`vendoredDirs`).
 DEFAULT_VENDORED = ["vendor", "vendored", "_vendor", "third_party", "third-party", "node_modules"]
@@ -134,6 +139,18 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 # ------------------------------------------------------------------ file walk
+
+def is_test_file(lang: str, rel: str) -> bool:
+    """Spec4 §1 `test` pattern; applies to JS/TS only (`javascript`), every other language has none."""
+    if lang != "javascript":
+        return False
+    parts = rel.split("/")
+    base = parts[-1]
+    if any(seg in TEST_DIR_SEGMENTS for seg in parts[:-1]):
+        return True
+    m = re.fullmatch(r"(.+)\.(test|spec)(\.[^.]+)", base)
+    return bool(m) and m.group(3).lower() in EXTS["javascript"]
+
 
 def seg_excluded(rel_parts: tuple[str, ...], cfg: dict) -> bool:
     skip = set(vendored(cfg)) | ALWAYS_SKIP_DIRS | set(cfg.get("frameExcludeDirs") or [])
@@ -464,6 +481,8 @@ def frame_sites(lang: str, key: str, root, data: bytes) -> list[Site]:
 def iter_frame(lang: str, root: Path, cfg: dict) -> Iterator[dict]:
     """Yield frame records in (path, start byte) order. Pure function of the tree + cfg."""
     for rel, p in iter_source_files(lang, root, cfg):
+        if is_test_file(lang, rel):
+            continue
         data = p.read_bytes()
         key, tree = parse_file(lang, rel, data)
         L = Lines(data)
@@ -1209,14 +1228,16 @@ def method_has_branch_and_call(lang: str, key: str, d: Def, data: bytes) -> tupl
     return br, bool(calls)
 
 
-def flow_population(lang: str, root: Path, cfg: dict) -> list[dict]:
+def flow_population(lang: str, root: Path, cfg: dict, lo: int = 5, hi: int = 25) -> list[dict]:
     pop = []
     for rel, p in iter_source_files(lang, root, cfg):
+        if is_test_file(lang, rel):
+            continue
         data = p.read_bytes()
         key, tree = parse_file(lang, rel, data)
         for d in enumerate_defs(lang, rel, data, key, tree.root_node):
             n_lines = d.lineEnd - d.lineStart + 1
-            if not (5 <= n_lines <= 25) or d.nparams < 1:
+            if not (lo <= n_lines <= hi) or d.nparams < 1:
                 continue
             if "<anon>" in d.qname.split("::", 1)[1]:
                 continue
@@ -1312,7 +1333,7 @@ def build_sample(lang: str, rows: list[dict]) -> tuple[list[dict], list[dict]]:
     root = src_dir(lang)
     cache: dict[str, list[str]] = {}
     pub, priv = [], []
-    for i, (h, r) in enumerate(order[:CAP], start=1):
+    for i, (h, r) in enumerate(order if lang in CENSUS_LANGS else order[:CAP], start=1):
         lines = cache.get(r["path"])
         if lines is None:
             lines = cache[r["path"]] = Lines((root / r["path"]).read_bytes()).text_lines()
@@ -1355,6 +1376,20 @@ def build_flow(lang: str) -> list[dict]:
     return out
 
 
+def flow_tier2_path(lang): return HERE / "sample" / f"{lang}-flow-tier2.jsonl"
+
+
+def build_flow_tier2(lang: str) -> list[dict]:
+    """ML §8.4 two-stage rule (a population drawn whole): the methods of 26-60 lines under the same conditions, same seed,
+    at most 3, generated now so that it exists before any label; the labeller is asked for it only if the tier-1 pairs
+    are below 120."""
+    cfg = corpus_cfg(lang)
+    pop = flow_population(lang, src_dir(lang), cfg, 26, 60)
+    order = hash_sort(pop, seed_for("flow", lang, cfg["commit"]))[:3]
+    return [{"ordinal": i, "path": m["path"], "qname": m["qname"], "lineStart": m["lineStart"], "lineEnd": m["lineEnd"],
+             "source": m["source"]} for i, (h, m) in enumerate(order, start=1)]
+
+
 def cmd_flowdraw(lang: str) -> dict:
     cfg = corpus_cfg(lang)
     pop = flow_population(lang, src_dir(lang), cfg)
@@ -1362,7 +1397,10 @@ def cmd_flowdraw(lang: str) -> dict:
     out = [{"ordinal": i, "path": m["path"], "qname": m["qname"], "lineStart": m["lineStart"], "lineEnd": m["lineEnd"],
             "source": m["source"]} for i, (h, m) in enumerate(order, start=1)]
     n = write_jsonl(flow_path(lang), out)
-    return {"lang": lang, "population": len(pop), "flowMethods": n}
+    res = {"lang": lang, "population": len(pop), "flowMethods": n}
+    if lang in CENSUS_LANGS:
+        res["tier2"] = write_jsonl(flow_tier2_path(lang), build_flow_tier2(lang))
+    return res
 
 
 # ------------------------------------------------------------------ reference mapping (ML §5.2 "Mapping a reference answer to a site", §11 N1)
@@ -1899,13 +1937,22 @@ def fill_brief(lang: str) -> str:
         "{SPEC_VERSION}": f"{ver} (`docs/plans/connected-code-graph-bundle-spec3.md`; `-spec4` amends nothing in §4)",
     }
     body = brief_template()
+    if lang in CENSUS_LANGS:
+        # ML §3.1 (v1.6): a census labels every site; the template's 150-internal / {CAP} stop rule does not apply
+        stop = ("- **Stop** after the line that brings the number of lines with at least one `internal` or\n"
+                "  `declared` callee to\n  **150**, or after ordinal **{CAP}**, whichever comes first.")
+        if stop not in body:
+            raise SystemExit("brief: the template's stop rule no longer matches; the census variant needs a revision")
+        body = body.replace(stop, "- **Stop** only after the line for ordinal **{CAP}**, the last site of the sample file: every site is\n"
+                                  "  labelled (a census of {CAP} sites). There is no earlier stop and no count of internal sites to reach.")
+        slots["{CAP}"] = str(len(read_jsonl(sample_path(lang))))
     for k, v in slots.items():
         body = body.replace(k, v)
     body = body.rstrip() + "\n\n" + excerpt_txt + "\n"
     return body
 
 
-def validate_brief(text: str) -> list[str]:
+def validate_brief(text: str, lang: str = "") -> list[str]:
     errs = []
     left = re.findall(r"\{[A-Z_]{2,}\}", text)
     if left:
@@ -1913,12 +1960,14 @@ def validate_brief(text: str) -> list[str]:
     for must in ("**Output.**", "**Writing a target.**", "**Appendix: `qname` grammar**", "### 4.1 Common grammar"):
         if must not in text:
             errs.append(f"missing {must}")
+    if lang in CENSUS_LANGS and ("**150**" in text or "whichever comes first" in text):
+        errs.append("census brief carries the stop rule")
     return errs
 
 
 def cmd_brief(lang: str) -> dict:
     txt = fill_brief(lang)
-    errs = validate_brief(txt)
+    errs = validate_brief(txt, lang)
     if errs:
         raise SystemExit(f"brief {lang}: {errs}")
     brief_path(lang).write_text(txt, encoding="utf-8")
@@ -2256,9 +2305,11 @@ def cmd_verify(langs: list[str]) -> dict:
                 f2.append({"ordinal": i, "path": m["path"], "qname": m["qname"], "lineStart": m["lineStart"], "lineEnd": m["lineEnd"], "source": m["source"]})
             if f2 != read_jsonl(flow_path(lang)):
                 problems.append(f"{lang}: flow sample differs")
+            if lang in CENSUS_LANGS and (not flow_tier2_path(lang).exists() or build_flow_tier2(lang) != read_jsonl(flow_tier2_path(lang))):
+                problems.append(f"{lang}: flow tier-2 sample differs")
         if brief_path(lang).exists() and brief_path(lang).read_text(encoding="utf-8") != fill_brief(lang):
             problems.append(f"{lang}: brief differs")
-        if validate_brief(brief_path(lang).read_text(encoding="utf-8") if brief_path(lang).exists() else ""):
+        if validate_brief(brief_path(lang).read_text(encoding="utf-8") if brief_path(lang).exists() else "", lang):
             problems.append(f"{lang}: brief invalid")
         if flow_brief_path(lang).exists():
             ftxt = flow_brief_path(lang).read_text(encoding="utf-8")

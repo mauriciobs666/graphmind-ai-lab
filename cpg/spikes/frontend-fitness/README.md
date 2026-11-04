@@ -25,13 +25,14 @@ the by-construction exclusions and the macro-argument rule (§4, §5).
 | `frame/<lang>.jsonl` | the tree-sitter census frame (ML §4.1): every syntactic call site | **not** labellers |
 | `sample/<lang>.jsonl`, `sample/<lang>.brief.md` | what the labeller gets (500 sites; the filled brief, pasted as-is) | S26 labeller |
 | `sample/<lang>.private.jsonl` | harness-only (kind, node type, frame size, `siteKey`) | **not** labellers |
-| `sample/<lang>-flow.jsonl` | the golden-flow draw (ML §6.4): up to 30 methods with source text | S56 labeller |
+| `sample/<lang>-flow.jsonl` | the golden-flow draw (ML §6.4): up to 30 methods with source text (TS/JS: 12, no test files; plus `javascript-flow-tier2.jsonl`, 3 methods) | S56 labeller |
 | `flow-brief.template.md` (+ `flow-brief.patch.md`, how `flowbrief` was added) | the S56 labeller brief template (ML §6.4); only the text between its two BRIEF markers is used | harness, `data-scientist` |
 | `sample/<lang>-flow.brief.md` | the filled S56 brief (`flowbrief <lang>`: template + per-language slots + a redacted bundle-spec excerpt), pasted as is | S56 labeller |
 | `labels/<lang>-flow.jsonl` | the S56 labeller's output; `flowcheck <lang>` schema-checks it (opens only this file and `sample/<lang>-flow.jsonl`; exit 1 on any error; `belowFloor120` is advisory) | `data-scientist`, S28 |
 | `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the C5 record (raw and adjusted), the reference answer for every sampled ordinal | **not** labellers; S57 |
 | `truth/csharp.gen-audit.jsonl` | the hash order (`ccg-p0a-v1-gen|`) of the 74 reference-silent generic/`nameof` sites of the C# sample: the S57 audit draw (`genaudit`, §2) | **not** labellers; S57 |
 | `labels/ adjudication/ results/` | empty (`.gitkeep`): later steps write them | later steps |
+| `labels/superseded/` | `javascript.pre-census.jsonl` (the 500-site labels drawn before ML v1.6: 444 test sites, old stop rule) and `javascript/` (its labeller scripts); kept out of the truth, used only for the test-retest check on the 56 shared prod sites (ML §3.1) | `data-scientist` |
 
 Scratch (gitignored, `cpg/.ccg-work/`): `corpora/<lang>/src` (the clean `git archive` tree; the labeller's and Joern-off's
 tree), `frontend-fitness/{truth-work,truth-out,rejected,probe*}`. Rejected-candidate artifacts live under `rejected/`.
@@ -39,7 +40,7 @@ tree), `frontend-fitness/{truth-work,truth-out,rejected,probe*}`. Rejected-candi
 Reproduce: `run_fitness.py fetch <lang>` (needs only `corpora.yaml`), then `frame`, `draw`, `flowdraw`, `c5pilot`,
 `brief`, `flowbrief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...`. `run_fitness.py verify` re-derives every frame,
 sample, private, flow and brief file and compares: it passes for all six pinned corpora (and `srcDigest` equality).
-Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (101 tests).
+Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (see the suite).
 
 ## 2. Definitions this harness fixes (where ML leaves a choice)
 
@@ -59,7 +60,7 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
   C++, `.c` as C. A file is generated if its first five lines match `generated|do not edit` (case-insensitive) or its path
   is under `generatedPaths`. Directory segments in the effective `vendoredDirs` (spec3 §5.0 default) and tool caches are
   excluded. All six pinned corpora use the **default** vendored list.
-* **Sample** = ML §4.4 verbatim (`SHA-256(seed|siteKey)`, first 500). The flow population = ML §6.4: bodied, **named**
+* **Sample** = ML §4.4 verbatim (`SHA-256(seed|siteKey)`, first 500; **TS/JS is a census**: the frame without the bundle spec4 §1 `test` files, all 523 sites in hash order, no cap and no stop rule in its brief, ML §3.1 v1.6). The flow population = ML §6.4: bodied, **named**
   (never `<anon>`), 5-25 lines, ≥ 1 parameter other than `self`/`cls`, ≥ 1 branch node (`if`/ternary/`switch`/`match`/
   `when`/loops) and ≥ 1 frame call. Flow qnames follow bundle spec §4.1/§4.2 for named scopes; overload signatures are used
   only for the `#N` suffix; **qname fidelity beyond named scopes is unverified** (Kotlin property accessors, C# primary-
@@ -96,7 +97,7 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
 | Language | Corpus @ pinned SHA | Frame sites / files | Reference | C5 pilot (raw) | Reference at the 500 sampled sites |
 |---|---|---|---|---|---|
 | Python | proving repo `falkor-chat/server` @ `0caf85e3` | 17,358 / 104 | scip-python 0.6.8 | **0.90** (45/50) PASS | 254 internal, 178 external, 66 silent, 2 local |
-| TS/JS | proving repo `salesperson` @ `0caf85e3` | 4,097 / 68 | scip-typescript 0.6.0 (+ a work-copy tsconfig over `tests/`) | **0.98** PASS | 109 internal, 370 external, 21 local |
+| TS/JS | proving repo `salesperson` @ `0caf85e3` | **523 / 40** (prod census; 4,097 / 68 with tests) | scip-typescript 0.6.0 (+ a work-copy tsconfig over `tests/`; whole-corpus index, re-mapped) | **1.00** (50/50, re-drawn from the 523 frame) PASS | 181 internal, 197 external, 144 local, 1 silent (all 523 sites) |
 | Go | `labstack/echo` @ `7af8fac5` (MIT, module `echo/v5`) | 13,362 / 112 | callgraph VTA v0.52.0 `-test` | **0.90** raw (45/50), 45/49 = 0.918 adjusted (1 `builtin`) PASS | 150 internal, 11 dispatch, 268 external, 71 silent |
 | Java | `spring-petclinic/spring-petclinic-rest` @ `5180cc9b` (Apache-2.0) | 3,693 / 64 | scip-java 0.13.2 (manual: `javac -Xplugin:scip` + `aggregate`) | **0.92** PASS | 62 internal + 38 declared, 317 external, 83 silent |
 | C# | `ThreeMammals/Ocelot` @ `8b8fde19` (MIT) | 24,414 / 547 | scip-dotnet 0.2.16 | **0.86** raw (43/50), 43/43 = 1.00 adjusted (6 `generic-callee`, 1 `nameof`) PASS | 218 internal + 15 declared, 189 external, 78 silent (74 in a class: 62 generic, 12 `nameof`) |
@@ -106,10 +107,10 @@ Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` 
 C1/C2/C3/C6-C8 and the exclusion greps are in `corpora.yaml` (all six: no OpenTelemetry/`microservices-demo`/broker
 hit; Ocelot 55.6k and googletest 54.4k code lines against the 60k ceiling; echo's C6 is the name-based approximation
 below). Java's frame holds 3,693 sites (≥ 2,000 ✓) but the reference finds an in-corpus target at only 100 of the 500
-sampled sites (TS/JS: 109), so those labellers may end near the 100-site floor of ML §4.3 (the hand labeller may find
+sampled sites (TS/JS: 181 of its 523-site census), so those labellers may end near the 100-site floor of ML §4.3 (the hand labeller may find
 more where the reference is silent: 83 Java sites). The flow draw
-is 30 methods everywhere except **TS/JS: 14** (the whole population: only 18 bodied named methods have a branch and a
-call even at 2-60 lines; ML §8.4's 120-pair floor then needs ≈ 9 pairs per method).
+is 30 methods everywhere except **TS/JS: 12** (the whole non-test population; `sample/javascript-flow-tier2.jsonl` holds the 3
+methods of 26-60 lines of ML §8.4's second stage, generated now, labelled only if the tier-1 pairs are below 120).
 
 **C6 for Go is approximate**: 14 interface types with ≥ 2 in-corpus implementers by a tree-sitter *name-based* method-set
 check (3 when the interface has ≥ 2 methods); `callgraph` emits no implementation relation, so the ML §3.2 "checked by

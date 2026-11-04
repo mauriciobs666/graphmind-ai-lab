@@ -98,9 +98,8 @@ site**, appended as you go:
 - `kind` is `internal`, `declared` or `external`. `confidence` is `sure` or `unsure`. **`unsure` is
   always better than a guess or a skip.**
 - `evidence`: at most 300 characters, citing file:line for what you relied on.
-- **Stop** after the line that brings the number of lines with at least one `internal` or
-  `declared` callee to
-  **150**, or after ordinal **500**, whichever comes first.
+- **Stop** only after the line for ordinal **523**, the last site of the sample file: every site is
+  labelled (a census of 523 sites). There is no earlier stop and no count of internal sites to reach.
 - **Resume:** if you are restarted, read the last ordinal in `/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labels/javascript.jsonl` and continue with the
   next one. Never rewrite earlier lines.
 

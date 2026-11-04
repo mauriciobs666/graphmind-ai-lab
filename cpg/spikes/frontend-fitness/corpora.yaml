@@ -87,9 +87,11 @@ corpora:
       C2_C3:
         targetNonBlankLines: 7266
         targetShare: 0.7363
-        frameFiles: 74
+        frameFiles: 40                     # prod census (ML v1.6 §3.1): files outside bundle spec4 §1's `test` pattern; was 74 (4097 sites)
         frameFileCodeLines(cloc-style): 6163
-        frameSites: 4097
+        frameSites: 523
+        frameSitesWithTests: 4097
+        frameTestExcludedSites: 3574
         framefilesWithParseErrors: 0
         nonBlankLinesByLanguage:
           javascript: 7266
@@ -106,22 +108,22 @@ corpora:
         toolVersion: 0.6.0
         exitStatus: 0
         documentsIndexed: 74
-        pilot:
+        pilot:                           # re-drawn from the 523-site prod frame, reference re-mapped (no tool re-run)
           pilotSites: 50
-          withReference: 49
-          silent: 1
-          coverage: 0.98
-          coverageIfStructuralSilentsExcluded: 0.98
-          silentTagged: {}
+          withReference: 50
+          silent: 0
+          coverage: 1.0
+          adjustedCoverage: 1.0
+          excluded: 0
         verdict: PASS
-        recordedAtUtc: '2026-11-04T19:02:12Z'
+        recordedAtUtc: '2026-11-04T20:44:41Z'
       frameKinds:
-        ctor: 62
-        jsx: 172
-        method: 1773
-        other: 13
-        plain: 2022
-        qualified: 55
+        ctor: 13
+        jsx: 44
+        method: 74
+        other: 1
+        plain: 379
+        qualified: 12
   go:
     project: labstack/echo
     url: https://github.com/labstack/echo
