@@ -16,34 +16,74 @@ build:
     SC-FAIL-REPO: {H1: built, H2: failed}
     SC-NEVER-REPO: never-built
 
-history:   # section 8; linear; fixed author/committer; the materializer (S39) applies it, nothing here runs git
-  H0: {date: 2026-01-05, content: "the tree at this path, minus the H4 comment line in job/run_report.py"}
-  H1: {date: 2026-02-10, content: "no tree change for fx-job; a successful build point (job builds)"}
-  H2:
-    date: 2026-02-15
-    content: "adds job/broken.py (a syntax error, e.g. 'def broken(:') and a forced buildFailure marker on unit job"
-    buildFailure: {unit: job, repoId: fx-job, marker: forced, cause: job/broken.py}
-  H3:
-    date: 2026-02-20
-    content: "reverts H2: removes job/broken.py and the buildFailure marker"
-  H4:
-    date: 2026-03-10
-    content: "comment-only edit to job/run_report.py: adds the line '# Reviewed for the quarterly audit.' (line 2, after the module docstring); HEAD tree = this tree"
-    comment_only: [{path: job/run_report.py, added_line: "# Reviewed for the quarterly audit."}]
-branches:
-  ov-job:   # off H4; un-merged change set CS-JOB (section 5.8). Edits are exact-string replacements.
-    edits:
-      - path: job/run_report.py
-        qname: "job/run_report.py::write_report"
-        replace:
-          old: '"INSERT INTO order_report (order_id, total_text) VALUES (?, ?)",'
-          new: '"INSERT INTO order_report (order_id, total_text, generated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",'
-      - path: job/trigger_server.py
-        qname: "job/trigger_server.py::status"
-        replace:
-          old: 'return {"running": _state["running"], "runs": _state["runs"]}'
-          new: 'return {"state": "running" if _state["running"] else "idle", "runs": _state["runs"]}'
+history:   # F-6 (fixture-manifest-v1): the checked-in tree is baseTree; H0 = baseTree + H0.ops; each later commit = its predecessor + its ops; forward ops only (add_file, replace_text, delete_file).
+  repo: fx-job
+  author: fixed (materializer)
+  linear: true
+  baseTree: cpg/fixtures/system1/fx-job/** (all files; the HEAD = H4 tree)
+  commits:
+  - id: H0
+    date: '2026-01-05'
+    message: initial tree
+    ops:
+    - op: replace_text
+      path: job/run_report.py
+      from: '"""Order report job: reads orders, renders rows, writes the order_report table."""
 
+        # Reviewed for the quarterly audit.
+
+        '
+      to: '"""Order report job: reads orders, renders rows, writes the order_report table."""
+
+        '
+  - id: H1
+    date: '2026-02-10'
+    message: 'build point: job builds'
+    allowEmpty: true
+    ops: []
+  - id: H2
+    date: '2026-02-15'
+    message: forced build failure on job
+    buildFailure:
+      unit: job
+      cause: job/broken.py
+    ops:
+    - op: add_file
+      path: job/broken.py
+      content: "def broken(:\n    pass\n"
+  - id: H3
+    date: '2026-02-20'
+    message: revert the build failure
+    ops:
+    - op: delete_file
+      path: job/broken.py
+  - id: H4
+    date: '2026-03-10'
+    message: comment-only edit (HEAD, out of window)
+    ops:
+    - op: replace_text
+      path: job/run_report.py
+      from: '"""Order report job: reads orders, renders rows, writes the order_report table."""
+
+        '
+      to: '"""Order report job: reads orders, renders rows, writes the order_report table."""
+
+        # Reviewed for the quarterly audit.
+
+        '
+  branches:
+  - name: ov-job
+    base: H4
+    changeSet: CS-JOB
+    ops:
+    - op: replace_text
+      path: job/run_report.py
+      from: '"INSERT INTO order_report (order_id, total_text) VALUES (?, ?)",'
+      to: '"INSERT INTO order_report (order_id, total_text, generated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",'
+    - op: replace_text
+      path: job/trigger_server.py
+      from: 'return {"running": _state["running"], "runs": _state["runs"]}'
+      to: 'return {"state": "running" if _state["running"] else "idle", "runs": _state["runs"]}'
 rows:
   # ---- LNK (link rows with a job locator) ----
   - {id: LNK-03, prefix: LNK, kind: env_var, key: "FX_SVC_URL", P: "svc:deploy/compose.yaml @services.job.environment.FX_SVC_URL", C: "job:job/api_client.py::ApiClient.__init__", st: confirmed, reason: key-match, gate: P3, shape: exact literal, serves: [LNK], stratum: fixture-dev}
@@ -57,10 +97,10 @@ rows:
   - {id: LNK-26, prefix: LNK, kind: data_entity, key: "sql:column:orders.total", P: "svc:db/orders.py::insert_order", C: "job:job/run_report.py::render_row", st: confirmed, reason: key-match, gate: P3, serves: [LNK], stratum: fixture-dev}
   - {id: LNK-29, prefix: LNK, kind: config_key, key: "settings.get(section + '.' + key)", C: "job:job/settings.py::lookup", st: possible, reason: runtime-built, gate: P3, shape: runtime-built key, serves: [LNK], stratum: fixture-dev}
   - {id: LNK-33, prefix: LNK, kind: library_api, key: "python:fx_svc_common.fmt.fmt_money(amount,*,locale)", P: "svc:common/fx_svc_common/fmt.py::fmt_money", C: "job:job/run_report.py::render_row", pin: "fx-svc-common==1.4 (requirements.txt)", stub: "job/stubs/fx_svc_common_1_4.pyi", call: "fmt_money(row[0], LOCALE)", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
-  - {id: LNK-34, prefix: LNK, kind: library_api, key: "round_money", P: "svc:common/fx_svc_common/fmt.py::round_money", C: "job:job/run_report.py::requeue", call: "round_money(order[\"total\"])", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
-  - {id: LNK-35, prefix: LNK, kind: library_api, key: "split_money", P: "svc:common/fx_svc_common/split.py::split_money", C: "job:job/run_report.py::fetch_item", call: "split_money(item[\"price\"], 3)", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-34, prefix: LNK, kind: library_api, key: "python:fx_svc_common.fmt.round_money(amount,*,mode)", P: "svc:common/fx_svc_common/fmt.py::round_money", C: "job:job/run_report.py::requeue", call: "round_money(order[\"total\"])", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-35, prefix: LNK, kind: library_api, key: "python:fx_svc_common.split.split_money(amount,parts,*,remainder)", P: "svc:common/fx_svc_common/split.py::split_money", C: "job:job/run_report.py::fetch_item", call: "split_money(item[\"price\"], 3)", st: possible, reason: name-only-provider, versionSkew: true, gate: P2, shape: version skew, serves: [LNK], stratum: fixture-dev}
   - {id: LNK-37, prefix: LNK, kind: http, key: "GET /api/search", P: "svc:api/search.py::search", C: "job:job/run_report.py::search_reports", const: "job:job/paths.py::SEARCH_PATH", st: confirmed, reason: key-match, gate: P1, shape: constant across files, serves: [LNK], stratum: fixture-dev}
-  - {id: LNK-41, prefix: LNK, kind: library_api, key: "fmt_date", P: "svc:common/fx_svc_common/fmt.py::fmt_date", C: "job:job/run_report.py::render_row", call: "fmt_date(ts)", st: confirmed, reason: key-match, versionSkew_note: true, gate: P2, serves: [LNK], stratum: fixture-dev}
+  - {id: LNK-41, prefix: LNK, kind: library_api, key: "python:fx_svc_common.fmt.fmt_date(ts)", P: "svc:common/fx_svc_common/fmt.py::fmt_date", C: "job:job/run_report.py::render_row", call: "fmt_date(ts)", st: confirmed, reason: key-match, versionSkew_note: true, gate: P2, serves: [LNK], stratum: fixture-dev}
   # ---- AC6 ----
   - {id: AC6-QL-3, prefix: AC6, kind: data_entity, shape_syntax: "SQL by concatenation: \"SELECT \" + cols + \" FROM \" + tbl", C: "job:job/dynq.py::dump_table", st: possible, reason: runtime-built, gate: P3, tag: runtime-built query, serves: [AC-6], stratum: fixture-dev, note: "both parts are parameters; no true target"}
   # ---- TW ----

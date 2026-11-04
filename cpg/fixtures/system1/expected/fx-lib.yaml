@@ -19,31 +19,42 @@ build:
 schemaEntries:
   - {objectKey: "/acme.fxlib.Pricing/Quote", kind: rpc, path: pricing/src/main/proto/pricing.proto, line: 9, implemented_by: "lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)", stratum: fixture-dev}
 
-history:   # section 8; linear; fixed author/committer; the materializer (S39) applies it, nothing here runs git
-  # fx-lib is touched by H0, H1, H3 only (section 8 table). The tree at this path is the HEAD tree (H3 = HEAD for fx-lib).
-  # `pre_h3_edits` turns the HEAD tree into the H0/H1 tree: exact-string replacements, each `old` occurring once in the file.
-  H0:
-    date: 2026-01-05
-    content: "the tree at this path with pre_h3_edits applied (Pricing.quote(int,String) exists; the 3-argument overload does not)"
-  H1:
-    date: 2026-02-10
-    content: "no tree change for fx-lib; a successful build point (both units build, P2 and later)"
-  H3:
-    date: 2026-02-20
-    content: "applies the reverse of pre_h3_edits: Pricing.quote(int,String) becomes quote(int,String,Currency); HEAD tree = this tree"
-pre_h3_edits:
-  - path: pricing/src/main/java/com/acme/fxlib/Pricing.java
-    qname: "pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote"
-    old: |2-
-          public static BigDecimal quote(int qty, String sku, Currency currency) {
-    new: |2-
-          public static BigDecimal quote(int qty, String sku) {
-              Currency currency = DEFAULT_CURRENCY;
-  - path: quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java
-    qname: "quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.quoteDefault"
-    old: 'return Pricing.quote(1, "SKU-1", Pricing.DEFAULT_CURRENCY);'
-    new: 'return Pricing.quote(1, "SKU-1");'
-
+history:   # F-6 (fixture-manifest-v1): the checked-in tree is baseTree; H0 = baseTree + H0.ops; each later commit = its predecessor + its ops; forward ops only (add_file, replace_text, delete_file).
+  repo: fx-lib
+  author: fixed (materializer)
+  linear: true
+  baseTree: cpg/fixtures/system1/fx-lib/** (all files; the HEAD = H3 tree)
+  commits:
+  - id: H0
+    date: '2026-01-05'
+    message: 'initial tree: Pricing.quote(int,String)'
+    ops:
+    - op: replace_text
+      path: pricing/src/main/java/com/acme/fxlib/Pricing.java
+      from: '    public static BigDecimal quote(int qty, String sku, Currency currency) {'
+      to: "    public static BigDecimal quote(int qty, String sku) {\n        Currency currency = DEFAULT_CURRENCY;"
+    - op: replace_text
+      path: quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java
+      from: return Pricing.quote(1, "SKU-1", Pricing.DEFAULT_CURRENCY);
+      to: return Pricing.quote(1, "SKU-1");
+  - id: H1
+    date: '2026-02-10'
+    message: 'build point: both units build'
+    allowEmpty: true
+    ops: []
+  - id: H3
+    date: '2026-02-20'
+    message: quote gains Currency
+    ops:
+    - op: replace_text
+      path: pricing/src/main/java/com/acme/fxlib/Pricing.java
+      from: "    public static BigDecimal quote(int qty, String sku) {\n        Currency currency = DEFAULT_CURRENCY;"
+      to: '    public static BigDecimal quote(int qty, String sku, Currency currency) {'
+    - op: replace_text
+      path: quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java
+      from: return Pricing.quote(1, "SKU-1");
+      to: return Pricing.quote(1, "SKU-1", Pricing.DEFAULT_CURRENCY);
+  branches: []
 rows:
   - {id: LNK-23, prefix: LNK, kind: rpc, key: "/acme.fxlib.Pricing/Quote", P: "lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)", P_line: 14, declared_in: "lib:pricing/src/main/proto/pricing.proto", C: "svc:clients/pricing.py::quote", st: confirmed, reason: key-match, gate: P2, serves: [LNK], stratum: fixture-dev, note: "provider side only; the Python stub call with the literal method lives in fx-svc"}
   - {id: LNK-24, prefix: LNK, kind: topic, key: "inhouse-fxbus:price.updated", P: "lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)", P_line: 27, wrapper: "lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.publish(String,Object)", wrapper_line: 25, publish_call_site: "Pricing.java line 27: FxBus.publish(\"price.updated\", ...)", C: "lib:pricing/src/main/java/com/acme/fxlib/bus/AuditListener.java::AuditListener.onPrice(PriceEvent)", C_line: 15, consumer_form: "annotation @FxSubscribe(\"price.updated\") on onPrice", st: confirmed, reason: key-match, gate: P2, serves: [LNK], stratum: fixture-dev}

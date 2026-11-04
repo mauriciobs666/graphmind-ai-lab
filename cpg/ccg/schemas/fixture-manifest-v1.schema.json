@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://graphmind.local/ccg/fixture-manifest-v1.schema.json",
+  "title": "Fixture manifest v1 (connected code graph, S39)",
+  "description": "Validates cpg/fixtures/system1/expected/{fx-svc,fx-web,fx-lib,fx-job,cross}.yaml. Plan: docs/test-plans/connected-code-graph-fixtures.md (rows, section 5; history, section 8). Three conventions are fixed here. (F-6) HISTORY: the checked-in tree is history.baseTree; commit H0 is baseTree plus H0.ops; each later commit is its predecessor plus its ops; forward ops only (add_file, replace_text, delete_file); a branch is a base commit plus ops. A reverse construct (treeState, pre_h3_edits, reverse ops) is rejected. (F-8) PLANTER LITERALS: a row that plants a route/tool/topic/table/env literal names it with `literal` and its enclosing code locator in `locator`/`C`/`P`; the planter check (TP-018) keys on the pair (literal, enclosing locator), never on a global literal set. (F-4) SKEW KEY: a library_api key is the provider's full key `<lang>:<module>.<name>(<signature>)`, in every manifest that holds the row. Per-builder row dialects are tolerated for field NAMES only (`status`/`st`, `keyNorm`/`key`, `P`/`provider`); the semantic fields below are strict. YAML 1.1 reads an unquoted `on`/`off` key as a boolean; the SK rows' `on`/`off` blocks are accepted under either spelling.",
+  "type": "object",
+  "required": ["rows"],
+  "properties": {
+    "manifest": {"$ref": "#/$defs/manifestHeader"},
+    "repo": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job"]},
+    "version": {"const": 1},
+    "units": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/unit"}},
+    "history": {"$ref": "#/$defs/history"},
+    "rows": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/row"}},
+    "pre_h3_edits": false,
+    "treeState": false
+  },
+  "oneOf": [
+    {
+      "required": ["manifest"],
+      "properties": {"manifest": {"properties": {"repoId": {"const": "cross"}}}},
+      "description": "cross.yaml: deduplicated cross-repository rows",
+      "properties": {"rows": {"items": {"$ref": "#/$defs/crossRow"}}}
+    },
+    {
+      "required": ["history", "units"],
+      "description": "a per-repository manifest: header is `manifest` (fx-svc) or `repo` (the compact dialect)",
+      "anyOf": [
+        {"required": ["manifest"], "properties": {"manifest": {"properties": {"repoId": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job"]}}}}},
+        {"required": ["repo"]}
+      ]
+    }
+  ],
+  "$defs": {
+    "manifestHeader": {
+      "type": "object",
+      "required": ["repoId", "formatVersion", "stratum"],
+      "properties": {
+        "repoId": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job", "cross"]},
+        "formatVersion": {"const": 1},
+        "stratum": {"const": "fixture-dev"}
+      }
+    },
+    "unit": {
+      "type": "object",
+      "properties": {
+        "unitId": {"type": "string", "minLength": 1},
+        "repoId": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job"]},
+        "rootPath": {"type": "string", "minLength": 1},
+        "lang": {"enum": ["python", "javascript", "java"]}
+      }
+    },
+    "op": {
+      "oneOf": [
+        {"type": "object", "required": ["op", "path", "content"], "additionalProperties": false,
+         "properties": {"op": {"const": "add_file"}, "path": {"$ref": "#/$defs/relPath"}, "content": {"type": "string"}}},
+        {"type": "object", "required": ["op", "path", "from", "to"], "additionalProperties": false,
+         "properties": {"op": {"const": "replace_text"}, "path": {"$ref": "#/$defs/relPath"},
+                        "from": {"type": "string", "minLength": 1}, "to": {"type": "string"}}},
+        {"type": "object", "required": ["op", "path"], "additionalProperties": false,
+         "properties": {"op": {"const": "delete_file"}, "path": {"$ref": "#/$defs/relPath"}}}
+      ]
+    },
+    "relPath": {"type": "string", "pattern": "^[^/\\s][^\\s]*$", "not": {"pattern": "(^|/)\\.\\.(/|$)"}},
+    "date": {"type": "string", "pattern": "^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+    "commit": {
+      "type": "object",
+      "required": ["id", "date", "message", "ops"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^H[0-9]+$"},
+        "date": {"$ref": "#/$defs/date"},
+        "message": {"type": "string", "minLength": 1},
+        "allowEmpty": {"type": "boolean"},
+        "buildFailure": {"type": "object"},
+        "note": {"type": "string"},
+        "ops": {"type": "array", "items": {"$ref": "#/$defs/op"}}
+      },
+      "if": {"properties": {"ops": {"maxItems": 0}, "id": {"not": {"const": "H0"}}}},
+      "then": {"required": ["allowEmpty"]}
+    },
+    "branch": {
+      "type": "object",
+      "required": ["name", "base", "ops"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$", "not": {"const": "main"}},
+        "base": {"type": "string", "pattern": "^H[0-9]+$"},
+        "changeSet": {"type": "string"},
+        "serves": {"type": "array", "items": {"type": "string"}},
+        "ops": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/op"}}
+      }
+    },
+    "history": {
+      "type": "object",
+      "required": ["repo", "baseTree", "commits"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job"]},
+        "author": {"type": "string"},
+        "linear": {"const": true},
+        "baseTree": {"type": "string", "minLength": 1},
+        "commits": {
+          "type": "array",
+          "minItems": 2,
+          "prefixItems": [{"$ref": "#/$defs/commit", "properties": {"id": {"const": "H0"}}}],
+          "items": {"$ref": "#/$defs/commit"}
+        },
+        "branches": {"type": "array", "items": {"$ref": "#/$defs/branch"}}
+      }
+    },
+    "status": {"enum": ["confirmed", "possible", "none"]},
+    "reasonCode": {"type": "string", "pattern": "^(none|[a-z][a-z0-9-]*(:<lang>)?)$"},
+    "reason": {
+      "description": "one registry code, `edge / link` as a string, or the structured {edge, link} form (fx-svc)",
+      "oneOf": [
+        {"type": "string", "pattern": "^(none|[a-z][a-z0-9-]*(:<lang>)?( / [a-z][a-z0-9-]*(:<lang>)?)?)$"},
+        {"type": "object", "required": ["edge", "link"], "additionalProperties": false,
+         "properties": {"edge": {"$ref": "#/$defs/reasonCode"}, "link": {"$ref": "#/$defs/reasonCode"}}}
+      ]
+    },
+    "skewKey": {"type": "string", "pattern": "^(python|java|javascript):[A-Za-z_][A-Za-z0-9_.]*\\([^()]*\\)$"},
+    "locatorString": {
+      "type": "string",
+      "pattern": "^(fx-svc|fx-web|fx-lib|fx-job):[^\\s:@]+(::[^\\s]+| @[^\\s]+)?$"
+    },
+    "row": {
+      "type": "object",
+      "required": ["id", "gate", "stratum"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Za-z0-9]+)+$"},
+        "gate": {"enum": ["P1", "P2", "P3", "P4", "P5"]},
+        "stratum": {"const": "fixture-dev"},
+        "serves": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "status": {"$ref": "#/$defs/status"},
+        "st": {"$ref": "#/$defs/status"},
+        "reason": {"$ref": "#/$defs/reason"},
+        "kind": {"type": "string", "minLength": 1},
+        "literal": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {"description": "a row with a status carries a reason (a possible row's reason is mandatory; confirmed rows name theirs too)",
+         "if": {"anyOf": [{"required": ["status"]}, {"required": ["st"]}]}, "then": {"required": ["reason"]}},
+        {"not": {"required": ["status", "st"]}},
+        {"description": "a possible row never carries the reason `none`",
+         "if": {"anyOf": [{"required": ["status"], "properties": {"status": {"const": "possible"}}},
+                          {"required": ["st"], "properties": {"st": {"const": "possible"}}}]},
+         "then": {"properties": {"reason": {"not": {"const": "none"}}}}},
+        {"description": "F-4: a library_api key is the provider's full key",
+         "if": {"required": ["kind"], "properties": {"kind": {"const": "library_api"}}},
+         "then": {"properties": {"keyNorm": {"$ref": "#/$defs/skewKey"}, "key": {"$ref": "#/$defs/skewKey"}}}},
+        {"description": "F-8: a planted literal names its enclosing locator (TP-018 keys on the pair)",
+         "if": {"required": ["literal"]},
+         "then": {"anyOf": [{"required": ["C"]}, {"required": ["consumer"]}, {"required": ["P"]}, {"required": ["provider"]}, {"required": ["locator"]}]}}
+      ]
+    },
+    "crossRow": {
+      "type": "object",
+      "required": ["id", "gate", "stratum", "serves", "holders", "why"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Za-z0-9]+)+$"},
+        "kind": {"type": "string"},
+        "keyNorm": {"type": "string"},
+        "status": {"$ref": "#/$defs/status"},
+        "reason": {"$ref": "#/$defs/reason"},
+        "gate": {"enum": ["P1", "P2", "P3", "P4", "P5"]},
+        "stratum": {"const": "fixture-dev"},
+        "serves": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "holders": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["fx-svc", "fx-web", "fx-lib", "fx-job"]}},
+        "why": {"enum": ["multi-manifest", "cross-unit"]},
+        "provider": {"type": "array", "items": {"$ref": "#/$defs/locatorString"}},
+        "consumer": {"type": "array", "items": {"$ref": "#/$defs/locatorString"}},
+        "refs": {"type": "array", "items": {"$ref": "#/$defs/locatorString"}},
+        "scenario": {"type": "string"},
+        "unit": {"type": "object"}
+      },
+      "allOf": [
+        {"if": {"required": ["status"]}, "then": {"required": ["reason"]}},
+        {"if": {"required": ["kind"], "properties": {"kind": {"const": "library_api"}}},
+         "then": {"properties": {"keyNorm": {"$ref": "#/$defs/skewKey"}}}},
+        {"if": {"properties": {"why": {"const": "multi-manifest"}}}, "then": {"properties": {"holders": {"minItems": 2}}}}
+      ]
+    }
+  }
+}

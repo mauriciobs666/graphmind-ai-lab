@@ -15,11 +15,22 @@ components: [api, mcp, bus, ui, plugins]   # directories app/src/<component>/; i
 build:
   steady: built   # SC-STEADY: unit web builds; fx-web is never an AB target
 
-history:   # section 8; linear; fixed author/committer; the materializer (S39) applies it, nothing here runs git
-  H0: {date: 2026-01-05, content: "the whole tree at this path (every file under fx-web/)"}
-  H1: {date: 2026-02-10, content: "no tree change for fx-web; a successful build point (S39 must allow an empty commit)"}
-  # H2, H3, H4 are not fx-web commits (section 8 'Repos' column); HEAD of fx-web = H1 = the tree here.
-branches: {}   # ov-job, ov-svc, tf-* are fx-job / fx-svc branches
+history:   # F-6 (fixture-manifest-v1): the checked-in tree is baseTree; H0 = baseTree + H0.ops; each later commit = its predecessor + its ops; forward ops only (add_file, replace_text, delete_file).
+  repo: fx-web
+  author: fixed (materializer)
+  linear: true
+  baseTree: cpg/fixtures/system1/fx-web/** (all files)
+  commits:
+  - id: H0
+    date: '2026-01-05'
+    message: initial tree
+    ops: []
+  - id: H1
+    date: '2026-02-10'
+    message: 'build point: unit web builds'
+    allowEmpty: true
+    ops: []
+  branches: []
 
 rows:
   # ---- LNK (link rows with a web locator) ----
