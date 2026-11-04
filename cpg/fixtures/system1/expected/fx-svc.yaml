@@ -213,6 +213,8 @@ rows:
   aux:
   - repoId: fx-web
     path: app/src/api/endpoints.ts
+  - repoId: fx-svc
+    path: api/app.py
   keyNorm: GET /api/v1/orders/1001
   providerKeyNorm: GET /api/v1/orders/{}
   status: confirmed

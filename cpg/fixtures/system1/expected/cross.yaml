@@ -96,6 +96,7 @@ rows:
   - fx-web:app/src/api/orders.ts::getOrder
   refs:
   - fx-web:app/src/api/endpoints.ts
+  - fx-svc:api/app.py
   - fx-web:app/src/api/endpoints.ts::API_PREFIX
   - fx-web:app/src/api/endpoints.ts::ORDER_PATH
   - fx-web:app/src/api/endpoints.ts::SAMPLE_ORDER

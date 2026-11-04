@@ -5,6 +5,11 @@ directory (``.venv/bin/python -m pytest -q tests/test_fixtures.py``); the ``live
 ``ccg-toolchain`` image and the S08 runner (``-m live``). Every check carries a planted failing input (a mutant
 manifest, repo copy or answer builder) that must turn it red: a check that cannot fail is not a check.
 
+Named-symbol rule (ruling, S39 only): D15's unit floor (`cpg-content-check.sc`, S08, unchanged) passes any unit whose
+files emit the synthetic `<module>` METHOD, so a comments-only unit reads `ok`. This file adds a named-symbol rule and
+per-unit floors (`UNIT_FLOORS`) for the fixtures. **S11, S25 and S28 must apply a named-symbol rule themselves**; they
+cannot rely on the shared check's verdict alone.
+
 Conventions fixed by this file's schema (``ccg/schemas/fixture-manifest-v1.schema.json``):
 F-6 (tree = base tree + forward ops), F-8 (TP-018 keys on (literal, enclosing locator)), F-4 (skew key form).
 """
@@ -129,6 +134,58 @@ def test_tp001_planted_mutant_committer_date_unset_is_detected(tmp_path):
     first, second = _run_twice(mut, tmp_path, sleep=1.1)
     with pytest.raises(AssertionError, match="not deterministic"):
         _shas_equal_or_raise(first, second)
+
+
+# F-7: pinned SHAs (the materializer is also deterministic against a recorded value, not only run against run).
+# These change when a fixture tree, a manifest history block or the materializer's fixed constants change on purpose:
+# regenerate with `cd cpg && .venv/bin/python fixtures/materialize.py --json` and update this table in the same commit.
+PINNED_SHAS = {
+    'fx-job': {
+        "commits": {'H0': '7eb574a91d1abfc3e38930e139be2ef38ef8b42d', 'H1': '1595bdc063bacd92728767a049aa5ed5421ddec3', 'H2': '40f23388e6ab3b01ab5b1191857fb6059aff0d6d', 'H3': 'bf1fff8f2fdfc1aaeba960bfae771d6206dff154', 'H4': 'efbaa1946d52d5f7b4b3618bf73e7930f009db39'},
+        "branches": {'ov-job': '6a29ed25ee6808f7d4bfb063a6cb6589f389612f'},
+    },
+    'fx-lib': {
+        "commits": {'H0': '436df2c4bfdfda2f7253e9708b83d47b27998b17', 'H1': '0042d7183f93e2c0023129f3a50a21fd54f3f599', 'H3': '7f407188f9743be5c975d45faed8b5238410e175'},
+        "branches": {},
+    },
+    'fx-svc': {
+        "commits": {'H0': '91dfb929b5b2250a5ee7b25c4349b04ea2f23869', 'H1': '855ff39970c3f0fdf2dffbca2934dce89cf59bed', 'H2': 'df4585e1d5cce724213ca61cefbf5fb60c0f7680', 'H3': 'fb8cc776d19e708bbeb64ba14095f51f059e0c9b', 'H4': 'c00c24a2d18c4a95ea6d520a2513e27dce7620c5'},
+        "branches": {'ov-svc': 'e7fac573149dee3302045f5a74230d3429156f08', 'tf-mid': '0e183cf938c0856b699f3580067eb621e6ecd153', 'tf-sink': 'b9768660cdf8acdaa682c7577ab91fdd58e7eaab', 'tf-src': '8e6fc65dd40da376b7ef86272d97c7e4ef805c66'},
+    },
+    'fx-web': {
+        "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
+        "branches": {},
+    },
+}
+
+
+def sha_pin_violations(shas):
+    bad = []
+    for repo, got in shas.items():
+        want = PINNED_SHAS[repo]
+        if got["commits"] != want["commits"]:
+            bad.append((repo, "commits", {k: v for k, v in got["commits"].items() if want["commits"].get(k) != v}))
+        if {k: v for k, v in got["branches"].items() if k != "main"} != want["branches"]:
+            bad.append((repo, "branches"))
+    return bad
+
+
+def test_f7_materialized_shas_equal_the_pinned_shas(built):
+    assert sha_pin_violations(built[1]) == []
+    assert sum(len(v["commits"]) + len(v["branches"]) for v in PINNED_SHAS.values()) == 15 + 5
+
+
+def test_f7_file_modes_are_only_0644_and_0755_and_scripts_are_executable_as_in_the_tree(built):
+    out, _ = built
+    for repo in REPOS:
+        ls = git(out / repo, "ls-files", "-s").splitlines()
+        modes = {ln.split("\t")[1]: ln.split()[0] for ln in ls}
+        assert set(modes.values()) <= {"100644", "100755"}, repo
+        for path, mode in modes.items():
+            src = M.SYSTEM / repo / path
+            if src.exists():
+                want = "100755" if os.access(src, os.X_OK) and src.stat().st_mode & 0o111 else "100644"
+                assert mode == want, (repo, path, mode)
 
 
 def test_tp001_history_shape_matches_the_plan_section_8(built, manifests):
@@ -339,6 +396,77 @@ def test_f4_skew_keys_have_one_form_in_every_manifest(manifests):
                 seen.setdefault(row["id"], set()).add(key)
     assert set(seen) == {"LNK-33", "LNK-34", "LNK-35", "LNK-41"}
     assert all(len(v) == 1 for v in seen.values()), seen
+
+
+SKEW_ROWS = ("LNK-33", "LNK-34", "LNK-35", "LNK-41")
+
+
+def provider_skew_key(svc_dir: Path, rel_path: str, name: str) -> str:
+    """`python:<module>.<name>(<params>)` derived from the provider source with ast (defaults dropped, `*` marks keyword-only)."""
+    tree = ast.parse((svc_dir / rel_path).read_text())
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    a = fn.args
+    params = [x.arg for x in [*a.posonlyargs, *a.args]]
+    if a.vararg:
+        params.append("*" + a.vararg.arg)
+    elif a.kwonlyargs:
+        params.append("*")
+    params += [x.arg for x in a.kwonlyargs]
+    if a.kwarg:
+        params.append("**" + a.kwarg.arg)
+    module = ".".join(Path(rel_path).with_suffix("").parts[1:])                 # common/fx_svc_common/fmt.py -> fx_svc_common.fmt
+    return f"python:{module}.{name}({','.join(params)})"
+
+
+def skew_key_violations(manifests, svc_dir):
+    bad = []
+    for rid, held in M.holders(manifests).items():
+        if rid not in SKEW_ROWS:
+            continue
+        loc = next(l for r in held.values() for f, l in M.row_locators(r) if f in ("P", "provider"))
+        want = provider_skew_key(svc_dir, loc["path"], loc["qname"].split("::")[-1])
+        for repo, row in held.items():
+            key = row.get("keyNorm", row.get("key"))
+            if key != want:
+                bad.append((rid, repo, key, want))
+    return bad
+
+
+def test_f4_skew_keys_are_derived_from_the_provider_source(manifests, built):
+    svc = built[0] / "fx-svc"
+    assert skew_key_violations(manifests, svc) == []
+    assert provider_skew_key(svc, "common/fx_svc_common/fmt.py", "round_money") == "python:fx_svc_common.fmt.round_money(amount,*,mode)"
+    assert provider_skew_key(svc, "common/fx_svc_common/split.py", "split_money") == "python:fx_svc_common.split.split_money(amount,parts,*,remainder)"
+
+
+def test_f4_probe_every_axis_of_every_skew_key_turns_red(manifests, built):
+    """Each key x {module, name, each parameter, the `*` marker (removed, moved)}, applied consistently to every holder."""
+    svc = built[0] / "fx-svc"
+    n, survivors = 0, []
+    for rid in SKEW_ROWS:
+        key = next(r.get("keyNorm", r.get("key")) for r in M.holders(manifests)[rid].values())
+        m = re.match(r"^python:(fx_svc_common)\.(\w+)\.(\w+)\((.*)\)$", key)
+        _, mod, name, params = m.groups()
+        plist = params.split(",")
+        variants = {"module": key.replace(f".{mod}.", ".zz." if mod != "zz" else ".yy."),
+                    "name": key.replace(f".{name}(", f".{name}x(")}
+        for i, prm in enumerate(plist):
+            if prm != "*":
+                variants[f"param:{prm}"] = "python:fx_svc_common.%s.%s(%s)" % (mod, name, ",".join(x + "x" if j == i else x for j, x in enumerate(plist)))
+        if "*" in plist:
+            variants["star-removed"] = key.replace("*,", "")
+            others = [x for x in plist if x != "*"]
+            variants["star-moved"] = "python:fx_svc_common.%s.%s(%s)" % (mod, name, ",".join(["*", *others]))
+        for axis, bad_key in variants.items():
+            bad = copy.deepcopy(manifests)
+            for r in M.holders(bad)[rid].values():
+                r["keyNorm" if "keyNorm" in r else "key"] = bad_key
+            n += 1
+            if not skew_key_violations(bad, svc):
+                survivors.append((rid, axis))
+    assert survivors == []
+    assert n >= 20
+    print(f"F-4 probe: {n} mutants, 0 survivors")
 
 
 def test_f4_planted_short_skew_key_is_rejected_by_the_schema(manifests):
@@ -891,6 +1019,151 @@ def test_tp004_planted_failing_inputs(manifests):
     assert any("rows 131" in x for x in census_violations(bad))
 
 
+# ======================================================================================== plan <-> manifest row tie (F-3)
+# Every row of plan section 5 carries its status, reason and gate (and, for KN rows, its key; for DF/CD rows, its
+# distance, directness and group). Each holder's copy must equal the plan: the count-based census cannot see a
+# reason swapped for another registry-valid one.
+
+_PLAN_ST = {"c": "confirmed", "p": "possible", "confirmed": "confirmed", "possible": "possible", "none": None}
+
+
+def _clean(cell):
+    cell = cell.replace("**", "").replace("`", "").strip()
+    return re.sub(r"\s*\([^)]*\)\s*$", "", cell).strip()        # `name-only-provider (versionSkew)` -> the code
+
+
+def _canon_reason(r):
+    if r is None:
+        return None
+    if isinstance(r, dict):
+        r = f"{r['edge']} / {r['link']}"
+    r = re.sub(r"\s*/\s*", " / ", r.strip())
+    return None if r == "none" else r
+
+
+def plan_row_table():
+    """{row id: {gate, status, reason, keyNorm?, distance?, direct?, group?, planted}} parsed from plan section 5."""
+    text = PLAN_TEXT.split("## 5. Planted items")[1].split("## 6.")[0]
+    out, hdr = {}, None
+    for ln in text.splitlines():
+        if not ln.startswith("|"):
+            hdr = None
+            continue
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if cells[0] == "ID":
+            hdr = [c.lower() for c in cells]
+            continue
+        if hdr is None or set(cells[0]) <= set("-: "):
+            continue
+        if len(cells) > len(hdr):                              # a `|` inside a code span (AC6-PM-2): align from the right
+            cells = cells[:2] + [" | ".join(cells[2:2 + len(cells) - len(hdr) + 1])] + cells[len(cells) - (len(hdr) - 3):]
+        row = {"planted": " ".join(cells)}
+        for h, c in zip(hdr, cells):
+            if h == "gate":
+                row["gate"] = _clean(c)
+            elif h == "st":
+                row["status"] = _PLAN_ST.get(_clean(c).split()[0] if _clean(c) else "", "?")
+            elif h.startswith("reason"):
+                row["reason"] = _canon_reason(_clean(c)) if _clean(c) else None
+            elif h == "expected `keynorm`":
+                row["keyNorm"] = _clean(c)
+            elif h.startswith("dist"):
+                m = re.match(r"(\d)", _clean(c))
+                row["distance"], row["direct"] = int(m.group(1)), "direct" in c and "indirect" not in c
+            elif h == "group":
+                row["group"] = norm_group(_clean(c))
+        out[cells[0]] = row
+    return out
+
+
+def _key_in_plan_row(key, planted):
+    """The key appears in the plan row, either verbatim or as a plan key whose `{}` the literal key fills (F-4's literal keys)."""
+    if key in planted:
+        return True
+    for k in re.findall(r"`((?:GET|POST|PUT|DELETE) /[^`]*)`", planted):
+        if "{}" in k and re.fullmatch(re.escape(k).replace(re.escape("{}"), r"[^/]+"), key):
+            return True
+    return False
+
+
+def plan_row_violations(manifests, plan=None):
+    plan = plan or plan_row_table()
+    bad = []
+    for rid, held in M.holders(manifests).items():
+        p = plan.get(rid)
+        if p is None:
+            bad.append((rid, "row has no plan entry"))
+            continue
+        for repo, row in held.items():
+            v = M.row_view(row)
+            for field, have in (("gate", v["gate"]), ("status", None if v["status"] == "none" else v["status"]), ("reason", _canon_reason(v["reason"]))):
+                if field in p and p[field] != "?" and (p[field] != have):
+                    bad.append((rid, repo, field, p[field], have))
+            if "keyNorm" in p and p["keyNorm"] != v["key"]:
+                bad.append((rid, repo, "keyNorm", p["keyNorm"], v["key"]))
+            if "distance" in p:
+                d = row.get("distance", row.get("dist"))
+                if (p["distance"], p["direct"]) != (d, row.get("direct")):
+                    bad.append((rid, repo, "distance/direct", (p["distance"], p["direct"]), (d, row.get("direct"))))
+                if p.get("group") != norm_group(row["group"]):
+                    bad.append((rid, repo, "group", p.get("group"), row["group"]))
+            if v["key"] and re.match(r"^(GET|POST|PUT|DELETE) /", v["key"]) and rid.startswith("LNK") and not _key_in_plan_row(v["key"], p["planted"]):
+                bad.append((rid, repo, "key not in the plan row", v["key"]))
+    return bad
+
+
+def _mutations(row, plan_row):
+    """(field, setter) pairs that corrupt one plan-tied field of *row* (a manifest row dict, in place)."""
+    muts = []
+    if "gate" in plan_row:
+        muts.append(("gate", lambda r: r.__setitem__("gate", "P5" if r["gate"] != "P5" else "P1")))
+    if plan_row.get("status") not in (None, "?") and ("status" in row or "st" in row):
+        k = "status" if "status" in row else "st"
+        muts.append(("status", lambda r, k=k: r.__setitem__(k, "possible" if r[k] == "confirmed" else "confirmed")))
+    if plan_row.get("reason") is not None and "reason" in row:
+        muts.append(("reason", lambda r: r.__setitem__("reason", "port-shared" if _canon_reason(r["reason"]) != "port-shared" else "name-match")))
+    verb_key = row["id"].startswith("LNK") and re.match(r"^(GET|POST|PUT|DELETE) /", str(row.get("keyNorm", row.get("key", ""))))
+    if "keyNorm" in plan_row or verb_key:
+        k = "keyNorm" if "keyNorm" in row else "key"
+        if k in row:
+            muts.append(("key", lambda r, k=k: r.__setitem__(k, r[k] + "/zz")))
+    if "distance" in plan_row:
+        k = "distance" if "distance" in row else "dist"
+        muts.append(("distance", lambda r, k=k: r.__setitem__(k, r[k] + 1)))
+        muts.append(("group", lambda r: r.__setitem__("group", "zzz" + r["group"])))
+    return muts
+
+
+def plan_tie_probe(manifests):
+    """Mutate every (holder row x plan-tied field); return (count run, survivors)."""
+    plan = plan_row_table()
+    n, survivors = 0, []
+    for repo in REPOS:
+        for i, row in enumerate(manifests[repo]["rows"]):
+            p = plan.get(row["id"])
+            for field, setter in _mutations(row, p):
+                bad = copy.deepcopy(manifests)
+                setter(bad[repo]["rows"][i])
+                n += 1
+                if not plan_row_violations(bad, plan):
+                    survivors.append((repo, row["id"], field))
+    return n, survivors
+
+
+def test_f3_every_manifest_row_equals_its_plan_row_on_status_reason_gate_and_key(manifests):
+    plan = plan_row_table()
+    assert len(plan) == 132 and set(plan) == set(M.holders(manifests))
+    assert plan_row_violations(manifests, plan) == []
+    assert plan["AC6-PM-2"]["gate"] == "P1" and plan["SQC-PY"]["gate"] == "P4" and plan["KN-4"]["keyNorm"] == "GET /api/files/a%2Fb"
+
+
+def test_f3_probe_every_row_x_field_mutation_turns_the_tie_red(manifests):
+    n, survivors = plan_tie_probe(manifests)
+    assert survivors == [], survivors[:10]
+    assert n >= 400, f"the probe must enumerate rows x fields; ran {n}"
+    print(f"F-3 probe: {n} mutants, 0 survivors")
+
+
 # ======================================================================================== TP-013 / TP-014 / TP-016
 
 
@@ -1109,13 +1382,14 @@ def answer_item(it):
             "direct": it.get("direct", it["distance"] == 1)}
 
 
-def build_answer(items, *, group_key, item_key, flat=False, distance_shift=0):
+def build_answer(items, *, group_key, item_key, flat=False, distance_shift=0, direct_all=False, distance_only_shift=0):
     """items: list of {locator, name, status, distance}. Returns the ordered list of groups."""
     shifted = []
     for it in items:
         it2 = dict(it)
-        it2["distance"] = it["distance"] + distance_shift
-        it2["direct"] = it2["distance"] == 1
+        it2["distance"] = it["distance"] + distance_shift + distance_only_shift
+        # distance_only_shift moves the distance but keeps `direct` true to the real distance (isolates the two conjuncts)
+        it2["direct"] = True if direct_all else (it["distance"] == 1 if distance_only_shift else it2["distance"] == 1)
         shifted.append(it2)
     if flat:
         return [{"repo": "*", "component": "*", "distance": 0, "items": [answer_item(i) for i in sorted(shifted, key=item_key)]}]
@@ -1138,6 +1412,9 @@ MUTANTS = {
     "b: sort by distance first": dict(group_key=lambda kv: (kv[0][2], _bytes(kv[0][0]), _bytes(kv[0][1])), item_key=CORRECT["item_key"]),
     "c: distance off by one": dict(**CORRECT, distance_shift=1),
     "d: groups flattened": dict(**CORRECT, flat=True),
+    "e: drops the last dependency of every reverse answer": dict(**CORRECT, drop_last=True),
+    "f: right distances, direct=True on every item": dict(**CORRECT, direct_all=True),
+    "g: wrong distance, direct kept true to the real distance": dict(**CORRECT, distance_only_shift=1),
 }
 
 
@@ -1148,6 +1425,8 @@ def check_answer(answer, planted, kind):
     for pid, it in planted:
         gi = next((i for i, g in enumerate(answer) for x in g["items"] if x["locator"] == it["locator"] and x["name"] == it["name"]), None)
         found = None if gi is None else next(x for x in answer[gi]["items"] if x["locator"] == it["locator"] and x["name"] == it["name"])
+        if found is None and kind == "reverse":
+            continue                  # a dependency the answer omits is A25-4's failure alone, not A25-1..3's
         # A25-1: direct iff distance 1, else indirect, with the expected distance
         out.append(("A25-1", pid, found is not None and found["distance"] == it["distance"] and found["direct"] == (it["distance"] == 1)))
         # A25-2: the item sits in its named group; groups ordered by repository, component (bytes), distance
@@ -1169,10 +1448,11 @@ def run_ac25(manifests, builder):
     results = []
     for chg in sorted({str(v["changed"]["qname"]) for v in fwd.values()}):
         planted = [(i, v) for i, v in fwd.items() if v["changed"]["qname"] == chg]
-        results += check_answer(build_answer([v for _, v in planted], **builder), planted, "forward")
+        results += check_answer(build_answer([v for _, v in planted], **{k: x for k, x in builder.items() if k != "drop_last"}), planted, "forward")
     for rid, rv in rev.items():
         planted = [(f"{rid}/{d['name']}", d) for d in rv["deps"]]
-        ans = build_answer([d for _, d in planted], **builder)
+        bk = {k: v for k, v in builder.items() if k != "drop_last"}
+        ans = build_answer([d for _, d in (planted[:-1] if builder.get("drop_last") else planted)], **bk)
         results += check_answer(ans, planted, "reverse")
         listed = {(x["locator"]["path"], x["name"]) for g in ans for x in g["items"]}
         results.append(("A25-4", rid, listed == {(d["locator"]["path"], d["name"]) for d in rv["deps"]}))
@@ -1253,6 +1533,9 @@ def test_ac25_planted_failing_answer_builders_turn_the_column_red(manifests, nam
     res = run_ac25(manifests, MUTANTS[name])
     failed = {(a, i) for a, i, ok in res if not ok}
     kinds = {a for a, _ in failed}
+    fwd, rev = ac25_items(manifests)
+    every = {**{i: v for i, v in fwd.items()},
+             **{f"{rid}/{d['name']}": d for rid, r in rev.items() for d in r["deps"]}}
     if name.startswith("a:"):
         assert kinds == {"A25-3"}, failed                                         # only A25-3, in exactly the four pair groups
         assert {i for _, i in failed} == {"DF-2", "DF-4", "CD-3", "CD-4", "RV-1/is_member", "RV-1/find_hook",
@@ -1261,8 +1544,17 @@ def test_ac25_planted_failing_answer_builders_turn_the_column_red(manifests, nam
         assert "A25-2" in kinds, failed                                          # api/2 before core/1
     elif name.startswith("c:"):
         assert "A25-1" in kinds, failed
-    else:
+    elif name.startswith("d:"):
         assert "A25-2" in kinds, failed
+    elif name.startswith("e:"):
+        assert failed == {("A25-4", "RV-1"), ("A25-4", "RV-2"), ("A25-4", "RV-3")}, failed
+    elif name.startswith("f:"):
+        assert kinds == {"A25-1"} and {i for _, i in failed} == {k for k, v in every.items() if v["distance"] != 1}, failed
+        assert {"DF-2", "DF-3", "DF-4", "CD-3", "CD-4"} <= {i for _, i in failed}
+    else:                                                                         # g: every distance is wrong, directness is not
+        assert kinds <= {"A25-1", "A25-2"}, failed                                # a wrong distance also puts the item in the wrong group
+        assert {i for a, i in failed if a == "A25-1"} == set(every), failed       # ... but A25-1 must itself fail on every item
+        assert len(every) == 19
 
 
 def test_ac25_a_manifest_with_the_wrong_group_or_direct_flag_is_caught(manifests):
@@ -1407,11 +1699,7 @@ def unexplained_sites(repo, repo_dir, manifests):
 
 # Findings the run reports instead of hiding: a literal with no row naming its enclosing element. Keyed on
 # (repo, path, literal, enclosing element). The list must match the sweep exactly (a stale entry fails too).
-PLANTER_FINDINGS = {
-    ("fx-svc", "api/app.py", "/api", "API_PREFIX"):
-        "S39-D1: the `/api` mount prefix every /api provider key depends on is in no row (LNK-04 names the router "
-        "files, not api/app.py); suggest `aux: fx-svc:api/app.py` on LNK-04",
-}
+PLANTER_FINDINGS: dict = {}      # S39-D1 (the `/api` mount prefix) was closed by `aux: fx-svc:api/app.py` on LNK-04
 
 
 def finding_key(b):
@@ -1596,6 +1884,160 @@ def test_ab1_lnk42_lnk43_planted_failing_inputs(manifests, built, tmp_path):
     assert any("run_tool" in v for v in unit_gate_violations(docs, root / "fx-svc"))
 
 
+# ======================================================================================== branches (F-2)
+# Plan 5.8 / 5.10: five un-merged change sets, each cut from HEAD (= H4). The expectations below are the plan's text
+# turned into checks on the materialized branch (what changed, in which element, how), so an edit that keeps the paths
+# but changes the substance fails; the pinned SHAs (F-7) then fix the exact bytes.
+
+BRANCH_PLAN = {
+    # repo: {branch: (changed files, {file: changed top-level functions}, rule)}
+    "fx-job": {"ov-job": ({"job/run_report.py", "job/trigger_server.py"},
+                          {"job/run_report.py": {"write_report"}, "job/trigger_server.py": {"status"}}, "ov-job")},
+    "fx-svc": {"ov-svc": ({"db/schema.sql"}, {}, "ov-svc"),
+               "tf-mid": ({"api/ops.py"}, {"api/ops.py": {"normalize"}}, "tf-mid"),
+               "tf-sink": ({"api/ops.py"}, {"api/ops.py": {"exec_cmd"}}, "tf-sink"),
+               "tf-src": ({"api/ops.py"}, {"api/ops.py": {"run_cmd"}}, "tf-src")},
+}
+
+
+def _funcs(text):
+    tree = ast.parse(text)
+    return {n.name: (ast.dump(n), n.lineno, n.end_lineno) for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+
+def _insert_columns(text):
+    m = re.search(r"INSERT INTO order_report \(([^)]*)\)", text)
+    return [c.strip() for c in m.group(1).split(",")] if m else None
+
+
+def _return_keys(text, fn):
+    node = next(n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef) and n.name == fn)
+    ret = next(n for n in ast.walk(node) if isinstance(n, ast.Return))
+    return {k.value for k in ret.value.keys} if isinstance(ret.value, ast.Dict) else None
+
+
+def _table_columns(text, table="orders"):
+    m = re.search(rf"(?is)create\s+table\s+{table}\s*\((.*?)\n\)\s*;", text)
+    return [ln.strip().split()[0] for ln in m.group(1).splitlines() if ln.strip() and not ln.strip().upper().startswith(("PRIMARY", "UNIQUE", "FOREIGN"))] if m else None
+
+
+def branch_violations(manifests, repo, repo_dir):
+    """Plan-derived checks of every branch of *repo* in the materialized repository *repo_dir*."""
+    bad = []
+    for b in manifests[repo]["history"].get("branches", []):
+        name = b["name"]
+        if b["base"] != "H4":
+            bad.append((repo, name, "plan: off HEAD (H4), manifest base is " + b["base"]))
+        files, funcs, _ = BRANCH_PLAN[repo][name]
+        parent = git(repo_dir, "rev-parse", f"{name}^")
+        if parent != git(repo_dir, "rev-parse", "H4"):
+            bad.append((repo, name, "branch is not cut from H4"))
+        changed = set(git(repo_dir, "diff", "--name-only", "H4", name).splitlines())
+        if changed != files:
+            bad.append((repo, name, f"changed files {sorted(changed)} != plan {sorted(files)}"))
+            continue
+        before = {f: git(repo_dir, "show", f"H4:{f}") for f in files}
+        after = {f: git(repo_dir, "show", f"{name}:{f}") for f in files}
+        for f in files:
+            if f.endswith(".py"):
+                try:
+                    fb, fa = _funcs(before[f]), _funcs(after[f])
+                except SyntaxError as exc:
+                    bad.append((repo, name, f"{f} does not parse: {exc.msg}"))
+                    continue
+                diff = {n for n in set(fb) | set(fa) if fb.get(n, (None,))[0] != fa.get(n, (None,))[0]}
+                if diff != funcs[f]:
+                    bad.append((repo, name, f"{f}: changed functions {sorted(diff)} != plan {sorted(funcs[f])}"))
+        if name == "ov-job":
+            cb, ca = _insert_columns(before["job/run_report.py"]), _insert_columns(after["job/run_report.py"])
+            if not (cb and ca and set(cb) < set(ca)):
+                bad.append((repo, name, f"write_report must write more columns to order_report: {cb} -> {ca}"))
+            kb, ka = _return_keys(before["job/trigger_server.py"], "status"), _return_keys(after["job/trigger_server.py"], "status")
+            if not (kb and ka and kb != ka):
+                bad.append((repo, name, f"status response shape must change: {kb} -> {ka}"))
+        elif name == "ov-svc":
+            cb, ca = _table_columns(before["db/schema.sql"]), _table_columns(after["db/schema.sql"])
+            if not (cb and ca and "total" in cb and "total" not in ca and len(set(ca) - set(cb)) == 1 and len(ca) == len(cb)):
+                bad.append((repo, name, f"orders.total must be removed and one column added: {cb} -> {ca}"))
+        elif name == "tf-mid":
+            fb, fa = _funcs(before["api/ops.py"]), _funcs(after["api/ops.py"])
+            if not fa["exec_cmd"][1] > fb["exec_cmd"][1]:
+                bad.append((repo, name, "tf-mid must add a line above the sink (exec_cmd must move down)"))
+        elif name == "tf-sink":                       # the sink is the last element: an in-place edit moves nothing
+            fb, fa = _funcs(before["api/ops.py"]), _funcs(after["api/ops.py"])
+            if {n: v[1] for n, v in fb.items()} != {n: v[1] for n, v in fa.items()}:
+                bad.append((repo, name, "tf-sink is a single in-place edit: no function may move"))
+    return bad
+
+
+def test_f2_branches_realize_the_plan_change_sets(built, manifests):
+    out, _ = built
+    for repo in ("fx-job", "fx-svc"):
+        assert branch_violations(manifests, repo, out / repo) == [], repo
+    for cue in ("`write_report`", "`status`", "`orders.total`", "adds a line above the sink", "`tf-mid`", "`tf-sink`", "`tf-src`"):
+        assert cue in PLAN_TEXT.replace("job:job/run_report.py::", "`").replace("**adds a line above the sink**", "adds a line above the sink") or cue.strip("`") in PLAN_TEXT, cue
+
+
+def _branch_mutants(manifests):
+    """[(label, repo, mutated manifest)]: per branch {base}, per op {path, from, to x3}."""
+    out = []
+    for repo in ("fx-job", "fx-svc"):
+        for bi, b in enumerate(manifests[repo]["history"]["branches"]):
+            other_path = {"fx-job": "job/paths.py", "fx-svc": "api/health.py"}[repo]
+
+            def with_(edit, label, bi=bi, repo=repo, b=b):
+                m = copy.deepcopy(manifests[repo])
+                edit(m["history"]["branches"][bi])
+                out.append((label, repo, m))
+
+            with_(lambda x: x.__setitem__("base", "H3"), f"{b['name']}:base")
+            for oi, op in enumerate(b["ops"]):
+                tag = f"{b['name']}:op{oi}"
+                with_(lambda x, oi=oi, p=other_path: x["ops"][oi].__setitem__("path", p), tag + ":path")
+                with_(lambda x, oi=oi: x["ops"][oi].__setitem__("from", x["ops"][oi]["from"][:-1]), tag + ":from")
+                with_(lambda x, oi=oi: x["ops"][oi].__setitem__("to", x["ops"][oi]["to"] + ")"), tag + ":to-syntax")
+                with_(lambda x, oi=oi: x["ops"][oi].__setitem__("to", x["ops"][oi]["from"]), tag + ":to-noop")
+                with_(lambda x, oi=oi: x["ops"][oi].__setitem__("to", re.sub(r"([A-Za-z])(\W*)$", lambda m_: ("b" if m_.group(1).lower() != "b" else "c").upper() * m_.group(1).isupper() + ("b" if m_.group(1).lower() != "b" else "c") * (not m_.group(1).isupper()) + m_.group(2), x["ops"][oi]["to"].rstrip("\n"), count=1) + ("\n" if x["ops"][oi]["to"].endswith("\n") else "")), tag + ":to-token")
+    return out
+
+
+def run_branch_probe(manifests, tmp_path):
+    results = []
+    for label, repo, mutated in _branch_mutants(manifests):
+        assert mutated != manifests[repo], f"{label}: an equivalent mutant (no change)"
+        exp = tmp_path / "exp"
+        exp.mkdir(exist_ok=True)
+        (exp / f"{repo}.yaml").write_text(yaml.safe_dump({**manifests[repo], "history": mutated["history"] if "history" in mutated else mutated}, sort_keys=False, width=10000))
+        out = tmp_path / "m" / label.replace(":", "_")
+        out.mkdir(parents=True)
+        try:
+            info = M.materialize_repo(repo, out, expected_dir=exp)
+        except M.MaterializeError:
+            results.append((label, "anchor", True))
+            continue
+        try:
+            sem = branch_violations({repo: mutated}, repo, out / repo)
+        except (SyntaxError, StopIteration, AttributeError, subprocess.CalledProcessError) as exc:
+            sem = [(repo, label, f"unreadable after-state: {type(exc).__name__}")]
+        pin = sha_pin_violations({repo: info})
+        results.append((label, "semantic" if sem else "pin-only" if pin else "SURVIVED", bool(sem or pin)))
+    return results
+
+
+def test_f2_probe_every_branch_op_field_mutation_is_caught(manifests, tmp_path):
+    """5 branches: base x1 and, per op (6 ops), path, from and three `to` variants. Every mutant must be red."""
+    mutants = _branch_mutants(manifests)
+    assert len(mutants) == 5 + 6 * 5, len(mutants)
+    res = run_branch_probe({r: manifests[r] for r in manifests}, tmp_path)
+    survivors = [r for r in res if not r[2]]
+    assert survivors == [], survivors
+    how = {}
+    for _, kind, _ in res:
+        how[kind] = how.get(kind, 0) + 1
+    print(f"F-2 probe: {len(res)} mutants, 0 survivors; detected by {how}")
+    assert how.get("semantic", 0) + how.get("anchor", 0) >= 20, how
+
+
 # ======================================================================================== TP-006 content check, live
 RUNNER = CPG / "sandbox" / "offline-run.sh"
 CHECK_SC = CPG / "sandbox" / "scripts" / "cpg-content-check.sc"
@@ -1639,22 +2081,65 @@ def content_check(cpg_ids, outdir, audit_dir, src):
     return r, verdict, counts, per_file, methods
 
 
-def expected_symbol_names(manifests, unit):
-    """Last qname segments (no signature) of the manifest's locators that sit in *unit*, minus nested units' files."""
+def is_callable_symbol(text, path, qname):
+    """True when the locator names a function, method or class (not a constant, a field or a path)."""
+    q = qname.split("(")[0]
+    ext = os.path.splitext(path)[1]
+    if ext == ".py":
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            return False
+        want = q.split(".")
+        scope = tree.body
+        node = None
+        for part in want:
+            node = next((n for n in scope if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Assign, ast.AnnAssign))
+                         and (getattr(n, "name", None) == part or any(isinstance(t, ast.Name) and t.id == part for t in getattr(n, "targets", [getattr(n, "target", None)])))), None)
+            if node is None:
+                return False
+            scope = getattr(node, "body", [])
+        return isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    if ext in (".ts", ".tsx"):
+        head = re.escape(q.split(".")[0])
+        m = re.search(rf"(?m)^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(function\*?\s+{head}\b|class\s+{head}\b|(?:const|let|var)\s+{head}\b[^\n]*)", text)
+        if not m:
+            return False
+        decl = m.group(0)
+        return bool(re.search(r"\bfunction\b|\bclass\b|=>|=\s*(?:async\s*)?\(", decl))
+    if ext == ".java":
+        return "(" in qname
+    return False
+
+
+def expected_symbol_names(manifests, unit, root_dir: Path):
+    """Last qname segments of the callable symbols (function/method/class) the manifest places in *unit*."""
     nested = [u["rootPath"] for u in manifests[unit["repoId"]]["units"] if u is not unit and u["rootPath"] != "."
               and (unit["rootPath"] == "." or u["rootPath"].startswith(unit["rootPath"]))]
     root = "" if unit["rootPath"] == "." else unit["rootPath"]
-    names = set()
+    ext = {"python": (".py",), "javascript": (".ts", ".tsx"), "java": (".java",)}[unit["lang"]]
+    names = {}
     for _, _, _, loc in all_locators({**manifests, "cross": {"rows": []}}):
         if loc["repo"] != unit["repoId"] or not loc.get("qname") or not loc["path"].startswith(root) or any(loc["path"].startswith(n) for n in nested):
             continue
-        if not loc["path"].endswith({"python": ".py", "javascript": (".ts", ".tsx"), "java": ".java"}[unit["lang"]]):
+        if not loc["path"].endswith(ext):
             continue
-        q = loc["qname"].split("(")[0]
+        q = loc["qname"].split("::")[-1] if "::" in loc["qname"] else loc["qname"]
         if q.startswith("<"):
             continue
-        names.add(q.split(".")[-1])
-    return names
+        f = root_dir / loc["repo"] / loc["path"]
+        if f.is_file() and is_callable_symbol(f.read_text(), loc["path"], q):
+            names[(loc["path"], q.split("(")[0])] = q.split("(")[0].split(".")[-1]
+    return names          # {(path, dotted qname): last segment}: Rules.fee and PremiumRules.fee are two entries
+
+
+# Recorded per-unit floors, from the live run of 2026-11-04 (callable symbols only): (expected callable symbols,
+# of which present in the parsed CPG). A drop is a red, not an allowance. S39 owns this rule only: S25/S28 (and S11)
+# must apply a named-symbol rule themselves, because `cpg-content-check.sc` (S08, unchanged) passes any unit whose
+# files each emit the synthetic `<module>` METHOD, including a comments-only unit (planted test below).
+# svc is (65, 64): `db/settings.py::Settings` is a class without methods; classes are TYPE_DECLs, not METHODs.
+UNIT_FLOORS = {"job": (15, 15), "lib-cli": (3, 3), "lib-pricing": (5, 5), "svc": (65, 64), "svc-common": (4, 4),
+               "svc-legacy": (1, 1), "svc-tools": (1, 1), "web": (33, 33)}
 
 
 @pytest.fixture(scope="module")
@@ -1669,6 +2154,7 @@ def runner_ready():
 
 @pytest.mark.live
 def test_tp006_every_unit_parses_in_the_sandbox_and_passes_the_d15_content_check(manifests, built, runner_ready, tmp_path, request):
+    """D15's floor plus the S39-only named-symbol rule and recorded per-unit floors (see the module docstring)."""
     out = built[0]
     audit, cpgs = tmp_path / "audit", tmp_path / "cpgs"
     cpgs.mkdir()
@@ -1689,17 +2175,21 @@ def test_tp006_every_unit_parses_in_the_sandbox_and_passes_the_d15_content_check
     report = {}
     for i in ids:
         u = unit_of[i]
-        want = expected_symbol_names(manifests, u)
+        want = expected_symbol_names(manifests, u, out)
         got = {n for n in methods[i] if not n.startswith("<")}
-        report[u["unitId"]] = {"methods": counts[i], "named": len(got), "expected_symbols": len(want), "expected_found": len(want & got),
-                               "expected_missing": sorted(want - got),
+        found = {k for k, v in want.items() if v in got}
+        report[u["unitId"]] = {"methods": counts[i], "named": len(got), "expected_callable": len(want), "expected_found": len(found),
+                               "expected_missing": sorted(f"{p}::{q}" for (p, q) in set(want) - found),
                                "files_with_zero_methods": sorted(f for f, n in per_file.get(i, {}).items() if n == 0 and f != "N/A")}
         assert got, f"{u['unitId']}: only synthetic methods (a <module> per file): the D15 floor passes but nothing was parsed"
-        assert want & got, f"{u['unitId']}: none of the manifest's {len(want)} symbols appears in the CPG"
+        assert set(report[u["unitId"]]["files_with_zero_methods"]) <= {"<unknown>"}, (u["unitId"], report[u["unitId"]]["files_with_zero_methods"])
     if os.environ.get("CCG_FIXTURES_REPORT"):
         Path(os.environ["CCG_FIXTURES_REPORT"]).write_text(json.dumps(report, indent=1, sort_keys=True))
+    assert set(report) == set(UNIT_FLOORS), "every unit has a recorded floor"
     for unit, rep in report.items():
-        assert rep["expected_found"] >= 0.5 * rep["expected_symbols"], (unit, rep)
+        want_n, want_found = UNIT_FLOORS[unit]
+        assert rep["expected_callable"] == want_n, (unit, rep)
+        assert rep["expected_found"] >= want_found, (unit, rep)
 
 
 @pytest.mark.live
