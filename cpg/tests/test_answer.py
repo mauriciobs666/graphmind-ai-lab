@@ -2224,3 +2224,66 @@ def test_two_groups_may_share_a_key_across_kinds_and_two_queries_may_differ_by_c
 def test_an_array_at_the_schema_root_is_not_hidden_by_the_probe():
     assert answer.array_paths({"type": "array", "items": {"type": "array"}}) == {"", "[]"}
     assert answer.derived_data_fields({"type": "string", "x-ccg-data": True}) == {""}
+
+
+# --- V16: a symbol subject's span (spec v1.3 §8) --------------------------------------------------------
+
+def _subject(d: dict) -> dict:
+    return d["items"][0]["subject"]
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda s: s.update(lineStart=20, lineEnd=19),
+    lambda s: s.update(ownedRegions=[5, 3, 2]),
+    lambda s: s.update(ownedRegions=[5, 3]),
+    lambda s: s.update(ownedRegions=[20, 25, 10, 15]),
+    lambda s: s.update(ownedRegions=[7]),
+    lambda s: s.update(ownedRegions=[1, 5, 3, 6]),
+], ids=["lineEnd<lineStart", "odd-and-descending", "pair-descending", "pairs-out-of-order", "odd-length", "overlapping-pairs"])
+def test_v16_rejects_a_bad_symbol_span_in_an_item_and_in_a_group_member(mutate):
+    rejects(golden(), lambda d: mutate(_subject(d)), "V16")
+    rejects(b_group(), lambda d: mutate(d["groups"][0]["members"][0]["subject"]), "V16")
+
+
+@pytest.mark.parametrize("regions", [[16, 18], [], [3, 3], [1, 2, 2, 4], [1, 2, 3, 4]], ids=["outside-span", "empty", "point", "touching", "ordinary"])
+def test_v16_accepts_regions_outside_the_span_empty_equal_and_touching_pairs(regions):
+    accepts(golden(), lambda d: _subject(d).update(lineStart=30, lineEnd=40, ownedRegions=regions))
+    accepts(golden(), lambda d: _subject(d).pop("ownedRegions", None))
+    accepts(golden(), lambda d: _subject(d).update(lineStart=16, lineEnd=16))  # one-line symbol
+
+
+def test_v16_checks_every_symbol_not_only_the_first_item():
+    def bad_second(d):
+        d["items"].append(copy.deepcopy(simple_item("v16b", U1)))
+        d["items"][1]["subject"].update(lineStart=9, lineEnd=1)
+    rejects(b_rich(), lambda d: d["items"][2]["subject"].update(lineStart=9, lineEnd=1), "V16")
+    rejects(b_rich(), lambda d: d["groups"][1]["members"][1]["subject"].update(ownedRegions=[4, 3]), "V16")
+
+
+# `.PY` is not a determined extension (spec v1.3 V15): the id is not recomputed, so a wrong id validates.
+def test_v15_extension_match_is_case_sensitive():
+    def upper(d):
+        s = _subject(d)
+        s.update(path="svc/A.PY", symbolId="f" * 32)
+    doc = b_possible()
+    sub = doc["items"][0]["subject"]
+    wrong = "f" * 32
+    sub.update(path="svc/A.PY", qname="svc/A.PY::fd", symbolId=wrong)
+    doc["items"][0]["chain"][-1].update(id=wrong, path="svc/A.PY", qname="svc/A.PY::fd")
+    validate(doc)
+    sub["path"], sub["qname"] = "svc/a.py", "svc/a.py::fd"
+    doc["items"][0]["chain"][-1].update(path="svc/a.py", qname="svc/a.py::fd")
+    with pytest.raises(AnswerError, match="V15"):
+        validate(doc)
+
+
+def test_an_options_scope_paths_reject_a_trailing_newline():
+    doc = _opts_doc(False)
+    rejects(doc, lambda d: d["interpretation"]["options"][0]["scope"]["paths"].__setitem__(0, "svc/a\n"), "stripped")
+
+
+# verbPath and accessPath are state/path expressions of the same class as urlPath: a padded one is rejected too.
+def test_verb_path_and_access_path_must_be_stripped():
+    rejects(golden(), lambda d: d["items"][0]["chain"][2]["lifted"][0].update(verbPath=" a0.method"), "stripped")
+    rejects(golden(), lambda d: d["items"][0]["chain"][2]["lifted"][0].update(verbPath="a0.method\t"), "stripped")
+    rejects(b_data(), lambda d: d["items"][0]["chain"][2].update(accessPath="a0 "), "stripped")

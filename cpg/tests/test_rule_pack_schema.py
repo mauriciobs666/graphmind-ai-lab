@@ -12,8 +12,8 @@ Topic cells (spec v1.4, from ``teco`` ruling O-16): ``PROVIDES topic`` is a cell
 ``onUnknown: config-derived`` is valid on a ``consumes`` or a ``provides`` of kind ``topic``, and the ``provides`` default
 ``onUnknown`` is ``config-derived`` for ``topic`` (``drop`` for every other kind). ``envPorts.excludeVars`` is optional (§1.6).
 
-Validator-only ruling (not in the spec): one slot carries one ``onUnknown`` mode, so a ``firstOf`` whose nested expressions
-name different modes is rejected.
+Spec §1.4 "A slot has one mode" (N-29): every ``onUnknown`` nested in one slot names the same mode, so a ``firstOf`` whose
+nested expressions name different modes is rejected; an expression with none takes the slot's mode.
 
 Leaves left to the P1 conformance test: ``UNEXERCISED_UNTIL_P1`` in ``test_rule_pack_leaf_mutation.py`` (P3-1 harness).
 """
@@ -262,10 +262,10 @@ MORE_NEGATIVES = [
      lambda p: p["rules"][1].update(match={"anyOf": [{"query": "handler-ns"}, {"query": "nope"}]})),
     ("P4-4 evidence subject in the second anyOf clause of a non-infra pack", "fastapi",
      lambda p: p["rules"][0].update(match={"anyOf": [p["rules"][0]["match"], {"evidence": {"regex": "x"}}]})),
-    ("P4-4 mixed nested onUnknown modes (drop first) under status confirmed", "fastapi",
+    ("N-29 mixed nested onUnknown modes [drop, partial] under status confirmed", "fastapi",
      lambda p: (p["rules"][0]["extract"].update(route={"firstOf": [{"arg": "a0", "onUnknown": "drop"}, {"arg": "kw.path", "onUnknown": "partial"}]}),
                 p["rules"][0]["emit"][0]["provides"].update(status="confirmed"))),
-    ("P4-4 mixed nested onUnknown modes (partial first)", "fastapi",
+    ("N-29 mixed nested onUnknown modes [partial, drop]", "fastapi",
      lambda p: p["rules"][0]["extract"].update(route={"firstOf": [{"arg": "a0", "onUnknown": "partial"}, {"arg": "kw.path", "onUnknown": "drop"}]})),
     ("key names a slot the rule does not extract", "fastapi", set_emit(key="{verb} {nope}")),
     ("evidence subject outside an infra pack", "fastapi", lambda p: p["rules"][0].update(match={"evidence": {"regex": "x"}})),
@@ -487,6 +487,12 @@ def test_partial_is_partial_key_on_http_and_runtime_built_elsewhere():
     writes = lambda p: p["rules"][0]["emit"].__setitem__(0, {"writes": {"kind": "http", "key": "{verb} {mount}{route}"}})
     assert accepted("fastapi", lambda p: (http(p), writes(p)))  # partial-key is not on WRITES
     assert accepted("fastapi", lambda p: writes(p)) == []  # writes default is drop
+
+
+def test_a_nested_firstof_with_one_named_mode_and_one_unnamed_expression_is_valid():
+    """N-29: an expression with no onUnknown takes the slot's mode, so [partial, <none>] is one mode."""
+    route = lambda p: p["rules"][0]["extract"].update(route={"firstOf": [{"arg": "a0", "onUnknown": "partial"}, {"arg": "kw.path"}]})
+    assert accepted("fastapi", route) == []
 
 
 def test_runtime_built_is_not_valid_for_an_http_publisher_but_is_for_an_http_consumer():

@@ -1,11 +1,11 @@
 """Canonical answer document, schema v1: read, validate, canonicalize and write.
 
 Spec: ``docs/plans/connected-code-graph-answer-spec.md`` (v1.2, S33) -- the document (§2-§5), ordering and
-canonical bytes (§6), the F-3/F-4/F-12/G-1 obligations (§7), the validator rules V1-V15 (§8). The shapes live in
+canonical bytes (§6), the F-3/F-4/F-12/G-1 obligations (§7), the validator rules V1-V16 (§8). The shapes live in
 ``ccg/schemas/answer-v1.schema.json``; the schema is necessary, not sufficient, and this module adds what JSON
 Schema cannot say (derivations, anchor chaining, staleness set equality, id recomputation, the F-4 token screen).
 
-Public API: ``loads``/``validate`` (V1-V15), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
+Public API: ``loads``/``validate`` (V1-V16), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
 serialize), ``is_canonical``, ``facts_bytes`` (§6's boundary), ``fence_data`` (§7.2), ``mask_identifier`` (§7.3),
 ``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``; plus the ``samplingHash``/``cacheKey`` helpers.
 """
@@ -57,8 +57,8 @@ ARRAY_RULES = {
 }
 
 #: V1: identity strings (§6) are stripped as well as NFC; ids are held to their patterns by the schema.
-#: ``rootPath``, ``urlPath`` and the elements of ``paths`` are path-like data compared field by field (AC-24), so held to the same bar.
-IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name", "rootPath", "urlPath", "paths"})
+#: ``rootPath``, ``urlPath``, ``verbPath``, ``accessPath`` (the last two beyond spec §6's list) and the elements of ``paths`` are path-like data compared field by field (AC-24), so held to the same bar.
+IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name", "rootPath", "urlPath", "verbPath", "accessPath", "paths"})
 SUBJECT_ID = {"symbol": "symbolId", "config": "entryId"}
 ANCHOR_ID = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
 ANCHOR_HOP_KIND = {"symbol": "Symbol", "contract": "ContractPoint", "config": "ConfigEntry"}
@@ -285,7 +285,7 @@ def _check_values(value, path: str = "", key: str | None = None) -> None:
 
 
 def loads(data: bytes) -> dict:
-    """Parse and validate an answer's bytes (§6, V1-V15); order is not a validity rule."""
+    """Parse and validate an answer's bytes (§6, V1-V16); order is not a validity rule."""
     try:
         text = data.decode("utf-8")
         doc = json.loads(text, object_pairs_hook=_no_dup_keys, parse_float=_no_float, parse_constant=_no_float)
@@ -744,6 +744,22 @@ def _check_ids(doc: dict) -> None:  # V15
             check(where + ".subject", it["subject"], it["repoId"])
 
 
+def _check_spans(doc: dict) -> None:  # V16
+    for where, it in _all_items(doc):
+        s = it["subject"]
+        if s["type"] != "symbol":
+            continue
+        w = where + ".subject"
+        if s["lineStart"] > s["lineEnd"]:
+            _fail("V16", w, "lineStart is after lineEnd")
+        regions = s.get("ownedRegions", [])
+        if len(regions) % 2:
+            _fail("V16", f"{w}.ownedRegions", "ownedRegions is [start, end, ...] pairs: even length")
+        # each pair s <= e and ascending pairs are one condition: the flat list is non-decreasing (s0 <= e0 <= s1 <= ...)
+        if any(a > b for a, b in zip(regions, regions[1:])):
+            _fail("V16", f"{w}.ownedRegions", "ownedRegions is ascending (non-decreasing flat list)")
+
+
 def _describe(error) -> str:
     """One short line for a schema error: the failing branch of a ``oneOf``, a ``not`` as what is forbidden."""
     while error.validator in ("oneOf", "anyOf") and error.context:
@@ -759,7 +775,7 @@ def _describe(error) -> str:
 
 
 def validate(doc: dict) -> None:
-    """Schema plus V1-V13 and V15 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
+    """Schema plus V1-V13, V15 and V16 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
     if not isinstance(doc, dict):
         raise AnswerError("V1: an answer is one JSON object")
     _check_values(doc)
@@ -781,3 +797,4 @@ def validate(doc: dict) -> None:
     _check_f4(doc)
     _check_cycles(doc)
     _check_ids(doc)
+    _check_spans(doc)
