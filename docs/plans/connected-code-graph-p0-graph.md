@@ -163,7 +163,7 @@ this and add a fixture (a contract walk from a provider-less CP lists its consum
 reached point**; path-narrowing reduces states and `DATA` fan-out, not items (measured in
 `docs/test-reports/connected-code-graph-p0-slice-report.md` §6.8; reproducible from `probe_s14.py`, whose V2 gate ends
 every non-`Ret` item). Slice walks (anchor `p0`, `p0.path`, `p0.method`, `p0.query`, `p0.nothing`, value walk from `buildUrl`):
-21 items each; states as built (V0) **98 / 84 / 84 / 82 / 81 / 83**; with the V2 gate **19 / 5 / 5 / 3 / 2 / 4**. This is a
+21 items each; states as built (V0) **98 / 84 / 84 / 82 / 81 / 83**; with the V2 gate **19 / 5 / 5 / 3 / 2 / 4** (carried from the S17-L2 gate, Pass 12 in `docs/reviews/connected-code-graph-p0.md` and the 2026-11-01 entry of `docs/plans/connected-code-graph-coordination.md`; there is no results file, and `probe_s14.py` on a reloaded `ccg_p0slice` regenerates them). This is a
 sound over-approximation (recall preserved); the stored edges already support the precise walk (live: `apiFetch`'s `Ret`
 reaches `parse`, `text`, `fetch`, `buildUrl@108`, `Param opts` over `DATA`, paths `r→ret`, `r→a0`, `r→recv` consistent), so closing it adds
 traversal rows, no node, edge or prop.
@@ -185,7 +185,7 @@ Graph note §3.5 as written, with: the indexes of §1.6's index column on the em
 **`BATCH_MAX` stays 20,000**; S23's measured **hard ceiling is 100,000 rows per query** (§6, row 14), never a target;
 one connection, retries explicitly zero (a `Retry(NoBackoff(), 0)` object, never the
 client default), socket timeout 300 s; an **explicit query `timeout` <= `TIMEOUT_MAX` on every load query whenever it
-is nonzero** (S22: without one the cap applies anyway and a write over it dies with nothing committed; a `timeout` above the cap is
+is nonzero** (S22, with `TIMEOUT_DEFAULT` 0: without one the cap applies anyway and a write over it dies with nothing committed; with `TIMEOUT_DEFAULT` set, only the explicit one protects the load, so it stays required; a `timeout` above the cap is
 rejected, one equal to it is accepted; §6, row 6); a created-count check per edge batch; constraints after the load, polled to `OPERATIONAL`, any `FAILED`
 fails the build; `:Snapshot` last; `RENAME`. Verified live on the slice with `TIMEOUT_MAX` 0, and on the S22/S23 probes with 0 and nonzero caps (§6).
 
@@ -225,20 +225,21 @@ design constants.
 | 2 | Item-set-only `SSpaths` pre-pass | open for `architect`, not adopted | §1: needs a `pathCount` budget not knowable beforehand; row 3 is the cost |
 | 3 | `SSpaths` `pathCount` ceiling | 1,000,000 on this shape; never more | §1: peak 797 MB at 1,000,000 (330 MB graph, 2 GB cap); 3,000,000 on the top hub OOM-killed the container (exit 137), memory-vs-budget growth is an untested hypothesis |
 | 4 | BFS read chunk | <= 1,000 ids, halved on a full reply | §1: 101,395 reads, p50 3.9 / p95 61.8 / p99 224.0 / max 939.8 ms; worst per-edge-type p99 `DATA <-` 537.6 ms |
-| 5 | `TIMEOUT_MAX` default | **10,000 ms** (P1 re-derives) | §4: 10 x 537.6 ms = 5,376 -> 10,000 in the 1-2-5 series; max read 939.8 ms <= the 1,000 ms tenth |
-| 6 | Load rule under a nonzero cap | pass `timeout <= TIMEOUT_MAX`; batch time well under the cap | §4: no `timeout` is capped anyway (4,000-row write killed at 3.01 s under cap 3,000, 0 committed); above the cap rejected, equal accepted; 20k-row batch 0.13 s at cap 10,000 |
+| 5 | `TIMEOUT_MAX` default | **10,000 ms** (P1 re-derives) | §4: 10 x 537.6 ms = 5,376 -> 10,000 in the 1-2-5 series; the tenth clause holds only at 10,000 (max read 939.8 ms <= 1,000; 6,000 would fail it); one S20 read was killed at 1,000 ms under load and is not in the records |
+| 6 | Load rule under a nonzero cap | pass `timeout <= TIMEOUT_MAX` (D16 keeps it); batch time well under the cap | §4: with `TIMEOUT_DEFAULT` 0, no `timeout` is capped anyway (4,000-row write killed at 3.01 s under cap 3,000, 0 committed); above the cap rejected, equal accepted; 20k-row batch 0.13 s at cap 10,000 |
 | 7 | Constraint and full-text backfill under a cap | poll `OPERATIONAL`; not under the cap | §4: cap 800 ms, 300k nodes: constraint 1.16 s, full-text 1.65 s, neither killed |
 | 8 | Verdict-lock ttl | **2,000 ms** (P1 re-derives) | §4: worst (1,000-entry replay + `RENAME` + remainder check) 0.464 s on 20k `Link`s; 3 x = 1.39 s |
-| 9 | Lock/replay protocol (proposal §3.8) | as written, plus the log tail repair and a monotonic offset | §4: B6, mid-swap expiry, other-holder release, SIGKILL between append and patch (verdict and swap) re-converge; 13 non-live + 8 live tests; 21 mutants of the lock, ACL-rule and stall code, all killed |
+| 9 | Lock/replay protocol (proposal §3.8) | as written, plus the log tail repair and a monotonic offset | §4: B6, mid-swap expiry, other-holder release, SIGKILL between append and patch (verdict and swap) re-converge; 13 non-live + 8 live tests; 24 mutants of the lock, ACL-rule, swap-script and stall code, all killed (`cpg/spikes/store/results/mutants_s22_s23.json`) |
 | 10 | ACL users | lock grants as a key-scoped selector, `+get` on the lock key, `+exists` for `ccg_build`, `+info` on all four | §4: 4 users x 19 cells, 0 differences from the proposal; flat `+del` lets `ccg_build`/`ccg_verdict` delete the live graph; no `+get` breaks the release |
 | 11 | Swap form | plain `RENAME build live` (first build and normal case); guarded `EVAL` only where a kept `prev` is wanted; zero kept snapshots | §2: `MULTI` does not roll back; the `EVAL` guards all three keys; `RENAME` 0.4 ms with a 12 s reader in flight |
 | 12 | Telemetry | `MAX_INFO_QUERIES` 0 or small on the instance; no ACL pattern covers `telemetry{...}`; a retention check after `GRAPH.DELETE` polls | §2, §5: 0 -> no stream; `XTRIM` regrows; removal lags the delete by 13-36 ms |
 | 13 | `Dependency(depId)` | index before the load, `UNIQUE` after | §3: 52.3 s -> 0.19 s at 20,000 edges |
-| 14 | Batch ceiling (D16) | `BATCH_MAX` 20,000; hard ceiling **100,000** rows per query, indexed endpoints | §5: worst `PING` 73.1 ms and 3.5 s write at 100,000; 182 ms at 200,000; throughput flat at about 28,000 edges/s |
-| 15 | The `PING` stall | not reproduced | §5: worst `PING` 485 ms at 500,000 edges; 27 ms during a 49.6 s un-indexed write |
+| 14 | Batch ceiling (D16) | `BATCH_MAX` 20,000; hard ceiling **100,000** rows per query, indexed endpoints, idle instance | §5: worst `PING` 73.1 ms and 3.5 s write at 100,000; 182 ms at 200,000; throughput flat at about 28,000 edges/s. 100,000 is the incident's write size and its cause is open; 50,000 (30.5 ms) is the last size below it |
+| 15 | The `PING` stall | not reproduced; cause of the incident unexplained (untested: memory pressure, the S21 new-connection artefact) | §5: worst `PING` 485 ms at 500,000 edges; 27 ms during a 49.6 s un-indexed write |
 
 Carried:
 1. **Not in this note's delivery:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/tests/test_ddl_live.py` and the loader changes D1-D8; they follow from §1 and
    need a live `__build_` key.
 2. **`MOUNTED_BY`** waits on the assembler emitting mount ids (D5), P1.
 3. **For S50 (proposal §3.5, §3.8):** the ACL grants of row 10, the lock ttl of row 8, `TIMEOUT_MAX` of row 5.
+4. **Open for S50 (inferred from Redis glob semantics, not run):** `ccg_build`'s `~ccg_<s>*` also matches every system whose name begins with `<s>` (`ccg_shop*` spans `ccg_shopify...`), so one system's build credential could write, rename or expire another's graphs. Use `~ccg_<s> ~ccg_<s>__*` plus the lock selector, or forbid system names that are prefixes of each other. The probe's foreign key could not collide, so the matrix does not show it.

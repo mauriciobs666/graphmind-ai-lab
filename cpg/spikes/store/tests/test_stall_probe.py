@@ -33,3 +33,36 @@ def test_summarize_max_is_the_true_maximum_and_over1s_is_not_over100ms():
     s = SP.summarize_pings(samples, 0, 100)
     assert s["n"] == 101 and s["max_ms"] == 500.0 and s["p99_ms"] == 1.0
     assert s["over100ms"] == 1 and s["over1s"] == 0
+
+
+def test_windows_put_baseline_before_during_before_after_and_during_is_the_write():
+    w = SP.windows(10.0, 14.0)
+    assert w["during"] == (10.0, 14.0)
+    assert w["baseline"][1] < 10.0 <= w["during"][0] and w["during"][1] < w["after"][0]
+
+
+def test_sampler_targets_ccg_falkordb_at_5_ms():
+    import lock_replay as LR
+    assert SP.SAMPLER_PORT == LR.PORT == 6390 and SP.SAMPLER_INTERVAL_S == 0.005
+    src = SP.sampler_source()
+    assert "port=6390" in src and "6379" not in src and "time.sleep(0.005)" in src
+
+
+import pytest  # noqa: E402
+
+BUSY = ("local t=redis.call('TIME') local s=t[1]*1000000+t[2] while true do local n=redis.call('TIME') "
+        "if n[1]*1000000+n[2]-s>400000 then break end end return 1")
+
+
+@pytest.mark.live
+def test_live_sampler_sees_a_server_block_it_knows_its_port_and_samples_every_few_ms(tmp_path):
+    """Positive control: a 0.4 s Lua busy loop blocks the server; the sampler's PING must show it inside the `during`
+    window and not in the baseline, from the right instance, at about 5 ms."""
+    import lock_replay as LR
+    from load import password
+    db = LR.connect()
+    r = SP.sample_during(lambda: db.connection.eval(BUSY, 0), tmp_path / "s.json", password())
+    assert r["samplerRunId"] == db.connection.info("server")["run_id"]   # ccg-falkordb, not falkordb-dev
+    assert r["baseline"]["n"] >= 100                       # ~0.95 s at ~5 ms; 500 ms would give 2
+    assert r["baseline"]["max_ms"] < 100
+    assert r["during"]["n"] >= 1 and r["during"]["max_ms"] >= 300

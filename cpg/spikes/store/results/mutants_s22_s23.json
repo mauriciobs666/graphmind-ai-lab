@@ -1,0 +1,127 @@
+{
+ "run": "2026-11-04",
+ "total": 24,
+ "killed": 24,
+ "mutants": [
+  {
+   "name": "M1 no fsync",
+   "status": "KILLED",
+   "firstFailingTest": "test_log_append_fsyncs_every_entry"
+  },
+  {
+   "name": "M2 no torn-tail repair",
+   "status": "KILLED",
+   "firstFailingTest": "test_log_torn_tail_is_ignored_and_not_glued_onto"
+  },
+  {
+   "name": "M3 no remainder replay",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_replays_an_entry_appended_after_the_pre_rename_replay"
+  },
+  {
+   "name": "M4 no pre-rename replay",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_order_lock_replay_rename_remainder_release"
+  },
+  {
+   "name": "M5 pre-rename replay on live",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_order_lock_replay_rename_remainder_release"
+  },
+  {
+   "name": "M6 verdict patches only its own entry",
+   "status": "KILLED",
+   "firstFailingTest": "test_verdict_replays_an_unapplied_earlier_entry_before_its_own"
+  },
+  {
+   "name": "M7 unconditional release",
+   "status": "KILLED",
+   "firstFailingTest": "test_live_lock_nx_contention_expiry_and_compare_and_delete"
+  },
+  {
+   "name": "M8 lock without NX",
+   "status": "KILLED",
+   "firstFailingTest": "test_live_lock_nx_contention_expiry_and_compare_and_delete"
+  },
+  {
+   "name": "M9 offset not monotonic",
+   "status": "KILLED",
+   "firstFailingTest": "test_live_offset_never_moves_backwards"
+  },
+  {
+   "name": "M10 torn tail counted",
+   "status": "KILLED",
+   "firstFailingTest": "test_log_torn_tail_is_ignored_and_not_glued_onto"
+  },
+  {
+   "name": "M11 replay from 0",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_order_lock_replay_rename_remainder_release"
+  },
+  {
+   "name": "M12 offset advance off-by-one",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_order_lock_replay_rename_remainder_release"
+  },
+  {
+   "name": "M13 verdict skips lock",
+   "status": "KILLED",
+   "firstFailingTest": "test_verdict_appends_under_the_lock_and_releases_by_token"
+  },
+  {
+   "name": "M14 swap releases before remainder",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_order_lock_replay_rename_remainder_release"
+  },
+  {
+   "name": "M15 flat +del at verdict root",
+   "status": "KILLED",
+   "firstFailingTest": "test_selector_variant_grants_lock_commands_only_inside_the_selector[ccg_verdict]"
+  },
+  {
+   "name": "M16 selector drops +get",
+   "status": "KILLED",
+   "firstFailingTest": "test_selector_variant_grants_lock_commands_only_inside_the_selector[ccg_build]"
+  },
+  {
+   "name": "S1 summarize: completion-based window",
+   "status": "KILLED",
+   "firstFailingTest": "test_summarize_counts_a_ping_issued_inside_the_window_that_returns_after_it"
+  },
+  {
+   "name": "S2 summarize: max is p99",
+   "status": "KILLED",
+   "firstFailingTest": "test_summarize_max_is_the_true_maximum_and_over1s_is_not_over100ms"
+  },
+  {
+   "name": "S3 summarize: over1s uses >=100",
+   "status": "KILLED",
+   "firstFailingTest": "test_summarize_max_is_the_true_maximum_and_over1s_is_not_over100ms"
+  },
+  {
+   "name": "P2-m2 swapped RENAME order, static test only",
+   "status": "KILLED",
+   "firstFailingTest": "test_swap_script_checks_all_three_keys_before_its_first_rename"
+  },
+  {
+   "name": "P2-m2b same mutant, live test",
+   "status": "KILLED",
+   "firstFailingTest": "test_live_swap_script_refuses_before_moving_anything[happy-swapped-after0]"
+  },
+  {
+   "name": "X1 sampler pings port 6379",
+   "status": "KILLED",
+   "firstFailingTest": "test_sampler_targets_ccg_falkordb_at_5_ms"
+  },
+  {
+   "name": "X2 sampler interval 500 ms",
+   "status": "KILLED",
+   "firstFailingTest": "test_sampler_targets_ccg_falkordb_at_5_ms"
+  },
+  {
+   "name": "X3 during window collapsed",
+   "status": "KILLED",
+   "firstFailingTest": "test_windows_put_baseline_before_during_before_after_and_during_is_the_write"
+  }
+ ]
+}

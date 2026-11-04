@@ -1202,9 +1202,10 @@ to the general fact here.
     range(1,30000000) AS y RETURN count(y)"` with `timeout 60000`, with no timeout, and as a
     restricted user; the `:Blob` write above followed by `MATCH (b:Blob) RETURN count(b)`; restore
     `TIMEOUT_MAX 0`.
-  - **Under a nonzero cap the cap itself is the implicit bound on a write that passes no `timeout`; the engine default
+  - **Under a nonzero cap with `TIMEOUT_DEFAULT` 0 the cap itself is the implicit bound on a write that passes no `timeout`; the engine default
     `TIMEOUT 1000` is not applied to writes, and an explicit `timeout` is not needed to avoid a kill, only never to
-    exceed the cap** (verified 2026-11-04, module `41811`, restricted ACL user `ccg_build`, scratch graph
+    exceed the cap** (the docs say `TIMEOUT_DEFAULT` applies to reads and writes and may be set up to the cap; with it set, only an explicit
+    `timeout` protects a load: not run) (verified 2026-11-04, module `41811`, restricted ACL user `ccg_build`, scratch graph
     `ccg_p0spike__to`, `cpg/spikes/store/timeout_probe.py`, `results/timeout_probe.json`; the slow write is
     `UNWIND range(0,$n-1) AS i MATCH (a:D {id:i}), (b:D {id:i+1}) CREATE (a)-[:E]->(b)` over 6,000 un-indexed `D` nodes,
     1,000 rows = 1.09 s, 2,000 = 2.2 s, 4,000 = 4.4 s at cap 0). `TIMEOUT_MAX 3000`: the 2,000-row write (2.27 s, past
@@ -1279,15 +1280,14 @@ to the general fact here.
   admin `XTRIM telemetry{g} MAXLEN 10` holds for the moment (`XLEN` 10) and the stream regrows with later
   queries (40 after 30 more); `DEL telemetry{g}` is recreated by the next query (2.06 s in the recorded run). The stream appears
   about 1 s after a graph's first query, a parameter value was visible in it after about 3 s, `TTL` -1.
-- **`telemetry{<graph>}` is removed synchronously by `GRAPH.DELETE`; the earlier "asynchronous removal" sighting did
-  not reproduce** (verified 2026-11-02, module `41811`, `ASYNC_DELETE 1`, 32 trials in four shapes: settled
+- **`telemetry{<graph>}` is removed by `GRAPH.DELETE` with a lag of tens of ms, not synchronously: poll, do not read once** (verified 2026-11-02, module `41811`, `ASYNC_DELETE 1`, 32 trials in four shapes: settled
   stream; query immediately before delete with no stream yet; a 600k-node graph; stream present plus a query
   immediately before delete). `EXISTS telemetry{g}` was 0 at the first poll after `GRAPH.DELETE` returned
   (<= 9 ms; 47-63 ms for the 600k-node graph, i.e. the delete's own time), polled every 10 ms; the key never
-  reappeared in the 6-8 s watched afterwards. **Re-measured 2026-11-04** (`cpg/spikes/store/stall_probe.py delete-probe`,
+  reappeared in the 6-8 s watched afterwards. The 2026-11-02 reading below ("gone at the first poll", 10 ms polls) is superseded by the 2026-11-04 re-measurement (`cpg/spikes/store/stall_probe.py delete-probe`,
   polled every 5 ms, 3 trials each): the delete returned in 0-8 ms and the stream was gone 13-21 ms later for a
   20k-node/20k-edge graph and 29-36 ms later for 100k nodes/400k edges, never reappearing in 1 s; a `--scan` issued within
-  milliseconds of `GRAPH.DELETE` on a ~1M-edge graph still listed it once. So the removal lags the delete's return by tens of
+  milliseconds of `GRAPH.DELETE` on a ~1M-edge graph still listed it once (unrecorded). So the removal lags the delete's return by tens of
   ms: a retention check polls, it does not read once. `GRAPH.DELETE` leaves no parameter history behind; `RENAME` still
   does (old stream gone, new one only after the next query).
 - **An un-indexed `MATCH (b:Label {id: r.t})` inside an `UNWIND` edge load is a label scan per row, quadratic in the
@@ -1320,10 +1320,7 @@ to the general fact here.
   11.7 / 30.5 / 73.1 / 182 / 485 ms (idle baseline max 0.75-4.6 ms), one gap at the commit, `INFO cpu` user delta about the
   write time (one core), `used_memory` +1.5 / +18 / +53 / +142 / +410 MB. Un-indexed endpoints over 20,000 `M` nodes: 1k / 2k /
   5k / 10k edges took 5.0 / 9.9 / 23.9 / 49.6 s (about 5 ms per row, linear in rows x label size) with worst `PING` 8 / 12 /
-  18 / 27 ms. The incident (instance silent for minutes on a 100k-edge write) was **not reproduced** in either shape; the
-  only minutes-long behaviour found is the un-indexed write itself, which at 100k rows over a 20k-node label would run for
-  tens of minutes while the server stays responsive (inferred, not run). Stay under the `PING` figure that matters to you by
-  batch size: 100,000 edges per query is the highest size tested with worst `PING` under 100 ms. Verify: the query above with
+  18 / 27 ms. The incident (instance silent for minutes on a 100k-edge write; its own record shows `Node By Index Scan` on both endpoints and `PING`/`HELLO` unanswered for about 8 minutes) was **not reproduced** in either shape; its cause is unexplained. Candidate causes not tested: memory pressure (RAM probe on a 6 GB VM, 2 GB container cap) and the S21 in-process new-connection artefact. The un-indexed write is slow (above) but does not explain it. By batch size: 100,000 edges per query is the highest size tested with worst `PING` under 100 ms, on an idle instance, and is the incident's size. Verify: the query above with
   a `redis-cli -i 0.01 ping` loop in another shell.
 - **`OPTIONAL MATCH ... SET` on a null entity is a silent no-op, and a `CASE` expression works inside `SET`: one query can
   patch a node and advance a monotonic counter** (verified 2026-11-04, module `41811`). `MATCH (s:Snapshot) OPTIONAL MATCH

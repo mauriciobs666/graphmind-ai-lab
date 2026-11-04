@@ -38,21 +38,59 @@ N_NODES, M_NODES = 100_000, 20_000
 MEM_STOP = 1_000_000_000
 PING_STOP_S, CALL_STOP_S = 5.0, 60.0
 
-_SAMPLER = r"""
+SAMPLER_PORT, SAMPLER_INTERVAL_S = LR.PORT, 0.005
+
+_SAMPLER_TEMPLATE = r"""
 import json, os, signal, sys, time
 import redis
-r = redis.Redis(host="127.0.0.1", port=6390, password=os.environ["STALL_PW"], socket_timeout=300, retry=None)
+r = redis.Redis(host="127.0.0.1", port=%(port)d, password=os.environ["STALL_PW"], socket_timeout=300, retry=None)
 out, samples, stop = sys.argv[1], [], []
 signal.signal(signal.SIGTERM, lambda *a: stop.append(1))
 r.ping()
-print("READY", flush=True)
+print("READY", r.info("server")["run_id"], flush=True)
 while not stop:
     t0 = time.monotonic()
-    r.ping()
+    try:
+        r.ping()
+    except redis.exceptions.ResponseError:
+        pass                      # a BUSY reply is still the server answering; its latency is the datum
     samples.append((t0, time.monotonic() - t0))
-    time.sleep(0.005)
+    time.sleep(%(interval)r)
 json.dump(samples, open(out, "w"))
 """
+
+
+def sampler_source() -> str:
+    return _SAMPLER_TEMPLATE % {"port": SAMPLER_PORT, "interval": SAMPLER_INTERVAL_S}
+
+
+def windows(t0: float, t1: float) -> dict:
+    """The three PING windows around a write that ran ``[t0, t1]`` (1 s idle before, 1 s tail after)."""
+    return {"baseline": (t0 - 1.0, t0 - 0.05), "during": (t0, t1), "after": (t1 + 0.05, t1 + 1.0)}
+
+
+def sample_during(work, out: Path, pw: str) -> dict:
+    """Start the PING sampler in its own process, idle 1 s, run ``work()``, tail 1 s, stop it. Returns the samples, the
+    window stats, the timestamps, ``work``'s result and the ``run_id`` of the server the sampler is connected to."""
+    import os
+    env = dict(os.environ, STALL_PW=pw)
+    p = subprocess.Popen([sys.executable, "-c", sampler_source(), str(out)], stdout=subprocess.PIPE, text=True, env=env)
+    ready = p.stdout.readline().split()
+    assert ready[0] == "READY"
+    time.sleep(1.0)
+    t0 = time.monotonic()
+    try:
+        result = work()
+    finally:
+        t1 = time.monotonic()
+        time.sleep(1.0)
+        p.terminate()
+        p.wait(30)
+    samples = json.load(open(out))
+    out.unlink()
+    w = windows(t0, t1)
+    return {"samples": samples, "t0": t0, "t1": t1, "result": result, "samplerRunId": ready[1],
+            **{k: summarize_pings(samples, *v) for k, v in w.items()}}
 
 
 def summarize_pings(samples: list[tuple[float, float]], t_start: float, t_end: float) -> dict:
@@ -81,7 +119,7 @@ def run(out: Path | None = None) -> dict:
     rnd = random.Random(20261104)
     rec: dict = {"shapes": {}, "setup": {}}
     from load import password
-    env = dict(os.environ, STALL_PW=password())
+    pw = password()
     g = admin.select_graph(G)
     g.query("CREATE INDEX FOR (n:N) ON (n.id)")
     for lo in range(0, N_NODES, 20_000):
@@ -104,27 +142,23 @@ def run(out: Path | None = None) -> dict:
                 break
             rows = [{"a": rnd.randrange(universe), "b": rnd.randrange(universe)} for _ in range(n)]
             tmp = HERE / "results" / f"_stall_samples_{name}_{n}.json"
-            p = subprocess.Popen([sys.executable, "-c", _SAMPLER, str(tmp)], stdout=subprocess.PIPE, text=True, env=env)
-            assert p.stdout.readline().strip() == "READY"
-            time.sleep(1.0)                                           # idle baseline
-            c0, m0 = cpu(admin), int(a.info("memory")["used_memory"])
-            t0 = time.monotonic()
-            try:
-                res = admin.select_graph(G).query(q_idx if name == "indexed" else q_unidx, {"rows": rows})
-                created, err = res.relationships_created, None
-            except Exception as e:  # noqa: BLE001
-                created, err = None, str(e).splitlines()[0][:120]
-            t1 = time.monotonic()
-            c1, m1 = cpu(admin), int(a.info("memory")["used_memory"])
-            time.sleep(1.0)                                           # recovery tail
-            p.terminate()
-            p.wait(30)
-            samples = json.load(open(tmp))
-            tmp.unlink()
+            box = {}
+
+            def work():
+                box["c0"], box["m0"] = cpu(admin), int(a.info("memory")["used_memory"])
+                try:
+                    res = admin.select_graph(G).query(q_idx if name == "indexed" else q_unidx, {"rows": rows})
+                    box["created"], box["err"] = res.relationships_created, None
+                except Exception as e:  # noqa: BLE001
+                    box["created"], box["err"] = None, str(e).splitlines()[0][:120]
+                box["c1"], box["m1"] = cpu(admin), int(a.info("memory")["used_memory"])
+
+            sd = sample_during(work, tmp, pw)
+            samples, t0, t1 = sd["samples"], sd["t0"], sd["t1"]
+            created, err, c0, c1, m0, m1 = box["created"], box["err"], box["c0"], box["c1"], box["m0"], box["m1"]
+            assert sd["samplerRunId"] == a.info("server")["run_id"], "sampler is not connected to ccg-falkordb"
             step = {"edges": n, "write_s": round(t1 - t0, 3), "created": created, "error": err,
-                    "baseline": summarize_pings(samples, t0 - 1.0, t0 - 0.05),
-                    "during": summarize_pings(samples, t0, t1),
-                    "after": summarize_pings(samples, t1 + 0.05, t1 + 1.0),
+                    "baseline": sd["baseline"], "during": sd["during"], "after": sd["after"],
                     "cpuSysDelta_s": round(c1[0] - c0[0], 2), "cpuUserDelta_s": round(c1[1] - c0[1], 2),
                     "usedMemoryDelta": m1 - m0}
             # the longest gap between consecutive samples inside the window is the stall as a client sees it
@@ -136,6 +170,11 @@ def run(out: Path | None = None) -> dict:
                 steps.append({"stop": f"stop rule hit at {n}: worst PING {prev_max} ms, write {step['write_s']} s"})
                 break
         rec["shapes"][name] = steps
+        # positive control (gate P3-3): at the largest indexed step the PING under load must be slower than the idle baseline
+        big = [x for x in steps if x.get("edges", 0) >= 200_000 and "during" in x]
+        if name == "indexed" and big:
+            rec["positiveControl"] = {"edges": big[-1]["edges"], "duringMaxMs": big[-1]["during"]["max_ms"], "baselineMaxMs": big[-1]["baseline"]["max_ms"]}
+            assert big[-1]["during"]["max_ms"] > big[-1]["baseline"]["max_ms"], "positive control failed: the sampler does not see the write"
 
     try:
         shape("indexed", q_idx, N_NODES, (20_000, 50_000, 100_000, 200_000, 500_000), True)

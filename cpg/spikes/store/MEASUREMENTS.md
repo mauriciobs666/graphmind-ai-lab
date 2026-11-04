@@ -168,7 +168,7 @@ reads of three shapes left `PING` at 3.0-29.1 ms (`--only stall`, `results/swap_
   delete itself), 32/32 trials in four shapes (8 each), never reappearing in 6-8 s watched** (shapes: settled stream; a query
   immediately before the delete with no stream yet; a 600k-node graph; stream present + a query immediately before the
   delete; all with `ASYNC_DELETE 1`). The "query immediately before the delete, no stream yet" shape had no stream at the
-  delete in 0/8 trials, so its "gone at the first poll" is vacuous: it tests only that no stream appears afterwards. The earlier "one sighting of asynchronous removal" is **not reproduced**; unexplained.
+  delete in 0/8 trials, so its "gone at the first poll" is vacuous: it tests only that no stream appears afterwards. The stream does outlive the delete's return by tens of ms (§5, 2026-11-04: 13-36 ms), so "first poll" here means a 10 ms poll that missed it; the earlier "one sighting of asynchronous removal" is that lag.
   Operating rule: telemetry streams hold parameter values for up to 1,000 queries and for the graph's life; for
   the engine, set `MAX_INFO_QUERIES 0` (or a small cap) on the instance, keep code text out of parameters (G13), and
   exclude `telemetry{...}` from non-admin ACL patterns; `GRAPH.DELETE` leaves no history behind, `RENAME` resets it.
@@ -231,11 +231,14 @@ ms. Rule 3 x worst = 1.39 s -> **lock ttl 2,000 ms** (next whole value up). **P0
 graph sizes (the replay is one query per entry, so it scales with log length, not graph size).
 
 **Sizing, `TIMEOUT_MAX`.** Worst per-edge-type p99 per-level read in S20 (§1): `DATA <-` **537.6 ms**; rule 10 x = 5,376 ms -> next value of
-the 1-2-5 series **10,000 ms** (6,000 if "round" means a whole second). The "each read <= a tenth of it" clause: the largest recorded
-read at <= 1,000 ids is 939.8 ms, under the 1,000 ms tenth, with 6 % headroom. **P0-scale default; P1 re-derives it** from its own p99.
+the 1-2-5 series **10,000 ms** (6,000 if "round" means a whole second). The "each read <= a tenth of it" clause holds **only at 10,000**: the largest recorded
+read at <= 1,000 ids is 939.8 ms, under the 1,000 ms tenth with 6 % headroom, and over the 600 ms tenth of 6,000 (that is the argument for
+10,000; 6,000 would need a smaller BFS chunk). The known exception: one S20 read (`S0723.30`, 1,000-id hub frontier) was killed at the
+engine's 1,000 ms default under load and is absent from the 101,395 recorded reads (§1 "One failed read"), so one read has already
+reached the tenth. **P0-scale default; P1 re-derives it** from its own p99.
 
 **`TIMEOUT_MAX` against loads, backfills, reads** (`python spikes/store/timeout_probe.py`; as `ccg_build`, windows of 800, 3,000 and
-10,000 ms, original 0 restored, ceilings and stop rules in the script's docstring; peak `used_memory` 373 MB):
+10,000 ms, original 0 restored, ceilings and stop rules in the script's docstring; peak `used_memory` 371 MB (`memoryLog` max)):
 
 | probe | observed |
 |---|---|
@@ -244,12 +247,12 @@ read at <= 1,000 ids is 939.8 ms, under the 1,000 ms tenth, with 6 % headroom. *
 | cap 3,000: 4,000 rows, no `timeout` / `timeout 3000` / `timeout 1000` | `Query timed out` at 3.01 / 3.02 / 1.005 s; **0 committed** |
 | cap 3,000: `timeout 60000` | rejected in 0.0 s: "cannot exceed the TIMEOUT_MAX" |
 | cap 10,000: 20,000-row edge batch (indexed), no `timeout` / `timeout 10000` | 0.131 / 0.149 s |
-| cap 10,000: 20,000-row node batch, no `timeout` / `timeout 10000` | 0.013 / 0.012 s |
+| cap 10,000: 20,000-row node batch, no `timeout` / `timeout 10000` | 0.013 / 0.013 s |
 | cap 800: `GRAPH.CONSTRAINT CREATE UNIQUE` on 300,000 nodes | `OPERATIONAL` after 1.16 s (0.21 s at cap 0 in the same run); not killed |
 | cap 800: `db.idx.fulltext.createNodeIndex` on 300,000 nodes | `OPERATIONAL` after 1.65 s (1.70 s at cap 0); `queryNodes('sym17')` 60 hits; not killed |
 
-So (1) a nonzero cap applies to a write that passes no `timeout` (and the engine default 1,000 ms does not), so an explicit `timeout` is
-**not needed to avoid a kill**; it is needed only to stay at or below the cap (equal is accepted, above is rejected, for reads too);
+So (1) with `TIMEOUT_DEFAULT` 0 (the recorded state), a nonzero cap applies to a write that passes no `timeout` (and the engine default 1,000 ms does not), so an explicit `timeout` is
+**not needed to avoid a kill**; but `TIMEOUT_DEFAULT` may be set up to the cap and applies to writes too (docs.falkordb.com, not run), and then only an explicit `timeout` protects a load, so **D16 keeps the explicit `timeout`**. It must stay at or below the cap (equal is accepted, above is rejected, for reads too);
 (2) a killed write commits nothing; (3) the constraint and full-text backfills are asynchronous and not under the cap: poll them.
 **Loader rule for P1/S17:** pass `timeout <= TIMEOUT_MAX` (the value is configuration, since the build user has no `GRAPH.CONFIG`), keep
 every batch's measured time under the cap with margin (a 20,000-row indexed batch is 0.13 s, 1.3 % of 10 s), and never load an edge
@@ -274,17 +277,21 @@ label whose endpoint label has no id index (the un-indexed form is the only slow
 | un-indexed | 10,000 | 49.6 | 27.0 | 48.4 | 0 |
 
 Idle baseline worst `PING` 0.75-4.6 ms; after each write 0.9-5.3 ms. **No stall reproduced**: the worst `PING` grows about 1 ms per
-1,000 edges (one gap at the commit) and the instance answered throughout the un-indexed writes. The incident (minutes without a
-`PING`, 100k edges, cause unestablished) is therefore not explained by write size; the only minutes-long behaviour found is the un-indexed
-write itself (about 5 ms per row over 20k nodes, so 100k rows over a 20k-node label would take tens of minutes while `PING` still
-answers: inferred, not run), which would look like an unresponsive instance to a client that waits on the write.
+1,000 edges (one gap at the commit) and the instance answered throughout the un-indexed writes. **The cause of the incident is
+unexplained.** Its record (`docs/reviews/connected-code-graph-p0-impl.md`, "Incident during this check") shows `Node By Index Scan` on both
+endpoints and `PING`/`HELLO` unanswered for about 8 minutes, so a slow un-indexed write does not explain it. Candidate causes not tested:
+memory pressure (a RAM probe on a 6 GB VM, 2 GB container cap), and the S21 new-connection artefact (§2). The recorded run also lacks the
+positive control the script now asserts (`positiveControl`: `during.max_ms` > `baseline.max_ms` at the 500k step); its data satisfies it
+(485 vs 3.9 ms).
 
 **Batch ceiling for D16: 100,000 rows per query** (largest size tested with worst `PING` under 100 ms, a 3.5 s write, 2.8x under a
 10 s `TIMEOUT_MAX`). Throughput is flat from 20,000 to 500,000 (28,200 / 28,600 / 28,200 / 28,400 / 27,500 edges/s), so a bigger batch
-buys nothing: **`BATCH_MAX` stays 20,000**; 100,000 is the hard ceiling, never a target. The ceiling holds for indexed endpoints only.
-P0-scale figure on an idle instance; P1 re-measures under its own concurrency.
+buys nothing: **`BATCH_MAX` stays 20,000**; 100,000 is the hard ceiling, never a target. The ceiling holds for indexed endpoints only. **100,000 is also the incident's write size**, and
+the incident's cause is open; this figure was measured on an idle instance (about 36-59 MB in use) and the stall was not reproduced at
+it. If the owner wants margin until the cause is known, the last size below the incident is 50,000 (worst `PING` 30.5 ms). P0-scale
+figure; P1 re-measures under its own concurrency.
 
 **Telemetry after `GRAPH.DELETE`** (`python spikes/store/stall_probe.py delete-probe`, `results/stall_telemetry_delete.json`): the
 stream outlived the delete's return by 13-21 ms (20k nodes/20k edges) and 29-36 ms (100k/400k), 6/6 trials, never reappearing; a
-`--scan` run within milliseconds of the delete after the stall probe's ~1M-edge graph listed it once. This reproduces the earlier
-"asynchronous removal sighting" (§2) as a lag of tens of ms: a retention check polls.
+`--scan` run within milliseconds of the delete after the stall probe's ~1M-edge graph listed it once (unrecorded: no results file). Both are the same fact, a lag of tens of ms (§2's
+"asynchronous removal sighting" included): a retention check polls.
