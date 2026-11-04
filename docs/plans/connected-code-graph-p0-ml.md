@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.10 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.11 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.10): S57 adjudication procedure written (§5.4): strata, audits of agreed and scripted labels, the declared and role census, per-language strata, the final-label and noise definitions, Part F (flow-label audit), and one stop and escalate list. Earlier content (v1.4–v1.9) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.11): §5.4 counts only residual label errors toward the noise flag; classes enumerated by a complete scan and corrected are reported apart (steps 3, 4, 6, 7). Earlier content (v1.4–v1.10) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -664,7 +664,7 @@ wrong `defLine`), not for correlation with the reference. Zero `unsure` is treat
 about quality, never as evidence of it.
 
 *Decision per audited site:* DS reads the source and records `labelCorrect` true/false with
-file:line evidence. An error is a **label** error, whatever the reference says. *Threshold:* a
+file:line evidence. An error is a **label** error, whatever the reference says; an error of a closed class (step 7) is corrected but does not count toward the flag. *Threshold:* a
 stratum is **flagged** iff errors/n > 0.05 in draw U, which is ≥ 2 of 30, ≥ 3 of 40, ≥ 4 of 60,
 ≥ 6 of 100 (flag probability at a true 2%: 0.12, 0.05, 0.03, 0.02; at 8%: 0.70, 0.63, 0.72,
 0.82; with no error the Wilson upper bound is 0.11, 0.09, 0.06, 0.04). *Sibling sweep:* on any
@@ -685,8 +685,9 @@ For each, the FC reads the lines at `defLine` and records body or bodyless and t
 DS applies the language's row of bundle spec3 §4.1 rule 8 only where the form is not plainly a body:
 symbol → role `decl`; substituted (C/C++ prototype to definition, C# partial) → that definition,
 role `impl`; otherwise `N(s)`. A label `internal` at a bodyless form, or `declared` at a body,
-is corrected and **logged as a label error with kind `role`** (§6.5). The noise figure is reported
-with and without role errors; the flag uses the figure **with** them. The 76 label-`declared` and
+is corrected and **logged as a label error with kind `role`** (§6.5). The census also reads the line at
+every `defLine`: the right entity with a wrong `defLine` or `qname` is a `coordinate` error, corrected
+the same way. Both are **closed classes** (step 7). The 76 label-`declared` and
 81 reference-`declared` sites of Java, Kotlin and C# are in step 1's adjudication when they
 disagree and in this census always.
 
@@ -736,7 +737,7 @@ disagree and in this census always.
 - **A decision** (`adjudication/<lang>.jsonl`, one line per adjudicated, overturned or swept site) holds
   `ordinal`, `siteId`, the reasons, the decided set (`callees` with `role` impl/decl, `nonSymbol` for
   `N(s)`, `notACall`, `dynamic`), `wrong` (`label`, `reference`, `both`, or `neither` when the
-  reference was silent and the label right), `errorKind` (`target`, `role`, `schema`, `kind`, `none`),
+  reference was silent and the label right), `errorKind` (`target`, `kind`, `role`, `coordinate`, `shape`, `none`; `shape` is a label line breaking §6.5's schema, such as empty `callees` with neither `notACall` nor `dynamic`),
   and `evidence`: at least one `path:line` of the corpus, ≤ 300 characters. A decision without a
   citation is not a decision (§5.1 step 3).
 - **A final label** (`truth/<lang>.final.jsonl`) exists for **every** labelled site, once: `T` (path,
@@ -754,17 +755,29 @@ files, with N the labelled sites:
   (AI, AE, `relaxed`, `byConstruction`, `declared`, macro);
 - adjudicated counts by `wrong` and `errorKind`; W = sites with the label wrong among the adjudicated;
 - audit table per stratum: n, errors k, Wilson, population N_s, and draw C's cell errors;
-- **hand error rate** e_h = (W + Σ_s N_s·k_s/n_s) ÷ N, with the same figure using each stratum's Wilson upper
-  bound for k_s/n_s as the conservative bound, and both with and without `role` errors; **reference
-  error rate** over the comparable sites likewise. e_h > 0.05 (the flag uses the figure with role errors) makes the language
-  **noise-limited** in the report (§5.1 step 4); the bound is reported beside it. Test-retest for JS
-  is already reported (56 sites, 55 agree; ledger).
+- **hand error rate**, two figures, **always both reported**: e_all = (W + Σ_s N_s·k_s/n_s) ÷ N over every
+  error, and e_res, the same over **residual** errors, those not in a closed class. Each also with every
+  stratum's Wilson upper bound for k_s/n_s as the conservative bound; the **reference error rate** over the
+  comparable sites likewise. **The flag uses e_res**: e_res > 0.05 makes the language **noise-limited**
+  (§5.1 step 4) and a step 3 stratum is flagged on its residual errors; the bounds and e_all are reported
+  beside it. Test-retest for JS is already reported (56 sites, 55 agree; ledger).
+- **Closed class** (the purpose: the flag measures the error that remains in `final.jsonl`, and an error
+  that a complete scan finds and the final labels correct leaves none, so counting it, let alone
+  extrapolating it from a sample, would charge for risk that no longer exists). An `errorKind` is closed iff
+  all of: (i) it is `role`, `coordinate` or `shape`, a list this note extends only by revision; (ii) it is
+  found by a **complete** detector, not by agreement or a sample: step 4's census read every distinct label
+  and reference target and recorded a verdict (`noise.json` `census.targetsRead` equals the distinct
+  `(path, defLine)` count of the labels and reference), or the script's schema check ran on every label
+  line; (iii) every instance is corrected in `final.jsonl` and listed in `noise.json` by ordinal; and
+  (iv) the instances are at most 0.10 of the labelled sites, above which the labelling convention is
+  suspect and the language is returned. `target` and `kind` errors are never closed: a wrong entity, or a
+  wrong internal/external call, that the reference shares is invisible to any scan (§5.1's residual error).
 
 **Stop and escalate (one list; "return" means to the coordinator, with the file named).**
 1. The script rejects a file, or a count differs from step 1's: stop; return.
 2. Any read of `results/`, a CPG or Joern output, or of another language's files: the unit is void; a
    fresh FC restarts it.
-3. Flagged stratum after extension (step 3): `noise-limited`; unit stays open; return.
+3. Flagged stratum after extension (step 3, on residual errors): `noise-limited`; unit stays open; return. A closed class above 0.10 of the labelled sites: return.
 4. `underivable` > 0.05 of N; C++ macro-underdetermined > 0.30; C# generic stratum > 0.10 of the labelled
    internal sites; `relaxed` reference-error rate > 0.10 or `typeCtorMerged` ≥ 3 reference errors: return.
 5. Python n_int < 100: resume the labeller (step 5), no return needed.
