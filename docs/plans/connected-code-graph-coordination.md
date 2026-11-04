@@ -430,3 +430,5 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-04: S59 re-done per ML v1.9, verified (--check ok, test_contact 30 passed, graph-dba reports full suite 3241 passed, 47 mutants killed bar 2 equivalent). contact.json derivedFrom ebe66607; 7 Python + 2 TS/JS. S59 accepted. Next: S57 design (data-scientist).
 
 - 2026-11-04: ML note v1.10 committed: S57 procedure in §5.4 (data-scientist decides judged items; qa-engineer custodians per language prepare queues/assemble). Part F (flow audit) deferred: needs flowcheck nErrors 0 (Python/Go empty-pairs methods outstanding). JS labeller-scripts not kept (no provenance). Dispatching 7 custodians for parts A-E.
+
+- 2026-11-04: S57 phase 1 dispatched (custodians prepare decision queues, parts A-E; data-scientist decides after). python a00794f1a709b1d1f (first launched with a placeholder prompt by my slip, then given the real brief via SendMessage), javascript a8f0f877e323eb2e1, go a8f86b6e69772aafd, java a936d55fd1b468086, csharp a5a58f4f57f6d2b05, cpp a318f61a8ea3fab67, kotlin a95293459acc82622. All in-flight.
