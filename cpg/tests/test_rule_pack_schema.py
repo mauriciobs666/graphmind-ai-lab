@@ -983,6 +983,21 @@ def test_argument_paths_outside_spec_5_1_are_rejected_and_the_spec_agrees(bad):
     assert accepted("fastapi", lambda p: p["rules"][0]["extract"].update(t={"arg": bad}))
 
 
+@pytest.mark.parametrize("bad", ["kw.p\u00e9", "kw.\u00e9x", "recv.f\u00e9"], ids=["w-in-kw", "w-leading", "w-in-recv-member"])
+def test_p5_3_a_non_ascii_word_character_is_rejected_as_the_ecma_schema_would(bad):
+    """JSON Schema `pattern` is ECMA 262: `\\w` is ASCII-only. Python's str regex is Unicode unless told otherwise."""
+    assert accepted("fastapi", lambda p: p["rules"][0]["extract"].update(t={"arg": bad}))
+
+
+@pytest.mark.parametrize("bad", ["a1\u0663", "a\u0663", "a12\u0663"], ids=["d-after-ascii", "d-only", "d-trailing"])
+def test_p5_3_a_non_ascii_digit_is_rejected_as_the_ecma_schema_would(bad):
+    assert accepted("fastapi", lambda p: p["rules"][0]["extract"].update(t={"arg": bad}))
+
+
+def test_p5_3_a_non_ascii_digit_in_a_version_is_rejected():
+    assert accepted("fastapi", lambda p: p.update(version="1.0.\u0663"))
+
+
 @pytest.mark.parametrize("good", ["a0", "a12", "kw.x", "kw.x.y", "recv", "recv.f", "a0.b.c", "kw._p", "a1.method"])
 def test_argument_paths_of_spec_5_1_are_accepted(good):
     assert re.fullmatch(spec.ARGPATH, good)
@@ -1639,3 +1654,10 @@ EQUIVALENT_WHEN_MUTANTS: set[str] = set()
 def test_every_when_clause_of_the_severity_pack_file_is_pinned_by_a_vector():
     survivors = sorted(n for n, m in when_mutants(sev_formula()) if not spec.run_vectors(m))
     assert set(survivors) == EQUIVALENT_WHEN_MUTANTS, survivors
+
+
+@pytest.mark.parametrize("pattern,instance,ok", [("\\d", "٣", False), ("\\d", "3", True), ("^\\w$", "é", False), ("^\\w$", "e", True)])
+def test_p5_3_the_pattern_keyword_is_ascii_for_both_the_anchored_and_the_unanchored_form(pattern, instance, ok):
+    """No shipped schema pattern is unanchored today; the unanchored branch still follows ECMA so a future one cannot drift."""
+    v = rulepack._Validator({"type": "string", "pattern": pattern})
+    assert v.is_valid(instance) is ok

@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 import test_rule_pack_spec as spec
+from ccg.rulepack import default_on_unknown
 
 KAFKA, BUS = spec.PACKS["kafka"], spec.PACKS["paper-inhouse-bus"]
 
@@ -47,7 +48,7 @@ def resolved(values, constants=None):
 
 
 def on_unknown(expr, edge, kind):
-    return expr.get("onUnknown", "config-derived" if (edge, kind) == ("provides", "topic") else "partial")
+    return expr.get("onUnknown", default_on_unknown(edge, kind))
 
 
 def emit(r, slots, mode_of):

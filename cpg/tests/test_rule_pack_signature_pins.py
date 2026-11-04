@@ -144,3 +144,19 @@ def test_every_alternative_of_every_runtime_pattern_is_witnessed_by_a_detection_
                                   "java.net.ConnectException: Connection refused"])
 def test_a_line_of_no_runtime_marker_detects_no_runtime(line):
     assert [r for r, rx in spec.RUNTIMES.items() if re.search(rx, line)] == []
+
+
+# P5-1: lines that look like a runtime's marker without being one; widening a `runtimes` pattern makes one of them detect a runtime.
+DETECT_NEAR_MISS = {
+    "python": ['File "/app/x.py" was not found', "INFO Traceback logging enabled", '  File "/app/x.py", line three'],
+    "node": ["    at 10:30 we meet", "  at the end of day:12", "node: internal setting changed"],
+    "jvm": ["    at com.acme.Foo.bar(Foo.py:12)", "Caused by network failure", "    at com.acme.Foo.bar(Foo.java)"],
+    "dotnet": ["   at Acme.Foo.Bar() in /src/Foo.cs", "   at Acme.Foo.Bar in /src/Foo.cs:line 12"],
+    "go": ["  server.go:42 listening on :8080", "goroutine pool started", "goroutine 5 running"],
+}
+
+
+def test_p5_1_every_runtime_has_near_miss_lines_and_none_detects_a_runtime():
+    assert set(DETECT_NEAR_MISS) == set(spec.RUNTIMES)
+    detected = [(ln, r) for ls in DETECT_NEAR_MISS.values() for ln in ls for r, rx in spec.RUNTIMES.items() if re.search(rx, ln)]
+    assert not detected, detected

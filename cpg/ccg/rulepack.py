@@ -43,11 +43,12 @@ class PackError(ValueError):
 
 def _pattern(validator, pattern, instance, schema):
     """JSON Schema ``pattern`` (ECMA 262): an anchored pattern covers the whole string. Python's ``$`` also matches before a
-    final newline, so an anchored pattern is applied with ``fullmatch``; an unanchored one searches."""
+    final newline, so an anchored pattern is applied with ``fullmatch``; an unanchored one searches. ECMA's ``\\w`` and ``\\d`` are
+    ASCII-only while Python's are Unicode, so both run with ``re.ASCII`` (P5-3)."""
     if not isinstance(instance, str):
         return
     anchored = pattern.startswith("^") and pattern.endswith("$")
-    if not (re.fullmatch(pattern, instance) if anchored else re.search(pattern, instance)):
+    if not (re.fullmatch(pattern, instance, re.ASCII) if anchored else re.search(pattern, instance, re.ASCII)):
         yield jsonschema.ValidationError(f"{instance!r} does not match {pattern!r}")
 
 
