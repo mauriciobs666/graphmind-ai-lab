@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-10-29 (v1.3): re-aligned to bundle spec v1.2 (rule 8's exhaustive table, Go `IfaceType.NAME` specs, §5.0 `vendoredDirs`); §12 Pass 2 has the one-line record.*
+*Revision 2026-11-04 (v1.4): S25 pilot results folded in: C5's by-construction exclusions and the macro-argument mapping (§3.2, §5.2), short-circuit guards and the TS/JS flow floor (§6.4, §8.4); the C#, C++ and TS/JS rulings are priors with stopping conditions. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -168,10 +168,75 @@ criterion. `data-scientist` confirms at S25's gate. **Every criterion is a must*
 | C2 | Single-language project in the target language (≥ 80% of source lines). **Not** a polyglot multi-service demo application of any kind. | `cloc`-style line counts |
 | C3 | 5k–60k non-generated lines in the language, so that Joern, the reference indexer and the sandbox fit the 6 GB host (§7 of the plan), and the frame holds ≥ 2,000 call sites. | line count; frame size from the tree-sitter pass |
 | C4 | Builds from a clean checkout at the pinned SHA with the language's standard tool, in the image, with network: Maven or Gradle, Gradle for Kotlin, `dotnet build`, `go build ./...`, CMake. C/C++ must emit `compile_commands.json`. | build log, exit 0 |
-| C5 | The pinned reference tool (§5.2) indexes it without a fatal error, and gives a reference occurrence for ≥ 90% of a 50-site seeded pilot of its frame. **Run in S25 before any Joern run on the candidate.** A C5 failure rejects the candidate and moves to the next one; the tool is never swapped to rescue a corpus. | indexer log, document count, pilot coverage |
+| C5 | The pinned reference tool (§5.2) indexes it without a fatal error, and gives a reference occurrence, under §5.2's mapping, for ≥ 90% of a 50-site seeded pilot of its frame **after the by-construction exclusions below**. **Run in S25 before any Joern run on the candidate.** A C5 failure rejects the candidate and moves to the next one; the tool is never swapped to rescue a corpus. | indexer log, document count, raw and adjusted pilot coverage, excluded sites by class |
 | C6 | Contains the weak-spot idiom of proposal §3.2, at the count shown below, by a tree-sitter or grep census. | counts |
 | C7 | A modern dialect: Java ≥ 17; Kotlin **within the version range that the pinned scip-java Kotlin plugin documents or S24's smoke test proves** (scip-kotlin is archived and merged into scip-java, and Kotlin 2.x/K2 support is not stated, so in practice this may mean Kotlin 1.9.x, recorded as a representativeness limitation); C# / .NET ≥ 6; Go ≥ 1.21 with modules; C++ ≥ 17. Last commit within 3 years of the pin. | build files |
 | C8 | Has tests in the repository, so that tests-for-a-change shapes are in the frame. | test dir |
+
+**C5: sites reference-silent by construction (closed list; priors, confirmed or overturned at S57).**
+A pilot site leaves C5's denominator only if it is still reference-silent after §5.2's mapping and the
+harness tags it from the source alone (no Joern, no label) into one of these classes. Raw coverage is always reported beside the adjusted figure.
+- **Go:** a builtin call (`len`, `append`, ...). Moot for the pinned echo corpus (0.90 raw).
+- **C#:** a callee with a type-argument list (`F<T>(…)`, `new C<T>(…)`) and `nameof`. `scip-dotnet` 0.2.16
+  emits no occurrence for them, in-corpus generics included; verified, with the occurrences of each
+  silent Ocelot sample site's line read back: all 78 silent sites of the 500 (74 in the class) have
+  no occurrence named like their callee.
+- **C/C++:** a site under a non-guard `#if`/`#ifdef`/`#else` group (the compilation database builds
+  one configuration) and a site whose callee is itself a macro.
+- **Limits:** the excluded sites are ≤ 10 of the 50 (a judgment, not derived: more means the
+  reference is blind to too much of the frame for the noise estimate). A class is added only by a
+  revision of this note made before the pilot it would apply to. An excluded site stays in the
+  sample, is labelled, and is adjudicated like any silent site when the label says internal or
+  `unsure` (§5.1 step 3).
+- **Effect on label noise.** Noise is estimated only where both sources speak, so each class is a
+  stratum with no second opinion. The report gives the comparable share (labelled sites whose
+  reference is not silent) and the agreement rate per stratum (§5.1 step 4).
+
+**C# (Ocelot kept; priors).** The generic/`nameof` class applies. Pilot: 7 of 50 silent, all in the
+class, so adjusted 43/43. Over the 500 sample sites 74 generic/`nameof` sites are silent, of which
+12 are `nameof` and 14 name something defined in the corpus (a name-existence proxy, an upper
+bound on internal sites, since `Get` or `CreateLogger` may be external): at most about 6% of the
+~230 internal sites expected (§4.3), so the blind stratum is bounded. Selection bias: the reference
+is blind to generic callees, the shape of result wrappers (`OkResponse<T>`), DI and typed
+configuration reads, which is also where a hand labeller is most likely to err. Mitigation: those
+sites are checked from source, before Joern, at S57: every one labelled internal (adjudicated
+anyway) and a seeded 40 of those labelled external (hash sort, prefix `ccg-p0a-v1-gen|`).
+*Stopping conditions.* (a) The generic-stratum share of the labelled internal sites exceeds 10%:
+the "bounded stratum" premise fails and C# is reported stratified (non-generic noise-estimated,
+generic single-source), as a flag, not a language drop. (b) The checked sample shows an error rate
+above 5% (observed, §5.1 step 4's convention; for the 40 external-labelled sites, ≥ 3): the C#
+recall is flagged noise-limited on that stratum. Rejected: marking C# single-source, which would
+discard the estimate for the ≥ 84% of sites where the reference speaks (422 of 500) to protect a stratum that
+the audit above checks directly. Raw pilot coverage 0.86 (Wilson 95% [0.74, 0.93]) does not separate
+the corpus from 0.90 on its own; the sample-level figure (0.844, 422/500, Wilson [0.81, 0.87]) is
+the one that sets the comparable share.
+
+**C++ (googletest kept; priors).** Of the 22 silent pilot sites (all classified from the pilot files):
+18 are calls inside a test-macro argument list (`EXPECT_*`, `ASSERT_*`, `SCOPED_TRACE`,
+`EXPECT_CALL`), including all 13 the harness left unclassified; 6 sit under non-guard `#if`
+(other-OS branches; one is a macro invocation itself, one a macro-argument site); the tree-sitter ERROR tag is
+not the cause (all 4 tagged sites are macro-argument sites with an occurrence present). `scip-clang`
+does emit the callee's symbol at these macro-argument sites, but at the macro invocation's columns
+(for `EXPECT_EQ(x, Print(..))`, `Print` at the columns of `EXPECT_EQ`), so the strict
+position mapping reports them silent. §5.2's macro-argument rule recovers 15 of the 22 (13 untagged
+sites: 11). The remaining 7: the 5 uncompiled-branch sites, an `EXPECT_CALL(..).WillOnce` chain and
+a `std::numeric_limits<float>::quiet_NaN` call. Pilot: 28 + 15 = 43 of 50 raw (0.86), 43 of 45
+adjusted (0.956). Over the 500 sample sites: 196 silent strictly; the rule recovers 125 of them
+(a name-and-window match, whose false-match rate is unmeasured), the other 71 being 37 under
+non-guard `#if`, 9 macro-callee sites outside `#if` and 25 neither; adjusted coverage 429/454
+= 0.945. Decision: googletest stays, the mapping rule and the class list above apply.
+Rejected: changing criteria to find another corpus. Every other candidate in `corpora.yaml` fails a
+criterion that guards something real (spdlog: a Kafka client, §3.3 rule 4; yaml-cpp 82.9k and quill
+69.2k lines: C3's memory ceiling, unmeasured for Joern; pistache: needs a libcurl the truth image
+lacks, and building without tests leaves the test files silent; leveldb: C5 0.66 and C7), and any
+C++ corpus with C8's tests and C6's ≥ 50 function-like macros has the same macro-argument
+structure. A search would not escape it, so I do not ask for one. Rejected: single-source, which
+would drop the estimate where hand labels are most error-prone.
+*Stopping conditions.* (a) At S57, the hand-vs-reference disagreement at `relaxed` sites that adjudication
+finds to be the reference's error exceeds 10%: the macro-argument rule is withdrawn, those sites
+become by-construction silent, and the comparable share is recomputed. (b) The comparable share of
+the labelled sites is below 0.80 after (a): return to the coordinator, as the C++ noise estimate no
+longer rests on enough sites to continue as designed.
 
 **C6 thresholds (idiom present enough to be sampled at its natural rate, not hand-picked):**
 - **Java:** ≥ 20 DI or framework annotations on types or constructors (`@Component`, `@Service`,
@@ -382,7 +447,8 @@ answer**, and adjudicated wherever they differ:
      from erasing real misses.
    - Every adjudication records the decision, the evidence and which source was wrong.
 4. **Reported:** the hand-label vs reference agreement rate, with a Wilson interval, and the
-   adjudicated error rate of each source. This is the label-noise figure. If the hand labeller's
+   adjudicated error rate of each source, and both per stratum (the `relaxed` and by-construction
+   classes of §3.2/§5.2, and the rest). This is the label-noise figure. If the hand labeller's
    adjudicated error rate on the agreed-or-adjudicated set exceeds **5%**, the language's recall is
    flagged as noise-limited in the report.
 
@@ -443,6 +509,13 @@ symbol gives the qualified name. Go's `callgraph` edges carry the call position 
 matched to the site by file, line and callee name. A site with no reference occurrence is
 *reference-silent* and is adjudicated if the hand label says internal.
 
+**C/C++ macro-argument sites.** A site inside the argument list of a macro-shaped call maps to a
+non-local, non-definition occurrence in the window from the first line of its outermost enclosing
+macro invocation to the site's name line, whose last descriptor name equals the site's callee name.
+One distinct symbol in the window: that is the site's `static`, with `relaxed: true`. Two or more
+distinct symbols: `silent`, tagged `ambiguous`, and not counted as covered. The strict position
+mapping applies everywhere else. The agreement rate is reported separately for `relaxed` sites.
+
 ### 5.3 Census truths (no labeller)
 
 | Metric | Truth |
@@ -496,8 +569,14 @@ line against §6.5's schema on read and rejects the file on the first invalid li
 ### 6.4 Golden flow sets for `flowAvailable` (S28), and who writes them (F6, Q1)
 
 - **Population:** per language, the corpus methods that are 5–25 lines long, take ≥ 1 parameter,
-  contain ≥ 1 branch and ≥ 1 call, and are not generated. Draw **30** by the §4.4 hash sort with
-  seed prefix `ccg-p0a-v1-flow|`.
+  contain ≥ 1 branch node (the frame's node list) and ≥ 1 call, and are not generated. Draw **30**
+  by the §4.4 hash sort with seed prefix `ccg-p0a-v1-flow|`; a population smaller than 30 is drawn
+  whole (TS/JS: 14 methods). The population is not widened to methods whose only guard is a
+  short-circuit operator: on TS/JS, requiring the guarded right operand to contain a call adds 0 of
+  161 bodied definitions, and the looser test adds 13, 10 of them one cloned 8-line test helper.
+- **Conditions in the labels.** The labeller counts a short-circuit operand that guards a point
+  (`&&`, `||`, `??`, `and`, `or`) as a condition, as bundle spec §5.5 defines `cond`; the pairs it
+  guards are control pairs. This widens the pairs per method, not the methods.
 - **Label per method:** every intraprocedural *pair* that impact would follow:
   - **data pairs** (source → sink): a parameter, or a field/receiver read, → a call argument, the
     return value, or a field write, wherever a value of the source can reach the sink inside the
@@ -826,7 +905,16 @@ is below 0.95.** The rule would be: observed `P_c` < 0.95 makes the language an 
 
 **One primary criterion (review M4).** True iff, in **both** configurations:
 - **primary:** pooled flow pair recall (§7.3) is **≥ 0.95 observed**, over **≥ 120 golden
-  pairs**. With fewer than 120 pairs it is *insufficient*, and the answer is false;
+  pairs**, counted after S56's labels and S28's adjudication. With fewer than 120 pairs it is
+  *insufficient*, and the answer is false. The floor is not lowered for any language. Two-stage
+  rule for a population drawn whole (TS/JS; prior, confirmed at S56): if the labelled pairs are
+  below 120, the same labeller labels, in the same dispatch, the language's methods of 26–60 lines
+  under the same conditions (TS/JS: 3 methods), once; still below 120 means *insufficient*, reported
+  as `flow-unavailable:<lang>:insufficient-sample`, distinct from a measured miss. Whether 14 methods
+  yield the 8.6 pairs each that 120 needs is unmeasured. The table below is for 30 methods; for
+  n = 120 independent misses give P(pass) 0.99, 0.93, 0.61, 0.26, 0.04 at true recall
+  0.98, 0.97, 0.95, 0.93, 0.90, and fewer than 20 methods widens it further (the cluster interval
+  is reported beside the decision);
 - **precondition** (a different construct, kept): projection success is ≥ 0.95 of corpus methods
   (census). A projection that fails on many methods cannot be trusted on the ones it emits.
 
@@ -946,7 +1034,8 @@ adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended.
   there).
 - **R7. Inverse-sampling cap interacts with the C/C++ macro kind.** If macro-invocation sites are
   mostly `notACall`, they consume ordinals without adding internal sites. `notACall` sites count
-  toward the 500 cap, and the report gives their share.
+  toward the 500 cap, and the report gives their share. On googletest 17 of the 500 sample sites are
+  macro-callee sites with a silent reference (§3.2).
 - **R8. The fetch-on and truth runs share one network-enabled image.** A dependency cache that
   leaks into an off run would inflate off-configuration resolution. Mitigation: §9's separation,
   checked in S25.
@@ -960,7 +1049,7 @@ must produce, so that the step rows can be written from this section. Paths are 
 | Id | Step (new or amended) | Must produce | Inputs; must not see | Done when | Depends on |
 |---|---|---|---|---|---|
 | **N0** | **S24 amended** (`devops`) | Each §5.2 primary tool, pinned, in the image. A per-language **smoke project** (a few files with one interface or override) and its index, read back with `scip print --json` (`callgraph` output for Go) | §5.2, §9 | every primary tool indexes its smoke project in the image; a tool that cannot is replaced only by an installed-tool fallback, or the language is recorded *single-source* | S02, S05 |
-| **N1** | **S25 amended: the reference truth run** (`graph-dba`) | Per candidate, **before its first Joern run**: `truth/<lang>.c5.json` (tool, version, exit status, documents indexed, 50-site pilot coverage), then for the chosen corpus `truth/<lang>.ref.jsonl`, one line per sampled site: `ordinal`, `siteId`, `static` (`{path, qname, defLine}`, `declared`, `external`, or `silent`), `impls` (list), `tool`, `toolVersion` | the image with network and the corpus's dependencies; the fetch-off workspace never sees the dependency caches (§9) | C5 recorded per candidate; `ref.jsonl` covers every sampled ordinal; the Joern run's timestamp is later than the C5 record's | N0, S08, S09; N2's frame (same step) |
+| **N1** | **S25 amended: the reference truth run** (`graph-dba`) | Per candidate, **before its first Joern run**: `truth/<lang>.c5.json` (tool, version, exit status, documents indexed, 50-site pilot coverage, raw and adjusted, excluded count by §3.2 class), then for the chosen corpus `truth/<lang>.ref.jsonl`, one line per sampled site: `ordinal`, `siteId`, `static` (`{path, qname, defLine}`, `declared`, `external`, or `silent`; `relaxed: true` where §5.2's macro-argument rule matched; `ambiguous` as the tag of a `silent` row), `impls` (list), `tool`, `toolVersion` | the image with network and the corpus's dependencies; the fetch-off workspace never sees the dependency caches (§9) | C5 recorded per candidate; `ref.jsonl` covers every sampled ordinal; the Joern run's timestamp is later than the C5 record's | N0, S08, S09; N2's frame (same step) |
 | **N2** | **S25 amended: frame, draws, brief, matcher** (`graph-dba`) | `frame/<lang>.jsonl` (the census frame, §4.1); `sample/<lang>.jsonl` and `sample/<lang>.private.jsonl` (§4.4, 500 sites); **`sample/<lang>.brief.md`** (the §6.5 template, slots filled, the bundle spec §4.1 + §4.2-language excerpt appended verbatim with its version); **`sample/<lang>-flow.jsonl`** (the 30 flow methods, §6.4: `ordinal`, `path`, `qname`, `lineStart`, `lineEnd`, and the method's source text); `matcher-table.md` (Joern call `name` per constructor and call kind, per frontend, §7.1) | corpora, tree-sitter | the hash sorts reproduce from `corpora.yaml` alone; every brief validates as §6.5 with no unfilled `{…}` slot | S09. Inside S25 the order is: frame → C5 (N1) → draws and briefs → first Joern run |
 | **N3** | **New: golden flow labelling** (seven fresh `qa-engineer` dispatches, one per language) | `labels/<lang>-flow.jsonl`: per method `ordinal`, and per pair `{kind: data or control, source, sink, evidence}`, with points named as in S03's bundle (`Param{index}`, `Ret`, call-site position, `Cond` code) | `sample/<lang>-flow.jsonl` and that corpus only; never S11's projection, `extract.sc`, `results/`, `truth/`; the same §6.2 list | 30 methods labelled; transcript grep clean (§6.2, by `teco`). **Checker: `data-scientist`**, as for S26: label schema valid, every method has ≥ 1 pair, evidence cited | N2, S03 (point names); **not** S26, so it runs alongside S26 |
 | **N4** | **New: pre-Joern adjudication** (`data-scientist`; `analyst` checks) | `adjudication/<lang>.input.jsonl`, generated by `make_adjudication_input.py`. `graph-dba` writes that script in S25; it opens only `labels/` and `truth/`, and `analyst` checks this statically. **`data-scientist` runs it at the start of N4**, before opening anything under `results/`; `graph-dba` does not run it. The step writes `adjudication/<lang>.jsonl` (per disagreeing or `unsure` site: final `T(s)` with roles, `N(s)`, evidence, which source was wrong) and `truth/<lang>.final.jsonl` (the agreed-or-adjudicated truth for every labelled site) | `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`; must not see `results/` or any Joern output | every disagreement and `unsure` site has a decision with evidence; the label-noise figures of §5.1 step 4 are computed; `analyst` confirms no Joern artifact was read (transcript) | S26 for that language, N1 |
