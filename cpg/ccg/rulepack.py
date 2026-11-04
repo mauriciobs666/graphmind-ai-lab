@@ -335,7 +335,7 @@ class _Checker:
     def rule(self, r, where):
         p = self.p
         queries = {q["id"]: q for q in p.get("queries", [])}
-        liftings = {l["id"] for l in p.get("liftings", [])}
+        liftings = {l["id"]: l for l in p.get("liftings", [])}
         for subject, clause in _clauses(r["match"]):
             if subject == "evidence" and p["kind"] != "infra-signatures":
                 self.err(f"{where}.match", "the evidence subject belongs to infra-signatures packs")
@@ -356,18 +356,35 @@ class _Checker:
             for path, node in _walk(expr):
                 if isinstance(node, dict) and "yield" in node and (columns is None or node["yield"] not in columns):
                     self.err(f"{where}.extract.{slot}", f"yield {node['yield']!r} is not a column of the rule's query")
+        self.lifted_refs(r, slots, liftings, where)
         used: dict[str, list[tuple[str, str]]] = {s: [] for s in slots}
         for j, em in enumerate(r["emit"]):
             ((name, e),) = em.items()
             if name in EDGES:
                 self.emission(r, name, e, slots, used, f"{where}.emit.{j}.{name}")
         for slot, expr in slots.items():
+            if len(set(_nested_unknown_modes(expr))) > 1:
+                self.err(f"{where}.extract.{slot}", "mixed onUnknown modes in one slot (a slot has one mode)")
             if "config-derived" in _nested_unknown_modes(expr) and not used[slot]:
                 self.err(f"{where}.extract.{slot}", "onUnknown config-derived on a slot no key uses")
 
+    def lifted_refs(self, r, slots, liftings, where):
+        """A ``{lifted: s}`` slot names the matched lifting's ``role.slot`` or a companion ``role``, and the rule emits ``role.kind``."""
+        lifting = next((liftings[c["lifting"]] for s, c in _clauses(r["match"]) if s == "lifted" and c["lifting"] in liftings), None)
+        offered = set() if lifting is None else {lifting["role"]["slot"], *(c["role"] for c in lifting.get("companions", []))}
+        for slot, expr in slots.items():
+            for path, node in _walk(expr):
+                if isinstance(node, dict) and isinstance(node.get("lifted"), str) and node["lifted"] not in offered:
+                    self.err(f"{where}.extract.{slot}", f"lifted {node['lifted']!r} is not a slot of the rule's lifting (offers {sorted(offered)})")
+        if lifting is not None:
+            for j, em in enumerate(r["emit"]):
+                ((name, e),) = em.items()
+                if name in EDGES and e["kind"] != lifting["role"]["kind"]:
+                    self.err(f"{where}.emit.{j}.{name}.kind", f"{e['kind']!r} is not the lifting's role kind {lifting['role']['kind']!r}")
+
     def slot_mode(self, expr, edge, kind):
-        modes = list(_nested_unknown_modes(expr))
-        return modes[0] if modes else default_on_unknown(edge, kind)
+        modes = set(_nested_unknown_modes(expr))  # mixed modes in one slot are rejected in rule(), so there is at most one
+        return next(iter(modes)) if modes else default_on_unknown(edge, kind)
 
     def emission(self, r, name, e, slots, used, where):
         edge, kind = EDGES[name], e["kind"]

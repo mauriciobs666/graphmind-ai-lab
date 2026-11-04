@@ -128,7 +128,7 @@ def run_all(workers: int = 6) -> dict[str, bool]:
     return result
 
 
-# Classification from the slow run (109 leaves: 84 killed, 25 survivors). Regenerate by running the slow test and moving leaves.
+# Classification from the slow run. Regenerate by running the slow test and moving leaves.
 # UNEXERCISED_UNTIL_P1: values only a runtime reading the pack can test. The spec 12.1 P1 conformance row (fastapi and fetch
 # over s14a against assemble.py, plus its named fixtures) covers the fastapi: and fetch: ones; the fastmcp: ones (imports
 # gates, callee names, the tool-call key, launch defaults and flags, URL-source patterns) have NO conformance row in 12.1 yet:
@@ -156,7 +156,6 @@ UNEXERCISED_UNTIL_P1: set[str] = {
     "fastmcp:urlBindings[0].urlSources[0].config.keyPath.regex",
     "fastmcp:urlBindings[0].urlSources[1].callsite.callee",
     "fetch:liftings[0].companions[0].arg",
-    "fetch:liftings[0].role.slot",
     "fetch:liftings[0].seeds[0].call.callee",
     "fetch:rules[0].emit[0].consumes.key",
 }
@@ -233,6 +232,7 @@ KILLED: set[str] = {
     "fetch:liftings[0].companions[0].unknown",
     "fetch:liftings[0].id",
     "fetch:liftings[0].role.kind",
+    "fetch:liftings[0].role.slot",
     "fetch:liftings[0].seeds[0].arg",
     "fetch:liftings[0].seeds[0].call.resolution[0]",
     "fetch:liftings[0].seeds[0].call.resolution[1]",

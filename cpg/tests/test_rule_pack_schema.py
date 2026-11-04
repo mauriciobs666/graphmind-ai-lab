@@ -252,6 +252,21 @@ MORE_NEGATIVES = [
     ("where joins a non-id field to an id field", "paper-inhouse-bus", query_binding(1, {"name": "$dec.targetId"})),
     ("where joins an id field to a non-id field", "paper-inhouse-bus", query_binding(1, {"id": "$dec.line"})),
     ("lifted rule on an undeclared lifting", "fetch", lambda p: p["rules"][0].update(match={"lifted": {"lifting": "nope"}})),
+    ("P4-3 lifting's role.slot renamed: the rule's lifted url dangles", "fetch", lambda p: p["liftings"][0]["role"].update(slot="urlZ")),
+    ("P4-3 lifting's role.kind differs from the kind the rule emits", "fetch", lambda p: p["liftings"][0]["role"].update(kind="topic")),
+    ("P4-3 lifting without its verb companion: the rule's lifted verb dangles", "fetch", lambda p: p["liftings"][0].pop("companions")),
+    ("P4-3 lifted slot in a rule that matches no lifting", "fetch", lambda p: p["rules"][0].update(match={"callsite": {"callee": "fetch"}})),
+    ("P4-4 undeclared lifting in the second anyOf clause", "fetch",
+     lambda p: p["rules"][0].update(match={"anyOf": [{"lifted": {"lifting": "fetch-url"}}, {"lifted": {"lifting": "nope"}}]})),
+    ("P4-4 undeclared query in the second anyOf clause", "paper-inhouse-bus",
+     lambda p: p["rules"][1].update(match={"anyOf": [{"query": "handler-ns"}, {"query": "nope"}]})),
+    ("P4-4 evidence subject in the second anyOf clause of a non-infra pack", "fastapi",
+     lambda p: p["rules"][0].update(match={"anyOf": [p["rules"][0]["match"], {"evidence": {"regex": "x"}}]})),
+    ("P4-4 mixed nested onUnknown modes (drop first) under status confirmed", "fastapi",
+     lambda p: (p["rules"][0]["extract"].update(route={"firstOf": [{"arg": "a0", "onUnknown": "drop"}, {"arg": "kw.path", "onUnknown": "partial"}]}),
+                p["rules"][0]["emit"][0]["provides"].update(status="confirmed"))),
+    ("P4-4 mixed nested onUnknown modes (partial first)", "fastapi",
+     lambda p: p["rules"][0]["extract"].update(route={"firstOf": [{"arg": "a0", "onUnknown": "partial"}, {"arg": "kw.path", "onUnknown": "drop"}]})),
     ("key names a slot the rule does not extract", "fastapi", set_emit(key="{verb} {nope}")),
     ("evidence subject outside an infra pack", "fastapi", lambda p: p["rules"][0].update(match={"evidence": {"regex": "x"}})),
     ("duplicate mount ids", "fastapi", lambda p: p["mounts"].append(copy.deepcopy(p["mounts"][0]))),
@@ -391,6 +406,21 @@ def test_the_registry_cells_for_a_topic_publisher_exist_and_spec3_stays_frozen()
     for code, _status, on, *_ in spec3_rows("### 7.2 Status reasons", "### 7.3"):
         if code.strip("`") in ("runtime-built", "config-derived"):
             assert "PROVIDES" not in on
+
+
+def test_the_spec_checker_and_the_shipped_validator_still_disagree_on_config_derived_on_a_topic_publisher():
+    """P4-5, RETIRE WITH THE SPEC v1.4 ROUND. Spec 1.4 (v1.3 text) and N-27 say `onUnknown: config-derived` is valid only on a
+    `consumes`; `check_rule` in test_rule_pack_spec.py is its executable twin and rejects it. The shipped validator accepts it on
+    `provides topic` (teco ruling O-16). When v1.4 changes the spec text and `check_rule` together, this test goes red: delete it,
+    the module docstring's Topic knock-on paragraph and the matching note on `default_on_unknown`."""
+    def mutate(p):
+        p["rules"][0]["extract"]["topic"].update(onUnknown="config-derived")
+    pack = copy.deepcopy(PACKS["kafka"])
+    mutate(pack)
+    assert errors(pack) == []  # the validator accepts
+    with pytest.raises(AssertionError, match="N-27"):
+        spec.check_pack(pack)  # the spec checker rejects it, by its N-27 assertion
+    assert rulepack.default_on_unknown("provides", "topic") == "config-derived"
 
 
 @pytest.mark.parametrize("edge,kind,expected", [
@@ -575,7 +605,7 @@ FREE_STRING_LEAVES = {
     "rules[].match.decorator.name.regex", "rules[].scope.imports[].module.exact", "rules[].scope.imports[].module.prefix",
     "runtimes[].regex", "urlBindings[].urlSources[].callsite.callee", "urlBindings[].urlSources[].config.keyPath.regex",
     # free text of a declaration
-    "launch.frameworkDefaults[].protocol", "launch.portFlags[].flags[]", "liftings[].role.slot", "mounts[].prefix.default",
+    "launch.frameworkDefaults[].protocol", "launch.portFlags[].flags[]", "mounts[].prefix.default",
     "rules[].emit[].consumes.key", "rules[].emit[].provides.key", "rules[].extract.verb.literal",
     "signatures[].library", "vocab[].example", "vocab[].keyNorm",
 }
@@ -898,16 +928,30 @@ def test_boundaries_accept_the_spec_ranges_and_reject_outside_them(name):
     assert all(verdicts(pid, path, bad, *extra).values()), verdicts(pid, path, bad, *extra)
 
 
-def one_binding_query(alias):
+def aliased_query(alias, ref="$dec.args.a0"):
+    """Two bindings: `dec` (yielded) and a second one named `alias`, joined to it but never yielded, so only the
+    schema's `as` pattern can reject a malformed alias (a yielded alias is also checked by the yield pattern: P4-2)."""
     def m(p):
-        p["queries"][0] = {"id": "handler-ns", "from": [{"as": alias, "record": "decorator", "where": {}}], "yield": {"handler": f"${alias}.targetId"}}
-        del p["rules"][1]  # the subscribe rule reads the columns this one-binding query does not yield
+        p["queries"][0] = {"id": "handler-ns",
+                           "from": [{"as": "dec", "record": "decorator", "where": {}},
+                                    {"as": alias, "record": "symbol", "where": {"id": "$dec.targetId"}}],
+                           "yield": {"handler": "$dec.targetId", "topic": ref}}
+        del p["rules"][1]  # the subscribe rule reads the columns this query does not yield
     return m
 
 
-@pytest.mark.parametrize("alias,ok", [("dec", True), ("d_1", True), ("", False), ("Dec", False), ("1d", False), ("d-x", False), ("d x", False)])
+@pytest.mark.parametrize("alias,ok", [("dec2", True), ("d_1", True), ("", False), ("Dec", False), ("TY", False), ("1d", False),
+                                      ("d-x", False), ("d x", False), ("t y", False), ("_d", False)])
 def test_a_query_alias_is_a_lowercase_token(alias, ok):
-    assert (accepted("paper-inhouse-bus", one_binding_query(alias)) == []) is ok
+    assert (accepted("paper-inhouse-bus", aliased_query(alias)) == []) is ok
+
+
+@pytest.mark.parametrize("ref,ok", [("$dec.args.a0", True), ("$dec.args.kw.x", True), ("$dec.targetId", True),
+                                    ("xdec.args.a0", False), ("xdec.args.a0$h.id", False), ("$dec.args.a0!! junk", False), ("$dec.args.a0 junk", False),
+                                    ("$dec.args.", False), ("$Dec.id", False), ("dec", False), ("$dec", False)])
+def test_a_query_yield_reference_is_a_dollar_alias_field_path(ref, ok):
+    """P4-2: the validator's `args.` branch checks only that the record has `args`, so the schema pattern is the only guard."""
+    assert (accepted("paper-inhouse-bus", aliased_query("h", ref)) == []) is ok
 
 
 @pytest.mark.parametrize("bad", ["arg0", "a-1", "p0", "r", "ret", "a", "kw.", "kw", ".a0", "a0.", "kw.1x", "recv-x", "A0", "a0 b", ""])
@@ -1284,3 +1328,16 @@ def test_more_required_keys(name, mutate):
 ], ids=lambda x: x if isinstance(x, str) else "")
 def test_more_required_keys_of_constructs_no_spec_pack_uses(name, mutate):
     assert synth(mutate), name
+
+
+# ---------------------------------------------------------------- S31 fix round (Pass 4)
+
+def test_every_data_file_under_ccg_is_covered_by_a_package_data_glob():
+    """P4-1: an installed (non-editable) wheel ships exactly the globs of pyproject's package-data; the expected set is the tree."""
+    import tomllib
+    declared = tomllib.loads((CPG / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]["ccg"]
+    pkg = CPG / "ccg"
+    data = {p.relative_to(pkg) for p in pkg.rglob("*") if p.is_file() and p.suffix not in (".py", ".pyc") and "__pycache__" not in p.parts}
+    assert data, "the tree has data files (schemas, registry, store DDL)"
+    shipped = {p.relative_to(pkg) for g in declared for p in pkg.glob(g) if p.is_file()}
+    assert data <= shipped, sorted(map(str, data - shipped))
