@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.4): S25 pilot results folded in: C5's by-construction exclusions and the macro-argument mapping (§3.2, §5.2), short-circuit guards and the TS/JS flow floor (§6.4, §8.4); the C#, C++ and TS/JS rulings are priors with stopping conditions. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.5): S25 pilot results folded in (C5's by-construction exclusions and the type-and-constructor clause, §3.2, §5.2) and the S56 flow brief signed off (direct pairs, point classes, JS/TS tests, §6.4, §7.3, §8.4); the C#, C++, TS/JS and brief rulings are priors with stopping conditions. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -584,20 +584,47 @@ line against §6.5's schema on read and rejects the file on the first invalid li
 - **Population:** per language, the corpus methods that are 5–25 lines long, take ≥ 1 parameter,
   contain ≥ 1 branch node (the frame's node list) and ≥ 1 call, and are not generated. Draw **30**
   by the §4.4 hash sort with seed prefix `ccg-p0a-v1-flow|`; a population smaller than 30 is drawn
-  whole (TS/JS: 14 methods). The population is not widened to methods whose only guard is a
+  whole (TS/JS: 12 methods). **TS/JS excludes the files bundle spec4 §1 lists as `test`**
+  (`*.test.<ext>`, `*.spec.<ext>`, `e2e/` or `__tests__/` segments): the bundle has no symbol for them by
+  design, so every pair there would be a miss by construction. That removes 2 of the first draw's 14
+  methods; the 3 methods of 26–60 lines are all outside tests. The draw is regenerated before any label
+  exists. Python tests stay in. The population is not widened to methods whose only guard is a
   short-circuit operator: on TS/JS, requiring the guarded right operand to contain a call adds 0 of
   161 bodied definitions, and the looser test adds 13, 10 of them one cloned 8-line test helper.
 - **Conditions in the labels.** The labeller counts a short-circuit operand that guards a point
   (`&&`, `||`, `??`, `and`, `or`) as a condition, as bundle spec §5.5 defines `cond`; the pairs it
   guards are control pairs. This widens the pairs per method, not the methods.
-- **Label per method:** every intraprocedural *pair* that impact would follow:
-  - **data pairs** (source → sink): a parameter, or a field/receiver read, → a call argument, the
-    return value, or a field write, wherever a value of the source can reach the sink inside the
-    method;
-  - **control pairs:** a condition → each call site, return or field write it guards.
+- **Label per method:** every **direct** intraprocedural *pair*, over the four point classes of
+  bundle spec §5.4–§5.6 (`param`, `call`, `ret`, `cond`), nothing else being a source or a sink:
+  - **data pairs:** the source is a `param` or a call's **result**; the sink is a call (argument or
+    receiver), a `ret`, or a `cond` that reads the value. *Direct* means through local variables,
+    aliases, loop variables, destructuring, fields and elements of locals, and language operators,
+    and **not** through a call: `f(g(x))` is `x`→`g` and `g`→`f`. The sink is the innermost
+    condition containing the read;
+  - **control pairs:** the source is a `cond`; the sink is a call, a `ret` or another `cond` that it
+    directly decides (nearest governing condition, early exits and short-circuit operands included).
+  - **Not asked for:** field-write sinks and reads of an implicit `this` (no bundle point exists for
+    them: spec §5.4 makes implicit `this` not a `param` for JVM, C# and JS, and the `data` edge
+    endpoints are `Param`/`CallSite` as definition and `CallSite`/`Ret`/`Cond` as use). Flow through
+    fields is therefore unmeasured: `flowAvailable: true` means flow among those four point classes,
+    and the report says so. For C++, spec §5.4's receiver list is closed and names no C++ construct,
+    and its implicit-`this` sentence names JVM, C# and JS only, so the brief's treatment of C++'s
+    implicit `this` as the JVM's is an extension of the spec, not its text.
+
+  *Stopping conditions (priors, confirmed or overturned at S28).* (a) Direct pairs: if more than 10%
+  of the connected data pairs are connected only by a chain of two or more edges, the chain rule is
+  carrying the recall and the single-edge figure is the one reported first. (b) Endpoints: if more
+  than 10% of a language's golden pairs are `endpoint-unresolved`, S28's adjudicator splits them into
+  labeller naming errors and projection gaps before any §8.4 decision; for C++, if the unresolved
+  `param` endpoints show a one-position offset (the projection counting `this`), bundle spec §5.4
+  gets the C++ sentence and the pairs are re-keyed, not scored as misses. (c) Fields: if P1's AC-5
+  strata show a missed impact link that runs through a field or implicit `this` in a language with
+  `flowAvailable: true`, that language's flow claim is narrowed to the four point classes in its
+  report.
 
   Each pair is given as (method, source point, sink point), with points named the way S03's
-  bundle names `Param{index}`, `Ret`, call-site position and `Cond` code.
+  bundle names `Param{index}`, `Ret`, call-site position and `Cond` code. The brief is
+  `cpg/spikes/frontend-fitness/flow-brief.template.md`.
 - The labeller must not see S11's projection output, or `extract.sc`. The same §6.2 list applies.
 - **Producer:** a new step of seven fresh per-language `qa-engineer` dispatches (§11 N3). It needs
   S25's flow draw and S03's point names, not S26, so it can run alongside S26 as separate
@@ -799,7 +826,7 @@ by string*, *framework-invoked* (decorator/route/annotation dispatch), *macro*, 
 | Metric | Definition | Interval |
 |---|---|---|
 | Projection success | methods the S11 projection emits without error or timeout ÷ corpus methods (census) | Wilson |
-| **Flow pair recall** | golden pairs (§6.4) the projection connects ÷ golden pairs. A **data pair** is connected when a directed chain of one or more `DATA` edges within the method leads from the source point to the sink point; access-path labels are ignored, and an edge marked `field-truncated` (the bundle's depth-3 cap) still counts as connecting. A **control pair** is connected by a direct `CONTROLLED_BY` edge from the sink point to the condition's `Cond`. Data and control are reported separately and pooled | ratio estimator over the method clusters, formula below |
+| **Flow pair recall** | golden pairs (§6.4) the projection connects ÷ golden pairs. A **data pair** is connected when a directed chain of one or more `DATA` edges within the method leads from the source point to the sink point; access-path labels are ignored, and an edge marked `field-truncated` (the bundle's depth-3 cap) still counts as connecting. The golden pairs are direct (§6.4), so the chain allowance only credits a pair the projection routes through intermediate points; the share connected by a single edge is reported beside the pooled figure, so that leniency is visible. A pair whose endpoint matches no projection point, or several, is a miss, listed apart as `endpoint-unresolved`. A **control pair** is connected by a direct `CONTROLLED_BY` edge from the sink point to the condition's `Cond`. Data and control are reported separately and pooled | ratio estimator over the method clusters, formula below |
 | Methods fully recovered | methods with every golden pair connected ÷ 30 | Wilson |
 | Spurious pairs | projection pairs not in the golden set ÷ projection pairs, on the 30 methods | none (secondary) |
 | Density and build time | nodes, edges and MB per file; projection build time per kLOC; symbol and call-site density per file (graph note Q3) | none (descriptive) |
@@ -923,8 +950,10 @@ is below 0.95.** The rule would be: observed `P_c` < 0.95 makes the language an 
   rule for a population drawn whole (TS/JS; prior, confirmed at S56): if the labelled pairs are
   below 120, the same labeller labels, in the same dispatch, the language's methods of 26–60 lines
   under the same conditions (TS/JS: 3 methods), once; still below 120 means *insufficient*, reported
-  as `flow-unavailable:<lang>:insufficient-sample`, distinct from a measured miss. Whether 14 methods
-  yield the 8.6 pairs each that 120 needs is unmeasured. The table below is for 30 methods; for
+  as `flow-unavailable:<lang>:insufficient-sample`, distinct from a measured miss. Whether 12 methods
+  yield the 10 pairs each that 120 needs (15 methods with tier 2: 8) is unmeasured. A crude proxy,
+  the sink points (calls, returns, conditions) in the methods, is 97 for the 12 and 138 for the 15, so
+  120 needs about 1.2 and 0.9 pairs per sink; I have no measured pairs-per-sink. The table below is for 30 methods; for
   n = 120 independent misses give P(pass) 0.99, 0.93, 0.61, 0.26, 0.04 at true recall
   0.98, 0.97, 0.95, 0.93, 0.90, and fewer than 20 methods widens it further (the cluster interval
   is reported beside the decision);
@@ -1017,6 +1046,13 @@ runs them in separate containers or workspaces, and S08's escape-axis probe shou
 that those caches are not mounted into the sandbox.
 
 ## 10. Risks and open questions
+
+**Open question (TS/JS call-site frame, for the coordinator).** 3,574 of the TS/JS frame's 4,097 sites,
+444 of its 500 sample sites and 89 of its 109 reference-internal sample sites are in files that match
+bundle spec4's `test` pattern. If the Joern frontend does not see test files (not verified by me),
+a1's TS/JS recall is measured almost wholly on code the bundle excludes by design; restricting the
+frame to non-test files leaves 523 sites, below C3's 2,000. Answering it changes what the TS/JS fixed
+corpus measures, so it is a scope decision. No labelling has started on it.
 
 **Open questions.** The v1.0 questions Q1 (who writes the golden flow sets) and Q2 (where
 adjudication sits) are answered: §11 N3 and N4–N5, as the review recommended. What remains for
