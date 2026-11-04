@@ -165,3 +165,24 @@ New scope, about 55 lines: provenance widening (`grammarHash`, `samplingHash`, `
 ### Stopping condition for Pass 3
 
 Approve iff: (a) §6 and test 11 state that `facts_bytes` excludes `provenance` and `lookups`, with the lookups-removal assertion; (b) `grep -n "C1\|carry-over" docs/plans/connected-code-graph-p0-2.md` shows the C-list attached (teco), or the spec's reading order tells S34 it is not needed; (c) n2's base named. n1, n3, n4 and the growth residue may be folded at the next ordinary revision.
+
+## Pass 3 (2026-11-04): v1.2 (`467e100c`, 518 lines)
+
+**Verdict: approve with suggestions. S34 may start in full**, including `facts_bytes` and test 11. N1 is closed; the stopping condition (a)-(c) holds.
+
+CPG: considered, not relevant — a contract specification; checked against documents and `cpg/ccg/*`.
+
+### Dispositions
+
+- **N1 / (a) fixed, and the narrowing is right.** §6 now defines `facts_bytes` = canonical bytes minus `provenance`, and minus `lookups` **only when `status == resolved`**. Against pin-and-replay: a resolved answer (plain or mixed) replays as a structured ask that names no failed path, so excluding its `lookups` makes the four paths equal; an `unresolved` answer has no `request`, so it is not replayable and its `lookups` *are* the answer, so keeping them in the facts is correct; `ambiguous` carries no `lookups` (V2). No case is left where replay and the boundary disagree. Test 11 can fail both ways: dropping `B-mixed`'s `lookups` must leave `facts_bytes` equal (an always-include mutant fails), and changing `B-unres`' must change it (an always-exclude mutant fails). The boundary is stated once in §6, and §3 and §9 now point to it.
+- **(b) fixed.** `docs/plans/connected-code-graph-p0-2.md` line 1499 ("Also for P1/S50") points to C1-C9 and to the EP §10.4/§5.2 amendments (`data-scientist`, before S47/S49). The amendments still have no S-row of their own; the pointer is enough for S34.
+- **(c)/n2 fixed.** `B-amb` (two ranked options, each a `symbol` anchor for `getHealth` / the storefront `health` handler) and `B-mixed` (a `symbol` anchor plus one `lookups` entry); both ids reproduce by `ids.symbol_id` (ran in Pass 2: `8ae57f34…`, `a6c26487…`). Tests 6 and 13 use them.
+- **n1 fixed:** five plants (nested object, array item, `$ref`, `oneOf`, `allOf`/`if`-`then`), each its own test.
+- **n3 fixed:** `rank` (int >= 1) on options, all-or-none and distinct, sorted by `rank` else canonical bytes; §6 row and test 6 agree, so no tie is possible.
+- **n4 fixed.** Ran the patterns: `^[a-z0-9._-]+$` matches `graphmind-ai-lab` and is the `-spec3` §3.4 normalized class; `^[a-z][a-z0-9_]*$` matches all nine contract kinds in `-spec3` §6; `^[a-z][a-z0-9-]*(:[a-z0-9]+)?$` matches every code in `reasons.yaml` (with `<lang>` as `python`) and `function-level-continuation`. `$defs` list now includes `Request`, `Recipe`, `Stamp`, `DepthBound`.
+- **Residue trim:** C1-C4 and C8 are now one-line pointers to §7.4(3), §7.1/§7.2, §4.1, §4.4, §4.2, each of which exists; date stamps and the "former open item" sentence are gone (grep: only the revision note carries a date); `facts_bytes` has one home. Nothing was restated and no citation broke (checked each `§` and `C-n` reference). 516 to 518 lines with the new scope added is net trim.
+
+### New findings (minor, fold at next revision)
+
+- **p1.** `rank` lives on the shared `Request` `$def`, so a resolved `request` may carry it and EP §10.4's equality (`useCase`, `direction`, anchors, `scope`) should ignore it. Say: `rank` is allowed only inside `options`, and V2 rejects it on `request`.
+- **p2.** The EP §10.4/§5.2 amendments (status predicate, pin-and-replay, harness assertions) are still unwritten and unscheduled; `teco` should route a `data-scientist` row before S47/S49. This does not touch S34.
