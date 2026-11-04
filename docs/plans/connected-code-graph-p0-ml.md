@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.9 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.10 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.9): `contact.json` sources aligned with eval-protocol §8.2: the slice report counts for its §4 only, worked-example documents do not (§3.1, R6). Earlier content (v1.4–v1.8) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.10): S57 adjudication procedure written (§5.4): strata, audits of agreed and scripted labels, the declared and role census, per-language strata, the final-label and noise definitions, Part F (flow-label audit), and one stop and escalate list. Earlier content (v1.4–v1.9) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -508,7 +508,7 @@ answer**, and adjudicated wherever they differ:
    an implementation/override relation, it also gives the **dispatch expansion**.
 2. The harness compares, per site, the hand label with the reference. **Agree** (same
    in-corpus target set, or both external): that is the truth.
-3. **Adjudication** covers every site where they disagree, every site labelled `unsure`, and
+3. **Adjudication** (procedure: §5.4) covers every site where they disagree, every site labelled `unsure`, and
    **every site Joern misses** in either configuration, even where label and reference agree.
    - **Disagreements and `unsure` sites** are adjudicated by `data-scientist` in a **separate
      pre-Joern step** (§11 N4, checked by `analyst`), from a file that has no Joern columns, before
@@ -605,6 +605,200 @@ mapping applies everywhere else. The agreement rate is reported separately for `
 | Value-set recovery | tree-sitter argument nodes that are a string literal, a literal-only concatenation, a template literal without substitutions, or a same-file constant (`final`/`const`/`val`/module-level `UPPER_CASE` in Python) initialized by one of those |
 | Decorator/annotation shape | tree-sitter decorator/annotation/attribute nodes attached to definitions, with their literal arguments |
 | Fan-out | Joern itself: a count over Joern's own name-match candidates, so no external truth. Methods Joern failed to emit lower fan-out; method coverage is reported beside it so that this is visible |
+
+### 5.4 Adjudication procedure (S57), one fitness custodian per language, in parallel
+
+**Roles.** A fresh `qa-engineer` fitness custodian (FC) per language does the mechanical work and
+reads source; `data-scientist` (DS) decides every judged item and returns decisions keyed by
+`ordinal`; the FC writes them down. Neither opens `results/`, a CPG or any Joern output
+(`analyst` checks both transcripts). **Inputs:** `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`,
+`labeller-scripts/<lang>/` (provenance only, as evidence of how labels were made) and the corpus tree
+`cpg/.ccg-work/corpora/<lang>/src` (the evidence for every decision is a file:line there). Part F
+(flow labels, below) adds `sample/<lang>-flow.jsonl` and `labels/<lang>-flow.jsonl`, an extension of
+the S57 row's input list that Part F's order of reads makes safe. **Outputs:**
+`adjudication/<lang>.input.jsonl` (the script), `adjudication/<lang>.audit.jsonl` (the draws and
+their outcomes), `adjudication/<lang>.jsonl` (decisions), `adjudication/<lang>.noise.json`,
+`adjudication/<lang>-flow-audit.jsonl`, `truth/<lang>.final.jsonl`. Already fixed by the S25 gate
+(`docs/reviews/connected-code-graph-frontend-fitness.md`) and not re-checked here: the input script's
+firewall and its `label-notacall-reference-call` reason (F11), `flowcheck`'s endpoint and evidence
+checks (F1), the C5 figures (F3, F9) and the contact list (G1, G2).
+
+**Step 1: compare.** Run `make_adjudication_input.py <lang>`; it must exit 0 and report the labelled
+count (python 240, javascript 523, go 373, java 500, csharp 313, cpp 187, kotlin 430). Every site
+with `status: needs-adjudication` is **adjudicated, with no sampling**: today 328 sites (python 73,
+javascript 43, go 35, java 16, csharp 44, cpp 89, kotlin 28). `unsure` and `dynamic` are reasons
+whatever the reference says.
+
+**Step 2: strata of the agreed sites.** Every `agreed` site is in exactly one stratum, by the
+reference's kind and the label:
+- **AI** agreed internal: the label lists an in-corpus target (internal or declared) and the sets match;
+- **AE** agreed non-internal: no in-corpus target on either side, the reference being `external`,
+  `local` or a dispatch without an in-corpus target, the label external or `notACall`;
+- **AS** agreed against a silent reference: no in-corpus target on the label, the reference
+  `silent`. This is **single-source**: the script calls it agreed, but the reference gave no
+  second opinion, so it is excluded from the comparable share and from the agreement rate.
+The **comparable share** is the labelled sites whose reference is not silent; the **agreement
+rate** is agreed ÷ comparable, Wilson 95% (S25 gate §7: Java and Go will read lower than their
+pilots).
+
+**Step 3: audit the agreed strata (the shared-error and scripted-label check).** Agreement shows only
+that two sources agree, so a sample of each agreed stratum is re-decided from source by DS as if it
+were a disagreement. Draw within a stratum by ascending SHA-256 of `ccg-p0a-v1-aud|<lang>|<stratum>|`
+plus `siteId`, the first n (draw U). A second draw C takes, per **cell** of the stratum not hit by U
+(cell = label kind × package or `defPath`, or `notACall`), its first site; C is read and corrected
+but **reported apart and never pooled into the rate**. Sizes (all of a stratum if it is smaller):
+
+| Tier | Languages | AI | AE | AS |
+|---|---|---|---|---|
+| standard | python, go, csharp, kotlin, cpp | 60 | 60 | 30 |
+| scripted externals (JS) | javascript | 100 | 100, of which ≥ 40 from the reference-`local` cell | all (1) |
+| helper-resolved targets (Java) | java | 100 (a census, N = 100) | 100 | 40 |
+
+JS gets the larger tier because its labels came from a Python rule table written after a full read,
+not site by site (the second labeller of the old and new runs both used one, so their 55/56 test-retest
+agreement is not independent evidence), all 523 are `sure`, and the table was not kept
+(`labeller-scripts/javascript/` is absent). Java gets it because it too has 0 `unsure` and 0 `dynamic`
+over 500 sites, against 71 of 187 for C++ (S25 gate §5.1); `lab.py` only indexes definitions from source text
+and the call decisions are hand-written, so the audit looks for helper mistakes (overload fan-out, a
+wrong `defLine`), not for correlation with the reference. Zero `unsure` is treated as uninformative
+about quality, never as evidence of it.
+
+*Decision per audited site:* DS reads the source and records `labelCorrect` true/false with
+file:line evidence. An error is a **label** error, whatever the reference says. *Threshold:* a
+stratum is **flagged** iff errors/n > 0.05 in draw U, which is ≥ 2 of 30, ≥ 3 of 40, ≥ 4 of 60,
+≥ 6 of 100 (flag probability at a true 2%: 0.12, 0.05, 0.03, 0.02; at 8%: 0.70, 0.63, 0.72,
+0.82; with no error the Wilson upper bound is 0.11, 0.09, 0.06, 0.04). *Sibling sweep:* on any
+error, the FC lists every site of the language whose label shares the erroneous site's cell or
+callee name, and DS re-decides up to 10 of them (all if ≤ 10, else the first 10 by the same
+hash); overturns found are applied but do not enter the rate.
+*Stop and escalate:* a flagged stratum is extended once (census if N ≤ 150, else a second draw of n);
+if the pooled rate is still above 0.05, the stratum is **noise-limited**: the language's recall carries
+that flag (§5.1 step 4), S57 for the language stays open, and the FC returns to the coordinator with
+the per-cell error table and the cost of relabelling the stratum with a fresh labeller.
+
+**Step 4: the declared and role census (all languages, no sampling).** Rule 8's role of a target
+(§2, §6.5's harness mapping) needs the declaring source, which the script may not open, so the FC
+does it: take every distinct `(path, defLine)` that appears as a label callee of kind `declared` or
+`internal`, or as the reference's `static`/`impls` (62 to 143 per language, plus 0 to 31 declared:
+Java 62 + 31, Kotlin 143 + 13, C# 115 + 10, Python 126 + 2, Go 126 + 4, C++ 124 + 3, JS 102 + 0).
+For each, the FC reads the lines at `defLine` and records body or bodyless and the declaration form;
+DS applies the language's row of bundle spec3 §4.1 rule 8 only where the form is not plainly a body:
+symbol → role `decl`; substituted (C/C++ prototype to definition, C# partial) → that definition,
+role `impl`; otherwise `N(s)`. A label `internal` at a bodyless form, or `declared` at a body,
+is corrected and **logged as a label error with kind `role`** (§6.5). The noise figure is reported
+with and without role errors; the flag uses the figure **with** them. The 76 label-`declared` and
+81 reference-`declared` sites of Java, Kotlin and C# are in step 1's adjudication when they
+disagree and in this census always.
+
+**Step 5: language-specific strata (all adjudicated or checked in the same pass).**
+- **C++ macro invocations.** 53 labelled sites (28%) are function-like macro invocations
+  (`macro-shaped`), 51 of them `unsure` with a partial list from the labeller's first expansion
+  level; they are 24 distinct macros (`EXPECT_EQ` 12, `EXPECT_THAT` 10, `EXPECT_TRUE` 6, ...). A
+  macro is not a symbol (rule 8), so the truth of such a site is the in-corpus symbols its
+  **first-level expansion** calls. DS decides **per macro name**, once, from the `#define`, and
+  applies it to every site of that macro; the site's final set is that set, with an overload
+  chosen only when the argument types fix it from source. Where they do not (the labeller's
+  `Compare` overloads), the site is `scored: false`, `notScoredReason: macro-underdetermined`, counted and
+  reported apart as `dynamic`-with-empty-set is (§2), and the recall is reported with and without them
+  (R7). *Escalate* if the underdetermined share exceeds 0.30 of the labelled C++ sites: C++ recall
+  would describe a remainder, and the scope of the C++ measure is the coordinator's. The other 20
+  `unsure` non-macro C++ sites are adjudicated one by one; the three C++ labels with empty
+  `callees` and no `notACall` are label errors of kind `schema` unless DS finds the site is not a
+  call (then `notACall`).
+- **`relaxed`, `ambiguous`, `byConstruction` reference rows** (§3.2, §5.2; C++ 46, 2, 14; Go
+  13; C# 50). The agreement rate and the adjudicated reference-error rate are reported per
+  stratum. §3.2's withdrawal conditions are evaluated here: the share of `relaxed` C++ sites
+  where DS finds the **reference** wrong must not exceed 0.10, and ≥ 3 of the sites that carry
+  `typeCtorMerged` (read from `ref.jsonl`; the script does not pass it on) being reference errors
+  withdraws that clause. Either result is returned to the coordinator, who reapplies §3.2.
+- **C# generic and `nameof` stratum.** The FC runs `run_fitness.py genaudit csharp --select` (the S57
+  step of §3.2): every such site the label calls internal, plus the seeded 40 labelled external
+  (prefix `ccg-p0a-v1-gen|`), re-decided by DS from source. Flag if the labelled-external 40 show
+  ≥ 3 errors or any internal-labelled error rate exceeds 0.05; the stratum's share of the labelled
+  internal sites over 0.10 makes C# "stratified, generic single-source" (§3.2). This audit stands
+  beside, and is not part of, step 3's AE/AI draws.
+- **Go dispatch.** A reference of kind `dispatch` (VTA edges) is compared with the label as a set.
+  DS decides by §2's virtual-call rule (the declared type's method plus every in-corpus
+  implementation) and records which source was incomplete.
+- **Python sample length.** The labeller stopped at ordinal 240 on its own 150th internal-or-declared
+  site (148 internal, 2 both); the reference holds 129 internal sites in those 240 rows because 25 labelled
+  internal are reference-silent. After adjudication the **final internal count** n_int is computed.
+  n_int ≥ 150: nothing. 100 ≤ n_int < 150: proceed and report the actual n (§4.3). n_int < 100: the
+  labeller resumes in ordinal order, in batches of 50, each batch run through this procedure, until n_int
+  ≥ 150 or ordinal 500. That stop depends on labels and adjudication, never on Joern, so the prefix
+  stays a uniform sample. The contact strata floor of §3.1 is checked on the same final truth and
+  belongs to S27.
+- **JS reference-`local`.** 144 of 523 reference rows are `local` (callables held in local variables,
+  which the labeller called external or resolved to a defining arrow); 23 disagree and are adjudicated;
+  the agreed ones are audited by step 3's ≥ 40 rule.
+
+**Step 6: decisions and the final label.**
+- **A decision** (`adjudication/<lang>.jsonl`, one line per adjudicated, overturned or swept site) holds
+  `ordinal`, `siteId`, the reasons, the decided set (`callees` with `role` impl/decl, `nonSymbol` for
+  `N(s)`, `notACall`, `dynamic`), `wrong` (`label`, `reference`, `both`, or `neither` when the
+  reference was silent and the label right), `errorKind` (`target`, `role`, `schema`, `kind`, `none`),
+  and `evidence`: at least one `path:line` of the corpus, ≤ 300 characters. A decision without a
+  citation is not a decision (§5.1 step 3).
+- **A final label** (`truth/<lang>.final.jsonl`) exists for **every** labelled site, once: `T` (path,
+  qname, defLine, role), `N`, `external`, `notACall`, `dynamic`, `scored`, `notScoredReason`, `basis` and
+  `strata`. `basis` is `agreed` (the label, roles from step 4), `audit-confirmed`, `adjudicated`,
+  `audit-overturned`, `sweep-overturned`, or `label-only` (stratum AS). `scored` is false for `notACall`,
+  for `dynamic` with empty `T`, for `macro-underdetermined`, and for **`underivable`**: DS read the source
+  and neither source nor the code settles the target. Unscored sites are counted and reported by reason;
+  an `underivable` share above 0.05 of a language's labelled sites is escalated to the coordinator.
+- **What S27 receives** is this file as `final`; S27 applies miss overturns on top as `final2` (§11 N5).
+
+**Step 7: the label-noise figure (`adjudication/<lang>.noise.json`).** Computed by the FC from the
+files, with N the labelled sites:
+- comparable share and agreement rate (agreed ÷ comparable, Wilson), overall and per stratum
+  (AI, AE, `relaxed`, `byConstruction`, `declared`, macro);
+- adjudicated counts by `wrong` and `errorKind`; W = sites with the label wrong among the adjudicated;
+- audit table per stratum: n, errors k, Wilson, population N_s, and draw C's cell errors;
+- **hand error rate** e_h = (W + Σ_s N_s·k_s/n_s) ÷ N, with the same figure using each stratum's Wilson upper
+  bound for k_s/n_s as the conservative bound, and both with and without `role` errors; **reference
+  error rate** over the comparable sites likewise. e_h > 0.05 (the flag uses the figure with role errors) makes the language
+  **noise-limited** in the report (§5.1 step 4); the bound is reported beside it. Test-retest for JS
+  is already reported (56 sites, 55 agree; ledger).
+
+**Stop and escalate (one list; "return" means to the coordinator, with the file named).**
+1. The script rejects a file, or a count differs from step 1's: stop; return.
+2. Any read of `results/`, a CPG or Joern output, or of another language's files: the unit is void; a
+   fresh FC restarts it.
+3. Flagged stratum after extension (step 3): `noise-limited`; unit stays open; return.
+4. `underivable` > 0.05 of N; C++ macro-underdetermined > 0.30; C# generic stratum > 0.10 of the labelled
+   internal sites; `relaxed` reference-error rate > 0.10 or `typeCtorMerged` ≥ 3 reference errors: return.
+5. Python n_int < 100: resume the labeller (step 5), no return needed.
+6. FC and DS read a declaration form differently: DS decides, the difference is logged.
+7. Done when: every adjudicated item has a decision, every audit item an outcome, `final.jsonl` has N
+   lines and validates, `noise.json` is written, Part F is run, and `analyst` has checked the transcripts and
+   `final.jsonl` against the decisions.
+
+**Part F: sample audit of the flow labels (S56), same unit, pre-Joern.** The seven golden sets are
+12 to 30 methods, 151 to 483 pairs (js 12/151, java 30/461, go 30/433, csharp 30/394, cpp 30/344,
+kotlin 30/476, python 30/483), written in 5 to 10 tool calls and 90 to 220 seconds each, so their
+quality is unmeasured; §8.4's spurious-pair sample only bounds omissions after Joern. This audit
+measures both kinds of error before any projection exists.
+- *Precondition.* `run_fitness.py flowcheck <lang>` reports `nErrors` 0 and `complete`. At the S25 gate
+  it did not for Java (16 evidence errors), Python and Go (one method each with no pair): the S56
+  labeller repairs those first (gate Pass 2, F1 disposition).
+- *F1: pair validity.* Draw 60 pairs (JS 40) by ascending SHA-256 of `ccg-p0a-v1-flowaud|<lang>|pair|`
+  plus method ordinal and pair index, all `unsure` pairs first up to 20. DS checks each against the
+  source and the brief's rules (direct flow; a control pair directly decided) and records valid or
+  invalid with file:line. **Flag** iff invalid/n > 0.05 (≥ 4 of 60, ≥ 3 of 40); the `unsure`
+  pairs are reported apart.
+- *F2: omissions.* Draw 6 methods (JS 4) by the same hash with `method`. The FC relabels them from
+  `sample/<lang>-flow.jsonl` and the flow brief only, in the same JSON schema and **before opening
+  `labels/<lang>-flow.jsonl`** (the transcript shows the order; `teco` greps it). It then diffs the two
+  sets; DS judges every pair on one side only from source. Omission rate = valid pairs the golden
+  set lacks ÷ valid pairs in the union. **Flag** iff it exceeds 0.05 with ≥ 20 valid pairs (the
+  rule of §8.4); fewer than 20 extends the draw by 3 methods once, then reports *insufficient*.
+- *Corrections.* `labels/<lang>-flow.jsonl` is never edited. `truth/<lang>.flow-final.jsonl` is the
+  golden set with invalid pairs removed and audited-method omissions added; unaudited methods
+  stand unchanged. S28 reads it.
+- *Escalate.* A flagged F1 or F2: a second fresh S56 labeller relabels the language's methods blind,
+  DS adjudicates the differences, and the adjudicated union is the golden set, before S28. Flags
+  in three or more languages: return to the coordinator, as the S56 labelling process, not a language,
+  is suspect.
 
 ## 6. Labelling protocol (S26 blind labels)
 
@@ -1192,7 +1386,7 @@ must produce, so that the step rows can be written from this section. Paths are 
 | **N1** | **S25 amended: the reference truth run** (`graph-dba`) | Per candidate, **before its first Joern run**: `truth/<lang>.c5.json` (tool, version, exit status, documents indexed, 50-site pilot coverage, raw and adjusted, excluded count by §3.2 class), then for the chosen corpus `truth/<lang>.ref.jsonl`, one line per sampled site: `ordinal`, `siteId`, `static` (`{path, qname, defLine}`, `declared`, `external`, or `silent`; `relaxed: true` where §5.2's macro-argument rule matched; `ambiguous` as the tag of a `silent` row), `impls` (list), `tool`, `toolVersion` | the image with network and the corpus's dependencies; the fetch-off workspace never sees the dependency caches (§9) | C5 recorded per candidate; `ref.jsonl` covers every sampled ordinal; the Joern run's timestamp is later than the C5 record's | N0, S08, S09; N2's frame (same step) |
 | **N2** | **S25 amended: frame, draws, brief, matcher** (`graph-dba`) | `frame/<lang>.jsonl` (the census frame, §4.1); `sample/<lang>.jsonl` and `sample/<lang>.private.jsonl` (§4.4, 500 sites); **`sample/<lang>.brief.md`** (the §6.5 template, slots filled, the bundle spec §4.1 + §4.2-language excerpt appended verbatim with its version); **`sample/<lang>-flow.jsonl`** (the 30 flow methods, §6.4: `ordinal`, `path`, `qname`, `lineStart`, `lineEnd`, and the method's source text); `matcher-table.md` (Joern call `name` per constructor and call kind, per frontend, §7.1) | corpora, tree-sitter | the hash sorts reproduce from `corpora.yaml` alone; every brief validates as §6.5 with no unfilled `{…}` slot | S09. Inside S25 the order is: frame → C5 (N1) → draws and briefs → first Joern run |
 | **N3** | **New: golden flow labelling** (seven fresh `qa-engineer` dispatches, one per language) | `labels/<lang>-flow.jsonl`: per method `ordinal`, and per pair `{kind: data or control, source, sink, evidence}`, with points named as in S03's bundle (`Param{index}`, `Ret`, call-site position, `Cond` code) | `sample/<lang>-flow.jsonl` and that corpus only; never S11's projection, `extract.sc`, `results/`, `truth/`; the same §6.2 list | 30 methods labelled; transcript grep clean (§6.2, by `teco`). **Checker: `data-scientist`**, as for S26: label schema valid, every method has ≥ 1 pair, evidence cited | N2, S03 (point names); **not** S26, so it runs alongside S26 |
-| **N4** | **New: pre-Joern adjudication** (`data-scientist`; `analyst` checks) | `adjudication/<lang>.input.jsonl`, generated by `make_adjudication_input.py`. `graph-dba` writes that script in S25; it opens only `labels/` and `truth/`, and `analyst` checks this statically. **`data-scientist` runs it at the start of N4**, before opening anything under `results/`; `graph-dba` does not run it. The step writes `adjudication/<lang>.jsonl` (per disagreeing or `unsure` site: final `T(s)` with roles, `N(s)`, evidence, which source was wrong) and `truth/<lang>.final.jsonl` (the agreed-or-adjudicated truth for every labelled site) | `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`; must not see `results/` or any Joern output | every disagreement and `unsure` site has a decision with evidence; the label-noise figures of §5.1 step 4 are computed; `analyst` confirms no Joern artifact was read (transcript) | S26 for that language, N1 |
+| **N4** | **New: pre-Joern adjudication** (`data-scientist` decides, a fitness custodian per language runs; `analyst` checks) | The files and procedure of §5.4: `adjudication/<lang>.{input,audit,noise}.json*`, `adjudication/<lang>.jsonl`, `adjudication/<lang>-flow-audit.jsonl`, `truth/<lang>.final.jsonl`, `truth/<lang>.flow-final.jsonl` | `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`, the corpus tree, and for Part F the flow sample and flow labels; must not see `results/` or any Joern output | §5.4's "done when"; `analyst` confirms no Joern artifact was read (transcripts) | S26 and S56 for that language, N1 |
 | **N5** | **S27 amended** (`graph-dba` runs; `data-scientist` adjudicates misses) | In this order: (1) provisional metrics on N4's `truth/<lang>.final.jsonl`, to list the misses; (2) **`adjudication/<lang>-misses.jsonl`**: every Joern miss in either configuration with its decision, cited evidence and cause class (§7.2); (3) overturns applied, written as `truth/<lang>.final2.jsonl`; (4) **the reported metrics, computed only on `final2`**, with the provisional figures shown beside them for transparency; (5) the §8.5 table | N4's outputs, Joern results | `analyst` has checked the miss log independently, and that every §8 number traces to `final2`; decisions follow §8 mechanically | N4 |
 | **N6** | **S09 brief amended** (`teco`) | `py-tree-sitter` and the ten grammars of §5.2 declared in `cpg/pyproject.toml`'s `spike` extra | §5.2 | `pip install -e .[spike]` imports every grammar | S03 |
 | **N7** | **S28 amended** (`graph-dba` runs; `data-scientist` adjudicates) | §7.3 metrics on N3's labels. **`adjudication/<lang>-flow-misses.jsonl`** (every missed golden pair) and **`adjudication/<lang>-flow-spurious.jsonl`** (the ≤ 50 seeded spurious pairs, §8.4) | N3's labels, the projection output | overturned misses and confirmed omissions applied to the golden set before the reported pair recall is computed (provisional figure shown beside); `flowAvailable` decided by §8.4; omission rate reported; **checker: `analyst`** on both adjudication logs | N3, S27, S15 |
