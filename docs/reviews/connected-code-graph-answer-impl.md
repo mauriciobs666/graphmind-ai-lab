@@ -120,3 +120,32 @@ Builder's survivors re-derived: of the 8 Python ones I re-ran 6 as my own mutant
 ## Appendix C: golden re-derivation
 
 Scripts: `scratchpad/an34/derive.py`, `cmp.py` (own `Rd` reader over `rows.edges`, not `MemoryReader.from_rows`). Result lines: `lifted equal True 4`; `cc 1`; hop 1/3/4 path, line, qname, unit, repo all True; `states [...] == [...]`; `snap True`; `ids.contract_point_id` = `a359de51...`, symbol ids = `8ae57f34...` and `a6c26487...`.
+
+## Pass 2 (2026-11-04): re-gate of `0528c556`
+
+**Verdict: approve. S34 is accepted**, with one residual nit (below) and the F6/`.PY` rulings routed to `architect`. Observed: `tests/test_answer.py` 577 passed; whole `cpg` 2962 passed, 1 skipped (slow leaf mutation, off by default), 10 deselected (live).
+
+**Stopping condition.** (1) met for `loads`/`validate`/`dumps`/`is_canonical`: the lone-surrogate document raises `AnswerError`; `facts_bytes` on it still raises `UnicodeEncodeError`, because `facts_bytes` does not validate by the F8 ruling, so I waive that clause. (2) met: duplicate query name, group `(kind, key)`, `lifted` `(siteId, ord)` and `bound` `ord` each raise `AnswerError` (my `p2.py`, `probe1.py`). (3) met: every plant of the F3 table, run with my `plant.py`, now appears in the `array_paths` diff (`pa[]`, `staleness.*`, `staleness.~^x`, `staleness.pn`, `PA`, `staleness.pd`), and `derived_data_fields` returns `Group.pq[].z` for the inline-array data string. (4) met, see the mutant line. (5) met, `normalize_question` exists.
+
+| F | Disposition |
+|---|---|
+| F1 | fixed: `_check_values` rejects non-UTF-8-encodable strings (verified above) |
+| F2 | fixed: uniqueness in V2 (queries), V3 (`lifted`, `bound`), V8 (groups); verified by run |
+| F3 | fixed: one `schema_nodes` walker feeds `array_paths` and `derived_data_fields` (see deviation 3) |
+| F4 | fixed: all 13 survivors killed; see mutant line |
+| F5 | fixed, stricter than spec (deviation 2); `verbPath` is still unstripped (nit) |
+| F6 | not fixed; routed to `architect` as agreed |
+| F7 | fixed: `normalize_question` plus vectors (deviation 5) |
+| F8 | documented in the docstring, not validated (deviation 4); accepted |
+| F9 | `.PY` routed to `architect`; golden-field pinning and message labels untouched, still nits |
+
+**Mutants.** My harness re-run on the fixed code (`run1`–`run5`): 69 killed and 12 survived, the survivors being exactly the 12 equivalents of Appendix B. The only change to the harness: `optkey-noncanon` is retired (the code now *is* that form, by design, since `canonicalize` canonicalizes options first, and the matching `opts-not-canon` mutant is killed), and `opt-key-repr` was re-pointed at the new `_opt_key` text (killed). That matches the builder's 69.
+
+**Deviations.**
+1. *`unclassified_strings` kept on `_iter_schema`:* accepted. It walks every dict of the schema with no applicator logic, so it is the broader of the two; all F3 plants are flagged by it. Two walkers remain, but they answer different questions (every string vs. probe paths).
+2. *F5 strip extended to `rootPath`, `urlPath`, `Scope.paths[]`:* accepted, but it is stricter than spec §6, whose identity list names only `path`; the spec text must list these at close, or a conforming engine that does not strip them is rejected. `verbPath` and `accessPath` are the same class and remain unstripped (verified: `" a0.method"` validates); either add them or state why not. Nit.
+3. *F3 deriving keywords from `jsonschema_specifications`:* it is a hard dependency of `jsonschema` (installed: `jsonschema` 4.26.0 pinned in `pyproject.toml`, `jsonschema-specifications` 2025.9.1, `referencing` 0.37.0), so it is available wherever `answer.py` already imports; it is not pinned directly, so the keyword set is fixed only through the `jsonschema==4.26.0` pin. Draft 2020-12's vocabulary is frozen, so drift risk is low; a metaschema change would surface as the plant tests failing, which is the desired direction.
+4. *F8 documented:* agreed. The caller is told `facts_bytes` projects an already-valid document.
+5. *`normalize_question`, "the ends stripped":* I agree `str.strip()` taking edge newlines is the right reading. `ids.tuple_id` already strips the same ends before hashing (checked: leading/trailing `\n`, NBSP, U+2003, U+3000 give equal ids with and without), so the hash and the function cannot disagree; interior lines keep a single leading space, as the spec's "within a line" says (`"a b\n c"` from `"a \t b\r\n c"`). The 13 vectors match spec §3 by reading and by my own cases.
+
+**Same-revision interaction.** The identity-strip key inheritance (`key` passed down into array elements) cannot leak into the dict elements of `lifted`/`chain` (each dict element resets the key per property); the new uniqueness checks sit in V2/V3/V8 after the schema, so the golden and all 13 bases still validate (577 green).
