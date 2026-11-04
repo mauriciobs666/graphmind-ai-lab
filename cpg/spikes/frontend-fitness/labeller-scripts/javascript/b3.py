@@ -1,0 +1,36 @@
+exec(open('build.py').read())
+def ST(o): return SAMPLE[o-1]
+def loc(o,name,chain=None,pat=None):
+    p=ST(o)['path']
+    put(o,[I(p,chain or name,pat or r'(function|const) '+name+r'\b')],ev=f'local helper {name} defined in {p}')
+def imp(o,p,name,chain=None,pat=None):
+    put(o,[I(p,chain or name,pat or r'(function|const|class) '+name+r'\b')],ev=f'{name} imported from {p}')
+def E(o,pkg,ev): put(o,[ext(pkg)],ev=ev)
+imp(333,'src/session/storage.ts','removeKey')
+for o in(336,383,485): E(o,'i18next','i18n default from ../i18n/config (config.ts:46)')
+loc(342,'renderPanel')
+for o in(344,378,490): E(o,'@testing-library/user-event','userEvent.setup')
+for o in(346,419,422,434,483): imp(o,'src/api/dispatch.ts','resolveErrorAction') if o in(346,483) else None
+for o in(419,422,434,281): loc(o,'err')
+E(347,'@tanstack/react-query','useQueryClient'); 
+for o in(352,395): E(o,'react-i18next','t from useTranslation')
+E(356,'react-router-dom','navigate = useNavigate() hooks.ts:63')
+for o in(358,473): imp(o,'src/components/message/composerNotice.ts','composerNoticeFor')
+imp(367,'src/components/sheets/BottomSheet.tsx','BottomSheet'); loc(373,'stateWith'); loc(423,'stateWith')
+E(374,'react','setPhase from useState PresenterResetAllControl.tsx:47')
+imp(382,'src/layout/Shell.tsx','LayoutShell'); imp(394,'src/api/hooks.ts','useMessages')
+E(406,'react','setAction from useState'); E(457,'react','setAction from useState')
+loc(386,'jsonResponse'); loc(441,'jsonResponse'); loc(432,'jsonResponse'); loc(479,'jsonResponse')
+loc(411,'isStateRequest'); loc(413,'renderPanel')
+put(412,[I('src/api/endpoints.ts','presenterParticipants',r'export function presenterParticipants')],ev='fetchPresenterParticipants = presenterParticipants alias imported from ./endpoints (hooks.ts import), endpoints.ts:211')
+E(418,'@tanstack/react-query','queryClient from useQueryClient')
+for o in(362,402,433): imp(o,'src/session/storage.ts','saveParticipantSession')
+imp(439,'src/session/storage.ts','readJson'); imp(440,'src/i18n/format.ts','formatCurrency')
+imp(442,'src/session/storage.ts','participantAuthHeader'); imp(488,'src/session/storage.ts','participantAuthHeader')
+E(447,'react','event: FormEvent (React synthetic event) PresenterKeyScreen.tsx:19')
+imp(450,'src/views/ChatView.tsx','ChatView'); imp(451,'src/api/hooks.ts','useErrorEffects')
+E(453,'@tanstack/react-query','useQuery'); imp(469,'src/views/OrderPanel.tsx','OrderPanel')
+E(470,'@playwright/test','route.request playwright Route')
+E(477,'builtin','String.prototype.startsWith'); E(478,'builtin','String.prototype.includes'); E(491,'builtin','String.prototype.includes')
+imp(481,'src/components/message/DeadTurnNotice.tsx','DeadTurnNotice'); imp(493,'src/components/message/TurnIndicator.tsx','TurnIndicator')
+imp(500,'src/components/message/Transcript.tsx','Transcript')
