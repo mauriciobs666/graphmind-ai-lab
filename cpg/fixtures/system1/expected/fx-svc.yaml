@@ -918,6 +918,25 @@ rows:
   serves:
   - LNK
   stratum: fixture-dev
+- id: LNK-44
+  kind: data_entity
+  item: 'sql:table:order_report: written by INSERT INTO order_report in fx-job, read by SELECT * FROM order_report (no column key); no DDL in any repository'
+  provider:
+  - repoId: fx-job
+    path: job/run_report.py
+    qname: job/run_report.py::write_report
+  consumer:
+  - repoId: fx-svc
+    path: api/reports.py
+    qname: api/reports.py::report_view
+  keyNorm: sql:table:order_report
+  status: confirmed
+  reason: key-match
+  gate: P3
+  serves:
+  - LNK
+  - OV-1
+  stratum: fixture-dev
 - id: KN-1
   kind: http
   item: 'consumer literal as written: /api/v1/%2E%2E/health'
@@ -1722,6 +1741,7 @@ rows:
   gate: P3
   serves:
   - AC-19
+  - LNK-44
   changeSet: CS-JOB
   listed: true
   stratum: fixture-dev

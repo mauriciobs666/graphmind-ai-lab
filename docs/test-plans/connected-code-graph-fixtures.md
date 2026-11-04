@@ -1,8 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.2 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
 
-*2026-11-01 (v1.2): analyst/data-scientist Pass 2: FT boundary corrected, steady-state build states and links for `legacy`/`tools`, closed-world scope, full SQC-JAVA locators, committed keyNorm mutant test, candidate-containment and literal-grep items; rework copies pruned.*
+*2026-11-04 (v1.3): fixtures-gate fixes F-1 (LNK-44 `order_report`, census 132 rows), F-2 (B1S-R query), F-3 (LNK-14 origin), F-7 (reverse model), F-9/F-11 (AC6-TOP-3 target, same-unit calls, origin-only bases).*
 
 ## 1. Scope and objective
 S35 fixes, as numbered tables, every item planted in the four-repository fixture system
@@ -20,7 +20,7 @@ Two limits, stated once. Fixture pass rates are existence checks on hand-written
 recall or precision estimates and are never extrapolated (three instances give a Wilson lower bound of 0.44 for
 3/3). And each manifest is **closed-world** for cross-boundary links: every `Link` (and every provider/consumer pair it
 joins) the engine emits for a fixture repository must match a row here, so an unplanted emitted link fails TP-010.
-A consumer with no provider (NC-3, NC-4, NC-7) emits a `CONSUMES` edge to a contract point and **no `Link`**; that is
+Calls inside one unit (for example `PricingService.quote` to the four-argument `Pricing.quote`, or `Pricing.quote` to `FxBus.publish`) are `CALLS` edges and never produce a `Link`. A consumer with no provider (NC-3, NC-4, NC-7) emits a `CONSUMES` edge to a contract point and **no `Link`**; that is
 allowed and is not an unplanted link. TP-018 checks the planter side, by grep. Distances and statuses come from the engine's own hop model
 (OI-4), so A25-1 certifies conformance to that model, not that the model is right.
 
@@ -75,6 +75,8 @@ the code that implements or reads it, and the definition itself is a `schemaEntr
 version-skew `library_api` linking, topic-from-config. `P3` data_entity, config_key, env_var, query-built-at-runtime, the multi-repo
 overlay and cross-repository AC-9b. `P4` verdicts (SQ-C Python half). `P5` taint (P2-7). `fx-lib` rows gate **only
 at P2**; every row that needs Java is `P2` and none is promoted earlier.
+
+**Base URLs are origin-only.** Every base-URL value (`VITE_API_BASE`, `VITE_JOB_BASE`, `VITE_REPORTS_BASE`, `FX_SVC_URL`, `FX_JOB_URL`, `base_url`) holds scheme, host and port and no path; each consumer appends the full path.
 
 **Keys follow RFC 3986 order (F-13).** A fixture key is written as the **original** literal in source and as the
 `keyNorm` after one pass: decode (step 5), then resolve dots (step 6), then mask (step 8a). Keys with escapes
@@ -148,7 +150,7 @@ answer must contain.
 | LNK-11 | http | `POST /api/v1/orders`, Python wrapper `ApiClient.post` | P `svc:api/orders.py::create_order` · C `job:job/run_report.py::requeue` (wrapper `job:job/api_client.py::ApiClient.post`) | c | lifted-role | P1 | client wrapper | LNK |
 | LNK-12 | mcp_tool | `reindex`, TS `callTool(name)` wrapper | P `svc:mcp/server.py::reindex` · C `web:app/src/ui/Admin.tsx::onReindex` (wrapper `web:app/src/mcp/client.ts::callTool`) | c | lifted-role | P1 | client wrapper | LNK |
 | LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding) | P `svc:api/items.py::read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | binding-confirmed | P1 | config-bound base URL | LNK |
-| LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml`, read by `job/settings.py` | P `svc:api/health.py::health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
+| LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml` (origin `http://api:8000`, the Compose service `api` of LNK-22, so it binds to unit `svc` alone), read by `job/settings.py` | P `svc:api/health.py::health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
 | LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | binding-confirmed | P1 | config-bound base URL | LNK |
 | LNK-16 | http | `GET /job/status` fetched from `http://localhost:8000`; `fx-svc` (Compose) **and** `fx-job` (`scripts/dev.sh`) both claim 8000. True target: `job:job/trigger_server.py::status` | P `job:job/trigger_server.py::status` · C `web:app/src/ui/JobStatus.tsx::JobStatus` | p | port-shared | P1 | | LNK |
 | LNK-17 | http | `` fetch(`/api/items/${id}`) `` where `id` is a component prop: key `GET /api/items/{?}`. True target: `read_item` | P `svc:api/items.py::read_item` · C `web:app/src/ui/Item.tsx::ItemView` | p | partial-key | P1 | | LNK |
@@ -158,7 +160,7 @@ answer must contain.
 | LNK-21 | launch | `.mcp.json` server `fx-svc` to `scripts/run-mcp.sh` to `python -m fx_svc.mcp.server` to unit `svc` | P `unit fx-svc:. python` · C `svc:.mcp.json @mcpServers.fx-svc` | c | binding-confirmed | P1 | | LNK |
 | LNK-22 | launch | Compose service `api`: build context to unit `svc`, port 8000 | P `unit fx-svc:. python` · C `svc:deploy/compose.yaml @services.api` | c | binding-confirmed | P1 | | LNK |
 | LNK-23 | rpc | `/acme.fxlib.Pricing/Quote`: `.proto` service, Java impl, Python stub call with a literal method | P `fx-lib:pricing/src/main/java/com/acme/fxlib/PricingService.java::PricingService.quote(QuoteRequest,StreamObserver<QuoteReply>)` (declared in `pricing/src/main/proto/pricing.proto`) · C `svc:clients/pricing.py::quote` | c | key-match | P2 | | LNK |
-| LNK-24 | topic | `inhouse-fxbus:price.updated`: `FxBus.publish("price.updated", e)` in `Pricing.quote` and a listener | P `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.publish(String,Object)` · C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/AuditListener.java::AuditListener.onPrice(PriceEvent)` | c | key-match | P2 | | LNK |
+| LNK-24 | topic | `inhouse-fxbus:price.updated`: `FxBus.publish("price.updated", e)` in `Pricing.quote` and a listener | P `fx-lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)` (publish call `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.publish(String,Object)` as the wrapper) · C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/AuditListener.java::AuditListener.onPrice(PriceEvent)` | c | key-match | P2 | | LNK |
 | LNK-25 | library_api | `java:com.acme.fxlib.Pricing.quote(int,String,Currency)`, consumer `quote-cli` on the same version; `Pricing` also has the distinct overload `quote(int,String,Currency,Locale)` | P `fx-lib:pricing/src/main/java/com/acme/fxlib/Pricing.java::Pricing.quote(int,String,Currency)` · C `fx-lib:quote-cli/src/main/java/com/acme/fxlib/cli/QuoteCli.java::QuoteCli.quoteDefault()` | c | key-match | P2 | | LNK |
 | LNK-26 | data_entity | `sql:column:orders.total`: written by `INSERT`, read by `SELECT total` in another repository | P `svc:db/orders.py::insert_order` · C `job:job/run_report.py::render_row` | c | key-match | P3 | | LNK |
 | LNK-27 | data_entity | `cypher:label:Order`: `CREATE (:Order {id: 1})` and `MATCH (o:Order)` | P `svc:db/graph.py::link_order` · C `svc:db/graph.py::neighbors` | c | key-match | P3 | | LNK |
@@ -175,6 +177,7 @@ answer must contain.
 | LNK-41 | library_api | **skew control:** `fmt_date(ts)` has the same signature in 1.4 and 2.1; the `versionSkew` note is present on the link | P `svc:common/fx_svc_common/fmt.py::fmt_date` · C `job:job/run_report.py::render_row` | c | key-match (`versionSkew` note) | P2 | | LNK |
 | LNK-42 | http | `GET /legacy/fee` fetched by `legacy_fee`; `svc-legacy` is unbuildable and never built in the steady state | P `svc:legacy/app.py::fee` · C `svc:api/orders.py::legacy_fee` | p | target-not-mapped | P1 | | LNK |
 | LNK-43 | http | `GET /tools/run` fetched by `run_tool`; `svc-tools` is never built | P `svc:tools/app.py::run` · C `svc:api/orders.py::run_tool` | p | target-not-mapped | P1 | | LNK |
+| LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
 
 Reasons for the skew rows (LNK-33..35, 41), LNK-32 and LNK-31 are this plan's decisions (OI-3): bundle spec3 §7.2
 has no skew code, and `versionSkew` is a property on the link (graph note `Link.versionSkew`). The skew shape is
@@ -225,7 +228,7 @@ are given so the extractor's side is checkable too.
 | AC6-PM-3 | mcp_tool | Python triple-quoted `SYSTEM_PROMPT` naming `list_orders` | same | C `svc:prompts/system.py::<module>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-TOP-1 | topic | name from an env var `os.environ["ORDERS_TOPIC"]`, set in no file of the repository | the value is absent. True: `kafka:orders.created` | C `svc:bus/producer.py::publish_dynamic` | p | config-derived | P2 | | AC-6 |
 | AC6-TOP-2 | topic | name from a config-file key `config.bus.topic` (JSON); the key is in no file of the repository | the key is not set. True: `kafka:orders.created` | C `web:app/src/bus/consumer.ts::onConfigured` | p | config-derived | P2 | | AC-6 |
-| AC6-TOP-3 | topic | name from a Java system property `System.getProperty("bus.topic")` | set at launch outside the repository | C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.subscribeConfigured(String)` | p | config-derived | P2 | | AC-6 |
+| AC6-TOP-3 | topic | name from a Java system property `System.getProperty("bus.topic")` | set at launch outside the repository. True: none knowable | C `fx-lib:pricing/src/main/java/com/acme/fxlib/bus/FxBus.java::FxBus.subscribeConfigured(String)` | p | config-derived | P2 | | AC-6 |
 | AC6-QL-1 | data_entity | SQL table from an f-string: `f"SELECT count(*) FROM {table}"` | `table` is a parameter. True: `sql:table:orders` | C `svc:db/dynamic.py::count_rows` | p | runtime-built | P3 | | AC-6 |
 | AC6-QL-2 | data_entity | Cypher label by `%`-format: `"MATCH (n:%s)" % label` | `label` is a parameter. True: `cypher:label:Order` | C `svc:db/dynamic.py::match_label` | p | runtime-built | P3 | | AC-6 |
 | AC6-QL-3 | data_entity | SQL by concatenation: `"SELECT " + cols + " FROM " + tbl` | both are parameters | C `job:job/dynq.py::dump_table` | p | runtime-built | P3 | | AC-6 |
@@ -254,7 +257,7 @@ Each entity has two writers (W, W2) and readers (R); `B1-1..4` are asserted on W
 | B1F-RU | same, key `?.entries` | reader through an untyped parameter | `svc:api/orders.py::peek` | p | field-name-match | P1 | B1-1 (listed after the confirmed reader), B1-3 |
 | B1S-D | `sql:table:orders` | definition (DDL) | `svc:db/schema.sql` (`schemaEntry`, `objectKey` `sql:table:orders`) | c | key-match | P3 | B1-3 (rename) |
 | B1S-W | same | writer W (`INSERT INTO orders`) | `svc:db/orders.py::insert_order` | c | key-match | P3 | B1-1, B1-3, B1-4 |
-| B1S-R | same | reader R, **in another repo** (`SELECT total FROM orders`) | `job:job/run_report.py::load_orders` | c | key-match | P3 | B1-1, B1-2, B1-3 |
+| B1S-R | same | reader R, **in another repo** (`SELECT count(*) FROM orders`: the table key only, so no column key is read; LNK-26's `render_row` is the column reader) | `job:job/run_report.py::load_orders` | c | key-match | P3 | B1-1, B1-2, B1-3 |
 | B1S-W2 | same | other writer W2 (`DELETE FROM orders`) | `svc:db/orders.py::archive_orders` | c | key-match | P3 | B1-2, B1-3, B1-4 |
 
 ### 5.5 AC-25 impact shape (`DF-*`, `CD-*`, `RV-*`)
@@ -289,7 +292,7 @@ HTTP link counts as one hop, and DF-3 and RV-3 are link-level relations unless S
 - forward `CF-CD`: (fx-svc, bus, 2) [CD-3, CD-4] · (fx-svc, core, 1) [CD-1, CD-2].
 
 The reverse question ("what does this depend on?") for the **same changed function**, and a cross-repository one.
-The list is known and complete; no other dependency may be listed as `confirmed`.
+The list is known and complete; no other dependency may be listed as `confirmed`. The reverse relation is **data dependency** (what the subject's value is computed from), over functions, to distance <= 3; a call whose result is unused (`audit(o)` in `eligible`) and a call-based reading are not the model, and RV-3 stops at distance 3 for that reason (S33 confirms, OI-1).
 
 | ID | subject | planted dependencies (dist, group, st); listed in this group order | gate | serves |
 |---|---|---|---|---|
@@ -338,7 +341,7 @@ columns it writes to `order_report`) and `job:job/trigger_server.py::status` (th
 
 | ID | change set | affected code (other repositories) | st | reason | gate | serves |
 |---|---|---|---|---|---|---|
-| OV-1 | `CS-JOB` | listed: `svc:api/reports.py::report_view`, reader of `sql:table:order_report` (written by fx-job) | c | key-match | P3 | AC-19 |
+| OV-1 | `CS-JOB` | listed: `svc:api/reports.py::report_view`, reader of `sql:table:order_report` (written by fx-job; LNK-44) | c | key-match | P3 | AC-19, LNK-44 |
 | OV-2 | `CS-JOB` | listed: `JobPanel`, consumer of `GET /job/status` through `VITE_JOB_BASE` = `http://job:8300` (Compose) | c | binding-confirmed | P3 | AC-19 |
 | OV-3 | `CS-JOB` | **not listed:** `svc:api/health.py::health`, `web:app/src/ui/Health.tsx::Health`, and `svc:clients/jobs.py::trigger_job` (LNK-15's caller of `POST /job/trigger`, which `CS-JOB` does not edit) | none | none | P3 | AC-19 |
 | OV-4 | `CS-SVC` | listed: `job:job/run_report.py::render_row` (LNK-26's reader of `sql:column:orders.total`): the column is removed and a new one added | c | key-match | P3 | AC-19 |
@@ -470,16 +473,16 @@ the 12 negatives, twins and controls (NC-1..7, TW-1..3, OV-3, FT-2).
 
 | Category | Rows | Category | Rows |
 |---|---|---|---|
-| Link rows (`LNK`) | 43 | Mis-resolved call (`MR`) | 2 |
+| Link rows (`LNK`) | 44 | Mis-resolved call (`MR`) | 2 |
 | Key normalization (`KN`) | 5 | Partial failure (`AB`) | 4 |
 | AC-6 unprovable (`AC6`) | 18 | Overlay (`OV`) | 5 |
 | Look-alike twins (`TW`) | 3 | Signature change (`SQC`) | 2 |
 | B1 four assertions (`B1F`, `B1S`) | 8 | Taint edits (`TF`) | 3 |
 | AC-25 forward (`DF`, `CD`) | 8 | Omitted files (`SK`) | 18 |
 | AC-25 reverse (`RV`) | 3 | Field depth (`FT`) | 2 |
-| Negative controls (`NC`) | 7 | **Rows** | **131** |
+| Negative controls (`NC`) | 7 | **Rows** | **132** |
 
-Positive items: **119** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 91 · P2 16 · P3 20 · P4 1 · P5 3 (= 131). `fx-lib` rows are all P2
+Positive items: **120** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 91 · P2 16 · P3 21 · P4 1 · P5 3 (= 132). `fx-lib` rows are all P2
 (LNK-23, 24, 25, 31, AC6-TOP-3, SQC-JAVA); no P3 row needs Java.
 
 The AC-25 set is **60 distinct assertions** (§3). DF-3 (via LNK-36) and OV-2 plant a UI consumer
@@ -500,7 +503,7 @@ Every kind x status cell has at least one row; every `possible` row carries its 
 | rpc | LNK-23 | LNK-32 (runtime-built / unknown-key) |
 | topic (Kafka, in-house bus) | LNK-05, 09 (Kafka), 24 (in-house) | AC6-TOP-1..3 (config-derived) |
 | library_api | LNK-25, 41; TW-1 | LNK-33..35 (name-only-provider, skew) |
-| data_entity (SQL, graph label) | LNK-26, 27; B1S-* | AC6-QL-1..3 (runtime-built) |
+| data_entity (SQL, graph label) | LNK-26, 27, 44; B1S-* | AC6-QL-1..3 (runtime-built) |
 | config_key | LNK-28 | LNK-29 (runtime-built) |
 | env_var | LNK-03 | AC6-EX-3 (example-config) |
 

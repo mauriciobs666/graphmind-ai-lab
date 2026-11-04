@@ -8,6 +8,11 @@ API_PREFIX = "/api"
 
 def create_app():
     app = FastAPI(title="fx-svc")
-    for module in (health, files, hooks, items, orders, reports, search):
-        app.include_router(module.router, prefix=API_PREFIX)
+    app.include_router(health.router, prefix=API_PREFIX)
+    app.include_router(files.router, prefix=API_PREFIX)
+    app.include_router(hooks.router, prefix=API_PREFIX)
+    app.include_router(items.router, prefix=API_PREFIX)
+    app.include_router(orders.router, prefix=API_PREFIX)
+    app.include_router(reports.router, prefix=API_PREFIX)
+    app.include_router(search.router, prefix=API_PREFIX)
     return app

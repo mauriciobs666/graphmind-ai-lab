@@ -4,6 +4,7 @@ import importlib
 from fx_svc.plugins.audit import AuditPlugin
 
 REGISTRY: dict = {}
+REGISTRY["audit"] = AuditPlugin
 
 
 def load_plugin(name):

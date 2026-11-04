@@ -40,7 +40,7 @@ def requeue(order):
 
 
 def load_orders(conn):
-    return conn.execute("SELECT total FROM orders").fetchall()
+    return conn.execute("SELECT count(*) FROM orders").fetchall()
 
 
 def render_row(conn, order_id, ts):

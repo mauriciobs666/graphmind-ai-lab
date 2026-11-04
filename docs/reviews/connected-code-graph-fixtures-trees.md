@@ -93,3 +93,28 @@ Census, gates, statuses and reasons match the plan row for row. History ops appl
 2. Does S33 resolve reverse questions by data dependency (F-7)?
 
 No new `REVIEW.md` lines proposed.
+
+## Pass 2 (2026-11-04)
+
+**Verdict: approve with suggestions.** The trees may be accepted for S39. Condition: align the plan's LNK-24 P-locator with the fx-lib manifest (one line, below) before TP-002/TP-010 run. F-5 must be decided before P3 asserts LNK-15/OV-2.
+
+CPG: considered, not relevant — fixtures are not a loaded graph; re-checked by execution.
+
+**Executed.** Checkers re-run: job GREEN (27 rows), web GREEN (50), lib GREEN, svc GREEN (90 rows, 157 locators; scratchpad checker is now `s36b/check.py`). Whole-plan recount (own script, v1.3 text): 132 row IDs, equal to the manifest union (none missing or extra); LNK 44; gates P1 91 · P2 16 · P3 21 · P4 1 · P5 3, equal to the plan's §6 and its 120 positives (132 - 12). Status/reason/gate agree across all multi-manifest rows. LNK-44 agrees in job and svc manifests (key `sql:table:order_report`, P `write_report`, C `report_view`, confirmed, `key-match`, P3) and in plan rows LNK-44, OV-1, §7. Python parses; `__pycache__` count 0. Java/TS sources are unchanged apart from `package.json`/README, so the Pass 1 `javac`/`tsc` results stand (I could not re-run javac: my stub dir was cleaned from the scratchpad). Same-revision fixes against each other: the F-2 query (`SELECT count(*)`), the F-3 origin (`http://api:8000`), the unrolled `app.py` and LNK-44 do not collide; no manifest carries a line number for `app.py`, `loader.py` or `run_report.py`.
+
+| Finding | Disposition |
+|---|---|
+| F-1 | Fixed. LNK-44 in plan, both manifests; census 132 re-verified. |
+| F-2 | Fixed. `run_report.py:43` is `SELECT count(*) FROM orders`; plan B1S-R and manifest say so. |
+| F-3 | Fixed. `config/job.yaml` is `http://api:8000`; plan LNK-14 and manifest state it; checker GREEN. |
+| F-4 | Fixed for LNK-08/13 (keys now agree); skew-key form (LNK-34, 35, 41) still differs in form: carried to the S39 schema. |
+| F-5 | **Carried** (architect/S30: Compose `web`/`job` service-to-unit rule). |
+| F-6 | **Carried** (S39 schema: one tree-state convention). |
+| F-7 | Fixed. Plan §5.5 states data dependency, functions, distance <= 3. |
+| F-8 | **Carried** (S39 TP-018 must key on (literal, locator)). |
+| F-9 | Partly. Lib manifest LNK-24 now has P = `Pricing.quote(int,String,Currency)` (line 27) with `FxBus.publish` as wrapper, but **plan row LNK-24 (line 163) still names `FxBus.publish` as P**: manifest and plan disagree, TP-002 would flag it. Edit the plan P-locator (`qa-engineer`). AC6-TOP-3 "none knowable" and the same-unit-calls sentence (plan §1) are in. |
+| F-10 | Fixed. Seven explicit `include_router` lines in `api/app.py`, same prefix and routers as the loop; the change matches the finding and breaks no locator (no line references). |
+| F-11 | Partly. B1 containment wording, the `.pyi`-is-typing-only note and the `callTool` live check are not in the plan (grep finds none); minor, fold into the next plan revision. **LNK-39 ruling:** add one registration line to `fx-svc/plugins/loader.py` (`REGISTRY["audit"] = AuditPlugin`, `MailPlugin` left unregistered) so the true target is derivable from the source; do not drop the claim (TP-019 would lose a row). Risk to check live at P1: a dict-value flow analysis could narrow `REGISTRY.get(kind)` to one target and make the row `confirmed`; if so, register behind a parameterized function instead. Owner: fx-svc builder. |
+| F-12 | Fixed. README now says parse-only. SDK pin `1.12.0`: verified, Streamable HTTP first shipped in 1.10.0 ([release notes](https://github.com/modelcontextprotocol/typescript-sdk/releases/tag/1.10.0)), so 1.12.0 includes `client/streamableHttp.js` (import path from a third-party source). |
+
+Growth-stops: plan v1.3 revision note is one dated line; additions are new scope (LNK-44) or in-place rework; no restated history found.
