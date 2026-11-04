@@ -396,15 +396,89 @@ corpora:
         plain: 9310
         qualified: 3715
   kotlin:
+    project: amirroid/KtorAdmin
+    url: https://github.com/Amirroid/KtorAdmin
+    commit: f205b67131400e4cb599b3d51c3a43dd346cbf93
+    srcDigest: 6e79b82b2251a08a477f67b627c14d9145c4a7e560b5364ef3bbb6f77fe23b86
     language: kotlin
-    status: blocked-needs-decision
-    why: 'no Kotlin corpus pinned: C5 (the reference run) needs a Gradle build of an external Kotlin repository, which the harness permission
-      layer refused to run (auto-mode classifier, "Code from External"); the pipeline stops here by design.'
-    candidatesCensused: see rejectedCandidates.kotlin; the best static fit so far is mokksy/mokksy (Apache-2.0, Kotlin 2.2.21, 15.5k code lines,
-      153 suspend funs) but it is Kotlin Multiplatform with wasmJs/macosArm64 targets (webMain/nativeMain sources would be reference-silent).
+    vendoredDirsEffective:
+    - vendor
+    - vendored
+    - _vendor
+    - third_party
+    - third-party
+    - node_modules
+    generatedPaths: []
+    licence:
+      spdx: MIT
+      file: LICENSE
+      head: MIT License Copyright (c) 2025 Amirreza Gholami Permission is hereby granted, free of charge, to any person obtaining a copy of this
+        software and associated documentation files (the "Software"), to deal in the Software without restriction
+    lastCommitDate: '2026-10-07'
+    dialect: Kotlin 2.4.20 (JVM only; Gradle 9.8.0 wrapper, JDK toolchain 21, Ktor 3.6.0, KSP 2.3.12); modules KtorAdminLibrary, sample, templates/fluent
     truth:
-      tool: scip-kotlinc 0.13.2 via kotlinc-scip (kotlin-compiler-embeddable 2.4.21) + scip-java aggregate
+      tool: scip-kotlinc 0.13.2 via kotlinc-scip (kotlin-compiler-embeddable 2.4.21, kotlin-serialization-compiler-plugin 2.4.21) + scip-java aggregate
+        0.13.2
+      workCopyBuild: '`./gradlew assemble testClasses` (exit 0, 4m15s, KSP ran), then an init script (truth-scripts/kotlin-cp.init.gradle) printed
+        each module''s main+test compile classpath and source roots (incl. build/generated/ksp), then `kotlinc-scip` once per module over src/main
+        + src/test + generated roots with `-Xplugin` serialization, then `scip-java aggregate`. Not `scip-java index --build-tool=gradle` (see README)'
       joernFrontendLanguage: kotlin
+    evidence:
+      C2_C3:
+        targetNonBlankLines: 22915
+        targetShare: 0.915
+        frameFiles: 260
+        frameFileCodeLines(cloc-style): 19625
+        frameSites: 7754
+        framefilesWithParseErrors: 4
+        nonBlankLinesByLanguage:
+          javascript: 2111
+          kotlin: 22915
+          shell: 17
+      C4:
+        build: ./gradlew assemble testClasses
+        exitStatus: 0
+        wallSeconds: 255
+        modules:
+        - KtorAdminLibrary
+        - sample
+        - templates/fluent
+        note: 'in the truth image with network, work copy of the clean tree (no .git: the git-version buildSrc script falls back to 0.0.0)'
+      C6_idioms:
+        suspendFun: 179
+        receiverLambdaFunctionsDefined: 16
+        builderDslUsesInCorpusBuilders+apply/with: 43
+        ktorRoutingDslLikeCalls: 35
+        springDI: not a Spring project
+      C7:
+        corpusKotlin: 2.4.20
+        scipKotlincCompilerPair: 2.4.21 (S24-proved)
+        lastCommit: '2026-10-07'
+      C8_tests:
+      - KtorAdminLibrary/src/test
+      exclusion_greps:
+        brokerClients: no hit (census grep); dependencies are ktor, exposed, kotlin-jdbc, hikari, mongodb driver, aws s3, itext
+        opentelemetry_microservices-demo: no hit
+      C5:
+        tool: scip-kotlinc (scip-java aggregate)
+        toolVersion: 0.13.2
+        exitStatus: 0
+        documentsIndexed: 272
+        pilot:
+          pilotSites: 50
+          withReference: 50
+          silent: 0
+          coverage: 1.0
+          coverageIfStructuralSilentsExcluded: 1.0
+          silentTagged: {}
+        verdict: PASS
+        recordedAtUtc: '2026-11-04T20:20:05Z'
+      frameKinds:
+        ctor: 85
+        method: 3755
+        other: 6
+        plain: 3207
+        qualified: 701
 rejectedCandidates:
   csharp:
   - project: dotnet-architecture/eShopOnWeb
@@ -460,6 +534,19 @@ rejectedCandidates:
       image; the follow-up plain Gradle build was refused by the permission layer and not run'
   - project: mokksy/ai-mocks
     reason: 'not run: Kotlin Multiplatform (commonMain 235 files, wasm/native targets)'
+  - project: SMILEY4/ktor-openapi-tools
+    commit: 2ac0b5ee649d4f4a8e7d74744224247f76696748
+    reason: 'not run: C6, 10 `suspend fun` by the tree-sitter census (< 20); JVM-only Gradle, Kotlin 2.2.21, 10.5k Kotlin lines, 3 test dirs'
+  - project: utybo/Tegral
+    reason: 'not screened further: needs JDK 11/17 toolchains (e2e-tests) and Kotlin 2.0.21; KtorAdmin met every criterion first (selection rule: one pick)'
+  - project: nomisRev/ktor-arrow-example
+    reason: 'not run: 3.7k Kotlin lines (< 5k, C3)'
+  - project: kittinunf/fuel
+    reason: 'not run: 2.3k Kotlin lines (< 5k, C3)'
+  - project: fabrikt-io/fabrikt
+    reason: 'not run: 72.2k Kotlin lines (> 60k, C3)'
+  - project: specmatic/specmatic
+    reason: 'not run: 231k Kotlin lines (> 60k, C3)'
   - project: ktorio/ktor-samples
     reason: 'not run: a directory of independent sample projects (own Gradle builds), one is an OpenTelemetry sample'
 cppBuildDecision:

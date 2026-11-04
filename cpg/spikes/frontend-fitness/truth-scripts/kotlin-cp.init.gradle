@@ -1,0 +1,25 @@
+// Init script for the Kotlin reference-truth run (truth-scripts/kotlin.sh): registers `ccgDump` in every Kotlin/JVM
+// project; it writes <CCG_OUT>/<project path>.{cp,src}.txt -- the main + test compile classpath (compileOnly deps included; minus the module's own
+// main outputs) and the source roots (src/{main,test}/{kotlin,java} + KSP/Kotlin-generated roots under build/).
+allprojects { p ->
+  p.afterEvaluate {
+    if (p.plugins.hasPlugin('org.jetbrains.kotlin.jvm')) {
+      p.tasks.register('ccgDump') {
+        doLast {
+          def out = new File(System.getenv('CCG_OUT')); out.mkdirs()
+          def name = p.path == ':' ? 'root' : p.path.substring(1).replace(':', '_')
+          def own = ['classes/kotlin/main', 'classes/java/main', 'resources/main'].collect { new File(p.buildDir, it).canonicalPath }
+          def cp = (p.sourceSets.main.compileClasspath.files + p.sourceSets.test.compileClasspath.files).findAll { it.exists() && !own.contains(it.canonicalPath) }
+          new File(out, name + '.cp.txt').text = cp.collect { it.path }.join(':')
+          def roots = []
+          ['main', 'test'].each { ss ->
+            ['kotlin', 'java'].each { l ->
+              [new File(p.projectDir, "src/${ss}/${l}"), new File(p.buildDir, "generated/ksp/${ss}/${l}"), new File(p.buildDir, "generated/source/kapt/${ss}")].each { d -> if (d.isDirectory()) roots << d.path }
+            }
+          }
+          new File(out, name + '.src.txt').text = roots.unique().join('\n')
+        }
+      }
+    }
+  }
+}

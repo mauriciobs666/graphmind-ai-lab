@@ -1,0 +1,32 @@
+{
+ "documentsIndexed": 272,
+ "exitStatus": 0,
+ "lang": "kotlin",
+ "pilot": {
+  "adjustedCoverage": 1.0,
+  "adjustedDenominator": 50,
+  "ambiguous": 0,
+  "coverage": 1.0,
+  "coverageStrict": 1.0,
+  "excluded": 0,
+  "excludedByClass": {},
+  "exclusionCap": 10,
+  "exclusionCapExceeded": false,
+  "note": "ML \u00a73.2 C5 tests `adjustedCoverage` >= 0.90 when `exclusionCapExceeded` is false; more than 10 excluded sites means the reference is blind to too much of the frame (a C5 failure). `coverage` is the raw figure, always reported beside it",
+  "pilotSites": 50,
+  "relaxed": 0,
+  "silent": 0,
+  "silentInformationalTags": {},
+  "withReference": 50
+ },
+ "pilotKinds": {
+  "declared": 2,
+  "external": 36,
+  "internal": 12
+ },
+ "recordedAtEpoch": 1793823605,
+ "recordedAtUtc": "2026-11-04T20:20:05Z",
+ "seedPrefix": "ccg-p0a-v1-c5|",
+ "tool": "scip-java",
+ "toolVersion": "0.13.2"
+}
