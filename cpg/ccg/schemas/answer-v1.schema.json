@@ -1,0 +1,1592 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "urn:ccg:answer-v1",
+ "title": "Connected code graph canonical answer, schema v1",
+ "description": "Canonical answer document, answerSchemaVersion \"1.0\" (docs/plans/connected-code-graph-answer-spec.md v1.2, S33/S34). This schema is necessary but NOT sufficient: ccg.answer.validate adds rules V1-V13 and V15 of the spec's section 8 (derivations, H3 anchor chaining, staleness set equality, id recomputation, the F-4 token screen) that JSON Schema cannot say. Every string-typed property carries exactly one of pattern/enum/const (engine-minted), x-ccg-minted, or x-ccg-data (free text from source, F-3).",
+ "type": "object",
+ "additionalProperties": false,
+ "properties": {
+  "answerSchemaVersion": {
+   "type": "string",
+   "const": "1.0"
+  },
+  "interpretation": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "status": {
+     "type": "string",
+     "enum": [
+      "resolved",
+      "ambiguous",
+      "unresolved"
+     ]
+    },
+    "request": {
+     "$ref": "#/$defs/Request"
+    },
+    "options": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Request"
+     }
+    },
+    "ambiguityKind": {
+     "type": "string",
+     "enum": [
+      "several-symbols",
+      "unknown-name",
+      "two-use-cases",
+      "no-anchor"
+     ]
+    },
+    "lookups": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Lookup"
+     },
+     "minItems": 1
+    },
+    "provenance": {
+     "$ref": "#/$defs/Provenance"
+    },
+    "rcaMarks": {
+     "type": "array",
+     "items": {},
+     "maxItems": 0
+    }
+   },
+   "required": [
+    "status"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "status": {
+        "const": "resolved"
+       }
+      },
+      "required": [
+       "status"
+      ]
+     },
+     "then": {
+      "required": [
+       "request"
+      ],
+      "properties": {
+       "request": {
+        "not": {
+         "required": [
+          "rank"
+         ]
+        }
+       }
+      },
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "options"
+         ]
+        },
+        {
+         "required": [
+          "ambiguityKind"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "status": {
+        "const": "ambiguous"
+       }
+      },
+      "required": [
+       "status"
+      ]
+     },
+     "then": {
+      "required": [
+       "options",
+       "ambiguityKind"
+      ],
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "request"
+         ]
+        },
+        {
+         "required": [
+          "lookups"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "status": {
+        "const": "unresolved"
+       }
+      },
+      "required": [
+       "status"
+      ]
+     },
+     "then": {
+      "required": [
+       "lookups"
+      ],
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "request"
+         ]
+        },
+        {
+         "required": [
+          "options"
+         ]
+        },
+        {
+         "required": [
+          "ambiguityKind"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "recipe": {
+   "$ref": "#/$defs/Recipe"
+  },
+  "stamp": {
+   "$ref": "#/$defs/Stamp"
+  },
+  "staleness": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "units": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Unit"
+     }
+    }
+   },
+   "required": [
+    "units"
+   ]
+  },
+  "items": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/Item"
+   }
+  },
+  "groups": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/Group"
+   }
+  },
+  "depthBound": {
+   "$ref": "#/$defs/DepthBound"
+  }
+ },
+ "required": [
+  "answerSchemaVersion",
+  "interpretation",
+  "recipe",
+  "stamp",
+  "staleness",
+  "items",
+  "groups",
+  "depthBound"
+ ],
+ "$defs": {
+  "Scope": {
+   "oneOf": [
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "repoIds": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9._-]+$"
+       },
+       "minItems": 1,
+       "uniqueItems": true
+      }
+     },
+     "required": [
+      "repoIds"
+     ]
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "paths": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "x-ccg-data": true
+       },
+       "minItems": 1,
+       "uniqueItems": true
+      }
+     },
+     "required": [
+      "paths"
+     ]
+    }
+   ]
+  },
+  "AnchorSymbol": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "symbol"
+    },
+    "symbolId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "qname": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "repoId": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "signature": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "type",
+    "symbolId",
+    "qname",
+    "repoId",
+    "path"
+   ]
+  },
+  "AnchorContract": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "contract"
+    },
+    "cpId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "kind": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "keyNorm": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "type",
+    "cpId",
+    "kind",
+    "keyNorm"
+   ]
+  },
+  "AnchorConfig": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "config"
+    },
+    "entryId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "repoId": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "keyPath": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "type",
+    "entryId",
+    "repoId",
+    "path",
+    "keyPath"
+   ]
+  },
+  "Request": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "useCase": {
+     "type": "string",
+     "const": "impact"
+    },
+    "direction": {
+     "type": "string",
+     "enum": [
+      "impact",
+      "depends-on"
+     ]
+    },
+    "anchors": {
+     "type": "array",
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/$defs/AnchorSymbol"
+       },
+       {
+        "$ref": "#/$defs/AnchorContract"
+       },
+       {
+        "$ref": "#/$defs/AnchorConfig"
+       }
+      ]
+     },
+     "minItems": 1
+    },
+    "scope": {
+     "$ref": "#/$defs/Scope"
+    },
+    "rank": {
+     "type": "integer",
+     "minimum": 1
+    }
+   },
+   "required": [
+    "useCase",
+    "direction",
+    "anchors"
+   ]
+  },
+  "Lookup": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "repoId": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "state": {
+     "type": "string",
+     "enum": [
+      "skipped-file",
+      "not-found"
+     ]
+    },
+    "reason": {
+     "type": "string",
+     "enum": [
+      "test",
+      "frontend-ignore"
+     ]
+    },
+    "unitId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    }
+   },
+   "required": [
+    "path",
+    "repoId",
+    "state"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "state": {
+        "const": "skipped-file"
+       }
+      },
+      "required": [
+       "state"
+      ]
+     },
+     "then": {
+      "required": [
+       "reason",
+       "unitId"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "state": {
+        "const": "not-found"
+       }
+      },
+      "required": [
+       "state"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "reason"
+         ]
+        },
+        {
+         "required": [
+          "unitId"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "Provenance": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "modelFingerprint": {
+     "type": "string",
+     "x-ccg-data": true,
+     "minLength": 1
+    },
+    "promptHash": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "grammarHash": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "samplingHash": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "resolverVersion": {
+     "type": "string",
+     "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "endpoint": {
+     "type": "string",
+     "enum": [
+      "local",
+      "hosted"
+     ]
+    },
+    "temperatureMilli": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "quantization": {
+     "type": "string",
+     "x-ccg-data": true,
+     "minLength": 1
+    },
+    "cacheKey": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "cacheHit": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "modelFingerprint",
+    "promptHash",
+    "grammarHash",
+    "samplingHash",
+    "resolverVersion",
+    "endpoint",
+    "temperatureMilli",
+    "cacheKey",
+    "cacheHit"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "endpoint": {
+        "const": "local"
+       }
+      },
+      "required": [
+       "endpoint"
+      ]
+     },
+     "then": {
+      "required": [
+       "quantization"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "endpoint": {
+        "const": "hosted"
+       }
+      },
+      "required": [
+       "endpoint"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "quantization"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "Recipe": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "algorithm": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "id": {
+       "type": "string",
+       "const": "bfs-v1"
+      },
+      "version": {
+       "type": "string",
+       "pattern": "^[0-9]+\\.[0-9]+$"
+      }
+     },
+     "required": [
+      "id",
+      "version"
+     ]
+    },
+    "queries": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "type": "string",
+        "pattern": "^[a-z_]+(:[A-Za-z]+)?$"
+       },
+       "cypher": {
+        "type": "string",
+        "x-ccg-minted": true,
+        "minLength": 1
+       }
+      },
+      "required": [
+       "name",
+       "cypher"
+      ]
+     }
+    },
+    "guards": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "visitedSeedsAnchor": {
+       "const": true
+      },
+      "levelGuard": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "required": [
+      "visitedSeedsAnchor",
+      "levelGuard"
+     ]
+    }
+   },
+   "required": [
+    "algorithm",
+    "queries",
+    "guards"
+   ]
+  },
+  "Stamp": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "snapshotId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "verdictLogOffset": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "verdictLogHash": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    }
+   },
+   "required": [
+    "snapshotId",
+    "verdictLogOffset",
+    "verdictLogHash"
+   ]
+  },
+  "DepthBound": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "bound": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "unexplored": {
+     "type": "integer",
+     "minimum": 0
+    }
+   },
+   "required": [
+    "unexplored"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "unexplored": {
+        "minimum": 1
+       }
+      },
+      "required": [
+       "unexplored"
+      ]
+     },
+     "then": {
+      "required": [
+       "bound"
+      ]
+     }
+    }
+   ]
+  },
+  "Unit": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "unitId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "repoId": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "rootPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "lang": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9]*$"
+    },
+    "buildStatus": {
+     "type": "string",
+     "enum": [
+      "fresh",
+      "stale-kept",
+      "not-mapped"
+     ]
+    },
+    "builtCommit": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{40}$"
+    },
+    "builtAt": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "failedAt": {
+     "type": "string",
+     "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "reason": {
+     "type": "string",
+     "x-ccg-data": true,
+     "maxLength": 500
+    }
+   },
+   "required": [
+    "unitId",
+    "repoId",
+    "rootPath",
+    "lang",
+    "buildStatus"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "buildStatus": {
+        "const": "fresh"
+       }
+      },
+      "required": [
+       "buildStatus"
+      ]
+     },
+     "then": {
+      "required": [
+       "builtCommit",
+       "builtAt"
+      ],
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "failedAt"
+         ]
+        },
+        {
+         "required": [
+          "reason"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "buildStatus": {
+        "const": "stale-kept"
+       }
+      },
+      "required": [
+       "buildStatus"
+      ]
+     },
+     "then": {
+      "required": [
+       "builtCommit",
+       "builtAt",
+       "failedAt",
+       "reason"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "buildStatus": {
+        "const": "not-mapped"
+       }
+      },
+      "required": [
+       "buildStatus"
+      ]
+     },
+     "then": {
+      "required": [
+       "reason"
+      ],
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "builtCommit"
+         ]
+        },
+        {
+         "required": [
+          "builtAt"
+         ]
+        },
+        {
+         "required": [
+          "failedAt"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "SymbolSubject": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "symbol"
+    },
+    "symbolId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "qname": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "lineStart": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "lineEnd": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "ownedRegions": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 1
+     }
+    },
+    "signature": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "type",
+    "symbolId",
+    "qname",
+    "path",
+    "lineStart",
+    "lineEnd"
+   ]
+  },
+  "ConfigSubject": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "config"
+    },
+    "entryId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "line": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "keyPath": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "type",
+    "entryId",
+    "path",
+    "line",
+    "keyPath"
+   ]
+  },
+  "Launch": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "launchKind": {
+     "type": "string",
+     "enum": [
+      "command",
+      "port",
+      "env-default",
+      "mount"
+     ]
+    },
+    "protocol": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "envVar": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "mountPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "service": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "argv0": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "launchKind"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "launchKind": {
+        "const": "command"
+       }
+      },
+      "required": [
+       "launchKind"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "port"
+         ]
+        },
+        {
+         "required": [
+          "protocol"
+         ]
+        },
+        {
+         "required": [
+          "envVar"
+         ]
+        },
+        {
+         "required": [
+          "mountPath"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "launchKind": {
+        "const": "port"
+       }
+      },
+      "required": [
+       "launchKind"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "argv0"
+         ]
+        },
+        {
+         "required": [
+          "envVar"
+         ]
+        },
+        {
+         "required": [
+          "mountPath"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "launchKind": {
+        "const": "env-default"
+       }
+      },
+      "required": [
+       "launchKind"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "argv0"
+         ]
+        },
+        {
+         "required": [
+          "port"
+         ]
+        },
+        {
+         "required": [
+          "protocol"
+         ]
+        },
+        {
+         "required": [
+          "mountPath"
+         ]
+        }
+       ]
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "launchKind": {
+        "const": "mount"
+       }
+      },
+      "required": [
+       "launchKind"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "argv0"
+         ]
+        },
+        {
+         "required": [
+          "port"
+         ]
+        },
+        {
+         "required": [
+          "protocol"
+         ]
+        },
+        {
+         "required": [
+          "envVar"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "Lifted": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "ord": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "siteId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "kind": {
+     "type": "string",
+     "enum": [
+      "CallSite",
+      "Symbol"
+     ]
+    },
+    "id": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "repo": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "unit": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "line": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "urlPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "verbPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "viaSiteId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "viaLine": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "name": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "ord",
+    "siteId",
+    "kind",
+    "id",
+    "repo",
+    "unit",
+    "path",
+    "line",
+    "urlPath",
+    "name"
+   ]
+  },
+  "Bound": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "ord": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "entryId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "repo": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "unit": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "line": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "keyPath": {
+     "type": "string",
+     "x-ccg-data": true
+    }
+   },
+   "required": [
+    "ord",
+    "entryId",
+    "repo",
+    "unit",
+    "path",
+    "line",
+    "keyPath"
+   ]
+  },
+  "Hop": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "ContractPoint",
+      "Symbol",
+      "CallSite",
+      "Param",
+      "Ret",
+      "Cond",
+      "Link",
+      "ConfigEntry"
+     ]
+    },
+    "id": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "repo": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "unit": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "path": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "line": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "edgeType": {
+     "type": "string",
+     "enum": [
+      "CALLS",
+      "CALLS_NAME",
+      "HAS_CALL",
+      "HAS_PARAM",
+      "HAS_RETURN",
+      "HAS_COND",
+      "DATA",
+      "CONTROLLED_BY",
+      "VIA",
+      "TO",
+      "ON",
+      "CONSUMES",
+      "PROVIDES",
+      "READS",
+      "WRITES",
+      "DEFINED_BY",
+      "BOUND_BY",
+      "LAUNCHES",
+      "RAN",
+      "DEPENDS_ON",
+      "FROM_DEP"
+     ]
+    },
+    "dir": {
+     "type": "string",
+     "enum": [
+      "<-",
+      "->"
+     ]
+    },
+    "status": {
+     "type": "string",
+     "enum": [
+      "confirmed",
+      "possible"
+     ]
+    },
+    "reason": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]*(:[a-z0-9]+)?$"
+    },
+    "state": {
+     "type": "string",
+     "enum": [
+      "value",
+      "path",
+      "function",
+      "contract",
+      "key",
+      "end"
+     ]
+    },
+    "accessPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "candidateCount": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "qname": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "calleeName": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "code": {
+     "type": "string",
+     "x-ccg-data": true,
+     "maxLength": 200
+    },
+    "contractKind": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "keyNorm": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "lifted": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Lifted"
+     }
+    },
+    "bound": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Bound"
+     }
+    },
+    "keyPath": {
+     "type": "string",
+     "x-ccg-data": true
+    },
+    "launch": {
+     "$ref": "#/$defs/Launch"
+    }
+   },
+   "required": [
+    "kind",
+    "id",
+    "state"
+   ]
+  },
+  "Item": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "subject": {
+     "oneOf": [
+      {
+       "$ref": "#/$defs/SymbolSubject"
+      },
+      {
+       "$ref": "#/$defs/ConfigSubject"
+      }
+     ]
+    },
+    "repoId": {
+     "type": "string",
+     "pattern": "^[a-z0-9._-]+$"
+    },
+    "unitId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "status": {
+     "type": "string",
+     "enum": [
+      "confirmed",
+      "possible"
+     ]
+    },
+    "reason": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]*(:[a-z0-9]+)?$"
+    },
+    "directness": {
+     "type": "string",
+     "enum": [
+      "direct",
+      "indirect"
+     ]
+    },
+    "distance": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "viaData": {
+     "type": "boolean"
+    },
+    "chain": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Hop"
+     },
+     "minItems": 1
+    }
+   },
+   "required": [
+    "subject",
+    "repoId",
+    "unitId",
+    "status",
+    "directness",
+    "distance",
+    "viaData",
+    "chain"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "status": {
+        "const": "possible"
+       }
+      },
+      "required": [
+       "status"
+      ]
+     },
+     "then": {
+      "required": [
+       "reason"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "status": {
+        "const": "confirmed"
+       }
+      },
+      "required": [
+       "status"
+      ]
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "reason"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "Group": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "other-possible-callees",
+      "runtime-built-access"
+     ]
+    },
+    "key": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    },
+    "reason": {
+     "type": "string",
+     "enum": [
+      "resolution-unverified",
+      "runtime-built"
+     ]
+    },
+    "count": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "members": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/Item"
+     },
+     "minItems": 1
+    }
+   },
+   "required": [
+    "kind",
+    "key",
+    "reason",
+    "count",
+    "members"
+   ],
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "other-possible-callees"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "properties": {
+       "reason": {
+        "const": "resolution-unverified"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "kind": {
+        "const": "runtime-built-access"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "then": {
+      "properties": {
+       "reason": {
+        "const": "runtime-built"
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}
