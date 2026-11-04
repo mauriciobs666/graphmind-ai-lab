@@ -18,7 +18,7 @@ the by-construction exclusions and the macro-argument rule (§4, §5).
 | Path | What | Who may read it |
 |---|---|---|
 | `corpora.yaml` | the pinned corpora (SHA, `srcDigest` of the fetched tree), C1-C8 evidence, C5 verdicts, rejected candidates, the C++ build decision | harness, `data-scientist` |
-| `run_fitness.py` | the harness: `fetch census frame draw flowdraw c5pilot brief refmap verify joern` (`--help`) | harness |
+| `run_fitness.py` | the harness: `fetch census frame draw flowdraw c5pilot brief flowbrief flowcheck genaudit refmap verify joern` (`--help`) | harness |
 | `truth_run.sh`, `truth-scripts/{java,cpp,kotlin}.sh`, `truth-scripts/kotlin-cp.init.gradle` | reference-truth runs in the `ccg-toolchain-truth` image (network on, outside the sandbox) | harness |
 | `make_adjudication_input.py` | N4's input script. Opens only `labels/` and `truth/`; run by `data-scientist`, never by `graph-dba` | S57 |
 | `measure.sc`, `matcher-probe.sc`, `matcher-table.md` | Joern-side per-site answers (P0-18b); the probe that produced the matcher table | harness |
@@ -26,6 +26,9 @@ the by-construction exclusions and the macro-argument rule (§4, §5).
 | `sample/<lang>.jsonl`, `sample/<lang>.brief.md` | what the labeller gets (500 sites; the filled brief, pasted as-is) | S26 labeller |
 | `sample/<lang>.private.jsonl` | harness-only (kind, node type, frame size, `siteKey`) | **not** labellers |
 | `sample/<lang>-flow.jsonl` | the golden-flow draw (ML §6.4): up to 30 methods with source text | S56 labeller |
+| `flow-brief.template.md` (+ `flow-brief.patch.md`, how `flowbrief` was added) | the S56 labeller brief template (ML §6.4); only the text between its two BRIEF markers is used | harness, `data-scientist` |
+| `sample/<lang>-flow.brief.md` | the filled S56 brief (`flowbrief <lang>`: template + per-language slots + a redacted bundle-spec excerpt), pasted as is | S56 labeller |
+| `labels/<lang>-flow.jsonl` | the S56 labeller's output; `flowcheck <lang>` schema-checks it (opens only this file and `sample/<lang>-flow.jsonl`; exit 1 on any error; `belowFloor120` is advisory) | `data-scientist`, S28 |
 | `truth/<lang>.c5-pilot.jsonl`, `truth/<lang>.c5.json`, `truth/<lang>.ref.jsonl` | the 50-site pilot, the C5 record (raw and adjusted), the reference answer for every sampled ordinal | **not** labellers; S57 |
 | `truth/csharp.gen-audit.jsonl` | the hash order (`ccg-p0a-v1-gen|`) of the 74 reference-silent generic/`nameof` sites of the C# sample: the S57 audit draw (`genaudit`, §2) | **not** labellers; S57 |
 | `labels/ adjudication/ results/` | empty (`.gitkeep`): later steps write them | later steps |
@@ -34,9 +37,9 @@ Scratch (gitignored, `cpg/.ccg-work/`): `corpora/<lang>/src` (the clean `git arc
 tree), `frontend-fitness/{truth-work,truth-out,rejected,probe*}`. Rejected-candidate artifacts live under `rejected/`.
 
 Reproduce: `run_fitness.py fetch <lang>` (needs only `corpora.yaml`), then `frame`, `draw`, `flowdraw`, `c5pilot`,
-`brief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...`. `run_fitness.py verify` re-derives every frame,
+`brief`, `flowbrief`; `truth_run.sh <lang>` then `refmap <lang> --mode c5|ref ...`. `run_fitness.py verify` re-derives every frame,
 sample, private, flow and brief file and compares: it passes for all six pinned corpora (and `srcDigest` equality).
-Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (41 tests).
+Tests: `cd cpg && .venv/bin/python -m pytest -q tests/test_frontend_fitness.py` (101 tests).
 
 ## 2. Definitions this harness fixes (where ML leaves a choice)
 

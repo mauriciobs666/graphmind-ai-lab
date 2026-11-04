@@ -6,6 +6,7 @@ sample/ or frame/ files). Run: cd cpg && .venv/bin/python -m pytest -q tests/tes
 """
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -636,3 +637,217 @@ def test_adjudication_input_carries_stratum_tags_of_the_reference(tmp_path):
     ref = {r["ordinal"]: r["reference"] for r in rows}
     assert ref[1]["relaxed"] is True and ref[2]["ambiguous"] is True and ref[3]["byConstruction"] == ["builtin"]
     assert "relaxed" not in ref[2] and "byConstruction" not in ref[1]
+
+
+# ---------------------------------------------------------------- S56 flow brief + flowcheck (flow-brief.template.md)
+
+FLOW_LANGS = ["python", "javascript", "java", "kotlin", "csharp", "go", "cpp"]
+FSRC = "def handle(req, flag):\n    if flag and check(req):\n        return run(req)\n    return run(req)"
+
+
+def _flow_sample(n=3):
+    return [{"ordinal": i, "path": f"m{i}.py", "qname": f"m{i}.py::handle", "lineStart": 10, "lineEnd": 13, "source": FSRC} for i in range(1, n + 1)]
+
+
+@pytest.fixture
+def flowenv(tmp_path, monkeypatch):
+    (tmp_path / "sample").mkdir()
+    (tmp_path / "labels").mkdir()
+    monkeypatch.setattr(rf, "flow_path", lambda l: tmp_path / "sample" / f"{l}-flow.jsonl")
+    monkeypatch.setattr(rf, "flow_label_path", lambda l: tmp_path / "labels" / f"{l}-flow.jsonl")
+    monkeypatch.setattr(rf, "flow_brief_path", lambda l: tmp_path / "sample" / f"{l}-flow.brief.md")
+    (tmp_path / "sample" / "x").write_text("")
+    for l in FLOW_LANGS:
+        (tmp_path / "sample" / f"{l}-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in _flow_sample()))
+    return tmp_path
+
+
+@pytest.mark.parametrize("lang", FLOW_LANGS)
+def test_flow_brief_fills_validates_and_is_deterministic(flowenv, lang):
+    a, b = rf.fill_flow_brief(lang), rf.fill_flow_brief(lang)
+    assert a == b and rf.validate_flow_brief(lang, a) == []
+    assert "{N_METHODS}" not in a and f"inside 3 {rf.LANG_LABEL[lang]} methods" in a and "ordinal **3**" in a                           # the count came from the sample file
+    assert f"The short-circuit operators of {rf.LANG_LABEL[lang]} are {rf.FLOW_OPS[lang]}." in a
+    assert rf.FLOW_OP_EXAMPLES[lang] in a and rf.FLOW_SCOPE_NOTES[lang] in a and rf.FLOW_RECEIVER_NOTE[lang] in a
+    assert len(re.findall("joern", a, flags=re.I)) == 1
+    assert str(flowenv / "labels" / f"{lang}-flow.jsonl") in a
+
+
+def test_flow_brief_operator_lists_differ_per_language(flowenv):
+    ops = {l: rf.FLOW_OPS[l] for l in FLOW_LANGS}
+    assert "`and`, `or`" == ops["python"] and "`??`" in ops["javascript"] and "`??`" in ops["csharp"]
+    assert "elvis" in ops["kotlin"] and "`??`" not in ops["java"] and "`??`" not in ops["go"]
+    for l in FLOW_LANGS:
+        t = rf.fill_flow_brief(l)
+        for o in FLOW_LANGS:
+            if ops[o] != ops[l]:
+                assert f"are {ops[o]}." not in t
+
+
+def test_flow_spec_excerpt_is_redacted_and_names_sections():
+    x = rf.flow_spec_excerpt()
+    for h in ("### 5.4 `param`", "### 5.5 `ret` and `cond`", "### 5.6 `callsite`", "### 5.7 The call-site ordinal"):
+        assert h in x
+    assert "Joern" not in x and "CDG sources decide" not in x and "<operator>" not in x
+    assert "**Which calls are call sites:**" in x and "(language operators)" in x
+
+
+def test_flow_spec_redaction_fails_loudly_when_spec_drifts(tmp_path, monkeypatch):
+    t = rf.SPEC3.read_text(encoding="utf-8")
+    import re as _re
+    drift55 = _re.sub(r"Joern's CDG sources decide", "The comparison tool decides", t)
+    drift56 = t.replace("(Joern's `<operator>.*` calls)", "(Joern's operator calls)")
+    drift_bullet = t.replace("- **Decorator and annotation", "- **Decorators and annotations")
+    assert drift55 != t and drift56 != t and drift_bullet != t
+    for name, txt in (("a.md", drift55), ("b.md", drift56), ("c.md", drift_bullet)):
+        (tmp_path / name).write_text(txt, encoding="utf-8")
+        monkeypatch.setattr(rf, "SPEC3", tmp_path / name)
+        with pytest.raises(SystemExit):
+            rf.flow_spec_excerpt()
+
+
+@pytest.mark.parametrize("leak", ["see results/ here", "the truth/ dir", "ref.jsonl", "adjudication log", "run extract.sc", "the projection output",
+                                  "CONTROLLED_BY edges", "CDG", "DATA edge", "CALLS_NAME", "FULL_NAME", "cpg.bin", "0.95", "recall",
+                                  "threshold", "flowAvailable", "labels/python.jsonl", "x.brief.md", "S26", "S28", "S56", "S57"])
+def test_flow_brief_leak_patterns_each_reject(flowenv, leak):
+    good = rf.fill_flow_brief("python")
+    assert rf.validate_flow_brief("python", good) == []
+    errs = rf.validate_flow_brief("python", good + "\n" + leak + "\n")
+    assert any("leak pattern" in e for e in errs)
+
+
+def test_flow_brief_validator_rejects_slots_sections_ops_joern_count(flowenv):
+    good = rf.fill_flow_brief("python")
+    assert any("unfilled" in e for e in rf.validate_flow_brief("python", good + " {SCOPE_NOTES}"))
+    for must in ("**Output.**", "**What counts as a condition (`cond`).**", "short-circuit operands that guard a point", "**What to label: pairs.**",
+                 "**Appendix: bundle spec points**", "### 5.4 `param`", "### 5.5 `ret` and `cond`", "### 5.7 The call-site ordinal",
+                 rf.FLOW_OPS["python"], rf.FLOW_OP_EXAMPLES["python"]):
+        assert any("missing" in e for e in rf.validate_flow_brief("python", good.replace(must, "REMOVED", 1))), must
+    # the per-language operator list of ANOTHER language does not satisfy the check
+    assert any("missing" in e for e in rf.validate_flow_brief("python", good.replace(rf.FLOW_OPS["python"], rf.FLOW_OPS["go"])))
+    assert any("Joern" in e for e in rf.validate_flow_brief("python", good + " and Joern again"))
+    assert any("Joern" in e for e in rf.validate_flow_brief("python", good + " and joern again"))      # any case
+    assert any("Joern" in e for e in rf.validate_flow_brief("python", good.replace("Joern", "the tool")))
+    js = rf.fill_flow_brief("javascript")
+    assert rf.validate_flow_brief("javascript", js) == []
+    for must in ("`&&`, `||` and `??`", "Every operand of such an operator", "`props.onClick && props.onClick(e)`"):
+        assert any("javascript: missing" in e for e in rf.validate_flow_brief("javascript", js.replace(must, "REMOVED"))), must
+
+
+def test_flowbrief_command_writes_file_and_refuses_a_leak(flowenv, monkeypatch):
+    r = rf.cmd_flowbrief("go")
+    assert (flowenv / "sample" / "go-flow.brief.md").read_text(encoding="utf-8") == rf.fill_flow_brief("go") and r["lang"] == "go"
+    monkeypatch.setitem(rf.FLOW_SCOPE_NOTES, "go", "see truth/ for details")
+    with pytest.raises(SystemExit):
+        rf.cmd_flowbrief("go")
+    (flowenv / "sample" / "go-flow.jsonl").unlink()
+    with pytest.raises(SystemExit):
+        rf.fill_flow_brief("go")
+
+
+def test_verify_rederives_the_flow_brief(flowenv, monkeypatch):
+    langs = [l for l in ("python",) if rf.src_dir(l).exists() and rf.frame_path(l).exists()]
+    if not langs:
+        pytest.skip("corpora not fetched")
+    (flowenv / "sample" / "python-flow.jsonl").write_text((FF / "sample" / "python-flow.jsonl").read_text())
+    rf.cmd_flowbrief("python")
+    assert [p for p in rf.cmd_verify(langs)["problems"] if "flow brief" in p] == []
+    p = flowenv / "sample" / "python-flow.brief.md"
+    p.write_text(p.read_text() + "\nedited\n")
+    assert "python: flow brief differs" in rf.cmd_verify(langs)["problems"]
+    p.write_text(rf.fill_flow_brief("python").replace("**Output.**", "x"))
+    assert "python: flow brief invalid" in rf.cmd_verify(langs)["problems"]
+
+
+# ---- flowcheck
+
+def _lab(ordinal=1, pairs=None, **kw):
+    d = {"ordinal": ordinal, "path": f"m{ordinal}.py", "qname": f"m{ordinal}.py::handle", "pairs": pairs if pairs is not None else [GOOD_PAIR]}
+    d.update(kw)
+    return d
+
+
+GOOD_PAIR = {"kind": "data", "source": {"point": "param", "index": 0, "name": "req"},
+             "sink": {"point": "call", "calleeName": "check", "ordinal": 0, "line": 11}, "evidence": "req passed to check", "confidence": "sure"}
+CTRL = {"kind": "control", "source": {"point": "cond", "line": 11, "code": "flag and check(req)"},
+        "sink": {"point": "ret", "ordinal": 0, "line": 12}, "evidence": "if guards return", "confidence": "unsure"}
+
+
+def _check(flowenv, rows, lang="python"):
+    (flowenv / "labels" / f"{lang}-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return rf.cmd_flowcheck(lang)
+
+
+def test_flowcheck_accepts_valid_and_reports_counts(flowenv):
+    r = _check(flowenv, [_lab(1, [GOOD_PAIR, CTRL]), _lab(2, [], noPairReason="no branch reaches a call"), _lab(3, [GOOD_PAIR], unlisted=[{"line": 11, "construct": "walrus"}])])
+    assert r["nErrors"] == 0 and r["complete"] is True and r["pairs"] == 3 and r["data"] == 2 and r["control"] == 1
+    assert r["unsure"] == 1 and r["withPair"] == 2 and r["withoutPair"] == 1 and r["belowFloor120"] is True
+    assert _check(flowenv, [_lab(1)])["complete"] is False and _check(flowenv, [_lab(1)])["nErrors"] == 0     # resumable
+    assert rf.cmd_flowcheck("go")["labelled"] == 0
+
+
+def _pair(**over):
+    p = json.loads(json.dumps(GOOD_PAIR))
+    for k, v in over.items():
+        p[k] = v
+    return p
+
+
+@pytest.mark.parametrize("name,rows,frag", [
+    ("call-ordinal-too-high", [_lab(1, [_pair(sink={"point": "call", "calleeName": "check", "ordinal": 1, "line": 11})])], "fewer occurrences"),
+    ("callee-not-in-method", [_lab(1, [_pair(sink={"point": "call", "calleeName": "nope", "ordinal": 0, "line": 11})])], "fewer occurrences"),
+    ("cond-code-not-in-method", [_lab(1, [dict(CTRL, source={"point": "cond", "line": 11, "code": "flag or other"})])], "cond code"),
+    ("cond-as-data-source", [_lab(1, [dict(CTRL, kind="data")])], "cannot be a data source"),
+    ("param-as-control-source", [_lab(1, [_pair(kind="control")])], "cannot be a control source"),
+    ("source-equals-sink", [_lab(1, [_pair(kind="data", source={"point": "ret", "ordinal": 0, "line": 12}, sink={"point": "ret", "ordinal": 0, "line": 12})])], "cannot be a data source"),
+    ("source-equals-sink-cond", [_lab(1, [dict(CTRL, sink=CTRL["source"])])], "source equals sink"),
+    ("skipped-ordinal", [_lab(2)], "expected ordinal 1"),
+    ("line-below-span", [_lab(1, [_pair(sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": 9})])], "outside 10-13"),
+    ("line-above-span", [_lab(1, [_pair(sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": 14})])], "outside 10-13"),
+    ("evidence-too-long", [_lab(1, [_pair(evidence="x" * 301)])], "evidence"),
+    ("evidence-empty", [_lab(1, [_pair(evidence=" ")])], "evidence"),
+    ("empty-pairs-no-reason", [_lab(1, [])], "noPairReason"),
+    ("duplicate-pair", [_lab(1, [GOOD_PAIR, GOOD_PAIR])], "duplicate"),
+    ("wrong-qname", [_lab(1, qname="other")], "expected ordinal 1"),
+    ("extra-key-in-endpoint", [_lab(1, [_pair(source={"point": "param", "index": 0, "name": "req", "x": 1})])], "keys"),
+    ("bad-point", [_lab(1, [_pair(source={"point": "zzz"})])], "bad point"),
+    ("bad-confidence", [_lab(1, [_pair(confidence="maybe")])], "kind/confidence"),
+    ("param-index-below-minus-1", [_lab(1, [_pair(source={"point": "param", "index": -2, "name": "req"})])], "bad param"),
+    ("non-int-line", [_lab(1, [_pair(sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": "11"})])], "non-integer"),
+    ("call-name-is-whole-word", [_lab(1, [_pair(sink={"point": "call", "calleeName": "chec", "ordinal": 0, "line": 11})])], "fewer occurrences"),
+    ("data-sink-param", [_lab(1, [_pair(sink={"point": "param", "index": 0, "name": "req"})])], "cannot be a data sink"),
+    ("ordinal-not-sample-ordinal", [dict(_lab(1), ordinal=2)], "expected ordinal 1"),
+    ("path-not-sample-path", [dict(_lab(1), path="zzz.py")], "expected ordinal 1"),
+    ("bad-unlisted", [_lab(1, unlisted=[{"line": 11}])], "unlisted"),
+    ("more-lines-than-methods", [_lab(1), _lab(2), _lab(3), _lab(4)], "more lines than methods"),
+    ("unknown-top-key", [_lab(1, extra=1)], "keys"),
+])
+def test_flowcheck_rejects(flowenv, name, rows, frag):
+    r = _check(flowenv, rows)
+    assert r["nErrors"] >= 1 and any(frag in e for e in r["errors"]), (name, r["errors"])
+    assert r["complete"] is False
+
+
+def test_flowcheck_boundaries_whitespace_length_and_complete(flowenv):
+    edge = [_pair(sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": 10}),
+            _pair(sink={"point": "call", "calleeName": "check", "ordinal": 0, "line": 13})]          # both ends of lineStart..lineEnd
+    ws_cond = dict(CTRL, source={"point": "cond", "line": 11, "code": "flag   and\n check(req)"})      # whitespace collapses
+    assert _check(flowenv, [_lab(1, edge + [ws_cond])])["nErrors"] == 0
+    cond = "x == " + "a" * 250
+    rows = [dict(r, source="if " + cond + ":\n    f(x)") for r in _flow_sample()]
+    (flowenv / "sample" / "python-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    r = _check(flowenv, [_lab(1, [dict(CTRL, source={"point": "cond", "line": 11, "code": cond})])])
+    assert any("cond code" in e for e in r["errors"])
+    (flowenv / "sample" / "python-flow.jsonl").write_text("".join(json.dumps(r) + "\n" for r in _flow_sample()))
+    r = _check(flowenv, [_lab(1), _lab(2, [_pair(evidence="")]), _lab(3)])
+    assert r["labelled"] == 3 and r["nErrors"] == 1 and r["complete"] is False
+    assert _check(flowenv, [_lab(1), _lab(2), _lab(3)])["complete"] is True
+
+
+def test_flowcheck_cli_exit_codes_and_not_json(flowenv, capsys):
+    (flowenv / "labels" / "python-flow.jsonl").write_text("{not json\n")
+    assert rf.cmd_flowcheck("python")["nErrors"] == 1
+    (flowenv / "labels" / "python-flow.jsonl").write_text(json.dumps(_lab(1)) + "\n")
+    assert rf.main(["flowcheck", "python"]) == 0
+    (flowenv / "labels" / "python-flow.jsonl").write_text(json.dumps(_lab(2)) + "\n")
+    assert rf.main(["flowcheck", "python"]) == 1
