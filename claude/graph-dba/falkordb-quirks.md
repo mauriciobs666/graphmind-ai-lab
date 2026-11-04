@@ -1143,7 +1143,11 @@ to the general fact here.
 - **Default `TIMEOUT` is 1000ms — and writes ignore it entirely while `TIMEOUT_MAX=0` (this lab's
   default)**; a write then runs to completion regardless of clause or default. Setting
   `TIMEOUT_MAX` changes that for writes too (sub-bullet below). Reads enforce it batch-granularly
-  (slightly-over queries can slip through). The client `timeout=` pass-through
+  (slightly-over queries can slip through). It is a module argument (`MODULE LIST` -> graph args `MAX_QUEUED_QUERIES 25
+  TIMEOUT 1000 RESULTSET_SIZE 10000`; `GRAPH.CONFIG GET TIMEOUT`, re-read 2026-11-04): a read that passes no `timeout` is
+  killed at it (`ResponseError: Query timed out`; one benchmark read was killed at it, concurrently with niced pytest runs,
+  and 5 quiet reruns peaked at 83.7 ms, `cpg/spikes/store/results/recheck_timeout.json`), so every program-issued read passes
+  an explicit `timeout`. The client `timeout=` pass-through
   (`g.ro_query(q, params=…, timeout=…)`) works and is **uncapped while
   `TIMEOUT_MAX=0`**. Re-measured 2026-09-08 on module `41811`
   (`TIMEOUT 1000`, `TIMEOUT_DEFAULT 0`, `TIMEOUT_MAX 0`): `UNWIND range(1,20000000) AS i WITH i
@@ -1198,6 +1202,22 @@ to the general fact here.
     range(1,30000000) AS y RETURN count(y)"` with `timeout 60000`, with no timeout, and as a
     restricted user; the `:Blob` write above followed by `MATCH (b:Blob) RETURN count(b)`; restore
     `TIMEOUT_MAX 0`.
+  - **Under a nonzero cap the cap itself is the implicit bound on a write that passes no `timeout`; the engine default
+    `TIMEOUT 1000` is not applied to writes, and an explicit `timeout` is not needed to avoid a kill, only never to
+    exceed the cap** (verified 2026-11-04, module `41811`, restricted ACL user `ccg_build`, scratch graph
+    `ccg_p0spike__to`, `cpg/spikes/store/timeout_probe.py`, `results/timeout_probe.json`; the slow write is
+    `UNWIND range(0,$n-1) AS i MATCH (a:D {id:i}), (b:D {id:i+1}) CREATE (a)-[:E]->(b)` over 6,000 un-indexed `D` nodes,
+    1,000 rows = 1.09 s, 2,000 = 2.2 s, 4,000 = 4.4 s at cap 0). `TIMEOUT_MAX 3000`: the 2,000-row write (2.27 s, past
+    the 1,000 ms default) completed with no `timeout` and with `timeout 3000`, 2,000 of 2,000 committed; the 4,000-row
+    write was killed (`Query timed out`) at 3.01 s with no `timeout` and at 3.02 s with `timeout 3000`, and at 1.005 s with
+    `timeout 1000`, **0 of 4,000 committed** each time; `timeout 60000` was rejected in 0.0 s. `timeout` equal to the cap
+    is accepted. Real 20,000-row batches at `TIMEOUT_MAX 10000` took 0.131 s (edges, indexed endpoints) and 0.013 s
+    (nodes) with and without `timeout`. **A read that passes an explicit `timeout` above the cap is rejected too**: the
+    harness's own `ro_query(..., timeout=60000)` count failed with the cap rejection. **Async backfills are not under the
+    cap**: at `TIMEOUT_MAX 800`, `GRAPH.CONSTRAINT CREATE ... UNIQUE` on 300,000 nodes reached `OPERATIONAL` in 1.16 s
+    (0.2 s uncapped in the same run; 0.65-1.1 s in earlier runs) and `db.idx.fulltext.createNodeIndex` in 1.65 s (1.5-1.7 s
+    uncapped), neither killed; both commands return in 0.001-0.03 s and are polled, not waited on. Verify: the commands above
+    after `GRAPH.CONFIG SET TIMEOUT_MAX 3000`; restore `TIMEOUT_MAX 0`.
 - **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
   `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
   vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.
@@ -1225,20 +1245,16 @@ to the general fact here.
   callers): `count(*)` = `N` for N = 100 / 10,000 / 30,000 / 100,000 / 300,000, with 0 / 3,210 / 3,210 / 19,666 /
   19,666 distinct `Symbol` ends against 29,746 BFS items (longest path 1, 3, 3, 5, 5 edges); `N` = 1,000,000 returned
   946,532 paths (all of them) and all 29,746 symbols in 2.1 s; `pathCount: 0` returned only the 3,521 length-1 paths.
-  Returning rows instead, any `N` above 10,000 gave exactly 10,000 rows and 4,251 symbols, silently: the benchmark set
-  both caps to 10,000 and so could not tell them apart. On 15 of 15 hub anchors the row-returning form reached 10-15 %
-  of the BFS's items; with aggregation and `N` = 1,000,000 the item sets equalled the BFS's on 50 of 50 anchors (no
+  Returning rows instead, at `N` = 1,000,000 gave exactly 10,000 rows and 4,251 symbols, silently (the row count follows
+  from `RESULTSET_SIZE`; the 4,251 is that one query's): the benchmark set both caps to 10,000 and so could not tell them
+  apart. On 15 of 15 hub anchors the row-returning form reached a pooled 10-15 % of the BFS's items (per anchor 2-23 %); with aggregation and `N` = 1,000,000 the item sets equalled the BFS's on 50 of 50 anchors (no
   chain returned). **`N` = 3,000,000 on the top hub OOM-killed the 2 GB container** (exit 137, `OOMKilled true`): with
-  no persistence every key was lost; `used_memory_peak` was 797 MB at `N` = 1,000,000. `weightProp` must exist on every
+  no persistence every key was lost; `used_memory_peak` was 797 MB at `N` = 1,000,000, the highest budget observed safe on this
+  330 MB graph in the 2 GB container. That memory grows with the *budget* (the top hub had only 946,532 paths in all) is a
+  hypothesis, untested: probe it on a disposable instance, never the shared one. `weightProp` must exist on every
   listed edge type (`w` was stored on `CALLS` and `HAS_CALL`); `maxLen` counts edges; the weight is per edge, so a
   state-dependent label is not expressible. Verify: the aggregated query above on any hub, `pathCount` stepped as in
-  `cpg/spikes/store/results/sspaths_pathcount_probe.json`; never raise it past what the container can hold.
-- **The engine's default read `TIMEOUT` is 1000 ms (a module argument), `TIMEOUT_DEFAULT` and `TIMEOUT_MAX` are
-  0** (`MODULE LIST` -> graph args `MAX_QUEUED_QUERIES 25 TIMEOUT 1000 RESULTSET_SIZE 10000`; verified 2026-11-02).
-  A read that passes no `timeout` is killed at that default (`ResponseError: Query timed out`); the BFS
-  benchmark crashed once on a 1,000-id hub-frontier read, concurrently with niced pytest runs. It was not
-  reproduced in 5 reruns without load (worst read 83.7 ms, `results/recheck_timeout.json`), so the cause is unconfirmed. Rule: every
-  program-issued read passes an explicit `timeout`. Verify: `GRAPH.CONFIG GET TIMEOUT`.
+  `cpg/spikes/store/results/sspaths_pathcount_probe.json`; do not raise it past 1,000,000 on this shape.
 - **`MULTI; RENAME live prev; RENAME build live; EXEC` is not a safe swap form: a failing second `RENAME` does
   not roll back the first** (verified 2026-11-02, module `41811`, Redis 8.x, scratch graphs
   `ccg_p0spike__swap_*`). With `build` absent, EXEC replied `[True, ResponseError]`; `live` was gone and `prev`
@@ -1268,12 +1284,49 @@ to the general fact here.
   stream; query immediately before delete with no stream yet; a 600k-node graph; stream present plus a query
   immediately before delete). `EXISTS telemetry{g}` was 0 at the first poll after `GRAPH.DELETE` returned
   (<= 9 ms; 47-63 ms for the 600k-node graph, i.e. the delete's own time), polled every 10 ms; the key never
-  reappeared in the 6-8 s watched afterwards. So `GRAPH.DELETE` leaves no parameter history behind; `RENAME` still
+  reappeared in the 6-8 s watched afterwards. **Re-measured 2026-11-04** (`cpg/spikes/store/stall_probe.py delete-probe`,
+  polled every 5 ms, 3 trials each): the delete returned in 0-8 ms and the stream was gone 13-21 ms later for a
+  20k-node/20k-edge graph and 29-36 ms later for 100k nodes/400k edges, never reappearing in 1 s; a `--scan` issued within
+  milliseconds of `GRAPH.DELETE` on a ~1M-edge graph still listed it once. So the removal lags the delete's return by tens of
+  ms: a retention check polls, it does not read once. `GRAPH.DELETE` leaves no parameter history behind; `RENAME` still
   does (old stream gone, new one only after the next query).
 - **An un-indexed `MATCH (b:Label {id: r.t})` inside an `UNWIND` edge load is a label scan per row, quadratic in the
   label's size** (verified 2026-11-02, module `41811`, scratch graphs `ccg_p0spike__dep_*`): loading N
   `(:Unit)-[:DEPENDS_ON]->(:Dependency)` edges against N `Dependency` nodes took 0.13 s / 3.2 s / 52.3 s at
   N = 1,000 / 5,000 / 20,000 with no index (plan: `Filter` over `Node By Label Scan`) and 0.01 / 0.05 / 0.19 s
-  with a `Dependency(depId)` index (`Node By Index Scan`; index 2 MB at 20,000). A nonzero `TIMEOUT_MAX` also caps writes (entry above), so such a batch
-  would exceed any cap under ~52 s (inferred, not run). Every label an edge batch matches by id needs its index before the
+  with a `Dependency(depId)` index (`Node By Index Scan`; index 2 MB at 20,000). A nonzero `TIMEOUT_MAX` also caps writes (entry above): a 4,000-row version of this write was killed at 3.01 s
+  under `TIMEOUT_MAX 3000` with 0 committed (2026-11-04). Every label an edge batch matches by id needs its index before the
   load. Verify: `cpg/spikes/store/dep_index_probe.py`.
+- **ACL lock grants: a flat `+del`/`+set` on a user's key pattern also reaches the graph keys in that pattern; scope them with
+  a selector bound to the lock key, and a Lua release needs `+get` too** (verified 2026-11-04, Redis 8.6.3, module `41811`,
+  users `ccg_build`/`ccg_verdict`/`ccg_engine`/`ccg_raw_p0` on scratch keys `ccg_p0spike__acl*`,
+  `cpg/spikes/store/acl_probe.py`, `results/acl_matrix.json`; users deleted afterwards). Proposal §3.5 as written
+  (`~ccg_<s>*` plus flat `+set +del +eval`): `DEL <graph key>` and `EVAL "return redis.call('DEL', KEYS[1])" 1 <graph key>`
+  are both **allowed** for `ccg_build` and `ccg_verdict`, so either credential can delete the live graph. The same grants as a
+  selector, `ACL SETUSER u ... ~ccg_<s>* +graph.query ... (~ccg_<s>:verdict_lock +set +get +del +eval)`, make both
+  `NOPERM` on the graph key while the lock `SET`, `DEL` and the compare-and-delete `EVAL` work. The release script's
+  `redis.call('GET', ...)` is ACL-checked per call, so `+set +del +eval` without `+get` fails the release with `NOPERM`
+  (matrix: 3 ACL variants x 4 users x 19 cells). A swap script that calls `EXISTS` needs `+exists`. A
+  script's undeclared key access is checked too (`EVAL "return redis.call('GET', ARGV[1])" 0 <foreign key>` ->
+  `ACL failure in script: No permissions to access a key`). `FalkorDB(...)` constructs for all four users only with `+info`
+  (V17; `-info` -> `no permissions to run the 'info' command`), so `ccg_build`, `ccg_verdict` and `ccg_engine` need it
+  as `ccg_raw_<s>` does. `GRAPH.PROFILE`, `GRAPH.LIST` and `XLEN telemetry{...}` are `NOPERM` for all four. Verify:
+  `ACL SETUSER` with each form, then each command via `redis-cli --user`; `python spikes/store/acl_probe.py` from `cpg/`.
+- **A single large `UNWIND ... CREATE` edge write does not block `PING` for more than about 1 ms per 1,000 edges, and an
+  un-indexed endpoint match does not block it at all** (verified 2026-11-04, module `41811`, scratch graph
+  `ccg_p0spike__stall_g`, `PING` sampled every ~5 ms from a separate process, `cpg/spikes/store/stall_probe.py`,
+  `results/stall_probe.json`). Indexed endpoints (`MATCH (a:N {id:r.a}), (b:N {id:r.b}) CREATE (a)-[:E]->(b)`, 100,000 `N`
+  nodes, one query): 20k / 50k / 100k / 200k / 500k edges took 0.71 / 1.75 / 3.54 / 7.04 / 18.2 s with worst `PING`
+  11.7 / 30.5 / 73.1 / 182 / 485 ms (idle baseline max 0.75-4.6 ms), one gap at the commit, `INFO cpu` user delta about the
+  write time (one core), `used_memory` +1.5 / +18 / +53 / +142 / +410 MB. Un-indexed endpoints over 20,000 `M` nodes: 1k / 2k /
+  5k / 10k edges took 5.0 / 9.9 / 23.9 / 49.6 s (about 5 ms per row, linear in rows x label size) with worst `PING` 8 / 12 /
+  18 / 27 ms. The incident (instance silent for minutes on a 100k-edge write) was **not reproduced** in either shape; the
+  only minutes-long behaviour found is the un-indexed write itself, which at 100k rows over a 20k-node label would run for
+  tens of minutes while the server stays responsive (inferred, not run). Stay under the `PING` figure that matters to you by
+  batch size: 100,000 edges per query is the highest size tested with worst `PING` under 100 ms. Verify: the query above with
+  a `redis-cli -i 0.01 ping` loop in another shell.
+- **`OPTIONAL MATCH ... SET` on a null entity is a silent no-op, and a `CASE` expression works inside `SET`: one query can
+  patch a node and advance a monotonic counter** (verified 2026-11-04, module `41811`). `MATCH (s:Snapshot) OPTIONAL MATCH
+  (l:Link {linkId:$id}) SET l.verdict=$v, s.verdictLogOffset = CASE WHEN s.verdictLogOffset < $off THEN $off ELSE
+  s.verdictLogOffset END` with an unknown `$id` set no verdict and still advanced the offset (`cpg/spikes/store/lock_replay.py`
+  `PATCH_QUERY`).

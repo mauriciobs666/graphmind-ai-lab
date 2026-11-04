@@ -1,0 +1,169 @@
+{
+ "originalTimeoutMax": 0,
+ "engineTimeout": 1000,
+ "timeoutDefault": 0,
+ "steps": {
+  "calibration_cap0_slow_write": {
+   "500": {
+    "status": "ok",
+    "s": 0.561,
+    "result": 500.0
+   },
+   "1000": {
+    "status": "ok",
+    "s": 1.09,
+    "result": 1000.0
+   },
+   "2000": {
+    "status": "ok",
+    "s": 2.207,
+    "result": 2000.0
+   },
+   "4000": {
+    "status": "ok",
+    "s": 4.406,
+    "result": 4000.0
+   },
+   "6000": {
+    "status": "ok",
+    "s": 6.845,
+    "result": 5999.0
+   }
+  },
+  "constraint_cap0": {
+   "status": "ok",
+   "s": 0.206,
+   "result": {
+    "command_s": 0.0,
+    "operational_s": 0.206,
+    "status": [
+     "OPERATIONAL"
+    ]
+   }
+  },
+  "fulltext_cap0": {
+   "status": "ok",
+   "s": 1.697,
+   "result": {
+    "command_s": 0.001,
+    "operational_s": 1.697,
+    "hits_sym17": 60
+   }
+  },
+  "constraint_cap800": {
+   "status": "ok",
+   "s": 1.16,
+   "result": {
+    "command_s": 0.032,
+    "operational_s": 1.16,
+    "status": [
+     "OPERATIONAL"
+    ]
+   }
+  },
+  "fulltext_cap800": {
+   "status": "ok",
+   "s": 1.647,
+   "result": {
+    "command_s": 0.001,
+    "operational_s": 1.647,
+    "hits_sym17": 60
+   }
+  },
+  "writes_cap3000": {
+   "mid_noTimeout": {
+    "status": "ok",
+    "s": 2.268,
+    "result": 2000.0,
+    "rows": 2000,
+    "committed": 2000
+   },
+   "mid_timeout=cap": {
+    "status": "ok",
+    "s": 2.249,
+    "result": 2000.0,
+    "rows": 2000,
+    "committed": 2000
+   },
+   "slow_noTimeout": {
+    "status": "error",
+    "s": 3.014,
+    "error": "Query timed out",
+    "rows": 4000,
+    "committed": 0
+   },
+   "slow_timeout=cap": {
+    "status": "error",
+    "s": 3.018,
+    "error": "Query timed out",
+    "rows": 4000,
+    "committed": 0
+   },
+   "slow_timeout=1000": {
+    "status": "error",
+    "s": 1.005,
+    "error": "Query timed out",
+    "rows": 4000,
+    "committed": 0
+   },
+   "mid_timeout=60000(>cap)": {
+    "status": "error",
+    "s": 0.0,
+    "error": "The query TIMEOUT parameter value cannot exceed the TIMEOUT_MAX configuration parameter value",
+    "rows": 2000,
+    "committed": 0
+   }
+  },
+  "loads_cap10000": {
+   "edge_batch_20k_noTimeout": {
+    "status": "ok",
+    "s": 0.131,
+    "result": 20000.0
+   },
+   "edge_batch_20k_timeout=cap": {
+    "status": "ok",
+    "s": 0.149,
+    "result": 20000.0
+   },
+   "node_batch_20k_noTimeout": {
+    "status": "ok",
+    "s": 0.013,
+    "result": 20000.0
+   },
+   "node_batch_20k_timeout=cap": {
+    "status": "ok",
+    "s": 0.013,
+    "result": 20000.0
+   },
+   "slow_write_mid_noTimeout": {
+    "status": "ok",
+    "s": 2.276,
+    "result": 2000.0,
+    "committed": 2000
+   }
+  }
+ },
+ "rows": {
+  "mid(~2s)": 2000,
+  "slow(~4s)": 4000
+ },
+ "timeoutMaxRestored": 0,
+ "memoryLog": [
+  36456120,
+  151645832,
+  211210624,
+  261316024,
+  183787704,
+  184217768,
+  185047264,
+  360076208,
+  371382096,
+  185568680,
+  185611400,
+  185611368,
+  185612384,
+  185612384,
+  194570144
+ ],
+ "finalTimeoutMax": 0
+}

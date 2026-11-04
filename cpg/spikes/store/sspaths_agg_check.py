@@ -5,6 +5,10 @@ reply held 10,000 paths. Here the reply is one row (``collect(DISTINCT ...)``), 
 the item set is compared to ``bfs-v1``'s on the same call-only segment (``levels = maxLen = 2 * 3``), 50 anchors,
 20 repeats (set digest identical?), wall time per answer. No chain is returned in this form.
 Usage: ``python sspaths_agg_check.py [--repeats 20] [--path-count 1000000]`` (keys: ``ccg_p0spike`` read-only).
+``symbolPathsBelowBudget`` compares the count of paths that END on a ``Symbol`` (the ``WHERE`` runs before ``count(*)``) with the
+budget, so it is True even when the engine used the whole budget: it says nothing about exhaustion (gate P2-m1; the old record
+key ``pathCountExhausted`` in ``results/sspaths_aggregated.json`` carries the same value). Exhaustion needs the count before
+the filter, as ``results/sspaths_pathcount_probe.json`` has it.
 A ``pathCount`` of 3,000,000 on the top hub OOM-killed the 2 GB container (see MEASUREMENTS.md): do not raise it.
 """
 import argparse
@@ -29,7 +33,7 @@ def answer(graph, anchor, depth, pc):
     t0 = time.perf_counter()
     r = graph.ro_query(QUERY, {"id": anchor, "maxlen": 2 * depth, "pc": pc}, R.READ_TIMEOUT_MS).result_set[0]
     ids = sorted(r[1])
-    return {"paths": r[0], "ids": ids, "seconds": time.perf_counter() - t0, "exhausted": r[0] < pc}
+    return {"paths": r[0], "ids": ids, "seconds": time.perf_counter() - t0, "symbolPathsBelowBudget": r[0] < pc}
 
 
 def main(argv=None):
@@ -47,7 +51,7 @@ def main(argv=None):
         digests = {B.digest(r["ids"]) for r in runs}
         rec = {"anchor": a["symbolId"], "class": a["class"], "indegree": a["indegree"], "bfsItems": len(bs),
                "sspathsItems": len(runs[0]["ids"]), "setEqual": set(runs[0]["ids"]) == bs, "repeatsIdentical": len(digests) == 1,
-               "paths": runs[0]["paths"], "pathCountExhausted": all(r["exhausted"] for r in runs),
+               "paths": runs[0]["paths"], "symbolPathsBelowBudget": all(r["symbolPathsBelowBudget"] for r in runs),
                "seconds": [round(r["seconds"], 4) for r in runs]}
         out.append(rec)
         print({k: v for k, v in rec.items() if k != "seconds"}, flush=True)

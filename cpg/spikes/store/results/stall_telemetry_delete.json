@@ -1,0 +1,58 @@
+{
+ "trials": [
+  {
+   "nodes": 20000,
+   "edges": 20000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.002,
+   "streamGoneAtS": 0.021,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  },
+  {
+   "nodes": 20000,
+   "edges": 20000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.001,
+   "streamGoneAtS": 0.016,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  },
+  {
+   "nodes": 20000,
+   "edges": 20000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.001,
+   "streamGoneAtS": 0.013,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  },
+  {
+   "nodes": 100000,
+   "edges": 400000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.0,
+   "streamGoneAtS": 0.032,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  },
+  {
+   "nodes": 100000,
+   "edges": 400000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.005,
+   "streamGoneAtS": 0.029,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  },
+  {
+   "nodes": 100000,
+   "edges": 400000,
+   "streamExistedBeforeDelete": true,
+   "deleteReturnS": 0.008,
+   "streamGoneAtS": 0.036,
+   "streamReappeared": false,
+   "streamExistsAfter1s": false
+  }
+ ]
+}

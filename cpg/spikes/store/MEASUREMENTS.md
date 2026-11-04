@@ -7,9 +7,8 @@
 > `recheck_{digests,ping,timeout}.json`). Code: `synth.py`, `bfs.py`, `bench_reach.py`, `swap_probe.py`,
 > `dep_index_probe.py`, `sspaths_agg_check.py`, `recheck_claims.py`; tests `tests/test_store_spikes.py`.
 > A figure with no file under `results/` is marked "unrecorded". Gate follow-up: `docs/reviews/connected-code-graph-store-spikes.md`.
-> **Hand-off to S23:** the six `falkordb-quirks.md` entries dated 2026-11-02 (+ one added in the gate follow-up) were folded in
-> early; S23 must not re-add them. The "default read `TIMEOUT` is 1000 ms" entry restates the older "Default `TIMEOUT` is 1000ms"
-> entry (~line 1143); folding the two is left to S23.
+> **S22/S23 (2026-11-04):** §4-§6 below. The six `falkordb-quirks.md` entries dated 2026-11-02 were folded in early; the duplicate
+> "default read `TIMEOUT` is 1000 ms" entry is now one line inside the older "Default `TIMEOUT` is 1000ms" entry (gate m6).
 
 ## 1. S20 -- BFS vs `algo.SSpaths`
 
@@ -85,7 +84,9 @@ BFS items at 100,000 and 300,000).
 **Aggregated form (`sspaths_agg_check.py`, `results/sspaths_aggregated.json`).** `... YIELD path WITH last(nodes(path)) AS e
 WHERE e:Symbol AND e.symbolId <> $id RETURN count(*), collect(DISTINCT e.symbolId)`, `pathCount` 1,000,000, `maxLen 6`,
 all 50 anchors, 20 repeats: **the item set equalled the BFS's on 50/50 anchors**, 20/20 repeats identical on 50/50, the
-budget was never exhausted by a hub (largest path count 473,266 Symbol-ending paths), pooled p95 0.53 s (hubs 1.89 s, mid
+budget was not shown to be exhausted (the record flag `pathCountExhausted` is True on 50/50 because it compares the count *after* the
+`WHERE e:Symbol` filter with the budget, gate P2-m1; the code now names it `symbolPathsBelowBudget`; only the top hub is known to be
+under budget, 946,532 paths < 1,000,000 in the unfiltered probe; largest Symbol-ending count 473,266), pooled p95 0.53 s (hubs 1.89 s, mid
 0.002 s, low 0.001 s) against the BFS's 3.70 s. It returns no chain, status or distance (those need the path or a second
 query), and the budget needed is not knowable beforehand. **`pathCount` 3,000,000 on the top hub killed the container**
 (below). So the benchmarked configuration fails rule 2 as recorded and the BFS stays the engine's walk, but "`SSpaths`
@@ -96,8 +97,10 @@ item-set-only `SSpaths` pre-pass is worth a guarded path budget.
 `Connection closed by server`; `docker inspect`: exit 137, `OOMKilled true`. The instance has no persistence, so every
 key (`ccg_p0spike`, `ccg_p0slice`) was lost. `cpg/infra/ccg-falkordb.sh up` recreated the container (`config: matches D7`,
 0 keys); `ccg_p0spike` was rebuilt (record above); **`ccg_p0slice` was not reloaded** (see the follow-up report: R-B names S13
-and `teco` grants it). Memory at `pathCount` 1,000,000: `used_memory_peak` 797 MB. Nothing proves 3,000,000 alone caused it
-(not repeated).
+and `teco` grants it). Memory at `pathCount` 1,000,000: `used_memory_peak` 797 MB (the highest budget observed safe on this 330 MB graph in the 2 GB
+container: the **observed ceiling is 1,000,000**). Nothing proves 3,000,000 alone caused it (not repeated). That memory grows with
+the budget rather than with the paths found (the top hub had only 946,532 paths in all) is a **hypothesis**, untested (gate P2-m4); it
+may be probed only on a disposable instance, never `ccg-falkordb`.
 
 **Decision (§4.5 rule, `bench_reach.adopt_decision`, depth >= 3), as benchmarked (row-returning, `pathCount` 10,000): the
 BFS (`bfs-v1`); `SSpaths` is not adopted.** Rule 1 holds (20/20 identical for every anchor, 5/5 at the `D = 5` hubs). Rule 3
@@ -189,3 +192,99 @@ DDL fails `test_ddl_file_matches_section_1_6_statically`; dropping the index als
 `test_loader_v1.py::test_every_edge_endpoint_label_has_an_index_on_its_id_property` (every `EDGE_ORDER` endpoint label must
 have an index on its `ID_PROP`). `test_live_slice.py::test_sl3_load_integrity`
 (live, on `ccg_p0slice`) now expects 11 constraints; its fixture reloads the slice, so it is the reload (R-B).
+
+## 4. S22 -- ACL matrix, lock and replay, `TIMEOUT_MAX` (2026-11-04)
+
+Instance `ccg-falkordb` (module `41811`, Redis 8.6.3, 8 CPUs), keys `ccg_p0spike__*` only; `ccg_p0slice` untouched. Code:
+`acl_probe.py`, `lock_replay.py`, `timeout_probe.py`; tests `tests/test_lock_replay.py`. Raw: `results/{acl_matrix,
+lock_replay_timing,timeout_probe}.json`.
+
+**ACL matrix** (`python spikes/store/acl_probe.py`; users `ccg_build`, `ccg_verdict`, `ccg_engine`, `ccg_raw_p0`, deleted afterwards:
+`usersLeft` []). 19 cells per user (`GRAPH.QUERY`, `RO_QUERY`, `EXPLAIN`, `PROFILE`, `LIST`, `RENAME`, `EXPIRE`, `DEL` graph key,
+`GRAPH.CONSTRAINT`, `INFO`, lock `SET`/`EVAL` release/`DEL`, `XLEN telemetry`, foreign key read/write, two `EVAL` escapes, the swap
+`EVAL`) under three ACL variants. Expectation = proposal §3.5, plus `+info` everywhere (V17) and engine = `RO_QUERY` + `EXPLAIN` on
+the live key (the proposal says only "read").
+
+| variant | observed vs expectation |
+|---|---|
+| `selector` (lock grants `(~<s>:verdict_lock +set +get +del +eval)`; `ccg_build` also `+exists` for the swap script) | **0 differences**, 4 users x 19 cells; constructor `ok` for all four |
+| `flat+get` (`+set +get +del +eval` flat on the patterns) | `ccg_build` and `ccg_verdict` can `DEL` the graph key and `EVAL ... DEL` it |
+| `spec` (proposal §3.5 to the letter, flat `+set +del +eval`) | the same leak, **and** the release `EVAL` fails: its in-script `GET` is ACL-checked and `+get` is not granted |
+
+`ccg_raw_p0` without `+info`: the constructor fails (`no permissions to run the 'info' command`), as V17. `GRAPH.PROFILE`,
+`GRAPH.LIST`, `XLEN telemetry{...}` and every foreign-key command: `NOPERM` for all four users in all variants. **Findings for S50
+(proposal §3.5):** lock grants as a key-scoped selector, not flat; `+get` added to the lock grants; `ccg_build` also needs `+exists`
+(and `+eval` for a guarded swap); `+info` on all four users.
+
+**Lock and replay** (`lock_replay.py`; `tests/test_lock_replay.py`: 13 non-live + 8 live). Live fault tests pass: a verdict issued
+during a build is present after the swap (B6); lock `PX` 300 ms with a 0.9 s sleep before `RENAME`: the verdict that took the
+expired lock and patched the *old* key is present after the swap, found by the remainder replay (`remainder` 1); the swap's
+compare-and-delete release returns False and leaves a lock another holder took after expiry; a `SIGKILL` between append and patch
+leaves the lock to expire by `PX`, and the next verdict (replayed 2) or the next swap (replayed 1) re-converges with offset =
+log length; the offset never moves backwards. Residual: the remainder replay runs after the lock may have expired, so a verdict
+landing between its offset read and its last patch is caught only by the *next* verdict or swap (the design's self-healing), not
+within the swap.
+
+**Sizing, lock ttl** (`python spikes/store/lock_replay.py measure`: 20,000 indexed `Link` nodes, 1,000 log entries, 5 repetitions):
+replay 0.445-0.461 s, `RENAME` 0.000-0.001 s, remainder check 0.002 s; worst total **0.464 s**; one verdict (lock, fsync, one patch) 8-11
+ms. Rule 3 x worst = 1.39 s -> **lock ttl 2,000 ms** (next whole value up). **P0-scale default; P1 re-derives it** from its own log and
+graph sizes (the replay is one query per entry, so it scales with log length, not graph size).
+
+**Sizing, `TIMEOUT_MAX`.** Worst per-edge-type p99 per-level read in S20 (§1): `DATA <-` **537.6 ms**; rule 10 x = 5,376 ms -> next value of
+the 1-2-5 series **10,000 ms** (6,000 if "round" means a whole second). The "each read <= a tenth of it" clause: the largest recorded
+read at <= 1,000 ids is 939.8 ms, under the 1,000 ms tenth, with 6 % headroom. **P0-scale default; P1 re-derives it** from its own p99.
+
+**`TIMEOUT_MAX` against loads, backfills, reads** (`python spikes/store/timeout_probe.py`; as `ccg_build`, windows of 800, 3,000 and
+10,000 ms, original 0 restored, ceilings and stop rules in the script's docstring; peak `used_memory` 373 MB):
+
+| probe | observed |
+|---|---|
+| slow write (un-indexed endpoint scan), cap 0: 1,000 / 2,000 / 4,000 / 6,000 rows | 1.09 / 2.2 / 4.4 / 6.8 s |
+| cap 3,000: 2,000 rows (2.27 s), no `timeout` / `timeout 3000` | completed, 2,000 committed each |
+| cap 3,000: 4,000 rows, no `timeout` / `timeout 3000` / `timeout 1000` | `Query timed out` at 3.01 / 3.02 / 1.005 s; **0 committed** |
+| cap 3,000: `timeout 60000` | rejected in 0.0 s: "cannot exceed the TIMEOUT_MAX" |
+| cap 10,000: 20,000-row edge batch (indexed), no `timeout` / `timeout 10000` | 0.131 / 0.149 s |
+| cap 10,000: 20,000-row node batch, no `timeout` / `timeout 10000` | 0.013 / 0.012 s |
+| cap 800: `GRAPH.CONSTRAINT CREATE UNIQUE` on 300,000 nodes | `OPERATIONAL` after 1.16 s (0.21 s at cap 0 in the same run); not killed |
+| cap 800: `db.idx.fulltext.createNodeIndex` on 300,000 nodes | `OPERATIONAL` after 1.65 s (1.70 s at cap 0); `queryNodes('sym17')` 60 hits; not killed |
+
+So (1) a nonzero cap applies to a write that passes no `timeout` (and the engine default 1,000 ms does not), so an explicit `timeout` is
+**not needed to avoid a kill**; it is needed only to stay at or below the cap (equal is accepted, above is rejected, for reads too);
+(2) a killed write commits nothing; (3) the constraint and full-text backfills are asynchronous and not under the cap: poll them.
+**Loader rule for P1/S17:** pass `timeout <= TIMEOUT_MAX` (the value is configuration, since the build user has no `GRAPH.CONFIG`), keep
+every batch's measured time under the cap with margin (a 20,000-row indexed batch is 0.13 s, 1.3 % of 10 s), and never load an edge
+label whose endpoint label has no id index (the un-indexed form is the only slow write seen).
+
+## 5. S23 -- the `PING` stall and the batch ceiling (2026-11-04)
+
+`python spikes/store/stall_probe.py` (`results/stall_probe.json`): one query per write, `PING` every ~5 ms from a separate process,
+`INFO cpu`/`memory` deltas around each write; graph `ccg_p0spike__stall_g`, 100,000 `N` nodes (indexed `id`) and 20,000 `M` nodes
+(un-indexed). Peak `used_memory` over the run 917 MB (`INFO` `used_memory_peak`, 500k-edge step).
+
+| shape | edges | write (s) | worst `PING` during (ms) | `INFO cpu` user delta (s) | `used_memory` delta (MB) |
+|---|---|---|---|---|---|
+| indexed | 20,000 | 0.71 | 11.7 | 0.65 | +1.5 |
+| indexed | 50,000 | 1.75 | 30.5 | 1.6 | +18 |
+| indexed | 100,000 | 3.54 | **73.1** | 3.3 | +53 |
+| indexed | 200,000 | 7.04 | 182 | 6.5 | +142 |
+| indexed | 500,000 | 18.2 | 485 | 16.7 | +410 |
+| un-indexed | 1,000 | 4.99 | 8.2 | 4.8 | -2 |
+| un-indexed | 2,000 | 9.90 | 11.7 | 9.8 | 0 |
+| un-indexed | 5,000 | 23.9 | 17.6 | 23.4 | 0 |
+| un-indexed | 10,000 | 49.6 | 27.0 | 48.4 | 0 |
+
+Idle baseline worst `PING` 0.75-4.6 ms; after each write 0.9-5.3 ms. **No stall reproduced**: the worst `PING` grows about 1 ms per
+1,000 edges (one gap at the commit) and the instance answered throughout the un-indexed writes. The incident (minutes without a
+`PING`, 100k edges, cause unestablished) is therefore not explained by write size; the only minutes-long behaviour found is the un-indexed
+write itself (about 5 ms per row over 20k nodes, so 100k rows over a 20k-node label would take tens of minutes while `PING` still
+answers: inferred, not run), which would look like an unresponsive instance to a client that waits on the write.
+
+**Batch ceiling for D16: 100,000 rows per query** (largest size tested with worst `PING` under 100 ms, a 3.5 s write, 2.8x under a
+10 s `TIMEOUT_MAX`). Throughput is flat from 20,000 to 500,000 (28,200 / 28,600 / 28,200 / 28,400 / 27,500 edges/s), so a bigger batch
+buys nothing: **`BATCH_MAX` stays 20,000**; 100,000 is the hard ceiling, never a target. The ceiling holds for indexed endpoints only.
+P0-scale figure on an idle instance; P1 re-measures under its own concurrency.
+
+**Telemetry after `GRAPH.DELETE`** (`python spikes/store/stall_probe.py delete-probe`, `results/stall_telemetry_delete.json`): the
+stream outlived the delete's return by 13-21 ms (20k nodes/20k edges) and 29-36 ms (100k/400k), 6/6 trials, never reappearing; a
+`--scan` run within milliseconds of the delete after the stall probe's ~1M-edge graph listed it once. This reproduces the earlier
+"asynchronous removal sighting" (§2) as a lag of tens of ms: a retention check polls.

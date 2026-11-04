@@ -22,7 +22,7 @@ Loaded and read live (38,121 nodes, 90,867 edges, 10 `UNIQUE` constraints `OPERA
 `PROVIDES`, `CONSUMES`, `VIA`, `TO`, `ON`, `LIFTED_VIA`. **Frozen, untested** (first testable phase in brackets):
 `ownedRegions` and the anchor rule [P1 fixture]; multi-candidate links [P1]; `MOUNTED_BY`, `SkippedFile`,
 `PROVIDES` props [P1 loader]; `fieldAccess` `READS`/`WRITES`, `ConfigEntry`, `SchemaEntry`, `Dependency`, `Mark`,
-`Finding`, `RAN`, `LogTemplate` [P1-P5]; `TIMEOUT_MAX`-nonzero loads and multi-batch splitting [S22/S23, P1];
+`Finding`, `RAN`, `LogTemplate` [P1-P5]; multi-batch splitting at P1 scale [P1];
 `arg(i)`/`Ret` traversal rows (§3) [P1]; a `DATA` cycle beyond the self-edge [S20 synthetic graph].
 
 ### 1.2 Deltas against the graph note
@@ -161,26 +161,33 @@ this and add a fixture (a contract walk from a provider-less CP lists its consum
 `bfs-v1` does not implement the interprocedural `arg(i)` rows (`CALLS ->` into a callee, index-matched
 `HAS_PARAM ->`, a `Ret`-reached callee summary onto the call site's `r`). An **item is a function containing a
 reached point**; path-narrowing reduces states and `DATA` fan-out, not items (measured in
-`docs/test-reports/connected-code-graph-p0-slice-report.md` §6.8; reproducible from `probe_s14.py`). This is a sound over-approximation (recall preserved); the stored edges already
-support the precise walk (live: `apiFetch`'s `Ret` reaches `parse`, `text`, `fetch`, `buildUrl@108`, `Param opts`
-over `DATA`, paths `r→ret`, `r→a0`, `r→recv` consistent), so closing it adds traversal rows, no node, edge or prop.
+`docs/test-reports/connected-code-graph-p0-slice-report.md` §6.8; reproducible from `probe_s14.py`, whose V2 gate ends
+every non-`Ret` item). Slice walks (anchor `p0`, `p0.path`, `p0.method`, `p0.query`, `p0.nothing`, value walk from `buildUrl`):
+21 items each; states as built (V0) **98 / 84 / 84 / 82 / 81 / 83**; with the V2 gate **19 / 5 / 5 / 3 / 2 / 4**. This is a
+sound over-approximation (recall preserved); the stored edges already support the precise walk (live: `apiFetch`'s `Ret`
+reaches `parse`, `text`, `fetch`, `buildUrl@108`, `Param opts` over `DATA`, paths `r→ret`, `r→a0`, `r→recv` consistent), so closing it adds
+traversal rows, no node, edge or prop.
 
-**Labelling rule (M2).** Until those rows exist, a continuation `HAS_PARAM|HAS_CALL|HAS_COND <-` followed by
-`CALLS <-` or `TO <-` is a **`possible`** hop, `reason: function-level-continuation` (weight 1,000). A continuation
-from a `Ret` (`HAS_RETURN <-`) and `CALLS <-` from an anchor `Symbol` stay `confirmed`. Each item carries `viaData`
-(its best path contains a `DATA` hop) so "path-matched" is never claimed for function-level items. Impact precision is
-not scored before the `arg(i)`/`Ret` rows land. Consequence for the slice: the 21 `buildUrl` items become `possible`,
-which `test_live_slice.py` currently asserts `confirmed`.
+**Labelling rule (M2) and the `function` state.** A fourth state kind, `function`, is entered by `HAS_PARAM|HAS_CALL|HAS_COND <-`
+from a non-`Ret` point; `HAS_RETURN <-` goes into `value`, not `function`. From `function`, `CALLS <-` and `TO <-` are **`possible`**
+hops with `reason: function-level-continuation`; from an anchor `Symbol` or a `value` state they stay `confirmed`. The state costs
++19 states on the five `apiFetch` walks and +21 on the `buildUrl` walk against the model without it. **Cost is lexicographic:
+`(possible hops, distance, level)`, ties broken on the predecessor's stable key.** It carries no numeric weight; it equals a weight
+of 1,000 per `possible` hop while distance stays below 1,000, which the level cap 64 guarantees. Each `Item` carries `via_data` (its
+best path contains a `DATA` hop, so "path-matched" is never claimed for function-level items) and `reason` (the first
+`function-level-continuation` on its chain). Impact precision is not scored before the `arg(i)`/`Ret` rows land. Consequence for the
+slice: **20 of the 21 `buildUrl` items become `possible`**; `apiFetch`, the direct caller of the anchor (`CALLS <-` from an anchor
+`Symbol`), stays `confirmed`.
 
 ## 4. Load protocol (D16 / S22 / S23)
 
 Graph note §3.5 as written, with: the indexes of §1.6's index column on the empty `ccg_p0slice__build_<id>`; nodes then edges in `UNWIND` batches **≤ 20,000 rows**, read from one constant (`BATCH_MAX`).
-**20,000 is provisional and carried to S23, which replaces it** with the ceiling its `PING`-stall probe records;
-S17 closes without that value; one connection, retries explicitly zero (a `Retry(NoBackoff(), 0)` object, never the
-client default), socket timeout 300 s; an **explicit query `timeout` = `TIMEOUT_MAX` on every load query whenever it
-is nonzero**; a created-count check per edge batch; constraints after the load, polled to `OPERATIONAL`, any `FAILED`
-fails the build; `:Snapshot` last; `RENAME`. Verified live on the slice with `TIMEOUT_MAX` 0 only; the nonzero branch
-and a batch split at scale are first tested by S22/S23.
+**`BATCH_MAX` stays 20,000**; S23's measured **hard ceiling is 100,000 rows per query** (§6, row 14), never a target;
+one connection, retries explicitly zero (a `Retry(NoBackoff(), 0)` object, never the
+client default), socket timeout 300 s; an **explicit query `timeout` <= `TIMEOUT_MAX` on every load query whenever it
+is nonzero** (S22: without one the cap applies anyway and a write over it dies with nothing committed; a `timeout` above the cap is
+rejected, one equal to it is accepted; §6, row 6); a created-count check per edge batch; constraints after the load, polled to `OPERATIONAL`, any `FAILED`
+fails the build; `:Snapshot` last; `RENAME`. Verified live on the slice with `TIMEOUT_MAX` 0, and on the S22/S23 probes with 0 and nonzero caps (§6).
 
 ## 5. Tests that change or are added
 
@@ -194,22 +201,44 @@ Cited by test name; paths are under `cpg/spikes/vertical-slice/` unless stated.
 - **Lookup scope (§1.3, §1.4).** A live-store test loading **the same path in two repos**, mapped in one and in `SkippedFile`
   in the other, asserting the File+line anchor query returns only the queried repo's symbols, and "mapped", "not mapped" and "not found" per repo, and that a `.d.ts` path answers "not found".
 - **Value-mode labelling (§3.3).** `tests/test_live_slice.py::test_sl4_contract_mode_lists_the_endpoints_caller_confirmed_at_distance_one`
-  is unchanged; the `buildUrl` value-walk assertion that every item is `confirmed` with no `possible` hop changes to
-  `possible` / `function-level-continuation`. New, on hand-built graphs against `impact.py`: (a) a `Ret` reached by `DATA`
-  and then `HAS_RETURN <-`, `CALLS <-` → the caller is `confirmed` (kills "label everything `possible`"); (b) a planted
-  case where the reached point does not reach the callee's `Ret` → the caller is `possible`; (c) `viaData` is true exactly
-  when the best path contains a `DATA` hop.
+  is unchanged; the `buildUrl` value-walk assertion that every item is `confirmed` with no `possible` hop changes to 20 `possible` /
+  `function-level-continuation` and `apiFetch` `confirmed`. On hand-built graphs against `impact.py`, in `spikes/vertical-slice/tests/test_impact_v1.py`:
+  (a) `test_a_caller_reached_through_a_ret_of_the_reached_function_is_confirmed` (kills "label everything `possible`");
+  (b) `test_a_caller_of_a_function_whose_return_the_change_does_not_reach_is_possible_with_the_reason`;
+  (c) `test_via_data_is_true_exactly_when_the_items_best_path_has_a_data_hop` (`Item.via_data`).
 - **Traversal guards, against `impact.py`'s `bfs-v1`** (not S20's `cpg/spikes/store/bfs.py`, a benchmark implementation):
-  a two-point `DATA` cycle with matching paths asserts termination and the state count; a strictly-smaller-cost
-  re-expansion test pins `<` against `<=` (the survivor mutant I7); a reader returning 10,000 rows asserts the
+  a two-point `DATA` cycle with matching paths asserts termination and the state count; `test_an_equal_cost_second_arrival_is_not_re_expanded_so_state_counts_stay_exact` and
+  `test_a_strictly_smaller_arrival_is_re_expanded_and_improves_everything_downstream` pin `<` against `<=` (the survivor mutant I7); a reader returning 10,000 rows asserts the
   `RESULTSET_SIZE` raise; a chain deeper than 64 levels asserts the level guard raises.
 - **D8.** `impact.py`'s `data_in` coalesces an absent `status`/`reason` to the default; a test loads an edge without them.
 - **Retries.** A test asserts the loader's connection carries a zero-retry object, independent of the client default.
 
-## 6. Carried and open
+## 6. Store-spike decisions (S20-S23) and carried items
 
-1. **Batch ceiling** → S23 (§4). Not held for.
-2. **Not in this note's delivery:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/tests/test_ddl_live.py` and the loader changes
-   D1-D8; they follow from §1 and need a live `__build_` key.
-3. **`MOUNTED_BY`** waits on the assembler emitting mount ids (D5), P1.
-4. S20/S21 measurements: `cpg/spikes/store/MEASUREMENTS.md` (S23's input); `Dependency(depId)` added (§1.6, D10).
+One row per decision, each with its measurement. Raw figures, commands and result files: `cpg/spikes/store/MEASUREMENTS.md` (§n below).
+Every figure is **P0-scale**: one idle instance, a 454k-node synthetic graph, 2 GB cap; values marked "P1 re-derives" are defaults, not
+design constants.
+
+| # | Decision | Value | Measurement |
+|---|---|---|---|
+| 1 | Traversal operator | `bfs-v1`; `algo.SSpaths` not adopted | §1: row-returning `SSpaths` item sets differ on 15/50 anchors (all 15 hubs; 85 % of BFS hub items missing at `D` = 3); p95 3.70 s (BFS) vs 0.64 s; chains differ in 3 % of common items; the aggregated form equals the BFS set on 50/50 anchors (p95 0.53 s) but returns no chain, which FR-20 requires |
+| 2 | Item-set-only `SSpaths` pre-pass | open for `architect`, not adopted | §1: needs a `pathCount` budget not knowable beforehand; row 3 is the cost |
+| 3 | `SSpaths` `pathCount` ceiling | 1,000,000 on this shape; never more | §1: peak 797 MB at 1,000,000 (330 MB graph, 2 GB cap); 3,000,000 on the top hub OOM-killed the container (exit 137), memory-vs-budget growth is an untested hypothesis |
+| 4 | BFS read chunk | <= 1,000 ids, halved on a full reply | §1: 101,395 reads, p50 3.9 / p95 61.8 / p99 224.0 / max 939.8 ms; worst per-edge-type p99 `DATA <-` 537.6 ms |
+| 5 | `TIMEOUT_MAX` default | **10,000 ms** (P1 re-derives) | §4: 10 x 537.6 ms = 5,376 -> 10,000 in the 1-2-5 series; max read 939.8 ms <= the 1,000 ms tenth |
+| 6 | Load rule under a nonzero cap | pass `timeout <= TIMEOUT_MAX`; batch time well under the cap | §4: no `timeout` is capped anyway (4,000-row write killed at 3.01 s under cap 3,000, 0 committed); above the cap rejected, equal accepted; 20k-row batch 0.13 s at cap 10,000 |
+| 7 | Constraint and full-text backfill under a cap | poll `OPERATIONAL`; not under the cap | §4: cap 800 ms, 300k nodes: constraint 1.16 s, full-text 1.65 s, neither killed |
+| 8 | Verdict-lock ttl | **2,000 ms** (P1 re-derives) | §4: worst (1,000-entry replay + `RENAME` + remainder check) 0.464 s on 20k `Link`s; 3 x = 1.39 s |
+| 9 | Lock/replay protocol (proposal §3.8) | as written, plus the log tail repair and a monotonic offset | §4: B6, mid-swap expiry, other-holder release, SIGKILL between append and patch (verdict and swap) re-converge; 13 non-live + 8 live tests; 21 mutants of the lock, ACL-rule and stall code, all killed |
+| 10 | ACL users | lock grants as a key-scoped selector, `+get` on the lock key, `+exists` for `ccg_build`, `+info` on all four | §4: 4 users x 19 cells, 0 differences from the proposal; flat `+del` lets `ccg_build`/`ccg_verdict` delete the live graph; no `+get` breaks the release |
+| 11 | Swap form | plain `RENAME build live` (first build and normal case); guarded `EVAL` only where a kept `prev` is wanted; zero kept snapshots | §2: `MULTI` does not roll back; the `EVAL` guards all three keys; `RENAME` 0.4 ms with a 12 s reader in flight |
+| 12 | Telemetry | `MAX_INFO_QUERIES` 0 or small on the instance; no ACL pattern covers `telemetry{...}`; a retention check after `GRAPH.DELETE` polls | §2, §5: 0 -> no stream; `XTRIM` regrows; removal lags the delete by 13-36 ms |
+| 13 | `Dependency(depId)` | index before the load, `UNIQUE` after | §3: 52.3 s -> 0.19 s at 20,000 edges |
+| 14 | Batch ceiling (D16) | `BATCH_MAX` 20,000; hard ceiling **100,000** rows per query, indexed endpoints | §5: worst `PING` 73.1 ms and 3.5 s write at 100,000; 182 ms at 200,000; throughput flat at about 28,000 edges/s |
+| 15 | The `PING` stall | not reproduced | §5: worst `PING` 485 ms at 500,000 edges; 27 ms during a 49.6 s un-indexed write |
+
+Carried:
+1. **Not in this note's delivery:** `cpg/ccg/store/ddl_v1.cypher`, `cpg/tests/test_ddl_live.py` and the loader changes D1-D8; they follow from §1 and
+   need a live `__build_` key.
+2. **`MOUNTED_BY`** waits on the assembler emitting mount ids (D5), P1.
+3. **For S50 (proposal §3.5, §3.8):** the ACL grants of row 10, the lock ttl of row 8, `TIMEOUT_MAX` of row 5.

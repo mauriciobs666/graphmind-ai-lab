@@ -1,0 +1,59 @@
+{
+ "links": 20000,
+ "entries": 1000,
+ "reps": 5,
+ "runs": [
+  {
+   "replayed": 1000,
+   "replay_s": 0.4452075809999769,
+   "rename_s": 0.00032775299996501417,
+   "remainder": 0,
+   "remainder_s": 0.00217260699992039,
+   "released": true,
+   "single_verdict_s": 0.00938693099988086,
+   "offsetAfter": 1001
+  },
+  {
+   "replayed": 1000,
+   "replay_s": 0.45248704499999803,
+   "rename_s": 0.00037208899993856903,
+   "remainder": 0,
+   "remainder_s": 0.00226629500002673,
+   "released": true,
+   "single_verdict_s": 0.009807322000142449,
+   "offsetAfter": 1001
+  },
+  {
+   "replayed": 1000,
+   "replay_s": 0.4521291139999448,
+   "rename_s": 0.000400638999963121,
+   "remainder": 0,
+   "remainder_s": 0.002329880999695888,
+   "released": true,
+   "single_verdict_s": 0.008376795999993192,
+   "offsetAfter": 1001
+  },
+  {
+   "replayed": 1000,
+   "replay_s": 0.4609416399998736,
+   "rename_s": 0.0005236580000200775,
+   "remainder": 0,
+   "remainder_s": 0.0024930680001489236,
+   "released": true,
+   "single_verdict_s": 0.00946021700019628,
+   "offsetAfter": 1001
+  },
+  {
+   "replayed": 1000,
+   "replay_s": 0.45590419699965423,
+   "rename_s": 0.000404643999900145,
+   "remainder": 0,
+   "remainder_s": 0.0024178560001928417,
+   "released": true,
+   "single_verdict_s": 0.010802497999975458,
+   "offsetAfter": 1001
+  }
+ ],
+ "worstTotalS": 0.4639583660000426,
+ "ttlRuleS": 1.3918750980001278
+}

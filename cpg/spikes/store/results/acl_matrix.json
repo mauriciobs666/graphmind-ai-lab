@@ -1,0 +1,406 @@
+{
+ "variants": {
+  "selector": {
+   "rules": {
+    "ccg_build": "~ccg_p0spike__acl* +graph.query +graph.constraint +rename +expire +exists +info +eval (~ccg_p0spike__acl:verdict_lock +set +get +del +eval)",
+    "ccg_verdict": "~ccg_p0spike__acl +graph.query +info (~ccg_p0spike__acl:verdict_lock +set +get +del +eval)",
+    "ccg_engine": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info",
+    "ccg_raw_p0": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info"
+   },
+   "cells": {
+    "ccg_build": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "allowed",
+     "EXPIRE": "allowed",
+     "DEL (graph key)": "NOPERM-key",
+     "GRAPH.CONSTRAINT": "allowed",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "allowed",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-key",
+     "EVAL: DEL graph key in script": "NOPERM-key",
+     "EVAL swap script (RENAME build->live)": "allowed"
+    },
+    "ccg_verdict": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-key",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "allowed",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-key",
+     "EVAL: DEL graph key in script": "NOPERM-key",
+     "EVAL swap script (RENAME build->live)": "NOPERM-key"
+    },
+    "ccg_engine": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    },
+    "ccg_raw_p0": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    }
+   },
+   "constructor": {
+    "ccg_build": "ok",
+    "ccg_verdict": "ok",
+    "ccg_engine": "ok",
+    "ccg_raw_p0": "ok"
+   },
+   "diff": {
+    "ccg_build": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    },
+    "ccg_verdict": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    },
+    "ccg_engine": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    },
+    "ccg_raw_p0": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    }
+   }
+  },
+  "flat+get": {
+   "rules": {
+    "ccg_build": "~ccg_p0spike__acl* +graph.query +graph.constraint +rename +expire +exists +info +set +get +del +eval",
+    "ccg_verdict": "~ccg_p0spike__acl ~ccg_p0spike__acl:verdict_lock +graph.query +info +set +get +del +eval",
+    "ccg_engine": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info",
+    "ccg_raw_p0": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info"
+   },
+   "cells": {
+    "ccg_build": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "allowed",
+     "EXPIRE": "allowed",
+     "DEL (graph key)": "allowed",
+     "GRAPH.CONSTRAINT": "allowed",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "allowed",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-key",
+     "EVAL: DEL graph key in script": "allowed",
+     "EVAL swap script (RENAME build->live)": "allowed"
+    },
+    "ccg_verdict": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "allowed",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "allowed",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-key",
+     "EVAL: DEL graph key in script": "allowed",
+     "EVAL swap script (RENAME build->live)": "NOPERM-key"
+    },
+    "ccg_engine": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    },
+    "ccg_raw_p0": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    }
+   },
+   "constructor": {
+    "ccg_build": "ok",
+    "ccg_verdict": "ok",
+    "ccg_engine": "ok",
+    "ccg_raw_p0": "ok"
+   },
+   "diff": {
+    "ccg_build": {
+     "allowedButNotExpected": [
+      "DEL (graph key)",
+      "EVAL: DEL graph key in script"
+     ],
+     "expectedButNotAllowed": []
+    },
+    "ccg_verdict": {
+     "allowedButNotExpected": [
+      "DEL (graph key)",
+      "EVAL: DEL graph key in script"
+     ],
+     "expectedButNotAllowed": []
+    },
+    "ccg_engine": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    },
+    "ccg_raw_p0": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    }
+   }
+  },
+  "spec": {
+   "rules": {
+    "ccg_build": "~ccg_p0spike__acl* +graph.query +graph.constraint +rename +expire +exists +info +set +del +eval",
+    "ccg_verdict": "~ccg_p0spike__acl ~ccg_p0spike__acl:verdict_lock +graph.query +info +set +del +eval",
+    "ccg_engine": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info",
+    "ccg_raw_p0": "~ccg_p0spike__acl ~ccg_p0spike__acl__ov_* +graph.ro_query +graph.explain +info"
+   },
+   "cells": {
+    "ccg_build": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "allowed",
+     "EXPIRE": "allowed",
+     "DEL (graph key)": "allowed",
+     "GRAPH.CONSTRAINT": "allowed",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "allowed",
+     "EVAL swap script (RENAME build->live)": "allowed"
+    },
+    "ccg_verdict": {
+     "GRAPH.QUERY": "allowed",
+     "GRAPH.RO_QUERY": "NOPERM-cmd",
+     "GRAPH.EXPLAIN": "NOPERM-cmd",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "allowed",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "allowed",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "allowed",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-cmd",
+     "foreign QUERY": "NOPERM-key",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "allowed",
+     "EVAL swap script (RENAME build->live)": "NOPERM-key"
+    },
+    "ccg_engine": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    },
+    "ccg_raw_p0": {
+     "GRAPH.QUERY": "NOPERM-cmd",
+     "GRAPH.RO_QUERY": "allowed",
+     "GRAPH.EXPLAIN": "allowed",
+     "GRAPH.PROFILE": "NOPERM-cmd",
+     "GRAPH.LIST": "NOPERM-cmd",
+     "RENAME": "NOPERM-cmd",
+     "EXPIRE": "NOPERM-cmd",
+     "DEL (graph key)": "NOPERM-cmd",
+     "GRAPH.CONSTRAINT": "NOPERM-cmd",
+     "INFO": "allowed",
+     "SET lock": "NOPERM-cmd",
+     "EVAL release (GET+DEL in script)": "NOPERM-cmd",
+     "DEL lock": "NOPERM-cmd",
+     "XLEN telemetry": "NOPERM-cmd",
+     "foreign RO_QUERY": "NOPERM-key",
+     "foreign QUERY": "NOPERM-cmd",
+     "EVAL: GET foreign key in script": "NOPERM-cmd",
+     "EVAL: DEL graph key in script": "NOPERM-cmd",
+     "EVAL swap script (RENAME build->live)": "NOPERM-cmd"
+    }
+   },
+   "constructor": {
+    "ccg_build": "ok",
+    "ccg_verdict": "ok",
+    "ccg_engine": "ok",
+    "ccg_raw_p0": "ok"
+   },
+   "diff": {
+    "ccg_build": {
+     "allowedButNotExpected": [
+      "DEL (graph key)",
+      "EVAL: DEL graph key in script"
+     ],
+     "expectedButNotAllowed": [
+      "EVAL release (GET+DEL in script)"
+     ]
+    },
+    "ccg_verdict": {
+     "allowedButNotExpected": [
+      "DEL (graph key)",
+      "EVAL: DEL graph key in script"
+     ],
+     "expectedButNotAllowed": [
+      "EVAL release (GET+DEL in script)"
+     ]
+    },
+    "ccg_engine": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    },
+    "ccg_raw_p0": {
+     "allowedButNotExpected": [],
+     "expectedButNotAllowed": []
+    }
+   }
+  }
+ },
+ "expect": {
+  "ccg_build": [
+   "DEL lock",
+   "EVAL release (GET+DEL in script)",
+   "EVAL swap script (RENAME build->live)",
+   "EXPIRE",
+   "GRAPH.CONSTRAINT",
+   "GRAPH.QUERY",
+   "INFO",
+   "RENAME",
+   "SET lock"
+  ],
+  "ccg_verdict": [
+   "DEL lock",
+   "EVAL release (GET+DEL in script)",
+   "GRAPH.QUERY",
+   "INFO",
+   "SET lock"
+  ],
+  "ccg_engine": [
+   "GRAPH.EXPLAIN",
+   "GRAPH.RO_QUERY",
+   "INFO"
+  ],
+  "ccg_raw_p0": [
+   "GRAPH.EXPLAIN",
+   "GRAPH.RO_QUERY",
+   "INFO"
+  ]
+ },
+ "constructor_without_info": "fail:User ccg_raw_p0 has no permissions to run the 'info' command",
+ "usersLeft": []
+}

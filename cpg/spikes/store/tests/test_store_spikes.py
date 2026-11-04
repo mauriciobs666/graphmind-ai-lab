@@ -535,6 +535,8 @@ def test_swap_script_checks_all_three_keys_before_its_first_rename():
                        "EXISTS', KEYS[3]) == 1 then return 'refused: prev present'"):
         assert guard_text in text and text.index(guard_text) < first_rename
     assert text.count("redis.call('RENAME'") == 2 and "refused" not in W.OLD_SCRIPT.replace("refused: build absent", "")
+    # P2-m2: live moves to prev BEFORE build moves to live (the reverse destroys the old snapshot and leaves prev = new)
+    assert text.index("redis.call('RENAME', KEYS[1], KEYS[3])") < text.index("redis.call('RENAME', KEYS[2], KEYS[1])")
 
 
 @pytest.mark.live
