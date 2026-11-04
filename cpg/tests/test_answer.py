@@ -1897,3 +1897,330 @@ def test_the_runtime_built_group_kind_fixes_its_reason_and_the_possible_item_nee
     rejects(doc, lambda d: d["groups"][1].update(reason="resolution-unverified"), "schema")
     rejects(doc, lambda d: d["groups"][0].update(reason="runtime-built"), "schema")
     rejects(b_possible(), lambda d: d["items"][0].pop("reason"), "required|V7")
+
+
+# --- S34 fix round (gate review F1-F9) ------------------------------------------------------------------
+
+# F1: a lone surrogate is not UTF-8-encodable; it is rejected at the door, never a UnicodeEncodeError later.
+def _surrogate_doc() -> dict:
+    d = b_mixed()
+    d["interpretation"]["request"]["anchors"][0]["qname"] = "salesperson/src/api/endpoints.ts::api\ud800Fetch"
+    return d
+
+
+def test_a_lone_surrogate_is_an_answer_error_in_validate_dumps_and_loads():
+    doc = _surrogate_doc()
+    with pytest.raises(AnswerError, match="V1.*UTF-8"):
+        validate(doc)
+    with pytest.raises(AnswerError, match="V1"):
+        dumps(doc)
+    raw = b'{"x":"api\\ud800Fetch"}'  # what json.loads hands over for a lone escaped surrogate
+    with pytest.raises(AnswerError, match="V1"):
+        loads(raw)
+
+
+def test_a_lone_surrogate_in_free_text_or_a_key_is_rejected_too_and_is_canonical_returns_false_or_raises_answer_error():
+    doc = b_stale()
+    doc["staleness"]["units"][0]["reason"] = "bad \udfff text"
+    with pytest.raises(AnswerError, match="V1"):
+        validate(doc)
+    good = dumps(golden())
+    bad = good.replace(b'"graphmind-ai-lab"', b'"graphmind\\udc80-ai-lab"', 1)
+    try:
+        assert answer.is_canonical(bad) is False
+    except AnswerError:
+        pass
+
+
+def test_a_valid_astral_character_is_not_mistaken_for_a_surrogate():
+    doc = b_stale()
+    doc["staleness"]["units"][0]["reason"] = "emoji \U0001f600 ok"
+    validate(doc)
+    assert loads(dumps(doc))["staleness"]["units"][0]["reason"] == "emoji \U0001f600 ok"
+
+
+# F2: a sort key that can tie is rejected, so two valid documents never differ in bytes by array order.
+def test_duplicate_recipe_query_names_are_rejected():
+    def dup(d):
+        d["recipe"]["queries"].append({"name": d["recipe"]["queries"][0]["name"], "cypher": "RETURN 2"})
+    rejects(b_possible(), dup, r"V2.*queries.*duplicate")
+
+
+def test_two_groups_of_one_kind_and_key_are_rejected():
+    def dup(d):
+        other = tagged_group("other-possible-callees", d["groups"][0]["key"], "zz")
+        d["groups"].append(other)
+    rejects(b_group(), dup, r"V8.*duplicate group")
+
+
+def test_two_lifted_entries_of_one_site_and_ord_are_rejected():
+    def dup(d):
+        lifted = d["items"][0]["chain"][2]["lifted"]
+        lifted[1]["ord"] = lifted[0]["ord"]
+    rejects(golden(), dup, r"V3.*lifted.*duplicate")
+
+
+def test_two_bound_entries_of_one_ord_are_rejected():
+    def dup(d):
+        bound = d["items"][0]["chain"][1]["bound"]
+        bound[1]["ord"] = bound[0]["ord"]
+    rejects(b_config(), dup, r"V3.*bound.*duplicate")
+
+
+def test_the_same_ord_at_different_sites_is_not_a_tie():
+    d = golden()
+    lifted = d["items"][0]["chain"][2]["lifted"]
+    assert len({x["siteId"] for x in lifted}) == 1  # all lifted entries of one Link share one site (V5)
+    validate(d)
+
+
+# F5: path-like data strings are stripped too (Scope.paths[], Unit.rootPath, Lifted.urlPath).
+def test_scope_paths_elements_the_unit_root_path_and_the_lifted_url_path_must_be_stripped():
+    scoped = b_rich({"paths": ["svc/a", "svc/b"]})
+    rejects(scoped, lambda d: d["interpretation"]["request"]["scope"]["paths"].__setitem__(0, " svc/a"), "stripped")
+    rejects(scoped, lambda d: d["interpretation"]["request"]["scope"]["paths"].__setitem__(1, "svc/b\n"), "stripped")
+    rejects(b_rich(), lambda d: d["staleness"]["units"][0].update(rootPath="svc "), "stripped")
+    rejects(golden(), lambda d: d["staleness"]["units"][0].update(rootPath=" falkor-chat/server"), "stripped")
+    rejects(golden(), lambda d: d["items"][0]["chain"][2]["lifted"][0].update(urlPath="a0.path "), "stripped")
+
+
+# F7: normalize_question is spec §3's rule, as literal vectors.
+@pytest.mark.parametrize("raw,want", [
+    ("what breaks if I change /shop/api/health?", "what breaks if I change /shop/api/health?"),
+    ("  what   breaks\tif  I  change   /shop/api/health?  ", "what breaks if I change /shop/api/health?"),
+    ("o que quebra se eu mudar  /shop/api/health ?", "o que quebra se eu mudar /shop/api/health ?"),
+    ("Qual é o impacto de\tmudar   getHealth?\r\n", "Qual é o impacto de mudar getHealth?"),
+    ("Qual é o impacto", "Qual é o impacto"),  # NFC composes e + combining acute
+    ("GetHealth vs getHealth", "GetHealth vs getHealth"),  # case kept
+    ("café CAFÉ", "café CAFÉ"),  # no accent or case folding
+    ("ﬁ ²", "ﬁ ²"),  # no NFKC: ligature and superscript stay
+    ("a\r\nb", "a\nb"),
+    ("line one  \nline  two", "line one \nline two"),  # a run at a line's end becomes ONE space and stays: only the ends are stripped
+    ("a\n\n  b", "a\n\n b"),  # newlines kept, each line's run collapsed
+    ("  \n a b \n  ", "a b"),  # the ends are stripped, newlines included
+    ("Traceback:\n  File \"x.py\", line 3\n    boom", "Traceback:\n File \"x.py\", line 3\n boom"),
+])
+def test_normalize_question_literal_vectors(raw, want):
+    assert answer.normalize_question(raw) == want
+
+
+def test_normalize_question_differs_from_a_naive_whitespace_collapse_and_is_idempotent():
+    raw = "a\n  b"
+    assert " ".join(raw.split()) == "a b" and answer.normalize_question(raw) == "a\n b"
+    for s in ("a\r\n  b\t\tc ", "x"):
+        once = answer.normalize_question(s)
+        assert answer.normalize_question(once) == once
+
+
+def test_normalize_question_keeps_a_lone_carriage_return_and_other_whitespace_runs_apart_from_space_and_tab():
+    assert answer.normalize_question("a\rb") == "a\rb"  # spec: CRLF only
+    assert answer.normalize_question("a  b") == "a  b"  # only space and tab runs collapse
+
+
+# F4a: an option is a Request: its own anchors and scope arrays are ordered, and the option order uses the canonical form.
+def _cp(n: str) -> dict:
+    return {"type": "contract", "cpId": n * 32, "kind": "http", "keyNorm": f"GET /x{n}"}
+
+
+def _opts_doc(ranked: bool) -> dict:
+    o1 = {"useCase": "impact", "direction": "impact", "anchors": [_cp("3"), _cp("1")], "scope": {"paths": ["svc/b", "svc/a"]}}
+    o2 = {"useCase": "impact", "direction": "impact", "anchors": [_cp("2")]}
+    if ranked:
+        o1["rank"], o2["rank"] = 1, 2
+    return empty_answer({"status": "ambiguous", "ambiguityKind": "several-symbols", "options": [o1, o2]})
+
+
+@pytest.mark.parametrize("ranked", [True, False], ids=["ranked", "unranked"])
+def test_an_options_own_anchors_and_scope_arrays_are_sorted_and_the_option_order_uses_that_canonical_form(ranked):
+    doc = _opts_doc(ranked)
+    validate(doc)
+    opts = canonicalize(doc)["interpretation"]["options"]
+    by_anchor = {o["anchors"][0]["cpId"]: o for o in opts}
+    assert [a["cpId"] for a in by_anchor["1" * 32]["anchors"]] == ["1" * 32, "3" * 32]
+    assert by_anchor["1" * 32]["scope"]["paths"] == ["svc/a", "svc/b"]
+    # canonical option 1 is [1,3] and sorts before option 2 [2]; raw bytes of option 1 start with 3 and would sort after
+    assert [o["anchors"][0]["cpId"] for o in opts] == ["1" * 32, "2" * 32]
+    flipped = copy.deepcopy(doc)
+    flipped["interpretation"]["options"].reverse()
+    flipped["interpretation"]["options"][1]["anchors"].reverse()
+    flipped["interpretation"]["options"][1]["scope"]["paths"].reverse()
+    assert dumps(flipped) == dumps(doc)
+
+
+# F4b: "never by locale": every ordered string key compares by code point (B < a).
+def test_item_path_and_item_root_path_compare_by_code_point_not_casefolded():
+    x, y = order_specs(5)
+    x, y = dict(x, path="svc/B.py"), dict(y, path="svc/a.py")  # x's later components (line) point the other way
+    for specs in ((y, x), (x, y)):
+        got = [i["subject"]["path"] for i in canonicalize(order_doc(*specs))["items"]]
+        assert got == ["svc/B.py", "svc/a.py"]
+    x, y = order_specs(1)
+    x, y = dict(x, root="B"), dict(y, root="a")
+    for specs in ((y, x), (x, y)):
+        doc = order_doc(*specs)
+        assert [u["rootPath"] for u in canonicalize(doc)["staleness"]["units"]] == ["B", "a"]
+        assert [i["unitId"] for i in canonicalize(doc)["items"]] == [x["unit"], y["unit"]]
+
+
+def test_lookup_path_and_query_name_compare_by_code_point_not_casefolded():
+    doc = b_unres()
+    doc["interpretation"]["lookups"] = [{"path": "a.py", "repoId": REPO, "state": "not-found"}, {"path": "B.py", "repoId": REPO, "state": "not-found"}]
+    validate(doc)
+    assert [x["path"] for x in canonicalize(doc)["interpretation"]["lookups"]] == ["B.py", "a.py"]
+    g = golden()
+    g["recipe"]["queries"] = [{"name": n, "cypher": "RETURN 1"} for n in ("x:a", "x:B")]
+    validate(g)
+    assert [q["name"] for q in canonicalize(g)["recipe"]["queries"]] == ["x:B", "x:a"]
+
+
+# F4c: the F-4 namespace split is at the FIRST colon in mask_identifier too, and an index is canonical decimal.
+def test_mask_identifier_splits_a_config_key_namespace_at_the_first_colon():
+    assert answer.mask_identifier("config_key", f"ns:{UNMASKED}:b.c") == "ns:[#].c"
+    assert answer._screen_units("config_key", f"ns:{UNMASKED}:b.c") == [f"{UNMASKED}:b", "c"]
+
+
+def test_a_leading_zero_index_does_not_tokenize_and_fails_closed():
+    assert answer.mask_identifier("keyPath", "a[01]") == "[#]"
+    assert answer.mask_identifier("keyPath", "a[0]") == "a[0]" and answer.mask_identifier("keyPath", "a[10]") == "a[10]"
+    with pytest.raises(AnswerError, match="tokenize"):
+        answer._screen_units("keyPath", "a[01]")
+
+
+# F4d: facts_bytes keeps the ranker's rank and drops provenance whichever status the answer has.
+def test_facts_bytes_keeps_an_options_rank_value():
+    base = b_amb()
+    other = copy.deepcopy(base)
+    other["interpretation"]["options"][1]["rank"] = 3  # same order, different value
+    validate(other)
+    assert [o["rank"] for o in canonicalize(other)["interpretation"]["options"]] == [1, 3]
+    assert facts_bytes(other) != facts_bytes(base)
+
+
+def test_provenance_is_outside_the_facts_of_an_unresolved_answer_too():
+    unres = b_unres()
+    with_prov = copy.deepcopy(unres)
+    with_prov["interpretation"]["provenance"] = b_prov()["interpretation"]["provenance"]
+    validate(with_prov)
+    assert facts_bytes(with_prov) == facts_bytes(unres)
+    assert dumps(with_prov) != dumps(unres)
+
+
+# F4e: schema constants and branches that no other rule backs up.
+def test_the_visited_seeds_guard_is_the_constant_true():
+    rejects(golden(), lambda d: d["recipe"]["guards"].update(visitedSeedsAnchor=False), "schema")
+
+
+def test_an_ambiguous_answer_has_no_lookups():
+    def add(d):
+        d["interpretation"]["lookups"] = [{"path": "svc/nope.py", "repoId": REPO, "state": "not-found"}]
+    rejects(b_amb(), add, "schema|V2")
+
+
+# F4f: members that tie on every earlier key component are ordered by the subject id.
+def test_group_members_tied_on_every_earlier_component_sort_by_subject_id():
+    def member(name: str) -> dict:
+        s = mk_sym(name, "svc/same.py", 100)
+        return mk_item(s, [sym_hop(SA, U1["unitId"]), sym_hop(s, U1["unitId"], "end", edge="CALLS_NAME", status="possible", reason="resolution-unverified")])
+    ms = [member(f"t{i}") for i in range(6)]
+    want = sorted(ms, key=lambda m: m["subject"]["symbolId"])
+    assert [m["subject"]["symbolId"] for m in ms] != [m["subject"]["symbolId"] for m in want]
+    g = {"kind": "other-possible-callees", "key": H("k"), "reason": "resolution-unverified", "count": 6, "members": ms}
+    doc = mk_doc([anchor_of(SA)], groups=[g], units=[U1])
+    validate(doc)
+    assert [m["subject"]["symbolId"] for m in canonicalize(doc)["groups"][0]["members"]] == [m["subject"]["symbolId"] for m in want]
+
+
+# F9: the golden's lifted entries are pinned field by field (ids re-derived independently by the gate review, Appendix C).
+def test_the_golden_lifted_entries_carry_their_ids_names_kinds_and_via_fields():
+    lifted = golden()["items"][0]["chain"][2]["lifted"]
+    repo, unit, site = "graphmind-ai-lab", "c2341bca0404a6a3eadab1d72ba5f4db", "ac74017feb936c98cb9fd4bfbe5737e8"
+    assert [(x["ord"], x["id"], x["kind"], x["name"], x.get("viaSiteId"), x["repo"], x["unit"], x["siteId"]) for x in lifted] == [
+        (0, "ac74017feb936c98cb9fd4bfbe5737e8", "CallSite", "apiFetch", None, repo, unit, site),
+        (1, "3e0e2e00a2cea8e99fd32ff6c2b1082e", "Symbol", "salesperson/src/api/client.ts::apiFetch", "5cb61d0b7a08ee25601c8d92957c578e", repo, unit, site),
+        (2, "beea8ff223e4a606b872f99096eaa81b", "Symbol", "salesperson/src/api/client.ts::buildUrl", None, repo, unit, site),
+        (3, "41d8c78a0fa5b76642dc74e73958888a", "CallSite", "fetch", None, repo, unit, site)]
+    assert {x["ord"] for x in lifted} == {0, 1, 2, 3}
+
+
+# F3: one walker over every subschema-bearing keyword of Draft 2020-12 feeds both schema probes.
+APPLICATOR_PLANT_PATHS = {  # keyword -> the probe path of what sits under it, planted at property "plantHost"
+    "properties": "plantHost.k", "patternProperties": "plantHost.~k", "additionalProperties": "plantHost.*",
+    "unevaluatedProperties": "plantHost.*", "items": "plantHost[]", "prefixItems": "plantHost[]", "contains": "plantHost[]",
+    "unevaluatedItems": "plantHost[]", "allOf": "plantHost", "anyOf": "plantHost", "oneOf": "plantHost", "not": "plantHost",
+    "if": "plantHost", "then": "plantHost", "else": "plantHost", "dependentSchemas": "plantHost", "propertyNames": "plantHost",
+    "$defs": "k",
+}
+
+
+def _plant_under(kw: str, sub: dict) -> dict:
+    schema = copy.deepcopy(answer.load_schema())
+    if kw in ("allOf", "anyOf", "oneOf", "prefixItems"):
+        host = {kw: [sub]}
+    elif kw in ("properties", "patternProperties", "dependentSchemas", "$defs"):
+        host = {kw: {"k": sub}}
+    else:
+        host = {kw: sub}
+    schema["properties"]["plantHost"] = host
+    return schema
+
+
+def test_the_derived_applicator_keywords_are_the_draft_2020_12_set():
+    single, arrays, maps = answer.applicator_keywords()
+    assert single == {"items", "contains", "additionalProperties", "propertyNames", "if", "then", "else", "not",
+                      "unevaluatedItems", "unevaluatedProperties"}
+    assert arrays == {"prefixItems", "allOf", "anyOf", "oneOf"}
+    assert maps == {"properties", "patternProperties", "dependentSchemas", "$defs"}
+    assert single | arrays | maps == set(APPLICATOR_PLANT_PATHS)
+
+
+@pytest.mark.parametrize("kw", sorted(APPLICATOR_PLANT_PATHS))
+def test_array_paths_sees_an_array_planted_under_every_applicator_keyword(kw):
+    base = answer.array_paths()
+    planted = _plant_under(kw, {"type": "array"})
+    assert answer.array_paths(planted) - base == {APPLICATOR_PLANT_PATHS[kw]}
+
+
+@pytest.mark.parametrize("kw", sorted(APPLICATOR_PLANT_PATHS))
+def test_derived_data_fields_sees_a_data_string_planted_under_every_applicator_keyword(kw):
+    base = answer.derived_data_fields()
+    planted = _plant_under(kw, {"type": "string", "x-ccg-data": True})
+    assert answer.derived_data_fields(planted) - base == {APPLICATOR_PLANT_PATHS[kw]}
+    assert answer.unclassified_strings(planted) == []  # classified, so V14 alone would be green: the DATA_FIELDS test is the net
+
+
+def test_a_data_string_in_an_inline_object_inside_an_array_item_reaches_the_data_fields():
+    schema = copy.deepcopy(answer.load_schema())
+    schema["properties"]["plantArr"] = {"type": "array", "items": {"type": "object", "properties": {
+        "s": {"type": "string", "x-ccg-data": True}, "plain": {"type": "string", "pattern": "^a$"}}}}
+    assert answer.derived_data_fields(schema) - answer.derived_data_fields() == {"plantArr[].s"}
+
+
+def test_an_array_of_arrays_and_an_array_valued_defs_entry_are_both_probed():
+    schema = copy.deepcopy(answer.load_schema())
+    schema["properties"]["plantNest"] = {"type": "array", "items": {"type": "array", "items": {"type": "array"}}}
+    schema["$defs"]["PlantList"] = {"type": "array", "items": {"type": "string", "x-ccg-data": True}}
+    assert answer.array_paths(schema) - answer.array_paths() == {"plantNest", "plantNest[]", "plantNest[][]", "PlantList"}
+    assert answer.derived_data_fields(schema) - answer.derived_data_fields() == {"PlantList[]"}
+
+
+def test_a_list_typed_array_and_a_false_data_flag_are_read_as_they_are():
+    schema = copy.deepcopy(answer.load_schema())
+    schema["properties"]["plantL"] = {"type": ["array", "null"]}
+    schema["properties"]["plantF"] = {"type": "string", "x-ccg-data": False}
+    assert answer.array_paths(schema) - answer.array_paths() == {"plantL"}
+    assert answer.derived_data_fields(schema) == answer.derived_data_fields()
+
+
+def test_two_groups_may_share_a_key_across_kinds_and_two_queries_may_differ_by_case_only():
+    two = b_group()
+    other = tagged_group("runtime-built-access", two["groups"][0]["key"], "zz")
+    two["groups"].append(other)
+    validate(two)
+    doc = golden()
+    doc["recipe"]["queries"] = [{"name": n, "cypher": "RETURN 1"} for n in ("x:a", "x:A")]
+    validate(doc)
+
+
+def test_an_array_at_the_schema_root_is_not_hidden_by_the_probe():
+    assert answer.array_paths({"type": "array", "items": {"type": "array"}}) == {"", "[]"}
+    assert answer.derived_data_fields({"type": "string", "x-ccg-data": True}) == {""}

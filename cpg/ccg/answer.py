@@ -57,7 +57,8 @@ ARRAY_RULES = {
 }
 
 #: V1: identity strings (§6) are stripped as well as NFC; ids are held to their patterns by the schema.
-IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name"})
+#: ``rootPath``, ``urlPath`` and the elements of ``paths`` are path-like data compared field by field (AC-24), so held to the same bar.
+IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name", "rootPath", "urlPath", "paths"})
 SUBJECT_ID = {"symbol": "symbolId", "config": "entryId"}
 ANCHOR_ID = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
 ANCHOR_HOP_KIND = {"symbol": "Symbol", "contract": "ContractPoint", "config": "ConfigEntry"}
@@ -129,52 +130,83 @@ def unclassified_strings(schema: dict | None = None) -> list[str]:
     return bad
 
 
-def _visit(node, loc: str, on_prop) -> None:
-    """Walk an object schema's properties through composition keywords, calling ``on_prop(location, name, schema)``."""
-    if not isinstance(node, dict):
-        return
-    for kw in ("oneOf", "anyOf", "allOf"):
-        for sub in node.get(kw, ()):
-            _visit(sub, loc, on_prop)
-    for kw in ("if", "then", "else"):
-        _visit(node.get(kw), loc, on_prop)
-    for name, prop in node.get("properties", {}).items():
-        on_prop(loc, name, prop)
+_META_BASE = "https://json-schema.org/draft/2020-12/"
+
+
+@cache
+def applicator_keywords() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """The subschema-bearing keywords of Draft 2020-12, read from its metaschema vocabularies (not typed by hand):
+    ``(single, arrays, maps)`` -- a keyword holding one subschema, a list of them, or a name -> subschema map."""
+    from jsonschema_specifications import REGISTRY
+
+    single: set[str] = set()
+    arrays: set[str] = set()
+    maps: set[str] = set()
+    for vocab in ("core", "applicator", "unevaluated"):
+        props = REGISTRY.get_or_retrieve(f"{_META_BASE}meta/{vocab}").value.contents["properties"]
+        for kw, spec in props.items():
+            if spec.get("$dynamicRef") == "#meta":
+                single.add(kw)
+            elif spec.get("$ref", "").endswith("/schemaArray"):
+                arrays.add(kw)
+            elif spec.get("type") == "object" and spec.get("additionalProperties", {}).get("$dynamicRef") == "#meta":
+                maps.add(kw)
+    return frozenset(single), frozenset(arrays), frozenset(maps)
+
+
+#: How a keyword extends the probe path: an element of an array, a map value of ``additionalProperties``; all other
+#: applicators (``allOf``, ``not``, ``if`` ...) constrain the same instance, so they keep the path.
+_PATH_SUFFIX = {"items": "[]", "prefixItems": "[]", "contains": "[]", "unevaluatedItems": "[]",
+                "additionalProperties": ".*", "unevaluatedProperties": ".*"}
+
+
+def schema_nodes(schema: dict) -> list[tuple[str, dict]]:
+    """``(probe path, subschema)`` of every subschema reachable through an applicator keyword (``$ref`` is not followed:
+    a ``$defs`` entry is a root named by its key). Paths: ``<root>.<property>``, ``[]`` per array level, ``.*`` for
+    ``additionalProperties``, ``.~<pattern>`` for ``patternProperties``; one walker feeds both probes."""
+    single, arrays, maps = applicator_keywords()
+    out: list[tuple[str, dict]] = []
+
+    def join(loc: str, part: str) -> str:
+        return loc + part if loc else part.lstrip(".")
+
+    def walk(node, loc: str) -> None:
+        if not isinstance(node, dict):
+            return
+        out.append((loc, node))
+        for kw, val in node.items():
+            if kw == "$defs" and isinstance(val, dict):
+                for name, d in val.items():
+                    walk(d, name)
+            elif kw in single:
+                walk(val, join(loc, _PATH_SUFFIX.get(kw, "")))
+            elif kw in arrays and isinstance(val, list):
+                for sub in val:
+                    walk(sub, join(loc, _PATH_SUFFIX.get(kw, "")))
+            elif kw in maps and isinstance(val, dict):
+                for name, sub in val.items():
+                    part = {"properties": f".{name}", "patternProperties": f".~{name}"}.get(kw, "")
+                    walk(sub, join(loc, part))
+
+    walk(schema, "")
+    return out
 
 
 def array_paths(schema: dict | None = None) -> set[str]:
-    """§6's coverage probe: every ``"type": "array"`` property as ``<$defs name | root path>.<property>``."""
+    """§6's coverage probe: the probe path of every ``"type": "array"`` subschema (``<$defs name | root path>.<property>``)."""
     schema = load_schema() if schema is None else schema
-    out: set[str] = set()
-
-    def on_prop(loc: str, name: str, prop: dict, _out=out) -> None:
-        here = f"{loc}.{name}" if loc else name
-        if prop.get("type") == "array":
-            _out.add(here)
-            _visit(prop.get("items"), here + "[]", on_prop)
-        else:
-            _visit(prop, here, on_prop)
-
-    _visit(schema, "", on_prop)
-    for name, d in schema.get("$defs", {}).items():
-        _visit(d, name, on_prop)
+    out = set()
+    for path, node in schema_nodes(schema):
+        t = node.get("type")
+        if t == "array" or (isinstance(t, list) and "array" in t):
+            out.add(path)
     return out
 
 
 def derived_data_fields(schema: dict | None = None) -> frozenset[str]:
-    """The ``<$defs name>.<property>`` of every property marked ``x-ccg-data`` (an array of data as ``name[]``)."""
+    """The probe path of every subschema marked ``x-ccg-data`` (``<$defs name>.<property>``, an array's items as ``name[]``)."""
     schema = load_schema() if schema is None else schema
-    out: set[str] = set()
-
-    def on_prop(loc: str, name: str, prop: dict) -> None:
-        if prop.get("x-ccg-data"):
-            out.add(f"{loc}.{name}")
-        elif prop.get("type") == "array" and isinstance(prop.get("items"), dict) and prop["items"].get("x-ccg-data"):
-            out.add(f"{loc}.{name}[]")
-
-    for name, d in schema.get("$defs", {}).items():
-        _visit(d, name, on_prop)
-    return frozenset(out)
+    return frozenset(path for path, node in schema_nodes(schema) if node.get("x-ccg-data"))
 
 
 # --- registry --------------------------------------------------------------------------------
@@ -226,24 +258,30 @@ def _no_float(text: str):
     raise AnswerError(f"V1: numbers are integers only (§6), got {text}")
 
 
-def _check_values(value, path: str = "") -> None:
-    """V1: no ``null``, no float, every string NFC, identity strings stripped -- rejected, never repaired."""
+def _check_values(value, path: str = "", key: str | None = None) -> None:
+    """V1: no ``null``, no float, every string NFC and UTF-8-encodable, identity strings stripped -- rejected, never repaired.
+
+    ``key`` is the nearest object key, inherited by the elements of an array (``Scope.paths[]``)."""
     if value is None:
         _fail("V1", path or "<document>", "null is never written (§6)")
     if isinstance(value, float):
         _fail("V1", path, "floats are never written (§6)")
     if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            _fail("V1", path, "string is not UTF-8 encodable (a lone surrogate) (§6)")
         if unicodedata.normalize("NFC", value) != value:
             _fail("V1", path, "string is not NFC (§6)")
+        if key in IDENTITY_KEYS and value != value.strip():
+            _fail("V1", path, "identity string is not stripped (§6)")
     elif isinstance(value, dict):
         for k, v in value.items():
             where = f"{path}.{k}" if path else k
-            if k in IDENTITY_KEYS and isinstance(v, str) and v != v.strip():
-                _fail("V1", where, "identity string is not stripped (§6)")
-            _check_values(v, where)
+            _check_values(v, where, k)
     elif isinstance(value, list):
         for i, v in enumerate(value):
-            _check_values(v, f"{path}[{i}]")
+            _check_values(v, f"{path}[{i}]", key)
 
 
 def loads(data: bytes) -> dict:
@@ -360,6 +398,20 @@ def fence_data(value: str) -> str:
     return f"{tick} {v} {tick}"
 
 
+# --- the question's normal form (§3) ---------------------------------------------------------------
+
+_SPACE_TAB_RUN = re.compile(r"[ \t]+")
+
+
+def normalize_question(text: str) -> str:
+    """§3's ``normalizedQuestion``: NFC; CRLF to LF; each run of spaces and tabs to one space; the ends stripped.
+
+    Case, accents and newlines are kept (no NFKC, no folding): over-normalizing could serve one interpretation for two
+    inputs. A lone ``\\r`` and other Unicode spaces are not touched; ``str.strip`` takes the ends (newlines included)."""
+    t = unicodedata.normalize("NFC", text).replace("\r\n", "\n")
+    return _SPACE_TAB_RUN.sub(" ", t).strip()
+
+
 # --- hashes of the provenance (§3) -----------------------------------------------------------------
 
 def sampling_hash(temperature_milli: int, params: Mapping[str, int] | None = None) -> str:
@@ -378,8 +430,8 @@ def cache_key(normalized_question: str, snapshot_id: str, model_fingerprint: str
 
 # --- canonical order (§6) ------------------------------------------------------------------------
 
-def _opt_key(option: dict) -> bytes:
-    return canonical_line(_canon_request(option))
+def _opt_key(option: dict) -> bytes:  # called on options already passed through ``_canon_request``
+    return canonical_line(option)  # ``canonicalize`` has already canonicalized the option's own arrays
 
 
 def _canon_request(req: dict) -> dict:
@@ -454,7 +506,11 @@ def is_canonical(data: bytes) -> bool:
 
 
 def facts_bytes(doc: dict) -> bytes:
-    """§6: the canonical bytes without ``interpretation.provenance`` and, for a resolved answer, ``interpretation.lookups``."""
+    """§6: the canonical bytes without ``interpretation.provenance`` and, for a resolved answer, ``interpretation.lookups``.
+
+    A projection of a document the caller already holds as valid (it came from ``loads`` or went through ``dumps``): it
+    deliberately does not re-validate, so facts of a document under construction can be compared, and an invalid one
+    gives bytes, not an error."""
     d = canonicalize(doc)
     interp = d["interpretation"]
     interp.pop("provenance", None)
@@ -504,6 +560,9 @@ def _check_interpretation(doc: dict) -> None:  # V2
     keys = [(x["repoId"], x["path"]) for x in interp.get("lookups", [])]
     if len(set(keys)) != len(keys):
         _fail("V2", "interpretation.lookups", "duplicate (repoId, path)")
+    names = [q["name"] for q in doc["recipe"]["queries"]]
+    if len(set(names)) != len(names):
+        _fail("V2", "recipe.queries", "duplicate query name (§4.1: names unique)")
 
 
 def _check_hops(where: str, item: dict) -> None:  # V3, V5, V6
@@ -538,9 +597,15 @@ def _check_hops(where: str, item: dict) -> None:  # V3, V5, V6
             _fail("V5", w, "a Link hop is followed by its CallSite hop (VIA <-)")
         if hop["kind"] == "Link":
             site = chain[i + 1]["id"] if i + 1 < len(chain) else None
+            tied = [(x["siteId"], x["ord"]) for x in hop.get("lifted", [])]
+            if len(set(tied)) != len(tied):
+                _fail("V3", f"{w}.lifted", "duplicate (siteId, ord)")
             for j, lf in enumerate(hop.get("lifted", [])):
                 if lf["siteId"] != site:
                     _fail("V5", f"{w}.lifted[{j}]", "siteId is not the following call site's id")
+        ords = [b["ord"] for b in hop.get("bound", [])]
+        if len(set(ords)) != len(ords):
+            _fail("V3", f"{w}.bound", "duplicate ord")
         if "reason" in hop:
             status = registry_status(hop["reason"])
             if status is None:
@@ -580,6 +645,9 @@ def _check_groups(doc: dict) -> None:  # V8
         if sid in seen:
             _fail("V8", where, f"subject {sid} occurs twice ({seen[sid]})")
         seen[sid] = where
+    group_keys = [(g["kind"], g["key"]) for g in doc["groups"]]
+    if len(set(group_keys)) != len(group_keys):
+        _fail("V8", "groups", "duplicate group (kind, key)")
     for g, grp in enumerate(doc["groups"]):
         if grp["count"] != len(grp["members"]):
             _fail("V8", f"groups[{g}].count", "count equals the number of members")
