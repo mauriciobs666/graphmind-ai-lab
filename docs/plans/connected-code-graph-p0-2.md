@@ -1,8 +1,8 @@
 # Connected code graph — phase P0 implementation plan (successor)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.4 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.5 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
 
-*2026-11-04 (v1.4): successor to plan v1.3; absorbs the ledger through 2026-11-04 — the State column (§3), S59 (development-contact list), the S25/S26/S56 rulings of `docs/plans/connected-code-graph-p0-ml.md` v1.4–v1.8, the fixture set of four repos, and the stale items of the ledger's owed-edits list. Disposition table: §16.*
+*2026-11-05 (v1.5): in place; adds S27c (the ML §5.3 definitions census, a sub-unit of S27) to the step table, §4.6, the chains and the S30/S50 dependencies. v1.4 was the successor to v1.3; disposition table: §16.*
 
 ## 0. Goal & scope
 
@@ -351,8 +351,8 @@ steps and about 5 files; fixture source trees (S36–S38) are the stated excepti
 dispatched as two units (P0-18a pre-Joern, P0-18b Joern runs, §4.6) because of its size.
 
 **Ids:** `S01`–`S59` plus `S35b` and `S43a` are steps; **S18, S19 and S29 were never assigned**. S56–S58 are
-new in this document (§0.1) and **S59 in v1.4**. A stakeholder decision is always written *decision S<n>*, never a bare
-`S<n>`. Ledger units cite the `P0-nn` unit id; new units are P0-47…P0-49, and S59's P0-50 (the next free number; the ledger names S59 without a unit id).
+new in this document (§0.1), **S59 in v1.4** and **S27c in v1.5** (a lettered sub-unit of S27, like S35b and S43a). A stakeholder decision is always written *decision S<n>*, never a bare
+`S<n>`. Ledger units cite the `P0-nn` unit id; new units are P0-47…P0-49, and S59's P0-50 (the next free number; the ledger names S59 without a unit id). S27c's unit is P0-20c (a sub-unit of P0-20, no new number).
 
 **Gates:** `an` `analyst` review; `ds` `data-scientist` method check; `gd` `graph-dba` check; `tc`
 `teco` documentation check; `sh` the stakeholder. **State** column (2026-11-04, from the ledger): `acc` accepted; `gated` a gate
@@ -389,8 +389,9 @@ contract is the cited document; this table does not re-decide it.
 | S56 | P0-47a…g | del | `qa-engineer`, one fresh instance per language (seven, parallel; never an S26 labeller) | GT | `labels/<lang>-flow.jsonl` | `sample/<lang>-flow.jsonl`; that corpus only; bundle spec point names (§5.4–§5.6) | **§4.6 S56** (ML §11 N3). **Flow brief per language** (`flow-brief.template.md` instantiated per language; direct pairs only; call results as sources, conditions as data sinks and cond→cond control; no field-write sinks or implicit-`this` reads; ML §6.4, v1.5). **Floor: 120 realized direct pairs per language** (ML §8.4); **TS/JS: 12 methods, prod files only, plus a tier-2 draw of 3 methods of 26–60 lines** if the 12 yield fewer than 120 (ML §6.4, §8.4; v1.5, v1.6). Delivered for all seven languages. Its methods are development contact for flow anchors (eval-protocol §8.2), recorded in `contact.json` apart from the call-site strata (S59; ML §3.1, v1.8), so its output is an input to S47's contact set. | ds | S25, S03 |
 | S57 | P0-48a…g | | `data-scientist` decides; fresh `qa-engineer` fitness custodian (FC) runs and writes, one per language | GT | `adjudication/<lang>.input.jsonl`, `adjudication/<lang>.jsonl`, `truth/<lang>.final.jsonl` | `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`; never `results/` or any Joern output | **§4.6 S57** (ML §11 N4; owner per §2 D13). | an | S26 (that language), S25 |
 | S27 | P0-20 | | `graph-dba` runs; `data-scientist` adjudicates misses | M | `results/*.json`; `adjudication/<lang>-misses.jsonl`; `truth/<lang>.final2.jsonl`; fitness report §a1 | S25 results; S57 truth; **`contact.json` (S59)** | **§4.6 S27** (ML §11 N5). **Strata:** for Python and TS/JS, sites in `contact.json`-listed files form their own stratum; the language passes the recall screen only if the non-contact stratum alone meets ML §8.1's gate with ≥ 50 internal sites (counted on `final2`), else *insufficient* (ML §3.1, v1.6–v1.8; not restated). | an + ds | S57 (all languages), **S59** |
+| S27c | P0-20c | | `coder` (extractor, join, metrics scripts, with tests); `graph-dba` (`measure.sc` change, the 12 reruns); `data-scientist` (the definitions) | M | `cpg/spikes/frontend-fitness/{make_defs_census.py, s27_census_metrics.py, measure.sc, truth/<lang>.defs.jsonl, results/*.measure.jsonl}`, `cpg/tests/test_defs_census.py`; fitness report §a1.2 (four rows) and §a1.5 | S27 steps (1)–(4) (`truth/<lang>.final2.jsonl`); S59 (`contact.json`); S08's follow-up round (runner); **fitness report §a1.6 as the specification, and ML §7.2 as amended, both with no open item** (the `data-scientist` closes them first) | **Sequence, extractor, `measure.sc` additions, metrics and acceptance (a)–(d): fitness report §a1.6** (ML §5.3, §7.2; not restated). Done when §a1.6's acceptance (a)–(d) hold and its sequence (1)–(5) is complete: the four §a1.2 rows (method coverage, line fidelity, value-set recovery, decorator/annotation shapes) are filled from `s27_census_metrics.py` output under ML §7.2's definitions, with the worked example per language for S30 in the report. Tests (`test_defs_census.py`, incl. §a1.6 (d)'s mutation test) pass before the rerun. The `measure.sc` change is `analyst`-gated as code before the rerun, like S25's. | an (+ ds on the definitions and metrics) | S27, S59, S08's follow-up round |
 | S28 | P0-21 | | `graph-dba` runs; `data-scientist` adjudicates | M | fitness report §a2; `results/projection-*.json`; `adjudication/<lang>-flow-{misses,spurious}.jsonl` | S11 `extract.sc`; S56 labels; ML §7.3, §8.4 | **§4.6 S28** (ML §11 N7). | an + ds | S56, S27, S15, **S08's follow-up round** (P3-10) |
-| S30 | P0-22 | acc | `architect` | C | `docs/plans/connected-code-graph-rule-pack-spec.md` | S03 (+S16), S14 bundles, S27 decorator/annotation shapes; proposal §3.3–§3.4 | Format v1, five paper packs walked through, infrastructure-signature pack v0, the severity rule table (§4.2). **Every proving-repo anchor the walkthroughs touch is listed as a locator, by eval-protocol §8.2, hops excluded.** **The server-binding walkthrough runs on `falkor-chat/server`, or on S35's fixture — never on `cypher-mcp` or `mcp-monitor`** (eval-protocol §14, §15 Q10, R9): walking `.mcp.json` → `cypher` would cost `wiring` 3 of its at most 10 eligible items and cap it at 7, short of 8. | an (+ ds consult) | S15, S27, S16 if it runs |
+| S30 | P0-22 | acc | `architect` | C | `docs/plans/connected-code-graph-rule-pack-spec.md` | S03 (+S16), S14 bundles, **S27c's decorator/annotation shapes**; proposal §3.3–§3.4 | Format v1, five paper packs walked through, infrastructure-signature pack v0, the severity rule table (§4.2). **Every proving-repo anchor the walkthroughs touch is listed as a locator, by eval-protocol §8.2, hops excluded.** **The server-binding walkthrough runs on `falkor-chat/server`, or on S35's fixture — never on `cypher-mcp` or `mcp-monitor`** (eval-protocol §14, §15 Q10, R9): walking `.mcp.json` → `cypher` would cost `wiring` 3 of its at most 10 eligible items and cap it at 7, short of 8. | an (+ ds consult) | S15, S27, **S27c**, S16 if it runs |
 | S31 | P0-23 | acc | `tdd-engineer` | CC | `cpg/ccg/schemas/rule-pack-v1.schema.json`, `cpg/tests/test_rule_pack_schema.py`, `cpg/packs/{fastapi,fetch,fastmcp}/pack.yaml`, `cpg/ccg/registry/reasons.yaml` (registry cells incl. `PROVIDES topic` on runtime-built/config-derived, O-16) | S30 | Schema = S30. The three packs validate. Each negative example in S30 is rejected. | an | S30 |
 | S32 | P0-24 | acc | `tdd-engineer` | CC | `cpg/packs/{kafka,paper-inhouse-bus,infra-signatures,severity-rules}/pack.yaml`; extend `test_rule_pack_schema.py` | S30 | All seven packs validate. | an | S31 |
 | S33 | P0-25 | acc | `architect` | C | `docs/plans/connected-code-graph-answer-spec.md` | S03 (+S16), S17, S20 decision, eval-protocol §5 (hit rule, E9), §10.4; proposal §3.6 | Answer schema v1 specified (§4.2), and it satisfies eval-protocol §5.2/§14 (groups enumerate members with their own chains; each item carries a span-bearing symbol id and its chain; `stamp.verdictLogOffset`); **the interpretation block carries each resolved symbol anchor's `qname`**, so §10.4 can apply `E` (eval-protocol §15 Q1). **From `-spec2` §3–§4.1:** G-1's rendering consequence (a `launchFact` hop shows file and line only, unless S17 carries the gated fields); **F-3** free text from source (`keyPath`, `Cond.code`, `calleeName`, `qname`, emitted `launchFact` args) is fenced as data wherever an LLM reads it; **F-4** free-text identifiers shown in an answer (`ConfigEntry.keyPath`, a `config_key`/`http` key, `launchFact.mountPath`/`service`/`envVar`) are rendered through `-spec2` §1.7.1's token screen; **F-12** the recipe's traversal over `CONTROLLED_BY` is cycle-safe (a visited set seeded with the anchor). | an (+ ds consult) | S17, S20, S06, S16 if it runs |
@@ -430,7 +431,7 @@ ordering only, and a dependency on an accepted step is satisfied.
 - **Slice chain:** S11 → S12 (P0-11b) → P0-12 (S13 → S14) → S15.
 - **Store chain:** P0-15 (S20 → S21) → P0-16 (S22 → S23), all exclusive.
 - **Fitness chain:** S24 → S25 (P0-18a, then P0-18b) → {S26 (seven) ∥ S56 (seven)} → S57 (per
-  language, as that language's S26 lands) → S27 → S28 (also after S15). **S59** (after S11, S14, S30
+  language, as that language's S26 lands) → S27 → {S27c ∥ S28} (S28 also after S15). **S59** (after S11, S14, S30
   and S56) runs beside S57 and must be accepted before S27 reads its strata; S47 also waits on it.
 - **Fixtures:** S36 ∥ S37 ∥ S38 ∥ S35b → S39.
 - **Ground truth (§6):** S40 waits on S48; **S54** waits on S40, S52 and S53, and no writer starts
@@ -441,12 +442,12 @@ ordering only, and a dependency on an accepted step is satisfied.
   contract chains.
 - **Before S15:** **S16 always runs** (§3 S16) and must be accepted before S15. **After S15:** an
   SL-7-forced change makes a `-spec4`, which S30, S33 and S34 wait on; otherwise they do not. S17 also waits on S23;
-  S30 also waits on S27; S33 waits on S17 and S20; then S31 → S32 and S34.
+  S30 also waits on S27 and S27c; S33 waits on S17 and S20; then S31 → S32 and S34.
 - **Close:** S50 → S51.
 
 **Critical path:** S08 → S11 → S12 → S13 → S14 → S15 → S17 → S33 → S34 → S50. Beside it, and also
 before S50:
-- **Fitness:** S24 → S25 → S26 → S57 → S27 → S28. S56 runs beside S26 and must finish before S28; S59 feeds S27 and, through S47, the ground-truth chain.
+- **Fitness:** S24 → S25 → S26 → S57 → S27 → {S27c ∥ S28}. S56 runs beside S26 and must finish before S28; S59 feeds S27 and, through S47, the ground-truth chain.
 - **Ground truth:** S06 → S52 → S53 → S55 → S48 → S40 → S54 → S41/S42 → S45 → S46 → S47. With ten
   KA/KB sessions at two at a time, that is about five session-lengths of wall-clock. S47 also joins
   the critical path's S34 and the fitness chain's S56 (P3-1), so S47 is the later of the two chains'
@@ -458,7 +459,7 @@ before S50:
 
 | P0 item (proposal §4) | Nature | Steps | Durable artifacts |
 |---|---|---|---|
-| (a) frontend fitness | **Measurement spike** (a1 + a2, §2 D3), protocol first | S05, S24–S28, S56, S57 | `docs/plans/connected-code-graph-p0-ml.md`; `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md`; `cpg/spikes/frontend-fitness/{corpora.yaml, results/, labels/, truth/, adjudication/}` |
+| (a) frontend fitness | **Measurement spike** (a1 + a2, §2 D3), protocol first | S05, S24–S28, S27c, S56, S57 | `docs/plans/connected-code-graph-p0-ml.md`; `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md`; `cpg/spikes/frontend-fitness/{corpora.yaml, results/, labels/, truth/, adjudication/}` |
 | (b) vertical slice + schema/model freeze | **Contract** + **measurement spike** | S03, S09–S17 | bundle spec + `-spec2`; **`-spec3` required before P0 exit**; `cpg/ccg/{ids.py, bundle.py, schemas/bundle-v1.schema.json, store/ddl_v1.cypher}`; slice report; p0-graph note §1 |
 | (c) store spikes | **Measurement spike** on the dedicated instance (durable bring-up script) | S01, S20–S23 | `cpg/infra/ccg-falkordb.sh`; p0-graph note §2–§6 |
 | (d) rule-pack format v1 | **Contract** (spec + schema + paper packs) | S30–S32 | rule-pack spec; `rule-pack-v1.schema.json`; `cpg/packs/*/pack.yaml` |
@@ -560,7 +561,7 @@ question Q1 is §12 here.
   anchor a walkthrough touches is listed as a locator (bundle spec §3.5), by eval-protocol §8.2's
   definition, with wrapper and chain hops excluded.**
 - **Language expressiveness:** the format can express the decorator, annotation and attribute
-  shapes S27 measured for all seven languages, or S30 records the gap.
+  shapes S27c measured for all seven languages, or S30 records the gap.
 - **Infrastructure-signature pack v0 (a §6.2 item):** ML §8.3's signature classes (connection
   refused, DNS, timeout, OOM kill, TLS, third-party exception classes), with patterns per runtime:
   Python, Node, JVM, .NET and Go.
@@ -732,7 +733,7 @@ Every load in this section obeys §2 D16.
   any `UNIQUE` gate S17 adopts from the graph-dba check, e.g. `Dependency.depId`) and
   `test_ddl_live.py`.
 
-### 4.6 Frontend fitness (S24–S28, S56, S57, S59)
+### 4.6 Frontend fitness (S24–S28, S27c, S56, S57, S59)
 
 S24 is in §4.1. Paths below are under `cpg/spikes/frontend-fitness/`. The ML note sections cited
 are the specification; this section fixes owners, order and done-conditions.
@@ -801,12 +802,18 @@ are the specification; this section fixes owners, order and done-conditions.
   cited evidence and cause class (ML §7.2), the decisions being `data-scientist`'s and the file
   `graph-dba`'s (§2 D13); (3) overturns applied as `truth/<lang>.final2.jsonl`; (4) **reported
   metrics computed only on `final2`**, with the provisional figures beside them; (5) ML §8.5's table
-  per language, the decisions by ML §8 as ratified (§2 D14), the decorator/annotation/attribute shapes
-  S30 needs, "ineligible as held-back" listing the five external corpora (ML §3.3 reverse rule), and
+  per language, the decisions by ML §8 as ratified (§2 D14), "ineligible as held-back" listing the five external corpora (ML §3.3 reverse rule), and
   any evidence from the off runs bearing on egress §11 R7's three `--help`-only flag
   classifications; (6) for Python and TS/JS, the `contact.json` stratum split of the §3 S27 row.
   Done when `analyst` has checked the miss log independently and that every §8
-  number traces to `final2`.
+  number traces to `final2`. The decorator/annotation/attribute shapes S30 needs are S27c's, not S27's.
+- **S27c (new in v1.5; ML §5.3, §7.2), a sub-unit of S27, P0-20c.** The definitions census of fitness report
+  §a1.6, which is its specification (sequence, record shapes, metrics, acceptance; not restated). Owners:
+  `coder` writes `make_defs_census.py`, `s27_census_metrics.py` and `test_defs_census.py`; `graph-dba` makes the
+  `measure.sc` change and reruns the 12 builds (six languages x off/on; Kotlin frontend-only, per §a1.6); the
+  `data-scientist` owns the definitions (ML §7.2 as amended) and the §a1.6 items the coder would otherwise guess.
+  It starts after S27's step (4) (`final2`) and after §a1.6 and ML §7.2 carry no open item. Gate: `analyst`
+  (the `measure.sc` change as code before the rerun, then the filled §a1.2 rows). S27 does not wait on it; S30 and S50 do.
 - **S28 (amended; ML §11 N7), `graph-dba` runs; `data-scientist` adjudicates.** Runs S11's
   `extract.sc` projection on every corpus, offline (each CPG passing §2 D15), and computes ML §7.3's
   metrics on S56's labels. Writes `adjudication/<lang>-flow-misses.jsonl` (every missed golden pair)
@@ -896,7 +903,7 @@ S35 fixes, as a numbered table, every planted item. The categories that **must**
 | `cpg/infra/README.md` | S01 only | — |
 | `claude/graph-dba/falkordb-quirks.md` | S07 (done) → S23 | strictly sequential; nobody else writes it in P0 |
 | `docs/plans/connected-code-graph-p0-graph.md` | S20 (§2) → S21 (§3–§4) → S22 (§5) → S23 (§6) → S17 (§1) | one owner, sequential; S17 waits for S23 |
-| `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` | S27 (§a1) → S28 (§a2) | sequential |
+| `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` | S27 (§a1) → S27c (§a1.2 rows, §a1.5) and S28 (§a2) | S27c and S28 write disjoint sections |
 | `cpg/spikes/frontend-fitness/{truth,adjudication}/<lang>*` | S25 (`c5`, `ref`) → S57 FC (`input`, adjudication, `final`) → S27 (`misses`, `final2`) → S28 (`flow-*`) | per language, sequential; each writer creates new files and never rewrites an earlier step's |
 | `cpg/tests/test_rule_pack_schema.py` | S31 → S32 | sequential |
 | `cpg/tests/test_eval_tools.py` | S48 → S49 | sequential |
@@ -923,7 +930,8 @@ S35 fixes, as a numbered table, every planted item. The categories that **must**
 | S25 | `sample/<lang>.brief.md`, `sample/<lang>-flow.jsonl`, `truth/<lang>.ref.jsonl`, the adjudication-input script | S26, S56, S57 |
 | S57 | `truth/<lang>.final.jsonl` | S27 |
 | S59 | `contact.json`: the development-contact files of the two proving-repo corpora, and the S56 flow-anchor files apart | S27 (call-site strata), S47 (contact set) |
-| S27 | the indexer and fold/list decisions per language; decorator and annotation shapes | S30, S50 |
+| S27 | the indexer and fold/list decisions per language | S50 |
+| S27c | method coverage, line fidelity, value-set recovery; decorator and annotation shapes (the worked example per language) | S30, S50 |
 | S28 | `flowAvailable` per language | S50; P1 extractors |
 | S06 | eval-protocol §14's table (strata, schemas, counts, hit rule, matching, estimators, trigger, contact rule, split, procedures, minimums) | S14/S30 (touched-anchor lists), S33, S35, S40–S49, S52 — per §14 here |
 | S40 | `EVAL_COMMIT` and the exclusions (incl. the prompt-bearing glob list) | S41–S47; P1's gate builds and prompt extractor |
