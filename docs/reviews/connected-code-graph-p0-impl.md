@@ -3284,6 +3284,83 @@ S47's row cites it; (6) §16 is absent and the M5-nit condition is in §12.3; (7
 attributable to (1)–(5) alone (the `git diff` of the revision shows no added history). Pass 4 does not
 re-read §1–§9, which this delta did not touch.
 
+### Pass 4 (2026-11-05) — EP v1.4 against the Pass 3 stopping condition
+
+**Re-checked:** `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.4 (`73cf84e1`), read via
+`git diff HEAD~` on the file (only the delta); each disposition below was grepped or recomputed in the tree.
+
+**Verdict: approve with suggestions.** All seven stopping-condition items hold; no blocker. One new major
+(N-1), and three minors. S47's inputs are unchanged and unaffected by N-1.
+
+**Dispositions of Pass 3.**
+- **M-1 fixed.** §5.2.1 now has the replay table: its rows name all 21 `edgeType` values (counted against
+  answer spec §5.2's list); `CALLS_NAME` is the two-edge path through one `Name`; the allow-list and `dir`
+  check are stated; planted input (f) is a name-matched hit. The R-class patterns agree with
+  `cpg/spikes/vertical-slice/load.py` `EDGE_ORDER` (`DATA` from `CallSite|Ret|Cond` to `Param|CallSite`,
+  `CONTROLLED_BY` from `CallSite|Ret|Cond|Param` to `Cond`, `VIA/TO/ON`, `PROVIDES` from `Symbol`, `CONSUMES` from
+  `CallSite`). `DEPENDS_ON` is loaded but X-class: correct, `Unit`/`Dependency` are not hop kinds.
+- **M-2 fixed.** Each HA row has a planted input with outside values: HA-1 (a)–(e) (wrong `dir`, a
+  confirmed-non-joining other type, out-of-list string), HA-3, HA-4 with the literal (it matches my run of
+  `ids.tuple_id(["verdictLog"])` in Pass 3), HA-5 a planted collision; HA-5's non-empty list now blocks.
+- **M-3 fixed in form** (rulings below): bypass as an engine requirement, `cacheHit == true` control, endpoint
+  request count as the independent check.
+- **M-4 fixed.** Control (a) flips `direction`, a field every pin has; the raw leg is unconditional with GC as
+  deriver (not an engine function), a pass criterion (set equality, any inequality fails) and a row-deletion
+  control. 24/24 Wilson lower bound recomputed: 0.862.
+- **M-5 fixed.** `CAP_i = max(5, |goldOptions_i|)`; `ccg-prereg-ac24-v1` has `capFloor`, `capRule`,
+  `devExtras`, `tieReading`, `cacheBypass`, `interpreter`; the "Why 5"/"Rejected" prose is cut to the constraint.
+- **m-1 not fixed (not owed here):** `connected-code-graph-eval-protocol2-ml.md:9,217`, `-p0-2.md:370` and the
+  EP's own §9.3 example (line 1113) still read `@1.2`; update at acceptance (`teco`).
+- **m-2 fixed.**
+
+**Stopping condition.** (1) yes; (2) yes; (3) yes; (4) yes; (5) yes, under the ruling below; (6) §16 is gone
+and the `**/*.md` condition is in §12.3, B1(b)'s reasoning now sits in §12.1; (7) net growth is negative:
+`git show HEAD~:` 2,177 lines / 25,424 words, v1.4 2,200 / 25,067 (`wc`), i.e. −357 words. The additions
+(table, planted-input column, record schema, raw-leg paragraph) are items 1–5; the removals (§16, the cap
+rationale, the old controls) exceed them. 44 lines still carry inline `v1.1`/`v1.2` markers (`grep -c`),
+mostly §14: pre-existing, not new growth, prune at the next ordinary revision.
+
+**Rulings.**
+- *AC-24 record as its own schema in the same `preregistration.jsonl`:* **accepted.** `ccg-prereg-v1`'s
+  four-field comparison is stratum-bound, and one append-only file keeps one commit-order check. But see N-1.
+- *Cache bypass as an engine requirement, not designed by the DS:* **accepted**, with N-3 (the obligation is
+  not yet anywhere the answer-spec owner will see it).
+- *Condition (5) as "named record in §12.3", S47 row unchanged:* **accepted.** My wording over-specified.
+  `CAP_i` is per item and needs no S47 count; `devExtras` needs dev answers from the P1 engine, so the record is
+  P1-time; the P1 gate harness row (§14) cites the record, and S47's row correctly lost the CAP mention.
+
+**Same-revision cross-checks.**
+- *Replay classes R/D/X vs the HA-1 inputs:* consistent; (e) covers the allow-list. No input exercises the D/X
+  rule ("a hop carrying it is a harness error") — N-2.
+- *`CAP_i` vs 0.862:* independent (0.862 is the 24-item AC-16 bound, §10.6; `CAP_i` acts on ≤ 10 ambiguity
+  items); `devExtras` "at most 2" agrees with §10.2 (one dev item per language).
+- *Bypass vs controls:* the control order is sound (cache-on `true` first, bypass `false` ×5, stub caching engine
+  caught by the endpoint count). AC-16 is unaffected (`provenance` is outside `facts_bytes`).
+- *AC-24 record vs the `ccg-prereg-v1` comparison:* N-1.
+
+**New findings.**
+- **N-1 (major; the AC-24 record omits `packSetHash`).** `coreTreeHash` excludes `cpg/packs/**` by design
+  (§12.3: "covered separately by `packSetHash`"). The AC-24 record compares `coreTreeHash` and the interpreter
+  fields only. AC-24's contract-point cell resolves names to `ContractPoint`/`Link` nodes that packs produce, so
+  a pack edit after registration changes what the interpreter can resolve and is invisible to the record; the
+  run would still be labelled first contact. **Fix:** add `packSetHash` to `ccg-prereg-ac24-v1` and to its
+  recompute-and-compare list. Also recompute `promptHash`/`grammarHash` from the working tree, not only from the
+  answers' `provenance`, which is the engine's self-report.
+- **N-2 (minor).** The R/D/X rules have no planted input (a D-class hop before its phase loads; an X-class hop);
+  add one each, expected "harness error, gate blocked". The endpoint count "must equal 5" assumes one completion
+  per interpretation; state the retry rule (ML says single-shot), or a correct engine that retries once on a
+  grammar failure is voided.
+- **N-3 (minor; owner: `teco`).** The cache-bypass obligation is stated only in EP §10.4. `grep` for bypass in
+  `-answer-spec.md` and `-p0-2.md` finds nothing; add it as a carry-over item (next after C9) and to the
+  P1 "For P1" list, else no unit owns it and the AC-24 gate cannot run.
+- **N-4 (minor; dangling citations).** `-p0-2.md:1556` ("eval-protocol §16, M5 nit") and `:1695` (`EP §16 Pass 2`)
+  cite the removed §16; repoint to EP §12.3 (the condition now lives there). The raw leg cites "answer spec §1"
+  for the `bfs-v1` description; that row defers to `-p0-graph.md` §3 and `cpg/spikes/store/MEASURE…`: cite those.
+
+**Stopping condition for acceptance (falsifiable):** accept EP v1.4 as "EP v1.3 accepted" for S47 once N-1 is
+fixed in §12.3 (check: `grep packSetHash` hits the `ccg-prereg-ac24-v1` block and the compare sentence), and
+`teco` records N-3 and N-4 in their plans; N-2 and m-1 may ride the next revision.
+
 ## S10 (P0-09)
 
 **Reviewed (2026-10-29):** `cpg/ccg/schemas/bundle-v1.schema.json`, `cpg/ccg/bundle.py`,
