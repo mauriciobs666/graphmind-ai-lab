@@ -8,19 +8,25 @@ Writes `results/<lang>.census.json`: `{lang, frontendOnly, label, definitions:{.
 `{k, n, p, wilson95}` (s27_metrics.prop). Rule sources: report §a1.6 item 3 and ML §7.2; names and offsets come from
 `s27_metrics` (`spec_names`, `METHOD_LINE_OFFSET`, `NONSYMBOL_NAME`, `prop`) and matcher-table.md, extended here, never redefined.
 
-Input schema expected from graph-dba's `measure.sc` change (the existing `meta`/`file`/`method`/`site` records are unchanged):
-  meta   : + "censusSchema": 1 ; + "frontendOnly": true for the overlay-free Kotlin import. Without censusSchema the
-           value-set and decorator metrics are reported {"status":"unmeasured"}; coverage, parse success and line fidelity
-           need only the existing records.
-  method : + "ann": [{"name": str, "node": "ANNOTATION"|"CALL"|..., "lits": [raw literal source text, ...]}] -- the method's
-           annotation/decorator names as Joern exposes them (qualified or simple) and the raw `code` of every literal argument.
-           (`l`/`le` are `lineNumber`/`lineNumberEnd` as Joern reports them, i.e. 0-based for C#.)
-  carg   : one per argument of each frame-site CALL that matched (`site.matched`), joined by the frame's siteKey:
-           {"k":"carg","key":<siteKey>,"order":<1-based position of the argument among ALL Joern arguments, receiver included>,
-            "recv":<true when that CALL's first argument is its receiver>,"kind":<node label, e.g. "LITERAL","IDENTIFIER","CALL">,
-            "lit":<raw source text of the Literal, else null>,"nreach":<number of reaching definitions of the argument, 0 off>,
-            "reach":[raw source text of each reaching definition that is a Literal]}
-  The census argIndex (0-based over explicit arguments, receiver excluded) is `order - 1 - recv`.
+Input schema expected from graph-dba's `measure.sc` change. The existing `meta`/`file`/`method`/`site` records are unchanged except for the
+additions below. NOTHING below exists in measure.sc today; the committed fixtures `tests/data/census/<lang>.measure.jsonl` are SYNTHETIC
+(built from the test fixtures by `synth_measure`) and fix the format, not Joern's behaviour: graph-dba verifies each field against real Joern
+per frontend and may ask for changes here.
+  meta   : + "censusSchema": 1 ; + "frontendOnly": true for the overlay-free import (Kotlin). Without censusSchema the value-set and
+           decorator metrics are `{"status":"unmeasured"}`; coverage, parse success and line fidelity need only the existing records.
+  method : + "ann": [{"name": str, "node": "ANNOTATION"|"CALL"|..., "lits": [raw source text of each literal argument]}] -- the method's
+           annotation/decorator names as Joern exposes them (qualified or simple; compared on the last `.`/`::` segment) and the raw
+           `code` of each literal argument. `l`/`le` are Joern's lineNumber/lineNumberEnd as reported (0-based for C#).
+  carg   : one record per argument of each frame-site CALL that matched (`site.matched`), joined by the frame's siteKey:
+           {"k":"carg","key":<siteKey>,"order":<int>,"recv":<bool>,"kind":<label>,"lit":<str|null>,"nreach":<int>,"reach":[<str>]}
+           * `order` = the 1-based RANK of the argument among the call's arguments sorted by Joern `argumentIndex` (ascending, ties by
+             node order), the receiver INCLUDED when the call has one. It is not the raw argumentIndex: frontends put the receiver at
+             argumentIndex 0 or 1 and number the rest differently, so measure.sc must rank, not copy.
+           * `recv` = true when the call's receiver is one of the arguments counted in `order` (so rank 1 is the receiver); computed per
+             call, false for a plain call. The census argIndex (0-based over explicit arguments) is `order - 1 - recv`.
+           * `kind` = the argument node label ("LITERAL", "IDENTIFIER", "CALL", ...); `lit` = raw source text of the Literal when
+             kind is LITERAL, else null; `nreach` = number of reaching definitions of an IDENTIFIER argument (0 when the dataflow
+             overlay is absent); `reach` = raw source text of each reaching definition that is a Literal.
 
 Judgments (consistent with ML §7.2 and §a1.6):
   * Candidate METHODs per definition: unclaimed, non-vendored, in the file, name accepted (see `accepted_names`), start line equal to
@@ -29,7 +35,14 @@ Judgments (consistent with ML §7.2 and §a1.6):
     source order); ties by source order of the METHODs. Non-symbol definitions never claim a METHOD and are not in any denominator.
   * Line fidelity: over matched pairs, METHOD.l == nameLine + offset and METHOD.le == endLine + offset (variant: l == declStartLine
     + offset). The offset applies to both ends.
-  * Parse success: census file has a FILE record and (its `methods` count > 0 or a non-vendored method record).
+  * Parse success: census file has a FILE record and (its `methods` count > 0 or a non-vendored method record). For python/javascript
+    this is vacuous (a `<module>`/`:program` METHOD always exists); `parseSuccessStrict` is beside it: over files whose census has a
+    symbol definition, those with at least one non-synthetic METHOD (not `NONSYMBOL_NAME`).
+  * Strata (ruling): every figure is the headline over the whole frame (as shipped); `strata.inCpgFiles` / `strata.absentFiles` split the
+    same figures by whether the file has a FILE node. Files absent from the CPG (cpp tests, Go `_test.go`, C# tests) stay in the headline
+    denominator: the frame-versus-import gap is reported, not hidden.
+  * Operator names: c2cpg names operator methods by the bare token (`()`, `=`, `==`, `<<`); `accepted_names` adds that alias.
+  * Macro stratum (cpp): definitions of kind "macro" are outside the headline denominator; `macroStratum` gives coverage with them.
   * Value-set recovery: matched call (site.matched) whose argument is a LITERAL with equal normalised value, or has exactly one
     reaching definition (nreach == 1) which is a Literal of equal value. Values are compared after
     `make_defs_census.normalise_literal`, the same function that produced the census value.
@@ -68,6 +81,15 @@ def accepted_names(d: dict):
     names.add(d["nameKey"])
     if d.get("kind") == "ctor":
         names.add("<init>")
+    for k in list(names):
+        if k.startswith("operator"):
+            # c2cpg names operator methods by the bare operator token: `=`, `()`, `==`, `<<` (observed: 149 such METHODs in the
+            # cpp off measure); `operator new` -> `new`. csharpsrc2cpg emitted no operator METHOD at all in the existing measure
+            # (10 C# operator defs, no METHOD within 2 lines), so no C# alias is added until one is observed. Kotlin `operator fun`
+            # is an ordinary identifier name and needs none.
+            rest = k[len("operator"):].strip()
+            if rest:
+                names.add(rest)
     return names
 
 
@@ -116,10 +138,12 @@ def read_defs(path) -> dict:
     return out
 
 
-def match_file(defs, methods, off):
-    """One-to-one matching of one file's symbol definitions to its METHODs -> {def index: method record}."""
+def match_file(defs, methods, off, with_macros=False):
+    """One-to-one matching of one file's symbol definitions to its METHODs -> {def index: method record}.
+    `with_macros` also offers the macro-stratum definitions (kind "macro", symbol:false) for matching."""
     claimed, out = set(), {}
-    order = sorted((i for i, d in enumerate(defs) if d["symbol"]), key=lambda i: (defs[i]["nameLine"], i))
+    order = sorted((i for i, d in enumerate(defs) if d["symbol"] or (with_macros and d.get("kind") == "macro")),
+                   key=lambda i: (defs[i]["nameLine"], i))
     for i in order:
         d = defs[i]
         names = accepted_names(d)
@@ -144,7 +168,26 @@ def _unmeasured(reason):
     return {"status": "unmeasured", "reason": reason}
 
 
-def census_block(lang: str, D: dict, M: dict) -> dict:
+def split_defs(D: dict, in_set) -> tuple:
+    """(D restricted to files in `in_set`, D restricted to the others): the frame-versus-import strata."""
+    def part(keep):
+        return {"meta": D["meta"], "files": [f for f in D["files"] if (f in in_set) == keep],
+                "defs": {p: v for p, v in D["defs"].items() if (p in in_set) == keep},
+                "args": [a for a in D["args"] if (a["path"] in in_set) == keep]}
+    return part(True), part(False)
+
+
+def census_block(lang: str, D: dict, M: dict, strata: bool = True) -> dict:
+    """Headline (as-shipped, whole frame) block; `strata` adds the in-CPG-file-set / absent-file split (ruling: absent files
+    such as cpp TEST files stay in the denominator, the gap is reported, not hidden)."""
+    block = _census_core(lang, D, M)
+    if strata:
+        din, dabs = split_defs(D, set(M["files"]))
+        block["strata"] = {"inCpgFiles": _census_core(lang, din, M), "absentFiles": _census_core(lang, dabs, M)}
+    return block
+
+
+def _census_core(lang: str, D: dict, M: dict) -> dict:
     off = sm.METHOD_LINE_OFFSET[lang]
     meta = M["meta"]
     schema = meta.get("censusSchema") == 1
@@ -166,12 +209,27 @@ def census_block(lang: str, D: dict, M: dict) -> dict:
             nline += 1 if (m["l"] == d["nameLine"] + off and end_ok) else 0
             nline_decl += 1 if (m["l"] == d["declStartLine"] + off and end_ok) else 0
     parsed = sum(1 for p in D["files"] if p in M["files"] and (M["files"][p] > 0 or M["methods"].get(p)))
+    # python/javascript: `<module>`/`:program` always exists, so `parseSuccess` is vacuous there (ML §7.2 as written); the strict
+    # figure asks for a non-synthetic METHOD in the files whose census has a symbol definition.
+    with_defs = [p for p in D["files"] if any(d["symbol"] for d in D["defs"].get(p, []))]
+    strict = sum(1 for p in with_defs if any(not sm.NONSYMBOL_NAME.search(m["name"]) for m in M["methods"].get(p, [])))
+    macro_defs = sum(1 for v in D["defs"].values() for d in v if d.get("kind") == "macro")
     block = {
         "parseSuccess": sm.prop(parsed, len(D["files"])),
+        "parseSuccessStrict": sm.prop(strict, len(with_defs)),
         "methodCoverage": sm.prop(ncov, sym),
         "lineFidelity": sm.prop(nline, ncov),
         "lineFidelityDeclStart": sm.prop(nline_decl, ncov),
     }
+    if macro_defs:
+        mk_ = tot = 0
+        for path, defs in D["defs"].items():
+            if path in M["files"]:
+                mm = match_file(defs, M["methods"].get(path, []), off, with_macros=True)
+                mk_ += sum(1 for i in mm if defs[i].get("kind") == "macro")
+                tot += len(mm)
+        block["macroStratum"] = {"macroDefs": macro_defs, "macroDefsMatched": sm.prop(mk_, macro_defs),
+                                 "methodCoverageWithMacros": sm.prop(tot, sym + macro_defs)}
     if frontend_only:
         block["valueSetRecovery"] = _unmeasured("frontend-only import: no dataflow overlay")
     elif not schema:

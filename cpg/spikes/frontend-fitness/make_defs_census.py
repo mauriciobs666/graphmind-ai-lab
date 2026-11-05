@@ -52,6 +52,17 @@ Judgments where §a1.6 leaves a choice (each consistent with ML §7.2; the resid
   9. Java record header `<init>` (only when the record declares no explicit canonical/compact constructor) and implicit accessors
      (a component with no explicit no-arg method of its name) are `symbol:true`; their spans are the header's component list and
      the component entry. Kotlin/C# primary constructors likewise (span: the parameter list; nameLine: the type name's line).
+ 11. C++ macro invocations with a brace body (`TEST(A, B) {}`, `TEST_F`, `ACTION`, ...) parse as function_definitions named by an all-caps
+     identifier with no return type. They are recorded as `kind:"macro"`, `symbol:false`: the bundle spec's rule 8 table is exhaustive and
+     names function-like macros as non-symbols (ML §2), so they are left out of method coverage; the metrics script reports coverage
+     with and without this stratum (`macroStratum`). A trailing annotation macro (`T f() GUARDED_(mu) { ... }`) is re-attached to the
+     preceding declarator, or recovered from the ERROR child tree-sitter builds, so the real function is one `symbol:true` definition.
+     Listed exception (a typed all-caps function, a real function): `RUN_ALL_TESTS` (googletest `gtest.h`). Covered by tests.
+ 12. Python `endLine` is the end of the last non-comment statement (tree-sitter-python attaches a trailing comment to the block).
+ 13. C# interpolated strings: `$"/u/{{{id}}}"` is one string_content token with no `interpolation` child in tree-sitter-c-sharp; any `{` or
+     `}` left after removing `{{`/`}}` makes the string a substitution, not a literal.
+ 14. Acceptance (b) (`--check`) excludes reference targets whose source line is a type declaration (an implicit constructor resolves to its
+     class, which is not a definition with a body); the count is printed and returned as `excludedAsTypeDeclarations`, never dropped silently.
  10. Probe file location for the S30 decorator-node worked examples: `results/<lang>.decorator-probe.json`, `{lang,node,example}`;
      written by graph-dba's measure.sc unit, not here.
 """
@@ -243,6 +254,8 @@ def literal_value(lang: str, n):
     if t in TEMPLATE_NODES.get(lang, ()):
         if first(n, "template_substitution", "interpolation"):
             return None
+        if lang == "csharp" and re.search(r"[{}]", re.sub(r"\{\{|\}\}", "", tx(n))):
+            return None  # `$"{{{id}}}"` is one string_content token in tree-sitter-c-sharp, but `{id}` is a substitution
         v = normalise_literal(lang, tx(n))
         return ("template", v) if v is not None else None
     if lang == "python" and t == "concatenated_string":
@@ -1000,6 +1013,9 @@ def cpp_name(fd):
     return out[:-1], out[-1], last
 
 
+MACRO_NAME = re.compile(r"[A-Z][A-Z0-9_]+")
+
+
 def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
     """(def records, arg records, tree-sitter error count) of one file."""
     key, tree = rf.parse_file(lang, rel, data)
@@ -1013,6 +1029,8 @@ def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
         nl = L.lc((name_node or n).start_byte)[0]
         ds = min([L.lc(sn.start_byte)[0], nl] + [L.lc(d.start_byte)[0] for d in deco_nodes])
         en = end_node or n
+        if lang == "python" and end_node is None:
+            en = _code_end(n)
         el = L.lc(max(en.end_byte - 1, en.start_byte))[0]
         defs.append({"k": "def", "path": rel, "name": None if anon else name, "nameKey": None if anon else nkey, "nameLine": nl,
                      "endLine": el, "declStartLine": ds, "symbol": symbol, "decorators": list(decos),
@@ -1193,9 +1211,41 @@ def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
             quals, base, nn = cpp_name(fd)
             if base is None:
                 return (chain, types, True)
+            err = first(n, "ERROR")
+            inner = first(err, "function_declarator") if err is not None else None
+            real = None
+            if err is not None and not quals and MACRO_NAME.fullmatch(base):
+                if inner is not None:
+                    real = cpp_name(inner)
+                else:
+                    idc = first(err, "init_declarator")
+                    idn = fld(idc, "declarator") if idc is not None else None
+                    if idn is not None and idn.type in ("identifier", "field_identifier"):
+                        real = ([], tx(idn), idn)
+            if real is not None:
+                # `void Retire() GUARDED_BY_(mu) { ... }` inside a class: the real declarator sits in an ERROR child and the
+                # trailing macro is parsed as the declarator; the real function is the one in the ERROR.
+                quals, base, nn = real
             encl = types[-1] if types else None
             ctor = base == (quals[-1] if quals else encl)
             seg = "<init>" if ctor else base
+            if not quals and not ctor and fld(n, "type") is None and MACRO_NAME.fullmatch(base):
+                prev = n.prev_sibling
+                while prev is not None and prev.type == "comment":
+                    prev = prev.prev_sibling
+                if (prev is not None and prev.type in ("declaration", "field_declaration") and not tx(prev).rstrip().endswith(";")
+                        and cpp_func_declarator(fld(prev, "declarator")) is not None):
+                    # trailing annotation macro (`T f() GTEST_LOCK_EXCLUDED_(mu) { ... }`): tree-sitter splits the function into a
+                    # prototype plus a macro-named definition; re-attach, so the real function is one symbol:true definition.
+                    for dd in reversed(defs):
+                        if dd["_s"] == prev.start_byte and dd["kind"] in ("prototype", "pure"):
+                            dd["symbol"], dd["kind"] = True, "ctor" if dd["nameKey"] == "<init>" else "fn"
+                            dd["endLine"] = L.lc(max(n.end_byte - 1, n.start_byte))[0]
+                            return (tuple(dd["qname"].split("::", 1)[1].split(".")), types, True)
+                # a macro invocation with a brace body (TEST, TEST_F, ACTION...): not a function-like definition under rule 8
+                # (spec3 §4.1: the table is exhaustive, function-like macros are not symbols). Kept as its own stratum.
+                mk(ctx, n, [base], base, base, nn, False, "macro")
+                return (chain, types, True)
             d, dn = decorators_of(lang, n)
             deleted = first(n, "delete_method_clause") is not None
             par = n.parent
@@ -1231,6 +1281,21 @@ def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
     rec(root, ((), (), False))
     defs.sort(key=lambda d: d.pop("_s"))
     return defs, build_args(lang, rel, data, key, root, L), rf.count_errors(root)
+
+
+_PY_COMPOUND = {"function_definition", "block", "if_statement", "elif_clause", "else_clause", "for_statement", "while_statement",
+                "try_statement", "except_clause", "finally_clause", "with_statement", "match_statement", "case_clause",
+                "class_definition", "decorated_definition"}
+
+
+def _code_end(n):
+    """The last non-comment statement of a Python definition: tree-sitter-python attaches a trailing comment to the block."""
+    while n.type in _PY_COMPOUND:
+        cs = [c for c in n.named_children if c.type != "comment"]
+        if not cs:
+            break
+        n = cs[-1]
+    return n
 
 
 def _walk(n):
@@ -1303,7 +1368,8 @@ def check_truth(lang: str, recs: list) -> dict:
     miss = sorted(w for w in wanted if w[1] not in syms.get(w[0], ()))
     types = [w for w in miss if is_type_decl(w[0], w[1])]
     real = [w for w in miss if w not in types]
-    return {"targets": len(wanted), "typeDeclTargets": len(types), "missingNonType": len(real), "examples": real[:12]}
+    return {"targets": len(wanted), "typeDeclTargets": len(types), "excludedAsTypeDeclarations": len(types),
+            "missingNonType": len(real), "examples": real[:12]}
 
 
 def main(argv=None) -> int:
@@ -1322,6 +1388,9 @@ def main(argv=None) -> int:
         info["symbolDefs"] = sum(1 for r in recs if r["k"] == "def" and r["symbol"])
         if a.check:
             info["acceptanceB"] = check_truth(lang, recs)
+            ab = info["acceptanceB"]
+            print(f"{lang}: acceptance (b): {ab['targets']} targets; {ab['excludedAsTypeDeclarations']} excluded as type declarations "
+                  f"(an implicit constructor resolves to its class: not a definition with a body); {ab['missingNonType']} missing", file=sys.stderr)
         print(json.dumps(info, sort_keys=True))
     return 0
 

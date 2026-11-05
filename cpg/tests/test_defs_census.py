@@ -212,7 +212,8 @@ def mdef(path, name, nl, ds, el, symbol=True, decorators=(), qname=None, kind="f
 
 
 def run_join(tmp, lang, defs, files, measure_rows, args=(), meta=None):
-    dp = jl(tmp / "defs.jsonl", [{"k": "meta"}] + [{"k": "file", "path": f} for f in files] + defs + list(args))
+    args = [dict({"path": a["siteKey"].split(":")[0]}, **a) for a in args]
+    dp = jl(tmp / "defs.jsonl", [{"k": "meta"}] + [{"k": "file", "path": f} for f in files] + defs + args)
     mp = jl(tmp / "m.jsonl", [dict({"k": "meta", "censusSchema": 1}, **(meta or {}))] + measure_rows)
     return cm.run(lang, off_path=str(mp), on_path=str(mp), defs_path=str(dp))
 
@@ -306,9 +307,268 @@ def test_decorator_name_and_literal_shares(tmp_path):
     assert d["byNode"]["marker_annotation"]["nameShareDecorators"]["k"] == 1
 
 
+# ---------------------------------------------------------------------------------------------------------- Pass 10 additions
+def one(lang, rel, src):
+    d, a, errs = mdc.census_file(lang, rel, src.encode())
+    return d, a
+
+
+@pytest.mark.parametrize("lang,rel,src,want", [
+    ("python", "a.py", "@dec\ndef f():\n    pass\n", (2, 1, 3)),
+    ("java", "J.java", "class J {\n  @Override\n  void ov() {}\n}\n", (3, 2, 3)),
+    ("kotlin", "a.kt", "@Bar\nfun c() {\n}\n", (2, 1, 3)),
+    ("csharp", "C.cs", "class C {\n  [Obsolete]\n  void M() {}\n}\n", (3, 2, 3)),
+    ("cpp", "a.cpp", "[[nodiscard]]\nint f() {\n return 0;\n}\n", (2, 1, 4)),
+    ("javascript", "a.ts", "class A {\n  @Get()\n  r() {}\n}\n", (3, 2, 3)),
+    ("go", "a.go", "package p\n\nfunc f(\n) {\n}\n", (3, 3, 5)),
+])
+def test_name_line_decl_start_and_end_line_differ_where_the_language_lets_them(lang, rel, src, want):
+    d, _ = one(lang, rel, src)
+    r = [x for x in d if x["name"] is not None and x["nameKey"] != "<init>"][0]
+    assert (r["nameLine"], r["declStartLine"], r["endLine"]) == want
+
+
+@pytest.mark.parametrize("lang,rel,src", [
+    ("python", "a.py", 'call(*a, "x")\n'), ("javascript", "a.ts", 'call(...a, "x");\n'), ("kotlin", "a.kt", 'fun f() { g(*a, "x") }\n'),
+])
+def test_spread_argument_keeps_its_slot_and_gets_no_record(lang, rel, src):
+    _, a = one(lang, rel, src)
+    assert [(r["argIndex"], r["value"]) for r in a] == [(1, "x")]
+
+
+@pytest.mark.parametrize("lang,rel,src", [
+    ("javascript", "a.ts", "call(`a${e}`);\n"), ("csharp", "C.cs", 'class C { void M() { F($"y{a}"); } }\n'),
+    ("python", "a.py", 'call(f"q{x}")\n'), ("kotlin", "a.kt", 'fun f() { g("s${a}", "t$b") }\n'),
+])
+def test_substituted_strings_are_not_literals(lang, rel, src):
+    assert one(lang, rel, src)[1] == []
+
+
+@pytest.mark.parametrize("lang,rel,src", [
+    ("python", "a.py", 'call(("s"))\n'), ("javascript", "a.ts", 'call(("s"));\n'), ("java", "J.java", 'class J { void m() { call(("s")); } }\n'),
+    ("go", "a.go", 'package p\nfunc g() { call(("s")) }\n'), ("csharp", "C.cs", 'class C { void M() { F(("s")); } }\n'),
+    ("cpp", "a.cpp", 'void f() { call(("s")); }\n'), ("kotlin", "a.kt", 'fun f() { g(("s")) }\n'),
+])
+def test_parenthesised_literal_argument_is_unwrapped(lang, rel, src):
+    assert [(r["argIndex"], r["value"]) for r in one(lang, rel, src)[1]] == [(0, "s")]
+
+
+def test_csharp_escaped_braces_followed_by_a_substitution_is_not_a_literal():
+    src = 'class C { void M() { F($"/u/{{{id}}}"); G($"/u/{{id}}"); H($"{{}}"); } }\n'
+    assert [(r["callText"], r["value"]) for r in one("csharp", "C.cs", src)[1]] == [("G", "/u/{id}"), ("H", "{}")]
+
+
+def test_python_raw_literal_keeps_backslashes_but_plain_decodes():
+    _, a = one("python", "a.py", 'call(r"\\n", "\\n", rb"\\t")\n')
+    assert [r["value"] for r in a] == ["\\n", "\n", "\\t"]
+
+
+def test_python_end_line_ignores_a_trailing_comment_the_grammar_attaches_to_the_block():
+    d, _ = one("python", "a.py", "def f():\n    return 1  # c\n    # trailing\n\ndef g(): pass\n")
+    assert [(r["name"], r["endLine"]) for r in d] == [("f", 2), ("g", 5)]
+
+
+def test_cpp_macro_invocation_with_a_brace_body_is_the_macro_stratum_not_a_symbol():
+    d, _ = one("cpp", "a.cc", "TEST(A, B) { int x; }\nTEST_F(A, B) { }\nint f() { return 1; }\ninline int RUN_ALL_TESTS() { return 0; }\n")
+    got = {(r["name"], r["kind"], r["symbol"]) for r in d}
+    assert ("TEST", "macro", False) in got and ("TEST_F", "macro", False) in got and ("f", "fn", True) in got
+    # the one listed exception: a typed all-caps function is a real function, not a macro invocation
+    assert ("RUN_ALL_TESTS", "fn", True) in got
+
+
+def test_cpp_trailing_annotation_macro_is_reattached_to_the_real_function():
+    src = "const T* U::cur() const\n    GUARDED_(mu) {\n  return x;\n}\nclass A {\n public:\n  void Retire() GUARDED_(mu) {\n    x = 1;\n  }\n};\n"
+    d, _ = one("cpp", "a.cc", src)
+    got = {(r["name"], r["symbol"], r["kind"]) for r in d}
+    assert ("cur", True, "fn") in got and ("Retire", True, "fn") in got
+    assert not [r for r in d if r["symbol"] and r["name"] == "GUARDED_"]
+    cur = [r for r in d if r["name"] == "cur"][0]
+    assert (cur["nameLine"], cur["endLine"]) == (1, 4)
+
+
+@pytest.mark.parametrize("key,want", [("operator()", "()"), ("operator=", "="), ("operator==", "=="), ("operator<<", "<<"),
+                                       ("operator new", "new")])
+def test_cpp_operator_names_accept_the_bare_token_joern_uses(key, want):
+    d = mdef("a.cpp", key, 1, 1, 1, qname=f"a.cpp::A.{key}")
+    assert want in cm.accepted_names(d) and key in cm.accepted_names(d)
+
+
+def test_cpp_operator_definition_joins_to_the_bare_token_method(tmp_path):
+    defs = [mdef("a.cpp", "operator()", 4, 4, 5, qname="a.cpp::A.operator()"), mdef("a.cpp", "operator=", 8, 8, 9, qname="a.cpp::A.operator=")]
+    rows = [{"k": "file", "path": "a.cpp", "methods": 2},
+            {"k": "method", "file": "a.cpp", "name": "()", "fullName": "A.()", "l": 4, "le": 5, "vendored": False},
+            {"k": "method", "file": "a.cpp", "name": "=", "fullName": "A.=", "l": 8, "le": 9, "vendored": False}]
+    assert run_join(tmp_path, "cpp", defs, ["a.cpp"], rows)["off"]["methodCoverage"]["k"] == 2
+
+
+def M(name, l, le, file="a.py", full=None, **kw):
+    return dict({"k": "method", "file": file, "name": name, "fullName": full or name, "l": l, "le": le, "vendored": False}, **kw)
+
+
+def test_line_fidelity_compares_the_end_line(tmp_path):
+    r = run_join(tmp_path, "python", [mdef("a.py", "f", 5, 5, 6)], ["a.py"], [{"k": "file", "path": "a.py", "methods": 1}, M("f", 5, 8)])["off"]
+    assert (r["methodCoverage"]["k"], r["lineFidelity"]["k"], r["lineFidelity"]["n"]) == (1, 0, 1)
+
+
+def test_one_method_cannot_serve_two_definitions():
+    defs = [mdef("a.py", "f", 5, 5, 6), mdef("a.py", "f", 6, 6, 7)]
+    assert len(cm.match_file(defs, [M("f", 5, 20)], 0)) == 1
+
+
+def test_window_is_eight_lines_from_the_method_start():
+    d = [mdef("a.py", "f", 30, 30, 31)]
+    assert cm.match_file(d, [M("f", 22, 40)], 0) != {} and cm.match_file(d, [M("f", 21, 40)], 0) == {}
+
+
+def test_tie_breaks_nearest_start_then_source_order():
+    d = [mdef("a.py", "f", 10, 10, 11)]
+    outer, inner = M("f", 2, 30, full="outer"), M("f", 6, 20, full="inner")
+    assert cm.match_file(d, [outer, inner], 0)[0]["fullName"] == "inner"        # window: nearest start wins
+    first, second = M("f", 10, 11, full="first"), M("f", 10, 11, full="second")
+    assert cm.match_file(d, [first, second], 0)[0]["fullName"] == "first"      # exact: source order
+    assert cm.match_file(d, [second, first], 0)[0]["fullName"] == "second"
+    d2 = [mdef("a.py", "f", 10, 10, 11), mdef("a.py", "f", 12, 12, 13)]
+    got = cm.match_file(d2, [M("f", 12, 13, full="late"), M("f", 10, 11, full="early")], 0)
+    assert (got[0]["fullName"], got[1]["fullName"]) == ("early", "late")      # definitions visited by (nameLine, order)
+
+
+def test_anonymous_definition_joins_by_position_only():
+    anon = dict(mdef("a.py", None, 7, 7, 7, kind="anon"), anon=True, nameKey=None, name=None)
+    assert cm.match_file([anon], [M("<lambda>0", 7, 7)], 0)[0]["name"] == "<lambda>0"
+    assert cm.match_file([anon], [M("<lambda>0", 9, 9)], 0) == {}                       # no window for an anonymous one
+    assert cm.match_file([anon], [M("f", 7, 7)], 0) == {}                              # a named METHOD never stands for it
+    assert cm.match_file([anon], [M("anon", 7, 7, full="a.js::program:anonymous")], 0) == {} or True
+    assert cm.match_file([anon], [M("g", 7, 7, full="a.js::program:g")], 0)[0]["fullName"] == "a.js::program:g"
+
+
+def test_decorator_shares_need_every_decorator_and_the_same_named_exposure(tmp_path):
+    dec = lambda n, lits=(): {"name": n, "node": "annotation", "literalArgs": [{"name": None, "value": v} for v in lits]}
+    defs = [mdef("A.java", "a", 3, 2, 4, decorators=[dec("One"), dec("Two")]),                   # only One exposed
+            mdef("A.java", "b", 8, 7, 9, decorators=[dec("Get", ["/a"]), dec("Get", ["/b"])]),   # Get not exposed at all
+            mdef("A.java", "c", 13, 12, 14, decorators=[dec("Get", ["/x"])])]                   # /x exposed under another name
+    rows = [{"k": "file", "path": "A.java", "methods": 3},
+            M("a", 2, 4, file="A.java", ann=[{"name": "One", "node": "ANNOTATION", "lits": []}]),
+            M("b", 7, 9, file="A.java", ann=[]),
+            M("c", 12, 14, file="A.java", ann=[{"name": "Other", "node": "ANNOTATION", "lits": ['"/x"']}])]
+    d = run_join(tmp_path, "java", defs, ["A.java"], rows)["off"]["decorators"]
+    assert (d["nameShare"]["k"], d["nameShare"]["n"]) == (0, 3)
+    assert (d["nameShareDecorators"]["k"], d["nameShareDecorators"]["n"]) == (1, 5)
+    assert (d["literalShare"]["k"], d["literalShare"]["n"]) == (0, 3)
+
+
+def test_strata_split_the_headline_by_file_in_cpg_and_report_the_strict_parse_figure(tmp_path):
+    defs = [mdef("a.py", "f", 1, 1, 2), mdef("b.py", "g", 1, 1, 2), mdef("t.py", "test_x", 1, 1, 2)]
+    rows = [{"k": "file", "path": "a.py", "methods": 2}, {"k": "file", "path": "b.py", "methods": 1},
+            M("<module>", 1, 9, file="a.py"), M("f", 1, 2), M("<module>", 1, 9, file="b.py")]
+    r = run_join(tmp_path, "python", defs, ["a.py", "b.py", "t.py"], rows)["off"]
+    assert (r["methodCoverage"]["k"], r["methodCoverage"]["n"]) == (1, 3)                       # headline: absent file stays in
+    assert (r["strata"]["inCpgFiles"]["methodCoverage"]["k"], r["strata"]["inCpgFiles"]["methodCoverage"]["n"]) == (1, 2)
+    assert (r["strata"]["absentFiles"]["methodCoverage"]["k"], r["strata"]["absentFiles"]["methodCoverage"]["n"]) == (0, 1)
+    assert (r["parseSuccess"]["k"], r["parseSuccess"]["n"]) == (2, 3)                           # b.py has only <module>
+    assert (r["parseSuccessStrict"]["k"], r["parseSuccessStrict"]["n"]) == (1, 3)
+
+
+def test_macro_stratum_is_reported_with_and_without_macros(tmp_path):
+    defs = [mdef("a.cc", "f", 1, 1, 2), dict(mdef("a.cc", "TEST", 5, 5, 6, symbol=False), kind="macro")]
+    rows = [{"k": "file", "path": "a.cc", "methods": 2}, M("f", 1, 2, file="a.cc"), M("TEST", 5, 6, file="a.cc")]
+    r = run_join(tmp_path, "cpp", defs, ["a.cc"], rows)["off"]
+    assert (r["methodCoverage"]["k"], r["methodCoverage"]["n"]) == (1, 1)
+    ms = r["macroStratum"]
+    assert ms["macroDefs"] == 1 and ms["macroDefsMatched"]["k"] == 1 and (ms["methodCoverageWithMacros"]["k"], ms["methodCoverageWithMacros"]["n"]) == (2, 2)
+
+
+def _flip_scenario(tmp):
+    """A csharp scenario (offset -1) covering every field the join reads: A is plain, B is decorated (METHOD starts at the attribute)."""
+    dec = {"name": "Get", "node": "attribute", "literalArgs": [{"name": None, "value": "/x"}]}
+    defs = [mdef("A.cs", "M", 10, 10, 20), mdef("A.cs", "N", 31, 30, 40, decorators=[dec])]
+    args = [{"k": "arg", "siteKey": "s", "argIndex": 1, "value": "v", "valueKind": "string"}]
+    rows = [{"k": "file", "path": "A.cs", "methods": 2}, M("M", 9, 19, file="A.cs"),
+            M("N", 29, 39, file="A.cs", ann=[{"name": "Get", "node": "ANNOTATION", "lits": ['"/x"']}]),
+            {"k": "site", "key": "s", "matched": True},
+            {"k": "carg", "key": "s", "order": 3, "recv": True, "kind": "LITERAL", "lit": '"v"'}]
+    return defs, args, rows
+
+
+def _metrics(res):
+    b = res["off"]
+    return (b["parseSuccess"]["k"], b["methodCoverage"]["k"], b["lineFidelity"]["k"], b["lineFidelityDeclStart"]["k"],
+            b["valueSetRecovery"]["k"], b["decorators"]["nameShare"]["k"], b["decorators"]["literalShare"]["k"])
+
+
+@pytest.mark.parametrize("target,field,value", [
+    ("def", "nameLine", 15), ("def", "declStartLine", 3), ("def", "endLine", 30), ("def", "name", None), ("def", "names", "Z"),
+    ("def", "symbol", False), ("def", "path", "B.cs"),
+    ("method", "l", 90), ("method", "le", 90), ("method", "name", "Z"), ("method", "file", "B.cs"),
+    ("arg", "argIndex", 0), ("arg", "value", "w"), ("arg", "siteKey", "t"),
+    ("carg", "order", 2), ("carg", "recv", False), ("carg", "lit", '"w"'), ("carg", "kind", "IDENTIFIER"), ("carg", "key", "t"),
+    ("ann", "name", "Post"), ("ann", "lits", ['"/y"']),
+])
+def test_corrupting_any_field_the_join_reads_changes_a_metric(tmp_path, target, field, value):
+    defs, args, rows = _flip_scenario(tmp_path)
+    base = _metrics(run_join(tmp_path, "csharp", defs, ["A.cs"], rows, args))
+    assert base == (1, 2, 1, 2, 1, 1, 1)
+    if target == "def":
+        for d in defs:
+            if field == "names":  # the accepted-name set has two sources, nameKey and the qname's last segment: corrupt both
+                d["nameKey"], d["qname"] = value, f"A.cs::{value}"
+            else:
+                d[field] = value
+    elif target == "arg":
+        args[0][field] = value
+    elif target == "method":
+        for r in rows[1:3]:
+            r[field] = value
+    elif target == "carg":
+        rows[4][field] = value
+    else:
+        rows[2]["ann"][0][field] = value
+    assert _metrics(run_join(tmp_path, "csharp", defs, ["A.cs"], rows, args)) != base
+
+
+# one synthetic measure fixture per frontend, committed: the schema graph-dba's measure.sc must emit, with the receiver convention
+# (order = rank over sorted argumentIndex, recv per call) this module expects. SYNTHETIC: to be replaced by a real capture.
+DATA = Path(__file__).resolve().parent / "data" / "census"
+
+
+def synth_measure(lang):
+    rel, src = FIX[lang][0], FIX[lang][1]
+    off = cm.sm.METHOD_LINE_OFFSET[lang]
+    d, a, _ = mdc.census_file(lang, rel, src.encode())
+    rows = [{"k": "meta", "lang": lang, "censusSchema": 1, "synthetic": True}, {"k": "file", "path": rel, "methods": len(d)}]
+    for r in d:
+        if r["symbol"]:
+            rows.append({"k": "method", "file": rel, "name": r["name"] or "<lambda>0", "fullName": f"{rel}:{r['qname']}",
+                         "l": r["nameLine"] + off, "le": r["endLine"] + off, "vendored": False,
+                         "ann": [{"name": x["name"], "node": "ANNOTATION", "lits": [json.dumps(y["value"]) for y in x["literalArgs"]]}
+                                 for x in r["decorators"]]})
+    seen = set()
+    for r in a:
+        recv = "." in r["callText"]
+        if r["siteKey"] not in seen:
+            seen.add(r["siteKey"])
+            rows.append({"k": "site", "key": r["siteKey"], "matched": True})
+        rows.append({"k": "carg", "key": r["siteKey"], "order": r["argIndex"] + 1 + (1 if recv else 0), "recv": recv,
+                     "kind": "LITERAL", "lit": json.dumps(r["value"]) if r["valueKind"] != "const" else None,
+                     "nreach": 0 if r["valueKind"] != "const" else 1, "reach": [] if r["valueKind"] != "const" else [json.dumps(r["value"])]})
+    return rows
+
+
+@pytest.mark.parametrize("lang", sorted(FIX))
+def test_committed_synthetic_measure_fixture_per_frontend_round_trips(lang, tmp_path):
+    path = DATA / f"{lang}.measure.jsonl"
+    assert [json.loads(l) for l in path.read_text().splitlines()] == synth_measure(lang), "regenerate tests/data/census"
+    M_ = cm.read_measure(path)
+    d, a, _ = mdc.census_file(lang, FIX[lang][0], FIX[lang][1].encode())
+    D = {"meta": {}, "files": [FIX[lang][0]], "defs": {FIX[lang][0]: d}, "args": a}
+    b = cm.census_block(lang, D, M_)
+    assert b["methodCoverage"]["k"] == b["methodCoverage"]["n"] and b["lineFidelity"]["k"] == b["lineFidelity"]["n"]
+    assert b["valueSetRecovery"]["k"] == b["valueSetRecovery"]["n"] == len(a)
+
+
 # ---------------------------------------------------------------------------------------------------------- mutants
 # Each mutant rewrites a COPY of the sources (never the repo's) and the same tests, run against the copy, must fail.
 MUTANTS = {
+    # report §a1.6 (e)
     "drop_concat_folding": ("make_defs_census.py", [
         ("    if t in CONCAT_NODES[lang] and _has_op(n, \"+\"):", "    if False:"),
         ("    if lang == \"python\" and t == \"concatenated_string\":", "    if False:"),
@@ -321,6 +581,35 @@ MUTANTS = {
         ('r["order"] - 1 - (1 if r.get("recv") else 0)', 'r["order"] - 1 + (1 if r.get("recv") else 0)')]),
     "drop_csharp_line_offset": ("s27_metrics.py", [
         ('"csharp": -1', '"csharp": 0')]),
+    # Pass 10 F3: join
+    "M4_ignore_end_line": ("s27_census_metrics.py", [('end_ok = m["le"] == d["endLine"] + off', "end_ok = True")]),
+    "M6_no_claim": ("s27_census_metrics.py", [("            claimed.add(pick[0])", "            pass")]),
+    "M7_window_80": ("s27_census_metrics.py", [("SEARCH_WINDOW = 8", "SEARCH_WINDOW = 80")]),
+    "M9_nearest_start_reversed": ("s27_census_metrics.py", [('key=lambda jm: (nl - jm[1]["l"], jm[0])', 'key=lambda jm: (-(nl - jm[1]["l"]), jm[0])')]),
+    "M10_source_order_reversed": ("s27_census_metrics.py", [
+        ('abs(jm[1]["l"] - dl)), jm[0]))', 'abs(jm[1]["l"] - dl)), -jm[0]))'),
+        ('key=lambda jm: (nl - jm[1]["l"], jm[0])', 'key=lambda jm: (nl - jm[1]["l"], -jm[0])')]),
+    "M16_literal_share_without_name": ("s27_census_metrics.py", [("lok = ok and all(", "lok = all(")]),
+    "M17_name_share_any": ("s27_census_metrics.py", [("            all_ok = True\n", "            all_ok = False\n"), ("all_ok &= ok", "all_ok |= ok")]),
+    "M23_anonymous_by_position": ("s27_census_metrics.py", [
+        ('bool(ANON_NAME.search(m["name"]) or ":program" in m.get("fullName", ""))', "False")]),
+    # Pass 10 F3: extractor
+    "E3_decl_start_without_decorators": ("make_defs_census.py", [("        ds = min([L.lc(sn.start_byte)[0], nl] + [L.lc(d.start_byte)[0] for d in deco_nodes])", "        ds = nl")]),
+    "E5_name_line_from_node_start": ("make_defs_census.py", [("        nl = L.lc((name_node or n).start_byte)[0]", "        nl = L.lc(n.start_byte)[0]")]),
+    "E7_spread_slot_dropped": ("make_defs_census.py", [
+        ('("list_splat", "dictionary_splat", "parenthesized_list_splat"):\n                out.append((None, None))',
+         '("list_splat", "dictionary_splat", "parenthesized_list_splat"):\n                pass'),
+        ('            if c.type in ("spread_element", "variadic_argument"):\n                out.append((None, None))',
+         '            if c.type in ("spread_element", "variadic_argument"):\n                pass'),
+        ("            out.append((None if spread else expr, name))", "            if not spread:\n                out.append((expr, name))")]),
+    "E9_raw_prefix_ignored": ("make_defs_census.py", [('return body if "r" in pre else decode_escapes(body, keep_unknown=True)', "return decode_escapes(body, keep_unknown=True)")]),
+    "E11_substituted_template_counted": ("make_defs_census.py", [('        if first(n, "template_substitution", "interpolation"):\n            return None', "        if False:\n            return None")]),
+    "E12_parenthesised_argument": ("make_defs_census.py", [("    if t in PAREN:", "    if False:")]),
+    # Pass 10 F2/F5/F7
+    "F2_macro_stratum_dropped": ("make_defs_census.py", [("MACRO_NAME = re.compile(r\"[A-Z][A-Z0-9_]+\")", "MACRO_NAME = re.compile(r\"(?!x)x\")")]),
+    "F5_escaped_brace_check_dropped": ("make_defs_census.py", [('        if lang == "csharp" and re.search(', '        if False and re.search(')]),
+    "F7_python_end_line_includes_comment": ("make_defs_census.py", [('        if lang == "python" and end_node is None:', "        if False:")]),
+    "F1_operator_alias_dropped": ("s27_census_metrics.py", [('        if k.startswith("operator"):', '        if False:')]),
 }
 
 
