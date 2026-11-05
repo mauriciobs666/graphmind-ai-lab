@@ -2445,3 +2445,198 @@ Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c
 R1 and R4 survive but sit in code this round did not change (the row's condition already existed); I report them as context, not as findings.
 
 **Growth-stops check:** Pass 17 adds one minor and two nits and re-opens no earlier finding. Passes 1–16 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 18 — U5.8a generation runs, the screen, form obedience (2026-11-04)
+
+**Verdict: approve with suggestions.** Every rule I checked conforms: the hit kinds, the third-hit drop, the regenerated item's `genRound` and new `genRunId`, the 5% equality, screen-beats-binding, the `bindingMismatch`/`formMismatch` split and the schema-failure void. Ledger ordering is crash-safe on every crash point I tried. Two majors, neither a blocker:
+- **P18-M1:** `_inside_brackets` nets openers against closers over the whole prefix, so a stray `)` earlier in a string ("Thanks :) (clear)") hides a bracketed meta token. This is a false negative in the screen's core rule.
+- **P18-M2:** `generation-restart` (a generator re-pin, the natural exit from a template halt) keeps every generated item, hit and counter, which the note forbids.
+- **Minors and nits:** survivors in the new tests, an unguarded `begin_round`, a misleading HISTORY clause, and a few screen edges (P18-m1 to m3, n1 to n3).
+
+### Scope
+
+- **Reviewed:** the uncommitted tree: new `decisionmodels/screen.py`, `tests/test_screen.py`, `tests/test_generation.py`; the `campaign.py` diff (fold, `State`, `begin_round`, `queue_regeneration`, `_record_generation`, `next`, `status`); the `ingest.py` docstring; the `README.md`, `AGENTS.md` and `docs/HISTORY.md` diffs. Spec: plan4 §3.6, §5 U5.8 (Screen); plan5 §3.2, §3.4, §3.5, §4 U5.8; the note §Q1.1 "Obedience is checked per item" and §Q1.2 "Hits"/"On a hit"/"Reruns"; plan6 for the halt and `resolve` paths. Root `REVIEW.md` applied; `decision-models/REVIEW.md` does not exist. Out of scope as briefed: votes, `labels.py`, tranche, top-up, pilot, cue check, recheck, report, label renderers.
+- **Suite:** live tree from `decision-models/`, fresh `PYTHONPYCACHEPREFIX`: **1224 passed, 2 xfailed**; `ruff check .` clean. HISTORY's "1147 to 1224" and "47 + 30" tests agree with what I ran (77 in the two new files).
+- **Mutants and probes:** private copy `scratchpad/p18/repo/` (mutants) and `repo2/` (probes), the live tree untouched (`cmp` equal for the four reviewed files after the runs). 37 mutants run: 9 survived and 1 hung into a 60 s timeout (Appendix Q). 6 probe tests plus a screen sweep.
+- **Not run:** nothing live; no `driver` subcommand queues a round yet (README says so), so the runner path is exercised only through `Campaign` in tests.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Answers to the gate's questions
+
+**Conformance.**
+- **Hit kinds and grammar** match the note: `near-miss` and the id form hit anywhere; ordinary words only inside balanced brackets or after `label`/`answer`/`category`/`intent` plus separators; "had difficulty paying", "pedido_123" and "opções_12" pass. The one deviation is P18-M1.
+- **Third-hit drop, the regenerated item and the 5% equality:** a seed drops on its third hit; a regenerated item keeps its seed's `genRound` and takes the regen batch's `genRunId` (mutants M4, M15 red); `100·hits > 5·drawn` (mutant `>=` red, 40 drawn: 2 hits no halt, 3 halt).
+- **Screen beats binding; binding vs form:** precedence is pinned in `check_item` and at the fold (M8, M33 red). The four-error wrong-kind item is one `bindingMismatch` with no `formMismatch`. A schema failure voids the run and appends no `generated` or hit event (the test asserts none).
+- **Per-seed `genRound` and `genRunId` under `cut`:** `genRound` comes from the seed's round (`state.seed_round`), so a pooled regen run holds items of rounds 1 and 2; `genRunId = gen_<n>` follows the batch id, which a cut does not copy, so the overflow batch is a run of its own (tests and M15 red). `seed_round` is indexed by round start order, not by `genRound`, so a repeated `genRound` is safe in the code (untested: P18-m1).
+- **Template halt fires once per (round, reason):** `template_halts` is never cleared, `resolve` included. A probe shows that after `resolve` a run with 25 of 25 first-pass binding hits (round at 29 of 50 hits, 58%) does not halt again. That matches the test and AGENTS ("once per round and reason"); it contradicts HISTORY's wording (P18-m3).
+
+**Ledger ordering, crash safety, replay.**
+- **Crash between the events and the outcome:** probe C1 raises on the first `outcome` append after a run with 23 accepted items and 2 hits. State then shows 0 items, 0 hits (the staged events are unfolded). A fresh `Campaign` re-ingests the same opaque: 23 items, 2 hit seeds with one hit each, the ledger holds two `generated` events and four hit events, and `fold` keeps one of each. Correct.
+- **Crash after a partial hit append** is the same case: nothing is folded until the outcome. A void or reissue outcome discards staged events (`staged.pop`), but no test covers a void with staged events (mutant X1 survives, P18-m1).
+- **Crash between `outcome` and `_move_to_store`** is the existing path (`_reingest`); nothing new.
+- **`fold` purity:** `_apply_generation` mutates only `state`; the halt is derived in `fold`, so replay reproduces it. The shuffle seeds `random.Random` with a string, which is stable across processes. `next` re-ingesting a crashed halting run returns `Stop("halted", "")`, an empty detail (P18-n3).
+- **`begin_round` is not atomic:** P18-m2.
+
+**Screen scope.** Skipping enum fields and `equalsAxis`-bound fields is right: the only such field is guard's `condition`, a bound item that differs is a `bindingMismatch`, and a leak in the equal text would be the seed's own. Unknown item fields are refused by `input_field_errors` before the screen (probe: `intent` and a nested `note` give two errors), so no unscreened channel exists. False negatives found: P18-M1, n1. False positives: Open question 1.
+
+**Implementer's observations, as built.** A round of 5 seeds halts on one hit (20%); the tail run of 5 seeds is a plain short run; the denominator is the `round-start` seed list (one `begin_round`), so a double `begin_round(1)` gives two rounds (P18-m2). After a template halt, `resolve` retry changes nothing about the ingested batch (safe), `--skip-batch` is refused (reason is not `safeguardStop`), `--repin-instructions` is refused (the halt has no `run`), and `--repin-model generator` goes through P18-M2. The 3-hit cap bounds the waste per seed after an un-fixed resolve.
+
+### Findings
+
+**P18-M1 — major — a stray closing bracket earlier in a string hides a later bracketed meta token.** *Owner: `coder`. Verified: probe, and the fix below run.*
+- `screen.py:_inside_brackets` computes `depth = openers before − closers before` over the whole prefix. A closer with no opener (an emoticon `:)`, a list marker `1)`) cancels a later real opener. Probe on guard (`turns_item`): "Thanks :) (clear)", "1) first 2) (clear)", "a) (b clear c)" and "(a)) x (clear)" all return `None`; "(ok) difficulty" correctly passes.
+- **Why it matters.** The screen exists to keep intent out of the votes and out of Laya's eval input (note §Q1.2). Chat text is where `:)` and `1)` occur. The test file pins nested and unclosed brackets but no stray closer, so the suite stays green.
+- **Fix (run):** clamp at zero while scanning, `depth = depth + 1 if char in _OPENERS else max(0, depth - 1) if char in _CLOSERS else depth`. In `repo2`, 77 tests stay green and the four strings above hit `meta:clear`; "(ok) difficulty", "(unclosed difficulty" and "(a) clear (b)" still pass. Add the four strings to `test_an_ordinary_word_in_a_meta_position_is_a_hit`, which today reddens on none of them.
+
+**P18-M2 — major — `generation-restart` keeps the generated items, hits and counters.** *Owner: `architect` to rule, then `coder`. Verified: probe R1.*
+- Note §Q1.2 "Reruns": a generator re-pin "discards the in-progress point's generated items and restarts its generation, so a point never mixes two generators"; plan4 §3.3 binds `resolve --repin-model generator` to the `generation-restart` event. `_fold_resolution` only sets `state.pins[role]`.
+- Before this unit nothing generated was folded, so the omission was harmless. Now probe R1 (50 seeds, one run halting on 4 binding hits, then `resolve(repin_model=("generator", "claude-opus-4-8"))`) leaves 21 items, 4 hits, `round_hits` and `template_halts` unchanged, with the new pin set. The template halt is the natural moment to move to another generator.
+- **Fix:** either `fold` clears `items`, `hits`, `dropped_seeds`, `round_hits` and `template_halts` on `generation-restart` and the round is requeued, or the plan names the later unit that does and `resolve` refuses `--repin-model generator` while `state.items` is non-empty until then. A test: items, then restart, then none left.
+
+**P18-m1 — minor — survivors in the new tests.** *Owner: `coder`. Verified by mutants (Appendix Q).*
+- **M9:** `generation_drops` reading the *last* of a hit's `reasons` instead of the first stays green: the one multi-reason drop in the suite (seed 1's third hit) shows a single reason. Add a seed whose third hit is screen + binding + form and assert it counts under `screenHits`.
+- **X1:** applying staged events at a `void` outcome stays green. Add a staged run followed by a `void`/`reissued` outcome and assert nothing folded.
+- **X2:** removing `latest[seed].state == "ingested"` from `awaiting_regeneration` stays green; the clause is what stops a seed in a `retryCapExceeded` regen batch from re-queuing forever. Drop a regen batch by three voids and assert `next()` is `done`.
+- **X3:** indexing `seed_round` by `genRound − 1` stays green; no test repeats or skips a `genRound` (two `begin_round(1)`, or a 1 then 3).
+- **M34/M35:** `begin_round(design_stratum=...)` is never called with a stratum, so ignoring it or recording `None` stays green.
+- The extra shuffle in `begin_round` is unobservable (M26 stays green) because `draw_seeds` already returns a shuffled order; it is plan-required, so only a note.
+
+**P18-m2 — minor — `begin_round` is neither idempotent nor guarded.** *Owner: `coder`. Verified: probe B1.*
+- Two `begin_round(1, 30)` calls record two round-1 starts and four batches. A crash between `seed-draw` and `round-start` (injected) leaves 30 held seeds in no round; the retry draws 30 more (60 in `state.seeds`, 30 in a round). Nothing reads the orphans today, but later units that walk `state.seeds` will.
+- **Fix:** refuse a `genRound` already started unless it is a new top-up round, and append `round-start` in the same step as the draw, or have `fold` ignore draws with no `round-start`. A test for the double call.
+
+**P18-m3 — minor — HISTORY says the halt re-arms.** *Owner: `coder` (or `teco` at close). Verified: probe R2.*
+- `docs/HISTORY.md` U5.8a: "fires once per (round, reason) until a `resolve` clears it". `resolve` clears `state.halt` only; `template_halts` stays, so the pair never fires again (P18 answers above). AGENTS says "once per round and reason", which is right. Reword HISTORY to "once per (round, reason); a `resolve` clears the halt, not the pair".
+
+**Nits.**
+- **P18-n1 (screen edges, probe-verified, all `None`):** `near‑miss` with U+2011 or U+2013, `(near miss)`, uppercase ids (`DOM_07`: `_ID_TOKEN` runs on the raw text, the minted form is lowercase), `answers: yes`, `Intended: yes` (`intended` is not a keyword in the note), `{clear}`, fullwidth `（clear）`. The note fixes the grammar, so these are bounded false negatives, not conformance gaps; fold the first two into the token list if cheap.
+- **P18-n2:** `fold` merges staged hits by seed but replaces staged items. If a crashed ingest is re-run after the screen or a `points/` list is edited (what a human does after a halt), a seed can be in both `items` and `hits` (synthetic-event probe S1). Replace the whole `staged` entry at each `generated` event.
+- **P18-n3:** `next()` recovering a halting ingest returns `Stop("halted", "")` because it reads `result.outcome["reason"]`; use `_halt_text(state.halt)`. Verified by probe.
+
+### What's solid
+
+- Items and hits are events appended before the `outcome`, applied only at an ingested outcome; every crash point I tried recovers to the same state.
+- Plumbing mutants (axes checked, answer key, hit seed, `genRound`, `genRunId`, halt denominator and round) all redden; hand-built seeds with unique conditions avoid the uniform-stub trap.
+- `check_item` returns every reason in precedence order, so the cap and the halts take their different views from one result.
+- The docs match the code except P18-m3; AGENTS' new bullet states current behavior in a clause and cites no history.
+
+### Open questions
+
+1. **Token lists and natural text (data-scientist/architect).** The note's in-bracket rule hits ordinary words in the message-type and guard lists: probe on message-type gives `meta:order` for "Where is my order (order #4411)?", `meta:other` for "(other than login)", `meta:type` for "(type A)"; guard gives `meta:no` for "(no rush)". The code follows `points/*/point.json`; whether a 5% template halt is then reachable on natural text is a list-tuning question for U5.3's owner, not this unit.
+2. Does P18-M2 belong to this unit or to U5.8b/c? Either way the plan should say where `generation-restart` clears generation state.
+
+### Appendix Q — Pass 18 mutants and probes
+
+Files: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p18/` (`mutants.py`, `mutants-run.txt`, `mutants-run2.txt`, `mutants-run3.txt`, `repo2/tests/test_p18_probes.py`, `repo2/probe1.py`). Mutants ran `tests/test_screen.py` and `tests/test_generation.py` (60 s timeout); the first five (M1 to M5) ran with `-x` plus `tests/test_campaign.py`. Each file was restored and `cmp`-equal. Baseline 77 passed.
+
+| ID | Mutation | Result |
+|---|---|---|
+| M1 / M2 | check against the first seed's axes / rotate the answer key | red / red |
+| M3 | a hit requeues the batch's last seed | red |
+| M4 / M19 | `genRound` / halt `genRound` from the last round | red / red |
+| M5 | halt denominator all rounds | red |
+| M6 | `awaiting_regeneration` ignores `dropped_seeds` | red (hang, 60 s) |
+| M7 / X7 | `firstPass` always / inverted | red / red |
+| M8 / M33 | precedence reversed / hit event named by the last reason | red / red |
+| **M9** | `generation_drops` reads the last reason | **green** |
+| M11 / M14 | `>=` at 5% / cap 2 | red / red |
+| M15 | `gen_run_id` not from the batch id | red |
+| M18 / M20 / M24 / M30 / X4 | halt reason last / one reason counted / halts not recorded / no touched round / `>` at the cap | red |
+| M21 / M22 / M23 / M28 / M29 | equalsAxis skip removed / id unbounded / unclosed counts / binding detail / keyword adjacency | red |
+| M27 / M31 / M32 / X6 | regen order / run of 1 / drop count +2 / form not kept | red |
+| M26 | shuffle removed | green (draw already shuffled) |
+| M34 / M35 | `design_stratum` ignored / recorded as `None` | **green** / **green** |
+| **X1** | a void outcome applies staged events | **green** |
+| **X2** | `latest[seed].state == "ingested"` removed | **green** |
+| **X3** | `seed_round` by `genRound − 1` | **green** |
+| X5 | `setdefault` for an accepted item | green (unreachable in the flows I found) |
+| M25 | `staged.get` for `pop` | green (not a behavioral mutant; the apply stays at the outcome) |
+
+Probes (`repo2/tests/test_p18_probes.py`, added to the copy only): C1 crash at the outcome then re-ingest; B1 double `begin_round` and a crash before `round-start`; R2 a 25-of-25 bad run after `resolve`; R1 `repin_model` after a template halt; S1 staged hit plus accepted item for one seed; a `next()` recovery halt detail. The screen sweep is `probe1.py` (35 guard strings, 5 message-type).
+
+**Halt counts under several definitions** (observed from `seeds.round_one_count`/`target_count`): guard 880 drawn, 36 runs, tail 5, tolerates 44 hits per reason (40 if the denominator were the 800 target); message-type 660 drawn, 27 runs, tail 10, tolerates 33 (30); join-in 440 drawn, 18 runs, tail 15, tolerates 22 (20). A denominator of "items generated so far" would halt guard on 2 hits in its first run of 25.
+
+**Growth-stops check:** Pass 18 adds two majors, three minors and three nits, and re-opens no earlier finding. Passes 1 to 17 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 19 — U5.8a fix round re-gate (2026-11-04)
+
+**Verdict: approve with suggestions.** All Pass 18 findings are fixed and re-run red. The round's pieces compose without a defect I could reach in a real flow. One method point (P19-M1) and three minors remain.
+- **P19-M1 (major, method):** the pooled halt's denominator is the seeds ingested so far, so it is a sequential test with no correction. At a true 3% hit rate it fires in about a third of guard rounds.
+- **P19-m1 to m3 (minor):** a run issued before a repin is audited against the new pin; the narrowed bracket rule lets through leaks the old rule caught; `extend=True` is a bare caller assertion.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against my Pass 18 copy: the `campaign.py` and `screen.py` diffs, `tests/test_generation_rounds.py` (new, 27 tests), the changed tests, `HISTORY.md`. Spec: plan6 v1.18 §3.8 and its §5 row "U5.8a, U5.9"; note §Q1.2 "Hits" as amended. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite:** live tree, fresh `PYTHONPYCACHEPREFIX`: **1285 passed, 2 xfailed**; `ruff check .` clean.
+- **Mutants and probes:** private copy `scratchpad/p19/repo/`; 33 mutants, each restored `cmp`-equal. Probes in `p19/repo/tests/test_p19_probes.py`, `p19/cmp_screen.py` (old screen against new, 57 strings) and a simulation (Appendix R). Live tree untouched (sha256 in `p19/live-sha256.txt`).
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### (a) Disposition of Pass 18
+
+- **P18-M1 (bracket miss): fixed.** `_bracket_contents` is a stack that ignores a closer with no opener; "Thanks :) (clear)", "1) a 2) (clear)" now hit `meta:clear` (cmp run), pinned in `test_screen.py:93-94`. Mutants: mismatched pairs closing (B2), `all`→`any` (B3), colon form removed (B4), `|` dropped (B5) all red. B1 (stray closer skipped) is the code's own behavior, an equivalent mutant.
+- **P18-M2 (restart keeps state): fixed.** `_restart_generation` clears items, hits, drops, `round_hits`, `template_halts`, pool, rounds, staged and retires every batch. Mutants: items kept (P11), halts kept (P12), pool kept (P13), no retire (P14), retired outcome applied (P15) all red. One survivor, P19-m4.
+- **P18-m1 survivors: all fixed.** M9, X1, X2, X3, M34, M35 re-run red (all six red).
+- **P18-m2 (`begin_round`): fixed with a caveat (P19-m3).** A started `genRound` is refused unless `extend`; `extend` on an unstarted one is refused (P16, P17 red); a crash after the draw leaves an orphan and a retry succeeds; a crash after `round-start` is requeued by `next` (P18, P19 red).
+- **P18-m3 (HISTORY wording): fixed.** `docs/HISTORY.md:52` says "a `resolve` clears the halt, not the pair".
+- **P18-n1: unchanged by design.** Re-run: `near‑miss` (U+2011), `(near miss)`, `DOM_07`, `answers: yes`, `Intended: yes`, `{clear}`, `（clear）` still pass. **P18-n2: fixed** (the `generated` event starts a fresh staged entry; P21 red). **P18-n3: fixed** (`next` returns the halt text; test at `test_generation_rounds.py:545`).
+
+### (b) Interactions
+
+- **Balanced cut × pooled halt × per-round denominator.** Run sizes differ by one (16 of 25, 20 of 24 for 880), so the pooled denominator after k runs is within k of 25k; no effect on either test. A requeue of unbatched seeds re-cuts the remainder in the stored (already shuffled) order, so a half-queued round ends balanced (test: `[22, 22, 22, 22, 21, 21]`). `drawn_in` sums every `round-start` of a `genRound` (P3 `<=` mutant red); a denominator that grows after runs are ingested is consistent but means an early halt used the smaller draw. **P19-M1 below is the real interaction.**
+- **Restart-retire × the issue-time snapshot × open attempts.** Probe O1: run B open on batch 2, run A halts on batch 1, `resolve --repin-model generator claude-opus-4-8`, then `next`. Result: `Stop("done")`, B's outcome recorded as `halted modelMismatch environmental`, no `state.halt`, batch `retired`. So a retired run never stops the campaign. But B was audited against the *new* pin: see P19-m1.
+- **`extend` × orphans × unbatched re-queue.** Probe E1: round 1 (20 seeds); `begin_round(2, 30, "turns")` crashes at `queue_batch` (30 unbatched); the same call without `extend` is refused; `extend=True` for the other stratum gives `drawn_in(2) = 60`; `next` queues the 30 stranded seeds as 2×15. Correct. Orphan draws (no `round-start`) are never queued. Caveats: P19-m3.
+- **Screen rule against the false-negative class.** "(label order please)" is caught on message-type through the keyword rule (`label` directly before the token `order`); on guard it is not, because `order` is not a guard token. What the narrowed rule newly lets through (old hit, new pass; cmp run, guard unless marked): `(intended answer is true)`, `(the intended answer)`, `(the answer is no)`, `(difficulty hard)`, `(clear difficulty)`, `(clear/hard)`, `(clear and simple)`, `(yes or no)`, `(clear, hard)`, `(clear.)`, `(clear!)`, `(clear?)`, `(true.)`, `(clear] x`, `(not clear)`, `(very clear)`, `(true story)`, `(no rush)`, `(listed in order)`, `(empty list)`; message-type `(order #4411)`, `(other than login)`, `(type A)`, `(it is an order)`. Newly hit: the two stray-closer strings. The amendment's text (whole content, or a token followed by `:` or `=`) excludes every one of these, so the code conforms; but the first five and the punctuated forms are leaks of the kind the note exists to stop, and I list them for the architect (P19-m2).
+
+### (c) The implementer's deviations
+
+1. **`extend=True` is sound as a guard, weak as a rule.** It reconciles the two plan sentences correctly: a repeated `genRound` call is refused loudly, and a top-up's per-stratum calls share one denominator. But `extend` is the caller's assertion: nothing checks that the draw is a new stratum. Probe E1: a stale `extend=True` for round 1 silently doubles it (`drawn_in(1)` 20 to 40), and a retry of a crashed stratum with `extend=True` draws that stratum twice. See P19-m3.
+2. **Pooled halt on a front-loaded leak: it follows the plan, and it is noisy.** The denominator is ingested seeds, as §3.8 says. But the test is repeated after every run, so it crosses early by chance (P19-M1).
+3. **Pins and instructions from the folded state, the rest from the snapshot: right in the common case, wrong for one flow.** A `resolve --repin-*` moves the pin; an audit of a *later* run must see it, and the first-event-sticky fold is where it lives, whereas the snapshot's `model` would be the last install's and would ignore the repin. The residual is an attempt issued before a repin and ingested after (P19-m1). Template, agent type, effort and guard command are not touched by a repin, so the snapshot is right for them; mutant P1 (audit reads the latest event) is red.
+
+### Findings
+
+**P19-M1 — major (method; the code conforms to §3.8) — the pooled halt is an uncorrected sequential test.** *Owner: `architect` with `data-scientist`. Verified: simulation, Appendix R.*
+- After every first-pass run the code tests `h ≥ 2` and `100·h > 5·n` with `n` the seeds ingested so far. Guard round 1 (36 runs, 16 of 25 and 20 of 24), independent hits: pooled fires in **0.0 / 3.8 / 16.1 / 33.6 / 62.4 / 87.7%** of rounds at a true rate of 0 / 1 / 2 / 3 / 4 / 5%. The end-of-round test (45 hits of 880) fires in 0.0% at 3% and 45.9% at 5%.
+- A first run of 25 halts on 2 hits (8%). At a 3% true rate that has probability about 17% before a second run exists.
+- **Why it matters.** A false halt costs one `resolve`, and the pair is then spent (`pool_halts` is kept), so the harm is a needless stop, not lost data. But the pool makes the "5%" threshold mean "5% at some prefix", about a third of rounds stop at 3%. Fix options for the architect: a minimum pooled `n` (the round-level floor is 2 hits, a pool of 25 seeds is not a pool), or a pooled test that only runs when a round is under its floor, which is the case it was added for.
+
+**P19-m1 — minor — a run issued before a repin is audited against the new pin.** *Owner: `architect` (plan wording), `coder`. Verified: probe O1.*
+- `_expected` reads `state.pins` and `state.instructions` (current) with the snapshot for the rest. Probe O1: the open run's model is the old pin; after the repin it is a `modelMismatch` halt outcome. For a generate run the batch is retired, so it is recorded and harmless. For a label run open across `--repin-model labeler` (no retire) the fold would set a halt on a run that was fine under its pin. Reachable only through a crash-leftover attempt and a halt in the same `next` recovery scan.
+- **Fix:** store the pin and instructions on `Attempt` at `issued` and audit against those; a repin then applies to later issues only. Add a label-run case.
+
+**P19-m2 — minor — the narrowed bracket rule passes real leaks.** *Owner: `architect`. Verified: `p19/cmp_screen.py`.*
+- The list under (b). Real leaks among them: `(intended answer is true)`, `(the answer is no)`, `(difficulty hard)`, `(clear difficulty)`, and any single token with trailing punctuation (`(clear.)`). The cost of the old rule was false halts on `(no rush)`, `(order #4411)`; the new rule trades it for these.
+- **Fix, for the plan to choose:** allow trailing punctuation inside the group (`(clear.)`), and make `intended` a keyword like `intent` so "(intended answer is true)" is caught by the keyword rule. Both keep `(no rush)` and `(order #4411)` passing (the keyword rule needs the token directly after).
+
+**P19-m3 — minor — `extend` and a half-queued round leave the operator to guess.** *Owner: `coder`. Verified: probe E1.*
+- Stale `extend=True` doubles a round without notice (`drawn_in(1)` 20 to 40); the retry of a crashed stratum call must be `extend=True`, which draws that stratum again while `next` also queues the stranded one. Neither is wrong for the denominator, but the stratum is drawn twice.
+- **Fix:** refuse an `extend` whose `design_stratum` already has a `round-start` in that `genRound`, or have `begin_round` report the unbatched count before drawing.
+
+**P19-m4 — minor — one survivor.** *Owner: `coder`. Verified: mutant P22.*
+- Removing `if batch.state == "retired": stop = None` in `ingest` stays green: the open-run test repins to the model the fixture already used, so the retired run audits clean and never halts. Use a different model (probe O1's) and assert `next()` is `done` and the outcome is recorded.
+
+**Nits.** P19-n1: a pooled-only halt carries `genRound: None`; U5.10's `diagnostics.json` ("the halt's round and reason") must handle it. P19-n2: `State.unbatched_seeds`'s docstring says "no live generation batch", the code counts every generation batch in any state (right, since a dropped batch must not be requeued).
+
+### What the architect must fix in plan6
+
+1. §3.8 "pooled halt": the stopping rule, per P19-M1 (a minimum pooled `n`, or pool only under the round floor).
+2. §3.8 "issue time": say pins and instructions are the values as of issue, not the folded values at ingest, or accept P19-m1 explicitly; currently the sentence says "the same event" while the code correctly reads the folded pin.
+3. §3.8 "A round": `extend` is not named; state who may pass it and what a retry after a half-written stratum does (P19-m3).
+4. §3.8 / note §Q1.2 "Hits": the punctuation and `intended` cases (P19-m2).
+5. §3.8 "halt": a pooled halt has no round; say what `diagnostics.json` records.
+
+### What's solid
+
+- Every Pass 18 survivor is now red; the 27 new mutants over restart, snapshot, hash, pool, balanced cut, `drawn_in`, unbatched requeue and bracket parsing redden except P22 and the equivalent B1.
+- The restart resets exactly what §3.8 lists, and a retired run is recorded without effect.
+- The issue-time snapshot is held by value in the fold (no aliasing), and the hash and the audit both read it.
+
+### Appendix R — Pass 19 mutants, probes, simulation
+
+Files under `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p19/`: `mut.py`, `mut-run.txt`, `cmp_screen.py`, `repo/tests/test_p19_probes.py`. Baseline in the copy 138 passed (the three new test files). Mutants (all red unless stated): M9, X1, X2, X3, M34, M35; P1 audit reads the latest event, P2 hash from the latest event, P3 `drawn_in` `<=`, P4/P5 balanced cut off by one, P6 floor 1, P7 pool counts hit seeds, P8 pool takes regeneration, P9 pool halts not recorded, P10 pool without the hash, P11-P14 restart keeps items / halts / pool / batches, P15 retired outcome applied, P16/P17 `extend` checks, P18/P19 unbatched requeue, P20 pooled halt's round, P21 stale staged hit; B2-B5 bracket parser. **Green:** P22 (P19-m4), B1 (equivalent).
+
+**Simulation** (independent hits, 4,000 rounds per rate, sizes 16×25 + 20×24, test after each run as `_over_threshold`): pooled fires 0.0% at 0%, 3.8% at 1%, 16.1% at 2%, 33.6% at 3%, 62.4% at 4%, 87.7% at 5%, 100% at 8%; the end-of-round test at 880 seeds (45 hits) fires 0.0% at 3% and 45.9% at 5%.
+
+**Growth-stops check:** Pass 19 adds one major, four minors and two nits, re-opens no earlier finding, and states each Pass 18 finding in one disposition line. Passes 1 to 18 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.

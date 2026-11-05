@@ -41,6 +41,24 @@ finishes the move; a different answer raises `AnswerRefused`); a name with no `a
 (re-issued, usage stop, halt) is retired, and an answer part it did not record, or one that differs
 from its stored copy, raises `AnswerRefused`. Either way nothing is appended.
 
+**Generation** (plan4 §3.6, plan5 §3.2/§3.5, plan6 §3.8; `screen.py`). `begin_round` draws a
+round's seeds (`record_draw`), appends `round-start {genRound, seeds}` and queues them, shuffled,
+as first-pass runs (`generation: "first"`) in a balanced cut of `⌈n/25⌉` runs (`balanced_runs`);
+`queue_regeneration` (which `next` calls when nothing is pending) queues the seeds a hit left
+awaiting as `"regen"` runs, and `next` first queues any `round-start` seed no batch holds. A run's
+`genRunId` is its batch's (`Batch.gen_run_id`); an item's `genRound` is its seed's round, never the
+batch's. At ingest, before the `outcome` commits it, each item is checked: a clean run's items go
+in one `generated` event, a rejected one in a `screen-hit`/`binding-mismatch`/`form-mismatch`
+event (`reasons` lists every reason it shows, first = the one counted toward the seed's 3 hits).
+`fold` applies both only at the run's ingested `outcome`, then evaluates the `template` halts
+(`State.halt`, `voidClass: "template"`): per (`genRound`, reason) over that round's drawn seeds,
+and per (generator-template hash, reason) over ingested first-pass seeds, each needing two hits
+and over 5%, each firing once, regeneration hits excluded. An attempt carries the `expectations`
+in force at its `issued` (`Attempt.expectations`), which the audit and the hash read. A
+`generation-restart` (a generator re-pin) resets the folded generation view and `retire`s every
+batch (`_restart_generation`). A batch queued by plain `queue_batch` carries no `generation` and
+is not checked.
+
 **Counting.** `earlier_no_attempt` is the batch's earlier `neverSpawned`/`incomplete` outcomes,
 leaving out attempts an `interrupted {batch}` event names (plan6 §3.2; the audit's own flag exempts
 only the current one). The `launchFailed` clock reads `issued` times: earlier `launchFailed`/
@@ -64,8 +82,10 @@ Choices this module makes where the plans leave room:
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
+import random
 import re
 import secrets
 import uuid
@@ -76,10 +96,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import audit, exchange
-from .ingest import AlreadyIngested, AnswerRefused, ingest_answer_files
+from . import audit, exchange, screen
+from .ingest import AlreadyIngested, AnswerRefused, Ingested, ingest_answer_files
 from .points import ROLES, input_field_errors, load_point
-from .seeds import Seed, SeedDraw
+from .seeds import Seed, SeedDraw, draw_seeds, round_one_count
 
 PHASES = ("smoke", "pilot", "full")
 #: plan6 §3.2: `batchTimeout` defaults to 45 minutes; §3.4: `launchFailBound` to 6 hours.
@@ -90,6 +110,16 @@ DEFAULT_LABEL_BATCH_CAP = 50
 GENERATION_RUN_SIZE = 25
 #: plan4 §3.3: a batch with 2 counted attempts is re-issued; after 3, its entries drop.
 MAX_COUNTED_ATTEMPTS = 3
+#: note §Q1.2 "On a hit": a seed's third hit (screen, form or binding) drops it.
+MAX_SEED_HITS = 3
+#: plan5 §3.5: a round halts when more than 5% of its drawn seeds show one reason in first pass.
+HALT_PERCENT = 5
+#: plan6 §3.8: a round or a template pool halts on at least this many hits, and over 5%.
+HALT_MIN_HITS = 2
+#: The ledger events that record one rejected generated item, by the reason that rejected it.
+HIT_EVENTS = {screen.SCREEN: "screen-hit", screen.BINDING_MISMATCH: "binding-mismatch",
+              screen.FORM_MISMATCH: "form-mismatch"}
+_HIT_EVENT_KINDS = frozenset(HIT_EVENTS.values())
 #: plan4 §3.5: `full` needs the previous point's campaign finalized.
 FULL_ORDER = ("guard-judge", "message-type-classifier", "join-in-judge")
 #: plan5 §3.6's spend gate states.
@@ -124,6 +154,9 @@ class Attempt:
     request_sha256: str
     interrupted: bool = False
     outcome: dict[str, Any] | None = None
+    #: The `expectations` event in force when this attempt was `issued` (plan6 §3.8): the audit
+    #: reads the template, agent type and effort from it, never from a later `install`.
+    expectations: Mapping[str, Any] | None = None
 
 
 @dataclass
@@ -143,6 +176,12 @@ class Batch:
         last = self.attempts[-1] if self.attempts else None
         return last if last is not None and last.outcome is None else None
 
+    @property
+    def gen_run_id(self) -> str:
+        """plan4 §3.6's `genRunId`: unique because a batch id is, and it is the batch's, not
+        copied by a cut (`extra` is), so a cut's overflow is a run of its own."""
+        return f"gen_{self.batch_id.removeprefix('bat_')}"
+
 
 @dataclass
 class State:
@@ -158,6 +197,60 @@ class State:
     held_keys: set[str] = field(default_factory=set)
     halt: dict[str, Any] | None = None
     epoch: int = 0
+    #: Generation (plan4 §3.6, plan5 §3.5, plan6 §3.8): the drawn rounds (`genRound`, seed ids)
+    #: in start order, each seed's `genRound`, the items accepted by seed, every hit by seed in
+    #: order, the seeds dropped on a third hit (by that hit), the first-pass hits per (`genRound`,
+    #: reason), the halts fired, and the events of an attempt not yet committed by its outcome.
+    rounds: list[dict[str, Any]] = field(default_factory=list)
+    seed_round: dict[str, int] = field(default_factory=dict)  # seed id -> its `genRound`
+    items: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hits: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    dropped_seeds: dict[str, dict[str, Any]] = field(default_factory=dict)
+    round_hits: dict[tuple[int, str], int] = field(default_factory=dict)  # (genRound, reason)
+    template_halts: set[tuple[int, str]] = field(default_factory=set)
+    #: plan6 §3.8's pooled halt, per generator-template hash: first-pass seeds ingested and hits
+    #: by reason; and the (hash, reason) pairs already fired.
+    pool: dict[str, dict[str, Any]] = field(default_factory=dict)
+    pool_halts: set[tuple[str, str]] = field(default_factory=set)
+    staged: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def generation_drops(self) -> dict[str, Any]:
+        """plan5 §3.5's `dropped` keys for seeds dropped on a third hit, counted under the third
+        hit's reason: `screenHits`, `formMismatch` by form, `bindingMismatch`."""
+        counts: dict[str, Any] = {"screenHits": 0, "formMismatch": {}, "bindingMismatch": 0}
+        for hit in self.dropped_seeds.values():
+            reason = hit["reasons"][0]
+            if reason == screen.SCREEN:
+                counts["screenHits"] += 1
+            elif reason == screen.BINDING_MISMATCH:
+                counts["bindingMismatch"] += 1
+            else:
+                counts["formMismatch"][hit["form"]] = counts["formMismatch"].get(hit["form"], 0) + 1
+        return counts
+
+    def awaiting_regeneration(self) -> list[str]:
+        """The seeds a hit queued: hit, with no accepted item and fewer than three hits, whose
+        latest generation batch is ingested (not still pending, issued, halted or dropped), in
+        order of first hit."""
+        latest: dict[str, Batch] = {}
+        for batch in self.batches.values():
+            if batch.kind == "generate" and batch.state != "retired":
+                latest.update(dict.fromkeys(batch.entries, batch))
+        return [seed for seed in self.hits if seed not in self.items
+                and seed not in self.dropped_seeds and seed in latest
+                and latest[seed].state == "ingested"]
+
+    def drawn_in(self, gen_round: int) -> int:
+        """plan6 §3.8: a round's halt denominator, every seed of every `round-start` that
+        carries its `genRound`."""
+        return sum(len(r["seeds"]) for r in self.rounds if r["genRound"] == gen_round)
+
+    def unbatched_seeds(self) -> list[str]:
+        """The `round-start` seeds no live generation batch holds (a crash between the round and
+        its `queued` events), in round order."""
+        held = {seed for batch in self.batches.values() if batch.kind == "generate"
+                for seed in batch.entries}
+        return [seed for r in self.rounds for seed in r["seeds"] if seed not in held]
 
     def dropped(self) -> dict[str, dict[str, int]]:
         """plan4 §3.7's `retryCapExceeded` and plan6 §3.5's `safeguardSkipped` counts."""
@@ -199,6 +292,17 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                     seed_id=record["seedId"], role=record["role"],
                     design_stratum=record["designStratum"], axes=record["axes"],
                 )
+        elif kind == "round-start":
+            for seed_id in event["seeds"]:
+                state.seed_round[seed_id] = event["genRound"]
+            state.rounds.append({"genRound": event["genRound"], "seeds": list(event["seeds"])})
+        elif kind == "generated":
+            # A fresh entry: a crashed ingest re-run may screen differently, and its earlier hits
+            # must not survive beside the new items.
+            state.staged[event["opaque"]] = {"items": [dict(r) for r in event["items"]],
+                                             "hits": {}}
+        elif kind in _HIT_EVENT_KINDS:
+            _staged(state, event["opaque"])["hits"][event["seedId"]] = dict(event)
         elif kind == "queued":
             extra = {k: v for k, v in event.items()
                      if k not in ("event", "at", "batch", "kind", "point", "entries")}
@@ -216,6 +320,7 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                 batch=batch.batch_id, opaque=event["opaque"], session_id=event["sessionId"],
                 attempt=event["attempt"], issued_at=_parse_at(event["at"]), epoch=state.epoch,
                 keys=event["keys"], request_sha256=event["requestSha256"],
+                expectations=state.expectations,
             )
             batch.attempts.append(attempt)
             batch.state = "issued"
@@ -233,13 +338,99 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
     return state
 
 
+def _staged(state: State, opaque: str) -> dict[str, Any]:
+    return state.staged.setdefault(opaque, {"items": [], "hits": {}})
+
+
+def generator_template_hash(expectations: Mapping[str, Any] | None) -> str:
+    """plan6 §3.8: sha256 of the canonical JSON of the generator role's `agentDefinition`,
+    `spawnTemplate` and `requestTemplate` entries in an `expectations` event's `promptSha256`."""
+    prompts = (expectations or {}).get("promptSha256") or {}
+    parts = {key: (prompts.get(key) or {}).get("generator")
+             for key in ("agentDefinition", "spawnTemplate", "requestTemplate")}
+    text = json.dumps(parts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _over_threshold(hits: int, drawn: int) -> bool:
+    """plan5 §3.5 and plan6 §3.8: more than 5% of the seeds, and at least two hits."""
+    return hits >= HALT_MIN_HITS and 100 * hits > HALT_PERCENT * drawn
+
+
+def _apply_generation(state: State, attempt: Attempt, batch: Batch,
+                      staged: Mapping[str, Any]) -> None:
+    """The ingested generation run's items and hits, then plan6 §3.8's halts after each run: one
+    `template` halt per (`genRound`, reason) over that round's drawn seeds, and one per
+    (generator-template hash, reason) over the ingested first-pass seeds. Regeneration hits count
+    toward the 3-hit cap only."""
+    for record in staged["items"]:
+        state.items[record["seedId"]] = record
+    first_pass = batch.extra.get("generation") == "first"
+    digest = generator_template_hash(attempt.expectations)
+    pool = state.pool.setdefault(digest, {"seeds": 0, "hits": {}}) if first_pass else None
+    if pool is not None:
+        pool["seeds"] += len(attempt.keys)
+    touched: set[int] = set()
+    for seed_id, hit in staged["hits"].items():
+        history = state.hits.setdefault(seed_id, [])
+        history.append(hit)
+        if len(history) >= MAX_SEED_HITS:
+            state.dropped_seeds[seed_id] = hit
+        if hit["firstPass"]:
+            gen_round = state.seed_round[seed_id]
+            touched.add(gen_round)
+            for reason in hit["reasons"]:
+                key = (gen_round, reason)
+                state.round_hits[key] = state.round_hits.get(key, 0) + 1
+                pool["hits"][reason] = pool["hits"].get(reason, 0) + 1
+    rounds = [(g, reason) for g in sorted(touched) for reason in screen.REASONS
+              if (g, reason) not in state.template_halts
+              and _over_threshold(state.round_hits.get((g, reason), 0), state.drawn_in(g))]
+    pooled = [] if pool is None else [
+        (digest, reason) for reason in screen.REASONS
+        if (digest, reason) not in state.pool_halts
+        and _over_threshold(pool["hits"].get(reason, 0), pool["seeds"])]
+    if (rounds or pooled) and state.halt is None:
+        state.template_halts.update(rounds)
+        state.pool_halts.update(pooled)
+        reasons = [r for r in screen.REASONS if r in {x[1] for x in rounds + pooled}]
+        state.halt = {"event": "template-halt", "batch": batch.batch_id, "reason": reasons[0],
+                      "reasons": reasons, "voidClass": "template",
+                      "genRound": rounds[0][0] if rounds else None, "pooled": bool(pooled),
+                      "templateHash": digest}
+
+
+def _restart_generation(state: State) -> None:
+    """plan6 §3.8 (note §Q1.2 "Reruns"): a generator re-pin discards the generation view. Items,
+    hits, drops, counts, halts, rounds and staged events go, and every generation and label batch
+    of the point is `retired`: never issued again, neither dropped nor ingested. The ledger, the
+    held RNG seeds and seed ids (`state.seeds`), the pins, instructions and expectations stay."""
+    state.items.clear()
+    state.hits.clear()
+    state.dropped_seeds.clear()
+    state.round_hits.clear()
+    state.template_halts.clear()
+    state.pool.clear()
+    state.pool_halts.clear()
+    state.rounds.clear()
+    state.seed_round.clear()
+    state.staged.clear()
+    for batch in state.batches.values():
+        batch.state, batch.dropped = "retired", None
+
+
 def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
     attempt = state.opaques[event["opaque"]]
     attempt.outcome = dict(event)
     batch = state.batches[attempt.batch]
     outcome = event["outcome"]
+    staged = state.staged.pop(event["opaque"], None)
+    if batch.state == "retired":      # a run reconciled after a generator re-pin: recorded only
+        return
     if outcome == "ingested":
         batch.state = "ingested"
+        if staged is not None:
+            _apply_generation(state, attempt, batch, staged)
     elif outcome == "void":
         batch.counted += 1
         if batch.counted >= MAX_COUNTED_ATTEMPTS:
@@ -264,6 +455,8 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
         batch.state, batch.dropped = "dropped", "safeguardSkipped"
     elif batch is not None and batch.state == "halted":
         batch.state = "pending"
+    if event["event"] == "generation-restart":
+        _restart_generation(state)
     if event["event"] in ("generation-restart", "labelling-restart"):
         state.pins[event["role"]] = event["model"]
     if event.get("action") == "repin-instructions":
@@ -400,6 +593,21 @@ def pilot_report_refusal(report: Mapping[str, Any]) -> str | None:
 def _finalized(data_dir: Path, role: str) -> bool:
     folder = data_dir / role
     return folder.is_dir() and any(folder.glob("*/generation.json"))
+
+
+def balanced_runs(seed_ids: Sequence[str]) -> list[list[str]]:
+    """plan6 §3.8's balanced cut: `⌈n / 25⌉` runs whose sizes differ by at most one, the larger
+    ones first (880 seeds: 16 of 25, then 20 of 24); none is a short tail or exceeds 25."""
+    runs = -(-len(seed_ids) // GENERATION_RUN_SIZE)
+    if not runs:
+        return []
+    base, extra = divmod(len(seed_ids), runs)
+    cuts, start = [], 0
+    for index in range(runs):
+        size = base + (index < extra)
+        cuts.append(list(seed_ids[start:start + size]))
+        start += size
+    return cuts
 
 
 # --- the campaign --------------------------------------------------------------------------------
@@ -637,6 +845,56 @@ class Campaign:
                       "point": state.init["point"], "entries": list(entries), **extra})
         return batch_id
 
+    def begin_round(self, gen_round: int, count: int | None = None, *,
+                    design_stratum: str | None = None, extend: bool = False) -> list[str]:
+        """plan4 §3.6 "Generation runs", plan6 §3.8: draw `count` seeds on a fresh RNG seed
+        (plan5 §3.2: `record_draw` refuses a held one), record the round (`round-start`: its
+        `genRound` and drawn seeds, which add to the halt denominator of that `genRound`), shuffle
+        the seeds on that RNG seed and cut them into balanced runs (`balanced_runs`), each queued
+        as a first-pass generation batch. Round 1's `count` is ⌈1.1 × target⌉
+        (`seeds.round_one_count`); a later round names it. A `genRound` already started since the
+        last generator restart is refused unless `extend` adds a draw to it (a top-up round draws
+        one stratum per call, each its own RNG seed); `extend` needs the round to exist. A crash
+        after the draw leaves an orphan draw and no round; the retry draws afresh. Returns the
+        queued batch ids."""
+        if isinstance(gen_round, bool) or not isinstance(gen_round, int) or gen_round < 1:
+            raise CampaignRefused(f"genRound must be a positive integer, not {gen_round!r}")
+        state = self.state()
+        started = any(r["genRound"] == gen_round for r in state.rounds)
+        if started and not extend:
+            raise CampaignRefused(f"genRound {gen_round} is already started (extend adds a draw)")
+        if extend and not started:
+            raise CampaignRefused(f"genRound {gen_round} has not started; nothing to extend")
+        role = state.init["point"]
+        if count is None:
+            if gen_round != 1:
+                raise CampaignRefused("a round after round 1 needs an explicit seed count")
+            count = round_one_count(role)
+        rng_seed = self.fresh_rng_seed()
+        draw = draw_seeds(role, count, rng_seed, design_stratum=design_stratum)
+        self.record_draw(draw)
+        ordered = [seed.seed_id for seed in draw.seeds]
+        random.Random(f"generation-runs|{rng_seed}").shuffle(ordered)
+        self._append({"event": "round-start", "genRound": gen_round, "rngSeed": rng_seed,
+                      "designStratum": design_stratum, "seeds": ordered})
+        return self._queue_runs(ordered, "first")
+
+    def queue_regeneration(self) -> list[str]:
+        """Note §Q1.2 "On a hit": the seeds a hit queued, pooled across rounds and design strata,
+        cut into balanced generation runs (`[]` when none is awaiting). A regenerated item keeps
+        its seed's `genRound` (`ingest` reads it per seed, never from the batch) and takes its new
+        run's `genRunId`."""
+        return self._queue_runs(self.state().awaiting_regeneration(), "regen")
+
+    def _queue_unbatched(self) -> list[str]:
+        """plan6 §3.8 "A half-written round": queue the `round-start` seeds no batch holds, in
+        the same balanced cut, as first-pass runs."""
+        return self._queue_runs(self.state().unbatched_seeds(), "first")
+
+    def _queue_runs(self, seed_ids: Sequence[str], generation: str) -> list[str]:
+        return [self.queue_batch("generate", run, generation=generation)
+                for run in balanced_runs(seed_ids)]
+
     def record_interrupted(self, batch: str) -> None:
         """plan6 §3.2: `pause --now` names the batch it stopped (the runner holds the lock)."""
         if self.state().batches[batch].open_attempt is None:
@@ -660,15 +918,22 @@ class Campaign:
             if attempt.outcome is None or self._exchange_names(attempt.opaque):
                 result = self.ingest(attempt.opaque)
                 if result.stop is not None:
-                    return Stop(result.stop, result.outcome.get("reason", "") if
-                                result.outcome else "")
+                    halt = self.state().halt
+                    detail = (_halt_text(halt) if result.stop == "halted" and halt is not None
+                              else result.outcome.get("reason", "") if result.outcome else "")
+                    return Stop(result.stop, detail)
         stray = self._exchange_names()
         if stray:
             raise CampaignRefused(f"exchange/ holds files no attempt accounts for: {stray}")
         if self.usage_stop is not None:
             return self.usage_stop
         state = self.state()
+        if state.unbatched_seeds() and self._queue_unbatched():
+            state = self.state()
         pending = [b for b in state.batches.values() if b.state == "pending"]
+        if not pending and self.queue_regeneration():
+            state = self.state()
+            pending = [b for b in state.batches.values() if b.state == "pending"]
         if not pending:
             return Stop("done", "nothing is pending")
         return self.prepare(pending[0].batch_id)
@@ -741,7 +1006,7 @@ class Campaign:
             self._reingest(attempt)
             return IngestResult(opaque, attempt.batch, None, None)
         batch = state.batches[attempt.batch]
-        expected = self._expected(state, batch, opaque)
+        expected = self._expected(state, batch, opaque, attempt.expectations)
         launch = self._launch(state, attempt)
         result = audit.audit_run(
             self.transcript_path(attempt.session_id), expected,
@@ -755,12 +1020,54 @@ class Campaign:
                                          opaque, ingested_answer_sha256=None)
         verdict = audit.combine(result, answer)
         event = self._outcome_event(state, batch, attempt, result, verdict, launch, parts)
+        if (verdict.status == "ingested" and isinstance(answer, Ingested)
+                and batch.state != "retired"):
+            self._record_generation(state, batch, attempt, answer.answers)
         recorded = self._append(event)
         self._move_to_store(opaque, parts)
         stop = {"halted": "halted", "usage-stop": "usage-stop"}.get(event["outcome"])
+        if batch.state == "retired":      # recorded only: it must not stop the campaign
+            stop = None
+        after = (self.state().halt if event["outcome"] == "ingested"
+                 and batch.state != "retired" else None)
+        if after is not None and after.get("voidClass") == "template" and state.halt is None:
+            stop = "halted"
         if stop == "usage-stop":
             self.usage_stop = Stop(stop, event.get("reason", ""))
         return IngestResult(opaque, batch.batch_id, recorded, stop)
+
+    def _record_generation(self, state: State, batch: Batch, attempt: Attempt,
+                           answers: Mapping[str, Any]) -> None:
+        """plan5 §3.5 at generation ingest, before the run's `outcome` commits it: each answered
+        item is screened and checked against its seed's bindings. An item that shows nothing is
+        recorded in one `generated` event with the run's `genRunId` and the seed's `genRound`; one
+        that shows a reason is a `screen-hit`, `binding-mismatch` or `form-mismatch` event under
+        its first reason, listing every reason it shows. A batch not queued as a generation run
+        (`begin_round`, `queue_regeneration`) is not checked. Appended before the outcome, folded
+        only when it commits: a crash between them leaves events a re-ingest overwrites."""
+        generation = batch.extra.get("generation")
+        if batch.kind != "generate" or generation is None:
+            return
+        definition = load_point(batch.point)
+        accepted: list[dict[str, Any]] = []
+        hits: list[dict[str, Any]] = []
+        for key, seed_id in attempt.keys.items():
+            seed, item = state.seeds[seed_id], answers[key]
+            check = screen.check_item(definition, seed.axes, item)
+            if check.primary is None:
+                accepted.append({"seedId": seed_id, "genRunId": batch.gen_run_id,
+                                 "genRound": state.seed_round[seed_id],
+                                 "item": item})
+            else:
+                hits.append({"event": HIT_EVENTS[check.primary], "opaque": attempt.opaque,
+                             "batch": batch.batch_id, "seedId": seed_id,
+                             "genRunId": batch.gen_run_id, "reasons": list(check.reasons),
+                             "detail": check.detail, "form": check.form,
+                             "firstPass": generation == "first"})
+        self._append({"event": "generated", "opaque": attempt.opaque, "batch": batch.batch_id,
+                      "items": accepted})
+        for hit in hits:
+            self._append(hit)
 
     def _outcome_event(self, state: State, batch: Batch, attempt: Attempt, result: audit.Audit,
                        verdict: audit.Verdict, launch: audit.Launch,
@@ -846,16 +1153,21 @@ class Campaign:
         lines = path.read_text("utf-8").splitlines() if path.is_file() else []
         return {record["itemId"]: record["item"] for record in map(json.loads, lines) if record}
 
-    def _expected(self, state: State, batch: Batch, opaque: str) -> audit.Expected:
-        """The audit's expectations with absolute paths (Pass 9: relative ones breach)."""
+    def _expected(self, state: State, batch: Batch, opaque: str,
+                  expectations: Mapping[str, Any] | None = None) -> audit.Expected:
+        """The audit's expectations with absolute paths (Pass 9: relative ones breach). The agent
+        type, effort, spawn template and guard command come from `expectations`: for an issued
+        attempt, the event in force at its `issued` (plan6 §3.8; default: the latest). The model
+        pin and the instructions come from the folded `state`, which `resolve` re-pins."""
+        expectations = state.expectations if expectations is None else expectations
         role = ROLE_OF_KIND[batch.kind]
-        spec = state.expectations["roles"][role]
+        spec = expectations["roles"][role]
         return audit.Expected(
             agent_type=spec["agentType"], model=state.pins[role], effort=spec["effort"],
             spawn_template=spec["spawnTemplate"],
             request_path=str(self.exchange_dir / "req" / f"{opaque}.jsonl"),
             answer_path=str(self.exchange_dir / "ans" / f"{opaque}.jsonl"),
-            guard_command=state.expectations["guardCommand"],
+            guard_command=expectations["guardCommand"],
             instructions=frozenset(tuple(pair) for pair in state.instructions[role]),
         )
 
@@ -961,7 +1273,8 @@ class Campaign:
         state = self.state()
         counts: dict[str, int] = {}
         for batch in state.batches.values():
-            counts[batch.state] = counts.get(batch.state, 0) + 1
+            if batch.state != "retired":
+                counts[batch.state] = counts.get(batch.state, 0) + 1
         init = state.init
         lines = [f"point {init['point']}, phase {init['phase']}",
                  "batches: " + (", ".join(f"{n} {s}" for s, n in sorted(counts.items()))
@@ -984,6 +1297,9 @@ class Campaign:
         dropped = {k: v for k, v in state.dropped().items() if any(v.values())}
         if dropped:
             lines.append(f"dropped: {json.dumps(dropped, sort_keys=True)}")
+        if state.dropped_seeds:
+            lines.append("seeds dropped on a third hit: "
+                         + json.dumps(state.generation_drops(), sort_keys=True))
         return lines
 
 

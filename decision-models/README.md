@@ -48,7 +48,11 @@ campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
 `decisionmodels/driver.py`), and the unattended runner with its stop switch (U6.3:
 `decisionmodels/runner.py`, `driver run`, `pause [--now]`, `resume`), and the three agent
 definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
-live smoke ran, `docs/test-reports/live-smoke-report.md`). Labelling requests render guard items only until U5.2b-render.
+live smoke ran, `docs/test-reports/live-smoke-report.md`), and generation runs with the
+generated-text screen, form obedience, the template halts and the generator restart (U5.8a:
+`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet, and
+votes, the pilot tooling and top-up are later).
+Labelling requests render guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
 

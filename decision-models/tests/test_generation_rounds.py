@@ -1,0 +1,559 @@
+"""Round halts, the template pool, issue-time expectations and the generator restart
+(typed-decision-models U5.8a, plan6 `docs/plans/typed-decision-models6.md` §3.8 and its §5 row
+"U5.8a, U5.9"), plus the survivors Pass 18 found in `test_generation.py`.
+
+Helpers and the fixture-run machinery are `test_generation.py`'s: hand-built seeds with their own
+`condition` and ids, runs staged from the clean transcript fixture.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+from test_campaign import GUARD_COMMAND, stage, write_answer
+from test_generation import (
+    GENERATOR_AS_FIXTURE,
+    bench,
+    binding_item,
+    drain,
+    form_item,
+    hand_round,
+    hand_seed,
+    leak_item,
+    leaking,
+    padded,
+    run_generation,
+)
+from test_screen import MESSAGE_TYPE, obedient_item
+
+from decisionmodels import campaign, screen, seeds
+from decisionmodels.campaign import Campaign, CampaignRefused, Stop, generator_template_hash
+
+
+def prompts(**generator: str) -> dict[str, Any]:
+    """A `promptSha256` whose generator entries are `generator`'s (the others fixed)."""
+    entries = {"agentDefinition": "a0", "spawnTemplate": "s0", "requestTemplate": "r0"}
+    entries.update(generator)
+    return {key: {"generator": value, "labeler": "x", "driver": "y"}
+            for key, value in entries.items()}
+
+
+def re_install(camp: Campaign, **kwargs: Any) -> None:
+    camp.record_expectations(guard_command=GUARD_COMMAND, roles=GENERATOR_AS_FIXTURE, **kwargs)
+
+
+def ledger_events(camp: Campaign, *kinds: str) -> list[dict[str, Any]]:
+    return [e for e in camp.events() if e["event"] in kinds]
+
+
+def bad_binding(*numbers: int) -> dict[str, Any]:
+    return {hand_seed(n).seed_id: binding_item for n in numbers}
+
+
+# --- the balanced cut ----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("count", "sizes"), [
+    (0, []), (1, [1]), (25, [25]), (26, [13, 13]), (51, [17, 17, 17]), (75, [25, 25, 25]),
+    (76, [19, 19, 19, 19]), (880, [25] * 16 + [24] * 20),
+])
+def test_the_balanced_cut_makes_ceil_n_over_25_runs_differing_by_at_most_one(
+        count: int, sizes: list[int]) -> None:
+    ids = [f"s{n}" for n in range(count)]
+    runs = campaign.balanced_runs(ids)
+    assert [len(r) for r in runs] == sizes
+    assert [seed for run in runs for seed in run] == ids
+
+
+def test_a_regeneration_pool_is_cut_balanced_too(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 31)]                # two runs of 15
+    hand_round(camp, hand)
+    everything = {s.seed_id: binding_item for s in hand}
+    run_generation(camp, leaking(everything))                   # halts: the pair is spent below
+    camp.resolve(decision="the template was fixed")
+    run_generation(camp, leaking(everything))
+    assert camp.state().halt is None and len(camp.state().awaiting_regeneration()) == 30
+    assert isinstance(camp.next(), campaign.Serve)
+    sizes = [len(b.entries) for b in camp.state().batches.values()
+             if b.extra.get("generation") == "regen"]
+    assert sizes == [15, 15]
+
+
+# --- the halt: floor, denominator, pooling -------------------------------------------------------
+
+
+@pytest.mark.parametrize(("hits", "halts"), [(1, False), (2, True)])
+def test_a_round_of_19_seeds_halts_at_two_hits_and_not_at_one(
+        tmp_path: Path, hits: int, halts: bool) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 20)]
+    hand_round(camp, hand)
+    _, result = run_generation(camp, leaking(bad_binding(*range(1, hits + 1))))
+    assert (result.stop == "halted") is halts
+
+
+def test_two_round_starts_with_one_gen_round_share_one_denominator(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    first = [hand_seed(n) for n in range(1, 21)]
+    second = [hand_seed(n) for n in range(101, 121)]
+    hand_round(camp, first, gen_round=1)
+    hand_round(camp, second, gen_round=1)
+    state = camp.state()
+    assert state.drawn_in(1) == 40 and len(state.rounds) == 2
+    assert set(state.seed_round.values()) == {1}
+    run_generation(camp, leaking(bad_binding(1)))
+    _, two = run_generation(camp, leaking(bad_binding(101)))
+    assert two.stop is None                                    # 2 of 40 is exactly 5%
+    assert camp.state().round_hits == {(1, "bindingMismatch"): 2}
+
+
+def test_a_skipped_or_repeated_gen_round_keys_its_seeds_by_that_number(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand_round(camp, [hand_seed(n) for n in range(1, 4)], gen_round=1)
+    hand_round(camp, [hand_seed(n) for n in range(11, 14)], gen_round=3)
+    state = camp.state()
+    assert {state.seed_round[hand_seed(n).seed_id] for n in range(1, 4)} == {1}
+    assert {state.seed_round[hand_seed(n).seed_id] for n in range(11, 14)} == {3}
+    assert state.drawn_in(2) == 0 and state.drawn_in(3) == 3
+    for _ in range(2):
+        run_generation(camp, leaking(bad_binding(11)))
+    assert {k[0] for k in camp.state().round_hits} == {3}
+    items = camp.state().items
+    assert {items[hand_seed(n).seed_id]["genRound"] for n in range(1, 4)} == {1}
+
+
+def three_small_rounds(camp: Campaign) -> list[list]:
+    rounds = []
+    for gen_round in (1, 2, 3):
+        hand = [hand_seed(gen_round * 100 + n) for n in range(10)]
+        hand_round(camp, hand, gen_round=gen_round)
+        rounds.append(hand)
+    return rounds
+
+
+def test_three_10_seed_rounds_with_one_hit_each_halt_in_the_pool_at_the_second_hit(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    rounds = three_small_rounds(camp)
+    _, one = run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
+    assert one.stop is None and camp.state().halt is None      # one hit: under the floor
+    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: binding_item}))
+    halt = camp.state().halt
+    assert two.stop == "halted" and halt["pooled"] is True and halt["genRound"] is None
+    assert halt["reasons"] == ["bindingMismatch"] and halt["batch"] == "bat_0002"
+    assert camp.state().round_hits == {(1, "bindingMismatch"): 1, (2, "bindingMismatch"): 1}
+    camp.resolve(decision="the template was fixed")
+    _, three = run_generation(camp, leaking({rounds[2][0].seed_id: binding_item}))
+    assert three.stop is None and camp.state().halt is None    # the pair fired once
+    (pooled,) = camp.state().pool.values()
+    assert pooled == {"seeds": 30, "hits": {"bindingMismatch": 3}}
+
+
+def test_a_hit_of_another_reason_does_not_pool(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    rounds = three_small_rounds(camp)
+    run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
+    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: form_item}))
+    assert two.stop is None and camp.state().halt is None
+    (pooled,) = camp.state().pool.values()
+    assert pooled["hits"] == {"bindingMismatch": 1, "formMismatch": 1}
+
+
+def test_the_same_hits_under_a_changed_hash_do_not_pool(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    re_install(camp, prompt_sha256=prompts())
+    rounds = three_small_rounds(camp)
+    run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
+    re_install(camp, prompt_sha256=prompts(requestTemplate="r1"))
+    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: binding_item}))
+    assert two.stop is None and camp.state().halt is None
+    assert sorted(p["hits"]["bindingMismatch"] for p in camp.state().pool.values()) == [1, 1]
+    _, three = run_generation(camp, leaking({rounds[2][0].seed_id: binding_item}))
+    assert three.stop == "halted"                              # the second hash's second hit
+
+
+def test_regeneration_hits_do_not_enter_the_pool(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    rounds = three_small_rounds(camp)
+    bad = {rounds[0][0].seed_id: binding_item}
+    drain(camp, leaking(bad))
+    (pooled,) = camp.state().pool.values()
+    assert pooled == {"seeds": 30, "hits": {"bindingMismatch": 1}}
+
+
+def test_the_template_hash_is_the_canonical_json_of_the_generator_entries() -> None:
+    expectations = {"promptSha256": prompts(agentDefinition="aaa")}
+    parts = {"agentDefinition": "aaa", "spawnTemplate": "s0", "requestTemplate": "r0"}
+    wanted = hashlib.sha256(json.dumps(parts, sort_keys=True, separators=(",", ":"))
+                            .encode()).hexdigest()
+    assert generator_template_hash(expectations) == wanted
+    base = generator_template_hash({"promptSha256": prompts()})
+    for key in ("agentDefinition", "spawnTemplate", "requestTemplate"):
+        assert generator_template_hash({"promptSha256": prompts(**{key: "z"})}) != base
+    other_roles = prompts()
+    for key in other_roles:
+        other_roles[key]["labeler"] = "changed"
+        other_roles[key]["driver"] = "changed"
+    assert generator_template_hash({"promptSha256": other_roles}) == base
+    assert generator_template_hash(None) == generator_template_hash({})
+
+
+def test_a_resolve_after_a_template_halt_records_a_decision_and_draws_nothing(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 41)]
+    hand_round(camp, hand)
+    run_generation(camp, leaking(bad_binding(1, 2, 3)))
+    assert camp.state().halt is not None
+    before = len(camp.events())
+    camp.resolve(decision="fixed the generator template")
+    (event,) = camp.events()[before:]
+    assert event["event"] == "resolved" and event["decision"] == "fixed the generator template"
+    assert camp.state().halt is None and "stakeholderRef" not in event
+    assert camp.state().template_halts == {(1, "bindingMismatch")}
+    # a further hit of the same reason in that round does not halt; another reason does
+    _, two = run_generation(camp, leaking({**bad_binding(21), **{
+        hand_seed(n, form="empty").seed_id: form_item for n in (22, 23, 24)}}))
+    assert camp.state().halt["reasons"] == ["formMismatch"] and two.stop == "halted"
+
+
+def test_ten_percent_no_rush_brackets_do_not_halt_a_guard_round(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 41)]
+    hand_round(camp, hand)
+
+    def with_aside(seed: seeds.Seed) -> dict:
+        item = obedient_item(seed)
+        if item["path"] == "turns":
+            item["turns"][0]["text"] += " (no rush)"
+        else:
+            item["understanding"]["request"] += " (other than login)"
+        return item
+
+    asides = {hand[n].seed_id: with_aside for n in (0, 9, 20, 29)}
+    assert drain(camp, leaking(asides)) == 2
+    state = camp.state()
+    assert state.hits == {} and state.halt is None and len(state.items) == 40
+
+
+def test_ten_percent_order_numbers_do_not_halt_a_message_type_stratum() -> None:
+    base = seeds.draw_seeds("message-type-classifier", 40, 4, design_stratum=None).seeds
+    ordered = [s for s in base if s.axes["intendedAnswer"] == "order"]
+    assert len(ordered) >= 2
+    hits = 0
+    for index, seed in enumerate(base):
+        prior = None if seed.axes["threadPosition"] == "opening" else {
+            "speaker": "Pip", "text": "Anything else?"}
+        text = f"Where is my order (order #{4400 + index})?" if index % 10 == 0 else "ok"
+        check = screen.check_item(MESSAGE_TYPE, seed.axes, {"text": text, "priorTurn": prior})
+        hits += bool(check.reasons)
+    assert hits == 0 and ordered
+
+
+# --- issue-time expectations ---------------------------------------------------------------------
+
+
+def test_a_run_issued_before_a_reinstall_is_audited_against_the_template_at_issue(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    re_install(camp, prompt_sha256=prompts())
+    hand = padded([hand_seed(1)])
+    hand_round(camp, hand)
+    action = camp.next()
+    session = camp.issue(action)
+    stage(camp, session, action.opaque)
+    write_answer(camp, action.opaque, answer_with_items(camp, action.opaque))
+    changed = {role: {**spec, "spawnTemplate": spec["spawnTemplate"] + " Be quick."}
+               for role, spec in GENERATOR_AS_FIXTURE.items()}
+    camp.record_expectations(guard_command=GUARD_COMMAND, roles=changed,
+                             prompt_sha256=prompts(spawnTemplate="s1"))
+    result = camp.ingest(action.opaque)
+    assert result.outcome["outcome"] == "ingested" and "reason" not in result.outcome
+    state = camp.state()
+    assert len(state.items) == 25
+    old = state.attempts[0].expectations["roles"]["generator"]["spawnTemplate"]
+    assert old == GENERATOR_AS_FIXTURE["generator"]["spawnTemplate"]
+    assert state.expectations["roles"]["generator"]["spawnTemplate"].endswith("Be quick.")
+    # the run's hash is the one in force at its issue, not the re-install's
+    assert list(state.pool) == [generator_template_hash({"promptSha256": prompts()})]
+
+
+def answer_with_items(camp: Campaign, opaque: str) -> bytes:
+    text = (camp.store / "req" / f"{opaque}.jsonl").read_text("utf-8")
+    state = camp.state()
+    lines: list[dict[str, Any]] = [{"bodySha256": json.loads(text.splitlines()[0])["bodySha256"]}]
+    lines += [{"key": key, "item": obedient_item(state.seeds[seed_id])}
+              for key, seed_id in state.opaques[opaque].keys.items()]
+    return "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines).encode("utf-8")
+
+
+# --- begin_round: guards, orphans, a half-written round ------------------------------------------
+
+
+def test_begin_round_refuses_a_started_gen_round_unless_it_extends_it(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    camp.begin_round(1, 10)
+    before = camp.ledger_path.read_bytes()
+    with pytest.raises(CampaignRefused, match="already started"):
+        camp.begin_round(1, 10)
+    with pytest.raises(CampaignRefused, match="not started"):
+        camp.begin_round(2, 10, extend=True)
+    assert camp.ledger_path.read_bytes() == before
+    camp.begin_round(1, 10, extend=True)
+    assert camp.state().drawn_in(1) == 20 and len(camp.state().rounds) == 2
+
+
+def test_begin_round_records_its_design_stratum(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    camp.begin_round(1, 12, design_stratum="turns")
+    state = camp.state()
+    (start,) = ledger_events(camp, "round-start")
+    (draw,) = ledger_events(camp, "seed-draw")
+    assert start["designStratum"] == draw["draw"]["designStratum"] == "turns"
+    assert {state.seeds[s].axes["evidenceKind"] for s in start["seeds"]} == {"turns"}
+
+
+def test_a_crash_after_the_draw_leaves_an_orphan_and_a_retry_succeeds(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = bench(tmp_path)
+    real = Campaign._append
+
+    def crash(self: Campaign, event: Any) -> dict:
+        if event["event"] == "round-start":
+            raise OSError("killed")
+        return real(self, event)
+
+    monkeypatch.setattr(Campaign, "_append", crash)
+    with pytest.raises(OSError):
+        camp.begin_round(1, 12)
+    monkeypatch.setattr(Campaign, "_append", real)
+    orphans = set(camp.state().seeds)
+    assert len(orphans) == 12 and camp.state().rounds == []
+    assert camp.begin_round(1, 12)                              # not refused: no round exists
+    state = camp.state()
+    assert len(state.seeds) == 24 and state.drawn_in(1) == 12
+    assert not orphans & {s for r in state.rounds for s in r["seeds"]}
+    assert state.unbatched_seeds() == []
+
+
+def test_next_queues_the_runs_a_crash_after_round_start_left_unqueued(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = bench(tmp_path)
+    real, calls = Campaign.queue_batch, []
+
+    def crash(self: Campaign, kind: str, entries: Any, **extra: Any) -> str:
+        calls.append(len(entries))
+        if len(calls) == 2:
+            raise OSError("killed")
+        return real(self, kind, entries, **extra)
+
+    monkeypatch.setattr(Campaign, "queue_batch", crash)
+    with pytest.raises(OSError):
+        camp.begin_round(1, 130)
+    monkeypatch.setattr(Campaign, "queue_batch", real)
+    assert calls == [22, 22] and len(camp.state().unbatched_seeds()) == 108
+    assert isinstance(camp.next(), campaign.Serve)
+    state = camp.state()
+    sizes = [len(b.entries) for b in state.batches.values()]
+    assert state.unbatched_seeds() == [] and sizes == [22, 22, 22, 22, 21, 21]
+    held = [s for b in state.batches.values() for s in b.entries]
+    assert sorted(held) == sorted(state.seeds)
+
+
+# --- a generator re-pin restarts the generation --------------------------------------------------
+
+
+def spent_campaign(tmp_path: Path) -> tuple[Campaign, list]:
+    """Items, hits, a third-hit drop, spent halts and, last, a template halt still to resolve."""
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 41)]
+    hand_round(camp, hand)
+    doomed = hand[0]
+    run_generation(camp, leaking({doomed.seed_id: leak_item, **bad_binding(2, 3, 4)}))
+    assert camp.state().halt is not None
+    camp.resolve(decision="the template was fixed")
+    run_generation(camp, leaking({doomed.seed_id: leak_item}))
+    drain(camp, leaking({doomed.seed_id: leak_item}))           # the regenerations; doomed drops
+    second = [hand_seed(n) for n in range(201, 221)]
+    hand_round(camp, second, gen_round=2)
+    run_generation(camp, leaking({second[0].seed_id: form_item, second[1].seed_id: form_item}))
+    state = camp.state()
+    assert state.halt["genRound"] == 2 and state.halt["reasons"] == ["formMismatch"]
+    assert state.items and state.hits and state.dropped_seeds == {doomed.seed_id: state.hits[
+        doomed.seed_id][2]}
+    assert state.template_halts and state.pool_halts
+    return camp, hand
+
+
+def test_a_generator_repin_resets_the_folded_generation_view_and_keeps_the_ledger(
+        tmp_path: Path) -> None:
+    camp, hand = spent_campaign(tmp_path)
+    held_seeds = set(camp.state().seeds)
+    held_rng = set(camp.state().held_rng_seeds)
+    before = camp.ledger_path.read_bytes()
+    camp.resolve(decision="a new generator", repin_model=("generator", "claude-sonnet-5-5"))
+    state = camp.state()
+    assert camp.ledger_path.read_bytes().startswith(before)
+    assert (state.items, state.hits, state.dropped_seeds, state.round_hits) == ({}, {}, {}, {})
+    assert (state.template_halts, state.pool, state.pool_halts) == (set(), {}, set())
+    assert (state.rounds, state.seed_round, state.staged) == ([], {}, {})
+    assert {b.state for b in state.batches.values()} == {"retired"}
+    assert state.halt is None and state.awaiting_regeneration() == []
+    assert state.dropped()["retryCapExceeded"] == {"seeds": 0, "items": 0}
+    assert set(state.seeds) == held_seeds and state.held_rng_seeds == held_rng
+    assert camp.next() == Stop("done", "nothing is pending")
+    assert not any("retired" in line or "batches: 1" in line for line in camp.status()[1:2])
+
+
+def test_after_a_restart_round_one_is_drawn_afresh_and_its_own_halt_can_fire(
+        tmp_path: Path) -> None:
+    camp, hand = spent_campaign(tmp_path)
+    old_ids, old_rng = set(camp.state().seeds), set(camp.state().held_rng_seeds)
+    camp.resolve(decision="a new generator", repin_model=("generator", "claude-sonnet-5-5"))
+    with pytest.raises(CampaignRefused, match="already held"):
+        camp.record_draw(seeds.SeedDraw(
+            role="guard-judge", rng_seed=next(iter(old_rng)), count=1, design_stratum=None,
+            seeds=(hand[0],)))
+    camp.begin_round(1, 20)                                     # allowed: no round since restart
+    state = camp.state()
+    fresh = set(state.seeds) - old_ids
+    assert len(fresh) == 20 and state.held_rng_seeds - old_rng
+    run_generation(camp, leaking({s: binding_item for s in sorted(fresh)[:2]}))
+    halt = camp.state().halt                                    # 2 of 20: fires anew, the round's
+    assert halt is not None and halt["genRound"] == 1 and halt["reasons"] == ["bindingMismatch"]
+
+
+def test_a_labeler_repin_keeps_the_items_and_the_batches(tmp_path: Path) -> None:
+    camp, _ = spent_campaign(tmp_path)
+    items = dict(camp.state().items)
+    camp.resolve(decision="a new labeler", repin_model=("labeler", "claude-haiku-5-6"))
+    state = camp.state()
+    assert state.items == items and state.template_halts
+    assert "retired" not in {b.state for b in state.batches.values()}
+
+
+def test_a_run_open_at_a_generator_repin_is_recorded_and_changes_nothing(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 41)]
+    first, second = hand_round(camp, hand)
+    open_run = camp.prepare(second)
+    session = camp.issue(open_run)
+    stage(camp, session, open_run.opaque)
+    write_answer(camp, open_run.opaque, answer_with_items(camp, open_run.opaque))
+    halting = camp.prepare(first)
+    session = camp.issue(halting)
+    stage(camp, session, halting.opaque)
+    bad = bad_binding(1, 2)
+    text = (camp.store / "req" / f"{halting.opaque}.jsonl").read_text("utf-8")
+    keys = camp.state().opaques[halting.opaque].keys
+    lines = [{"bodySha256": json.loads(text.splitlines()[0])["bodySha256"]}] + [
+        {"key": k, "item": (binding_item if seed_id in bad else obedient_item)(
+            camp.state().seeds[seed_id])} for k, seed_id in keys.items()]
+    write_answer(camp, halting.opaque,
+                 "".join(json.dumps(line) + "\n" for line in lines).encode("utf-8"))
+    assert camp.ingest(halting.opaque).stop == "halted"
+    camp.resolve(decision="a new generator", repin_model=("generator", "claude-sonnet-5-5"))
+    assert camp.state().batches[second].open_attempt is not None
+    assert camp.next() == Stop("done", "nothing is pending")    # it reconciled the open run
+    state = camp.state()
+    assert state.batches[second].state == "retired" and state.items == {} and state.halt is None
+    assert state.batches[second].attempts[0].outcome["outcome"] == "ingested"
+
+
+# --- survivors from Pass 18 ----------------------------------------------------------------------
+
+
+def all_three(seed: seeds.Seed) -> dict:
+    item = leak_item(seed)
+    item["condition"] = "another"
+    item["understanding"]["missing"] = ["x"]
+    return item
+
+
+def test_a_drop_counts_under_the_third_hits_first_reason_not_its_last(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = padded([hand_seed(1, form="empty")])
+    hand_round(camp, hand)
+    target = hand[0].seed_id
+    passes = iter([binding_item, binding_item, all_three])
+    drain(camp, lambda s: next(passes)(s) if s.seed_id == target else obedient_item(s))
+    state = camp.state()
+    assert state.hits[target][2]["reasons"] == ["screen", "bindingMismatch", "formMismatch"]
+    assert state.generation_drops() == {"screenHits": 1, "formMismatch": {}, "bindingMismatch": 0}
+
+
+def test_a_void_outcome_applies_none_of_the_events_staged_for_it(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 4)]
+    hand_round(camp, hand)
+    action = camp.next()
+    session = camp.issue(action)
+    stage(camp, session, action.opaque)
+    camp._append({"event": "generated", "opaque": action.opaque, "batch": "bat_0001",
+                  "items": [{"seedId": hand[0].seed_id, "genRunId": "gen_x", "genRound": 1,
+                             "item": {}}]})
+    camp._append({"event": "screen-hit", "opaque": action.opaque, "batch": "bat_0001",
+                  "seedId": hand[1].seed_id, "genRunId": "gen_x", "reasons": ["screen"],
+                  "detail": "x", "form": None, "firstPass": True})
+    write_answer(camp, action.opaque, b'{"bodySha256": "0"}\n')
+    assert camp.ingest(action.opaque).outcome["outcome"] == "void"
+    state = camp.state()
+    assert state.items == {} and state.hits == {} and state.round_hits == {} and state.staged == {}
+
+
+def test_a_stale_hit_staged_for_an_opaque_does_not_survive_the_real_generated_event(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 4)]
+    hand_round(camp, hand)
+    action = camp.next()
+    session = camp.issue(action)
+    stage(camp, session, action.opaque)
+    camp._append({"event": "screen-hit", "opaque": action.opaque, "batch": "bat_0001",
+                  "seedId": hand[1].seed_id, "genRunId": "gen_x", "reasons": ["screen"],
+                  "detail": "stale", "form": None, "firstPass": True})
+    write_answer(camp, action.opaque, answer_with_items(camp, action.opaque))
+    camp.ingest(action.opaque)
+    state = camp.state()
+    assert hand[1].seed_id in state.items and state.hits == {}
+
+
+def test_a_regeneration_run_dropped_by_the_retry_cap_is_not_requeued(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = padded([hand_seed(1)])
+    hand_round(camp, hand)
+    run_generation(camp, leaking({hand[0].seed_id: leak_item}))
+    for _ in range(campaign.MAX_COUNTED_ATTEMPTS):
+        action = camp.next()
+        assert isinstance(action, campaign.Serve) and action.opaque
+        session = camp.issue(action)
+        stage(camp, session, action.opaque)
+        write_answer(camp, action.opaque, b'{"bodySha256": "0"}\n')
+        camp.ingest(action.opaque)
+    state = camp.state()
+    regen = [b for b in state.batches.values() if b.extra.get("generation") == "regen"]
+    assert [b.dropped for b in regen] == ["retryCapExceeded"]
+    assert state.awaiting_regeneration() == []
+    assert camp.next() == Stop("done", "nothing is pending")
+
+
+def test_next_names_the_halt_when_it_reconciles_a_run_that_halts(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 21)]
+    hand_round(camp, hand)
+    action = camp.next()
+    session = camp.issue(action)
+    stage(camp, session, action.opaque)
+    text = (camp.store / "req" / f"{action.opaque}.jsonl").read_text("utf-8")
+    keys = camp.state().opaques[action.opaque].keys
+    lines = [{"bodySha256": json.loads(text.splitlines()[0])["bodySha256"]}] + [
+        {"key": k, "item": binding_item(camp.state().seeds[s])} for k, s in keys.items()]
+    write_answer(camp, action.opaque,
+                 "".join(json.dumps(line) + "\n" for line in lines).encode("utf-8"))
+    stop = camp.next()                                          # the crash-recovery ingest
+    assert stop == Stop("halted", "bindingMismatch (template) on bat_0001")

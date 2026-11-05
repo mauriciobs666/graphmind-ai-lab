@@ -144,9 +144,12 @@ generates or labels: it has seen seeds and intents.
     - Tokens no prose uses are hits anywhere: `near-miss`, and any token in the non-word id form,
       such as `dom_07` (`seeds.ID_PATTERN`). Since ids never reach the generator, such a hit
       catches an invented reference code or a request-writer defect.
-    - Ordinary words are hits only in a meta position: inside brackets or parentheses, or after
-      `label`, `answer`, `category` or `intent`. That covers `intended`, `difficulty` and the
-      answer names. So "had difficulty paying" and a plain "complaint" pass.
+    - Ordinary words are hits only in a meta position: a bracket or parenthesis whose whole content
+      is a listed token (or tokens joined by `/`, `,`, `|`), or a listed token followed by `:` or `=`
+      inside a bracket, or a token after `label`, `answer`, `category` or `intent`. That covers
+      `intended`, `difficulty` and the answer names. So "had difficulty paying", a plain
+      "complaint", "(order #4411)", "(other than login)", "(type A)" and "(no rush)" pass.
+      *(2026-11-04: narrowed from "any listed token inside brackets", which flagged natural text.)*
   - **On a hit,** the seed is regenerated, not dropped: the seed is kept and only its text is
     redrawn, so the design mix is unchanged. Regeneration runs pool hits across design strata.
     A regenerated item keeps its seed's `genRound` and takes the new run's `genRunId`.

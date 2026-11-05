@@ -2,6 +2,62 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-04 — typed-decision-models U5.8a fix round — bracket rule, plan6 §3.8, generator restart
+
+**What:** impl review Pass 18 (judged, not blindly applied), plan6 v1.18 §3.8 and its §5 row
+"U5.8a, U5.9", note §Q1.2 "Hits" (amended 2026-11-04).
+
+- `screen.py`: bracket groups are found by a stack, so a stray closer (`:)`, `1)`) no longer
+  cancels a later opener (P18-M1: the net-depth count was the defect). A bracket hits only when its
+  whole content is listed tokens joined by `/`, `,` or `|`, or holds a listed token followed by `:`
+  or `=`; the keyword rule is unchanged. Of Pass 18's strings, "a) (b clear c)" now passes by the
+  amended rule; "a) (clear)" pins the same stray-closer case. Not taken (the note's Hits grammar
+  does not call for them): U+2011/U+2013 hyphens in `near-miss`, "(near miss)" (prose), uppercase
+  ids, "answers: yes", `Intended:` as a keyword, `{}` and fullwidth brackets.
+- `campaign.py`: balanced cut (`balanced_runs`, also for regeneration pools); halt needs two hits
+  and over 5%, keyed by `genRound` over every `round-start` of it, plus a pooled halt per
+  (generator-template hash, reason) over ingested first-pass seeds; `Attempt.expectations`
+  snapshots the `expectations` at `issued` and the audit reads it; `next` queues `round-start`
+  seeds no batch holds; `generation-restart` resets the folded view and retires every batch
+  (open runs are reconciled and recorded, changing nothing); `begin_round` refuses a started
+  `genRound` unless `extend=True` (a top-up stratum), a `generated` event replaces its staged
+  entry whole (P18-n2), and a recovery re-ingest that halts names the halt (P18-n3).
+- Tests: `tests/test_generation_rounds.py` (new), `test_screen.py`, `test_generation.py`. Mutants
+  (screen bracket rules, the cut, the floor, the denominator, the pool, the snapshot, the restart,
+  the Pass 18 survivors; four plumbing mutants swap the hash, the pool denominator, the stratum and
+  the audited expectations) each redden them; sources restored `cmp`-equal. Suite 1224 → 1285
+  passed, 2 xfailed.
+
+## 2026-11-04 — typed-decision-models U5.8a — generation runs, the screen, form obedience
+
+**What:** plan4 §3.6 "Generation runs" and "Generated-text screen", §5 U5.8 (Screen); plan5 §3.2,
+§3.4, §3.5, §4 U5.8 (Obedience, Screen); method note §Q1.1 "Obedience is checked per item" and
+§Q1.2. The first of U5.8's three sequential sub-units: votes and majority (8b) and the pilot
+tooling, cue check and `record-decision` (8c) are not built, nor is `render.py`'s join-in and
+message-type renderers (U5.2b-render).
+
+- `decisionmodels/screen.py`: `screen_hit(point, item)` (pure; `token:`, `id:`, `meta:` reasons)
+  over the item's evidence strings (enums and seed-fixed `condition` text excluded), and
+  `check_item`, which adds `seed_binding_errors` and returns every reason the item shows in
+  plan5 §3.5's precedence (`screen`, `bindingMismatch`, `formMismatch`).
+- `campaign.py`: `begin_round(genRound, count)` (a fresh RNG seed through `record_draw`; round 1
+  draws ⌈1.1 × target⌉ seeds; shuffled, runs of 25; a `round-start` event), `queue_regeneration`
+  (called by `next` when nothing is pending; pools hits across rounds), `Batch.gen_run_id`, and at
+  ingest the `generated`, `screen-hit`, `binding-mismatch` and `form-mismatch` events. `fold`
+  keeps accepted items, hits, third-hit drops (`State.generation_drops`) and the `template` halt.
+  `status` prints the drops. No change to `ingest.py`'s checks (a schema failure still voids the
+  run), `audit.py` or `runner.py`.
+- Decided where the plans leave room: items and hits are ledger events, applied at the run's
+  `outcome` (a crash between leaves them unfolded); the halt is derived in `fold`, so it survives a
+  crash and fires once per (round, reason); a `resolve` clears the halt, not the pair; one `round-start` is one
+  "round" for the 5% halt's denominator; `queue_batch` of a generate batch without `generation` is
+  left unchecked, as older tests use it.
+- Tests: `tests/test_screen.py` (47) and `tests/test_generation.py` (30). Mutants of both
+  files' targets (22; the screen's both-counted and binding-first mutants, `>=` at 5%, regeneration
+  hits counted, a pooled denominator, and plumbing mutants that swap `genRound`, `genRunId`, the
+  hit's seed or the axes checked against) each redden them; sources restored `cmp`-equal. Suite
+  1147 → 1224 passed, 2 xfailed (U5.2b-render's).
+
 ## 2026-11-01 — typed-decision-models U5.7 definition check: repeated key and wrong `name`
 
 `install.frontmatter` refuses a repeated key (it kept the last, and Claude Code's choice is

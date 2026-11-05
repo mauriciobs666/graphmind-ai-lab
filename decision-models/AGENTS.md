@@ -12,11 +12,12 @@ the design.
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
+reconciliation, halts, generation runs), `screen.py` (the generated-text screen and form
+obedience, pure), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
-definitions, spawn templates, `guard_hook.py` and `settings.json`. Later plan4 §4.1 and plan6 §4
-units are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+definitions, spawn templates, `guard_hook.py` and `settings.json`. Votes, labels, top-up, the pilot and
+`finalize` (plan4 §4.1 U5.8b onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -79,6 +80,19 @@ units are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
   probe report's recorded key sets, never copies of real transcript content.
 - **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
   message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.
+- **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
+  `round-start` (one `genRound` may have several); `Campaign.ingest` appends a run's `generated` and
+  `screen-hit`/`binding-mismatch`/`form-mismatch` events *before* its `outcome`, and `fold` applies
+  them only at that ingested `outcome`. An item's `genRound` is its **seed's** round (a regeneration
+  run pools rounds), its `genRunId` its batch's (`Batch.gen_run_id`, never copied by a cut). A hit
+  event's `reasons` lists every reason the item shows; the first counts toward the seed's 3 hits.
+  The `template` halts count first-pass hits under each reason: per `genRound` and per
+  generator-template hash, each needing two hits and over 5%, each firing once even after `resolve`
+  (which clears the halt, not the pair). Runs are cut balanced (`balanced_runs`). An attempt keeps
+  the `expectations` in force when it was issued; the audit reads those, not the latest. A
+  generator re-pin (`generation-restart`) resets the folded generation view and **retires** every
+  batch (never issued, ignored by `next`); the ledger, held RNG seeds and `seedId`s, pins and
+  expectations stay. A batch queued by plain `queue_batch` has no `generation` and is not checked.
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

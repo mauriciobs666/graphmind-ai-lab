@@ -28,7 +28,8 @@ does not depend on how one answer is split into parts.
 (moved to `store/` by U5.6's driver), the answer parts, and the ledger's record of an earlier
 ingest (`ingested_answer_sha256`). Recording an outcome, moving files, re-issuing a void batch and
 the transcript audit (U5.5), whose classes take precedence over these, are the caller's. A
-generated item that passes here goes on to the screen and seed bindings (U5.8, plan5 §3.5).
+generated item that passes here goes on to the screen and seed bindings (`screen.check_item`,
+called from `Campaign.ingest`; plan5 §3.5).
 """
 
 from __future__ import annotations
