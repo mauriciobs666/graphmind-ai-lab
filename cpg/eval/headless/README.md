@@ -121,3 +121,19 @@ cpg/eval/headless/tests/test_launcher.sh      # prepare/start/resume/status agai
 cpg/eval/headless/tests/mutants_launcher.sh   # exact-string mutants of run-writer.sh against test_launcher.sh
 bash -n cpg/eval/headless/run-writer.sh       # shellcheck is not installed on this host (§7, P3-11)
 ```
+
+## S55 capture (2026-11-05)
+
+One real session (`start capture dummy`, agent `ccg-annotator`, sonnet, one-file dummy kit, one-line
+brief) through the real argv with pinned build 2.1.312. Fixtures: `cpg/tests/fixtures/headless/capture.{1.stream.jsonl,transcript.jsonl,index.jsonl}`
+(email and organization uuid scrubbed). Settled:
+- **(a) Shapes.** The stream is `system/init` (`tools` = exactly `Read,Grep,Glob,Write,Edit`, `cwd` = role root,
+  `mcp_servers` = `[]`, `permissionMode` = `dontAsk`), then `assistant`/`user` (tool results carry `tool_use_result`)
+  and `rate_limit_event` lines, then one `result` (`success`, `total_cost_usd`, `permission_denials`). The transcript
+  is `~/.claude/projects/<cwd with / and . as ->/<session>.jsonl` (`tool_use_result` there is `toolUseResult`,
+  with `permissionDecision`), written by the CLI itself.
+- **(b)** `--output-format stream-json` under `-p` **requires** `--verbose` (CLI error without it); the launcher always passes it.
+- **(c)** OAuth works under `--restricted` with `env -i HOME=…`; exit 0, cost 0.05 USD, `out/done.txt` written.
+- **Context purity.** The harness injects the account email (`userEmail`) and organization uuid into every writer's
+  context; nothing else from the repo (`graphmind` hits come only from the agent prompt's `repoId`). Not removable by flags; S54 records it.
+- **Not observed here (S54):** the hook firing and its `cwd`; a deny reaching the model; `--agents` resolution is confirmed working (agent `ccg-annotator` loaded).
