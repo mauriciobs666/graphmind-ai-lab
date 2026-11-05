@@ -1,0 +1,438 @@
+{
+ "lang": "csharp",
+ "N": 313,
+ "comparable": 260,
+ "referenceSilent": 53,
+ "agreement": {
+  "agreed": 226,
+  "comparable": 260,
+  "rate": 0.8692,
+  "wilson95": [
+   0.8228,
+   0.9049
+  ]
+ },
+ "adjudicated": {
+  "n": 44,
+  "W": 0,
+  "byWrong": {
+   "neither": 20,
+   "reference": 24
+  },
+  "byErrorKind": {
+   "none": 44
+  }
+ },
+ "referenceError": {
+  "wrong": 24,
+  "comparable": 260,
+  "rate": 0.0923,
+  "wilson95": [
+   0.0628,
+   0.1337
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 106,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ]
+  },
+  "AE": {
+   "N_s": 120,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ]
+  },
+  "AS": {
+   "N_s": 43,
+   "n": 30,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.1135
+   ]
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.0,
+   "conservative": 0.05906
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.025101
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 140
+ },
+ "closedClasses": {
+  "count": 0,
+  "byKind": {
+   "role": [],
+   "coordinate": [],
+   "shape": []
+  }
+ },
+ "unscored": {
+  "byReason": {
+   "notACall": 8
+  },
+  "underivable": 0
+ },
+ "basisCounts": {
+  "audit-confirmed": 194,
+  "adjudicated": 44,
+  "agreed": 75
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.0,
+   "flagged": false
+  },
+  "v1.11": {
+   "figure": 0.0,
+   "flagged": false
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": {
+   "definitionsInFinalT": [
+    "src/Configuration/Builder/ServiceProviderConfigurationBuilder.cs:3",
+    "unit/LoadBalancer/LoadBalancerHouseTests.cs:196"
+   ],
+   "nDefinitionsInFinalT": 2,
+   "sitesInFinalT": [
+    149,
+    212,
+    247
+   ],
+   "nSitesInFinalT": 3,
+   "otherClassLineCensusEntries": [
+    "samples/ServiceFabric/DownstreamService/ApiGateway.cs:12",
+    "src/Configuration/Builder/DownstreamRouteBuilder.cs:7",
+    "src/Configuration/File/FileConfiguration.cs:3",
+    "src/Configuration/File/FileRoute.cs:6",
+    "src/Configuration/LoadBalancerOptions.cs:7",
+    "src/Configuration/QoSOptions.cs:5",
+    "src/Requester/MessageInvokerHttpRequester.cs:8",
+    "src/Responses/OkResponse.cs:3",
+    "src/Security/SecurityError.cs:6",
+    "src/Values/ServiceHostAndPort.cs:3"
+   ],
+   "censusSitesTouching": [
+    33,
+    46,
+    53,
+    122,
+    127,
+    136,
+    139,
+    140,
+    149,
+    161,
+    177,
+    212,
+    214,
+    242,
+    247,
+    254,
+    268,
+    288,
+    305
+   ],
+   "note": "new X() with no explicit constructor; the decided target is the class header line (brief 6.5 constructor row); S27 to map consistently (not decided here)"
+  },
+  "anonymousLambdaIndices": "none found (scan of every final T qname for <anon>, lambda and #n markers)",
+  "externalPackagesAbsentFromTree": "none found: the decisions record no label-external package whose source is absent from the tree (not separately scanned)"
+ },
+ "detail": {
+  "lang": "csharp",
+  "N": 313,
+  "comparable": {
+   "n": 260,
+   "referenceSilent": 53,
+   "silentAS": 43,
+   "silentNotAS": 10
+  },
+  "agreement": {
+   "agreed": 226,
+   "comparable": 260,
+   "rate": 0.8692,
+   "wilson95": [
+    0.8228,
+    0.9049
+   ],
+   "byLabelKind": {
+    "declared": {
+     "agreed": 2,
+     "n": 10,
+     "rate": 0.2,
+     "wilson95": [
+      0.0567,
+      0.5098
+     ]
+    },
+    "external": {
+     "agreed": 120,
+     "n": 120,
+     "rate": 1.0,
+     "wilson95": [
+      0.969,
+      1.0
+     ]
+    },
+    "internal": {
+     "agreed": 104,
+     "n": 130,
+     "rate": 0.8,
+     "wilson95": [
+      0.7231,
+      0.8597
+     ]
+    }
+   }
+  },
+  "adjudicated": {
+   "n": 44,
+   "byWrong": {
+    "neither": 20,
+    "reference": 24
+   },
+   "byErrorKind": {
+    "none": 44
+   },
+   "W_labelWrong": 0,
+   "referenceWrong": 24,
+   "referenceWrongOverComparable": {
+    "k": 24,
+    "n": 260,
+    "rate": 0.0923,
+    "wilson95": [
+     0.0628,
+     0.1337
+    ]
+   }
+  },
+  "audit": {
+   "AI": {
+    "N_s": 106,
+    "U_n": 60,
+    "U_errors": 0,
+    "U_wilson": [
+     0,
+     0.0602
+    ],
+    "U_wilsonUpper": 0.0602,
+    "C_n": 22,
+    "C_errors": 0,
+    "C_note": "reported apart, never pooled"
+   },
+   "AE": {
+    "N_s": 120,
+    "U_n": 60,
+    "U_errors": 0,
+    "U_wilson": [
+     0,
+     0.0602
+    ],
+    "U_wilsonUpper": 0.0602,
+    "C_n": 9,
+    "C_errors": 0,
+    "C_note": "reported apart, never pooled"
+   },
+   "AS": {
+    "N_s": 43,
+    "U_n": 30,
+    "U_errors": 0,
+    "U_wilson": [
+     0,
+     0.1135
+    ],
+    "U_wilsonUpper": 0.1135,
+    "C_n": 2,
+    "C_errors": 0,
+    "C_note": "reported apart, never pooled"
+   }
+  },
+  "genericAudit": {
+   "external": {
+    "n": 33,
+    "errors": 0,
+    "wilson95": [
+     0,
+     0.1043
+    ],
+    "note": "only 33 labelled-external sites exist in the pool; 40 not reachable"
+   },
+   "internal": {
+    "n": 9,
+    "errors": 0,
+    "wilson95": [
+     0,
+     0.2991
+    ]
+   },
+   "flag": {
+    "externalErrors>=3": false,
+    "internalErrorRate>0.05": false
+   },
+   "internalShareOfLabelledInternal": {
+    "genInternal": 9,
+    "labelledInternalOrDeclared": 150,
+    "share": 0.06,
+    "threshold": 0.1
+   }
+  },
+  "handErrorRate": {
+   "definition": "(W + sum N_s*k_s/n_s)/N, draw U only",
+   "point": 0.0,
+   "conservative_wilsonUpperPerStratum": 0.05906,
+   "roleErrors": 0,
+   "withRoleErrors": {
+    "point": 0.0,
+    "conservative": 0.05906
+   },
+   "withoutRoleErrors": {
+    "point": 0.0,
+    "conservative": 0.05906
+   },
+   "noiseLimitedThreshold": 0.05,
+   "noiseLimited_point": false,
+   "noiseLimited_conservative": true
+  },
+  "byConstruction": {
+   "sites": 50,
+   "comparable": 0,
+   "referenceSilent": 50
+  },
+  "sampleAdjustedCoverage": {
+   "sampleRows": 500,
+   "withReference": 422,
+   "excludedByConstruction": 74,
+   "denominator": 426,
+   "coverage": 0.9906,
+   "wilson95": [
+    0.9761,
+    0.9963
+   ]
+  },
+  "census": {
+   "entries": 140,
+   "labelErrors": 0,
+   "byRole": {
+    "impl": 130,
+    "decl": 10
+   },
+   "fcFormDisagreements": 0
+  },
+  "unscored": {
+   "notACall": 8
+  },
+  "underivable": 0,
+  "openPoint_for_S27_not_decided_here": {
+   "text": "labelled sites whose decided target is a type/class line (new X() with no explicit constructor); S27 to map consistently",
+   "definitions": [
+    "samples/ServiceFabric/DownstreamService/ApiGateway.cs:12",
+    "src/Configuration/Builder/DownstreamRouteBuilder.cs:7",
+    "src/Configuration/Builder/ServiceProviderConfigurationBuilder.cs:3",
+    "src/Configuration/File/FileConfiguration.cs:3",
+    "src/Configuration/File/FileRoute.cs:6",
+    "src/Configuration/LoadBalancerOptions.cs:7",
+    "src/Configuration/QoSOptions.cs:5",
+    "src/Requester/MessageInvokerHttpRequester.cs:8",
+    "src/Responses/OkResponse.cs:3",
+    "src/Security/SecurityError.cs:6",
+    "src/Values/ServiceHostAndPort.cs:3",
+    "unit/LoadBalancer/LoadBalancerHouseTests.cs:196"
+   ],
+   "sites": [
+    33,
+    46,
+    53,
+    122,
+    127,
+    136,
+    139,
+    140,
+    149,
+    161,
+    177,
+    212,
+    214,
+    242,
+    247,
+    254,
+    268,
+    288,
+    305
+   ],
+   "nTypeDeclarationDefinitions": 12
+  },
+  "e_all_e_res_v112": {
+   "e_all": {
+    "point": 0.0,
+    "conservative": 0.05906
+   },
+   "e_res": {
+    "point": 0.0,
+    "conservative": 0.025101
+   },
+   "r_s": {
+    "AI": 0,
+    "AE": 0,
+    "AS": 0
+   },
+   "unreadRemainder": {
+    "AI": 46,
+    "AE": 60,
+    "AS": 13
+   },
+   "wilsonUpper": {
+    "AI": 0.0602,
+    "AE": 0.0602,
+    "AS": 0.1135
+   },
+   "flag": "e_res.point > 0.05",
+   "noiseLimited": false,
+   "wouldHaveSaid_v1_10": "e_h point 0.0 (not noise-limited, the v1.10 flag used the point figure incl. role errors); conservative 0.05906 above 0.05 reported beside it",
+   "labelOnlyWvariant": {
+    "W": 0
+   },
+   "labellerNoisyFinalLabelsRepaired": false,
+   "closedClassShare": {
+    "count": 0,
+    "share": 0.0,
+    "tripwire": 0.1,
+    "note": "census found 0 role errors (140 targets read, 0 form disagreements); no coordinate/shape errors"
+   },
+   "basisChange": {
+    "before": {
+     "label-only": 43,
+     "audit-confirmed": 151,
+     "adjudicated": 44,
+     "agreed": 75
+    },
+    "after": {
+     "audit-confirmed": 194,
+     "adjudicated": 44,
+     "agreed": 75
+    },
+    "AS": "43 label-only -> audit-confirmed; each AS site is in draw U, draw C or the generic audit (verified)"
+   }
+  }
+ }
+}
