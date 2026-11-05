@@ -1,0 +1,158 @@
+# eval-manifest.yaml — S40 (P0-32). Census scope = evaluated scope (plan §6.2; eval-protocol §3.3, §13.1 step 8).
+# Written by the ground-truth custodian from export_kit.py output and the eval-protocol appendix; GC wrote no keys.
+# Strings are JSON-quoted on purpose (valid YAML, no escaping surprises).
+
+schema: ccg-eval-manifest-v1
+evalCommit: "cf7b2042cce7bad5d0ab7876940bcea00343d914"
+evalCommitFile: cpg/eval/EVAL_COMMIT
+kitManifest: cpg/eval/kit-manifest.json
+
+protocol:
+  # EP2 §1.5: both documents' paths and versions; the held-out manifest's `protocol` field uses `protocolString`.
+  documents:
+    - {path: docs/plans/connected-code-graph-eval-protocol-ml.md, version: "1.4"}
+    - {path: docs/plans/connected-code-graph-eval-protocol2-ml.md, version: "1.4"}
+  protocolString: "docs/plans/connected-code-graph-eval-protocol-ml.md@1.4+docs/plans/connected-code-graph-eval-protocol2-ml.md@1.4"
+
+screen:
+  # EP2 §1.5: diagnostic, not a stop condition.
+  specVersion: "1.2"   # bundle spec3's Version (EP2 §1.5 says spec3's version). spec3 is superseded by spec4, which carries no Version field: see S40-NOTES open item 1.
+  specDocument: docs/plans/connected-code-graph-bundle-spec3.md
+  bundlePySha256: "18be67564e0d20f4d8f2478fd53ca77680fc9abe1ddd537179dc6be0cf1d427e"   # sha256 of cpg/ccg/bundle.py at evalCommit (git show), not of the working tree
+
+strata: [http, mcp, scripts, wiring, flow]
+
+exclusions:
+  paths:   # plan §6.2
+    - "cpg/"
+    - "deprecated/"
+    - "docs/**/connected-code-graph*"
+    - "docs/BACKLOG.md"
+  contentCheck:   # eval-protocol §13.1 step 3; every file hit is deleted from the kit and excluded here
+    pattern: "connected-code-graph|connected code graph|C-1001|\\bccg[_ -]"
+    caseInsensitive: true
+    files:
+      - {path: "claude/cobb/kaizen/plan.md", class: doc}
+      - {path: "claude/docs/plans/identifier-leak-cleanup-coordination.md", class: prompt-md}
+      - {path: "claude/docs/reviews/identifier-leak-cleanup.md", class: prompt-md}
+      - {path: "claude/graph-dba/falkordb-quirks.md", class: prompt-md}
+      - {path: "decision-models/docs/test-reports/live-smoke-report.md", class: doc}
+      - {path: "docs/plans/agent-reading-cost.md", class: doc}
+      - {path: "docs/plans/live-specs-coordination.md", class: doc}
+      - {path: "docs/requirements/agent-reading-cost.md", class: doc}
+      - {path: "docs/requirements/cross-initiative-coordination.md", class: doc}
+      - {path: "docs/requirements/document-size-discipline.md", class: doc}
+      - {path: "docs/reviews/agent-reading-cost.md", class: doc}
+      - {path: "docs/reviews/cross-initiative-coordination.md", class: doc}
+      - {path: "docs/reviews/document-size-discipline-impl.md", class: doc}
+      - {path: "docs/reviews/document-size-discipline.md", class: doc}
+      - {path: "docs/test-reports/standard-local-model-report.md", class: doc}
+      - {path: "falkor-chat/docs/reviews/embedder-context.md", class: doc}
+  excludedScope:   # counts by path class of content-check files that would otherwise be in census scope (code/config/prompt-md)
+    count: 3
+    byClass: {doc: 13, prompt-md: 3}
+  testCode:   # eval-protocol §3.3: excluded as anchor and as impacted element; TS tests are out by design (Q3 ruling B)
+    - "**/tests/**"
+    - "**/test_*.py"
+    - "**/*_test.py"
+    - "**/conftest.py"
+    - "**/*.test.{ts,tsx,js,jsx}"
+    - "**/*.spec.{ts,tsx,js,jsx}"
+  vendoredDirNames: [node_modules, vendor, vendored, _vendor, third_party, third-party]   # export_kit.py SKIP_DIRS
+  dockerfiles: out-of-census-scope
+  flowChainMaxHops: 2
+
+promptBearingMarkdown:   # eval-protocol §3.3 (G5); every other .md is documentation and never a consumer
+  include:
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "claude/**/*.md"
+    - "skills/**/*.md"
+    - "opencode/agents/**/*.md"
+    - "opencode/skills/**/*.md"
+    - ".kiro/steering/*.md"
+    - ".claude/commands/**/*.md"
+    - ".claude/agents/**/*.md"
+  except:
+    - "claude/**/kaizen/**"
+    - "claude/README.md"
+    - "skills/README.md"
+
+frames:
+  flow: "Prod-only census"   # TS/JS frame ruling: test files excluded by the testCode globs
+
+units:   # export_kit.py --list-units; `ports` filled from source (eval-protocol §2.4), checked by the method owner
+  - rootPath: "cypher-mcp"
+    lang: "python"
+    ports: []   # stdio server; cypher-mcp/Dockerfile has no EXPOSE ("listens on nothing")
+  - rootPath: "decision-models"
+    lang: "python"
+    ports: []   # no listener in source
+  - rootPath: "falkor-chat/server"
+    lang: "python"
+    ports: [8000, 8200]   # falkor-chat/compose.yaml service `server` (build: ., container side 8000); falkor-chat/Dockerfile `EXPOSE 8000` and `--port 8000`; 8200 is scripts/start_agent_team.sh's default `AGENT_TEAM_PORT` (lines 137, 157), the port `.mcp.json` points at. 8200 is a judgement call, see S40-NOTES
+  - rootPath: "mcp-monitor"
+    lang: "python"
+    ports: []   # MCP client; no listener in source
+  - rootPath: "model-bench"
+    lang: "python"
+    ports: []   # no listener in source
+  - rootPath: "salesperson"
+    lang: "javascript"
+    ports: []   # static bundle served by falkor-chat/server at /shop; no listener of its own in source
+
+cypherMcpTools: ["query"]   # export_kit.py --list-cypher-tools (cypher-mcp/server.py, @mcp.tool)
+
+grainTable:   # eval-protocol §2.4; rows matched top to bottom within a file's format, first segment-prefix wins, keyPath truncated to it
+  - id: mcp-json
+    fileTest: ".mcp.json"
+    rules:
+      - {pattern: "mcpServers.<name>", class: server}
+  - id: kiro-agent
+    fileTest: "**/.kiro/agents/*.json"
+    note: "any other key (v1.2, P2-4) falls through to the any-other-json row"
+    rules:
+      - {pattern: "mcpServers.<name>", class: server}
+      - {pattern: "tools[i]", class: contract}
+      - {pattern: "allowedTools[i]", class: contract}
+      - {pattern: "toolAliases.<key>", class: contract}
+      - {pattern: "toolsSettings.<key>", class: contract}
+      - {pattern: "includeMcpJson", class: server, note: "only when the value is true: it binds the agent to every .mcp.json server, one item per such server"}
+    fallthrough: "any-other-json"
+  - id: claude-settings
+    fileTest: "**/.claude/settings*.json"
+    rules:
+      - {pattern: "enabledMcpjsonServers[i]", class: server}
+      - {pattern: "permissions.allow[i]", class: contract}
+      - {pattern: "permissions.ask[i]", class: contract}
+      - {pattern: "permissions.deny[i]", class: contract}
+      - {pattern: "hooks.<Event>[i]", class: contract, note: "the whole matcher group; or invokes a script (stratum scripts)"}
+  - id: mcp-monitor-toml
+    fileTest: "mcp-monitor/*.toml"
+    rules:
+      - {pattern: "server.<name>", class: server}
+      - {pattern: "watch[i]", class: contract}
+  - id: compose
+    fileTest: "compose*.y*ml, docker-compose*.y*ml"
+    rules:
+      - {pattern: "services.<svc>", class: server}
+  - id: env
+    fileTest: ".env, .env.*"
+    rules:
+      - {pattern: "<VAR>", class: server-or-contract, note: "server if the value is a URL whose port (explicit, or the scheme's default) is in some listed unit's ports, or an integer in some listed unit's ports; otherwise contract"}
+  - id: any-other-json
+    fileTest: "any other JSON, YAML or TOML"
+    rules:
+      - {pattern: "first two segments of the keyPath, an array index counting as a segment", class: contract}
+
+flowAnchors:   # export_kit.py --draw-flow-anchors; eval-protocol §3.6
+  file: ~/.local/share/ccg-eval/cf7b2042cce7/work/flow-anchors.jsonl   # outside the repo; the list is also pasted into every key-writer brief
+  sha256: "a2e9cac3d73def5c13b617e64ee129a01f0c21bf0e539bc8e77d3f04a3288f40"
+  perLanguage: 8
+  seeds:
+    python: "ccg-p0f-flow-v1|python|cf7b2042cce7bad5d0ab7876940bcea00343d914"
+    javascript: "ccg-p0f-flow-v1|javascript|cf7b2042cce7bad5d0ab7876940bcea00343d914"
+
+writerBriefs:   # files and hashes are in kit-manifest.json `briefs`
+  grammarExtract: {bytes: 12145, sha256: "5202c983c7ced1bc2b1ef166fd2b8a77bfbf3d444f1880e3a5afdd06e009f3ff"}
+  roleStrata: {KA: [http, mcp, scripts, wiring, flow], KB: [http, mcp, scripts, wiring, flow], QW: [impact], AN1: [impact], AN2: [impact]}
