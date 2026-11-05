@@ -7,7 +7,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUARD="${GUARD:-$HERE/../guard-paths.sh}"
-SETTINGS="$HERE/../settings.json"
+SETTINGS="${SETTINGS:-$HERE/../settings.json}"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -122,7 +122,7 @@ assert list(s["hooks"]) == ["PreToolUse"], list(s["hooks"])
 for t in ("Read", "Grep", "Glob", "Write", "Edit"):
     assert t in entry["matcher"].split("|"), t
 (h,) = entry["hooks"]
-assert h["type"] == "command" and "$CCG_GUARD" in h["command"] and "exit 2" in h["command"]
+assert h["type"] == "command" and "$CCG_GUARD" in h["command"] and "exit 2" in h["command"] and 'exec "$CCG_GUARD"' not in h["command"]
 PY
 then ok "settings.json: PreToolUse guard only, fail-closed when CCG_GUARD unset"; else bad "settings.json shape"; fi
 # the settings command itself fails closed
@@ -130,6 +130,74 @@ out="$(env -i PATH=/usr/bin:/bin sh -c "$(/usr/bin/python3 -I -c 'import json,sy
 [ "$rc" = 2 ] && ok "settings command denies when CCG_GUARD is unset" || bad "settings command denies when CCG_GUARD is unset (rc=$rc)"
 printf '%s' "$(mk Read file_path "$OUTSIDE/secret.txt")" | env -i PATH=/usr/bin:/bin CCG_GUARD="$GUARD" sh -c "$(/usr/bin/python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["hooks"]["PreToolUse"][0]["hooks"][0]["command"])' "$SETTINGS")" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "settings command routes to the guard (deny passes through)" || bad "settings command routes to the guard (rc=$rc)"
+
+# exit-code probe (S52 gate B-1): over tool x key x value class, the guard must exit 0 or 2 and
+# never anything else (only exit 2 blocks a PreToolUse hook; exit 1 fails open); and it must
+# deny (2) every outside/malformed class wherever the guard examines that key.
+PROBE_OUT="$(GUARD="$GUARD" ROOT="$ROOT" /usr/bin/python3 -I - <<'PY'
+import json, os, subprocess
+guard, root = os.environ["GUARD"], os.environ["ROOT"]
+tools = ["Read", "Grep", "Glob", "Write", "Edit", "NotebookEdit", "MultiEdit", "SomethingElse"]
+keys = ["file_path", "notebook_path", "path", "pattern", "glob"]
+WRITE = {"Write", "Edit", "NotebookEdit", "MultiEdit"}
+PATHK = {"file_path", "notebook_path", "path"}
+vals = {  # class -> (value, denied-when-examined)
+    "in-root": ("out/KA.jsonl", False),
+    "abs-outside": ("/etc/passwd", True),
+    "rel-outside": ("../../../../../../etc/passwd", True),
+    "symlink-out": ("kit-src/escape-dir/secret.txt", None),  # a pattern is not resolved
+    "lone-surrogate": ("a\ud800b", None),
+    "surrogate-dotdot": ("\ud800/../../../../../../etc/passwd", True),
+    "nul": ("a\0b", True),
+    "non-str-int": (5, True),
+    "non-str-list": (["/etc/passwd"], True),
+    "non-str-dict": ({"a": 1}, True),
+    "empty": ("", None),
+    "deep-5000": ("a/" * 5000 + "x", None),
+    "tilde": ("~/x", True),
+}
+def run(inp):
+    return subprocess.run([guard], input=json.dumps(inp).encode(), capture_output=True,
+                          env={"PATH": "/usr/bin:/bin"}, timeout=60).returncode
+bad = []; cells = 0
+for tool in tools:
+    for key in keys:
+        for cls, (v, must_deny) in vals.items():
+            cells += 1
+            rc = run({"tool_name": tool, "tool_input": {key: v}, "cwd": root})
+            examined = key in PATHK or (tool == "Glob" and key == "pattern") or (tool == "Grep" and key == "glob")
+            if rc not in (0, 2):
+                bad.append("rc=%s %s %s %s" % (rc, tool, key, cls))
+            elif examined and must_deny and rc != 2:
+                bad.append("allowed %s %s %s" % (tool, key, cls))
+            elif examined and key in PATHK and cls == "in-root" and rc != 0:
+                bad.append("denied in-root %s %s" % (tool, key))
+# cwd classes
+for name, cwd in [("lone-surrogate", "a\ud800b"), ("nul", "a\0b"), ("int", 5), ("empty", ""), ("missing-dir", "/nonexistent/zz")]:
+    cells += 1
+    rc = run({"tool_name": "Read", "tool_input": {"file_path": "x"}, "cwd": cwd})
+    if rc not in (0, 2): bad.append("rc=%s cwd %s" % (rc, name))
+    if name != "missing-dir" and rc != 2: bad.append("cwd %s not denied (rc=%s)" % (name, rc))
+print("CELLS", cells)
+print("BAD", len(bad))
+for b in bad[:15]: print("  " + b)
+PY
+)"
+echo "$PROBE_OUT" | sed 's/^/     /'
+[ "$(echo "$PROBE_OUT" | sed -n 's/^BAD //p')" = 0 ] && ok "exit-code probe: only 0/2, outside and malformed denied" || bad "exit-code probe (see above)"
+
+# settings command: any guard exit other than 0 must become exit 2
+SETCMD="$(/usr/bin/python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["hooks"]["PreToolUse"][0]["hooks"][0]["command"])' "$SETTINGS")"
+for stub_rc in 1 3 126 139; do
+	printf '#!/bin/sh\nexit %s\n' "$stub_rc" >"$TMP/stub.sh"; chmod +x "$TMP/stub.sh"
+	env -i PATH=/usr/bin:/bin CCG_GUARD="$TMP/stub.sh" sh -c "$SETCMD" </dev/null >/dev/null 2>&1; rc=$?
+	[ "$rc" = 2 ] && ok "settings command: guard exit $stub_rc becomes 2" || bad "settings command: guard exit $stub_rc gave $rc"
+done
+printf '#!/bin/sh\nexit 0\n' >"$TMP/stub.sh"
+env -i PATH=/usr/bin:/bin CCG_GUARD="$TMP/stub.sh" sh -c "$SETCMD" </dev/null >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "settings command: guard exit 0 stays 0" || bad "settings command: guard exit 0 gave $rc"
+printf '{"tool_name":"Read","tool_input":{"file_path":"\\ud800/../../../etc/passwd"},"cwd":"%s"}' "$ROOT" | env -i PATH=/usr/bin:/bin CCG_GUARD="$GUARD" sh -c "$SETCMD" >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "settings command + guard: lone-surrogate path denied (2)" || bad "settings command + guard: lone-surrogate gave $rc"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

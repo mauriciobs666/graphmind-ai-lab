@@ -20,8 +20,9 @@ mutants=(
 'glob pattern check removed|    if pat.startswith(("/", "~")) or ".." in parts:|    if False:'
 'dot-dot pattern component allowed|    if pat.startswith(("/", "~")) or ".." in parts:|    if pat.startswith(("/", "~")):'
 'unknown tool with path skipped|if not known and not present:|if not known:'
-'read without path allowed|    if not present:\n        deny("%s without a path" % tool)|    pass'
+'read without path allowed|        if not present:\n            deny("%s without a path" % tool)|        pass'
 'cwd field ignored (process cwd used)|    cwd = data.get("cwd")|    cwd = None'
+'internal errors not caught (exit 1 on surrogate)|except Exception as exc:  # any internal failure|except ZeroDivisionError as exc:  # any internal failure'
 'non-string path accepted|        deny("empty or malformed path")|        return root'
 )
 survived=0 killed=0
@@ -41,6 +42,32 @@ open(dst, "w").write(t.replace(old, new))
 PY
 	chmod +x "$f"
 	if GUARD="$f" "$HERE/test_guard_paths.sh" >/dev/null 2>&1; then
+		echo "SURVIVED  $name"; survived=$((survived+1))
+	else
+		echo "killed    $name"; killed=$((killed+1))
+	fi
+done
+
+# settings.json mutants: the test takes SETTINGS=<path>
+S_SRC="$HERE/../settings.json"
+smutants=(
+'settings command reverted to exec (guard exit 1 passes through)|; "$CCG_GUARD"; rc=$?; [ "$rc" -eq 0 ] || exit 2|; exec "$CCG_GUARD"'
+'settings command ignores guard exit code|; rc=$?; [ "$rc" -eq 0 ] || exit 2|; true'
+)
+for m in "${smutants[@]}"; do
+	i=$((i+1))
+	IFS='|' read -r name old new <<<"$m"
+	f="$TMP/smut$i.json"
+	/usr/bin/python3 -I - "$S_SRC" "$f" "$old" "$new" <<'PY' || { echo "BAD MUTANT SPEC: $name"; exit 3; }
+import sys, json
+src, dst, old, new = sys.argv[1:5]
+s = json.load(open(src)); h = s["hooks"]["PreToolUse"][0]["hooks"][0]
+if h["command"].count(old) != 1:
+    sys.stderr.write("old text occurs %d times\n" % h["command"].count(old)); sys.exit(1)
+h["command"] = h["command"].replace(old, new)
+json.dump(s, open(dst, "w"))
+PY
+	if SETTINGS="$f" "$HERE/test_guard_paths.sh" >/dev/null 2>&1; then
 		echo "SURVIVED  $name"; survived=$((survived+1))
 	else
 		echo "killed    $name"; killed=$((killed+1))

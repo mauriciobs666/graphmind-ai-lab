@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -x \"$CCG_GUARD\" ] || { echo 'ccg path guard: CCG_GUARD unset or not executable; denying' >&2; exit 2; }; exec \"$CCG_GUARD\""
+            "command": "[ -x \"$CCG_GUARD\" ] || { echo 'ccg path guard: CCG_GUARD unset or not executable; denying' >&2; exit 2; }; \"$CCG_GUARD\"; rc=$?; [ \"$rc\" -eq 0 ] || exit 2"
           }
         ]
       }

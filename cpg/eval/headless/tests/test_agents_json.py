@@ -10,7 +10,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
-AGENTS = json.loads((HERE.parent / "agents.json").read_text())
+import hashlib, os
+AGENTS = json.loads(Path(os.environ.get("AGENTS_JSON", HERE.parent / "agents.json")).read_text())
+# The grammar extract is generated once (M-1 ruling: rules 5 and 7 cut, http step 7 without the
+# catch-all clause); the four definitions and S40's briefs hold byte-identical copies of it.
+EXTRACT_LEN, EXTRACT_SHA256 = 12145, "5202c983c7ced1bc2b1ef166fd2b8a77bfbf3d444f1880e3a5afdd06e009f3ff"
 ML = (REPO / "docs/plans/connected-code-graph-eval-protocol-ml.md").read_text()
 
 NAMES = ["ccg-key-writer-provider", "ccg-key-writer-consumer", "ccg-question-writer", "ccg-annotator"]
@@ -66,9 +70,13 @@ for n, d in AGENTS.items():
     check(n + ": authored text has no learning-capture/KB/CPG/repo instructions", not bad, str(bad))
     gbad = re.findall(r"falkor|salesperson|storefront|embedding\.py|test_fusion|joern|callsite|analyst|P-slice|P-later|§[0-9]", re.sub(r"RFC 3986 §[0-9.]+", "", grammar.get(n, "")))
     check(n + ": grammar extract names no proving-repo element or unpasted section", not gbad, str(gbad[:5]))
-    check(n + ": grammar extract omits rule 5 and has rules 1-4, 6-10",
+    check(n + ": grammar extract omits rule 5 and has rules 1-4, 6, 8-10 (7 cut)",
           grammar.get(n) is not None and "5. **Anonymous" not in grammar[n]
-          and all(re.search(r"(?m)^%d\. \*\*" % i, grammar[n]) for i in (1, 2, 3, 4, 6, 7, 8, 9, 10)))
+          and all(re.search(r"(?m)^%d\. \*\*" % i, grammar[n]) for i in (1, 2, 3, 4, 6, 8, 9, 10))
+          and not re.search(r"(?m)^7\. ", grammar[n]) and "(Rules 5 and 7 are not used in this brief.)" in grammar[n]
+          and "{**}" not in grammar[n] and "Duplicates get" not in grammar[n])
+    gb = grammar.get(n, "").encode()
+    check(n + ": grammar extract pinned (length, sha256)", len(gb) == EXTRACT_LEN and hashlib.sha256(gb).hexdigest() == EXTRACT_SHA256, "%d %s" % (len(gb), hashlib.sha256(gb).hexdigest()))
     check(n + ": grammar extract has no JSON example block", "```json" not in p and '"schema":"ccg-key-v1"' not in grammar.get(n, ""))
 
 # the two key writers: same schema text, different strategy and wording
@@ -79,6 +87,10 @@ wa, wb = set(re.findall(r"[a-z]+", sa.lower())), set(re.findall(r"[a-z]+", sb.lo
 check("key writers: strategy sections differ in wording (Jaccard < 0.5)", len(wa & wb) / len(wa | wb) < 0.5, "%.2f" % (len(wa & wb) / len(wa | wb)))
 check("key writers: provider-first vs consumer-first named", "provider-first" in sa and "consumer-first" in sb and "consumer-first" not in sa and "provider-first" not in sb)
 check("key writers: strategy is not the only difference in outputs path", AGENTS[NAMES[0]]["description"] != AGENTS[NAMES[1]]["description"])
+
+check("key writers/QW/annotator: extracts byte-identical", len({grammar.get(n) for n in NAMES}) == 1)
+check("no 'working notes' file instruction (m-4)", all("working notes" not in AGENTS[n]["prompt"] for n in NAMES))
+check("rule 4 keeps spec3's wording (m-1)", all("extractor parsed" not in AGENTS[n]["prompt"] for n in NAMES))
 
 print("\n%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)
