@@ -1,8 +1,8 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.14 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.15 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
-*Revision 2026-11-05 (v1.14): §2 "Site found" now follows §7.1 (a site absent in Joern is not found); before this, §2 (name match credited without a `CALL`) and §7.1 contradicted each other. A post-result clarification, disclosed in the P0 report with the lenient counterpart as a secondary figure (§7.2). Earlier revisions: §12.*
+*Revision 2026-11-05 (v1.15): §2 "Site found" now follows §7.1 (a site absent in Joern is not found); §2 and §7.1 had contradicted each other, and the lenient reading is a secondary figure (§7.2). §7.2's census rows (parse success, method coverage, line fidelity) are redefined before any census result exists; the operative rules are in `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a1.6. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
 
 ## 0. Question and the decision it serves
 
@@ -1107,9 +1107,9 @@ writes the effective list into `corpora.yaml`, and §4.1's frame exclusion uses 
 | "Resolved away" | sites resolved only to external names while the truth is internal | labelled internal sites | Wilson |
 | **Name-match fan-out** | `|Nm(s)|` per unresolved site: median, p90, p99, max, share > 20 | **census**: every matched unresolved frame site | none (census of this corpus) |
 | Fan-out, arity-filtered | same, keeping candidates with compatible arity | census | sensitivity only |
-| **Parse success** | files with a Joern `FILE` node and no frontend error for that file ÷ frame files | census | Wilson |
-| Method coverage | tree-sitter definitions with a matching Joern `METHOD` (file, name, start line ± 0) ÷ definitions | census | Wilson |
-| **Line fidelity** | matched methods whose `lineNumber` and `lineNumberEnd` both equal tree-sitter's ÷ matched methods. Start uses §5.3's convention. A decorator-inclusive variant is reported too, because frontends differ on it | census | Wilson |
+| **Parse success** | frame files with a Joern `FILE` node and at least one non-external `METHOD` ÷ frame files (the frontend's own per-file errors are logged apart and not part of the figure) | census | Wilson |
+| Method coverage | tree-sitter definitions (`symbol: true`) matched one-to-one to a Joern `METHOD` ÷ definitions; the matching key and window are fixed in the report §a1.6 (file, name rule, start line at the frontend's offset, no ± 0 literal) | census | Wilson |
+| **Line fidelity** | matched methods whose `lineNumber` equals the name-line start and whose `lineNumberEnd` equals tree-sitter's end ÷ matched methods; the decorator-inclusive start is reported as a second variant, because frontends differ on it (exact lines for every language) | census | Wilson |
 | **Value-set recovery** | §5.3 constant arguments whose Joern argument is a `Literal` with the same value, or whose single reaching definition is one ÷ such arguments | census | Wilson |
 | Decorator/annotation shape | per kind: share of §5.3 decorated definitions where Joern exposes the decorator name on the method, and share with its literal arguments; plus one worked example per language for S30 | census | Wilson |
 | Recall and precision **by kind** | §7.2's first three rows per §4.1 kind | domains of the sample | Wilson, labelled *descriptive* (small n) |

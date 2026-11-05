@@ -88,7 +88,7 @@ file *or any file of its truth set* is a contact file gives 143/145 (2 misses, b
 passes. Python's indexer outcome is driven by the precision point estimate (110/116 = 0.9483 < 0.95); a single extra correct site (111/116 = 0.957
 [0.903, 0.981]) would flip it. TS/JS fails under every definition (A: 96/165; B and C: 87/152; contact stratum 19 sites, below 50).
 
-Lenient recall for the others reaches no language above 0.92 except Python, so the §8.1 screen outcome (fail) does not depend on the reading.
+Lenient recall for the five failing languages is at most 0.921 (Java), so the §8.1 screen outcome (fail) does not depend on the reading.
 Share of fan-out above 20 (cost trigger): Python 136/8,801, C# 907/16,075, C++ 194/3,538, others 0; no p90 above 6.
 
 ### a1.3 Override runs (secondary; renamed `test`/`i18n` path segments)
@@ -129,41 +129,46 @@ spring-petclinic-rest, C# Ocelot, C++ googletest and Kotlin KtorAdmin.
 
 ### a1.6 Spec for the ML §5.3 definitions census (S27c; for a coder, then graph-dba)
 
-**Sequence:** (1) `make_defs_census.py` (no Joern); (2) `measure.sc` change by graph-dba, analyst-gated like the earlier edits; (3) rerun of the 12 builds (six languages x
-off/on; Kotlin frontend-only, below); (4) `s27_census_metrics.py`; (5) fill the four rows of §a1.2 and the S30 shapes. Steps 1 and 4 are plain Python in
-`cpg/spikes/frontend-fitness/`; the rerun is needed because the current `*.measure.jsonl` carries no argument or annotation data.
+The metric definitions are ML §7.2 (parse success, method coverage, line fidelity, value-set recovery, decorator shape); this section carries the operating rules the
+coder needs, and the rule sources it must read. **Sequence:** (1) `make_defs_census.py` (no Joern); (2) `measure.sc` change by graph-dba, analyst-gated; (3) rerun of the 12
+builds (six languages x off/on; Kotlin frontend-only, below); (4) `s27_census_metrics.py`; (5) fill the four rows of §a1.2 and the S30 shapes. The rerun is needed because the
+current `*.measure.jsonl` carries no argument or annotation data. All code lives in `cpg/spikes/frontend-fitness/`.
 
-**1. Definitions census, `truth/<lang>.defs.jsonl`.** Frame files only (the same file rules as `run_fitness.py frame`), tree-sitter grammars as the frame.
-- `{"k":"def","path","name","nameKey","nameLine","endLine","declStartLine","symbol","decorators":[{"name","node","literalArgs":[...]}]}`.
-  `nameLine` is the line of the name (decorators and annotations excluded); `declStartLine` includes them (the decorator-inclusive variant);
-  `symbol` per bundle spec rule 8 for the language (a bodyless non-symbol is recorded with `symbol:false` and excluded from coverage).
-- **Name key (`nameKey`):** the short name; constructors `<init>` (Java/C#/Kotlin/C++ also keyed by the type name), Python `__init__`, JS `constructor`;
-  overloads keep the same short name with an ordinal `#n` by source order; anonymous functions `<anon>#n` by order within the enclosing definition;
-  several definitions on one line are kept as separate records (Python has 1,081 such lines) and matched by name first, then by order.
-- `{"k":"arg","path","line","column","callText","argIndex","valueKind","value"}` for each argument that is a string literal, a literal-only
-  concatenation, a substitution-free template literal, or a same-file constant (`final`/`const`/`val`/module-level `UPPER_CASE` in Python) initialised by one of these.
-  `value` is normalised: decoded escapes, quotes and prefixes stripped, concatenation folded, template text without delimiters; f-strings and raw
-  strings with substitution are not census arguments.
+**1. Definitions census, `truth/<lang>.defs.jsonl`** (frame files only, the frame's file rules and grammars).
+- `{"k":"def","path","name","nameKey","nameLine","endLine","declStartLine","symbol","decorators":[{"name","node","literalArgs":[{"name":str|null,"value":str}]}]}`.
+  `nameLine` is the line of the name (decorators and annotations excluded); `declStartLine` includes them. `symbol` is set by the per-language table of rule 8 in the bundle
+  spec in force (`docs/plans/connected-code-graph-bundle-spec3.md` §4.1, as amended by `-spec4.md`); a bodyless non-symbol is kept with `symbol:false` and left out of coverage.
+  Each rule-8 case (the lists in ML §2) gets a planted fixture and an expected `symbol` value in the tests.
+- **`nameKey`** is the short name: the last segment after `.`, `::` or a Go receiver; template and type arguments stripped; operators as written (`operator==`), destructors with `~`;
+  constructors are `<init>` and the type name (Java/C#/Kotlin/C++), `__init__` (Python), `constructor` (JS); overloads share the short name and are told apart by source order. The accepted
+  Joern names per frontend come from `matcher-table.md` and `s27_metrics.py` `spec_names` (the existing rule source; the coder extends it, never redefines it). A census definition with
+  no name (arrow function, lambda, anonymous class) matches by position only: a METHOD named `<lambda>N`, `<anon>…` or `:program`-nested whose start line is the definition's.
+  JS object-literal and class-field functions take the property key as name; Python nested defs their own name.
+- `{"k":"arg",…}` is one record per call argument that is (a) a string literal, (b) a literal-only concatenation, (c) a substitution-free template literal, or (d) an identifier that
+  resolves to a same-file constant: a file- or class-scope binding (`final`/`static final`/`const`/`constexpr`/`val`/Go `const`/module-level `UPPER_CASE`) initialised by (a)–(c), with
+  no local of the same name in the enclosing function (a shadowing local disqualifies the argument). Fields: `path,line,column,callText,argIndex,argName,valueKind,value`.
+  `argIndex` is 0-based over the explicit arguments, the receiver excluded (Joern's argument 1 is the receiver for method calls: subtract it); a keyword or named argument keeps its
+  positional index and sets `argName`; spread arguments are skipped. `value` is normalised: decoded escapes, delimiters and prefixes stripped, concatenation folded, template text only.
 
-**2. `measure.sc` additions** (per non-external METHOD and per frame call argument): METHOD annotation/decorator names with literal arguments; for each
-argument whose `(file, line, column)` matches an `arg` record, its node kind, the `Literal` value if it is one, and the value of a single reaching definition if
-one exists and is a `Literal`.
+**2. `measure.sc` additions** (graph-dba): per non-external METHOD, its annotation/decorator names and literal arguments; per `arg` record (joined by `(file, line, column)`), the Joern
+argument's node kind, its `Literal` value if it is one, and the value of the single reaching definition when that is a `Literal`. **Kotlin:** the metrics script reads a flag in the `meta` record; for
+the frontend-only CPG (`importCpg(cpg, name, false)`, no overlays) coverage, line fidelity and annotations are measured, value-set recovery is recorded as unmeasured, and results are labelled
+"frontend-only". Whether `measure.sc` tolerates an overlay-free import is graph-dba's check before the rerun.
 
-**3. Metrics (`s27_census_metrics.py`).** Coverage key: file + name + start line, using the lines the harness already fixes (`s27_metrics.py` `METHOD_LINE_OFFSET`:
-C# METHOD line = definition line - 1; elsewhere exact line, else the innermost METHOD whose span holds the line within 8 lines of its start and whose name
-matches); this replaces ML §7.2's "start ± 0", which would give C# near zero. Line fidelity: matched methods whose both `lineNumber`/`lineNumberEnd` equal the census
-lines (Java/C++ compared on span and name, since modifiers and templates shift the start). Parse success: frame files with a FILE node and at least one non-external
-METHOD (the existing `frameFilesWithFileNodeAndMethod`); the frontend's own per-file errors go to a log the runner suppresses, so they are separate evidence (§a1.4).
-Both configurations, each language; files without a FILE node count as uncovered. **Value-set recovery:** an argument counts as recovered if the Joern argument is a `Literal`
-with the same normalised value, or if its single reaching definition is one; "single reaching definition" is exactly one `ReachingDef` source for the argument, reached
-through no call, and requires the dataflow overlay. **Kotlin:** the overlay aborts, so value-set recovery is unmeasured; coverage, line fidelity and annotations can be
-measured from the frontend-only CPG loaded without overlays (`--nooverlays`), and the result is labelled as such.
+**3. `s27_census_metrics.py <lang>`** writes `results/<lang>.census.json` with an `off` and an `on` block, every metric as `{k, n, p, wilson95}`.
+- **Matching (one-to-one):** per file, definitions in `(nameLine, source order)`. Candidate METHODs are those in the file not yet claimed, whose name satisfies the name rule, and whose
+  start line equals `nameLine` or `declStartLine` at the frontend's offset (`METHOD_LINE_OFFSET`: C# -1, others 0); failing that, the innermost unclaimed METHOD whose span holds
+  `nameLine` within 8 lines of its start. Prefer the exact start; ties by smallest line distance, then source order. A METHOD is claimed once; a definition with no candidate is uncovered; files with no FILE node are uncovered.
+- **Line fidelity:** exact for every language (ML §7.2): `lineNumber` equals the name-line start (variant: the decorator-inclusive start), and `lineNumberEnd` equals the census end line. No
+  "span and name" rule.
+- **Parse success:** frame files with a FILE node and at least one non-external METHOD ÷ frame files. Both configurations are computed separately.
+- **Value-set recovery:** an `arg` record is recovered if the matched Joern call (§7.1, same siteKey) has that argument as a `Literal` with the same normalised value, or if the argument has exactly one reaching
+  definition which is such a `Literal` (needs the dataflow overlay). An `arg` whose call is unmatched counts as not recovered.
+- **Decorator shape:** the denominator is definitions with at least one decorator, annotation or attribute node. Name share: Joern exposes the decorator name, compared on the last dotted segment
+  (`app.route` equals `route`; Java qualified names reduce to the simple name), case-sensitive. Literal share: over decorators with at least one literal argument, all literal values present. The tree-sitter node
+  per language: Python `decorator`; TS/JS `decorator`; Java `annotation`/`marker_annotation`; Kotlin `annotation`; C# `attribute`; C++ `attribute_declaration`; Go none. The Joern node that carries it (ANNOTATION on the METHOD,
+  or a call for Python decorators) is unverified: the coder records it from a one-file probe per language, in the format `{lang, node, example}`, before step 2. One worked example per language is a deliverable for S30.
 
-**Decorator/annotation shapes (S30).** tree-sitter node per language: Python `decorator`; TS/JS `decorator`; Java `annotation`/`marker_annotation`; Kotlin `annotation`;
-C# `attribute_list`/`attribute`; C++ `attribute_declaration` (`[[...]]`); Go none (record "no decorators"). The Joern node expected to carry it (ANNOTATION on the
-METHOD, or a call for Python decorators) is unverified: the coder establishes it with a one-file probe per language before step 2 and records it. The deliverable includes one
-worked example per language (definition, decorator, literal arguments, Joern representation) for S30.
-
-**Acceptance.** (a) One `def` record per tree-sitter definition in every frame file, counts published per language; (b) every `(path, defLine)` that appears as a `T` member in `final2`
-or a reference `static`/`impls` target with a body must appear in `defs.jsonl` with `symbol:true` (independent of the extractor: 100% or the discrepancies are listed); (c) 3
-hand-counted files per language; (d) a mutation test: dropping a node type from the extractor fails (b) or (c).
+**Acceptance.** (a) One `def` record per tree-sitter definition in every frame file, counts published; (b) every `(path, defLine)` that is a `T` member in `final2` or a reference `static`/`impls` target with a body appears in
+`defs.jsonl` with `symbol:true`; (c) 3 hand-counted files per language; (d) per language, a fixture with one planted definition per rule-8 case, one argument of each kind (a)–(d), and one decorator with a literal argument,
+each with its expected record; (e) mutants that must fail the tests: drop concatenation folding, drop `marker_annotation`, drop the shadowing check, flip the receiver offset, drop the C# line offset.
