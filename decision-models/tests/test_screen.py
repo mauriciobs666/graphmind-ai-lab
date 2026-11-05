@@ -130,6 +130,69 @@ def test_ordinary_prose_and_word_bounded_ids_pass(text: str) -> None:
     assert screen_hit(GUARD, turns_item(text)) is None
 
 
+@pytest.mark.parametrize(("text", "token"), [
+    ("(intended answer is true)", "true"),
+    ("(the answer is no)", "no"),
+    ("(difficulty clear)", "clear"),
+    ("(clear difficulty)", "clear"),
+    ("(no difficulty)", "no"),
+    ("(clear.)", "clear"),
+    ("(true!)", "true"),
+    ("(clear?;)", "clear"),
+    ("(clear/ambiguous)", "clear"),
+    ("(category: x, label is advance)", "advance"),
+    ("[intent suspend]", "suspend"),
+    ("(intended)", "intended"),
+    ("[clear | advance]", "clear"),
+])
+def test_the_bracket_rule_hits_note_16s_listed_strings(text: str, token: str) -> None:
+    assert screen_hit(GUARD, turns_item(text)) == f"meta:{token}"
+
+
+@pytest.mark.parametrize("text", [
+    "(no answer)",
+    "(no answer from support)",
+    "(not clear)",
+    "(very clear)",
+    "(true story)",
+    "(no rush)",
+    "(listed in order)",
+    "(clear and simple)",
+    "(it is an order)",
+    "(type A)",
+    "(other than login)",
+    "(order #4411)",
+    "(clear/hard)",           # `hard` is not a guard token: list content, not a rule gap
+    "(clear, hard)",
+    "(answer later: it varies)",
+    "(the difficulty of it all)",
+    "(difficulty is hard)",
+    "(difficulty hard)",
+    "(the difficulty)",
+    "(hard difficulty)",
+    "(intended for you)",
+    "(label printer, sad)",
+    "Difficulty clear is not a bracket",
+])
+def test_the_bracket_rule_passes_note_16s_prose_strings(text: str) -> None:
+    assert screen_hit(GUARD, turns_item(text)) is None
+
+
+def test_a_keyword_reaches_two_words_forward_and_no_further_or_back() -> None:
+    assert screen_hit(GUARD, turns_item("(answer is probably no)")) is None   # three words on
+    assert screen_hit(GUARD, turns_item("(answer is probably, no)")) is None
+    assert screen_hit(GUARD, turns_item("(no, the answer)")) is None          # backwards
+    assert screen_hit(GUARD, turns_item("(answer: is no)")) == "meta:no"
+    assert screen_hit(GUARD, turns_item("(difficulty a clear)")) == "meta:clear"
+
+
+def test_difficulty_and_intended_are_keywords_in_brackets_only() -> None:
+    assert screen_hit(GUARD, turns_item("difficulty clear")) is None
+    assert screen_hit(GUARD, turns_item("intended true")) is None
+    assert screen_hit(GUARD, turns_item("intent true")) == "meta:true"
+    assert screen_hit(GUARD, turns_item("(intended true)")) == "meta:true"
+
+
 def test_the_bracket_rule_on_the_message_type_list_passes_natural_order_text() -> None:
     for text in ("Where is my order (order #4411)?", "(other than login)", "(type A)"):
         assert screen_hit(MESSAGE_TYPE, {"text": text, "priorTurn": None}) is None

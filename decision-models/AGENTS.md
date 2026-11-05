@@ -81,18 +81,21 @@ definitions, spawn templates, `guard_hook.py` and `settings.json`. Votes, labels
 - **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
   message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.
 - **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
-  `round-start` (one `genRound` may have several); `Campaign.ingest` appends a run's `generated` and
+  `round-start` (one `genRound` may have several; only U5.9's planner passes `extend=True`, for a
+  new named stratum of a started round); `Campaign.ingest` appends a run's `generated` and
   `screen-hit`/`binding-mismatch`/`form-mismatch` events *before* its `outcome`, and `fold` applies
   them only at that ingested `outcome`. An item's `genRound` is its **seed's** round (a regeneration
   run pools rounds), its `genRunId` its batch's (`Batch.gen_run_id`, never copied by a cut). A hit
   event's `reasons` lists every reason the item shows; the first counts toward the seed's 3 hits.
-  The `template` halts count first-pass hits under each reason: per `genRound` and per
-  generator-template hash, each needing two hits and over 5%, each firing once even after `resolve`
-  (which clears the halt, not the pair). Runs are cut balanced (`balanced_runs`). An attempt keeps
-  the `expectations` in force when it was issued; the audit reads those, not the latest. A
-  generator re-pin (`generation-restart`) resets the folded generation view and **retires** every
-  batch (never issued, ignored by `next`); the ledger, held RNG seeds and `seedId`s, pins and
-  expectations stay. A batch queued by plain `queue_batch` has no `generation` and is not checked.
+  The `template` halts count first-pass hits under each reason: per `genRound` after each run
+  (over 4% of its drawn seeds, two hits at least), and per generator-template hash over a pool of
+  the rounds under 25 seeds (tested once a round's runs have all ingested and 300 seeds are
+  pooled); each pair fires once even after `resolve`, which clears the halt, not the pair. Runs
+  are cut balanced (`balanced_runs`). An attempt keeps the `expectations`, pins and instructions in
+  force when it was issued; the audit reads those, never the latest. A generator re-pin
+  (`generation-restart`) resets the folded generation view and **retires** every batch (never
+  issued, ignored by `next`); the ledger, held RNG seeds and `seedId`s, pins and expectations
+  stay. A batch queued by plain `queue_batch` has no `generation` and is not checked.
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

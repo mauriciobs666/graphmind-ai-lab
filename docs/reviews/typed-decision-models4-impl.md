@@ -2640,3 +2640,81 @@ Files under `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-
 **Simulation** (independent hits, 4,000 rounds per rate, sizes 16×25 + 20×24, test after each run as `_over_threshold`): pooled fires 0.0% at 0%, 3.8% at 1%, 16.1% at 2%, 33.6% at 3%, 62.4% at 4%, 87.7% at 5%, 100% at 8%; the end-of-round test at 880 seeds (45 hits) fires 0.0% at 3% and 45.9% at 5%.
 
 **Growth-stops check:** Pass 19 adds one major, four minors and two nits, re-opens no earlier finding, and states each Pass 18 finding in one disposition line. Passes 1 to 18 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 20 — U5.8a2 fix round re-gate (2026-11-05)
+
+**Verdict: approve with suggestions.** Every Pass 19 finding is fixed or reduced to a residual the plan accepts. The new code conforms to plan6 v1.19 §3.8 and note v1.16 §Q1.2 on every example in both texts. Three minors and one ruling for the data-scientist remain; none blocks U5.9.
+- **P20-m1:** `extend` is not refused once a stratum's runs have ingested, so a round can enter the pool at its first stratum's size and lose the rest.
+- **P20-m2:** the pool loses hits in two ways: a round's hash is its completing run's, and a round whose run is dropped never joins.
+- **P20-m3:** test gaps (three surviving mutants).
+- **Ruling needed (rule (a)):** whether `(clear advance)` is a leak.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against `HEAD`: the `campaign.py` and `screen.py` diffs, `tests/test_screen.py`, `tests/test_generation.py`, `tests/test_generation_rounds.py`, `HISTORY.md`. Spec: plan6 v1.19 §3.8 and note §Q1.2 "Hits" and "Halt", read by me. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite:** live tree, fresh `PYTHONPYCACHEPREFIX`: **1331 passed, 2 xfailed**; `ruff check .` clean.
+- **Mutants and probes:** private copies `scratchpad/p20/repo/` and `repo2/`; 31 mutants, each restored `cmp`-equal (Appendix S). The live tree is untouched (`p20/live-sha256.txt`).
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Disposition of Pass 19
+
+- **P19-M1 (pooled halt noise): fixed to the plan, with a residual.** The pool now takes only rounds under 25 drawn seeds, joins when all of a round's first-pass runs have ingested, and is tested from 300 seeds; a 25-seed round decides alone. Simulation (3,000 rounds per rate): per-round test at 880 seeds fires 3.9 / 47.9 / 91.7 / 100% at a true 3 / 4 / 5 / 8% (plan: about 4% false, about 91% power; confirmed). The pool, still tested after every joining round, fires at a true 3% in **12.0%** of 30-round and **23.1%** of 60-round campaigns (10-seed rounds), down from 33.6% per guard round; at 4% it fires in 43.7% and 69.8%. A repeated test remains: for the architect/data-scientist, not a code defect.
+- **P19-m1 (pre-repin run audited on the new pin): fixed.** `Attempt.pins` and `.instructions` are copied at `issued`, and `_expected(attempt)` reads them. Pass 19's probe O1 re-run: the open run's outcome is `ingested`, batch `retired`, no halt. Mutants Q13 (latest pin), Q14 (latest instructions) and Q18 (shared dict) red.
+- **P19-m2 (narrowed bracket rule): fixed.** Re-run on guard: `(intended answer is true)`, `(the answer is no)`, `(difficulty clear)`, `(clear difficulty)`, `(no difficulty)`, `(clear.)`, `(true!)`, `(clear/ambiguous)` hit; `(no answer)`, `(no answer from support)`, `(not clear)`, `(very clear)`, `(true story)`, `(no rush)`, `(listed in order)`, `(clear and simple)`, `(clear/hard)` and "had difficulty paying" pass; message-type `(it is an order)`, `(type A)`, `(other than login)`, `(order #4411)` pass. This is note v1.16's list exactly. Mutants S1 to S4 red; S5 survives (P20-m3).
+- **P19-m3 (`extend`): fixed.** Refused unless the round is started, a stratum is named, and that stratum has no `round-start` in the round. Probe S6: a repeat of a drawn stratum, an unnamed stratum and a first-call repeat are refused; the stale `begin_round(1, 20, extend=True)` that doubled round 1 in Pass 19 is refused. Mutants Q15 (check off), Q16 (unnamed allowed) red; Q17 survives (P20-m3). One hole remains: P20-m1.
+- **P19-m4 (P22 survivor): fixed.** The retired-run stop test now fails when the line is removed (red).
+- **Pass 19 nits:** a pooled-only halt's `genRound` is now the completing round, and the halt carries `poolRounds`, `poolSeeds`, `poolHits` (checked by S3). `unbatched_seeds`'s docstring: not re-checked.
+
+### Interactions and the coder's deviations
+
+**1. Rule (a), "listed tokens only", read as joiners-only. The reading is better supported than its alternative; it leaks `(clear advance)`.**
+- **Text.** Note v1.16 (a): "the content is listed tokens only (or joined by `/`, `,`, `|`)". The parenthetical can extend "only" (any arrangement of listed tokens, so whitespace too) or restate it (tokens, with these joiners). On the first reading (d) "exactly `difficulty` or `intended` and one listed token, in either order" is already covered, because `difficulty` and `intended` are listed in all three points (probe: `True, True` for each). On the second every clause has work: (d) alone catches `(clear difficulty)`. So the note's own structure supports the coder.
+- **Probe (`p20/rule_a.py`), joiners-only against whitespace-also.** They differ on 14 of 21 strings. Whitespace-also adds hits on `(clear advance)`, `(true clear)`, `(advance suspend)`, `(clear true false)`, `(no yes)`; and false hits on prose-shaped brackets: join-in `(no reply)`, `(reply yes)`, message-type `(other question)`, `(order type)`, `(other order)`, `(question order)`.
+- **Is it a leak?** `(clear advance)` writes two meta tokens in a bracket with no keyword: a leak of difficulty and answer, and it passes. The cost of catching it is `(no reply)` and `(other question)`, ordinary phrases. **Ruling needed from `data-scientist`** (with the architect): which side the note takes, and pin both `(clear advance)` and `(no reply)` in the note's examples; no test pins either today (grep over `tests/`).
+
+**2. A round pools when all its seeds are in ingested first-pass runs, under the completing run's hash.** Probes (`p20/repo2/tests/test_p20_probes.py`):
+- **Template change inside a round (S1).** 29 rounds of 10 seeds under hash H0 with one hit each (290 seeds, 29 hits, 10%), then round 30 as two strata of 5 with an `install` re-run between the runs. Round 30 joins H1's pool (10 seeds, 0 hits); H0's pool stays at 290, under 300, and never tests. A defective H0 escapes. Reachable by any `install` re-run between a round's runs (P20-m2).
+- **Restart mid-pool (S4).** After 15 pooled rounds and a generator restart the folded `pool` is `{}`, `pooled_rounds` empty and `rounds` empty; mutant Q7 (not clearing `pooled_rounds`) is red. Correct.
+- **`resolve` after a pooled halt (S3).** Pooled bindingMismatch with a per-round formMismatch in the same run: one halt, `reason bindingMismatch`, `reasons [bindingMismatch, formMismatch]`, `genRound 30`, `pooled True`, `poolSeeds 300`; `template_halts` holds the round pair and `pool_halts` the pool pair. After `resolve` a further small round with one hit does not halt. A changed hash starts a fresh pool (existing test). Nit: the halt's `pooled: true` does not say which reason is pooled and which per-round; the two sets do.
+- **Dropped run (S5).** A round's only run voided three times is `dropped retryCapExceeded`, `round_ingested` is False for good, and the pool stays at 290: one dropped small round can keep the pool under 300 (P20-m2).
+
+**3. Issue-time snapshot, crash-recovery ingest and restart-retire.** Pass 19's O1 flow (run open on batch 2, run on batch 1 halts, `--repin-model generator`) now ends `Stop("done")` with B's outcome `ingested`, batch `retired`, `state.halt` None. The planted-case tests for a label run open across a labeler repin and for instructions pass, and Q13/Q14/Q18 are red. No combination I could build mis-audits a run issued before a repin.
+
+**4. The `extend` refusals against U5.9's sequence.** `begin_round(g, n1, design_stratum=s1)` then `begin_round(g, n2, design_stratum=s2, extend=True)` before any `next` is accepted (S6); a repeat of `s1` is refused as a duplicate. A planner killed between the two calls, with the runner already issuing `s1`, reaches P20-m1.
+
+### Findings
+
+**P20-m1 — minor — `extend` is accepted after a stratum's runs have ingested, which pools the round too early.** *Owner: `coder`; the plan text ("draws every stratum before its first run issues") is not enforced. Verified: probe S2.*
+- `begin_round(30, 15, "turns")`, ingest its run, then `begin_round(30, 15, "understanding", extend=True)` is accepted. At the first ingest `round_ingested(30)` is true with `drawn_in(30) = 15`, so the round joins the pool at 15 seeds and `pooled_rounds` holds it. After the second stratum `drawn_in(30) = 30` (a round that should decide alone, at 25 or more) but the pool holds 15 seeds for it and the second stratum's hits never reach it.
+- **Real flow:** the U5.9 planner is interrupted after its first `begin_round`, `driver run` is started, and the planner is re-run to finish.
+- **Fix:** refuse `extend` once any first-pass run of that `genRound` has issued (or the round is in `pooled_rounds`). A test: the S2 sequence refused.
+
+**P20-m2 — minor — the pool loses hits in two ways.** *Owner: `architect`/`coder`. Verified: probes S1, S5.*
+- The completing run's hash decides the whole round (S1), and a round with a dropped run never pools (S5), so a leaking H0 can escape the pool without anyone deciding it should.
+- **Fix (for the plan to choose):** attribute each run's seeds and hits to its own hash, which also makes the round complete without a gate; or at least count a round whose runs are all either ingested or dropped as complete. Add the S1 and S5 cases.
+
+**P20-m3 — minor — three surviving mutants.** *Owner: `coder`. Verified: mutants Q4, Q17, S5.*
+- **Q4:** the pool adds `drawn_in(1)` instead of the joining round's size and stays green; every pooled test round has 10 seeds, round 1 included. Add rounds of 12 and 20 seeds and assert `poolSeeds`.
+- **Q17:** the duplicate-stratum check ignoring `genRound` stays green. U5.9 reuses strata across top-up rounds 2, 3, …; a test that extends round 3 with a stratum round 2 already drew.
+- **S5:** removing `intended` from the (c) keywords stays green, because `(intended answer is true)` is caught through `answer`. Pin `(intended is true)`.
+- Two others are equivalent: Q9 (a round's first-pass batches are the only ones whose ingestion can complete it) and Q11 (the halting run belongs to one round, so the completing and per-round `genRound` coincide).
+
+### What's solid
+
+- Pass 19's seven survivors are all red; 19 further mutants of mine over the pool, restart, snapshot, `extend` and bracket code are red (26 of 31 red in all, Appendix S).
+- The folded state after a restart is empty in every pool field, and a retired run changes nothing but its recorded outcome.
+- The issue-time snapshot copies by value (Q18 red), and the audit and the hash both read it.
+
+### Open questions
+
+1. **Rule (a)** (above): `data-scientist` and the architect.
+2. **Pool re-test:** whether the pool's 12 to 23% false-halt rate at a true 3% over 30 to 60 rounds is acceptable, or the pool should be tested once, at a fixed seed count.
+
+### Appendix S — Pass 20 mutants and probes
+
+Files in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p20/`: `mut.py`, `mut-run.txt`, `rule_a.py`, `repo2/tests/test_p20_probes.py`. Mutants (31: 26 red, 5 green) ran the three generation test files with `-x` and a 90 s timeout. **Pass 19's survivors:** M9, X1, X2, X3, M34, M35, P22 all red. **Red:** Q1 (literal 10 seeds), Q2 (hits assigned), Q3 (wrong reason key), Q5 (min 0), Q6 (pool below 26), Q7, Q8 (any state counts as ingested), Q10 (hash from latest), Q12 (5%), Q13 to Q16, Q18, Q19, S1 to S4. **Green:** Q4, Q17, S5 (P20-m3); Q9 and Q11 (equivalent).
+
+My own plumbing mutant on the pool's denominator, Q4, survived: all the test rounds are 10 seeds, the uniform-stub trap.
+
+**Growth-stops check:** Pass 20 adds three minors and one ruling, re-opens no earlier finding, and states each Pass 19 finding in one disposition line. Passes 1 to 19 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.

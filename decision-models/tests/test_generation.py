@@ -75,7 +75,7 @@ def hand_round(camp: Campaign, hand: Sequence[Seed], gen_round: int = 1) -> list
 
 
 def padded(hand: Sequence[Seed], total: int = 25, base: int = 900) -> list[Seed]:
-    """`hand` plus obedient filler seeds up to `total` drawn, so one hit stays under 5% (a round
+    """`hand` plus obedient filler seeds up to `total` drawn, so one hit stays under 4% (a round
     of 25 tolerates one, of 40 two)."""
     return [*hand, *(hand_seed(base + n) for n in range(total - len(hand)))]
 
@@ -445,7 +445,7 @@ def test_four_percent_screen_plus_form_and_four_percent_form_only_halt_on_form_n
         tmp_path: Path) -> None:
     camp = bench(tmp_path)
     hand = [hand_seed(n, form="empty") for n in range(1, 51)]  # 50 drawn: two runs of 25
-    first, _ = hand_round(camp, hand)
+    first, second = hand_round(camp, hand)
     run_one = camp.state().batches[first].entries
 
     def screen_and_form(seed: Seed) -> dict:
@@ -453,43 +453,54 @@ def test_four_percent_screen_plus_form_and_four_percent_form_only_halt_on_form_n
         item["understanding"]["known"] = [LEAK]
         return item
 
-    # Per run: one screen-plus-form item and one form-only item. After run 1 the form reason has
-    # 2 hits (8% of the 25 seeds ingested, and of the 50 drawn only 4%); screen has 1.
+    # Per run: one screen-plus-form item and one form-only item. Screen shows 2 of 50 (exactly
+    # 4%, no halt); form shows 4 of 50 (8%) and halts once it passes 4%, at its third hit.
     bad = {run_one[0]: screen_and_form, run_one[1]: form_item,
            hand[25].seed_id: screen_and_form, hand[26].seed_id: form_item}
-    _, result = run_generation(camp, leaking(bad))
-    assert result.stop == "halted"
+    _, one = run_generation(camp, leaking(bad))
+    assert one.stop is None and camp.state().halt is None     # form 2 of 50 is exactly 4%
+    _, two = run_generation(camp, leaking(bad))
+    assert two.stop == "halted" and camp.state().batches[second].state == "ingested"
     halt = camp.state().halt
     assert halt["reason"] == "formMismatch" and halt["reasons"] == ["formMismatch"]
-    assert halt["voidClass"] == "template" and halt["pooled"] is True
-    assert camp.state().round_hits == {(1, "screen"): 1, (1, "formMismatch"): 2}
-    assert [e["event"] for e in camp.events() if e["event"].endswith(("-hit", "-mismatch"))] == [
-        "screen-hit", "form-mismatch"]
-    assert camp.next() == Stop("halted", "formMismatch (template) on bat_0001")
-    assert any("HALTED" in line for line in camp.status())
-    camp.resolve(decision="fixed the form text")
-    _, result = run_generation(camp, leaking(bad))           # run 2: screen reaches 2 of 50 = 4%
-    halt = camp.state().halt                                  # the round's own pair is new
-    assert halt["reasons"] == ["formMismatch"] and halt["pooled"] is False
-    assert halt["genRound"] == 1 and result.stop == "halted"
+    assert halt["voidClass"] == "template" and halt["genRound"] == 1 and halt["pooled"] is False
     assert camp.state().round_hits == {(1, "screen"): 2, (1, "formMismatch"): 4}
+    assert camp.next() == Stop("halted", "formMismatch (template) on bat_0002")
+    assert any("HALTED" in line for line in camp.status())
 
 
 @pytest.mark.parametrize(("hits", "halts"), [(2, False), (3, True)])
-def test_the_halt_fires_after_the_first_run_past_five_percent_and_exactly_five_does_not(
+def test_the_halt_fires_after_the_first_run_past_four_percent_and_exactly_four_does_not(
         tmp_path: Path, hits: int, halts: bool) -> None:
     camp = bench(tmp_path)
-    hand = [hand_seed(n) for n in range(1, 41)]              # 40 drawn: two runs of 20
+    hand = [hand_seed(n) for n in range(1, 51)]              # 50 drawn: two runs of 25
     first, second = hand_round(camp, hand)
-    in_first = {hand[0].seed_id: binding_item}               # spread, or the pooled halt fires
-    in_second = {s.seed_id: binding_item for s in hand[20:20 + hits - 1]}
+    in_first = {s.seed_id: binding_item for s in hand[:2]}
+    in_second = {s.seed_id: binding_item for s in hand[25:25 + hits - 2]}
     _, one = run_generation(camp, leaking(in_first))
-    assert one.stop is None and camp.state().halt is None
+    assert one.stop is None and camp.state().halt is None    # 2 of 50 is exactly 4%
     _, two = run_generation(camp, leaking(in_second))
-    assert (two.stop == "halted") is halts                    # 2 of 40 is exactly 5%
+    assert (two.stop == "halted") is halts
     assert (camp.state().halt is not None) is halts
     assert camp.state().round_hits == {(1, "bindingMismatch"): hits}
     assert camp.state().batches[second].state == "ingested" and first
+
+
+@pytest.mark.parametrize(("hits", "halts"), [(35, False), (36, True)])
+def test_a_round_of_880_seeds_halts_at_36_hits_and_not_at_35_and_never_enters_the_pool(
+        tmp_path: Path, hits: int, halts: bool) -> None:
+    camp = bench(tmp_path)
+    hand = [hand_seed(n) for n in range(1, 881)]
+    runs = hand_round(camp, hand)
+    assert len(runs) == 36
+    for index in range(36):
+        entries = camp.state().batches[runs[index]].entries
+        bad = {entries[0]: binding_item} if index < hits else {}
+        _, result = run_generation(camp, leaking(bad))
+        assert (result.stop == "halted") is (halts and index == 35), index
+    state = camp.state()
+    assert state.round_hits == {(1, "bindingMismatch"): hits}
+    assert state.pool == {} and state.pooled_rounds == set()
 
 
 def test_the_halt_is_against_the_rounds_own_drawn_seeds_not_the_campaigns(tmp_path: Path) -> None:
@@ -503,19 +514,17 @@ def test_the_halt_is_against_the_rounds_own_drawn_seeds_not_the_campaigns(tmp_pa
 
 def test_regeneration_hits_count_toward_the_cap_only(tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    hand = [hand_seed(n) for n in range(1, 41)]
-    hand_round(camp, hand)                                   # two runs of 20
-    bad = {hand[0].seed_id: binding_item, hand[20].seed_id: binding_item}
+    hand = [hand_seed(n) for n in range(1, 51)]
+    hand_round(camp, hand)                                   # two runs of 25
+    bad = {hand[0].seed_id: binding_item, hand[25].seed_id: binding_item}
     run_generation(camp, leaking(bad))
-    run_generation(camp, leaking(bad))                       # 2 of 40: exactly 5%
+    run_generation(camp, leaking(bad))                       # 2 of 50: exactly 4%
     assert camp.state().halt is None
     drain(camp, leaking(bad))                  # both hit again, twice, in regeneration
     state = camp.state()
     assert state.halt is None and state.round_hits == {(1, "bindingMismatch"): 2}
-    (pooled,) = state.pool.values()
-    assert pooled["hits"] == {"bindingMismatch": 2} and pooled["seeds"] == 40
-    assert [len(state.hits[s.seed_id]) for s in (hand[0], hand[20])] == [3, 3]
-    assert set(state.dropped_seeds) == {hand[0].seed_id, hand[20].seed_id}
+    assert [len(state.hits[s.seed_id]) for s in (hand[0], hand[25])] == [3, 3]
+    assert set(state.dropped_seeds) == {hand[0].seed_id, hand[25].seed_id}
 
 
 def test_a_template_halt_clears_with_resolve_and_does_not_fire_again_for_its_round(
@@ -534,7 +543,7 @@ def test_a_template_halt_clears_with_resolve_and_does_not_fire_again_for_its_rou
     assert camp.state().batches[first].state == "ingested"
 
 
-def test_two_reasons_over_five_percent_fire_together(tmp_path: Path) -> None:
+def test_two_reasons_over_four_percent_fire_together(tmp_path: Path) -> None:
     camp = bench(tmp_path)
     hand = [hand_seed(n, form="empty") for n in range(1, 21)]
     hand_round(camp, hand)

@@ -2,6 +2,31 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-05 — typed-decision-models U5.8a2 — 4% halt, pooled halt per round, issue-time pins
+
+**What:** impl review Pass 19 (P19-M1, m1 to m4), plan6 v1.19 §3.8 and its §5 row "U5.8a, U5.9",
+note v1.16 §Q1.2 "Hits" and "Halt".
+
+- `campaign.py`: `HALT_PERCENT` 5 → 4 (an 880-seed round halts at 36 hits, not 35; a 50-seed round
+  at 3, not 2). The pooled halt now pools only rounds under 25 drawn seeds, adds a round when its
+  first-pass runs have all ingested (not after each run, the sequential-test defect of P19-M1),
+  tests once the pool holds 300 seeds (more than 4%, two hits), once per (hash, reason); the halt
+  names the completing round's `genRound` (never `None`), `pooled: true`, and `poolRounds`,
+  `poolSeeds`, `poolHits`. A round pools under the hash of the run that completes it. `Attempt`
+  keeps the model pins and instructions in force at `issued`, and the audit reads them (P19-m1).
+  `begin_round(extend=True)` is refused for an unstarted `genRound`, without a `design_stratum`,
+  and for a stratum that already has a `round-start` (P19-m3).
+- `screen.py`: the bracket rule is note §Q1.2 "Hits" rules a to d exactly (trailing `. ! ? ;`
+  stripped, keyword then listed token within two words forward, `intended` and `difficulty` as
+  in-bracket keywords, the two-word `difficulty`/`intended` form) (P19-m2).
+- Not done: `diagnostics.json` does not exist yet (U5.10). It must record each pooled halt's hash,
+  reason, `poolRounds`, `poolHits` and `poolSeeds`, which the halt dict already carries.
+- Tests: `tests/test_generation_rounds.py`, `test_generation.py`, `test_screen.py`. Mutants of the
+  new rules (screen rules a to d and the window, the percent, the pool floor and ceiling, the
+  completion test, the pool denominator and hit sources, the pins and instructions snapshot, the
+  three `extend` refusals, the retired-run stop and the restart clears) each redden them, in a
+  scratch copy. Suite 1285 → 1331 passed, 2 xfailed.
+
 ## 2026-11-04 — typed-decision-models U5.8a fix round — bracket rule, plan6 §3.8, generator restart
 
 **What:** impl review Pass 18 (judged, not blindly applied), plan6 v1.18 §3.8 and its §5 row

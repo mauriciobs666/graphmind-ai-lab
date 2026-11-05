@@ -13,13 +13,13 @@ binding check already holds equal). The token lists are the point's (`points.scr
   (Unicode `\\w`), `id:<match>`. "pedido_123" and "opções_12" carry no such match, since a word
   character precedes the pattern; "(dom_07)" and "cue_01" do.
 - **Hits in a meta position** (`screen.metaPosition`, whole words, case-insensitive) are
-  `meta:<token>`. A meta position is a closed `(...)` or `[...]` group whose whole content is
-  listed tokens joined by `/`, `,` or `|` (`(clear)`, `[true, false]`), or that holds a listed
-  token followed by `:` or `=` (`(difficulty: hard)`); or a token directly after `label`,
-  `answer`, `category` or `intent` and only separators (`label: complaint`, `answer - yes`). A
-  stray closer (`:)`, `1)`) is ignored; an unclosed opener makes no group. So "had difficulty
-  paying", a plain "complaint", "(order #4411)", "(other than login)", "(type A)" and "(no rush)"
-  pass (note v1.9 §Q1.2 as amended 2026-11-04; the lists in `points/` are unchanged).
+  `meta:<token>`. A meta position is a closed `(...)` or `[...]` group that satisfies one of
+  note §Q1.2 "Hits" rules a to d (`_bracket_hit`: `(clear)`, `(difficulty: hard)`, `(the answer
+  is no)`, `(no difficulty)`), or a token directly after `label`, `answer`, `category` or
+  `intent` and only separators outside brackets (`label: complaint`, `answer - yes`). A stray
+  closer (`:)`, `1)`) is ignored; an unclosed opener makes no group. So "had difficulty paying",
+  a plain "complaint", "(order #4411)", "(other than login)", "(no rush)", "(no answer)" and
+  "(clear/hard)" (`hard` is not a listed token) pass; the lists in `points/` are unchanged.
 
 **`check_item(point, axes, item)`** adds the seed bindings. It returns an `ItemCheck` holding every
 reason the item shows, in plan5 §3.5's precedence order: `screen`, then `bindingMismatch` (any
@@ -52,7 +52,6 @@ FORM_AXIS = "missingForm"
 _ID_TOKEN = re.compile(rf"(?<!\w)(?:{ID_PATTERN.pattern})(?!\w)")
 _META_KEYWORD = re.compile(r"(?<!\w)(?:label|answer|category|intent)[\s:=>\-–—\"'*_`]*\Z")
 _OPENERS, _CLOSERS = "([", ")]"
-_BRACKET_JOINERS = re.compile(r"\s*[/,|]\s*")
 
 
 @dataclass(frozen=True)
@@ -108,16 +107,38 @@ def _bracket_contents(text: str) -> list[str]:
     return groups
 
 
+_TRAILING = " .!?;"
+_GROUP_KEYWORDS = frozenset({"label", "answer", "category", "intent", "intended", "difficulty"})
+_WORD = re.compile(r"\w[\w-]*")
+_SEPARATORS = re.compile(r"\s*[/,|]\s*")
+
+
 def _bracket_hit(content: str, tokens: Sequence[str]) -> str | None:
-    """A listed token when the bracket's whole content is tokens joined by `/`, `,` or `|`, or
-    when a listed token is followed by `:` or `=` inside it (note §Q1.2 "Hits")."""
-    listed = {token.casefold() for token in tokens}
-    parts = [part.strip() for part in _BRACKET_JOINERS.split(content)]
-    if parts and all(part in listed for part in parts):
-        return parts[0]
+    """The listed token a bracket group's content hits (note §Q1.2 "Hits", rules a to d), after
+    trailing `.`, `!`, `?`, `;` and spaces are stripped:
+    (a) the content is listed tokens only, or joined by `/`, `,` or `|`;
+    (b) a listed token is followed by `:` or `=`;
+    (c) `label`, `answer`, `category`, `intent`, `intended` or `difficulty` is followed by a
+        listed token within its next two words (forward only: "(no answer)" passes);
+    (d) the content is exactly `difficulty` or `intended` and one listed token, either order."""
+    content = content.rstrip(_TRAILING).lstrip()
+    listed = {token.casefold(): token for token in tokens}
+    parts = _SEPARATORS.split(content)
+    if all(part in listed for part in parts):
+        return listed[parts[0]]
     for token in tokens:
         if re.search(rf"(?<!\w){re.escape(token.casefold())}\s*[:=]", content):
             return token
+    words = _WORD.findall(content)
+    for index, word in enumerate(words):
+        if word in _GROUP_KEYWORDS:
+            for follower in words[index + 1:index + 3]:
+                if follower in listed:
+                    return listed[follower]
+    if len(words) == 2:
+        for keyword, other in (words, words[::-1]):
+            if keyword in ("difficulty", "intended") and other in listed:
+                return listed[other]
     return None
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_campaign import GUARD_COMMAND, stage, write_answer
+from test_campaign import GUARD_COMMAND, answer_bytes, smoke, stage, write_answer
 from test_generation import (
     GENERATOR_AS_FIXTURE,
     bench,
@@ -88,10 +88,10 @@ def test_a_regeneration_pool_is_cut_balanced_too(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(("hits", "halts"), [(1, False), (2, True)])
-def test_a_round_of_19_seeds_halts_at_two_hits_and_not_at_one(
+def test_a_round_of_24_seeds_halts_at_two_hits_and_not_at_one(
         tmp_path: Path, hits: int, halts: bool) -> None:
     camp = bench(tmp_path)
-    hand = [hand_seed(n) for n in range(1, 20)]
+    hand = [hand_seed(n) for n in range(1, 25)]
     hand_round(camp, hand)
     _, result = run_generation(camp, leaking(bad_binding(*range(1, hits + 1))))
     assert (result.stop == "halted") is halts
@@ -99,16 +99,16 @@ def test_a_round_of_19_seeds_halts_at_two_hits_and_not_at_one(
 
 def test_two_round_starts_with_one_gen_round_share_one_denominator(tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    first = [hand_seed(n) for n in range(1, 21)]
-    second = [hand_seed(n) for n in range(101, 121)]
+    first = [hand_seed(n) for n in range(1, 26)]
+    second = [hand_seed(n) for n in range(101, 126)]
     hand_round(camp, first, gen_round=1)
     hand_round(camp, second, gen_round=1)
     state = camp.state()
-    assert state.drawn_in(1) == 40 and len(state.rounds) == 2
+    assert state.drawn_in(1) == 50 and len(state.rounds) == 2
     assert set(state.seed_round.values()) == {1}
     run_generation(camp, leaking(bad_binding(1)))
     _, two = run_generation(camp, leaking(bad_binding(101)))
-    assert two.stop is None                                    # 2 of 40 is exactly 5%
+    assert two.stop is None                                    # 2 of 50 is exactly 4%
     assert camp.state().round_hits == {(1, "bindingMismatch"): 2}
 
 
@@ -127,63 +127,113 @@ def test_a_skipped_or_repeated_gen_round_keys_its_seeds_by_that_number(tmp_path:
     assert {items[hand_seed(n).seed_id]["genRound"] for n in range(1, 4)} == {1}
 
 
-def three_small_rounds(camp: Campaign) -> list[list]:
-    rounds = []
-    for gen_round in (1, 2, 3):
-        hand = [hand_seed(gen_round * 100 + n) for n in range(10)]
+def small_rounds(camp: Campaign, rounds: range, *, bad: dict[int, Any] | None = None,
+                 on_round: Any = None, base: int = 0) -> list:
+    """Run one 10-seed round per `genRound` in `rounds`; `bad` maps a `genRound` to the item
+    function its first seed answers with. Returns each run's `IngestResult`."""
+    results = []
+    for gen_round in rounds:
+        if on_round is not None:
+            on_round(gen_round)
+        hand = [hand_seed(base + gen_round * 100 + n) for n in range(10)]
         hand_round(camp, hand, gen_round=gen_round)
-        rounds.append(hand)
-    return rounds
+        respond = leaking({hand[0].seed_id: bad[gen_round]} if gen_round in (bad or {}) else {})
+        results.append(run_generation(camp, respond)[1])
+    return results
 
 
-def test_three_10_seed_rounds_with_one_hit_each_halt_in_the_pool_at_the_second_hit(
+def test_thirty_10_seed_rounds_with_one_hit_each_halt_in_the_pool_at_the_30th(
         tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    rounds = three_small_rounds(camp)
-    _, one = run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
-    assert one.stop is None and camp.state().halt is None      # one hit: under the floor
-    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: binding_item}))
-    halt = camp.state().halt
-    assert two.stop == "halted" and halt["pooled"] is True and halt["genRound"] is None
-    assert halt["reasons"] == ["bindingMismatch"] and halt["batch"] == "bat_0002"
-    assert camp.state().round_hits == {(1, "bindingMismatch"): 1, (2, "bindingMismatch"): 1}
+    results = small_rounds(camp, range(1, 31), bad={g: binding_item for g in range(1, 31)})
+    assert [r.stop for r in results[:29]] == [None] * 29       # 290 seeds: under 300
+    state = camp.state()
+    assert results[29].stop == "halted" and state.template_halts == set()
+    halt = state.halt
+    assert halt["pooled"] is True and halt["genRound"] == 30 and halt["batch"] == "bat_0030"
+    assert halt["reasons"] == ["bindingMismatch"]
+    assert halt["poolRounds"] == list(range(1, 31)) and halt["poolSeeds"] == 300
+    assert halt["poolHits"] == {"screen": 0, "bindingMismatch": 30, "formMismatch": 0}
+    assert len(halt["templateHash"]) == 64
+    assert state.round_hits == {(g, "bindingMismatch"): 1 for g in range(1, 31)}
+
+
+def test_a_resolve_that_leaves_the_hash_unchanged_does_not_refire_the_pool(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    small_rounds(camp, range(1, 31), bad={g: binding_item for g in range(1, 31)})
+    assert camp.state().halt is not None
     camp.resolve(decision="the template was fixed")
-    _, three = run_generation(camp, leaking({rounds[2][0].seed_id: binding_item}))
-    assert three.stop is None and camp.state().halt is None    # the pair fired once
+    (after,) = small_rounds(camp, range(31, 32), bad={31: binding_item})
+    assert after.stop is None and camp.state().halt is None
     (pooled,) = camp.state().pool.values()
-    assert pooled == {"seeds": 30, "hits": {"bindingMismatch": 3}}
+    assert pooled["seeds"] == 310 and pooled["hits"]["bindingMismatch"] == 31
+
+
+def test_thirty_rounds_with_a_hash_change_after_round_15_do_not_halt(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    re_install(camp, prompt_sha256=prompts())
+
+    def change(gen_round: int) -> None:
+        if gen_round == 16:
+            re_install(camp, prompt_sha256=prompts(requestTemplate="r1"))
+
+    results = small_rounds(camp, range(1, 31), bad={g: binding_item for g in range(1, 31)},
+                           on_round=change)
+    assert [r.stop for r in results] == [None] * 30 and camp.state().halt is None
+    pools = camp.state().pool
+    assert sorted(p["seeds"] for p in pools.values()) == [150, 150]
+    assert sorted(p["rounds"][0] for p in pools.values()) == [1, 16]
 
 
 def test_a_hit_of_another_reason_does_not_pool(tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    rounds = three_small_rounds(camp)
-    run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
-    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: form_item}))
-    assert two.stop is None and camp.state().halt is None
+    results = small_rounds(camp, range(1, 31), bad={3: binding_item, 17: form_item})
+    assert [r.stop for r in results] == [None] * 30
     (pooled,) = camp.state().pool.values()
-    assert pooled["hits"] == {"bindingMismatch": 1, "formMismatch": 1}
-
-
-def test_the_same_hits_under_a_changed_hash_do_not_pool(tmp_path: Path) -> None:
-    camp = bench(tmp_path)
-    re_install(camp, prompt_sha256=prompts())
-    rounds = three_small_rounds(camp)
-    run_generation(camp, leaking({rounds[0][0].seed_id: binding_item}))
-    re_install(camp, prompt_sha256=prompts(requestTemplate="r1"))
-    _, two = run_generation(camp, leaking({rounds[1][0].seed_id: binding_item}))
-    assert two.stop is None and camp.state().halt is None
-    assert sorted(p["hits"]["bindingMismatch"] for p in camp.state().pool.values()) == [1, 1]
-    _, three = run_generation(camp, leaking({rounds[2][0].seed_id: binding_item}))
-    assert three.stop == "halted"                              # the second hash's second hit
+    assert pooled["hits"] == {"screen": 0, "bindingMismatch": 1, "formMismatch": 1}
+    assert pooled["seeds"] == 300
 
 
 def test_regeneration_hits_do_not_enter_the_pool(tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    rounds = three_small_rounds(camp)
-    bad = {rounds[0][0].seed_id: binding_item}
-    drain(camp, leaking(bad))
+    for gen_round in (1, 2, 3):
+        hand_round(camp, [hand_seed(gen_round * 100 + n) for n in range(10)], gen_round=gen_round)
+    drain(camp, leaking({hand_seed(100).seed_id: binding_item}))   # hits in the first pass + twice
     (pooled,) = camp.state().pool.values()
-    assert pooled == {"seeds": 30, "hits": {"bindingMismatch": 1}}
+    assert pooled == {"rounds": [1, 2, 3], "seeds": 30,
+                      "hits": {"screen": 0, "bindingMismatch": 1, "formMismatch": 0}}
+
+
+def test_a_generator_restart_makes_the_pooled_pair_new(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    small_rounds(camp, range(1, 31), bad={g: binding_item for g in range(1, 31)})
+    assert camp.state().pool_halts
+    camp.resolve(decision="a new generator", repin_model=("generator", "claude-sonnet-5-5"))
+    state = camp.state()
+    assert state.pool_halts == set() and state.pool == {} and state.halt is None
+    results = small_rounds(camp, range(1, 31), base=10000,
+                           bad={g: binding_item for g in range(1, 31)})
+    assert results[29].stop == "halted" and camp.state().halt["pooled"] is True
+
+
+def test_a_25_seed_round_is_outside_the_pool(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand_round(camp, [hand_seed(n) for n in range(1, 26)])
+    run_generation(camp, obedient_item)
+    assert camp.state().pool == {} and camp.state().pooled_rounds == set()
+
+
+def test_a_small_round_joins_the_pool_when_its_last_run_ingests_not_before(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    hand_round(camp, [hand_seed(n) for n in range(1, 13)], gen_round=1)
+    hand_round(camp, [hand_seed(n) for n in range(101, 113)], gen_round=1)   # 24 under genRound 1
+    run_generation(camp, obedient_item)
+    assert camp.state().pool == {} and camp.state().pooled_rounds == set()
+    run_generation(camp, obedient_item)
+    (pooled,) = camp.state().pool.values()
+    assert pooled["rounds"] == [1] and pooled["seeds"] == 24 and camp.state().pooled_rounds == {1}
 
 
 def test_the_template_hash_is_the_canonical_json_of_the_generator_entries() -> None:
@@ -262,12 +312,13 @@ def test_a_run_issued_before_a_reinstall_is_audited_against_the_template_at_issu
         tmp_path: Path) -> None:
     camp = bench(tmp_path)
     re_install(camp, prompt_sha256=prompts())
-    hand = padded([hand_seed(1)])
+    hand = [hand_seed(n) for n in range(1, 25)]
     hand_round(camp, hand)
     action = camp.next()
     session = camp.issue(action)
     stage(camp, session, action.opaque)
-    write_answer(camp, action.opaque, answer_with_items(camp, action.opaque))
+    write_answer(camp, action.opaque,
+                 answer_with_items(camp, action.opaque, bad=bad_binding(1, 2)))
     changed = {role: {**spec, "spawnTemplate": spec["spawnTemplate"] + " Be quick."}
                for role, spec in GENERATOR_AS_FIXTURE.items()}
     camp.record_expectations(guard_command=GUARD_COMMAND, roles=changed,
@@ -275,20 +326,21 @@ def test_a_run_issued_before_a_reinstall_is_audited_against_the_template_at_issu
     result = camp.ingest(action.opaque)
     assert result.outcome["outcome"] == "ingested" and "reason" not in result.outcome
     state = camp.state()
-    assert len(state.items) == 25
+    assert len(state.items) == 22
     old = state.attempts[0].expectations["roles"]["generator"]["spawnTemplate"]
     assert old == GENERATOR_AS_FIXTURE["generator"]["spawnTemplate"]
     assert state.expectations["roles"]["generator"]["spawnTemplate"].endswith("Be quick.")
     # the run's hash is the one in force at its issue, not the re-install's
-    assert list(state.pool) == [generator_template_hash({"promptSha256": prompts()})]
+    assert state.halt["templateHash"] == generator_template_hash({"promptSha256": prompts()})
+    assert state.halt["templateHash"] != generator_template_hash(state.expectations)
 
 
-def answer_with_items(camp: Campaign, opaque: str) -> bytes:
+def answer_with_items(camp: Campaign, opaque: str, bad: dict | None = None) -> bytes:
     text = (camp.store / "req" / f"{opaque}.jsonl").read_text("utf-8")
     state = camp.state()
     lines: list[dict[str, Any]] = [{"bodySha256": json.loads(text.splitlines()[0])["bodySha256"]}]
-    lines += [{"key": key, "item": obedient_item(state.seeds[seed_id])}
-              for key, seed_id in state.opaques[opaque].keys.items()]
+    lines += [{"key": key, "item": (binding_item if seed_id in (bad or {}) else obedient_item)(
+        state.seeds[seed_id])} for key, seed_id in state.opaques[opaque].keys.items()]
     return "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in lines).encode("utf-8")
 
 
@@ -297,15 +349,22 @@ def answer_with_items(camp: Campaign, opaque: str) -> bytes:
 
 def test_begin_round_refuses_a_started_gen_round_unless_it_extends_it(tmp_path: Path) -> None:
     camp = bench(tmp_path)
-    camp.begin_round(1, 10)
+    camp.begin_round(1, 10, design_stratum="turns")
     before = camp.ledger_path.read_bytes()
     with pytest.raises(CampaignRefused, match="already started"):
-        camp.begin_round(1, 10)
+        camp.begin_round(1, 10, design_stratum="turns")          # a repeat, no extend
     with pytest.raises(CampaignRefused, match="not started"):
-        camp.begin_round(2, 10, extend=True)
+        camp.begin_round(2, 10, design_stratum="turns", extend=True)
+    with pytest.raises(CampaignRefused, match="name it"):
+        camp.begin_round(1, 10, extend=True)                      # no design stratum
+    with pytest.raises(CampaignRefused, match="already holds a draw"):
+        camp.begin_round(1, 10, design_stratum="turns", extend=True)
     assert camp.ledger_path.read_bytes() == before
-    camp.begin_round(1, 10, extend=True)
-    assert camp.state().drawn_in(1) == 20 and len(camp.state().rounds) == 2
+    camp.begin_round(1, 10, design_stratum="understanding", extend=True)
+    state = camp.state()
+    assert state.drawn_in(1) == 20 and len(state.rounds) == 2
+    with pytest.raises(CampaignRefused, match="already holds a draw"):
+        camp.begin_round(1, 10, design_stratum="understanding", extend=True)
 
 
 def test_begin_round_records_its_design_stratum(tmp_path: Path) -> None:
@@ -386,7 +445,7 @@ def spent_campaign(tmp_path: Path) -> tuple[Campaign, list]:
     assert state.halt["genRound"] == 2 and state.halt["reasons"] == ["formMismatch"]
     assert state.items and state.hits and state.dropped_seeds == {doomed.seed_id: state.hits[
         doomed.seed_id][2]}
-    assert state.template_halts and state.pool_halts
+    assert state.template_halts and state.pool and state.pooled_rounds == {2}
     return camp, hand
 
 
@@ -401,6 +460,7 @@ def test_a_generator_repin_resets_the_folded_generation_view_and_keeps_the_ledge
     assert camp.ledger_path.read_bytes().startswith(before)
     assert (state.items, state.hits, state.dropped_seeds, state.round_hits) == ({}, {}, {}, {})
     assert (state.template_halts, state.pool, state.pool_halts) == (set(), {}, set())
+    assert state.pooled_rounds == set()
     assert (state.rounds, state.seed_round, state.staged) == ([], {}, {})
     assert {b.state for b in state.batches.values()} == {"retired"}
     assert state.halt is None and state.awaiting_regeneration() == []
@@ -437,14 +497,49 @@ def test_a_labeler_repin_keeps_the_items_and_the_batches(tmp_path: Path) -> None
     assert "retired" not in {b.state for b in state.batches.values()}
 
 
+def test_a_label_run_open_across_a_labeler_repin_is_audited_against_the_old_pin(
+        tmp_path: Path) -> None:
+    camp = smoke(tmp_path, items=3)
+    open_run = camp.prepare("bat_0001")
+    camp.issue(open_run)
+    stage(camp, camp.state().attempts[0].session_id, open_run.opaque)
+    write_answer(camp, open_run.opaque, answer_bytes(camp, open_run.opaque))
+    other = camp.queue_batch("label", ["fx_0001"])
+    halting = camp.prepare(other)
+    session = camp.issue(halting)
+    stage(camp, session, halting.opaque, "refusal")
+    assert camp.ingest(halting.opaque).stop == "halted"
+    camp.resolve(decision="a new labeler", repin_model=("labeler", "claude-haiku-5-6"))
+    assert camp.state().pins["labeler"] == "claude-haiku-5-6"
+    result = camp.ingest(open_run.opaque)                       # the fixture's model is sonnet
+    assert result.outcome["outcome"] == "ingested" and result.stop is None
+    assert camp.state().halt is None
+    assert camp.state().attempts[0].pins["labeler"] == "claude-sonnet-5-5"
+
+
+def test_an_attempt_keeps_the_instructions_in_force_at_issue(tmp_path: Path) -> None:
+    camp = smoke(tmp_path, items=2)
+    action = camp.prepare("bat_0001")
+    camp.issue(action)
+    camp._append({"event": "resolved", "action": "repin-instructions", "role": "labeler",
+                  "instructions": [["/x/CLAUDE.md", "abc"]], "decision": "x",
+                  "batch": "bat_0001", "reason": None})
+    state = camp.state()
+    batch, attempt = state.batches["bat_0001"], state.attempts[0]
+    assert state.instructions["labeler"] == [["/x/CLAUDE.md", "abc"]]
+    assert attempt.instructions["labeler"] == []
+    assert camp._expected(state, batch, action.opaque, attempt).instructions == frozenset()
+    assert camp._expected(state, batch, action.opaque).instructions == frozenset(
+        {("/x/CLAUDE.md", "abc")})
+
+
 def test_a_run_open_at_a_generator_repin_is_recorded_and_changes_nothing(tmp_path: Path) -> None:
     camp = bench(tmp_path)
     hand = [hand_seed(n) for n in range(1, 41)]
     first, second = hand_round(camp, hand)
     open_run = camp.prepare(second)
     session = camp.issue(open_run)
-    stage(camp, session, open_run.opaque)
-    write_answer(camp, open_run.opaque, answer_with_items(camp, open_run.opaque))
+    stage(camp, session, open_run.opaque, "refusal")            # a run that would halt on audit
     halting = camp.prepare(first)
     session = camp.issue(halting)
     stage(camp, session, halting.opaque)
@@ -457,12 +552,13 @@ def test_a_run_open_at_a_generator_repin_is_recorded_and_changes_nothing(tmp_pat
     write_answer(camp, halting.opaque,
                  "".join(json.dumps(line) + "\n" for line in lines).encode("utf-8"))
     assert camp.ingest(halting.opaque).stop == "halted"
-    camp.resolve(decision="a new generator", repin_model=("generator", "claude-sonnet-5-5"))
+    camp.resolve(decision="a new generator", repin_model=("generator", "claude-opus-5-6"))
     assert camp.state().batches[second].open_attempt is not None
     assert camp.next() == Stop("done", "nothing is pending")    # it reconciled the open run
     state = camp.state()
     assert state.batches[second].state == "retired" and state.items == {} and state.halt is None
-    assert state.batches[second].attempts[0].outcome["outcome"] == "ingested"
+    outcome = state.batches[second].attempts[0].outcome
+    assert (outcome["outcome"], outcome["reason"]) == ("halted", "safeguardStop")
 
 
 # --- survivors from Pass 18 ----------------------------------------------------------------------
