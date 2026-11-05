@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record in §12.3); §16 removed.*
+*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 and 4 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record with `packSetHash` in §12.3); §16 removed.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -639,7 +639,9 @@ a check with no such input is not a check.
 
 The rows name all 21 types of answer spec §5.2. Patterns: graph note §3 and `docs/plans/connected-code-graph-p0-graph.md`
 D4. HA-1 gains one more planted input: (f) an item reached by a name-matched call, built in the
-harness test's own mini-snapshot with a `CALLS_NAME`/`RESOLVES_TO` pair, must score a hit.
+harness test's own mini-snapshot with a `CALLS_NAME`/`RESOLVES_TO` pair, must score a hit;
+(g) a hop with `edgeType` `READS` against a snapshot that holds no `READS` edges (class D) and (h) a hop
+with `edgeType` `LAUNCHES` (class X) must each be a harness error, neither a hit nor a miss.
 
 - **What HA-1 does not do.** A real chain between real nodes passes however long, so it bounds
   fabrication, not recall inflation by genuine `possible` items (that is the noise gate, §11).
@@ -1110,7 +1112,7 @@ Every file is canonical JSONL:
 {
   "schema": "ccg-heldout-manifest-v1",
   "evalCommit": "<40 hex>",
-  "protocol": "docs/plans/connected-code-graph-eval-protocol-ml.md@1.2",
+  "protocol": "docs/plans/connected-code-graph-eval-protocol-ml.md@1.4+docs/plans/connected-code-graph-eval-protocol2-ml.md@1.4",
   "splitSeed": "ccg-p0f-split-v1|<40 hex>",
   "files": [{"name": "ac5-http.jsonl", "sha256": "<64 hex>", "bytes": 0, "items": 0, "countingItems": 0, "anchors": 0}],
   "contactAnchors": 0,
@@ -1266,10 +1268,10 @@ diagnostics only.
   must carry `provenance.cacheHit == false`; a `true` voids that item's repeats. Because `cacheHit` is
   the engine's self-report, the harness also checks the endpoint: the completion requests the
   interpreter endpoint received during the 5 repeats, counted from the endpoint's own log or a
-  counting proxy, must equal 5. **Planted inputs:** with the cache on, the same question twice must
+  counting proxy, must be at least 5, and every request beyond 5 must be a logged retry (the same request body after a transport error or a non-2xx response); fewer than 5, or an extra request that is not a retry, fails. **Planted inputs:** with the cache on, the same question twice must
   give `cacheHit == true` on the second (so the field can read `true`, and the voiding rule is
-  exercised); with the bypass, five repeats must give `false` five times and 5 endpoint requests; a
-  stub engine that caches but reports `false` must be caught by the endpoint count.
+  exercised); with the bypass, five repeats must give `false` five times and at least 5 endpoint requests; a
+  stub engine that caches but reports `false` (1 request) must fail the count; a stub whose first attempt at one repeat returns a 5xx and is retried (6 requests, the extra a logged retry) must pass; a stub that sends a sixth request with a different body must fail.
 - **Reported:** understood rate pooled and per language; the over-asking rate on unambiguous items;
   ambiguity handling with the extras per item; and the flip rate over 5 repeats per item
   (ML §4.4). Results are per configured interpreter model, and the gate binds the codebase's default
@@ -1302,7 +1304,7 @@ it in AC-16 as well would count it twice.
 - **The raw-recipe leg is unconditional.** Answer spec §3/§4.1 decide that it yields rows, never an
   answer document, so it is compared as an item set: `(subject id, status, [(kind, id) of each chain
   hop])` per item and group member. **Owner:** GC writes the rows-to-item-set driver in the harness
-  from the `bfs-v1` description (answer spec §1), not by importing an engine function, else the leg
+  from the `bfs-v1` description (`docs/plans/connected-code-graph-p0-graph.md` §3), not by importing an engine function, else the leg
   compares the engine with itself. **Pass:** the derived set equals the answer's `items` plus
   `groups[].members` as a set; any inequality fails AC-16. If the rows cannot support the derivation
   (answer spec C3: today's reads omit fields), the leg fails and the engine is the finding; it is never
@@ -1580,7 +1582,7 @@ The example values are illustrative.
 
   ```json
   {"schema": "ccg-prereg-ac24-v1", "evalCommit": "<40 hex>", "coreCommit": "<40 hex>",
-   "coreTreeHash": "<64 hex>",
+   "coreTreeHash": "<64 hex>", "packSetHash": "<64 hex>",
    "interpreter": {"endpoint": "local", "modelFingerprint": "<string>", "quantization": "<string>",
                    "promptHash": "<64 hex>", "grammarHash": "<64 hex>", "samplingHash": "<32 hex>",
                    "resolverVersion": "1.0"},
@@ -1593,8 +1595,10 @@ The example values are illustrative.
   `devExtras` lists, for each dev ambiguous item (at most 2, §10.2), `|options|` and its extras
   under the rule. `tieReading` is `null` unless the gate scores a ranked output (P5), where it names
   the verdict-carrying reading (§5.2.1). The record's commit precedes the first held-out run in `git
-  log`; at the run the harness recomputes `coreTreeHash` and the `interpreter` fields from the
-  run's own working tree and answers' provenance and compares them with the record. Any difference
+  log`; at the run the harness recomputes `coreTreeHash` and `packSetHash` (the latter covers `cpg/packs/**`,
+  which `coreTreeHash` excludes by design) from the run's own working tree, `promptHash` and
+  `grammarHash` from the working tree's prompt and grammar files, and `modelFingerprint`, `samplingHash`
+  and `resolverVersion` from the answers' provenance, and compares them with the record. Any difference
   makes the run "after adaptation" (ML §4.5), as for `ccg-prereg-v1`.
 
 ## 13. Tooling procedures for GC (M5)
