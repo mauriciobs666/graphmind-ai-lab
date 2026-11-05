@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.16 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
-*Revision 2026-11-05 (v1.16): §5.4 Part F records the per-language pair and method hash key as the custodians used it; Java's pair key has no `|` between ordinal and index. A post-hoc recording of what was run, not a rule change. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
+*Revision 2026-11-05 (v1.16): §5.4 Part F records the per-language hash keys as used (Java's pair key has no `|`) and a closed coordinate class for the flow audit; post-hoc clarifications, not rule changes. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
 
 ## 0. Question and the decision it serves
 
@@ -824,6 +824,9 @@ measures both kinds of error before any projection exists.
   (pairIndex 0-based file order); **java** pair `ccg-p0a-v1-flowaud|java|pair|<ordinal><pairIndex>` (no separator, so
   7 golden keys collide, 3 of them in the draw, and a colliding pair draws with its twin) and method
   `ccg-p0a-v1-flowaud|java|method|<ordinal>`.
+- *Coordinate class.* A pair whose endpoint `line` is wrong but whose pair is valid is not an F1 invalid: it is corrected in
+  place in `truth/<lang>.flow-final.jsonl` (provenance `partF-coordinate-fix`) and counted apart as a tripwire, as §5.4's closed
+  classes are.
 - *F1: pair validity.* Draw 60 pairs (JS 40) by ascending SHA-256 of `ccg-p0a-v1-flowaud|<lang>|pair|`
   plus method ordinal and pair index, all `unsure` pairs first up to 20. DS checks each against the
   source and the brief's rules (direct flow; a control pair directly decided) and records valid or

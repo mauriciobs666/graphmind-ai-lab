@@ -187,22 +187,23 @@ relabel files for all seven languages.
 | javascript | 40 | 0 (18 / 0) | no | 54 | 9 | 0 | 0/63 | no | 151 (0 / 0) |
 | go | 60 | 4 (11 / 4) | **yes** (0.067) | 85 | 1 | 1 | 1/87 = 0.011 | no | 430 (4 / 1) |
 | java | 60 | 0 (5 / 0) | no | 124 | 3 | 4 | 4/131 = 0.031 | no | 465 (0 / 4) |
-| csharp | 60 | 6 (20 / 6) | **yes** (0.100) | 62 | 6 | 0 | 0/68 | no | 388 (6 / 0) |
-| cpp | 60 | 2 (20 / 2) | no | 74 | 2 | 5 | 5/81 = 0.062 | **yes** | 343 (6 / 5) |
+| csharp | 60 | 2 (20 / 2) | no (0.033) | 62 | 6 | 0 | 0/68 | no | 392 (2 / 0; 5 coordinate-corrected) |
+| cpp | 60 | 2 (20 / 2) | no | 74 | 2 | 5 | 5/81 = 0.062 | **yes** | 343 (6 / 5; 2 coordinate-corrected) |
 | kotlin | 60 | 0 (20 / 0) | no | 74 | 0 | 1 | 1/75 = 0.013 | no | 477 (0 / 1) |
 
-Every one of the 15 invalid pairs was `unsure` in the golden set; 0 of the 286 `sure` pairs drawn were invalid (Wilson 95% upper bound 0.013). Agreed pairs
+Every one of the 11 invalid F1 pairs was `unsure` in the golden set; 0 of the 286 `sure` pairs drawn were invalid (Wilson 95% upper bound 0.013). Agreed pairs
 (present in both sets) are counted valid without a separate read; an invalid agreed pair would shrink the denominator and raise the omission rate slightly.
 F2 also found golden-only pairs that are invalid: cpp 3 (`IsValidParamName`, early exit reaching points nested in a later loop), removed in the final set;
 csharp 0; relabel-only invalid: go 0, csharp 1, kotlin 1 (none added). The invalid pairs by cause: go `callee-value` 3 and `field-write` 1; python `callee-value` 2
-and a generator-expression source 1; csharp `coordinate` 4 (switch-arm cond lines recorded 119/120/121, file lines 120/121/122, `ToString_ClientWhitelist`) and
-`out-arg` 2; cpp `this-field` 1 and `stream-into-call` 1, plus cpp ordinal 5 pair 1 (below).
+and a generator-expression source 1; csharp `out-arg` 2; cpp `this-field` 1 and `stream-into-call` 1, plus cpp ordinal 5 pair 1 (below).
 
-**Escalation (ML §5.4).** Flagged: go F1, csharp F1, cpp F2: three languages, so the process, not a language, is suspect and the matter returns to the
-coordinator before any second labeller. All three flags are narrow: go's flips to 1 of 60 if the `callee-value` ruling below is reversed; csharp's falls to 2 of 60 if
-the four off-by-one switch-arm pairs (one method, valid in intent) are counted as fixed; cpp's is 5 of 81, and 4 of 80 would be exactly 0.05. Python sits at
-exactly 0.050 (3 of 60, not above). Python's relabel reproduced all 84 pairs of its six methods with no difference, which the transcript check (relabel before
-`labels/` opened) should confirm.
+**Coordinate class (coordinator ruling).** A wrong `line` on an otherwise valid endpoint is a closed coordinate class (tripwire, not a validity error) and is corrected
+in place in the final set, with `provenance: partF-coordinate-fix`: csharp ordinal 4, pairs 3 to 7 (switch-arm cond lines 119/120/121 corrected to 120/121/122; pair 6 was
+not queued) and cpp ordinal 5, pairs 2 and 7 (`GetInstance` 691 to 692). The csharp F1 is therefore 2 invalid of 60 (the two `out-arg` pairs), not flagged.
+
+**Escalation (ML §5.4).** Flagged: go F1 (go's flips to 1 of 60 if the `callee-value` ruling below is reversed) and cpp F2 (5 of 81; 4 of 80 would be exactly 0.05).
+Two languages, so the three-language return does not apply; each gets a second blind labeller. Python sits at exactly 0.050 (3 of 60, not above). Python's relabel
+reproduced all 84 pairs of its six methods with no difference, which the transcript check (relabel before `labels/` opened) should confirm.
 
 **Rulings (once, for all languages; the brief's text is the authority).**
 1. *Switch-case discriminant* (JS, C# switch expressions, C++ `switch`, Kotlin `when`, Java): the case label is the test of the subject against the label, so the
@@ -230,9 +231,8 @@ a composite literal; `c` used only inside function literals) have no pair; the c
 
 **C++ ordinal 5.** The sample span (685-698) starts at the macro `GTEST_LOCK_EXCLUDED_`; the signature is at `googlemock/src/gmock-spec-builders.cc:683-684`. The only
 param pair, `mock_obj` -> `cond@688`, is invalid (`mock_obj` is the subscript key at 687; `file`/`line` reach only field writes), and it is removed from the final
-set. S28 must match the param points of this method, and of any method whose sample span omits the signature, on the corpus declaration line, not the span. Also in
-that method, `GetInstance` is recorded at line 691 but is on 692 (pairs 2 and 7), outside the audit draw and left unchanged.
+set. S28 must match the param points of this method, and of any method whose sample span omits the signature, on the corpus declaration line, not the span. Its `GetInstance`
+line (691, on 692) is corrected under the coordinate class above.
 
-**Not decided here.** The coordinate scan (call name or cond code present on the recorded line) of all seven golden sets found 5 cond endpoints on wrong lines in
-csharp ordinal 4 (pairs 3 to 7; 3, 4, 5 and 7 queued, 6 left in place) and the cpp ordinal 5 call above; the other languages had none. The
-Java pair key has no separator (ML §5.4 Part F records it).
+**Coordinate scan.** The scan (call name or cond code present on the recorded line) of all seven golden sets found wrong lines only in csharp ordinal 4 and cpp ordinal 5,
+both corrected above; the other languages had none. The Java pair key has no separator (ML §5.4 Part F records it).
