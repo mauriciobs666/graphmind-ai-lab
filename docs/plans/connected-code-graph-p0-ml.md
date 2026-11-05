@@ -1,10 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.12 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.13 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
-*Revision 2026-11-04 (v1.12): §5.4 defines the noise flag as residual error in `final.jsonl` (corrected errors of any kind never count; the flag is audit-extrapolated), gives `basis` a precedence order, and fixes `shape` and the open-points list (steps 3, 5, 6, 7, stop list). Earlier content (v1.4–v1.11) stands. The v1.3 re-alignment record is in §12 Pass 2.*
+*Revision 2026-11-04 (v1.13): §5.4 step 7 owns the noise flag (§5.1 step 4 points to it); `flagByVersion` disclosure envelope; stop item 2 waiver condition; `sweep-overturned` in the `basis` list; C++ single-reading statement. Earlier content (v1.4–v1.12) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
 
@@ -521,9 +521,9 @@ answer**, and adjudicated wherever they differ:
    - Every adjudication records the decision, the evidence and which source was wrong.
 4. **Reported:** the hand-label vs reference agreement rate, with a Wilson interval, and the
    adjudicated error rate of each source, and both per stratum (the `relaxed` and by-construction
-   classes of §3.2/§5.2, and the rest). This is the label-noise figure. If the hand labeller's
-   adjudicated error rate on the agreed-or-adjudicated set exceeds **5%**, the language's recall is
-   flagged as noise-limited in the report.
+   classes of §3.2/§5.2, and the rest). This is the label-noise figure. Whether a language's recall is flagged
+   noise-limited is decided only by §5.4 step 7 (residual error in the final labels, e_res > 0.05); the
+   labeller's own error rate is reported there beside it and gates nothing.
 
 Residual error: a site where both sources are wrong *the same way*, for example a forgotten
 implementation that the reference also does not relate. This is most likely for callback and
@@ -742,7 +742,7 @@ disagree and in this census always.
   citation is not a decision (§5.1 step 3).
 - **A final label** (`truth/<lang>.final.jsonl`) exists for **every** labelled site, once: `T` (path,
   qname, defLine, role), `N`, `external`, `notACall`, `dynamic`, `scored`, `notScoredReason`, `basis` and
-  `strata`. `basis` records the **procedure that produced the line**, by this precedence: `sweep-overturned`, `audit-overturned` or `adjudicated` (the decision changed or settled the line); else `audit-confirmed` (DS re-read the site from source in draw U, draw C, the C# generic audit or step 3's audit, **in any stratum, AS included**); else `label-only` (an AS site nobody re-read: the label stands alone); else `agreed` (an AI/AE site nobody re-read, roles from step 4). The stratum is a separate fact, carried by an `AS`, `AI` or `AE` entry in `strata` on every agreed-class site. `scored` is false for `notACall`,
+  `strata`. `basis` records the **procedure that produced the line**, by this precedence: `sweep-overturned`, `audit-overturned` or `adjudicated` (the decision changed or settled the line); else `audit-confirmed` (DS re-read the site from source in draw U, draw C, the C# generic audit, step 3's audit or a sibling sweep and found the label right, **in any stratum, AS included**); else `label-only` (an AS site nobody re-read: the label stands alone); else `agreed` (an AI/AE site nobody re-read, roles from step 4). The stratum is a separate fact, carried by an `AS`, `AI` or `AE` entry in `strata` on every agreed-class site. `scored` is false for `notACall`,
   for `dynamic` with empty `T`, for `macro-underdetermined`, and for **`underivable`**: DS read the source
   and neither source nor the code settles the target. Unscored sites are counted and reported by reason;
   an `underivable` share above 0.05 of a language's labelled sites is escalated to the coordinator.
@@ -773,6 +773,15 @@ files, with N the labelled sites:
     report also states that the corrected sites rest on DS's own source reading, whose error is not
     estimated by this procedure; `analyst`'s independent re-read of decisions (Pass 3: 0 wrong in 14 for C++) is the only evidence of it.
   Test-retest for JS is already reported (56 sites, 55 agree; ledger).
+  - **`flagByVersion`, required in every `noise.json` and in the report, per language:** an object
+    `{"v1.10": {"figure": f, "flagged": b}, "v1.11": {...}, "v1.12": {...}}`, exactly these three keys, each
+    `figure` a number in [0,1] and `flagged` a boolean equal to `figure > 0.05`. `v1.10.figure` = e_all (every
+    error found, W counted, closed classes included); `v1.11.figure` = the same with closed-class errors
+    removed and W still counted; `v1.12.figure` = e_res, equal to the file's top-level e_res. A language whose
+    `flagged` differs between versions is named in the report with the rule change that decided it (python,
+    kotlin and C++ at the time of writing).
+  - **C++ final labels rest on a single DS reading**: 90 sites adjudicated and 86 audited, each decided once
+    by DS. `analyst`'s independent reads (18, 0 wrong, Wilson upper about 0.18) are the only check, and the report says so.
 - **Closed class** (excluded from e_res because a complete scan found and corrected every instance, so
   nothing is extrapolated and nothing remains). An `errorKind` is closed iff all of: (i) it is `role`,
   `coordinate` or `shape`, a list this note extends only by revision; (ii) it is found by a **complete**
@@ -793,7 +802,7 @@ files, with N the labelled sites:
 **Stop and escalate (one list; "return" means to the coordinator, with the file named).**
 1. The script rejects a file, or a count differs from step 1's: stop; return.
 2. Any read of `results/`, a CPG or Joern output, or of another language's files: the unit is void; a
-   fresh FC restarts it.
+   fresh FC restarts it. **One waiver:** a read of a labeller-side row of another language (a queue or input row, not a decision or final file) by the FC is waived, not void, iff the coordinator records it and `analyst` re-derives every draw of the unit from `input.jsonl` alone and finds them identical; DS never having seen the row is also required. Anything else stays void.
 3. Flagged stratum after extension, or e_res > 0.05 (step 7): `noise-limited`; unit stays open; return. A closed class above 0.10 of the labelled sites: return. A high e_all alone is a disclosure, not a return.
 4. `underivable` > 0.05 of N; C++ macro-underdetermined > 0.30; C# generic stratum > 0.10 of the labelled
    internal sites; `relaxed` reference-error rate > 0.10 or `typeCtorMerged` ≥ 3 reference errors: return.
