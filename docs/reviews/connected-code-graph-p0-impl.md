@@ -5582,3 +5582,32 @@ Re-gate passes when: (1) the M-1 coverage probe above is a test and classifies e
 - **Plugin pin.** `--accepted-plugins` voids on a name difference and on a non-`@builtin` source; the real names pass. Without it the report lists `unpinned`, so the pin is opt-in; S54 must pass it.
 
 Stopping condition: met; no further pass needed if N-1 and N-2 are fixed or recorded as accepted limits before S54.
+
+## Pass 6 — S54 D1: `guard-paths.sh` Glob/Grep pattern analysis (uncommitted diff)
+
+**Verdict: approve with suggestions.** The guard closes every escape form I built; two of the mutant-removal rationales are false (M-1), so two cost bounds are unpinned. CPG: considered, not relevant (shell hook; no loaded graph covers it). Scope: `cpg/eval/headless/guard-paths.sh`, both tests, the S52-NOTES section. Read root `REVIEW.md` (no `cpg/` one exists).
+
+**Checks run.** `bash cpg/eval/headless/tests/test_guard_paths.sh`: 98 passed, 0 failed. `sha256sum agents.json` = `f88cfb46...af827` (matches); `settings.json` is `8fd894ba...ac124`, and `git status` shows neither modified. I drove the real guard with hook JSON for 76 patterns × 8 `path` values (none, `kit-src`, `kit-src/pkg`, `.`, `..`, `/etc`, `kit-src/escape-dir`, an in-root symlink to `/etc`) for Glob and Grep, 1,216 calls. Exit codes: only 0 and 2.
+
+- **(1) Escapes.** Denied (rc 2): nested/`{..,x}`/`{kit-src,}/../x`/`{,.}{,.}` braces, `\.`, `\\..`, `[.]`, `.?`, `**/..`, `kit-src/*/../x`, `..\x`, `kit-src\..\..\x`, absolute, `//etc`, `~`, `{~,x}`, in-root absolute, null byte, lone surrogate (rc 2, not 1), `kit-src/escape-dir/*`, `pattern '../'` with each in-root `path`, `?`×40, 30 chained braces (0.02 s). Allowed and judged benign: `$HOME/*`, `${HOME}/x`, `kit-src/..%2f`, `\x2e\x2e`, `..`, U+FF0E, U+2024, ideographic space, `.. ` and ` ../x` (all literal names, not `..`); empty pattern; 100,000 `*` (0.05 s). Whether Claude Code's glob expands `$VAR` or normalises Unicode dots is not verified (inferred no).
+- **(3) Writer globs.** `kit-src/**/*.py`, `kit-src/{a,b}/*.md`, `kit-src/**/*.{py,md}`, `*.py`, Grep `*.{py,md}`: rc 0.
+- **(5) Audit agreement.** Over the same 1,216 calls, no call the guard allows is counted `path-outside-root` by `audit.classify_call`; and for Glob with no `path`, no guard deny is an audit pass. Lines up with the port.
+- **(6)** holds (above). Notes section is accurate against the code.
+
+### Findings
+
+**M-1 (major, verified by mutation): two removal rationales in `mutants_guard_paths.sh:9-13` are false.**
+(a) "No mutant for the as-written reading (the unescaped reading is a superset)". It is not: `\q` is a separator in `literal_base` but `\x` unescaped drops it. `kit-src/{..\q,c}/x` and `kit-src/{..\q,c}` are denied by the guard and **allowed (rc 0) by the guard with `dict.fromkeys((pat, unescaped))` → `(unescaped,)`** (planted copy, scratchpad `mut.sh`). The suite has no test for it, so the mutant would survive; the audit denies the same pattern, so only the hook would diverge. (b) "Overflow checks singly ... each is backed by another": true for the verdict, false for cost. Deleting `if len(out) > MAXV` made `{a,b}`×30 time out at 15 s (guard: rc 2 in 0.02 s); deleting the `n > MAXV` product cap made `?`×40 time out at 10 s. The only overflow test is 10 braces (1,024 readings), which the per-pattern budget catches either way. These are the Pass 5 N-2 regression guards (a stalled hook), now unpinned. Fix: add tests `Glob "kit-src/{..\\q,c}/x"` (deny) and a 30-brace and a 40-`?` pattern asserted to finish with rc 2 under a `timeout`; restore the three mutants (as-written dropped, brace-cap off, product-cap off) so they must die.
+
+**m-1 (minor, verified): a wildcard that names an in-root symlink is allowed** (`kit-src/e?cape-dir/x`, `kit-src/esc*/x`, `kit-src/[e]scape-dir/x`, with `path` none or `kit-src`); the literal-prefix resolution cannot see it. Same limit as Pass 4 m-7, mitigated only by S53/export refusing symlinks in the kit copy. The note should say so rather than claim "can name something outside the role root" is closed.
+
+**n-1 (nit):** the up-front `..`/absolute test is now redundant for `..`/`~` (verified subsumed: the as-written variant hits `literal_base`); keeping it as defence in depth is fine, and the replacement mutant for the absolute prefix is real.
+
+### Removed mutants
+The two retired ones (`glob pattern check removed`, `dot-dot allowed`) are covered by `pattern_escapes not called`, the absolute-prefix mutant and `dot-dot component not rejected in base`. I did not run the mutants script (teco's run). Not run: no live Claude Code Glob semantics test.
+
+### What's solid
+Fail-closed on exceptions and surrogates preserved; no exit code but 0/2; `path`-relative resolution works; the port reads like `audit.py` and agrees on the sample.
+
+### Stopping condition
+Re-gate passes when M-1's tests and mutants are in and the mutants script shows them killed; m-1 recorded in the note as an accepted limit.
