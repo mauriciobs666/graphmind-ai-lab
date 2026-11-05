@@ -123,10 +123,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                       launch_fail_bound=args.launch_fail_bound)
             print(f"initialised {args.point} {args.phase} campaign at {camp.root}")
         elif args.command == "resolve":
-            camp.resolve(decision=args.decision, skip_batch=args.skip_batch,
-                         repin_instructions=args.repin_instructions,
-                         repin_model=tuple(args.repin_model) if args.repin_model else None)
-            print("resolved; the next `driver run` resumes")
+            print("\n".join(camp.resolve(
+                decision=args.decision, skip_batch=args.skip_batch,
+                repin_instructions=args.repin_instructions,
+                repin_model=tuple(args.repin_model) if args.repin_model else None)))
         else:
             print("\n".join(camp.status()))
     except CampaignRefused as exc:

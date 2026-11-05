@@ -2780,3 +2780,117 @@ Pass 21 adds three minors and a nit, restates no earlier finding (one dispositio
 ### Appendix T — Pass 21 mutants
 
 `scratchpad/p21/mut-run.txt`. **Red (14):** A2, A3, B1, B2, C1, C2, D1, D3, E4, E5, E8, E9, Q17, S5. **Green and real:** A1 (P21-m2), D2, E1, E3, E7 (P21-m3), F1 (P21-m1). **Green and equivalent:** D4, D5, E2 (regeneration hits: unverified as unreachable; I built no sequence where a regeneration run precedes a round's close), E6, E10, F2, F3, G1 to G3. Probes: `probes/test_p21.py` (two pools, drop close and resolve, double feed, void retry across `install`, issue-before-install, half-written stratum, `--skip-batch`, last-seed hit); `rule_a.py`, `d_probe.py`, `alt.py`, `sim.py`.
+
+## Pass 22 — U5.8a4 and U5.8b re-gate (2026-11-05)
+
+**Verdict: needs changes.** Part A (U5.8a4) closes every Pass 21 finding. Part B (U5.8b) works on every flow I ran except one: a crash between a vote's `queued` events loses that vote's unqueued items silently (P22-M1). One surviving plumbing mutant (P22-M2), one plan deviation (P22-m1) and two minors remain.
+- **P22-M1:** a half-queued vote has no recovery; the campaign ends `done` with items at two votes.
+- **P22-M2:** no test reads what a labeler is shown; a mutant that shows every key the first item survives.
+- **P22-m1:** `labelling-restart` retires only vote-carrying label batches; plan6 says "label batches (retired)".
+- **P22-m2:** `resolve` prints a fixed line, not the halt it clears, and says "resumes" when its drop has just raised a new halt.
+- **P22-m3:** survivors V12 to V14 (below).
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against `HEAD`, `decision-models/`: `campaign.py`, `screen.py`, new `labels.py` and `tests/test_votes.py`, the three changed test files, `AGENTS.md`, `README.md`, `docs/HISTORY.md`. Spec: plan6 v1.21 §3.7 and §3.8 (pooled-halt record, bracket rule, "Votes"), plan4 §3.6 "Votes" and its §5 row U5.8, note v1.18 §Q1.2 "Hits", read by me. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite:** fresh `PYTHONPYCACHEPREFIX`: **1377 passed, 2 xfailed**; `ruff check .` clean; live-tree sha256 of `decisionmodels/*.py` and `tests/*.py` unchanged after the pass. `AGENTS.md` 1,323 words, no line over 700 characters.
+- **Mutants and probes:** scratch copy `scratchpad/p22/` (`defs.py`, `mut.py`, `mut.out`, `probes/test_p22.py`, `rule_a.py`): 27 new mutants plus 4 of Pass 21's re-run (Appendix U).
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks and the two new files were read in full.
+
+### Disposition of Pass 21
+
+- **P21-m1 (two pools in one close): fixed.** The halt is `round` plus `pools[]` in hash order, every pair marked fired, `reason` the round's first else the first pool's, `genRound` the closing round's; `status`/`next` print each entry. Tests cover two pools over, a round and a pool together, and a plain `resolve` that does not refire. Mutants H1 (first pool only), H3 (union-first reason), H5 (pool reasons = union) red.
+- **P21-m2 (rule (d)): fixed.** The joiner is `\W+`, (d) deleted, and `difficulty`/`intended` are pinned as listed tokens by `tests/test_points.py:334`. Re-run on guard, join-in and message-type: none of 20 prose pass strings hits (`(no answer from support)`, `(clear and simple)`, `(order #4411)`, `(other than login)`, `(no rush)`, ...), `(clear; difficulty)`, `(clear - advance)`, `(clear & advance)`, `(yes & no)` hit on guard. Mutant S1 (old joiner) red. The accepted false-hit class widens as intended (`(yes-no)`, `(no-reply)`, `(order, other)` hit).
+- **P21-m3 (survivors): fixed.** `--skip-batch` close, a hit on the last/first/middle entry, a two-reason item and the 299/300 floor each have a test; mutants D2, E1, E3, E7 re-run red. E2 and D4 stay equivalent as ruled.
+- **P21-n1 (`stop` after a drop-raised halt): fixed.** `ingest` now reads the halt after a `void` outcome too; mutant H4 red, and the drop test asserts `stops == [None, None, "halted"]`.
+
+### The judged choice: `labelling-restart` retires only vote-carrying label batches
+
+**Plan text.** plan6 v1.21 §3.8 "Votes": "A labeler re-pin (`labelling-restart`) clears the folded votes, `voteTie` drops and label batches (retired), keeps the items". Read plainly, "label batches" is every `label` batch; the sibling rule for a generator restart is "every `generate` and label batch of the point". The plan does not say "vote batches", and `_restart_generation` retires all batches. The coder's `_restart_labelling` keeps a label batch with no `vote` extra (the smoke fixture's); HISTORY and `AGENTS.md` state it.
+
+**Consequences, executed.**
+- Mutant R1 (retire every label batch) is **green on 369 tests** in the five relevant files: no test needs the narrowing, and none pins it. Nothing in the suite is the reason for the choice.
+- In production today the two readings agree: `queue_votes` is the only non-test caller of `queue_batch("label", ...)` (`grep` over `decisionmodels/` and `tests/`), and it always sets `vote`.
+- The difference is a hazard for what follows. U5.8c's cap/screen vote and U5.9's 250-item tranche queue label batches too. If either omits the `vote` marker, a labeler re-pin leaves its batches pending and its recorded answers live under the old pin, which is the mixing the restart exists to prevent. The choice makes the marker `extra["vote"]` carry safety semantics the plan never gave it.
+- **Ruling:** the plan's literal text should stand (retire every label batch). If the fixture batch must survive, the fixture marks it, not the production code. Finding P22-m1 below.
+
+### Findings
+
+**P22-M1 — major — a crash between a vote's `queued` events loses the unqueued items from that vote, silently.** *Owner: `coder`. Verified: probe `test_crash_between_vote_start_and_queued_loses_items`, scratch copy.*
+- `queue_votes` appends `vote-start`, then one `queued` per batch (`campaign.py` `queue_votes`). With 8 items and cap 3, a kill at the 2nd `queue_batch` leaves 5 of 8 items at two votes and a kill at the 3rd leaves 2 of 8, after the whole campaign runs to `done`: `next_vote` finds the vote's live batches, waits for them, then moves to the next vote; the unqueued tail is never queued, so `State.label_votes` is `None` for it. A kill before the first `queued` recovers (resume queues the recorded items). The generation half has this recovery (`unbatched_seeds`, plan6 §3.8 "A half-written round"); the votes half has none, and no test cuts the ledger inside a vote.
+- **Fix:** `next_vote` treats a vote as incomplete while the recorded `vote-start` items (less those of dropped label batches) are not all held by its live batches, and `queue_votes` queues the missing ones into the same vote. The test is the probe over every kill point (1, 2, 3), asserting three votes per item.
+
+**P22-M2 — major (test gap) — nothing checks what a labeler is shown; a plumbing mutant survives.** *Owner: `coder`. Verified: mutant P1, probe `test_label_request_shows_each_key_its_own_item`.*
+- `prepare` now builds a label request from `state.items[ref]["item"]` for vote batches (the only new data path into a blind label). Mutant P1 replaces it with the first state item for every ref: green on 369 tests, because every vote test answers by key through `respond(ref, vote)` and never reads the request. A blind vote on the wrong text is the failure the whole vote exists to avoid.
+- **Fix:** in a vote test, assert for each key of the served request that the item's own text (its `condition`, a turn text) is in the request and the other items' are not. My probe does this and reddens P1 (4 of 5 conditions missing).
+
+**P22-m1 — minor — `labelling-restart` narrows plan6's "label batches (retired)" to vote batches** (above). *Owner: `architect` confirms the text, `coder` aligns. Verified: mutant R1 green.* Retire every `label` batch in `_restart_labelling`, mark or avoid the fixture's batch in the tests that need it, and pin with a test that queues a plain label batch, repins the labeler, and asserts it retired (R1 then differs from the live code).
+
+**P22-m2 — minor — `resolve` prints no halt and can print a false "resumes".** *Owner: `coder`. Verified: `driver.py:125-129`; probe `test_skip_batch_of_a_halted_run_...`.*
+- plan6 §3.8: "`status`, `resolve` and `diagnostics.json` print every entry". `status` and `next` do (`_halt_text`); `resolve` prints the fixed line "resolved; the next `driver run` resumes", and the `resolved` event stores only `reason` and `batch`. A `--skip-batch` resolve that closes a round and raises a pooled halt (tested) still prints "resumes", though `driver run` stops at once.
+- **Fix:** print the cleared halt's text, and the new halt's if the resolve raised one.
+
+**P22-m3 — minor — surviving mutants.** *Owner: `coder`. Verified: mutants V12 to V14.*
+- **V14:** `vote_ties` counting an item at two votes is green. A choice item whose vote-3 batch dropped, with two different labels, would be reported as a `voteTie` though it has no third vote. Add that case (message-type, vote-3 batch dropped).
+- **V12 and V13:** removing `queue_votes`'s in-flight guard, or `next_vote`'s own `return None`, is green. Each guards the condition the other and `next`'s "nothing pending" check also cover, so only a double mutation could fail them. Keep one, or add a test that reaches them.
+- V2 and V3 (`genRound` or `vote` constant) make the vote tests loop forever instead of failing; the suite catches them only by timeout. A `next` loop bound in `vote_all` would fail fast.
+
+### What's solid
+
+- Part B's folds are sound: `votes` apply only at the ingested `outcome` and survive a crashed ingest (test and V1 red); `labelVotes` has string keys, zeros included, summing to 3, with `"true"`/`"false"` for predicates (L1, L2 red); the reshuffle seed comes from `fresh_rng_seed()` and joins the held set (V6, V7, V8 red); `genRound` and `vote` ride on the batch and the overflow cut copies them (V2, V3, V5 red); batching at `labelBatchCap` (V4 red); settled-round eligibility counts accepted, third-hit and dropped-batch seeds (V10, V11 red); a dropped vote batch leaves later votes and counts once (V9 red); labeler and generator restarts clear votes and starts (R2, R3, R4 red) and keep the held seeds.
+- Part A: the halt record, the drop-raised `stop`, the joiner and the deleted rule (d) match plan6 v1.21 and note v1.18 on every string in both texts.
+- Docs: `AGENTS.md` and `HISTORY.md` describe the shipped code; `HISTORY.md`'s equivalent-mutant list agrees with mine.
+
+### Open questions
+
+1. P22-m1: `architect` to confirm "label batches" means every label batch.
+2. Whether a half-queued vote should recover inside `queue_votes` (my suggestion) or by a `vote-start`-time `queued` batch list in one event, which makes the window disappear (the plan's choice; `data-scientist` has no stake).
+
+### Growth-stops check
+
+Pass 22 adds one major, one test-gap major and three minors; each Pass 21 finding has one disposition line; no earlier finding is re-argued. Passes 1 to 21 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical.
+
+### Appendix U — Pass 22 mutants
+
+`scratchpad/p22/mut.out`, `mut2.out`; files: `tests/test_votes.py`, `test_generation_rounds.py`, `test_generation.py`, `test_screen.py`, `test_campaign.py`, `-x`. **Red (25):** R2, R3, R4, V1 to V11 (V2 and V3 by hang, killed after 9 minutes), H1, H3, H4, H5, S1, L1, L2, and Pass 21's D2, E1, E3, E7. **Green and real:** P1 (P22-M2), R1 (P22-m1), V14, V12, V13 (P22-m3). **Green and equivalent:** V15 (`>=` half over exactly three votes), E2, D4. Probes in `probes/test_p22.py`: the crash cut at kill points 1, 2, 3 (one recovers, two lose items), the request-content check (live pass, P1 fail); `rule_a.py` for the bracket strings.
+
+## Pass 23 — Pass 22 fix round re-gate (2026-11-05)
+
+**Verdict: approve with suggestions.** Every Pass 22 finding is fixed and each fix is pinned by a test that reddens its mutant. The M1 recovery holds against dropped batches, `labelling-restart` and a generator restart. One nit, no new defect.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against the tree Pass 22 reviewed (`diff -u` of `campaign.py`, `driver.py`, `labels.py`, `screen.py` and the tests; the coder's report not used). Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite:** fresh `PYTHONPYCACHEPREFIX`: **1386 passed, 2 xfailed**; `ruff check .` clean; live-tree sha256 unchanged after the pass. `AGENTS.md` 1,349 words, no line over 700 characters.
+- **Execution:** scratch copy `scratchpad/p23/` (`probes/test_p22.py`, `defs.py`, `mut.out`): my Pass 22 probes, 15 mutants, 3 interaction probes.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff was read in full.
+
+### Disposition of Pass 22
+
+- **P22-M1 (half-queued vote): fixed.** `next_vote` returns a recorded vote with the items its live batches do not hold (less dropped batches' items) and `queue_votes` queues them in the recorded order. My kill-point probe at 1, 2 and 3 now ends with three votes for all 8 items, each held once per vote; the coder's test is the same shape. Mutants N2 (held ignored), N4 (last entry of held dropped), N6 (recorded order lost), N12 (recorded flag false) red.
+- **P22-M2 (labeler's item unchecked): fixed.** `test_label_request_shows_each_key_its_own_item_in_every_vote` reads each key's request text across all three votes and rejects the other items' conditions; my mutant P1 (first item for every key) red.
+- **P22-m1 (restart retired vote batches only): fixed.** `_restart_labelling` retires every label batch; a test queues a plain label batch, repins, and asserts it retired; mutant N1 (vote-only) red. `test_install.py`'s repin test still tests its subject: the new `queue_batch` supplies the batch the repin retired, and the test still plants an instructions attachment, expects the `halted` outcome, resolves with `repin_instructions` and checks the pins after `install`. A mutant that skips the folded `repin-instructions` assignment turns it red.
+- **P22-m2 (`resolve` output): fixed.** `Campaign.resolve` returns the lines `driver resolve` prints (`cleared: ...`, then the raised halt or the resumes line); `driver.py` is its only caller (`grep` over `decisionmodels/`), and the other `resolve` calls in the tests ignore the return. Mutants N8 (stale halt) and N9 (no cleared text) red.
+- **P22-m3 (survivors): fixed.** V14 (two-vote tie) red; V12 and V13 each red on their own tests; V2 and V3 now fail in 5 to 8 s through `vote_all`'s 60-batch limit instead of hanging.
+
+### Interactions of the M1 recovery (executed)
+
+- **Dropped batch:** kill at the 2nd label `queue_batch`, then the first batch drops by the retry cap: its 3 items stay out of votes 2 and 3 (held 5 of 8 there, none of them dead), the tail is queued once, and `dropped()` counts 3 once. Mutants N3 (`out` ignored) and N5 (held from ingested batches only; equivalent, since a dropped batch's items are in `out` and an open batch returns `None` first) behave as stated.
+- **`labelling-restart` after a half-queued vote:** the queued batch halts, the repin retires every label batch and clears `vote_starts`, `next_vote(1)` is `(1, items, False)`, and the votes repeat from vote 1 with each item held once per vote; nothing queues into a retired vote because `vote_batches` excludes `retired`.
+- **Generator restart:** items, votes and starts clear, every label batch is retired, `next_vote(1)` is `None`.
+- Equivalent mutants: N7 (`or not batches`: the only difference is a vote whose items are all out, which `queue_votes` skips either way) and N11 (a no-op I wrote).
+
+### Findings
+
+**P23-n1 — nit — the plan does not state the vote half's crash recovery.** *Owner: `architect`, at the next plan revision. Verified: read of plan6 v1.21 §3.8.* The "A half-written round" bullet recovers the generation half only; the behavior the coder built (a half-queued vote queues the rest into itself, in the recorded order) is only in `campaign.py`'s docstring, `AGENTS.md` and `HISTORY.md`. Add one sentence and a §5-row clause so the live-spec close finds it.
+
+### What's solid
+
+- The recovery adds one derived set (`held`) and changes no event: no ledger migration, and the folded state of an old ledger is unchanged.
+- `HISTORY.md` supersedes its earlier "smoke fixture's label batch stays" line explicitly, and `AGENTS.md`/`README.md` say "every label batch".
+
+### Growth-stops check
+
+Pass 23 adds one nit; each Pass 22 finding has one disposition line. Passes 1 to 22 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical.

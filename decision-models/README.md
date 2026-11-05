@@ -50,8 +50,9 @@ campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
 definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
 live smoke ran, `docs/test-reports/live-smoke-report.md`), and generation runs with the
 generated-text screen, form obedience, the template halts and the generator restart (U5.8a:
-`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet, and
-votes, the pilot tooling and top-up are later).
+`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), and
+the votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`; the pilot
+tooling, the message-type tranche and top-up are later).
 Labelling requests render guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
@@ -87,7 +88,9 @@ or `AGENTS.md`. Run these from `decision-models/`:
   a launch refusal (`store/refusal`), the last issued session id, and any dropped batches.
 - **`resolve`** is the only way past a halt. Retry re-issues the halted batch under a new name;
   `--skip-batch` (a safeguards stop only) drops it and counts it as `safeguardSkipped`; a
-  re-pin records the new model (a generation or labelling restart) or instructions set.
+  re-pin records the new model (a generation or labelling restart; a labelling restart retires every
+  label batch, the smoke fixture's too) or instructions set. It prints the halt it cleared and, if
+  a `--skip-batch` drop closed a round or pool, the halt that raised.
 - `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
 
 ### `install`, the agent definitions and the guard

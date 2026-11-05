@@ -12,12 +12,12 @@ the design.
 `decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts, generation runs), `screen.py` (the generated-text screen and form
-obedience, pure), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
+reconciliation, halts, generation runs, votes), `screen.py` (the generated-text screen and form
+obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
-definitions, spawn templates, `guard_hook.py` and `settings.json`. Votes, labels, top-up, the pilot and
-`finalize` (plan4 §4.1 U5.8b onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+definitions, spawn templates, `guard_hook.py` and `settings.json`. The pilot and cap/screen vote,
+the message-type tranche, top-up and `finalize` (plan4 §4.1 U5.8c onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -91,12 +91,24 @@ definitions, spawn templates, `guard_hook.py` and `settings.json`. Votes, labels
   (over 4% of its drawn seeds, two hits at least), and per generator-template hash over a pool of
   the rounds under 25 seeds (a round closes when its runs are all ingested or dropped; each
   ingested run's seeds and hits go to its own issue-time hash's pool, which is tested at 300 seeds
-  and over 5%); each pair fires once even after `resolve`, which clears the halt, not the pair. Runs
+  and over 5%); one halt record lists the per-round part (`round`) and every pool that crossed
+  (`pools`), and each pair fires once even after `resolve`, which clears the halt, not the pair. Runs
   are cut balanced (`balanced_runs`). An attempt keeps the `expectations`, pins and instructions in
   force when it was issued; the audit reads those, never the latest. A generator re-pin
   (`generation-restart`) resets the folded generation view and **retires** every batch (never
   issued, ignored by `next`); the ledger, held RNG seeds and `seedId`s, pins and expectations
   stay. A batch queued by plain `queue_batch` has no `generation` and is not checked.
+- **Votes are ledger-folded too** (plan6 §3.8; `labels.py`). When nothing is pending, `next` calls
+  `queue_votes`: a round whose seeds are all accepted or dropped starts vote *v* with a
+  `vote-start` event (a fresh, held RNG seed; the items reshuffled on it) and queues label batches
+  of at most `labelBatchCap` (`prepare` cuts `P_MAX` overflow into the same vote). Vote *v+1*
+  starts when vote *v*'s batches are all ingested or dropped. A `votes` event is applied at the
+  run's ingested `outcome`; `State.label_votes` / `vote_ties` give `labelVotes` and `voteTie`. A
+  dropped label batch (any reason) takes its items out of the later votes. A vote is incomplete
+  until its live batches hold every `vote-start` item (a crash between its `queued` events);
+  `queue_votes` queues the missing ones into it. A `labelling-restart` clears the votes and
+  retires **every** label batch (the smoke fixture's too), keeping the items; a generator restart
+  clears both. A label batch with no `vote` records nothing.
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

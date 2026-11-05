@@ -14,7 +14,7 @@ binding check already holds equal). The token lists are the point's (`points.scr
   character precedes the pattern; "(dom_07)" and "cue_01" do.
 - **Hits in a meta position** (`screen.metaPosition`, whole words, case-insensitive) are
   `meta:<token>`. A meta position is a closed `(...)` or `[...]` group that satisfies one of
-  note §Q1.2 "Hits" rules a to d (`_bracket_hit`: `(clear)`, `(difficulty: hard)`, `(the answer
+  note §Q1.2 "Hits" rules a to c (`_bracket_hit`: `(clear)`, `(difficulty: hard)`, `(the answer
   is no)`, `(no difficulty)`), or a token directly after `label`, `answer`, `category` or
   `intent` and only separators outside brackets (`label: complaint`, `answer - yes`). A stray
   closer (`:)`, `1)`) is ignored; an unclosed opener makes no group. So "had difficulty paying",
@@ -110,25 +110,27 @@ def _bracket_contents(text: str) -> list[str]:
 _TRAILING = " .!?;"
 _GROUP_KEYWORDS = frozenset({"label", "answer", "category", "intent", "intended", "difficulty"})
 _WORD = re.compile(r"\w[\w-]*")
-#: Rule (a)'s joiners: whitespace, `/`, `,` and `|`.
-_JOINERS = re.compile(r"[\s/,|]+")
+#: Rule (a)'s joiner: any run of non-word characters (spaces, `/`, `,`, `|`, `-`, `;`, `&`, ...).
+_JOINERS = re.compile(r"\W+")
 
 
 def _bracket_hit(content: str, tokens: Sequence[str]) -> str | None:
-    """The listed token a bracket group's content hits (note §Q1.2 "Hits", rules a to d), after
+    """The listed token a bracket group's content hits (note §Q1.2 "Hits", rules a to c), after
     trailing `.`, `!`, `?`, `;` and spaces are stripped:
-    (a) the content is one or more listed tokens and nothing else, joined by spaces, `/`, `,` or
-        `|` (so `(clear advance)` hits, and `(no reply)` and `(other question)` are accepted
-        false hits: a false hit costs one regeneration, a miss leaks the answer);
+    (a) the content is one or more listed tokens and nothing else, separated by any run of
+        non-word characters (so `(clear advance)` and `(clear - difficulty)` hit, and `(no
+        reply)` and `(other question)` are accepted false hits: a false hit costs one
+        regeneration, a miss leaks the answer);
     (b) a listed token is followed by `:` or `=`;
     (c) `label`, `answer`, `category`, `intent`, `intended` or `difficulty` is followed by a
-        listed token within its next two words (forward only: "(no answer)" passes);
-    (d) the content is exactly `difficulty` or `intended` and one listed token, either order."""
+        listed token within its next two words (forward only: "(no answer)" passes).
+    There is no rule (d): `difficulty` and `intended` are listed in every point, so (a) covers
+    `(difficulty clear)` and `(no difficulty)`."""
     content = content.rstrip(_TRAILING).lstrip()
     listed = {token.casefold(): token for token in tokens}
     parts = [part for part in _JOINERS.split(content) if part]
     if parts and all(part in listed for part in parts):
-        # report the answer-bearing token, not the keyword, as (d) always did
+        # report the answer-bearing token, not the keyword
         named = [part for part in parts if part not in ("difficulty", "intended")]
         return listed[(named or parts)[0]]
     for token in tokens:
@@ -140,10 +142,6 @@ def _bracket_hit(content: str, tokens: Sequence[str]) -> str | None:
             for follower in words[index + 1:index + 3]:
                 if follower in listed:
                     return listed[follower]
-    if len(words) == 2:
-        for keyword, other in (words, words[::-1]):
-            if keyword in ("difficulty", "intended") and other in listed:
-                return listed[other]
     return None
 
 

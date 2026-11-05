@@ -83,7 +83,7 @@ def test_a_token_no_prose_uses_is_a_hit_anywhere(text: str, reason: str) -> None
     ("x (clear / advance) y", "clear"),
     ("x (suspend | advance)", "suspend"),
     ("Paying (difficulty: hard)", "difficulty"),
-    ("Paying [intended = yes]", "intended"),
+    ("Paying [intended = yes]", "yes"),     # rule (a) now: `=` is a joiner; the answer is named
     ("[label: advance]", "advance"),
     ("Label: advance", "advance"),
     ("the answer - yes", "yes"),
@@ -144,10 +144,14 @@ def test_ordinary_prose_and_word_bounded_ids_pass(text: str) -> None:
     ("[intent suspend]", "suspend"),
     ("(intended)", "intended"),
     ("[clear | advance]", "clear"),
-    ("(clear advance)", "clear"),         # rule (a): whitespace joins listed tokens
+    ("(clear advance)", "clear"),         # rule (a): any run of non-word characters joins
+    ("(clear; difficulty)", "clear"),     # the residue the old rule (d) caught and (a) now does
+    ("(clear - advance)", "clear"),
+    ("(yes & no)", "yes"),
+    ("(clear - difficulty)", "clear"),
     ("(true clear)", "true"),
     ("[suspend yes no]", "suspend"),
-    ("(intended is true)", "true"),       # rule (c) through `intended`: not (a), (b) or (d)
+    ("(intended is true)", "true"),       # rule (c) through `intended`: not (a) or (b)
 ])
 def test_the_bracket_rule_hits_note_17s_listed_strings(text: str, token: str) -> None:
     assert screen_hit(GUARD, turns_item(text)) == f"meta:{token}"

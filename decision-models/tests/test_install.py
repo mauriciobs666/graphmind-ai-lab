@@ -447,6 +447,7 @@ def test_a_repinned_model_and_instructions_set_survive_a_reinstall(tmp_path: Pat
     camp = made.camp
     run_batch(camp, "refusal")                                    # a halt: safeguardStop
     camp.resolve(decision="move labelling", repin_model=("labeler", "claude-haiku-9"))
+    camp.queue_batch("label", ["fx_0001"])             # the re-pin retired the smoke batch
     action, session = run_batch(camp, "refusal", ingest=False)
     agent = camp.transcript_path(session).with_suffix("") / "subagents" / f"agent-{F_AGENT}.jsonl"
     lines = agent.read_text("utf-8").splitlines()

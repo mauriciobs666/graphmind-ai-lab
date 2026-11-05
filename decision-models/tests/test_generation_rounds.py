@@ -14,7 +14,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_campaign import GUARD_COMMAND, answer_bytes, serve, smoke, stage, write_answer
+from test_campaign import (
+    GUARD_COMMAND,
+    answer_bytes,
+    run_batch,
+    serve,
+    smoke,
+    stage,
+    write_answer,
+)
 from test_generation import (
     GENERATOR_AS_FIXTURE,
     bench,
@@ -27,6 +35,7 @@ from test_generation import (
     leaking,
     padded,
     run_generation,
+    votes_next,
 )
 from test_screen import MESSAGE_TYPE, obedient_item
 
@@ -152,9 +161,12 @@ def test_thirty_10_seed_rounds_with_one_hit_each_halt_in_the_pool_at_the_30th(
     halt = state.halt
     assert halt["pooled"] is True and halt["genRound"] == 30 and halt["batch"] == "bat_0030"
     assert halt["reasons"] == ["bindingMismatch"]
-    assert halt["poolRounds"] == list(range(1, 31)) and halt["poolSeeds"] == 300
-    assert halt["poolHits"] == {"screen": 0, "bindingMismatch": 30, "formMismatch": 0}
-    assert len(halt["templateHash"]) == 64
+    assert "round" not in halt
+    (pool,) = halt["pools"]
+    assert pool["poolRounds"] == list(range(1, 31)) and pool["poolSeeds"] == 300
+    assert pool["poolHits"] == {"screen": 0, "bindingMismatch": 30, "formMismatch": 0}
+    assert pool["reasons"] == ["bindingMismatch"] and len(pool["templateHash"]) == 64
+    assert halt["reason"] == "bindingMismatch"
     assert state.round_hits == {(g, "bindingMismatch"): 1 for g in range(1, 31)}
 
 
@@ -236,15 +248,18 @@ def test_a_small_round_joins_the_pool_when_its_last_run_ingests_not_before(
     assert pooled["rounds"] == [1] and pooled["seeds"] == 24 and camp.state().pooled_rounds == {1}
 
 
-def sized_rounds(camp: Campaign, sizes: list[int], *, start: int = 1,
-                 bad: Any = binding_item) -> list:
-    """One round per entry of `sizes` (its seed count), `bad` answered by each round's first
-    seed. Returns each run's `IngestResult`."""
+def sized_rounds(camp: Campaign, sizes: list[int], *, start: int = 1, bad: Any = binding_item,
+                 where: tuple[int, ...] = (0,)) -> list:
+    """One round per entry of `sizes` (its seed count); each round's run answers `bad` at the
+    position `where` names in its `entries` (cycled, so -1 is the run's last entry). Returns
+    each run's `IngestResult`."""
     results = []
-    for gen_round, size in enumerate(sizes, start):
+    for number, size in enumerate(sizes):
+        gen_round = start + number
         hand = [hand_seed(gen_round * 100 + n) for n in range(size)]
-        hand_round(camp, hand, gen_round=gen_round)
-        results.append(run_generation(camp, leaking({hand[0].seed_id: bad}))[1])
+        (batch_id,) = hand_round(camp, hand, gen_round=gen_round)
+        victim = camp.state().batches[batch_id].entries[where[number % len(where)]]
+        results.append(run_generation(camp, leaking({victim: bad}))[1])
     return results
 
 
@@ -256,8 +271,9 @@ def test_the_pool_adds_each_rounds_own_size_not_a_neighbours(tmp_path: Path) -> 
     assert results[21].stop == "halted"
     halt = camp.state().halt
     assert halt["pooled"] is True and halt["genRound"] == 22
-    assert halt["poolRounds"] == list(range(1, 23)) and halt["poolSeeds"] == 304
-    assert halt["poolHits"] == {"screen": 0, "bindingMismatch": 22, "formMismatch": 0}
+    (pool,) = halt["pools"]
+    assert pool["poolRounds"] == list(range(1, 23)) and pool["poolSeeds"] == 304
+    assert pool["poolHits"] == {"screen": 0, "bindingMismatch": 22, "formMismatch": 0}
 
 
 @pytest.mark.parametrize(("hits", "halts"), [(15, False), (16, True)])
@@ -290,7 +306,8 @@ def test_a_small_round_split_by_an_install_feeds_each_runs_own_hash(tmp_path: Pa
     assert pool[h0]["rounds"][-1] == 29 and pool[h1]["rounds"] == [29]
     assert result.stop == "halted"
     halt = camp.state().halt
-    assert halt["templateHash"] == h0 and halt["genRound"] == 29 and halt["poolSeeds"] == 300
+    (pool,) = halt["pools"]
+    assert pool["templateHash"] == h0 and halt["genRound"] == 29 and pool["poolSeeds"] == 300
 
 
 def test_a_small_round_with_a_dropped_run_closes_and_pools_the_ingested_run(
@@ -318,7 +335,176 @@ def test_a_small_round_with_a_dropped_run_closes_and_pools_the_ingested_run(
     assert pool["seeds"] == 294 and pool["rounds"][-1] == 29 and state.pooled_rounds >= {29}
     assert pool["hits"]["bindingMismatch"] == 29             # the dropped run's seeds are not in
     (after,) = sized_rounds(camp, [10], start=30)
-    assert after.stop == "halted" and camp.state().halt["poolSeeds"] == 304
+    assert after.stop == "halted" and camp.state().halt["pools"][0]["poolSeeds"] == 304
+
+
+@pytest.mark.parametrize(("sizes", "halts"), [([10] * 28 + [19], False), ([10] * 28 + [20], True)])
+def test_a_pool_of_299_seeds_is_not_tested_and_one_of_300_is(
+        tmp_path: Path, sizes: list[int], halts: bool) -> None:
+    camp = bench(tmp_path)
+    results = sized_rounds(camp, sizes)                      # 29 rounds, a hit in each
+    assert [r.stop for r in results[:-1]] == [None] * 28
+    assert (results[-1].stop == "halted") is halts
+    (pool,) = camp.state().pool.values()
+    assert pool["seeds"] == sum(sizes)
+
+
+def test_a_hit_on_any_entry_of_a_pooled_run_counts_the_last_included(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    results = sized_rounds(camp, [10] * 30, where=(-1, 0, 4, -2, 9))
+    assert [r.stop for r in results[:29]] == [None] * 29
+    assert results[29].stop == "halted"
+    assert camp.state().halt["pools"][0]["poolHits"]["bindingMismatch"] == 30
+
+
+def two_reason_item(seed: Any) -> dict[str, Any]:
+    """A leak (screen) in an item whose condition is also the wrong one (bindingMismatch)."""
+    item = leak_item(seed)
+    item["condition"] = "some other condition"
+    return item
+
+
+def test_an_item_showing_two_reasons_counts_under_both_in_the_round_and_the_pool(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    results = sized_rounds(camp, [10] * 30, bad=two_reason_item)
+    assert results[29].stop == "halted"
+    state = camp.state()
+    assert state.round_hits[(1, "screen")] == 1 and state.round_hits[(1, "bindingMismatch")] == 1
+    (pool,) = state.halt["pools"]
+    assert pool["reasons"] == ["screen", "bindingMismatch"]
+    assert pool["poolHits"] == {"screen": 30, "bindingMismatch": 30, "formMismatch": 0}
+    assert state.halt["reasons"] == ["screen", "bindingMismatch"]
+
+
+def split_round(camp: Campaign, number: int, sizes: tuple[int, int]) -> list[Any]:
+    """Round `number` as two runs (`sizes`), seeds numbered apart from the sized rounds'."""
+    runs = []
+    for part, size in enumerate(sizes):
+        hand = [hand_seed(90000 + number * 1000 + part * 100 + n) for n in range(size)]
+        hand_round(camp, hand, gen_round=number)
+        runs.append(hand)
+    return runs
+
+
+def test_one_close_crossing_two_pools_lists_both_and_marks_every_pair_fired(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    h0_template, h1_template = prompts(), prompts(requestTemplate="r1")
+    h0 = generator_template_hash({"promptSha256": h0_template})
+    h1 = generator_template_hash({"promptSha256": h1_template})
+    sizes = [15] * 14 + [10] * 8                             # 290 seeds, 22 hits per hash
+    re_install(camp, prompt_sha256=h0_template)
+    assert all(r.stop is None for r in sized_rounds(camp, sizes))
+    re_install(camp, prompt_sha256=h1_template)
+    assert all(r.stop is None for r in sized_rounds(camp, sizes, start=101))
+    re_install(camp, prompt_sha256=h0_template)
+    first, second = split_round(camp, 200, (10, 10))
+    assert run_generation(camp, leaking({first[3].seed_id: binding_item}))[1].stop is None
+    re_install(camp, prompt_sha256=h1_template)
+    _, result = run_generation(camp, leaking({second[2].seed_id: form_item}))
+    assert result.stop == "halted"
+    state = camp.state()
+    halt = state.halt
+    assert "round" not in halt and halt["genRound"] == 200 and halt["pooled"] is True
+    assert [p["templateHash"] for p in halt["pools"]] == sorted([h0, h1])
+    by_hash = {p["templateHash"]: p for p in halt["pools"]}
+    assert by_hash[h0]["poolSeeds"] == by_hash[h1]["poolSeeds"] == 300
+    assert by_hash[h0]["poolHits"] == {"screen": 0, "bindingMismatch": 23, "formMismatch": 0}
+    assert by_hash[h1]["poolHits"] == {"screen": 0, "bindingMismatch": 22, "formMismatch": 1}
+    assert by_hash[h0]["reasons"] == by_hash[h1]["reasons"] == ["bindingMismatch"]
+    assert by_hash[h0]["poolRounds"][-1] == by_hash[h1]["poolRounds"][-1] == 200
+    assert halt["reason"] == "bindingMismatch"
+    assert state.pool_halts == {(h0, "bindingMismatch"), (h1, "bindingMismatch")}
+    text = camp.next().detail
+    assert h0[:12] in text and h1[:12] in text
+    assert h0[:12] in "\n".join(camp.status()) and h1[:12] in "\n".join(camp.status())
+    camp.resolve(decision="both templates fixed")
+    assert camp.state().halt is None and camp.state().pool_halts == state.pool_halts
+
+
+def test_a_round_and_a_pool_crossing_together_keep_their_own_reasons(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    sized_rounds(camp, [10] * 29)                            # 290 seeds, 29 binding hits
+    hand = [hand_seed(n, form="empty") for n in range(1, 11)]
+    hand_round(camp, hand, gen_round=30)
+    bad = {hand[0].seed_id: form_item, hand[6].seed_id: form_item}
+    _, result = run_generation(camp, leaking(bad))
+    assert result.stop == "halted"
+    state = camp.state()
+    halt = state.halt
+    assert halt["round"] == {"genRound": 30, "reasons": ["formMismatch"]}
+    (pool,) = halt["pools"]
+    assert pool["reasons"] == ["bindingMismatch"] and pool["poolSeeds"] == 300
+    # formMismatch sorts after bindingMismatch, yet the round's reason leads
+    assert halt["reason"] == "formMismatch"
+    assert halt["reasons"] == ["bindingMismatch", "formMismatch"]
+    assert halt["genRound"] == 30
+    assert state.template_halts == {(30, "formMismatch")}
+    assert state.pool_halts == {(pool["templateHash"], "bindingMismatch")}
+
+
+def test_a_dropped_run_that_closes_a_round_raises_the_pooled_halt_through_ingest(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    sized_rounds(camp, [10] * 28)                            # 280 seeds, 28 hits
+    first = [hand_seed(9000 + n) for n in range(20)]
+    second = [hand_seed(9100 + n) for n in range(4)]
+    hand_round(camp, first, gen_round=29)
+    hand_round(camp, second, gen_round=29)
+    assert run_generation(camp, obedient_item)[1].stop is None
+
+    def broken(seed: Any) -> dict[str, Any]:
+        item = obedient_item(seed)
+        del item["condition"]
+        return item
+
+    stops = [run_generation(camp, broken)[1].stop for _ in range(3)]
+    assert stops == [None, None, "halted"]
+    halt = camp.state().halt
+    assert halt["batch"] == "bat_0030" and halt["pools"][0]["poolSeeds"] == 300
+
+
+def test_skip_batch_of_a_halted_run_closes_the_round_and_pools(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    sized_rounds(camp, [10] * 28)
+    first = [hand_seed(9000 + n) for n in range(20)]
+    second = [hand_seed(9100 + n) for n in range(4)]
+    hand_round(camp, first, gen_round=29)
+    hand_round(camp, second, gen_round=29)
+    run_generation(camp, obedient_item)
+    run_batch(camp, "refusal")                               # the second run: a safeguardStop
+    assert camp.state().halt["reason"] == "safeguardStop"
+    camp.resolve(decision="skip the flagged run", skip_batch=True)
+    state = camp.state()
+    assert state.batches["bat_0030"].dropped == "safeguardSkipped"
+    assert 29 in state.pooled_rounds
+    (pool,) = state.halt["pools"]
+    assert pool["poolSeeds"] == 300 and pool["reasons"] == ["bindingMismatch"]
+    camp.resolve(decision="the template is fixed")
+    assert camp.state().halt is None and camp.state().pool_halts == state.pool_halts
+
+
+def test_driver_resolve_prints_the_halt_it_clears_and_the_one_its_drop_raises(
+        tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    from decisionmodels import driver
+    camp = bench(tmp_path)
+    sized_rounds(camp, [10] * 28)
+    hand_round(camp, [hand_seed(9000 + n) for n in range(20)], gen_round=29)
+    hand_round(camp, [hand_seed(9100 + n) for n in range(4)], gen_round=29)
+    run_generation(camp, obedient_item)
+    run_batch(camp, "refusal")                               # the second run: a safeguardStop
+    capsys.readouterr()
+    root = str(camp.root)
+    assert driver.main(["resolve", "--root", root, "--decision", "skip", "--skip-batch"]) == 0
+    cleared, raised = capsys.readouterr().out.splitlines()
+    assert cleared.startswith("cleared: safeguardStop") and "bat_0030" in cleared
+    assert raised.startswith("HALTED: ") and "pool " in raised and "300 seeds" in raised
+    assert "resumes" not in raised and raised.endswith("clear with `driver resolve`")
+    assert driver.main(["resolve", "--root", root, "--decision", "fixed"]) == 0
+    cleared, resumes = capsys.readouterr().out.splitlines()
+    assert cleared.startswith("cleared: ") and "pool " in cleared
+    assert resumes == "resolved; the next `driver run` resumes"
 
 
 @pytest.mark.parametrize("ingested", [False, True])
@@ -750,7 +936,7 @@ def test_a_regeneration_run_dropped_by_the_retry_cap_is_not_requeued(tmp_path: P
     regen = [b for b in state.batches.values() if b.extra.get("generation") == "regen"]
     assert [b.dropped for b in regen] == ["retryCapExceeded"]
     assert state.awaiting_regeneration() == []
-    assert camp.next() == Stop("done", "nothing is pending")
+    assert votes_next(camp).kind == "label"          # the dropped seed is settled: the rest vote
 
 
 def test_next_names_the_halt_when_it_reconciles_a_run_that_halts(tmp_path: Path) -> None:
@@ -767,4 +953,5 @@ def test_next_names_the_halt_when_it_reconciles_a_run_that_halts(tmp_path: Path)
     write_answer(camp, action.opaque,
                  "".join(json.dumps(line) + "\n" for line in lines).encode("utf-8"))
     stop = camp.next()                                          # the crash-recovery ingest
-    assert stop == Stop("halted", "bindingMismatch (template) on bat_0001")
+    assert stop == Stop(
+        "halted", "bindingMismatch (template) on bat_0001 [round 1: bindingMismatch]")

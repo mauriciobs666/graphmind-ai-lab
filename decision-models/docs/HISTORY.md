@@ -2,6 +2,86 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-05 — typed-decision-models U5.8b fix round — half-queued votes, label request, restart, resolve
+
+**What:** impl review Pass 22 (P22-M1, M2, m1 to m3), plan6 v1.21 §3.7 and §3.8 "Votes".
+
+- `campaign.py`: `State.next_vote` treats a recorded vote as incomplete until its live batches hold
+  every `vote-start` item (less those of dropped label batches), and `queue_votes` queues the
+  missing items into the same vote in the recorded order (P22-M1; the votes half of
+  `unbatched_seeds`). `_restart_labelling` retires every `label` batch, not only vote batches
+  (P22-m1; this supersedes the "smoke fixture's label batch stays" line of the entry below).
+  `Campaign.resolve` returns the lines `driver resolve` prints: the cleared halt and the halt it
+  raised, else the "resumes" line (P22-m2).
+- Tests: `tests/test_votes.py` (a kill after the 1st, 2nd and 3rd label `queue_batch` of 8 items
+  at cap 3; the recovered order and cap; a vote in flight in one round holds back another; the
+  request shows each key its own item in all three votes; a plain label batch retired by a
+  re-pin; a two-vote item is no `voteTie`; `vote_all` stops at 60 batches instead of looping),
+  `tests/test_generation_rounds.py` (`driver resolve` output), `tests/test_install.py` (queues a
+  fresh label batch after its repin, since the smoke batch is now retired). Twelve scratch-copy
+  mutants red (no held check, tail never queued, first item shown to every key, vote-only restart,
+  two-vote ties, either in-flight guard removed, constant `genRound` or `vote`, three `resolve`
+  outputs). Both in-flight guards stay: they differ across rounds, and a test now reaches each.
+
+## 2026-11-05 — typed-decision-models U5.8b — votes: majority of three, `labelVotes`, `voteTie`
+
+**What:** plan4 §3.6 "Votes" and its §5 row U5.8 (Votes part), plan5 §3.2, plan6 v1.21 §3.7 and
+§3.8 "Votes". Not built: the message-type 250-item tranche (U5.9), the pilot cap/screen vote
+(U5.8c).
+
+- `labels.py` (new, pure): `vote_key` (`"true"`/`"false"` for a predicate, the label for a choice),
+  `label_votes` (the whole answer space, zeros included, summing to 3), `majority` (two of three,
+  or `None`: three distinct choice labels).
+- `campaign.py`: `next` calls `queue_votes` when nothing is pending. A round votes once every seed
+  of its `genRound` is accepted, dropped on a third hit or in a dropped generation batch
+  (`State.round_settled`); only that round's accepted items vote. Each (round, vote) appends
+  `vote-start {genRound, vote, rngSeed, items}` (the seed from `fresh_rng_seed()`, so it joins
+  `held_rng_seeds`; the items are shuffled on it) and queues label batches of at most
+  `labelBatchCap`, with `genRound` and `vote` in their `queued` extras; `prepare` cuts what does
+  not fit in `P_MAX` pages into the next batch of the same vote. Votes run vote-major, one request
+  at a time, and vote *v+1* starts when every batch of vote *v* is ingested or dropped. A `votes`
+  event (item → answer) is appended before the run's `outcome` and applied only at the ingested
+  one. A dropped label batch (`retryCapExceeded` or `--skip-batch`) leaves its items out of the
+  round's later votes and is counted once by `State.dropped()`. `State.label_votes`,
+  `vote_ties` (the `voteTie` drops) and `reshuffle_seeds` (the pilot report's reshuffle seeds,
+  for U5.8c) read the folded votes. `labelling-restart` clears the votes and retires the vote
+  batches (the smoke fixture's label batch, which holds no vote, stays; items and held seeds kept;
+  votes repeat from vote 1); `generation-restart` clears
+  the votes with the items. `status` prints the `voteTie` count.
+- Event names (the plan leaves them to the coder): `vote-start`, `votes`.
+- Tests: `tests/test_votes.py` (new; 19 tests). Twenty-four scratch-copy mutants (a plain majority
+  without `voteTie`, no zeros, a boolean key, one shuffle reused, an unheld seed, a dropped or
+  skipped batch's items kept, restart variants, the answer map and the vote number, settled
+  always, no cap chunking, all rounds' items, an overflow that loses its vote, votes applied at
+  the event, the smoke batch recording, no ties, two votes, vote order) are red; two are
+  equivalent (a majority of `>= half` over exactly three votes; the vote-start guard that
+  `queue_votes` already makes unreachable). Suite 1358 → 1377 passed, 2 xfailed.
+  `tests/test_generation.py`'s `drain` now stops when no
+  generation is left (before `next` would queue a settled round's votes), and four assertions that
+  `next` was `Stop("done")` after generation now expect the round's first vote.
+
+## 2026-11-05 — typed-decision-models U5.8a4 — halt lists every pool, joiner = non-word run
+
+**What:** impl review Pass 21 (P21-m1 to m3, n1), plan6 v1.21 §3.8 and its §5 row "U5.8a, U5.9",
+note v1.18 §Q1.2 "Hits".
+
+- `campaign.py`: the `template` halt record has a `round` part (`genRound`, `reasons`; absent if no
+  per-round pair crossed) and a `pools` list (`templateHash`, `reasons`, `poolRounds`, `poolSeeds`,
+  `poolHits`, in hash order); every listed pair is marked fired. `reason` is the round's first
+  reason when `round` is present, else the first pool's; `genRound` is the closing round's.
+  `status`, `next` and `resolve` print every entry (`_halt_text`). A pooled halt raised by a drop
+  (`retryCapExceeded`) now reaches `IngestResult.stop` as `halted` (P21-n1).
+- `screen.py`: rule (a)'s joiner is any run of non-word characters (`(clear; difficulty)` and
+  `(clear - advance)` hit) and rule (d) is deleted, since (a) covers it. A bracket like
+  `[intended = yes]` now reports `meta:yes` (via (a)), not `meta:intended`.
+- Tests: `tests/test_generation_rounds.py` (a close crossing two pools, a per-round and a pooled
+  crossing in one close, pools of 299 and 300 seeds, a hit at a run's last, first and middle entry,
+  an item with two reasons, the `--skip-batch` close, the drop-raised halt through ingest),
+  `tests/test_screen.py`. Eighteen mutants (halt-record parts, the pool order and firing, the
+  reason, `genRound`, the drop and `--skip-batch` closes, the 299 and 301 floors, a first or last
+  entry, a second reason, the printed pools, the joiner variants and an empty bracket) each redden
+  them, in a scratch copy. Suite 1346 → 1358 passed, 2 xfailed.
+
 ## 2026-11-05 — typed-decision-models U5.8a3 — pool per run hash at 5%, extend after issue refused
 
 **What:** impl review Pass 20 (P20-m1 to m3, the rule (a) ruling), plan6 v1.20 §3.8 and its §5 row

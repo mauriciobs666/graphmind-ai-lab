@@ -80,10 +80,26 @@ def padded(hand: Sequence[Seed], total: int = 25, base: int = 900) -> list[Seed]
     return [*hand, *(hand_seed(base + n) for n in range(total - len(hand)))]
 
 
+def generation_left(camp: Campaign) -> bool:
+    """Whether a generation batch is pending, a hit awaits regeneration or a seed has no batch."""
+    state = camp.state()
+    return bool(state.awaiting_regeneration() or state.unbatched_seeds() or any(
+        b.kind == "generate" and b.state == "pending" for b in state.batches.values()))
+
+
+def votes_next(camp: Campaign) -> campaign.Serve:
+    """The settled round's first vote, which `next` serves once no generation is left."""
+    action = camp.next()
+    assert isinstance(action, campaign.Serve) and action.kind == "label", action
+    return action
+
+
 def drain(camp: Campaign, respond: Callable[[Seed], Any]) -> int:
-    """Run every batch `next` serves (regeneration included) until it stops; returns the count."""
+    """Run every generation batch `next` serves (regeneration included) until none is left, and
+    stop there, before `next` would queue a settled round's votes (`test_votes.py`); returns the
+    count."""
     runs = 0
-    while not isinstance(camp.next(), Stop):
+    while generation_left(camp) and not isinstance(camp.next(), Stop):
         run_generation(camp, respond)
         runs += 1
     return runs
@@ -212,7 +228,7 @@ def test_every_item_records_its_runs_gen_run_id_and_its_seeds_gen_round(tmp_path
     for _ in range(3):
         run_generation(camp, obedient_item)
     state = camp.state()
-    assert camp.next() == Stop("done", "nothing is pending")
+    votes_next(camp)
     run_ids = {b: state.batches[b].gen_run_id for b in (*one, *two)}
     assert len(set(run_ids.values())) == 3
     assert len(state.items) == 37
@@ -292,7 +308,7 @@ def test_a_regenerated_item_keeps_its_seeds_gen_round_and_takes_the_new_gen_run_
     assert a["genRunId"] == b["genRunId"] == new_run and new_run not in old.values()
     assert state.items[one[0].seed_id]["genRunId"] == old[first]
     assert state.items[two[0].seed_id]["genRunId"] == old[second]
-    assert len(state.items) == 50 and camp.next() == Stop("done", "nothing is pending")
+    assert len(state.items) == 50 and votes_next(camp).kind == "label"
 
 
 def test_the_third_hit_drops_the_seed_and_counts_it_under_screen_hits(tmp_path: Path) -> None:
@@ -306,7 +322,7 @@ def test_the_third_hit_drops_the_seed_and_counts_it_under_screen_hits(tmp_path: 
     assert [h["firstPass"] for h in state.hits[target.seed_id]] == [True, False, False]
     assert target.seed_id not in state.items and set(state.dropped_seeds) == {target.seed_id}
     assert state.generation_drops() == {"screenHits": 1, "formMismatch": {}, "bindingMismatch": 0}
-    assert camp.next() == Stop("done", "nothing is pending")
+    votes_next(camp)
     assert len(events_of(camp, "screen-hit")) == 3
     assert any("screenHits" in line for line in camp.status())
 
@@ -465,7 +481,8 @@ def test_four_percent_screen_plus_form_and_four_percent_form_only_halt_on_form_n
     assert halt["reason"] == "formMismatch" and halt["reasons"] == ["formMismatch"]
     assert halt["voidClass"] == "template" and halt["genRound"] == 1 and halt["pooled"] is False
     assert camp.state().round_hits == {(1, "screen"): 2, (1, "formMismatch"): 4}
-    assert camp.next() == Stop("halted", "formMismatch (template) on bat_0002")
+    assert camp.next() == Stop(
+        "halted", "formMismatch (template) on bat_0002 [round 1: formMismatch]")
     assert any("HALTED" in line for line in camp.status())
 
 

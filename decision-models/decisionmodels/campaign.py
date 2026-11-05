@@ -61,6 +61,21 @@ its `issued` (`Attempt`), which the audit and the hash read. A `generation-resta
 re-pin) resets the folded generation view and retires every batch (`_restart_generation`). A
 batch queued by plain `queue_batch` carries no `generation` and is not checked.
 
+**Votes** (plan4 §3.6, plan6 §3.8; `labels.py`). A round's accepted items vote once every seed of
+its `genRound` is accepted or dropped (`State.round_settled`) and no halt is open. `next`, when
+nothing is pending, calls `queue_votes`: for the first such round with votes left it starts the
+next vote with a `vote-start {genRound, vote, rngSeed, items}` event (a fresh RNG seed, held; the
+items reshuffled on it) and queues the items as label batches of at most `labelBatchCap`
+(`prepare` cuts what does not fit in `P_MAX` pages into the next batch of that vote). Votes run
+vote-major: vote *v+1* starts when every batch of vote *v* is ingested or dropped. A `votes`
+event, appended before the run's `outcome` and applied only at its ingested `outcome`, holds each
+item's answer. A batch dropped (`retryCapExceeded` or `--skip-batch`) takes its items out of the
+round's later votes. `State.label_votes` is an item's `labelVotes` once it has three votes, and
+`State.vote_ties` the choice items with three distinct labels (`voteTie`). A `labelling-restart`
+clears the votes and retires every label batch; the items stay. A batch queued without `vote`
+(the smoke fixture's) records no votes. A vote a crash left half-queued is incomplete until its
+live batches hold every `vote-start` item; `queue_votes` queues the rest into it.
+
 **Counting.** `earlier_no_attempt` is the batch's earlier `neverSpawned`/`incomplete` outcomes,
 leaving out attempts an `interrupted {batch}` event names (plan6 §3.2; the audit's own flag exempts
 only the current one). The `launchFailed` clock reads `issued` times: earlier `launchFailed`/
@@ -98,7 +113,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import audit, exchange, screen
+from . import audit, exchange, labels, screen
 from .ingest import AlreadyIngested, AnswerRefused, Ingested, ingest_answer_files
 from .points import ROLES, input_field_errors, load_point
 from .seeds import Seed, SeedDraw, draw_seeds, round_one_count
@@ -228,6 +243,10 @@ class State:
     pool_halts: set[tuple[str, str]] = field(default_factory=set)
     #: A first-pass run's generator-template hash at its issue, set when it ingests.
     run_hash: dict[str, str] = field(default_factory=dict)
+    #: Votes (plan4 §3.6, plan6 §3.8): each item's answers by vote number, and each (`genRound`,
+    #: vote)'s recorded `vote-start` (its reshuffle RNG seed and item order), in start order.
+    votes: dict[str, dict[int, Any]] = field(default_factory=dict)
+    vote_starts: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     staged: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def generation_drops(self) -> dict[str, Any]:
@@ -276,6 +295,67 @@ class State:
         wanted = {seed for r in self.rounds if r["genRound"] == gen_round for seed in r["seeds"]}
         return bool(runs) and wanted <= held and all(
             batch.state in ("ingested", "dropped") for batch in runs)
+
+    def round_settled(self, gen_round: int) -> bool:
+        """plan6 §3.8 "Votes": every seed drawn under `gen_round` is accepted, dropped on a third
+        hit, or in a generation batch that dropped; none awaits regeneration."""
+        wanted = {seed for r in self.rounds if r["genRound"] == gen_round for seed in r["seeds"]}
+        given_up = {seed for batch in self.batches.values()
+                    if batch.kind == "generate" and batch.state == "dropped"
+                    for seed in batch.entries}
+        return bool(wanted) and all(
+            seed in self.items or seed in self.dropped_seeds or seed in given_up
+            for seed in wanted)
+
+    def vote_batches(self, gen_round: int, vote: int) -> list[Batch]:
+        """The live label batches of (`gen_round`, `vote`), cut overflow included."""
+        return [batch for batch in self.batches.values()
+                if batch.kind == "label" and batch.state != "retired"
+                and batch.extra.get("genRound") == gen_round and batch.extra.get("vote") == vote]
+
+    def next_vote(self, gen_round: int) -> tuple[int, list[str], bool] | None:
+        """The vote `gen_round` starts or finishes queuing next, as (vote, the items still to be
+        queued into it, whether its `vote-start` is already recorded), or `None` when the round
+        is not settled, a vote is still running, or all three are done. A recorded vote is
+        incomplete until its live batches hold every item its `vote-start` names (a crash between
+        its `queued` events leaves a tail). An item whose label batch dropped is out."""
+        if not self.round_settled(gen_round):
+            return None
+        out = {seed for batch in self.batches.values()
+               if batch.kind == "label" and batch.state == "dropped" for seed in batch.entries}
+        for vote in range(1, labels.VOTES_PER_ITEM + 1):
+            batches = self.vote_batches(gen_round, vote)
+            if any(batch.state not in ("ingested", "dropped") for batch in batches):
+                return None
+            recorded = (gen_round, vote) in self.vote_starts
+            items = (self.vote_starts[(gen_round, vote)]["items"] if recorded else
+                     sorted(seed for seed, rec in self.items.items()
+                            if rec["genRound"] == gen_round))
+            held = {seed for batch in batches for seed in batch.entries}
+            todo = [seed for seed in items if seed not in out and seed not in held]
+            if todo or not batches:
+                return vote, todo, recorded
+        return None
+
+    def label_votes(self, seed_id: str) -> dict[str, int] | None:
+        """`labelVotes` of an item with all three votes in, else `None`."""
+        answers = self.votes.get(seed_id, {})
+        if len(answers) < labels.VOTES_PER_ITEM:
+            return None
+        return labels.label_votes(load_point(self.init["point"]).expected,
+                                  [answers[v] for v in sorted(answers)])
+
+    def vote_ties(self) -> list[str]:
+        """The items with three votes and no majority (`voteTie`): a choice item with three
+        distinct labels."""
+        expected = load_point(self.init["point"]).expected
+        return [seed for seed, answers in self.votes.items()
+                if len(answers) >= labels.VOTES_PER_ITEM
+                and labels.majority(expected, [answers[v] for v in sorted(answers)]) is None]
+
+    def reshuffle_seeds(self) -> list[int]:
+        """The RNG seeds of the votes' reshuffles, in start order (the pilot report lists them)."""
+        return [start["rngSeed"] for start in self.vote_starts.values()]
 
     def unbatched_seeds(self) -> list[str]:
         """The `round-start` seeds no live generation batch holds (a crash between the round and
@@ -329,6 +409,14 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                 state.seed_round[seed_id] = event["genRound"]
             state.rounds.append({"genRound": event["genRound"], "seeds": list(event["seeds"]),
                                  "designStratum": event.get("designStratum")})
+        elif kind == "vote-start":
+            state.held_rng_seeds.add(event["rngSeed"])
+            state.vote_starts[(event["genRound"], event["vote"])] = {
+                "rngSeed": event["rngSeed"], "items": list(event["items"])}
+        elif kind == "votes":
+            # Fresh, as for `generated`: a crashed ingest re-run replaces its earlier record.
+            state.staged[event["opaque"]] = {"votes": dict(event["answers"]),
+                                             "vote": event["vote"]}
         elif kind == "generated":
             # A fresh entry: a crashed ingest re-run may screen differently, and its earlier hits
             # must not survive beside the new items.
@@ -444,21 +532,33 @@ def _close_rounds(state: State, batch: Batch) -> tuple[int | None, list[tuple[st
 def _raise_template_halt(state: State, batch: Batch, digest: str,
                          rounds: list[tuple[int, str]], closed: int | None,
                          pooled: list[tuple[str, str]]) -> None:
-    """The `template` halt for the per-round pairs and pooled pairs a run or a drop newly crossed;
-    a pooled halt names the closing round and the first pool's counts."""
+    """The one `template` halt for the pairs a run or a drop newly crossed (plan6 §3.8). Its
+    `round` part holds the per-round pairs (`genRound`, `reasons`), absent if none; its `pools`
+    part one entry per pool that crossed, in hash order (`templateHash`, `reasons`, `poolRounds`,
+    `poolSeeds`, `poolHits`). Every pair is marked fired. `reason` is the first of the round's
+    reasons, else the first pool's; `genRound` is the closing round's."""
     if not (rounds or pooled) or state.halt is not None:
         return
     state.template_halts.update(rounds)
     state.pool_halts.update(pooled)
     reasons = [r for r in screen.REASONS if r in {x[1] for x in rounds + pooled}]
-    state.halt = {"event": "template-halt", "batch": batch.batch_id, "reason": reasons[0],
-                  "reasons": reasons, "voidClass": "template",
-                  "genRound": rounds[0][0] if rounds else closed,
-                  "pooled": bool(pooled), "templateHash": pooled[0][0] if pooled else digest}
-    if pooled:
-        pool = state.pool[pooled[0][0]]
-        state.halt.update(poolRounds=list(pool["rounds"]), poolSeeds=pool["seeds"],
-                          poolHits=dict(pool["hits"]))
+    state.halt = {"event": "template-halt", "batch": batch.batch_id, "voidClass": "template",
+                  "genRound": rounds[0][0] if rounds else closed, "reasons": reasons,
+                  "pooled": bool(pooled)}
+    round_reasons = [r for r in screen.REASONS if r in {x[1] for x in rounds}]
+    if rounds:
+        state.halt["round"] = {"genRound": rounds[0][0], "reasons": round_reasons}
+    pools = []
+    for pool_digest in sorted({d for d, _ in pooled}):
+        pool = state.pool[pool_digest]
+        pools.append({"templateHash": pool_digest,
+                      "reasons": [r for r in screen.REASONS if (pool_digest, r) in pooled],
+                      "poolRounds": list(pool["rounds"]), "poolSeeds": pool["seeds"],
+                      "poolHits": dict(pool["hits"])})
+    if pools:
+        state.halt["pools"] = pools
+    state.halt["reason"] = round_reasons[0] if rounds else pools[0]["reasons"][0]
+    state.halt["templateHash"] = pools[0]["templateHash"] if pools else digest
 
 
 def _apply_generation(state: State, attempt: Attempt, batch: Batch,
@@ -505,6 +605,8 @@ def _restart_generation(state: State) -> None:
     state.pool_halts.clear()
     state.pooled_rounds.clear()
     state.run_hash.clear()
+    state.votes.clear()
+    state.vote_starts.clear()
     state.rounds.clear()
     state.seed_round.clear()
     state.staged.clear()
@@ -529,7 +631,10 @@ def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
         return
     if outcome == "ingested":
         batch.state = "ingested"
-        if staged is not None:
+        if staged is not None and "votes" in staged:
+            for seed_id, answer in staged["votes"].items():
+                state.votes.setdefault(seed_id, {})[staged["vote"]] = answer
+        elif staged is not None:
             _apply_generation(state, attempt, batch, staged)
     elif outcome == "void":
         batch.counted += 1
@@ -547,6 +652,18 @@ def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
         raise ValueError(f"unknown outcome {outcome!r} in the ledger")
 
 
+def _restart_labelling(state: State) -> None:
+    """plan6 §3.8 "Votes": a labeler re-pin clears the folded votes and retires every label batch
+    (never issued again, neither dropped nor ingested), vote-carrying or not. The items, the
+    ledger and the held RNG seeds, reshuffle seeds included, stay, so the votes repeat from
+    vote 1 on fresh seeds."""
+    state.votes.clear()
+    state.vote_starts.clear()
+    for batch in state.batches.values():
+        if batch.kind == "label":
+            batch.state, batch.dropped = "retired", None
+
+
 def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
     halted = state.halt
     state.halt = None
@@ -559,6 +676,8 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
         batch.state = "pending"
     if event["event"] == "generation-restart":
         _restart_generation(state)
+    if event["event"] == "labelling-restart":
+        _restart_labelling(state)
     if event["event"] in ("generation-restart", "labelling-restart"):
         state.pins[event["role"]] = event["model"]
     if event.get("action") == "repin-instructions":
@@ -1001,6 +1120,33 @@ class Campaign:
         run's `genRunId`."""
         return self._queue_runs(self.state().awaiting_regeneration(), "regen")
 
+    def queue_votes(self) -> list[str]:
+        """plan6 §3.8 "Votes": start the next vote of the first settled round that has one (`[]`
+        when none can start, or a vote is still running). The items are reshuffled on a fresh RNG
+        seed that `vote-start` records (it joins the held set, plan5 §3.2), then queued in
+        batches of at most `labelBatchCap`. A vote a crash left half-queued gets its missing items
+        queued into it, in the recorded order (the generation half's `unbatched_seeds`)."""
+        state = self.state()
+        if any(batch.kind == "label" and batch.extra.get("vote") is not None
+               and batch.state not in ("ingested", "dropped", "retired")
+               for batch in state.batches.values()):
+            return []
+        for gen_round in sorted({r["genRound"] for r in state.rounds}):
+            step = state.next_vote(gen_round)
+            if step is None or not step[1]:
+                continue
+            vote, order, recorded = step
+            if not recorded:
+                rng_seed = self.fresh_rng_seed()
+                random.Random(f"label-votes|{rng_seed}").shuffle(order)
+                self._append({"event": "vote-start", "genRound": gen_round, "vote": vote,
+                              "rngSeed": rng_seed, "items": order})
+            cap = state.init["labelBatchCap"]
+            return [self.queue_batch("label", order[start:start + cap],
+                                     genRound=gen_round, vote=vote)
+                    for start in range(0, len(order), cap)]
+        return []
+
     def _queue_unbatched(self) -> list[str]:
         """plan6 §3.8 "A half-written round": queue the `round-start` seeds no batch holds, in
         the same balanced cut, as first-pass runs."""
@@ -1049,6 +1195,9 @@ class Campaign:
         if not pending and self.queue_regeneration():
             state = self.state()
             pending = [b for b in state.batches.values() if b.state == "pending"]
+        if not pending and self.queue_votes():
+            state = self.state()
+            pending = [b for b in state.batches.values() if b.state == "pending"]
         if not pending:
             return Stop("done", "nothing is pending")
         return self.prepare(pending[0].batch_id)
@@ -1065,7 +1214,9 @@ class Campaign:
         if batch.kind == "label":
             items = self._items()
             built = exchange.build_label_request(
-                definition, [(ref, items[ref]) for ref in batch.entries],
+                definition,
+                [(ref, items[ref] if ref in items else state.items[ref]["item"])
+                 for ref in batch.entries],
                 exchange_dir=self.exchange_dir, cap=state.init["labelBatchCap"],
                 held_keys=state.held_keys)
             kept = list(built.keys.values())
@@ -1138,18 +1289,29 @@ class Campaign:
         if (verdict.status == "ingested" and isinstance(answer, Ingested)
                 and batch.state != "retired"):
             self._record_generation(state, batch, attempt, answer.answers)
+            self._record_votes(batch, attempt, answer.answers)
         recorded = self._append(event)
         self._move_to_store(opaque, parts)
         stop = {"halted": "halted", "usage-stop": "usage-stop"}.get(event["outcome"])
         if batch.state == "retired":      # recorded only: it must not stop the campaign
             stop = None
-        after = (self.state().halt if event["outcome"] == "ingested"
+        after = (self.state().halt if event["outcome"] in ("ingested", "void")
                  and batch.state != "retired" else None)
         if after is not None and after.get("voidClass") == "template" and state.halt is None:
             stop = "halted"
         if stop == "usage-stop":
             self.usage_stop = Stop(stop, event.get("reason", ""))
         return IngestResult(opaque, batch.batch_id, recorded, stop)
+
+    def _record_votes(self, batch: Batch, attempt: Attempt, answers: Mapping[str, Any]) -> None:
+        """plan6 §3.8 "Votes", at label ingest and before the run's `outcome` commits it: one
+        `votes` event holds each item's answer for the batch's vote. A batch queued without a
+        `vote` (the smoke fixture's) records nothing."""
+        if batch.kind != "label" or batch.extra.get("vote") is None:
+            return
+        self._append({"event": "votes", "opaque": attempt.opaque, "batch": batch.batch_id,
+                      "genRound": batch.extra["genRound"], "vote": batch.extra["vote"],
+                      "answers": {ref: answers[key] for key, ref in attempt.keys.items()}})
 
     def _record_generation(self, state: State, batch: Batch, attempt: Attempt,
                            answers: Mapping[str, Any]) -> None:
@@ -1340,10 +1502,12 @@ class Campaign:
 
     def resolve(self, *, decision: str, skip_batch: bool = False,
                 repin_instructions: bool = False,
-                repin_model: tuple[str, str] | None = None) -> None:
+                repin_model: tuple[str, str] | None = None) -> list[str]:
         """`driver resolve` (plan4 §3.3 "Halt", plan6 §3.5): clear the halt with one recorded
         decision. Retry re-issues the halted batch under a new name; `--skip-batch` drops it
-        into `safeguardSkipped`; a re-pin records its new model or instructions set."""
+        into `safeguardSkipped`; a re-pin records its new model or instructions set. Returns the
+        lines it prints (plan6 §3.8): the halt it cleared and, when the drop closed a round or
+        pool, the halt that raised, else the line that `driver run` resumes."""
         if not decision.strip():
             raise CampaignRefused("--decision needs a text")
         if skip_batch + repin_instructions + (repin_model is not None) > 1:
@@ -1372,6 +1536,10 @@ class Campaign:
             else:
                 event["action"] = "retry"
             self._append(event)
+            raised = self.state().halt
+        return [f"cleared: {_halt_text(halt)}",
+                f"HALTED: {_halt_text(raised)}; clear with `driver resolve`" if raised
+                else "resolved; the next `driver run` resumes"]
 
     @staticmethod
     def _repin_model(state: State, role: str, model: str) -> dict[str, Any]:
@@ -1414,6 +1582,8 @@ class Campaign:
         dropped = {k: v for k, v in state.dropped().items() if any(v.values())}
         if dropped:
             lines.append(f"dropped: {json.dumps(dropped, sort_keys=True)}")
+        if state.vote_ties():
+            lines.append(f"voteTie (three different labels): {len(state.vote_ties())} items")
         if state.dropped_seeds:
             lines.append("seeds dropped on a third hit: "
                          + json.dumps(state.generation_drops(), sort_keys=True))
@@ -1421,4 +1591,13 @@ class Campaign:
 
 
 def _halt_text(halt: Mapping[str, Any]) -> str:
-    return f"{halt.get('reason')} ({halt.get('voidClass')}) on {halt['batch']}"
+    """One line; a template halt lists its round part and every pool that crossed (plan6 §3.8)."""
+    text = f"{halt.get('reason')} ({halt.get('voidClass')}) on {halt['batch']}"
+    parts = []
+    if "round" in halt:
+        parts.append(f"round {halt['round']['genRound']}: " + ", ".join(halt["round"]["reasons"]))
+    for pool in halt.get("pools", ()):
+        hits = ", ".join(f"{reason} {pool['poolHits'][reason]}" for reason in pool["reasons"])
+        parts.append(f"pool {pool['templateHash'][:12]} ({pool['poolSeeds']} seeds, "
+                     f"rounds {pool['poolRounds']}): {', '.join(pool['reasons'])} [{hits}]")
+    return text + (" [" + "; ".join(parts) + "]" if parts else "")
