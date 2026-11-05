@@ -3139,6 +3139,151 @@ punctuation (run).**
 - A Kiro-agent key outside its row (`toolsSettings`, `includeMcpJson`) has no stated fallback. Is
   it "any other JSON", or out of scope? `includeMcpJson` is a binding in effect.
 
+### Pass 3 (2026-11-05) — EP v1.3 delta gate (S47 waits on "EP v1.3 accepted")
+
+**Scope.** `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.3 (committed `8a8038aa`), its
+delta only: §5.2.1 (HA-1..HA-5, controls, tie readings), §10.4 (status predicate, cap, cache rule),
+§10.6, the CAP line of §14/S47 and §12.3. Baseline: obligations C5 and C7 (C9's tie readings too) of
+`docs/plans/connected-code-graph-answer-spec.md` "Carry-over", and its §3, §4.1, §5.2, §5.3.
+Read for fit: `-eval-protocol2-ml.md` v1.4 header and pins, `-p0-graph.md` §1.1/§3.2, `-graph.md` §3.2
+and §6.2 item 6, `cpg/ccg/store/ddl_v1.cypher`, `cpg/spikes/vertical-slice/load.py`. Root `REVIEW.md`
+applied; no component `REVIEW.md` touched. No note edits, no git, no FalkorDB writes.
+
+CPG: not applicable — a method note with no code under review (the graph-model check in (a) was made against the DDL and plan text; `ccg_p0slice` is not loaded, so no live edge query was possible).
+
+**Verdict: needs changes.** The delta discharges the *list* of C5 and C7 and nothing is reversed;
+but four of its checks as written cannot pass or cannot fail (M-1..M-4), and CAP has no
+pre-registration home (M-5). All are one-round, in-document fixes. S47's own inputs (§7.4–§9,
+§10.2–§10.3, §13.6) are untouched by them except where CAP is recorded (M-5), so the revision is cheap.
+
+**Discharge of the obligations (read, not inferred).**
+- C5: stamp/verdict log (HA-4) ✓; request echo (HA-3) ✓; chain replay + fabricated-chain control (HA-1) ✓ in form
+  (see M-1); subject re-read by id, mismatch = harness error (HA-2) ✓; `mask_identifier` both sides
+  (HA-5) ✓; `cacheHit == false` per repeat (§10.4) ✓ in form, empty cache is insufficient (M-3).
+- C7: cap, `|options| > CAP` not understood, extras per item ✓ in form; registration home missing (M-5).
+- C9 tie readings (§5.2.1 last bullet) ✓. `EMPTY_VERDICT_LOG_HASH` run: `ids.tuple_id(["verdictLog"])` =
+  `c482b1cf54631b37eb4572dc86a68fb1`, equal to the answer spec's literal. `ceil(0.92×24) = 23` run, as §10.5 states.
+
+**M-1 (major; HA-1 cannot pass a correct name-matched hop; static, verified by reading).**
+HA-1 requires, per hop, "a stored edge of type `edgeType` joins hop *i*-1 to hop *i*". For
+`CALLS_NAME` there is none: the store has `(:CallSite)-[:CALLS_NAME]->(:Name)-[:RESOLVES_TO]->(:Symbol)`
+(`load.py:98`, `-graph.md:344`), `-graph.md:641` makes the pair "one compound hop" with `Name` never a hop,
+and answer spec §5.2's `edgeType` list has `CALLS_NAME` but not `RESOLVES_TO`, and its hop kinds have no `Name`.
+Every `possible` item reached by name-match (`name-match`, `resolution-unverified`) would score a miss under
+HA-1 — a correct answer failing the gate. The note's escape ("a derived edge is a harness error, reviewed with
+`graph-dba` before the first gate") defers it to a review that may not catch the case, and a harness error
+fails the gate as well. The same holds for `LAUNCHES` (target `File|Unit`), `DEFINED_BY` (`SchemaEntry`),
+`DEPENDS_ON`/`FROM_DEP`: no hop kind exists for their far end.
+- **Fix.** Put a per-`edgeType` replay table into §5.2.1: one row for each of the 21 types in answer spec §5.2,
+  giving the stored pattern, label pair and `dir` meaning; `CALLS_NAME` as the two-edge path through one `Name`;
+  a row saying "no replay at P1, bfs-v1 does not emit it" or "harness error" for the rest. Also whitelist the
+  `edgeType` string against that table before it enters a query (Cypher cannot parameterize a relationship
+  type, and the string is the engine's attestation).
+
+**M-2 (major; controls missing, so most HA checks have no mutant).** §5.2.1's controls cover HA-1 (a), (b)
+and HA-2 only. No planted input turns HA-3, HA-4, HA-5 or the `cacheHit` rule red, and HA-1's controls do
+not cover a wrong `dir` or a wrong `edgeType` over a real edge. Control (b) also needs an item with ≥ 3
+hops and a replacement node *verified* edge-free to its neighbours (a random real node may be joined).
+- **Fix.** One mutant per row, expected values from outside the engine: HA-1 reversed `dir`, and a real edge of
+  another type; HA-3 an added second anchor and a present `scope`; HA-4 `snapshotId` off by one hex digit,
+  `verdictLogOffset = 1`, and hash ≠ the literal `c482b1cf54631b37eb4572dc86a68fb1` (write the literal into the
+  note — HA-4 as written points at `answer.EMPTY_VERDICT_LOG_HASH`, the engine's own constant); HA-5 a planted
+  two-segments-one-parent collision that must be *listed*. Also a positive control that `cacheHit` can read
+  `true` (see M-3).
+
+**M-3 (major; (c) the cache is engine-side, and "empty cache" does not give uncached repeats).** The
+interpretation cache is the engine's: `cacheKey`/`cacheHit` are answer fields (answer spec §3), keyed on
+`(normalizedQuestion, snapshotId, model…)` with no repeat index, and "lives exactly as long as its snapshot". A
+fresh gate snapshot starts empty, but repeat 1 populates it and repeats 2–5 hit, so §10.4's rule voids four
+of five repeats by design. ML §4.4 line 577 says "cache disabled"; neither the answer spec nor the note
+defines a bypass (`grep` of both for bypass/disable: none). The check also trusts the engine's `cacheHit`
+self-report: a wrong engine that caches and reports `false` reads as flip rate 0.
+- **Fix.** Name the mechanism (an engine setting or request flag, recorded in the pre-registration) and ask the
+  answer spec's owner for it if absent; add the control "same question twice with the cache on: second
+  `cacheHit == true`, then with bypass: `false` five times".
+
+**M-4 (major; §10.6's positive control can be a no-op).** "The pin's `scope` dropped in one replay must
+fail": QW gold has `scope: null` unless the question restricts (§4.2), so for most pins the drop changes no
+byte and the control would *pass* the comparison it must fail. Also the **raw leg** (b): answer spec §3/§4.1
+decided rows-never-an-answer-document ("weaker by decision"), so the note's "*If* the raw path yields rows" is
+stale. The note leaves open who writes the rows→item-set derivation (the walk's cost order and grouping are the
+engine's, so chain ids from rows need a BFS driver), what "pass" is, and has no control for that leg.
+- **Fix.** Control on a field that always matters (flip `direction`, or drop one anchor). Make the raw leg
+  unconditional: item set = `(subject id, status, chain (kind, id) list)`; state the deriver's owner (GC's own
+  driver, not an engine function, else the leg compares the engine to itself) and that any inequality fails;
+  control = delete one row from the rows before deriving.
+
+**M-5 (major; (e) CAP is asserted, and has no pre-registration home).** Recomputed: 12 candidates, 6 per
+language, first by rank to dev, so ≤ 5 held-out per language and ≤ 10 total — the note's arithmetic holds
+(read §10.1/§10.2); "2 extras for 5 vs 2 readings" = 3 holds. But 5 is an *expectation* (the note says so; no QW
+file exists, `ls cpg/eval` shows only `headless/`), which is honest and acceptable as a prior. The defect is
+where it lands: §12.3's `ccg-prereg-v1` record is for AC-7 and AC-5 gates, has no `cap`, no tie-reading, no
+interpreter-model/cache-bypass field, and "the extras it would have flagged on dev" has nowhere to go.
+Two smaller points on the formula: `m` is a maximum over writer-authored gold, so one 8-option item lifts the
+cap to 8 for every 2-option item (use `CAP_i = max(5, |goldOptions_i|)`, or state why not), and the
+"rejected: gold plus k" reason ("forces 0 for `unknown-name`") holds only for k = 0. Falsifiability: at CAP 5 an
+engine padding two or three extras still passes, which the note accepts; a 6-option list fails — the check can
+fail.
+- **Fix.** Add an AC-24 record schema to §12.3 (or a sibling) with `cap`, `capRule`, `tieReading`,
+  `interpreterModel`, `cacheBypass`, `devExtras`; S47's row then cites it.
+
+**Rulings on the known questions.**
+- (a) Edge types vs stored edges: checked statically against `ddl_v1.cypher` (18 indexes / 11 constraints: the
+  hop id properties `symbolId`, `callSiteId`, `pointId`, `cpId`, `linkId`, `nameKey` are all indexed) and the
+  plan text: stored for `CALLS`, `HAS_CALL/PARAM/RETURN/COND`, `DATA`, `CONTROLLED_BY`, `VIA` (`CallSite→Link`,
+  so the `Link` hop's `<-` is right), `TO`, `ON`, `CONSUMES`, `PROVIDES`; **not** single-edge for `CALLS_NAME`
+  (M-1). `ConfigEntry.entryId` has no index until it is loaded (DDL header), so HA-1/HA-2 on config hops
+  are label scans until then — fine at that size, but P1's DDL should add it before the wiring gate (observation).
+  `LIFTED_VIA` and `lifted[]`/`bound[]` are not replayed at all, so a fabricated `Lifted` entry passes HA-1;
+  say so in "What HA-1 does not do".
+- (b) Raw-recipe path: rows only, decided by the answer spec; see M-4.
+- (c) Engine-side: yes; see M-3.
+- (d) §16 is a finding→resolution table of 37 lines (Pass 1 and 2 dispositions) in a not-yet-archived plan,
+  contrary to the growth-stops bullet; the v1.3 revision was the document's "next ordinary revision" and left it,
+  along with 47 lines carrying inline `v1.1`/`v1.2` markers (counted by `grep -c`), mostly §14's "Changes" column.
+  **Yes, `data-scientist` should prune** — but first relocate what only §16 holds: the M5-nit condition ("narrow
+  the `**/*.md` exclusion before the first pre-registration if P1 keeps interpreter prompts as `.md` under
+  `cpg/`") belongs in §12.3, and B1(b)'s "fresh item on a kept cluster" reasoning in §12.1 if absent there.
+- (e) Falsifiability: HA-1 can reject fabrication and nothing more, as the note says (the store is the engine's
+  own, so a false edge it wrote passes); HA-2 closes span/`qname` lying; HA-3/HA-4 are mechanical but unmutated
+  (M-2); HA-5 lists, never rejects, so a masker that collapses everything to `[#]` would hit every config item
+  and rely on a human reading the list — make a non-empty masked-segment list gate-blocking until reviewed.
+  CAP: asserted prior, arithmetic of its bounds recomputed (M-5).
+
+**Growth-stops check (v1.2 → v1.3, observed: 2,082 → 2,177 lines, 23,968 → 25,424 words, 129 changed lines
+by `git diff 637ce8be`).** New scope: HA-1..5 and controls, the status predicate, the cap, §10.6, the two
+tie-reading lines — C5/C7/C9 obligations, legitimately added. Rework done correctly: the two earlier
+revision notes were replaced by one dated line. Findings: (i) §16 above (restated history, m); (ii) the status
+predicate is stated in both `-answer-spec.md` §3 ("How AC-24 reads `status`") and §10.4 — a fact in two homes;
+the answer spec should cite §10.4 (its owner's edit); (iii) HA-3/HA-4 restate answer-spec V11/§4.2 in prose —
+cite, don't copy.
+
+**Minor.**
+- m-1 Pins: `-p0-2.md:217`'s manifest `protocol` string and its S06 row still read EP `@1.2` / "EP v1.2 plus EP2";
+  `-eval-protocol2-ml.md` §1.5/header read "EP v1.2". After this acceptance they must say EP v1.3 (and EP2 v1.4),
+  else the manifest pin names a version that lacks HA-1..5. Owner: `architect`/`data-scientist`.
+- m-2 "Why 5" and "Rejected" bullets are rationale prose of ~18 lines at one decision; trim to the constraint
+  once M-5 lands.
+
+**What's solid.** The status-predicate reading (§10.4) matches answer spec §3 point for point, and the
+always-asking counterweight is jointly gated; `ambiguityKind` rightly unscored; HA-2's "score on the
+snapshot's values, list the defect" is the right trust boundary; the tie-reading triple (id, pessimistic,
+optimistic) with a pre-registered carrier is sound; §10.6's "client mis-interpretation is AC-24, not AC-16"
+avoids double counting, and the `provenance`-only-change control is a real mutant.
+
+**Open questions.** (1) Does the answer-spec owner accept a cache-bypass input (M-3)? (2) Is the AC-24 gate to
+reuse `ccg-prereg-v1` or get its own record (M-5)?
+
+**Stopping condition (falsifiable).** Pass 4 approves when all hold: (1) §5.2.1 has a replay row for each of the
+21 `edgeType` values of answer spec §5.2, `CALLS_NAME` as a two-edge path, and an `edgeType` allow-list sentence;
+(2) every HA row and the `cacheHit` rule names a planted input and the literal `c482b1cf54631b37eb4572dc86a68fb1`
+appears in HA-4; (3) §10.4 names the cache-bypass mechanism and a `cacheHit == true` positive control;
+(4) §10.6's control mutates a field present in every pin, and the raw leg is unconditional with the deriver's
+owner, pass criterion and a control; (5) CAP, `tieReading` and `devExtras` have a named record in §12.3 and
+S47's row cites it; (6) §16 is absent and the M5-nit condition is in §12.3; (7) word growth over v1.3 is
+attributable to (1)–(5) alone (the `git diff` of the revision shows no added history). Pass 4 does not
+re-read §1–§9, which this delta did not touch.
+
 ## S10 (P0-09)
 
 **Reviewed (2026-10-29):** `cpg/ccg/schemas/bundle-v1.schema.json`, `cpg/ccg/bundle.py`,
