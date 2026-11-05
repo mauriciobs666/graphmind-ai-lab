@@ -54,3 +54,27 @@ def test_recall_decision_uses_stratum():
     strata = {"nonContact": {c: {"internalSites": 149, "recall": {"k": 146, "wilson95": [0, 1]}} for c in ("off", "on")}}
     d = m.recall_decision("python", metrics, strata, "recall")
     assert d["worse"] == "fail" and d["off"]["missBudgetAt98"] == 2 and d["off"]["misses"] == 3
+
+
+def _site(file, l, full, ext=False):
+    return {"matched": True, "nm": 0, "call": {"name": "x", "l": 1, "c": 1, "code": "x()"},
+            "res": [{"fullName": full, "file": file, "l": l, "vendored": False, "ext": ext}]}
+
+
+def test_a5_resolved_target_is_classified_by_fullname_not_line():
+    # two METHODs on one line; a (file, line) map keeps the LAST one. The target is the first (a real symbol).
+    mm = M(meth("a.py", 5, 9, "__init__", "a:__init__"), meth("a.py", 5, 9, "<fakeNew>", "a:<fakeNew>"))
+    mm["sites"] = {"k1": _site("a.py", 5, "a:__init__"), "k2": _site("a.py", 5, "a:<fakeNew>")}
+    out = m.analyse("python", "off", mm, [{"ordinal": 1, "siteKey": "k1"}, {"ordinal": 2, "siteKey": "k2"}], 0)
+    assert [r["fullName"] for r in out[1]["resolvedSymbols"]] == ["a:__init__"]      # fails if keyed by (file, line), last wins
+    assert [r["fullName"] for r in out[2]["resolvedNonSymbol"]] == ["a:<fakeNew>"]
+
+
+def test_a6_lambda_target_at_a_truth_location_is_a_symbol_and_found():
+    mm = M(meth("f.go", 7, 9, "<lambda>1", "f:<lambda>1"))
+    mm["sites"] = {"k": _site("f.go", 7, "f:<lambda>1")}
+    ro = {"ordinal": 1, "siteKey": "k", "calleeName": "zzz"}          # no name-match credit: only resolution can find it
+    ans = m.analyse("go", "off", mm, [ro], 0)[1]
+    tr = {"T": [{"path": "f.go", "defLine": 7, "qname": "f.go::X.<anon>#1", "role": "impl"}]}
+    j = m.judge(ro, tr, ans, mm, 0)
+    assert j["found"] and j["foundRes"] and j["resolved"] and j["correct"]    # fails if `<lambda>` is listed as a non-symbol

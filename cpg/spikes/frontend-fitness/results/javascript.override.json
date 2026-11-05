@@ -1,5 +1,13 @@
 {
  "lang": "javascript",
+ "variant": "override",
+ "headline": false,
+ "segmentsRenamed": [
+  "i18n",
+  "test",
+  "tests"
+ ],
+ "caveat": "SECONDARY measurement: the corpus was copied with the frontend-ignored path segments renamed (ccgseg<name>) and mapped back; the as-shipped run (results/javascript.json) is the headline, since P1 users hit the frontend defaults. Verdicts here (recallDecision, gate83) are not the language's decision.",
  "provisional": true,
  "truth": "truth/javascript.final.jsonl",
  "labelledSites": 523,

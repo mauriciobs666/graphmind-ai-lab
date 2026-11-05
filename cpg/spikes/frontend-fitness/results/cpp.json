@@ -1,5 +1,7 @@
 {
  "lang": "cpp",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/cpp.final.jsonl",
  "labelledSites": 187,

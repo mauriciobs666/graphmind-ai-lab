@@ -1,5 +1,7 @@
 {
  "lang": "go",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/go.final.jsonl",
  "labelledSites": 373,

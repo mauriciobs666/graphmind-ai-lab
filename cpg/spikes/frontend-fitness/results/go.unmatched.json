@@ -13,7 +13,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 6,
@@ -26,7 +28,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 13,
@@ -39,7 +43,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 36,
@@ -52,7 +58,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 40,
@@ -65,7 +73,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 42,
@@ -78,7 +88,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 69,
@@ -91,7 +103,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 82,
@@ -104,7 +118,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 98,
@@ -117,7 +133,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 99,
@@ -130,7 +148,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 117,
@@ -143,7 +163,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 126,
@@ -171,7 +193,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 135,
@@ -184,7 +208,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 146,
@@ -197,7 +223,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 151,
@@ -210,7 +238,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 160,
@@ -223,7 +253,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 163,
@@ -236,7 +268,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 171,
@@ -249,7 +283,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 185,
@@ -262,7 +298,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 217,
@@ -290,7 +328,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 220,
@@ -303,7 +343,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 225,
@@ -316,7 +358,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 226,
@@ -329,7 +373,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 227,
@@ -342,7 +388,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 250,
@@ -370,7 +418,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 266,
@@ -383,7 +433,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 271,
@@ -396,7 +448,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 273,
@@ -431,7 +485,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 283,
@@ -444,7 +500,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 288,
@@ -457,7 +515,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 290,
@@ -470,7 +530,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 306,
@@ -498,7 +560,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 311,
@@ -526,7 +590,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 314,
@@ -568,7 +634,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.addressOf', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 329,
@@ -581,7 +649,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 334,
@@ -609,7 +679,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 348,
@@ -622,7 +694,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 349,
@@ -635,7 +709,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 350,
@@ -648,7 +724,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    }
   ],
   "on": [
@@ -663,7 +741,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 6,
@@ -676,7 +756,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 13,
@@ -689,7 +771,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 36,
@@ -702,7 +786,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 40,
@@ -715,7 +801,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 42,
@@ -728,7 +816,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 69,
@@ -741,7 +831,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 82,
@@ -754,7 +846,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 98,
@@ -767,7 +861,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 99,
@@ -780,7 +876,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 117,
@@ -793,7 +891,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 126,
@@ -821,7 +921,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 135,
@@ -834,7 +936,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 146,
@@ -847,7 +951,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 151,
@@ -860,7 +966,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 160,
@@ -873,7 +981,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 163,
@@ -886,7 +996,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 171,
@@ -899,7 +1011,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 185,
@@ -912,7 +1026,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 217,
@@ -940,7 +1056,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 220,
@@ -953,7 +1071,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 225,
@@ -966,7 +1086,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 226,
@@ -979,7 +1101,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 227,
@@ -992,7 +1116,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 250,
@@ -1020,7 +1146,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 266,
@@ -1033,7 +1161,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 271,
@@ -1046,7 +1176,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 273,
@@ -1081,7 +1213,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 283,
@@ -1094,7 +1228,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 288,
@@ -1107,7 +1243,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 290,
@@ -1120,7 +1258,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 306,
@@ -1148,7 +1288,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 311,
@@ -1176,7 +1318,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 314,
@@ -1218,7 +1362,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.addressOf', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 329,
@@ -1231,7 +1377,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 334,
@@ -1259,7 +1407,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 348,
@@ -1272,7 +1422,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 349,
@@ -1285,7 +1437,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe go)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 350,
@@ -1298,8 +1452,11 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    }
   ]
- }
+ },
+ "dispositionNote": "S27 fix round B2 (iii): per-class disposition by the graph-dba harness; the data-scientist's causes stay in the v2 miss logs"
 }

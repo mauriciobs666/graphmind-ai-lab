@@ -1,5 +1,7 @@
 {
  "lang": "java",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/java.final.jsonl",
  "labelledSites": 500,

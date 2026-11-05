@@ -23,11 +23,18 @@ CASES = {
  "java": [("shipped-test-path", [(J, J)], []), ("moved-neutral-path", [(J, "moved/PetAgeValidatorTest.java")], []),
           ("moved-into-test-dir-name-only", [(J, "src/test/java/x/Foo.java")], []),
           ("shipped+exclude-regex-nonmatching", [(J, J)], ["--exclude-regex", "zzzz"]),
-          ("control-main-file", [(JM, JM)], [])],
+          ("control-main-file", [(JM, JM)], []),
+          ("direct-javasrc2cpg-shipped", [(J, J)], [], "javasrc2cpg"),
+          ("direct-javasrc2cpg+exclude-regex-nonmatching", [(J, J)], ["--exclude-regex", "zzzz"], "javasrc2cpg"),
+          ("direct-javasrc2cpg-moved-neutral", [(J, "moved/PetAgeValidatorTest.java")], [], "javasrc2cpg")],
  "javascript": [("shipped-i18n-path", [("src/i18n/format.ts", "src/i18n/format.ts")], []),
                 ("moved-neutral-path", [("src/i18n/format.ts", "src/lib/format.ts")], []),
                 ("shipped+exclude-regex-nonmatching", [("src/i18n/format.ts", "src/i18n/format.ts")], ["--exclude-regex", "zzzz"]),
-                ("control-api", [("src/api/polling.ts", "src/api/polling.ts")], [])],
+                ("control-api", [("src/api/polling.ts", "src/api/polling.ts")], []),
+                ("segment-test", [("src/api/polling.ts", "src/test/polling.ts")], []),
+                ("segment-tests", [("src/api/polling.ts", "src/tests/polling.ts")], []),
+                ("direct-jssrc2cpg-shipped-i18n", [("src/i18n/format.ts", "src/i18n/format.ts")], [], "jssrc2cpg"),
+                ("direct-jssrc2cpg-i18n+exclude-regex-nonmatching", [("src/i18n/format.ts", "src/i18n/format.ts")], ["--exclude-regex", "zzzz"], "jssrc2cpg")],
  "go": [("rfc9457-alone", [("rfc9457.go", "rfc9457.go")], []), ("csrf-alone", [("middleware/csrf.go", "middleware/csrf.go")], []),
         ("binder_test-alone", [("binder_test.go", "binder_test.go")], []), ("control-echo", [("echo.go", "echo.go")], [])],
  "csharp": [("scopes-alone", [("src/Authorization/ScopesAuthorizer.cs", "src/Authorization/ScopesAuthorizer.cs")], []),
@@ -35,7 +42,11 @@ CASES = {
             ("scopes-moved", [("src/Authorization/ScopesAuthorizer.cs", "moved/ScopesAuthorizer.cs")], [])],
  "cpp": [("gtest_unittest-alone", [("googletest/test/gtest_unittest.cc", "googletest/test/gtest_unittest.cc")], []),
          ("gtest_unittest-moved", [("googletest/test/gtest_unittest.cc", "moved/gtest_unittest.cc")], []),
-         ("control-gtest.cc", [("googletest/src/gtest.cc", "googletest/src/gtest.cc")], [])],
+         ("control-gtest.cc", [("googletest/src/gtest.cc", "googletest/src/gtest.cc")], []),
+         ("segment-test", [("googletest/src/gtest.cc", "googletest/test/gtest.cc")], []),
+         ("segment-tests", [("googletest/src/gtest.cc", "googletest/tests/gtest.cc")], []),
+         ("direct-c2cpg-segment-test", [("googletest/src/gtest.cc", "googletest/test/gtest.cc")], [], "c2cpg"),
+         ("direct-c2cpg-segment-test+exclude-regex-nonmatching", [("googletest/src/gtest.cc", "googletest/test/gtest.cc")], ["--exclude-regex", "zzzz"], "c2cpg")],
 }
 
 
@@ -49,7 +60,9 @@ def main():
     out = {}
     for lang in langs:
         root = CORP / lang / "src"
-        for name, files, extra in CASES[lang]:
+        for case in CASES[lang]:
+            name, files, extra = case[:3]
+            direct = case[3] if len(case) > 3 else None
             d = WORK / lang / name
             if d.exists():
                 shutil.rmtree(d)
@@ -59,13 +72,18 @@ def main():
                 (d / "src" / b).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(root / a, d / "src" / b)
             t = time.time()
-            argv = [RUNNER, "--backend", "container", "--mode", "offline", "--frontend", "joern-parse", "--source", str(d / "src"),
-                    "--output", str(d / "out"), "--codebase", lang, "--", "/src", "--language", FE[lang]]
-            if extra:
-                argv += ["--frontend-args"] + extra
+            if direct:
+                # the frontend binary itself: the runner appends only `--output /out/<id>.cpg.bin`, so extra flags are not followed by anything
+                argv = [RUNNER, "--backend", "container", "--mode", "offline", "--frontend", direct, "--source", str(d / "src"),
+                        "--output", str(d / "out"), "--", "/src"] + extra
+            else:
+                argv = [RUNNER, "--backend", "container", "--mode", "offline", "--frontend", "joern-parse", "--source", str(d / "src"),
+                        "--output", str(d / "out"), "--codebase", lang, "--", "/src", "--language", FE[lang]]
+                if extra:
+                    argv += ["--frontend-args"] + extra
             rc = run(argv, d / "parse.log")
             cpgs = sorted(glob.glob(str(d / "out" / "*.cpg.bin")))
-            rec = {"lang": lang, "case": name, "files": [b for a, b in files], "extraArgs": extra, "parseRc": rc, "wall": round(time.time() - t, 1)}
+            rec = {"lang": lang, "case": name, "files": [b for a, b in files], "extraArgs": extra, "command": " ".join(a.replace(str(CPG) + "/", "") for a in argv), "parseRc": rc, "wall": round(time.time() - t, 1)}
             if cpgs:
                 c = Path(cpgs[-1]).name
                 rc2 = run([RUNNER, "--backend", "container", "--mode", "offline", "--frontend", "joern", "--script-file",
@@ -84,6 +102,12 @@ def main():
     p = HERE / "results" / "frontend-defaults-probe.json"
     prev = json.loads(p.read_text()) if p.exists() else {}
     prev.update(out)
+    prev["_helpExcerpts"] = {
+        "note": "--help of the frontends in the toolchain image (Joern v4.0.579), lines on exclusion; none offers a way to remove a default",
+        "jssrc2cpg": ["--exclude <file1>  files or folders to exclude ...", "--exclude-regex <value>  a regex specifying files to exclude ..."],
+        "javasrc2cpg": ["--exclude <file1> ...", "--exclude-regex <value> ..."], "c2cpg": ["--exclude <file1> ...", "--exclude-regex <value> ...", "--include <value> header include paths"],
+        "gosrc2cpg": ["--exclude <file1> ...", "--exclude-regex <value> ..."], "csharpsrc2cpg": ["--exclude <file1> ...", "--exclude-regex <value> ..."],
+        "joern-parse": "own options + `--frontend-args` (variadic, verbatim); the runner appends `--output` after it, so any flag given after --frontend-args yields `Unknown option --output` (the earlier cases)"}
     p.write_text(json.dumps(prev, indent=1) + "\n")
 
 

@@ -1,5 +1,7 @@
 {
  "lang": "python",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/python.final.jsonl",
  "labelledSites": 240,

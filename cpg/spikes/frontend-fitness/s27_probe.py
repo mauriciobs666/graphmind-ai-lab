@@ -15,11 +15,45 @@ HERE = Path(__file__).resolve().parent
 CPG = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 lang = sys.argv[1]
+DISPOSE_ONLY = "--disposition-only" in sys.argv
+IGNORED_SEG = {"java": {"test"}, "javascript": {"i18n", "test", "tests"}, "cpp": {"test", "tests"}}
+PROBE = "results/frontend-defaults-probe.json"
+
+
+def disposition(r):
+    """Per-class disposition (S27 fix round B2 iii). Cites the probe cases in results/frontend-defaults-probe.json."""
+    cls, path = r["classification"], r["siteKey"].split(":")[0]
+    segs = set(path.split("/")[:-1])
+    if cls == "absent-no-file-node":
+        hit = segs & IGNORED_SEG.get(lang, set())
+        if hit:
+            return ("default exclusion: the frontend ignores a path segment named %s (probe %s: shipped path 0 methods, moved path parsed)" % (sorted(hit), lang)), "frontend-default-ignore"
+        if lang in ("go", "csharp"):
+            return ("per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe %s)" % lang), "per-file-failure"
+        return "no FILE node and no ignored segment: unexplained", "unexplained"
+    if cls == "absent-no-call-on-line":
+        if r["kind"] == "jsx":
+            return "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)", "by-construction"
+        return "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault", "absent-in-joern"
+    if cls == "calls-present":
+        return "calls exist on the lines but none carries the callee (inspected: %s): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault" % sorted({c["name"] or "<empty>" for c in (r["callsOnLine"] or [])})[:4], "by-construction-or-absent"
+    return "probe failed", "unexplained"
+
 WORK = CPG / ".ccg-work" / "frontend-fitness" / "joern" / lang
 res = json.loads((HERE / "results" / f"{lang}.json").read_text())
 rec = json.loads((WORK / "s27-run.json").read_text())
 priv = {json.loads(l)["siteKey"]: json.loads(l) for l in open(HERE / "sample" / f"{lang}.private.jsonl")}
 lineoff = -1 if lang == "csharp" else 0
+if DISPOSE_ONLY:
+    f = HERE / "results" / f"{lang}.unmatched.json"
+    d = json.loads(f.read_text())
+    for cfg, rows in d["configs"].items():
+        for r in rows:
+            r["dispositionText"], r["dispositionClass"] = disposition(r)
+    d["dispositionNote"] = "S27 fix round B2 (iii): per-class disposition by the graph-dba harness; the data-scientist's causes stay in the v2 miss logs"
+    f.write_text(json.dumps(d, indent=1) + "\n")
+    print(lang, {c: dict(__import__("collections").Counter(r["dispositionClass"] for r in rows)) for c, rows in d["configs"].items()})
+    sys.exit(0)
 out = {"lang": lang, "configs": {}}
 for cfg in ("off", "on"):
     sites = res["unmatchedLabelled"][cfg]
@@ -66,6 +100,7 @@ for cfg in ("off", "on"):
         rows.append({**s, "calleeName": callee, "nameLine": p["nameLine"], "classification": cls,
                      "possibleMatcherError": flag and cls == "calls-present", "fileNode": pr and pr["fileNode"],
                      "callsOnLine": pr and pr["calls"], "probeRc": rc})
+        rows[-1]["dispositionText"], rows[-1]["dispositionClass"] = disposition(rows[-1])
     out["configs"][cfg] = rows
 (HERE / "results" / f"{lang}.unmatched.json").write_text(json.dumps(out, indent=1) + "\n")
 print(json.dumps({c: [(r["siteKey"], r["classification"], r["possibleMatcherError"]) for r in v] for c, v in out["configs"].items()}, indent=1))

@@ -13,7 +13,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 10,
@@ -26,7 +28,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 11,
@@ -39,7 +43,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 19,
@@ -52,7 +58,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 24,
@@ -65,7 +73,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 25,
@@ -78,7 +88,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 28,
@@ -91,7 +103,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 54,
@@ -104,7 +118,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 57,
@@ -117,7 +133,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 59,
@@ -130,7 +148,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 76,
@@ -151,7 +171,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 90,
@@ -179,7 +201,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 93,
@@ -192,7 +216,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 97,
@@ -255,7 +281,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 101,
@@ -268,7 +296,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 108,
@@ -281,7 +311,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 135,
@@ -294,7 +326,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 137,
@@ -307,7 +341,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 144,
@@ -320,7 +356,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 152,
@@ -383,7 +421,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 154,
@@ -396,7 +436,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 158,
@@ -409,7 +451,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 161,
@@ -422,7 +466,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 174,
@@ -435,7 +481,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 176,
@@ -448,7 +496,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 188,
@@ -461,7 +511,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 190,
@@ -474,7 +526,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 196,
@@ -495,7 +549,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.conditional']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 218,
@@ -508,7 +564,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 252,
@@ -521,7 +579,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 263,
@@ -534,7 +594,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 307,
@@ -547,7 +609,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 311,
@@ -560,7 +624,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 313,
@@ -573,7 +639,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 315,
@@ -586,7 +654,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 335,
@@ -599,7 +669,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 337,
@@ -612,7 +684,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 349,
@@ -625,7 +699,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 357,
@@ -638,7 +714,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 373,
@@ -651,7 +729,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 378,
@@ -672,7 +752,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.conditional']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 389,
@@ -685,7 +767,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 402,
@@ -698,7 +782,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 419,
@@ -711,7 +797,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 420,
@@ -724,7 +812,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 421,
@@ -737,7 +827,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 431,
@@ -750,7 +842,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 435,
@@ -763,7 +857,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 443,
@@ -776,7 +872,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 445,
@@ -789,7 +887,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 446,
@@ -802,7 +902,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 451,
@@ -815,7 +917,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 460,
@@ -828,7 +932,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 462,
@@ -841,7 +947,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 484,
@@ -869,7 +977,9 @@
       "dispatch": "DYNAMIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.equals', 't']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 489,
@@ -932,7 +1042,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 499,
@@ -945,7 +1057,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 501,
@@ -958,7 +1072,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 502,
@@ -971,7 +1087,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 511,
@@ -984,7 +1102,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 523,
@@ -1012,7 +1132,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    }
   ],
   "on": [
@@ -1027,7 +1149,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 10,
@@ -1040,7 +1164,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 11,
@@ -1053,7 +1179,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 19,
@@ -1066,7 +1194,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 24,
@@ -1079,7 +1209,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 25,
@@ -1092,7 +1224,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 28,
@@ -1105,7 +1239,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 54,
@@ -1118,7 +1254,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 57,
@@ -1131,7 +1269,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 59,
@@ -1144,7 +1284,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 76,
@@ -1165,7 +1307,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 90,
@@ -1193,7 +1337,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 93,
@@ -1206,7 +1352,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 97,
@@ -1269,7 +1417,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 101,
@@ -1282,7 +1432,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 108,
@@ -1295,7 +1447,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 135,
@@ -1308,7 +1462,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 137,
@@ -1321,7 +1477,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 144,
@@ -1334,7 +1492,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 152,
@@ -1397,7 +1557,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 154,
@@ -1410,7 +1572,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 158,
@@ -1423,7 +1587,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 161,
@@ -1436,7 +1602,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 174,
@@ -1449,7 +1617,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 176,
@@ -1462,7 +1632,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 188,
@@ -1475,7 +1647,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 190,
@@ -1488,7 +1662,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 196,
@@ -1509,7 +1685,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.conditional']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 218,
@@ -1522,7 +1700,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 252,
@@ -1535,7 +1715,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 263,
@@ -1548,7 +1730,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 307,
@@ -1561,7 +1745,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 311,
@@ -1574,7 +1760,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 313,
@@ -1587,7 +1775,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 315,
@@ -1600,7 +1790,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 335,
@@ -1613,7 +1805,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 337,
@@ -1626,7 +1820,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 349,
@@ -1639,7 +1835,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 357,
@@ -1652,7 +1850,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 373,
@@ -1665,7 +1865,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 378,
@@ -1686,7 +1888,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.conditional']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 389,
@@ -1699,7 +1903,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 402,
@@ -1712,7 +1918,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 419,
@@ -1725,7 +1933,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 420,
@@ -1738,7 +1948,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 421,
@@ -1751,7 +1963,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 431,
@@ -1764,7 +1978,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 435,
@@ -1777,7 +1993,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 443,
@@ -1790,7 +2008,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 445,
@@ -1803,7 +2023,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 446,
@@ -1816,7 +2038,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 451,
@@ -1829,7 +2053,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 460,
@@ -1842,7 +2068,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 462,
@@ -1855,7 +2083,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 484,
@@ -1883,7 +2113,9 @@
       "dispatch": "DYNAMIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.equals', 't']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 489,
@@ -1946,7 +2178,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<empty>', '<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 499,
@@ -1959,7 +2193,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 501,
@@ -1972,7 +2208,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 502,
@@ -1985,7 +2223,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "default exclusion: the frontend ignores a path segment named ['i18n'] (probe javascript: shipped path 0 methods, moved path parsed)",
+    "dispositionClass": "frontend-default-ignore"
    },
    {
     "ordinal": 511,
@@ -1998,7 +2238,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "JSX element: jssrc2cpg emits no CALL for a component tag (matcher-table.md, by construction)",
+    "dispositionClass": "by-construction"
    },
    {
     "ordinal": 523,
@@ -2026,8 +2268,11 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment', '<operator>.fieldAccess']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    }
   ]
- }
+ },
+ "dispositionNote": "S27 fix round B2 (iii): per-class disposition by the graph-dba harness; the data-scientist's causes stay in the v2 miss logs"
 }

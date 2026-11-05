@@ -292,6 +292,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("lang")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--no-adjudication", action="store_true", help="do not write adjudication/<lang>-misses.v2.* (the data-scientist edits them)")
     ap.add_argument("--variant", default="", choices=["", "override"], help="override: the segment-renamed CPGs (<work>/<lang>-override); writes results/<lang>.override.*")
     a = ap.parse_args()
     lang = a.lang
@@ -398,7 +399,7 @@ def main():
             r = {"matched": an["matched"], "nm": an["nm"], "call": an["call"], "res": an["res"]}
             if tr["scored"]:
                 j = per_cfg[c][1][o]["j"]
-                r.update({"found": j["found"], "foundLenient": j["foundLenient"], "resolved": j["resolved"], "correct": j["correct"]})
+                r.update({"variant": "override" if a.variant else "as-shipped", "found": j["found"], "foundLenient": j["foundLenient"], "resolved": j["resolved"], "correct": j["correct"]})
             row[c] = r
         return row
 
@@ -446,7 +447,10 @@ def main():
                          "matchedUnresolvedCtorSites": ctor_unres}
 
     res = {
-        "lang": lang, "provisional": True, "truth": f"truth/{lang}.final.jsonl",
+        "lang": lang, "variant": "override" if a.variant else "as-shipped", "headline": not a.variant,
+        **({"segmentsRenamed": json.loads((WORK / wl / "s27-run.json").read_text()).get("segmentsRenamed"),
+            "caveat": "SECONDARY measurement: the corpus was copied with the frontend-ignored path segments renamed (ccgseg<name>) and mapped back; the as-shipped run (results/%s.json) is the headline, since P1 users hit the frontend defaults. Verdicts here (recallDecision, gate83) are not the language's decision." % lang} if a.variant else {}),
+        "provisional": True, "truth": f"truth/{lang}.final.jsonl",
         "labelledSites": len(order_all), "scoredSites": len(scored), "unscoredSites": len(unscored),
         "unscoredReasons": dict(collections.Counter(truth[o]["notScoredReason"] for o in unscored)),
         "internalSites": metrics["off"]["internalSites"], "externalScoredSites": len(scored) - metrics["off"]["internalSites"],
@@ -485,7 +489,7 @@ def main():
         with open(HERE / "results" / f"{lang}{sfx}.answers.jsonl", "w") as fh:
             for r in answers:
                 fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-        if not a.variant:
+        if not a.variant and not a.no_adjudication:
             # the data-scientist edits <lang>-misses.jsonl; the regenerated rows go beside it, never over it
             with open(HERE / "adjudication" / f"{lang}-misses.v2.jsonl", "w") as fh:
                 for r in miss_rows:

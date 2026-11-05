@@ -13,7 +13,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 5,
@@ -26,7 +28,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 7,
@@ -39,7 +43,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 9,
@@ -52,7 +58,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 23,
@@ -73,7 +81,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 24,
@@ -101,7 +111,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.await', 'TestRouteCircuitBreaker']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 25,
@@ -114,7 +126,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 28,
@@ -127,7 +141,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 39,
@@ -140,7 +156,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 40,
@@ -153,7 +171,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 42,
@@ -166,7 +186,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 45,
@@ -179,7 +201,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 46,
@@ -192,7 +216,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 48,
@@ -205,7 +231,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 54,
@@ -218,7 +246,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 55,
@@ -231,7 +261,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 59,
@@ -244,7 +276,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 61,
@@ -265,7 +299,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 63,
@@ -278,7 +314,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 64,
@@ -291,7 +329,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 73,
@@ -304,7 +344,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 76,
@@ -317,7 +359,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 79,
@@ -330,7 +374,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 86,
@@ -343,7 +389,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 92,
@@ -356,7 +404,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 94,
@@ -369,7 +419,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 103,
@@ -382,7 +434,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 113,
@@ -395,7 +449,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 116,
@@ -408,7 +464,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 117,
@@ -421,7 +479,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 122,
@@ -434,7 +494,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 123,
@@ -447,7 +509,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 125,
@@ -460,7 +524,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 132,
@@ -473,7 +539,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 134,
@@ -486,7 +554,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 137,
@@ -499,7 +569,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 139,
@@ -512,7 +584,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 144,
@@ -525,7 +599,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 146,
@@ -538,7 +614,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 149,
@@ -551,7 +629,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 150,
@@ -564,7 +644,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 154,
@@ -577,7 +659,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 160,
@@ -590,7 +674,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 168,
@@ -603,7 +689,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 170,
@@ -616,7 +704,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 172,
@@ -629,7 +719,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 176,
@@ -642,7 +734,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 178,
@@ -655,7 +749,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 179,
@@ -668,7 +764,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 184,
@@ -681,7 +779,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 185,
@@ -694,7 +794,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 187,
@@ -707,7 +809,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 191,
@@ -735,7 +839,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.await', 'ThenTheResponseBodyShouldBeAsync']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 192,
@@ -748,7 +854,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 196,
@@ -761,7 +869,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 197,
@@ -774,7 +884,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 202,
@@ -787,7 +899,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 215,
@@ -800,7 +914,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 219,
@@ -813,7 +929,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 223,
@@ -826,7 +944,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 233,
@@ -839,7 +959,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 245,
@@ -852,7 +974,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 253,
@@ -865,7 +989,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 263,
@@ -878,7 +1004,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 270,
@@ -891,7 +1019,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 274,
@@ -904,7 +1034,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 275,
@@ -917,7 +1049,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 279,
@@ -930,7 +1064,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 288,
@@ -943,7 +1079,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 292,
@@ -956,7 +1094,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 293,
@@ -969,7 +1109,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 297,
@@ -982,7 +1124,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 301,
@@ -995,7 +1139,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 305,
@@ -1008,7 +1154,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 311,
@@ -1021,7 +1169,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    }
   ],
   "on": [
@@ -1036,7 +1186,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 5,
@@ -1049,7 +1201,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 7,
@@ -1062,7 +1216,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 9,
@@ -1075,7 +1231,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 23,
@@ -1096,7 +1254,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 24,
@@ -1124,7 +1284,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.await', 'TestRouteCircuitBreaker']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 25,
@@ -1137,7 +1299,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 28,
@@ -1150,7 +1314,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 39,
@@ -1163,7 +1329,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 40,
@@ -1176,7 +1344,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 42,
@@ -1189,7 +1359,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 45,
@@ -1202,7 +1374,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 46,
@@ -1215,7 +1389,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 48,
@@ -1228,7 +1404,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 54,
@@ -1241,7 +1419,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 55,
@@ -1254,7 +1434,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 59,
@@ -1267,7 +1449,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 61,
@@ -1288,7 +1472,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.assignment']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 63,
@@ -1301,7 +1487,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 64,
@@ -1314,7 +1502,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 73,
@@ -1327,7 +1517,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 76,
@@ -1340,7 +1532,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 79,
@@ -1353,7 +1547,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 86,
@@ -1366,7 +1562,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 92,
@@ -1379,7 +1577,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 94,
@@ -1392,7 +1592,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 103,
@@ -1405,7 +1607,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 113,
@@ -1418,7 +1622,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 116,
@@ -1431,7 +1637,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 117,
@@ -1444,7 +1652,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 122,
@@ -1457,7 +1667,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 123,
@@ -1470,7 +1682,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 125,
@@ -1483,7 +1697,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 132,
@@ -1496,7 +1712,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 134,
@@ -1509,7 +1727,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 137,
@@ -1522,7 +1742,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 139,
@@ -1535,7 +1757,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 144,
@@ -1548,7 +1772,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 146,
@@ -1561,7 +1787,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 149,
@@ -1574,7 +1802,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 150,
@@ -1587,7 +1817,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 154,
@@ -1600,7 +1832,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 160,
@@ -1613,7 +1847,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 168,
@@ -1626,7 +1862,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 170,
@@ -1639,7 +1877,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 172,
@@ -1652,7 +1892,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 176,
@@ -1665,7 +1907,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 178,
@@ -1678,7 +1922,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 179,
@@ -1691,7 +1937,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 184,
@@ -1704,7 +1952,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 185,
@@ -1717,7 +1967,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 187,
@@ -1730,7 +1982,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 191,
@@ -1758,7 +2012,9 @@
       "dispatch": "STATIC_DISPATCH"
      }
     ],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "calls exist on the lines but none carries the callee (inspected: ['<operator>.await', 'ThenTheResponseBodyShouldBeAsync']): the callee has no CALL of its own (JSX tag, call of a call with an empty name, generic instantiation); matcher not at fault",
+    "dispositionClass": "by-construction-or-absent"
    },
    {
     "ordinal": 192,
@@ -1771,7 +2027,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 196,
@@ -1784,7 +2042,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 197,
@@ -1797,7 +2057,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 202,
@@ -1810,7 +2072,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 215,
@@ -1823,7 +2087,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 219,
@@ -1836,7 +2102,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 223,
@@ -1849,7 +2117,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 233,
@@ -1862,7 +2132,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 245,
@@ -1875,7 +2147,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 253,
@@ -1888,7 +2162,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 263,
@@ -1901,7 +2177,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 270,
@@ -1914,7 +2192,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 274,
@@ -1927,7 +2207,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 275,
@@ -1940,7 +2222,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 279,
@@ -1953,7 +2237,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 288,
@@ -1966,7 +2252,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 292,
@@ -1979,7 +2267,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 293,
@@ -1992,7 +2282,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 297,
@@ -2005,7 +2297,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 301,
@@ -2018,7 +2312,9 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    },
    {
     "ordinal": 305,
@@ -2031,7 +2327,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    },
    {
     "ordinal": 311,
@@ -2044,8 +2342,11 @@
     "possibleMatcherError": false,
     "fileNode": false,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "per-file frontend failure: the file yields no FILE node when parsed alone, also at a neutral path (probe csharp)",
+    "dispositionClass": "per-file-failure"
    }
   ]
- }
+ },
+ "dispositionNote": "S27 fix round B2 (iii): per-class disposition by the graph-dba harness; the data-scientist's causes stay in the v2 miss logs"
 }

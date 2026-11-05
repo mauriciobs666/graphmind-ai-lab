@@ -7,13 +7,14 @@
     "src/test/java/org/springframework/validation/PetAgeValidatorTest.java"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/java/shipped-test-path/src --output .ccg-work/frontend-fitness/s27-probes/java/shipped-test-path/out --codebase java -- /src --language javasrc",
    "parseRc": 0,
-   "wall": 6.2,
+   "wall": 5.6,
    "fileMethods": [
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/739c9196-9e70-40ea-b4d8-47a51dfe9541.cpg.bin=0"
+    "METHOD_COUNT /out/21504801-2600-4858-8284-016ed5e263ea.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -25,6 +26,7 @@
     "moved/PetAgeValidatorTest.java"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/java/moved-neutral-path/src --output .ccg-work/frontend-fitness/s27-probes/java/moved-neutral-path/out --codebase java -- /src --language javasrc",
    "parseRc": 0,
    "wall": 6.2,
    "fileMethods": [
@@ -32,7 +34,7 @@
     "moved/PetAgeValidatorTest.java=5"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/46082c9a-4d5c-40ca-b620-62931b55f724.cpg.bin=5"
+    "METHOD_COUNT /out/c443ad71-1cb9-4eef-93c5-0374163619f2.cpg.bin=5"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -44,13 +46,14 @@
     "src/test/java/x/Foo.java"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/java/moved-into-test-dir-name-only/src --output .ccg-work/frontend-fitness/s27-probes/java/moved-into-test-dir-name-only/out --codebase java -- /src --language javasrc",
    "parseRc": 0,
-   "wall": 5.6,
+   "wall": 5.5,
    "fileMethods": [
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/bfdcaa13-45d3-46bd-87db-f771df40555f.cpg.bin=0"
+    "METHOD_COUNT /out/2c289aed-aeb5-47bd-b780-05601f82d283.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -65,11 +68,12 @@
     "--exclude-regex",
     "zzzz"
    ],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/java/shipped+exclude-regex-nonmatching/src --output .ccg-work/frontend-fitness/s27-probes/java/shipped+exclude-regex-nonmatching/out --codebase java -- /src --language javasrc --frontend-args --exclude-regex zzzz",
    "parseRc": 1,
-   "wall": 1.7,
+   "wall": 1.5,
    "noCpg": true,
    "parseLogNonWarn": [
-    "2026-11-05 02:18:56.830 ERROR ExternalCommand$          Process exited with code 1.",
+    "2026-11-05 02:37:23.490 ERROR ExternalCommand$          Process exited with code 1.",
     "Output: Error parsing the command line",
     "Error: Unknown option --output",
     "Error: Unknown argument 'cpg.bin'",
@@ -83,14 +87,76 @@
     "src/main/java/org/springframework/samples/petclinic/model/Owner.java"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/java/control-main-file/src --output .ccg-work/frontend-fitness/s27-probes/java/control-main-file/out --codebase java -- /src --language javasrc",
    "parseRc": 0,
-   "wall": 6.3,
+   "wall": 6.4,
    "fileMethods": [
     "<unknown>=0",
     "src/main/java/org/springframework/samples/petclinic/model/Owner.java=17"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/fd96d7df-3877-4e85-8638-7aabed8d9076.cpg.bin=17"
+    "METHOD_COUNT /out/78129561-7e53-4e07-b023-06f8ab2745fd.cpg.bin=17"
+   ],
+   "contentRc": 0,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "java",
+   "case": "direct-javasrc2cpg-shipped",
+   "files": [
+    "src/test/java/org/springframework/validation/PetAgeValidatorTest.java"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend javasrc2cpg --source .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg-shipped/src --output .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg-shipped/out -- /src",
+   "parseRc": 0,
+   "wall": 4.7,
+   "fileMethods": [
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/70262bdf-b443-46b7-8db9-f67b7736bee9.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "java",
+   "case": "direct-javasrc2cpg+exclude-regex-nonmatching",
+   "files": [
+    "src/test/java/org/springframework/validation/PetAgeValidatorTest.java"
+   ],
+   "extraArgs": [
+    "--exclude-regex",
+    "zzzz"
+   ],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend javasrc2cpg --source .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg+exclude-regex-nonmatching/src --output .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg+exclude-regex-nonmatching/out -- /src --exclude-regex zzzz",
+   "parseRc": 0,
+   "wall": 4.9,
+   "fileMethods": [
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/8abec969-5883-44bc-940c-54d4c892d77a.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "java",
+   "case": "direct-javasrc2cpg-moved-neutral",
+   "files": [
+    "moved/PetAgeValidatorTest.java"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend javasrc2cpg --source .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg-moved-neutral/src --output .ccg-work/frontend-fitness/s27-probes/java/direct-javasrc2cpg-moved-neutral/out -- /src",
+   "parseRc": 0,
+   "wall": 5.3,
+   "fileMethods": [
+    "<unknown>=0",
+    "moved/PetAgeValidatorTest.java=5"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/a08ee908-02e9-4dae-a139-f9772b7d2350.cpg.bin=5"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -104,11 +170,12 @@
     "src/i18n/format.ts"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/shipped-i18n-path/src --output .ccg-work/frontend-fitness/s27-probes/javascript/shipped-i18n-path/out --codebase javascript -- /src --language jssrc",
    "parseRc": 0,
-   "wall": 3.9,
+   "wall": 3.8,
    "fileMethods": [],
    "methodCount": [
-    "METHOD_COUNT /out/625e89b8-eeed-42ea-aba9-23e9127aef27.cpg.bin=0"
+    "METHOD_COUNT /out/284b5251-227d-4c17-826d-3fbe38c0c14c.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -120,13 +187,14 @@
     "src/lib/format.ts"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/moved-neutral-path/src --output .ccg-work/frontend-fitness/s27-probes/javascript/moved-neutral-path/out --codebase javascript -- /src --language jssrc",
    "parseRc": 0,
    "wall": 4.5,
    "fileMethods": [
     "src/lib/format.ts=3"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/af14d6e8-b26c-4bac-bee4-88745535a18f.cpg.bin=3"
+    "METHOD_COUNT /out/28e67ea2-b54c-481a-ae5b-86a20f1d5ac0.cpg.bin=3"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -141,14 +209,15 @@
     "--exclude-regex",
     "zzzz"
    ],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/shipped+exclude-regex-nonmatching/src --output .ccg-work/frontend-fitness/s27-probes/javascript/shipped+exclude-regex-nonmatching/out --codebase javascript -- /src --language jssrc --frontend-args --exclude-regex zzzz",
    "parseRc": 1,
-   "wall": 1.7,
+   "wall": 1.8,
    "noCpg": true,
    "parseLogNonWarn": [
-    "2026-11-05 02:19:28.490 ERROR ExternalCommand$          Process exited with code 1.",
+    "2026-11-05 02:38:26.191 ERROR ExternalCommand$          Process exited with code 1.",
     "Output: Error parsing the command line",
     "Error: Unknown option --output",
-    "Error: Unknown argument '/out/80c37310-a38c-4d2b-8142-d365f654deaf.cpg.bin'",
+    "Error: Unknown argument '/out/c9480344-1ff4-41e3-8598-051263ae5626.cpg.bin'",
     "java.lang.RuntimeException: Could not generate CPG with language = jssrc and input = /src"
    ]
   },
@@ -159,16 +228,92 @@
     "src/api/polling.ts"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/control-api/src --output .ccg-work/frontend-fitness/s27-probes/javascript/control-api/out --codebase javascript -- /src --language jssrc",
    "parseRc": 0,
    "wall": 4.4,
    "fileMethods": [
     "src/api/polling.ts=1"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/4bbef8d0-e60f-4cd5-9dbb-c83cf604fcfe.cpg.bin=1"
+    "METHOD_COUNT /out/703b6bba-44c9-4d90-b173-2f2eda044d6d.cpg.bin=1"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
+  },
+  {
+   "lang": "javascript",
+   "case": "segment-test",
+   "files": [
+    "src/test/polling.ts"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/segment-test/src --output .ccg-work/frontend-fitness/s27-probes/javascript/segment-test/out --codebase javascript -- /src --language jssrc",
+   "parseRc": 0,
+   "wall": 3.7,
+   "fileMethods": [],
+   "methodCount": [
+    "METHOD_COUNT /out/bb403da4-7e97-4dae-803d-0b44219de158.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "javascript",
+   "case": "segment-tests",
+   "files": [
+    "src/tests/polling.ts"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/javascript/segment-tests/src --output .ccg-work/frontend-fitness/s27-probes/javascript/segment-tests/out --codebase javascript -- /src --language jssrc",
+   "parseRc": 0,
+   "wall": 3.7,
+   "fileMethods": [],
+   "methodCount": [
+    "METHOD_COUNT /out/5d200eb3-5d3a-473e-85a6-c9f354d52afc.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "javascript",
+   "case": "direct-jssrc2cpg-shipped-i18n",
+   "files": [
+    "src/i18n/format.ts"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend jssrc2cpg --source .ccg-work/frontend-fitness/s27-probes/javascript/direct-jssrc2cpg-shipped-i18n/src --output .ccg-work/frontend-fitness/s27-probes/javascript/direct-jssrc2cpg-shipped-i18n/out -- /src",
+   "parseRc": 0,
+   "wall": 2.7,
+   "fileMethods": [],
+   "methodCount": [
+    "METHOD_COUNT /out/2642831d-9e10-47e2-89c1-a4c4cc10a917.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": [
+    "2026-11-05 02:38:55.693 WARN  AstGenRunner              You may want to check the DEBUG logs for a list of files that are ignored by default."
+   ]
+  },
+  {
+   "lang": "javascript",
+   "case": "direct-jssrc2cpg-i18n+exclude-regex-nonmatching",
+   "files": [
+    "src/i18n/format.ts"
+   ],
+   "extraArgs": [
+    "--exclude-regex",
+    "zzzz"
+   ],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend jssrc2cpg --source .ccg-work/frontend-fitness/s27-probes/javascript/direct-jssrc2cpg-i18n+exclude-regex-nonmatching/src --output .ccg-work/frontend-fitness/s27-probes/javascript/direct-jssrc2cpg-i18n+exclude-regex-nonmatching/out -- /src --exclude-regex zzzz",
+   "parseRc": 0,
+   "wall": 2.7,
+   "fileMethods": [],
+   "methodCount": [
+    "METHOD_COUNT /out/8c6cdbd4-ea63-44a8-b825-2c6230e6a0a3.cpg.bin=0"
+   ],
+   "contentRc": 1,
+   "parseLogNonWarn": [
+    "2026-11-05 02:39:03.397 WARN  AstGenRunner              You may want to check the DEBUG logs for a list of files that are ignored by default."
+   ]
   }
  ],
  "go": [
@@ -179,6 +324,7 @@
     "rfc9457.go"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/go/rfc9457-alone/src --output .ccg-work/frontend-fitness/s27-probes/go/rfc9457-alone/out --codebase go -- /src --language golang",
    "parseRc": 0,
    "wall": 2.3,
    "fileMethods": [
@@ -186,7 +332,7 @@
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/c2144957-d38c-4cb0-a826-235eb66c47b2.cpg.bin=0"
+    "METHOD_COUNT /out/55c72ab5-311f-4753-b7d5-47f3457aff73.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -198,15 +344,16 @@
     "middleware/csrf.go"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/go/csrf-alone/src --output .ccg-work/frontend-fitness/s27-probes/go/csrf-alone/out --codebase go -- /src --language golang",
    "parseRc": 0,
-   "wall": 2.7,
+   "wall": 2.6,
    "fileMethods": [
     "/middleware=0",
     "<unknown>=0",
     "middleware=1"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/656a0ae8-6c23-4fad-9339-9463c05be2d7.cpg.bin=1"
+    "METHOD_COUNT /out/464d8c34-e412-459b-8163-d594bf92cde4.cpg.bin=1"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -218,14 +365,15 @@
     "binder_test.go"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/go/binder_test-alone/src --output .ccg-work/frontend-fitness/s27-probes/go/binder_test-alone/out --codebase go -- /src --language golang",
    "parseRc": 0,
-   "wall": 3.2,
+   "wall": 3.1,
    "fileMethods": [
     "/=0",
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/2ba6e29e-336b-4d3c-b855-bfb185582adb.cpg.bin=0"
+    "METHOD_COUNT /out/b01d88ca-2f27-4439-a2cb-c018dfae1028.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -237,8 +385,9 @@
     "echo.go"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/go/control-echo/src --output .ccg-work/frontend-fitness/s27-probes/go/control-echo/out --codebase go -- /src --language golang",
    "parseRc": 0,
-   "wall": 3.2,
+   "wall": 3.1,
    "fileMethods": [
     "/=0",
     "<unknown>=0",
@@ -246,7 +395,7 @@
     "echo.go=62"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/7670b09e-539c-4e5c-a0b7-5f55cf0c2a12.cpg.bin=63"
+    "METHOD_COUNT /out/bb6c8215-ef7a-404c-afc1-d75d323d7ef0.cpg.bin=63"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -260,13 +409,14 @@
     "src/Authorization/ScopesAuthorizer.cs"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/csharp/scopes-alone/src --output .ccg-work/frontend-fitness/s27-probes/csharp/scopes-alone/out --codebase csharp -- /src --language csharpsrc",
    "parseRc": 0,
-   "wall": 4.1,
+   "wall": 3.8,
    "fileMethods": [
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/3a0c8e01-12ba-418d-8f92-cbcfabf82709.cpg.bin=0"
+    "METHOD_COUNT /out/e90188ae-0152-4f11-ab55-5717b5207110.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -278,13 +428,14 @@
     "testing/AcceptanceSteps.cs"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/csharp/acceptancesteps-alone/src --output .ccg-work/frontend-fitness/s27-probes/csharp/acceptancesteps-alone/out --codebase csharp -- /src --language csharpsrc",
    "parseRc": 0,
    "wall": 4.0,
    "fileMethods": [
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/07d39607-51b6-4557-bd99-a456386d0204.cpg.bin=0"
+    "METHOD_COUNT /out/2b8f2a04-494a-4453-81aa-6170bcb531bc.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -296,13 +447,14 @@
     "moved/ScopesAuthorizer.cs"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/csharp/scopes-moved/src --output .ccg-work/frontend-fitness/s27-probes/csharp/scopes-moved/out --codebase csharp -- /src --language csharpsrc",
    "parseRc": 0,
    "wall": 3.8,
    "fileMethods": [
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/3ad7964b-9685-49db-bf12-a7db61be47d4.cpg.bin=0"
+    "METHOD_COUNT /out/6e3c0da8-0e76-475f-aceb-d45e404b5fdc.cpg.bin=0"
    ],
    "contentRc": 1,
    "parseLogNonWarn": []
@@ -316,14 +468,15 @@
     "googletest/test/gtest_unittest.cc"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/cpp/gtest_unittest-alone/src --output .ccg-work/frontend-fitness/s27-probes/cpp/gtest_unittest-alone/out --codebase cpp -- /src --language c",
    "parseRc": 0,
-   "wall": 2.5,
+   "wall": 2.3,
    "fileMethods": [
     "<includes>=1",
     "<unknown>=0"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/1b97eff7-0ed2-4b21-bae7-5d99b8539714.cpg.bin=1"
+    "METHOD_COUNT /out/9a65c780-33b4-4914-b53e-913afa9c3292.cpg.bin=1"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -335,6 +488,7 @@
     "moved/gtest_unittest.cc"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/cpp/gtest_unittest-moved/src --output .ccg-work/frontend-fitness/s27-probes/cpp/gtest_unittest-moved/out --codebase cpp -- /src --language c",
    "parseRc": 0,
    "wall": 3.6,
    "fileMethods": [
@@ -343,7 +497,7 @@
     "moved/gtest_unittest.cc=203"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/e5c0fbbe-2b83-4855-8158-ae7d1c14a41a.cpg.bin=204"
+    "METHOD_COUNT /out/64bed76e-10ba-4740-a709-3cf20afa025f.cpg.bin=204"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
@@ -355,6 +509,7 @@
     "googletest/src/gtest.cc"
    ],
    "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/cpp/control-gtest.cc/src --output .ccg-work/frontend-fitness/s27-probes/cpp/control-gtest.cc/out --codebase cpp -- /src --language c",
    "parseRc": 0,
    "wall": 4.2,
    "fileMethods": [
@@ -363,10 +518,123 @@
     "googletest/src/gtest.cc=353"
    ],
    "methodCount": [
-    "METHOD_COUNT /out/207e9c1b-093f-4ba8-b08c-d61e8ba643f8.cpg.bin=354"
+    "METHOD_COUNT /out/41df1f28-c1b0-485e-9d68-761416ddfa42.cpg.bin=354"
+   ],
+   "contentRc": 0,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "cpp",
+   "case": "segment-test",
+   "files": [
+    "googletest/test/gtest.cc"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/cpp/segment-test/src --output .ccg-work/frontend-fitness/s27-probes/cpp/segment-test/out --codebase cpp -- /src --language c",
+   "parseRc": 0,
+   "wall": 2.3,
+   "fileMethods": [
+    "<includes>=1",
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/e399e4bd-0384-4d17-b03b-c016c33cf4d2.cpg.bin=1"
+   ],
+   "contentRc": 0,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "cpp",
+   "case": "segment-tests",
+   "files": [
+    "googletest/tests/gtest.cc"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend joern-parse --source .ccg-work/frontend-fitness/s27-probes/cpp/segment-tests/src --output .ccg-work/frontend-fitness/s27-probes/cpp/segment-tests/out --codebase cpp -- /src --language c",
+   "parseRc": 0,
+   "wall": 2.2,
+   "fileMethods": [
+    "<includes>=1",
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/1b005431-7ad6-4d2e-9f74-fc38b6190a02.cpg.bin=1"
+   ],
+   "contentRc": 0,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "cpp",
+   "case": "direct-c2cpg-segment-test",
+   "files": [
+    "googletest/test/gtest.cc"
+   ],
+   "extraArgs": [],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend c2cpg --source .ccg-work/frontend-fitness/s27-probes/cpp/direct-c2cpg-segment-test/src --output .ccg-work/frontend-fitness/s27-probes/cpp/direct-c2cpg-segment-test/out -- /src",
+   "parseRc": 0,
+   "wall": 1.3,
+   "fileMethods": [
+    "<includes>=1",
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/e5bb23bf-4908-4953-9dcd-0d62fd9593a5.cpg.bin=1"
+   ],
+   "contentRc": 0,
+   "parseLogNonWarn": []
+  },
+  {
+   "lang": "cpp",
+   "case": "direct-c2cpg-segment-test+exclude-regex-nonmatching",
+   "files": [
+    "googletest/test/gtest.cc"
+   ],
+   "extraArgs": [
+    "--exclude-regex",
+    "zzzz"
+   ],
+   "command": "sandbox/offline-run.sh --backend container --mode offline --frontend c2cpg --source .ccg-work/frontend-fitness/s27-probes/cpp/direct-c2cpg-segment-test+exclude-regex-nonmatching/src --output .ccg-work/frontend-fitness/s27-probes/cpp/direct-c2cpg-segment-test+exclude-regex-nonmatching/out -- /src --exclude-regex zzzz",
+   "parseRc": 0,
+   "wall": 1.3,
+   "fileMethods": [
+    "<includes>=1",
+    "<unknown>=0"
+   ],
+   "methodCount": [
+    "METHOD_COUNT /out/c175cc22-140e-497a-94b8-05cb693742a0.cpg.bin=1"
    ],
    "contentRc": 0,
    "parseLogNonWarn": []
   }
- ]
+ ],
+ "_helpExcerpts": {
+  "note": "--help of the frontends in the toolchain image (Joern v4.0.579), lines on exclusion; none offers a way to remove a default",
+  "jssrc2cpg": [
+   "--exclude <file1>  files or folders to exclude ...",
+   "--exclude-regex <value>  a regex specifying files to exclude ..."
+  ],
+  "javasrc2cpg": [
+   "--exclude <file1> ...",
+   "--exclude-regex <value> ..."
+  ],
+  "c2cpg": [
+   "--exclude <file1> ...",
+   "--exclude-regex <value> ...",
+   "--include <value> header include paths"
+  ],
+  "gosrc2cpg": [
+   "--exclude <file1> ...",
+   "--exclude-regex <value> ..."
+  ],
+  "csharpsrc2cpg": [
+   "--exclude <file1> ...",
+   "--exclude-regex <value> ..."
+  ],
+  "joern-parse": "own options + `--frontend-args` (variadic, verbatim); the runner appends `--output` after it, so any flag given after --frontend-args yields `Unknown option --output` (the earlier cases)"
+ },
+ "_conclusions": {
+  "defaultPathSegmentIgnore": "java: segment `test`; javascript: `i18n`, `test`, `tests` (segment-test/segment-tests cases: 0 methods); cpp: `test`, `tests` (segment-test/segment-tests: only the <includes> pseudo-file). Each moves to a parsed state when the segment is renamed (moved-neutral-path / gtest_unittest-moved).",
+  "noCliOverride": "Correct command lines: the frontend binary run directly through the runner (`--frontend javasrc2cpg|jssrc2cpg|c2cpg -- /src --exclude-regex zzzz`, rc 0, CPG written). The shipped test/i18n path stays at 0 methods with and without the flag; `--exclude`/`--exclude-regex` only add exclusions and --help lists no include/un-ignore option (c2cpg `--include` is a header include path). The earlier `joern-parse --frontend-args --exclude-regex` cases failed with 'Unknown option --output' because the runner appends --output after the variadic --frontend-args: a malformed command line, no evidence either way; superseded by the direct cases.",
+  "perFileFailure": "go (rfc9457.go, binder_test.go alone: 0 methods; csrf.go alone: no FILE node) and csharp (scopes-alone, acceptancesteps-alone, scopes-moved: 0 methods at a neutral path too): not a path rule."
+ }
 }

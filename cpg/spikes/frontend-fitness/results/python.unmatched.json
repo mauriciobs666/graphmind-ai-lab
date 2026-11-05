@@ -13,7 +13,9 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    }
   ],
   "on": [
@@ -28,8 +30,11 @@
     "possibleMatcherError": false,
     "fileNode": true,
     "callsOnLine": [],
-    "probeRc": 0
+    "probeRc": 0,
+    "dispositionText": "no CALL on the site's lines (inspected, calls listed empty): construct not modelled by the frontend; matcher not at fault",
+    "dispositionClass": "absent-in-joern"
    }
   ]
- }
+ },
+ "dispositionNote": "S27 fix round B2 (iii): per-class disposition by the graph-dba harness; the data-scientist's causes stay in the v2 miss logs"
 }

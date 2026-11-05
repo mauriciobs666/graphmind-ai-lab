@@ -1,5 +1,7 @@
 {
  "lang": "javascript",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/javascript.final.jsonl",
  "labelledSites": 523,

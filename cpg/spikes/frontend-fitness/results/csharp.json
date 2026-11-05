@@ -1,5 +1,7 @@
 {
  "lang": "csharp",
+ "variant": "as-shipped",
+ "headline": true,
  "provisional": true,
  "truth": "truth/csharp.final.jsonl",
  "labelledSites": 313,

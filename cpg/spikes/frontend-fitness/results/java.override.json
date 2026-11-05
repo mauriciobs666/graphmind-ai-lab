@@ -1,5 +1,11 @@
 {
  "lang": "java",
+ "variant": "override",
+ "headline": false,
+ "segmentsRenamed": [
+  "test"
+ ],
+ "caveat": "SECONDARY measurement: the corpus was copied with the frontend-ignored path segments renamed (ccgseg<name>) and mapped back; the as-shipped run (results/java.json) is the headline, since P1 users hit the frontend defaults. Verdicts here (recallDecision, gate83) are not the language's decision.",
  "provisional": true,
  "truth": "truth/java.final.jsonl",
  "labelledSites": 500,
