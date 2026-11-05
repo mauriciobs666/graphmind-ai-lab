@@ -504,3 +504,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-05 C5 closed+committed (graph-dba): results read final2, provisional:false, figures identical, 253 tests. Awaiting DS C1-C4,C6-C10.
 - 2026-11-05 DS revisions for Pass 7 delivered+committed (a29eb06a466168ccf); re-gate sent to analyst a79771729dce253a3 (Pass 8).
 - 2026-11-05 Analyst Pass 8: approve w/ suggestions; C1-C3,C5-C9 fixed; open D1 (census redefines ML 7.2 coverage/fidelity/parse success; S27c has no plan row, S30 dep) D2 (ML header §12 pointer) + coder-guess list in §a1.6. Stop condition: closes Pass 9 if ML 7.2 amended + S27c plan row + guess items 1-5,8 written or delegated with named rule source. DS -> ML 7.2, §a1.6; architect -> plan row S27c, S30 dep.
+- 2026-11-05 Pass 8 closure dispatched: DS a29eb06a466168ccf (ML 7.2 amend, §a1.6 guess items, D2) + architect aeb8be93489747c2a (plan v1.5: S27c row, S30 dep). Pass 9 gate follows.
