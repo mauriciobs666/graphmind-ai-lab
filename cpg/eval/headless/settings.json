@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Write|Edit|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -x \"$CCG_GUARD\" ] || { echo 'ccg path guard: CCG_GUARD unset or not executable; denying' >&2; exit 2; }; exec \"$CCG_GUARD\""
+          }
+        ]
+      }
+    ]
+  }
+}
