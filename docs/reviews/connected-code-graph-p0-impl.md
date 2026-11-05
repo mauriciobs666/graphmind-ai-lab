@@ -5466,3 +5466,24 @@ Fix: take an atomic lock before the checks, e.g. `mkdir "$ROLE_ROOT/.lock"` (or 
 ### Stopping condition (falsifiable)
 
 Re-gate passes when: (1) running two `start $E KA flow` in parallel against a fresh role root yields exactly one index `start` line and one exit 3; (2) that test exists in `test_launcher.sh` and a lock-removal mutant is killed in `mutants_launcher.sh`; (3) the README states the orphan-before-`--assume-ended` rule, or the launcher forwards TERM and writes an end record (m-1). m-2, m-3 and the nits need no further pass if dispositions are recorded.
+
+## Pass 2 — S52 (P0-43) re-gate
+
+**Verdict: approve.** The stopping condition from Pass 1 holds by execution. Scope: S52's files only; S53's `run-writer.sh`, `test_launcher.sh` and `mutants_launcher.sh` were ignored.
+
+CPG: considered, not relevant — the artifact is a shell hook, JSON prompts and tests, none of which a loaded CPG models.
+
+**Dispositions.**
+- **B-1: fixed.** `settings.json` now runs `"$CCG_GUARD"; rc=$?; [ "$rc" -eq 0 ] || exit 2` (no `exec`), and `guard-paths.sh` runs `main()` inside `try … except Exception → deny`. I ran `"\ud800/../../../etc/passwd"` for Read, Write and Grep through the settings command and through the guard alone: all six exit 2. A benign `BRIEF.md` Read through the settings command exits 0.
+- **Stopping condition 2: met.** `test_guard_paths.sh` now has an exit-code-in-{0,2} probe over tool × key × value class and cwd classes, and a settings-command-plus-guard surrogate case: 75 passed, 0 failed. `mutants_guard_paths.sh`: 18 killed, 0 survived, including the two I asked for (internal errors not caught; settings command reverted to `exec`) and a third (settings command ignores the guard's exit code).
+- **M-1: fixed by ruling, and the prompts match it.**
+  - The Appendix B hash moved to `c2be33d4a0ed833e` only because "Rules for the pasters" was edited. `### B.0` to the end of the Appendix is byte-identical to v1.3's, and the old `ee7029c3f3148e08` is v1.3's whole Appendix. So the B.0 text and the three role parts are unchanged.
+  - All four prompts still contain B.0 before and after the slot (only `{outputPath}` replaced), end exactly with the role part, and hold one byte-identical extract: 12,145 bytes, sha256 prefix `5202c983c7ced1bc`.
+  - The extract has no rule 7 and no `{**}`, reads "(Rules 5 and 7 are not used in this brief.)", and `http` step 7 ends at `{}`. Rule 4 reads spec3's "Every code file".
+  - The ruling is sound. Writers are told never to write `<anon>` or `#N`; the extract keeps `<anon>`/`#N` only so "nearest enclosing named" is decidable. The `#k` cut is safe because EP E1 and `E(q)` (§2.3, line 144) remove `#k` and log the rewrite, so a stray `#k` cannot change scoring. The `{}`-versus-`{**}` limit is stated, and its "nil exposure" claim holds: my route-decorator grep over tracked non-test `.py/.ts/.tsx/.js` for `:path}`, `{*`, `[...`, `/*` found no hits.
+  - One residual, not a defect: two same-scope definitions of one name both come out as `f` in a key, and the system disambiguates them through `E`'s first-duplicate mapping.
+- **m-1: fixed** (rule 4 wording; a test pins it). **m-2: fixed** (extract length and hash pinned, four copies required byte-identical). **m-3: fixed** (`mutants_agents_json.sh`: 11 killed, 0 survived; `test_agents_json.py`: 59 passed, 0 failed). **m-4: fixed** (checklist "in your context only"; a test asserts there is no file instruction). Dispositions are recorded in `S52-NOTES.md` lines 57-86, which I read.
+
+**Carried to S54, unchanged from Pass 1 question 5:** hook firing, exit-code handling under the real harness (plant the surrogate path), `cwd` equals the role root, real tool-input key names, tool list exactly the five, no symlinks in the kit copy, brace-glob and `$VAR`/whitespace/Unicode path handling, `--agents`/`--agent` resolution, `CCG_GUARD` inheritance under `env -i`. Any later change to Appendix B's B.0 or role parts, or to the extract, changes the `agents.json` hash and re-opens S54.
+
+**Stopping condition:** met; no Pass 3 for S52.
