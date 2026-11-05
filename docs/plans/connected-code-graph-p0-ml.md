@@ -1,9 +1,10 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.13 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.14 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
 *Revision 2026-10-29 (v1.1): review S05 Pass 1 addressed in full (M1, M3, M4, m1–m4, n1 fixed; M2 restored to the plan's point-estimate rule, with the upper-bound rule kept as a proposal, §8.3; M5, m5 and the S24↔S25 order specified as step outputs for `architect`, §11). Dispositions in §12.*
 *Revision 2026-10-29 (v1.2): review S05 Pass 2 addressed (P2-1 resolved against bundle spec v1.1 rule 8; P2-2–P2-4; vendored and decorator scope decided); dispositions in §12 Pass 2.*
+*Revision 2026-11-05 (v1.14): §2 "Site found" clarified to the strict rule after the S27 results were seen: a frame site that matches no Joern `CALL` (§7.1, absent in Joern) is not found, even when name matching would cover its truth; the lenient reading (name match credited without a `CALL`) is reported only as a secondary figure. This is a post-result rule clarification, disclosed in the P0 report.*
 *Revision 2026-11-04 (v1.13): §5.4 step 7 owns the noise flag (§5.1 step 4 points to it); `flagByVersion` disclosure envelope; stop item 2 waiver condition; `sweep-overturned` in the `basis` list; C++ single-reading statement. Earlier content (v1.4–v1.12) stands. The v1.3 re-alignment record is in §12 Pass 2.*
 
 ## 0. Question and the decision it serves
@@ -123,7 +124,7 @@ What reading the real plan and system changed:
     `calleeName`. Name matching is name-only, within the corpus, as the P1 fallback will do
     (proposal §3.4). Resolved sites also carry their name-match candidates (proposal m1). An
     arity-filtered variant is a reported sensitivity only.
-- **Site found** (recall unit): `T(s) ⊆ Res_c(s) ∪ Nm(s)`. Strict: a site with two true callees, one
+- **Site found** (recall unit): the site matches a Joern `CALL` (§7.1) **and** `T(s) ⊆ Res_c(s) ∪ Nm(s)`; an unmatched site (absent in Joern) is not found. Strict: a site with two true callees, one
   missed, is a miss. Edge-level recall is reported as a secondary figure. The analysis unit is the
   **site**, because edges of one site are not independent (repeated-measures rule). A `decl` member
   shares its name with the call, so `Nm(s)` always covers it. In practice recall is decided by the
