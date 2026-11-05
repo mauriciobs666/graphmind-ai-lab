@@ -101,13 +101,21 @@ def _resolve(root: str, p) -> str | None:
     return os.path.realpath(os.path.join(root, p))
 
 
-def _expand_braces(pat: str) -> list[str]:
-    m = re.search(r"\{([^{}]*)\}", pat)
-    if not m:
-        return [pat]
+def _expand_braces(pat: str, limit: int = MAX_PATTERN_VARIANTS) -> list[str] | None:
+    """Brace-free alternatives of ``pat``; None as soon as there would be more than ``limit`` of them
+    (counted while expanding, so a hostile pattern costs O(limit), never 2**groups)."""
     out: list[str] = []
-    for alt in m.group(1).split(","):
-        out += _expand_braces(pat[:m.start()] + alt + pat[m.end():])
+    stack = [pat]
+    while stack:
+        cur = stack.pop()
+        m = re.search(r"\{([^{}]*)\}", cur)
+        if not m:
+            out.append(cur)
+            if len(out) > limit:
+                return None
+            continue
+        alts = m.group(1).split(",")
+        stack.extend(cur[:m.start()] + alt + cur[m.end():] for alt in alts)
     return out
 
 
@@ -175,20 +183,36 @@ def _literal_base(base_dir: str, pat: str) -> str | None:
     return os.path.realpath(os.path.join(base_dir, prefix))
 
 
-def pattern_escapes(root: str, base_dir: str, pat) -> bool:
-    """True if any reading of the glob ``pat`` (braces expanded; ``[class]`` and ``?`` read as ``/``,
-    ``~`` or ``.`` where they could be) can name something outside ``root``."""
-    if not isinstance(pat, str) or "\0" in pat:
+def _pattern_escapes_one(root: str, base_dir: str, pat: str) -> bool:
+    budget = MAX_PATTERN_VARIANTS            # readings for the whole pattern: braces x wildcards
+    alts = _expand_braces(pat, budget)
+    if alts is None:
         return True
-    for alt in _expand_braces(pat):
+    for alt in alts:
         variants = _wildcard_variants(alt)
         if variants is None:
+            return True
+        budget -= len(variants)
+        if budget < 0:
             return True
         for v in variants:
             b = _literal_base(base_dir, v)
             if b is None or not _inside(b, root):
                 return True
     return False
+
+
+def pattern_escapes(root: str, base_dir: str, pat) -> bool:
+    """True if any reading of the glob ``pat`` (braces expanded; ``[class]`` and ``?`` read as ``/``,
+    ``~`` or ``.`` where they could be; and with ``\\x`` read as ``x``, since a backslash may escape a
+    dot) can name something outside ``root``. Braces and wildcard readings share one budget of
+    ``MAX_PATTERN_VARIANTS``; exceeding it is an escape (fail closed). Known limit: the readings are
+    enumerated over the whole pattern, so an honest glob with many ``?``/classes (``kit-src/**/????-??-??.json``)
+    exceeds the budget and is voided; narrowing that needs path-depth reasoning, not done."""
+    if not isinstance(pat, str) or "\0" in pat:
+        return True
+    unescaped = re.sub(r"\\(.)", r"\1", pat, flags=re.DOTALL)
+    return any(_pattern_escapes_one(root, base_dir, r) for r in dict.fromkeys((pat, unescaped)))
 
 
 def classify_call(name: str, inp, root: str, allowed: set[str]) -> list[str]:

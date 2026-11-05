@@ -722,6 +722,68 @@ def test_classify_pattern_too_many_readings_is_an_escape(tmp_path):
     assert audit.classify_call("Glob", {"pattern": "?" * 6 + "/x"}, str(root), ROLE_SET) == ["path-outside-root"]
 
 
+@pytest.mark.parametrize("tool", ["Glob", "Grep"])
+@pytest.mark.parametrize("pattern", [r"kit-src/\.\./\.\./\.\./\.\./etc/*", r"\.\./x/*", r"kit-src/\.\./\.\./x"])
+def test_classify_backslash_escaped_dots_are_read_both_ways(tmp_path, tool, pattern):
+    # N-1: `\x` may mean a literal x; the pattern is judged as written AND with `\x` read as `x`
+    root = tmp_path / "role"
+    (root / "kit-src").mkdir(parents=True)
+    assert audit.classify_call(tool, _tool_input(tool, pattern), str(root), ROLE_SET) == ["path-outside-root"]
+
+
+@pytest.mark.parametrize("pattern", [r"kit-src/\*.md", r"kit-src/a\ b/*", r"kit-src/\.hidden/*"])
+def test_classify_backslash_benign_control(tmp_path, pattern):
+    root = tmp_path / "role"
+    (root / "kit-src").mkdir(parents=True)
+    assert audit.classify_call("Glob", {"pattern": pattern}, str(root), ROLE_SET) == []
+
+
+def test_pattern_escapes_brace_groups_are_bounded_in_time(tmp_path):
+    # N-2: 30 `{a,b}` groups are 2**30 readings; the audit must give up (escape) without expanding them
+    import time
+    root = tmp_path / "role"
+    root.mkdir()
+    t0 = time.monotonic()
+    assert audit.pattern_escapes(str(root), str(root), "kit-src/" + "{a,b}" * 30) is True
+    assert time.monotonic() - t0 < 1.0
+
+
+def test_pattern_escapes_reading_cap_is_pinned(tmp_path):
+    # MAX_PATTERN_VARIANTS = 512: nine two-reading classes (512 readings) are audited; ten (1024) escape
+    root = tmp_path / "role"
+    root.mkdir()
+    r = str(root)
+    assert audit.MAX_PATTERN_VARIANTS == 512
+    assert audit.pattern_escapes(r, r, "kit-src/" + "[.a]" * 9) is False
+    assert audit.pattern_escapes(r, r, "kit-src/" + "[.a]" * 10) is True
+
+
+def test_pattern_escapes_brace_cap_is_pinned(tmp_path):
+    # the brace alternatives share the same budget: nine groups (512 alternatives) pass, ten escape
+    root = tmp_path / "role"
+    root.mkdir()
+    r = str(root)
+    assert audit.pattern_escapes(r, r, "kit-src/" + "{a,b}" * 9) is False
+    assert audit.pattern_escapes(r, r, "kit-src/" + "{a,b}" * 10) is True
+
+
+def test_pattern_escapes_one_wide_brace_group_is_capped_at_exactly_512(tmp_path):
+    root = tmp_path / "role"
+    root.mkdir()
+    r = str(root)
+    wide = lambda n: "kit-src/{" + ",".join(f"f{i}" for i in range(n)) + "}"
+    assert audit.pattern_escapes(r, r, wide(512)) is False
+    assert audit.pattern_escapes(r, r, wide(513)) is True
+
+
+def test_pattern_escapes_budget_is_shared_between_braces_and_wildcards(tmp_path):
+    # 2 alternatives x 512 class readings = 1024 > 512: the budget is for the whole pattern
+    root = tmp_path / "role"
+    root.mkdir()
+    r = str(root)
+    assert audit.pattern_escapes(r, r, "kit-src/{a,b}" + "[.a]" * 9) is True
+
+
 def test_classify_glob_path_is_the_base_for_the_pattern(tmp_path):
     # pins `base_dir = resolved.get("path", root)`: `link/*` under path=kit-src goes through an
     # in-root symlink that points out; against the root instead, `link` does not exist and looks clean
