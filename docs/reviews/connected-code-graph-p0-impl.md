@@ -5561,3 +5561,24 @@ The path resolution (`realpath` against a realpath root, the `os.sep` guard agai
 ### Stopping condition (falsifiable)
 
 Re-gate passes when: (1) the M-1 coverage probe above is a test and classifies every (brace, class, `?`, `**`) × (absolute, `~`, `..`) × (Glob, Grep) cell outside the root; (2) a test exports a non-tip commit of a multi-commit repo and the `"HEAD"` and raw-SHA mutants are killed; (3) the method owner has ruled on M-3, and the tool and tests agree with the ruling (an "intent" question verifies; an escaped `gold` in `text` does not); (4) m-1 and m-3 are fixed or recorded as accepted limits. The D1-D7 rulings are not part of the condition; they are carried to S40.
+
+## Pass 5 — S48 re-gate (`0ca9f24b`)
+
+**Verdict: approve with suggestions.** All four Pass 4 stopping conditions hold by execution. I ran the suite (216 passed), re-applied my mutants in a scratch mirror, re-ran my attack harness against the new audit, and re-ran the independent frame and draw script. CPG: considered, not relevant (same reason as Pass 4).
+
+**Dispositions.**
+- **M-1 fixed.** All my brace, class, `?` and `**` forms are caught: `{a,{b,{c,/etc}}}/*`, `{,/}etc/*`, `[,/]etc`, `[--0]etc/*`, `kit-src/{.,x}{.,x}/{.,x}{.,x}/etc/*`, `kit-src/??/etc`, `?etc/*`, `**/{..,a}/x`. The 512-reading cap fails closed. Benign patterns (`kit-src/**/*.py`, `src/*.{ts,tsx}`, `kit-src/[a-z]`) stay clean. New residuals are N-1 to N-3 below.
+- **M-2 fixed.** The `"HEAD"` mutant is killed (1 failed), and so is the raw-SHA `evalCommit` mutant (8 failed). A symlink refusal now leaves no `kit-src`.
+- **M-3 fixed, matches §13.2.** Six honest questions (intent, groups, gold standard, `ambiguityKind` field, `group_by`, `goldOptions` handling) verify ok. Leak shapes fail with the `aid` only: `"gold":`, `goldOptions:`, `intent=`, `ambiguityKind:`, own `qid`, own `group` value, and a leak written with JSON escapes in QW (the check reads parsed text). A re-encoded output fails the byte-identity check. Case variants (`"Gold":`), `group: 5` and `intent : x` pass; the ruling names literal field spellings, so that is conformant.
+- **m-1 fixed** (input difference voids; mutant killed). **m-2 fixed** (anchored denial text; the `permission` mutant is killed). **m-3 fixed** (`no-sessions` void, malformed start line exit 2). **m-5 fixed. m-6 fixed** (40-hex or resolved, and equal to the manifest).
+- **m-4 fixed as a design.** The excuse is tied to one transcript message. Two hidden messages: the second voids. A tail naming a stream-matched message id: voids. A hidden outside read or MCP call in the excused slot: still voids, since the call is classified. A tail naming the hidden message's id excuses only the id mismatch for a clean call. Residual: `if cand not in all_matched` is unpinned (mutant survives).
+- **m-7 fixed** (`base_dir` mutant killed).
+- **D1-D3 fixed, D4-D7 ruled or reported.** The vendored list matches the spec's names, and unparsed files are counted (`skipped-files`, `error-trees`). `outer.helper`, `default` and `default.m` now appear; non-identifier object keys are out. My independent script, rerun against the new frame at HEAD's kit, agrees on all 1715 Python and 156 JS candidates, and its draw equals the tool's for both languages. The draw changed from Pass 4 only because the seed commit moved. D5 is now a stated ruling in the code, so my script is not independent of it.
+
+**New findings (minor).**
+- **N-1 (verified on the audit; inferred on Glob semantics): backslash-escaped dots escape.** `kit-src/\.\./\.\./\.\./\.\./etc/*` classifies clean, since `\.` is not read as `.`. If Claude Code's glob treats `\.` as a literal dot, this reaches outside the root; `guard-paths.sh` shares the form. Treat `\x` as `x` before the component test (run the pattern both ways).
+- **N-2 (verified): brace expansion is unbounded.** `{a,b}` ×20 took 26 s in the audit, and each extra brace doubles that. A writer-chosen pattern can stall the audit. Cap the expansions (as for wildcard readings) and treat the excess as an escape.
+- **N-3 (verified): the reading cap gives false voids.** The variants are enumerated over the whole pattern, not the literal prefix, so honest `kit-src/**/????-??-??.json` and `kit-src/??????` are flagged outside-root (fail closed). Enumerate the prefix before the first wildcard component only. The `MAX_PATTERN_VARIANTS` constant is unpinned (raising it leaves the suite green).
+- **Plugin pin.** `--accepted-plugins` voids on a name difference and on a non-`@builtin` source; the real names pass. Without it the report lists `unpinned`, so the pin is opt-in; S54 must pass it.
+
+Stopping condition: met; no further pass needed if N-1 and N-2 are fixed or recorded as accepted limits before S54.
