@@ -1,0 +1,201 @@
+{
+ "lang": "python",
+ "N": 240,
+ "assembledBy": "qa-engineer FC (mechanical); decisions by data-scientist",
+ "comparable": {
+  "comparable": 209,
+  "referenceSilent": 31,
+  "share": 0.8708
+ },
+ "agreement": {
+  "agreed": 163,
+  "comparable": 209,
+  "rate": 0.7799,
+  "wilson95": [
+   0.719,
+   0.8307
+  ],
+  "perStratum": {
+   "AI(label has in-corpus target)": {
+    "agreed": 92,
+    "comparable": 125,
+    "rate": 0.736,
+    "wilson95": [
+     0.6525,
+     0.8054
+    ]
+   },
+   "AE(label has none)": {
+    "agreed": 71,
+    "comparable": 84,
+    "rate": 0.8452,
+    "wilson95": [
+     0.753,
+     0.9073
+    ]
+   },
+   "declared": {
+    "agreed": 0,
+    "comparable": 1,
+    "rate": 0.0,
+    "wilson95": [
+     0,
+     0.7935
+    ]
+   },
+   "relaxed": null,
+   "byConstruction": null,
+   "macro": null
+  },
+  "referenceFlagCounts": {}
+ },
+ "adjudicated": {
+  "n": 73,
+  "byWrongAndErrorKind": {
+   "both|coordinate": 8,
+   "both|target": 3,
+   "label|target": 7,
+   "neither|none": 39,
+   "reference|none": 16
+  },
+  "W_labelWrong": 18,
+  "errorKindRecode": "schema->coordinate for ordinals [10, 55, 56, 153, 212, 218, 222, 229]"
+ },
+ "auditTable": {
+  "AI": {
+   "N_s": 92,
+   "n": 60,
+   "errors_k": 0,
+   "residual_errors": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ],
+   "drawC": {
+    "n": 7,
+    "cell_errors": 0,
+    "pooled": false
+   },
+   "flagged": false
+  },
+  "AE": {
+   "N_s": 71,
+   "n": 60,
+   "errors_k": 0,
+   "residual_errors": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ],
+   "drawC": {
+    "n": 0,
+    "cell_errors": 0,
+    "pooled": false
+   },
+   "flagged": false
+  },
+  "AS": {
+   "N_s": 4,
+   "n": 4,
+   "errors_k": 0,
+   "residual_errors": 0,
+   "wilson95": [
+    0,
+    0.4899
+   ],
+   "drawC": {
+    "n": 0,
+    "cell_errors": 0,
+    "pooled": false
+   },
+   "flagged": false
+  }
+ },
+ "closedClass": {
+  "kinds": [
+   "coordinate",
+   "role",
+   "shape"
+  ],
+  "instancesByOrdinal": {
+   "coordinate": [
+    10,
+    55,
+    56,
+    153,
+    212,
+    218,
+    222,
+    229
+   ],
+   "role": [],
+   "shape": []
+  },
+  "count": 8,
+  "shareOfN": 0.0333,
+  "condIV_le_0.10": true,
+  "labelRoleErrorsInCensus": 0
+ },
+ "handError": {
+  "e_all": 0.075,
+  "e_all_conservative": 0.1241,
+  "e_res": 0.0417,
+  "e_res_conservative": 0.0907,
+  "W": 18,
+  "W_residual": 10,
+  "flagUses": "e_res",
+  "noiseLimited": false,
+  "note": "conservative = each stratum Wilson upper bound for k/n (AS: n=N_s=4 drawn in full; literal Wilson bound 0/4 used, a census would give 0)"
+ },
+ "referenceError": {
+  "adjudicatedWrongOnComparable": 27,
+  "comparable": 209,
+  "rate": 0.1292,
+  "wilson95": [
+   0.0903,
+   0.1814
+  ],
+  "auditRefErrors": {
+   "AI": 0,
+   "AE": 0,
+   "AS": 0
+  },
+  "rate_with_audit_extrapolation": 0.1292,
+  "conservative": 0.1761
+ },
+ "census": {
+  "distinctLabelAndReference": 152,
+  "dsDecidedNotInThose": 43,
+  "dsExtList": 43,
+  "targetsRead": 195,
+  "queue152": 152,
+  "ext43": 43,
+  "equalsDistinctLabelRefDecided": true,
+  "labelRefAllRead": true,
+  "decidedAllRead": true,
+  "forms": {
+   "def-with-body": 153,
+   "class": 32,
+   "protocol-stub": 2,
+   "parameter": 1,
+   "blank-line": 3,
+   "first-body-line": 1,
+   "attribute-assignment": 1,
+   "lambda": 2
+  }
+ },
+ "sampleLength": {
+  "n_int_final": 155,
+  "classTargetSites_anyTypeTarget": 15,
+  "classTargetSites_onlyTypeTargets": 24,
+  "ruleOutcome": "n_int>=150: nothing",
+  "note": "whether class-target sites count toward n_int is an open point for S27, not decided here"
+ },
+ "unscored": {},
+ "underivable": 0,
+ "basisCounts": {
+  "audit-confirmed": 131,
+  "adjudicated": 73,
+  "agreed": 36
+ }
+}

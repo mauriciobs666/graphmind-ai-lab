@@ -1,0 +1,510 @@
+{
+ "lang": "python",
+ "N": 240,
+ "comparable": 209,
+ "referenceSilent": 31,
+ "agreement": {
+  "agreed": 163,
+  "comparable": 209,
+  "rate": 0.7799,
+  "wilson95": [
+   0.719,
+   0.8307
+  ]
+ },
+ "adjudicated": {
+  "n": 73,
+  "W": 18,
+  "byWrong": {
+   "neither": 39,
+   "both": 11,
+   "reference": 16,
+   "label": 7
+  },
+  "byErrorKind": {
+   "none": 55,
+   "target": 10,
+   "coordinate": 8
+  }
+ },
+ "referenceError": {
+  "wrong": 27,
+  "comparable": 209,
+  "rate": 0.1292,
+  "wilson95": [
+   0.0903,
+   0.1814
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 92,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ],
+   "r_residual": 0,
+   "unreadRemainder": 32,
+   "wilson95_residual": [
+    0,
+    0.0602
+   ]
+  },
+  "AE": {
+   "N_s": 71,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ],
+   "r_residual": 0,
+   "unreadRemainder": 11,
+   "wilson95_residual": [
+    0,
+    0.0602
+   ]
+  },
+  "AS": {
+   "N_s": 4,
+   "n": 4,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.4899
+   ],
+   "r_residual": 0,
+   "unreadRemainder": 0,
+   "wilson95_residual": [
+    0,
+    0.4899
+   ]
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.075,
+   "conservative": 0.1241
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.0108
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 195,
+  "file": "adjudication/python.census.jsonl",
+  "rows": 195,
+  "distinctLabelReferenceFinalT": 195,
+  "equal": true
+ },
+ "closedClasses": {
+  "count": 8,
+  "byKind": {
+   "role": [],
+   "coordinate": [
+    10,
+    55,
+    56,
+    153,
+    212,
+    218,
+    222,
+    229
+   ],
+   "shape": []
+  }
+ },
+ "unscored": {
+  "byReason": {},
+  "underivable": 0
+ },
+ "basisCounts": {
+  "audit-confirmed": 131,
+  "adjudicated": 73,
+  "agreed": 36
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.075,
+   "flagged": true
+  },
+  "v1.11": {
+   "figure": 0.0417,
+   "flagged": false
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": {
+   "n_sitesWithAnyClassLineTarget": 15,
+   "n_sitesClassLineOnly": 15,
+   "sitesAnyOrdinals": [
+    24,
+    26,
+    31,
+    42,
+    48,
+    57,
+    77,
+    108,
+    115,
+    127,
+    131,
+    136,
+    154,
+    164,
+    187
+   ],
+   "sitesClassOnlyOrdinals": [
+    24,
+    26,
+    31,
+    42,
+    48,
+    57,
+    77,
+    108,
+    115,
+    127,
+    131,
+    136,
+    154,
+    164,
+    187
+   ],
+   "definitions": [
+    {
+     "path": "falkorchat/config.py",
+     "defLine": 265,
+     "qname": "falkorchat/config.py::CallContext"
+    },
+    {
+     "path": "falkorchat/llm.py",
+     "defLine": 36,
+     "qname": "falkorchat/llm.py::ToolCall"
+    },
+    {
+     "path": "falkorchat/llm.py",
+     "defLine": 51,
+     "qname": "falkorchat/llm.py::ChatResult"
+    },
+    {
+     "path": "falkorchat/querygen.py",
+     "defLine": 78,
+     "qname": "falkorchat/querygen.py::QueryFilter"
+    },
+    {
+     "path": "falkorchat/querygen.py",
+     "defLine": 91,
+     "qname": "falkorchat/querygen.py::QueryMatch"
+    },
+    {
+     "path": "falkorchat/repository.py",
+     "defLine": 35,
+     "qname": "falkorchat/repository.py::MemberIdCollisionError"
+    },
+    {
+     "path": "falkorchat/repository.py",
+     "defLine": 113,
+     "qname": "falkorchat/repository.py::WorkflowInputRejectedError"
+    },
+    {
+     "path": "falkorchat/services.py",
+     "defLine": 301,
+     "qname": "falkorchat/services.py::MatchNotFoundError"
+    },
+    {
+     "path": "falkorchat/storefront.py",
+     "defLine": 333,
+     "qname": "falkorchat/storefront.py::ParticipantRecord"
+    },
+    {
+     "path": "falkorchat/tools.py",
+     "defLine": 1285,
+     "qname": "falkorchat/tools.py::HumanHandoffTool"
+    },
+    {
+     "path": "tests/eval/generate_report.py",
+     "defLine": 94,
+     "qname": "tests/eval/generate_report.py::ReportError"
+    },
+    {
+     "path": "tests/test_input_bound_parity.py",
+     "defLine": 93,
+     "qname": "tests/test_input_bound_parity.py::Service"
+    },
+    {
+     "path": "tests/test_input_bound_parity.py",
+     "defLine": 123,
+     "qname": "tests/test_input_bound_parity.py::Twin"
+    }
+   ],
+   "note": "T is a class line standing for an implicit constructor (class has no __init__, or reference-only mapping); whether such sites count toward n_int/recall is open for S27"
+  },
+  "anonymousLambdaIndices": [
+   {
+    "qname": "tests/test_workflow_timers.py::test_sweep_bucket_raced_on_a_stale_scanned_step_key_not_just_status.<anon>#1",
+    "ordinals": [
+     84
+    ],
+    "path_lines": [
+     "tests/test_workflow_timers.py:780"
+    ]
+   },
+   {
+    "qname": "tests/test_workflow_timers.py::test_sweep_cas_contention_a_run_resumed_in_the_read_act_gap_lands_in_raced.<anon>#1",
+    "ordinals": [
+     84
+    ],
+    "path_lines": [
+     "tests/test_workflow_timers.py:722"
+    ]
+   }
+  ],
+  "externalsAbsentFromTree": {
+   "found": [],
+   "externalPackagesLabelled": [
+    "builtin",
+    "falkordb",
+    "fastapi",
+    "httpx",
+    "pydantic",
+    "pytest",
+    "stdlib",
+    "stdlib:collections.abc",
+    "stdlib:pathlib"
+   ],
+   "note": "none found: no labelled external names a package whose source is in the corpus tree (top-level: ['.env.example', 'falkorchat', 'pyproject.toml', 'tests'])"
+  }
+ },
+ "detail": {
+  "lang": "python",
+  "N": 240,
+  "assembledBy": "qa-engineer FC (mechanical); decisions by data-scientist",
+  "comparable": {
+   "comparable": 209,
+   "referenceSilent": 31,
+   "share": 0.8708
+  },
+  "agreement": {
+   "agreed": 163,
+   "comparable": 209,
+   "rate": 0.7799,
+   "wilson95": [
+    0.719,
+    0.8307
+   ],
+   "perStratum": {
+    "AI(label has in-corpus target)": {
+     "agreed": 92,
+     "comparable": 125,
+     "rate": 0.736,
+     "wilson95": [
+      0.6525,
+      0.8054
+     ]
+    },
+    "AE(label has none)": {
+     "agreed": 71,
+     "comparable": 84,
+     "rate": 0.8452,
+     "wilson95": [
+      0.753,
+      0.9073
+     ]
+    },
+    "declared": {
+     "agreed": 0,
+     "comparable": 1,
+     "rate": 0.0,
+     "wilson95": [
+      0,
+      0.7935
+     ]
+    },
+    "relaxed": null,
+    "byConstruction": null,
+    "macro": null
+   },
+   "referenceFlagCounts": {}
+  },
+  "adjudicated": {
+   "n": 73,
+   "byWrongAndErrorKind": {
+    "both|coordinate": 8,
+    "both|target": 3,
+    "label|target": 7,
+    "neither|none": 39,
+    "reference|none": 16
+   },
+   "W_labelWrong": 18,
+   "errorKindRecode": "schema->coordinate for ordinals [10, 55, 56, 153, 212, 218, 222, 229]"
+  },
+  "auditTable": {
+   "AI": {
+    "N_s": 92,
+    "n": 60,
+    "errors_k": 0,
+    "residual_errors": 0,
+    "wilson95": [
+     0,
+     0.0602
+    ],
+    "drawC": {
+     "n": 7,
+     "cell_errors": 0,
+     "pooled": false
+    },
+    "flagged": false
+   },
+   "AE": {
+    "N_s": 71,
+    "n": 60,
+    "errors_k": 0,
+    "residual_errors": 0,
+    "wilson95": [
+     0,
+     0.0602
+    ],
+    "drawC": {
+     "n": 0,
+     "cell_errors": 0,
+     "pooled": false
+    },
+    "flagged": false
+   },
+   "AS": {
+    "N_s": 4,
+    "n": 4,
+    "errors_k": 0,
+    "residual_errors": 0,
+    "wilson95": [
+     0,
+     0.4899
+    ],
+    "drawC": {
+     "n": 0,
+     "cell_errors": 0,
+     "pooled": false
+    },
+    "flagged": false
+   }
+  },
+  "closedClass": {
+   "kinds": [
+    "coordinate",
+    "role",
+    "shape"
+   ],
+   "instancesByOrdinal": {
+    "coordinate": [
+     10,
+     55,
+     56,
+     153,
+     212,
+     218,
+     222,
+     229
+    ],
+    "role": [],
+    "shape": []
+   },
+   "count": 8,
+   "shareOfN": 0.0333,
+   "condIV_le_0.10": true,
+   "labelRoleErrorsInCensus": 0
+  },
+  "handError": {
+   "e_all": 0.075,
+   "e_all_conservative": 0.1241,
+   "e_res": 0.0417,
+   "e_res_conservative": 0.0907,
+   "W": 18,
+   "W_residual": 10,
+   "flagUses": "e_res",
+   "noiseLimited": false,
+   "note": "conservative = each stratum Wilson upper bound for k/n (AS: n=N_s=4 drawn in full; literal Wilson bound 0/4 used, a census would give 0)"
+  },
+  "referenceError": {
+   "adjudicatedWrongOnComparable": 27,
+   "comparable": 209,
+   "rate": 0.1292,
+   "wilson95": [
+    0.0903,
+    0.1814
+   ],
+   "auditRefErrors": {
+    "AI": 0,
+    "AE": 0,
+    "AS": 0
+   },
+   "rate_with_audit_extrapolation": 0.1292,
+   "conservative": 0.1761
+  },
+  "census": {
+   "distinctLabelAndReference": 152,
+   "dsDecidedNotInThose": 43,
+   "dsExtList": 43,
+   "targetsRead": 195,
+   "queue152": 152,
+   "ext43": 43,
+   "equalsDistinctLabelRefDecided": true,
+   "labelRefAllRead": true,
+   "decidedAllRead": true,
+   "forms": {
+    "def-with-body": 153,
+    "class": 32,
+    "protocol-stub": 2,
+    "parameter": 1,
+    "blank-line": 3,
+    "first-body-line": 1,
+    "attribute-assignment": 1,
+    "lambda": 2
+   }
+  },
+  "sampleLength": {
+   "n_int_final": 155,
+   "classTargetSites_anyTypeTarget": 15,
+   "classTargetSites_onlyTypeTargets": 24,
+   "ruleOutcome": "n_int>=150: nothing",
+   "note": "whether class-target sites count toward n_int is an open point for S27, not decided here"
+  },
+  "unscored": {},
+  "underivable": 0,
+  "basisCounts": {
+   "audit-confirmed": 131,
+   "adjudicated": 73,
+   "agreed": 36
+  },
+  "v1.12": {
+   "e_all_W_only_labelWrong": 0.0292,
+   "e_all_W_labelWrongOrBoth": 0.075,
+   "e_res_formula": "sum_s (N_s-n_s)*r_s/n_s / N, r_s = audited target/kind errors",
+   "closedClassShare": 0.0333,
+   "closedClassTripwire": 0.1,
+   "v1.10WouldHaveSaid": {
+    "figure_with_role_errors": 0.075,
+    "noiseLimited": true
+   },
+   "v1.11Said": {
+    "e_res": 0.0417,
+    "noiseLimited": false
+   },
+   "n_int": {
+    "withClassLineOnlySites": 155,
+    "excludingClassLineOnlySites": 140
+   },
+   "basisRuling": "precedence adjudicated > audit-confirmed > label-only > agreed verified against FC records; 0 deviations; the 4 AS sites (all re-read in draw U) are audit-confirmed; 0 label-only",
+   "siblingSweep": "none required: no target/kind error in any audit draw (draws U and C: 0 errors)",
+   "dsReasoningNote": "adjudicated sites decided from source by DS; DS error not estimated by this procedure"
+  }
+ }
+}

@@ -1,0 +1,61 @@
+{
+ "stratumN": {
+  "AE": 71,
+  "AI": 92,
+  "AS": 4
+ },
+ "cellCounts": {
+  "AE": {
+   "external:builtin": 33,
+   "external:stdlib": 24,
+   "external:fastapi": 3,
+   "external:pytest": 3,
+   "external:falkordb": 7,
+   "external:pydantic": 1
+  },
+  "AI": {
+   "internal:tests/test_mcp.py": 4,
+   "internal:tests/test_modelconfig.py": 1,
+   "internal:tests/test_repository.py": 9,
+   "internal:falkorchat/storefront.py": 6,
+   "internal:falkorchat/trigger.py": 1,
+   "internal:falkorchat/services.py": 8,
+   "internal:tests/test_graphrag.py": 2,
+   "internal:tests/test_retry.py": 2,
+   "internal:falkorchat/llm.py": 4,
+   "internal:falkorchat/tools.py": 2,
+   "internal:tests/test_storefront_api.py": 8,
+   "internal:tests/test_services.py": 3,
+   "internal:tests/test_embedding_migration.py": 1,
+   "internal:tests/test_workflow_timers.py": 1,
+   "internal:falkorchat/config.py": 2,
+   "internal:tests/test_provenance.py": 1,
+   "internal:tests/test_executor_agent.py": 5,
+   "internal:falkorchat/repository.py": 3,
+   "internal:tests/eval/test_guard_set_integrity.py": 1,
+   "internal:tests/eval/nlq_scoring.py": 1,
+   "internal:tests/test_input_bound_parity.py": 2,
+   "internal:tests/test_storefront.py": 4,
+   "internal:tests/test_background.py": 1,
+   "internal:falkorchat/guards.py": 1,
+   "internal:tests/test_llm.py": 2,
+   "internal:tests/eval/judge.py": 1,
+   "internal:falkorchat/update_detection.py": 3,
+   "internal:falkorchat/querygen.py": 2,
+   "internal:tests/eval/generate_report.py": 1,
+   "internal:tests/test_order_fulfillment.py": 1,
+   "internal:falkorchat/executor.py": 2,
+   "internal:tests/test_opencode_config_resolution.py": 2,
+   "internal:tests/test_workflow_live.py": 1,
+   "internal:tests/test_guards.py": 1,
+   "internal:tests/eval/guard_calibration.py": 1,
+   "internal:falkorchat/mcp.py": 1,
+   "internal:tests/eval/test_judge_live.py": 1
+  },
+  "AS": {
+   "external:builtin": 1,
+   "external:stdlib": 1,
+   "external:pytest": 2
+  }
+ }
+}
