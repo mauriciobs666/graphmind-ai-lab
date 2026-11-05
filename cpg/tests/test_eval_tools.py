@@ -77,6 +77,7 @@ def _tool_pair(stream_asst, stream_user, t_asst, t_user, tid, name, inp, refused
     for rec in (sa, ta):
         blk = rec["message"]["content"][0]
         blk.update(id=tid, name=name, input=inp)
+        rec["message"]["id"] = "msg_" + tid.replace("toolu_", "")        # one message per injected call
         rec.pop("wire_tool_inputs", None)
         rec.pop("wireToolInputs", None)
         rec["uuid"] = f"a-{tid}"
@@ -154,6 +155,11 @@ def _index_two(second_exit=0):
     return [start1, end1, start2, end2]
 
 
+def _t_pairs(tr):
+    return [r for r in tr if (r["type"] == "assistant" and r["message"]["content"][0]["type"] == "tool_use")
+            or (r["type"] == "user" and "toolUseResult" in r)]
+
+
 def build_twoattempt(variant="clean"):
     """variant: clean (cut mid tool_use input, id present) | cutid (cut before the id) |
     planted (attempt 2 makes an out-of-root read) | planted-truncated (the call in the cut-off line
@@ -172,10 +178,31 @@ def build_twoattempt(variant="clean"):
                 rec["message"]["content"][0]["name"] = "Read"
     line = json.dumps(a2, separators=(",", ":"), ensure_ascii=False)
     if variant == "cutid":
-        cut = line.index('"content"') + 5
+        cut = line.index('"content"') + 5           # after the message id, before the tool_use block
+    elif variant in ("cutearly", "midmissing-early"):
+        cut = line.index('"model"') + 10            # before the message id: nothing recoverable
     else:
         cut = line.index('"input"') + 12            # inside the input object, after the id
-    attempt1 = _dump([init, a1, rl, u1]) + line[:cut]         # no newline: timeout cut the line
+    s1 = [init, a1, rl, u1]
+    t_mid = []
+    if variant == "x-before-tail":
+        # no stream-matched message follows X: only the tail's own message may be excused
+        _, (xa, xu) = _tool_pair(a1, u1, *_t_pairs(tr)[:2], "toolu_MIDMISSING0001", "mcp__cypher__query",
+                                 {"graph": "g", "cypher": "RETURN 1"}, False)
+        t_mid = [xa, xu]
+    if variant.startswith("midmissing"):
+        # attempt 1 also has a stream-matched Read (M) AFTER a call X that only the transcript holds
+        (_, _), (xa, xu) = _tool_pair(a1, u1, *_t_pairs(tr)[:2], "toolu_MIDMISSING0001", "mcp__cypher__query",
+                                      {"graph": "g", "cypher": "RETURN 1"}, False)
+        (ma, mu), (tma, tmu) = _tool_pair(a1, u1, *_t_pairs(tr)[:2], "toolu_MIDMATCHED0001", "Read",
+                                          {"file_path": p("kit-src/README.md")}, False)
+        s1 += [ma, mu]
+        t_mid = [xa, xu, tma, tmu]
+    tail = line[:cut]
+    if variant == "midmissing-sameid":
+        # the cut-off line carries X's OWN message id, yet a stream-matched message (M) follows X
+        tail = tail.replace(a2["message"]["id"], "msg_MIDMISSING0001")
+    attempt1 = _dump(s1) + tail         # no newline: timeout cut the line
     # attempt 2: a fresh init (same flags), one legitimate read, one result
     init2 = copy.deepcopy(init)
     init2["uuid"] = "init-attempt-2"
@@ -184,8 +211,7 @@ def build_twoattempt(variant="clean"):
         extra.append({"inp": {"file_path": REPO_AGENTS}, "name": "Read", "tid": "toolu_ATTEMPT2PLANT0001"})
     s2 = [init2]
     t_extra = []
-    t_pairs = [r for r in tr if (r["type"] == "assistant" and r["message"]["content"][0]["type"] == "tool_use")
-               or (r["type"] == "user" and "toolUseResult" in r)]
+    t_pairs = _t_pairs(tr)
     for e in extra:
         (sa, su), (ta, tu) = _tool_pair(a1, u1, t_pairs[0], t_pairs[1], e["tid"], e["name"], e["inp"], False)
         s2 += [sa, su]
@@ -193,10 +219,15 @@ def build_twoattempt(variant="clean"):
     s2.append(_read(CAP_STREAM)[-1])                                  # the result event
     t_idx = [i for i, r in enumerate(tr) if r["type"] == "assistant"][-1]
     tr[t_idx:t_idx] = t_extra
+    if t_mid:                                                    # between a1's result and the Write (a2)
+        w = next(i for i, r in enumerate(tr) if r["type"] == "assistant"
+                 and r["message"]["content"][0].get("id") == a2["message"]["content"][0]["id"])
+        tr[w:w] = t_mid
     return {"index": _index_two(), "1.stream": attempt1, "2.stream": _dump(s2), "transcript": tr}
 
 
-TWO_VARIANTS = ("clean", "cutid", "planted", "planted-truncated")
+TWO_VARIANTS = ("clean", "cutid", "cutearly", "planted", "planted-truncated", "midmissing", "midmissing-early",
+                "midmissing-sameid", "x-before-tail")
 
 
 def all_derived():
@@ -645,6 +676,182 @@ def test_audit_unmatched_transcript_call_without_truncation_is_a_mismatch(env):
     assert s["void"] == {"stream-transcript-mismatch": 1} and s["attemptsTruncated"] == 0
 
 
+# --- review Pass 4 fixes -----------------------------------------------------------------------
+
+ROLE_SET = set(audit.DEFAULT_TOOLS.split(","))
+
+# the coverage probe: (pattern form) x (what it reaches) x (Glob `pattern` | Grep `glob`)
+ESCAPES = {
+    "plain": {"abs": "/etc/*", "home": "~/x/*", "dotdot": "../x/*"},
+    "brace": {"abs": "{/etc,kit-src}/*", "home": "{~/.ssh,x}/*", "dotdot": "{..,x}/*"},
+    "nested-brace": {"abs": "{a,{/etc,b}}/*", "home": "{a,{~,b}}/x", "dotdot": "k/{a,{..,b}}/x"},
+    "class": {"abs": "[/]etc/*", "home": "[~]/x/*", "dotdot": "[.][.]/x/*"},
+    "range-class": {"abs": "[+-0]etc/*", "home": "[!a]/x/*", "dotdot": "[--/][-.]/x/*"},
+    "question": {"abs": "?etc/*", "home": "?/x/*", "dotdot": ".?/x/*"},
+    "doublestar": {"abs": "/**/x", "home": "~/**/x", "dotdot": "**/../x"},
+}
+BENIGN = ["kit-src/**/*.md", "{kit-src,out}/*", "[ab]*/x", "kit-src/?.md", "**/*.py", "kit-src/[a-c]?/*.{md,txt}",
+          "out/*", "*", "k[", "[]x]/y"]
+
+
+def _tool_input(tool, pattern):
+    return {"pattern": pattern} if tool == "Glob" else {"pattern": "x", "glob": pattern}
+
+
+@pytest.mark.parametrize("tool", ["Glob", "Grep"])
+@pytest.mark.parametrize("form", sorted(ESCAPES))
+@pytest.mark.parametrize("reach", ["abs", "home", "dotdot"])
+def test_classify_pattern_escape_probe(tmp_path, tool, form, reach):
+    root = tmp_path / "role"
+    (root / "out").mkdir(parents=True)
+    got = audit.classify_call(tool, _tool_input(tool, ESCAPES[form][reach]), str(root), ROLE_SET)
+    assert got == ["path-outside-root"], (tool, form, reach)
+
+
+@pytest.mark.parametrize("tool", ["Glob", "Grep"])
+@pytest.mark.parametrize("pattern", BENIGN)
+def test_classify_pattern_benign_control(tmp_path, tool, pattern):
+    root = tmp_path / "role"
+    (root / "out").mkdir(parents=True)
+    assert audit.classify_call(tool, _tool_input(tool, pattern), str(root), ROLE_SET) == []
+
+
+def test_classify_pattern_too_many_readings_is_an_escape(tmp_path):
+    root = tmp_path / "role"
+    root.mkdir()
+    assert audit.classify_call("Glob", {"pattern": "?" * 6 + "/x"}, str(root), ROLE_SET) == ["path-outside-root"]
+
+
+def test_classify_glob_path_is_the_base_for_the_pattern(tmp_path):
+    # pins `base_dir = resolved.get("path", root)`: `link/*` under path=kit-src goes through an
+    # in-root symlink that points out; against the root instead, `link` does not exist and looks clean
+    root = tmp_path / "role"
+    (root / "kit-src").mkdir(parents=True)
+    (tmp_path / "elsewhere").mkdir()
+    os.symlink(tmp_path / "elsewhere", root / "kit-src" / "link")
+    assert audit.classify_call("Glob", {"pattern": "link/*", "path": "kit-src"}, str(root), ROLE_SET) == ["path-outside-root"]
+    assert audit.classify_call("Glob", {"pattern": "link/*"}, str(root), ROLE_SET) == []     # control: not under kit-src
+
+
+@pytest.mark.parametrize("kind", ["abs", "home"])
+def test_audit_brace_pattern_end_to_end(env, kind):
+    pat = ESCAPES["brace"][kind]
+    st, tr = with_call("Glob", {"pattern": pat}, "toolu_PLANTEDbrace0001")
+    env.single(_dump(st), _dump(tr))
+    assert env.session()[0]["void"] == {"path-outside-root": 1}
+
+
+def test_audit_cutearly_tail_unrecoverable_id_clean(env):
+    env.two("cutearly")
+    s, _, _ = env.session()
+    assert s["verdict"] == "clean" and s["streamTruncatedCalls"] == 1 and s["void"] == {}
+
+
+@pytest.mark.parametrize("variant", ["midmissing", "midmissing-early"])
+def test_audit_mid_session_missing_call_beside_cut_off_tail_voids(env, variant):
+    env.two(variant)
+    s, _, d = env.session()
+    # X (an MCP call only the transcript holds, before a stream-matched message) is NOT excused ...
+    assert s["void"] == {"mcp-call": 1, "stream-transcript-mismatch": 1}
+    # ... and the cut-off call itself still is
+    assert s["streamTruncatedCalls"] == 1
+    assert {x["id"] for x in d} == {"toolu_MIDMISSING0001"}
+
+
+def test_audit_excuse_never_reaches_a_call_with_a_later_matched_message(env):
+    env.two("midmissing-sameid")
+    s, _, d = env.session()
+    # X (before the matched message M) is not excused although the tail names X's message id; the
+    # Write, whose message is not the tail's any more, has no excuse either
+    ids = sorted(x["id"] for x in d if x["type"] == "stream-transcript-mismatch")
+    assert s["void"].get("stream-transcript-mismatch") == 2 and "toolu_MIDMISSING0001" in ids
+    assert s["streamTruncatedCalls"] == 0
+
+
+def test_audit_recovered_message_id_beats_position(env):
+    # X sits between the last matched message and the tail; the id says the tail is the NEXT message
+    env.two("x-before-tail")
+    s, _, d = env.session()
+    mism = [x["id"] for x in d if x["type"] == "stream-transcript-mismatch"]
+    assert mism == ["toolu_MIDMISSING0001"] and s["streamTruncatedCalls"] == 1
+    assert s["void"] == {"mcp-call": 1, "stream-transcript-mismatch": 1}
+
+
+def test_audit_excuse_does_not_reach_other_messages_of_the_attempt(env):
+    # recoverable id: the excuse is for the cut-off line's own message only, even though the tail
+    # is the last thing in the log and the missing call sits right before it
+    env.two("clean")
+    st, tr = with_call("Read", {"file_path": p("kit-src/README.md")}, "toolu_PLANTEDextra0001")
+    log = env.eval_dir / "runs" / f"{SESSION}.1.stream.jsonl"
+    tr_path = env.projects / "-proj" / f"{SESSION}.jsonl"
+    recs = [json.loads(l) for l in tr_path.read_text().splitlines()]
+    extra = [r for r in tr if "toolu_PLANTEDextra0001" in json.dumps(r)]
+    w = next(i for i, r in enumerate(recs) if r["type"] == "assistant"
+             and r["message"]["content"][0].get("name") == "Write")
+    recs[w:w] = [json.loads(env.sub(json.dumps(x))) for x in extra]
+    tr_path.write_text(_dump(recs))
+    s, _, _ = env.session()
+    assert s["void"] == {"stream-transcript-mismatch": 1} and s["streamTruncatedCalls"] == 1
+
+
+def test_audit_input_differing_between_stream_and_transcript_voids(env):
+    st, tr = build_violation("inroot-read")
+    for r in tr:
+        if r["type"] == "assistant" and r["message"]["content"][0].get("id") == "toolu_PLANTEDinrootread0001":
+            r["message"]["content"][0]["input"] = {"file_path": "/etc/passwd"}
+    env.single(_dump(st), _dump(tr))
+    s, _, _ = env.session()
+    assert s["void"] == {"path-outside-root": 1, "stream-transcript-mismatch": 1}
+
+
+def test_audit_refusal_needs_a_denial_message_not_a_word(env):
+    for n, (content, refused) in enumerate([
+            ("File does not exist: /etc/permission-x", False),            # existence oracle: NOT a refusal
+            ("denied", False),
+            ("guard-paths: Read path '/etc/permission-x' resolves outside the session root", True)]):
+        e = Env(env.eval_dir.parent.parent / f"r{n}")
+        st, tr = with_call("Read", {"file_path": "/etc/permission-x"}, "toolu_PLANTEDperm0001")
+        _retag(st, tr, "toolu_PLANTEDperm0001", decision="accept", is_error=True, content=content)
+        e.single(_dump(st), _dump(tr))
+        s, _, _ = e.session()
+        assert (s["refused"] == {"path-outside-root": 1}) is refused, content
+        assert (s["void"] == {}) is refused
+
+
+def test_audit_plugins_pinned_and_unpinned(env, tmp_path):
+    env.single(CAP_STREAM.read_text(), CAP_TRANSCRIPT.read_text())
+    rep, _ = env.run()
+    assert rep["verdict"] == "clean" and rep["unpinned"] == ["plugins", "agents"]
+    names = [p["name"] for p in _INIT["plugins"]]
+    rep, _ = env.run(accepted_plugins=names, accepted_agents=_INIT["agents"])
+    assert rep["verdict"] == "clean" and rep["unpinned"] == []
+    for bad in (names[:-1], names + ["extra"], ["x"] + names[1:]):
+        rep, _ = env.run(accepted_plugins=bad)
+        assert rep["sessions"][0]["void"] == {"init-plugins": 1}, bad
+    st = _read(CAP_STREAM)
+    st[0]["plugins"][0]["source"] = "evil@market"                  # path says builtin, source does not
+    env.single(_dump(st), CAP_TRANSCRIPT.read_text())
+    assert env.run(accepted_plugins=names)[0]["sessions"][0]["void"] == {"init-plugins": 1}
+    assert env.run()[0]["sessions"][0]["void"] == {}              # unpinned: only the path is judged
+
+
+def test_audit_empty_runs_is_not_clean(env):
+    rep, _ = env.run()
+    assert rep["verdict"] == "void" and rep["totals"]["voidViolations"] == {"no-sessions": 1}
+    cmd = [PY, str(TOOLS / "audit.py"), "--eval-dir", str(env.eval_dir), "--projects-dir", str(env.projects)]
+    assert subprocess.run(cmd, capture_output=True).returncode == 1
+
+
+def test_audit_malformed_index_start_line_is_a_usage_error(env):
+    env.single(CAP_STREAM.read_text(), CAP_TRANSCRIPT.read_text())
+    idx = _read(CAP_INDEX)
+    del idx[0]["n"]
+    (env.eval_dir / "runs" / "index.jsonl").write_text(_dump(idx))
+    cmd = [PY, str(TOOLS / "audit.py"), "--eval-dir", str(env.eval_dir), "--projects-dir", str(env.projects)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    assert r.returncode == 2 and "Traceback" not in r.stderr and "start line" in r.stderr
+
+
 # --- output shape --------------------------------------------------------------------------------
 
 def test_audit_report_has_counts_and_types_only(env):
@@ -815,6 +1022,165 @@ def test_export_refuses_a_symlink_in_the_archive(tmp_path):
     _git(r, "commit", "-q", "-m", "c")
     res = _export(r, _git(r, "rev-parse", "HEAD").stdout.strip(), tmp_path / "o")
     assert res.returncode == 3 and "link" in res.stderr
+    # nothing half-extracted is left behind: no kit-src, no staging dir, no manifest
+    assert sorted(q.name for q in (tmp_path / "o").iterdir()) == []
+
+
+@pytest.fixture
+def history(tmp_path):
+    """Three commits; the middle and the last change what the first exported."""
+    r = tmp_path / "hist"
+    r.mkdir()
+    _git(r, "init", "-q", "-b", "main")
+    shas = []
+    steps = [{"a.txt": "alpha-1\n", "b.txt": "beta-1\n", "sub/c.py": "def c():\n    return 1\n"},
+             {"a.txt": "alpha-2\n", "d.txt": "delta-2\n"},
+             {"b.txt": None, "sub/c.py": "def c():\n    return 3\n", "e.txt": "eps-3\n"}]
+    for files in steps:
+        for rel, text in files.items():
+            f = r / rel
+            if text is None:
+                f.unlink()
+                continue
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(text)
+        _git(r, "add", "-A")
+        _git(r, "commit", "-q", "-m", "c")
+        shas.append(_git(r, "rev-parse", "HEAD").stdout.strip())
+    return r, shas
+
+
+def test_export_non_tip_commit_with_short_sha(history, tmp_path):
+    r, shas = history
+    first = shas[0]
+    out = tmp_path / "o"
+    res = _export(r, first[:9], out)                       # an ABBREVIATED, non-tip commit
+    assert res.returncode == 0, res.stderr
+    kit = out / "kit-src"
+    want = _git(r, "ls-tree", "-r", "--name-only", first).stdout.split()
+    assert _kit_files(kit) == sorted(want) == ["a.txt", "b.txt", "sub/c.py"]
+    for rel in want:
+        assert (kit / rel).read_bytes() == subprocess.run(["git", "-C", str(r), "show", f"{first}:{rel}"],
+                                                          capture_output=True).stdout
+    m = json.loads((out / "kit-manifest.json").read_text())
+    assert m["evalCommit"] == first and len(m["evalCommit"]) == 40 and m["evalCommit"] != first[:9]
+    assert [f["sha256"] for f in m["files"]] == [hashlib.sha256((kit / f["path"]).read_bytes()).hexdigest()
+                                                 for f in m["files"]]
+    for dp, dns, fns in os.walk(out):
+        os.chmod(dp, 0o755)
+
+
+def test_draw_normalizes_a_short_commit_to_40_hex(flow_kit, history, tmp_path):
+    r, shas = history
+    full = shas[1]
+    # (a) through --repo
+    a = _cli("--draw-flow-anchors", "--kit-src", str(flow_kit), "--repo", str(r), "--eval-commit", full[:10],
+             "--out", str(tmp_path / "a.jsonl"))
+    b = _cli("--draw-flow-anchors", "--kit-src", str(flow_kit), "--eval-commit", full, "--out", str(tmp_path / "b.jsonl"))
+    assert a.returncode == 0 and b.returncode == 0 and f"eval-commit: {full}" in a.stdout
+    assert (tmp_path / "a.jsonl").read_bytes() == (tmp_path / "b.jsonl").read_bytes()
+    # (b) through the manifest next to the kit
+    (flow_kit.parent / "kit-manifest.json").write_text(json.dumps({"evalCommit": full}))
+    c = _cli("--draw-flow-anchors", "--kit-src", str(flow_kit), "--eval-commit", full[:12], "--out", str(tmp_path / "c.jsonl"))
+    assert c.returncode == 0 and (tmp_path / "c.jsonl").read_bytes() == (tmp_path / "b.jsonl").read_bytes()
+    # (c) a commit that is not the manifest's: refused
+    d = _cli("--draw-flow-anchors", "--kit-src", str(flow_kit), "--eval-commit", shas[0], "--out", str(tmp_path / "d.jsonl"))
+    assert d.returncode == 1 and "differs" in d.stderr and not (tmp_path / "d.jsonl").exists()
+
+
+def test_draw_short_commit_without_repo_or_manifest_is_a_usage_error(flow_kit, tmp_path):
+    res = _cli("--draw-flow-anchors", "--kit-src", str(flow_kit), "--eval-commit", COMMIT[:10], "--out", str(tmp_path / "o"))
+    assert res.returncode == 2 and "40-hex" in res.stderr
+
+
+# --- the frame rulings (method owner, Pass 4) ---------------------------------------------------
+
+@pytest.fixture
+def frame2(tmp_path):
+    kit = tmp_path / "k2" / "kit-src"
+    (kit / "svc").mkdir(parents=True)
+    (kit / "svc" / "pyproject.toml").write_text("")
+    body = "{\n  const a = 1;\n  return a;\n}\n"
+    (kit / "svc" / "d1.js").write_text("export default function (x) " + body)
+    (kit / "svc" / "d2.js").write_text("export default class {\n  m() " + body + "}\n")
+    (kit / "svc" / "d3.js").write_text("export default (x) => " + body)
+    (kit / "svc" / "d4.js").write_text("export default function named(x) " + body)
+    (kit / "svc" / "anon.js").write_text(
+        "function host() {\n  cb(() => {\n    function helper() " + body.replace("\n}", "\n  }") + "  });\n"
+        "  function helper() " + body.replace("\n}", "\n  }") + "}\n")
+    (kit / "svc" / "dupclass.js").write_text(
+        "class Dup {\n  m() " + body.replace("\n}", "\n  }") + "}\nclass Dup {\n  n() " + body.replace("\n}", "\n  }") + "}\n")
+    (kit / "svc" / "dup.py").write_text(
+        "class C:\n    def m(self):\n        a = 1\n        return a\n\n"
+        "class C:\n    def n(self):\n        a = 1\n        return a\n")
+    (kit / "svc" / "keys.js").write_text(
+        "const o = {\n  ok() " + body.replace("\n}", "\n  },") + "  \"a.b\"() " + body.replace("\n}", "\n  },")
+        + "  1() " + body.replace("\n}", "\n  },") + "  \"quoted\"() " + body.replace("\n}", "\n  }") + "};\n")
+    (kit / "svc" / "app.py").write_text("def kept(a):\n    b = a\n    return b\n")
+    for d in ("vendored", "_vendor", "third-party", "node_modules", "vendor"):
+        (kit / "svc" / d).mkdir()
+        (kit / "svc" / d / "lib.py").write_text("def hidden(a):\n    b = a\n    return b\n")
+    (kit / "svc" / "third-party" / "x.js").write_text("export function hiddenJs(a) " + body)
+    (kit / "svc" / "broken.py").write_text("def broken(:\n")
+    (kit / "svc" / "broken.js").write_text("function broken( {{{ \n")
+    return kit
+
+
+def _q(frame2, lang="python"):
+    return {c.qname for c in export_kit.flow_frame(frame2)[lang]}
+
+
+def test_frame_default_exports(frame2):
+    js = _q(frame2, "javascript")
+    assert "svc/d1.js::default" in js and "svc/d2.js::default.m" in js and "svc/d3.js::default" in js
+    assert "svc/d4.js::named" in js and "svc/d4.js::default" not in js
+
+
+def test_frame_anonymous_subtree_does_not_pollute_duplicate_counting(frame2):
+    js = _q(frame2, "javascript")
+    assert "svc/anon.js::host.helper" in js                      # the real sibling keeps the bare name
+    assert not any("helper#" in q for q in js)
+    assert len([q for q in js if q.startswith("svc/anon.js::")]) == 2     # host and host.helper; the callback's is not
+
+
+def test_frame_children_of_a_duplicate_are_excluded(frame2):
+    js, py = _q(frame2, "javascript"), _q(frame2, "python")
+    assert "svc/dupclass.js::Dup.m" in js and not any("#" in q for q in js)
+    assert "svc/dupclass.js::Dup#2.n" not in js
+    assert "svc/dup.py::C.m" in py and not any("#" in q for q in py)
+
+
+def test_frame_non_identifier_object_keys_are_anonymous(frame2):
+    js = _q(frame2, "javascript")
+    assert "svc/keys.js::ok" in js
+    assert not any(q.endswith(("::a.b", "::1")) for q in js)
+    assert "svc/keys.js::quoted" in js                           # a quoted key that IS an identifier is a name
+
+
+def test_frame_vendored_names_below_the_unit_root(frame2):
+    py, js = _q(frame2), _q(frame2, "javascript")
+    assert "svc/app.py::kept" in py
+    assert not any("hidden" in q for q in py | js)
+
+
+def test_frame_counts_files_it_could_not_parse(frame2, tmp_path):
+    stats: dict = {}
+    export_kit.flow_frame(frame2, stats)
+    assert stats["skippedFiles"] == 1 and stats["errorTrees"] == 1
+    assert "broken" not in "".join(_q(frame2))
+    # the CLI prints the count (the frame is short here, so use a kit that can draw)
+    kit = tmp_path / "w" / "kit-src"
+    (kit / "x").mkdir(parents=True)
+    (kit / "x" / "m.py").write_text("".join(f"def f{i}(a):\n    b = a\n    return b\n\n" for i in range(9)))
+    (kit / "x" / "n.js").write_text("".join(f"function g{i}(a) {{\n  const b = a;\n  return b;\n}}\n" for i in range(9)))
+    (kit / "x" / "bad.py").write_text("def (:\n")
+    res = _cli("--draw-flow-anchors", "--kit-src", str(kit), "--eval-commit", COMMIT, "--out", str(tmp_path / "o.jsonl"))
+    assert res.returncode == 0 and "skipped-files: 1" in res.stdout
+
+
+@pytest.mark.parametrize("path", ["a/b.pyi", "a/x.c++", "a/x.hh", "a/x.hxx", "a/x.ino", "a/Dockerfile", "a/Dockerfile.dev"])
+def test_path_class_code_extensions(path):
+    assert export_kit.path_class(path) == "code"
 
 
 def test_export_bad_commit(repo, tmp_path):
@@ -1138,11 +1504,18 @@ def test_strip_verify_passes_and_catches_planted_leaks(tmp_path):
     d = json.loads(lines[0]); d["note"] = "n"
     bad.write_text("\n".join([json.dumps(d)] + lines[1:]) + "\n")
     assert v(bad).returncode == 1
-    # (1b) every forbidden substring, planted in the text value
-    for word in ("gold", "goldOptions", "intent", "group", "ambiguityKind"):
-        d = json.loads(lines[0]); d["text"] = f"x{word}y"
-        bad.write_text("\n".join([json.dumps(d)] + lines[1:]) + "\n")
-        assert v(bad).returncode == 1, word
+    # (1b) an edited text, and an edited lang (byte-identity with the whitelist re-derived from QW)
+    d = json.loads(lines[0]); d["text"] = d["text"] + " "
+    bad.write_text("\n".join([json.dumps(d)] + lines[1:]) + "\n")
+    r = v(bad)
+    assert r.returncode == 1 and d["aid"] in r.stderr and "question number" not in r.stderr
+    d = json.loads(lines[0]); d["lang"] = "xx"
+    bad.write_text("\n".join([json.dumps(d, sort_keys=True, separators=(",", ":"))] + lines[1:]) + "\n")
+    assert v(bad).returncode == 1
+    # (1b') a re-serialized but identical line is NOT byte-identical either
+    d = json.loads(lines[0])
+    bad.write_text("\n".join([json.dumps(d)] + lines[1:]) + "\n")
+    assert v(bad).returncode == 1
     # (1c) a tampered aid map
     badmap = tmp_path / "badmap.jsonl"
     ml = amap.read_text().splitlines()
@@ -1170,6 +1543,68 @@ def test_strip_verify_passes_and_catches_planted_leaks(tmp_path):
     rr = subprocess.run([PY, str(TOOLS / "strip_gold.py"), "--verify", "--eval-commit", "1" * 16, "--in", str(qw),
                          "--out", str(out), "--aid-map", str(amap)], capture_output=True, text=True)
     assert rr.returncode == 1
+
+
+def _verify_rows(tmp_path, texts, groups=None):
+    rows = _qw(len(texts))
+    for r, tx in zip(rows, texts):
+        r["text"] = tx
+    for r, g in zip(rows, groups or []):
+        r["group"] = g
+    res, out, amap = _strip(tmp_path, rows)
+    assert res.returncode == 0
+    return subprocess.run([PY, str(TOOLS / "strip_gold.py"), "--verify", "--eval-commit", STRIP_EC,
+                           "--in", str(tmp_path / "QW.jsonl"), "--out", str(out), "--aid-map", str(amap)],
+                          capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("text", [
+    "What is the intent of the Composer component?", "Do the groups of tools differ?",
+    "Is the grouping intentional?", "Is this the gold standard for goldfish?",
+    "Which ambiguity kinds exist, and what is a group?", "Does q-0001 call it?",       # longer token, not the qid q-000
+    "What does the key 'intent' mean?",                                                 # quoted word but no field shape
+])
+def test_strip_verify_honest_questions_pass(tmp_path, text):
+    r = _verify_rows(tmp_path, [text])
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.parametrize("text,shape", [
+    ('the "gold": [1] list', "quoted-field"),
+    ("{'gold': 1}", "quoted-key"),
+    ("{'intent': 'x'}", "quoted-key"),
+    ('and "goldOptions" here', "quoted-field"),
+    ('see "intent" and "group"', "quoted-field"),
+    ("goldOptions: x", "colon-field"),
+    ("gold: x", "colon-field"),
+    ("intent=impact", "assign-field"),
+    ("intent\n= impact", "assign-field"),                       # a JSON-escaped newline: only parsed text shows it
+    ("group = g", "assign-field"),
+    ("ambiguityKind: scope", "colon-field"),
+    ("ambiguityKind'x", "ambiguityKind-quote"),
+    ('double-escaped \\"gold\\" form', "quoted-field"),        # literal backslashes around the quotes
+    ("it was written for q-000", "own-qid"),
+    ("(q-000)", "own-qid"),
+    ("about g0 please", "own-group"),
+])
+def test_strip_verify_leak_shapes_fail_listing_aid_only(tmp_path, text, shape):
+    r = _verify_rows(tmp_path, [text])
+    assert r.returncode == 1, text
+    assert f"aid {_aid(STRIP_EC, 'q-000')}: text leak ({shape})" in r.stderr
+    assert text not in r.stderr and "text leak" in r.stderr
+
+
+def test_strip_verify_qid_and_group_are_the_items_own_only(tmp_path):
+    # item 0 mentions item 1's qid and group: not a leak of item 0's own
+    r = _verify_rows(tmp_path, ["compare with q-001 in g1", "plain"], ["g0", "g1"])
+    assert r.returncode == 0, r.stderr
+
+
+def test_strip_verify_leak_in_one_item_names_that_aid_only(tmp_path):
+    r = _verify_rows(tmp_path, ["fine", "intent=x", "fine too"])
+    assert r.returncode == 1
+    assert _aid(STRIP_EC, "q-001") in r.stderr
+    assert _aid(STRIP_EC, "q-000") not in r.stderr and _aid(STRIP_EC, "q-002") not in r.stderr
 
 
 # =============================================================================================

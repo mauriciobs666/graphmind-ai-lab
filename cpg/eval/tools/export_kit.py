@@ -28,7 +28,7 @@ import hashlib
 import json
 import os
 import re
-import stat
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -48,10 +48,14 @@ PROMPT_MD_GLOBS = ("**/AGENTS.md", "**/CLAUDE.md", "claude/**/*.md", "skills/**/
                    "opencode/agents/**/*.md", "opencode/skills/**/*.md", ".kiro/steering/*.md",
                    ".claude/commands/**/*.md", ".claude/agents/**/*.md")
 PROMPT_MD_EXCEPT = ("claude/**/kaizen/**", "claude/README.md", "skills/README.md")
-CODE_EXT = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".sh", ".bash",
+CODE_EXT = {".py", ".pyi", ".c++", ".hh", ".hxx", ".ino", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".sh", ".bash",
             ".java", ".kt", ".kts", ".cs", ".go", ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp"}
 CONFIG_EXT = {".json", ".yaml", ".yml", ".toml"}
-SKIP_DIRS = {"node_modules", "vendor", "third_party", ".venv", "site-packages", "__pycache__"}
+# Vendored directory names (bundle spec §5.0 names these; the kit is `git archive`, so untracked
+# caches are not in it). Applied to every directory segment of the path. "Only below the unit root" is
+# equivalent here: `--list-units` never lists a unit whose own path holds one of these segments, so the
+# segments above a unit root are never vendored names.
+SKIP_DIRS = {"node_modules", "vendor", "vendored", "_vendor", "third_party", "third-party"}
 JS_EXT = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"}
 FLOW_PER_LANG = 8
 FLOW_LANGS = ("python", "javascript")
@@ -142,7 +146,7 @@ def path_class(rel: str) -> str:
     ext = os.path.splitext(base)[1].lower()
     if rel.endswith(".md"):
         return "prompt-md" if is_prompt_md(rel) else "doc"
-    if ext in CODE_EXT:
+    if ext in CODE_EXT or base == "Dockerfile" or base.startswith("Dockerfile."):
         return "code"
     if ext in CONFIG_EXT or base == ".env" or base.startswith(".env."):
         return "config"
@@ -191,7 +195,22 @@ def export(repo: str, eval_commit: str, out_dir: Path | None, manifest_path: Pat
         print(f"export_kit: {kit} exists; refusing to overwrite", file=sys.stderr)
         return 3
     manifest_path = manifest_path or out_dir / "kit-manifest.json"
-    kit.mkdir(parents=True)
+    # Extract into a sibling staging directory and rename at the end, so a refusal or a failure
+    # never leaves a half-extracted (writable) kit-src behind.
+    stage = out_dir / ".kit-src.partial"
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir(parents=True)
+    try:
+        return _export_into(repo, full, out_dir, stage, kit, manifest_path)
+    finally:
+        if stage.exists():
+            for dp, dns, fns in os.walk(stage):
+                os.chmod(dp, 0o755)
+            shutil.rmtree(stage)
+
+
+def _export_into(repo, full, out_dir, kit_stage: Path, kit: Path, manifest_path: Path) -> int:
     path_excluded_n = 0
     with subprocess.Popen(["git", "-C", repo, "archive", "--format=tar", full],
                           stdout=subprocess.PIPE) as proc:
@@ -209,10 +228,11 @@ def export(repo: str, eval_commit: str, out_dir: Path | None, manifest_path: Pat
                 if path_excluded(rel):
                     path_excluded_n += 1
                     continue
-                tf.extract(m, kit, filter="data")
+                tf.extract(m, kit_stage, filter="data")
         if proc.wait() != 0:
             print("export_kit: git archive failed", file=sys.stderr)
             return 4
+    kit_final, kit = kit, kit_stage
 
     # step 3: content check (case-insensitive), delete + record, then re-grep to zero
     hits = []
@@ -258,6 +278,8 @@ def export(repo: str, eval_commit: str, out_dir: Path | None, manifest_path: Pat
             q = os.path.join(dp, n)
             os.chmod(q, os.stat(q).st_mode & ~0o222)
     os.chmod(kit, os.stat(kit).st_mode & ~0o222)
+    os.rename(kit, kit_final)
+    kit = kit_final
     print(f"kit-src: {kit}\nfiles: {len(files)}\npath-excluded: {path_excluded_n}\n"
           f"content-check-excluded: {len(hits)}\nexcluded-scope: {manifest['excludedScope']['count']}\n"
           f"manifest: {manifest_path}")
@@ -326,6 +348,23 @@ def list_units(kit_src: Path) -> list[dict]:
 
 
 # ----------------------------------------------------------------------------- --draw-flow-anchors
+#
+# The frame is a SIMPLIFIED re-implementation of bundle-spec3 §4.1/§4.2 (not S11's normalizer). Known,
+# ruled departures and limits (method owner, S48 review Pass 4):
+#   * TS type-level symbols (interface/type/enum/namespace members) are not modelled, so a `#k` that
+#     spec3 gives to a merged declaration is not counted here; only function-like candidates are.
+#   * Accessor duplicates: a second `get x` gets `#2` on the NAME (`x#2.<get>`) in spec3; here the
+#     suffix lands on the last segment. Such a candidate (k != 1) is excluded either way.
+#   * `namespace A.B { }` is one scope with the segment `A.B` here; spec3 may split it into two.
+#   * Python: a function whose body is only a docstring/`pass`/`...`, or any `@abstractmethod` /
+#     `@overload`, is not a candidate ("with a body", §3.6); spec3 rule 8 makes them symbols without
+#     one. Ruled defensible. `@overload` stubs are not counted for `#k`; abstract/stub ones are.
+#   * `export default function/class/arrow` with no name is `default` (`default.<method>` for a class).
+#   * A JS/TS object key that is not an identifier (`"a.b"() {}`, `1() {}`) is anonymous.
+#   * Anonymous subtrees never take part in `#k` counting and never yield candidates; any candidate
+#     whose chain holds a `#<digits>` segment (a child of a duplicate) is excluded (§2.3).
+#   * Files that do not parse (Python SyntaxError) are skipped and counted; tree-sitter error trees
+#     still yield what parsed and are counted separately.
 
 class Cand:
     __slots__ = ("path", "qname", "lineStart", "lineEnd")
@@ -334,13 +373,15 @@ class Cand:
         self.path, self.qname, self.lineStart, self.lineEnd = path, qname, ls, le
 
 
-def _py_frame(rel: str, src: str) -> list[Cand]:
+def _py_frame(rel: str, src: str, stats: dict | None = None) -> list[Cand]:
     """Named, bodied Python functions and methods: a simplified bundle-spec §4.1 chain (classes and
     functions add segments; ``@property``/``.setter``/``.deleter`` add ``<get>``/``<set>``/``<del>``;
     the k-th same-base sibling gets ``#k``); ``#k`` duplicates are counted but never candidates (§2.3)."""
     try:
         tree = ast.parse(src)
-    except SyntaxError:
+    except (SyntaxError, ValueError):
+        if stats is not None:
+            stats["skippedFiles"] = stats.get("skippedFiles", 0) + 1
         return []
     out: list[Cand] = []
     dup: dict[tuple, int] = {}
@@ -440,14 +481,26 @@ def _js_binding(n):
     return None
 
 
-def _js_frame(parsers, rel: str, data: bytes) -> list[Cand]:
+_IDENT_RE = re.compile(r"[#A-Za-z_$][\w$]*")
+
+
+def _is_default_export(n) -> bool:
+    par = n.parent
+    return par is not None and par.type == "export_statement" and any(c.type == "default" for c in par.children)
+
+
+def _js_frame(parsers, rel: str, data: bytes, stats: dict | None = None) -> list[Cand]:
     ext = os.path.splitext(rel)[1].lower()
     parser = parsers["tsx" if ext == ".tsx" else "ts" if ext in (".ts", ".mts", ".cts") else "js"]
     root = parser.parse(data).root_node
+    if root.has_error and stats is not None:
+        stats["errorTrees"] = stats.get("errorTrees", 0) + 1
     out: list[Cand] = []
     dup: dict[tuple, int] = {}
 
-    def seg(chain, segs):
+    def seg(chain, segs, anon=False):
+        if anon:                                   # anonymous subtrees take no part in `#k` counting
+            return list(segs), 1
         key = (chain, tuple(segs))
         k = dup.get(key, 0) + 1
         dup[key] = k
@@ -460,14 +513,17 @@ def _js_frame(parsers, rel: str, data: bytes) -> list[Cand]:
         is_fn = False
         if t in _JS_CLASS:
             nm = n.child_by_field_name("name")
-            if nm is None:
+            if nm is None and _is_default_export(n) and not anon:
+                s, _ = seg(chain, ["default"])
+                new_chain = chain + tuple(s)
+            elif nm is None:
                 new_anon = True
             else:
-                s, _ = seg(chain, [_txt(nm)])
+                s, _ = seg(chain, [_txt(nm)], anon)
                 new_chain = chain + tuple(s)
         elif t in ("internal_module", "module"):
             nm = n.child_by_field_name("name")
-            s, _ = seg(chain, [_txt(nm) if nm is not None else "?"])
+            s, _ = seg(chain, [_txt(nm) if nm is not None else "?"], anon)
             new_chain = chain + tuple(s)
         elif t in _JS_FN_DECL:
             nm = n.child_by_field_name("name")
@@ -477,10 +533,10 @@ def _js_frame(parsers, rel: str, data: bytes) -> list[Cand]:
                 added, is_fn = [_txt(nm)], True
         elif t == "method_definition":
             nm = n.child_by_field_name("name")
-            if nm is None or nm.type == "computed_property_name":
+            name = _txt(nm).strip("\"'") if nm is not None else None
+            if nm is None or nm.type == "computed_property_name" or not _IDENT_RE.fullmatch(name):
                 new_anon = True
             else:
-                name = _txt(nm).strip("\"'")
                 name = "<init>" if name == "constructor" else name
                 acc = [c.type for c in n.children if c.type in ("get", "set")]
                 added = [name] + (["<get>"] if "get" in acc else ["<set>"] if "set" in acc else [])
@@ -488,12 +544,14 @@ def _js_frame(parsers, rel: str, data: bytes) -> list[Cand]:
         elif t in _JS_FN_EXPR:
             nm = n.child_by_field_name("name")
             b = _txt(nm) if nm is not None else _js_binding(n)
+            if not b and _is_default_export(n):
+                b = "default"
             if b:
                 added, is_fn = [b], True
             else:
                 new_anon = True
         if added is not None:
-            s, k = seg(chain, added)
+            s, k = seg(chain, added, anon)
             new_chain = chain + tuple(s)
             body = n.child_by_field_name("body")
             if is_fn and not anon and k == 1 and body is not None:
@@ -506,8 +564,9 @@ def _js_frame(parsers, rel: str, data: bytes) -> list[Cand]:
     return out
 
 
-def flow_frame(kit_src: Path) -> dict[str, list[Cand]]:
-    """§3.6's frame: eligible named bodied functions, ``lineEnd − lineStart ≥ 2``, outside test code."""
+def flow_frame(kit_src: Path, stats: dict | None = None) -> dict[str, list[Cand]]:
+    """§3.6's frame: eligible named bodied functions, ``lineEnd − lineStart ≥ 2``, outside test code.
+    ``stats`` (optional) receives ``skippedFiles`` / ``errorTrees`` counts."""
     frame = {"python": [], "javascript": []}
     parsers = None
     for p, rel in _walk_files(kit_src):
@@ -519,20 +578,46 @@ def flow_frame(kit_src: Path) -> dict[str, list[Cand]]:
         if any(seg in SKIP_DIRS for seg in rel.split("/")[:-1]):
             continue
         if ext == ".py":
-            cands = _py_frame(rel, p.read_text(encoding="utf-8", errors="replace"))
+            cands = _py_frame(rel, p.read_text(encoding="utf-8", errors="replace"), stats)
             lang = "python"
         else:
             parsers = parsers or _ts_parsers()
-            cands = _js_frame(parsers, rel, p.read_bytes())
+            cands = _js_frame(parsers, rel, p.read_bytes(), stats)
             lang = "javascript"
-        frame[lang] += [c for c in cands if c.lineEnd - c.lineStart >= 2 and "<anon>" not in c.qname]
+        frame[lang] += [c for c in cands if c.lineEnd - c.lineStart >= 2
+                        and "<anon>" not in c.qname and not re.search(r"#\d+", c.qname.split("::", 1)[1])]
     return frame
 
 
-def draw_flow_anchors(kit_src: Path, eval_commit: str) -> list[dict]:
+def resolve_eval_commit(arg: str, repo: str | None, kit_src: Path | None) -> str:
+    """The full 40-hex EVAL_COMMIT that seeds the draw (an abbreviation seeds a different draw).
+    A 40-hex argument is used as is; otherwise ``--repo`` resolves it, or the manifest next to the
+    kit (``<kit-src>/../kit-manifest.json``) whose ``evalCommit`` it prefixes. If a manifest is
+    there, the commit must equal its ``evalCommit``."""
+    full = None
+    if re.fullmatch(r"[0-9a-f]{40}", arg):
+        full = arg
+    elif repo:
+        r = _git(repo, "rev-parse", "--verify", f"{arg}^{{commit}}")
+        if r.returncode == 0:
+            full = r.stdout.decode().strip()
+    man = kit_src.parent / "kit-manifest.json" if kit_src else None
+    mc = None
+    if man and man.is_file():
+        mc = json.loads(man.read_text(encoding="utf-8")).get("evalCommit")
+    if full is None and mc and mc.startswith(arg) and len(arg) >= 7:
+        full = mc
+    if full is None:
+        raise KeyError(f"cannot resolve {arg!r} to a full 40-hex commit (give 40 hex, --repo, or a kit with a manifest)")
+    if mc and mc != full:
+        raise ValueError(f"--eval-commit {full} differs from the kit manifest's evalCommit {mc}")
+    return full
+
+
+def draw_flow_anchors(kit_src: Path, eval_commit: str, stats: dict | None = None) -> list[dict]:
     """8 per language by S05's convention: ascending ``SHA-256(seed + "|" + qname)`` where
     ``seed = "ccg-p0f-flow-v1|" + lang + "|" + EVAL_COMMIT``."""
-    frame = flow_frame(kit_src)
+    frame = flow_frame(kit_src, stats)
     rows = []
     for lang in FLOW_LANGS:
         if len(frame[lang]) < FLOW_PER_LANG:
@@ -573,14 +658,20 @@ def main(argv=None) -> int:
             else:
                 if not a.eval_commit:
                     ap.error("--eval-commit is required to draw")
-                rows = draw_flow_anchors(a.kit_src, a.eval_commit)
+                try:
+                    commit = resolve_eval_commit(a.eval_commit, a.repo, a.kit_src)
+                except KeyError as e:
+                    ap.error(str(e.args[0]))
+                stats: dict = {}
+                rows = draw_flow_anchors(a.kit_src, commit, stats)
             text = "".join(canon(r) + "\n" for r in rows)
             if a.draw_flow_anchors:
                 out = a.out or a.kit_src.parent / "work" / "flow-anchors.jsonl"
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(text, encoding="utf-8")
                 by = {l: sum(1 for r in rows if r["lang"] == l) for l in FLOW_LANGS}
-                print(f"anchors: {len(rows)} {by}\nsha256: {sha256_bytes(text.encode())}\nfile: {out}")
+                print(f"anchors: {len(rows)} {by}\nskipped-files: {stats.get('skippedFiles', 0)}\n"
+                      f"error-trees: {stats.get('errorTrees', 0)}\neval-commit: {commit}\nsha256: {sha256_bytes(text.encode())}\nfile: {out}")
             elif a.out:
                 a.out.parent.mkdir(parents=True, exist_ok=True)
                 a.out.write_text(text, encoding="utf-8")
