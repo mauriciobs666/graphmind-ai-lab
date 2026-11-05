@@ -1,8 +1,8 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.15 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.16 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
-*Revision 2026-11-05 (v1.15): §2 "Site found" now follows §7.1 (a site absent in Joern is not found); §2 and §7.1 had contradicted each other, and the lenient reading is a secondary figure (§7.2). §7.2's census rows (parse success, method coverage, line fidelity) are redefined before any census result exists; the operative rules are in `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a1.6. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
+*Revision 2026-11-05 (v1.16): §5.4 Part F records the per-language pair and method hash key as the custodians used it; Java's pair key has no `|` between ordinal and index. A post-hoc recording of what was run, not a rule change. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
 
 ## 0. Question and the decision it serves
 
@@ -818,6 +818,12 @@ measures both kinds of error before any projection exists.
 - *Precondition.* `run_fitness.py flowcheck <lang>` reports `nErrors` 0 and `complete`. At the S25 gate
   it did not for Java (16 evidence errors), Python and Go (one method each with no pair): the S56
   labeller repairs those first (gate Pass 2, F1 disposition).
+- *Hash keys as recorded in each `adjudication/<lang>-flow-audit.input.json`* (SHA-256 of the string, ascending;
+  recomputed by DS for all seven and identical to the draws): pair `ccg-p0a-v1-flowaud|<lang>|pair|<ordinal>|<pairIndex>`
+  and method `ccg-p0a-v1-flowaud|<lang>|method|<ordinal>` for python, javascript, go, csharp, cpp and kotlin
+  (pairIndex 0-based file order); **java** pair `ccg-p0a-v1-flowaud|java|pair|<ordinal><pairIndex>` (no separator, so
+  7 golden keys collide, 3 of them in the draw, and a colliding pair draws with its twin) and method
+  `ccg-p0a-v1-flowaud|java|method|<ordinal>`.
 - *F1: pair validity.* Draw 60 pairs (JS 40) by ascending SHA-256 of `ccg-p0a-v1-flowaud|<lang>|pair|`
   plus method ordinal and pair index, all `unsure` pairs first up to 20. DS checks each against the
   source and the brief's rules (direct flow; a control pair directly decided) and records valid or

@@ -172,3 +172,67 @@ the frontend-only CPG (`importCpg(cpg, name, false)`, no overlays) coverage, lin
 **Acceptance.** (a) One `def` record per tree-sitter definition in every frame file, counts published; (b) every `(path, defLine)` that is a `T` member in `final2` or a reference `static`/`impls` target with a body appears in
 `defs.jsonl` with `symbol:true`; (c) 3 hand-counted files per language; (d) per language, a fixture with one planted definition per rule-8 case, one argument of each kind (a)–(d), and one decorator with a literal argument,
 each with its expected record; (e) mutants that must fail the tests: drop concatenation folding, drop `marker_annotation`, drop the shadowing check, flip the receiver offset, drop the C# line offset.
+
+## §a2.0 Flow-label audit (Part F)
+
+Protocol `docs/plans/connected-code-graph-p0-ml.md` §5.4 Part F. Decisions: `cpg/spikes/frontend-fitness/adjudication/<lang>-flow-audit.jsonl` (one record per
+queued pair and diff row, with file:line and convention tag); corrected sets `truth/<lang>.flow-final.jsonl` (provenance field on added pairs, `partFRemoved` on
+methods that lost pairs). Judged from corpus source and the flow brief only. All 400 queued pairs and 61 diff rows are decided; no extension was needed (every
+language has at least 20 valid pairs in the audited methods). The draws were recomputed from the golden files and equal the queues, the F2 method sets and the
+relabel files for all seven languages.
+
+| Lang | F1 n | invalid (unsure drawn / invalid) | F1 flag | F2 agreed | golden-only valid | relabel-only valid | omission | F2 flag | final pairs (removed / added) |
+|---|---|---|---|---|---|---|---|---|---|
+| python | 60 | 3 (20 / 3) | no (0.050) | 84 | 0 | 0 | 0/84 | no | 480 (3 / 0) |
+| javascript | 40 | 0 (18 / 0) | no | 54 | 9 | 0 | 0/63 | no | 151 (0 / 0) |
+| go | 60 | 4 (11 / 4) | **yes** (0.067) | 85 | 1 | 1 | 1/87 = 0.011 | no | 430 (4 / 1) |
+| java | 60 | 0 (5 / 0) | no | 124 | 3 | 4 | 4/131 = 0.031 | no | 465 (0 / 4) |
+| csharp | 60 | 6 (20 / 6) | **yes** (0.100) | 62 | 6 | 0 | 0/68 | no | 388 (6 / 0) |
+| cpp | 60 | 2 (20 / 2) | no | 74 | 2 | 5 | 5/81 = 0.062 | **yes** | 343 (6 / 5) |
+| kotlin | 60 | 0 (20 / 0) | no | 74 | 0 | 1 | 1/75 = 0.013 | no | 477 (0 / 1) |
+
+Every one of the 15 invalid pairs was `unsure` in the golden set; 0 of the 286 `sure` pairs drawn were invalid (Wilson 95% upper bound 0.013). Agreed pairs
+(present in both sets) are counted valid without a separate read; an invalid agreed pair would shrink the denominator and raise the omission rate slightly.
+F2 also found golden-only pairs that are invalid: cpp 3 (`IsValidParamName`, early exit reaching points nested in a later loop), removed in the final set;
+csharp 0; relabel-only invalid: go 0, csharp 1, kotlin 1 (none added). The invalid pairs by cause: go `callee-value` 3 and `field-write` 1; python `callee-value` 2
+and a generator-expression source 1; csharp `coordinate` 4 (switch-arm cond lines recorded 119/120/121, file lines 120/121/122, `ToString_ClientWhitelist`) and
+`out-arg` 2; cpp `this-field` 1 and `stream-into-call` 1, plus cpp ordinal 5 pair 1 (below).
+
+**Escalation (ML §5.4).** Flagged: go F1, csharp F1, cpp F2: three languages, so the process, not a language, is suspect and the matter returns to the
+coordinator before any second labeller. All three flags are narrow: go's flips to 1 of 60 if the `callee-value` ruling below is reversed; csharp's falls to 2 of 60 if
+the four off-by-one switch-arm pairs (one method, valid in intent) are counted as fixed; cpp's is 5 of 81, and 4 of 80 would be exactly 0.05. Python sits at
+exactly 0.050 (3 of 60, not above). Python's relabel reproduced all 84 pairs of its six methods with no difference, which the transcript check (relabel before
+`labels/` opened) should confirm.
+
+**Rulings (once, for all languages; the brief's text is the authority).**
+1. *Switch-case discriminant* (JS, C# switch expressions, C++ `switch`, Kotlin `when`, Java): the case label is the test of the subject against the label, so the
+   subject read by the label cond is a data pair; `code` is only the label text. The `default`/`else` body is decided by the nearest preceding label, and a later
+   label by the one before it. Without this, JS has 13 of 40 invalid; the relabeller's omission of the same 9 pairs is the other reading.
+2. *Short-circuit operand* (Go, Python, Java): an operand whose right side contains a call is a cond that decides every call in that right side, nested ones
+   included, unless a nearer cond lies between.
+3. *Early exit* (C#, Go, C++, others): after `if c { return | raise | throw }` every later point in the method that the exit can skip is decided by `c`, also
+   past an enclosing loop and across several exits (the brief's "including later returns"); `break`/`continue` decide the rest of the loop body. Points nested in
+   the body of a later conditional or loop belong to that structure's nearest cond, so the early exit does not decide them (cpp `IsValidParamName`). A loop header
+   decides all its body points. Handler bodies of `try`/`catch` are plain nested blocks. These pairs are multi-step in Joern's control dependence; S28 should report
+   the `early-exit` tag as its own stratum.
+4. *Discard arm `_`* (C#): a case label, so a cond; its body is decided by it, and by the previous arm only through it.
+5. *Declared-type prefix in `cond.code`* (Java): cosmetic; pair identity ignores it (12 pairs of `JdbcOwnerRepositoryImpl.delete` match).
+6. *Property read* (Kotlin): a property of a held value, including the extension receiver `this` (param -1), is a field read and flows directly; it is not a call
+   site. Flow through the implicit dispatch `this` (a C++ member initialiser read back as a field) and a write into a field followed by a whole-object use are not
+   (the brief's "not asked for").
+7. *Also ruled:* `callee-value` (a param or local invoked as `f(...)`, or the result of a call used as callee, is neither argument nor receiver: invalid; an alias of a
+   member access `o.m` called later has receiver `o`: valid); `out-arg` (a value written through an `out` argument is not the call's result: invalid); C++ stream `<<` is a
+   language operator (operands flow to its result; a streamed operand does not reach the call on its left); macro invocations are call sites; a slice bound is an operand, a
+   subscript key only selects (`index-as-selector`: invalid); a source never equals its sink even across loop iterations.
+
+**Pairless methods.** Python ordinal 11 (`fake_make_http_transport`: only a nested `def` and `return _transport`) and Go ordinal 13 (`FormFieldBinder`: `return vb` of
+a composite literal; `c` used only inside function literals) have no pair; the custodians' `noPairReason`s stand.
+
+**C++ ordinal 5.** The sample span (685-698) starts at the macro `GTEST_LOCK_EXCLUDED_`; the signature is at `googlemock/src/gmock-spec-builders.cc:683-684`. The only
+param pair, `mock_obj` -> `cond@688`, is invalid (`mock_obj` is the subscript key at 687; `file`/`line` reach only field writes), and it is removed from the final
+set. S28 must match the param points of this method, and of any method whose sample span omits the signature, on the corpus declaration line, not the span. Also in
+that method, `GetInstance` is recorded at line 691 but is on 692 (pairs 2 and 7), outside the audit draw and left unchanged.
+
+**Not decided here.** The coordinate scan (call name or cond code present on the recorded line) of all seven golden sets found 5 cond endpoints on wrong lines in
+csharp ordinal 4 (pairs 3 to 7; 3, 4, 5 and 7 queued, 6 left in place) and the cpp ordinal 5 call above; the other languages had none. The
+Java pair key has no separator (ML §5.4 Part F records it).
