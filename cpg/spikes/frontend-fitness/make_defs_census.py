@@ -1014,6 +1014,53 @@ def cpp_name(fd):
 
 
 MACRO_NAME = re.compile(r"[A-Z][A-Z0-9_]+")
+_CLASS_HEAD = re.compile(r"\b(?:class|struct|union)\b((?:\s+[A-Za-z_]\w*|\s*\[\[[^\]]*\]\]|\s*__attribute__\(\([^)]*\)\))+)\s*(?:final\s*)?(?::[^{;]*)?\{")
+
+
+def _class_head_name(data: bytes, n):
+    """Name of the last `class|struct|union [attrs] Name [: bases] {` head before `n` that is still open at `n` (brace depth), for the
+    case where tree-sitter built no class_specifier around `n`."""
+    text = data[:n.start_byte].decode("utf-8", "replace")
+    best = None
+    for m in _CLASS_HEAD.finditer(text):
+        toks = [t for t in re.findall(r"[A-Za-z_]\w*", re.sub(r"\[\[[^\]]*\]\]|__attribute__\(\([^)]*\)\)", " ", m.group(1))) if t != "final"]
+        body = text[m.end():]
+        if toks and body.count("{") + 1 > body.count("}"):
+            best = toks[-1]
+    return best
+
+
+_CPP_TYPE_WORDS = {"int", "char", "bool", "void", "float", "double", "long", "short", "unsigned", "signed", "auto", "const", "decltype",
+                   "noexcept", "sizeof", "alignas"}
+_PURE = re.compile(r"\bvirtual\b([^;{}]*?)=\s*0\s*;", re.S)
+
+
+def recover_pure_virtuals(data: bytes, root, L, defs, rel):
+    """Pure virtuals (`virtual T F(...) [GUARDED_(mu)] = 0;`) that tree-sitter lost inside a parse-error region: a bounded text recovery,
+    only for statements no existing definition already covers (same name on the same line), outside comments and strings."""
+    text = data.decode("utf-8", "replace")
+    have = {(d["name"], d["nameLine"]) for d in defs}
+    for m in _PURE.finditer(text):
+        body = re.sub(r"\s+", " ", m.group(1))
+        # the declarator is the first `Name(` (balanced parameter list follows); a macro call before `=` is the trailing annotation
+        nm = next((x for x in re.finditer(r"([~A-Za-z_]\w*|operator\s*[^\s(]+)\s*\(", body) if x.group(1) not in _CPP_TYPE_WORDS), None)
+        if nm is None:
+            continue
+        name = re.sub(r"\s+", "", nm.group(1))
+        byte = len(text[:m.start()].encode("utf-8"))
+        node = root.descendant_for_byte_range(byte, byte)
+        if node is None or node.type in ("comment", "string_literal", "raw_string_literal", "string_content"):
+            continue
+        pos = m.start(1) + m.group(1).find(nm.group(1))
+        line = L.lc(len(text[:pos].encode("utf-8")))[0]
+        if (name, line) in have:
+            continue
+        cls = _class_head_name(data, node) or None
+        end_line = L.lc(len(text[:m.end()].encode("utf-8")) - 1)[0]
+        defs.append({"k": "def", "path": rel, "name": name, "nameKey": name, "nameLine": line,
+                     "endLine": end_line, "declStartLine": L.lc(byte)[0], "symbol": True, "decorators": [],
+                     "qname": f"{rel}::{cls + '.' if cls else ''}{name}", "kind": "pure", "anon": False, "declNode": "recovered",
+                     "_s": byte})
 
 
 def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
@@ -1227,6 +1274,10 @@ def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
                 # trailing macro is parsed as the declarator; the real function is the one in the ERROR.
                 quals, base, nn = real
             encl = types[-1] if types else None
+            if not quals and MACRO_NAME.fullmatch(base) and fld(n, "type") is None and base != encl:
+                head = _class_head_name(data, n)     # `class API_ [[nodiscard]] RE {` loses the class context in tree-sitter
+                if head == base:
+                    quals = [head]
             ctor = base == (quals[-1] if quals else encl)
             seg = "<init>" if ctor else base
             if not quals and not ctor and fld(n, "type") is None and MACRO_NAME.fullmatch(base):
@@ -1279,6 +1330,8 @@ def census_file(lang: str, rel: str, data: bytes) -> tuple[list, list, int]:
             rec(c, new)
 
     rec(root, ((), (), False))
+    if lang == "cpp" and root.has_error:
+        recover_pure_virtuals(data, root, L, defs, rel)
     defs.sort(key=lambda d: d.pop("_s"))
     return defs, build_args(lang, rel, data, key, root, L), rf.count_errors(root)
 

@@ -226,6 +226,7 @@ def test_csharp_line_offset_is_applied_to_start_and_end(tmp_path):
     r = run_join(tmp_path, "csharp", defs, ["A.cs"], rows)["off"]
     assert r["methodCoverage"]["k"] == 2 and r["lineFidelity"]["k"] == 1 and r["lineFidelityDeclStart"]["k"] == 2
     assert r["parseSuccess"]["k"] == 1
+    assert r["lineEndDelta"] == {"0": 2}
 
 
 def test_matching_is_one_to_one_by_name_then_window_and_skips_non_symbols(tmp_path):
@@ -648,6 +649,44 @@ def test_line_fidelity_start_only_and_end_delta_expose_a_constant_end_offset(tmp
     assert r["lineFidelity"]["k"] == 0 and r["lineFidelityStartOnly"]["k"] == 3 and r["lineEndDelta"] == {"2": 3}
 
 
+def test_strata_labels_are_not_swapped_and_partition_the_headline(tmp_path):
+    defs = [mdef("in1.py", "a", 1, 1, 2), mdef("in1.py", "b", 5, 5, 6), mdef("in2.py", "c", 1, 1, 2), mdef("out.py", "d", 1, 1, 2)]
+    rows = [{"k": "file", "path": "in1.py", "methods": 2}, {"k": "file", "path": "in2.py", "methods": 1},
+            M("a", 1, 2, file="in1.py"), M("b", 5, 6, file="in1.py"), M("c", 1, 2, file="in2.py")]
+    r = run_join(tmp_path, "python", defs, ["in1.py", "in2.py", "out.py"], rows)["off"]
+    st = r["strata"]
+    assert kn(st["inCpgFiles"]["methodCoverage"]) == (3, 3) and kn(st["absentFiles"]["methodCoverage"]) == (0, 1)
+    assert kn(r["methodCoverage"]) == (3, 4)
+    assert kn(st["inCpgFiles"]["parseSuccess"]) == (2, 2) and kn(st["absentFiles"]["parseSuccess"]) == (0, 1)
+
+
+def test_same_named_annotations_on_one_method_are_unioned_not_overwritten(tmp_path):
+    dec = lambda v: {"name": "Get", "node": "annotation", "literalArgs": [{"name": None, "value": v}]}
+    defs = [mdef("A.java", "a", 3, 2, 4, decorators=[dec("/a"), dec("/b")])]
+    rows = [{"k": "file", "path": "A.java", "methods": 1},
+            M("a", 2, 4, file="A.java", ann=[{"name": "Get", "node": "ANNOTATION", "lits": ["/a"], "litNodes": ["ANNOTATION_LITERAL"]},
+                                             {"name": "Get", "node": "ANNOTATION", "lits": ["/b"], "litNodes": ["ANNOTATION_LITERAL"]}])]
+    d = run_join(tmp_path, "java", defs, ["A.java"], rows)["off"]["decorators"]
+    assert kn(d["literalShare"]) == (2, 2) and kn(d["nameShare"]) == (1, 1)
+
+
+def test_cpp_constructor_keeps_its_class_when_tree_sitter_loses_the_class_context():
+    src = "class GTEST_API_ [[nodiscard]] RE {\n public:\n  RE(const char* r) : x_(r) {}\n  RE(const RE& o) : RE(o.p()) {}\n};\n"
+    d, _ = one("cpp", "a.cc", src)
+    got = [(r["name"], r["symbol"], r["kind"], r["qname"].split("::")[1]) for r in d if r["name"] == "RE"]
+    assert got and all(g == ("RE", True, "ctor", "RE.<init>") for g in got) and not [r for r in d if r["kind"] == "macro" and r["name"] == "RE"]
+
+
+def test_cpp_pure_virtual_with_a_trailing_macro_is_recovered_inside_a_parse_error_region():
+    src = ("struct B {\n  virtual void Clear()\n      GUARDED_(mu) = 0;\n};\n"
+           "class Z : public X {\n  virtual int (*Fp(int))(bool) = 0;\n  virtual void ok() = 0;\n};\n"
+           "template <typename T>\n::std::string P(const T& v) { ::std::stringstream ss; return ss.str(); }\nGARBAGE((;\n"
+           "// virtual void inComment() = 0;\n")
+    d, _ = one("cpp", "a.cc", src)
+    pure = {(r["name"], r["nameLine"]) for r in d if r["kind"] == "pure" and r["symbol"]}
+    assert ("Clear", 2) in pure and ("ok", 7) in pure and ("Fp", 6) in pure and not [p for p in pure if p[0] == "inComment"]
+
+
 # ---------------------------------------------------------------------------------------------------------- mutants
 # Each mutant rewrites a COPY of the sources (never the repo's) and the same tests, run against the copy, must fail.
 MUTANTS = {
@@ -698,6 +737,11 @@ MUTANTS = {
     "R4_js_literals_taken_as_nodes": ("s27_census_metrics.py", [('LITERALS_ONLY_IN_CODE = {"javascript"}', "LITERALS_ONLY_IN_CODE = set()")]),
     "R5_no_argument_nodes_cause_dropped": ("s27_census_metrics.py", [('elif a["siteKey"] not in M["cargs"]:', "elif False:")]),
     "R6_end_delta_dropped": ("s27_census_metrics.py", [("            end_delta[m[\"le\"] - (d[\"endLine\"] + off)] += 1", "            pass")]),
+    "N3_strata_split_inverted": ("s27_census_metrics.py", [("if (f in in_set) == keep]", "if (f in in_set) != keep]"), ("if (p in in_set) == keep}", "if (p in in_set) != keep}"), ('if (a["path"] in in_set) == keep]', 'if (a["path"] in in_set) != keep]')]),
+    "N3_end_delta_without_offset": ("s27_census_metrics.py", [('end_delta[m["le"] - (d["endLine"] + off)] += 1', 'end_delta[m["le"] - d["endLine"]] += 1')]),
+    "N3_annotation_overwrite": ("s27_census_metrics.py", [('exposed[last_segment(a["name"])].update(ann_values(lang, a))', 'exposed[last_segment(a["name"])] = ann_values(lang, a)')]),
+    "N1_ctor_class_head_dropped": ("make_defs_census.py", [("                head = _class_head_name(data, n)", "                head = None")]),
+    "N2_error_region_pure_virtual_recovery_dropped": ("make_defs_census.py", [("    if lang == \"cpp\" and root.has_error:", "    if False:")]),
     "F1_operator_alias_dropped": ("s27_census_metrics.py", [('        if k.startswith("operator"):', '        if False:')]),
 }
 
