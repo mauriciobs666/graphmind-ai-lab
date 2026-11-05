@@ -5419,3 +5419,50 @@ This step passes its re-gate when all of these hold, each checkable from the rep
 3. M-1 has a recorded ruling (EP owner or S40) and the four prompts match it; a different result
    re-opens this step.
 M-1 and m-1 to m-4 do not need a third pass if their dispositions are recorded in `S52-NOTES.md`; the next pass checks B-1 only.
+
+## Pass 2 — S53 (P0-44): headless launcher verbs prepare/start/resume/status
+
+> Scope: `cpg/eval/headless/{run-writer.sh,README.md,tests/test_launcher.sh,tests/mutants_launcher.sh}` at `bbbe5b01` against `docs/plans/connected-code-graph-p0-2.md` §3 S53, §6.1, §6.3. S52 files not reviewed. CPG: considered, not relevant — shell script with no CPG graph.
+
+**Verdict: needs changes** (one major, the concurrent double `start`; the rest minor). Checks run: `bash -n` clean; `tests/test_launcher.sh` 142 passed, 0 failed; `tests/mutants_launcher.sh` 0 of 33 survived (both run by me). `prepare-bin` is unchanged: `diff` of the pre-commit script against HEAD shows only comment, usage and `main` dispatch lines removed or added, and the `cmd_prepare_bin` body is identical. No `claude` model call was made. All attacks below used a stub binary under a scratch HOME with a space in the script path.
+
+### Done-conditions (by execution)
+
+1. `prepare-bin` plus `env -i … --version`: untouched since its earlier acceptance. Not re-run (the brief forbids `claude` calls).
+2. One `build_argv`: I dry-ran `start` and `resume` and compared. The argv matches §6.3 token for token. Start and resume differ only in the session flag, the prompt and the stream name. Met.
+3. A new stream per attempt: a real run produced `.1` then `.2` files, and `noclobber` refuses an existing name. Met.
+4. `--tools Read,Grep,Glob,Write,Edit` and `--disable-slash-commands` are present. Met.
+5. The index records the CLI version, binary hash, settings hash and agents hash. `resume` drift check not re-run by me (the suite covers it and the mutants kill it). Met.
+Env under `env -i`: the stub saw only `HOME PATH LANG CCG_GUARD PWD`; a planted `SECRET` did not leak. Quote and `$(…)` content in a brief arrived as one literal argv token, with nothing executed.
+Rejected inputs (exit 2): `../x`, `a/../b`, `"KA flow"`, `--model 'opus --x'`, an uppercase UUID, a bare `--`.
+
+### Findings
+
+**M-1 (major, verified): concurrent `start` is not excluded.** Two `start $E KA flow` runs launched together both passed the "already has a session" check (`run-writer.sh:413-418`), because the index line is written only after the check and nothing is locked. The result was two sessions with distinct UUIDs on the same role root and the same `out/`, both running. `resume` then follows only the last `start` line (`:452`), so the first session is orphaned from the launcher's view. This is likely in practice: a 4 h `start` exceeds a foreground tool timeout, and a retry would double-launch.
+Fix: take an atomic lock before the checks, e.g. `mkdir "$ROLE_ROOT/.lock"` (or `flock` on a file in `runs/`), removed on exit with a trap. Apply it to `resume` too. Add a test with two background `start`s that expects exactly one to exit 3, and a mutant that removes the lock.
+
+**m-1 (minor, verified): a killed launcher orphans the writer.** `kill -TERM` on the launcher left `timeout … claude` running (pid survived), with a start record and no end record. `resume --assume-ended` would then start a second writer on the same session and `out/`. The README should say to find and kill the orphan before using `--assume-ended`. Better: `trap` TERM/INT in `launch` to forward the signal to the child group and write an end record with the signal's exit code.
+
+**m-2 (minor, verified): an oversized brief burns the session.** A 140 KB `BRIEF.md` passes `prepare` and `start`, then `exec` fails (`Argument list too long`, exit 126). The start record, stream file and session id are consumed, and a retry needs `--restart`. Reject a prompt over about 100,000 bytes in `prepare` and `start` before writing anything. Real briefs are about 24 KB, so this is low risk.
+
+**m-3 (minor, inferred, S55 to settle): stdin is inherited.** The launcher does not redirect stdin for `claude -p`. If a caller leaves stdin as an open pipe, `-p` may wait for EOF. Add `</dev/null` to the launch subshell (`:327`); it changes no argv token. Under `timeout`'s own process group, a terminal read would also stop it.
+
+**n-1 (nit, verified): `prepare` copies symlinks verbatim.** A kit symlink to `/etc/passwd` is preserved inside `kit-src`. The S52 guard and `--restricted` should block following it. Consider rejecting symlinks in the kit at `prepare` for defense in depth.
+
+**n-2 (nit, inferred):** if a launcher is killed mid-write, the next append glues onto the partial line. I reproduced the glued line; `idx_get` still read the later fields correctly in my run. Low likelihood, so no action beyond a leading newline guard if you want one.
+
+### Choices beyond spec
+
+- Rehearsal and capture defaults of sonnet, 30 min, agent `ccg-annotator`: acceptable; the plan sets none and S54/S55 are short. State it in S54's brief.
+- `--restart` (only when `out/` is empty): acceptable and safe; it deletes nothing. M-1 and m-1 are what weaken it.
+- `--assume-ended`: acceptable as an explicit override, but see m-1.
+- claude stderr left on the terminal: acceptable. A tool-run launcher captures it in its own output; it is lost to the audit but is not evidence the audit needs.
+- Cost not in the index: acceptable. The stream's result event carries it.
+
+### What's solid
+
+`prepare` is idempotent and refuses different inputs (exit 3). The argv is one function used by both verbs. Drift covers every earlier attempt, not just the last. There is no deletion anywhere in the launcher. Input validation is tight and the traversal inputs I tried were all refused. The mutant suite is not decorative: it is 33 distinct kills over the done-conditions.
+
+### Stopping condition (falsifiable)
+
+Re-gate passes when: (1) running two `start $E KA flow` in parallel against a fresh role root yields exactly one index `start` line and one exit 3; (2) that test exists in `test_launcher.sh` and a lock-removal mutant is killed in `mutants_launcher.sh`; (3) the README states the orphan-before-`--assume-ended` rule, or the launcher forwards TERM and writes an end record (m-1). m-2, m-3 and the nits need no further pass if dispositions are recorded.
