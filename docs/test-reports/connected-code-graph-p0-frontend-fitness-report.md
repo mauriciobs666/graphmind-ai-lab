@@ -185,10 +185,10 @@ relabel files for all seven languages.
 |---|---|---|---|---|---|---|---|---|---|
 | python | 60 | 3 (20 / 3) | no (0.050) | 84 | 0 | 0 | 0/84 | no | 480 (3 / 0) |
 | javascript | 40 | 0 (18 / 0) | no | 54 | 9 | 0 | 0/63 | no | 151 (0 / 0) |
-| go | 60 | 4 (11 / 4) | **yes** (0.067) | 85 | 1 | 1 | 1/87 = 0.011 | no | 430 (4 / 1) |
+| go | 60 | 4 (11 / 4) | **yes** (0.067), adjudicated with second labeller | 85 | 1 | 1 | 1/87 = 0.011 | no | 433 (4 / 4) |
 | java | 60 | 0 (5 / 0) | no | 124 | 3 | 4 | 4/131 = 0.031 | no | 465 (0 / 4) |
 | csharp | 60 | 2 (20 / 2) | no (0.033) | 62 | 6 | 0 | 0/68 | no | 392 (2 / 0; 5 coordinate-corrected) |
-| cpp | 60 | 2 (20 / 2) | no | 74 | 2 | 5 | 5/81 = 0.062 | **yes** | 343 (6 / 5; 2 coordinate-corrected) |
+| cpp | 60 | 2 (20 / 2) | no | 74 | 2 | 5 | 5/81 = 0.062 | **yes**, adjudicated with second labeller | 349 (13 / 18; 2 coordinate-corrected) |
 | kotlin | 60 | 0 (20 / 0) | no | 74 | 0 | 1 | 1/75 = 0.013 | no | 477 (0 / 1) |
 
 Every one of the 11 invalid F1 pairs was `unsure` in the golden set; 0 of the 286 `sure` pairs drawn were invalid (Wilson 95% upper bound 0.013). Agreed pairs
@@ -201,9 +201,30 @@ and a generator-expression source 1; csharp `out-arg` 2; cpp `this-field` 1 and 
 in place in the final set, with `provenance: partF-coordinate-fix`: csharp ordinal 4, pairs 3 to 7 (switch-arm cond lines 119/120/121 corrected to 120/121/122; pair 6 was
 not queued) and cpp ordinal 5, pairs 2 and 7 (`GetInstance` 691 to 692). The csharp F1 is therefore 2 invalid of 60 (the two `out-arg` pairs), not flagged.
 
-**Escalation (ML §5.4).** Flagged: go F1 (go's flips to 1 of 60 if the `callee-value` ruling below is reversed) and cpp F2 (5 of 81; 4 of 80 would be exactly 0.05).
-Two languages, so the three-language return does not apply; each gets a second blind labeller. Python sits at exactly 0.050 (3 of 60, not above). Python's relabel
-reproduced all 84 pairs of its six methods with no difference, which the transcript check (relabel before `labels/` opened) should confirm.
+**Escalation (ML §5.4).** Flagged: go F1 and cpp F2; each got a fresh second blind labeller (all 30 methods, `adjudication/<lang>-flow-second.jsonl`), and the
+adjudicated union is the golden set (`truth/<lang>.flow-final.jsonl`; provenance `partF-second-only-valid` on added pairs). Python sits at exactly 0.050 (3 of 60, not above).
+Python's relabel reproduced all 84 pairs of its six methods with no difference, which the transcript check (relabel before `labels/` opened) should confirm.
+
+**Second-labeller adjudication** (every one-sided pair judged from source, records `part: F-second` in `adjudication/<lang>-flow-audit.jsonl`). A pair differing only by a wrong
+`ret` line in the second set (go 4, cpp 2 of `GetInstance`) is matched to the golden pair, not one-sided.
+
+| | go | cpp |
+|---|---|---|
+| second-set pairs / `unsure` | 419 / 9 (2.1%) | 344 / 63 (18.3%); golden has 61 |
+| agreed (incl. coordinate-matched) | 413 | 329 |
+| golden-only valid / invalid | 20 / 0 | 3 / 12 |
+| second-only valid / invalid | 3 / 3 | 15 / 0 |
+| disagreement (one-sided / union) | 26 / 439 = 5.9% | 30 / 359 = 8.4% |
+| final pairs | 433 | 349 |
+
+Of the cpp second-only valid, 2 were already added from the custodian relabel; of the 12 golden-only invalid, 5 were decided earlier. Golden-only valid pairs are the second
+labeller's omissions, mostly the early-exit reading (go: later points after several exits; cpp: `continue`/`return` in loops). The go second-only invalid are an index used as
+callee selector, a map key, and a flow through two `append` calls.
+
+**Where the second labeller contradicts a DS ruling.** Go: it independently labelled all 4 pairs ruled invalid (3 `callee-value`, 1 `field-write`), each `unsure`, as the golden
+labeller did, so two independent labellers disagree with the `callee-value` and `field-write` rulings; both flagged them `unsure`, and the rulings stand on the brief's
+"argument or receiver" text and are tagged for reversal. Cpp: it also labelled `mock_obj` -> `cond@688` (`index-as-selector`, `unsure`), though it took method 5's parameters from the
+coordinator's brief; that ruling stands. It does not contain any of the 12 cpp pairs ruled invalid for `stream-into-call`, `this-field` and `nested-block`, which supports those rulings.
 
 **Rulings (once, for all languages; the brief's text is the authority).**
 1. *Switch-case discriminant* (JS, C# switch expressions, C++ `switch`, Kotlin `when`, Java): the case label is the test of the subject against the label, so the
