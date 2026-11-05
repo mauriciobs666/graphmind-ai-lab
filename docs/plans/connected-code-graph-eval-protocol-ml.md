@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 and 4 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record with `packSetHash` in §12.3); §16 removed.*
+*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 and 4 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record with `packSetHash` in §12.3); §16 removed; Appendix B grammar-slot rule (S52 M-1).*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -2021,10 +2021,26 @@ if __name__ == "__main__":
 - S40 pastes B.0 plus the role's part (B.1, B.2 or B.3) into each `BRIEF.md`, and S52 pastes the
   same parts into the matching agent definition.
 - Each paster fills only the `{…}` slots, from `eval-manifest.yaml` and S40's draw.
-- **The `{grammarExtract}` slot** takes the bundle spec's §4.0, §4.1 rules 1–4 and 6–10, and the
+- **The `{grammarExtract}` slot** takes the bundle spec's §4.0, §4.1 rules 1–4, 6 and 8–10, and the
   rule bullets of §4.2 for Python, TS/JS, shell and Markdown, plus §6's `http` and `mcp_tool`
-  rows. It **omits** §4.1 rule 5, every worked-example table, and §6's example column. Those name
-  real proving-repo elements, the slice's among them.
+  rows. It **omits** §4.1 rules 5 and 7, every worked-example table, and §6's example column (those
+  name real proving-repo elements, the slice's among them), and §6 `http` step 7's catch-all clause
+  (`{**}` and the list of catch-all syntaxes). The extract's unused-rule line reads "(Rules 5 and 7
+  are not used in this brief.)". S40 generates the extract once; S52's four definitions and the
+  brief hold byte-identical copies.
+- **B.0 governs what a writer writes; the extract governs what counts as named.** The extract's
+  `<anon>#N` and `#N` in the grammar block, and the Python lambda and TS/JS binding bullets, say
+  which scopes are anonymous, so that "the nearest enclosing named function" is decidable (a `const f
+  = () => …` is named `f`, so those bullets stay). A writer never writes `<anon>` or a `#N`, and
+  rule 7 is cut so that a redefined top-level function is `f`, as B.0 says. Were a `#k` written
+  anyway, `E` (§2.3) removes it and the rewrite is logged, so scoring is unaffected and the cut is for
+  one instruction per case. B.0's "every path parameter is `{}`" governs `keyNorm`: the normalizer
+  (§13.4) rewrites framework syntaxes to `{}`, and a writer's `{}` cannot be turned into `{**}`.
+  **Known limit:** a catch-all route parameter written `{}` would not equal the system's `{**}`
+  (EP2 keeps the placeholders distinct). Observed exposure at this tree is nil: a grep of tracked
+  non-test `.py`, `.ts`, `.tsx` and `.js` for `:path}`, `{*x}`, `[...x]` and `*` in route decorators
+  finds no catch-all route parameter. Before key-writing on a codebase that has one, B.0's `{}`
+  sentence gets a catch-all clause, which re-pins the briefs.
 - Nothing else from this note is pasted. The text below names no proving-repo element and gives no
   rationale. Its examples are synthetic paths that do not exist in the kit.
 
