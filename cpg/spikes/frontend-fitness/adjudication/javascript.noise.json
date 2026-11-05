@@ -1,0 +1,407 @@
+{
+ "lang": "javascript",
+ "N": 523,
+ "comparable": 522,
+ "referenceSilent": 1,
+ "agreement": {
+  "agreed": 479,
+  "comparable": 522,
+  "rate": 0.9176,
+  "wilson95": [
+   0.8909,
+   0.9383
+  ]
+ },
+ "adjudicated": {
+  "n": 43,
+  "W": 0,
+  "byWrong": {
+   "reference": 43
+  },
+  "byErrorKind": {
+   "none": 43
+  }
+ },
+ "referenceError": {
+  "wrong": 43,
+  "comparable": 522,
+  "rate": 0.0824,
+  "wilson95": [
+   0.0617,
+   0.1091
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 161,
+   "n": 100,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.037
+   ]
+  },
+  "AE": {
+   "N_s": 318,
+   "n": 100,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.037
+   ]
+  },
+  "AS": {
+   "N_s": 1,
+   "n": 1,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.7935
+   ]
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.0,
+   "conservative": 0.0339
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.0197
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 103
+ },
+ "closedClasses": {
+  "count": 0,
+  "byKind": {
+   "role": [],
+   "coordinate": [],
+   "shape": []
+  }
+ },
+ "unscored": {
+  "byReason": {},
+  "underivable": 0
+ },
+ "basisCounts": {
+  "agreed": 266,
+  "audit-confirmed": 214,
+  "adjudicated": 43
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.0,
+   "flagged": false
+  },
+  "v1.11": {
+   "figure": 0.0,
+   "flagged": false
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": "none found: the 103 census entries read by DS are 86 function declarations, 9 arrow functions, 6 expression-bodied arrows, 1 explicit constructor (src/api/client.ts:35, ApiError.<init>, not a class line; class at :25) and 1 parameter (composerNotice.ts:28, not a definition); no target sits on a class line.",
+  "anonymousIndexQnames": {
+   "count": 19,
+   "note": "JS <anon>#n indices appear in these final T qnames (S57 compares (path, defLine); S27 needs the list)",
+   "entries": [
+    {
+     "ordinal": 4,
+     "site": "src/api/hooks.ts:253",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 15,
+     "site": "src/api/hooks.ts:395",
+     "qname": "src/session/SessionContext.tsx::SessionProvider.<anon>#5",
+     "defLine": 72
+    },
+    {
+     "ordinal": 35,
+     "site": "src/api/hooks.ts:351",
+     "qname": "src/session/SessionContext.tsx::SessionProvider.<anon>#3",
+     "defLine": 62
+    },
+    {
+     "ordinal": 61,
+     "site": "src/api/hooks.ts:70",
+     "qname": "src/session/SessionContext.tsx::SessionProvider.<anon>#4",
+     "defLine": 67
+    },
+    {
+     "ordinal": 68,
+     "site": "src/api/hooks.ts:401",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 73,
+     "site": "src/api/hooks.ts:137",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 78,
+     "site": "src/api/hooks.ts:76",
+     "qname": "src/session/SessionContext.tsx::SessionProvider.<anon>#6",
+     "defLine": 77
+    },
+    {
+     "ordinal": 141,
+     "site": "src/api/hooks.ts:368",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 207,
+     "site": "src/layout/Header.tsx:39",
+     "qname": "src/layout/SheetContext.tsx::SheetStateProvider.<anon>#1.open",
+     "defLine": 26
+    },
+    {
+     "ordinal": 290,
+     "site": "src/api/hooks.ts:432",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 299,
+     "site": "src/api/hooks.ts:285",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 352,
+     "site": "src/components/sheets/ResetControl.tsx:74",
+     "qname": "src/layout/SheetContext.tsx::SheetStateProvider.<anon>#1.close",
+     "defLine": 27
+    },
+    {
+     "ordinal": 353,
+     "site": "src/api/hooks.ts:172",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 358,
+     "site": "src/components/sheets/BottomSheet.tsx:35",
+     "qname": "src/layout/SheetContext.tsx::SheetStateProvider.<anon>#1.close",
+     "defLine": 27
+    },
+    {
+     "ordinal": 372,
+     "site": "src/api/hooks.ts:206",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 387,
+     "site": "src/api/hooks.ts:462",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 474,
+     "site": "src/api/hooks.ts:323",
+     "qname": "src/api/hooks.ts::useErrorEffects.<anon>#1",
+     "defLine": 67
+    },
+    {
+     "ordinal": 478,
+     "site": "src/components/sheets/ResetControl.tsx:60",
+     "qname": "src/layout/SheetContext.tsx::SheetStateProvider.<anon>#1.close",
+     "defLine": 27
+    },
+    {
+     "ordinal": 502,
+     "site": "src/i18n/LanguageChooser.tsx:48",
+     "qname": "src/i18n/useLocale.ts::useLocale.<anon>#1",
+     "defLine": 22
+    }
+   ]
+  },
+  "externalsAbsentFromTree": {
+   "note": "every external label names a third-party package or builtin whose source is not in the corpus tree (JS has no vendored node_modules in src); no generated-source gap analogous to Java OpenAPI DTOs was found.",
+   "distinctPackages": 11,
+   "packages": {
+    "@playwright/test": 1,
+    "@tailwindcss/vite": 1,
+    "@tanstack/react-query": 33,
+    "@vitejs/plugin-react": 1,
+    "builtin": 71,
+    "i18next": 3,
+    "react": 95,
+    "react-dom/client": 2,
+    "react-i18next": 121,
+    "react-router-dom": 10,
+    "vite": 1
+   }
+  }
+ },
+ "detail": {
+  "lang": "javascript",
+  "N": 523,
+  "comparable": 522,
+  "comparableShare": 0.9981,
+  "agreedComparable": 479,
+  "agreementRate": 0.9176,
+  "agreementWilson95": [
+   0.8909,
+   0.9383
+  ],
+  "agreedAllIncludingAS": 480,
+  "perStratumAgreement": {
+   "AI": {
+    "comparable": 161,
+    "agreed": 161
+   },
+   "AE": {
+    "comparable": 318,
+    "agreed": 318
+   },
+   "note": "AS (1) is reference-silent, single-source, excluded; relaxed/byConstruction/declared/macro strata do not occur in javascript (not computed)."
+  },
+  "adjudicated": {
+   "total": 43,
+   "byWrong": {
+    "reference": 43
+   },
+   "byErrorKind": {
+    "none": 43
+   },
+   "W_labelWrong": 0
+  },
+  "auditTable": {
+   "AI": {
+    "n": 100,
+    "errors": 0,
+    "wilson95": [
+     0.0,
+     0.037
+    ],
+    "population": 161,
+    "censusOfStratum": false,
+    "drawC": {
+     "n": 10,
+     "errors": 0,
+     "cells": 10
+    }
+   },
+   "AE": {
+    "n": 100,
+    "errors": 0,
+    "wilson95": [
+     0.0,
+     0.037
+    ],
+    "population": 318,
+    "censusOfStratum": false,
+    "drawC": {
+     "n": 3,
+     "errors": 0,
+     "cells": 3
+    },
+    "refLocalCell": {
+     "n": 40,
+     "population": 121,
+     "errors": 0
+    }
+   },
+   "AS": {
+    "n": 1,
+    "errors": 0,
+    "wilson95": [
+     0.0,
+     0.7935
+    ],
+    "population": 1,
+    "censusOfStratum": true,
+    "drawC": {
+     "n": 0,
+     "errors": 0,
+     "cells": 0
+    }
+   }
+  },
+  "handErrorRate": {
+   "withRoleErrors": 0.0,
+   "withoutRoleErrors": 0.0,
+   "conservativeWilsonBoundWithRole": 0.0339,
+   "conservativeWilsonBoundWithoutRole": 0.0339,
+   "roleErrors": 0,
+   "noiseLimited": false,
+   "note": "AS stratum audited as a census (n=N_s=1) so its term is exact; draw C excluded from the rate."
+  },
+  "referenceErrorRate": {
+   "wrongSites": 43,
+   "comparable": 522,
+   "rate": 0.0824,
+   "wilson95": [
+    0.0617,
+    0.1091
+   ],
+   "breakdown": {
+    "param-t attributed internal": 20,
+    "local": 23
+   },
+   "censusReferenceErrors": 1,
+   "censusNote": "composerNotice.ts:28 is a census-level reference error (parameter, not definition); not added to the site count"
+  },
+  "census": {
+   "entries": 103,
+   "roleImpl": 102,
+   "notADefinition": 1,
+   "roleErrors": 0
+  },
+  "unscored": {
+   "underivable": 0,
+   "notACall": 0,
+   "share": 0.0
+  },
+  "testRetest": "56 sites, 55 agree (ledger; not recomputed)",
+  "v1.12": {
+   "e_all": {
+    "point": 0.0,
+    "conservative": 0.0339
+   },
+   "e_res": {
+    "point": 0.0,
+    "conservative": 0.0197
+   },
+   "perStratum": {
+    "AI": {
+     "N_s": 161,
+     "n": 100,
+     "unreadRemainder": 61,
+     "r_s_targetKindErrors": 0,
+     "wilsonUpper": 0.037
+    },
+    "AE": {
+     "N_s": 318,
+     "n": 100,
+     "unreadRemainder": 218,
+     "r_s_targetKindErrors": 0,
+     "wilsonUpper": 0.037
+    },
+    "AS": {
+     "N_s": 1,
+     "n": 1,
+     "unreadRemainder": 0,
+     "r_s_targetKindErrors": 0,
+     "wilsonUpper": null
+    }
+   },
+   "flag": "e_res point 0.0 <= 0.05: not noise-limited",
+   "closedClassShare": 0.0,
+   "closedClassTripwire": 0.1,
+   "v1.10_would_have_said": "e_h = 0.0 (point), conservative 0.0339, not noise-limited; same verdict. v1.12 e_res conservative differs (unread remainder only)."
+  }
+ }
+}
