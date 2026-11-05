@@ -1,0 +1,415 @@
+{
+ "lang": "cpp",
+ "hashInput": {
+  "pair": "ccg-p0a-v1-flowaud|cpp|pair|<methodOrdinal>|<pairIndex>",
+  "method": "ccg-p0a-v1-flowaud|cpp|method|<methodOrdinal>",
+  "pairIndex": "0-based index in the method's pairs array"
+ },
+ "nMethods": 30,
+ "nPairs": 344,
+ "nUnsureAll": 61,
+ "f1": [
+  {
+   "ordinal": 4,
+   "pairIndex": 1,
+   "unsure": true,
+   "hash": "001f2e9fd89a1cbbdcda15c666ecc65292db53d3d3e20917ed004775f6fc15b3"
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 5,
+   "unsure": true,
+   "hash": "01816388ea3a28813f2e9e4fdb08f042d0d76a0bca5746afcce41083996bd163"
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 10,
+   "unsure": true,
+   "hash": "059993b2ae7aebaae4ac458bc9338f0c50b8796c50352fe02c091f9aefe5f22a"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 20,
+   "unsure": true,
+   "hash": "0908b70fc04e3d35232f6c6cf5d7a2bc20ece0a3357a7da3919e339a11171a65"
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 11,
+   "unsure": true,
+   "hash": "0b4e95b92a462ab6fde56faaf9e29f7fa733f5888f44adada45079ba042166f4"
+  },
+  {
+   "ordinal": 9,
+   "pairIndex": 3,
+   "unsure": true,
+   "hash": "15ca5cc79e0d6fd227d33b6bd3d06893b60c4e856cce4f7407f9ed6160fa9f80"
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 1,
+   "unsure": true,
+   "hash": "17e3953d458305fdcf61bcd0d543f51910f9afe413a898c19d7bfddae33e0bb7"
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 4,
+   "unsure": true,
+   "hash": "188e773c049412d92d68cc058952cf0e9633ab0c9dfd8aa603002997c32e8701"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 26,
+   "unsure": true,
+   "hash": "1afe8784b3a831e3c8480ac64195ad67564c01714959d3bebb957925d48f65e2"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 25,
+   "unsure": true,
+   "hash": "1d039abdb33e52c0c5360cc8617ee822c3f54e168671d17af5e39b94cad6c15f"
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 2,
+   "unsure": true,
+   "hash": "1d724f25f6aab39b837b589eface40a39be826f9dd7d188c77f4f2d9993c1faf"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 22,
+   "unsure": true,
+   "hash": "271cce2e18782af4c39f14ba2d7ad36b8c7eff25873d18d1aa6f4f9a1b78f518"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 15,
+   "unsure": true,
+   "hash": "2cc34ee0db83066871e00d40a526fb058ff23e376fc9839b6c3d8b7004d302e6"
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 4,
+   "unsure": true,
+   "hash": "2edf39c99c5ce2999c2925a46e865db251bf3781e7521510437d03f44f42fa1c"
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 24,
+   "unsure": true,
+   "hash": "2f3c42b9f916c88f837ab4094e7231a05017958fd4ec7bc476c2624b5e6b0bad"
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 5,
+   "unsure": true,
+   "hash": "36f462016d4dde65a84e8e1f0ef958f6011ff64cebd1ca2d4f19c2a9e78b9276"
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 7,
+   "unsure": true,
+   "hash": "4156bb3069eb1834df0ecc422d475f84dca62e25d47c6d7c6ba624e416428a4c"
+  },
+  {
+   "ordinal": 24,
+   "pairIndex": 4,
+   "unsure": true,
+   "hash": "47c7c6d66020c3d81c2aa2057f1bb73422dac6d36176ffb2fde081541f24e382"
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 2,
+   "unsure": true,
+   "hash": "4cf51095aab780ed16e0bb700e7f4f79024404123cbc7745f29716a93611d9e3"
+  },
+  {
+   "ordinal": 16,
+   "pairIndex": 0,
+   "unsure": true,
+   "hash": "4db978dba153a453974ad7261c1bd848fab2cce98ec1d24820d9b1faeb02de7a"
+  },
+  {
+   "ordinal": 29,
+   "pairIndex": 6,
+   "unsure": false,
+   "hash": "00e5980b3df40a4470797586c72a212fc800da6a02ffb6d92106674e7fb2cd44"
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 28,
+   "unsure": false,
+   "hash": "01747b36278dbc64753fba3312b51d34368779e9f4f12898aedd5dd84526c819"
+  },
+  {
+   "ordinal": 23,
+   "pairIndex": 16,
+   "unsure": false,
+   "hash": "01b4d2483d57bf905941d7eb568bbccd59a04348ccff53f0b8ebde6e54436f38"
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 13,
+   "unsure": false,
+   "hash": "01e586f511ccf81da9cc822afeab9238d845f57e1c5970022d99a16033346e9c"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 24,
+   "unsure": false,
+   "hash": "02144a56bdea1ebdd86bf04f1779820c8f6104d159bbecc6e6a3d362f5eee10d"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 20,
+   "unsure": false,
+   "hash": "037f07b8c40c365d29aa25091b8ceb4afdba607e26ecdd5021a0f87070613d0d"
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 1,
+   "unsure": false,
+   "hash": "0759bcdf8734c2eb15a76bf93affda1a021b608a9e1cddd01b092c3e6be93a59"
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 11,
+   "unsure": false,
+   "hash": "09e6d1702511afbb65883a96000a1b58e39db85941c62d61f1f67e224c4c141d"
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 4,
+   "unsure": false,
+   "hash": "0a794e2ef57041f6e8cf0d7e4f9b26390618b286fa7c2f11b15d962b02a7778d"
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 3,
+   "unsure": false,
+   "hash": "0aaa2897a3ab6274e66a5ee7b16ec37e21a8681bcd458643e1dce599e6f77535"
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 13,
+   "unsure": false,
+   "hash": "0be7fe9108a82e37022c28f2b1b71c4b2c39485817fa5c9a80fb5e83988beaa0"
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 8,
+   "unsure": false,
+   "hash": "0c0f091f7181aa2bb8bd93520f5506f41f67b328911e7e30700ecd48a6582aa0"
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 5,
+   "unsure": false,
+   "hash": "0c5e749ea41182b12db8b6b3bcc4acfe1dd1308a6de0645c06875bd0dd3fa257"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 17,
+   "unsure": false,
+   "hash": "0cbdbc23fe7d0025ac6d850d9c7abe7cb8b7476b9c59b5e7cfe17a72e8d2cfb3"
+  },
+  {
+   "ordinal": 16,
+   "pairIndex": 4,
+   "unsure": false,
+   "hash": "0e83495008f2010577744b2ead750629b0ac0b720cc717508ae5c331547a72e4"
+  },
+  {
+   "ordinal": 15,
+   "pairIndex": 2,
+   "unsure": false,
+   "hash": "0fd10124daf3e6e0656260fca83a3fb4c954ef1bd22c36f1e9a00fdc9c8aca82"
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 2,
+   "unsure": false,
+   "hash": "0fe4c760a8222cba993871bac026cd2cdb990caf7cbb8015d97f97f27c627718"
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 3,
+   "unsure": false,
+   "hash": "11b8089cace5312a2905889fc348edba8213acb70587a7a5bc96714d5e64276c"
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 26,
+   "unsure": false,
+   "hash": "11faccacb920df86b389919b89272314b2e72105fed18215a7eb90985f8629a4"
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 0,
+   "unsure": false,
+   "hash": "131e6249b3a375a774f3bff2bfaa45ad6a965772a74e9969da8d6cdced22e6e4"
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 2,
+   "unsure": false,
+   "hash": "16b1302b7d0702936c0c758aabac8aadaea1635ae11e84b27fd9c401853b6059"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 4,
+   "unsure": false,
+   "hash": "18335b9572234b19b1b9039469afa1183a0f7de984f7697b386d1aaf0fd27cd1"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 1,
+   "unsure": false,
+   "hash": "1a28439ff13a49231bbfb13b8989887af1b0d1fc9e40d8da7fad642c7cff21ff"
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 5,
+   "unsure": false,
+   "hash": "1a5beb43ffa8a3ec0fd4c969fa212119d84805cf0744715269a2fa58faebd3ad"
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 1,
+   "unsure": false,
+   "hash": "1b9dabea0da5542eaea4a8e4087716ec5a616c9cb6495f1e1a66c87f40b65744"
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 9,
+   "unsure": false,
+   "hash": "1d06e00441638df33f56865a6a11f26e088910207251059d2cd21485fbf79207"
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 1,
+   "unsure": false,
+   "hash": "1d4aa1078b171ff8e99d9a5bb45bb027756532385b56431bac124e6a98675e81"
+  },
+  {
+   "ordinal": 23,
+   "pairIndex": 5,
+   "unsure": false,
+   "hash": "1e4b430ceb8b173a25e4b88ed40a9533056d2a9d6b60e23cb0353de6b1ea536a"
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 12,
+   "unsure": false,
+   "hash": "1e9ab622b161dadb7698365e76c761a51da8632db97c40172675fca70dc48fa6"
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 2,
+   "unsure": false,
+   "hash": "1f80e68b8cb0c32d79b41c43a689f7c3523b72d016dd0f08e7b9154471845814"
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 0,
+   "unsure": false,
+   "hash": "1ff01dd5fb5942f2a55c3e645885a9462e4bf77d8749f9f9d0514a0dd33f3a41"
+  },
+  {
+   "ordinal": 2,
+   "pairIndex": 1,
+   "unsure": false,
+   "hash": "20ebb663e3859a536635b763f37e196d0159949914cb87c74df211f97b49f98e"
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 0,
+   "unsure": false,
+   "hash": "244c7d9babd539c57dc345788e9261b181b3068612ddf1278d363f219335c865"
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 12,
+   "unsure": false,
+   "hash": "27a2ddc89a08812c8e0ae86285633abe85678d8651d07f4d421cee2a8839e361"
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 3,
+   "unsure": false,
+   "hash": "2988cd1e1fbc5f41e9ec0b512f2ae3a291686551f6374301be6b323830e867d7"
+  },
+  {
+   "ordinal": 24,
+   "pairIndex": 8,
+   "unsure": false,
+   "hash": "2a91335efa099f8b1d53c211358ee1c815a64be07ad133a5b71efc64303456eb"
+  },
+  {
+   "ordinal": 29,
+   "pairIndex": 3,
+   "unsure": false,
+   "hash": "2af23ea423f313f0964d489fa2202f4199ef1be6864c05fdba96074adf7945b5"
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 0,
+   "unsure": false,
+   "hash": "2b75931a78de5fcd9f1d282873b22b3b235df104fd429510d14b3f06513826cf"
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 6,
+   "unsure": false,
+   "hash": "2d62edf01846d4a4e52577f657395a2f9ce6b1a2250fc6ce7bfafccad099ceee"
+  },
+  {
+   "ordinal": 29,
+   "pairIndex": 0,
+   "unsure": false,
+   "hash": "2dae65f0c7001fb649dadb91fa267985ed6cbaa58d37f89d174e9c08a83711d1"
+  }
+ ],
+ "f2": {
+  "drawn": [
+   {
+    "ordinal": 14,
+    "hash": "165c93d08cc485d4a47ae64b1af5d43a89fcde3bc00eac029af47c3379a3538b"
+   },
+   {
+    "ordinal": 12,
+    "hash": "1679c75d33d3ddaa52db6cede9f36cb67bc920dc1c39850f469bd219b2ddc56d"
+   },
+   {
+    "ordinal": 29,
+    "hash": "1ce4e73ce591dc148bec35e63a5b36dac65fae0a04bcfa1621eec4024352093b"
+   },
+   {
+    "ordinal": 23,
+    "hash": "1d8ca1061896b253894454c796439625eadc0c10186e435cd8bf3e223b813f55"
+   },
+   {
+    "ordinal": 19,
+    "hash": "28d03b4b792057b5d47cec0af3877bd4a1d04bcd651e04cebe8d1457ea531b2d"
+   },
+   {
+    "ordinal": 27,
+    "hash": "2b403d413dfbf7dd7b6ae6c8133e80219c27461c335c394ae3f2f405b26e7149"
+   }
+  ],
+  "extension": [
+   {
+    "ordinal": 5,
+    "hash": "374c603af5d179755464b959626675045965d59fd2fe85b591cd9a783407d689"
+   },
+   {
+    "ordinal": 9,
+    "hash": "3a5a181ab41aa24662a2b11dab7ae5e538132ed7addf38cc7ae705fca9b2e7a5"
+   },
+   {
+    "ordinal": 13,
+    "hash": "412dc1dc6d756762f6a641b69afd6cd84669953d8e958d341c444ea248a84abb"
+   }
+  ]
+ }
+}

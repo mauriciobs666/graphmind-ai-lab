@@ -1,0 +1,257 @@
+{
+ "seed": "ccg-p0a-v1-flowaud|java|",
+ "keyRule": "sha256(prefix+'pair|'+ordinal+pairIndex) / prefix+'method|'+ordinal",
+ "nMethods": 30,
+ "nPairs": 461,
+ "nUnsureTotal": 5,
+ "F1": [
+  {
+   "ordinal": 13,
+   "pairIndex": 15
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 30
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 22
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 14
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 29
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 7
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 7
+  },
+  {
+   "ordinal": 23,
+   "pairIndex": 11
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 20
+  },
+  {
+   "ordinal": 20,
+   "pairIndex": 4
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 25
+  },
+  {
+   "ordinal": 29,
+   "pairIndex": 15
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 9
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 3
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 1
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 4
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 12
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 2
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 24
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 5
+  },
+  {
+   "ordinal": 23,
+   "pairIndex": 26
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 9
+  },
+  {
+   "ordinal": 18,
+   "pairIndex": 1
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 7
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 15
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 3
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 10
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 16,
+   "pairIndex": 27
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 3
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 6
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 2
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 5
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 6
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 2
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 7
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 8
+  },
+  {
+   "ordinal": 16,
+   "pairIndex": 24
+  },
+  {
+   "ordinal": 20,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 2
+  },
+  {
+   "ordinal": 2,
+   "pairIndex": 1
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 19
+  },
+  {
+   "ordinal": 25,
+   "pairIndex": 7
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 8
+  },
+  {
+   "ordinal": 27,
+   "pairIndex": 2
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 16
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 6
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 4
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 6
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 0
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 21
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 11
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 1
+  },
+  {
+   "ordinal": 29,
+   "pairIndex": 8
+  },
+  {
+   "ordinal": 18,
+   "pairIndex": 6
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 17
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 1
+  }
+ ],
+ "F2MethodOrdinals": [
+  28,
+  6,
+  26,
+  4,
+  19,
+  25
+ ]
+}

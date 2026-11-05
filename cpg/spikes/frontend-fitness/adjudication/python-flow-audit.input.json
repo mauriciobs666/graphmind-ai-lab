@@ -1,0 +1,325 @@
+{
+ "hash": "sha256",
+ "pairKey": "ccg-p0a-v1-flowaud|python|pair|<ordinal>|<pairIndex>",
+ "methodKey": "ccg-p0a-v1-flowaud|python|method|<ordinal>",
+ "nMethods": 30,
+ "nPairs": 483,
+ "nUnsure": 24,
+ "F1": [
+  {
+   "ordinal": 17,
+   "pairIndex": 3,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 9,
+   "unsure": true
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 1,
+   "unsure": true
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 11,
+   "unsure": true
+  },
+  {
+   "ordinal": 9,
+   "pairIndex": 20,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 8,
+   "unsure": true
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 20,
+   "unsure": true
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 13,
+   "unsure": true
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 14,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 7,
+   "unsure": true
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 7,
+   "unsure": true
+  },
+  {
+   "ordinal": 18,
+   "pairIndex": 13,
+   "unsure": true
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 30,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 4,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 11,
+   "unsure": true
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 5,
+   "unsure": true
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 12,
+   "unsure": true
+  },
+  {
+   "ordinal": 20,
+   "pairIndex": 9,
+   "unsure": true
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 15,
+   "unsure": true
+  },
+  {
+   "ordinal": 23,
+   "pairIndex": 4,
+   "unsure": true
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 3,
+   "unsure": false
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 15,
+   "unsure": false
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 40,
+   "unsure": false
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 25,
+   "unsure": false
+  },
+  {
+   "ordinal": 3,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 7,
+   "unsure": false
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 17,
+   "pairIndex": 24,
+   "unsure": false
+  },
+  {
+   "ordinal": 14,
+   "pairIndex": 18,
+   "unsure": false
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 4,
+   "unsure": false
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 1,
+   "unsure": false
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 35,
+   "unsure": false
+  },
+  {
+   "ordinal": 27,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 31,
+   "unsure": false
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 12,
+   "unsure": false
+  },
+  {
+   "ordinal": 26,
+   "pairIndex": 13,
+   "unsure": false
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 32,
+   "unsure": false
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 3,
+   "unsure": false
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 19,
+   "unsure": false
+  },
+  {
+   "ordinal": 7,
+   "pairIndex": 8,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 4,
+   "unsure": false
+  },
+  {
+   "ordinal": 13,
+   "pairIndex": 12,
+   "unsure": false
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 9,
+   "unsure": false
+  },
+  {
+   "ordinal": 21,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 9,
+   "unsure": false
+  },
+  {
+   "ordinal": 27,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 10,
+   "unsure": false
+  },
+  {
+   "ordinal": 28,
+   "pairIndex": 11,
+   "unsure": false
+  },
+  {
+   "ordinal": 19,
+   "pairIndex": 19,
+   "unsure": false
+  },
+  {
+   "ordinal": 30,
+   "pairIndex": 1,
+   "unsure": false
+  },
+  {
+   "ordinal": 18,
+   "pairIndex": 5,
+   "unsure": false
+  },
+  {
+   "ordinal": 22,
+   "pairIndex": 26,
+   "unsure": false
+  }
+ ],
+ "F2": {
+  "methods": [
+   10,
+   25,
+   21,
+   16,
+   3,
+   30
+  ],
+  "extension3": [
+   29,
+   5,
+   6
+  ]
+ }
+}

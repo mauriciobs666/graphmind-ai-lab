@@ -1,0 +1,222 @@
+{
+ "language": "javascript",
+ "seedPairPrefix": "ccg-p0a-v1-flowaud|javascript|pair|",
+ "seedMethodPrefix": "ccg-p0a-v1-flowaud|javascript|method|",
+ "keyForm": "prefix + ordinal + '|' + pairIndex (0-based file order); methods: prefix + ordinal",
+ "methodsTotal": 12,
+ "pairsTotal": 151,
+ "unsureTotal": 18,
+ "pairs": [
+  {
+   "ordinal": 12,
+   "pairIndex": 3,
+   "unsure": true
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 4,
+   "unsure": true
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 4,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 4,
+   "unsure": true
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 1,
+   "unsure": true
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 2,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 3,
+   "unsure": true
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 21,
+   "unsure": true
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 21,
+   "unsure": true
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 1,
+   "unsure": true
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 2,
+   "unsure": true
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 0,
+   "unsure": true
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 3,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 1,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 5,
+   "unsure": true
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 1,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 2,
+   "unsure": true
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 26,
+   "unsure": true
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 0,
+   "unsure": false
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 9,
+   "unsure": false
+  },
+  {
+   "ordinal": 9,
+   "pairIndex": 1,
+   "unsure": false
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 8,
+   "unsure": false
+  },
+  {
+   "ordinal": 5,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 8,
+   "unsure": false
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 21,
+   "unsure": false
+  },
+  {
+   "ordinal": 1,
+   "pairIndex": 1,
+   "unsure": false
+  },
+  {
+   "ordinal": 4,
+   "pairIndex": 1,
+   "unsure": false
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 10,
+   "unsure": false
+  },
+  {
+   "ordinal": 2,
+   "pairIndex": 7,
+   "unsure": false
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 6,
+   "unsure": false
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 0,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 7,
+   "unsure": false
+  },
+  {
+   "ordinal": 11,
+   "pairIndex": 16,
+   "unsure": false
+  },
+  {
+   "ordinal": 8,
+   "pairIndex": 15,
+   "unsure": false
+  },
+  {
+   "ordinal": 6,
+   "pairIndex": 17,
+   "unsure": false
+  },
+  {
+   "ordinal": 10,
+   "pairIndex": 2,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 13,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 17,
+   "unsure": false
+  },
+  {
+   "ordinal": 12,
+   "pairIndex": 20,
+   "unsure": false
+  }
+ ],
+ "f2Methods": [
+  5,
+  11,
+  2,
+  8
+ ],
+ "f2Extension": [
+  3,
+  12,
+  10
+ ]
+}
