@@ -24,7 +24,7 @@ H="$TMP_ROOT/home"; HL="$TMP_ROOT/hl"; EV=0123456789abcdef0123
 mkdir -p "$H/.local/share/claude/versions" "$H/.local/bin" "$HL"
 cat >"$H/.local/share/claude/versions/2.1.312" <<'STUB'
 #!/bin/sh
-{ echo "PWD=$(pwd)"; env | sort; for a in "$@"; do echo "ARG:$a"; done; } >"$HOME/stub.log"
+{ echo "PWD=$(pwd)"; echo "STDIN=$(readlink /proc/$$/fd/0)"; env | sort; for a in "$@"; do echo "ARG:$a"; done; } >"$HOME/stub.log"
 echo '{"type":"result","stub":true}'
 [ -f "$HOME/stub.sleep" ] && exec sleep "$(cat "$HOME/stub.sleep")"
 exit "$(cat "$HOME/stub.rc" 2>/dev/null || echo 0)"
@@ -36,7 +36,7 @@ cp "$SRC_DIR/settings.json" "$SRC_DIR/agents.json" "$SRC_DIR/guard-paths.sh" "$H
 chmod +x "$HL/guard-paths.sh"
 EVH="$H/.local/share/ccg-eval"; E12="${EV:0:12}"; ED="$EVH/$E12"; RUNS="$ED/runs"; IDX="$RUNS/index.jsonl"
 
-rw() { OUT="$(env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 CANARY=leak bash "$HL/run-writer.sh" "$@" 2>&1)"; RC=$?; }
+rw() { OUT="$(env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 CANARY=leak bash "$HL/run-writer.sh" "$@" 2>&1 <<<"pending stdin")"; RC=$?; }
 rwo() { OUT="$(env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 bash "$HL/run-writer.sh" "$@" 2>/dev/null)"; RC=$?; }
 
 rw prepare-bin; check "fixture: prepare-bin ok" test "$RC" -eq 0
@@ -261,6 +261,60 @@ check "restart: new session is current"    test "$(grep '"role":"KB"' "$IDX" | g
 rw start --session-id not-a-uuid "$EV" AN2 flow; check "start: bad uuid is usage (2)" test "$RC" -eq 2
 rw start "$EV" KA nostratum;               check "start: unprepared role root (4)" test "$RC" -eq 4
 rw bogus;                                  check "unknown verb (2)" test "$RC" -eq 2
+
+# --- 7b. lock, signals, size, stdin, symlinks, torn index line ------------------------------------
+check "stdin: launch gets /dev/null"       grep -qx 'STDIN=/dev/null' "$H/stub.log"
+rw prepare "$EV" AN1 flow --brief "$TMP_ROOT/brief.md"
+echo 2 >"$H/stub.sleep"
+( env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 bash "$HL/run-writer.sh" start "$EV" AN1 flow >"$TMP_ROOT/p1.out" 2>&1; echo $? >"$TMP_ROOT/p1.rc" ) &
+( env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 bash "$HL/run-writer.sh" start "$EV" AN1 flow >"$TMP_ROOT/p2.out" 2>&1; echo $? >"$TMP_ROOT/p2.rc" ) &
+wait
+rm -f -- "${H:?}/stub.sleep"
+check "lock: parallel starts, exactly one start line" test "$(grep '"event":"start"' "$IDX" | grep -c '"role":"AN1"')" -eq 1
+check "lock: parallel starts, exit codes are {0,3}"   test "$(sort "$TMP_ROOT/p1.rc" "$TMP_ROOT/p2.rc" | tr '\n' ' ')" = "0 3 "
+check "lock: released after exit"          test -z "$(find "$RUNS" -maxdepth 1 -name '.lock-*' -print -quit)"
+# a live lock refuses, a stale lock (dead pid) is taken over
+mkdir "$RUNS/.lock-AN1-flow"; echo $$ >"$RUNS/.lock-AN1-flow/pid"
+rw resume --assume-ended "$EV" AN1 flow
+check "lock: live lock refuses resume (3)" test "$RC" -eq 3
+check "lock: live lock message"            has "locked by another launcher" "$OUT"
+echo 999999 >"$RUNS/.lock-AN1-flow/pid"
+rw resume "$EV" AN1 flow
+check "lock: stale lock taken over"        test "$RC" -eq 0
+check "lock: stale lock released after"    test ! -e "$RUNS/.lock-AN1-flow"
+# SIGTERM to the launcher stops the child and still writes an end record
+echo 37 >"$H/stub.sleep"
+env -i HOME="$H" PATH=/usr/bin:/bin LANG=C.UTF-8 bash "$HL/run-writer.sh" resume "$EV" AN1 flow >"$TMP_ROOT/sig.out" 2>&1 &
+LP=$!
+for _ in $(seq 1 50); do grep -q 'n":3,.*"mode":"resume"' "$IDX" && break; sleep 0.1; done
+sleep 0.5; kill -TERM "$LP"; wait "$LP"; SIG_RC=$?
+rm -f -- "${H:?}/stub.sleep"
+check "signal: launcher exits non-zero"    test "$SIG_RC" -ne 0
+check "signal: end record written"         grep -qE '"event":"end","session":"[^"]*","n":3,.*"exit":(143|124|[0-9]+)' "$IDX"
+for _ in $(seq 1 50); do pgrep -f '[s]leep 37' >/dev/null || break; sleep 0.1; done
+check "signal: child gone"                 bash -c "! pgrep -f '[s]leep 37' >/dev/null"
+check "signal: lock released"              test ! -e "$RUNS/.lock-AN1-flow"
+# oversized prompt: refused before any session id / stream / index line is written
+head -c 100001 /dev/zero | tr '\0' 'a' >"$TMP_ROOT/big.md"
+rw prepare "$EV" QW big --brief "$TMP_ROOT/big.md"
+check "size: prepare rejects a big brief (2)" test "$RC" -eq 2
+rw prepare "$EV" QW small --brief "$TMP_ROOT/brief.md"
+chmod u+w "$ED/roles/QW-small/BRIEF.md"; cp "$TMP_ROOT/big.md" "$ED/roles/QW-small/BRIEF.md"
+N_IDX="$(wc -l <"$IDX")"; N_RUNS="$(ls "$RUNS" | wc -l)"
+rw start "$EV" QW small
+check "size: start rejects a big brief (2)" test "$RC" -eq 2
+check "size: nothing written"              test "$(wc -l <"$IDX")" -eq "$N_IDX" -a "$(ls "$RUNS" | wc -l)" -eq "$N_RUNS"
+# a symlink in the kit is refused
+mkdir -p "$TMP_ROOT/kitln"; ln -s /etc/passwd "$TMP_ROOT/kitln/pw"
+rw prepare "$EV" QW link --brief "$TMP_ROOT/brief.md" --kit-src "$TMP_ROOT/kitln"
+check "prepare: kit symlink refused (3)"   test "$RC" -eq 3
+check "prepare: no role root for it"       test ! -e "$ED/roles/QW-link"
+# a torn last index line must not swallow the next record
+printf '{"event":"sta' >>"$IDX"
+rw resume "$EV" KA flow
+check "torn index: resume ok"              test "$RC" -eq 0
+check "torn index: every record is whole"  test "$(grep -vc '^{"event":".*}$' "$IDX")" -eq 1
+check "torn index: new start line intact"  grep -qE '^\{"event":"start".*"session":"'$U1'","n":6,' "$IDX"
 
 # --- 8. status ----------------------------------------------------------------------------------
 rw status; check "status: no args lists eval dirs" has "$E12" "$OUT"

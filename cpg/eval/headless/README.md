@@ -92,6 +92,16 @@ run-writer.sh status  [<E> [<role> <stratum>]]
   changed CLI version, binary hash, `settings.json` hash or `agents.json` hash against any earlier
   attempt, or a previous attempt with no `end` line (unless `--assume-ended`). It reuses the
   recorded agent, model and timeout. Auditing the partial session first (§6.3) is the operator's step.
+- **Locking and signals:** a real `start`/`resume` takes an atomic lock (`runs/.lock-<role>-<stratum>`,
+  `mkdir` plus the launcher's pid) before reading the index and holds it until it exits, so two
+  parallel launches on one role give exactly one `start` line and one exit 3. A lock whose pid is dead is
+  taken over; `--dry-run` takes none. The launch runs with stdin from `/dev/null`; SIGTERM/SIGINT to the
+  launcher is forwarded to `timeout` (which stops claude) and the `end` line is still written. If the
+  launcher is killed with SIGKILL, the writer may survive: **find and kill the orphan before using
+  `--assume-ended`**. A torn last index line is terminated before the next record is appended.
+- **Size and links:** a brief over 100,000 bytes is refused (exit 2) by `prepare` and by `start`
+  before any session id, stream log or index line exists. `prepare` refuses (exit 3) a kit that
+  contains a symlink; flatten it first.
 - **`status`** is read-only: with no argument it lists eval dirs; with `<E>` (and role/stratum) it
   prints the binary check and one line per attempt, with `DRIFT:` when a config or the binary no
   longer matches the recorded hashes.

@@ -254,6 +254,40 @@ next_attempt() {
 	printf '%s\n' $((max + 1))
 }
 
+MAX_PROMPT_BYTES=100000   # one exec argument must stay well under the 128 KiB kernel limit
+
+# check_prompt_size FILE — refuse an oversized brief before anything is written.
+check_prompt_size() {
+	local sz; sz="$(wc -c <"$1")"
+	(( sz <= MAX_PROMPT_BYTES )) || die 2 "$1 is $sz bytes; a prompt over $MAX_PROMPT_BYTES bytes cannot be passed as one argument"
+}
+
+# idx_append LINE — append one record; if a killed launcher left a partial last line, break it first.
+idx_append() {
+	if [[ -s "$INDEX" && -n "$(tail -c1 "$INDEX")" ]]; then printf '\n' >>"$INDEX"; fi
+	printf '%s\n' "$1" >>"$INDEX"
+}
+
+# acquire_lock — exclusive per role+stratum, held until this launcher exits (mkdir is atomic).
+# A lock whose recorded pid is dead is stale and is taken over once.
+LOCK_DIR=""
+acquire_lock() {
+	local d="$RUNS/.lock-$T_ROLE-$T_STRATUM" pid
+	if ! mkdir -- "$d" 2>/dev/null; then
+		pid="$(cat -- "$d/pid" 2>/dev/null || true)"
+		if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+			log "taking over a stale lock (pid $pid is gone): $d"
+			rm -rf -- "${d:?}"
+			mkdir -- "$d" 2>/dev/null || die 3 "$T_ROLE-$T_STRATUM is locked by another launcher: $d"
+		else
+			die 3 "$T_ROLE-$T_STRATUM is locked by another launcher (pid ${pid:-unknown}): $d"
+		fi
+	fi
+	printf '%s\n' "$$" >"$d/pid"
+	LOCK_DIR="$d"
+	trap 'rm -rf -- "${LOCK_DIR:?}"' EXIT
+}
+
 json_str() { local s="${1//\\/\\\\}"; printf '"%s"' "${s//\"/\\\"}"; }
 
 # check_launch_inputs — refuse unless the pin verifies and the repo-side files are usable.
@@ -318,15 +352,22 @@ launch() {
 	# New file only: noclobber makes this fail if the log exists, never truncating an earlier one.
 	( set -o noclobber; : >"$stream" ) 2>/dev/null || die 3 "stream log already exists: $stream"
 	local start; start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-	printf '{"event":"start","role":%s,"stratum":%s,"eval":%s,"session":"%s","n":%s,"mode":"%s","agent":%s,"model":%s,"timeout_s":%s,"cli_version":%s,"bin_sha256":"%s","settings_sha256":"%s","agents_sha256":"%s","stream":%s,"start":"%s"}\n' \
+	idx_append "$(printf '{"event":"start","role":%s,"stratum":%s,"eval":%s,"session":"%s","n":%s,"mode":"%s","agent":%s,"model":%s,"timeout_s":%s,"cli_version":%s,"bin_sha256":"%s","settings_sha256":"%s","agents_sha256":"%s","stream":%s,"start":"%s"}\n' \
 		"$(json_str "$T_ROLE")" "$(json_str "$T_STRATUM")" "$(json_str "$E12")" "$session" "$n" "$mode" \
 		"$(json_str "$agent")" "$(json_str "$model")" "$tmo" "$(json_str "$CLI_VERSION")" \
-		"$BIN_SHA" "$SETTINGS_SHA" "$AGENTS_SHA" "$(json_str "$(basename -- "$stream")")" "$start" >>"$INDEX"
+		"$BIN_SHA" "$SETTINGS_SHA" "$AGENTS_SHA" "$(json_str "$(basename -- "$stream")")" "$start")"
 	log "attempt $n of session $session ($T_ROLE-$T_STRATUM, $model): $stream"
-	local rc=0
-	( cd "$ROLE_ROOT" && "${ARGV[@]}" ) >>"$stream" || rc=$?
-	printf '{"event":"end","session":"%s","n":%s,"end":"%s","exit":%s}\n' \
-		"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >>"$INDEX"
+	# Background child + wait, so TERM/INT to the launcher is forwarded to `timeout` (which stops
+	# claude) and the end record is still written. stdin is /dev/null.
+	local rc=0 child
+	( cd "$ROLE_ROOT" && exec "${ARGV[@]}" ) </dev/null >>"$stream" &
+	child=$!
+	trap 'kill -TERM "$child" 2>/dev/null || true' TERM INT
+	wait "$child" || rc=$?
+	while kill -0 "$child" 2>/dev/null; do wait "$child" || rc=$?; done
+	trap - TERM INT
+	idx_append "$(printf '{"event":"end","session":"%s","n":%s,"end":"%s","exit":%s}' \
+		"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc")"
 	log "attempt $n finished: exit $rc"
 	return "$rc"
 }
@@ -359,6 +400,9 @@ cmd_prepare() {
 	[[ -f "$brief" ]] || die 4 "brief not found: $brief"
 	kit="${kit:-$EDIR/kit-src}"
 	[[ -d "$kit" ]] || die 4 "kit-src not found: $kit"
+	check_prompt_size "$brief"
+	local link; link="$(find "$kit" -type l -print -quit)"
+	[[ -z "$link" ]] || die 3 "kit-src contains a symlink ($link); flatten the kit first (a link could point outside the role root)"
 
 	if [[ -e "$ROLE_ROOT" ]]; then
 		if [[ -f "$ROLE_ROOT/BRIEF.md" ]] && cmp -s "$brief" "$ROLE_ROOT/BRIEF.md" \
@@ -408,6 +452,8 @@ cmd_start() {
 	if [[ -n "$session" ]]; then need_uuid "$session"; else session="$(new_uuid)"; fi
 	require_role_root
 	check_launch_inputs
+	check_prompt_size "$ROLE_ROOT/BRIEF.md"
+	[[ "$dry" == 1 ]] || acquire_lock
 
 	local prior=""
 	if [[ -f "$INDEX" ]]; then
@@ -446,6 +492,7 @@ cmd_resume() {
 	parse_target
 	require_role_root
 	check_launch_inputs
+	[[ "$dry" == 1 ]] || acquire_lock
 
 	# The session is the latest recorded one for this role+stratum; --session-id must match it.
 	local last=""

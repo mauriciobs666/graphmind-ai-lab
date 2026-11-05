@@ -34,7 +34,7 @@ no-end-check-disabled	if [[ -z "$ends" && "$assume" != 1 ]]; then	if false; then
 second-start-allowed	[[ "$restart" == 1 ]] \|\| die 3 "$T_ROLE	true || die 3 "$T_ROLE
 nonempty-out-allowed	if [[ -n "$(find "$ROLE_ROOT/out" -mindepth 1 -print -quit)" ]]; then	if false; then
 existing-stream-allowed-on-start	compgen -G "$RUNS/$session.*.stream.jsonl" >/dev/null \&\& die 3	false \&\& die 3
-end-record-missing	"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >>"$INDEX"	"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >/dev/null
+end-record-missing	"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc")"	"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >/dev/null)"
 index-no-bin-hash	"bin_sha256":"%s"	"bin_x":"%s"
 index-no-cli-version	"cli_version":%s	"cli_x":%s
 dry-run-launches	if [[ "$dry" == 1 ]]; then	if false; then
@@ -44,7 +44,16 @@ prepare-overwrites-different	die 3 "role root exists with different content; ref
 prepare-not-idempotent	log "role root already prepared with identical inputs: $ROLE_ROOT — no-op"\n			return 0	die 3 "x"
 kit-writable	chmod -R a-w -- "$tmp/kit-src"	true
 stream-name-reused	"$RUNS/$session.$n.stream.jsonl"	"$RUNS/$session.1.stream.jsonl"
-cwd-not-role-root	( cd "$ROLE_ROOT" \&\& "${ARGV[@]}" )	( "${ARGV[@]}" )
+no-lock-resume	check_launch_inputs\n\t[[ "$dry" == 1 ]] \|\| acquire_lock\n\n\t# The session	check_launch_inputs\n\n\t# The session
+no-lock-start	check_prompt_size "$ROLE_ROOT/BRIEF.md"\n	[[ "$dry" == 1 ]] \|\| acquire_lock	check_prompt_size "$ROLE_ROOT/BRIEF.md"
+signal-not-forwarded	trap 'kill -TERM "$child" 2>/dev/null \|\| true' TERM INT	true
+stdin-inherited	</dev/null >>"$stream" &	>>"$stream" \&
+prompt-size-unchecked-start	check_prompt_size "$ROLE_ROOT/BRIEF.md"	true
+prompt-size-unchecked-prepare	check_prompt_size "$brief"	true
+kit-symlink-allowed	[[ -z "$link" ]] \|\| die 3	true \|\| die 3
+torn-line-unguarded	if [[ -s "$INDEX" && -n "$(tail -c1 "$INDEX")" ]]; then	if false; then
+stale-lock-not-taken-over	if [[ -n "$pid" ]] \&\& ! kill -0 "$pid" 2>/dev/null; then	if false; then
+cwd-not-role-root	( cd "$ROLE_ROOT" \&\& exec "${ARGV[@]}" )	( exec "${ARGV[@]}" )
 TSV
 
 python3 - "$ORIG" "$MUTANTS" "$WORK" <<'PY'
@@ -54,7 +63,7 @@ for line in open(sys.argv[2]).read().split("\n"):
     if not line.strip():
         continue
     name, old, new = line.split("\t", 2) if line.count("\t") >= 2 else (line.split("\t") + ["", ""])[:3]
-    un = lambda t: t.replace("\\n", "\n").replace("\\|", "|").replace("\\&", "&")
+    un = lambda t: t.replace("\\n", "\n").replace("\\|", "|").replace("\\&", "&").replace("\\t", "\t")
     old, new = un(old), un(new)
     import os
     path = f"{sys.argv[3]}/{name}.sh"
