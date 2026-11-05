@@ -3,11 +3,20 @@
 #
 # Contract: docs/plans/connected-code-graph-p0-2.md v1.2 §2 D20, §3 row S53, §6.2–§6.3, §13 K-P0-12.
 #
-#   run-writer.sh prepare-bin        copy the pinned Claude CLI build into a launcher-owned location
+#   run-writer.sh prepare-bin                       copy the pinned Claude CLI build into a launcher-owned location
+#   run-writer.sh prepare <E> <role> <stratum> --brief FILE [--kit-src DIR]
+#                                                   lay out one role root (idempotent)
+#   run-writer.sh start   [--dry-run] [--restart] [--model M] [--timeout S] [--session-id U]
+#                         <E> <role> <stratum>      first attempt of a new session (n=1)
+#   run-writer.sh resume  [--dry-run] [--assume-ended] [--timeout S] [--session-id U]
+#                         <E> <role> <stratum>      next attempt of the recorded session (n+1)
+#   run-writer.sh status  [<E> [<role> <stratum>]]  read-only: sessions, attempts, drift check
 #   run-writer.sh --help
 #
-# Verbs still to come (after S52): prepare, start, resume, status. They read the pin record that
-# prepare-bin writes (pin_read) and never the Claude versions directory.
+# <E> is the eval commit (first 12 chars are used). <role> is KA KB QW AN1 AN2 rehearsal capture.
+# Everything lives under $CCG_EVAL_HOME/<E>/ (docs/plans/connected-code-graph-p0-2.md §6.2).
+# The later verbs read the binary path and hash from bin/PIN (written by prepare-bin), never from
+# the Claude versions directory.
 #
 # prepare-bin
 #   Copies $CLAUDE_VERSIONS_DIR/$CCG_PIN_VERSION (default ~/.local/share/claude/versions/2.1.312)
@@ -23,8 +32,23 @@
 #   Read-only towards ~/.local/bin/claude and ~/.local/share/claude/; writes only under
 #   $CCG_EVAL_HOME/bin/.
 #
-# Exit codes: 0 = done or already prepared (fallback included: read the banner); 2 = usage;
-# 3 = existing state refused; 4 = no source build found; 5 = copy failed verification.
+# prepare   Creates $CCG_EVAL_HOME/<E>/{runs,work} and roles/<role>-<stratum>/{kit-src,BRIEF.md,out}.
+#   kit-src is a read-only copy of --kit-src (default <E>/kit-src); BRIEF.md a read-only copy of
+#   --brief. Re-running with identical inputs is a no-op; different inputs are refused (exit 3),
+#   never overwritten.
+# start     Builds argv with build_argv (the §6.3 launch command), records the attempt in
+#   runs/index.jsonl, runs it in the foreground, writes runs/<uuid>.1.stream.jsonl, records the end.
+#   Refuses if the role already has a session (--restart: allowed only when out/ is empty), if
+#   the pinned binary no longer hashes to PIN, or if the guard/python3 are not usable.
+#   --dry-run prints the command and writes nothing. Defaults per role: model, agent and timeout
+#   (KA opus 4h, KB sonnet 4h, QW opus 2h, AN1 sonnet 1h, AN2 opus 1h, rehearsal/capture sonnet 30m).
+# resume    The same build_argv with --resume <uuid>, the fixed continuation prompt and the next
+#   attempt number. Reuses the recorded model/agent. Refuses an unknown session, a changed
+#   CLI version / binary / settings.json / agents.json hash against ANY earlier attempt, and a
+#   previous attempt with no end record (unless --assume-ended).
+#
+# Exit codes: 0 = done / no-op (prepare-bin fallback included: read the banner); 2 = usage;
+# 3 = existing state or drift refused; 4 = a required input is missing; 5 = copy failed verification.
 #
 # Environment overrides (tests use a temp HOME instead; these exist for the same purpose):
 #   CCG_EVAL_HOME        default $HOME/.local/share/ccg-eval
@@ -40,6 +64,11 @@ CLAUDE_VERSIONS_DIR="${CLAUDE_VERSIONS_DIR:-$HOME/.local/share/claude/versions}"
 CLAUDE_LAUNCHER="${CLAUDE_LAUNCHER:-$HOME/.local/bin/claude}"
 CCG_PIN_VERSION="${CCG_PIN_VERSION:-2.1.312}"
 BIN_DIR="$CCG_EVAL_HOME/bin"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SETTINGS_FILE="$HERE/settings.json"
+AGENTS_FILE="$HERE/agents.json"
+GUARD_FILE="$HERE/guard-paths.sh"
+CONTINUE_PROMPT="continue; your output file lists what is already done"
 PIN_FILE="$BIN_DIR/PIN"
 FALLBACK_MARK="$BIN_DIR/FALLBACK-REREAD-6.3"
 
@@ -163,13 +192,348 @@ cmd_prepare_bin() {
 	log "prepared: claude $ver sha256=$got -> $dest"
 }
 
+# ---------------------------------------------------------------------------------------------
+# S53 verbs: prepare, start, resume, status
+# ---------------------------------------------------------------------------------------------
+
+ROLES="KA KB QW AN1 AN2 rehearsal capture"
+
+# role_defaults ROLE — sets D_AGENT D_MODEL D_TIMEOUT (plan §6.1 / §6.3).
+role_defaults() {
+	case "$1" in
+		KA)        D_AGENT=ccg-key-writer-provider; D_MODEL=opus;   D_TIMEOUT=14400 ;;
+		KB)        D_AGENT=ccg-key-writer-consumer; D_MODEL=sonnet; D_TIMEOUT=14400 ;;
+		QW)        D_AGENT=ccg-question-writer;     D_MODEL=opus;   D_TIMEOUT=7200 ;;
+		AN1)       D_AGENT=ccg-annotator;           D_MODEL=sonnet; D_TIMEOUT=3600 ;;
+		AN2)       D_AGENT=ccg-annotator;           D_MODEL=opus;   D_TIMEOUT=3600 ;;
+		rehearsal|capture)
+		           D_AGENT=ccg-annotator;           D_MODEL=sonnet; D_TIMEOUT=1800 ;;
+		*) die 2 "unknown role '$1' (one of: $ROLES)" ;;
+	esac
+}
+
+# set_target E ROLE STRATUM — validates and sets E12 EDIR RUNS ROLE_ROOT INDEX.
+set_target() {
+	local e="$1" role="$2" stratum="$3"
+	[[ "$e" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]] || die 2 "bad eval commit '$e'"
+	[[ " $ROLES " == *" $role "* ]] || die 2 "unknown role '$role' (one of: $ROLES)"
+	[[ "$stratum" =~ ^[a-z][a-z0-9-]*$ ]] || die 2 "bad stratum '$stratum' (lowercase, digits, '-')"
+	E12="${e:0:12}"
+	T_ROLE="$role"; T_STRATUM="$stratum"
+	EDIR="$CCG_EVAL_HOME/$E12"
+	RUNS="$EDIR/runs"
+	ROLE_ROOT="$EDIR/roles/$role-$stratum"
+	INDEX="$RUNS/index.jsonl"
+}
+
+need_uint() { [[ "$2" =~ ^[1-9][0-9]*$ ]] || die 2 "$1 must be a positive integer, got '$2'"; }
+need_uuid() { [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || die 2 "not a lowercase UUID: $1"; }
+new_uuid() { tr 'A-F' 'a-f' </proc/sys/kernel/random/uuid; }
+
+# idx_get LINE KEY — value of KEY in one index line (values never contain , " or }).
+idx_get() { sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\).*/\1/p" <<<"$1"; }
+
+# idx_events SESSION EVENT — all matching index lines, oldest first.
+idx_events() {
+	[[ -f "$INDEX" ]] || return 0
+	grep -F -- "\"event\":\"$2\"" "$INDEX" | grep -F -- "\"session\":\"$1\"" || true
+}
+
+# next_attempt SESSION — one past the highest n seen in the index or among existing stream files.
+next_attempt() {
+	local u="$1" max=0 line n f
+	while IFS= read -r line; do
+		[[ -n "$line" ]] || continue
+		n="$(idx_get "$line" n)"; [[ "$n" =~ ^[0-9]+$ ]] && (( n > max )) && max="$n"
+	done < <(idx_events "$u" start)
+	for f in "$RUNS/$u".*.stream.jsonl; do
+		[[ -e "$f" ]] || continue
+		n="${f#"$RUNS/$u."}"; n="${n%.stream.jsonl}"
+		[[ "$n" =~ ^[0-9]+$ ]] && (( n > max )) && max="$n"
+	done
+	printf '%s\n' $((max + 1))
+}
+
+json_str() { local s="${1//\\/\\\\}"; printf '"%s"' "${s//\"/\\\"}"; }
+
+# check_launch_inputs — refuse unless the pin verifies and the repo-side files are usable.
+# Sets BIN CLI_VERSION BIN_SHA SETTINGS_SHA AGENTS_SHA.
+check_launch_inputs() {
+	[[ -f "$PIN_FILE" ]] || die 4 "no PIN in $BIN_DIR: run 'run-writer.sh prepare-bin' first"
+	pin_verify || die 3 "the pinned binary does not verify against PIN; refusing to launch"
+	BIN="$(pin_get binary)"; CLI_VERSION="$(pin_get version)"; BIN_SHA="$(pin_get sha256)"
+	[[ -x "$BIN" ]] || die 3 "pinned binary is not executable: $BIN"
+	[[ -f "$SETTINGS_FILE" ]] || die 4 "missing $SETTINGS_FILE"
+	[[ -f "$AGENTS_FILE" ]] || die 4 "missing $AGENTS_FILE"
+	[[ -x "$GUARD_FILE" ]] || die 4 "path guard missing or not executable: $GUARD_FILE"
+	[[ -x /usr/bin/python3 ]] || die 4 "the path guard needs /usr/bin/python3"
+	SETTINGS_SHA="$(sha256_of "$SETTINGS_FILE")"
+	AGENTS_SHA="$(sha256_of "$AGENTS_FILE")"
+}
+
+# build_argv MODE AGENT MODEL TIMEOUT SESSION PROMPT — the ONE argv builder (§6.3), used by start
+# and resume. MODE is start|resume; it alone picks --session-id vs --resume. Fills ARGV.
+build_argv() {
+	local mode="$1" agent="$2" model="$3" tmo="$4" session="$5" prompt="$6" sflag
+	case "$mode" in
+		start)  sflag=--session-id ;;
+		resume) sflag=--resume ;;
+		*) die 2 "build_argv: bad mode $mode" ;;
+	esac
+	ARGV=(
+		env -i HOME="$HOME" PATH=/usr/bin:/bin LANG=C.UTF-8 CCG_GUARD="$GUARD_FILE"
+		timeout --kill-after=60 "$tmo"
+		"$BIN" -p --restricted --strict-mcp-config --disable-slash-commands
+		--tools Read,Grep,Glob,Write,Edit
+		--allowedTools Read Grep Glob Write Edit
+		--disallowedTools Bash WebFetch WebSearch Agent
+		--settings "$SETTINGS_FILE"
+		--agents "$AGENTS_FILE" --agent "$agent"
+		--model "$model" --permission-mode dontAsk --permission-prompts none
+		--output-format stream-json --verbose
+		"$sflag" "$session" "$prompt"
+	)
+}
+
+# shq TOKEN — shell-quote only when needed (printf %q would escape the commas of --tools).
+shq() { if [[ "$1" =~ ^[A-Za-z0-9_@%+=:,./-]+$ ]]; then printf '%s' "$1"; else printf '%q' "$1"; fi; }
+
+print_command() { # print_command STREAM — one argv token per line, so a diff is line-exact
+	local t
+	printf 'cd %s\n' "$(shq "$ROLE_ROOT")"
+	for t in "${ARGV[@]}"; do printf '  %s\n' "$(shq "$t")"; done
+	printf '  > %s\n' "$(shq "$1")"
+}
+
+# launch MODE AGENT MODEL TIMEOUT SESSION PROMPT N DRY
+launch() {
+	local mode="$1" agent="$2" model="$3" tmo="$4" session="$5" prompt="$6" n="$7" dry="$8"
+	local stream="$RUNS/$session.$n.stream.jsonl"
+	build_argv "$mode" "$agent" "$model" "$tmo" "$session" "$prompt"
+	if [[ "$dry" == 1 ]]; then
+		printf '# DRY RUN (%s, attempt %s): nothing written, nothing started\n' "$mode" "$n"
+		print_command "$stream"
+		return 0
+	fi
+	# New file only: noclobber makes this fail if the log exists, never truncating an earlier one.
+	( set -o noclobber; : >"$stream" ) 2>/dev/null || die 3 "stream log already exists: $stream"
+	local start; start="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	printf '{"event":"start","role":%s,"stratum":%s,"eval":%s,"session":"%s","n":%s,"mode":"%s","agent":%s,"model":%s,"timeout_s":%s,"cli_version":%s,"bin_sha256":"%s","settings_sha256":"%s","agents_sha256":"%s","stream":%s,"start":"%s"}\n' \
+		"$(json_str "$T_ROLE")" "$(json_str "$T_STRATUM")" "$(json_str "$E12")" "$session" "$n" "$mode" \
+		"$(json_str "$agent")" "$(json_str "$model")" "$tmo" "$(json_str "$CLI_VERSION")" \
+		"$BIN_SHA" "$SETTINGS_SHA" "$AGENTS_SHA" "$(json_str "$(basename -- "$stream")")" "$start" >>"$INDEX"
+	log "attempt $n of session $session ($T_ROLE-$T_STRATUM, $model): $stream"
+	local rc=0
+	( cd "$ROLE_ROOT" && "${ARGV[@]}" ) >>"$stream" || rc=$?
+	printf '{"event":"end","session":"%s","n":%s,"end":"%s","exit":%s}\n' \
+		"$session" "$n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >>"$INDEX"
+	log "attempt $n finished: exit $rc"
+	return "$rc"
+}
+
+require_role_root() {
+	[[ -d "$ROLE_ROOT" && -f "$ROLE_ROOT/BRIEF.md" && -d "$ROLE_ROOT/out" && -d "$ROLE_ROOT/kit-src" ]] \
+		|| die 4 "role root not prepared: $ROLE_ROOT (run 'prepare' first)"
+	[[ -d "$RUNS" ]] || die 4 "no runs dir: $RUNS"
+}
+
+parse_target() { # parse_target ARGS... — sets POS (E role stratum) after option parsing by caller
+	[[ ${#POS[@]} -eq 3 ]] || die 2 "expected <E> <role> <stratum>, got ${#POS[@]} argument(s)"
+	set_target "${POS[0]}" "${POS[1]}" "${POS[2]}"
+}
+
+cmd_prepare() {
+	local brief="" kit="" a
+	POS=()
+	while [[ $# -gt 0 ]]; do
+		a="$1"; shift
+		case "$a" in
+			--brief) [[ $# -ge 1 ]] || die 2 "--brief needs a file"; brief="$1"; shift ;;
+			--kit-src) [[ $# -ge 1 ]] || die 2 "--kit-src needs a directory"; kit="$1"; shift ;;
+			-*) die 2 "prepare: unknown option $a" ;;
+			*) POS+=("$a") ;;
+		esac
+	done
+	parse_target
+	[[ -n "$brief" ]] || die 2 "prepare needs --brief FILE"
+	[[ -f "$brief" ]] || die 4 "brief not found: $brief"
+	kit="${kit:-$EDIR/kit-src}"
+	[[ -d "$kit" ]] || die 4 "kit-src not found: $kit"
+
+	if [[ -e "$ROLE_ROOT" ]]; then
+		if [[ -f "$ROLE_ROOT/BRIEF.md" ]] && cmp -s "$brief" "$ROLE_ROOT/BRIEF.md" \
+			&& [[ -d "$ROLE_ROOT/kit-src" && -d "$ROLE_ROOT/out" ]] \
+			&& diff -r -q -- "$kit" "$ROLE_ROOT/kit-src" >/dev/null 2>&1; then
+			log "role root already prepared with identical inputs: $ROLE_ROOT — no-op"
+			return 0
+		fi
+		die 3 "role root exists with different content; refusing to overwrite: $ROLE_ROOT"
+	fi
+
+	mkdir -p -- "$RUNS" "$EDIR/work" "$EDIR/roles"
+	local tmp
+	tmp="$(mktemp -d -- "$EDIR/roles/.prepare.XXXXXX")"
+	trap 'chmod -R u+w -- "$tmp" 2>/dev/null; rm -rf -- "$tmp"' EXIT
+	cp -a -- "$kit" "$tmp/kit-src"
+	cp -- "$brief" "$tmp/BRIEF.md"
+	mkdir -- "$tmp/out"
+	chmod -R a-w -- "$tmp/kit-src"
+	chmod 0444 -- "$tmp/BRIEF.md"
+	chmod 0755 -- "$tmp"
+	mv -T -- "$tmp" "$ROLE_ROOT" 2>/dev/null || die 3 "$ROLE_ROOT appeared concurrently; refusing to overwrite"
+	trap - EXIT
+	log "prepared role root: $ROLE_ROOT"
+}
+
+cmd_start() {
+	local dry=0 restart=0 model="" tmo="" session="" a
+	POS=()
+	while [[ $# -gt 0 ]]; do
+		a="$1"; shift
+		case "$a" in
+			--dry-run) dry=1 ;;
+			--restart) restart=1 ;;
+			--model) [[ $# -ge 1 ]] || die 2 "--model needs a value"; model="$1"; shift ;;
+			--timeout) [[ $# -ge 1 ]] || die 2 "--timeout needs seconds"; tmo="$1"; shift ;;
+			--session-id) [[ $# -ge 1 ]] || die 2 "--session-id needs a UUID"; session="$1"; shift ;;
+			-*) die 2 "start: unknown option $a" ;;
+			*) POS+=("$a") ;;
+		esac
+	done
+	parse_target
+	role_defaults "$T_ROLE"
+	model="${model:-$D_MODEL}"; tmo="${tmo:-$D_TIMEOUT}"
+	[[ "$model" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]] || die 2 "bad model '$model'"
+	need_uint "--timeout" "$tmo"
+	if [[ -n "$session" ]]; then need_uuid "$session"; else session="$(new_uuid)"; fi
+	require_role_root
+	check_launch_inputs
+
+	local prior=""
+	if [[ -f "$INDEX" ]]; then
+		prior="$(grep -F -- "\"role\":$(json_str "$T_ROLE"),\"stratum\":$(json_str "$T_STRATUM")," "$INDEX" | grep -F '"event":"start"' | tail -n 1 || true)"
+	fi
+	if [[ -n "$prior" ]]; then
+		[[ "$restart" == 1 ]] || die 3 "$T_ROLE-$T_STRATUM already has session $(idx_get "$prior" session); use resume, or --restart for a fresh session on an empty out/"
+	fi
+	if [[ -n "$(find "$ROLE_ROOT/out" -mindepth 1 -print -quit)" ]]; then
+		die 3 "out/ is not empty ($ROLE_ROOT/out); a fresh session starts from an empty output (the launcher never deletes it)"
+	fi
+	[[ -z "$(idx_events "$session" start)" ]] || die 3 "session id $session is already in the index"
+	compgen -G "$RUNS/$session.*.stream.jsonl" >/dev/null && die 3 "stream logs for session $session already exist in $RUNS"
+	local n; n="$(next_attempt "$session")"
+	local prompt; prompt="$(<"$ROLE_ROOT/BRIEF.md")"
+	[[ "$prompt" != -* ]] || die 4 "BRIEF.md must not start with '-' (it would parse as an option)"
+	[[ -n "$prompt" ]] || die 4 "BRIEF.md is empty"
+	[[ "$dry" == 1 ]] || mkdir -p -- "$RUNS"
+	launch start "$D_AGENT" "$model" "$tmo" "$session" "$prompt" "$n" "$dry"
+}
+
+cmd_resume() {
+	local dry=0 assume=0 tmo="" session="" a
+	POS=()
+	while [[ $# -gt 0 ]]; do
+		a="$1"; shift
+		case "$a" in
+			--dry-run) dry=1 ;;
+			--assume-ended) assume=1 ;;
+			--timeout) [[ $# -ge 1 ]] || die 2 "--timeout needs seconds"; tmo="$1"; shift ;;
+			--session-id) [[ $# -ge 1 ]] || die 2 "--session-id needs a UUID"; session="$1"; shift ;;
+			-*) die 2 "resume: unknown option $a" ;;
+			*) POS+=("$a") ;;
+		esac
+	done
+	parse_target
+	require_role_root
+	check_launch_inputs
+
+	# The session is the latest recorded one for this role+stratum; --session-id must match it.
+	local last=""
+	[[ -f "$INDEX" ]] && last="$(grep -F -- "\"role\":$(json_str "$T_ROLE"),\"stratum\":$(json_str "$T_STRATUM")," "$INDEX" | grep -F '"event":"start"' | tail -n 1 || true)"
+	[[ -n "$last" ]] || die 3 "no recorded session for $T_ROLE-$T_STRATUM; nothing to resume"
+	local known; known="$(idx_get "$last" session)"
+	if [[ -n "$session" ]]; then
+		need_uuid "$session"
+		[[ -n "$(idx_events "$session" start)" ]] || die 3 "unknown session id $session"
+		[[ "$session" == "$known" ]] || die 3 "session $session is not the current session of $T_ROLE-$T_STRATUM ($known)"
+	fi
+	session="$known"
+
+	# Drift: every earlier attempt of the session must match the current CLI, binary and configs.
+	local line key want got
+	while IFS= read -r line; do
+		[[ -n "$line" ]] || continue
+		for key in cli_version:"$CLI_VERSION" bin_sha256:"$BIN_SHA" settings_sha256:"$SETTINGS_SHA" agents_sha256:"$AGENTS_SHA"; do
+			want="${key#*:}"; got="$(idx_get "$line" "${key%%:*}")"
+			[[ "$got" == "$want" ]] || die 3 "${key%%:*} changed since attempt $(idx_get "$line" n) (recorded $got, now $want); refusing to resume"
+		done
+	done < <(idx_events "$session" start)
+
+	local n; n="$(next_attempt "$session")"
+	local prev ends
+	prev="$(idx_get "$(idx_events "$session" start | tail -n 1)" n)"   # last INDEXED attempt
+	ends="$(idx_events "$session" end | grep -F -- "\"n\":$prev," || true)"
+	if [[ -z "$ends" && "$assume" != 1 ]]; then
+		die 3 "attempt $prev has no end record (still running, or the launcher died); use --assume-ended if you are sure it is not running"
+	fi
+	local agent model; agent="$(idx_get "$last" agent)"; model="$(idx_get "$last" model)"
+	tmo="${tmo:-$(idx_get "$last" timeout_s)}"; need_uint "--timeout" "$tmo"
+	launch resume "$agent" "$model" "$tmo" "$session" "$CONTINUE_PROMPT" "$n" "$dry"
+}
+
+cmd_status() {
+	local d
+	if [[ $# -eq 0 ]]; then
+		for d in "$CCG_EVAL_HOME"/*/; do
+			[[ -d "$d/runs" ]] && printf '%s\n' "$(basename -- "$d")"
+		done
+		return 0
+	fi
+	POS=("$@")
+	if [[ $# -eq 1 ]]; then
+		[[ "$1" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]] || die 2 "bad eval commit '$1'"
+		E12="${1:0:12}"; EDIR="$CCG_EVAL_HOME/$E12"; RUNS="$EDIR/runs"; INDEX="$RUNS/index.jsonl"
+		T_ROLE=""; T_STRATUM=""
+	else
+		parse_target
+	fi
+	[[ -d "$EDIR" ]] || die 4 "no such eval dir: $EDIR"
+	if [[ -f "$PIN_FILE" ]]; then
+		if pin_verify 2>/dev/null; then printf 'binary: claude %s sha256=%s verified\n' "$(pin_get version)" "$(pin_get sha256)"
+		else printf 'binary: PIN does NOT verify\n'; fi
+	else
+		printf 'binary: no PIN (run prepare-bin)\n'
+	fi
+	printf 'settings.json sha256=%s\nagents.json   sha256=%s\n' "$(sha256_of "$SETTINGS_FILE")" "$(sha256_of "$AGENTS_FILE")"
+	[[ -f "$INDEX" ]] || { printf 'no attempts recorded\n'; return 0; }
+	local line role stratum session n end rc drift
+	while IFS= read -r line; do
+		[[ -n "$line" ]] || continue
+		role="$(idx_get "$line" role)"; stratum="$(idx_get "$line" stratum)"
+		[[ -z "$T_ROLE" || ( "$role" == "$T_ROLE" && "$stratum" == "$T_STRATUM" ) ]] || continue
+		session="$(idx_get "$line" session)"; n="$(idx_get "$line" n)"
+		end="$(idx_events "$session" end | grep -F -- "\"n\":$n," | tail -n 1 || true)"
+		if [[ -n "$end" ]]; then rc="exit $(idx_get "$end" exit)"; else rc="no end record"; fi
+		drift=""
+		[[ "$(idx_get "$line" settings_sha256)" == "$(sha256_of "$SETTINGS_FILE")" ]] || drift="$drift settings.json-changed"
+		[[ "$(idx_get "$line" agents_sha256)" == "$(sha256_of "$AGENTS_FILE")" ]] || drift="$drift agents.json-changed"
+		[[ "$(idx_get "$line" bin_sha256)" == "$(pin_get sha256 2>/dev/null || true)" ]] || drift="$drift binary-changed"
+		printf '%s-%s session=%s n=%s %s model=%s cli=%s start=%s%s\n' "$role" "$stratum" "$session" "$n" "$rc" \
+			"$(idx_get "$line" model)" "$(idx_get "$line" cli_version)" "$(idx_get "$line" start)" \
+			"${drift:+ DRIFT:$drift}"
+	done < <(grep -F '"event":"start"' "$INDEX" || true)
+}
+
 main() {
 	local verb="${1:-}"
 	[[ $# -gt 0 ]] && shift
 	case "$verb" in
 		prepare-bin) cmd_prepare_bin "$@" ;;
 		-h|--help|help) usage ;;
-		prepare|start|resume|status) die 2 "verb '$verb' is not implemented yet (S53, after S52)" ;;
+		prepare) cmd_prepare "$@" ;;
+		start) cmd_start "$@" ;;
+		resume) cmd_resume "$@" ;;
+		status) cmd_status "$@" ;;
 		'') usage >&2; exit 2 ;;
 		*) die 2 "unknown verb: $verb (try --help)" ;;
 	esac
