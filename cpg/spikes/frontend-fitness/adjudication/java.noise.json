@@ -1,0 +1,553 @@
+{
+ "lang": "java",
+ "N": 500,
+ "comparable": 417,
+ "referenceSilent": 83,
+ "agreement": {
+  "agreed": 417,
+  "comparable": 417,
+  "rate": 1.0,
+  "wilson95": [
+   0.9909,
+   1.0
+  ]
+ },
+ "adjudicated": {
+  "n": 16,
+  "W": 2,
+  "byWrong": {
+   "label": 2,
+   "neither": 14
+  },
+  "byErrorKind": {
+   "none": 14,
+   "target": 2
+  }
+ },
+ "referenceError": {
+  "wrong": 1,
+  "comparable": 417,
+  "rate": 0.0024,
+  "wilson95": [
+   0.0004,
+   0.0135
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 100,
+   "n": 100,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.037
+   ]
+  },
+  "AE": {
+   "N_s": 317,
+   "n": 100,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.037
+   ]
+  },
+  "AS": {
+   "N_s": 67,
+   "n": 40,
+   "k": 0,
+   "wilson95": [
+    0.0,
+    0.0876
+   ]
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.004,
+   "conservative": 0.0466
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.0208
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 93
+ },
+ "closedClasses": {
+  "count": 0,
+  "byKind": {
+   "role": [],
+   "coordinate": [],
+   "shape": []
+  }
+ },
+ "unscored": {
+  "byReason": {},
+  "underivable": 0
+ },
+ "basisCounts": {
+  "audit-confirmed": 252,
+  "agreed": 205,
+  "label-only": 27,
+  "adjudicated": 16
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.004,
+   "flagged": false
+  },
+  "v1.11": {
+   "figure": 0.004,
+   "flagged": false
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": {
+   "count": 6,
+   "siteCount": 11,
+   "definitions": [
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/model/PetType.java",
+     "defLine": 27,
+     "role": "impl",
+     "sites": [
+      248,
+      290,
+      452
+     ]
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/model/Specialty.java",
+     "defLine": 28,
+     "role": "impl",
+     "sites": [
+      167,
+      178,
+      349
+     ]
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/model/User.java",
+     "defLine": 18,
+     "role": "impl",
+     "sites": [
+      155
+     ]
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPet.java",
+     "defLine": 26,
+     "role": "impl",
+     "sites": [
+      1
+     ]
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/rest/advice/ExceptionControllerAdvice.java",
+     "defLine": 48,
+     "role": "impl",
+     "sites": [
+      247,
+      393
+     ]
+    },
+    {
+     "path": "src/main/java/org/springframework/samples/petclinic/rest/validation/PetAgeValidator.java",
+     "defLine": 8,
+     "role": "impl",
+     "sites": [
+      461
+     ]
+    }
+   ],
+   "note": "`new X` with no explicit constructor: T is the class declaration line, role impl (decided by DS per the brief). S27 must check how Joern places the implicit constructor."
+  },
+  "anonymousLambdaIndices": {
+   "found": 0,
+   "note": "none found: no qname in final T carries #n/<anon>/lambda/$n; the two `<init>` qnames are named constructors"
+  },
+  "externalsAbsentFromTree": {
+   "package": "org.springframework.samples.petclinic.rest.dto",
+   "count": 29,
+   "sites": [
+    27,
+    45,
+    49,
+    55,
+    57,
+    59,
+    67,
+    91,
+    96,
+    103,
+    166,
+    198,
+    200,
+    211,
+    215,
+    231,
+    353,
+    362,
+    380,
+    408,
+    411,
+    417,
+    419,
+    433,
+    435,
+    462,
+    477,
+    482,
+    490
+   ],
+   "note": "OpenAPI-generated DTOs: package source is absent from the corpus tree (no dto directory under cpg/.ccg-work/corpora/java/src); labelled external"
+  }
+ },
+ "detail": {
+  "original_v111": {
+   "N": 500,
+   "adjudicated": {
+    "W": 2,
+    "byErrorKind": {
+     "none": 14,
+     "target": 2
+    },
+    "byWrong": {
+     "label": 2,
+     "neither": 14
+    },
+    "n": 16
+   },
+   "agreementRate": {
+    "agreed": 417,
+    "comparable": 417,
+    "note": "AS (67, reference silent, single-source) excluded; script-level agreed=484 of 500 includes AS",
+    "rate": 1.0,
+    "wilson95": [
+     0.9909,
+     1.0
+    ]
+   },
+   "auditTable": {
+    "AE": {
+     "N_s": 317,
+     "census": false,
+     "drawC": {
+      "errors": 0,
+      "n": 12,
+      "note": "read and corrected, reported apart, never pooled"
+     },
+     "errors": 0,
+     "n": 100,
+     "wilson": [
+      0,
+      0.037
+     ]
+    },
+    "AI": {
+     "N_s": 100,
+     "census": true,
+     "drawC": {
+      "errors": 0,
+      "n": 0,
+      "note": "read and corrected, reported apart, never pooled"
+     },
+     "errors": 0,
+     "n": 100,
+     "wilson": [
+      0,
+      0.037
+     ]
+    },
+    "AS": {
+     "N_s": 67,
+     "census": false,
+     "drawC": {
+      "errors": 0,
+      "n": 0,
+      "note": "read and corrected, reported apart, never pooled"
+     },
+     "errors": 0,
+     "n": 40,
+     "wilson": [
+      0,
+      0.0876
+     ]
+    }
+   },
+   "basisCounts": {
+    "adjudicated": 16,
+    "agreed": 205,
+    "audit-confirmed": 212,
+    "label-only": 67
+   },
+   "comparable": {
+    "comparable": 417,
+    "share": 0.834,
+    "silentReference": 83
+   },
+   "handErrorRate": {
+    "conservativeAIcensus": 0.0392,
+    "conservativeAIwilsonUpper": 0.0466,
+    "flagThreshold": 0.05,
+    "formula": "(W=2 + sum_s N_s*k_s/n_s=0.0) / N=500",
+    "noiseLimited": false,
+    "note": "flag uses the figure with role errors (point); label role errors = 0, so with and without are equal. Conservative bounds are below 0.05 as well.",
+    "point": 0.004,
+    "withRoleErrors": {
+     "conservativeAIcensus": 0.0392,
+     "conservativeAIwilsonUpper": 0.0466,
+     "labelRoleErrors": 0,
+     "point": 0.004
+    },
+    "withoutRoleErrors": {
+     "conservativeAIcensus": 0.0392,
+     "conservativeAIwilsonUpper": 0.0466,
+     "point": 0.004
+    }
+   },
+   "helperAudit": {
+    "defLineNameCheck": "0 of all internal/declared label callees had a defLine text lacking the callee name (FC mechanical check)",
+    "drawUAIerrors": 0,
+    "overloadQuestion": {
+     "ordinals": [
+      278,
+      305
+     ],
+     "result": "single overload correct in both (278 -> OwnerMapper.java:27 only; 305 -> :23 only); no overload fan-out error",
+     "source": "java.decisions.jsonl overloadCheck"
+    }
+   },
+   "labelled": 500,
+   "lang": "java",
+   "openPoints": [
+    {
+     "id": "implicit-constructor-target",
+     "otherSitesWithTypeDeclLineTarget": [
+      1,
+      155,
+      167,
+      248,
+      349,
+      393,
+      461
+     ],
+     "sites": [
+      178,
+      247,
+      290,
+      452
+     ],
+     "text": "Sites 178, 247, 290 and 452 (`new X`, X with no explicit constructor) are finalised with T = the class declaration line, role impl (per decision file: \"target is the class decl per brief\"). Open for the Joern matching step to check whether Joern emits the implicit constructor at the class line or elsewhere; not decided here."
+    }
+   ],
+   "perStratumAgreement": {
+    "AE": {
+     "agreed": 317,
+     "comparable": 317,
+     "rate": 1.0,
+     "wilson": [
+      0.988,
+      1
+     ]
+    },
+    "AI": {
+     "agreed": 100,
+     "comparable": 100,
+     "rate": 1.0,
+     "wilson": [
+      0.963,
+      1
+     ]
+    },
+    "byConstruction": {
+     "agreed": 0,
+     "comparable": 0,
+     "rate": null,
+     "wilson": [
+      null,
+      null
+     ]
+    },
+    "declared": {
+     "agreed": 39,
+     "comparable": 39,
+     "rate": 1.0,
+     "wilson": [
+      0.9103,
+      1
+     ]
+    },
+    "macro": {
+     "note": "not applicable to java"
+    },
+    "overall": {
+     "agreed": 417,
+     "comparable": 417,
+     "rate": 1.0,
+     "wilson": [
+      0.9909,
+      1.0
+     ]
+    },
+    "relaxed": {
+     "agreed": 0,
+     "comparable": 0,
+     "rate": null,
+     "wilson": [
+      null,
+      null
+     ]
+    }
+   },
+   "referenceErrorRate": {
+    "caveat": "audit draws judged the label only (every audited wrong=neither); undrawn agreed sites were not re-decided, so this is a floor, not an estimate over the comparable sites",
+    "comparable": 417,
+    "found": [
+     {
+      "defLine": 27,
+      "kind": "role",
+      "note": "reference gives static kind internal at a bodyless interface method; correct role is decl (rule 8)",
+      "ordinals": [
+       278
+      ],
+      "path": "src/main/java/org/springframework/samples/petclinic/mapper/OwnerMapper.java"
+     }
+    ],
+    "rate": 0.0024,
+    "referenceErrorsFound": 1,
+    "wilson": [
+     0.0004,
+     0.0135
+    ]
+   },
+   "scoring": {
+    "cap": 0.05,
+    "scored": 500,
+    "underivable": 0,
+    "underivableShare": 0.0
+   }
+  },
+  "v112": {
+   "basisRuling": "precedence adjudicated > audit-confirmed (any stratum, U or C) > label-only > agreed; the 40 AS draw-U lines moved label-only -> audit-confirmed, each checked against java.audit.jsonl (draw U, stratum AS, labelCorrect true) and equal to the coordinator list",
+   "basisBefore": {
+    "audit-confirmed": 212,
+    "agreed": 205,
+    "label-only": 67,
+    "adjudicated": 16
+   },
+   "basisAfter": {
+    "audit-confirmed": 252,
+    "agreed": 205,
+    "label-only": 27,
+    "adjudicated": 16
+   },
+   "basisChangedOrdinals": [
+    5,
+    68,
+    71,
+    76,
+    89,
+    97,
+    101,
+    120,
+    149,
+    152,
+    156,
+    158,
+    188,
+    218,
+    223,
+    224,
+    229,
+    262,
+    267,
+    275,
+    282,
+    286,
+    287,
+    299,
+    308,
+    329,
+    331,
+    365,
+    376,
+    378,
+    391,
+    392,
+    416,
+    430,
+    453,
+    457,
+    463,
+    464,
+    478,
+    481
+   ],
+   "e_all": {
+    "point": 0.004,
+    "conservativeAllWilson": 0.04659387270277702,
+    "conservativeAIcensus": 0.03919517294897777,
+    "W": 2,
+    "note": "labeller property, drives no gate"
+   },
+   "e_res": {
+    "point": 0.0,
+    "conservative": 0.02078674499850142,
+    "unreadRemainder": {
+     "AI": 0,
+     "AE": 217,
+     "AS": 27
+    },
+    "r_s": {
+     "AI": 0,
+     "AE": 0,
+     "AS": 0
+    },
+    "wilsonUpper": {
+     "AI": 0.037,
+     "AE": 0.037,
+     "AS": 0.0876
+    },
+    "formula": "sum_s (N_s-n_s)*r_s/n_s / N; AI census (n=N_s) contributes 0"
+   },
+   "v110Flag": {
+    "figure": "e_h with role errors",
+    "point": 0.004,
+    "conservative": 0.0466,
+    "flagged": false
+   },
+   "closedClassShare": {
+    "count": 0,
+    "share": 0.0,
+    "cap": 0.1,
+    "note": "no label role/coordinate/shape error found. The one census role error is on the reference side (OwnerMapper.java:27, ordinal 278) and is not in any final line."
+   },
+   "census": {
+    "targetsRead": 93,
+    "distinctLabelRefTargets": 93,
+    "distinctFinalT": 92,
+    "note": "93 = distinct (path, defLine) of labels, reference static/impls and final T (final T is a subset: 425/486 dropped Person.getFirstName)"
+   },
+   "helperAudit": {
+    "defLineNameCheck": "0 of all internal/declared label callees had a defLine text lacking the callee name (FC mechanical check)",
+    "drawUAIerrors": 0,
+    "overloadQuestion": {
+     "ordinals": [
+      278,
+      305
+     ],
+     "result": "single overload correct in both (278 -> OwnerMapper.java:27 only; 305 -> :23 only); no overload fan-out error",
+     "source": "java.decisions.jsonl overloadCheck"
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,224 @@
+{
+ "N": 500,
+ "adjudicated": {
+  "W": 2,
+  "byErrorKind": {
+   "none": 14,
+   "target": 2
+  },
+  "byWrong": {
+   "label": 2,
+   "neither": 14
+  },
+  "n": 16
+ },
+ "agreementRate": {
+  "agreed": 417,
+  "comparable": 417,
+  "note": "AS (67, reference silent, single-source) excluded; script-level agreed=484 of 500 includes AS",
+  "rate": 1.0,
+  "wilson95": [
+   0.9909,
+   1.0
+  ]
+ },
+ "auditTable": {
+  "AE": {
+   "N_s": 317,
+   "census": false,
+   "drawC": {
+    "errors": 0,
+    "n": 12,
+    "note": "read and corrected, reported apart, never pooled"
+   },
+   "errors": 0,
+   "n": 100,
+   "wilson": [
+    0,
+    0.037
+   ]
+  },
+  "AI": {
+   "N_s": 100,
+   "census": true,
+   "drawC": {
+    "errors": 0,
+    "n": 0,
+    "note": "read and corrected, reported apart, never pooled"
+   },
+   "errors": 0,
+   "n": 100,
+   "wilson": [
+    0,
+    0.037
+   ]
+  },
+  "AS": {
+   "N_s": 67,
+   "census": false,
+   "drawC": {
+    "errors": 0,
+    "n": 0,
+    "note": "read and corrected, reported apart, never pooled"
+   },
+   "errors": 0,
+   "n": 40,
+   "wilson": [
+    0,
+    0.0876
+   ]
+  }
+ },
+ "basisCounts": {
+  "adjudicated": 16,
+  "agreed": 205,
+  "audit-confirmed": 212,
+  "label-only": 67
+ },
+ "comparable": {
+  "comparable": 417,
+  "share": 0.834,
+  "silentReference": 83
+ },
+ "handErrorRate": {
+  "conservativeAIcensus": 0.0392,
+  "conservativeAIwilsonUpper": 0.0466,
+  "flagThreshold": 0.05,
+  "formula": "(W=2 + sum_s N_s*k_s/n_s=0.0) / N=500",
+  "noiseLimited": false,
+  "note": "flag uses the figure with role errors (point); label role errors = 0, so with and without are equal. Conservative bounds are below 0.05 as well.",
+  "point": 0.004,
+  "withRoleErrors": {
+   "conservativeAIcensus": 0.0392,
+   "conservativeAIwilsonUpper": 0.0466,
+   "labelRoleErrors": 0,
+   "point": 0.004
+  },
+  "withoutRoleErrors": {
+   "conservativeAIcensus": 0.0392,
+   "conservativeAIwilsonUpper": 0.0466,
+   "point": 0.004
+  }
+ },
+ "helperAudit": {
+  "defLineNameCheck": "0 of all internal/declared label callees had a defLine text lacking the callee name (FC mechanical check)",
+  "drawUAIerrors": 0,
+  "overloadQuestion": {
+   "ordinals": [
+    278,
+    305
+   ],
+   "result": "single overload correct in both (278 -> OwnerMapper.java:27 only; 305 -> :23 only); no overload fan-out error",
+   "source": "java.decisions.jsonl overloadCheck"
+  }
+ },
+ "labelled": 500,
+ "lang": "java",
+ "openPoints": [
+  {
+   "id": "implicit-constructor-target",
+   "otherSitesWithTypeDeclLineTarget": [
+    1,
+    155,
+    167,
+    248,
+    349,
+    393,
+    461
+   ],
+   "sites": [
+    178,
+    247,
+    290,
+    452
+   ],
+   "text": "Sites 178, 247, 290 and 452 (`new X`, X with no explicit constructor) are finalised with T = the class declaration line, role impl (per decision file: \"target is the class decl per brief\"). Open for the Joern matching step to check whether Joern emits the implicit constructor at the class line or elsewhere; not decided here."
+  }
+ ],
+ "perStratumAgreement": {
+  "AE": {
+   "agreed": 317,
+   "comparable": 317,
+   "rate": 1.0,
+   "wilson": [
+    0.988,
+    1
+   ]
+  },
+  "AI": {
+   "agreed": 100,
+   "comparable": 100,
+   "rate": 1.0,
+   "wilson": [
+    0.963,
+    1
+   ]
+  },
+  "byConstruction": {
+   "agreed": 0,
+   "comparable": 0,
+   "rate": null,
+   "wilson": [
+    null,
+    null
+   ]
+  },
+  "declared": {
+   "agreed": 39,
+   "comparable": 39,
+   "rate": 1.0,
+   "wilson": [
+    0.9103,
+    1
+   ]
+  },
+  "macro": {
+   "note": "not applicable to java"
+  },
+  "overall": {
+   "agreed": 417,
+   "comparable": 417,
+   "rate": 1.0,
+   "wilson": [
+    0.9909,
+    1.0
+   ]
+  },
+  "relaxed": {
+   "agreed": 0,
+   "comparable": 0,
+   "rate": null,
+   "wilson": [
+    null,
+    null
+   ]
+  }
+ },
+ "referenceErrorRate": {
+  "caveat": "audit draws judged the label only (every audited wrong=neither); undrawn agreed sites were not re-decided, so this is a floor, not an estimate over the comparable sites",
+  "comparable": 417,
+  "found": [
+   {
+    "defLine": 27,
+    "kind": "role",
+    "note": "reference gives static kind internal at a bodyless interface method; correct role is decl (rule 8)",
+    "ordinals": [
+     278
+    ],
+    "path": "src/main/java/org/springframework/samples/petclinic/mapper/OwnerMapper.java"
+   }
+  ],
+  "rate": 0.0024,
+  "referenceErrorsFound": 1,
+  "wilson": [
+   0.0004,
+   0.0135
+  ]
+ },
+ "scoring": {
+  "cap": 0.05,
+  "scored": 500,
+  "underivable": 0,
+  "underivableShare": 0.0
+ }
+}
