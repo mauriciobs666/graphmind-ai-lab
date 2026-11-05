@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and
-`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).
+"""S27 (P0-20) metrics for ONE language, from the two `measure.sc` outputs (off / on) and
+`truth/<lang>.final2.jsonl` (default; `--truth final` is the provisional run). ML §7.1, §7.2, §7.4, §8.1, §8.3.
 
     cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>
 
@@ -291,6 +291,7 @@ def rf_fetch_none(lang):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("lang")
+    ap.add_argument("--truth", default="final2", choices=["final", "final2"], help="final2 (default) is the reported truth; final is the provisional pre-adjudication one")
     ap.add_argument("--no-write", action="store_true")
     ap.add_argument("--no-adjudication", action="store_true", help="do not write adjudication/<lang>-misses.v2.* (the data-scientist edits them)")
     ap.add_argument("--variant", default="", choices=["", "override"], help="override: the segment-renamed CPGs (<work>/<lang>-override); writes results/<lang>.override.*")
@@ -300,7 +301,7 @@ def main():
     sfx = ".override" if a.variant else ""
     off = METHOD_LINE_OFFSET[lang]
     priv = {r["ordinal"]: r for r in read_jsonl(HERE / "sample" / f"{lang}.private.jsonl")}
-    truth = {r["ordinal"]: r for r in read_jsonl(HERE / "truth" / f"{lang}.final.jsonl")}
+    truth = {r["ordinal"]: r for r in read_jsonl(HERE / "truth" / f"{lang}.{a.truth}.jsonl")}
     runrec = json.loads((WORK / wl / "s27-run.json").read_text())
     Ms = {c: load_measure(wl, c) for c in ("off", "on")}
     if not all(Ms.values()):
@@ -387,7 +388,7 @@ def main():
                                      (None if name == "contact" else ("pass (observed >= 0.98, n >= 50)" if n and len(fd) / n >= 0.98 else "fail")))}
             blk["scoredSites"] = len([o for o in scored if pred(o)])
             strata[name] = blk
-        strata["note"] = "provisional (final.jsonl); S27 reports final2. The contact-file test is the site's path (final.jsonl `site`, path:line) in contact.json files."
+        strata["note"] = f"truth/{lang}.{a.truth}.jsonl. The contact-file test is the site's path (the truth line's `site`, path:line) in contact.json files."
 
     # answers + misses
     def answer_row(o):
@@ -450,7 +451,7 @@ def main():
         "lang": lang, "variant": "override" if a.variant else "as-shipped", "headline": not a.variant,
         **({"segmentsRenamed": json.loads((WORK / wl / "s27-run.json").read_text()).get("segmentsRenamed"),
             "caveat": "SECONDARY measurement: the corpus was copied with the frontend-ignored path segments renamed (ccgseg<name>) and mapped back; the as-shipped run (results/%s.json) is the headline, since P1 users hit the frontend defaults. Verdicts here (recallDecision, gate83) are not the language's decision." % lang} if a.variant else {}),
-        "provisional": True, "truth": f"truth/{lang}.final.jsonl",
+        "provisional": a.truth == "final", "truth": f"truth/{lang}.{a.truth}.jsonl",
         "labelledSites": len(order_all), "scoredSites": len(scored), "unscoredSites": len(unscored),
         "unscoredReasons": dict(collections.Counter(truth[o]["notScoredReason"] for o in unscored)),
         "internalSites": metrics["off"]["internalSites"], "externalScoredSites": len(scored) - metrics["off"]["internalSites"],
