@@ -96,3 +96,21 @@ the pasters" bullets (data-scientist's M-1 ruling). The extract is 12,145 bytes,
 - That the hook's `cwd` field equals the role root.
 - Each prompt is about 20-24 KB (about 3,000-3,700 words); whether `sonnet` keeps B.1 straight at
   that size is for S54/S55 to see.
+
+## Glob/Grep pattern guard (S54 D1)
+
+`guard-paths.sh` rule 3 now runs the same pattern analysis as `cpg/eval/tools/audit.py`
+(`pattern_escapes`): a Glob `pattern` / Grep `glob` is denied if, under any reading, it can name
+something outside the role root or contain a `..` component. Readings: as written and with `\x` read
+as `x`; braces expanded; `[class]` and `?` read as `/`, `~` or `.` where they could be; the literal
+prefix resolved (symlinks) against the call's `path` argument, else the root. One 512-reading budget
+per pattern covers braces and wildcards; overflow denies. The older up-front test (absolute, `~`,
+`..` component) stays as defence in depth and still denies in-root absolute patterns.
+Decision: port the analysis rather than deny every pattern with `{`, `[` or `\`, because writers
+legitimately use `kit-src/**/*.{py,md}` and `kit-src/{a,b}/*.md`, and the guard then agrees with the
+audit, so a pattern the hook allows the audit will not count as an escape. Accepted limit (as in the
+audit): an honest glob with many `?`/classes (`????-??-??.json`) exceeds the budget and is denied.
+Also accepted (audit Pass 4 m-7): a wildcard that names an in-root symlink (`kit-src/e?cape-dir/x`,
+`kit-src/esc*/x`) is allowed, since only the literal prefix is resolved; S53's refusal of symlinks in
+the kit copy is what covers it.
+`settings.json` and `agents.json` are unchanged.

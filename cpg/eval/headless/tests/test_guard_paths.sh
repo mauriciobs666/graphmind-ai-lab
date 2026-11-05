@@ -77,6 +77,42 @@ deny  "grep glob absolute"             Grep glob "/etc/*"
 deny  "grep glob dot-dot"              Grep glob "../*"
 allow "glob pattern relative"          Glob pattern "kit-src/**/*.py"
 allow "grep glob relative"             Grep glob "*.py"
+# S54 D1: braces / backslash / classes / ? that can read as a ".." component, no path argument
+deny  "glob plain dot-dot"              Glob pattern "../*"
+deny  "glob brace dot-dot (S54 D1a)"    Glob pattern "{..,x}/*"
+deny  "glob backslash dot-dot (S54 D1b)" Glob pattern 'kit-src/\.\./\.\./*'
+deny  "glob backslash one dot"          Glob pattern 'kit-src/\../*'
+deny  "glob brace dot-dot trailing"     Glob pattern "{kit-src,..}/*"
+deny  "glob brace builds dot-dot"       Glob pattern "kit-src/{.,.}./*"
+deny  "glob nested brace dot-dot"       Glob pattern "{a,{b,..}}/*"
+deny  "glob class dot-dot"              Glob pattern "kit-src/.[.]/*"
+deny  "glob ? dot-dot"                  Glob pattern "kit-src/.?/*"
+deny  "glob brace absolute"             Glob pattern "{/etc,kit-src}/*"
+deny  "glob brace tilde"                Glob pattern "{~,kit-src}/*"
+deny  "glob brace budget overflow"      Glob pattern "{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}{a,b}/x"
+deny  "grep glob brace dot-dot"         Grep glob "{..,x}/*"
+deny  "grep glob backslash dot-dot"     Grep glob 'kit-src/\.\./\.\./*'
+allow "glob brace alternatives"         Glob pattern "kit-src/{a,b}/*.md"
+allow "glob brace extensions"           Glob pattern "kit-src/**/*.{py,md}"
+allow "glob class in name"              Glob pattern "kit-src/pkg/[ab]pp.py"
+allow "glob backslash-escaped star"     Glob pattern 'kit-src/pkg/a\*.py'
+allow "grep glob brace extensions"      Grep glob "*.{py,md}"
+deny  "glob pattern absolute but inside root" Glob pattern "$ROOT/kit-src/*.py"
+deny  "glob brace with escaped dot-dot (as-written reading)" Glob pattern 'kit-src/{..\q,c}/x'
+# cost bound: hostile patterns must be refused quickly (5 s cap each), not enumerated
+calltimed() { printf '%s' "$1" | env -i PATH=/usr/bin:/bin timeout -s KILL 5 "$GUARD" >/dev/null 2>&1; RC=$?; }
+braces30="$(/usr/bin/python3 -I -c 'print("{a,b}"*30+"/x")')"
+qmarks40="$(/usr/bin/python3 -I -c 'print("?"*40)')"
+calltimed "$(mk Glob pattern "$braces30")"
+[ "$RC" = 2 ] && ok "glob 30 chained braces denied fast" || bad "glob 30 chained braces (rc=$RC, want 2; 137 = timed out)"
+calltimed "$(mk Glob pattern "$qmarks40")"
+[ "$RC" = 2 ] && ok "glob 40 question marks denied fast" || bad "glob 40 question marks (rc=$RC, want 2; 137 = timed out)"
+deny  "glob pattern through escaping link" Glob pattern "kit-src/escape-dir/*"
+# pattern resolved against the path argument, not only the root
+call "$(/usr/bin/python3 -I -c 'import json,sys; print(json.dumps({"tool_name":"Glob","tool_input":{"path":"kit-src","pattern":"escape-dir/*"},"cwd":sys.argv[1]}))' "$ROOT")"
+[ "$RC" = 2 ] && ok "glob pattern link escape resolved against path arg" || bad "glob pattern link escape resolved against path arg (rc=$RC)"
+call "$(/usr/bin/python3 -I -c 'import json,sys; print(json.dumps({"tool_name":"Glob","tool_input":{"path":"kit-src","pattern":"pkg/*.py"},"cwd":sys.argv[1]}))' "$ROOT")"
+[ "$RC" = 0 ] && ok "glob path + relative pattern allowed" || bad "glob path + relative pattern allowed (rc=$RC)"
 # 2. denies writes outside out/
 allow "write out/ file"                Write file_path "out/KA.jsonl"
 allow "write out/ absolute"            Write file_path "$ROOT/out/KA.jsonl"
