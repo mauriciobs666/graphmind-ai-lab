@@ -483,3 +483,40 @@ Root `REVIEW.md`, *Always check*: "When a rule is clarified after results, recom
 
 ### Stopping condition
 Closes at Pass 8 once C1-C3 are taken and C4 is either folded into the spec or scoped out by the stakeholder; C5-C10 are the owner's to take or decline. Reopens if the report ships a Python recall verdict without its margin and the contact-definition sensitivity, or reports the TS/JS or C++ indexer decision without the lenient counterpart.
+
+## Pass 8 (re-gate of the C1-C10 revision: report §a1 rev, ML v1.14 revision line and §7.2; executed against the tree, no git, 2026-11-05)
+
+CPG: considered, not relevant — spike data, recomputed from `results/*.answers.jsonl`, `truth/*.{final2,ref}.jsonl`, `adjudication/*-misses.v2.jsonl`, `adjudication/*.noise.json`.
+
+**Verdict: approve with suggestions.** C1-C3 and C5-C10 are closed; C4 is half closed. No blocker. Two new items (D1, D2) and a guess list for the coder (below) should be settled before dispatch.
+
+**Dispositions.**
+- **C1 fixed (re-executed).** My loop over `found`/`foundLenient` with the same `Ref` reproduces the report's table row for row: misses strict/lenient js 69/36, cpp 132/80, java 63/9, cs 69/43, go 34/22, py 3/3; closed 50/17, 67/24, 49/5, 56/40, 10/2, 0/0; remedies idx/recog for js and cpp, idx/idx java and cs (cs lenient 147/150 exactly 0.980), recog/recog go. §a1.2 main table's remedy cells and §a1.3's lenient column agree with it. Nit: "no language above 0.92 except Python" is false by 0.001 (Java lenient 0.921); say "0.92 or below except Python and Java at 0.921".
+- **C2 fixed (re-executed).** Strata: python A 146/149 (3 misses), B 143/145, C 144/146; js A 96/165, B and C 87/152. Printed 0.9799; 111/116 = 0.957 [0.903, 0.981] reproduces.
+- **C3 fixed.** The `flagByVersion` table equals all seven `noise.json` files (py .075/.042/0, go .027, java .004, cpp .262/.246/0, kotlin .065/.021/0); the C++ single-reading, unestimated DS error, `relaxed` 4/46, A7 and A8 are present.
+- **C4 partly fixed;** see D1 and the guess list.
+- **C5 fixed.** `results/*.json`: `provisional: false`, `truth: truth/<lang>.final2.jsonl`.
+- **C6 fixed.** 0 occurrences of "pending graph-dba probe" in the six v2 files; §a1.4 cites the probe.
+- **C7 fixed.** C++ cell reads "yes, but fragile" with the 17 of 74 override flip and the §8.1 caveats; JS shows 146/165.
+- **C8 fixed.** Shares above 5 match mine (866/8,801, 200/7,581, 1,788/16,075, 299/3,538, 1/797, 0/360).
+- **C9 fixed.** Go v2 causes are 13 / 12 / 9 (`other` includes #141 and #247, no `dispatch`); the report's "other 9 (2 + 7)" and 34 total agree; §a1.4 states the rule-8 mismatch.
+- **C10 mostly fixed.** One dated line replaces the stack; §7.2 now has the lenient row the note promises; the revision line cites it. See D2.
+
+**Same-revision interactions checked.** Lenient column vs main table vs §a1.1 table: consistent (above). Go re-class vs counts: consistent. Report §a1.3 (override) vs §a1.2: C++ "no" under override matches the 17/74 I computed. Report vs ML on the census: contradicts, see D1.
+
+**D1 (major, verified) — the report changes ML §7.2 without amending it.** Report §a1.6 step 3 says its coverage key "replaces ML §7.2's start ±0" and redefines line fidelity (Java/C++ "compared on span and name") and parse success (FILE node plus a METHOD, not "no frontend error"). ML §7.2 lines 1110-1113 are unchanged ("start line ± 0", "lineNumber and lineNumberEnd both equal"). The census is not run, so the change is pre-result and legitimate, but two documents now define the same metric differently and the protocol is the controlling one. Also `S27c` appears only in the report: `grep S27c docs/plans/connected-code-graph-p0-2.md` is empty, and S30's row still depends on "S27 shapes". Fix: ML v1.15 (or a §7.2 edit) carrying the three definitions; a plan row for S27c (Pass 7 open question 1 is still unanswered).
+
+**D2 (minor) — ML header pointer is false.** "Earlier revisions: §12": §12 holds only the Pass 1/2 dispositions; v1.4-v1.13 text is nowhere in the note (`grep v1.13` empty). Point at the coordination ledger/`HISTORY.md` or drop the clause. Growth-stops otherwise holds: the ML line is a single dated line and carries no finding table; the report's growth (about 65 lines) is new scope (C3 disclosures, §a1.6 content) with no finding-to-resolution table or restated history.
+
+**What a coder would still have to guess in §a1.6 (not buildable without design decisions yet).**
+1. **Matching:** the spec gives two algorithms (name then source order; and "innermost METHOD within 8 lines, name matches"). One-to-one assignment, tie-breaks, and what happens to a METHOD claimed twice are open. The 8-line window was built for T-members and can credit a neighbour (getters, overloads).
+2. **`nameKey` beyond short name:** qualified/class scope, Go receiver methods, C++ operators/destructors/templates, JS object-literal and class-field functions, Python nested defs. `<anon>#n` "within the enclosing definition" does not map to Joern's `<lambda>N` or `:program` numbering; no rule says how they are compared.
+3. **Line fidelity "span and name" for Java/C++:** undefined (exact end line? start within what?) and contradicts ML's exact-both rule.
+4. **`symbol` per rule 8:** a per-language table the coder must read and implement from the bundle spec; no list of cases is given and no test (acceptance (b) only covers definitions that happen to be T or reference targets).
+5. **Arguments:** how an identifier argument is resolved to a same-file constant (scope, shadowing, C++/Go/C# constant forms are not in the "`final`/`const`/`val`/UPPER_CASE" list); `argIndex` base and receiver offset (Joern 0/1); keyword, spread and named arguments; how an `arg` record is joined to a Joern call when the call is unmatched (counts as unrecovered?).
+6. **Decorators:** `literalArgs` shape (positional list vs named pairs, nested values); how a name is compared (`@app.route` vs `route`, Java fully qualified vs simple); which definitions are "decorated" for the denominator; Python `decorator` vs call representation is left to a probe, which is fine, but the probe's output format is not.
+7. **Kotlin:** the runner for a `--nooverlays` import and whether `measure.sc` tolerates it is not specified (graph-dba step, but the metrics script must branch on it).
+8. **Acceptance covers definitions only.** Nothing tests `arg` or `decorators` extraction; mutation test (d) is satisfied by (b) or (c), neither of which touches them. Add one planted argument and one planted decorator per language, and the mutants "drop the concatenation folding" and "drop `marker_annotation`".
+9. Both configurations, Wilson per metric and the output file name/location for `s27_census_metrics.py` results are unstated.
+
+**Stopping condition.** Closes at Pass 9 if (a) D1 is taken (ML §7.2 and the report agree on coverage key, line fidelity and parse success; `grep -n 'start line ± 0' docs/plans/connected-code-graph-p0-ml.md` returns nothing or states the window) and S27c has a plan row, and (b) items 1-5 and 8 of the guess list are written into §a1.6 or explicitly delegated to the coder with a named rule source. Reopens if a census output is reported against a definition the ML note does not carry, or if the C1 table is edited without a rerun of the `found`/`foundLenient` loop.
