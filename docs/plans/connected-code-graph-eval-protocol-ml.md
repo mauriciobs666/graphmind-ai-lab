@@ -1654,8 +1654,13 @@ Common to every tool:
   annotators (QW may write its ambiguous items last).
 - The `aid → qid` map goes to `work/aid-map.jsonl` only.
 - **`--verify`:** every `qid` maps to exactly one output line; every output object has exactly the
-  keys {`aid`, `lang`, `text`}; and no output line contains a `gold`, `goldOptions`, `intent`,
-  `group` or `ambiguityKind` substring.
+  keys {`aid`, `lang`, `text`}; the output file is byte-identical to the whitelist re-derived from
+  `QW.jsonl` (so no other field reaches it); and the **text-leak check** passes. That check never
+  matches bare words, because `text` is QW's question copied verbatim and an honest question may
+  say "intent" or "group". It fails, listing `aid`s only, on a leak shape: a serialized field
+  (`"gold"`, `goldOptions:`, `intent=`, `ambiguityKind` followed by `:`, `=` or a quote), the
+  item's own `qid`, or its `group` value, as a whole token in its `text`. The `aid`s go to the
+  custodian, who returns the item to QW. Nothing is rephrased by GC.
 
 ### 13.3 `audit.py` (S48; plan §6.5 is the specification)
 
