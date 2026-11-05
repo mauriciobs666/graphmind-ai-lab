@@ -1,0 +1,2033 @@
+{
+ "lang": "javascript",
+ "configs": {
+  "off": [
+   {
+    "ordinal": 1,
+    "siteKey": "src/i18n/useLocale.ts:21:21:useCallback",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useCallback",
+    "nameLine": 21,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ChatView",
+    "nameLine": 102,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "NumberFormat",
+    "nameLine": 16,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "WarehouseIcon",
+    "nameLine": 221,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ResetControl",
+    "nameLine": 21,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/i18n/LanguageChooser.tsx:39:17:useTranslation",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useTranslation",
+    "nameLine": 39,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Provider",
+    "nameLine": 32,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "OrderPanel",
+    "nameLine": 15,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Provider",
+    "nameLine": 107,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 11,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "DeadTurnNotice",
+    "nameLine": 95,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 95,
+      "c": 31,
+      "code": "shopState.deadTurnNotice",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "TurnIndicator",
+    "nameLine": 94,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 94,
+      "c": 27,
+      "code": "shopState.data.turn",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 94,
+      "c": 27,
+      "code": "shopState.data",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "RouterProvider",
+    "nameLine": 29,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Navigate",
+    "nameLine": 121,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 121,
+      "c": 8,
+      "code": "_tmp_9.push({ path: '*', element: <Navigate to={APP_PATHS.participant} replace /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 121,
+      "c": 10,
+      "code": "_tmp_12.path = \"*\"",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 10,
+      "code": "_tmp_12.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 121,
+      "c": 21,
+      "code": "_tmp_12.element = <Navigate to={APP_PATHS.participant} replace />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 21,
+      "code": "_tmp_12.element",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 44,
+      "code": "APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Header",
+    "nameLine": 37,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "StrictMode",
+    "nameLine": 7,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "JoinScreen",
+    "nameLine": 100,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/i18n/LanguageChooser.tsx:63:10:locales.map",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "map",
+    "nameLine": 63,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat(locale, { style: 'currency', currency }).format",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "format",
+    "nameLine": 16,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterRoute",
+    "nameLine": 120,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 120,
+      "c": 8,
+      "code": "_tmp_9.push({ path: APP_PATHS.presenter, element: <PresenterRoute /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 120,
+      "c": 10,
+      "code": "_tmp_11.path = APP_PATHS.presenter",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 10,
+      "code": "_tmp_11.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 16,
+      "code": "APP_PATHS.presenter",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 120,
+      "c": 37,
+      "code": "_tmp_11.element = <PresenterRoute />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 37,
+      "code": "_tmp_11.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CartPanel",
+    "nameLine": 11,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use(initReactI18next).init",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "init",
+    "nameLine": 33,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat(locale, options).format",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "format",
+    "nameLine": 27,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/i18n/useLocale.ts:19:20:useTranslation",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useTranslation",
+    "nameLine": 19,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "MessageBubble",
+    "nameLine": 66,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/i18n/LanguageChooser.tsx:56:8:t",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "t",
+    "nameLine": 56,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/i18n/format.ts:26:48:new Date",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "Date",
+    "nameLine": 26,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterKeyScreen",
+    "nameLine": 107,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.conditional",
+      "l": 107,
+      "c": 9,
+      "code": "presenter ? <PresenterRoster /> : <PresenterKeyScreen />",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "MessageBubble",
+    "nameLine": 74,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "SessionProvider",
+    "nameLine": 28,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Transcript",
+    "nameLine": 93,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ProfileSheet",
+    "nameLine": 44,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/i18n/LanguageChooser.tsx:40:25:useLocale",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "useLocale",
+    "nameLine": 40,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "SheetStateProvider",
+    "nameLine": 35,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 335,
+    "siteKey": "src/i18n/useLocale.ts:23:12:i18n.changeLanguage",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "changeLanguage",
+    "nameLine": 23,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CartSheet",
+    "nameLine": 42,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Outlet",
+    "nameLine": 39,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterResetAllControl",
+    "nameLine": 100,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterRoster",
+    "nameLine": 107,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.conditional",
+      "l": 107,
+      "c": 9,
+      "code": "presenter ? <PresenterRoster /> : <PresenterKeyScreen />",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CatalogSheet",
+    "nameLine": 41,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 402,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "use",
+    "nameLine": 33,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Composer",
+    "nameLine": 96,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "LanguageChooser",
+    "nameLine": 82,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ProfilePanel",
+    "nameLine": 17,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "I18nextProvider",
+    "nameLine": 10,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/i18n/LanguageChooser.tsx:44:5:onChange",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "onChange",
+    "nameLine": 44,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "I18nProvider",
+    "nameLine": 26,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CloseIcon",
+    "nameLine": 76,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "OrderSheet",
+    "nameLine": 43,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 451,
+    "siteKey": "src/i18n/LanguageChooser.tsx:70:10:t",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "t",
+    "nameLine": 70,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "DateTimeFormat",
+    "nameLine": 27,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "QueryClientProvider",
+    "nameLine": 27,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.equals",
+      "l": 10,
+      "c": 23,
+      "code": "openSheet === 'cart'",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "t",
+      "l": 10,
+      "c": 52,
+      "code": "t('layout.sheet.title.cart')",
+      "dispatch": "DYNAMIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ParticipantRoute",
+    "nameLine": 119,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 119,
+      "c": 8,
+      "code": "_tmp_9.push({ path: APP_PATHS.participant, element: <ParticipantRoute /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 119,
+      "c": 10,
+      "code": "_tmp_10.path = APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 10,
+      "code": "_tmp_10.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 16,
+      "code": "APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 119,
+      "c": 39,
+      "code": "_tmp_10.element = <ParticipantRoute />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 39,
+      "code": "_tmp_10.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CatalogPanel",
+    "nameLine": 15,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "App",
+    "nameLine": 8,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 502,
+    "siteKey": "src/i18n/LanguageChooser.tsx:48:5:setLocale",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "setLocale",
+    "nameLine": 48,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Icon",
+    "nameLine": 42,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "LayoutShell",
+    "nameLine": 117,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 117,
+      "c": 6,
+      "code": "_tmp_8.element = <LayoutShell />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 117,
+      "c": 6,
+      "code": "_tmp_8.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 1,
+    "siteKey": "src/i18n/useLocale.ts:21:21:useCallback",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useCallback",
+    "nameLine": 21,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ChatView",
+    "nameLine": 102,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "NumberFormat",
+    "nameLine": 16,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "WarehouseIcon",
+    "nameLine": 221,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ResetControl",
+    "nameLine": 21,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/i18n/LanguageChooser.tsx:39:17:useTranslation",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useTranslation",
+    "nameLine": 39,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Provider",
+    "nameLine": 32,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "OrderPanel",
+    "nameLine": 15,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Provider",
+    "nameLine": 107,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 11,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "DeadTurnNotice",
+    "nameLine": 95,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 95,
+      "c": 31,
+      "code": "shopState.deadTurnNotice",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "TurnIndicator",
+    "nameLine": 94,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 94,
+      "c": 27,
+      "code": "shopState.data.turn",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 94,
+      "c": 27,
+      "code": "shopState.data",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "RouterProvider",
+    "nameLine": 29,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Navigate",
+    "nameLine": 121,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 121,
+      "c": 8,
+      "code": "_tmp_9.push({ path: '*', element: <Navigate to={APP_PATHS.participant} replace /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 121,
+      "c": 10,
+      "code": "_tmp_12.path = \"*\"",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 10,
+      "code": "_tmp_12.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 121,
+      "c": 21,
+      "code": "_tmp_12.element = <Navigate to={APP_PATHS.participant} replace />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 21,
+      "code": "_tmp_12.element",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 121,
+      "c": 44,
+      "code": "APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Header",
+    "nameLine": 37,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "StrictMode",
+    "nameLine": 7,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "JoinScreen",
+    "nameLine": 100,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/i18n/LanguageChooser.tsx:63:10:locales.map",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "map",
+    "nameLine": 63,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat(locale, { style: 'currency', currency }).format",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "format",
+    "nameLine": 16,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterRoute",
+    "nameLine": 120,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 120,
+      "c": 8,
+      "code": "_tmp_9.push({ path: APP_PATHS.presenter, element: <PresenterRoute /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 120,
+      "c": 10,
+      "code": "_tmp_11.path = APP_PATHS.presenter",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 10,
+      "code": "_tmp_11.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 16,
+      "code": "APP_PATHS.presenter",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 120,
+      "c": 37,
+      "code": "_tmp_11.element = <PresenterRoute />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 120,
+      "c": 37,
+      "code": "_tmp_11.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CartPanel",
+    "nameLine": 11,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use(initReactI18next).init",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "init",
+    "nameLine": 33,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat(locale, options).format",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "format",
+    "nameLine": 27,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/i18n/useLocale.ts:19:20:useTranslation",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "useTranslation",
+    "nameLine": 19,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "MessageBubble",
+    "nameLine": 66,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/i18n/LanguageChooser.tsx:56:8:t",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "t",
+    "nameLine": 56,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/i18n/format.ts:26:48:new Date",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "Date",
+    "nameLine": 26,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterKeyScreen",
+    "nameLine": 107,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.conditional",
+      "l": 107,
+      "c": 9,
+      "code": "presenter ? <PresenterRoster /> : <PresenterKeyScreen />",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "MessageBubble",
+    "nameLine": 74,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "SessionProvider",
+    "nameLine": 28,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Transcript",
+    "nameLine": 93,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ProfileSheet",
+    "nameLine": 44,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/i18n/LanguageChooser.tsx:40:25:useLocale",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "useLocale",
+    "nameLine": 40,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "SheetStateProvider",
+    "nameLine": 35,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 335,
+    "siteKey": "src/i18n/useLocale.ts:23:12:i18n.changeLanguage",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "changeLanguage",
+    "nameLine": 23,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CartSheet",
+    "nameLine": 42,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "Outlet",
+    "nameLine": 39,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterResetAllControl",
+    "nameLine": 100,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "PresenterRoster",
+    "nameLine": 107,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.conditional",
+      "l": 107,
+      "c": 9,
+      "code": "presenter ? <PresenterRoster /> : <PresenterKeyScreen />",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CatalogSheet",
+    "nameLine": 41,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 402,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "use",
+    "nameLine": 33,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Composer",
+    "nameLine": 96,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "LanguageChooser",
+    "nameLine": 82,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ProfilePanel",
+    "nameLine": 17,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "I18nextProvider",
+    "nameLine": 10,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/i18n/LanguageChooser.tsx:44:5:onChange",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "onChange",
+    "nameLine": 44,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "I18nProvider",
+    "nameLine": 26,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CloseIcon",
+    "nameLine": 76,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "OrderSheet",
+    "nameLine": 43,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 451,
+    "siteKey": "src/i18n/LanguageChooser.tsx:70:10:t",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "t",
+    "nameLine": 70,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat",
+    "kind": "ctor",
+    "internal": false,
+    "calleeName": "DateTimeFormat",
+    "nameLine": 27,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false,
+    "calleeName": "QueryClientProvider",
+    "nameLine": 27,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "BottomSheet",
+    "nameLine": 10,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.equals",
+      "l": 10,
+      "c": 23,
+      "code": "openSheet === 'cart'",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "t",
+      "l": 10,
+      "c": 52,
+      "code": "t('layout.sheet.title.cart')",
+      "dispatch": "DYNAMIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "ParticipantRoute",
+    "nameLine": 119,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "",
+      "l": 119,
+      "c": 8,
+      "code": "_tmp_9.push({ path: APP_PATHS.participant, element: <ParticipantRoute /> })",
+      "dispatch": "DYNAMIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 8,
+      "code": "_tmp_9.push",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 119,
+      "c": 10,
+      "code": "_tmp_10.path = APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 10,
+      "code": "_tmp_10.path",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 16,
+      "code": "APP_PATHS.participant",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.assignment",
+      "l": 119,
+      "c": 39,
+      "code": "_tmp_10.element = <ParticipantRoute />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 119,
+      "c": 39,
+      "code": "_tmp_10.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "CatalogPanel",
+    "nameLine": 15,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "App",
+    "nameLine": 8,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 502,
+    "siteKey": "src/i18n/LanguageChooser.tsx:48:5:setLocale",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "setLocale",
+    "nameLine": 48,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "Icon",
+    "nameLine": 42,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true,
+    "calleeName": "LayoutShell",
+    "nameLine": 117,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 117,
+      "c": 6,
+      "code": "_tmp_8.element = <LayoutShell />",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 117,
+      "c": 6,
+      "code": "_tmp_8.element",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   }
+  ]
+ }
+}

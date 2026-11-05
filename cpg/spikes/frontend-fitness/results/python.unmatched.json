@@ -1,0 +1,35 @@
+{
+ "lang": "python",
+ "configs": {
+  "off": [
+   {
+    "ordinal": 109,
+    "siteKey": "falkorchat/api.py:582:20:Path",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "Path",
+    "nameLine": 582,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 109,
+    "siteKey": "falkorchat/api.py:582:20:Path",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "Path",
+    "nameLine": 582,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   }
+  ]
+ }
+}

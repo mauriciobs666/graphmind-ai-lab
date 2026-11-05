@@ -53,6 +53,9 @@ import scala.collection.mutable.ArrayBuffer
     val n = c.name
     (lang, kind) match {
       case ("javascript", "ctor")  => n == "<operator>.new" && c.code.startsWith("new ") && c.code.contains(callee)
+      // optional-chain call `a?.b(x)`: jssrc2cpg names the CALL with the whole callee text (`a?.b`), found by S27's
+      // unmatched-site inspection (matcher-table.md "JS/TS optional chain"); the code must begin with that name.
+      case ("javascript", _)       => n == callee || (n.endsWith("?." + callee) && c.code.startsWith(n))
       case ("java" | "csharp", "ctor") => n == "<init>" || n == callee
       case ("kotlin", _)           => n == callee || n == "<init>"                       // `Foo(3)` is a plain-looking frame site
       case ("cpp", "ctor")         => n == callee
@@ -75,13 +78,19 @@ import scala.collection.mutable.ArrayBuffer
   // ---- calls indexed by (file, line) -------------------------------------------------------------------------
   val calls = cpg.call.filter(c => !isOp(c) || c.name == "<operator>.new").l
   val callIdx = mutable.HashMap[(String, Int), ArrayBuffer[Call]]()
-  calls.foreach { c => callIdx.getOrElseUpdate((c.method.filename, lineOf(c)), ArrayBuffer()).append(c) }
+  // csharpsrc2cpg leaves some calls without an enclosing METHOD (`c.method` is null: NPE seen on Ocelot); they cannot be
+  // attributed to a file, so they are skipped (counted in meta.callsWithoutMethod).
+  var noMethod = 0
+  calls.foreach { c =>
+    val fn = scala.util.Try(c.method.filename).toOption
+    if (fn.isEmpty) noMethod += 1 else callIdx.getOrElseUpdate((fn.get, lineOf(c)), ArrayBuffer()).append(c)
+  }
 
   val frameRows = readJsonl(frame)
   val sampled = readJsonl(sample).map(_("siteKey").str).toSet
 
   emit(ujson.Obj("k" -> "meta", "cpg" -> cpgFile, "lang" -> lang, "files" -> cpg.file.name.l.distinct.size,
-    "methods" -> methods.size, "calls" -> calls.size, "frameSites" -> frameRows.size))
+    "methods" -> methods.size, "calls" -> calls.size, "callsWithoutMethod" -> noMethod, "frameSites" -> frameRows.size))
   cpg.file.name.l.distinct.sorted.foreach { fn => emit(ujson.Obj("k" -> "file", "path" -> fn, "methods" -> byFile.getOrElse(fn, Nil).size)) }
   methods.sortBy(m => (m.filename, mLine(m), m.fullName)).foreach { m =>
     emit(ujson.Obj("k" -> "method", "file" -> m.filename, "name" -> m.name, "fullName" -> m.fullName,
@@ -96,7 +105,13 @@ import scala.collection.mutable.ArrayBuffer
     val callee = r("calleeName").str
     val startCol = r("column").num.toInt + colOff   // the callee expression's first character: Joern's call column
     val kind = r("kind").str
-    val cands = callIdx.getOrElse((path, nameLine), ArrayBuffer()).filter(c => nameOk(kind, callee, c)).toList
+    // Fallback found by S27's unmatched-site inspection (matcher-table.md "multi-line chains"): when nothing on the name's
+    // line matches, accept a call on the line of the callee expression's first character (javasrc2cpg, gosrc2cpg put a
+    // chained or composite-literal call's line there, not on the name's line).
+    val exprLine = r("line").num.toInt + lineOff
+    val cands0 = callIdx.getOrElse((path, nameLine), ArrayBuffer()).filter(c => nameOk(kind, callee, c)).toList
+    val cands = if (cands0.nonEmpty || exprLine == nameLine) cands0
+                else callIdx.getOrElse((path, exprLine), ArrayBuffer()).filter(c => nameOk(kind, callee, c)).toList
     // Joern gives some calls no column (-1, e.g. Java `<init>`): those sort after calls with a column
     val best = cands.sortBy(c => (if (colOf(c) < 0) Int.MaxValue else math.abs(colOf(c) - startCol), c.id)).headOption
     val nmAll = byName.getOrElse(callee, ArrayBuffer()).toList

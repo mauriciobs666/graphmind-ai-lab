@@ -1,0 +1,1305 @@
+{
+ "lang": "go",
+ "configs": {
+  "off": [
+   {
+    "ordinal": 2,
+    "siteKey": "binder_test.go:2001:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "FailFast",
+    "nameLine": 2001,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "server_test.go:574:15:waitForServerStart",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "waitForServerStart",
+    "nameLine": 574,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "binder_test.go:1116:7:createTestContext",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "createTestContext",
+    "nameLine": 1116,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "middleware/compress_test.go:66:8:r.Close",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Close",
+    "nameLine": 66,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "binder_test.go:1768:11:b.Float32s(\"param\", &dest).BindError",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindError",
+    "nameLine": 1768,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "binder_test.go:126:4:assert.Len",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Len",
+    "nameLine": 126,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "middleware/request_logger_test.go:410:12:time.Unix",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Unix",
+    "nameLine": 410,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "binder_test.go:3015:7:binder. Int64(\"int64\", &dest.Int64). Int32(\"int32\", &dest.Int32). Int16(\"int16\", &dest.Int16). Int8",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "Int8",
+    "nameLine": 3019,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "binder_test.go:2918:2:b.ResetTimer",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "ResetTimer",
+    "nameLine": 2918,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "binder_test.go:2263:24:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 2263,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "middleware/rate_limiter.go:271:8:store.mutex.Unlock",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Unlock",
+    "nameLine": 271,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "middleware/decompress_test.go:387:8:h",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "h",
+    "nameLine": 387,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 387,
+      "c": 2,
+      "code": "err = h(func(c *echo.Context) error {\n\t\t_, readErr := io.ReadAll(c.Request().Body)\n\t\treturn readErr\n",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 387,
+      "c": 8,
+      "code": "h(func(c *echo.Context) error {\n\t\t_, readErr := io.ReadAll(c.Request().Body)\n\t\treturn readErr\n\t})(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "binder_test.go:1575:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "FailFast",
+    "nameLine": 1575,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "binder_test.go:742:24:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 742,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "binder_test.go:3132:11:b.MustTimes(\"param\", &dest, layout).BindError",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindError",
+    "nameLine": 3132,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "binder_test.go:1188:28:fmt.Sprintf",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Sprintf",
+    "nameLine": 1188,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "server_test.go:386:14:s.StartTLS",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "StartTLS",
+    "nameLine": 386,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "rfc9457.go:98:53:wrapped.Error",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "Error",
+    "nameLine": 98,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "middleware/randomstring_concurrent_test.go:29:7:t.Errorf",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Errorf",
+    "nameLine": 29,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "binder_generic_test.go:182:14:QueryParams[bool]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "QueryParams",
+    "nameLine": 182,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 182,
+      "c": 14,
+      "code": "v, err := QueryParams[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 182,
+      "c": 14,
+      "code": "QueryParams[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 220,
+    "siteKey": "rfc9457.go:77:8:errors.As",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "As",
+    "nameLine": 77,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "middleware/rewrite_test.go:245:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "MustCompile",
+    "nameLine": 245,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 226,
+    "siteKey": "binder_test.go:1661:9:createTestContext",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "createTestContext",
+    "nameLine": 1661,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 227,
+    "siteKey": "binder_test.go:126:24:len",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "len",
+    "nameLine": 126,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 250,
+    "siteKey": "binder_generic_test.go:286:14:FormValues[bool]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "FormValues",
+    "nameLine": 286,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 286,
+      "c": 14,
+      "code": "v, err := FormValues[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 286,
+      "c": 14,
+      "code": "FormValues[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "router_concurrent_test.go:243:6:func(goroutineID int) { defer wg.Done() for range 100 { routes := router.Routes() // Actually iterate and access the route data // This would cause a data race if Routes() returned a direct reference for _, route := range routes { _ = route.Method // Read the method _ = route.Path // Read the path _ = route.Name // Read the name if len(route.Parameters) > 0 { _ = route.Parameters[0] // Read parameters if present } } iterationCount.Add(1) } }",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "Parameters",
+    "nameLine": 254,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 271,
+    "siteKey": "binder_test.go:2497:23:b.BindWithDelimiter",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindWithDelimiter",
+    "nameLine": 2497,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "binder_generic_test.go:572:14:ParseValue[uint]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "ParseValue",
+    "nameLine": 572,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 572,
+      "c": 14,
+      "code": "v, err := ParseValue[uint](tc.when)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 572,
+      "c": 14,
+      "code": "ParseValue[uint](tc.when)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 572,
+      "c": 31,
+      "code": "tc.when",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 283,
+    "siteKey": "middleware/proxy_test.go:366:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "MustCompile",
+    "nameLine": 366,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 288,
+    "siteKey": "binder_test.go:329:4:assert.Equal",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Equal",
+    "nameLine": 329,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "server_test.go:95:17:addr.String",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "String",
+    "nameLine": 95,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "middleware/body_dump_test.go:314:8:mw",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "mw",
+    "nameLine": 314,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 314,
+      "c": 2,
+      "code": "err = mw(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 314,
+      "c": 8,
+      "code": "mw(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "context_generic_test.go:47:12:ContextGetOr[int64]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "ContextGetOr",
+    "nameLine": 47,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 47,
+      "c": 12,
+      "code": "v, err := ContextGetOr[int64](c, \"key\", 999)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 47,
+      "c": 12,
+      "code": "ContextGetOr[int64](c, \"key\", 999)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "ip_test.go:637:19:ExtractIPFromRealIPHeader(tc.givenTrustOptions...)",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "<dynamic>",
+    "nameLine": 637,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 637,
+      "c": 19,
+      "code": "extractedIP := ExtractIPFromRealIPHeader(tc.givenTrustOptions...)(&tc.whenRequest)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 637,
+      "c": 19,
+      "code": "ExtractIPFromRealIPHeader(tc.givenTrustOptions...)(&tc.whenRequest)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.addressOf",
+      "l": 637,
+      "c": 70,
+      "code": "&tc.whenRequest",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 637,
+      "c": 71,
+      "code": "tc.whenRequest",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "binder_test.go:258:4:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 258,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 334,
+    "siteKey": "middleware/method_override_test.go:88:9:m",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "m",
+    "nameLine": 88,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 88,
+      "c": 9,
+      "code": "err := m(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 88,
+      "c": 9,
+      "code": "m(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "binder_test.go:242:5:assert.NoError",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "NoError",
+    "nameLine": 242,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "binder_test.go:1152:2:assert.Equal",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Equal",
+    "nameLine": 1152,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "router_concurrent.go:30:8:r.mu.RUnlock",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "RUnlock",
+    "nameLine": 30,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 2,
+    "siteKey": "binder_test.go:2001:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "FailFast",
+    "nameLine": 2001,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "server_test.go:574:15:waitForServerStart",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "waitForServerStart",
+    "nameLine": 574,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "binder_test.go:1116:7:createTestContext",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "createTestContext",
+    "nameLine": 1116,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "middleware/compress_test.go:66:8:r.Close",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Close",
+    "nameLine": 66,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "binder_test.go:1768:11:b.Float32s(\"param\", &dest).BindError",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindError",
+    "nameLine": 1768,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "binder_test.go:126:4:assert.Len",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Len",
+    "nameLine": 126,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "middleware/request_logger_test.go:410:12:time.Unix",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Unix",
+    "nameLine": 410,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "binder_test.go:3015:7:binder. Int64(\"int64\", &dest.Int64). Int32(\"int32\", &dest.Int32). Int16(\"int16\", &dest.Int16). Int8",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "Int8",
+    "nameLine": 3019,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "binder_test.go:2918:2:b.ResetTimer",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "ResetTimer",
+    "nameLine": 2918,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "binder_test.go:2263:24:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 2263,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "middleware/rate_limiter.go:271:8:store.mutex.Unlock",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Unlock",
+    "nameLine": 271,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "middleware/decompress_test.go:387:8:h",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "h",
+    "nameLine": 387,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 387,
+      "c": 2,
+      "code": "err = h(func(c *echo.Context) error {\n\t\t_, readErr := io.ReadAll(c.Request().Body)\n\t\treturn readErr\n",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 387,
+      "c": 8,
+      "code": "h(func(c *echo.Context) error {\n\t\t_, readErr := io.ReadAll(c.Request().Body)\n\t\treturn readErr\n\t})(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "binder_test.go:1575:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "FailFast",
+    "nameLine": 1575,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "binder_test.go:742:24:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 742,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "binder_test.go:3132:11:b.MustTimes(\"param\", &dest, layout).BindError",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindError",
+    "nameLine": 3132,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "binder_test.go:1188:28:fmt.Sprintf",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Sprintf",
+    "nameLine": 1188,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "server_test.go:386:14:s.StartTLS",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "StartTLS",
+    "nameLine": 386,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "rfc9457.go:98:53:wrapped.Error",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "Error",
+    "nameLine": 98,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "middleware/randomstring_concurrent_test.go:29:7:t.Errorf",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Errorf",
+    "nameLine": 29,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "binder_generic_test.go:182:14:QueryParams[bool]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "QueryParams",
+    "nameLine": 182,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 182,
+      "c": 14,
+      "code": "v, err := QueryParams[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 182,
+      "c": 14,
+      "code": "QueryParams[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 220,
+    "siteKey": "rfc9457.go:77:8:errors.As",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "As",
+    "nameLine": 77,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "middleware/rewrite_test.go:245:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "MustCompile",
+    "nameLine": 245,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 226,
+    "siteKey": "binder_test.go:1661:9:createTestContext",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "createTestContext",
+    "nameLine": 1661,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 227,
+    "siteKey": "binder_test.go:126:24:len",
+    "kind": "plain",
+    "internal": false,
+    "calleeName": "len",
+    "nameLine": 126,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 250,
+    "siteKey": "binder_generic_test.go:286:14:FormValues[bool]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "FormValues",
+    "nameLine": 286,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 286,
+      "c": 14,
+      "code": "v, err := FormValues[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 286,
+      "c": 14,
+      "code": "FormValues[bool](c, \"key\")",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "router_concurrent_test.go:243:6:func(goroutineID int) { defer wg.Done() for range 100 { routes := router.Routes() // Actually iterate and access the route data // This would cause a data race if Routes() returned a direct reference for _, route := range routes { _ = route.Method // Read the method _ = route.Path // Read the path _ = route.Name // Read the name if len(route.Parameters) > 0 { _ = route.Parameters[0] // Read parameters if present } } iterationCount.Add(1) } }",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "Parameters",
+    "nameLine": 254,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 271,
+    "siteKey": "binder_test.go:2497:23:b.BindWithDelimiter",
+    "kind": "method",
+    "internal": true,
+    "calleeName": "BindWithDelimiter",
+    "nameLine": 2497,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "binder_generic_test.go:572:14:ParseValue[uint]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "ParseValue",
+    "nameLine": 572,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 572,
+      "c": 14,
+      "code": "v, err := ParseValue[uint](tc.when)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 572,
+      "c": 14,
+      "code": "ParseValue[uint](tc.when)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 572,
+      "c": 31,
+      "code": "tc.when",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 283,
+    "siteKey": "middleware/proxy_test.go:366:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "MustCompile",
+    "nameLine": 366,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 288,
+    "siteKey": "binder_test.go:329:4:assert.Equal",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Equal",
+    "nameLine": 329,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "server_test.go:95:17:addr.String",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "String",
+    "nameLine": 95,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "middleware/body_dump_test.go:314:8:mw",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "mw",
+    "nameLine": 314,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 314,
+      "c": 2,
+      "code": "err = mw(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 314,
+      "c": 8,
+      "code": "mw(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "context_generic_test.go:47:12:ContextGetOr[int64]",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "ContextGetOr",
+    "nameLine": 47,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 47,
+      "c": 12,
+      "code": "v, err := ContextGetOr[int64](c, \"key\", 999)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 47,
+      "c": 12,
+      "code": "ContextGetOr[int64](c, \"key\", 999)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "ip_test.go:637:19:ExtractIPFromRealIPHeader(tc.givenTrustOptions...)",
+    "kind": "other",
+    "internal": true,
+    "calleeName": "<dynamic>",
+    "nameLine": 637,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 637,
+      "c": 19,
+      "code": "extractedIP := ExtractIPFromRealIPHeader(tc.givenTrustOptions...)(&tc.whenRequest)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 637,
+      "c": 19,
+      "code": "ExtractIPFromRealIPHeader(tc.givenTrustOptions...)(&tc.whenRequest)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.addressOf",
+      "l": 637,
+      "c": 70,
+      "code": "&tc.whenRequest",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "<operator>.fieldAccess",
+      "l": 637,
+      "c": 71,
+      "code": "tc.whenRequest",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "binder_test.go:258:4:errors.New",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "New",
+    "nameLine": 258,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 334,
+    "siteKey": "middleware/method_override_test.go:88:9:m",
+    "kind": "plain",
+    "internal": true,
+    "calleeName": "m",
+    "nameLine": 88,
+    "classification": "calls-present",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [
+     {
+      "name": "<operator>.assignment",
+      "l": 88,
+      "c": 9,
+      "code": "err := m(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     },
+     {
+      "name": "",
+      "l": 88,
+      "c": 9,
+      "code": "m(h)(c)",
+      "dispatch": "STATIC_DISPATCH"
+     }
+    ],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "binder_test.go:242:5:assert.NoError",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "NoError",
+    "nameLine": 242,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "binder_test.go:1152:2:assert.Equal",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "Equal",
+    "nameLine": 1152,
+    "classification": "absent-no-file-node",
+    "possibleMatcherError": false,
+    "fileNode": false,
+    "callsOnLine": [],
+    "probeRc": 0
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "router_concurrent.go:30:8:r.mu.RUnlock",
+    "kind": "method",
+    "internal": false,
+    "calleeName": "RUnlock",
+    "nameLine": 30,
+    "classification": "absent-no-call-on-line",
+    "possibleMatcherError": false,
+    "fileNode": true,
+    "callsOnLine": [],
+    "probeRc": 0
+   }
+  ]
+ }
+}

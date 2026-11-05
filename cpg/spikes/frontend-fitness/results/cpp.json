@@ -1,0 +1,2204 @@
+{
+ "lang": "cpp",
+ "provisional": true,
+ "truth": "truth/cpp.final.jsonl",
+ "labelledSites": 187,
+ "scoredSites": 176,
+ "unscoredSites": 11,
+ "unscoredReasons": {
+  "notACall": 10,
+  "dynamic": 1
+ },
+ "internalSites": 152,
+ "externalScoredSites": 24,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 152,
+  "scoredSites": 176,
+  "recall": {
+   "k": 72,
+   "n": 152,
+   "p": 0.4737,
+   "wilson95": [
+    0.3959,
+    0.5527
+   ]
+  },
+  "edgeRecall": {
+   "k": 75,
+   "n": 407,
+   "p": 0.1843,
+   "wilson95": [
+    0.1496,
+    0.2248
+   ]
+  },
+  "precision": {
+   "k": 5,
+   "n": 5,
+   "p": 1.0,
+   "wilson95": [
+    0.5655,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 19,
+   "n": 152,
+   "p": 0.125,
+   "wilson95": [
+    0.0815,
+    0.187
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 5,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.4345
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 30,
+   "n": 176,
+   "p": 0.1705,
+   "wilson95": [
+    0.1221,
+    0.2329
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 152,
+  "scoredSites": 176,
+  "recall": {
+   "k": 72,
+   "n": 152,
+   "p": 0.4737,
+   "wilson95": [
+    0.3959,
+    0.5527
+   ]
+  },
+  "edgeRecall": {
+   "k": 75,
+   "n": 407,
+   "p": 0.1843,
+   "wilson95": [
+    0.1496,
+    0.2248
+   ]
+  },
+  "precision": {
+   "k": 5,
+   "n": 5,
+   "p": 1.0,
+   "wilson95": [
+    0.5655,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 19,
+   "n": 152,
+   "p": 0.125,
+   "wilson95": [
+    0.0815,
+    0.187
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 5,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.4345
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 30,
+   "n": 176,
+   "p": 0.1705,
+   "wilson95": [
+    0.1221,
+    0.2329
+   ]
+  }
+ },
+ "gate81": {
+  "off": {
+   "n": 152,
+   "k": 72,
+   "observedRecall": 0.4737,
+   "verdict": "fail",
+   "maxMissesAt98": 3
+  },
+  "on": {
+   "n": 152,
+   "k": 72,
+   "observedRecall": 0.4737,
+   "verdict": "fail",
+   "maxMissesAt98": 3
+  }
+ },
+ "gate83": {
+  "off": {
+   "nP": 5,
+   "P": 1.0,
+   "verdict": "unmeasured (n_P < 60)"
+  },
+  "on": {
+   "nP": 5,
+   "P": 1.0,
+   "verdict": "unmeasured (n_P < 60)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 72,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 80,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0012,
+    0.0012
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 3538,
+   "median": 1,
+   "p90": 5,
+   "p99": 67,
+   "max": 67,
+   "shareOver20": {
+    "k": 194,
+    "n": 3538,
+    "p": 0.0548,
+    "wilson95": [
+     0.0478,
+     0.0628
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 3538,
+   "median": 1,
+   "p90": 5,
+   "p99": 67,
+   "max": 67,
+   "shareOver20": {
+    "k": 194,
+    "n": 3538,
+    "p": 0.0548,
+    "wilson95": [
+     0.0478,
+     0.0628
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 28490,
+   "matchRate": {
+    "k": 4496,
+    "n": 28490,
+    "p": 0.1578,
+    "wilson95": [
+     0.1536,
+     0.1621
+    ]
+   },
+   "frameFiles": 132,
+   "frameFilesWithFileNode": {
+    "k": 61,
+    "n": 132,
+    "p": 0.4621,
+    "wilson95": [
+     0.3793,
+     0.547
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 61,
+    "n": 132,
+    "p": 0.4621,
+    "wilson95": [
+     0.3793,
+     0.547
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin",
+    "lang": "cpp",
+    "files": 77,
+    "methods": 2744,
+    "calls": 6349,
+    "callsWithoutMethod": 0,
+    "frameSites": 28490
+   }
+  },
+  "on": {
+   "frameSites": 28490,
+   "matchRate": {
+    "k": 4496,
+    "n": 28490,
+    "p": 0.1578,
+    "wilson95": [
+     0.1536,
+     0.1621
+    ]
+   },
+   "frameFiles": 132,
+   "frameFilesWithFileNode": {
+    "k": 61,
+    "n": 132,
+    "p": 0.4621,
+    "wilson95": [
+     0.3793,
+     0.547
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 61,
+    "n": 132,
+    "p": 0.4621,
+    "wilson95": [
+     0.3793,
+     0.547
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "cpp",
+    "files": 77,
+    "methods": 2744,
+    "calls": 6349,
+    "callsWithoutMethod": 0,
+    "frameSites": 28490
+   }
+  }
+ },
+ "strata": null,
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 407,
+   "withJoernMethodAtDefLine": 317
+  },
+  "on": {
+   "tMembers": 407,
+   "withJoernMethodAtDefLine": 317
+  }
+ },
+ "misses": {
+  "off": 80,
+  "on": 80,
+  "either": 80,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 80
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 1,
+    "siteKey": "googletest/test/gtest_unittest.cc:829:17:random.Generate",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 2,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2445:33:AllOf",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 3,
+    "siteKey": "googletest/test/gtest_unittest.cc:687:21:WideStringToUtf8(L\"a\", -1).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 4,
+    "siteKey": "googletest/test/googletest-port-test.cc:371:3:EXPECT_DEATH_IF_SUPPORTED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 5,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:346:19:a.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:645:16:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 7,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2749:3:rhs.push_back",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 8,
+    "siteKey": "googletest/test/gtest_unittest.cc:6389:33:UnitTest::GetInstance",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "googletest/test/gtest_unittest.cc:4053:3:ASSERT_HRESULT_SUCCEEDED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1450:26:internal::StringView",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3546:33:ContainsSubsequence",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 12,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:671:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:234:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 14,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1346:22:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 17,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:360:3:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:818:15:ContainsRegex",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 22,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1921:34:WhenBase64Unescaped",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 23,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3425:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "googletest/test/gtest_unittest.cc:6335:36:CreateFlagfile",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2596:28:Each",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 26,
+    "siteKey": "googletest/test/gtest_unittest.cc:393:26:CanonicalizeForStdLibVersioning",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 27,
+    "siteKey": "googletest/test/gtest_unittest.cc:1552:3:TestResultAccessor::RecordProperty",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1859:46:Throws<uint32_t>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 29,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2200:25:listener1.str",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 30,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:187:18:IsTrue",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 31,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:612:3:CaptureStdout",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 32,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:406:11:Invoke",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 34,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:178:3:cc.Method",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2053:13:res.find",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1368:9:EXPECT_PRED4",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 38,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1654:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 39,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2159:33:UncopyableIs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:2176:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 41,
+    "siteKey": "googletest/test/googletest-port-test.cc:128:12:Base",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 43,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2174:3:a->DoA",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 44,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1413:40:HasSubstr",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 46,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3318:64:Le",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 47,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2017:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 48,
+    "siteKey": "googletest/src/gtest-death-test.cc:119:5:testing::internal::BoolFromGTestEnv",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 49,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:268:15:c.IsSaturatedByCallCount",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 51,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:259:15:m.Matches",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 52,
+    "siteKey": "googletest/test/gtest_unittest.cc:7391:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 53,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3303:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1464:24:Expectation",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 56,
+    "siteKey": "googletest/test/gtest-unittest-api_test.cc:277:17:IsNull",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "googletest/test/gtest_unittest.cc:1617:5:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:238:23:IsNan",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 60,
+    "siteKey": "googletest/test/gtest_throw_on_failure_ex_test.cc:47:3:exit",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "googletest/test/gtest_unittest.cc:6228:3:EXPECT_EXIT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:677:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 67,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2793:20:UnorderedPointwise",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5894:32:std::forward<MessageMatcher>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "googlemock/test/gmock-function-mocker_test.cc:573:13:std::move(mock_foo).RefQualifiedOverloaded",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 70,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:192:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 71,
+    "siteKey": "googletest/test/googletest-output-test_.cc:657:3:EXPECT_FATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 72,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:430:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 73,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:431:13:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "googletest/test/gtest_unittest.cc:1349:9:AddNonfatalFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2397:15:listener.str",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 77,
+    "siteKey": "googletest/src/gtest-port.cc:1109:10:GetArgvs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 78,
+    "siteKey": "googletest/test/googletest-output-test_.cc:240:3:ADD_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 80,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:604:20:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 81,
+    "siteKey": "googletest/test/gtest_unittest.cc:3527:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:210:39:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 84,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:1836:28:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 85,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:1103:17:a1.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "googletest/src/gtest-death-test.cc:160:11:GTEST_FLAG_GET(internal_run_death_test).empty",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 87,
+    "siteKey": "googletest/test/gtest_unittest.cc:7533:18:tuple.Get<1>",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "googletest/test/gtest_unittest.cc:3042:27:EXPECT_DOUBLE_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 89,
+    "siteKey": "googletest/test/googletest-param-test-test.cc:698:11:UnitTestOptions::FilterMatchesTest",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2816:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:245:14:new Iterator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "googletest/src/gtest-port.cc:502:53:::GetLastError",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:249:7:FilePath::MakeFileName",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2528:14:Binary",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 96,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1528:18:AllOfArray",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2020:22:PrintToString",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "googletest/src/gtest.cc:5080:11:connect",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 100,
+    "siteKey": "googlemock/test/gmock-internal-utils_test.cc:379:15:LogIsVisible",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "googlemock/test/gmock_link_test.h:542:32:TypedEq<int&>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 102,
+    "siteKey": "googletest/test/gtest_unittest.cc:7752:19:unittest->GetTestSuite",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 104,
+    "siteKey": "googletest/test/gtest_unittest.cc:1211:5:AddFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 107,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1622:3:EXPECT_NONFATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 110,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1550:24:NanSensitiveDoubleEq",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:246:42:Return",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 112,
+    "siteKey": "googletest/test/googletest-test-part-test.cc:90:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 113,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:3559:43:std::declval<const Struct&>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "googletest/test/gtest_unittest.cc:3134:24:ASSERT_NEAR",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 115,
+    "siteKey": "googletest/test/gtest_unittest.cc:3184:3:FAIL",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 116,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3520:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:147:16:c.IsSaturatedByCallCount",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 118,
+    "siteKey": "googletest/test/googletest-printers-test.cc:1043:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 119,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:465:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 121,
+    "siteKey": "googletest/test/googletest-listener-test.cc:139:16:GetFullMethodName",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5474:7:std::forward<M>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:144:40:impl_->Current",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:340:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "googletest/test/gtest_unittest.cc:6131:3:GTEST_TEST_PARSING_FLAGS_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 128,
+    "siteKey": "googletest/test/gtest_unittest.cc:4927:3:EXPECT_NONFATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 130,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:661:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:29:FieldsAre",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "googletest/include/gtest/internal/gtest-internal.h:605:15:FormatFileLocation(test->file, test->line).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 133,
+    "siteKey": "googletest/test/gtest_stress_test.cc:141:26:result->GetTestProperty",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 134,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:934:30:Describe",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:577:28:DistanceFrom",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 136,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:2065:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 138,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1571:30:Ge",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 139,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:1086:38:IncrementArg2",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 142,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1446:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:490:10:BacktrackingMaxBPMState<Graph>(&g).Compute",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:322:5:EXPECT_DEATH",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 147,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:371:3:EXPECT_PRED_FORMAT2",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "googletest/src/gtest-death-test.cc:770:7:::_open_osfhandle",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 149,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:890:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 150,
+    "siteKey": "googlemock/test/gmock_link_test.h:648:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "googletest/src/gtest-death-test.cc:1313:5:GTEST_DEATH_TEST_CHECK_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 153,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:1537:48:GreaterThan",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:1221:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 156,
+    "siteKey": "googletest/test/gtest_unittest.cc:2051:18:test_suite->ad_hoc_test_result().test_property_count",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:414:13:Explain",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 159,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3280:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "googletest/test/googletest-param-test-test.cc:1079:3:EXPECT_STREQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:412:15:DefaultValue<int>::Exists",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 162,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1099:23:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "googlemock/test/gmock-nice-strict_test.cc:443:16:Mock::IsStrict",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 167,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:321:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 168,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1692:60:Pointee",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:828:15:raise",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 170,
+    "siteKey": "googletest/test/googletest-printers-test.cc:1890:38:p.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2348:5:s.push_back",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 172,
+    "siteKey": "googletest/test/gtest_unittest.cc:1110:16:String::CaseInsensitiveWideCStringEquals",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 173,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:431:16:DefaultValue<MyNonDefaultConstructible>::IsSet",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1608:26:DescribeNegation",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 175,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:1094:3:a.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:248:32:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 177,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1275:3:EXPECT_CALL(a, ReturnResult(2)).InSequence",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 178,
+    "siteKey": "googletest/test/gtest_unittest.cc:438:22:FormatTimeInMillisAsSeconds",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 179,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:896:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 180,
+    "siteKey": "googletest/test/gtest_unittest.cc:2680:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 182,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:354:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1241:15:StartsWith",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 184,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2382:33:DivisibleByImpl",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2827:43:IsHalfOf",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 186,
+    "siteKey": "googletest/test/gtest_unittest.cc:2449:3:EXPECT_PRED1",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 187,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:140:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 1,
+    "siteKey": "googletest/test/gtest_unittest.cc:829:17:random.Generate",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 2,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2445:33:AllOf",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 3,
+    "siteKey": "googletest/test/gtest_unittest.cc:687:21:WideStringToUtf8(L\"a\", -1).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 4,
+    "siteKey": "googletest/test/googletest-port-test.cc:371:3:EXPECT_DEATH_IF_SUPPORTED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 5,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:346:19:a.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:645:16:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 7,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2749:3:rhs.push_back",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 8,
+    "siteKey": "googletest/test/gtest_unittest.cc:6389:33:UnitTest::GetInstance",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "googletest/test/gtest_unittest.cc:4053:3:ASSERT_HRESULT_SUCCEEDED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1450:26:internal::StringView",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3546:33:ContainsSubsequence",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 12,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:671:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:234:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 14,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1346:22:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 17,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:360:3:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:818:15:ContainsRegex",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 22,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1921:34:WhenBase64Unescaped",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 23,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3425:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "googletest/test/gtest_unittest.cc:6335:36:CreateFlagfile",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2596:28:Each",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 26,
+    "siteKey": "googletest/test/gtest_unittest.cc:393:26:CanonicalizeForStdLibVersioning",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 27,
+    "siteKey": "googletest/test/gtest_unittest.cc:1552:3:TestResultAccessor::RecordProperty",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1859:46:Throws<uint32_t>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 29,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2200:25:listener1.str",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 30,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:187:18:IsTrue",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 31,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:612:3:CaptureStdout",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 32,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:406:11:Invoke",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 34,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:178:3:cc.Method",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2053:13:res.find",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1368:9:EXPECT_PRED4",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 38,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1654:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 39,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2159:33:UncopyableIs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:2176:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 41,
+    "siteKey": "googletest/test/googletest-port-test.cc:128:12:Base",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 43,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2174:3:a->DoA",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 44,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1413:40:HasSubstr",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 46,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3318:64:Le",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 47,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2017:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 48,
+    "siteKey": "googletest/src/gtest-death-test.cc:119:5:testing::internal::BoolFromGTestEnv",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 49,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:268:15:c.IsSaturatedByCallCount",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 51,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:259:15:m.Matches",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 52,
+    "siteKey": "googletest/test/gtest_unittest.cc:7391:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 53,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3303:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1464:24:Expectation",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 56,
+    "siteKey": "googletest/test/gtest-unittest-api_test.cc:277:17:IsNull",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "googletest/test/gtest_unittest.cc:1617:5:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:238:23:IsNan",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 60,
+    "siteKey": "googletest/test/gtest_throw_on_failure_ex_test.cc:47:3:exit",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "googletest/test/gtest_unittest.cc:6228:3:EXPECT_EXIT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:677:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 67,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2793:20:UnorderedPointwise",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5894:32:std::forward<MessageMatcher>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "googlemock/test/gmock-function-mocker_test.cc:573:13:std::move(mock_foo).RefQualifiedOverloaded",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 70,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:192:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 71,
+    "siteKey": "googletest/test/googletest-output-test_.cc:657:3:EXPECT_FATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 72,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:430:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 73,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:431:13:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "googletest/test/gtest_unittest.cc:1349:9:AddNonfatalFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2397:15:listener.str",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 77,
+    "siteKey": "googletest/src/gtest-port.cc:1109:10:GetArgvs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 78,
+    "siteKey": "googletest/test/googletest-output-test_.cc:240:3:ADD_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 80,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:604:20:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 81,
+    "siteKey": "googletest/test/gtest_unittest.cc:3527:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:210:39:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 84,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:1836:28:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 85,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:1103:17:a1.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "googletest/src/gtest-death-test.cc:160:11:GTEST_FLAG_GET(internal_run_death_test).empty",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 87,
+    "siteKey": "googletest/test/gtest_unittest.cc:7533:18:tuple.Get<1>",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "googletest/test/gtest_unittest.cc:3042:27:EXPECT_DOUBLE_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 89,
+    "siteKey": "googletest/test/googletest-param-test-test.cc:698:11:UnitTestOptions::FilterMatchesTest",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2816:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:245:14:new Iterator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "googletest/src/gtest-port.cc:502:53:::GetLastError",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:249:7:FilePath::MakeFileName",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2528:14:Binary",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 96,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1528:18:AllOfArray",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2020:22:PrintToString",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "googletest/src/gtest.cc:5080:11:connect",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 100,
+    "siteKey": "googlemock/test/gmock-internal-utils_test.cc:379:15:LogIsVisible",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "googlemock/test/gmock_link_test.h:542:32:TypedEq<int&>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 102,
+    "siteKey": "googletest/test/gtest_unittest.cc:7752:19:unittest->GetTestSuite",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 104,
+    "siteKey": "googletest/test/gtest_unittest.cc:1211:5:AddFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 107,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1622:3:EXPECT_NONFATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 110,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1550:24:NanSensitiveDoubleEq",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:246:42:Return",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 112,
+    "siteKey": "googletest/test/googletest-test-part-test.cc:90:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 113,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:3559:43:std::declval<const Struct&>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "googletest/test/gtest_unittest.cc:3134:24:ASSERT_NEAR",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 115,
+    "siteKey": "googletest/test/gtest_unittest.cc:3184:3:FAIL",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 116,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3520:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:147:16:c.IsSaturatedByCallCount",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 118,
+    "siteKey": "googletest/test/googletest-printers-test.cc:1043:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 119,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:465:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 121,
+    "siteKey": "googletest/test/googletest-listener-test.cc:139:16:GetFullMethodName",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5474:7:std::forward<M>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:144:40:impl_->Current",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:340:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "googletest/test/gtest_unittest.cc:6131:3:GTEST_TEST_PARSING_FLAGS_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 128,
+    "siteKey": "googletest/test/gtest_unittest.cc:4927:3:EXPECT_NONFATAL_FAILURE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 130,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:661:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:29:FieldsAre",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "googletest/include/gtest/internal/gtest-internal.h:605:15:FormatFileLocation(test->file, test->line).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 133,
+    "siteKey": "googletest/test/gtest_stress_test.cc:141:26:result->GetTestProperty",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 134,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:934:30:Describe",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:577:28:DistanceFrom",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 136,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:2065:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 138,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1571:30:Ge",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 139,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:1086:38:IncrementArg2",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 142,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1446:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:490:10:BacktrackingMaxBPMState<Graph>(&g).Compute",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:322:5:EXPECT_DEATH",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 147,
+    "siteKey": "googlemock/test/gmock-cardinalities_test.cc:371:3:EXPECT_PRED_FORMAT2",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "googletest/src/gtest-death-test.cc:770:7:::_open_osfhandle",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 149,
+    "siteKey": "googlemock/test/gmock-more-actions_test.cc:890:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 150,
+    "siteKey": "googlemock/test/gmock_link_test.h:648:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "googletest/src/gtest-death-test.cc:1313:5:GTEST_DEATH_TEST_CHECK_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 153,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:1537:48:GreaterThan",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:1221:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 156,
+    "siteKey": "googletest/test/gtest_unittest.cc:2051:18:test_suite->ad_hoc_test_result().test_property_count",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:414:13:Explain",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 159,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3280:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "googletest/test/googletest-param-test-test.cc:1079:3:EXPECT_STREQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:412:15:DefaultValue<int>::Exists",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 162,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1099:23:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "googlemock/test/gmock-nice-strict_test.cc:443:16:Mock::IsStrict",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 167,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:321:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 168,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1692:60:Pointee",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:828:15:raise",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 170,
+    "siteKey": "googletest/test/googletest-printers-test.cc:1890:38:p.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2348:5:s.push_back",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 172,
+    "siteKey": "googletest/test/gtest_unittest.cc:1110:16:String::CaseInsensitiveWideCStringEquals",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 173,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:431:16:DefaultValue<MyNonDefaultConstructible>::IsSet",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "googlemock/test/gmock-matchers-arithmetic_test.cc:1608:26:DescribeNegation",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 175,
+    "siteKey": "googlemock/test/gmock-actions_test.cc:1094:3:a.Perform",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:248:32:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 177,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:1275:3:EXPECT_CALL(a, ReturnResult(2)).InSequence",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 178,
+    "siteKey": "googletest/test/gtest_unittest.cc:438:22:FormatTimeInMillisAsSeconds",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 179,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:896:3:EXPECT_FALSE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 180,
+    "siteKey": "googletest/test/gtest_unittest.cc:2680:3:EXPECT_TRUE",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 182,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:354:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1241:15:StartsWith",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 184,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:2382:33:DivisibleByImpl",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:2827:43:IsHalfOf",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 186,
+    "siteKey": "googletest/test/gtest_unittest.cc:2449:3:EXPECT_PRED1",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 187,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:140:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:53:45Z",
+   "wallSeconds": 10.1,
+   "peakMemMiB": 535.8,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin",
+   "cpgMB": 3.35
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:05:12Z",
+   "wallSeconds": 5.2,
+   "peakMemMiB": 435.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin=2744",
+    "CONTENT /out/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:05:18Z",
+   "wallSeconds": 6.8,
+   "peakMemMiB": 424.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/ade2d09f-33b0-4911-8784-9c22000f398f.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=cpp",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:54:15Z",
+   "wallSeconds": 10.7,
+   "peakMemMiB": 537.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/parse.log",
+   "fetchFlag": null,
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/on.cpg.bin",
+   "cpgMB": 3.35
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:05:26Z",
+   "wallSeconds": 5.5,
+   "peakMemMiB": 426.7,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=2744",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:05:32Z",
+   "wallSeconds": 6.8,
+   "peakMemMiB": 421.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/a4efcb96-2477-4f51-a989-722d9e860596.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/ade2d09f-33b0-4911-8784-9c22000f398f.measure.jsonl",
+   "sha256": "62e7dd14b0a4fd111855032429ac10279120a6bf2477a235e8422b4a5d94f680"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/a4efcb96-2477-4f51-a989-722d9e860596.measure.jsonl",
+   "sha256": "4acd7dc81707f4c5cc6f4c022a4ba64f6a5dbd3d826521beca86eb9ccf8ae8b8"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

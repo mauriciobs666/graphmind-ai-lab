@@ -1,0 +1,1281 @@
+{
+ "lang": "javascript",
+ "provisional": true,
+ "truth": "truth/javascript.final.jsonl",
+ "labelledSites": 523,
+ "scoredSites": 523,
+ "unscoredSites": 0,
+ "unscoredReasons": {},
+ "internalSites": 184,
+ "externalScoredSites": 339,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 184,
+  "scoredSites": 523,
+  "recall": {
+   "k": 148,
+   "n": 184,
+   "p": 0.8043,
+   "wilson95": [
+    0.7411,
+    0.8552
+   ]
+  },
+  "edgeRecall": {
+   "k": 148,
+   "n": 187,
+   "p": 0.7914,
+   "wilson95": [
+    0.7276,
+    0.8435
+   ]
+  },
+  "precision": {
+   "k": 102,
+   "n": 102,
+   "p": 1.0,
+   "wilson95": [
+    0.9637,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 44,
+   "n": 184,
+   "p": 0.2391,
+   "wilson95": [
+    0.1832,
+    0.3057
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 102,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.0363
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 462,
+   "n": 523,
+   "p": 0.8834,
+   "wilson95": [
+    0.853,
+    0.9081
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 184,
+  "scoredSites": 523,
+  "recall": {
+   "k": 148,
+   "n": 184,
+   "p": 0.8043,
+   "wilson95": [
+    0.7411,
+    0.8552
+   ]
+  },
+  "edgeRecall": {
+   "k": 148,
+   "n": 187,
+   "p": 0.7914,
+   "wilson95": [
+    0.7276,
+    0.8435
+   ]
+  },
+  "precision": {
+   "k": 102,
+   "n": 102,
+   "p": 1.0,
+   "wilson95": [
+    0.9637,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 44,
+   "n": 184,
+   "p": 0.2391,
+   "wilson95": [
+    0.1832,
+    0.3057
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 102,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.0363
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 462,
+   "n": 523,
+   "p": 0.8834,
+   "wilson95": [
+    0.853,
+    0.9081
+   ]
+  }
+ },
+ "gate81": {
+  "off": {
+   "n": 184,
+   "k": 148,
+   "observedRecall": 0.8043,
+   "verdict": "fail",
+   "maxMissesAt98": 3
+  },
+  "on": {
+   "n": 184,
+   "k": 148,
+   "observedRecall": 0.8043,
+   "verdict": "fail",
+   "maxMissesAt98": 3
+  }
+ },
+ "gate83": {
+  "off": {
+   "nP": 102,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  },
+  "on": {
+   "nP": 102,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 148,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 36,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0124,
+    0.0124
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 360,
+   "median": 0,
+   "p90": 0,
+   "p99": 1,
+   "max": 2,
+   "shareOver20": {
+    "k": 0,
+    "n": 360,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0106
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 360,
+   "median": 0,
+   "p90": 0,
+   "p99": 1,
+   "max": 2,
+   "shareOver20": {
+    "k": 0,
+    "n": 360,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0106
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 523,
+   "matchRate": {
+    "k": 462,
+    "n": 523,
+    "p": 0.8834,
+    "wilson95": [
+     0.853,
+     0.9081
+    ]
+   },
+   "frameFiles": 40,
+   "frameFilesWithFileNode": {
+    "k": 35,
+    "n": 40,
+    "p": 0.875,
+    "wilson95": [
+     0.7389,
+     0.9454
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 35,
+    "n": 40,
+    "p": 0.875,
+    "wilson95": [
+     0.7389,
+     0.9454
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin",
+    "lang": "javascript",
+    "files": 41,
+    "methods": 232,
+    "calls": 785,
+    "callsWithoutMethod": 0,
+    "frameSites": 523
+   }
+  },
+  "on": {
+   "frameSites": 523,
+   "matchRate": {
+    "k": 462,
+    "n": 523,
+    "p": 0.8834,
+    "wilson95": [
+     0.853,
+     0.9081
+    ]
+   },
+   "frameFiles": 40,
+   "frameFilesWithFileNode": {
+    "k": 35,
+    "n": 40,
+    "p": 0.875,
+    "wilson95": [
+     0.7389,
+     0.9454
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 35,
+    "n": 40,
+    "p": 0.875,
+    "wilson95": [
+     0.7389,
+     0.9454
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "javascript",
+    "files": 41,
+    "methods": 232,
+    "calls": 785,
+    "callsWithoutMethod": 0,
+    "frameSites": 523
+   }
+  }
+ },
+ "strata": {
+  "contactFiles": [
+   "src/api/client.ts",
+   "src/api/endpoints.ts"
+  ],
+  "contact": {
+   "off": {
+    "internalSites": 19,
+    "recall": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "gate81": null
+   },
+   "on": {
+    "internalSites": 19,
+    "recall": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "gate81": null
+   },
+   "scoredSites": 37
+  },
+  "nonContact": {
+   "off": {
+    "internalSites": 165,
+    "recall": {
+     "k": 129,
+     "n": 165,
+     "p": 0.7818,
+     "wilson95": [
+      0.7128,
+      0.838
+     ]
+    },
+    "precision": {
+     "k": 83,
+     "n": 83,
+     "p": 1.0,
+     "wilson95": [
+      0.9558,
+      1.0
+     ]
+    },
+    "gate81": "fail"
+   },
+   "on": {
+    "internalSites": 165,
+    "recall": {
+     "k": 129,
+     "n": 165,
+     "p": 0.7818,
+     "wilson95": [
+      0.7128,
+      0.838
+     ]
+    },
+    "precision": {
+     "k": 83,
+     "n": 83,
+     "p": 1.0,
+     "wilson95": [
+      0.9558,
+      1.0
+     ]
+    },
+    "gate81": "fail"
+   },
+   "scoredSites": 486
+  },
+  "note": "provisional (final.jsonl); S27 reports final2. The contact-file test is the site's path (final.jsonl `site`, path:line) in contact.json files."
+ },
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 187,
+   "withJoernMethodAtDefLine": 173
+  },
+  "on": {
+   "tMembers": 187,
+   "withJoernMethodAtDefLine": 173
+  }
+ },
+ "misses": {
+  "off": 36,
+  "on": 36,
+  "either": 36,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 36
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 1,
+    "siteKey": "src/i18n/useLocale.ts:21:21:useCallback",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/i18n/LanguageChooser.tsx:39:17:useTranslation",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/i18n/LanguageChooser.tsx:63:10:locales.map",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat(locale, { style: 'currency', currency }).format",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use(initReactI18next).init",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat(locale, options).format",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/i18n/useLocale.ts:19:20:useTranslation",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/i18n/LanguageChooser.tsx:56:8:t",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/i18n/format.ts:26:48:new Date",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/i18n/LanguageChooser.tsx:40:25:useLocale",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 335,
+    "siteKey": "src/i18n/useLocale.ts:23:12:i18n.changeLanguage",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 402,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/i18n/LanguageChooser.tsx:44:5:onChange",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 451,
+    "siteKey": "src/i18n/LanguageChooser.tsx:70:10:t",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 502,
+    "siteKey": "src/i18n/LanguageChooser.tsx:48:5:setLocale",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 1,
+    "siteKey": "src/i18n/useLocale.ts:21:21:useCallback",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 11,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/i18n/LanguageChooser.tsx:39:17:useTranslation",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/i18n/LanguageChooser.tsx:63:10:locales.map",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/i18n/format.ts:16:10:new Intl.NumberFormat(locale, { style: 'currency', currency }).format",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use(initReactI18next).init",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 161,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat(locale, options).format",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/i18n/useLocale.ts:19:20:useTranslation",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/i18n/LanguageChooser.tsx:56:8:t",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/i18n/format.ts:26:48:new Date",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/i18n/LanguageChooser.tsx:40:25:useLocale",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 335,
+    "siteKey": "src/i18n/useLocale.ts:23:12:i18n.changeLanguage",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 402,
+    "siteKey": "src/i18n/config.ts:33:8:i18n.use",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/i18n/LanguageChooser.tsx:44:5:onChange",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 451,
+    "siteKey": "src/i18n/LanguageChooser.tsx:70:10:t",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/i18n/format.ts:27:10:new Intl.DateTimeFormat",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 502,
+    "siteKey": "src/i18n/LanguageChooser.tsx:48:5:setLocale",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:33:34Z",
+   "wallSeconds": 6.4,
+   "peakMemMiB": 339.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin",
+   "cpgMB": 0.78
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:02:28Z",
+   "wallSeconds": 5.9,
+   "peakMemMiB": 451.5,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin=232",
+    "CONTENT /out/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:02:36Z",
+   "wallSeconds": 6.6,
+   "peakMemMiB": 424.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/5bd17830-8924-4b0a-9303-0d7855587b66.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=javascript",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:33:56Z",
+   "wallSeconds": 6.6,
+   "peakMemMiB": 712.6,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/parse.log",
+   "fetchFlag": null,
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/on.cpg.bin",
+   "cpgMB": 0.78
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:02:45Z",
+   "wallSeconds": 5.7,
+   "peakMemMiB": 526.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=232",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:02:52Z",
+   "wallSeconds": 6.5,
+   "peakMemMiB": 426.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/2c1b8acf-e715-42d9-992e-8ad2f34ee088.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/5bd17830-8924-4b0a-9303-0d7855587b66.measure.jsonl",
+   "sha256": "a737a53574dea3d4ab6818788d4d5b360364fded79597057fb8e4eb233d325dc"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/2c1b8acf-e715-42d9-992e-8ad2f34ee088.measure.jsonl",
+   "sha256": "d6586dc41434d263d6a6375d9c27ba7ed77eb2743744294769a9fad673d30b0a"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

@@ -1,0 +1,4565 @@
+{
+ "lang": "java",
+ "provisional": true,
+ "truth": "truth/java.final.jsonl",
+ "labelledSites": 500,
+ "scoredSites": 500,
+ "unscoredSites": 0,
+ "unscoredReasons": {},
+ "internalSites": 114,
+ "externalScoredSites": 386,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 114,
+  "scoredSites": 500,
+  "recall": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "edgeRecall": {
+   "k": 138,
+   "n": 147,
+   "p": 0.9388,
+   "wilson95": [
+    0.8877,
+    0.9675
+   ]
+  },
+  "precision": {
+   "k": 47,
+   "n": 47,
+   "p": 1.0,
+   "wilson95": [
+    0.9244,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 4,
+   "n": 114,
+   "p": 0.0351,
+   "wilson95": [
+    0.0137,
+    0.0868
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 6,
+   "n": 47,
+   "p": 0.1277,
+   "wilson95": [
+    0.0598,
+    0.2517
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 157,
+   "n": 500,
+   "p": 0.314,
+   "wilson95": [
+    0.2749,
+    0.356
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 114,
+  "scoredSites": 500,
+  "recall": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "edgeRecall": {
+   "k": 138,
+   "n": 147,
+   "p": 0.9388,
+   "wilson95": [
+    0.8877,
+    0.9675
+   ]
+  },
+  "precision": {
+   "k": 50,
+   "n": 50,
+   "p": 1.0,
+   "wilson95": [
+    0.9287,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 1,
+   "n": 114,
+   "p": 0.0088,
+   "wilson95": [
+    0.0016,
+    0.048
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 6,
+   "n": 50,
+   "p": 0.12,
+   "wilson95": [
+    0.0562,
+    0.238
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 157,
+   "n": 500,
+   "p": 0.314,
+   "wilson95": [
+    0.2749,
+    0.356
+   ]
+  }
+ },
+ "gate81": {
+  "off": {
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "verdict": "fail",
+   "maxMissesAt98": 2
+  },
+  "on": {
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "verdict": "fail",
+   "maxMissesAt98": 2
+  }
+ },
+ "gate83": {
+  "off": {
+   "nP": 47,
+   "P": 1.0,
+   "verdict": "unmeasured (n_P < 60)"
+  },
+  "on": {
+   "nP": 50,
+   "P": 1.0,
+   "verdict": "unmeasured (n_P < 60)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 105,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 9,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0275,
+    0.0275
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 797,
+   "median": 0,
+   "p90": 0,
+   "p99": 4,
+   "max": 19,
+   "shareOver20": {
+    "k": 0,
+    "n": 797,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0048
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 772,
+   "median": 0,
+   "p90": 0,
+   "p99": 4,
+   "max": 4,
+   "shareOver20": {
+    "k": 0,
+    "n": 772,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.005
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 3693,
+   "matchRate": {
+    "k": 1133,
+    "n": 3693,
+    "p": 0.3068,
+    "wilson95": [
+     0.2921,
+     0.3219
+    ]
+   },
+   "frameFiles": 64,
+   "frameFilesWithFileNode": {
+    "k": 49,
+    "n": 64,
+    "p": 0.7656,
+    "wilson95": [
+     0.6487,
+     0.8525
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 49,
+    "n": 64,
+    "p": 0.7656,
+    "wilson95": [
+     0.6487,
+     0.8525
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin",
+    "lang": "java",
+    "files": 88,
+    "methods": 441,
+    "calls": 1209,
+    "callsWithoutMethod": 0,
+    "frameSites": 3693
+   }
+  },
+  "on": {
+   "frameSites": 3693,
+   "matchRate": {
+    "k": 1133,
+    "n": 3693,
+    "p": 0.3068,
+    "wilson95": [
+     0.2921,
+     0.3219
+    ]
+   },
+   "frameFiles": 64,
+   "frameFilesWithFileNode": {
+    "k": 49,
+    "n": 64,
+    "p": 0.7656,
+    "wilson95": [
+     0.6487,
+     0.8525
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 49,
+    "n": 64,
+    "p": 0.7656,
+    "wilson95": [
+     0.6487,
+     0.8525
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "java",
+    "files": 88,
+    "methods": 441,
+    "calls": 1209,
+    "callsWithoutMethod": 0,
+    "frameSites": 3693
+   }
+  }
+ },
+ "strata": null,
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 147,
+   "withJoernMethodAtDefLine": 138
+  },
+  "on": {
+   "tMembers": 147,
+   "withJoernMethodAtDefLine": 138
+  }
+ },
+ "misses": {
+  "off": 9,
+  "on": 9,
+  "either": 9,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 9
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 2,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:168:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 5,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:70:24:MockMvcBuilders.standaloneSetup(specialtyRestControllerV1) .setControllerAdvice(new ExceptionControllerAdvice()) .build",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:113:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 8,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:313:30:put(\"/api/owners/1\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:204:20:visitArr[0].getPet().getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:394:9:assertThat(petType3.getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 12,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:139:24:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:426:9:this.mockMvc.perform(post(\"/api/owners/1000000/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 15,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:158:6:this.mockMvc.perform(post(\"/api/specialties\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 16,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:133:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 18,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:353:20:owners.getTotalPages",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:192:15:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 20,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:99:48:Sort.by",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 21,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:355:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 22,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:170:6:this.mockMvc.perform(post(\"/api/visits\") .content(newVisitAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:485:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:410:17:new DataIntegrityViolationException",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 26,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:519:56:expectedSpecialties.size",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 27,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:670:9:petDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 30,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:464:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 31,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:445:24:jsonPath(\"$.schemaValidationErrors\").isArray",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 32,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:426:30:post(\"/api/owners/1000000/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 33,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:409:15:this.clinicService.findOwnerById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:552:30:post(\"/api/owners/1/pets/1/visits\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:122:9:given(this.clinicService.findPets(pageRequest)) .willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 38,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:223:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 39,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:70:9:user.setPassword",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:146:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:448:32:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 43,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:96:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 44,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:152:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect(jsonPath(\"$.[0].name\").value(\"dog\")) .andExpect(jsonPath(\"$.[1].id\").value(4)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 45,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:104:20:owner.id(4).firstName",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 47,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:90:9:owner.setCity",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 50,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:30:get(\"/api/pettypes/999\") .accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 51,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 53,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:158:24:jsonPath(\"$.[1].id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 55,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:98:20:ownerWithPet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:9:pet.id(id).name(name).birthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 58,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:407:20:petType.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:111:22:new PetDto",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 60,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:28:9:user.setEnabled",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:77:6:petType.setId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 63,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:420:9:this.clinicService.savePetType",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 65,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:353:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:246:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:236:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 71,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:214:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 72,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:41:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:167:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:191:27:put(\"/api/specialties/1\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 78,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:160:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 79,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:252:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 80,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:68:9:assertThat(owners.isEmpty()).isTrue",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:464:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:220:9:this.clinicService.deletePet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 84,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:233:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 85,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:337:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:522:30:post(\"/api/owners\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 87,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:120:27:PageRequest.of",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:518:31:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 89,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:183:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:95:18:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:253:23:owners.get(0).getId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:181:24:jsonPath(\"$.name\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:144:9:assertThat(owner6.getPets().size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 94,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:72:9:owners.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:111:9:this.mockMvc.perform(get(\"/api/vets/999\") .accept(MediaType.APPLICATION_JSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 96,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:84:18:pet.id(3) .name",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:345:24:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:212:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:147:27:post(\"/api/vets\") .content(newVetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 102,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:131:24:jsonPath(\"$.size\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 103,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:363:9:newPet.setName",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 104,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:407:9:assertThat(petType.getId().longValue()).isNotEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 105,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:318:16:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 106,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:207:21:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 107,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:254:9:visit.setPet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:421:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 109,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:104:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:107:9:this.clinicService.saveOwner",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:479:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 115,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:120:60:visits.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 116,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:491:24:jsonPath(\"$.schemaValidationErrors[0].defaultMessage\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 119,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:347:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 120,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:237:27:delete(\"/api/pettypes/1\") .content(newPetTypeAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:235:15:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:524:24:actual.getId().equals",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:242:9:assertThat(visit3.getPet().getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 125,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:174:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:392:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 127,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/ClinicServiceSpringDataJpaTests.java:24:9:entityManager.clear",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 129,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:240:20:visit1.getPet().getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 130,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:486:24:jsonPath(\"$.title\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:216:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:325:9:given(this.clinicService.findOwnerById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 134,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:470:24:jsonPath(\"$.schemaValidationErrors[0].defaultMessage\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:167:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:211:27:put(\"/api/visits/2\") .content(newVisitAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 139,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:245:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:476:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 141,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:498:9:assertThat(specialty).isNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 142,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:238:36:this.clinicService.findAllVisits",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:216:57:vetMapper.toVetDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:167:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:147:18:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 147,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:243:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:70:role.getName().startsWith",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 149,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:243:27:put(\"/api/visits/2\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:195:30:put(\"/api/pets/3\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:95:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 153,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:483:20:MockMvcResultHandlers.print",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:632:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 155,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:53:21:new User",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 156,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:147:27:post(\"/api/vets\") .content(newVetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 157,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:60:30:post(\"/api/users\") .content(newVetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:116:6:specialties.remove",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 159,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:460:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:523:31:actual.getName().equals",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:170:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 164,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:479:20:specialty.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 167,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:460:31:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:239:24:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 170,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:167:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:519:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 172,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:366:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 173,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:468:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:199:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:128:42:petMapper.toPets",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 177,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:641:30:put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 178,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:85:18:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 179,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:177:9:assertThat(vet.getSpecialties().get(1).getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 180,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:22:14:context.buildConstraintViolationWithTemplate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 182,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:141:21:jsonPath(\"$.[0].name\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:206:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 184,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:210:9:this.mockMvc.perform(put(\"/api/pets/3\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isBadRequest()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:57:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 186,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:103:23:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 187,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:156:12:this.clinicService.findAllVisits",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:249:27:delete(\"/api/pettypes/999\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:103:9:this.mockMvc.perform(get(\"/api/v2/owners?page=0&size=2\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.content[0].id\").value(1)) .andExpect(jsonPath(\"$.content[0].firstName\").value(\"George\")) .andExpect(jsonPath(\"$.content[1].id\").value(2)) .andExpect(jsonPath(\"$.content[1].firstName\").value(\"Betty\")) .andExpect(jsonPath(\"$.page\").value(0)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 192,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:669:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 193,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:176:27:get(\"/api/specialties/2\") .accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 194,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:434:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:481:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 197,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:101:9:given(this.clinicService.findOwners(null, pageRequest)) .willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 199,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:489:9:assertThat(specialtyId).isNotNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 200,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:112:18:pet.id(3) .name(\"Rosy\") .birthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 201,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:120:48:Sort.by",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 203,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:125:24:jsonPath(\"$.[0].firstName\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 204,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:149:21:jsonPath(\"$.[1].description\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 205,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:67:18:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 206,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:56:46:constraintViolations.iterator().next",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 207,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:234:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 213,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:253:23:visits.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 214,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:83:6:owner.setLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 215,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:92:18:pet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:365:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:173:21:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 219,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:110:16:new ArrayList<>",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 221,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:539:30:post(\"/api/owners/1/pets/1/visits\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 223,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:143:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 224,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:215:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:213:63:specialtyMapper.toSpecialtyDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 229,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:74:24:MockMvcBuilders.standaloneSetup(visitRestControllerV1) .setControllerAdvice",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 231,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:148:16:visit.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 234,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:504:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 235,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:504:9:this.mockMvc.perform(post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andDo(MockMvcResultHandlers.print()) .andExpect(status().isInternalServerError()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 236,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:193:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 237,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:338:30:delete(\"/api/owners/999\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 238,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:39:9:assertThat(constraintViolations.size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 239,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:117:9:assertThat(pet7.getName()).startsWith",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 240,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:139:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 241,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:410:9:assertThat(petTypes.size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 242,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:267:24:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 244,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:623:30:put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 246,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:183:20:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 247,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:75:29:new ExceptionControllerAdvice",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 248,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:403:27:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 249,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:73:9:assertThat(violation.getPropertyPath().toString()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 253,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:656:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 254,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:116:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 257,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:110:12:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 259,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:269:9:this.mockMvc.perform(get(\"/api/owners/\" + ownerId) .accept(MediaType.APPLICATION_JSON).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.id\").value(ownerId)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 260,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:641:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 262,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:166:6:given(this.clinicService.findAllPetTypes()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:20:user.getRoles().parallelStream().allMatch",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 264,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:170:6:newVet.setFirstName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 265,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:264:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:676:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 267,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:83:6:specialties.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 268,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:103:9:this.mockMvc.perform(get(\"/api/v2/owners?page=0&size=2\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.content[0].id\").value(1)) .andExpect(jsonPath(\"$.content[0].firstName\").value(\"George\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 269,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:160:27:post",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:100:26:ownerMapper.toOwners",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 274,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:442:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 275,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:135:6:given(this.clinicService.findAllPetTypes()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 276,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:20:9:MockitoAnnotations.openMocks",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 277,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:260:20:visit.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 280,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:449:9:assertThat(specialty1.getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 281,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 286,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:158:27:post(\"/api/specialties\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 287,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:206:27:delete",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:86:16:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 292,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:75:24:MockMvcBuilders.standaloneSetup",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 293,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:288:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 294,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:125:24:jsonPath(\"$.id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 295,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:117:24:jsonPath(\"$.id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 296,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:195:9:this.mockMvc.perform(put(\"/api/pets/3\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 297,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:90:9:pets.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 298,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:204:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 299,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:185:22:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 302,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:103:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 303,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:246:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 304,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:75:9:assertThat(owner.getPets().size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 305,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:154:63:ownerMapper.toOwner",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:113:9:this.mockMvc.perform(get(\"/api/pettypes/1\") .accept(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:233:17:visit.getPet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 308,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:194:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 309,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:354:20:owners.getContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 310,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:59:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:323:15:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:481:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:196:21:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 318,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:145:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 319,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:76:20:owner.getPets().get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 323,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:207:31:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 324,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:178:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 325,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:221:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 326,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:178:61:petTypeMapper.toPetTypeFieldsDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 327,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:109:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 328,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:204:61:petTypeMapper.toPetTypeDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:98:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 330,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:197:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 331,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:239:21:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 333,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:409:9:given(this.clinicService.findOwnerById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:122:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 340,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:268:9:given(this.clinicService.findVisitById(999)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 344,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:251:21:status().isNotFound",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 345,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:195:24:status().isNotFound",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 347,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:253:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:159:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:485:31:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:300:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 351,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:656:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect(status().isBadRequest()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 353,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:107:9:petType.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 354,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:295:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:160:6:this.mockMvc.perform(post(\"/api/vets\") .content(newVetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 358,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:520:9:doThrow",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 359,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:70:role.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 362,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:638:9:petDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 365,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:248:6:given(this.clinicService.findPetTypeById(999)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 367,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:193:21:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 368,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 369,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:101:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 370,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:464:20:specialty.getId().longValue",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 371,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:99:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 375,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:93:20:owner.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 376,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:107:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 377,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:230:59:visitMapper.toVisitDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:237:6:this.mockMvc.perform(delete(\"/api/pettypes/1\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 380,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:73:17:new OwnerDto",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 381,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:35:59:anyString",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 383,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:242:20:visit3.getPet().getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 384,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:385:17:petType.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 385,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:202:12:this.clinicService.findSpecialtyById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 387,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:424:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:487:24:jsonPath(\"$.schemaValidationErrors\").isArray",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 391,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:171:27:put",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 392,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:191:6:this.mockMvc.perform(put(\"/api/specialties/1\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 393,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:93:34:new ExceptionControllerAdvice",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 396,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:124:24:jsonPath(\"$.[0].id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 397,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:180:9:newVisit.setDescription",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 398,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:118:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 399,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:588:9:this.mockMvc.perform(get(\"/api/owners/1/pets/2\") .accept(MediaType.APPLICATION_JSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 401,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:154:9:given(this.clinicService.findPetById(3)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 405,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:21:46:mock",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 407,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:208:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 408,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:9:pet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 410,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:446:24:jsonPath(\"$.schemaValidationErrors[0].message\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 412,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:439:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 413,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:239:32:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 414,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:163:24:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 415,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:155:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 416,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:162:22:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 417,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:435:9:newPet.setId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 418,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:259:21:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:102:20:owner.id(3).firstName(\"Eduardo\").lastName(\"Rodriquez\").address(\"2693 Commerce St.\").city",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:230:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:210:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 422,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:351:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 424,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:326:30:delete",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 425,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:156:6:given(this.clinicService.findAllVisits()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 426,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:92:24:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 428,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:202:19:vets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 429,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:106:9:owner.setLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 430,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 433,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:651:21:pets.get(0).getId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:112:18:pet.id(3) .name(\"Rosy\") .birthDate(LocalDate.now()) .type",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 436,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:92:24:MockMvcBuilders.standaloneSetup(ownerRestControllerV1) .setControllerAdvice(new ExceptionControllerAdvice()) .build",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 437,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:256:9:visit.setDescription",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 438,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:98:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 439,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:107:is",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 440,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:352:9:System.err.println",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 441,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:282:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:113:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:219:19:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:142:9:pet.setBirthDate",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 447,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:210:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 449,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 450,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:27:9:assertFalse",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 452,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:91:16:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 453,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:124:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 455,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:400:40:this.clinicService.findAllPetTypes",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 456,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:144:63:specialtyMapper.toSpecialtyDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 457,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:179:6:this.mockMvc.perform(post(\"/api/pettypes\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 458,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:107:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 459,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:619:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:110:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 461,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:15:47:new PetAgeValidator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 463,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:79:6:petTypes.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 464,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:233:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 465,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:538:9:System.out.println",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 466,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:146:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 467,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:132:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 468,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:236:30:delete(\"/api/pets/999\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 469,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:78:6:petType.setName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 471,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:489:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 475,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:436:9:assertThat(petType).isNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 477,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:76:20:owner.id(4).firstName(\"Harold\").lastName(\"Davis\").address",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 478,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:166:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 480,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:450:32:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 481,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:168:6:given(this.clinicService.findVetById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 482,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:603:9:updatedPetDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 483,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:468:24:jsonPath(\"$.schemaValidationErrors[0].field\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 485,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:138:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 486,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:294:6:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 487,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:362:9:assertThat(owners.getTotalElements()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 490,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:81:9:owner.id(1).firstName(\"Eduardo\") .lastName(\"Rodriquez\") .address(\"2693 Commerce St.\") .city(\"McFarland\") .telephone",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 491,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:678:24:jsonPath(\"$.schemaValidationErrors[0].field\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 492,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:460:9:this.mockMvc.perform(post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andDo(MockMvcResultHandlers.print()) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.detail\").value(\"The request contains invalid or missing parameters\")) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 494,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:155:9:this.mockMvc.perform(get(\"/api/owners/1\") .accept(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isOk()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 495,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:174:20:vet.getLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 497,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:297:9:this.mockMvc.perform(get(\"/api/owners/\" + ownerId) .accept(MediaType.APPLICATION_JSON).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:118:9:this.mockMvc.perform(get(\"/api/specialties\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect(jsonPath(\"$.[0].name\").value(\"surgery\")) .andExpect(jsonPath(\"$.[1].id\").value(3)) .andExpect",
+    "kind": "method",
+    "internal": false
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 2,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:168:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 5,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:70:24:MockMvcBuilders.standaloneSetup(specialtyRestControllerV1) .setControllerAdvice(new ExceptionControllerAdvice()) .build",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:113:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 8,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:313:30:put(\"/api/owners/1\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:204:20:visitArr[0].getPet().getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 10,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:394:9:assertThat(petType3.getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 12,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:139:24:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:426:9:this.mockMvc.perform(post(\"/api/owners/1000000/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 15,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:158:6:this.mockMvc.perform(post(\"/api/specialties\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 16,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:133:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 18,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:353:20:owners.getTotalPages",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:192:15:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 20,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:99:48:Sort.by",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 21,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:355:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 22,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:170:6:this.mockMvc.perform(post(\"/api/visits\") .content(newVisitAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:485:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 25,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:410:17:new DataIntegrityViolationException",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 26,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:519:56:expectedSpecialties.size",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 27,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:670:9:petDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 30,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:464:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 31,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:445:24:jsonPath(\"$.schemaValidationErrors\").isArray",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 32,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:426:30:post(\"/api/owners/1000000/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 33,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:409:15:this.clinicService.findOwnerById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:552:30:post(\"/api/owners/1/pets/1/visits\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:122:9:given(this.clinicService.findPets(pageRequest)) .willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 38,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:223:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 39,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:70:9:user.setPassword",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:146:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:448:32:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 43,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:96:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 44,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:152:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect(jsonPath(\"$.[0].name\").value(\"dog\")) .andExpect(jsonPath(\"$.[1].id\").value(4)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 45,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:104:20:owner.id(4).firstName",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 47,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:90:9:owner.setCity",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 50,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:30:get(\"/api/pettypes/999\") .accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 51,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 53,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:158:24:jsonPath(\"$.[1].id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 55,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:98:20:ownerWithPet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:9:pet.id(id).name(name).birthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 58,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:407:20:petType.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:111:22:new PetDto",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 60,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:28:9:user.setEnabled",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:77:6:petType.setId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 63,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:420:9:this.clinicService.savePetType",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 65,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:353:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:246:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:236:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 71,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:214:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 72,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:41:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:167:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:191:27:put(\"/api/specialties/1\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 78,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:160:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 79,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:252:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 80,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:68:9:assertThat(owners.isEmpty()).isTrue",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:464:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:220:9:this.clinicService.deletePet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 84,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:233:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 85,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:337:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:522:30:post(\"/api/owners\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 87,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:120:27:PageRequest.of",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:518:31:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 89,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:183:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:95:18:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:253:23:owners.get(0).getId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:181:24:jsonPath(\"$.name\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:144:9:assertThat(owner6.getPets().size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 94,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:72:9:owners.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:111:9:this.mockMvc.perform(get(\"/api/vets/999\") .accept(MediaType.APPLICATION_JSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 96,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:84:18:pet.id(3) .name",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:345:24:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:212:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:147:27:post(\"/api/vets\") .content(newVetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 102,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:131:24:jsonPath(\"$.size\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 103,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:363:9:newPet.setName",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 104,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:407:9:assertThat(petType.getId().longValue()).isNotEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 105,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:318:16:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 106,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:207:21:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 107,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:254:9:visit.setPet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:421:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 109,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:104:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:107:9:this.clinicService.saveOwner",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:479:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 115,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:120:60:visits.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 116,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:491:24:jsonPath(\"$.schemaValidationErrors[0].defaultMessage\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 119,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:347:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 120,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:237:27:delete(\"/api/pettypes/1\") .content(newPetTypeAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:235:15:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:524:24:actual.getId().equals",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:242:9:assertThat(visit3.getPet().getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 125,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:174:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:392:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 127,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/ClinicServiceSpringDataJpaTests.java:24:9:entityManager.clear",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 129,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:240:20:visit1.getPet().getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 130,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:486:24:jsonPath(\"$.title\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:216:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:325:9:given(this.clinicService.findOwnerById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 134,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:470:24:jsonPath(\"$.schemaValidationErrors[0].defaultMessage\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:167:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 137,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:211:27:put(\"/api/visits/2\") .content(newVisitAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 139,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:245:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:476:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 141,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:498:9:assertThat(specialty).isNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 142,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:238:36:this.clinicService.findAllVisits",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 144,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:216:57:vetMapper.toVetDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:167:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:147:18:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 147,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:243:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:70:role.getName().startsWith",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 149,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:243:27:put(\"/api/visits/2\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:195:30:put(\"/api/pets/3\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:95:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 153,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:483:20:MockMvcResultHandlers.print",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:632:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 155,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:53:21:new User",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 156,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:147:27:post(\"/api/vets\") .content(newVetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 157,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:60:30:post(\"/api/users\") .content(newVetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 158,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:116:6:specialties.remove",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 159,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:460:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:523:31:actual.getName().equals",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:170:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 164,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:479:20:specialty.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 167,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:460:31:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:239:24:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 170,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:167:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:519:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 172,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:366:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 173,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:468:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 174,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:199:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:128:42:petMapper.toPets",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 177,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:641:30:put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 178,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:85:18:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 179,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:177:9:assertThat(vet.getSpecialties().get(1).getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 180,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:22:14:context.buildConstraintViolationWithTemplate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 182,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:141:21:jsonPath(\"$.[0].name\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:206:6:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 184,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:210:9:this.mockMvc.perform(put(\"/api/pets/3\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isBadRequest()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:57:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 186,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:103:23:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 187,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:156:12:this.clinicService.findAllVisits",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 188,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:249:27:delete(\"/api/pettypes/999\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 190,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:103:9:this.mockMvc.perform(get(\"/api/v2/owners?page=0&size=2\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.content[0].id\").value(1)) .andExpect(jsonPath(\"$.content[0].firstName\").value(\"George\")) .andExpect(jsonPath(\"$.content[1].id\").value(2)) .andExpect(jsonPath(\"$.content[1].firstName\").value(\"Betty\")) .andExpect(jsonPath(\"$.page\").value(0)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 192,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:669:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 193,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:176:27:get(\"/api/specialties/2\") .accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 194,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:434:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:481:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 197,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:101:9:given(this.clinicService.findOwners(null, pageRequest)) .willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 199,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:489:9:assertThat(specialtyId).isNotNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 200,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:112:18:pet.id(3) .name(\"Rosy\") .birthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 201,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:120:48:Sort.by",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 203,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:125:24:jsonPath(\"$.[0].firstName\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 204,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:149:21:jsonPath(\"$.[1].description\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 205,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:67:18:this.clinicService.findOwnerByLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 206,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:56:46:constraintViolations.iterator().next",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 207,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:234:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 213,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:253:23:visits.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 214,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:83:6:owner.setLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 215,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:92:18:pet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:365:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:173:21:content",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 219,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:110:16:new ArrayList<>",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 221,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:539:30:post(\"/api/owners/1/pets/1/visits\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 223,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:143:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 224,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:215:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:213:63:specialtyMapper.toSpecialtyDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 229,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:74:24:MockMvcBuilders.standaloneSetup(visitRestControllerV1) .setControllerAdvice",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 231,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:148:16:visit.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 234,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:504:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 235,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:504:9:this.mockMvc.perform(post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andDo(MockMvcResultHandlers.print()) .andExpect(status().isInternalServerError()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 236,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:193:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 237,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:338:30:delete(\"/api/owners/999\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 238,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:39:9:assertThat(constraintViolations.size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 239,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:117:9:assertThat(pet7.getName()).startsWith",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 240,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:139:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 241,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:410:9:assertThat(petTypes.size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 242,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:267:24:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 244,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:623:30:put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 246,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:183:20:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 247,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:75:29:new ExceptionControllerAdvice",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 248,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:403:27:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 249,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/model/ValidatorTests.java:73:9:assertThat(violation.getPropertyPath().toString()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 253,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:656:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 254,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:116:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 257,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:110:12:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 259,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:269:9:this.mockMvc.perform(get(\"/api/owners/\" + ownerId) .accept(MediaType.APPLICATION_JSON).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.id\").value(ownerId)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 260,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:641:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 262,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:166:6:given(this.clinicService.findAllPetTypes()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:20:user.getRoles().parallelStream().allMatch",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 264,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:170:6:newVet.setFirstName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 265,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:264:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:676:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 267,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:83:6:specialties.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 268,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:103:9:this.mockMvc.perform(get(\"/api/v2/owners?page=0&size=2\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.content[0].id\").value(1)) .andExpect(jsonPath(\"$.content[0].firstName\").value(\"George\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 269,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:160:27:post",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:100:26:ownerMapper.toOwners",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 274,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:442:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 275,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:135:6:given(this.clinicService.findAllPetTypes()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 276,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:20:9:MockitoAnnotations.openMocks",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 277,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:260:20:visit.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 280,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:449:9:assertThat(specialty1.getName()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 281,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 286,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:158:27:post(\"/api/specialties\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 287,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:206:27:delete",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:86:16:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 292,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:75:24:MockMvcBuilders.standaloneSetup",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 293,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:288:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 294,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:125:24:jsonPath(\"$.id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 295,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:117:24:jsonPath(\"$.id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 296,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:195:9:this.mockMvc.perform(put(\"/api/pets/3\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 297,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:90:9:pets.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 298,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:204:9:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 299,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:185:22:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 302,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:103:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 303,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:246:24:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 304,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:75:9:assertThat(owner.getPets().size()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 305,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:154:63:ownerMapper.toOwner",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:113:9:this.mockMvc.perform(get(\"/api/pettypes/1\") .accept(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:233:17:visit.getPet",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 308,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:194:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 309,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:354:20:owners.getContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 310,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/UserRestControllerV1Tests.java:59:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:323:15:this.clinicService.findVetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:481:30:post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:196:21:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 318,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:145:28:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 319,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:76:20:owner.getPets().get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 323,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:207:31:new ObjectMapper",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 324,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:178:24:status().isOk",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 325,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:221:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 326,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:178:61:petTypeMapper.toPetTypeFieldsDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 327,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:109:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 328,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:204:61:petTypeMapper.toPetTypeDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:98:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 330,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:197:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 331,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:239:21:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 333,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:409:9:given(this.clinicService.findOwnerById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:122:9:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 340,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:268:9:given(this.clinicService.findVisitById(999)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 344,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:251:21:status().isNotFound",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 345,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:195:24:status().isNotFound",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 347,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:253:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:159:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:485:31:new Specialty",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:300:24:content().contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 351,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:656:9:this.mockMvc.perform(put(\"/api/owners/\" + ownerId + \"/pets/\" + petId) .contentType(MediaType.APPLICATION_JSON) .content(updatedPetAsJSON)) .andExpect(status().isBadRequest()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 353,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:107:9:petType.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 354,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:295:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:160:6:this.mockMvc.perform(post(\"/api/vets\") .content(newVetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 358,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:520:9:doThrow",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 359,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:70:role.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 362,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:638:9:petDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 365,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:248:6:given(this.clinicService.findPetTypeById(999)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 367,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:193:21:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 368,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 369,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:101:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 370,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:464:20:specialty.getId().longValue",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 371,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:99:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 375,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:93:20:owner.getId",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 376,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:107:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 377,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:230:59:visitMapper.toVisitDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:237:6:this.mockMvc.perform(delete(\"/api/pettypes/1\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 380,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:73:17:new OwnerDto",
+    "kind": "ctor",
+    "internal": false
+   },
+   {
+    "ordinal": 381,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:35:59:anyString",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 383,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:242:20:visit3.getPet().getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 384,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:385:17:petType.getName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 385,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:202:12:this.clinicService.findSpecialtyById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 387,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:424:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:487:24:jsonPath(\"$.schemaValidationErrors\").isArray",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 391,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:171:27:put",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 392,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:191:6:this.mockMvc.perform(put(\"/api/specialties/1\") .content(newSpecialtyAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 393,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:93:34:new ExceptionControllerAdvice",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 396,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:124:24:jsonPath(\"$.[0].id\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 397,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:180:9:newVisit.setDescription",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 398,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:118:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 399,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:588:9:this.mockMvc.perform(get(\"/api/owners/1/pets/2\") .accept(MediaType.APPLICATION_JSON)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 401,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:154:9:given(this.clinicService.findPetById(3)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 405,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:21:46:mock",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 407,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:208:21:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 408,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:142:9:pet.id",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 410,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:446:24:jsonPath(\"$.schemaValidationErrors[0].message\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 412,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:439:30:post(\"/api/owners/1/pets\") .content",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 413,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:239:32:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 414,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:163:24:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 415,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:155:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 416,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:162:22:status().isBadRequest",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 417,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:435:9:newPet.setId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 418,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:259:21:status().isNoContent",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:102:20:owner.id(3).firstName(\"Eduardo\").lastName(\"Rodriquez\").address(\"2693 Commerce St.\").city",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:230:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:210:33:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 422,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:351:31:mapper.writeValueAsString",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 424,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:326:30:delete",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 425,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VisitRestControllerV1Tests.java:156:6:given(this.clinicService.findAllVisits()).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 426,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:92:24:LocalDate.now",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 428,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:202:19:vets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 429,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:106:9:owner.setLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 430,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:136:9:this.mockMvc.perform(get(\"/api/pettypes\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 433,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:651:21:pets.get(0).getId",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 435,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:112:18:pet.id(3) .name(\"Rosy\") .birthDate(LocalDate.now()) .type",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 436,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:92:24:MockMvcBuilders.standaloneSetup(ownerRestControllerV1) .setControllerAdvice(new ExceptionControllerAdvice()) .build",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 437,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:256:9:visit.setDescription",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 438,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:98:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 439,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/userService/AbstractUserServiceTests.java:32:107:is",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 440,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:352:9:System.err.println",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 441,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:282:23:owners.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:113:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:219:19:this.clinicService.findPetById",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:142:9:pet.setBirthDate",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 447,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:210:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 449,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:125:9:this.mockMvc.perform",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 450,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:27:9:assertFalse",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 452,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:91:16:new PetType",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 453,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:124:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 455,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:400:40:this.clinicService.findAllPetTypes",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 456,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:144:63:specialtyMapper.toSpecialtyDto",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 457,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:179:6:this.mockMvc.perform(post(\"/api/pettypes\") .content(newPetTypeAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 458,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:107:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 459,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:619:25:pets.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 460,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:110:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 461,
+    "siteKey": "src/test/java/org/springframework/validation/PetAgeValidatorTest.java:15:47:new PetAgeValidator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 463,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:79:6:petTypes.add",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 464,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:233:27:petTypes.get",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 465,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:538:9:System.out.println",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 466,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:146:30:get",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 467,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:132:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 468,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:236:30:delete(\"/api/pets/999\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 469,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:78:6:petType.setName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 471,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:489:24:jsonPath",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 475,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:436:9:assertThat(petType).isNull",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 477,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/V2RestControllersTests.java:76:20:owner.id(4).firstName(\"Harold\").lastName(\"Davis\").address",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 478,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:166:6:given",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 480,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:450:32:EntityUtils.getById",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 481,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/VetRestControllerV1Tests.java:168:6:given(this.clinicService.findVetById(1)).willReturn",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 482,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:603:9:updatedPetDto.setBirthDate",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 483,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:468:24:jsonPath(\"$.schemaValidationErrors[0].field\").exists",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 485,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetTypeRestControllerV1Tests.java:138:24:status",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 486,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:294:6:assertThat",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 487,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:362:9:assertThat(owners.getTotalElements()).isEqualTo",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 490,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/PetRestControllerV1Tests.java:81:9:owner.id(1).firstName(\"Eduardo\") .lastName(\"Rodriquez\") .address(\"2693 Commerce St.\") .city(\"McFarland\") .telephone",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 491,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:678:24:jsonPath(\"$.schemaValidationErrors[0].field\").value",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 492,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:460:9:this.mockMvc.perform(post(\"/api/owners/1/pets\") .content(newPetAsJSON).accept(MediaType.APPLICATION_JSON_VALUE).contentType(MediaType.APPLICATION_JSON_VALUE)) .andDo(MockMvcResultHandlers.print()) .andExpect(status().isBadRequest()) .andExpect(jsonPath(\"$.detail\").value(\"The request contains invalid or missing parameters\")) .andExpect(jsonPath(\"$.title\").value(\"MethodArgumentNotValidException\")) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 494,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:155:9:this.mockMvc.perform(get(\"/api/owners/1\") .accept(MediaType.APPLICATION_JSON_VALUE)) .andExpect(status().isOk()) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 495,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/service/clinicService/AbstractClinicServiceTests.java:174:20:vet.getLastName",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 497,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/OwnerRestControllerV1Tests.java:297:9:this.mockMvc.perform(get(\"/api/owners/\" + ownerId) .accept(MediaType.APPLICATION_JSON).contentType(MediaType.APPLICATION_JSON_VALUE)) .andExpect",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/test/java/org/springframework/samples/petclinic/rest/controller/SpecialtyRestControllerV1Tests.java:118:9:this.mockMvc.perform(get(\"/api/specialties\") .accept(MediaType.APPLICATION_JSON)) .andExpect(status().isOk()) .andExpect(content().contentType(\"application/json\")) .andExpect(jsonPath(\"$.[0].id\").value(2)) .andExpect(jsonPath(\"$.[0].name\").value(\"surgery\")) .andExpect(jsonPath(\"$.[1].id\").value(3)) .andExpect",
+    "kind": "method",
+    "internal": false
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:39:01Z",
+   "wallSeconds": 8.0,
+   "peakMemMiB": 276.1,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin",
+   "cpgMB": 0.6
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:52Z",
+   "wallSeconds": 5.2,
+   "peakMemMiB": 423.1,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin=441",
+    "CONTENT /out/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:57Z",
+   "wallSeconds": 6.5,
+   "peakMemMiB": 416.1,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/2f636e45-84f8-41c0-9ed4-c90109be0357.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=java",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:39:21Z",
+   "wallSeconds": 37.4,
+   "peakMemMiB": 384.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/parse.log",
+   "fetchFlag": "--fetch-dependencies",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/on.cpg.bin",
+   "cpgMB": 0.6
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:04:06Z",
+   "wallSeconds": 5.2,
+   "peakMemMiB": 277.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=441",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:04:13Z",
+   "wallSeconds": 6.1,
+   "peakMemMiB": 500.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/8c26ac15-b022-4bc4-993c-62213b54474a.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/2f636e45-84f8-41c0-9ed4-c90109be0357.measure.jsonl",
+   "sha256": "dd1b4f7f2e2317aaeab16aac8d82e42809629d93908faefe34527afcfc12d6e0"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/8c26ac15-b022-4bc4-993c-62213b54474a.measure.jsonl",
+   "sha256": "188a533ba8c9e3d6d82a96dbc460fc38f0bf180cd4d4fb3545511f510645f0a3"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

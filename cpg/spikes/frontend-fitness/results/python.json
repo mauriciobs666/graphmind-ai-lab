@@ -1,0 +1,566 @@
+{
+ "lang": "python",
+ "provisional": true,
+ "truth": "truth/python.final.jsonl",
+ "labelledSites": 240,
+ "scoredSites": 240,
+ "unscoredSites": 0,
+ "unscoredReasons": {},
+ "internalSites": 155,
+ "externalScoredSites": 85,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 155,
+  "scoredSites": 240,
+  "recall": {
+   "k": 152,
+   "n": 155,
+   "p": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ]
+  },
+  "edgeRecall": {
+   "k": 185,
+   "n": 196,
+   "p": 0.9439,
+   "wilson95": [
+    0.9023,
+    0.9684
+   ]
+  },
+  "precision": {
+   "k": 110,
+   "n": 116,
+   "p": 0.9483,
+   "wilson95": [
+    0.8917,
+    0.9761
+   ]
+  },
+  "resolvedAway": {
+   "k": 38,
+   "n": 155,
+   "p": 0.2452,
+   "wilson95": [
+    0.1841,
+    0.3185
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 116,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.0321
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 239,
+   "n": 240,
+   "p": 0.9958,
+   "wilson95": [
+    0.9768,
+    0.9993
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 155,
+  "scoredSites": 240,
+  "recall": {
+   "k": 152,
+   "n": 155,
+   "p": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ]
+  },
+  "edgeRecall": {
+   "k": 185,
+   "n": 196,
+   "p": 0.9439,
+   "wilson95": [
+    0.9023,
+    0.9684
+   ]
+  },
+  "precision": {
+   "k": 110,
+   "n": 116,
+   "p": 0.9483,
+   "wilson95": [
+    0.8917,
+    0.9761
+   ]
+  },
+  "resolvedAway": {
+   "k": 38,
+   "n": 155,
+   "p": 0.2452,
+   "wilson95": [
+    0.1841,
+    0.3185
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 116,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.0321
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 239,
+   "n": 240,
+   "p": 0.9958,
+   "wilson95": [
+    0.9768,
+    0.9993
+   ]
+  }
+ },
+ "gate81": {
+  "off": {
+   "n": 155,
+   "k": 152,
+   "observedRecall": 0.9806,
+   "verdict": "pass (observed >= 0.98)",
+   "maxMissesAt98": 3
+  },
+  "on": {
+   "n": 155,
+   "k": 152,
+   "observedRecall": 0.9806,
+   "verdict": "pass (observed >= 0.98)",
+   "maxMissesAt98": 3
+  }
+ },
+ "gate83": {
+  "off": {
+   "nP": 116,
+   "P": 0.9483,
+   "verdict": "adopted on precision (P < 0.95)"
+  },
+  "on": {
+   "nP": 116,
+   "P": 0.9483,
+   "verdict": "adopted on precision (P < 0.95)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 152,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 3,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0233,
+    0.0233
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 8801,
+   "median": 0,
+   "p90": 5,
+   "p99": 26,
+   "max": 26,
+   "shareOver20": {
+    "k": 136,
+    "n": 8801,
+    "p": 0.0155,
+    "wilson95": [
+     0.0131,
+     0.0182
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 8801,
+   "median": 0,
+   "p90": 5,
+   "p99": 26,
+   "max": 26,
+   "shareOver20": {
+    "k": 136,
+    "n": 8801,
+    "p": 0.0155,
+    "wilson95": [
+     0.0131,
+     0.0182
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 17358,
+   "matchRate": {
+    "k": 17213,
+    "n": 17358,
+    "p": 0.9916,
+    "wilson95": [
+     0.9902,
+     0.9929
+    ]
+   },
+   "frameFiles": 104,
+   "frameFilesWithFileNode": {
+    "k": 104,
+    "n": 104,
+    "p": 1.0,
+    "wilson95": [
+     0.9644,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 104,
+    "n": 104,
+    "p": 1.0,
+    "wilson95": [
+     0.9644,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin",
+    "lang": "python",
+    "files": 108,
+    "methods": 6254,
+    "calls": 25740,
+    "callsWithoutMethod": 0,
+    "frameSites": 17358
+   }
+  },
+  "on": {
+   "frameSites": 17358,
+   "matchRate": {
+    "k": 17213,
+    "n": 17358,
+    "p": 0.9916,
+    "wilson95": [
+     0.9902,
+     0.9929
+    ]
+   },
+   "frameFiles": 104,
+   "frameFilesWithFileNode": {
+    "k": 104,
+    "n": 104,
+    "p": 1.0,
+    "wilson95": [
+     0.9644,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 104,
+    "n": 104,
+    "p": 1.0,
+    "wilson95": [
+     0.9644,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "python",
+    "files": 108,
+    "methods": 6254,
+    "calls": 25740,
+    "callsWithoutMethod": 0,
+    "frameSites": 17358
+   }
+  }
+ },
+ "strata": {
+  "contactFiles": [
+   "falkorchat/api.py",
+   "falkorchat/app.py",
+   "falkorchat/mcp.py",
+   "falkorchat/storefront_api.py",
+   "falkorchat/tools.py",
+   "tests/eval/__init__.py",
+   "tests/test_input_bound_parity.py"
+  ],
+  "contact": {
+   "off": {
+    "internalSites": 6,
+    "recall": {
+     "k": 6,
+     "n": 6,
+     "p": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 3,
+     "n": 3,
+     "p": 1.0,
+     "wilson95": [
+      0.4385,
+      1.0
+     ]
+    },
+    "gate81": null
+   },
+   "on": {
+    "internalSites": 6,
+    "recall": {
+     "k": 6,
+     "n": 6,
+     "p": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 3,
+     "n": 3,
+     "p": 1.0,
+     "wilson95": [
+      0.4385,
+      1.0
+     ]
+    },
+    "gate81": null
+   },
+   "scoredSites": 10
+  },
+  "nonContact": {
+   "off": {
+    "internalSites": 149,
+    "recall": {
+     "k": 146,
+     "n": 149,
+     "p": 0.9799,
+     "wilson95": [
+      0.9425,
+      0.9931
+     ]
+    },
+    "precision": {
+     "k": 107,
+     "n": 113,
+     "p": 0.9469,
+     "wilson95": [
+      0.889,
+      0.9754
+     ]
+    },
+    "gate81": "fail"
+   },
+   "on": {
+    "internalSites": 149,
+    "recall": {
+     "k": 146,
+     "n": 149,
+     "p": 0.9799,
+     "wilson95": [
+      0.9425,
+      0.9931
+     ]
+    },
+    "precision": {
+     "k": 107,
+     "n": 113,
+     "p": 0.9469,
+     "wilson95": [
+      0.889,
+      0.9754
+     ]
+    },
+    "gate81": "fail"
+   },
+   "scoredSites": 230
+  },
+  "note": "provisional (final.jsonl); S27 reports final2. The contact-file test is the site's path (final.jsonl `site`, path:line) in contact.json files."
+ },
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 196,
+   "withJoernMethodAtDefLine": 196
+  },
+  "on": {
+   "tMembers": 196,
+   "withJoernMethodAtDefLine": 196
+  }
+ },
+ "misses": {
+  "off": 3,
+  "on": 3,
+  "either": 3,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 3
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 109,
+    "siteKey": "falkorchat/api.py:582:20:Path",
+    "kind": "plain",
+    "internal": false
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 109,
+    "siteKey": "falkorchat/api.py:582:20:Path",
+    "kind": "plain",
+    "internal": false
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:28:42Z",
+   "wallSeconds": 11.6,
+   "peakMemMiB": 1098.8,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin",
+   "cpgMB": 18.7
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:01:20Z",
+   "wallSeconds": 9.3,
+   "peakMemMiB": 1014.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=6254",
+    "CONTENT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:01:31Z",
+   "wallSeconds": 11.1,
+   "peakMemMiB": 949.9,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/776c9e26-7722-45cf-bd49-20eed1982d53.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=python",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:29:19Z",
+   "wallSeconds": 12.3,
+   "peakMemMiB": 858.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/parse.log",
+   "fetchFlag": null,
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/on.cpg.bin",
+   "cpgMB": 18.7
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:01:44Z",
+   "wallSeconds": 9.5,
+   "peakMemMiB": 958.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=6254",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:01:55Z",
+   "wallSeconds": 10.7,
+   "peakMemMiB": 938.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/64bdbe2b-7c51-4828-84bb-548abd7e4d37.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/776c9e26-7722-45cf-bd49-20eed1982d53.measure.jsonl",
+   "sha256": "3c60d4115a23d0c6a6c639fe59e89cb207ff6e2069b9c3f13f5218a435258512"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/64bdbe2b-7c51-4828-84bb-548abd7e4d37.measure.jsonl",
+   "sha256": "1c7a7f5668e897089e8a0de174324a51b163a985f475117d166ac2c02c20f447"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

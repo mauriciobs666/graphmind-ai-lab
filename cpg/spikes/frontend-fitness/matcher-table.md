@@ -24,6 +24,11 @@ lower node id. Nothing else is compared.
 | Go `gosrc2cpg` | `golang` | 1-based | 1-based | none |
 | C/C++ `c2cpg` | `c` | 1-based | 1-based | none |
 
+**Multi-line chains (S27 inspection).** When a chained call's name sits on a later line than the chain's start
+(`new X()\n  .m()`), javasrc2cpg and gosrc2cpg give the CALL the line of the **callee expression's first character**, not of
+the name. `measure.sc` therefore tries the name's line first and, only if no call matches there, the frame's `line`
+(same name rule, nearest column).
+
 A chain `a.b().c()` yields two Joern calls (`b` with code `a.b()`, `c` with code `a.b().c()`) that **share** line and
 column (the start of the whole expression), exactly like the two frame sites; their names tell them apart.
 
@@ -32,7 +37,7 @@ column (the start of the whole expression), exactly like the two frame sites; th
 | Language | plain / method / qualified | constructor (`new X`, `X(…)`, `super(…)`, `this(…)`) | Other kinds |
 |---|---|---|---|
 | Python | `name` = `calleeName` (`m` for `b.m()`, `f` for `f(2)`, `h` for a function value `h(3)`, `len` for a builtin) | `name` = the class name (`B` for `B(1)`; resolved to `B.__init__`) | decorators are out of the frame |
-| JS/TS | `name` = `calleeName` | **`<operator>.new`** with `code` = `new X(…)`; the matcher requires `code` to start with `new ` and contain `calleeName` (the index therefore keeps this one operator call) | tagged template `` tag`x` ``: `name` = `tag` (also synthesized `push`/`__ecma.Array.factory` calls on the same line, never matched). **JSX `<Cmp/>`: no CALL at all, so every JSX site is unmatched by construction** (counted *absent in Joern*) |
+| JS/TS | `name` = `calleeName`; **optional-chain call `a?.b(x)`: `name` is the whole callee text `a?.b`** (code `a?.b(x)`), found by S27's unmatched-site inspection (`measure.sc` accepts `name` ending `?.`+`calleeName` when `code` starts with `name`) | **`<operator>.new`** with `code` = `new X(…)`; the matcher requires `code` to start with `new ` and contain `calleeName` (the index therefore keeps this one operator call) | tagged template `` tag`x` ``: `name` = `tag` (also synthesized `push`/`__ecma.Array.factory` calls on the same line, never matched). **JSX `<Cmp/>`: no CALL at all, so every JSX site is unmatched by construction** (counted *absent in Joern*) |
 | Java | `name` = `calleeName` | `<init>` (`new Base(1)` has no column: `-1`; `super(1)`/`this()` carry a column); the matcher accepts `<init>` or the type name | — |
 | Kotlin | `name` = `calleeName`, **or `<init>`**: `B(3)` is a plain-looking frame site and Joern names the call `<init>` | same | trailing lambda `run { 1 }`: one call (the frame dedupes the `call_expression(call_expression, annotated_lambda)` pair to one site). **A delegation-specifier call `class A : B(x)`: no CALL, unmatched by construction** |
 | C# | `name` = `calleeName` (`G` for `b.G<int>()`, type arguments dropped, as the frame's `calleeName`; `nameof` for `nameof(b)`) | `<init>` (`new B(2)`, `new List<int>()`) | the `: base(1)` initializer is not a frame site |

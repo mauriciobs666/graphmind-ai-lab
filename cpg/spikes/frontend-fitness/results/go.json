@@ -1,0 +1,919 @@
+{
+ "lang": "go",
+ "provisional": true,
+ "truth": "truth/go.final.jsonl",
+ "labelledSites": 373,
+ "scoredSites": 359,
+ "unscoredSites": 14,
+ "unscoredReasons": {
+  "notACall": 14
+ },
+ "internalSites": 146,
+ "externalScoredSites": 213,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 146,
+  "scoredSites": 359,
+  "recall": {
+   "k": 122,
+   "n": 146,
+   "p": 0.8356,
+   "wilson95": [
+    0.767,
+    0.887
+   ]
+  },
+  "edgeRecall": {
+   "k": 169,
+   "n": 209,
+   "p": 0.8086,
+   "wilson95": [
+    0.7499,
+    0.8562
+   ]
+  },
+  "precision": {
+   "k": 106,
+   "n": 106,
+   "p": 1.0,
+   "wilson95": [
+    0.965,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 18,
+   "n": 146,
+   "p": 0.1233,
+   "wilson95": [
+    0.0794,
+    0.1865
+   ]
+  },
+  "resolvedToNonSymbol": 2,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 106,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.035
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 320,
+   "n": 359,
+   "p": 0.8914,
+   "wilson95": [
+    0.8549,
+    0.9195
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 146,
+  "scoredSites": 359,
+  "recall": {
+   "k": 122,
+   "n": 146,
+   "p": 0.8356,
+   "wilson95": [
+    0.767,
+    0.887
+   ]
+  },
+  "edgeRecall": {
+   "k": 169,
+   "n": 209,
+   "p": 0.8086,
+   "wilson95": [
+    0.7499,
+    0.8562
+   ]
+  },
+  "precision": {
+   "k": 106,
+   "n": 106,
+   "p": 1.0,
+   "wilson95": [
+    0.965,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 18,
+   "n": 146,
+   "p": 0.1233,
+   "wilson95": [
+    0.0794,
+    0.1865
+   ]
+  },
+  "resolvedToNonSymbol": 2,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 106,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.035
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 320,
+   "n": 359,
+   "p": 0.8914,
+   "wilson95": [
+    0.8549,
+    0.9195
+   ]
+  }
+ },
+ "gate81": {
+  "off": {
+   "n": 146,
+   "k": 122,
+   "observedRecall": 0.8356,
+   "verdict": "fail",
+   "maxMissesAt98": 2
+  },
+  "on": {
+   "n": 146,
+   "k": 122,
+   "observedRecall": 0.8356,
+   "verdict": "fail",
+   "maxMissesAt98": 2
+  }
+ },
+ "gate83": {
+  "off": {
+   "nP": 106,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  },
+  "on": {
+   "nP": 106,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 122,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 24,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0172,
+    0.0172
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 7629,
+   "median": 0,
+   "p90": 2,
+   "p99": 9,
+   "max": 20,
+   "shareOver20": {
+    "k": 0,
+    "n": 7629,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0005
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 7629,
+   "median": 0,
+   "p90": 2,
+   "p99": 9,
+   "max": 20,
+   "shareOver20": {
+    "k": 0,
+    "n": 7629,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0005
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 13362,
+   "matchRate": {
+    "k": 11494,
+    "n": 13362,
+    "p": 0.8602,
+    "wilson95": [
+     0.8542,
+     0.866
+    ]
+   },
+   "frameFiles": 112,
+   "frameFilesWithFileNode": {
+    "k": 109,
+    "n": 112,
+    "p": 0.9732,
+    "wilson95": [
+     0.9242,
+     0.9908
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 109,
+    "n": 112,
+    "p": 0.9732,
+    "wilson95": [
+     0.9242,
+     0.9908
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin",
+    "lang": "go",
+    "files": 117,
+    "methods": 2559,
+    "calls": 12924,
+    "callsWithoutMethod": 0,
+    "frameSites": 13362
+   }
+  },
+  "on": {
+   "frameSites": 13362,
+   "matchRate": {
+    "k": 11494,
+    "n": 13362,
+    "p": 0.8602,
+    "wilson95": [
+     0.8542,
+     0.866
+    ]
+   },
+   "frameFiles": 112,
+   "frameFilesWithFileNode": {
+    "k": 109,
+    "n": 112,
+    "p": 0.9732,
+    "wilson95": [
+     0.9242,
+     0.9908
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 109,
+    "n": 112,
+    "p": 0.9732,
+    "wilson95": [
+     0.9242,
+     0.9908
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "go",
+    "files": 117,
+    "methods": 2559,
+    "calls": 12924,
+    "callsWithoutMethod": 0,
+    "frameSites": 13362
+   }
+  }
+ },
+ "strata": null,
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 209,
+   "withJoernMethodAtDefLine": 196
+  },
+  "on": {
+   "tMembers": 209,
+   "withJoernMethodAtDefLine": 196
+  }
+ },
+ "misses": {
+  "off": 24,
+  "on": 24,
+  "either": 24,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 24
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 2,
+    "siteKey": "binder_test.go:2001:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "server_test.go:574:15:waitForServerStart",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "binder_test.go:1116:7:createTestContext",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "middleware/compress_test.go:66:8:r.Close",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "binder_test.go:1768:11:b.Float32s(\"param\", &dest).BindError",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "binder_test.go:126:4:assert.Len",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "middleware/request_logger_test.go:410:12:time.Unix",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "binder_test.go:3015:7:binder. Int64(\"int64\", &dest.Int64). Int32(\"int32\", &dest.Int32). Int16(\"int16\", &dest.Int16). Int8",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "binder_test.go:2918:2:b.ResetTimer",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "binder_test.go:2263:24:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "middleware/rate_limiter.go:271:8:store.mutex.Unlock",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "middleware/decompress_test.go:387:8:h",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "binder_test.go:1575:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "binder_test.go:742:24:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "binder_test.go:3132:11:b.MustTimes(\"param\", &dest, layout).BindError",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "binder_test.go:1188:28:fmt.Sprintf",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "server_test.go:386:14:s.StartTLS",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "rfc9457.go:98:53:wrapped.Error",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "middleware/randomstring_concurrent_test.go:29:7:t.Errorf",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "binder_generic_test.go:182:14:QueryParams[bool]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 220,
+    "siteKey": "rfc9457.go:77:8:errors.As",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "middleware/rewrite_test.go:245:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 226,
+    "siteKey": "binder_test.go:1661:9:createTestContext",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 227,
+    "siteKey": "binder_test.go:126:24:len",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 250,
+    "siteKey": "binder_generic_test.go:286:14:FormValues[bool]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "router_concurrent_test.go:243:6:func(goroutineID int) { defer wg.Done() for range 100 { routes := router.Routes() // Actually iterate and access the route data // This would cause a data race if Routes() returned a direct reference for _, route := range routes { _ = route.Method // Read the method _ = route.Path // Read the path _ = route.Name // Read the name if len(route.Parameters) > 0 { _ = route.Parameters[0] // Read parameters if present } } iterationCount.Add(1) } }",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 271,
+    "siteKey": "binder_test.go:2497:23:b.BindWithDelimiter",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "binder_generic_test.go:572:14:ParseValue[uint]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 283,
+    "siteKey": "middleware/proxy_test.go:366:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 288,
+    "siteKey": "binder_test.go:329:4:assert.Equal",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "server_test.go:95:17:addr.String",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "middleware/body_dump_test.go:314:8:mw",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "context_generic_test.go:47:12:ContextGetOr[int64]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "ip_test.go:637:19:ExtractIPFromRealIPHeader(tc.givenTrustOptions...)",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "binder_test.go:258:4:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 334,
+    "siteKey": "middleware/method_override_test.go:88:9:m",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "binder_test.go:242:5:assert.NoError",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "binder_test.go:1152:2:assert.Equal",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "router_concurrent.go:30:8:r.mu.RUnlock",
+    "kind": "method",
+    "internal": false
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 2,
+    "siteKey": "binder_test.go:2001:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 6,
+    "siteKey": "server_test.go:574:15:waitForServerStart",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 13,
+    "siteKey": "binder_test.go:1116:7:createTestContext",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "middleware/compress_test.go:66:8:r.Close",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 40,
+    "siteKey": "binder_test.go:1768:11:b.Float32s(\"param\", &dest).BindError",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 42,
+    "siteKey": "binder_test.go:126:4:assert.Len",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 69,
+    "siteKey": "middleware/request_logger_test.go:410:12:time.Unix",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 82,
+    "siteKey": "binder_test.go:3015:7:binder. Int64(\"int64\", &dest.Int64). Int32(\"int32\", &dest.Int32). Int16(\"int16\", &dest.Int16). Int8",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 98,
+    "siteKey": "binder_test.go:2918:2:b.ResetTimer",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "binder_test.go:2263:24:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 117,
+    "siteKey": "middleware/rate_limiter.go:271:8:store.mutex.Unlock",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 126,
+    "siteKey": "middleware/decompress_test.go:387:8:h",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "binder_test.go:1575:9:QueryParamsBinder(c).FailFast",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 146,
+    "siteKey": "binder_test.go:742:24:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "binder_test.go:3132:11:b.MustTimes(\"param\", &dest, layout).BindError",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 160,
+    "siteKey": "binder_test.go:1188:28:fmt.Sprintf",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 163,
+    "siteKey": "server_test.go:386:14:s.StartTLS",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 171,
+    "siteKey": "rfc9457.go:98:53:wrapped.Error",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 185,
+    "siteKey": "middleware/randomstring_concurrent_test.go:29:7:t.Errorf",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 217,
+    "siteKey": "binder_generic_test.go:182:14:QueryParams[bool]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 220,
+    "siteKey": "rfc9457.go:77:8:errors.As",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 225,
+    "siteKey": "middleware/rewrite_test.go:245:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 226,
+    "siteKey": "binder_test.go:1661:9:createTestContext",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 227,
+    "siteKey": "binder_test.go:126:24:len",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 250,
+    "siteKey": "binder_generic_test.go:286:14:FormValues[bool]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 266,
+    "siteKey": "router_concurrent_test.go:243:6:func(goroutineID int) { defer wg.Done() for range 100 { routes := router.Routes() // Actually iterate and access the route data // This would cause a data race if Routes() returned a direct reference for _, route := range routes { _ = route.Method // Read the method _ = route.Path // Read the path _ = route.Name // Read the name if len(route.Parameters) > 0 { _ = route.Parameters[0] // Read parameters if present } } iterationCount.Add(1) } }",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 271,
+    "siteKey": "binder_test.go:2497:23:b.BindWithDelimiter",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 273,
+    "siteKey": "binder_generic_test.go:572:14:ParseValue[uint]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 283,
+    "siteKey": "middleware/proxy_test.go:366:4:regexp.MustCompile",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 288,
+    "siteKey": "binder_test.go:329:4:assert.Equal",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 290,
+    "siteKey": "server_test.go:95:17:addr.String",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 306,
+    "siteKey": "middleware/body_dump_test.go:314:8:mw",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 311,
+    "siteKey": "context_generic_test.go:47:12:ContextGetOr[int64]",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 314,
+    "siteKey": "ip_test.go:637:19:ExtractIPFromRealIPHeader(tc.givenTrustOptions...)",
+    "kind": "other",
+    "internal": true
+   },
+   {
+    "ordinal": 329,
+    "siteKey": "binder_test.go:258:4:errors.New",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 334,
+    "siteKey": "middleware/method_override_test.go:88:9:m",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 348,
+    "siteKey": "binder_test.go:242:5:assert.NoError",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "binder_test.go:1152:2:assert.Equal",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 350,
+    "siteKey": "router_concurrent.go:30:8:r.mu.RUnlock",
+    "kind": "method",
+    "internal": false
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:36:43Z",
+   "wallSeconds": 9.2,
+   "peakMemMiB": 1232.9,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin",
+   "cpgMB": 4.34
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:12Z",
+   "wallSeconds": 5.2,
+   "peakMemMiB": 433.9,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin=2559",
+    "CONTENT /out/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:18Z",
+   "wallSeconds": 6.2,
+   "peakMemMiB": 421.6,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/bfcf67ad-8c94-4a3b-95ba-472693435351.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=go",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:37:09Z",
+   "wallSeconds": 16.4,
+   "peakMemMiB": 1251.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/parse.log",
+   "fetchFlag": "--fetch-dependencies",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/on.cpg.bin",
+   "cpgMB": 4.36
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:26Z",
+   "wallSeconds": 5.1,
+   "peakMemMiB": 431.6,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=2559",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:03:32Z",
+   "wallSeconds": 6.7,
+   "peakMemMiB": 423.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/720d4d61-f381-429d-a3ac-8efa02b71bef.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/bfcf67ad-8c94-4a3b-95ba-472693435351.measure.jsonl",
+   "sha256": "f30347fc0b29f9d714ea9fb6073ae505889f6300899d34dab79820e3305004bc"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/720d4d61-f381-429d-a3ac-8efa02b71bef.measure.jsonl",
+   "sha256": "7d8b98fa2f9713e336fd75a8714b4884b2b925e644befc1e401c95f297840548"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

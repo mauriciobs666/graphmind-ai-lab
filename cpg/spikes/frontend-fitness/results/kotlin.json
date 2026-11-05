@@ -1,0 +1,97 @@
+{
+ "lang": "kotlin",
+ "provisional": true,
+ "status": "stopped-no-cpg",
+ "stopReason": "Joern v4.0.579's default-overlay stage fails on this corpus: ReachingDefPass (dataflowengineoss) raises java.util.NoSuchElementException: key not found: ...nodes.MethodRef[label=METHOD_REF; ...]. joern-parse (offline runner and toolchain image alike) exits 1 after kotlin2cpg has written a frontend-only cpg.bin (1.23 MB, identical to the --nooverlays output). Every consumer step that calls importCpg (cpg-content-check.sc, measure.sc) applies the missing default overlays and aborts with the same pass failure (exit 1), so the D15 content check cannot certify a CPG. No metric computed; reported under the stop rule, not worked around.",
+ "labelledSites": 430,
+ "scoredSites": 430,
+ "internalSites": 152,
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:58:39Z",
+   "wallSeconds": 17.3,
+   "peakMemMiB": 837.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/off/5cb72b2b-369c-4995-bc05-21de59ed21c2.cpg.bin",
+   "cpgMB": 1.23
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=kotlin",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T01:59:07Z",
+   "wallSeconds": 19.9,
+   "peakMemMiB": 995.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/on/parse.log",
+   "fetchFlag": "--download-dependencies",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/on/on.cpg.bin",
+   "cpgMB": 1.23
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 1,
+   "startedUtc": "2026-11-05T01:58:58Z",
+   "wallSeconds": 7.0,
+   "peakMemMiB": 488.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/off/content.log",
+   "contentLines": []
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 1,
+   "startedUtc": "2026-11-05T01:59:29Z",
+   "wallSeconds": 6.6,
+   "peakMemMiB": 424.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/on/content.log",
+   "contentLines": []
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "attempts": [
+  "joern-parse default overlays, off (runner) and on (toolchain image, --download-dependencies): rc 1, frontend-only cpg.bin left behind",
+  "joern-parse --nooverlays: rc 0; cpg-content-check.sc via importCpg: rc 1 (ReachingDefPass re-applied, ERROR line in content.log)",
+  "one probe script: importCpg(cpg, 'p', false) then run.base; run.controlflow; run.callgraph: METHODS=2824 (non-external), CALLS=15950, calls with a callee edge = 0. Unexplained and not pursued (a hand-assembled overlay set would be a pipeline deviation needing a decision)."
+ ],
+ "evidenceLogs": {
+  "off.defaultOverlays": "see s27 run record; log overwritten by the --nooverlays attempt",
+  "off.contentCheck": ".ccg-work/frontend-fitness/joern/kotlin/off/content.log",
+  "on.contentCheck": ".ccg-work/frontend-fitness/joern/kotlin/on/content.log"
+ }
+}
