@@ -325,3 +325,68 @@ Against the saved pre-images (run): go v1.11 → now: 0 changes to `T`, `externa
 ### Stopping condition
 
 This gate closes at Pass 4 if the owner commits N1 (a)-(b)-(d) text and takes N2 and N5's deletion; N3, N4 and the rest are the owner's to take or decline without a Pass 5. It reopens on any of: `validator` exit non-zero on a clean checkout of the files; a final line whose `T` set differs from its label/decision (my derivation above, 0 mismatches today); `truth/python.noise.json` still present at commit; §5.1 step 4 still contradicting step 7.
+
+## Pass 5 (S27 part 1, commit `8ce609d9`: `measure.sc` edits, `matcher-table.md`, `s27_run.py`, `s27_metrics.py`, `s27_probe.py`, `unmatched-probe.sc`, `results/`, `adjudication/*-misses.jsonl`; static, 2026-11-04)
+
+**Scope.** Static review against plan p0-2 §4.6 S25/S27, ML §2/§7/§8, root `REVIEW.md`. Read from disk; no git, no FalkorDB. The P0 results are *provisional* (`final`, not `final2`), so findings concern method and reporting, not final figures. Re-derivations were run with an independent script over `results/<lang>.answers.jsonl`, `truth/<lang>.final.jsonl` and the work-area `*.measure.jsonl` (all six measure files are newer than `measure.sc`, 22:52).
+
+CPG: considered, not relevant — Scala/Python spike scripts and data files with no loaded graph; verified by independent recomputation from the artifacts.
+
+**Verdict: approve with suggestions.** No blocker: the three `measure.sc` changes are label-blind and do not inflate any headline figure; the figures I re-derived reproduce; the miss logs are exact. Three majors need an owner before `final2`/the report: A1 (Python's operative recall verdict is hidden in the top-level gate), A2 (the "inspected one by one" step is mechanical, and the Java/C++ "absent" classes have no established cause), A3 (Kotlin: wording and an undefined §8 outcome).
+
+### Q1. `measure.sc` changes and matcher table (verified)
+
+- **Label-blind:** `measure.sc` reads only `frame` and `sample.private` (siteKey, callee, kind); no `T`, label or reference. Its three rules are syntactic (name / line / column). The inspection that found them used `unmatched` keys only (`s27_probe.py` takes `siteKey`, opens no truth). Selecting fixes from *unmatched labelled sites* is what ML §7.1 prescribes.
+- **Optional chain (`n.endsWith("?."+callee) && code.startsWith(n)`):** correct for `a?.b(x)`; cannot match `a?.xb`. A false match needs a same-name optional-chain call on the same line that is nearer in column than the real, unmodelled one: not seen. Effect on labels: 4 scored JS sites match this way, none resolved.
+- **Multi-line fallback:** fires only when the name's line has no match. Effect on labelled scored sites: Java 15, C# 17, Go 1, others 0. Of those 33, only Go #74 is resolved (correct); no internal-recall effect, because `Nm` credit does not depend on the match. So it moves precision by at most one site (Go 106/106 → 105/105). **Risk it does create: A4** below.
+- **Null-method guard:** `Try(c.method.filename)` skips calls with no METHOD (7 in C#, 0 elsewhere, reported as `meta.callsWithoutMethod`). Bias nil on labels. It swallows *any* exception into the same counter; harmless here because the count is surfaced.
+- `matcher-table.md` rows agree with the code (fallback "only if no call matches there"; JS optional-chain row). Not re-observed on probes (needs Joern), so the claim "observed" rests on the author.
+
+### Q2. Re-derivation (independent script; three definitions of *found* for ambiguity)
+
+*found*: **R1** `Res` only (T member hit by a non-external, non-vendored resolved target within 8 lines above `defLine`); **R2** `Res ∪ Nm` with name-equality only; **R3** `Res ∪ Nm` with a Joern METHOD required near the T location (ML §2 as implemented); tool = `answers.found`.
+
+| lang | n_int | tool | R1 | R2 | R3 |
+|---|---|---|---|---|---|
+| python | 155 | 152 | 113 | 129 | **152** |
+| go | 146 | 122 | 108 | 129 | 124 (A1) |
+| csharp | 150 | 107 | 23 | 101 | **107** |
+| java | 114 | 105 | 47 | 104 | 104 (my METHOD-end check rejects `<init>`, `le = -1`; tool is right) |
+
+R3 reproduces the tool exactly except Go (2 sites, A1) and the Java note. The spread R1→R3 is large by design: recall is the *fallback* recall, so name match carries it (C#: 23 by resolution, 107 with name match). Wilson (z = 1.959964) reproduced to 4 d.p. for 152/155 [0.9446, 0.9934], 122/146 [0.767, 0.887], 107/150 [0.6364, 0.7797], 110/116 [0.8917, 0.9761], 47/47 and 50/50. Fan-out median/p90/p99/max reproduced for Python (0/5/26/26) and Go (0/2/9/20); C# p90 6.
+**Precision** (ML §2: resolved = a symbol target; correct = `Res ⊆ T`): Python tool 110/116 = 0.9483; strict-name variant 100/106 = 0.9434 (A5); both < 0.95; the lenient "any target hits T" reading (not ML's) gives 104/106 = 0.981 and would flip the verdict, so the strict `⊆` reading matters. Go 106/106; C# 22/25 (my 23/25, same cause class as A5, n_P < 60 either way). **Java off vs on:** 47/47 vs 50/50, the same precision; on adds 3 resolved sites, 0 recall change, 0 discordant sites, McNemar p = 1.0 (every language: 0/0). Both are n_P < 60 → *unmeasured* on both (rule applied correctly: `n_P < 60` → "unmeasured", `P < 0.95` → "adopted"; Python is the only language that fires, 0.9483, Wilson spanning 0.95).
+**Strata (ML §8.1 / plan S27 row):** Python non-contact 146/149 = 0.9799 → *fail* (≤ ⌊0.02·149⌋ = 2 misses allowed, 3 observed); contact 6/6. JS non-contact 129/165, contact 19/19. Implementation matches.
+
+### Q3. Miss logs (verified)
+
+For all six languages the set of ordinals in `adjudication/<lang>-misses.jsonl` equals {scored, `T` non-empty, `found` false in off or on}: 3/36/24/9/43/80, no duplicate, no external or unscored row, `proposedCause` empty and `decision` null throughout; every row is `missedIn` both configs (off ≡ on). The logs do contain the truth `evidence`/`basis` (fine for the post-hoc adjudicator).
+
+### Q4. Kotlin stop
+`results/kotlin.json` is real evidence: `off/content.log:6293-6294` holds `ReachingDefPass failed … NoSuchElementException … MethodRef`; the `--nooverlays` frontend CPG exists (1.23 MB, 2,824 methods, 15,950 calls); no metric was computed. See A3.
+
+### Findings
+
+**A1 (major, run) — Python's operative recall verdict contradicts the top-level gate, and its margin is one site.** `results/python.json` `gate81.off/on.verdict` = "pass (observed >= 0.98)" (152/155), but plan S27's row says the language passes only if the *non-contact* stratum does, and `strata.nonContact` = 146/149 = 0.9799, `gate81` "fail". A reader of the headline sees a pass. One adjudication overturn (`final2`) flips it either way. Fix: have `s27_metrics.py` emit a single language-level `recallDecision` that applies the stratum rule for Python/JS (and prints the miss budget: 2 allowed, 3 observed), and keep the unstratified figure labelled "pooled, not the decision". The report must say "observed 0.9799, Wilson [lower bound], one site from the line".
+
+**A2 (major, run) — "inspected one by one" (ML §7.1) is a mechanical classification; two classes have no established cause.** `s27_probe.py` classifies unmatched labelled sites as `absent-no-file-node` / `absent-no-call-on-line` / `calls-present` and sets `possibleMatcherError` by name similarity; nothing records a human disposition. Java: 343 of 343 are `absent-no-file-node` (15 of 64 frame files, all under `src/test/`, have no FILE node; census match 1,133/3,693); C++: 133 of 146 (71 of 132 files, the `googletest/`, `googlemock/` test trees; match 4,496/28,490). That pattern fits a frontend default (an ignored `test` path) as well as a parse loss, but I could not check the Joern source here: **inferred, not confirmed**. It matters: ML §8.1 sends "absent in Joern" to *frontend configuration, then re-measure*; if it is a default ignore, Java/C++/C# recall is understated for a harness reason and the "absent" label hides a fixable cause. Also, `s27_metrics.py` ran before the unmatched list was clean, against ML §7.1's "no metric until zero matcher errors remain"; the `results/` figures are post-fix, so only the process record is at issue. Fix: before `final2`, (a) group `absent-no-file-node` files by directory and read the frontend's ignore/exclude defaults (`--help`, `joern-parse` log) for java/cpp/csharp; (b) write one dispositioned line per class into the unmatched file; (c) if a default ignore explains it, re-run with the override and re-measure (a `data-scientist` call, since it changes the frame-to-CPG contract).
+
+**A3 (major, decision) — Kotlin: the disclosure overstates, and ML §8 has no outcome for it.** "Joern cannot build a CPG" is wrong as written: kotlin2cpg builds one; the *default-overlay stage* aborts on `ReachingDefPass`, so `importCpg` (hence D15 and `measure.sc`) aborts. The status `stopped-no-cpg` has the same problem. A hand-run (`run.base/controlflow/callgraph`) reached 2,824 methods and 0 callee edges, "unexplained and not pursued"; `typerelations` was not in the list tried. ML §8 covers only `n < 100` (fail); an unmeasurable language is not defined, and the stop is a pipeline fault, not a fitness result. Honest, but two cheaper facts were left: `Nm`-only recall and fan-out need only METHOD nodes (an `importCpg(…, false)`-style load would give a lower bound, Res empty, precision unmeasured). Decision for the owner/`data-scientist`: (1) reword to "default overlays fail on this corpus (ReachingDefPass, Joern v4.0.579); D15 not passable; Kotlin *unmeasured*, not *fail*"; (2) rule whether an Nm-only floor is reported, or the pipeline deviation (version / dataflow-less overlay set) is authorised; (3) state Kotlin's §8 row as *unmeasured* with the backlog item "frontend configuration". The primary default-overlay log was overwritten (`evidenceLogs.off.defaultOverlays` says so); the surviving trace in `content.log` should be copied into the report.
+
+**A4 (minor, run) — shared-CALL claims: several frame sites can take one Joern CALL.** For same-name chains `x.append(a).append(b)…` javasrc2cpg gives all calls the expression-start line/column; with the fallback the later frame sites find only the first CALL (same name, same column; lowest id wins). Counts of CALLs claimed by more than one frame site: Java 7 groups / 26 sites, C# 48 / 116, C++ 12 / 24, Python 2 / 4, Go 1 / 2. Census match rate is overstated by the surplus (≤ 0.4% of C# matched), resolved targets of a later chained call may be the wrong receiver's. Labelled impact: 5 Java sites, all external and unresolved → none on any figure. Fix: assign one-to-one (skip a CALL already claimed, ordering frame sites by `callText` length), or at least report the claim count in `meta`.
+
+**A5 (minor, run) — `resolvedSymbols` classification is keyed by `(file, line)`.** `s27_metrics.py` `M["methods"][file][l]` is last-wins; Python has 1,081 lines with several METHODs (`__init__`, `__init__<metaClassAdapter>`, `<fakeNew>`, `<metaClassCallHandler>`), 67 resolved targets land on them. 10 Python `Cls(...)` sites count as resolved only because the winning name is not exactly `<fakeNew>`; under the other order P = 100/106 = 0.943, not 110/116. Verdict unchanged (both < 0.95) but the figure is an accident of sort order. Fix: key by `fullName` (carried in `res`), not line.
+
+**A6 (minor, run) — `NONSYMBOL_NAME` includes `<lambda>\d*`, but the truth counts anonymous functions as symbols.** Go #229 and #340 resolve exactly to the `<lambda>N` METHOD at the T location (`TestValuesFromForm.<anon>#1`, `TestParseValue_Time.<anon>#1`), yet are *not found* and are excluded from precision. Go recall 122/146 → 124/146 = 0.849; both sites sit in `go-misses.jsonl` as false misses. Verdict unchanged (Go fails either way); Python/JS have 0 such sites. Fix: treat a `<lambda>` METHOD at a T location as a symbol, or drop `<lambda>` from the list and let T decide.
+
+**A7 (minor, run) — constructor `Nm` is defined two ways.** Recall credits a ctor T member by type name + any METHOD there (Java #461 *found* with `nm = 0`), but `nm` (fan-out) counts only METHODs named like the type, which is `<init>` in Java/C#. So the ctor sites contribute 0 to fan-out (C# p90 6 over all unresolved vs 9 over non-ctor; Java ctor sites 184 of 797, all 0). Decision-neutral (threshold 20), but §8.2's report should state it, or count `<init>` in the type for ctor sites.
+
+**A8 (note) — `on` ≡ `off` by construction for Python, JS, C++** (`FETCH_ON_FLAG` none): two parses of one input, 0 discordant sites. The paired test and "worse of the two configurations" are vacuous there; say so in the report rather than let p = 1.0 read as "no gap measured".
+
+### What is solid
+Label-blindness of the matcher and the probe; Wilson, nearest-rank quantiles, §8.1 miss budget and §8.3 n_P ≥ 60 rule as ML defines them; recall and the miss logs reproduce from independent code; measure outputs post-date `measure.sc`; Kotlin evidence is real and the stop rule was respected.
+
+### Open questions
+1. Authorise an Nm-only Kotlin floor, or a dataflow-less overlay deviation (A3)? 2. Is a Joern frontend default-ignore of test paths acceptable as a harness bias, or re-measure with an override (A2)? Both are `data-scientist`/stakeholder calls.
+
+### Stopping condition
+Closes at Pass 6 once A1-A3 are taken (A2 may be satisfied by a documented classification plus the ignore-default check); A4-A8 are the owner's to take or decline. Reopens if `final2` figures are reported with the pooled Python gate as the decision, or Kotlin appears as *fail* rather than *unmeasured*.
