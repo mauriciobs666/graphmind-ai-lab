@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.15 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.16 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
-*2026-11-01 — v1.15: §Q6 "Design effect" states that a constant cell contributes and takes the pooled DE, and makes the family line's noun singular at `k = 1` (impl review Pass 27, question 2 and P27-n1).*
+*2026-11-05 — v1.16: §Q1.2 halts a round above 4% (two-hit floor under 25 seeds) and states the bracket rule's final form (plan6 v1.19 §3.8, impl review Pass 19).*
 
 ## 0. The question and the decision it serves
 
@@ -144,17 +144,29 @@ generates or labels: it has seen seeds and intents.
     - Tokens no prose uses are hits anywhere: `near-miss`, and any token in the non-word id form,
       such as `dom_07` (`seeds.ID_PATTERN`). Since ids never reach the generator, such a hit
       catches an invented reference code or a request-writer defect.
-    - Ordinary words are hits only in a meta position: a bracket or parenthesis whose whole content
-      is a listed token (or tokens joined by `/`, `,`, `|`), or a listed token followed by `:` or `=`
-      inside a bracket, or a token after `label`, `answer`, `category` or `intent`. That covers
-      `intended`, `difficulty` and the answer names. So "had difficulty paying", a plain
-      "complaint", "(order #4411)", "(other than login)", "(type A)" and "(no rush)" pass.
-      *(2026-11-04: narrowed from "any listed token inside brackets", which flagged natural text.)*
+    - Ordinary words are hits only in a meta position. In a bracket or parenthesis group, after
+      trailing `.`, `!`, `?`, `;` and spaces are stripped from its content, a listed token hits when
+      (a) the content is listed tokens only (or joined by `/`, `,`, `|`), or (b) a listed token is
+      followed by `:` or `=`, or (c) `label`, `answer`, `category`, `intent`, `intended` or
+      `difficulty` is followed by a listed token within its next two words, or (d) the content is
+      exactly `difficulty` or `intended` and one listed token, in either order. Outside brackets, a
+      token after `label`, `answer`, `category` or `intent` hits. So `(intended answer is true)`,
+      `(the answer is no)`, `(difficulty clear)`, `(clear difficulty)` and `(clear.)` hit, while
+      "had difficulty paying", "complaint", "(order #4411)", "(other than login)", "(type A)",
+      "(no rush)", "(not clear)", "(true story)", "(clear and simple)" and "(no answer)" pass.
+      A bare keyword before a token is deliberately one-directional (c): `(no answer from support)`
+      is ordinary prose. `(no difficulty)` hits through (d), at the cost of a regeneration.
   - **On a hit,** the seed is regenerated, not dropped: the seed is kept and only its text is
     redrawn, so the design mix is unchanged. Regeneration runs pool hits across design strata.
     A regenerated item keeps its seed's `genRound` and takes the new run's `genRunId`.
     After 3 hits the seed drops, counted by its axes.
-  - **Halt** if more than 5% of a round's items hit, because the template is then defective.
+  - **Halt** if a round's first-pass hits exceed 4% of its drawn seeds and number at least two (a
+    single hit is handled by regeneration). The cutoff sits below the 5% leak to find: at 5% the
+    end-of-round test has 46% power, at 4% about 91% for about 4% false halts at a true 3%
+    rate (880 seeds, independent hits, exact calculation). The denominator is fixed when the round
+    is drawn and hits only grow, so a test after each run equals the end-of-round test, found
+    sooner. Rounds under 25 seeds cannot halt alone; plan6 §3.8 pools them per template once 300
+    seeds are drawn.
   - Hits print by intent and difficulty.
 - **Isolation.** The exchange directory is outside the repo, with opaque names and no earlier
   vote's answers. The tool allowlist is request-read and answer-write only, with **no MCP tool**:
