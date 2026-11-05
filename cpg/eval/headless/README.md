@@ -98,7 +98,10 @@ run-writer.sh status  [<E> [<role> <stratum>]]
   taken over; `--dry-run` takes none. The launch runs with stdin from `/dev/null`; SIGTERM/SIGINT to the
   launcher is forwarded to `timeout` (which stops claude) and the `end` line is still written. If the
   launcher is killed with SIGKILL, the writer may survive: **find and kill the orphan before using
-  `--assume-ended`**. A torn last index line is terminated before the next record is appended.
+  `--assume-ended`**. Accepted limits: takeover of a stale lock is not atomic (two launchers racing on
+  one dead pid could both run; the window is tiny), and a stale lock whose pid was reused by another process
+  refuses with exit 3 (remove the lock directory by hand). A torn last index line is terminated before the
+  next record is appended.
 - **Size and links:** a brief over 100,000 bytes is refused (exit 2) by `prepare` and by `start`
   before any session id, stream log or index line exists. `prepare` refuses (exit 3) a kit that
   contains a symlink; flatten it first.

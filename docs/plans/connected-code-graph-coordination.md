@@ -546,3 +546,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-05: S52 fixes delivered (cobb): B-1 fixed, M-1 cuts applied, m-1..m-4; verified guard 75/0, mutants 18/0, agents_json 59/0, mutants_agents 11/0. agents.json sha256 f88cfb46d28dea09... (S54 re-opened). Re-gate: analyst a472ea9542d492f22 (B-1 + M-1 ruling).
 - 2026-11-05: S52 ACCEPTED (analyst Pass 2 re-gate approve; agents.json f88cfb46d28dea09, extract 12,145 B sha 5202c983c7ced1bc). S54 must observe Pass 1 Q5 list. S53 fixes in flight (devops a65800465e4dc9266).
 - 2026-11-05: S53 fixes delivered (devops): lock, signal forwarding, size cap, stdin, symlink refuse, torn-line; verified launcher 162/0, mutants 0/42 survive, prepare_bin 31/0. Re-gate: analyst a1c41cd999cdb9c6e.
+- 2026-11-05: S53 ACCEPTED (analyst Pass 3 approve w/ suggestions; m-4 stale-lock takeover race and n-3 pid reuse recorded as accepted limits in README). Next: S55 capture session.

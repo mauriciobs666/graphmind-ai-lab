@@ -5487,3 +5487,25 @@ CPG: considered, not relevant — the artifact is a shell hook, JSON prompts and
 **Carried to S54, unchanged from Pass 1 question 5:** hook firing, exit-code handling under the real harness (plant the surrogate path), `cwd` equals the role root, real tool-input key names, tool list exactly the five, no symlinks in the kit copy, brace-glob and `$VAR`/whitespace/Unicode path handling, `--agents`/`--agent` resolution, `CCG_GUARD` inheritance under `env -i`. Any later change to Appendix B's B.0 or role parts, or to the extract, changes the `agents.json` hash and re-opens S54.
 
 **Stopping condition:** met; no Pass 3 for S52.
+
+## Pass 3 — S53 re-gate (`b024e3f5`)
+
+**Verdict: approve with suggestions.** Every Pass 2 stopping condition holds by execution. I ran `tests/test_launcher.sh` (162 passed, 0 failed) and `tests/mutants_launcher.sh` (0 of 42 survived). My own harness used a scratch HOME with a stub binary; no `claude` call was made.
+
+Dispositions:
+- **M-1 fixed.** Six parallel `start` runs on one role gave exactly one exit 0, five exit 3 and one index start line. Then 15 rounds of three parallel starts on fresh roles gave exactly one success each. The lock-removal mutants `no-lock-start` and `no-lock-resume` are killed.
+- **m-1 fixed.** SIGTERM to the launcher left no child. The index got an end record with exit 143, and the lock directory was removed. After SIGKILL the lock stays behind, and the writer survives as an orphan (I saw the `timeout` and stub pids). The next `start` or `resume` takes over the lock because its recorded pid is dead, and `resume` still refuses without `--assume-ended`. With `--assume-ended` a second writer ran beside the orphan, as warned. The README (lines 100-101) carries the "find and kill the orphan first" rule.
+- **m-2 fixed.** A 100,001-byte brief is refused by `prepare` (exit 2). A brief of exactly 100,000 bytes prepared and started.
+- **m-3 fixed.** The launch subshell is `</dev/null` (`run-writer.sh:363`). The `stdin-inherited` mutant is killed. I read the code but did not observe the child's stdin.
+- **n-1 fixed.** A kit with a nested symlink is refused (exit 3) and no role root is created.
+- **n-2 fixed.** A planted torn index line was terminated before the next record, and every later line was whole.
+
+### New findings
+
+**m-4 (minor, inferred): the stale-lock takeover is racy.** `acquire_lock` does `rm -rf` then `mkdir` (`:276-283`). Launcher B can read the dead pid, and A can then take over and write its own live pid. B's `rm -rf` then removes A's fresh lock and B's `mkdir` succeeds, so both launchers run. My 20 rounds of four parallel starts on a stale lock never hit it; the window is tiny and I did not reproduce it. It needs a stale lock plus a simultaneous double launch, which is rarer than the case M-1 closed. A fix is `flock` on a file under `runs/`, held for the launcher's life, which has no stale state and no takeover. If you keep `mkdir`, document the limit.
+
+**n-3 (nit, inferred): pid reuse.** A stale lock whose pid was reused by an unrelated live process is never taken over. It fails safe with exit 3 and a message that names the lock path; the README should say "remove the lock directory by hand if the pid is not a launcher".
+
+No problem found between the lock, the signal-forwarding wait and `--restart`. `start` takes the lock before the prior-session and empty-`out/` checks, and a signal during the wait still reaches the EXIT trap, which releases the lock.
+
+No further pass is needed if m-4 is either fixed or recorded as an accepted limit.
