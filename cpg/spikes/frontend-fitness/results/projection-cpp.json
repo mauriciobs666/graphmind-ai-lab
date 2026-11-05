@@ -1,0 +1,1697 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/off/9bc35aaa-ae58-4a58-b37a-883a81ec3f98.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.2
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp/on/53d28dd9-a0a2-4916-adee-76ab0ca34ea7.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.1
+  }
+ },
+ "censusReach": {
+  "k": 1903,
+  "n": 3490,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 0.5453,
+  "wilson95": [
+   0.5287,
+   0.5617
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.3168,
+     "ci95": [
+      0.1132,
+      0.5204
+     ],
+     "connected": 51,
+     "n": 27,
+     "pairs": 161,
+     "se": 0.09905,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.3457,
+     "ci95": [
+      0.2079,
+      0.4836
+     ],
+     "connected": 65,
+     "n": 30,
+     "pairs": 188,
+     "se": 0.06738,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.3324,
+     "ci95": [
+      0.1723,
+      0.4924
+     ],
+     "connected": 116,
+     "n": 30,
+     "pairs": 349,
+     "se": 0.07826,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin=2744",
+    "CONTENT /out/509b2c10-378a-46c2-b8e6-7a3e79bec655.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 51,
+    "n": 161,
+    "p": 0.3168,
+    "wilson95": [
+     0.2499,
+     0.3922
+    ]
+   },
+   "cpgMB": 3.35,
+   "data": {
+    "k": 65,
+    "n": 188,
+    "p": 0.3457,
+    "wilson95": [
+     0.2815,
+     0.4162
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 0,
+    "n": 65,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0558
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 65
+   },
+   "dataSingleEdgeShare": {
+    "k": 65,
+    "n": 65,
+    "p": 1.0,
+    "wilson95": [
+     0.9442,
+     1.0
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 89.11,
+    "controlEdgesPerMethod": 1.611,
+    "controlFactsDropped": 3247,
+    "cpgFilesWithMethods": 55,
+    "cpgMBPerFile": 0.0609,
+    "cpgMethods": 2744,
+    "cpgWhole": {
+     "calls": 19633,
+     "edges": 609922,
+     "edgesPerFile": 8132.3,
+     "fileNodes": 75,
+     "mbPerFile": 0.0447,
+     "nodes": 91344,
+     "nodesPerFile": 1217.9,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 2.066,
+    "dataFactsDropped": 2040,
+    "edgesPerFile": 183.36,
+    "edgesPerMethod": 3.677,
+    "extractSecondsPerKLOC": 0.185,
+    "kLOC": 38.93,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 1,
+    "nonSyntheticMethodsPerFile": 45.27,
+    "parseSecondsPerKLOC": 0.259,
+    "pointsPerFile": 203.65,
+    "projectedControlEdges": 4419,
+    "projectedDataEdges": 5666,
+    "projectedPoints": 11201,
+    "projectionMsPerKLOC": 3.85,
+    "rawCdgEdges": 15977,
+    "rawCdgSelfEdges": 1090,
+    "rawDataFacts": 7714,
+    "syntheticCallsDropped": 1448
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 14,
+    "source": 8,
+    "source+sink": 3
+   },
+   "endpointUnresolvedShare": {
+    "k": 25,
+    "n": 349,
+    "p": 0.0716,
+    "wilson95": [
+     0.049,
+     0.1036
+    ]
+   },
+   "extract": {
+    "factsMB": 6.97,
+    "peakMemMiB": 525.3,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:18:55Z",
+    "wallSeconds": 7.2
+   },
+   "extractInternalMs": {
+    "loadMs": 220,
+    "projectionMs": 150,
+    "totalMs": 828
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 12,
+    "<1ms": 2732
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 30,
+    "p": 0.0667,
+    "wilson95": [
+     0.0185,
+     0.2132
+    ]
+   },
+   "methodsMatched": {
+    "k": 14,
+    "n": 30,
+    "p": 0.4667,
+    "wilson95": [
+     0.3023,
+     0.6386
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 14,
+   "parse": {
+    "peakMemMiB": 535.8,
+    "wallSeconds": 10.1
+   },
+   "pooled": {
+    "k": 116,
+    "n": 349,
+    "p": 0.3324,
+    "wilson95": [
+     0.285,
+     0.3834
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 116,
+    "n": 240,
+    "p": 0.4833,
+    "wilson95": [
+     0.4209,
+     0.5463
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 116,
+    "n": 178,
+    "p": 0.6517,
+    "wilson95": [
+     0.5792,
+     0.7178
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 82,
+    "data": 79
+   },
+   "projectionSuccess": {
+    "k": 2744,
+    "n": 2744,
+    "p": 1.0,
+    "wilson95": [
+     0.9986,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 31,
+    "data": 14
+   },
+   "spuriousPairs": {
+    "k": 45,
+    "n": 161,
+    "p": 0.2795,
+    "wilson95": [
+     0.2159,
+     0.3533
+    ]
+   },
+   "status": {
+    "connected": 116,
+    "endpoint-unresolved": 25,
+    "method-absent": 171,
+    "not-connected": 37
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 51,
+     "endpoint-unresolved": 11,
+     "method-absent": 91,
+     "not-connected": 8
+    },
+    "data": {
+     "connected": 65,
+     "endpoint-unresolved": 14,
+     "method-absent": 80,
+     "not-connected": 29
+    }
+   },
+   "strata": {
+    "convention:coordinate-fixed": {
+     "byKind": {
+      "control": 1,
+      "data": 1
+     },
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "convention:coordinate-matched": {
+     "byKind": {
+      "control": 1,
+      "data": 1
+     },
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 29,
+      "data": 5
+     },
+     "k": 10,
+     "n": 34,
+     "p": 0.2941,
+     "status": {
+      "connected": 10,
+      "method-absent": 17,
+      "not-connected": 7
+     },
+     "wilson95": [
+      0.1683,
+      0.4617
+     ]
+    },
+    "convention:macro-call": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:return-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "convention:stream-operator": {
+     "byKind": {
+      "data": 3
+     },
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "status": {
+      "method-absent": 3
+     },
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "convention:switch-case-group": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "method-absent": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "convention:switch-default": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:switch-discriminant": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [
+      3,
+      4,
+      11,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      28
+     ],
+     "n": 109,
+     "p": 0.0,
+     "status": {
+      "method-absent": 109
+     },
+     "wilson95": [
+      0.0,
+      0.034
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [
+      3,
+      4,
+      11,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      28
+     ],
+     "k": 0,
+     "methods": [
+      2,
+      3,
+      4,
+      8,
+      9,
+      11,
+      12,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      26,
+      27,
+      28
+     ],
+     "n": 171,
+     "otherAbsent": [
+      2,
+      8,
+      9,
+      12,
+      26,
+      27
+     ],
+     "p": 0.0,
+     "reasons": {
+      "11": "file-absent-from-cpg",
+      "12": "no-method-in-file",
+      "15": "file-absent-from-cpg",
+      "17": "file-absent-from-cpg",
+      "19": "file-absent-from-cpg",
+      "2": "no-method-in-file",
+      "21": "file-absent-from-cpg",
+      "22": "file-absent-from-cpg",
+      "25": "file-absent-from-cpg",
+      "26": "no-method-in-file",
+      "27": "no-method-in-file",
+      "28": "file-absent-from-cpg",
+      "3": "file-absent-from-cpg",
+      "4": "file-absent-from-cpg",
+      "8": "no-method-in-file",
+      "9": "no-method-in-file"
+     },
+     "wilson95": [
+      0.0,
+      0.022
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1,
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "provenance:partF-coordinate-fix": {
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "provenance:partF-second-only-valid": {
+     "k": 1,
+     "n": 13,
+     "p": 0.0769,
+     "status": {
+      "connected": 1,
+      "method-absent": 10,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0137,
+      0.3331
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 114,
+    "n": 298,
+    "p": 0.3826,
+    "wilson95": [
+     0.3292,
+     0.4389
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.3168,
+     "ci95": [
+      0.1132,
+      0.5204
+     ],
+     "connected": 51,
+     "n": 27,
+     "pairs": 161,
+     "se": 0.09905,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.3457,
+     "ci95": [
+      0.2079,
+      0.4836
+     ],
+     "connected": 65,
+     "n": 30,
+     "pairs": 188,
+     "se": 0.06738,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.3324,
+     "ci95": [
+      0.1723,
+      0.4924
+     ],
+     "connected": 116,
+     "n": 30,
+     "pairs": 349,
+     "se": 0.07826,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=2744",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 51,
+    "n": 161,
+    "p": 0.3168,
+    "wilson95": [
+     0.2499,
+     0.3922
+    ]
+   },
+   "cpgMB": 3.35,
+   "data": {
+    "k": 65,
+    "n": 188,
+    "p": 0.3457,
+    "wilson95": [
+     0.2815,
+     0.4162
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 0,
+    "n": 65,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0558
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 65
+   },
+   "dataSingleEdgeShare": {
+    "k": 65,
+    "n": 65,
+    "p": 1.0,
+    "wilson95": [
+     0.9442,
+     1.0
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 89.11,
+    "controlEdgesPerMethod": 1.611,
+    "controlFactsDropped": 3247,
+    "cpgFilesWithMethods": 55,
+    "cpgMBPerFile": 0.0609,
+    "cpgMethods": 2744,
+    "cpgWhole": {
+     "calls": 19633,
+     "edges": 609922,
+     "edgesPerFile": 8132.3,
+     "fileNodes": 75,
+     "mbPerFile": 0.0447,
+     "nodes": 91344,
+     "nodesPerFile": 1217.9,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 2.066,
+    "dataFactsDropped": 2040,
+    "edgesPerFile": 183.36,
+    "edgesPerMethod": 3.677,
+    "extractSecondsPerKLOC": 0.182,
+    "kLOC": 38.93,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 1,
+    "nonSyntheticMethodsPerFile": 45.27,
+    "parseSecondsPerKLOC": 0.275,
+    "pointsPerFile": 203.65,
+    "projectedControlEdges": 4419,
+    "projectedDataEdges": 5666,
+    "projectedPoints": 11201,
+    "projectionMsPerKLOC": 4.08,
+    "rawCdgEdges": 15977,
+    "rawCdgSelfEdges": 1090,
+    "rawDataFacts": 7714,
+    "syntheticCallsDropped": 1448
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 14,
+    "source": 8,
+    "source+sink": 3
+   },
+   "endpointUnresolvedShare": {
+    "k": 25,
+    "n": 349,
+    "p": 0.0716,
+    "wilson95": [
+     0.049,
+     0.1036
+    ]
+   },
+   "extract": {
+    "factsMB": 6.97,
+    "peakMemMiB": 656.5,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:19:10Z",
+    "wallSeconds": 7.1
+   },
+   "extractInternalMs": {
+    "loadMs": 232,
+    "projectionMs": 159,
+    "totalMs": 848
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 10,
+    "<1ms": 2734
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 30,
+    "p": 0.0667,
+    "wilson95": [
+     0.0185,
+     0.2132
+    ]
+   },
+   "methodsMatched": {
+    "k": 14,
+    "n": 30,
+    "p": 0.4667,
+    "wilson95": [
+     0.3023,
+     0.6386
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 14,
+   "parse": {
+    "peakMemMiB": 537.4,
+    "wallSeconds": 10.7
+   },
+   "pooled": {
+    "k": 116,
+    "n": 349,
+    "p": 0.3324,
+    "wilson95": [
+     0.285,
+     0.3834
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 116,
+    "n": 240,
+    "p": 0.4833,
+    "wilson95": [
+     0.4209,
+     0.5463
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 116,
+    "n": 178,
+    "p": 0.6517,
+    "wilson95": [
+     0.5792,
+     0.7178
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 82,
+    "data": 79
+   },
+   "projectionSuccess": {
+    "k": 2744,
+    "n": 2744,
+    "p": 1.0,
+    "wilson95": [
+     0.9986,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 31,
+    "data": 14
+   },
+   "spuriousPairs": {
+    "k": 45,
+    "n": 161,
+    "p": 0.2795,
+    "wilson95": [
+     0.2159,
+     0.3533
+    ]
+   },
+   "status": {
+    "connected": 116,
+    "endpoint-unresolved": 25,
+    "method-absent": 171,
+    "not-connected": 37
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 51,
+     "endpoint-unresolved": 11,
+     "method-absent": 91,
+     "not-connected": 8
+    },
+    "data": {
+     "connected": 65,
+     "endpoint-unresolved": 14,
+     "method-absent": 80,
+     "not-connected": 29
+    }
+   },
+   "strata": {
+    "convention:coordinate-fixed": {
+     "byKind": {
+      "control": 1,
+      "data": 1
+     },
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "convention:coordinate-matched": {
+     "byKind": {
+      "control": 1,
+      "data": 1
+     },
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 29,
+      "data": 5
+     },
+     "k": 10,
+     "n": 34,
+     "p": 0.2941,
+     "status": {
+      "connected": 10,
+      "method-absent": 17,
+      "not-connected": 7
+     },
+     "wilson95": [
+      0.1683,
+      0.4617
+     ]
+    },
+    "convention:macro-call": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:return-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "convention:stream-operator": {
+     "byKind": {
+      "data": 3
+     },
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "status": {
+      "method-absent": 3
+     },
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "convention:switch-case-group": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "method-absent": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "convention:switch-default": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:switch-discriminant": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [
+      3,
+      4,
+      11,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      28
+     ],
+     "n": 109,
+     "p": 0.0,
+     "status": {
+      "method-absent": 109
+     },
+     "wilson95": [
+      0.0,
+      0.034
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [
+      3,
+      4,
+      11,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      28
+     ],
+     "k": 0,
+     "methods": [
+      2,
+      3,
+      4,
+      8,
+      9,
+      11,
+      12,
+      15,
+      17,
+      19,
+      21,
+      22,
+      25,
+      26,
+      27,
+      28
+     ],
+     "n": 171,
+     "otherAbsent": [
+      2,
+      8,
+      9,
+      12,
+      26,
+      27
+     ],
+     "p": 0.0,
+     "reasons": {
+      "11": "file-absent-from-cpg",
+      "12": "no-method-in-file",
+      "15": "file-absent-from-cpg",
+      "17": "file-absent-from-cpg",
+      "19": "file-absent-from-cpg",
+      "2": "no-method-in-file",
+      "21": "file-absent-from-cpg",
+      "22": "file-absent-from-cpg",
+      "25": "file-absent-from-cpg",
+      "26": "no-method-in-file",
+      "27": "no-method-in-file",
+      "28": "file-absent-from-cpg",
+      "3": "file-absent-from-cpg",
+      "4": "file-absent-from-cpg",
+      "8": "no-method-in-file",
+      "9": "no-method-in-file"
+     },
+     "wilson95": [
+      0.0,
+      0.022
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "method-absent": 1,
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "provenance:partF-coordinate-fix": {
+     "k": 2,
+     "n": 2,
+     "p": 1.0,
+     "status": {
+      "connected": 2
+     },
+     "wilson95": [
+      0.3424,
+      1.0
+     ]
+    },
+    "provenance:partF-second-only-valid": {
+     "k": 1,
+     "n": 13,
+     "p": 0.0769,
+     "status": {
+      "connected": 1,
+      "method-absent": 10,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0137,
+      0.3331
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 114,
+    "n": 298,
+    "p": 0.3826,
+    "wilson95": [
+     0.3292,
+     0.4389
+    ]
+   }
+  }
+ },
+ "corpusCommit": "a8380b01a25ebdb130097b607b3afed2a58d04ba",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 349,
+    "pairsOK": true,
+    "pooledRecall": 0.3324,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 349,
+    "pairsOK": true,
+    "pooledRecall": 0.3324,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 349,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "OnTestIterationEnd",
+    "params": {
+     "0": "unit_test",
+     "1": "iteration"
+    },
+    "span": [
+     3970,
+     3977
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "googletest/src/gtest.cc",
+   "qname": "googletest/src/gtest.cc::testing.internal.TestEventRepeater.OnTestIterationEnd",
+   "span": [
+    3970,
+    3977
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 2,
+   "path": "googletest/include/gtest/gtest-printers.h",
+   "qname": "googletest/include/gtest/gtest-printers.h::internal.PrintTo",
+   "span": [
+    823,
+    829
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 3,
+   "path": "googletest/test/gtest_unittest.cc",
+   "qname": "googletest/test/gtest_unittest.cc::CharsToLines",
+   "span": [
+    3556,
+    3562
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 4,
+   "path": "googletest/test/googletest-death-test_ex_test.cc",
+   "qname": "googletest/test/googletest-death-test_ex_test.cc::TEST",
+   "span": [
+    78,
+    82
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "RegisterUseByOnCallOrExpectCall",
+    "params": {
+     "0": "mock_obj",
+     "1": "file",
+     "2": "line"
+    },
+    "span": [
+     683,
+     698
+    ]
+   },
+   "matchHow": "span-only",
+   "matched": true,
+   "ordinal": 5,
+   "path": "googlemock/src/gmock-spec-builders.cc",
+   "qname": "googlemock/src/gmock-spec-builders.cc::testing.GTEST_LOCK_EXCLUDED_#13",
+   "span": [
+    685,
+    698
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "MatchAndExplain",
+    "params": {
+     "0": "args",
+     "1": "listener"
+    },
+    "span": [
+     1945,
+     1957
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "googlemock/include/gmock/gmock-matchers.h",
+   "qname": "googlemock/include/gmock/gmock-matchers.h::testing.internal.FloatingEq2Matcher.Impl.MatchAndExplain",
+   "span": [
+    1945,
+    1957
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Print",
+    "params": {
+     "0": "str",
+     "1": "os"
+    },
+    "span": [
+     1165,
+     1171
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "googletest/include/gtest/gtest-printers.h",
+   "qname": "googletest/include/gtest/gtest-printers.h::internal.UniversalPrinter.UniversalPrinter.UniversalTersePrinter.Print",
+   "span": [
+    1165,
+    1171
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 8,
+   "path": "googletest/src/gtest-printers.cc",
+   "qname": "googletest/src/gtest-printers.cc::testing.internal.PrintTo",
+   "span": [
+    346,
+    353
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 9,
+   "path": "googletest/include/gtest/internal/gtest-param-util.h",
+   "qname": "googletest/include/gtest/internal/gtest-param-util.h::testing.internal.ParamGeneratorConverter.Iterator.<init>",
+   "span": [
+    980,
+    986
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ConditionalPrintAsText",
+    "params": {
+     "0": "str",
+     "1": "length",
+     "2": "os"
+    },
+    "span": [
+     553,
+     558
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "googletest/src/gtest-printers.cc",
+   "qname": "googletest/src/gtest-printers.cc::testing.internal.<anonns>.ConditionalPrintAsText",
+   "span": [
+    553,
+    558
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 11,
+   "path": "googlemock/test/gmock-matchers-containers_test.cc",
+   "qname": "googlemock/test/gmock-matchers-containers_test.cc::testing.gmock_matchers_test.<anonns>.TEST_F",
+   "span": [
+    2360,
+    2374
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 12,
+   "path": "googletest/include/gtest/internal/gtest-param-util.h",
+   "qname": "googletest/include/gtest/internal/gtest-param-util.h::testing.internal.ParameterizedTestSuiteInfo.IsValidParamName",
+   "span": [
+    659,
+    669
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ValidateTestPropertyName",
+    "params": {
+     "0": "property_name",
+     "1": "reserved_names"
+    },
+    "span": [
+     2467,
+     2478
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "googletest/src/gtest.cc",
+   "qname": "googletest/src/gtest.cc::testing.ValidateTestPropertyName",
+   "span": [
+    2467,
+    2478
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "DescribeNegationTo",
+    "params": {
+     "0": "os"
+    },
+    "span": [
+     4032,
+     4044
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "googlemock/include/gmock/gmock-matchers.h",
+   "qname": "googlemock/include/gmock/gmock-matchers.h::testing.ContainsSubsequenceMatcherImpl.DescribeNegationTo",
+   "span": [
+    4032,
+    4044
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 15,
+   "path": "googletest/test/gtest_premature_exit_test.cc",
+   "qname": "googletest/test/gtest_premature_exit_test.cc::<anonns>.TEST_F",
+   "span": [
+    79,
+    95
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "MatchAndExplain",
+    "params": {
+     "0": "s",
+     "1": "listener"
+    },
+    "span": [
+     1184,
+     1195
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "googlemock/include/gmock/gmock-matchers.h",
+   "qname": "googlemock/include/gmock/gmock-matchers.h::testing.internal.WhenBase64UnescapedMatcher.MatchAndExplain",
+   "span": [
+    1184,
+    1195
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 17,
+   "path": "googlemock/test/gmock-matchers-misc_test.cc",
+   "qname": "googlemock/test/gmock-matchers-misc_test.cc::testing.gmock_matchers_test.<anonns>.<anonns>.BacktrackingMaxBPMState.RecurseInto",
+   "span": [
+    451,
+    472
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ParseGoogleMockFlag",
+    "params": {
+     "0": "str",
+     "1": "flag_name",
+     "2": "value"
+    },
+    "span": [
+     95,
+     106
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "googlemock/src/gmock.cc",
+   "qname": "googlemock/src/gmock.cc::testing.internal.ParseGoogleMockFlag",
+   "span": [
+    95,
+    106
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 19,
+   "path": "googletest/test/gtest_pred_impl_unittest.cc",
+   "qname": "googletest/test/gtest_pred_impl_unittest.cc::PredFormatFunction3",
+   "span": [
+    853,
+    862
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "OutputJsonKey",
+    "params": {
+     "0": "stream",
+     "1": "element_name",
+     "2": "name",
+     "3": "value",
+     "4": "indent",
+     "5": "comma"
+    },
+    "span": [
+     4710,
+     4723
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "googletest/src/gtest.cc",
+   "qname": "googletest/src/gtest.cc::testing.internal.JsonUnitTestResultPrinter.OutputJsonKey",
+   "span": [
+    4710,
+    4723
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 21,
+   "path": "googlemock/test/gmock-more-actions_test.cc",
+   "qname": "googlemock/test/gmock-more-actions_test.cc::testing.gmock_more_actions_test.Concat",
+   "span": [
+    1362,
+    1376
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 22,
+   "path": "googletest/test/gtest_unittest.cc",
+   "qname": "googletest/test/gtest_unittest.cc::TEST",
+   "span": [
+    808,
+    819
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ShuffleRange",
+    "params": {
+     "0": "random",
+     "1": "begin",
+     "2": "end",
+     "3": "v"
+    },
+    "span": [
+     302,
+     322
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 23,
+   "path": "googletest/src/gtest-internal-inl.h",
+   "qname": "googletest/src/gtest-internal-inl.h::testing.internal.ShuffleRange",
+   "span": [
+    302,
+    322
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ReportUninterestingCall",
+    "params": {
+     "0": "reaction",
+     "1": "msg"
+    },
+    "span": [
+     278,
+     301
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "googlemock/src/gmock-spec-builders.cc",
+   "qname": "googlemock/src/gmock-spec-builders.cc::testing.internal.ReportUninterestingCall",
+   "span": [
+    278,
+    301
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 25,
+   "path": "googletest/test/googletest-death-test-test.cc",
+   "qname": "googletest/test/googletest-death-test-test.cc::<anonns>.TEST_F",
+   "span": [
+    539,
+    543
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 26,
+   "path": "googletest/src/gtest.cc",
+   "qname": "googletest/src/gtest.cc::testing.internal.StreamingListener.UrlEncode",
+   "span": [
+    5034,
+    5052
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "no-method-in-file",
+   "matched": false,
+   "ordinal": 27,
+   "path": "googletest/src/gtest-printers.cc",
+   "qname": "googletest/src/gtest-printers.cc::testing.internal.PrintTo",
+   "span": [
+    302,
+    308
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "test"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 28,
+   "path": "googletest/test/googletest-filepath-test.cc",
+   "qname": "googletest/test/googletest-filepath-test.cc::testing.internal.<anonns>.TEST",
+   "span": [
+    373,
+    387
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "TryAugment",
+    "params": {
+     "0": "ilhs",
+     "1": "seen"
+    },
+    "span": [
+     184,
+     208
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "googlemock/src/gmock-matchers.cc",
+   "qname": "googlemock/src/gmock-matchers.cc::testing.internal.MaxBipartiteMatchState.TryAugment",
+   "span": [
+    184,
+    208
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "RecordProperty",
+    "params": {
+     "0": "xml_element",
+     "1": "test_property"
+    },
+    "span": [
+     2375,
+     2389
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "googletest/src/gtest.cc",
+   "qname": "googletest/src/gtest.cc::testing.TestResult.RecordProperty",
+   "span": [
+    2375,
+    2389
+   ]
+  }
+ ],
+ "lang": "cpp",
+ "missesFile": {
+  "path": "adjudication/cpp-flow-misses.jsonl",
+  "rows": 233
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 349
+ },
+ "spuriousSample": {
+  "drawn": 45,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 45,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 1,
+  "seed": "ccg-p0a-v1-spur|cpp|a8380b01a25ebdb130097b607b3afed2a58d04ba",
+  "sharesEndpointWithUnresolvedGolden": 3,
+  "truthIncompleteFlag": "pending adjudication (n=45; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/cpp.flow-final.jsonl",
+ "variant": "as-shipped (headline)"
+}

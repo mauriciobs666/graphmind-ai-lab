@@ -1,0 +1,1412 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/off/8ccba2c4-0755-4076-ba96-b4253e30a714.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 13.8
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/python/on/0eb15e94-1e41-4b0d-aeea-0c5f4c617727.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 14.5
+  }
+ },
+ "censusReach": {
+  "k": 4046,
+  "n": 4046,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 1.0,
+  "wilson95": [
+   0.9991,
+   1.0
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.6591,
+     "ci95": [
+      0.5417,
+      0.7765
+     ],
+     "connected": 116,
+     "n": 27,
+     "pairs": 176,
+     "se": 0.05711,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.6283,
+     "ci95": [
+      0.5489,
+      0.7077
+     ],
+     "connected": 191,
+     "n": 29,
+     "pairs": 304,
+     "se": 0.03874,
+     "t": 2.0484
+    },
+    "pooled": {
+     "R": 0.6396,
+     "ci95": [
+      0.5642,
+      0.715
+     ],
+     "connected": 307,
+     "n": 29,
+     "pairs": 480,
+     "se": 0.0368,
+     "t": 2.0484
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=6254",
+    "CONTENT /out/8a3d50ca-93c9-4f7c-a3e7-fcb21320760f.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 116,
+    "n": 176,
+    "p": 0.6591,
+    "wilson95": [
+     0.5863,
+     0.7251
+    ]
+   },
+   "cpgMB": 18.7,
+   "data": {
+    "k": 191,
+    "n": 304,
+    "p": 0.6283,
+    "wilson95": [
+     0.5727,
+     0.6807
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 2,
+    "n": 191,
+    "p": 0.0105,
+    "wilson95": [
+     0.0029,
+     0.0374
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 189,
+    "2": 2
+   },
+   "dataSingleEdgeShare": {
+    "k": 189,
+    "n": 191,
+    "p": 0.9895,
+    "wilson95": [
+     0.9626,
+     0.9971
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 184.77,
+    "controlEdgesPerMethod": 0.911,
+    "controlFactsDropped": 13096,
+    "cpgFilesWithMethods": 104,
+    "cpgMBPerFile": 0.1798,
+    "cpgMethods": 6254,
+    "cpgWhole": {
+     "calls": 127665,
+     "edges": 3873261,
+     "edgesPerFile": 35863.5,
+     "fileNodes": 108,
+     "mbPerFile": 0.1731,
+     "nodes": 499932,
+     "nodesPerFile": 4629.0,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 3.15,
+    "dataFactsDropped": 4552,
+    "edgesPerFile": 244.22,
+    "edgesPerMethod": 4.061,
+    "extractSecondsPerKLOC": 0.179,
+    "kLOC": 76.97,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 44.03,
+    "parseSecondsPerKLOC": 0.151,
+    "pointsPerFile": 366.76,
+    "projectedControlEdges": 5699,
+    "projectedDataEdges": 19700,
+    "projectedPoints": 38143,
+    "projectionMsPerKLOC": 4.64,
+    "rawCdgEdges": 48022,
+    "rawCdgSelfEdges": 2751,
+    "rawDataFacts": 24760,
+    "syntheticCallsDropped": 4461
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 12,
+    "source": 24
+   },
+   "endpointUnresolvedShare": {
+    "k": 36,
+    "n": 480,
+    "p": 0.075,
+    "wilson95": [
+     0.0547,
+     0.1021
+    ]
+   },
+   "extract": {
+    "factsMB": 35.49,
+    "peakMemMiB": 1278.0,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:15:50Z",
+    "wallSeconds": 13.8
+   },
+   "extractInternalMs": {
+    "loadMs": 4261,
+    "projectionMs": 357,
+    "totalMs": 5772
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 17,
+    "<1ms": 6237
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 29,
+    "p": 0.069,
+    "wilson95": [
+     0.0191,
+     0.2196
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 29,
+   "methodsWithProjectedPairs": 29,
+   "parse": {
+    "peakMemMiB": 1098.8,
+    "wallSeconds": 11.6
+   },
+   "pooled": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 187,
+    "data": 209
+   },
+   "projectionSuccess": {
+    "k": 6254,
+    "n": 6254,
+    "p": 1.0,
+    "wilson95": [
+     0.9994,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 71,
+    "data": 20
+   },
+   "spuriousPairs": {
+    "k": 91,
+    "n": 396,
+    "p": 0.2298,
+    "wilson95": [
+     0.1911,
+     0.2737
+    ]
+   },
+   "status": {
+    "connected": 307,
+    "endpoint-unresolved": 36,
+    "not-connected": 137
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 116,
+     "endpoint-unresolved": 27,
+     "not-connected": 33
+    },
+    "data": {
+     "connected": 191,
+     "endpoint-unresolved": 9,
+     "not-connected": 104
+    }
+   },
+   "strata": {
+    "convention:callee-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "not-connected": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 306,
+    "n": 459,
+    "p": 0.6667,
+    "wilson95": [
+     0.6223,
+     0.7083
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.6591,
+     "ci95": [
+      0.5417,
+      0.7765
+     ],
+     "connected": 116,
+     "n": 27,
+     "pairs": 176,
+     "se": 0.05711,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.6283,
+     "ci95": [
+      0.5489,
+      0.7077
+     ],
+     "connected": 191,
+     "n": 29,
+     "pairs": 304,
+     "se": 0.03874,
+     "t": 2.0484
+    },
+    "pooled": {
+     "R": 0.6396,
+     "ci95": [
+      0.5642,
+      0.715
+     ],
+     "connected": 307,
+     "n": 29,
+     "pairs": 480,
+     "se": 0.0368,
+     "t": 2.0484
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=6254",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 116,
+    "n": 176,
+    "p": 0.6591,
+    "wilson95": [
+     0.5863,
+     0.7251
+    ]
+   },
+   "cpgMB": 18.7,
+   "data": {
+    "k": 191,
+    "n": 304,
+    "p": 0.6283,
+    "wilson95": [
+     0.5727,
+     0.6807
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 2,
+    "n": 191,
+    "p": 0.0105,
+    "wilson95": [
+     0.0029,
+     0.0374
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 189,
+    "2": 2
+   },
+   "dataSingleEdgeShare": {
+    "k": 189,
+    "n": 191,
+    "p": 0.9895,
+    "wilson95": [
+     0.9626,
+     0.9971
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 184.77,
+    "controlEdgesPerMethod": 0.911,
+    "controlFactsDropped": 13096,
+    "cpgFilesWithMethods": 104,
+    "cpgMBPerFile": 0.1798,
+    "cpgMethods": 6254,
+    "cpgWhole": {
+     "calls": 127665,
+     "edges": 3873261,
+     "edgesPerFile": 35863.5,
+     "fileNodes": 108,
+     "mbPerFile": 0.1731,
+     "nodes": 499932,
+     "nodesPerFile": 4629.0,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 3.15,
+    "dataFactsDropped": 4552,
+    "edgesPerFile": 244.22,
+    "edgesPerMethod": 4.061,
+    "extractSecondsPerKLOC": 0.188,
+    "kLOC": 76.97,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 44.03,
+    "parseSecondsPerKLOC": 0.16,
+    "pointsPerFile": 366.76,
+    "projectedControlEdges": 5699,
+    "projectedDataEdges": 19700,
+    "projectedPoints": 38143,
+    "projectionMsPerKLOC": 5.3,
+    "rawCdgEdges": 48022,
+    "rawCdgSelfEdges": 2751,
+    "rawDataFacts": 24760,
+    "syntheticCallsDropped": 4461
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 12,
+    "source": 24
+   },
+   "endpointUnresolvedShare": {
+    "k": 36,
+    "n": 480,
+    "p": 0.075,
+    "wilson95": [
+     0.0547,
+     0.1021
+    ]
+   },
+   "extract": {
+    "factsMB": 35.49,
+    "peakMemMiB": 1211.4,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:16:17Z",
+    "wallSeconds": 14.5
+   },
+   "extractInternalMs": {
+    "loadMs": 4547,
+    "projectionMs": 408,
+    "totalMs": 6204
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 19,
+    "10-100ms": 1,
+    "<1ms": 6234
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 29,
+    "p": 0.069,
+    "wilson95": [
+     0.0191,
+     0.2196
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 29,
+   "methodsWithProjectedPairs": 29,
+   "parse": {
+    "peakMemMiB": 858.2,
+    "wallSeconds": 12.3
+   },
+   "pooled": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 307,
+    "n": 480,
+    "p": 0.6396,
+    "wilson95": [
+     0.5957,
+     0.6813
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 187,
+    "data": 209
+   },
+   "projectionSuccess": {
+    "k": 6254,
+    "n": 6254,
+    "p": 1.0,
+    "wilson95": [
+     0.9994,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 71,
+    "data": 20
+   },
+   "spuriousPairs": {
+    "k": 91,
+    "n": 396,
+    "p": 0.2298,
+    "wilson95": [
+     0.1911,
+     0.2737
+    ]
+   },
+   "status": {
+    "connected": 307,
+    "endpoint-unresolved": 36,
+    "not-connected": 137
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 116,
+     "endpoint-unresolved": 27,
+     "not-connected": 33
+    },
+    "data": {
+     "connected": 191,
+     "endpoint-unresolved": 9,
+     "not-connected": 104
+    }
+   },
+   "strata": {
+    "convention:callee-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "not-connected": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 306,
+    "n": 459,
+    "p": 0.6667,
+    "wilson95": [
+     0.6223,
+     0.7083
+    ]
+   }
+  }
+ },
+ "corpusCommit": "0caf85e3ccb757801d15d6babe55a63477a486dd",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 480,
+    "pairsOK": true,
+    "pooledRecall": 0.6396,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 480,
+    "pairsOK": true,
+    "pooledRecall": 0.6396,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 480,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "dispatch",
+    "params": {
+     "-1": "self",
+     "0": "name",
+     "1": "arguments",
+     "2": "ctx",
+     "3": "run"
+    },
+    "span": [
+     955,
+     961
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "tests/test_executor_agent.py",
+   "qname": "tests/test_executor_agent.py::test_recovery_after_mention_rejection_still_posts_via_implicit_fallback._RecoveringRegistry.dispatch",
+   "span": [
+    955,
+    959
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "maybe_trigger",
+    "params": {
+     "-1": "self",
+     "0": "ctx",
+     "1": "kwargs"
+    },
+    "span": [
+     767,
+     775
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 2,
+   "path": "tests/test_storefront.py",
+   "qname": "tests/test_storefront.py::_RecordingTrigger.maybe_trigger",
+   "span": [
+    767,
+    773
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_warn_once",
+    "params": {
+     "-1": "self",
+     "0": "kind",
+     "1": "ref"
+    },
+    "span": [
+     845,
+     856
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "falkorchat/modelconfig.py",
+   "qname": "falkorchat/modelconfig.py::StaticModelGateway._warn_once",
+   "span": [
+    845,
+    854
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "run",
+    "params": {
+     "-1": "self",
+     "0": "arguments",
+     "1": "ctx",
+     "2": "run"
+    },
+    "span": [
+     492,
+     502
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "falkorchat/tools.py",
+   "qname": "falkorchat/tools.py::LookupProductFactTool.run",
+   "span": [
+    492,
+    500
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_gate_open",
+    "params": {
+     "0": "keep_going",
+     "1": "label",
+     "2": "kind",
+     "3": "status"
+    },
+    "span": [
+     126,
+     146
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "falkorchat/retry.py",
+   "qname": "falkorchat/retry.py::_gate_open",
+   "span": [
+    126,
+    144
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_create_workspace_is_idempotent",
+    "params": {
+     "0": "throwaway_ws",
+     "1": "tmp_path"
+    },
+    "span": [
+     188,
+     210
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "tests/test_create_workspace_script.py",
+   "qname": "tests/test_create_workspace_script.py::test_create_workspace_is_idempotent",
+   "span": [
+    188,
+    208
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_order_cas",
+    "params": {
+     "-1": "self",
+     "0": "order_id",
+     "1": "expected",
+     "2": "new_status",
+     "3": "now"
+    },
+    "span": [
+     764,
+     773
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "tests/test_services.py",
+   "qname": "tests/test_services.py::FakeRepo._order_cas",
+   "span": [
+    764,
+    771
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_the_failed_envelope_status_comes_from_a_post_fault_get_run",
+    "params": {
+     "0": "svc",
+     "1": "wf_repo"
+    },
+    "span": [
+     642,
+     664
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 8,
+   "path": "tests/test_process_input.py",
+   "qname": "tests/test_process_input.py::test_the_failed_envelope_status_comes_from_a_post_fault_get_run",
+   "span": [
+    642,
+    662
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "run",
+    "params": {
+     "-1": "self",
+     "0": "ctx",
+     "1": "run_id"
+    },
+    "span": [
+     5042,
+     5060
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 9,
+   "path": "tests/test_storefront_api.py",
+   "qname": "tests/test_storefront_api.py::_GatedExecutor.run",
+   "span": [
+    5042,
+    5058
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_scalar_equal",
+    "params": {
+     "0": "expected",
+     "1": "actual"
+    },
+    "span": [
+     109,
+     128
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "tests/eval/nlq_scoring.py",
+   "qname": "tests/eval/nlq_scoring.py::_scalar_equal",
+   "span": [
+    109,
+    126
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "fake_make_http_transport",
+    "params": {
+     "0": "timeout",
+     "1": "headers",
+     "2": "opener",
+     "3": "provider",
+     "4": "model"
+    },
+    "span": [
+     433,
+     441
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "tests/test_modelconfig.py",
+   "qname": "tests/test_modelconfig.py::test_gateway_llm_role_chain_falls_back_end_to_end.fake_make_http_transport",
+   "span": [
+    433,
+    439
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_coerce_entities",
+    "params": {
+     "0": "raw"
+    },
+    "span": [
+     138,
+     163
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "falkorchat/extraction.py",
+   "qname": "falkorchat/extraction.py::_coerce_entities",
+   "span": [
+    138,
+    161
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "advance_order",
+    "params": {
+     "-1": "self",
+     "0": "ctx",
+     "1": "order_id",
+     "2": "transition"
+    },
+    "span": [
+     3296,
+     3324
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "falkorchat/services.py",
+   "qname": "falkorchat/services.py::Services.advance_order",
+   "span": [
+    3296,
+    3313
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "split_into_chunks",
+    "params": {
+     "0": "text",
+     "1": "size",
+     "2": "overlap"
+    },
+    "span": [
+     21,
+     37
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "falkorchat/chunking.py",
+   "qname": "falkorchat/chunking.py::split_into_chunks",
+   "span": [
+    21,
+    35
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_publish_rejects_a_timer_key_on_a_non_waiting_step_type",
+    "params": {
+     "0": "wf_repo",
+     "1": "step_type",
+     "2": "timer_key"
+    },
+    "span": [
+     630,
+     649
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 15,
+   "path": "tests/test_executor_process.py",
+   "qname": "tests/test_executor_process.py::test_publish_rejects_a_timer_key_on_a_non_waiting_step_type",
+   "span": [
+    630,
+    647
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "order_belongs_to_customer",
+    "params": {
+     "-1": "self",
+     "0": "ws",
+     "1": "customer_id",
+     "2": "order_id"
+    },
+    "span": [
+     757,
+     764
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "tests/test_services.py",
+   "qname": "tests/test_services.py::FakeRepo.order_belongs_to_customer",
+   "span": [
+    757,
+    762
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_shipped_log_config_routes_each_logger_level_to_exactly_one_handler_or_none",
+    "params": {
+     "0": "tmp_path"
+    },
+    "span": [
+     120,
+     134
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 17,
+   "path": "tests/test_logging_config.py",
+   "qname": "tests/test_logging_config.py::test_shipped_log_config_routes_each_logger_level_to_exactly_one_handler_or_none",
+   "span": [
+    120,
+    134
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_load_method",
+    "params": {
+     "0": "name"
+    },
+    "span": [
+     4701,
+     4708
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "tests/test_repository.py",
+   "qname": "tests/test_repository.py::_load_method",
+   "span": [
+    4701,
+    4706
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "is_transient",
+    "params": {
+     "0": "exc",
+     "1": "retry_timeouts"
+    },
+    "span": [
+     75,
+     98
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 19,
+   "path": "falkorchat/retry.py",
+   "qname": "falkorchat/retry.py::is_transient",
+   "span": [
+    75,
+    96
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_normalize_opaque",
+    "params": {
+     "0": "value"
+    },
+    "span": [
+     434,
+     454
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "falkorchat/services.py",
+   "qname": "falkorchat/services.py::_normalize_opaque",
+   "span": [
+    434,
+    452
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_migrate_count_check_reports_actual_unmigrated_counts",
+    "params": {
+     "0": "migrate_repo",
+     "1": "conn"
+    },
+    "span": [
+     723,
+     741
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 21,
+   "path": "tests/test_embedding_migration.py",
+   "qname": "tests/test_embedding_migration.py::test_migrate_count_check_reports_actual_unmigrated_counts",
+   "span": [
+    723,
+    739
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_parse_native_tool_calls",
+    "params": {
+     "0": "raw"
+    },
+    "span": [
+     263,
+     292
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 22,
+   "path": "falkorchat/llm.py",
+   "qname": "falkorchat/llm.py::_parse_native_tool_calls",
+   "span": [
+    263,
+    283
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_seed_thread",
+    "params": {
+     "0": "repo",
+     "1": "channel_id",
+     "2": "thread_id",
+     "3": "seeds"
+    },
+    "span": [
+     19,
+     43
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 23,
+   "path": "tests/test_provenance.py",
+   "qname": "tests/test_provenance.py::_seed_thread",
+   "span": [
+    19,
+    41
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "register_into",
+    "params": {
+     "-1": "self",
+     "0": "registry"
+    },
+    "span": [
+     1509,
+     1516
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "falkorchat/tools.py",
+   "qname": "falkorchat/tools.py::McpToolClient.register_into",
+   "span": [
+    1509,
+    1516
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "test_conflicting_facts_expected_has_at_least_two_values",
+    "params": {
+     "0": "row"
+    },
+    "span": [
+     202,
+     218
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 25,
+   "path": "tests/eval/test_nlq_golden_set_integrity.py",
+   "qname": "tests/eval/test_nlq_golden_set_integrity.py::test_conflicting_facts_expected_has_at_least_two_values",
+   "span": [
+    202,
+    216
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_validate_path",
+    "params": {
+     "0": "path"
+    },
+    "span": [
+     425,
+     441
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 26,
+   "path": "falkorchat/guards.py",
+   "qname": "falkorchat/guards.py::_validate_path",
+   "span": [
+    425,
+    439
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_serialize_opaque",
+    "params": {
+     "0": "value"
+    },
+    "span": [
+     402,
+     416
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 27,
+   "path": "falkorchat/services.py",
+   "qname": "falkorchat/services.py::_serialize_opaque",
+   "span": [
+    402,
+    414
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_handle_service_error",
+    "params": {
+     "0": "request",
+     "1": "exc"
+    },
+    "span": [
+     803,
+     822
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 28,
+   "path": "falkorchat/storefront_api.py",
+   "qname": "falkorchat/storefront_api.py::_make_service_error_handler._handle_service_error",
+   "span": [
+    803,
+    820
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "__getattr__",
+    "params": {
+     "-1": "self",
+     "0": "name"
+    },
+    "span": [
+     2057,
+     2066
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "tests/test_storefront_api.py",
+   "qname": "tests/test_storefront_api.py::_FailingMethodRepo.__getattr__",
+   "span": [
+    2057,
+    2064
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "_build_query_request_system_prompt",
+    "params": {
+     "0": "schema",
+     "1": "categories"
+    },
+    "span": [
+     1046,
+     1058
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "falkorchat/tools.py",
+   "qname": "falkorchat/tools.py::_build_query_request_system_prompt",
+   "span": [
+    1046,
+    1056
+   ]
+  }
+ ],
+ "lang": "python",
+ "missesFile": {
+  "path": "adjudication/python-flow-misses.jsonl",
+  "rows": 173
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 480
+ },
+ "spuriousSample": {
+  "drawn": 50,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 91,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p0a-v1-spur|python|0caf85e3ccb757801d15d6babe55a63477a486dd",
+  "sharesEndpointWithUnresolvedGolden": 18,
+  "truthIncompleteFlag": "pending adjudication (n=50; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/python.flow-final.jsonl",
+ "variant": "as-shipped (headline)"
+}

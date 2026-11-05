@@ -1,0 +1,1061 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/off/1cc2700e-5dc5-4e12-959e-0d925a6463a7.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.9
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript/on/4ad781c9-cb72-4061-b755-1272ac0101e2.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 8.3
+  }
+ },
+ "censusReach": {
+  "k": 127,
+  "n": 133,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 0.9549,
+  "wilson95": [
+   0.9051,
+   0.9792
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.338,
+     "ci95": [
+      0.0531,
+      0.623
+     ],
+     "connected": 24,
+     "n": 11,
+     "pairs": 71,
+     "se": 0.12789,
+     "t": 2.2281
+    },
+    "data": {
+     "R": 0.45,
+     "ci95": [
+      0.324,
+      0.576
+     ],
+     "connected": 36,
+     "n": 12,
+     "pairs": 80,
+     "se": 0.05724,
+     "t": 2.201
+    },
+    "pooled": {
+     "R": 0.3974,
+     "ci95": [
+      0.2409,
+      0.5538
+     ],
+     "connected": 60,
+     "n": 12,
+     "pairs": 151,
+     "se": 0.07107,
+     "t": 2.201
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin=232",
+    "CONTENT /out/4f042740-59a6-44b0-9665-6a885f2041c7.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 24,
+    "n": 71,
+    "p": 0.338,
+    "wilson95": [
+     0.2388,
+     0.4538
+    ]
+   },
+   "cpgMB": 0.78,
+   "data": {
+    "k": 36,
+    "n": 80,
+    "p": 0.45,
+    "wilson95": [
+     0.3458,
+     0.5588
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 0,
+    "n": 36,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0964
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 36
+   },
+   "dataSingleEdgeShare": {
+    "k": 36,
+    "n": 36,
+    "p": 1.0,
+    "wilson95": [
+     0.9036,
+     1.0
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 13.2,
+    "controlEdgesPerMethod": 1.944,
+    "controlFactsDropped": 21,
+    "cpgFilesWithMethods": 35,
+    "cpgMBPerFile": 0.0223,
+    "cpgMethods": 232,
+    "cpgWhole": {
+     "calls": 3649,
+     "edges": 121048,
+     "edgesPerFile": 2952.4,
+     "fileNodes": 41,
+     "mbPerFile": 0.019,
+     "nodes": 19812,
+     "nodesPerFile": 483.2,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.716,
+    "dataFactsDropped": 194,
+    "edgesPerFile": 24.26,
+    "edgesPerMethod": 3.659,
+    "extractSecondsPerKLOC": 2.401,
+    "kLOC": 3.29,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 5.46,
+    "parseSecondsPerKLOC": 1.945,
+    "pointsPerFile": 28.94,
+    "projectedControlEdges": 451,
+    "projectedDataEdges": 398,
+    "projectedPoints": 1013,
+    "projectionMsPerKLOC": 14.29,
+    "rawCdgEdges": 2242,
+    "rawCdgSelfEdges": 5,
+    "rawDataFacts": 637,
+    "syntheticCallsDropped": 252
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 19,
+    "source": 27,
+    "source+sink": 10
+   },
+   "endpointUnresolvedShare": {
+    "k": 56,
+    "n": 151,
+    "p": 0.3709,
+    "wilson95": [
+     0.2979,
+     0.4502
+    ]
+   },
+   "extract": {
+    "factsMB": 0.8,
+    "peakMemMiB": 504.5,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:16:45Z",
+    "wallSeconds": 7.9
+   },
+   "extractInternalMs": {
+    "loadMs": 856,
+    "projectionMs": 47,
+    "totalMs": 1065
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 11,
+    "<1ms": 221
+   },
+   "methodsFullyRecovered": {
+    "k": 1,
+    "n": 12,
+    "p": 0.0833,
+    "wilson95": [
+     0.0149,
+     0.3539
+    ]
+   },
+   "methodsMatched": {
+    "k": 11,
+    "n": 12,
+    "p": 0.9167,
+    "wilson95": [
+     0.6461,
+     0.9851
+    ]
+   },
+   "methodsWithPairs": 12,
+   "methodsWithProjectedPairs": 11,
+   "parse": {
+    "peakMemMiB": 339.3,
+    "wallSeconds": 6.4
+   },
+   "pooled": {
+    "k": 60,
+    "n": 151,
+    "p": 0.3974,
+    "wilson95": [
+     0.3228,
+     0.477
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 60,
+    "n": 142,
+    "p": 0.4225,
+    "wilson95": [
+     0.3444,
+     0.5048
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 60,
+    "n": 142,
+    "p": 0.4225,
+    "wilson95": [
+     0.3444,
+     0.5048
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 67,
+    "data": 42
+   },
+   "projectionSuccess": {
+    "k": 232,
+    "n": 232,
+    "p": 1.0,
+    "wilson95": [
+     0.9837,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 43,
+    "data": 6
+   },
+   "spuriousPairs": {
+    "k": 49,
+    "n": 109,
+    "p": 0.4495,
+    "wilson95": [
+     0.3595,
+     0.5431
+    ]
+   },
+   "status": {
+    "connected": 60,
+    "endpoint-unresolved": 56,
+    "method-absent": 9,
+    "not-connected": 26
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 24,
+     "endpoint-unresolved": 41,
+     "method-absent": 1,
+     "not-connected": 5
+    },
+    "data": {
+     "connected": 36,
+     "endpoint-unresolved": 15,
+     "method-absent": 8,
+     "not-connected": 21
+    }
+   },
+   "strata": {
+    "convention:early-exit": {
+     "byKind": {
+      "control": 2,
+      "data": 2
+     },
+     "k": 2,
+     "n": 4,
+     "p": 0.5,
+     "status": {
+      "connected": 2,
+      "endpoint-unresolved": 1,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.15,
+      0.85
+     ]
+    },
+    "convention:switch-chain": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:switch-default": {
+     "byKind": {
+      "control": 3
+     },
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 3
+     },
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "convention:switch-discriminant": {
+     "byKind": {
+      "data": 13
+     },
+     "k": 0,
+     "n": 13,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 13
+     },
+     "wilson95": [
+      0.0,
+      0.2281
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [
+      2
+     ],
+     "n": 9,
+     "p": 0.0,
+     "status": {
+      "method-absent": 9
+     },
+     "wilson95": [
+      0.0,
+      0.2991
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [
+      2
+     ],
+     "k": 0,
+     "methods": [
+      2
+     ],
+     "n": 9,
+     "otherAbsent": [],
+     "p": 0.0,
+     "reasons": {
+      "2": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.2991
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 59,
+    "n": 133,
+    "p": 0.4436,
+    "wilson95": [
+     0.3619,
+     0.5284
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.338,
+     "ci95": [
+      0.0531,
+      0.623
+     ],
+     "connected": 24,
+     "n": 11,
+     "pairs": 71,
+     "se": 0.12789,
+     "t": 2.2281
+    },
+    "data": {
+     "R": 0.45,
+     "ci95": [
+      0.324,
+      0.576
+     ],
+     "connected": 36,
+     "n": 12,
+     "pairs": 80,
+     "se": 0.05724,
+     "t": 2.201
+    },
+    "pooled": {
+     "R": 0.3974,
+     "ci95": [
+      0.2409,
+      0.5538
+     ],
+     "connected": 60,
+     "n": 12,
+     "pairs": 151,
+     "se": 0.07107,
+     "t": 2.201
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=232",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 24,
+    "n": 71,
+    "p": 0.338,
+    "wilson95": [
+     0.2388,
+     0.4538
+    ]
+   },
+   "cpgMB": 0.78,
+   "data": {
+    "k": 36,
+    "n": 80,
+    "p": 0.45,
+    "wilson95": [
+     0.3458,
+     0.5588
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 0,
+    "n": 36,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0964
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 36
+   },
+   "dataSingleEdgeShare": {
+    "k": 36,
+    "n": 36,
+    "p": 1.0,
+    "wilson95": [
+     0.9036,
+     1.0
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 13.2,
+    "controlEdgesPerMethod": 1.944,
+    "controlFactsDropped": 21,
+    "cpgFilesWithMethods": 35,
+    "cpgMBPerFile": 0.0223,
+    "cpgMethods": 232,
+    "cpgWhole": {
+     "calls": 3649,
+     "edges": 121048,
+     "edgesPerFile": 2952.4,
+     "fileNodes": 41,
+     "mbPerFile": 0.019,
+     "nodes": 19812,
+     "nodesPerFile": 483.2,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.716,
+    "dataFactsDropped": 194,
+    "edgesPerFile": 24.26,
+    "edgesPerMethod": 3.659,
+    "extractSecondsPerKLOC": 2.523,
+    "kLOC": 3.29,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 5.46,
+    "parseSecondsPerKLOC": 2.006,
+    "pointsPerFile": 28.94,
+    "projectedControlEdges": 451,
+    "projectedDataEdges": 398,
+    "projectedPoints": 1013,
+    "projectionMsPerKLOC": 14.89,
+    "rawCdgEdges": 2242,
+    "rawCdgSelfEdges": 5,
+    "rawDataFacts": 637,
+    "syntheticCallsDropped": 252
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 19,
+    "source": 27,
+    "source+sink": 10
+   },
+   "endpointUnresolvedShare": {
+    "k": 56,
+    "n": 151,
+    "p": 0.3709,
+    "wilson95": [
+     0.2979,
+     0.4502
+    ]
+   },
+   "extract": {
+    "factsMB": 0.8,
+    "peakMemMiB": 592.4,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:17:04Z",
+    "wallSeconds": 8.3
+   },
+   "extractInternalMs": {
+    "loadMs": 785,
+    "projectionMs": 49,
+    "totalMs": 990
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 7,
+    "<1ms": 225
+   },
+   "methodsFullyRecovered": {
+    "k": 1,
+    "n": 12,
+    "p": 0.0833,
+    "wilson95": [
+     0.0149,
+     0.3539
+    ]
+   },
+   "methodsMatched": {
+    "k": 11,
+    "n": 12,
+    "p": 0.9167,
+    "wilson95": [
+     0.6461,
+     0.9851
+    ]
+   },
+   "methodsWithPairs": 12,
+   "methodsWithProjectedPairs": 11,
+   "parse": {
+    "peakMemMiB": 712.6,
+    "wallSeconds": 6.6
+   },
+   "pooled": {
+    "k": 60,
+    "n": 151,
+    "p": 0.3974,
+    "wilson95": [
+     0.3228,
+     0.477
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 60,
+    "n": 142,
+    "p": 0.4225,
+    "wilson95": [
+     0.3444,
+     0.5048
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 60,
+    "n": 142,
+    "p": 0.4225,
+    "wilson95": [
+     0.3444,
+     0.5048
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 67,
+    "data": 42
+   },
+   "projectionSuccess": {
+    "k": 232,
+    "n": 232,
+    "p": 1.0,
+    "wilson95": [
+     0.9837,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 43,
+    "data": 6
+   },
+   "spuriousPairs": {
+    "k": 49,
+    "n": 109,
+    "p": 0.4495,
+    "wilson95": [
+     0.3595,
+     0.5431
+    ]
+   },
+   "status": {
+    "connected": 60,
+    "endpoint-unresolved": 56,
+    "method-absent": 9,
+    "not-connected": 26
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 24,
+     "endpoint-unresolved": 41,
+     "method-absent": 1,
+     "not-connected": 5
+    },
+    "data": {
+     "connected": 36,
+     "endpoint-unresolved": 15,
+     "method-absent": 8,
+     "not-connected": 21
+    }
+   },
+   "strata": {
+    "convention:early-exit": {
+     "byKind": {
+      "control": 2,
+      "data": 2
+     },
+     "k": 2,
+     "n": 4,
+     "p": 0.5,
+     "status": {
+      "connected": 2,
+      "endpoint-unresolved": 1,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.15,
+      0.85
+     ]
+    },
+    "convention:switch-chain": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:switch-default": {
+     "byKind": {
+      "control": 3
+     },
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 3
+     },
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "convention:switch-discriminant": {
+     "byKind": {
+      "data": 13
+     },
+     "k": 0,
+     "n": 13,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 13
+     },
+     "wilson95": [
+      0.0,
+      0.2281
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [
+      2
+     ],
+     "n": 9,
+     "p": 0.0,
+     "status": {
+      "method-absent": 9
+     },
+     "wilson95": [
+      0.0,
+      0.2991
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [
+      2
+     ],
+     "k": 0,
+     "methods": [
+      2
+     ],
+     "n": 9,
+     "otherAbsent": [],
+     "p": 0.0,
+     "reasons": {
+      "2": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.2991
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 59,
+    "n": 133,
+    "p": 0.4436,
+    "wilson95": [
+     0.3619,
+     0.5284
+    ]
+   }
+  }
+ },
+ "corpusCommit": "0caf85e3ccb757801d15d6babe55a63477a486dd",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 151,
+    "pairsOK": true,
+    "pooledRecall": 0.3974,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 151,
+    "pairsOK": true,
+    "pooledRecall": 0.3974,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "goldenMethods": 12,
+ "goldenPairs": 151,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "withOptimisticRow",
+    "params": {
+     "0": "rows",
+     "1": "sent"
+    },
+    "span": [
+     14,
+     21
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "src/components/message/optimistic.ts",
+   "qname": "src/components/message/optimistic.ts::withOptimisticRow",
+   "span": [
+    14,
+    21
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [
+    "i18n"
+   ],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 2,
+   "path": "src/i18n/format.ts",
+   "qname": "src/i18n/format.ts::formatDate",
+   "span": [
+    21,
+    28
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "reconcilePostMessageFailure",
+    "params": {
+     "0": "text",
+     "1": "freshMessages",
+     "2": "freshState"
+    },
+    "span": [
+     88,
+     96
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "src/api/hooks.ts",
+   "qname": "src/api/hooks.ts::reconcilePostMessageFailure",
+   "span": [
+    88,
+    96
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "readJson",
+    "params": {
+     "0": "key"
+    },
+    "span": [
+     17,
+     25
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "src/session/storage.ts",
+   "qname": "src/session/storage.ts::readJson",
+   "span": [
+    17,
+    25
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "DeadTurnNotice",
+    "params": {
+     "0": "param1_0"
+    },
+    "span": [
+     11,
+     22
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "src/components/message/DeadTurnNotice.tsx",
+   "qname": "src/components/message/DeadTurnNotice.tsx::DeadTurnNotice",
+   "span": [
+    11,
+    22
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "buildUrl",
+    "params": {
+     "0": "path",
+     "1": "query"
+    },
+    "span": [
+     73,
+     81
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "src/api/client.ts",
+   "qname": "src/api/client.ts::buildUrl",
+   "span": [
+    73,
+    81
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "<init>",
+    "params": {
+     "0": "opts"
+    },
+    "span": [
+     35,
+     51
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "src/api/client.ts",
+   "qname": "src/api/client.ts::ApiError.<init>",
+   "span": [
+    35,
+    51
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "errorMessageFor",
+    "params": {
+     "0": "action",
+     "1": "t"
+    },
+    "span": [
+     22,
+     43
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 8,
+   "path": "src/views/PresenterResetAllControl.tsx",
+   "qname": "src/views/PresenterResetAllControl.tsx::errorMessageFor",
+   "span": [
+    22,
+    43
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "handleSubmit",
+    "params": {
+     "0": "event"
+    },
+    "span": [
+     59,
+     68
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 9,
+   "path": "src/views/ChatView.tsx",
+   "qname": "src/views/ChatView.tsx::ChatView.handleSubmit",
+   "span": [
+    59,
+    68
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "useMessages",
+    "params": {
+     "0": "since"
+    },
+    "span": [
+     157,
+     177
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "src/api/hooks.ts",
+   "qname": "src/api/hooks.ts::useMessages",
+   "span": [
+    157,
+    177
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "errorMessageFor",
+    "params": {
+     "0": "action",
+     "1": "t"
+    },
+    "span": [
+     23,
+     46
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "src/components/sheets/ResetControl.tsx",
+   "qname": "src/components/sheets/ResetControl.tsx::errorMessageFor",
+   "span": [
+    23,
+    46
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "errorMessageFor",
+    "params": {
+     "0": "action",
+     "1": "t"
+    },
+    "span": [
+     68,
+     87
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "src/views/OrderPanel.tsx",
+   "qname": "src/views/OrderPanel.tsx::errorMessageFor",
+   "span": [
+    68,
+    87
+   ]
+  }
+ ],
+ "lang": "javascript",
+ "missesFile": {
+  "path": "adjudication/javascript-flow-misses.jsonl",
+  "rows": 91
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 151
+ },
+ "spuriousSample": {
+  "drawn": 49,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 49,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p0a-v1-spur|javascript|0caf85e3ccb757801d15d6babe55a63477a486dd",
+  "sharesEndpointWithUnresolvedGolden": 33,
+  "truthIncompleteFlag": "pending adjudication (n=49; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/javascript.flow-final.jsonl",
+ "variant": "as-shipped (headline)"
+}

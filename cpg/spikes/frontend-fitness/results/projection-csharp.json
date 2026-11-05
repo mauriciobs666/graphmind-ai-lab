@@ -1,0 +1,1483 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/csharp/off/480359ac-d601-4898-82d4-2253742ee2c6.facts.jsonl",
+   "rc": 1,
+   "wallSeconds": 7.4
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/csharp/on/c5c53a7a-ce24-4acd-b458-bc4f98d84a13.facts.jsonl",
+   "rc": 1,
+   "wallSeconds": 7.0
+  }
+ },
+ "censusReach": {
+  "k": 3754,
+  "n": 4639,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 0.8092,
+  "wilson95": [
+   0.7977,
+   0.8203
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.5746,
+     "ci95": [
+      0.4129,
+      0.7364
+     ],
+     "connected": 77,
+     "n": 27,
+     "pairs": 134,
+     "se": 0.07869,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.5814,
+     "ci95": [
+      0.4656,
+      0.6972
+     ],
+     "connected": 150,
+     "n": 30,
+     "pairs": 258,
+     "se": 0.05663,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.5791,
+     "ci95": [
+      0.4618,
+      0.6964
+     ],
+     "connected": 227,
+     "n": 30,
+     "pairs": 392,
+     "se": 0.05734,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/e8b9eb22-6f4b-4bb2-88df-6843f7b4434e.cpg.bin=5897",
+    "CONTENT /out/e8b9eb22-6f4b-4bb2-88df-6843f7b4434e.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 77,
+    "n": 134,
+    "p": 0.5746,
+    "wilson95": [
+     0.49,
+     0.6551
+    ]
+   },
+   "cpgMB": 7.28,
+   "data": {
+    "k": 150,
+    "n": 258,
+    "p": 0.5814,
+    "wilson95": [
+     0.5204,
+     0.64
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 3,
+    "n": 150,
+    "p": 0.02,
+    "wilson95": [
+     0.0068,
+     0.0571
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 147,
+    "2": 3
+   },
+   "dataSingleEdgeShare": {
+    "k": 147,
+    "n": 150,
+    "p": 0.98,
+    "wilson95": [
+     0.9429,
+     0.9932
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 27.21,
+    "controlEdgesPerMethod": 0.376,
+    "controlFactsDropped": 511,
+    "cpgFilesWithMethods": 669,
+    "cpgMBPerFile": 0.0109,
+    "cpgMethods": 5897,
+    "cpgWhole": {
+     "calls": 39954,
+     "edges": 1213649,
+     "edgesPerFile": 1764.0,
+     "fileNodes": 688,
+     "mbPerFile": 0.0106,
+     "nodes": 181415,
+     "nodesPerFile": 263.7,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.83,
+    "dataFactsDropped": 3636,
+    "edgesPerFile": 19.44,
+    "edgesPerMethod": 2.206,
+    "extractSecondsPerKLOC": 0.135,
+    "kLOC": 60.61,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 8.77,
+    "parseSecondsPerKLOC": 0.657,
+    "pointsPerFile": 37.04,
+    "projectedControlEdges": 2217,
+    "projectedDataEdges": 10789,
+    "projectedPoints": 24782,
+    "projectionMsPerKLOC": 2.99,
+    "rawCdgEdges": 8694,
+    "rawCdgSelfEdges": 680,
+    "rawDataFacts": 14549,
+    "syntheticCallsDropped": 1786
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 40,
+    "source": 17,
+    "source+sink": 22
+   },
+   "endpointUnresolvedShare": {
+    "k": 79,
+    "n": 392,
+    "p": 0.2015,
+    "wilson95": [
+     0.1648,
+     0.2441
+    ]
+   },
+   "extract": {
+    "factsMB": 16.27,
+    "peakMemMiB": 476.5,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:21:16Z",
+    "wallSeconds": 8.2
+   },
+   "extractInternalMs": {
+    "loadMs": 261,
+    "projectionMs": 181,
+    "totalMs": 1207
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 5,
+    "<1ms": 5892
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 30,
+    "p": 0.0667,
+    "wilson95": [
+     0.0185,
+     0.2132
+    ]
+   },
+   "methodsMatched": {
+    "k": 26,
+    "n": 30,
+    "p": 0.8667,
+    "wilson95": [
+     0.7032,
+     0.9469
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 25,
+   "parse": {
+    "peakMemMiB": 2161.7,
+    "wallSeconds": 39.8
+   },
+   "pooled": {
+    "k": 227,
+    "n": 392,
+    "p": 0.5791,
+    "wilson95": [
+     0.5297,
+     0.627
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 227,
+    "n": 392,
+    "p": 0.5791,
+    "wilson95": [
+     0.5297,
+     0.627
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 227,
+    "n": 362,
+    "p": 0.6271,
+    "wilson95": [
+     0.5762,
+     0.6753
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 114,
+    "data": 164
+   },
+   "projectionSuccess": {
+    "k": 5897,
+    "n": 5897,
+    "p": 1.0,
+    "wilson95": [
+     0.9993,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 37,
+    "data": 17
+   },
+   "spuriousPairs": {
+    "k": 54,
+    "n": 278,
+    "p": 0.1942,
+    "wilson95": [
+     0.152,
+     0.2448
+    ]
+   },
+   "status": {
+    "connected": 227,
+    "endpoint-unresolved": 79,
+    "method-absent": 30,
+    "not-connected": 56
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 77,
+     "endpoint-unresolved": 38,
+     "method-absent": 5,
+     "not-connected": 14
+    },
+    "data": {
+     "connected": 150,
+     "endpoint-unresolved": 41,
+     "method-absent": 25,
+     "not-connected": 42
+    }
+   },
+   "strata": {
+    "convention:coordinate-fixed": {
+     "byKind": {
+      "control": 2,
+      "data": 3
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "convention:discard-arm": {
+     "byKind": {
+      "control": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 8
+     },
+     "k": 4,
+     "n": 8,
+     "p": 0.5,
+     "status": {
+      "connected": 4,
+      "endpoint-unresolved": 3,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.2152,
+      0.7848
+     ]
+    },
+    "convention:try-handler": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [
+      8,
+      9,
+      17,
+      23
+     ],
+     "n": 30,
+     "otherAbsent": [
+      8,
+      9,
+      17,
+      23
+     ],
+     "p": 0.0,
+     "reasons": {
+      "17": "file-absent-from-cpg",
+      "23": "file-absent-from-cpg",
+      "8": "file-absent-from-cpg",
+      "9": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.1135
+     ]
+    },
+    "provenance:partF-coordinate-fix": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 220,
+    "n": 359,
+    "p": 0.6128,
+    "wilson95": [
+     0.5615,
+     0.6618
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.5746,
+     "ci95": [
+      0.4129,
+      0.7364
+     ],
+     "connected": 77,
+     "n": 27,
+     "pairs": 134,
+     "se": 0.07869,
+     "t": 2.0555
+    },
+    "data": {
+     "R": 0.5814,
+     "ci95": [
+      0.4656,
+      0.6972
+     ],
+     "connected": 150,
+     "n": 30,
+     "pairs": 258,
+     "se": 0.05663,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.5791,
+     "ci95": [
+      0.4618,
+      0.6964
+     ],
+     "connected": 227,
+     "n": 30,
+     "pairs": 392,
+     "se": 0.05734,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=5897",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 77,
+    "n": 134,
+    "p": 0.5746,
+    "wilson95": [
+     0.49,
+     0.6551
+    ]
+   },
+   "cpgMB": 7.28,
+   "data": {
+    "k": 150,
+    "n": 258,
+    "p": 0.5814,
+    "wilson95": [
+     0.5204,
+     0.64
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 3,
+    "n": 150,
+    "p": 0.02,
+    "wilson95": [
+     0.0068,
+     0.0571
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 147,
+    "2": 3
+   },
+   "dataSingleEdgeShare": {
+    "k": 147,
+    "n": 150,
+    "p": 0.98,
+    "wilson95": [
+     0.9429,
+     0.9932
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 27.21,
+    "controlEdgesPerMethod": 0.376,
+    "controlFactsDropped": 526,
+    "cpgFilesWithMethods": 669,
+    "cpgMBPerFile": 0.0109,
+    "cpgMethods": 5897,
+    "cpgWhole": {
+     "calls": 39954,
+     "edges": 1213962,
+     "edgesPerFile": 1764.5,
+     "fileNodes": 688,
+     "mbPerFile": 0.0106,
+     "nodes": 181498,
+     "nodesPerFile": 263.8,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.829,
+    "dataFactsDropped": 3651,
+    "edgesPerFile": 19.43,
+    "edgesPerMethod": 2.205,
+    "extractSecondsPerKLOC": 0.132,
+    "kLOC": 60.61,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 8.77,
+    "parseSecondsPerKLOC": 1.328,
+    "pointsPerFile": 37.04,
+    "projectedControlEdges": 2217,
+    "projectedDataEdges": 10784,
+    "projectedPoints": 24782,
+    "projectionMsPerKLOC": 3.09,
+    "rawCdgEdges": 8685,
+    "rawCdgSelfEdges": 680,
+    "rawDataFacts": 14559,
+    "syntheticCallsDropped": 1798
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 40,
+    "source": 17,
+    "source+sink": 22
+   },
+   "endpointUnresolvedShare": {
+    "k": 79,
+    "n": 392,
+    "p": 0.2015,
+    "wilson95": [
+     0.1648,
+     0.2441
+    ]
+   },
+   "extract": {
+    "factsMB": 16.28,
+    "peakMemMiB": 689.4,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:21:31Z",
+    "wallSeconds": 8.0
+   },
+   "extractInternalMs": {
+    "loadMs": 284,
+    "projectionMs": 187,
+    "totalMs": 1233
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 7,
+    "<1ms": 5890
+   },
+   "methodsFullyRecovered": {
+    "k": 2,
+    "n": 30,
+    "p": 0.0667,
+    "wilson95": [
+     0.0185,
+     0.2132
+    ]
+   },
+   "methodsMatched": {
+    "k": 26,
+    "n": 30,
+    "p": 0.8667,
+    "wilson95": [
+     0.7032,
+     0.9469
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 25,
+   "parse": {
+    "peakMemMiB": 1811.5,
+    "wallSeconds": 80.5
+   },
+   "pooled": {
+    "k": 227,
+    "n": 392,
+    "p": 0.5791,
+    "wilson95": [
+     0.5297,
+     0.627
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 227,
+    "n": 392,
+    "p": 0.5791,
+    "wilson95": [
+     0.5297,
+     0.627
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 227,
+    "n": 362,
+    "p": 0.6271,
+    "wilson95": [
+     0.5762,
+     0.6753
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 114,
+    "data": 164
+   },
+   "projectionSuccess": {
+    "k": 5897,
+    "n": 5897,
+    "p": 1.0,
+    "wilson95": [
+     0.9993,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 37,
+    "data": 17
+   },
+   "spuriousPairs": {
+    "k": 54,
+    "n": 278,
+    "p": 0.1942,
+    "wilson95": [
+     0.152,
+     0.2448
+    ]
+   },
+   "status": {
+    "connected": 227,
+    "endpoint-unresolved": 79,
+    "method-absent": 30,
+    "not-connected": 56
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 77,
+     "endpoint-unresolved": 38,
+     "method-absent": 5,
+     "not-connected": 14
+    },
+    "data": {
+     "connected": 150,
+     "endpoint-unresolved": 41,
+     "method-absent": 25,
+     "not-connected": 42
+    }
+   },
+   "strata": {
+    "convention:coordinate-fixed": {
+     "byKind": {
+      "control": 2,
+      "data": 3
+     },
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "convention:discard-arm": {
+     "byKind": {
+      "control": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 8
+     },
+     "k": 4,
+     "n": 8,
+     "p": 0.5,
+     "status": {
+      "connected": 4,
+      "endpoint-unresolved": 3,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.2152,
+      0.7848
+     ]
+    },
+    "convention:try-handler": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [
+      8,
+      9,
+      17,
+      23
+     ],
+     "n": 30,
+     "otherAbsent": [
+      8,
+      9,
+      17,
+      23
+     ],
+     "p": 0.0,
+     "reasons": {
+      "17": "file-absent-from-cpg",
+      "23": "file-absent-from-cpg",
+      "8": "file-absent-from-cpg",
+      "9": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.1135
+     ]
+    },
+    "provenance:partF-coordinate-fix": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "status": {
+      "endpoint-unresolved": 5
+     },
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 220,
+    "n": 359,
+    "p": 0.6128,
+    "wilson95": [
+     0.5615,
+     0.6618
+    ]
+   }
+  }
+ },
+ "corpusCommit": "8b8fde19ed6cafdba9e737c551360a24046eb4e5",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 392,
+    "pairsOK": true,
+    "pooledRecall": 0.5791,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 392,
+    "pairsOK": true,
+    "pooledRecall": 0.5791,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": false
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 392,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "EchoHeaders",
+    "params": {
+     "0": "context"
+    },
+    "span": [
+     152,
+     158
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "acceptance/Security/SecurityOptionsTests.cs",
+   "qname": "acceptance/Security/SecurityOptionsTests.cs::SecurityOptionsTests.EchoHeaders",
+   "span": [
+    152,
+    158
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "AppendNext",
+    "params": {
+     "-1": "builder",
+     "0": "next",
+     "1": "separator"
+    },
+    "span": [
+     11,
+     19
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 2,
+   "path": "src/Infrastructure/Extensions/StringBuilderExtensions.cs",
+   "qname": "src/Infrastructure/Extensions/StringBuilderExtensions.cs::StringBuilderExtensions.AppendNext",
+   "span": [
+    11,
+    19
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "WhenIGetUrlOnTheApiGatewayMultipleTimes",
+    "params": {
+     "0": "url",
+     "1": "times",
+     "2": "cookie",
+     "3": "value"
+    },
+    "span": [
+     136,
+     145
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "acceptance/LoadBalancer/CookieStickySessionsTests.cs",
+   "qname": "acceptance/LoadBalancer/CookieStickySessionsTests.cs::CookieStickySessionsTests.WhenIGetUrlOnTheApiGatewayMultipleTimes",
+   "span": [
+    136,
+    145
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ToString_ClientWhitelist",
+    "params": {
+     "0": "isEmpty",
+     "1": "expected"
+    },
+    "span": [
+     107,
+     130
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "unit/RateLimiting/FileRateLimitByHeaderRuleTests.cs",
+   "qname": "unit/RateLimiting/FileRateLimitByHeaderRuleTests.cs::FileRateLimitByHeaderRuleTests.ToString_ClientWhitelist",
+   "span": [
+    107,
+    130
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "PostConfigure",
+    "params": {
+     "0": "name",
+     "1": "options"
+    },
+    "span": [
+     17,
+     34
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "src/Authorization/RouteClaimsRequirementPostConfigureOptions.cs",
+   "qname": "src/Authorization/RouteClaimsRequirementPostConfigureOptions.cs::RouteClaimsRequirementPostConfigureOptions.PostConfigure",
+   "span": [
+    17,
+    34
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "IsSupportedAuthenticationProviders",
+    "params": {
+     "0": "options",
+     "1": "cancellationToken"
+    },
+    "span": [
+     21,
+     34
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "src/Configuration/Validator/FileAuthenticationOptionsValidator.cs",
+   "qname": "src/Configuration/Validator/FileAuthenticationOptionsValidator.cs::FileAuthenticationOptionsValidator.IsSupportedAuthenticationProviders",
+   "span": [
+    21,
+    34
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "IsValidPeriod",
+    "params": {
+     "0": "rateLimitOptions"
+    },
+    "span": [
+     114,
+     127
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "src/Configuration/Validator/RouteFluentValidator.cs",
+   "qname": "src/Configuration/Validator/RouteFluentValidator.cs::RouteFluentValidator.IsValidPeriod",
+   "span": [
+    114,
+    127
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 8,
+   "path": "src/LoadBalancer/Creators/LeastConnectionCreator.cs",
+   "qname": "src/LoadBalancer/Creators/LeastConnectionCreator.cs::LeastConnectionCreator.Create",
+   "span": [
+    11,
+    19
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 9,
+   "path": "src/LoadBalancer/Balancers/RoundRobin.cs",
+   "qname": "src/LoadBalancer/Balancers/RoundRobin.cs::RoundRobin.Update",
+   "span": [
+    108,
+    114
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Security",
+    "params": {
+     "0": "downstreamRoute",
+     "1": "context"
+    },
+    "span": [
+     9,
+     29
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "src/Security/IPSecurityPolicy.cs",
+   "qname": "src/Security/IPSecurityPolicy.cs::IPSecurityPolicy.Security",
+   "span": [
+    9,
+    29
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "MapAsync",
+    "params": {
+     "0": "context",
+     "1": "route",
+     "2": "contexts"
+    },
+    "span": [
+     244,
+     261
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "src/Multiplexer/MultiplexingMiddleware.cs",
+   "qname": "src/Multiplexer/MultiplexingMiddleware.cs::MultiplexingMiddleware.MapAsync",
+   "span": [
+    244,
+    261
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "GetParallelResponse",
+    "params": {
+     "0": "url",
+     "1": "threadIndex"
+    },
+    "span": [
+     178,
+     188
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "testing/Steps/ConcurrentSteps.cs",
+   "qname": "testing/Steps/ConcurrentSteps.cs::ConcurrentSteps.GetParallelResponse",
+   "span": [
+    178,
+    188
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Merge",
+    "params": {
+     "0": "options",
+     "1": "globalOptions"
+    },
+    "span": [
+     51,
+     62
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "src/Configuration/Creator/AuthenticationOptionsCreator.cs",
+   "qname": "src/Configuration/Creator/AuthenticationOptionsCreator.cs::AuthenticationOptionsCreator.Merge",
+   "span": [
+    51,
+    62
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Create",
+    "params": {
+     "0": "serviceNamespace",
+     "1": "serviceName",
+     "2": "loadBalancing"
+    },
+    "span": [
+     53,
+     62
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "src/Configuration/Creator/RouteKeyCreator.cs",
+   "qname": "src/Configuration/Creator/RouteKeyCreator.cs::RouteKeyCreator.Create",
+   "span": [
+    53,
+    62
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ConvertLevelToString",
+    "params": {
+     "0": "level"
+    },
+    "span": [
+     74,
+     81
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 15,
+   "path": "samples/ServiceFabric/ApiGateway/ServiceEventListener.cs",
+   "qname": "samples/ServiceFabric/ApiGateway/ServiceEventListener.cs::ServiceEventListener.ConvertLevelToString",
+   "span": [
+    74,
+    81
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Get",
+    "params": {
+     "0": "route",
+     "1": "config"
+    },
+    "span": [
+     24,
+     41
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "src/LoadBalancer/LoadBalancerHouse.cs",
+   "qname": "src/LoadBalancer/LoadBalancerHouse.cs::LoadBalancerHouse.Get",
+   "span": [
+    24,
+    41
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 17,
+   "path": "unit/LoadBalancer/RoundRobinTests.cs",
+   "qname": "unit/LoadBalancer/RoundRobinTests.cs::RoundRobinTests.GivenServices",
+   "span": [
+    249,
+    258
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "GetValue",
+    "params": {
+     "0": "claims",
+     "1": "key"
+    },
+    "span": [
+     44,
+     54
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "src/Infrastructure/Claims/ClaimsParser.cs",
+   "qname": "src/Infrastructure/Claims/ClaimsParser.cs::ClaimsParser.GetValue",
+   "span": [
+    44,
+    54
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Dispose",
+    "params": {
+     "0": "disposing"
+    },
+    "span": [
+     31,
+     42
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 19,
+   "path": "src/Logging/OcelotLoggerFactory.cs",
+   "qname": "src/Logging/OcelotLoggerFactory.cs::OcelotLoggerFactory.Dispose",
+   "span": [
+    31,
+    42
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "WhenIGetUrlOnTheApiGatewayTimesThenIExpectStatus",
+    "params": {
+     "0": "times",
+     "1": "expected"
+    },
+    "span": [
+     674,
+     681
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "acceptance/QualityOfService/QualityOfServiceTests.cs",
+   "qname": "acceptance/QualityOfService/QualityOfServiceTests.cs::QualityOfServiceTests.WhenIGetUrlOnTheApiGatewayTimesThenIExpectStatus",
+   "span": [
+    674,
+    681
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "ProcessRoutesWithRouteKeysAsync",
+    "params": {
+     "0": "context",
+     "1": "routes",
+     "2": "routeKeysConfigs",
+     "3": "mainResponse"
+    },
+    "span": [
+     120,
+     140
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 21,
+   "path": "src/Multiplexer/MultiplexingMiddleware.cs",
+   "qname": "src/Multiplexer/MultiplexingMiddleware.cs::MultiplexingMiddleware.ProcessRoutesWithRouteKeysAsync",
+   "span": [
+    120,
+    140
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "<init>",
+    "params": {
+     "0": "from"
+    },
+    "span": [
+     16,
+     31
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 22,
+   "path": "src/Configuration/HeaderFindAndReplace.cs",
+   "qname": "src/Configuration/HeaderFindAndReplace.cs::HeaderFindAndReplace.<init>",
+   "span": [
+    16,
+    31
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 23,
+   "path": "unit/DependencyInjection/ConfigurationBuilderExtensionsTests.cs",
+   "qname": "unit/DependencyInjection/ConfigurationBuilderExtensionsTests.cs::ConfigurationBuilderExtensionsTests.OcelotJSetSection.OcelotJSetSection_AcceptsVariousValueTypes",
+   "span": [
+    782,
+    798
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "GetDownstreamPath",
+    "params": {
+     "0": "upstreamUrlPath"
+    },
+    "span": [
+     108,
+     114
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "src/DownstreamRouteFinder/Finder/DiscoveryDownstreamRouteFinder.cs",
+   "qname": "src/DownstreamRouteFinder/Finder/DiscoveryDownstreamRouteFinder.cs::DiscoveryDownstreamRouteFinder.GetDownstreamPath",
+   "span": [
+    108,
+    114
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "GetDelay",
+    "params": {
+     "0": "configuration"
+    },
+    "span": [
+     31,
+     42
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 25,
+   "path": "src/Configuration/Repository/ServiceDiscoveryFileConfigurationPollerOptions.cs",
+   "qname": "src/Configuration/Repository/ServiceDiscoveryFileConfigurationPollerOptions.cs::ServiceDiscoveryFileConfigurationPollerOptions.GetDelay",
+   "span": [
+    31,
+    42
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "AuthenticateAsync",
+    "params": {
+     "0": "context",
+     "1": "route"
+    },
+    "span": [
+     61,
+     84
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 26,
+   "path": "src/Authentication/AuthenticationMiddleware.cs",
+   "qname": "src/Authentication/AuthenticationMiddleware.cs::AuthenticationMiddleware.AuthenticateAsync",
+   "span": [
+    61,
+    84
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "OcelotJProperty",
+    "params": {
+     "-1": "route",
+     "0": "propertyPath",
+     "1": "globalConfiguration"
+    },
+    "span": [
+     511,
+     522
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 27,
+   "path": "src/DependencyInjection/ConfigurationBuilderExtensions.cs",
+   "qname": "src/DependencyInjection/ConfigurationBuilderExtensions.cs::ConfigurationBuilderExtensions.OcelotJProperty",
+   "span": [
+    511,
+    522
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "SetAsync",
+    "params": {
+     "0": "configuration",
+     "1": "cancellationToken"
+    },
+    "span": [
+     99,
+     121
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 28,
+   "path": "src/Configuration/Repository/DiskFileConfigurationRepository.cs",
+   "qname": "src/Configuration/Repository/DiskFileConfigurationRepository.cs::DiskFileConfigurationRepository.SetAsync",
+   "span": [
+    99,
+    121
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "SerializeToStreamAsync",
+    "params": {
+     "0": "stream",
+     "1": "context"
+    },
+    "span": [
+     107,
+     116
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "acceptance/Request/StreamContentTests.cs",
+   "qname": "acceptance/Request/StreamContentTests.cs::StreamTestContent.SerializeToStreamAsync",
+   "span": [
+    107,
+    116
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Map",
+    "params": {
+     "0": "input"
+    },
+    "span": [
+     79,
+     101
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "src/Configuration/Creator/HeaderFindAndReplaceCreator.cs",
+   "qname": "src/Configuration/Creator/HeaderFindAndReplaceCreator.cs::HeaderFindAndReplaceCreator.Map",
+   "span": [
+    79,
+    101
+   ]
+  }
+ ],
+ "lang": "csharp",
+ "missesFile": {
+  "path": "adjudication/csharp-flow-misses.jsonl",
+  "rows": 165
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 392
+ },
+ "spuriousSample": {
+  "drawn": 50,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 54,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p0a-v1-spur|csharp|8b8fde19ed6cafdba9e737c551360a24046eb4e5",
+  "sharesEndpointWithUnresolvedGolden": 15,
+  "truthIncompleteFlag": "pending adjudication (n=50; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/csharp.flow-final.jsonl",
+ "variant": "as-shipped extract.sc ABORTS; all figures below are from s28-extract-bodiless-guard.sc (extract.sc + 3 one-line guards), secondary"
+}

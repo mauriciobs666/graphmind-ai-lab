@@ -1,0 +1,1512 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/off/ca0d7abe-a9ac-4a44-afbc-2173172c8dd6.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 6.8
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java/on/9c75af5a-366b-488d-92bb-a32fe6ca7c75.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.3
+  }
+ },
+ "censusReach": {
+  "k": 387,
+  "n": 543,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 0.7127,
+  "wilson95": [
+   0.6733,
+   0.7492
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.9704,
+     "ci95": [
+      0.9299,
+      1.0
+     ],
+     "connected": 164,
+     "n": 28,
+     "pairs": 169,
+     "se": 0.01974,
+     "t": 2.0518
+    },
+    "data": {
+     "R": 0.5068,
+     "ci95": [
+      0.448,
+      0.5655
+     ],
+     "connected": 150,
+     "n": 30,
+     "pairs": 296,
+     "se": 0.02875,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.6753,
+     "ci95": [
+      0.6212,
+      0.7294
+     ],
+     "connected": 314,
+     "n": 30,
+     "pairs": 465,
+     "se": 0.02646,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin=441",
+    "CONTENT /out/d631d7cb-5e8c-4c83-b2f1-3013416a3c71.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 164,
+    "n": 169,
+    "p": 0.9704,
+    "wilson95": [
+     0.9326,
+     0.9873
+    ]
+   },
+   "cpgMB": 0.6,
+   "data": {
+    "k": 150,
+    "n": 296,
+    "p": 0.5068,
+    "wilson95": [
+     0.4501,
+     0.5633
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 5,
+    "n": 150,
+    "p": 0.0333,
+    "wilson95": [
+     0.0143,
+     0.0757
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 145,
+    "2": 5
+   },
+   "dataSingleEdgeShare": {
+    "k": 145,
+    "n": 150,
+    "p": 0.9667,
+    "wilson95": [
+     0.9243,
+     0.9857
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 14.54,
+    "controlEdgesPerMethod": 1.073,
+    "controlFactsDropped": 61,
+    "cpgFilesWithMethods": 78,
+    "cpgMBPerFile": 0.0077,
+    "cpgMethods": 441,
+    "cpgWhole": {
+     "calls": 2606,
+     "edges": 90199,
+     "edgesPerFile": 1036.8,
+     "fileNodes": 87,
+     "mbPerFile": 0.0069,
+     "nodes": 17038,
+     "nodesPerFile": 195.8,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.907,
+    "dataFactsDropped": 483,
+    "edgesPerFile": 16.85,
+    "edgesPerMethod": 2.98,
+    "extractSecondsPerKLOC": 1.187,
+    "kLOC": 5.73,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 5.64,
+    "parseSecondsPerKLOC": 1.396,
+    "pointsPerFile": 23.55,
+    "projectedControlEdges": 473,
+    "projectedDataEdges": 841,
+    "projectedPoints": 1837,
+    "projectionMsPerKLOC": 9.08,
+    "rawCdgEdges": 1869,
+    "rawCdgSelfEdges": 57,
+    "rawDataFacts": 1324,
+    "syntheticCallsDropped": 75
+   },
+   "endpointUnresolvedByClass": {},
+   "endpointUnresolvedShare": {
+    "k": 0,
+    "n": 465,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0082
+    ]
+   },
+   "extract": {
+    "factsMB": 1.3,
+    "peakMemMiB": 426.9,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:17:51Z",
+    "wallSeconds": 6.8
+   },
+   "extractInternalMs": {
+    "loadMs": 193,
+    "projectionMs": 52,
+    "totalMs": 400
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 5,
+    "<1ms": 436
+   },
+   "methodsFullyRecovered": {
+    "k": 0,
+    "n": 30,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.1135
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 30,
+   "parse": {
+    "peakMemMiB": 276.1,
+    "wallSeconds": 8.0
+   },
+   "pooled": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 174,
+    "data": 151
+   },
+   "projectionSuccess": {
+    "k": 441,
+    "n": 441,
+    "p": 1.0,
+    "wilson95": [
+     0.9914,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 10,
+    "data": 6
+   },
+   "spuriousPairs": {
+    "k": 16,
+    "n": 325,
+    "p": 0.0492,
+    "wilson95": [
+     0.0305,
+     0.0785
+    ]
+   },
+   "status": {
+    "connected": 314,
+    "not-connected": 151
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 164,
+     "not-connected": 5
+    },
+    "data": {
+     "connected": 150,
+     "not-connected": 146
+    }
+   },
+   "strata": {
+    "convention:control-skip": {
+     "byKind": {
+      "control": 4
+     },
+     "k": 4,
+     "n": 4,
+     "p": 1.0,
+     "status": {
+      "connected": 4
+     },
+     "wilson95": [
+      0.5101,
+      1.0
+     ]
+    },
+    "convention:ctor-result-ret": {
+     "byKind": {
+      "data": 4
+     },
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "status": {
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    },
+    "convention:decl-type-cosmetic": {
+     "byKind": {
+      "control": 10,
+      "data": 2
+     },
+     "k": 10,
+     "n": 12,
+     "p": 0.8333,
+     "status": {
+      "connected": 10,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.552,
+      0.953
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 3,
+     "n": 5,
+     "p": 0.6,
+     "status": {
+      "connected": 3,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.2307,
+      0.8824
+     ]
+    },
+    "convention:loop-var": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:short-circuit": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "status": {
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 310,
+    "n": 460,
+    "p": 0.6739,
+    "wilson95": [
+     0.6298,
+     0.7152
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.9704,
+     "ci95": [
+      0.9299,
+      1.0
+     ],
+     "connected": 164,
+     "n": 28,
+     "pairs": 169,
+     "se": 0.01974,
+     "t": 2.0518
+    },
+    "data": {
+     "R": 0.5068,
+     "ci95": [
+      0.448,
+      0.5655
+     ],
+     "connected": 150,
+     "n": 30,
+     "pairs": 296,
+     "se": 0.02875,
+     "t": 2.0452
+    },
+    "pooled": {
+     "R": 0.6753,
+     "ci95": [
+      0.6212,
+      0.7294
+     ],
+     "connected": 314,
+     "n": 30,
+     "pairs": 465,
+     "se": 0.02646,
+     "t": 2.0452
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=441",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 164,
+    "n": 169,
+    "p": 0.9704,
+    "wilson95": [
+     0.9326,
+     0.9873
+    ]
+   },
+   "cpgMB": 0.6,
+   "data": {
+    "k": 150,
+    "n": 296,
+    "p": 0.5068,
+    "wilson95": [
+     0.4501,
+     0.5633
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 5,
+    "n": 150,
+    "p": 0.0333,
+    "wilson95": [
+     0.0143,
+     0.0757
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 145,
+    "2": 5
+   },
+   "dataSingleEdgeShare": {
+    "k": 145,
+    "n": 150,
+    "p": 0.9667,
+    "wilson95": [
+     0.9243,
+     0.9857
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 14.54,
+    "controlEdgesPerMethod": 1.073,
+    "controlFactsDropped": 61,
+    "cpgFilesWithMethods": 78,
+    "cpgMBPerFile": 0.0077,
+    "cpgMethods": 441,
+    "cpgWhole": {
+     "calls": 2627,
+     "edges": 90397,
+     "edgesPerFile": 1039.0,
+     "fileNodes": 87,
+     "mbPerFile": 0.0069,
+     "nodes": 17334,
+     "nodesPerFile": 199.2,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 1.9,
+    "dataFactsDropped": 483,
+    "edgesPerFile": 16.81,
+    "edgesPerMethod": 2.973,
+    "extractSecondsPerKLOC": 1.274,
+    "kLOC": 5.73,
+    "methodsFileNotInTree": 0,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 5.64,
+    "parseSecondsPerKLOC": 6.527,
+    "pointsPerFile": 23.51,
+    "projectedControlEdges": 473,
+    "projectedDataEdges": 838,
+    "projectedPoints": 1834,
+    "projectionMsPerKLOC": 8.9,
+    "rawCdgEdges": 1872,
+    "rawCdgSelfEdges": 57,
+    "rawDataFacts": 1321,
+    "syntheticCallsDropped": 75
+   },
+   "endpointUnresolvedByClass": {},
+   "endpointUnresolvedShare": {
+    "k": 0,
+    "n": 465,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0082
+    ]
+   },
+   "extract": {
+    "factsMB": 1.34,
+    "peakMemMiB": 585.5,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:18:07Z",
+    "wallSeconds": 7.3
+   },
+   "extractInternalMs": {
+    "loadMs": 189,
+    "projectionMs": 51,
+    "totalMs": 420
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 6,
+    "<1ms": 435
+   },
+   "methodsFullyRecovered": {
+    "k": 0,
+    "n": 30,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.1135
+    ]
+   },
+   "methodsMatched": {
+    "k": 30,
+    "n": 30,
+    "p": 1.0,
+    "wilson95": [
+     0.8865,
+     1.0
+    ]
+   },
+   "methodsWithPairs": 30,
+   "methodsWithProjectedPairs": 30,
+   "parse": {
+    "peakMemMiB": 384.2,
+    "wallSeconds": 37.4
+   },
+   "pooled": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 314,
+    "n": 465,
+    "p": 0.6753,
+    "wilson95": [
+     0.6314,
+     0.7162
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 174,
+    "data": 151
+   },
+   "projectionSuccess": {
+    "k": 441,
+    "n": 441,
+    "p": 1.0,
+    "wilson95": [
+     0.9914,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 10,
+    "data": 6
+   },
+   "spuriousPairs": {
+    "k": 16,
+    "n": 325,
+    "p": 0.0492,
+    "wilson95": [
+     0.0305,
+     0.0785
+    ]
+   },
+   "status": {
+    "connected": 314,
+    "not-connected": 151
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 164,
+     "not-connected": 5
+    },
+    "data": {
+     "connected": 150,
+     "not-connected": 146
+    }
+   },
+   "strata": {
+    "convention:control-skip": {
+     "byKind": {
+      "control": 4
+     },
+     "k": 4,
+     "n": 4,
+     "p": 1.0,
+     "status": {
+      "connected": 4
+     },
+     "wilson95": [
+      0.5101,
+      1.0
+     ]
+    },
+    "convention:ctor-result-ret": {
+     "byKind": {
+      "data": 4
+     },
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "status": {
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    },
+    "convention:decl-type-cosmetic": {
+     "byKind": {
+      "control": 10,
+      "data": 2
+     },
+     "k": 10,
+     "n": 12,
+     "p": 0.8333,
+     "status": {
+      "connected": 10,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.552,
+      0.953
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 5
+     },
+     "k": 3,
+     "n": 5,
+     "p": 0.6,
+     "status": {
+      "connected": 3,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.2307,
+      0.8824
+     ]
+    },
+    "convention:loop-var": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:short-circuit": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "otherAbsent": [],
+     "p": null,
+     "reasons": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "status": {
+      "not-connected": 4
+     },
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 310,
+    "n": 460,
+    "p": 0.6739,
+    "wilson95": [
+     0.6298,
+     0.7152
+    ]
+   }
+  }
+ },
+ "corpusCommit": "5180cc9bd0163393c4e628bedc1bc4c27cfaab1b",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 465,
+    "pairsOK": true,
+    "pooledRecall": 0.6753,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 465,
+    "pairsOK": true,
+    "pooledRecall": 0.6753,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 465,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "<init>",
+    "params": {
+     "0": "pathId",
+     "1": "bodyId"
+    },
+    "span": [
+     44,
+     53
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/BindingErrorsResponse.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/BindingErrorsResponse.java::BindingErrorsResponse.<init>",
+   "span": [
+    44,
+    53
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "save",
+    "params": {
+     "0": "vet"
+    },
+    "span": [
+     56,
+     63
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 2,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaVetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaVetRepositoryImpl.java::JpaVetRepositoryImpl.save",
+   "span": [
+    56,
+    63
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "updateOwnersPet",
+    "params": {
+     "0": "ownerId",
+     "1": "petId",
+     "2": "petFieldsDto"
+    },
+    "span": [
+     158,
+     173
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/OwnerRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/OwnerRestControllerV1.java::OwnerRestControllerV1.updateOwnersPet",
+   "span": [
+    158,
+    173
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "owner"
+    },
+    "span": [
+     213,
+     233
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java::JdbcOwnerRepositoryImpl.delete",
+   "span": [
+    213,
+    233
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "getVisit",
+    "params": {
+     "0": "visitId"
+    },
+    "span": [
+     65,
+     73
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/VisitRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/VisitRestControllerV1.java::VisitRestControllerV1.getVisit",
+   "span": [
+    65,
+    73
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "updatePet",
+    "params": {
+     "0": "petId",
+     "1": "petDto"
+    },
+    "span": [
+     73,
+     85
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java::PetRestControllerV1.updatePet",
+   "span": [
+    73,
+    85
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "pet"
+    },
+    "span": [
+     184,
+     196
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java::JdbcPetRepositoryImpl.delete",
+   "span": [
+    184,
+    196
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "getPet",
+    "params": {
+     "0": "petId"
+    },
+    "span": [
+     52,
+     60
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 8,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java::PetRestControllerV1.getPet",
+   "span": [
+    52,
+    60
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "findByPetId",
+    "params": {
+     "0": "petId"
+    },
+    "span": [
+     84,
+     102
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 9,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVisitRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVisitRepositoryImpl.java::JdbcVisitRepositoryImpl.findByPetId",
+   "span": [
+    84,
+    102
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "pet"
+    },
+    "span": [
+     89,
+     98
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetRepositoryImpl.java::JpaPetRepositoryImpl.delete",
+   "span": [
+    89,
+    98
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "getPet",
+    "params": {
+     "0": "name",
+     "1": "ignoreNew"
+    },
+    "span": [
+     121,
+     133
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "src/main/java/org/springframework/samples/petclinic/model/Owner.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/model/Owner.java::Owner.getPet",
+   "span": [
+    121,
+    133
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "loadOwnersPetsAndVisits",
+    "params": {
+     "0": "owners"
+    },
+    "span": [
+     177,
+     181
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java::JdbcOwnerRepositoryImpl.loadOwnersPetsAndVisits",
+   "span": [
+    177,
+    181
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "getOwnersPet",
+    "params": {
+     "0": "ownerId",
+     "1": "petId"
+    },
+    "span": [
+     191,
+     202
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/OwnerRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/OwnerRestControllerV1.java::OwnerRestControllerV1.getOwnersPet",
+   "span": [
+    191,
+    202
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "deletePet",
+    "params": {
+     "0": "petId"
+    },
+    "span": [
+     87,
+     96
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetRestControllerV1.java::PetRestControllerV1.deletePet",
+   "span": [
+    87,
+    96
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "findByLastName",
+    "params": {
+     "0": "lastName",
+     "1": "pageable"
+    },
+    "span": [
+     94,
+     112
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 15,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java::JdbcOwnerRepositoryImpl.findByLastName",
+   "span": [
+    94,
+    112
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "petType"
+    },
+    "span": [
+     74,
+     89
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetTypeRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetTypeRepositoryImpl.java::JpaPetTypeRepositoryImpl.delete",
+   "span": [
+    74,
+    89
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "save",
+    "params": {
+     "0": "pet"
+    },
+    "span": [
+     102,
+     114
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 17,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcPetRepositoryImpl.java::JdbcPetRepositoryImpl.save",
+   "span": [
+    102,
+    114
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "deleteVet",
+    "params": {
+     "0": "vetId"
+    },
+    "span": [
+     111,
+     121
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/VetRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/VetRestControllerV1.java::VetRestControllerV1.deleteVet",
+   "span": [
+    111,
+    121
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "save",
+    "params": {
+     "0": "vet"
+    },
+    "span": [
+     140,
+     152
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 19,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcVetRepositoryImpl.java::JdbcVetRepositoryImpl.save",
+   "span": [
+    140,
+    152
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "specialty"
+    },
+    "span": [
+     72,
+     78
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaSpecialtyRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaSpecialtyRepositoryImpl.java::JpaSpecialtyRepositoryImpl.delete",
+   "span": [
+    72,
+    78
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "updatePetType",
+    "params": {
+     "0": "petTypeId",
+     "1": "petTypeDto"
+    },
+    "span": [
+     81,
+     91
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 21,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetTypeRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetTypeRestControllerV1.java::PetTypeRestControllerV1.updatePetType",
+   "span": [
+    81,
+    91
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "getPetType",
+    "params": {
+     "0": "petTypeId"
+    },
+    "span": [
+     61,
+     69
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 22,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetTypeRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/PetTypeRestControllerV1.java::PetTypeRestControllerV1.getPetType",
+   "span": [
+    61,
+    69
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "delete",
+    "params": {
+     "0": "petType"
+    },
+    "span": [
+     39,
+     54
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 23,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/springdatajpa/SpringDataPetTypeRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/springdatajpa/SpringDataPetTypeRepositoryImpl.java::SpringDataPetTypeRepositoryImpl.delete",
+   "span": [
+    39,
+    54
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "updateSpecialty",
+    "params": {
+     "0": "specialtyId",
+     "1": "specialtyDto"
+    },
+    "span": [
+     84,
+     94
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/SpecialtyRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/SpecialtyRestControllerV1.java::SpecialtyRestControllerV1.updateSpecialty",
+   "span": [
+    84,
+    94
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "findAll",
+    "params": {
+     "0": "pageable"
+    },
+    "span": [
+     195,
+     211
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 25,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcOwnerRepositoryImpl.java::JdbcOwnerRepositoryImpl.findAll",
+   "span": [
+    195,
+    211
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "deleteSpecialty",
+    "params": {
+     "0": "specialtyId"
+    },
+    "span": [
+     96,
+     106
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 26,
+   "path": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/SpecialtyRestControllerV1.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/rest/controller/v1/SpecialtyRestControllerV1.java::SpecialtyRestControllerV1.deleteSpecialty",
+   "span": [
+    96,
+    106
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "save",
+    "params": {
+     "0": "pet"
+    },
+    "span": [
+     63,
+     70
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 27,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetRepositoryImpl.java::JpaPetRepositoryImpl.save",
+   "span": [
+    63,
+    70
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "saveUser",
+    "params": {
+     "0": "user"
+    },
+    "span": [
+     16,
+     35
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 28,
+   "path": "src/main/java/org/springframework/samples/petclinic/service/UserServiceImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/service/UserServiceImpl.java::UserServiceImpl.saveUser",
+   "span": [
+    16,
+    35
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "updateUserRoles",
+    "params": {
+     "0": "user"
+    },
+    "span": [
+     57,
+     67
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcUserRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jdbc/JdbcUserRepositoryImpl.java::JdbcUserRepositoryImpl.updateUserRoles",
+   "span": [
+    57,
+    67
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "save",
+    "params": {
+     "0": "petType"
+    },
+    "span": [
+     64,
+     72
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetTypeRepositoryImpl.java",
+   "qname": "src/main/java/org/springframework/samples/petclinic/repository/jpa/JpaPetTypeRepositoryImpl.java::JpaPetTypeRepositoryImpl.save",
+   "span": [
+    64,
+    72
+   ]
+  }
+ ],
+ "lang": "java",
+ "missesFile": {
+  "path": "adjudication/java-flow-misses.jsonl",
+  "rows": 151
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 465
+ },
+ "spuriousSample": {
+  "drawn": 16,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 16,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p0a-v1-spur|java|5180cc9bd0163393c4e628bedc1bc4c27cfaab1b",
+  "sharesEndpointWithUnresolvedGolden": 0,
+  "truthIncompleteFlag": "insufficient (n<20)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/java.flow-final.jsonl",
+ "variant": "as-shipped (headline)"
+}

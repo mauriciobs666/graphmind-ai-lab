@@ -257,3 +257,59 @@ line (691, on 692) is corrected under the coordinate class above.
 
 **Coordinate scan.** The scan (call name or cond code present on the recorded line) of all seven golden sets found wrong lines only in csharp ordinal 4 and cpp ordinal 5,
 both corrected above; the other languages had none. The Java pair key has no separator (ML §5.4 Part F records it).
+
+## §a2.1 Flow projection fitness, S28 run (provisional; before the data-scientist's adjudication)
+
+Run by `graph-dba`, 2026-11-05. Scripts: `cpg/spikes/frontend-fitness/{s28_run.py, s28_core.py, s28_metrics.py, s28-cpg-stats.sc, s28-extract-bodiless-guard.sc}`; outputs
+`results/projection-<lang>.json` (+ `.answers.jsonl`), `adjudication/<lang>-flow-misses.jsonl` (every pair missed in either configuration; `proposedCause` empty),
+`adjudication/<lang>-flow-spurious.jsonl` (seeded sample; `verdict` empty). Every figure below is read from those files.
+
+**Basis.** `extract.sc` (S11, unedited) ran through `offline-run.sh --mode offline`, after the D15 content check (`cpg-content-check.sc`, `=ok` for all twelve CPGs), on the CPGs S27
+built, off and on (`on` is a network-parsed CPG; the projection itself is offline). Truth = `truth/<lang>.flow-final.jsonl` (python 480 pairs, javascript 151, go 433, java 465, csharp 392,
+cpp 349; ordinals 1..30, JS 1..12). Headline = as-shipped, pooled over all labelled pairs including methods Joern never produced. Off and on agree on every pair for all six languages (0 discordant).
+Join and point rules are in each result's `definitions`; those the protocol leaves open: a cond matches on line and code ignoring all whitespace (Joern prints `(int,float)` for `(int, float)`);
+a call matches by (name, ordinal) only if on the labeller's line, else the one same-name call on that line (`ordinalShift`); csharpsrc2cpg lines are 0-based (callee found on l+1 for 3,516 of 4,000 calls) and are shifted +1;
+a qualified c2cpg constructor name is cut to its last segment; calls whose name is absent from the source are synthetic and, with their edges, are not points (as `normalize.py`).
+
+**Kotlin: unmeasured.** The default-overlay stage aborts (ReachingDefPass, `key not found: MethodRef`) in the content check and in `extract.sc` itself (rc 1, no fact written). The only CPG is frontend-only; projecting
+it needs `--nooverlays`, a pipeline deviation, and such a CPG has no REACHING_DEF or CDG to project. No `flowAvailable`.
+
+**C#: as-shipped `extract.sc` aborts, both configurations** (0 of 5,897 methods emitted; `SchemaViolationException: OUT edge with label AST to an adjacent BLOCK is mandatory`, METHOD seq 6, from `m.block` on a bodiless method).
+Beyond that, 1 of 5,897 METHODs has no AST parent (`m.astParent`). The C# rows below come from `s28-extract-bodiless-guard.sc`, a copy of `extract.sc` with those three accesses guarded (4 changed lines, no logic change); they are secondary and flagged `projection: extract.sc+bodiless-guard` in the adjudication files.
+
+| | python | javascript | go | java | csharp (guarded) | cpp |
+|---|---|---|---|---|---|---|
+| labelled methods matched to a Joern METHOD | 30/30 | 11/12 | 29/30 | 30/30 | 26/30 | 14/30 |
+| **flow pair recall, pooled** (Wilson; cluster 95%) | 307/480 = 0.640 [0.596, 0.681]; [0.564, 0.715] | 60/151 = 0.397 [0.323, 0.477]; [0.241, 0.554] | 246/433 = 0.568 [0.521, 0.614]; [0.513, 0.623] | 314/465 = 0.675 [0.631, 0.716]; [0.621, 0.729] | 227/392 = 0.579 [0.530, 0.627]; [0.462, 0.696] | 116/349 = 0.332 [0.285, 0.383]; [0.172, 0.492] |
+| data / control | 191/304 = 0.628 / 116/176 = 0.659 | 36/80 = 0.450 / 24/71 = 0.338 | 145/294 = 0.493 / 101/139 = 0.727 | 150/296 = 0.507 / 164/169 = 0.970 | 150/258 = 0.581 / 77/134 = 0.575 | 65/188 = 0.346 / 51/161 = 0.317 |
+| sure-only pooled | 306/459 | 59/133 | 246/425 | 310/460 | 220/359 | 114/298 |
+| connected data pairs by a single edge | 189/191 | 36/36 | 142/145 | 145/150 | 147/150 | 65/65 |
+| misses: not connected / endpoint-unresolved / method absent | 137 / 36 / 0 | 26 / 56 / 9 | 160 / 19 / 8 | 151 / 0 / 0 | 56 / 79 / 30 | 37 / 25 / 171 |
+| recall on matched methods only | 307/480 | 60/142 = 0.423 | 246/425 = 0.579 | 314/465 | 227/362 = 0.627 | 116/178 = 0.652 |
+| methods fully recovered | 2/29 | 1/12 | 1/29 | 0/30 | 2/30 | 2/30 |
+| spurious pairs (projection pairs not in the labels, labelled methods) | 91/396 = 0.230 | 49/109 = 0.450 | 41/284 = 0.144 | 16/325 = 0.049 | 54/278 = 0.194 | 45/161 = 0.280 |
+| spurious sample drawn / truth-incomplete flag | 50 / pending | 49 / pending | 41 / pending | 16 / insufficient (n < 20) | 50 / pending | 45 / pending |
+| projection success: emitted / CPG methods | 6254/6254 | 232/232 | 2559/2559 | 441/441 | 0/5897 as-shipped; 5897/5897 guarded | 2744/2744 |
+| census reach (informational, `truth/<lang>.defs.jsonl` as read today) | 4046/4046 | 127/133 | 1381/1439 | 387/543 | 3754/4639 | 1903/3490 |
+| CPG MB; FILE nodes; nodes / edges per file; MB per file | 18.7; 108; 4,629 / 35,864; 0.173 | 0.78; 41; 483 / 2,952; 0.019 | 4.34; 116; 1,027 / 7,040; 0.037 | 0.60; 87; 196 / 1,037; 0.007 | 7.28; 688; 264 / 1,764; 0.011 | 3.35; 75; 1,218 / 8,132; 0.045 |
+| projected points / edges per file; edges per method | 367 / 244; 4.06 | 29 / 24; 3.66 | 166 / 127; 5.47 | 24 / 17; 2.98 | 37 / 19; 2.21 | 204 / 183; 3.68 |
+| symbols / call sites per file (non-synthetic methods; located calls) | 44.0 / 184.8 | 5.5 / 13.2 | 23.2 / 105.5 | 5.6 / 14.5 | 8.8 / 27.2 | 45.3 / 89.1 |
+| build: parse s / extract s (projection ms; kLOC) | 11.6 / 13.8 (357; 77.0) | 6.4 / 7.9 (47; 3.3) | 9.2 / 7.5 (191; 41.6) | 8.0 / 6.8 (52; 5.7) | 39.8 / 8.2 (181; 60.6) | 10.1 / 7.2 (150; 38.9) |
+
+Peak container memory: extract 427 to 1,278 MiB (python highest). Python and TS/JS cross-check with S14: methods emitted 6,254 and 232 in both (disagreement 0.000, below 0.05). Stopping condition (a): chain-only (2 or more edges) data connections are at most 5 of 150 (java), python 2/191, below the 10% prior everywhere. Condition (b): endpoint-unresolved exceeds 10% of pairs in javascript (56/151) and csharp (79/392), so the adjudicator splits them before any §8.4 decision; python 36/480 and cpp 25/349 are below it. cpp has no unresolved `param` endpoint, so there is no `this` offset. The unresolved endpoints are conds (switch case labels and `for`/`foreach`/`for-of` headers lowered to synthetic conditions such as `iteratorNonEmptyOrException`, `_idx_ < x.Count`) and calls Joern does not emit (Go `defer x.Close()` and computed callees, C++ `::std::get<I>()`), plus C# expression-bodied `ret`s; `detail` in the miss rows lists the projection's points on that line.
+
+**Strata asked for by the audit** (tag = Part F `convention`, valid decisions; off = on):
+
+| Stratum | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| `early-exit` | 0/5 (control; not connected) | 2/4 | 12/38 | 3/5 | 4/8 (3 unresolved: switch arms) | 10/34 (17 in absent methods; 10/17 on matched) |
+| `callee-value` (valid pairs only; invalid ones were removed) | 0/1 | none | none (2 `alias`: 0/2) | none | none | none |
+| Part F-ruled-invalid pairs the projection emits (in the spurious sample) | 0 | 0 | 0 | 0 | 0 | 1 |
+
+`early-exit` recall is below the language's pooled figure in python, go (0.316 vs 0.568), java, csharp and cpp (matched methods: 0.588 vs 0.652), and above it in javascript (2/4 vs 0.397); the cells are small. C++ method ordinal 5 matched (`RegisterUseByOnCallOrExpectCall`, Joern span 683 to 698, parameters `mock_obj`/`file`/`line` at index 0 to 2, matched on the declaration span, not 685 to 698); its 10 remaining pairs include no param endpoint (the only param pair was removed in Part F) and 8 are connected.
+**Frontend default-ignored directories** (own stratum, a frontend fact): cpp 0/109 pairs in 10 methods under `test`/`tests`; javascript 0/9 in 1 method under `src/i18n`; none for the other languages. Other methods Joern has no METHOD for: cpp 6 methods with no METHOD in a parsed file (62 pairs), go 1 (csrf.go, 8 pairs), csharp 4 (30 pairs, parse defects).
+Excluding the default-ignored directories, pooled recall is cpp 116/240 = 0.483, javascript 60/142 = 0.423, others unchanged.
+
+**Why recall is low (checked once, Java).** A parameter's second and later uses are not connected: Joern's REACHING_DEF for `owner` at line 218 of `JdbcOwnerRepositoryImpl.delete` runs from the earlier `owner` identifier at line 217, not from the parameter, and `extract.sc`'s `defsOf` follows an identifier's definition only when it is an assignment target. This probe (`rdprobe.sc`, scratch) is one method; its generality is unverified. Missed pairs also include values built by `new HashMap<>()` and then `put`, tuple and spread literals, `for` headers and switch labels; those mechanisms were not probed. The miss rows carry the evidence; `proposedCause` is the data-scientist's.
+
+**`flowAvailable`, provisional (ML §8.4): false for python, javascript, go, java, csharp and cpp; Kotlin unmeasured.** Pooled recall is below 0.95 in both configurations everywhere (best 0.675), pairs exceed 120 everywhere, and C# additionally fails the precondition as shipped (0/5,897). Omission rate and the truth-incomplete flag await the adjudication of the spurious samples; no decision depends on them, since no language is near 0.95.

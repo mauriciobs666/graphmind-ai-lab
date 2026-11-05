@@ -1,0 +1,1645 @@
+{
+ "asShippedExtract": {
+  "off": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/off/dea88325-d8a4-4655-b8c8-2a62346546aa.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.5
+  },
+  "on": {
+   "factsFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/go/on/b0016efc-9ba7-4834-b84f-97787dce3379.facts.jsonl",
+   "rc": 0,
+   "wallSeconds": 7.8
+  }
+ },
+ "censusReach": {
+  "k": 1381,
+  "n": 1439,
+  "note": "informational: tree-sitter named definitions (kind fn/ctor, symbol true) from truth/<lang>.defs.jsonl (S27c census, read-only, in flux) with a Joern METHOD in the same file overlapping its span and equal-named or within 2 lines at both ends",
+  "p": 0.9597,
+  "wilson95": [
+   0.9482,
+   0.9687
+  ]
+ },
+ "cfg": {
+  "off": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.7266,
+     "ci95": [
+      0.6338,
+      0.8195
+     ],
+     "connected": 101,
+     "n": 26,
+     "pairs": 139,
+     "se": 0.04508,
+     "t": 2.0595
+    },
+    "data": {
+     "R": 0.4932,
+     "ci95": [
+      0.4299,
+      0.5565
+     ],
+     "connected": 145,
+     "n": 29,
+     "pairs": 294,
+     "se": 0.03091,
+     "t": 2.0484
+    },
+    "pooled": {
+     "R": 0.5681,
+     "ci95": [
+      0.5131,
+      0.6231
+     ],
+     "connected": 246,
+     "n": 29,
+     "pairs": 433,
+     "se": 0.02685,
+     "t": 2.0484
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin=2559",
+    "CONTENT /out/f9afeffb-63aa-4557-9384-98142d5130df.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 101,
+    "n": 139,
+    "p": 0.7266,
+    "wilson95": [
+     0.6472,
+     0.7939
+    ]
+   },
+   "cpgMB": 4.34,
+   "data": {
+    "k": 145,
+    "n": 294,
+    "p": 0.4932,
+    "wilson95": [
+     0.4365,
+     0.5501
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 3,
+    "n": 145,
+    "p": 0.0207,
+    "wilson95": [
+     0.0071,
+     0.0591
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 142,
+    "2": 2,
+    "3": 1
+   },
+   "dataSingleEdgeShare": {
+    "k": 142,
+    "n": 145,
+    "p": 0.9793,
+    "wilson95": [
+     0.9409,
+     0.9929
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 105.51,
+    "controlEdgesPerMethod": 1.577,
+    "controlFactsDropped": 200,
+    "cpgFilesWithMethods": 110,
+    "cpgMBPerFile": 0.0395,
+    "cpgMethods": 2559,
+    "cpgWhole": {
+     "calls": 31109,
+     "edges": 816660,
+     "edgesPerFile": 7040.2,
+     "fileNodes": 116,
+     "mbPerFile": 0.0374,
+     "nodes": 119174,
+     "nodesPerFile": 1027.4,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 3.896,
+    "dataFactsDropped": 887,
+    "edgesPerFile": 127.19,
+    "edgesPerMethod": 5.474,
+    "extractSecondsPerKLOC": 0.18,
+    "kLOC": 41.58,
+    "methodsFileNotInTree": 3,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 23.24,
+    "parseSecondsPerKLOC": 0.221,
+    "pointsPerFile": 165.65,
+    "projectedControlEdges": 4032,
+    "projectedDataEdges": 9959,
+    "projectedPoints": 18222,
+    "projectionMsPerKLOC": 4.59,
+    "rawCdgEdges": 13650,
+    "rawCdgSelfEdges": 348,
+    "rawDataFacts": 11041,
+    "syntheticCallsDropped": 930
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 10,
+    "source": 8,
+    "source+sink": 1
+   },
+   "endpointUnresolvedShare": {
+    "k": 19,
+    "n": 433,
+    "p": 0.0439,
+    "wilson95": [
+     0.0283,
+     0.0675
+    ]
+   },
+   "extract": {
+    "factsMB": 9.51,
+    "peakMemMiB": 678.1,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:17:21Z",
+    "wallSeconds": 7.5
+   },
+   "extractInternalMs": {
+    "loadMs": 220,
+    "projectionMs": 191,
+    "totalMs": 1029
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 12,
+    "<1ms": 2547
+   },
+   "methodsFullyRecovered": {
+    "k": 1,
+    "n": 29,
+    "p": 0.0345,
+    "wilson95": [
+     0.0061,
+     0.1718
+    ]
+   },
+   "methodsMatched": {
+    "k": 29,
+    "n": 30,
+    "p": 0.9667,
+    "wilson95": [
+     0.8333,
+     0.9941
+    ]
+   },
+   "methodsWithPairs": 29,
+   "methodsWithProjectedPairs": 27,
+   "parse": {
+    "peakMemMiB": 1232.9,
+    "wallSeconds": 9.2
+   },
+   "pooled": {
+    "k": 246,
+    "n": 433,
+    "p": 0.5681,
+    "wilson95": [
+     0.5211,
+     0.614
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 246,
+    "n": 433,
+    "p": 0.5681,
+    "wilson95": [
+     0.5211,
+     0.614
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 246,
+    "n": 425,
+    "p": 0.5788,
+    "wilson95": [
+     0.5314,
+     0.6249
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 126,
+    "data": 158
+   },
+   "projectionSuccess": {
+    "k": 2559,
+    "n": 2559,
+    "p": 1.0,
+    "wilson95": [
+     0.9985,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 25,
+    "data": 16
+   },
+   "spuriousPairs": {
+    "k": 41,
+    "n": 284,
+    "p": 0.1444,
+    "wilson95": [
+     0.1082,
+     0.19
+    ]
+   },
+   "status": {
+    "connected": 246,
+    "endpoint-unresolved": 19,
+    "method-absent": 8,
+    "not-connected": 160
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 101,
+     "endpoint-unresolved": 9,
+     "method-absent": 2,
+     "not-connected": 27
+    },
+    "data": {
+     "connected": 145,
+     "endpoint-unresolved": 10,
+     "method-absent": 6,
+     "not-connected": 133
+    }
+   },
+   "strata": {
+    "convention:alias": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:chain-expression": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "convention:coordinate-matched": {
+     "byKind": {
+      "control": 2,
+      "data": 2
+     },
+     "k": 3,
+     "n": 4,
+     "p": 0.75,
+     "status": {
+      "connected": 3,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.3006,
+      0.9544
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 30,
+      "data": 8
+     },
+     "k": 12,
+     "n": 38,
+     "p": 0.3158,
+     "status": {
+      "connected": 12,
+      "not-connected": 26
+     },
+     "wilson95": [
+      0.1908,
+      0.4746
+     ]
+    },
+    "convention:field-read": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:field-read-after-write": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:return-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:slice-operand": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [
+      26
+     ],
+     "n": 8,
+     "otherAbsent": [
+      26
+     ],
+     "p": 0.0,
+     "reasons": {
+      "26": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.3244
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "provenance:partF-second-only-valid": {
+     "k": 1,
+     "n": 3,
+     "p": 0.3333,
+     "status": {
+      "connected": 1,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0615,
+      0.7923
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 246,
+    "n": 425,
+    "p": 0.5788,
+    "wilson95": [
+     0.5314,
+     0.6249
+    ]
+   }
+  },
+  "on": {
+   "clusterInterval": {
+    "control": {
+     "R": 0.7266,
+     "ci95": [
+      0.6338,
+      0.8195
+     ],
+     "connected": 101,
+     "n": 26,
+     "pairs": 139,
+     "se": 0.04508,
+     "t": 2.0595
+    },
+    "data": {
+     "R": 0.4932,
+     "ci95": [
+      0.4299,
+      0.5565
+     ],
+     "connected": 145,
+     "n": 29,
+     "pairs": 294,
+     "se": 0.03091,
+     "t": 2.0484
+    },
+    "pooled": {
+     "R": 0.5681,
+     "ci95": [
+      0.5131,
+      0.6231
+     ],
+     "connected": 246,
+     "n": 29,
+     "pairs": 433,
+     "se": 0.02685,
+     "t": 2.0484
+    }
+   },
+   "contentCheck": [
+    "METHOD_COUNT /out/on.cpg.bin=2559",
+    "CONTENT /out/on.cpg.bin=ok"
+   ],
+   "control": {
+    "k": 101,
+    "n": 139,
+    "p": 0.7266,
+    "wilson95": [
+     0.6472,
+     0.7939
+    ]
+   },
+   "cpgMB": 4.36,
+   "data": {
+    "k": 145,
+    "n": 294,
+    "p": 0.4932,
+    "wilson95": [
+     0.4365,
+     0.5501
+    ]
+   },
+   "dataChainOnlyShare": {
+    "k": 3,
+    "n": 145,
+    "p": 0.0207,
+    "wilson95": [
+     0.0071,
+     0.0591
+    ]
+   },
+   "dataConnectedHops": {
+    "1": 142,
+    "2": 2,
+    "3": 1
+   },
+   "dataSingleEdgeShare": {
+    "k": 142,
+    "n": 145,
+    "p": 0.9793,
+    "wilson95": [
+     0.9409,
+     0.9929
+    ]
+   },
+   "density": {
+    "callSitesPerFile": 105.51,
+    "controlEdgesPerMethod": 1.577,
+    "controlFactsDropped": 200,
+    "cpgFilesWithMethods": 110,
+    "cpgMBPerFile": 0.0396,
+    "cpgMethods": 2559,
+    "cpgWhole": {
+     "calls": 31110,
+     "edges": 816583,
+     "edgesPerFile": 7039.5,
+     "fileNodes": 116,
+     "mbPerFile": 0.0376,
+     "nodes": 119176,
+     "nodesPerFile": 1027.4,
+     "note": "FILE nodes not named `<...>`; per-file figures divide the whole CPG (incl. external/stub nodes) by that count"
+    },
+    "dataEdgesPerMethod": 3.896,
+    "dataFactsDropped": 887,
+    "edgesPerFile": 127.19,
+    "edgesPerMethod": 5.474,
+    "extractSecondsPerKLOC": 0.188,
+    "kLOC": 41.58,
+    "methodsFileNotInTree": 3,
+    "methodsWithoutFile": 0,
+    "nonSyntheticMethodsPerFile": 23.24,
+    "parseSecondsPerKLOC": 0.394,
+    "pointsPerFile": 165.65,
+    "projectedControlEdges": 4032,
+    "projectedDataEdges": 9959,
+    "projectedPoints": 18222,
+    "projectionMsPerKLOC": 4.83,
+    "rawCdgEdges": 13650,
+    "rawCdgSelfEdges": 348,
+    "rawDataFacts": 11041,
+    "syntheticCallsDropped": 930
+   },
+   "endpointUnresolvedByClass": {
+    "sink": 10,
+    "source": 8,
+    "source+sink": 1
+   },
+   "endpointUnresolvedShare": {
+    "k": 19,
+    "n": 433,
+    "p": 0.0439,
+    "wilson95": [
+     0.0283,
+     0.0675
+    ]
+   },
+   "extract": {
+    "factsMB": 9.51,
+    "peakMemMiB": 649.2,
+    "rc": 0,
+    "startedUtc": "2026-11-05T12:17:36Z",
+    "wallSeconds": 7.8
+   },
+   "extractInternalMs": {
+    "loadMs": 258,
+    "projectionMs": 201,
+    "totalMs": 1042
+   },
+   "histogramMsPerMethod": {
+    "1-10ms": 17,
+    "<1ms": 2542
+   },
+   "methodsFullyRecovered": {
+    "k": 1,
+    "n": 29,
+    "p": 0.0345,
+    "wilson95": [
+     0.0061,
+     0.1718
+    ]
+   },
+   "methodsMatched": {
+    "k": 29,
+    "n": 30,
+    "p": 0.9667,
+    "wilson95": [
+     0.8333,
+     0.9941
+    ]
+   },
+   "methodsWithPairs": 29,
+   "methodsWithProjectedPairs": 27,
+   "parse": {
+    "peakMemMiB": 1251.3,
+    "wallSeconds": 16.4
+   },
+   "pooled": {
+    "k": 246,
+    "n": 433,
+    "p": 0.5681,
+    "wilson95": [
+     0.5211,
+     0.614
+    ]
+   },
+   "pooledExcludingDefaultIgnoredDirs": {
+    "k": 246,
+    "n": 433,
+    "p": 0.5681,
+    "wilson95": [
+     0.5211,
+     0.614
+    ]
+   },
+   "pooledOnMatchedMethods": {
+    "k": 246,
+    "n": 425,
+    "p": 0.5788,
+    "wilson95": [
+     0.5314,
+     0.6249
+    ]
+   },
+   "projectionPairsOnLabelledMethods": {
+    "control": 126,
+    "data": 158
+   },
+   "projectionSuccess": {
+    "k": 2559,
+    "n": 2559,
+    "p": 1.0,
+    "wilson95": [
+     0.9985,
+     1.0
+    ]
+   },
+   "spuriousByKind": {
+    "control": 25,
+    "data": 16
+   },
+   "spuriousPairs": {
+    "k": 41,
+    "n": 284,
+    "p": 0.1444,
+    "wilson95": [
+     0.1082,
+     0.19
+    ]
+   },
+   "status": {
+    "connected": 246,
+    "endpoint-unresolved": 19,
+    "method-absent": 8,
+    "not-connected": 160
+   },
+   "statusByKind": {
+    "control": {
+     "connected": 101,
+     "endpoint-unresolved": 9,
+     "method-absent": 2,
+     "not-connected": 27
+    },
+    "data": {
+     "connected": 145,
+     "endpoint-unresolved": 10,
+     "method-absent": 6,
+     "not-connected": 133
+    }
+   },
+   "strata": {
+    "convention:alias": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:chain-expression": {
+     "byKind": {
+      "control": 1
+     },
+     "k": 1,
+     "n": 1,
+     "p": 1.0,
+     "status": {
+      "connected": 1
+     },
+     "wilson95": [
+      0.2065,
+      1.0
+     ]
+    },
+    "convention:coordinate-matched": {
+     "byKind": {
+      "control": 2,
+      "data": 2
+     },
+     "k": 3,
+     "n": 4,
+     "p": 0.75,
+     "status": {
+      "connected": 3,
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.3006,
+      0.9544
+     ]
+    },
+    "convention:early-exit": {
+     "byKind": {
+      "control": 30,
+      "data": 8
+     },
+     "k": 12,
+     "n": 38,
+     "p": 0.3158,
+     "status": {
+      "connected": 12,
+      "not-connected": 26
+     },
+     "wilson95": [
+      0.1908,
+      0.4746
+     ]
+    },
+    "convention:field-read": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:field-read-after-write": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "convention:return-value": {
+     "byKind": {
+      "data": 1
+     },
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "convention:slice-operand": {
+     "byKind": {
+      "data": 2
+     },
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "status": {
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "frontend-default-ignored-dir": {
+     "k": 0,
+     "methods": [],
+     "n": 0,
+     "p": null,
+     "status": {},
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "method-absent": {
+     "inDefaultIgnoredDir": [],
+     "k": 0,
+     "methods": [
+      26
+     ],
+     "n": 8,
+     "otherAbsent": [
+      26
+     ],
+     "p": 0.0,
+     "reasons": {
+      "26": "file-absent-from-cpg"
+     },
+     "wilson95": [
+      0.0,
+      0.3244
+     ]
+    },
+    "provenance:partF-F2-relabel-only-valid": {
+     "k": 0,
+     "n": 1,
+     "p": 0.0,
+     "status": {
+      "not-connected": 1
+     },
+     "wilson95": [
+      0.0,
+      0.7935
+     ]
+    },
+    "provenance:partF-second-only-valid": {
+     "k": 1,
+     "n": 3,
+     "p": 0.3333,
+     "status": {
+      "connected": 1,
+      "not-connected": 2
+     },
+     "wilson95": [
+      0.0615,
+      0.7923
+     ]
+    }
+   },
+   "sureOnly": {
+    "k": 246,
+    "n": 425,
+    "p": 0.5788,
+    "wilson95": [
+     0.5314,
+     0.6249
+    ]
+   }
+  }
+ },
+ "corpusCommit": "7af8fac5354e53294c8d14fdd7dd4006dbaffd52",
+ "definitions": {
+  "edges": "DATA edge = (def point, use point) from the `d` facts, def != use; CONTROLLED_BY edge = (point, cond) from the `cb` facts with CDG self-edges dropped and (point, cond) pairs de-duplicated (-spec2 §1.4 G-4).",
+  "join": "param by spec index (the name is only a sanity diagnostic); ret by ordinal (line must equal the label's, else the unique ret on the label's line); call by (calleeName, ordinal) when that call site is on the label's line, else the unique call site of that calleeName on the label's line (tag `ordinalShift`), else unresolved; cond by line and collapsed code (equal, else equal ignoring all whitespace [Joern re-spaces `(int, float)` as `(int,float)`], else one contains the other, on that line; several candidates at the same tier = unresolved).  A pair with an unresolved endpoint is a miss, listed as `endpoint-unresolved`.",
+  "paramIndex": "spec index = Joern index - 1 after dropping the implicit `this` (index 0, named `this`) for javascript, java, csharp and cpp; python: Joern index 0 (self/cls) is -1, then index - 1; go: Joern index 0 (the receiver) is -1, then index - 1; a C# extension-method `this` parameter (Joern code starts `this `) is -1 and the rest count from 0.",
+  "points": "Points per method are those of bundle spec §5.4-§5.6 as normalize.py derives them: param (index), ret (ordinal over the method's own RETURNs sorted by line, column, id), cond (every CDG source), callsite (callee name + ordinal over same-name call sites sorted by the position of the callee's last identifier, found in the SOURCE from the call's start; a call whose name never occurs in the source is synthetic and is not a point, and an edge touching it is dropped, as normalize.py drops it).",
+  "strata": "convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)"
+ },
+ "flowAvailableProvisional": {
+  "perConfig": {
+   "off": {
+    "pairs": 433,
+    "pairsOK": true,
+    "pooledRecall": 0.5681,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   },
+   "on": {
+    "pairs": 433,
+    "pairsOK": true,
+    "pooledRecall": 0.5681,
+    "preconditionOK": true,
+    "projectionSuccess": 1.0,
+    "recallOK": false
+   }
+  },
+  "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; provisional: before the data-scientist's adjudication of misses and spurious pairs",
+  "value": false,
+  "wouldBeIfGuarded": null
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 433,
+ "labelledMethods": [
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "bools",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "values",
+     "2": "dest"
+    },
+    "span": [
+     967,
+     979
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 1,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.bools",
+   "span": [
+    967,
+    979
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "TestBodyDumpPreservesBodyLimitChunkedHTTP",
+    "params": {
+     "0": "t"
+    },
+    "span": [
+     52,
+     71
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 2,
+   "path": "middleware/body_dump_security_test.go",
+   "qname": "middleware/body_dump_security_test.go::TestBodyDumpPreservesBodyLimitChunkedHTTP",
+   "span": [
+    52,
+    71
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Bind",
+    "params": {
+     "-1": "b",
+     "0": "c",
+     "1": "target"
+    },
+    "span": [
+     134,
+     148
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 3,
+   "path": "bind.go",
+   "qname": "bind.go::DefaultBinder.Bind",
+   "span": [
+    134,
+    148
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "customFunc",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "customFunc",
+     "2": "valueMustExist"
+    },
+    "span": [
+     236,
+     252
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 4,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.customFunc",
+   "span": [
+    236,
+    252
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "applyMiddleware",
+    "params": {
+     "0": "h",
+     "1": "middleware"
+    },
+    "span": [
+     911,
+     916
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 5,
+   "path": "echo.go",
+   "qname": "echo.go::applyMiddleware",
+   "span": [
+    911,
+    916
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "Next",
+    "params": {
+     "-1": "b",
+     "0": "c"
+    },
+    "span": [
+     178,
+     187
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 6,
+   "path": "middleware/proxy.go",
+   "qname": "middleware/proxy.go::randomBalancer.Next",
+   "span": [
+    178,
+    187
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "String",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "dest"
+    },
+    "span": [
+     255,
+     266
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 7,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.String",
+   "span": [
+    255,
+    266
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "NewVirtualHostHandler",
+    "params": {
+     "0": "vhosts"
+    },
+    "span": [
+     10,
+     20
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 8,
+   "path": "vhost.go",
+   "qname": "vhost.go::NewVirtualHostHandler",
+   "span": [
+    10,
+    20
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "MustTextUnmarshaler",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "dest"
+    },
+    "span": [
+     403,
+     418
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 9,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.MustTextUnmarshaler",
+   "span": [
+    403,
+    418
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "BenchmarkRandomString_Pooled",
+    "params": {
+     "0": "b"
+    },
+    "span": [
+     45,
+     50
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 10,
+   "path": "middleware/randomstring_bench_test.go",
+   "qname": "middleware/randomstring_bench_test.go::BenchmarkRandomString_Pooled",
+   "span": [
+    45,
+    50
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "MustStrings",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "dest"
+    },
+    "span": [
+     298,
+     310
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 11,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.MustStrings",
+   "span": [
+    298,
+    310
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "TestBindQueryParams",
+    "params": {
+     "0": "t"
+    },
+    "span": [
+     239,
+     250
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 12,
+   "path": "bind_test.go",
+   "qname": "bind_test.go::TestBindQueryParams",
+   "span": [
+    239,
+    250
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "FormFieldBinder",
+    "params": {
+     "0": "c"
+    },
+    "span": [
+     168,
+     189
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 13,
+   "path": "binder.go",
+   "qname": "binder.go::FormFieldBinder",
+   "span": [
+    168,
+    189
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "NewContext",
+    "params": {
+     "0": "r",
+     "1": "w",
+     "2": "opts"
+    },
+    "span": [
+     98,
+     107
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 14,
+   "path": "context.go",
+   "qname": "context.go::NewContext",
+   "span": [
+    98,
+    107
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "durationsValue",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "dest",
+     "2": "valueMustExist"
+    },
+    "span": [
+     1219,
+     1232
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 15,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.durationsValue",
+   "span": [
+    1219,
+    1232
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "toMiddlewareOrPanic",
+    "params": {
+     "0": "config"
+    },
+    "span": [
+     91,
+     97
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 16,
+   "path": "middleware/middleware.go",
+   "qname": "middleware/middleware.go::toMiddlewareOrPanic",
+   "span": [
+    91,
+    97
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "BenchmarkBind_Query",
+    "params": {
+     "0": "b"
+    },
+    "span": [
+     187,
+     201
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 17,
+   "path": "perf_bench_test.go",
+   "qname": "perf_bench_test.go::BenchmarkBind_Query",
+   "span": [
+    187,
+    201
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "BenchmarkAllocJSONP",
+    "params": {
+     "0": "b"
+    },
+    "span": [
+     38,
+     51
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 18,
+   "path": "context_test.go",
+   "qname": "context_test.go::BenchmarkAllocJSONP",
+   "span": [
+    38,
+    51
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "BenchmarkBindbindDataWithTags",
+    "params": {
+     "0": "b"
+    },
+    "span": [
+     670,
+     680
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 19,
+   "path": "bind_test.go",
+   "qname": "bind_test.go::BenchmarkBindbindDataWithTags",
+   "span": [
+    670,
+    680
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "TestContextXMLBlob",
+    "params": {
+     "0": "t"
+    },
+    "span": [
+     434,
+     448
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 20,
+   "path": "context_test.go",
+   "qname": "context_test.go::TestContextXMLBlob",
+   "span": [
+    434,
+    448
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "mustParseCIDR",
+    "params": {
+     "0": "s"
+    },
+    "span": [
+     14,
+     20
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 21,
+   "path": "ip_test.go",
+   "qname": "ip_test.go::mustParseCIDR",
+   "span": [
+    14,
+    20
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "isForbiddenOverrideMethod",
+    "params": {
+     "0": "m"
+    },
+    "span": [
+     83,
+     90
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 22,
+   "path": "middleware/method_override.go",
+   "qname": "middleware/method_override.go::isForbiddenOverrideMethod",
+   "span": [
+    83,
+    90
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "allow",
+    "params": {
+     "-1": "store",
+     "0": "identifier"
+    },
+    "span": [
+     269,
+     285
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 23,
+   "path": "middleware/rate_limiter.go",
+   "qname": "middleware/rate_limiter.go::RateLimiterMemoryStore.allow",
+   "span": [
+    269,
+    285
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "newIPChecker",
+    "params": {
+     "0": "configs"
+    },
+    "span": [
+     174,
+     180
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 24,
+   "path": "ip.go",
+   "qname": "ip.go::newIPChecker",
+   "span": [
+    174,
+    180
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "UnmarshalParam",
+    "params": {
+     "-1": "i",
+     "0": "value"
+    },
+    "span": [
+     1179,
+     1194
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 25,
+   "path": "bind_test.go",
+   "qname": "bind_test.go::IntArrayA.UnmarshalParam",
+   "span": [
+    1179,
+    1194
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": null,
+   "matchHow": "file-absent-from-cpg",
+   "matched": false,
+   "ordinal": 26,
+   "path": "binder_test.go",
+   "qname": "binder_test.go::BenchmarkValueBinder_BindInt64_single",
+   "span": [
+    2926,
+    2939
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "XMLBlob",
+    "params": {
+     "-1": "c",
+     "0": "code",
+     "1": "b"
+    },
+    "span": [
+     687,
+     695
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 27,
+   "path": "context.go",
+   "qname": "context.go::Context.XMLBlob",
+   "span": [
+    687,
+    695
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "duration",
+    "params": {
+     "-1": "b",
+     "0": "sourceParam",
+     "1": "dest",
+     "2": "valueMustExist"
+    },
+    "span": [
+     1188,
+     1207
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 28,
+   "path": "binder.go",
+   "qname": "binder.go::ValueBinder.duration",
+   "span": [
+    1188,
+    1207
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "TrimNewlineEnd",
+    "params": {
+     "0": "bytes"
+    },
+    "span": [
+     16,
+     22
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 29,
+   "path": "echotest/reader.go",
+   "qname": "echotest/reader.go::TrimNewlineEnd",
+   "span": [
+    16,
+    22
+   ]
+  },
+  {
+   "defaultIgnoredSegment": [],
+   "joernMethod": {
+    "name": "isTrustedPeer",
+    "params": {
+     "0": "remoteAddr",
+     "1": "checker"
+    },
+    "span": [
+     83,
+     98
+    ]
+   },
+   "matchHow": "name+span",
+   "matched": true,
+   "ordinal": 30,
+   "path": "scheme.go",
+   "qname": "scheme.go::isTrustedPeer",
+   "span": [
+    83,
+    98
+   ]
+  }
+ ],
+ "lang": "go",
+ "missesFile": {
+  "path": "adjudication/go-flow-misses.jsonl",
+  "rows": 187
+ },
+ "offOnDiscordantPairs": {
+  "offOnlyConnected": 0,
+  "onOnlyConnected": 0,
+  "pairs": 433
+ },
+ "spuriousSample": {
+  "drawn": 41,
+  "omissionRate": null,
+  "onOnlyPairsNotInOffPopulation": 0,
+  "population": 41,
+  "rule": "SHA-256(seed|pairKey) ascending, first 50; pairKey = ordinal|kind|source|sink with point labels param:<idx>, call:<name>#<ordinal>@<line>, ret:<ordinal>@<line>, cond:<line>:<code>",
+  "ruledInvalidByPartF": 0,
+  "seed": "ccg-p0a-v1-spur|go|7af8fac5354e53294c8d14fdd7dd4006dbaffd52",
+  "sharesEndpointWithUnresolvedGolden": 6,
+  "truthIncompleteFlag": "pending adjudication (n=41; raised iff omission rate > 0.05)"
+ },
+ "toolchainImage": null,
+ "truth": "truth/go.flow-final.jsonl",
+ "variant": "as-shipped (headline)"
+}

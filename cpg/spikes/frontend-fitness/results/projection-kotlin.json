@@ -1,0 +1,28 @@
+{
+ "attempts": {
+  "off.content-check": {
+   "contentLines": [],
+   "rc": 1
+  },
+  "on.content-check": {
+   "contentLines": [],
+   "rc": 1
+  }
+ },
+ "extractProbe": {
+  "cause": "importCpg re-applies the default overlays; io.joern.dataflowengineoss.passes.reachingdef.ReachingDefPass fails (java.util.NoSuchElementException: key not found: ...MethodRef) and the script exits 1 before writing a fact",
+  "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/kotlin/off/s28-extract.log",
+  "rc": 1
+ },
+ "flowAvailableProvisional": {
+  "reason": "unmeasured: not a fail, no rule applied",
+  "value": null
+ },
+ "goldenMethods": 30,
+ "goldenPairs": 477,
+ "lang": "kotlin",
+ "note": "no projection-kotlin.answers.jsonl, no flow-misses / flow-spurious files: nothing was projected",
+ "pipelineDeviationNeeded": "joern-parse --nooverlays (s27_run.py --nooverlays): CPG would carry no REACHING_DEF/CDG, so extract.sc would project nothing",
+ "truth": "truth/kotlin.flow-final.jsonl",
+ "variant": "unmeasured"
+}
