@@ -1,0 +1,593 @@
+{
+ "lang": "java",
+ "provisional": true,
+ "truth": "truth/java.final.jsonl",
+ "labelledSites": 500,
+ "scoredSites": 500,
+ "unscoredSites": 0,
+ "unscoredReasons": {},
+ "internalSites": 114,
+ "externalScoredSites": 386,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 114,
+  "scoredSites": 500,
+  "recall": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 99,
+   "n": 114,
+   "p": 0.8684,
+   "wilson95": [
+    0.7942,
+    0.9186
+   ]
+  },
+  "edgeRecall": {
+   "k": 138,
+   "n": 147,
+   "p": 0.9388,
+   "wilson95": [
+    0.8877,
+    0.9675
+   ]
+  },
+  "precision": {
+   "k": 99,
+   "n": 108,
+   "p": 0.9167,
+   "wilson95": [
+    0.8492,
+    0.9555
+   ]
+  },
+  "resolvedAway": {
+   "k": 6,
+   "n": 114,
+   "p": 0.0526,
+   "wilson95": [
+    0.0243,
+    0.1101
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 13,
+   "n": 108,
+   "p": 0.1204,
+   "wilson95": [
+    0.0717,
+    0.1951
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 500,
+   "n": 500,
+   "p": 1.0,
+   "wilson95": [
+    0.9924,
+    1.0
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 114,
+  "scoredSites": 500,
+  "recall": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 105,
+   "n": 114,
+   "p": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 102,
+   "n": 114,
+   "p": 0.8947,
+   "wilson95": [
+    0.825,
+    0.9388
+   ]
+  },
+  "edgeRecall": {
+   "k": 138,
+   "n": 147,
+   "p": 0.9388,
+   "wilson95": [
+    0.8877,
+    0.9675
+   ]
+  },
+  "precision": {
+   "k": 102,
+   "n": 111,
+   "p": 0.9189,
+   "wilson95": [
+    0.8531,
+    0.9568
+   ]
+  },
+  "resolvedAway": {
+   "k": 3,
+   "n": 114,
+   "p": 0.0263,
+   "wilson95": [
+    0.009,
+    0.0745
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 13,
+   "n": 111,
+   "p": 0.1171,
+   "wilson95": [
+    0.0697,
+    0.1901
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 500,
+   "n": 500,
+   "p": 1.0,
+   "wilson95": [
+    0.9924,
+    1.0
+   ]
+  }
+ },
+ "recallDecision": {
+  "off": {
+   "basis": "pooled sample",
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "pooled sample",
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
+  "off": {
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  },
+  "on": {
+   "n": 114,
+   "k": 105,
+   "observedRecall": 0.9211,
+   "wilson95": [
+    0.8567,
+    0.9579
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 2,
+   "misses": 9
+  }
+ },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 2649,
+    "p90": 0,
+    "p99": 2,
+    "max": 26,
+    "matchedUnresolvedCtorSites": 284
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 2624,
+    "p90": 0,
+    "p99": 2,
+    "max": 26,
+    "matchedUnresolvedCtorSites": 284
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 54,
+   "sitesInThoseGroups": 225,
+   "labelledSitesInThoseGroups": 21
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 54,
+   "sitesInThoseGroups": 225,
+   "labelledSitesInThoseGroups": 21
+  }
+ },
+ "onEqualsOffByConstruction": false,
+ "gate83": {
+  "off": {
+   "nP": 108,
+   "P": 0.9167,
+   "verdict": "adopted on precision (P < 0.95)"
+  },
+  "on": {
+   "nP": 111,
+   "P": 0.9189,
+   "verdict": "adopted on precision (P < 0.95)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 105,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 9,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0275,
+    0.0275
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 2933,
+   "median": 0,
+   "p90": 0,
+   "p99": 2,
+   "max": 26,
+   "shareOver20": {
+    "k": 12,
+    "n": 2933,
+    "p": 0.0041,
+    "wilson95": [
+     0.0023,
+     0.0071
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 2908,
+   "median": 0,
+   "p90": 0,
+   "p99": 2,
+   "max": 26,
+   "shareOver20": {
+    "k": 12,
+    "n": 2908,
+    "p": 0.0041,
+    "wilson95": [
+     0.0024,
+     0.0072
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 3693,
+   "matchRate": {
+    "k": 3692,
+    "n": 3693,
+    "p": 0.9997,
+    "wilson95": [
+     0.9985,
+     1.0
+    ]
+   },
+   "frameFiles": 64,
+   "frameFilesWithFileNode": {
+    "k": 64,
+    "n": 64,
+    "p": 1.0,
+    "wilson95": [
+     0.9434,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 64,
+    "n": 64,
+    "p": 1.0,
+    "wilson95": [
+     0.9434,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/8055bb10-3e51-4ee9-9033-4bd1746b4de3.cpg.bin",
+    "lang": "java",
+    "files": 110,
+    "methods": 618,
+    "calls": 3771,
+    "callsWithoutMethod": 0,
+    "frameSites": 3693
+   }
+  },
+  "on": {
+   "frameSites": 3693,
+   "matchRate": {
+    "k": 3692,
+    "n": 3693,
+    "p": 0.9997,
+    "wilson95": [
+     0.9985,
+     1.0
+    ]
+   },
+   "frameFiles": 64,
+   "frameFilesWithFileNode": {
+    "k": 64,
+    "n": 64,
+    "p": 1.0,
+    "wilson95": [
+     0.9434,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 64,
+    "n": 64,
+    "p": 1.0,
+    "wilson95": [
+     0.9434,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "java",
+    "files": 110,
+    "methods": 618,
+    "calls": 3771,
+    "callsWithoutMethod": 0,
+    "frameSites": 3693
+   }
+  }
+ },
+ "strata": null,
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 147,
+   "withJoernMethodAtDefLine": 138
+  },
+  "on": {
+   "tMembers": 147,
+   "withJoernMethodAtDefLine": 138
+  }
+ },
+ "misses": {
+  "off": 9,
+  "on": 9,
+  "lenientOff": 9,
+  "lenientOn": 9,
+  "absentUnmatchedOnlyOff": 0,
+  "either": 9,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 9
+ },
+ "unmatchedLabelled": {
+  "off": [],
+  "on": []
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:24:00Z",
+   "wallSeconds": 9.0,
+   "peakMemMiB": 599.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/8055bb10-3e51-4ee9-9033-4bd1746b4de3.cpg.bin",
+   "cpgMB": 1.0
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:24:11Z",
+   "wallSeconds": 5.2,
+   "peakMemMiB": 437.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/8055bb10-3e51-4ee9-9033-4bd1746b4de3.cpg.bin=618",
+    "CONTENT /out/8055bb10-3e51-4ee9-9033-4bd1746b4de3.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:24:17Z",
+   "wallSeconds": 5.9,
+   "peakMemMiB": 428.5,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/5e83a981-6c42-405d-8784-461aa9eefae0.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=java-override",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:24:25Z",
+   "wallSeconds": 38.4,
+   "peakMemMiB": 383.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/on.cpg.bin",
+   "cpgMB": 1.01
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:03Z",
+   "wallSeconds": 5.1,
+   "peakMemMiB": 437.5,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=618",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:09Z",
+   "wallSeconds": 5.9,
+   "peakMemMiB": 487.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/590a1255-33fa-4458-94d5-50ce58d814e9.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/off/5e83a981-6c42-405d-8784-461aa9eefae0.measure.jsonl",
+   "sha256": "395a769a2cf9da8cb3e6d56ef97ce2f4c41a3cc26c6221164d5014685b46a611"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/java-override/on/590a1255-33fa-4458-94d5-50ce58d814e9.measure.jsonl",
+   "sha256": "6bcc55623f9ec4d43f21eee15226ebc6d827bd1968cfa0b2c53d29fbc8cb31d2"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

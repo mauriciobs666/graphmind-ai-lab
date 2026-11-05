@@ -21,6 +21,24 @@
     0.9934
    ]
   },
+  "recallLenientNameMatch": {
+   "k": 152,
+   "n": 155,
+   "p": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 113,
+   "n": 155,
+   "p": 0.729,
+   "wilson95": [
+    0.6542,
+    0.7928
+   ]
+  },
   "edgeRecall": {
    "k": 185,
    "n": 196,
@@ -81,6 +99,24 @@
     0.9934
    ]
   },
+  "recallLenientNameMatch": {
+   "k": 152,
+   "n": 155,
+   "p": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 113,
+   "n": 155,
+   "p": 0.729,
+   "wilson95": [
+    0.6542,
+    0.7928
+   ]
+  },
   "edgeRecall": {
    "k": 185,
    "n": 196,
@@ -129,22 +165,130 @@
    ]
   }
  },
- "gate81": {
+ "recallDecision": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 149,
+   "k": 146,
+   "observedRecall": 0.9799,
+   "wilson95": [
+    0.9425,
+    0.9931
+   ],
+   "misses": 3,
+   "missBudgetAt98": 2,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 149,
+   "k": 146,
+   "observedRecall": 0.9799,
+   "wilson95": [
+    0.9425,
+    0.9931
+   ],
+   "misses": 3,
+   "missBudgetAt98": 2,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 149,
+   "k": 146,
+   "observedRecall": 0.9799,
+   "wilson95": [
+    0.9425,
+    0.9931
+   ],
+   "misses": 3,
+   "missBudgetAt98": 2,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 149,
+   "k": 146,
+   "observedRecall": 0.9799,
+   "wilson95": [
+    0.9425,
+    0.9931
+   ],
+   "misses": 3,
+   "missBudgetAt98": 2,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
   "off": {
    "n": 155,
    "k": 152,
    "observedRecall": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ],
    "verdict": "pass (observed >= 0.98)",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 3
   },
   "on": {
    "n": 155,
    "k": 152,
    "observedRecall": 0.9806,
+   "wilson95": [
+    0.9446,
+    0.9934
+   ],
    "verdict": "pass (observed >= 0.98)",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 3
   }
  },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 8801,
+    "p90": 5,
+    "p99": 26,
+    "max": 26,
+    "matchedUnresolvedCtorSites": 0
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 8801,
+    "p90": 5,
+    "p99": 26,
+    "max": 26,
+    "matchedUnresolvedCtorSites": 0
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 2,
+   "sitesInThoseGroups": 4,
+   "labelledSitesInThoseGroups": 0
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 2,
+   "sitesInThoseGroups": 4,
+   "labelledSitesInThoseGroups": 0
+  }
+ },
+ "onEqualsOffByConstruction": true,
  "gate83": {
   "off": {
    "nP": 116,
@@ -312,20 +456,7 @@
       1.0
      ]
     },
-    "precision": {
-     "k": 3,
-     "n": 3,
-     "p": 1.0,
-     "wilson95": [
-      0.4385,
-      1.0
-     ]
-    },
-    "gate81": null
-   },
-   "on": {
-    "internalSites": 6,
-    "recall": {
+    "recallLenientNameMatch": {
      "k": 6,
      "n": 6,
      "p": 1.0,
@@ -343,7 +474,38 @@
       1.0
      ]
     },
-    "gate81": null
+    "stratumVerdictStrict": null
+   },
+   "on": {
+    "internalSites": 6,
+    "recall": {
+     "k": 6,
+     "n": 6,
+     "p": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 6,
+     "n": 6,
+     "p": 1.0,
+     "wilson95": [
+      0.6097,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 3,
+     "n": 3,
+     "p": 1.0,
+     "wilson95": [
+      0.4385,
+      1.0
+     ]
+    },
+    "stratumVerdictStrict": null
    },
    "scoredSites": 10
   },
@@ -359,20 +521,7 @@
       0.9931
      ]
     },
-    "precision": {
-     "k": 107,
-     "n": 113,
-     "p": 0.9469,
-     "wilson95": [
-      0.889,
-      0.9754
-     ]
-    },
-    "gate81": "fail"
-   },
-   "on": {
-    "internalSites": 149,
-    "recall": {
+    "recallLenientNameMatch": {
      "k": 146,
      "n": 149,
      "p": 0.9799,
@@ -390,7 +539,38 @@
       0.9754
      ]
     },
-    "gate81": "fail"
+    "stratumVerdictStrict": "fail"
+   },
+   "on": {
+    "internalSites": 149,
+    "recall": {
+     "k": 146,
+     "n": 149,
+     "p": 0.9799,
+     "wilson95": [
+      0.9425,
+      0.9931
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 146,
+     "n": 149,
+     "p": 0.9799,
+     "wilson95": [
+      0.9425,
+      0.9931
+     ]
+    },
+    "precision": {
+     "k": 107,
+     "n": 113,
+     "p": 0.9469,
+     "wilson95": [
+      0.889,
+      0.9754
+     ]
+    },
+    "stratumVerdictStrict": "fail"
    },
    "scoredSites": 230
   },
@@ -409,6 +589,9 @@
  "misses": {
   "off": 3,
   "on": 3,
+  "lenientOff": 3,
+  "lenientOn": 3,
+  "absentUnmatchedOnlyOff": 0,
   "either": 3,
   "offOnly": 0,
   "onOnly": 0,

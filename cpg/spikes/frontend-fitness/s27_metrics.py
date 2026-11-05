@@ -42,7 +42,8 @@ Z = 1.959964
 # Joern METHOD line vs truth defLine (checked per language by `tMappedAtDefLine` in the result; a mismatch is visible).
 METHOD_LINE_OFFSET = {"python": 0, "javascript": 0, "go": 0, "java": 0, "csharp": -1, "cpp": 0, "kotlin": 0}
 # Synthetic Joern METHODs that are not bundle symbols (never a resolution target that counts).
-NONSYMBOL_NAME = re.compile(r"^(<module>|<body>|<clinit>|<global>|<lambda>\d*|:program|<metaClassCallHandler>|<fakeNew>|<unresolved.*>|<empty>)$")
+NONSYMBOL_NAME = re.compile(r"^(<module>|<body>|<clinit>|<global>|:program|<metaClassCallHandler>|<fakeNew>|<unresolved.*>|<empty>)$|<metaClassAdapter>$")
+# `<lambda>N` is NOT listed: the truth counts anonymous functions as symbols (`<anon>`), so a lambda target is judged against T.
 CTOR_NAMES = {"<init>", "__init__", "constructor"}
 
 
@@ -110,19 +111,24 @@ def spec_names(qname: str) -> set:
 
 
 def locate(M, t, off):
-    """Joern METHOD (file, lineNumber) standing for truth member t, or None.
-    Exact: a METHOD at defLine + off. Else (frontends start a METHOD at its annotations/modifiers, the truth at the name):
-    a METHOD of the same file whose [l, le] holds the line and whose name is one of t's spec short names (or a constructor
-    `<init>`), innermost (largest l) first."""
+    """fullName of the Joern METHOD standing for truth member t, or None.
+    Exact: a METHOD at defLine + off (several can share a line: prefer one named like the symbol or `<init>`, else the first
+    that is a symbol). Else (frontends start a METHOD at its annotations/modifiers, the truth at the name): a METHOD of the same
+    file whose [l, le] holds the line, within 8 lines of its start, named like the symbol (or `<init>`), innermost first."""
     d = t["defLine"] + off
-    ms = M["methods"].get(t["path"], {})
-    if d in ms:
-        return (t["path"], d)
     names = spec_names(t.get("qname") or "") | {"<init>"}
-    cand = [m for m in ms.values() if m["l"] <= d <= m["le"] and m["name"] in names and d - m["l"] <= 8]
+    recs = M["mlist"].get(t["path"], {}).get(d, [])
+    if recs:
+        named = [m for m in recs if m["name"] in names]
+        if named:
+            return named[0]["fullName"]
+        sym = [m for m in recs if not NONSYMBOL_NAME.search(m["name"])]
+        if sym:
+            return sym[0]["fullName"]
+        return recs[0]["fullName"]  # a class body / module METHOD stands for the class-level symbol (existence only; never a resolution target)
+    cand = [m for m in M["methods"].get(t["path"], {}).values() if m["l"] <= d <= m["le"] and m["name"] in names and d - m["l"] <= 8]
     if cand:
-        m = max(cand, key=lambda x: x["l"])
-        return (t["path"], m["l"])
+        return max(cand, key=lambda x: x["l"])["fullName"]
     return None
 
 
@@ -135,6 +141,7 @@ def load_measure(lang, cfg):
     if not fs:
         return None
     meta, files, methods, sites = None, {}, collections.defaultdict(dict), {}
+    mlist, byfull = collections.defaultdict(lambda: collections.defaultdict(list)), {}
     for r in read_jsonl(fs[-1]):
         k = r["k"]
         if k == "meta":
@@ -143,9 +150,11 @@ def load_measure(lang, cfg):
             files[r["path"]] = r["methods"]
         elif k == "method":
             methods[r["file"]][r["l"]] = r
+            mlist[r["file"]][r["l"]].append(r)
+            byfull[r["fullName"]] = r
         elif k == "site":
             sites[r["key"]] = r
-    return {"path": fs[-1], "meta": meta, "files": files, "methods": methods, "sites": sites}
+    return {"path": fs[-1], "meta": meta, "files": files, "methods": methods, "mlist": mlist, "byFull": byfull, "sites": sites}
 
 
 def analyse(lang, cfgname, M, rows, off):
@@ -162,9 +171,9 @@ def analyse(lang, cfgname, M, rows, off):
                 ans["resolvedVendored"] += 1
             else:
                 nm = t["fullName"]
-                mm = M["methods"].get(t["file"], {}).get(t["l"])
+                mm = M["byFull"].get(t["fullName"])
                 name = mm["name"] if mm else ""
-                if NONSYMBOL_NAME.match(name):
+                if NONSYMBOL_NAME.search(name):
                     ans["resolvedNonSymbol"].append({"fullName": nm, "file": t["file"], "l": t["l"]})
                 else:
                     ans["resolvedSymbols"].append({"fullName": nm, "file": t["file"], "l": t["l"]})
@@ -174,35 +183,41 @@ def analyse(lang, cfgname, M, rows, off):
 
 
 def judge(ro, tr, ans, M, off):
-    """found / correct for one scored site in one configuration."""
+    """found (strict ML §7.1: the site must be matched to a CALL), foundLenient (ML §2 literally: T within Res or Nm
+    whether or not a CALL matched), foundRes (resolution only) and correct, for one scored site in one configuration."""
     T = tr["T"]
-    resset = {(r["file"], r["l"]) for r in ans["resolvedSymbols"]}
+    resset = {r["fullName"] for r in ans["resolvedSymbols"]}
+    matched = ans["matched"]
     members = []
     tkeys = set()
+    locs = []
     for t in T:
         loc = locate(M, t, off)
-        key = loc or (t["path"], t["defLine"] + off)
-        tkeys.add(key)
+        locs.append(loc)
+        tkeys.add(loc or ("?", t["path"], t["defLine"]))
         via, why = None, None
-        if key in resset:
+        if loc in resset:
             via = "res"
         else:
-            exists = loc
             names = spec_names(t.get("qname") or "")
-            if exists and ro["calleeName"] in names:
+            if loc and ro["calleeName"] in names:
                 via = "nm"
-            elif not exists:
+            elif not loc:
                 why = "no Joern METHOD at the truth location"
             else:
                 why = "name differs: calleeName %r not among the symbol's short names %r" % (ro["calleeName"], sorted(names))
-        members.append({"qname": t.get("qname"), "path": t["path"], "defLine": t["defLine"], "role": t["role"], "via": via, "why": why})
-    found = bool(T) and all(m["via"] for m in members)
-    tset = tkeys
+        viaS = via if (via == "res" or (via == "nm" and matched)) else None
+        if via == "nm" and not matched:
+            why = "name-match credit only: the site is unmatched to any Joern CALL (absent in Joern, ML §7.1)"
+        members.append({"qname": t.get("qname"), "path": t["path"], "defLine": t["defLine"], "role": t["role"], "via": via, "viaStrict": viaS, "why": why})
+    foundL = bool(T) and all(m["via"] for m in members)
+    found = bool(T) and all(m["viaStrict"] for m in members)
+    foundR = bool(T) and all(m["via"] == "res" for m in members)
     resolved = bool(ans["resolvedSymbols"])
-    correct = resolved and resset <= tset
-    edges = (sum(1 for m in members if m["via"]), len(members))
-    return {"found": found, "members": members, "resolved": resolved, "correct": correct, "edges": edges,
-            "resolvedToDeclOnly": resolved and bool(resset & tset) and all(m["role"] == "decl" for m, tk in zip(T, [locate(M, t, off) or (t["path"], t["defLine"] + off) for t in T]) if tk in resset)}
+    correct = resolved and resset <= tkeys
+    edges = (sum(1 for m in members if m["viaStrict"]), len(members))
+    return {"found": found, "foundLenient": foundL, "foundRes": foundR, "members": members, "resolved": resolved, "correct": correct, "edges": edges,
+            "resolvedToDeclOnly": resolved and bool(resset & tkeys) and all(m["role"] == "decl" for m, lc in zip(T, locs) if lc in resset)}
 
 
 def config_metrics(lang, per, order, off):
@@ -210,6 +225,8 @@ def config_metrics(lang, per, order, off):
     internal = [o for o in order if per[o]["tr"]["T"]]
     allsc = order
     found = [o for o in internal if per[o]["j"]["found"]]
+    foundL = [o for o in internal if per[o]["j"]["foundLenient"]]
+    foundR = [o for o in internal if per[o]["j"]["foundRes"]]
     resolved = [o for o in allsc if per[o]["j"]["resolved"]]
     correct = [o for o in resolved if per[o]["j"]["correct"]]
     away = [o for o in internal if (not per[o]["ans"]["resolvedSymbols"]) and (per[o]["ans"]["resolvedExternal"] or per[o]["ans"]["resolvedVendored"]) and not per[o]["ans"]["resolvedNonSymbol"]]
@@ -220,6 +237,8 @@ def config_metrics(lang, per, order, off):
     return {
         "internalSites": len(internal), "scoredSites": len(allsc),
         "recall": prop(len(found), len(internal)),
+        "recallLenientNameMatch": prop(len(foundL), len(internal)),
+        "recallResolutionOnly": prop(len(foundR), len(internal)),
         "edgeRecall": prop(fe, te),
         "precision": prop(len(correct), len(resolved)),
         "resolvedAway": prop(len(away), len(internal)),
@@ -229,29 +248,60 @@ def config_metrics(lang, per, order, off):
         "matchedLabelled": prop(sum(1 for o in allsc if per[o]["ans"]["matched"]), len(allsc)),
         "foundSetOrdinals": found, "internalOrdinals": internal, "resolvedOrdinals": resolved, "correctOrdinals": correct,
         "internalMissOrdinals": [o for o in internal if o not in set(found)],
+        "lenientMissOrdinals": [o for o in internal if o not in set(foundL)],
         "wrongResolvedOrdinals": [o for o in resolved if o not in set(correct)],
     }
 
 
-def gate_recall(m, label="§8.1"):
+def gate_recall(m, key="recall", floor=100):
     n = m["internalSites"]
-    k = m["recall"]["k"]
+    k = m[key]["k"]
     r = (k / n) if n else None
-    verdict = "insufficient (n < 100)" if n < 100 else ("pass (observed >= 0.98)" if r >= 0.98 else "fail")
-    return {"n": n, "k": k, "observedRecall": None if r is None else round(r, 4), "verdict": verdict, "maxMissesAt98": (n * 2) // 100}
+    verdict = f"insufficient (n < {floor})" if n < floor else ("pass (observed >= 0.98)" if r >= 0.98 else "fail")
+    return {"n": n, "k": k, "observedRecall": None if r is None else round(r, 4), "wilson95": m[key]["wilson95"], "verdict": verdict,
+            "missBudgetAt98": (n * 2) // 100, "misses": n - k}
+
+
+def recall_decision(lang, metrics, strata, key):
+    """ONE language-level §8.1 verdict per configuration and the worse of the two (ML §8 preamble). Python and TS/JS: the
+    non-contact stratum alone decides (ML §3.1, plan S27 row; >= 50 internal sites else insufficient). Others: the pooled
+    sample decides (n >= 100)."""
+    out = {}
+    for c in ("off", "on"):
+        if strata:
+            st = strata["nonContact"][c]
+            n, k = st["internalSites"], st[key]["k"]
+            r = k / n if n else None
+            out[c] = {"basis": "non-contact stratum", "n": n, "k": k, "observedRecall": None if r is None else round(r, 4), "wilson95": st[key]["wilson95"],
+                      "misses": n - k, "missBudgetAt98": (n * 2) // 100,
+                      "verdict": "insufficient (n < 50)" if n < 50 else ("pass (observed >= 0.98)" if r >= 0.98 else "fail")}
+        else:
+            g = gate_recall(metrics[c], key)
+            out[c] = {"basis": "pooled sample", **g}
+    order = lambda v: 0 if v.startswith("fail") else (1 if v.startswith("insufficient") else 2)
+    worst = min(out.values(), key=lambda v: order(v["verdict"]))
+    out["worse"] = worst["verdict"]
+    return out
+
+
+def rf_fetch_none(lang):
+    return lang in ("python", "javascript", "cpp")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("lang")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--variant", default="", choices=["", "override"], help="override: the segment-renamed CPGs (<work>/<lang>-override); writes results/<lang>.override.*")
     a = ap.parse_args()
     lang = a.lang
+    wl = lang + "-override" if a.variant else lang
+    sfx = ".override" if a.variant else ""
     off = METHOD_LINE_OFFSET[lang]
     priv = {r["ordinal"]: r for r in read_jsonl(HERE / "sample" / f"{lang}.private.jsonl")}
     truth = {r["ordinal"]: r for r in read_jsonl(HERE / "truth" / f"{lang}.final.jsonl")}
-    runrec = json.loads((WORK / lang / "s27-run.json").read_text())
-    Ms = {c: load_measure(lang, c) for c in ("off", "on")}
+    runrec = json.loads((WORK / wl / "s27-run.json").read_text())
+    Ms = {c: load_measure(wl, c) for c in ("off", "on")}
     if not all(Ms.values()):
         sys.exit(f"{lang}: missing measure output for {[c for c, v in Ms.items() if not v]}")
     order_all = sorted(truth)
@@ -296,7 +346,7 @@ def main():
         vals = []
         for k, s in M["sites"].items():
             if s["matched"]:
-                symres = [t for t in s["res"] if not t["ext"] and not t["vendored"] and not NONSYMBOL_NAME.match((M["methods"].get(t["file"], {}).get(t["l"]) or {"name": ""})["name"])]
+                symres = [t for t in s["res"] if not t["ext"] and not t["vendored"] and not NONSYMBOL_NAME.search((M["byFull"].get(t["fullName"]) or {"name": ""})["name"])]
                 if not symres:
                     vals.append(s["nm"])
         fan[c] = {"matchedUnresolvedSites": len(vals), "median": nearest_rank(vals, 1, 2), "p90": nearest_rank(vals, 9, 10),
@@ -326,12 +376,13 @@ def main():
             for c in ("off", "on"):
                 inn = [o for o in metrics[c]["internalOrdinals"] if pred(o)]
                 fd = [o for o in inn if o in set(metrics[c]["foundSetOrdinals"])]
+                fl = [o for o in inn if per_cfg[c][1][o]["j"]["foundLenient"]]
                 allsc = [o for o in scored if pred(o)]
                 rs = [o for o in allsc if per_cfg[c][1][o]["j"]["resolved"]]
                 cr = [o for o in rs if per_cfg[c][1][o]["j"]["correct"]]
                 n = len(inn)
-                blk[c] = {"internalSites": n, "recall": prop(len(fd), n), "precision": prop(len(cr), len(rs)),
-                          "gate81": ("insufficient (< 50 internal in the non-contact stratum)" if (name == "nonContact" and n < 50) else
+                blk[c] = {"internalSites": n, "recall": prop(len(fd), n), "recallLenientNameMatch": prop(len(fl), n), "precision": prop(len(cr), len(rs)),
+                          "stratumVerdictStrict": ("insufficient (< 50 internal in the non-contact stratum)" if (name == "nonContact" and n < 50) else
                                      (None if name == "contact" else ("pass (observed >= 0.98, n >= 50)" if n and len(fd) / n >= 0.98 else "fail")))}
             blk["scoredSites"] = len([o for o in scored if pred(o)])
             strata[name] = blk
@@ -347,7 +398,7 @@ def main():
             r = {"matched": an["matched"], "nm": an["nm"], "call": an["call"], "res": an["res"]}
             if tr["scored"]:
                 j = per_cfg[c][1][o]["j"]
-                r.update({"found": j["found"], "resolved": j["resolved"], "correct": j["correct"]})
+                r.update({"found": j["found"], "foundLenient": j["foundLenient"], "resolved": j["resolved"], "correct": j["correct"]})
             row[c] = r
         return row
 
@@ -363,6 +414,7 @@ def main():
         tr, ro = truth[o], priv[o]
         row = {"ordinal": o, "siteId": tr["siteId"], "site": tr["site"], "siteKey": ro["siteKey"], "calleeName": ro["calleeName"], "kind": ro["kind"],
                "missedIn": [c for c, f in (("off", mo), ("on", mn)) if f],
+               "missedLenientIn": [c for c in ("off", "on") if not per_cfg[c][1][o]["j"]["foundLenient"]],
                "truth": {k: tr[k] for k in ("T", "N", "external", "dynamic", "basis", "strata", "evidence")},
                "proposedCause": "", "decision": None}
         for c in ("off", "on"):
@@ -370,8 +422,28 @@ def main():
             j = per_cfg[c][1][o]["j"]
             row[c] = {"matched": an["matched"], "joernCall": an["call"], "resolvedSymbols": an["resolvedSymbols"],
                       "resolvedExternal": an["resolvedExternal"], "resolvedVendored": an["resolvedVendored"], "resolvedNonSymbol": an["resolvedNonSymbol"],
-                      "nm": an["nm"], "nmList": an["nmList"], "found": j["found"], "tMembers": j["members"]}
+                      "nm": an["nm"], "nmList": an["nmList"], "found": j["found"], "foundLenient": j["foundLenient"],
+                      "missKind": (None if j["found"] else ("absent-unmatched (name-match credit only)" if j["foundLenient"] else "lenient-and-strict")),
+                      "tMembers": j["members"]}
         miss_rows.append(row)
+
+    # A4: CALLs claimed by more than one frame site; A7: fan-out with and without constructor sites
+    kinds = {json.loads(l)["siteKey"]: json.loads(l)["kind"] for l in open(HERE / "frame" / f"{lang}.jsonl")}
+    claims, fan_noctor = {}, {}
+    for c, M in Ms.items():
+        g = collections.defaultdict(list)
+        for k, s_ in M["sites"].items():
+            if s_["matched"] and s_.get("call"):
+                cl = s_["call"]
+                g[(k.split(":")[0], cl["l"], cl["c"], cl["name"], cl["code"])].append(k)
+        multi = {kk: v for kk, v in g.items() if len(v) > 1}
+        lab = {priv[o]["siteKey"] for o in scored}
+        claims[c] = {"callsClaimedByMoreThanOneSite": len(multi), "sitesInThoseGroups": sum(len(v) for v in multi.values()),
+                     "labelledSitesInThoseGroups": sum(1 for v in multi.values() for k in v if k in lab)}
+        vals = [s_["nm"] for k, s_ in M["sites"].items() if s_["matched"] and kinds.get(k) != "ctor" and not [t for t in s_["res"] if not t["ext"] and not t["vendored"] and not NONSYMBOL_NAME.search((M["byFull"].get(t["fullName"]) or {"name": ""})["name"])]]
+        ctor_unres = sum(1 for k, s_ in M["sites"].items() if s_["matched"] and kinds.get(k) == "ctor" and not [t for t in s_["res"] if not t["ext"] and not t["vendored"]])
+        fan_noctor[c] = {"matchedUnresolvedNonCtorSites": len(vals), "p90": nearest_rank(vals, 9, 10), "p99": nearest_rank(vals, 99, 100), "max": max(vals) if vals else None,
+                         "matchedUnresolvedCtorSites": ctor_unres}
 
     res = {
         "lang": lang, "provisional": True, "truth": f"truth/{lang}.final.jsonl",
@@ -381,11 +453,24 @@ def main():
         "dynamicWithT": sum(1 for o in scored if truth[o]["dynamic"] and truth[o]["T"]),
         "off": {k: v for k, v in metrics["off"].items() if not k.endswith("Ordinals")},
         "on": {k: v for k, v in metrics["on"].items() if not k.endswith("Ordinals")},
-        "gate81": {"off": gate_recall(metrics["off"]), "on": gate_recall(metrics["on"])},
+        "recallDecision": recall_decision(lang, metrics, strata, "recall"),
+        "recallDecisionLenientNameMatch": recall_decision(lang, metrics, strata, "recallLenientNameMatch"),
+        "gate81Pooled": {"informational": True, "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
+                         "off": gate_recall(metrics["off"]), "on": gate_recall(metrics["on"])},
+        "recallDefinitions": {"strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+                              "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+                              "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"},
+        "fanOutDefinitions": {"measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+                              "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+                              "nonCtorFanOut": fan_noctor},
+        "sharedCallClaims": claims,
+        "onEqualsOffByConstruction": rf_fetch_none(lang),
         "gate83": {c: {"nP": metrics[c]["precision"]["n"], "P": metrics[c]["precision"]["p"],
                        "verdict": ("unmeasured (n_P < 60)" if metrics[c]["precision"]["n"] < 60 else ("adopted on precision (P < 0.95)" if metrics[c]["precision"]["p"] < 0.95 else "pass (P >= 0.95)"))} for c in ("off", "on")},
         "pairedOffOn": paired, "fanOut": fan, "census": census, "strata": strata,
         "tMemberMapping": tmap, "misses": {"off": len(metrics["off"]["internalMissOrdinals"]), "on": len(metrics["on"]["internalMissOrdinals"]),
+                                           "lenientOff": len(metrics["off"]["lenientMissOrdinals"]), "lenientOn": len(metrics["on"]["lenientMissOrdinals"]),
+                                           "absentUnmatchedOnlyOff": len(set(metrics["off"]["internalMissOrdinals"]) - set(metrics["off"]["lenientMissOrdinals"])),
                                            "either": len(miss_rows), "offOnly": sum(1 for r in miss_rows if r["missedIn"] == ["off"]),
                                            "onOnly": sum(1 for r in miss_rows if r["missedIn"] == ["on"]), "both": sum(1 for r in miss_rows if len(r["missedIn"]) == 2)},
         "unmatchedLabelled": {c: [{"ordinal": o, "siteKey": priv[o]["siteKey"], "kind": priv[o]["kind"], "internal": bool(truth[o]["T"])}
@@ -396,14 +481,29 @@ def main():
     }
     if not a.no_write:
         (HERE / "results").mkdir(exist_ok=True)
-        (HERE / "results" / f"{lang}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False) + "\n")
-        with open(HERE / "results" / f"{lang}.answers.jsonl", "w") as fh:
+        (HERE / "results" / f"{lang}{sfx}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False) + "\n")
+        with open(HERE / "results" / f"{lang}{sfx}.answers.jsonl", "w") as fh:
             for r in answers:
                 fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-        with open(HERE / "adjudication" / f"{lang}-misses.jsonl", "w") as fh:
-            for r in miss_rows:
-                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-    brief = {k: res[k] for k in ("lang", "labelledSites", "scoredSites", "unscoredSites", "internalSites", "misses", "gate81", "gate83", "pairedOffOn", "tMemberMapping")}
+        if not a.variant:
+            # the data-scientist edits <lang>-misses.jsonl; the regenerated rows go beside it, never over it
+            with open(HERE / "adjudication" / f"{lang}-misses.v2.jsonl", "w") as fh:
+                for r in miss_rows:
+                    fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+            old_p = HERE / "adjudication" / f"{lang}-misses.jsonl"
+            old = {r["ordinal"]: r for r in read_jsonl(old_p)} if old_p.exists() else {}
+            new = {r["ordinal"]: r for r in miss_rows}
+            cause = lambda r: bool(r.get("proposedCause") or r.get("decision") or r.get("cause") or r.get("causeClass"))
+            diff = {"lang": lang, "oldRows": len(old), "v2Rows": len(new),
+                    "removed": sorted(set(old) - set(new)), "added": sorted(set(new) - set(old)),
+                    "addedAbsentUnmatchedOnly": sorted(o for o in set(new) - set(old) if all(new[o][c]["foundLenient"] for c in ("off", "on") if c in new[o]["missedIn"])),
+                    "unchanged": len(set(old) & set(new)),
+                    "oldRowsWithCauseOrDecision": sorted(o for o, r in old.items() if cause(r)),
+                    "removedRowsThatHadCauseOrDecision": sorted(o for o in set(old) - set(new) if cause(old[o]))}
+            (HERE / "adjudication" / f"{lang}-misses.v2.diff.json").write_text(json.dumps(diff, indent=1) + "\n")
+    brief = {k: res[k] for k in ("lang", "labelledSites", "scoredSites", "unscoredSites", "internalSites", "misses", "recallDecision", "gate83", "pairedOffOn", "tMemberMapping")}
+    brief["recallLenient"] = {c: res[c]["recallLenientNameMatch"] for c in ("off", "on")}
+    brief["recallResOnly"] = {c: res[c]["recallResolutionOnly"] for c in ("off", "on")}
     brief["recall"] = {c: res[c]["recall"] for c in ("off", "on")}
     brief["precision"] = {c: res[c]["precision"] for c in ("off", "on")}
     brief["matched"] = {c: res[c]["matchedLabelled"] for c in ("off", "on")}

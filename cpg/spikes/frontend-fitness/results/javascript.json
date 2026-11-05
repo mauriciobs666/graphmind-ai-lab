@@ -13,6 +13,15 @@
   "internalSites": 184,
   "scoredSites": 523,
   "recall": {
+   "k": 115,
+   "n": 184,
+   "p": 0.625,
+   "wilson95": [
+    0.5532,
+    0.6917
+   ]
+  },
+  "recallLenientNameMatch": {
    "k": 148,
    "n": 184,
    "p": 0.8043,
@@ -21,13 +30,22 @@
     0.8552
    ]
   },
-  "edgeRecall": {
-   "k": 148,
-   "n": 187,
-   "p": 0.7914,
+  "recallResolutionOnly": {
+   "k": 102,
+   "n": 184,
+   "p": 0.5543,
    "wilson95": [
-    0.7276,
-    0.8435
+    0.4821,
+    0.6243
+   ]
+  },
+  "edgeRecall": {
+   "k": 115,
+   "n": 187,
+   "p": 0.615,
+   "wilson95": [
+    0.5436,
+    0.6817
    ]
   },
   "precision": {
@@ -73,6 +91,15 @@
   "internalSites": 184,
   "scoredSites": 523,
   "recall": {
+   "k": 115,
+   "n": 184,
+   "p": 0.625,
+   "wilson95": [
+    0.5532,
+    0.6917
+   ]
+  },
+  "recallLenientNameMatch": {
    "k": 148,
    "n": 184,
    "p": 0.8043,
@@ -81,13 +108,22 @@
     0.8552
    ]
   },
-  "edgeRecall": {
-   "k": 148,
-   "n": 187,
-   "p": 0.7914,
+  "recallResolutionOnly": {
+   "k": 102,
+   "n": 184,
+   "p": 0.5543,
    "wilson95": [
-    0.7276,
-    0.8435
+    0.4821,
+    0.6243
+   ]
+  },
+  "edgeRecall": {
+   "k": 115,
+   "n": 187,
+   "p": 0.615,
+   "wilson95": [
+    0.5436,
+    0.6817
    ]
   },
   "precision": {
@@ -129,22 +165,130 @@
    ]
   }
  },
- "gate81": {
+ "recallDecision": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 96,
+   "observedRecall": 0.5818,
+   "wilson95": [
+    0.5055,
+    0.6544
+   ],
+   "misses": 69,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 96,
+   "observedRecall": 0.5818,
+   "wilson95": [
+    0.5055,
+    0.6544
+   ],
+   "misses": 69,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 129,
+   "observedRecall": 0.7818,
+   "wilson95": [
+    0.7128,
+    0.838
+   ],
+   "misses": 36,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 129,
+   "observedRecall": 0.7818,
+   "wilson95": [
+    0.7128,
+    0.838
+   ],
+   "misses": 36,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
   "off": {
    "n": 184,
-   "k": 148,
-   "observedRecall": 0.8043,
+   "k": 115,
+   "observedRecall": 0.625,
+   "wilson95": [
+    0.5532,
+    0.6917
+   ],
    "verdict": "fail",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 69
   },
   "on": {
    "n": 184,
-   "k": 148,
-   "observedRecall": 0.8043,
+   "k": 115,
+   "observedRecall": 0.625,
+   "wilson95": [
+    0.5532,
+    0.6917
+   ],
    "verdict": "fail",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 69
   }
  },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 352,
+    "p90": 0,
+    "p99": 1,
+    "max": 2,
+    "matchedUnresolvedCtorSites": 8
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 352,
+    "p90": 0,
+    "p99": 1,
+    "max": 2,
+    "matchedUnresolvedCtorSites": 8
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 0,
+   "sitesInThoseGroups": 0,
+   "labelledSitesInThoseGroups": 0
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 0,
+   "sitesInThoseGroups": 0,
+   "labelledSitesInThoseGroups": 0
+  }
+ },
+ "onEqualsOffByConstruction": true,
  "gate83": {
   "off": {
    "nP": 102,
@@ -158,16 +302,16 @@
   }
  },
  "pairedOffOn": {
-  "bothFound": 148,
+  "bothFound": 115,
   "foundOnMissedOff": 0,
   "foundOffMissedOn": 0,
-  "neither": 36,
+  "neither": 69,
   "mcnemarExactP": 1.0,
   "newcombe": {
    "diff": 0.0,
    "ci95": [
-    -0.0124,
-    0.0124
+    -0.0051,
+    0.0051
    ],
    "phi": 1.0
   }
@@ -307,6 +451,15 @@
       1.0
      ]
     },
+    "recallLenientNameMatch": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
     "precision": {
      "k": 19,
      "n": 19,
@@ -316,7 +469,7 @@
       1.0
      ]
     },
-    "gate81": null
+    "stratumVerdictStrict": null
    },
    "on": {
     "internalSites": 19,
@@ -329,6 +482,15 @@
       1.0
      ]
     },
+    "recallLenientNameMatch": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
     "precision": {
      "k": 19,
      "n": 19,
@@ -338,7 +500,7 @@
       1.0
      ]
     },
-    "gate81": null
+    "stratumVerdictStrict": null
    },
    "scoredSites": 37
   },
@@ -346,6 +508,15 @@
    "off": {
     "internalSites": 165,
     "recall": {
+     "k": 96,
+     "n": 165,
+     "p": 0.5818,
+     "wilson95": [
+      0.5055,
+      0.6544
+     ]
+    },
+    "recallLenientNameMatch": {
      "k": 129,
      "n": 165,
      "p": 0.7818,
@@ -363,11 +534,20 @@
       1.0
      ]
     },
-    "gate81": "fail"
+    "stratumVerdictStrict": "fail"
    },
    "on": {
     "internalSites": 165,
     "recall": {
+     "k": 96,
+     "n": 165,
+     "p": 0.5818,
+     "wilson95": [
+      0.5055,
+      0.6544
+     ]
+    },
+    "recallLenientNameMatch": {
      "k": 129,
      "n": 165,
      "p": 0.7818,
@@ -385,7 +565,7 @@
       1.0
      ]
     },
-    "gate81": "fail"
+    "stratumVerdictStrict": "fail"
    },
    "scoredSites": 486
   },
@@ -402,12 +582,15 @@
   }
  },
  "misses": {
-  "off": 36,
-  "on": 36,
-  "either": 36,
+  "off": 69,
+  "on": 69,
+  "lenientOff": 36,
+  "lenientOn": 36,
+  "absentUnmatchedOnlyOff": 33,
+  "either": 69,
   "offOnly": 0,
   "onOnly": 0,
-  "both": 36
+  "both": 69
  },
  "unmatchedLabelled": {
   "off": [

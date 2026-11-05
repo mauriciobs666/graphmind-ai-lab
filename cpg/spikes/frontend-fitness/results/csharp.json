@@ -15,6 +15,15 @@
   "internalSites": 150,
   "scoredSites": 305,
   "recall": {
+   "k": 81,
+   "n": 150,
+   "p": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ]
+  },
+  "recallLenientNameMatch": {
    "k": 107,
    "n": 150,
    "p": 0.7133,
@@ -23,13 +32,22 @@
     0.7797
    ]
   },
-  "edgeRecall": {
-   "k": 121,
-   "n": 164,
-   "p": 0.7378,
+  "recallResolutionOnly": {
+   "k": 22,
+   "n": 150,
+   "p": 0.1467,
    "wilson95": [
-    0.6656,
-    0.7991
+    0.0989,
+    0.2121
+   ]
+  },
+  "edgeRecall": {
+   "k": 95,
+   "n": 164,
+   "p": 0.5793,
+   "wilson95": [
+    0.5027,
+    0.6522
    ]
   },
   "precision": {
@@ -75,6 +93,15 @@
   "internalSites": 150,
   "scoredSites": 305,
   "recall": {
+   "k": 81,
+   "n": 150,
+   "p": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ]
+  },
+  "recallLenientNameMatch": {
    "k": 107,
    "n": 150,
    "p": 0.7133,
@@ -83,13 +110,22 @@
     0.7797
    ]
   },
-  "edgeRecall": {
-   "k": 121,
-   "n": 164,
-   "p": 0.7378,
+  "recallResolutionOnly": {
+   "k": 22,
+   "n": 150,
+   "p": 0.1467,
    "wilson95": [
-    0.6656,
-    0.7991
+    0.0989,
+    0.2121
+   ]
+  },
+  "edgeRecall": {
+   "k": 95,
+   "n": 164,
+   "p": 0.5793,
+   "wilson95": [
+    0.5027,
+    0.6522
    ]
   },
   "precision": {
@@ -131,22 +167,130 @@
    ]
   }
  },
- "gate81": {
+ "recallDecision": {
   "off": {
+   "basis": "pooled sample",
+   "n": 150,
+   "k": 81,
+   "observedRecall": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 69
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 150,
+   "k": 81,
+   "observedRecall": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 69
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "pooled sample",
    "n": 150,
    "k": 107,
    "observedRecall": 0.7133,
+   "wilson95": [
+    0.6364,
+    0.7797
+   ],
    "verdict": "fail",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 43
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 150,
+   "k": 107,
+   "observedRecall": 0.7133,
+   "wilson95": [
+    0.6364,
+    0.7797
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 43
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
+  "off": {
+   "n": 150,
+   "k": 81,
+   "observedRecall": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 69
   },
   "on": {
    "n": 150,
-   "k": 107,
-   "observedRecall": 0.7133,
+   "k": 81,
+   "observedRecall": 0.54,
+   "wilson95": [
+    0.4602,
+    0.6178
+   ],
    "verdict": "fail",
-   "maxMissesAt98": 3
+   "missBudgetAt98": 3,
+   "misses": 69
   }
  },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 13503,
+    "p90": 9,
+    "p99": 100,
+    "max": 100,
+    "matchedUnresolvedCtorSites": 2572
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 13505,
+    "p90": 9,
+    "p99": 100,
+    "max": 100,
+    "matchedUnresolvedCtorSites": 2572
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 48,
+   "sitesInThoseGroups": 116,
+   "labelledSitesInThoseGroups": 0
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 48,
+   "sitesInThoseGroups": 116,
+   "labelledSitesInThoseGroups": 0
+  }
+ },
+ "onEqualsOffByConstruction": false,
  "gate83": {
   "off": {
    "nP": 25,
@@ -160,16 +304,16 @@
   }
  },
  "pairedOffOn": {
-  "bothFound": 107,
+  "bothFound": 81,
   "foundOnMissedOff": 0,
   "foundOffMissedOn": 0,
-  "neither": 43,
+  "neither": 69,
   "mcnemarExactP": 1.0,
   "newcombe": {
    "diff": 0.0,
    "ci95": [
-    -0.0106,
-    0.0106
+    -0.002,
+    0.002
    ],
    "phi": 1.0
   }
@@ -304,12 +448,15 @@
   }
  },
  "misses": {
-  "off": 43,
-  "on": 43,
-  "either": 43,
+  "off": 69,
+  "on": 69,
+  "lenientOff": 43,
+  "lenientOn": 43,
+  "absentUnmatchedOnlyOff": 26,
+  "either": 69,
   "offOnly": 0,
   "onOnly": 0,
-  "both": 43
+  "both": 69
  },
  "unmatchedLabelled": {
   "off": [

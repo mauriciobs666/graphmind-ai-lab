@@ -1,0 +1,15 @@
+{
+ "lang": "python",
+ "oldRows": 3,
+ "v2Rows": 3,
+ "removed": [],
+ "added": [],
+ "addedAbsentUnmatchedOnly": [],
+ "unchanged": 3,
+ "oldRowsWithCauseOrDecision": [
+  4,
+  75,
+  84
+ ],
+ "removedRowsThatHadCauseOrDecision": []
+}

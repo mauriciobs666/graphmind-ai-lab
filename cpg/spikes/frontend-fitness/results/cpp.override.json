@@ -1,0 +1,1078 @@
+{
+ "lang": "cpp",
+ "provisional": true,
+ "truth": "truth/cpp.final.jsonl",
+ "labelledSites": 187,
+ "scoredSites": 176,
+ "unscoredSites": 11,
+ "unscoredReasons": {
+  "notACall": 10,
+  "dynamic": 1
+ },
+ "internalSites": 152,
+ "externalScoredSites": 24,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 152,
+  "scoredSites": 176,
+  "recall": {
+   "k": 78,
+   "n": 152,
+   "p": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 91,
+   "n": 152,
+   "p": 0.5987,
+   "wilson95": [
+    0.5193,
+    0.6732
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 24,
+   "n": 152,
+   "p": 0.1579,
+   "wilson95": [
+    0.1085,
+    0.2242
+   ]
+  },
+  "edgeRecall": {
+   "k": 81,
+   "n": 407,
+   "p": 0.199,
+   "wilson95": [
+    0.1631,
+    0.2405
+   ]
+  },
+  "precision": {
+   "k": 24,
+   "n": 25,
+   "p": 0.96,
+   "wilson95": [
+    0.8046,
+    0.9929
+   ]
+  },
+  "resolvedAway": {
+   "k": 98,
+   "n": 152,
+   "p": 0.6447,
+   "wilson95": [
+    0.5659,
+    0.7164
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 25,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.1332
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 136,
+   "n": 176,
+   "p": 0.7727,
+   "wilson95": [
+    0.7054,
+    0.8284
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 152,
+  "scoredSites": 176,
+  "recall": {
+   "k": 78,
+   "n": 152,
+   "p": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 91,
+   "n": 152,
+   "p": 0.5987,
+   "wilson95": [
+    0.5193,
+    0.6732
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 24,
+   "n": 152,
+   "p": 0.1579,
+   "wilson95": [
+    0.1085,
+    0.2242
+   ]
+  },
+  "edgeRecall": {
+   "k": 81,
+   "n": 407,
+   "p": 0.199,
+   "wilson95": [
+    0.1631,
+    0.2405
+   ]
+  },
+  "precision": {
+   "k": 24,
+   "n": 25,
+   "p": 0.96,
+   "wilson95": [
+    0.8046,
+    0.9929
+   ]
+  },
+  "resolvedAway": {
+   "k": 98,
+   "n": 152,
+   "p": 0.6447,
+   "wilson95": [
+    0.5659,
+    0.7164
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 25,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.1332
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 136,
+   "n": 176,
+   "p": 0.7727,
+   "wilson95": [
+    0.7054,
+    0.8284
+   ]
+  }
+ },
+ "recallDecision": {
+  "off": {
+   "basis": "pooled sample",
+   "n": 152,
+   "k": 78,
+   "observedRecall": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 74
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 152,
+   "k": 78,
+   "observedRecall": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 74
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "pooled sample",
+   "n": 152,
+   "k": 91,
+   "observedRecall": 0.5987,
+   "wilson95": [
+    0.5193,
+    0.6732
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 61
+  },
+  "on": {
+   "basis": "pooled sample",
+   "n": 152,
+   "k": 91,
+   "observedRecall": 0.5987,
+   "wilson95": [
+    0.5193,
+    0.6732
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 61
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
+  "off": {
+   "n": 152,
+   "k": 78,
+   "observedRecall": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 74
+  },
+  "on": {
+   "n": 152,
+   "k": 78,
+   "observedRecall": 0.5132,
+   "wilson95": [
+    0.4344,
+    0.5913
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 74
+  }
+ },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 18374,
+    "p90": 6,
+    "p99": 67,
+    "max": 119,
+    "matchedUnresolvedCtorSites": 52
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 18374,
+    "p90": 6,
+    "p99": 67,
+    "max": 119,
+    "matchedUnresolvedCtorSites": 52
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 136,
+   "sitesInThoseGroups": 306,
+   "labelledSitesInThoseGroups": 2
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 136,
+   "sitesInThoseGroups": 306,
+   "labelledSitesInThoseGroups": 2
+  }
+ },
+ "onEqualsOffByConstruction": true,
+ "gate83": {
+  "off": {
+   "nP": 25,
+   "P": 0.96,
+   "verdict": "unmeasured (n_P < 60)"
+  },
+  "on": {
+   "nP": 25,
+   "P": 0.96,
+   "verdict": "unmeasured (n_P < 60)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 78,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 74,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0006,
+    0.0006
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 18426,
+   "median": 0,
+   "p90": 6,
+   "p99": 67,
+   "max": 119,
+   "shareOver20": {
+    "k": 287,
+    "n": 18426,
+    "p": 0.0156,
+    "wilson95": [
+     0.0139,
+     0.0175
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 18426,
+   "median": 0,
+   "p90": 6,
+   "p99": 67,
+   "max": 119,
+   "shareOver20": {
+    "k": 287,
+    "n": 18426,
+    "p": 0.0156,
+    "wilson95": [
+     0.0139,
+     0.0175
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 28490,
+   "matchRate": {
+    "k": 21526,
+    "n": 28490,
+    "p": 0.7556,
+    "wilson95": [
+     0.7505,
+     0.7605
+    ]
+   },
+   "frameFiles": 132,
+   "frameFilesWithFileNode": {
+    "k": 132,
+    "n": 132,
+    "p": 1.0,
+    "wilson95": [
+     0.9717,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 132,
+    "n": 132,
+    "p": 1.0,
+    "wilson95": [
+     0.9717,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/5304c556-903b-4d11-8aaa-a2c7264a1878.cpg.bin",
+    "lang": "cpp",
+    "files": 159,
+    "methods": 32708,
+    "calls": 63385,
+    "callsWithoutMethod": 0,
+    "frameSites": 28490
+   }
+  },
+  "on": {
+   "frameSites": 28490,
+   "matchRate": {
+    "k": 21526,
+    "n": 28490,
+    "p": 0.7556,
+    "wilson95": [
+     0.7505,
+     0.7605
+    ]
+   },
+   "frameFiles": 132,
+   "frameFilesWithFileNode": {
+    "k": 132,
+    "n": 132,
+    "p": 1.0,
+    "wilson95": [
+     0.9717,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 132,
+    "n": 132,
+    "p": 1.0,
+    "wilson95": [
+     0.9717,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "cpp",
+    "files": 159,
+    "methods": 32708,
+    "calls": 63385,
+    "callsWithoutMethod": 0,
+    "frameSites": 28490
+   }
+  }
+ },
+ "strata": null,
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 407,
+   "withJoernMethodAtDefLine": 343
+  },
+  "on": {
+   "tMembers": 407,
+   "withJoernMethodAtDefLine": 343
+  }
+ },
+ "misses": {
+  "off": 74,
+  "on": 74,
+  "lenientOff": 61,
+  "lenientOn": 61,
+  "absentUnmatchedOnlyOff": 13,
+  "either": 74,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 74
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 6,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:645:16:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "googletest/test/gtest_unittest.cc:4053:3:ASSERT_HRESULT_SUCCEEDED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 17,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:360:3:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:818:15:ContainsRegex",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1859:46:Throws<uint32_t>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 34,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:178:3:cc.Method",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2053:13:res.find",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1368:9:EXPECT_PRED4",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 46,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3318:64:Le",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 48,
+    "siteKey": "googletest/src/gtest-death-test.cc:119:5:testing::internal::BoolFromGTestEnv",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "googletest/test/gtest_unittest.cc:6228:3:EXPECT_EXIT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:677:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5894:32:std::forward<MessageMatcher>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 73,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:431:13:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "googletest/test/gtest_unittest.cc:1349:9:AddNonfatalFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 77,
+    "siteKey": "googletest/src/gtest-port.cc:1109:10:GetArgvs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:210:39:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "googletest/src/gtest-death-test.cc:160:11:GTEST_FLAG_GET(internal_run_death_test).empty",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "googletest/test/gtest_unittest.cc:3042:27:EXPECT_DOUBLE_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:245:14:new Iterator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "googletest/src/gtest-port.cc:502:53:::GetLastError",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2528:14:Binary",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "googletest/src/gtest.cc:5080:11:connect",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:246:42:Return",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 113,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:3559:43:std::declval<const Struct&>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "googletest/test/gtest_unittest.cc:3134:24:ASSERT_NEAR",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5474:7:std::forward<M>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:144:40:impl_->Current",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:340:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:29:FieldsAre",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "googletest/include/gtest/internal/gtest-internal.h:605:15:FormatFileLocation(test->file, test->line).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 133,
+    "siteKey": "googletest/test/gtest_stress_test.cc:141:26:result->GetTestProperty",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 136,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:2065:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:322:5:EXPECT_DEATH",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "googletest/src/gtest-death-test.cc:770:7:::_open_osfhandle",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "googletest/src/gtest-death-test.cc:1313:5:GTEST_DEATH_TEST_CHECK_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 162,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1099:23:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:828:15:raise",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1241:15:StartsWith",
+    "kind": "plain",
+    "internal": true
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 6,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:645:16:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 9,
+    "siteKey": "googletest/test/gtest_unittest.cc:4053:3:ASSERT_HRESULT_SUCCEEDED",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 17,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:360:3:GTEST_FLAG_SET",
+    "kind": "macro-shaped",
+    "internal": false
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:818:15:ContainsRegex",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "googlemock/test/gmock-matchers-misc_test.cc:1859:46:Throws<uint32_t>",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 34,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:178:3:cc.Method",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 35,
+    "siteKey": "googletest/test/googletest-printers-test.cc:2053:13:res.find",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 36,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1368:9:EXPECT_PRED4",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 46,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:3318:64:Le",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 48,
+    "siteKey": "googletest/src/gtest-death-test.cc:119:5:testing::internal::BoolFromGTestEnv",
+    "kind": "qualified",
+    "internal": true
+   },
+   {
+    "ordinal": 62,
+    "siteKey": "googletest/test/gtest_unittest.cc:6228:3:EXPECT_EXIT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 66,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:677:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 68,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5894:32:std::forward<MessageMatcher>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 73,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:431:13:FilePath",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 75,
+    "siteKey": "googletest/test/gtest_unittest.cc:1349:9:AddNonfatalFailure",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 77,
+    "siteKey": "googletest/src/gtest-port.cc:1109:10:GetArgvs",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 83,
+    "siteKey": "googlemock/test/gmock-matchers-containers_test.cc:210:39:Not",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 86,
+    "siteKey": "googletest/src/gtest-death-test.cc:160:11:GTEST_FLAG_GET(internal_run_death_test).empty",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 88,
+    "siteKey": "googletest/test/gtest_unittest.cc:3042:27:EXPECT_DOUBLE_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 91,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:245:14:new Iterator",
+    "kind": "ctor",
+    "internal": true
+   },
+   {
+    "ordinal": 92,
+    "siteKey": "googletest/src/gtest-port.cc:502:53:::GetLastError",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 95,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:2528:14:Binary",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 99,
+    "siteKey": "googletest/src/gtest.cc:5080:11:connect",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 111,
+    "siteKey": "googlemock/test/gmock-spec-builders_test.cc:246:42:Return",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 113,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:3559:43:std::declval<const Struct&>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 114,
+    "siteKey": "googletest/test/gtest_unittest.cc:3134:24:ASSERT_NEAR",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 122,
+    "siteKey": "googlemock/include/gmock/gmock-matchers.h:5474:7:std::forward<M>",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 123,
+    "siteKey": "googletest/include/gtest/internal/gtest-param-util.h:144:40:impl_->Current",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 124,
+    "siteKey": "googletest/test/googletest-filepath-test.cc:340:3:EXPECT_EQ",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 131,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:29:FieldsAre",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 132,
+    "siteKey": "googletest/include/gtest/internal/gtest-internal.h:605:15:FormatFileLocation(test->file, test->line).c_str",
+    "kind": "method",
+    "internal": false
+   },
+   {
+    "ordinal": 133,
+    "siteKey": "googletest/test/gtest_stress_test.cc:141:26:result->GetTestProperty",
+    "kind": "method",
+    "internal": true
+   },
+   {
+    "ordinal": 136,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:2065:51:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 140,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1760:3:EXPECT_THAT",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 145,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:322:5:EXPECT_DEATH",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 148,
+    "siteKey": "googletest/src/gtest-death-test.cc:770:7:::_open_osfhandle",
+    "kind": "qualified",
+    "internal": false
+   },
+   {
+    "ordinal": 151,
+    "siteKey": "googletest/src/gtest-death-test.cc:1313:5:GTEST_DEATH_TEST_CHECK_",
+    "kind": "macro-shaped",
+    "internal": true
+   },
+   {
+    "ordinal": 162,
+    "siteKey": "googletest/test/gtest_pred_impl_unittest.cc:1099:23:Bool",
+    "kind": "plain",
+    "internal": true
+   },
+   {
+    "ordinal": 169,
+    "siteKey": "googletest/test/googletest-death-test-test.cc:828:15:raise",
+    "kind": "plain",
+    "internal": false
+   },
+   {
+    "ordinal": 183,
+    "siteKey": "googlemock/test/gmock-matchers-comparisons_test.cc:1241:15:StartsWith",
+    "kind": "plain",
+    "internal": true
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:26:03Z",
+   "wallSeconds": 25.6,
+   "peakMemMiB": 1721.3,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/5304c556-903b-4d11-8aaa-a2c7264a1878.cpg.bin",
+   "cpgMB": 21.6
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:26:30Z",
+   "wallSeconds": 5.7,
+   "peakMemMiB": 489.8,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/5304c556-903b-4d11-8aaa-a2c7264a1878.cpg.bin=32708",
+    "CONTENT /out/5304c556-903b-4d11-8aaa-a2c7264a1878.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:26:37Z",
+   "wallSeconds": 6.9,
+   "peakMemMiB": 424.6,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/8259bdf4-9eb6-48c8-8019-7019f9ee16c5.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=cpp-override",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:26:46Z",
+   "wallSeconds": 27.5,
+   "peakMemMiB": 1380.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/on.cpg.bin",
+   "cpgMB": 21.6
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:27:15Z",
+   "wallSeconds": 5.5,
+   "peakMemMiB": 435.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=32708",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:27:21Z",
+   "wallSeconds": 6.9,
+   "peakMemMiB": 421.4,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/86e476b7-6c86-4fad-9cdd-eb8450f36ff9.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/off/8259bdf4-9eb6-48c8-8019-7019f9ee16c5.measure.jsonl",
+   "sha256": "bcf0b11c4c5f69ff1d77db067702544787e560fb6d5c013b1113acf6e8beb39f"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/cpp-override/on/86e476b7-6c86-4fad-9cdd-eb8450f36ff9.measure.jsonl",
+   "sha256": "fe6ccf94a461b73ff6a2fe48b2b09a832f475c8916bd76829c840351559c25e6"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

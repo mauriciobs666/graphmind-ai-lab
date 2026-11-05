@@ -1,0 +1,1259 @@
+{
+ "lang": "javascript",
+ "provisional": true,
+ "truth": "truth/javascript.final.jsonl",
+ "labelledSites": 523,
+ "scoredSites": 523,
+ "unscoredSites": 0,
+ "unscoredReasons": {},
+ "internalSites": 184,
+ "externalScoredSites": 339,
+ "dynamicWithT": 0,
+ "off": {
+  "internalSites": 184,
+  "scoredSites": 523,
+  "recall": {
+   "k": 126,
+   "n": 184,
+   "p": 0.6848,
+   "wilson95": [
+    0.6145,
+    0.7476
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 161,
+   "n": 184,
+   "p": 0.875,
+   "wilson95": [
+    0.8194,
+    0.9152
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 103,
+   "n": 184,
+   "p": 0.5598,
+   "wilson95": [
+    0.4876,
+    0.6296
+   ]
+  },
+  "edgeRecall": {
+   "k": 126,
+   "n": 187,
+   "p": 0.6738,
+   "wilson95": [
+    0.6037,
+    0.7369
+   ]
+  },
+  "precision": {
+   "k": 103,
+   "n": 103,
+   "p": 1.0,
+   "wilson95": [
+    0.964,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 45,
+   "n": 184,
+   "p": 0.2446,
+   "wilson95": [
+    0.1881,
+    0.3115
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 103,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.036
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 479,
+   "n": 523,
+   "p": 0.9159,
+   "wilson95": [
+    0.8889,
+    0.9367
+   ]
+  }
+ },
+ "on": {
+  "internalSites": 184,
+  "scoredSites": 523,
+  "recall": {
+   "k": 126,
+   "n": 184,
+   "p": 0.6848,
+   "wilson95": [
+    0.6145,
+    0.7476
+   ]
+  },
+  "recallLenientNameMatch": {
+   "k": 161,
+   "n": 184,
+   "p": 0.875,
+   "wilson95": [
+    0.8194,
+    0.9152
+   ]
+  },
+  "recallResolutionOnly": {
+   "k": 103,
+   "n": 184,
+   "p": 0.5598,
+   "wilson95": [
+    0.4876,
+    0.6296
+   ]
+  },
+  "edgeRecall": {
+   "k": 126,
+   "n": 187,
+   "p": 0.6738,
+   "wilson95": [
+    0.6037,
+    0.7369
+   ]
+  },
+  "precision": {
+   "k": 103,
+   "n": 103,
+   "p": 1.0,
+   "wilson95": [
+    0.964,
+    1.0
+   ]
+  },
+  "resolvedAway": {
+   "k": 45,
+   "n": 184,
+   "p": 0.2446,
+   "wilson95": [
+    0.1881,
+    0.3115
+   ]
+  },
+  "resolvedToNonSymbol": 0,
+  "resolvedToDeclarationOnly": {
+   "k": 0,
+   "n": 103,
+   "p": 0.0,
+   "wilson95": [
+    0.0,
+    0.036
+   ]
+  },
+  "resolvedToVendoredSites": 0,
+  "matchedLabelled": {
+   "k": 479,
+   "n": 523,
+   "p": 0.9159,
+   "wilson95": [
+    0.8889,
+    0.9367
+   ]
+  }
+ },
+ "recallDecision": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 107,
+   "observedRecall": 0.6485,
+   "wilson95": [
+    0.573,
+    0.7172
+   ],
+   "misses": 58,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 107,
+   "observedRecall": 0.6485,
+   "wilson95": [
+    0.573,
+    0.7172
+   ],
+   "misses": 58,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "recallDecisionLenientNameMatch": {
+  "off": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 142,
+   "observedRecall": 0.8606,
+   "wilson95": [
+    0.7995,
+    0.9053
+   ],
+   "misses": 23,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "on": {
+   "basis": "non-contact stratum",
+   "n": 165,
+   "k": 142,
+   "observedRecall": 0.8606,
+   "wilson95": [
+    0.7995,
+    0.9053
+   ],
+   "misses": 23,
+   "missBudgetAt98": 3,
+   "verdict": "fail"
+  },
+  "worse": "fail"
+ },
+ "gate81Pooled": {
+  "informational": true,
+  "note": "pooled sample, NOT the decision for Python/TS-JS (their decision is the non-contact stratum, plan S27 row)",
+  "off": {
+   "n": 184,
+   "k": 126,
+   "observedRecall": 0.6848,
+   "wilson95": [
+    0.6145,
+    0.7476
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 58
+  },
+  "on": {
+   "n": 184,
+   "k": 126,
+   "observedRecall": 0.6848,
+   "wilson95": [
+    0.6145,
+    0.7476
+   ],
+   "verdict": "fail",
+   "missBudgetAt98": 3,
+   "misses": 58
+  }
+ },
+ "recallDefinitions": {
+  "strict": "primary: found = T within Res or Nm AND the site matched to a Joern CALL (ML §7.1: an unmatched site is absent in Joern and counts as not found)",
+  "lenientNameMatch": "secondary: ML §2 literally, Nm credit without a matched CALL",
+  "resolutionOnly": "tertiary: every T member in Res (no name-match credit)"
+ },
+ "fanOutDefinitions": {
+  "measureScNm": "nm = non-external non-vendored METHODs whose name equals calleeName (a constructor site counts only METHODs named like the type, so `<init>` of Java/C# is not counted)",
+  "recallNmCredit": "a constructor T member is credited by type name plus any METHOD at the location; so ctor sites can be found with nm = 0",
+  "nonCtorFanOut": {
+   "off": {
+    "matchedUnresolvedNonCtorSites": 365,
+    "p90": 0,
+    "p99": 1,
+    "max": 2,
+    "matchedUnresolvedCtorSites": 11
+   },
+   "on": {
+    "matchedUnresolvedNonCtorSites": 365,
+    "p90": 0,
+    "p99": 1,
+    "max": 2,
+    "matchedUnresolvedCtorSites": 11
+   }
+  }
+ },
+ "sharedCallClaims": {
+  "off": {
+   "callsClaimedByMoreThanOneSite": 0,
+   "sitesInThoseGroups": 0,
+   "labelledSitesInThoseGroups": 0
+  },
+  "on": {
+   "callsClaimedByMoreThanOneSite": 0,
+   "sitesInThoseGroups": 0,
+   "labelledSitesInThoseGroups": 0
+  }
+ },
+ "onEqualsOffByConstruction": true,
+ "gate83": {
+  "off": {
+   "nP": 103,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  },
+  "on": {
+   "nP": 103,
+   "P": 1.0,
+   "verdict": "pass (P >= 0.95)"
+  }
+ },
+ "pairedOffOn": {
+  "bothFound": 126,
+  "foundOnMissedOff": 0,
+  "foundOffMissedOn": 0,
+  "neither": 58,
+  "mcnemarExactP": 1.0,
+  "newcombe": {
+   "diff": 0.0,
+   "ci95": [
+    -0.0075,
+    0.0075
+   ],
+   "phi": 1.0
+  }
+ },
+ "fanOut": {
+  "off": {
+   "matchedUnresolvedSites": 376,
+   "median": 0,
+   "p90": 0,
+   "p99": 1,
+   "max": 2,
+   "shareOver20": {
+    "k": 0,
+    "n": 376,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0101
+    ]
+   }
+  },
+  "on": {
+   "matchedUnresolvedSites": 376,
+   "median": 0,
+   "p90": 0,
+   "p99": 1,
+   "max": 2,
+   "shareOver20": {
+    "k": 0,
+    "n": 376,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0101
+    ]
+   }
+  }
+ },
+ "census": {
+  "off": {
+   "frameSites": 523,
+   "matchRate": {
+    "k": 479,
+    "n": 523,
+    "p": 0.9159,
+    "wilson95": [
+     0.8889,
+     0.9367
+    ]
+   },
+   "frameFiles": 40,
+   "frameFilesWithFileNode": {
+    "k": 40,
+    "n": 40,
+    "p": 1.0,
+    "wilson95": [
+     0.9124,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 40,
+    "n": 40,
+    "p": 1.0,
+    "wilson95": [
+     0.9124,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/80104f53-5ffb-44d2-adda-4622a9726030.cpg.bin",
+    "lang": "javascript",
+    "files": 46,
+    "methods": 247,
+    "calls": 822,
+    "callsWithoutMethod": 0,
+    "frameSites": 523
+   }
+  },
+  "on": {
+   "frameSites": 523,
+   "matchRate": {
+    "k": 479,
+    "n": 523,
+    "p": 0.9159,
+    "wilson95": [
+     0.8889,
+     0.9367
+    ]
+   },
+   "frameFiles": 40,
+   "frameFilesWithFileNode": {
+    "k": 40,
+    "n": 40,
+    "p": 1.0,
+    "wilson95": [
+     0.9124,
+     1.0
+    ]
+   },
+   "frameFilesWithFileNodeAndMethod": {
+    "k": 40,
+    "n": 40,
+    "p": 1.0,
+    "wilson95": [
+     0.9124,
+     1.0
+    ]
+   },
+   "meta": {
+    "k": "meta",
+    "cpg": "/out/on.cpg.bin",
+    "lang": "javascript",
+    "files": 46,
+    "methods": 247,
+    "calls": 822,
+    "callsWithoutMethod": 0,
+    "frameSites": 523
+   }
+  }
+ },
+ "strata": {
+  "contactFiles": [
+   "src/api/client.ts",
+   "src/api/endpoints.ts"
+  ],
+  "contact": {
+   "off": {
+    "internalSites": 19,
+    "recall": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "stratumVerdictStrict": null
+   },
+   "on": {
+    "internalSites": 19,
+    "recall": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "precision": {
+     "k": 19,
+     "n": 19,
+     "p": 1.0,
+     "wilson95": [
+      0.8318,
+      1.0
+     ]
+    },
+    "stratumVerdictStrict": null
+   },
+   "scoredSites": 37
+  },
+  "nonContact": {
+   "off": {
+    "internalSites": 165,
+    "recall": {
+     "k": 107,
+     "n": 165,
+     "p": 0.6485,
+     "wilson95": [
+      0.573,
+      0.7172
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 142,
+     "n": 165,
+     "p": 0.8606,
+     "wilson95": [
+      0.7995,
+      0.9053
+     ]
+    },
+    "precision": {
+     "k": 84,
+     "n": 84,
+     "p": 1.0,
+     "wilson95": [
+      0.9563,
+      1.0
+     ]
+    },
+    "stratumVerdictStrict": "fail"
+   },
+   "on": {
+    "internalSites": 165,
+    "recall": {
+     "k": 107,
+     "n": 165,
+     "p": 0.6485,
+     "wilson95": [
+      0.573,
+      0.7172
+     ]
+    },
+    "recallLenientNameMatch": {
+     "k": 142,
+     "n": 165,
+     "p": 0.8606,
+     "wilson95": [
+      0.7995,
+      0.9053
+     ]
+    },
+    "precision": {
+     "k": 84,
+     "n": 84,
+     "p": 1.0,
+     "wilson95": [
+      0.9563,
+      1.0
+     ]
+    },
+    "stratumVerdictStrict": "fail"
+   },
+   "scoredSites": 486
+  },
+  "note": "provisional (final.jsonl); S27 reports final2. The contact-file test is the site's path (final.jsonl `site`, path:line) in contact.json files."
+ },
+ "tMemberMapping": {
+  "off": {
+   "tMembers": 187,
+   "withJoernMethodAtDefLine": 187
+  },
+  "on": {
+   "tMembers": 187,
+   "withJoernMethodAtDefLine": 187
+  }
+ },
+ "misses": {
+  "off": 58,
+  "on": 58,
+  "lenientOff": 23,
+  "lenientOn": 23,
+  "absentUnmatchedOnlyOff": 35,
+  "either": 58,
+  "offOnly": 0,
+  "onOnly": 0,
+  "both": 58
+ },
+ "unmatchedLabelled": {
+  "off": [
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true
+   }
+  ],
+  "on": [
+   {
+    "ordinal": 10,
+    "siteKey": "src/routes.tsx:102:11:ChatView",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 19,
+    "siteKey": "src/views/OrderPanel.tsx:221:12:WarehouseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 24,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:21:10:ResetControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 28,
+    "siteKey": "src/layout/SheetContext.tsx:32:11:SheetContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 54,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:15:8:OrderPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 57,
+    "siteKey": "src/session/SessionContext.tsx:107:11:SessionContext.Provider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 59,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:11:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 76,
+    "siteKey": "src/views/ChatView.tsx:95:8:DeadTurnNotice",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 90,
+    "siteKey": "src/views/ChatView.tsx:94:8:TurnIndicator",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 93,
+    "siteKey": "src/App.tsx:29:12:RouterProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 97,
+    "siteKey": "src/routes.tsx:121:32:Navigate",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 101,
+    "siteKey": "src/layout/Shell.tsx:37:10:Header",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 108,
+    "siteKey": "src/main.tsx:7:4:StrictMode",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 135,
+    "siteKey": "src/routes.tsx:100:13:JoinScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 152,
+    "siteKey": "src/routes.tsx:120:48:PresenterRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 154,
+    "siteKey": "src/components/sheets/CartSheet.tsx:11:8:CartPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 176,
+    "siteKey": "src/components/message/Transcript.tsx:66:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 196,
+    "siteKey": "src/routes.tsx:107:45:PresenterKeyScreen",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 218,
+    "siteKey": "src/components/message/Transcript.tsx:74:10:MessageBubble",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 252,
+    "siteKey": "src/App.tsx:28:10:SessionProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 263,
+    "siteKey": "src/views/ChatView.tsx:93:8:Transcript",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 307,
+    "siteKey": "src/layout/Shell.tsx:44:10:ProfileSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 313,
+    "siteKey": "src/components/sheets/OrderSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 315,
+    "siteKey": "src/layout/Shell.tsx:35:6:SheetStateProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 337,
+    "siteKey": "src/layout/Shell.tsx:42:10:CartSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 349,
+    "siteKey": "src/layout/Shell.tsx:39:12:Outlet",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 357,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 373,
+    "siteKey": "src/views/PresenterRoster.tsx:100:8:PresenterResetAllControl",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 378,
+    "siteKey": "src/routes.tsx:107:23:PresenterRoster",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 389,
+    "siteKey": "src/layout/Shell.tsx:41:10:CatalogSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 419,
+    "siteKey": "src/views/ChatView.tsx:96:8:Composer",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 420,
+    "siteKey": "src/routes.tsx:82:10:LanguageChooser",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 421,
+    "siteKey": "src/components/sheets/ProfileSheet.tsx:17:10:ProfilePanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 431,
+    "siteKey": "src/i18n/Provider.tsx:10:11:I18nextProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 443,
+    "siteKey": "src/App.tsx:26:6:I18nProvider",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 445,
+    "siteKey": "src/components/sheets/BottomSheet.tsx:76:14:CloseIcon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 446,
+    "siteKey": "src/layout/Shell.tsx:43:10:OrderSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 462,
+    "siteKey": "src/App.tsx:27:8:QueryClientProvider",
+    "kind": "jsx",
+    "internal": false
+   },
+   {
+    "ordinal": 484,
+    "siteKey": "src/components/sheets/CartSheet.tsx:10:6:BottomSheet",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 489,
+    "siteKey": "src/routes.tsx:119:50:ParticipantRoute",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 499,
+    "siteKey": "src/components/sheets/CatalogSheet.tsx:15:8:CatalogPanel",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 501,
+    "siteKey": "src/main.tsx:8:6:App",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 511,
+    "siteKey": "src/layout/Header.tsx:42:16:Icon",
+    "kind": "jsx",
+    "internal": true
+   },
+   {
+    "ordinal": 523,
+    "siteKey": "src/routes.tsx:117:17:LayoutShell",
+    "kind": "jsx",
+    "internal": true
+   }
+  ]
+ },
+ "runs": {
+  "off.parse": {
+   "stage": "off.parse",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:16Z",
+   "wallSeconds": 6.9,
+   "peakMemMiB": 943.8,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/80104f53-5ffb-44d2-adda-4622a9726030.cpg.bin",
+   "cpgMB": 0.82
+  },
+  "off.content-check": {
+   "stage": "off.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:24Z",
+   "wallSeconds": 5.8,
+   "peakMemMiB": 426.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/80104f53-5ffb-44d2-adda-4622a9726030.cpg.bin=247",
+    "CONTENT /out/80104f53-5ffb-44d2-adda-4622a9726030.cpg.bin=ok"
+   ]
+  },
+  "off.measure": {
+   "stage": "off.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:32Z",
+   "wallSeconds": 6.5,
+   "peakMemMiB": 476.2,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/0be13b4f-cf30-410e-a809-3ee4fccb1b37.measure.jsonl"
+  },
+  "on.parse": {
+   "stage": "on.parse",
+   "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    "s27=javascript-override",
+    "--name",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:39Z",
+   "wallSeconds": 7.3,
+   "peakMemMiB": 705.0,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/parse.log",
+   "cpgFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/on.cpg.bin",
+   "cpgMB": 0.82
+  },
+  "on.content-check": {
+   "stage": "on.content-check",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:48Z",
+   "wallSeconds": 5.8,
+   "peakMemMiB": 429.6,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/content.log",
+   "contentLines": [
+    "METHOD_COUNT /out/on.cpg.bin=247",
+    "CONTENT /out/on.cpg.bin=ok"
+   ]
+  },
+  "on.measure": {
+   "stage": "on.measure",
+   "argv": [
+    "/home/mauricio/prg/graphmind-ai-lab/cpg/sandbox/offline-run.sh",
+    "--backend",
+    "container",
+    "--mode",
+    "offline",
+    "--frontend",
+    "..."
+   ],
+   "rc": 0,
+   "startedUtc": "2026-11-05T02:25:56Z",
+   "wallSeconds": 6.6,
+   "peakMemMiB": 478.9,
+   "log": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/measure.log",
+   "measureFile": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/9a4da4ef-f7c6-4e4b-8f5b-cf2b6f7901b4.measure.jsonl"
+  }
+ },
+ "toolchainImage": "ccg-toolchain:a82faf5219b3",
+ "measureFiles": {
+  "off": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/off/0be13b4f-cf30-410e-a809-3ee4fccb1b37.measure.jsonl",
+   "sha256": "3690a92763f96a48044abca9ea8799e09f4a51354507a9d967ad9c3293658f09"
+  },
+  "on": {
+   "path": "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/frontend-fitness/joern/javascript-override/on/9a4da4ef-f7c6-4e4b-8f5b-cf2b6f7901b4.measure.jsonl",
+   "sha256": "a2af76c77c37e88afec1a4cb983688a9d72fa3b9b3fc5ad58b5b735c4a09c77c"
+  }
+ },
+ "definitions": "S27 (P0-20) provisional metrics for ONE language, from the two `measure.sc` outputs (off / on) and\n`truth/<lang>.final.jsonl`. ML §7.1, §7.2, §7.4, §8.1, §8.3 (provisional: `final`, not `final2`).\n\n    cd cpg && .venv/bin/python spikes/frontend-fitness/s27_metrics.py <lang>\n\nReads  : <work>/joern/<lang>/{off,on}/*.measure.jsonl, <work>/joern/<lang>/s27-run.json (timings),\n         sample/<lang>.private.jsonl (siteKey, calleeName, kind: the harness's own file), truth/<lang>.final.jsonl,\n         contact.json (python, javascript), frame/<lang>.jsonl (file list).\nWrites : results/<lang>.json, results/<lang>.answers.jsonl, adjudication/<lang>-misses.jsonl\nNever writes final2 or any other adjudication file. `proposedCause` is always \"\" (the data-scientist decides).\n\nDefinitions fixed here where ML leaves a choice (every one is echoed under `definitions` in the result):\n  * labelled scored site: a `final.jsonl` line with scored == true. Internal: T non-empty. External: T empty.\n  * T-member <-> Joern METHOD (`locate`): same file and `lineNumber` == defLine + METHOD_LINE_OFFSET[lang]; else the innermost\n    METHOD of that file whose line span holds the line, within 8 lines of its start, named like the symbol (the frontends start a\n    METHOD at its annotations/modifiers, the truth at the name).\n  * Res_c(s): the matched CALL's resolved targets that are non-external, non-vendored and not a synthetic\n    (non-symbol) METHOD (NONSYMBOL_NAME). Targets of the other kinds are classed (resolved away / non-symbol).\n  * Nm coverage of a T member t: calleeName is one of t's spec short names (last qname segment; for a constructor\n    `<init>`/`__init__`/`constructor` also the enclosing type name) AND Joern has a non-external non-vendored METHOD at\n    t's location. measure.sc's own `nm` (METHODs named calleeName) is the fan-out figure.\n  * found = every T member covered by Res_c or Nm. correct = Res_c non-empty and Res_c subset of T.\n"
+}

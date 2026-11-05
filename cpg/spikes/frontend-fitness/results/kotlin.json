@@ -1,8 +1,8 @@
 {
  "lang": "kotlin",
  "provisional": true,
- "status": "stopped-no-cpg",
- "stopReason": "Joern v4.0.579's default-overlay stage fails on this corpus: ReachingDefPass (dataflowengineoss) raises java.util.NoSuchElementException: key not found: ...nodes.MethodRef[label=METHOD_REF; ...]. joern-parse (offline runner and toolchain image alike) exits 1 after kotlin2cpg has written a frontend-only cpg.bin (1.23 MB, identical to the --nooverlays output). Every consumer step that calls importCpg (cpg-content-check.sc, measure.sc) applies the missing default overlays and aborts with the same pass failure (exit 1), so the D15 content check cannot certify a CPG. No metric computed; reported under the stop rule, not worked around.",
+ "status": "unmeasured",
+ "stopReason": "Joern v4.0.579's default-overlay stage fails on this corpus: ReachingDefPass (dataflowengineoss) raises java.util.NoSuchElementException: key not found: ...nodes.MethodRef[label=METHOD_REF; ...]. joern-parse exits 1 after kotlin2cpg has written a frontend-only cpg.bin (1.23 MB, 2,824 non-external methods, 15,950 calls; identical to the --nooverlays output). importCpg (cpg-content-check.sc, measure.sc) applies the missing default overlays and aborts with the same pass failure, so the D15 content check cannot certify the CPG. No metric computed. Surviving trace of the failure: off/content.log and on/content.log under .ccg-work/frontend-fitness/joern/kotlin/ (the default-overlay parse log was overwritten by the --nooverlays attempt).",
  "labelledSites": 430,
  "scoredSites": 430,
  "internalSites": 152,
@@ -93,5 +93,11 @@
   "off.defaultOverlays": "see s27 run record; log overwritten by the --nooverlays attempt",
   "off.contentCheck": ".ccg-work/frontend-fitness/joern/kotlin/off/content.log",
   "on.contentCheck": ".ccg-work/frontend-fitness/joern/kotlin/on/content.log"
+ },
+ "statusText": "unmeasured: default-overlay stage (ReachingDefPass) aborts; frontend CPG builds (2,824 methods, 15,950 calls)",
+ "sectionEightRow": "unmeasured (not fail): ML \u00a78 has no outcome for a tool fault; backlog item \"frontend configuration\"",
+ "nameMatchOnlyFloor": {
+  "computed": false,
+  "why": "reading METHOD nodes of the frontend-only CPG needs importCpg(file, name, false) (no enhance), a change to the shared load call; not done without a ruling. The probe that did it (METHODS=2824) is evidence it is possible; such a floor would have Res empty, precision unmeasured, and would not be comparable to the other rows."
  }
 }
