@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.3 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-04 (v1.3): answer-spec obligations (`docs/plans/connected-code-graph-answer-spec.md` §3, C5, C7): §5.2 harness assertions and tie readings, §10.4 status predicate and did-you-mean cap, §10.6 AC-16 pin-and-replay.*
+*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record in §12.3); §16 removed.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -591,36 +591,64 @@ key-writer protocol.** Writers produce what plan §6 and §4.1 already ask for.
 ### 5.2.1 What the gate harness asserts before it scores
 
 The answer's spans, `qname`s, chains, `request` and `stamp` are the engine's attestation
-(`docs/plans/connected-code-graph-answer-spec.md` §10 item 7, §5.3, C5). H1-H4 read named fields, so
-they are unambiguous, but they are only as honest as the fields. The harness (P1; imports `E` and
-`h1_symbol_credit` from `match_keys.py`, §13.4) therefore checks each field against the gate
-snapshot first. Named HA-n here so as not to collide with H1-H4.
+(`docs/plans/connected-code-graph-answer-spec.md` §10 item 7, C5). The P1 gate harness (it imports
+`E` and `h1_symbol_credit` from `match_keys.py`, §13.4) checks each against the gate snapshot before
+H1-H4 are applied. The checks are named HA-n so as not to collide with H1-H4. Every row has a
+**planted input** that must turn it red, with its expected value written from outside the engine;
+a check with no such input is not a check.
 
-| # | Assertion | On failure |
+| # | Assertion | On failure | Planted input (must be red) |
+|---|---|---|---|
+| HA-1 | **Chain replay** (table below) for every candidate of H1-H4 | *x* fails H3: not a hit | (a) a middle hop id replaced by a 32-hex id absent from the snapshot; (b) on an item of at least 3 hops, a middle hop replaced by a real node that a separate query confirms has no edge to either neighbour; (c) one hop's `dir` reversed; (d) one hop's `edgeType` replaced by another allow-listed type that a separate query confirms does not join the pair; (e) an `edgeType` string outside the allow-list. (a)-(d) score a miss; (e) is a harness error and is never interpolated into a query |
+| HA-2 | **Subject read from the snapshot.** `qname`, `lineStart`, `lineEnd`, `ownedRegions` (symbol) or `path`, `keyPath` (config) are read by `symbolId` / `entryId`; H1 runs on those values; the answer's copies are compared | Item scored on the snapshot's values; a mismatch is listed as an engine defect, and the gate does not pass while any is listed (C5: harness error) | `lineStart`/`lineEnd` moved off the recorded line; separately, `qname` altered with the span intact. Each must list a mismatch while H1 still decides on the snapshot's span |
+| HA-3 | **Request echo.** `status == "resolved"`, and `request` equals the submitted one: `useCase`, `direction`, anchor id set (§2.2) equal to the asked anchor's, `scope` absent | Not resolved: a miss, reported with `lookups`. Resolved but unequal: a miss, and an engine defect is listed | a second anchor added; `scope` present; `direction` flipped; `status: "ambiguous"`. Each is a miss |
+| HA-4 | **Stamp** (answer spec §4.2, V11): `snapshotId` equals the id read from the `:Snapshot` node after the gate build and before the first question; `verdictLogOffset == 0`; `verdictLogHash == c482b1cf54631b37eb4572dc86a68fb1` (the literal, not `answer.EMPTY_VERDICT_LOG_HASH`; it is `ids.tuple_id(["verdictLog"])`, recomputed) | The answer is void; the run is reported | `snapshotId` with one hex digit changed; `verdictLogOffset: 1`; offset 0 with the hash's last digit changed. Each is void |
+| HA-5 | **Masking.** `answer.mask_identifier` is applied to both sides of the H1 config comparison; every comparison where masking changed a segment is listed | A non-empty list blocks the gate verdict until the method owner has reviewed each entry | a gold `keyPath` and an answer `keyPath` that differ in one failing segment under the same parent and mask to the same string: the entry must be listed |
+
+- **HA-1 replay.** Each hop's `(kind, id)` must exist (label and id property: `Symbol.symbolId`,
+  `CallSite.callSiteId`, `Param`/`Ret`/`Cond.pointId`, `ContractPoint.cpId`, `Link.linkId`,
+  `ConfigEntry.entryId`). For each hop *i* ≥ 1, the stored edge in the table joins hop *i*-1 to hop
+  *i*: with `dir` `->` hop *i*-1 is the stored source, with `<-` it is the stored target (answer
+  spec §5.2). The query is `MATCH (a:Ka {ida: $a})-[:TYPE]->(b:Kb {idb: $b}) RETURN count(*)`
+  (the `CALLS_NAME` row has the two-edge form). Labels come from the table by hop `kind`; **the
+  `edgeType` string is checked for exact membership of the 21-string allow-list below before it enters
+  the query text, because a relationship type cannot be a query parameter**, as is `dir` against
+  `{->, <-}`. A kind pair outside the row's pairs fails H3.
+- **Row classes.** R: replayed now (loaded by the P0 store, `cpg/spikes/vertical-slice/load.py`
+  `EDGE_ORDER`). D: deferred; its label or edge is not in the P0 DDL (`cpg/ccg/store/ddl_v1.cypher`
+  header), replayed once the phase that loads it has, and an answer hop carrying it before then is a
+  harness error. X: a hop cannot arrive by it (one end is not a hop kind, answer spec §5.2); an
+  answer hop carrying it is a harness error, reported to the answer-spec owner. A harness error blocks
+  the gate verdict.
+
+| `edgeType` | Stored pattern (source → target) | Class |
 |---|---|---|
-| HA-1 | **Chain replay.** For every candidate *x* of H1-H4, each hop's `(kind, id)` exists in the gate snapshot, and for each hop *i* ≥ 1 a stored edge of type `edgeType` joins hop *i*-1 to hop *i* in direction `dir` (answer spec §5.2). One query per hop. Existence of the edge is all it tests: not `state`, not `status`, and not that the chain equals the writer's (M4) | *x* does not satisfy H3: it is not a hit |
-| HA-2 | **Subject read from the snapshot.** The harness reads `qname`, `lineStart`, `lineEnd` and `ownedRegions` (symbol), or `path` and `keyPath` (config), **by `symbolId` / `entryId`** from the gate snapshot, and runs H1 on those values. The answer's own copies are compared with them | A mismatch is a harness error (C5): the item is scored on the snapshot's values, the mismatch is listed as an engine defect, and the gate does not pass while any is listed |
-| HA-3 | **Request echo.** `interpretation.status == "resolved"`, and `request` equals the submitted request: `useCase` and `direction` equal, the anchor **id set** equal to the id of the asked anchor (§2.2), `scope` absent | Not resolved: a miss, reported with `lookups`. Resolved but not equal: a miss, and an engine defect is listed (it rewrote the ask) |
-| HA-4 | **Stamp.** `stamp.snapshotId` equals the id read from the `:Snapshot` node right after the gate build and before the first question; `verdictLogOffset == 0` and `verdictLogHash` is the empty-log constant (answer spec §4.2) | The answer is void, and the run is reported |
-| HA-5 | **Masking.** `answer.mask_identifier` is applied to **both** sides of the H1 config comparison; every comparison where masking changed a segment is listed for manual review (two different failing segments under one parent collide) | Listed, not scored differently |
+| `CALLS` | `(CallSite)-[:CALLS]->(Symbol)` | R |
+| `CALLS_NAME` | `(CallSite)-[:CALLS_NAME]->(Name)-[:RESOLVES_TO]->(Symbol)`: two edges through one `Name`, which is never a hop (graph note §6.1 item 6) | R |
+| `HAS_CALL`, `HAS_PARAM`, `HAS_RETURN`, `HAS_COND` | `(Symbol)` → `(CallSite)`, `(Param)`, `(Ret)`, `(Cond)` respectively | R |
+| `DATA` | `(CallSite\|Ret\|Cond)-[:DATA]->(Param\|CallSite)` | R |
+| `CONTROLLED_BY` | `(CallSite\|Ret\|Cond\|Param)-[:CONTROLLED_BY]->(Cond)` | R |
+| `VIA`, `TO`, `ON` | `(CallSite)->(Link)`, `(Link)->(Symbol)`, `(Link)->(ContractPoint)` | R |
+| `CONSUMES`, `PROVIDES` | `(CallSite)->(ContractPoint)`, `(Symbol)->(ContractPoint)` (other sources, `ConfigEntry` and `CallSite` for `PROVIDES`, are not loaded: D) | R |
+| `READS`, `WRITES` | `(CallSite)->(ContractPoint)`; `WRITES` also from `ConfigEntry` | D |
+| `BOUND_BY` | `(Link)-[:BOUND_BY]->(ConfigEntry)` | D |
+| `RAN` | `(Symbol:Test)-[:RAN]->(Symbol)` | D |
+| `DEFINED_BY` | `(ContractPoint)->(SchemaEntry)` | X |
+| `LAUNCHES` | `(ConfigEntry)->(File\|Unit)` | X |
+| `DEPENDS_ON`, `FROM_DEP` | `(Unit)->(Dependency)`, `(Symbol)->(Dependency)` | X |
 
-- **Positive controls (a control that cannot fail proves nothing).** The harness is run once over a
-  copy of a real answer in which one item has (a) its middle hop's id replaced by a 32-hex id that
-  is not in the snapshot, and (b) a different item whose middle hop is replaced by a real node that
-  no edge joins to its neighbours. Both must score a miss under HA-1. A third copy has its
-  subject's `lineStart`/`lineEnd` moved off the recorded line: HA-2 must list a mismatch and H1 must
-  still be decided on the snapshot's span. The same run over the unmodified answer must score
-  the real item a hit, so a harness that rejects everything is also caught.
-- **What HA-1 does not do.** A real chain between real nodes passes, however long, so the check
-  bounds fabrication, not recall inflation by genuine `possible` items. That is the noise gate's
-  job (§11).
-- **An `edgeType` the replay cannot express as a stored-edge query** (a derived edge) is a harness
-  error, not a miss; the query set is reviewed with `graph-dba` before the first gate.
-- **A ranked output** (P5's RCA ranker, answer spec C9) is scored as hit@k under three readings,
-  all reported: the answer's own order (id tie-break), the **pessimistic** one (the true cause
-  placed last among the items sharing its integer score) and the **optimistic** one (first). The
-  pre-registration names which reading carries the pass/fail; the default is the pessimistic. A gap
-  between pessimistic and optimistic is reported as the share of the metric that is tie-break.
+The rows name all 21 types of answer spec §5.2. Patterns: graph note §3 and `docs/plans/connected-code-graph-p0-graph.md`
+D4. HA-1 gains one more planted input: (f) an item reached by a name-matched call, built in the
+harness test's own mini-snapshot with a `CALLS_NAME`/`RESOLVES_TO` pair, must score a hit.
+
+- **What HA-1 does not do.** A real chain between real nodes passes however long, so it bounds
+  fabrication, not recall inflation by genuine `possible` items (that is the noise gate, §11).
+  `lifted[]` and `bound[]` entries are not replayed, so a fabricated `Lifted` passes.
+- **A ranked output** (P5's RCA ranker, answer spec C9) is scored as hit@k under three readings, all
+  reported: the answer's own order (id tie-break), the **pessimistic** one (the true cause placed
+  last among the items sharing its integer score) and the **optimistic** one (first). The
+  pre-registration (§12.3) names the reading that carries the verdict; the default is pessimistic.
+  The gap between them is reported as the share of the metric that is tie-break.
 
 ### 5.3 How the gate reports
 
@@ -1216,36 +1244,36 @@ diagnostics only.
     and the writer's need not agree, and the behaviour AC-24 cares about is asking. It is reported
     next to the item.
   - **The did-you-mean cap (answer spec C7).** An ambiguous answer is understood only if
-    `|options| ≤ CAP`; above it, the list is not a choice. Extras per item, `|options|` minus the
-    gold entries matched, are reported for every ambiguous item. **Prior, to be confirmed at S47**:
-    `CAP = max(5, m)`, where `m` is the largest `|goldOptions|` in the final held-out ambiguity set
-    (a count, read by GC, no content). Recorded in the gate's pre-registration (§12.3) before the
-    run, with the extras it would have flagged on dev.
-    - *Why a number at all.* Without one, listing every candidate passes `several-symbols`.
-    - *Why 5.* No QW file exists yet (`cpg/eval/` holds only `headless/`), so the sizes of
-      `goldOptions` are not measured. `two-use-cases` is exactly 2 at P1 (`useCase` is fixed, so
-      the two readings are the two `direction`s, §4.2). `several-symbols` needs a name with two or
-      more eligible symbols; I expect 2-3 (an expectation, not a measurement). The held-out
-      ambiguity set is at most 10 items (5 per language, §10.2) and §10.5 requires **all** to be
-      understood, so a cap below a correct complete list fails the gate on a correct answer, while
-      one padded item slips through at a loose cap. That asymmetry favours slack, and 5 leaves a
-      2-reading item room for 3 extras. `m` keeps the cap from contradicting gold.
-    - *Rejected:* "gold plus k", which forces 0 for `unknown-name` and forbids the did-you-mean
-      list ML §3.1 (a) allows; and no cap (answer-spec review H-6).
-    - *Confirmation.* If S44's labels show `m > 5`, or dev answers show a correct complete list
-      above 5, the number is revisited before the pre-registration, never after the first gate run.
+    `|options| ≤ CAP_i = max(5, |goldOptions_i|)`, per item, so one large gold set does not loosen the
+    cap for the others. Extras per item (`|options|` minus the gold entries matched) are reported for
+    every ambiguous item. **5 is a prior, to be confirmed:** no QW file exists yet (`cpg/eval/` holds
+    only `headless/`), so `|goldOptions|` is unmeasured. The constraint it serves: a cap below a
+    correct complete list fails the gate on a correct answer (all ≤ 10 held-out ambiguous items must
+    pass, §10.2, §10.5), while a loose one lets a padded list through. At the floor of 5 a 2-reading
+    item admits 3 extras and a 6-option list fails. It is recorded, with the dev extras, in the
+    AC-24 pre-registration (§12.3) and revised only before it, never after the first gate run.
 - **Over-asking is gated with the ambiguity set, not beside it.** "Resolves nothing" is trivially
   true of an always-asking system, which would understand every `unknown-name` and `no-anchor` item.
   The ambiguity verdict is therefore read jointly with the unambiguous bound of §10.5 (≥ 23 of 24:
   at most one over-ask), and the over-asking rate on unambiguous items is reported with it as `k/24`
   and a Wilson 95% interval. An always-asking system scores 0/24 there; an always-resolving one
   fails the ambiguity set.
+- **Repeats are uncached by a bypass, not by an empty cache.** The interpretation cache is the
+  engine's and is keyed without a repeat index (answer spec §3), so after repeat 1 an empty cache
+  serves repeats 2-5. **Requirement on the engine (an obligation for the answer-spec owner):** a
+  documented input or flag that disables the interpretation cache for a run, neither reading nor
+  writing it. Its name is recorded as `cacheBypass` in the AC-24 pre-registration (§12.3). Every repeat
+  must carry `provenance.cacheHit == false`; a `true` voids that item's repeats. Because `cacheHit` is
+  the engine's self-report, the harness also checks the endpoint: the completion requests the
+  interpreter endpoint received during the 5 repeats, counted from the endpoint's own log or a
+  counting proxy, must equal 5. **Planted inputs:** with the cache on, the same question twice must
+  give `cacheHit == true` on the second (so the field can read `true`, and the voiding rule is
+  exercised); with the bypass, five repeats must give `false` five times and 5 endpoint requests; a
+  stub engine that caches but reports `false` must be caught by the endpoint count.
 - **Reported:** understood rate pooled and per language; the over-asking rate on unambiguous items;
-  ambiguity handling with the extras per item; and the flip rate over 5 uncached repeats per item
-  (ML §4.4). **Every repeat must carry `provenance.cacheHit == false`; a `true` voids that item's
-  repeats**, and the interpretation cache is empty for the gate snapshot (answer spec C5), because a
-  cached repeat returns one sample and reads as a flip rate of 0. Results are per configured
-  interpreter model, and the gate binds the codebase's default model (SQ7, decided).
+  ambiguity handling with the extras per item; and the flip rate over 5 repeats per item
+  (ML §4.4). Results are per configured interpreter model, and the gate binds the codebase's default
+  model (SQ7, decided), recorded as `interpreter` in §12.3.
 
 ### 10.5 The P1 smoke gate (provisional; ML §8.3)
 
@@ -1268,23 +1296,27 @@ it in AC-16 as well would count it twice.
 
 - **Procedure, per question.** The plain-language client answers the question; if its answer is
   `resolved`, take the `request` it echoes (rcaMarks included) as the pin. Submit the pin as a
-  structured request through (1) the MCP `ask` tool, (2) the CI script, (3) the raw recipe
-  (`recipe.queries` run with the pin's anchors, answer spec §4.1, C3). **Pass:** `facts_bytes`
-  (answer spec §6) of the client's own answer and of the three replays are byte-equal. A client
+  structured request through (1) the MCP `ask` tool, (2) the CI script, (3) the raw recipe. **Pass:**
+  for (1) and (2), `facts_bytes` (answer spec §6) is byte-equal to the client's own answer's. A client
   answer that is `ambiguous` or `unresolved` has no facts and is not an AC-16 item.
+- **The raw-recipe leg is unconditional.** Answer spec §3/§4.1 decide that it yields rows, never an
+  answer document, so it is compared as an item set: `(subject id, status, [(kind, id) of each chain
+  hop])` per item and group member. **Owner:** GC writes the rows-to-item-set driver in the harness
+  from the `bfs-v1` description (answer spec §1), not by importing an engine function, else the leg
+  compares the engine with itself. **Pass:** the derived set equals the answer's `items` plus
+  `groups[].members` as a set; any inequality fails AC-16. If the rows cannot support the derivation
+  (answer spec C3: today's reads omit fields), the leg fails and the engine is the finding; it is never
+  skipped. A tie rule the description leaves open is reported as a spec finding.
 - **Sample.** The AC-24 held-out unambiguous questions the client resolved (up to 24). The property
   is deterministic, so no recall-style threshold applies: any inequality fails AC-16. All-equal on
   n questions shows nothing about requests not tried; 24/24 has a Wilson 95% lower bound of 0.862
-  (§10.5) and is stated as that, not as "AC-16 holds".
-- **Same state.** One snapshot, empty verdict log (HA-4), and the cache is irrelevant because
+  (§10.5, recomputed) and is stated as that, not as "AC-16 holds".
+- **Same state.** One snapshot, empty verdict log (HA-4). The cache does not matter:
   `provenance` is outside `facts_bytes`.
-- **Positive control.** The same comparison with the pin's `scope` dropped in one replay must
-  fail, and a replay that adds a `provenance` change only must still pass. A comparison that cannot
-  fail on a changed request, or that fails on provenance, is mis-specified.
-- **Raw recipe.** Answer spec §4.1 and C3 say the P1 engine, not the slice, must make a raw re-run
-  reproduce the facts. If the raw path yields rows and not an answer document, the protocol
-  compares the item sets it can derive (subject ids with `status` and chain ids) and the report
-  says the comparison was weaker than byte equality for that path.
+- **Planted inputs.** (a) `direction` flipped in one replay of the pin (a field every pin has): that
+  replay's `facts_bytes` must differ. (b) A `provenance`-only change must still compare equal.
+  (c) For the raw leg, the one row that supplies a chosen item's chain edge is deleted before
+  deriving: the derived set must lose or change that item.
 
 ## 11. Noise bound by distance band (P1 onward)
 
@@ -1391,7 +1423,7 @@ With `n_h` labelled in stratum *h*, `f_h` of them false and `t_h` real:
        answer has been debugged, or developed against. The same holds for an item on a unit whose
        served set S(u) has an anchor in dev or in C (v1.2, P2-1);
      - an item whose cluster is a kept cluster joins it. It is scored, but it does **not** count
-       as fresh-anchor evidence;
+       as fresh-anchor evidence, because its anchor already passed, which mildly conditions it;
      - every other item is on a **fresh cluster**: one never exposed at any gate.
    - **Composition.** The list must reach `H ≥ 75` counting and every `H_s ≥ 8` (§3.7). For each
      stratum that had a miss, it must include at least as many fresh-cluster items of that stratum
@@ -1492,7 +1524,7 @@ S35 sets the counts. These are the floors:
 
   This note owns only the counts above.
 
-### 12.3 Pre-registration records (AC-7, and every proving-repo AC-5 gate)
+### 12.3 Pre-registration records (AC-7, every proving-repo AC-5 gate, and the AC-24 gate)
 
 The file is `cpg/eval/preregistration.jsonl`: committed, append-only, one canonical JSON line per
 record.
@@ -1536,6 +1568,34 @@ The example values are illustrative.
 - **Proving-repo AC-5 gates** use the same record, with `codebase` set to the proving repo at
   `EVAL_COMMIT` and `stratum` set to `ac5-gate-<n>`. That fixes the depth bound and the pack set
   before the run (§5.1).
+- **Condition on `coreTreeHash`'s `**/*.md` exclusion.** If P1 keeps interpreter prompts as `.md`
+  under `cpg/`, narrow the exclusion before the first pre-registration; otherwise a prompt change
+  leaves `coreTreeHash` unchanged.
+- **The AC-24 gate has its own record schema, `ccg-prereg-ac24-v1`, appended to the same file.**
+  Reason: `ccg-prereg-v1`'s four-field comparison (`packSetHash`, `coreTreeHash`, `algorithm`,
+  `defaultDepthBound`) belongs to a stratum's first contact, and an AC-24 gate has no stratum or
+  pack; optional AC-24 fields on it would make the fields compared depend on `stratum`. One
+  append-only file keeps one commit-order check. The ruling is reversible (a later merge is a schema
+  bump on append-only lines), and so is the choice of file.
+
+  ```json
+  {"schema": "ccg-prereg-ac24-v1", "evalCommit": "<40 hex>", "coreCommit": "<40 hex>",
+   "coreTreeHash": "<64 hex>",
+   "interpreter": {"endpoint": "local", "modelFingerprint": "<string>", "quantization": "<string>",
+                   "promptHash": "<64 hex>", "grammarHash": "<64 hex>", "samplingHash": "<32 hex>",
+                   "resolverVersion": "1.0"},
+   "capFloor": 5, "capRule": "max(capFloor, |goldOptions_i|)", "devExtras": [],
+   "cacheBypass": "<the engine's documented input, §10.4>", "tieReading": null, "recordedBy": "teco"}
+  ```
+
+  The example values are illustrative. `interpreter` holds the answer-spec §3 provenance fields that
+  define the interpreter (the `cacheKey` inputs); the model is the codebase's default (SQ7).
+  `devExtras` lists, for each dev ambiguous item (at most 2, §10.2), `|options|` and its extras
+  under the rule. `tieReading` is `null` unless the gate scores a ranked output (P5), where it names
+  the verdict-carrying reading (§5.2.1). The record's commit precedes the first held-out run in `git
+  log`; at the run the harness recomputes `coreTreeHash` and the `interpreter` fields from the
+  run's own working tree and answers' provenance and compares them with the record. Any difference
+  makes the run "after adaptation" (ML §4.5), as for `ccg-prereg-v1`.
 
 ## 13. Tooling procedures for GC (M5)
 
@@ -1726,13 +1786,13 @@ marked **v1.1** or **v1.2** are new since v1.0, and its §14 needs to absorb the
 | **S43/S43a/S44** (QW, AN) | §10.1's 48 questions; §13.2; Appendix B's QW and AN parts | none |
 | **S45** | §6, §7.1–§7.3, §13.4–§13.5 | **v1.1:** a `scope` verb; N3 pairs |
 | **S46** (stakeholder) | §7.3's 40 + 8 sample | none |
-| **S47** | §7.4, §8, §9, §10.2–§10.3 (and §10.4's `CAP`, pre-registered), §13.6 | **v1.1:** probe clusters; the counting count `H` beside `H_all`; the reserve file; an empty `exposure.jsonl`. **v1.2:** the probe is the served point with the fewest items (§5.1); step 3b's served-anchor rule and step 4's eligibility guard (§9.1); S47's report gives the `served-anchor` moves as a count (P2-1) |
+| **S47** | §7.4, §8, §9, §10.2–§10.3, §13.6 | **v1.1:** probe clusters; the counting count `H` beside `H_all`; the reserve file; an empty `exposure.jsonl`. **v1.2:** the probe is the served point with the fewest items (§5.1); step 3b's served-anchor rule and step 4's eligibility guard (§9.1); S47's report gives the `served-anchor` moves as a count (P2-1) |
 | **S48** | §13.1–§13.3. `export_kit.py --draw-flow-anchors` needs `ast` and py-tree-sitter from the **`spike` extra**, not S02's image (m5) | **v1.1:** `--list-units` and `--list-cypher-tools`. Correct S48's "or S02's image" wording. |
 | **S49** | §13.4–§13.6, with Appendix A as the oracle for `capture.py` | **v1.1:** the B1a, B1b, M2, M6, reserve and m4 oracle cases; `regate-list` and `exposure` verbs, needed from P1 (they may be built in P1). **v1.2:** the P2-1a–e, P2-2a–d and P2-3 oracle cases (§13.4, §13.6); `match_keys.py` exports `E`, `h1_symbol_credit` and `source_check_needed` (§13.4); `split` implements step 3b and the step 4 guard; `regate-list` re-applies step 3b and routes by S(u) (§12.1); `--check-report` uses §9.4's v1.2 pattern |
 | **S52** (agent definitions) | **Appendix B verbatim**, and bundle spec §4 and §6 | **v1.1:** quote Appendix B, **not** "§4.1/§4.2/§4.3 verbatim", which would carry JSON examples (M3) |
 | **S14 / S30** | §8.2's definition of "touched" | the lists must give **anchors** as locators, with the hops excluded. **v1.2 (S30):** take the server-binding walkthrough on `falkor-chat/server`, which the served-anchor rule sends to dev anyway, or on S35's fixture, and **not** on `cypher-mcp` or `mcp-monitor`. Walking `.mcp.json` → `cypher` costs `wiring` 3 of its at most 10 eligible items, and leaves it short of 8 (§9.1; §15 Q10) |
 | **S56** (golden flow methods) | §8.2: its methods are contact for flow anchors | **v1.1:** S56's output is an input to S47's contact set |
-| **P1 gate harness** | §5, §5.2.1 (HA-1 to HA-5, tie readings), §10.4 (status predicate, cap, cache rule), §10.6, §11, §12.1 (floor, routing, exposure record), §12.3 (`coreTreeHash`) | **v1.1:** the floor, the exposure record and the four-field pre-registration comparison. **v1.2:** H1 always requires the span test, and §5.4 runs under `E`; both are imported from `match_keys.py` (P2-2) |
+| **P1 gate harness** | §5, §5.2.1 (HA-1 to HA-5, tie readings), §10.4 (status predicate, cap, cache bypass), §10.6, §11, §12.1 (floor, routing, exposure record), §12.3 (`coreTreeHash`; the AC-24 record) | **v1.1:** the floor, the exposure record and the four-field pre-registration comparison. **v1.2:** H1 always requires the span test, and §5.4 runs under `E`; both are imported from `match_keys.py` (P2-2) |
 
 ## 15. Risks and open questions
 
@@ -1786,43 +1846,6 @@ marked **v1.1** or **v1.2** are new since v1.0, and its §14 needs to absorb the
 - **Q6 (`teco`):** E2 adds one KA and one KB session, and E5 allows up to 5 extra passes rather
   than 4. That is §6.6's usage budget, already stakeholder-accepted in kind. The count changes by
   about 2 to 3 sessions.
-
-## 16. Review dispositions (`docs/reviews/connected-code-graph-p0-impl.md`, §S06 (P0-05))
-
-### Pass 1 (needs changes) → v1.1
-
-| Finding | Disposition | Where |
-|---|---|---|
-| **B1(a)** the unit probe straddles the split | **Fixed as recommended.** A unit and its probe are one union-find cluster, the probe is fixed before the split, and contacting either contacts both. | §5.1, §8.2, §9.1 step 1 |
-| **B1(b)** fresh items on a dev anchor | **Fixed, and extended.** Fresh items are routed by cluster: dev or C goes to dev. Also, a fresh item on a **kept** cluster joins it but does not count as fresh evidence, because its anchor passed, which mildly conditions it. The review did not raise that third case. | §12.1 step 4 |
-| **M1** a re-gate overstates the evidence | **Fixed.** The reporting fix is adopted in full: fresh-cluster recall, the cumulative first-exposure record, kept items as a regression check, and 0.951 claimed only at gate 1. The **floor** follows the stakeholder decision: F = 35, sized and costed. The same-commit shortfall is specified (the four sources, then Q7). Added a **reserve** so the first re-gate usually needs no census. The exact DP reproduces `regate.py`. | §5.3, §9.1 step 6, §12.1 |
-| **M2** the loop does not terminate | **Fixed as recommended.** Marked strata are excluded from the test and the selection, and the termination argument is stated. The `H < 75` branch now selects only clusters with counting items. | §9.1 step 4 |
-| **M3** writer-facing text, `config` grain | **Fixed as recommended.** Appendix B is the only text S40 and S52 paste. §2.4 gives a per-format grain table with server/contract classes, checked against the working tree, and `normalize` truncates to it. | §2.4, §4, §13.4, Appendix B |
-| **M4** E1 penalizes a precise interpreter on AC-24 | **Fixed with the first option.** `E` is applied before the set comparison. The second option, constraining QW, was rejected: it would remove realistic file-and-line questions. | §10.4, §15 Q1 |
-| **M5** the core is not frozen | **Fixed as recommended, plus one exclusion choice.** `coreTreeHash` excludes `cpg/eval/`, `cpg/packs/` (covered separately), `cpg/tests/` and `*.md`. The four-field comparison decides "first contact" vs "after adaptation". | §12.3 |
-| **M6** flow and the 75 | **Fixed per the stakeholder decision.** Flow counts only across units or repos, by endpoints. Cross-boundary is defined per stratum. `H` and `H_all` are reported throughout, and the per-stratum 8 uses all items. | §3.7, §9.1, §5.3 |
-| **m1** stratum and scope depend on the writer | **Fixed.** `cypherMcpTools` comes from source, V4 runs per item after matching, and a field-precedence rule is stated. | §3.1, §6.1, §7.1, §13.1 |
-| **m2** the interval vs N̂* | **Fixed by labelling.** It is the "Chapman interval". When Chao binds, no interval is given, because a delta-method Chao variance would be a method choice for GC. No pooled interval. Decisions use the point N̂* only. | §6.4 |
-| **m3** unit anchors under-specified | **Fixed.** Units are listed by S40 (`--list-units`, which includes `requirements.txt`), N3 is added, and re-anchoring is mechanical through §2.4's classes and `provider`'s path. | §2.2, §2.4, §6.3, §13.1 |
-| **m4** probe removal is ambiguous | **Fixed as recommended.** Probes are removed on exact equality, and matched as whole tokens. | §9.4 |
-| **m5** grounding | **Fixed.** tree-sitter comes from the `spike` extra, not S02. `pyyaml` is in `dev`, which closes Q4. The golden flow methods are produced by S56. | §3.6, §7.1, §8.2, §13.1, §14 |
-| **m6** AC-25's shape has no owner | **Fixed.** S35's assertion column owns it, and S39 tests it. | §12.2 |
-| nit: `p_trigger` docstring | Fixed. | Appendix A |
-| nit: §10.2's dev count | Fixed: 3 per cell, 12 with no drops. §10.1 and E8 are aligned. | §0, §10.1, §10.2 |
-| nit: §7.3 wrap | Fixed: the order wraps from `flow` to `http`. | §7.3 |
-| Gap: `p0-2.md` §12–§15 placeholders | Routed to `architect`. | §15 Q8 |
-| Found while writing Appendix B: v1.0's `E` truncated at `#k`, while a writer told never to write `#2` writes `f` | Fixed: `E` removes `#k` suffixes instead, and V2 compares under `E`. | §2.3, §7.1 |
-
-### Pass 2 (approve with suggestions) → v1.2
-
-| Finding | Disposition | Where |
-|---|---|---|
-| **P2-1** binding entries leak through a unit's non-probe tools | **Fixed with the reviewer's direction, refined.** The served-anchor rule: a unit is held out only while every anchor of S(u) is (S(u) = provider under the unit by longest prefix, or in `serves[]`; all contract kinds). It is applied as a fixpoint after the share, as a guard in step 4, and again in re-gate steps 3–4. The probe is now the served point with the fewest items. Whole-server clusters were rejected: they merge about 25 `mcp` anchors and collapse `mcp` on any contact. Run: v1.1 leaks in 100% of 2,000 seeds, v1.2 in 0%. `H` changes by −3.0 to −4.2. `H_wiring`'s eligible supply is 10, or 7 if S30 contacts cypher-mcp, which SQ-P0-1 then handles; R9, Q10 and the S30 row cover it. | §3.5, §5.1, §8.2, §9.1, §12.1, §13.6, §14, §15 |
-| **P2-2** `#k` removal lets the id branch skip the span test | **Fixed as recommended.** H1 requires `E(qname(x)) = qname(e)` **and** the span test, with no id-only branch. §5.4's trigger and source comparison run under `E`, a correction is always eligible, and §5.4 gains a span case for wrong lines. AC-24's indistinguishable duplicates are recorded as a known limit. The exposure scan finds 0 duplicates in 1,756 Python scopes. | §0, §5.2, §5.4, §10.4, §13.4 |
-| **P2-3** trailing `.`/`:` defeat the whole-token match | **Fixed as recommended, plus a `./` left prefix.** The lookahead allows `[.:]*`. `a.py::f.` and `a.py::f:` hit, and `a.py::f.g` does not. 15/15 cases came out as wanted. | §9.4, §13.6 |
-| **P2-4** nit: `.env` classification needs unit ports | **Fixed.** `units[].ports`, recorded by S40 from source and checked by the method owner. No working-tree `.env` value matches a unit port. | §2.4, §13.1, Appendix B |
-| **P2-4** nit: Kiro keys outside the row | **Fixed.** `toolsSettings.<key>` is contract class. `includeMcpJson` is server class, only when it is `true`. Any other key falls to "any other JSON". | §2.4, Appendix B |
-| M5 nit (`coreTreeHash` excludes `**/*.md`) | **Not changed (outside this round).** It is recorded here as a P1 condition: narrow the exclusion before the first pre-registration if P1 keeps interpreter prompts as `.md` under `cpg/`. | — |
 
 ## Appendix A. Figures script
 
