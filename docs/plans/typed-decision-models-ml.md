@@ -1,8 +1,8 @@
 # Typed Decision Models — Method Note (statistics, data, fitting)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.16 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.17 · **Extends:** `docs/plans/typed-decision-models.md` · **Reviews:** `docs/reviews/typed-decision-models.md` (Pass 12), `docs/reviews/typed-decision-models-ml.md` (Pass 1)
 
-*2026-11-05 — v1.16: §Q1.2 halts a round above 4% (two-hit floor under 25 seeds) and states the bracket rule's final form (plan6 v1.19 §3.8, impl review Pass 19).*
+*2026-11-05 — v1.17: §Q1.2 rule (a) reads a space-separated run of listed tokens as a hit, and the pool's cutoff is 5% (plan6 v1.19 §3.8, impl review Pass 20).*
 
 ## 0. The question and the decision it serves
 
@@ -146,14 +146,14 @@ generates or labels: it has seen seeds and intents.
       catches an invented reference code or a request-writer defect.
     - Ordinary words are hits only in a meta position. In a bracket or parenthesis group, after
       trailing `.`, `!`, `?`, `;` and spaces are stripped from its content, a listed token hits when
-      (a) the content is listed tokens only (or joined by `/`, `,`, `|`), or (b) a listed token is
+      (a) the content is one or more listed tokens and nothing else, joined by spaces, `/`, `,` or `|`, or (b) a listed token is
       followed by `:` or `=`, or (c) `label`, `answer`, `category`, `intent`, `intended` or
       `difficulty` is followed by a listed token within its next two words, or (d) the content is
       exactly `difficulty` or `intended` and one listed token, in either order. Outside brackets, a
       token after `label`, `answer`, `category` or `intent` hits. So `(intended answer is true)`,
       `(the answer is no)`, `(difficulty clear)`, `(clear difficulty)` and `(clear.)` hit, while
       "had difficulty paying", "complaint", "(order #4411)", "(other than login)", "(type A)",
-      "(no rush)", "(not clear)", "(true story)", "(clear and simple)" and "(no answer)" pass.
+      "(no rush)", "(not clear)", "(true story)", "(clear and simple)" and "(no answer)" pass. `(no reply)` and `(other question)` also hit, by (a): listed tokens with no other word. That is accepted, since a false hit costs one regeneration and a miss leaks the answer; a real round shows whether it matters (hit rate by pattern in the diagnostics).
       A bare keyword before a token is deliberately one-directional (c): `(no answer from support)`
       is ordinary prose. `(no difficulty)` hits through (d), at the cost of a regeneration.
   - **On a hit,** the seed is regenerated, not dropped: the seed is kept and only its text is
@@ -166,7 +166,8 @@ generates or labels: it has seen seeds and intents.
     rate (880 seeds, independent hits, exact calculation). The denominator is fixed when the round
     is drawn and hits only grow, so a test after each run equals the end-of-round test, found
     sooner. Rounds under 25 seeds cannot halt alone; plan6 §3.8 pools them per template once 300
-    seeds are drawn.
+    seeds are ingested, with a 5% cutoff: the pool is a backstop for gross leaks the floor hides, and at
+    4% its single look at n=300 false-halts 12% at a true 3% rate (24.6% over 60 ten-seed rounds).
   - Hits print by intent and difficulty.
 - **Isolation.** The exchange directory is outside the repo, with opaque names and no earlier
   vote's answers. The tool allowlist is request-read and answer-write only, with **no MCP tool**:
