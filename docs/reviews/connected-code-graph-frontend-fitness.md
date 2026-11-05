@@ -520,3 +520,29 @@ CPG: considered, not relevant — spike data, recomputed from `results/*.answers
 9. Both configurations, Wilson per metric and the output file name/location for `s27_census_metrics.py` results are unstated.
 
 **Stopping condition.** Closes at Pass 9 if (a) D1 is taken (ML §7.2 and the report agree on coverage key, line fidelity and parse success; `grep -n 'start line ± 0' docs/plans/connected-code-graph-p0-ml.md` returns nothing or states the window) and S27c has a plan row, and (b) items 1-5 and 8 of the guess list are written into §a1.6 or explicitly delegated to the coder with a named rule source. Reopens if a census output is reported against a definition the ML note does not carry, or if the C1 table is edited without a rerun of the `found`/`foundLenient` loop.
+
+## Pass 9 (closure check against the Pass 8 stopping condition: ML v1.15, report §a1.6 rev, plan p0-2 v1.5; executed against the tree, no git, 2026-11-05)
+
+CPG: considered, not relevant — documents and spike scripts; no loaded graph.
+
+**Verdict: approve with suggestions. The Pass 8 stopping condition holds; this review closes.**
+
+**Condition, executed.**
+- **(a) D1 closed.** `grep -n 'start line ± 0' docs/plans/connected-code-graph-p0-ml.md` returns nothing (exit 1). ML §7.2 (v1.15, lines 1110-1113) now defines parse success (FILE node plus >= 1 non-external METHOD), method coverage (one-to-one, key and window in report §a1.6, no ±0 literal) and line fidelity (exact lines, decorator-inclusive variant second); each matches report §a1.6 section 3 clause for clause. The S27c row exists (`docs/plans/connected-code-graph-p0-2.md` line 392, unit P0-20c; §4.6 line 810; chains lines 434/445/450; output table line 934) and S30 (line 394) lists S27c; S27 is stated not to wait on it.
+- **(b) Guess items closed.** §a1.6 now fixes: one-to-one matching with tie-break order (item 1); `nameKey` rules, nameless definitions by position, the rule source `matcher-table.md` + `s27_metrics.py` `spec_names` (2); exact lines (3); rule 8 per `bundle-spec3` §4.1 as amended by `-spec4` (both files exist) with a fixture per case (4); argument kinds, constant resolution with shadowing, 0-based index with receiver subtracted, named/spread handling, normalisation, unmatched call = not recovered (5); acceptance (d) planted fixtures for definitions, argument kinds and a decorator, and (e) five named mutants (8).
+- **D2 and the nit closed.** The ML line cites the coordination ledger, which carries the v1.11/v1.13 entries; the report now says "at most 0.921 (Java)".
+
+**Residual guesses in §a1.6 (none blocks the coder).** All are coder-judgment, each checkable by the §a1.6 (d) fixtures:
+1. Census `def` records carry `name`/`nameKey` but no `qname`, while `spec_names` takes a qname; the coder derives the join key (and the (b) acceptance joins on `defLine` against `nameLine`).
+2. Constants: only bare identifiers qualify; `Foo.BAR` and parameters-as-shadowing are not addressed; Python bytes/raw/f-string normalisation is stated only in outline.
+3. Receiver offset is per frontend (which call kinds carry argument 0/1); the rule is "subtract the receiver" but the coder establishes it with the probe the spec asks for.
+4. The two Joern-side offsets in the mutants (C# line, receiver) can only fail a test if `test_defs_census.py` includes a synthetic `measure.jsonl`; the spec does not say so. Add that to the coder's brief.
+5. Decorator literal share ("all literal values present") and the exact `{lang, node, example}` probe file location are unnamed.
+
+**New findings (minor, owner: architect).**
+- **D3 — plan v1.5 cites acceptance letters that no longer match.** The S27c row says "acceptance (a)–(d)" and "§a1.6 (d)'s mutation test"; §a1.6 now has (a)–(e), with the mutants in (e) and (d) the fixtures. Fix the row to "(a)–(e)". Also its input list names S59 (`contact.json`), which the census does not read.
+- **D4 — the S59/S30/S27 dependency text is a paper cycle.** S27 needs S59 (row 391); S59's inputs list S30 (row 421, "S11, S14, S30"); S30 now waits on S27 and S27c (row 394, line 445). The ledger shows S30's first delivery (spec v1.2, 2026-11-01) and the rule-pack chain closed on 2026-11-04, before S27c, so S59 consumed that delivery. My view: the S59 input is "S30's first delivered round (the contact source)", and the S27c-consuming step is a later S30 amendment (it is also the "records the gap" clause at line 564). Rename the second as an explicit S30 follow-up row or sentence; as written a reader sees S59 blocked on S30 blocked on S27 blocked on S59, and S30 shows as both closed (ledger) and waiting (plan).
+
+**Dispositions of Pass 8 items:** D1 fixed, D2 fixed, guess-list 1-5 and 8 fixed, 0.92 nit fixed. Growth-stops: ML revision line is one dated line; the report and plan edits are new scope with no finding table. 
+
+**Stopping condition (met):** this review is closed. It would reopen only if a census result is reported against a definition that differs from ML §7.2 v1.15 or §a1.6, or if the C1 remedy table is edited without rerunning the `found`/`foundLenient` loop.
