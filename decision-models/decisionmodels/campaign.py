@@ -53,10 +53,11 @@ event (`reasons` lists every reason it shows, first = the one counted toward the
 `fold` applies both only at the run's ingested `outcome`, then evaluates the `template` halts
 (`State.halt`, `voidClass: "template"`): per (`genRound`, reason) over that round's drawn seeds
 after each run (more than 4% and at least two hits), and per (generator-template hash, reason)
-over the pool of rounds under 25 drawn seeds, each joining when its first-pass runs have all
-ingested and tested once the pool holds 300 seeds. Each pair fires once; regeneration hits are
-excluded. An attempt carries the `expectations`, model pins and instructions in force at its
-`issued` (`Attempt`), which the audit and the hash read. A `generation-restart` (a generator
+over the pool of rounds under 25 drawn seeds (more than 5%, at least 300 pooled seeds), each
+joining when its first-pass runs are all ingested or dropped, with each ingested run's seeds and
+hits added to the pool of that run's own issue-time hash. Each pair fires once; regeneration
+hits are excluded. An attempt carries the `expectations`, model pins and instructions in force at
+its `issued` (`Attempt`), which the audit and the hash read. A `generation-restart` (a generator
 re-pin) resets the folded generation view and retires every batch (`_restart_generation`). A
 batch queued by plain `queue_batch` carries no `generation` and is not checked.
 
@@ -118,7 +119,9 @@ MAX_SEED_HITS = 3
 HALT_PERCENT = 4
 HALT_MIN_HITS = 2
 #: plan6 §3.8's pool: rounds of fewer drawn seeds than `POOL_BELOW` (the rounds that cannot halt
-#: alone) join it, and it is tested once it holds `POOL_MIN_SEEDS` drawn seeds.
+#: alone) join it, and it is tested once it holds `POOL_MIN_SEEDS` seeds, at `POOL_PERCENT`, not
+#: the round's `HALT_PERCENT`: a backstop for gross leaks, tested after each joining round.
+POOL_PERCENT = 5
 POOL_BELOW = GENERATION_RUN_SIZE
 POOL_MIN_SEEDS = 300
 #: The ledger events that record one rejected generated item, by the reason that rejected it.
@@ -223,6 +226,8 @@ class State:
     pool: dict[str, dict[str, Any]] = field(default_factory=dict)
     pooled_rounds: set[int] = field(default_factory=set)
     pool_halts: set[tuple[str, str]] = field(default_factory=set)
+    #: A first-pass run's generator-template hash at its issue, set when it ingests.
+    run_hash: dict[str, str] = field(default_factory=dict)
     staged: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def generation_drops(self) -> dict[str, Any]:
@@ -256,13 +261,21 @@ class State:
         carries its `genRound`."""
         return sum(len(r["seeds"]) for r in self.rounds if r["genRound"] == gen_round)
 
-    def round_ingested(self, gen_round: int) -> bool:
-        """Every seed drawn under `gen_round` is in an ingested first-pass run."""
-        wanted = {seed for r in self.rounds if r["genRound"] == gen_round for seed in r["seeds"]}
-        done = {seed for batch in self.batches.values()
+    def first_pass_runs(self, gen_round: int) -> list[Batch]:
+        """The first-pass generation batches holding a seed of `gen_round`."""
+        return [batch for batch in self.batches.values()
                 if batch.kind == "generate" and batch.extra.get("generation") == "first"
-                and batch.state == "ingested" for seed in batch.entries}
-        return bool(wanted) and wanted <= done
+                and batch.state != "retired"
+                and any(self.seed_round.get(seed) == gen_round for seed in batch.entries)]
+
+    def round_closed(self, gen_round: int) -> bool:
+        """plan6 §3.8: every first-pass run of `gen_round` is ingested or dropped, and no seed
+        drawn under it lacks a run. A dropped run does not hold the round open."""
+        runs = self.first_pass_runs(gen_round)
+        held = {seed for batch in runs for seed in batch.entries}
+        wanted = {seed for r in self.rounds if r["genRound"] == gen_round for seed in r["seeds"]}
+        return bool(runs) and wanted <= held and all(
+            batch.state in ("ingested", "dropped") for batch in runs)
 
     def unbatched_seeds(self) -> list[str]:
         """The `round-start` seeds no live generation batch holds (a crash between the round and
@@ -379,33 +392,83 @@ def _over_threshold(hits: int, drawn: int) -> bool:
     return hits >= HALT_MIN_HITS and 100 * hits > HALT_PERCENT * drawn
 
 
-def _pool_round(state: State, digest: str, gen_round: int) -> list[tuple[str, str]]:
-    """plan6 §3.8's pooled halt: `gen_round` (every first-pass run ingested, under 25 seeds drawn)
-    joins `digest`'s pool, which is then tested once it holds 300 drawn seeds. Returns the
+def _pool_round(state: State, gen_round: int) -> list[tuple[str, str]]:
+    """plan6 §3.8's pooled halt: `gen_round`, closed and under 25 drawn seeds, adds each ingested
+    first-pass run's seeds and hits (by reason) to the pool of that run's own template hash; a
+    dropped run adds nothing. Each pool fed that holds 300 seeds is then tested. Returns the
     (hash, reason) pairs newly over the threshold."""
     state.pooled_rounds.add(gen_round)
-    pool = state.pool.setdefault(digest, {"rounds": [], "seeds": 0, "hits": {}})
-    pool["rounds"].append(gen_round)
-    pool["seeds"] += state.drawn_in(gen_round)
-    for reason in screen.REASONS:
-        pool["hits"][reason] = (pool["hits"].get(reason, 0)
-                                + state.round_hits.get((gen_round, reason), 0))
-    if pool["seeds"] < POOL_MIN_SEEDS:
-        return []
-    return [(digest, reason) for reason in screen.REASONS
-            if (digest, reason) not in state.pool_halts
-            and _over_threshold(pool["hits"][reason], pool["seeds"])]
+    fed: dict[str, dict[str, Any]] = {}
+    for batch in state.first_pass_runs(gen_round):
+        digest = state.run_hash.get(batch.batch_id)
+        if batch.state != "ingested" or digest is None:
+            continue
+        pool = fed.setdefault(digest, {"seeds": 0, "hits": dict.fromkeys(screen.REASONS, 0)})
+        pool["seeds"] += len(batch.entries)
+        for seed in batch.entries:
+            for hit in state.hits.get(seed, ()):
+                if hit["firstPass"]:
+                    for reason in hit["reasons"]:
+                        pool["hits"][reason] += 1
+    over: list[tuple[str, str]] = []
+    for digest, added in fed.items():
+        pool = state.pool.setdefault(digest, {"rounds": [], "seeds": 0, "hits": {}})
+        pool["rounds"].append(gen_round)
+        pool["seeds"] += added["seeds"]
+        for reason in screen.REASONS:
+            pool["hits"][reason] = pool["hits"].get(reason, 0) + added["hits"][reason]
+        if pool["seeds"] >= POOL_MIN_SEEDS:
+            over += [(digest, reason) for reason in screen.REASONS
+                     if (digest, reason) not in state.pool_halts
+                     and pool["hits"][reason] >= HALT_MIN_HITS
+                     and 100 * pool["hits"][reason] > POOL_PERCENT * pool["seeds"]]
+    return over
+
+
+def _close_rounds(state: State, batch: Batch) -> tuple[int | None, list[tuple[str, str]]]:
+    """After a first-pass run of `batch` is ingested or dropped: each round it belongs to that is
+    now closed, under 25 drawn seeds and not yet pooled is pooled (`_pool_round`). Returns the
+    last round closed and the pairs over the pooled threshold."""
+    closed: int | None = None
+    over: list[tuple[str, str]] = []
+    if batch.kind == "generate" and batch.extra.get("generation") == "first":
+        for g in sorted({state.seed_round[seed] for seed in batch.entries
+                         if seed in state.seed_round}):
+            if (g not in state.pooled_rounds and state.drawn_in(g) < POOL_BELOW
+                    and state.round_closed(g)):
+                closed = g
+                over += _pool_round(state, g)
+    return closed, over
+
+
+def _raise_template_halt(state: State, batch: Batch, digest: str,
+                         rounds: list[tuple[int, str]], closed: int | None,
+                         pooled: list[tuple[str, str]]) -> None:
+    """The `template` halt for the per-round pairs and pooled pairs a run or a drop newly crossed;
+    a pooled halt names the closing round and the first pool's counts."""
+    if not (rounds or pooled) or state.halt is not None:
+        return
+    state.template_halts.update(rounds)
+    state.pool_halts.update(pooled)
+    reasons = [r for r in screen.REASONS if r in {x[1] for x in rounds + pooled}]
+    state.halt = {"event": "template-halt", "batch": batch.batch_id, "reason": reasons[0],
+                  "reasons": reasons, "voidClass": "template",
+                  "genRound": rounds[0][0] if rounds else closed,
+                  "pooled": bool(pooled), "templateHash": pooled[0][0] if pooled else digest}
+    if pooled:
+        pool = state.pool[pooled[0][0]]
+        state.halt.update(poolRounds=list(pool["rounds"]), poolSeeds=pool["seeds"],
+                          poolHits=dict(pool["hits"]))
 
 
 def _apply_generation(state: State, attempt: Attempt, batch: Batch,
                       staged: Mapping[str, Any]) -> None:
     """The ingested generation run's items and hits, then plan6 §3.8's halts: after each run, one
     `template` halt per (`genRound`, reason) over that round's drawn seeds; and, when a first-pass
-    round under 25 seeds has all its runs ingested, the pooled halt per (generator-template
-    hash, reason). Regeneration hits count toward the 3-hit cap only."""
+    round under 25 seeds closes, the pooled halt per (generator-template hash, reason).
+    Regeneration hits count toward the 3-hit cap only."""
     for record in staged["items"]:
         state.items[record["seedId"]] = record
-    first_pass = batch.extra.get("generation") == "first"
     touched: set[int] = set()
     for seed_id, hit in staged["hits"].items():
         history = state.hits.setdefault(seed_id, [])
@@ -422,26 +485,10 @@ def _apply_generation(state: State, attempt: Attempt, batch: Batch,
               if (g, reason) not in state.template_halts
               and _over_threshold(state.round_hits.get((g, reason), 0), state.drawn_in(g))]
     digest = generator_template_hash(attempt.expectations)
-    pooled: list[tuple[str, str]] = []
-    completed = None
-    if first_pass:
-        for g in sorted({state.seed_round[seed] for seed in batch.entries}):
-            if (g not in state.pooled_rounds and state.drawn_in(g) < POOL_BELOW
-                    and state.round_ingested(g)):
-                completed = g
-                pooled += _pool_round(state, digest, g)
-    if (rounds or pooled) and state.halt is None:
-        state.template_halts.update(rounds)
-        state.pool_halts.update(pooled)
-        reasons = [r for r in screen.REASONS if r in {x[1] for x in rounds + pooled}]
-        state.halt = {"event": "template-halt", "batch": batch.batch_id, "reason": reasons[0],
-                      "reasons": reasons, "voidClass": "template",
-                      "genRound": rounds[0][0] if rounds else completed,
-                      "pooled": bool(pooled), "templateHash": digest}
-        if pooled:
-            pool = state.pool[digest]
-            state.halt.update(poolRounds=list(pool["rounds"]), poolSeeds=pool["seeds"],
-                              poolHits=dict(pool["hits"]))
+    if batch.extra.get("generation") == "first":
+        state.run_hash[batch.batch_id] = digest
+    closed, pooled = _close_rounds(state, batch)
+    _raise_template_halt(state, batch, digest, rounds, closed, pooled)
 
 
 def _restart_generation(state: State) -> None:
@@ -457,11 +504,19 @@ def _restart_generation(state: State) -> None:
     state.pool.clear()
     state.pool_halts.clear()
     state.pooled_rounds.clear()
+    state.run_hash.clear()
     state.rounds.clear()
     state.seed_round.clear()
     state.staged.clear()
     for batch in state.batches.values():
         batch.state, batch.dropped = "retired", None
+
+
+def _settle_drop(state: State, batch: Batch) -> None:
+    """A dropped first-pass run may close its round (plan6 §3.8): the round pools what its
+    ingested runs added, and the pool is tested."""
+    closed, pooled = _close_rounds(state, batch)
+    _raise_template_halt(state, batch, "", [], closed, pooled)
 
 
 def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
@@ -480,6 +535,7 @@ def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
         batch.counted += 1
         if batch.counted >= MAX_COUNTED_ATTEMPTS:
             batch.state, batch.dropped = "dropped", "retryCapExceeded"
+            _settle_drop(state, batch)
         else:
             batch.state = "pending"
     elif outcome in ("reissued", "usage-stop"):
@@ -498,6 +554,7 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
     batch = state.batches.get(halted["batch"]) if halted else None
     if event.get("action") == "skip-batch" and batch is not None:
         batch.state, batch.dropped = "dropped", "safeguardSkipped"
+        _settle_drop(state, batch)
     elif batch is not None and batch.state == "halted":
         batch.state = "pending"
     if event["event"] == "generation-restart":
@@ -900,10 +957,11 @@ class Campaign:
         (`seeds.round_one_count`); a later round names it. A `genRound` already started since the
         last generator restart is refused. Only U5.9's planner passes `extend=True`, for the
         second and later strata of one top-up round (each its own RNG seed and `round-start`):
-        it is refused unless the `genRound` is started, a `design_stratum` is given, and that
-        stratum has no `round-start` in the round yet. A retry after a crash needs no `extend`:
-        after `round-start` a repeat is refused as a duplicate (`next` queues the stranded
-        seeds), and after the draw alone the stratum has no `round-start`, so it draws afresh.
+        it is refused unless the `genRound` is started with no first-pass run issued, a
+        `design_stratum` is given, and that stratum has no `round-start` in that `genRound` yet. A
+        retry after a crash needs no `extend`: after `round-start` a repeat is refused as a
+        duplicate (`next` queues the stranded seeds), and after the draw alone the stratum has no
+        `round-start`, so it draws afresh.
         Returns the queued batch ids."""
         if isinstance(gen_round, bool) or not isinstance(gen_round, int) or gen_round < 1:
             raise CampaignRefused(f"genRound must be a positive integer, not {gen_round!r}")
@@ -915,6 +973,9 @@ class Campaign:
             raise CampaignRefused(f"genRound {gen_round} has not started; nothing to extend")
         if extend and design_stratum is None:
             raise CampaignRefused("extend adds one design stratum to a round: name it")
+        if extend and any(batch.attempts for batch in state.first_pass_runs(gen_round)):
+            raise CampaignRefused(
+                f"genRound {gen_round} has a run issued; extend draws before the first issues")
         if extend and any(r["genRound"] == gen_round and r["designStratum"] == design_stratum
                           for r in state.rounds):
             raise CampaignRefused(

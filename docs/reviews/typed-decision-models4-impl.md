@@ -2718,3 +2718,65 @@ Files in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2
 My own plumbing mutant on the pool's denominator, Q4, survived: all the test rounds are 10 seeds, the uniform-stub trap.
 
 **Growth-stops check:** Pass 20 adds three minors and one ruling, re-opens no earlier finding, and states each Pass 19 finding in one disposition line. Passes 1 to 19 are unchanged: the pre-pass copy and the first part of the live file are `cmp`-identical.
+
+## Pass 21 — U5.8a3 fix round re-gate (2026-11-05)
+
+**Verdict: approve with suggestions.** All three Pass 20 findings and both of its open questions are fixed or answered. The two new fold paths (a drop closes a round) and the per-run attribution hold on every probe I could build. Two items need a plan ruling and three test gaps remain; none blocks U5.9.
+- **P21-m1:** a close that crosses two pools halts on the first pool and marks both pairs fired.
+- **P21-m2:** rule (d) is only partly subsumed by (a); its remainder is unpinned and inconsistent with (a).
+- **P21-m3:** surviving mutants: the `--skip-batch` close, a hit on a pool run's last seed, a second reason, the 299 floor.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against `HEAD` (8c7c9fe0): `campaign.py`, `screen.py`, `tests/test_generation_rounds.py`, `tests/test_screen.py`, `AGENTS.md`, `docs/HISTORY.md`. Spec: plan6 v1.20 §3.8 and its §5 row "U5.8a, U5.9"; note v1.17 §Q1.2 "Hits" and "Halt", read by me. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite:** fresh `PYTHONPYCACHEPREFIX`: **1346 passed, 2 xfailed**; `ruff check .` clean; live-tree sha256 unchanged after the pass. `AGENTS.md`: 1,168 words, no line over 700 characters.
+- **Mutants and probes:** scratch copy `scratchpad/p21/` (`mut.py`, `mut-run.txt`, `probes/test_p21.py`), 30 mutants over the three generation test files and `test_campaign.py`.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the changed hunks were read in full.
+
+### Disposition of Pass 20
+
+- **P20-m1 (`extend` after a stratum ingested): fixed.** `begin_round` refuses `extend` once any first-pass run of the `genRound` has an attempt; the issued and ingested sequences are both refused with the ledger untouched (tests). Mutants C1 (check off) and C2 (ingested only) red.
+- **P20-m2 (pool loses hits): fixed, with a residual.** Each ingested run's seeds and hits go to the pool of its own issue-time hash, and a dropped run closes the round. Mutants B1, B2 (latest and first hash), D1 (no close on the void cap), D3 (a drop does not close) red. Residual: the `--skip-batch` close is pinned by no test (P21-m3), and one close can feed two pools (P21-m1).
+- **P20-m3 (three survivors): fixed.** Q4: rounds of 10, 12 and 20 seeds assert `poolSeeds`; E5 (size minus one) red. Q17: round 3 may reuse round 2's stratum; re-run mutant red. S5: `(intended is true)` pinned; re-run mutant red.
+- **Open question 1 (rule (a)): answered** by note v1.17: whitespace joins. Probe on the three points' tokens: `(clear advance)` hits; `(no reply)` hits on join-in and `(other question)` on message-type (accepted false hits); every Pass 19/20 pass string still passes, including `(clear and simple)`, `(no answer from support)`, `(it is an order)`, `(order #4411)`, `(other than login)`.
+- **Open question 2 (pool re-test): answered** by the 5% cutoff. My simulation (4,000 campaigns per cell, 10-seed rounds, test after every round from 300 seeds, at least two hits): a false halt at a true 3% is **1.9% (30 rounds) and 4.0% (60)**, against 12.3% and 24.3% at 4%; power is 42.7 / 69.5% at a true 5% and 96.9 / 100% at 8%. It is a backstop for gross leaks, as the plan says.
+
+### Probes of the coder's unspecified choices (all verified, scratch copy)
+
+1. **A drop closes a round.** A half-written second stratum (`round-start`, no `queued`) keeps the round open when the first stratum's run is dropped; `next` queues it, and the round pools only the second stratum's run at its ingest (pool 290 + 10). Via `next` the "no seed lacks a run" clause is unreachable (it queues every unbatched seed before serving), so mutant D4 is equivalent. A pooled halt raised by a void-cap drop reaches `next` as `Stop("halted")` and `resolve --decision` clears it with no refire; a fresh `Campaign` folds the same `pooled_rounds`. Calling `_close_rounds` and `_settle_drop` again on every batch changes no pool, so the pool is not fed twice (mutant D5, the `pooled_rounds` guard, survives only because no ledger reaches a second close).
+2. **Hash per run.** A run voided under H0 and retried under H1 is attributed to H1 (the ingesting attempt's snapshot). A run issued, then `install` re-run, then ingested keeps the issue-time hash and ingests. A cut's overflow batch copies `extra`, so it stays first-pass and gets its own hash.
+3. **Two pools** (below). 4. **Rule (d)** (below).
+
+### Findings
+
+**P21-m1 — minor — a close that feeds two over-threshold pools reports one and silences the other.** *Owner: `architect` rules, then `coder`. Verified: probe `test_two_pools_over_in_one_close`.*
+- A 20-seed round split by an `install` re-run, with H0 and H1 each at 290 seeds and 30 hits, closes with both pools at 300 seeds and 10%. `_raise_template_halt` records `poolRounds`, `poolSeeds`, `poolHits` and `templateHash` of `pooled[0]` only, while `pool_halts.update(pooled)` marks both pairs fired. The second pool (here 29 binding and 1 form hit) never halts again; mutant F1 (report the last pool) is green. A stakeholder who fixes H0's template and runs `resolve` is not told H1 also crossed. HISTORY's "Open" bullet defers recording each to `diagnostics.json`, which cannot recover what the halt dropped.
+- A per-round pair and a pooled pair in one close also share one record: `reason` is the first of the union (it may belong to the other half), `genRound` is the round pair's, `templateHash` the pool's.
+- **The plan must rule:** the halt carries a list of pools (hash, reason, `poolRounds`, `poolSeeds`, `poolHits`), or only the closing run's hash raises it and the rest fire at their next test. Then a test with two pools over at one close.
+
+**P21-m2 — minor — rule (d) is subsumed by (a) on whitespace, but not on punctuation.** *Owner: `architect` rules, then `coder`. Verified: probes on guard tokens, mutant A1.*
+- `difficulty` and `intended` are listed in all three points, so `(difficulty clear)`, `(clear difficulty)`, `(no difficulty)` hit through (a) alone. (d) keeps a residue: its `_WORD` split ignores any non-word separator, so `(clear - difficulty)`, `(clear; difficulty)` and `(clear & difficulty)` hit while `(clear - advance)`, `(clear; advance)` and `(yes & no)` miss. Deleting (d) (mutant A1) leaves the suite green: no test pins the residue.
+- **Rule on one of:** (i) joiner = any run of non-word characters, which makes (d) deletable. I checked it against the 14 prose pass strings above on all three points: none turns into a hit. Or (ii) keep (a) as written and delete (d), accepting that `(clear; difficulty)` stops hitting. Either way pin the choice with a bracket string using `;` or `-`.
+
+**P21-m3 — minor — surviving mutants.** *Owner: `coder`. Verified: mutants D2, E1, E3, E7 and probes.*
+- **D2:** the `--skip-batch` close (`_fold_resolution`'s `_settle_drop`) has no test; removing it is green. Probe `test_skip_batch_of_a_halted_run_closes_the_round_...` (a crafted `safeguardStop` outcome, then `resolve --skip-batch`) passes live (pooled halt, 304 seeds, a following plain `resolve` clears it with one pair fired) and reddens the mutant.
+- **E3 (my plumbing mutant):** the pool's loop over `batch.entries[:-1]` is green, because every fixture hits `hand[0]`. A probe with the hit on `batch.entries[-1]` of 30 rounds passes live and reddens it. **E4** (`[1:]`) is red. **E1:** counting only a hit's first reason is green: no fixture has an item showing two reasons.
+- **E7:** `POOL_MIN_SEEDS = 299` is green, since 10-, 12- and 20-seed rounds never land on 299 (E8 at 301 is red). Add a pool of exactly 299 and 300 seeds.
+- Equivalent: D4 (above), D5, E6, E10 (at 300 seeds the 5% rule needs 16 hits, so the two-hit floor never bites), F2, F3, G1 to G3.
+
+**P21-n1 — nit.** A pooled halt raised by a drop returns `IngestResult.stop = None` (only an ingested outcome sets `"halted"`, `campaign.py:1146`), so the runner's `_batch` does not stop on it; `next` then returns `Stop("halted")`, so the effect is one extra loop pass. Safe; align if cheap.
+
+### What's solid
+
+- All Pass 20 mutants I re-ran (C1, C2, B1, B2, D1, D3, E5, E8, E9, A2, A3, Q17, S5) are red; the 5% boundary is pinned at 15 and 16 hits in 300.
+- Issue-time attribution holds across a void retry, a cut, an `install` re-run and a restart (the folded pool, `run_hash` and `pooled_rounds` are empty after one).
+- Docs: `AGENTS.md` was rewritten in place, not appended to; HISTORY's mutant list matches what I found red.
+
+### Growth-stops check
+
+Pass 21 adds three minors and a nit, restates no earlier finding (one disposition line each for P20-m1 to m3 and the two questions), and holds the mutant tables to one appendix line. Passes 1 to 20 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical.
+
+### Appendix T — Pass 21 mutants
+
+`scratchpad/p21/mut-run.txt`. **Red (14):** A2, A3, B1, B2, C1, C2, D1, D3, E4, E5, E8, E9, Q17, S5. **Green and real:** A1 (P21-m2), D2, E1, E3, E7 (P21-m3), F1 (P21-m1). **Green and equivalent:** D4, D5, E2 (regeneration hits: unverified as unreachable; I built no sequence where a regeneration run precedes a round's close), E6, E10, F2, F3, G1 to G3. Probes: `probes/test_p21.py` (two pools, drop close and resolve, double feed, void retry across `install`, issue-before-install, half-written stratum, `--skip-batch`, last-seed hit); `rule_a.py`, `d_probe.py`, `alt.py`, `sim.py`.

@@ -110,22 +110,27 @@ def _bracket_contents(text: str) -> list[str]:
 _TRAILING = " .!?;"
 _GROUP_KEYWORDS = frozenset({"label", "answer", "category", "intent", "intended", "difficulty"})
 _WORD = re.compile(r"\w[\w-]*")
-_SEPARATORS = re.compile(r"\s*[/,|]\s*")
+#: Rule (a)'s joiners: whitespace, `/`, `,` and `|`.
+_JOINERS = re.compile(r"[\s/,|]+")
 
 
 def _bracket_hit(content: str, tokens: Sequence[str]) -> str | None:
     """The listed token a bracket group's content hits (note §Q1.2 "Hits", rules a to d), after
     trailing `.`, `!`, `?`, `;` and spaces are stripped:
-    (a) the content is listed tokens only, or joined by `/`, `,` or `|`;
+    (a) the content is one or more listed tokens and nothing else, joined by spaces, `/`, `,` or
+        `|` (so `(clear advance)` hits, and `(no reply)` and `(other question)` are accepted
+        false hits: a false hit costs one regeneration, a miss leaks the answer);
     (b) a listed token is followed by `:` or `=`;
     (c) `label`, `answer`, `category`, `intent`, `intended` or `difficulty` is followed by a
         listed token within its next two words (forward only: "(no answer)" passes);
     (d) the content is exactly `difficulty` or `intended` and one listed token, either order."""
     content = content.rstrip(_TRAILING).lstrip()
     listed = {token.casefold(): token for token in tokens}
-    parts = _SEPARATORS.split(content)
-    if all(part in listed for part in parts):
-        return listed[parts[0]]
+    parts = [part for part in _JOINERS.split(content) if part]
+    if parts and all(part in listed for part in parts):
+        # report the answer-bearing token, not the keyword, as (d) always did
+        named = [part for part in parts if part not in ("difficulty", "intended")]
+        return listed[(named or parts)[0]]
     for token in tokens:
         if re.search(rf"(?<!\w){re.escape(token.casefold())}\s*[:=]", content):
             return token

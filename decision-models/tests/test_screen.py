@@ -144,9 +144,35 @@ def test_ordinary_prose_and_word_bounded_ids_pass(text: str) -> None:
     ("[intent suspend]", "suspend"),
     ("(intended)", "intended"),
     ("[clear | advance]", "clear"),
+    ("(clear advance)", "clear"),         # rule (a): whitespace joins listed tokens
+    ("(true clear)", "true"),
+    ("[suspend yes no]", "suspend"),
+    ("(intended is true)", "true"),       # rule (c) through `intended`: not (a), (b) or (d)
 ])
-def test_the_bracket_rule_hits_note_16s_listed_strings(text: str, token: str) -> None:
+def test_the_bracket_rule_hits_note_17s_listed_strings(text: str, token: str) -> None:
     assert screen_hit(GUARD, turns_item(text)) == f"meta:{token}"
+
+
+def test_intended_is_a_rule_c_keyword_on_its_own() -> None:
+    # `answer` is absent, so only `intended` reaches the token two words on
+    assert screen_hit(GUARD, turns_item("(intended is true)")) == "meta:true"
+    assert screen_hit(GUARD, turns_item("(intended is probably true)")) is None
+
+
+def test_whitespace_joins_listed_tokens_and_a_stray_word_does_not() -> None:
+    assert screen_hit(GUARD, turns_item("(clear  advance)")) == "meta:clear"
+    assert screen_hit(GUARD, turns_item("(clear advance now)")) is None
+    assert screen_hit(GUARD, turns_item("(clear and advance)")) is None
+
+
+def test_no_reply_and_other_question_are_accepted_false_hits_by_rule_a() -> None:
+    # Listed tokens and nothing else: prose-shaped, but a false hit costs one regeneration and
+    # a miss leaks the answer (note §Q1.2 "Hits"); the diagnostics' hit rate by pattern shows
+    # whether it matters.
+    join_in = {"agentName": "Pip", "priorTurns": [], "newMessage":
+               {"role": "user", "displayName": "Ana", "text": "(no reply)"}}
+    assert screen_hit(JOIN_IN, join_in) == "meta:no"
+    assert screen_hit(MESSAGE_TYPE, {"text": "(other question)", "priorTurn": None}) == "meta:other"
 
 
 @pytest.mark.parametrize("text", [

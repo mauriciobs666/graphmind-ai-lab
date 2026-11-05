@@ -2,6 +2,32 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-05 — typed-decision-models U5.8a3 — pool per run hash at 5%, extend after issue refused
+
+**What:** impl review Pass 20 (P20-m1 to m3, the rule (a) ruling), plan6 v1.20 §3.8 and its §5 row
+"U5.8a, U5.9", note v1.17 §Q1.2 "Hits".
+
+- `campaign.py`: `POOL_PERCENT` = 5 for the pooled test only (`HALT_PERCENT` stays 4). A round closes
+  when every first-pass run is ingested or dropped (`State.round_closed`); a dropped run adds
+  nothing and does not hold it open. At close each ingested run adds its seeds and hits by reason
+  to the pool of its own issue-time hash (`State.run_hash`), so a round split by an `install`
+  re-run feeds two pools; membership is `drawn_in < 25` at close. A drop (`retryCapExceeded` or
+  `--skip-batch`) can close a round and so raise the pooled halt. `begin_round(extend=True)` is
+  refused once a first-pass run of that `genRound` has issued; the duplicate-stratum check is per
+  `genRound`.
+- `screen.py`: rule (a) takes whitespace as a joiner, so `(clear advance)` hits; `(no reply)` and
+  `(other question)` are accepted false hits, pinned as such.
+- Tests: `tests/test_generation_rounds.py` (pool rounds of 10, 12 and 20 seeds, the 5% cutoff at 15
+  and 16 hits in 300 seeds, the `install` split, a dropped run, the interrupted-planner `extend`
+  refusal issued and ingested, a stratum reused across rounds), `tests/test_screen.py`. Eighteen
+  mutants (pool percent 4 and 6, the completing run's hash, a dropped run holding the round open or
+  counted, `extend` after issue, the per-`genRound` check, the hits' source and reason key, the
+  pool size source, the membership bound, the 300 floor, the halt's `genRound`, the drop hook,
+  `intended` as a keyword, whitespace not a joiner, the two-hit floor) each redden them, in a
+  scratch copy. Suite 1331 → 1346 passed, 2 xfailed.
+- Open: a close that crosses two pools at once reports the first pool's `poolRounds`, `poolSeeds`
+  and `poolHits` in the halt; `diagnostics.json` (U5.10) should record each.
+
 ## 2026-11-05 — typed-decision-models U5.8a2 — 4% halt, pooled halt per round, issue-time pins
 
 **What:** impl review Pass 19 (P19-M1, m1 to m4), plan6 v1.19 §3.8 and its §5 row "U5.8a, U5.9",

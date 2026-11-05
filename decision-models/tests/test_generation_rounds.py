@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from test_campaign import GUARD_COMMAND, answer_bytes, smoke, stage, write_answer
+from test_campaign import GUARD_COMMAND, answer_bytes, serve, smoke, stage, write_answer
 from test_generation import (
     GENERATOR_AS_FIXTURE,
     bench,
@@ -234,6 +234,121 @@ def test_a_small_round_joins_the_pool_when_its_last_run_ingests_not_before(
     run_generation(camp, obedient_item)
     (pooled,) = camp.state().pool.values()
     assert pooled["rounds"] == [1] and pooled["seeds"] == 24 and camp.state().pooled_rounds == {1}
+
+
+def sized_rounds(camp: Campaign, sizes: list[int], *, start: int = 1,
+                 bad: Any = binding_item) -> list:
+    """One round per entry of `sizes` (its seed count), `bad` answered by each round's first
+    seed. Returns each run's `IngestResult`."""
+    results = []
+    for gen_round, size in enumerate(sizes, start):
+        hand = [hand_seed(gen_round * 100 + n) for n in range(size)]
+        hand_round(camp, hand, gen_round=gen_round)
+        results.append(run_generation(camp, leaking({hand[0].seed_id: bad}))[1])
+    return results
+
+
+def test_the_pool_adds_each_rounds_own_size_not_a_neighbours(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    sizes = [10, 12, 20] * 7 + [10]                          # 21 rounds: 294 seeds, then 304
+    results = sized_rounds(camp, sizes)
+    assert [r.stop for r in results[:21]] == [None] * 21
+    assert results[21].stop == "halted"
+    halt = camp.state().halt
+    assert halt["pooled"] is True and halt["genRound"] == 22
+    assert halt["poolRounds"] == list(range(1, 23)) and halt["poolSeeds"] == 304
+    assert halt["poolHits"] == {"screen": 0, "bindingMismatch": 22, "formMismatch": 0}
+
+
+@pytest.mark.parametrize(("hits", "halts"), [(15, False), (16, True)])
+def test_the_pool_cutoff_is_5_percent_not_the_rounds_4(
+        tmp_path: Path, hits: int, halts: bool) -> None:
+    camp = bench(tmp_path)
+    results = small_rounds(camp, range(1, 31), bad={g: binding_item for g in range(1, hits + 1)})
+    assert (results[29].stop == "halted") is halts           # 15 of 300 is 5%, not more than 5%
+    assert camp.state().halt is None or camp.state().halt["pooled"] is True
+
+
+def test_a_small_round_split_by_an_install_feeds_each_runs_own_hash(tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    re_install(camp, prompt_sha256=prompts())
+    sized_rounds(camp, [10] * 28)                            # H0: 280 seeds, 28 binding hits
+    first = [hand_seed(9000 + n) for n in range(20)]
+    second = [hand_seed(9100 + n) for n in range(4)]
+    hand_round(camp, first, gen_round=29)
+    hand_round(camp, second, gen_round=29)                   # 24 drawn under genRound 29
+    assert run_generation(camp, leaking({first[0].seed_id: form_item}))[1].stop is None
+    assert camp.state().pool == {} or all(p["seeds"] == 280 for p in camp.state().pool.values())
+    re_install(camp, prompt_sha256=prompts(requestTemplate="r1"))
+    _, result = run_generation(camp, obedient_item)
+    h0 = generator_template_hash({"promptSha256": prompts()})
+    h1 = generator_template_hash({"promptSha256": prompts(requestTemplate="r1")})
+    pool = camp.state().pool
+    assert pool[h0]["seeds"] == 300 and pool[h1]["seeds"] == 4
+    assert pool[h0]["hits"] == {"screen": 0, "bindingMismatch": 28, "formMismatch": 1}
+    assert pool[h1]["hits"] == {"screen": 0, "bindingMismatch": 0, "formMismatch": 0}
+    assert pool[h0]["rounds"][-1] == 29 and pool[h1]["rounds"] == [29]
+    assert result.stop == "halted"
+    halt = camp.state().halt
+    assert halt["templateHash"] == h0 and halt["genRound"] == 29 and halt["poolSeeds"] == 300
+
+
+def test_a_small_round_with_a_dropped_run_closes_and_pools_the_ingested_run(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    sized_rounds(camp, [10] * 28)                            # 280 seeds, 28 hits
+    first = [hand_seed(9000 + n) for n in range(14)]
+    second = [hand_seed(9100 + n) for n in range(10)]
+    hand_round(camp, first, gen_round=29)
+    hand_round(camp, second, gen_round=29)                   # 24 drawn
+    run_generation(camp, leaking({first[0].seed_id: binding_item}))
+    assert 29 not in camp.state().pooled_rounds              # the second run is still open
+
+    def broken(seed: Any) -> dict[str, Any]:
+        item = obedient_item(seed)
+        del item["condition"]
+        return item
+
+    for _ in range(3):
+        _, last = run_generation(camp, broken)
+    state = camp.state()
+    assert state.batches["bat_0030"].dropped == "retryCapExceeded"
+    assert last.stop is None and state.halt is None
+    (pool,) = state.pool.values()
+    assert pool["seeds"] == 294 and pool["rounds"][-1] == 29 and state.pooled_rounds >= {29}
+    assert pool["hits"]["bindingMismatch"] == 29             # the dropped run's seeds are not in
+    (after,) = sized_rounds(camp, [10], start=30)
+    assert after.stop == "halted" and camp.state().halt["poolSeeds"] == 304
+
+
+@pytest.mark.parametrize("ingested", [False, True])
+def test_extend_is_refused_once_a_first_pass_run_of_the_round_has_issued(
+        tmp_path: Path, ingested: bool) -> None:
+    """U5.9's planner killed between its two `begin_round` calls while the runner went on."""
+    camp = bench(tmp_path)
+    camp.begin_round(30, 15, design_stratum="turns")
+    if ingested:
+        run_generation(camp, obedient_item)
+    else:
+        camp.issue(serve(camp))
+    before = camp.ledger_path.read_bytes()
+    with pytest.raises(CampaignRefused, match="issued"):
+        camp.begin_round(30, 15, design_stratum="understanding", extend=True)
+    assert camp.ledger_path.read_bytes() == before
+    assert camp.state().drawn_in(30) == 15
+
+
+def test_a_stratum_a_lower_round_drew_is_accepted_for_round_3_and_refused_for_round_2(
+        tmp_path: Path) -> None:
+    camp = bench(tmp_path)
+    camp.begin_round(2, 10, design_stratum="turns")
+    camp.begin_round(2, 8, design_stratum="understanding", extend=True)
+    camp.begin_round(3, 12, design_stratum="turns")
+    camp.begin_round(3, 9, design_stratum="understanding", extend=True)
+    with pytest.raises(CampaignRefused, match="already holds a draw"):
+        camp.begin_round(2, 5, design_stratum="understanding", extend=True)
+    state = camp.state()
+    assert (state.drawn_in(2), state.drawn_in(3)) == (18, 21)
 
 
 def test_the_template_hash_is_the_canonical_json_of_the_generator_entries() -> None:
