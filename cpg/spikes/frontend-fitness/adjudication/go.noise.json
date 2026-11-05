@@ -1,0 +1,865 @@
+{
+ "lang": "go",
+ "N": 373,
+ "comparable": 324,
+ "referenceSilent": 49,
+ "agreement": {
+  "agreed": 310,
+  "comparable": 324,
+  "rate": 0.9568,
+  "wilson95": [
+   0.9288,
+   0.9741
+  ]
+ },
+ "adjudicated": {
+  "n": 35,
+  "W": 9,
+  "byWrong": {
+   "label": 8,
+   "neither": 20,
+   "reference": 6,
+   "both": 1
+  },
+  "byErrorKind": {
+   "target": 9,
+   "none": 26
+  }
+ },
+ "referenceError": {
+  "wrong": 7,
+  "comparable": 324,
+  "rate": 0.0216,
+  "wilson95": [
+   0.0105,
+   0.0439
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 115,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ]
+  },
+  "AE": {
+   "N_s": 195,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ]
+  },
+  "AS": {
+   "N_s": 28,
+   "n": 28,
+   "k": 1,
+   "wilson95": [
+    0.0063,
+    0.1771
+   ]
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.0268,
+   "conservative": 0.0768
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.0307
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 138
+ },
+ "closedClasses": {
+  "count": 0,
+  "byKind": {
+   "role": [],
+   "coordinate": [],
+   "shape": []
+  }
+ },
+ "unscored": {
+  "byReason": {
+   "notACall": 14
+  },
+  "underivable": 0
+ },
+ "basisCounts": {
+  "audit-confirmed": 165,
+  "agreed": 172,
+  "audit-overturned": 1,
+  "adjudicated": 35
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.0268,
+   "flagged": false
+  },
+  "v1.11": {
+   "figure": 0.0268,
+   "flagged": false
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": {
+   "found": 0,
+   "items": [],
+   "statement": "none found: scan of the 138 census definition lines for a `type` declaration"
+  },
+  "anonymousLambdaIndices": {
+   "definitions": 24,
+   "withIndexSuffix": 21,
+   "bareAnon": 3,
+   "items": [
+    {
+     "path": "binder.go",
+     "defLine": 130,
+     "qname": "binder.go::QueryParamsBinder.<anon>#1"
+    },
+    {
+     "path": "binder.go",
+     "defLine": 146,
+     "qname": "binder.go::PathValuesBinder.<anon>#1"
+    },
+    {
+     "path": "binder.go",
+     "defLine": 171,
+     "qname": "binder.go::FormFieldBinder.<anon>#1"
+    },
+    {
+     "path": "binder.go",
+     "defLine": 176,
+     "qname": "binder.go::FormFieldBinder.<anon>#2"
+    },
+    {
+     "path": "binder_generic_test.go",
+     "defLine": 1133,
+     "qname": "binder_generic_test.go::TestParseValue_Time.<anon>#1"
+    },
+    {
+     "path": "binder_test.go",
+     "defLine": 213,
+     "qname": "binder_test.go::TestValueBinder_GetValues.<anon>#1"
+    },
+    {
+     "path": "binder_test.go",
+     "defLine": 220,
+     "qname": "binder_test.go::TestValueBinder_GetValues.<anon>#2"
+    },
+    {
+     "path": "echotest/reader_external_test.go",
+     "defLine": 21,
+     "qname": "echotest/reader_external_test.go::TestLoadBytes_custom.<anon>#1"
+    },
+    {
+     "path": "ip.go",
+     "defLine": 226,
+     "qname": "ip.go::ExtractIPFromRealIPHeader.<anon>#1"
+    },
+    {
+     "path": "middleware/body_dump.go",
+     "defLine": 88,
+     "qname": "middleware/body_dump.go::BodyDumpConfig.ToMiddleware.<anon>#1"
+    },
+    {
+     "path": "middleware/compress.go",
+     "defLine": 87,
+     "qname": "middleware/compress.go::GzipConfig.ToMiddleware.<anon>#1.<anon>#1"
+    },
+    {
+     "path": "middleware/cors.go",
+     "defLine": 192,
+     "qname": "middleware/cors.go::CORSConfig.ToMiddleware.<anon>#1"
+    },
+    {
+     "path": "middleware/cors_test.go",
+     "defLine": 296,
+     "qname": "middleware/cors_test.go::<anon>"
+    },
+    {
+     "path": "middleware/cors_test.go",
+     "defLine": 310,
+     "qname": "middleware/cors_test.go::<anon>"
+    },
+    {
+     "path": "middleware/csrf.go",
+     "defLine": 169,
+     "qname": "middleware/csrf.go::CSRFConfig.ToMiddleware.<anon>#1.<anon>#1"
+    },
+    {
+     "path": "middleware/decompress.go",
+     "defLine": 78,
+     "qname": "middleware/decompress.go::DecompressConfig.ToMiddleware.<anon>#1"
+    },
+    {
+     "path": "middleware/extractor_test.go",
+     "defLine": 492,
+     "qname": "middleware/extractor_test.go::TestValuesFromForm.<anon>#1"
+    },
+    {
+     "path": "middleware/method_override.go",
+     "defLine": 63,
+     "qname": "middleware/method_override.go::MethodOverrideConfig.ToMiddleware.<anon>#1"
+    },
+    {
+     "path": "middleware/request_logger_test.go",
+     "defLine": 235,
+     "qname": "middleware/request_logger_test.go::TestRequestLogger_HandleError.<anon>#1"
+    },
+    {
+     "path": "middleware/request_logger_test.go",
+     "defLine": 407,
+     "qname": "middleware/request_logger_test.go::<anon>"
+    },
+    {
+     "path": "middleware/static_test.go",
+     "defLine": 61,
+     "qname": "middleware/static_test.go::TestStaticHTML5PreservesMatchedHandlerNotFound.<anon>#1"
+    },
+    {
+     "path": "middleware/static_test.go",
+     "defLine": 78,
+     "qname": "middleware/static_test.go::TestStaticHTML5PreservesMatchedHandlerNotFound.<anon>#2"
+    },
+    {
+     "path": "response.go",
+     "defLine": 266,
+     "qname": "response.go::wrapHeadHandler.<anon>#1"
+    },
+    {
+     "path": "router_concurrent_test.go",
+     "defLine": 243,
+     "qname": "router_concurrent_test.go::TestConcurrentRouter_RoutesIterationDuringModification.<anon>#1"
+    }
+   ]
+  },
+  "externalsAbsentFromTree": {
+   "statement": "none found as generated code: external labels are stdlib/builtin or Go module dependencies, not generated sources in the corpus tree",
+   "nonStdlibPackages": [
+    "builtin:error.Error",
+    "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require",
+    "golang.org/x/time/rate"
+   ]
+  }
+ },
+ "detail": {
+  "original_v1_11": {
+   "lang": "go",
+   "N": 373,
+   "comparable": 324,
+   "referenceSilent": {
+    "total": 49,
+    "adjudicated": 21,
+    "AS": 28
+   },
+   "agreement": {
+    "overall": {
+     "comparable": 324,
+     "agreed": 310,
+     "rate": 0.9568,
+     "wilson95": [
+      0.9288,
+      0.9741
+     ]
+    },
+    "labelInCorpus(AI-side)": {
+     "comparable": 129,
+     "agreed": 115,
+     "rate": 0.8915,
+     "wilson95": [
+      0.8261,
+      0.9342
+     ]
+    },
+    "labelNonInternal(AE-side)": {
+     "comparable": 195,
+     "agreed": 195,
+     "rate": 1.0,
+     "wilson95": [
+      0.9807,
+      1
+     ]
+    },
+    "declared": {
+     "comparable": 5,
+     "agreed": 0,
+     "rate": 0.0,
+     "wilson95": [
+      0,
+      0.4345
+     ]
+    },
+    "byConstruction": {
+     "comparable": 0,
+     "agreed": 0,
+     "rate": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "dispatch": {
+     "comparable": 7,
+     "agreed": 1,
+     "rate": 0.1429,
+     "wilson95": [
+      0.0257,
+      0.5131
+     ]
+    }
+   },
+   "adjudicated": {
+    "n": 35,
+    "wrong": {
+     "label": 8,
+     "neither": 20,
+     "reference": 6,
+     "both": 1
+    },
+    "errorKind": {
+     "target": 9,
+     "none": 26
+    },
+    "W_labelWrong": 9
+   },
+   "auditTable": {
+    "AI": {
+     "N_s": 115,
+     "n": 60,
+     "k": 0,
+     "wilson95": [
+      0,
+      0.0602
+     ],
+     "census": false,
+     "drawC": {
+      "n": 3,
+      "errors": 0
+     },
+     "exactCount": null,
+     "flagged": false
+    },
+    "AE": {
+     "N_s": 195,
+     "n": 60,
+     "k": 0,
+     "wilson95": [
+      0,
+      0.0602
+     ],
+     "census": false,
+     "drawC": {
+      "n": 13,
+      "errors": 0
+     },
+     "exactCount": null,
+     "flagged": false
+    },
+    "AS": {
+     "N_s": 28,
+     "n": 28,
+     "k": 1,
+     "wilson95": [
+      0.0063,
+      0.1771
+     ],
+     "census": true,
+     "drawC": {
+      "n": 0,
+      "errors": 0
+     },
+     "exactCount": 1,
+     "flagged": false
+    }
+   },
+   "cellErrorTable": [
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:github.com/stretchr/testify/require",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:compress/gzip",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:encoding/xml",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:io",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:io/fs",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:math",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:net",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:os",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:path",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:path/filepath",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:sync/atomic",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:text/template",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "C",
+     "cell": "external:stdlib:time",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:github.com/stretchr/testify/assert",
+     "n": 30,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:golang.org/x/time/rate",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:bytes",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:errors",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:fmt",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:mime/multipart",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:net/http",
+     "n": 6,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:net/http/httptest",
+     "n": 6,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:net/url",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:reflect",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:regexp",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:strings",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:sync",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AE",
+     "draw": "U",
+     "cell": "external:stdlib:testing",
+     "n": 4,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "C",
+     "cell": "internal:ip.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "C",
+     "cell": "internal:middleware/proxy.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "C",
+     "cell": "internal:middleware/rate_limiter.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "external:stdlib:net/http|internal:middleware/middleware_test.go|internal:perf_bench_test.go|internal:response.go|internal:response_test.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:bind.go",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:bind_test.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:binder.go",
+     "n": 3,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:binder_test.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:context.go",
+     "n": 11,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:echo.go",
+     "n": 25,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:group.go",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:httperror.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:json.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:middleware/body_dump.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:middleware/middleware.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:middleware/request_id.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:response.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:route_syntax_test.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:router.go",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:router_test.go",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:server.go",
+     "n": 2,
+     "errors": 0
+    },
+    {
+     "stratum": "AI",
+     "draw": "U",
+     "cell": "internal:server_test.go",
+     "n": 1,
+     "errors": 0
+    },
+    {
+     "stratum": "AS",
+     "draw": "U",
+     "cell": "external:builtin",
+     "n": 13,
+     "errors": 0
+    },
+    {
+     "stratum": "AS",
+     "draw": "U",
+     "cell": "external:stdlib:time",
+     "n": 1,
+     "errors": 1
+    },
+    {
+     "stratum": "AS",
+     "draw": "U",
+     "cell": "notACall",
+     "n": 14,
+     "errors": 0
+    }
+   ],
+   "handErrorRate": {
+    "point": 0.0268,
+    "conservativeWilsonUpper": 0.0768,
+    "pointWithoutRoleErrors": 0.0268,
+    "conservativeWithoutRoleErrors": 0.0768,
+    "roleErrors": 0,
+    "formula": "(W + sum_s N_s*k_s/n_s, AS exact count)/N",
+    "noiseLimitedByPoint": false,
+    "conservativeExceeds0_05": true
+   },
+   "referenceErrorRate": {
+    "adjudicatedReferenceWrong": 7,
+    "outOf": 324,
+    "rate": 0.0216,
+    "wilson95": [
+     0.0105,
+     0.0439
+    ],
+    "note": "audits judged labels only; reference errors counted from adjudicated sites"
+   },
+   "byConstruction": {
+    "labelled": 13,
+    "byStratum": {
+     "AS": 13
+    },
+    "adjudicatedReferenceErrors": 0
+   },
+   "role": {
+    "censusItems": 138,
+    "labelErrors": 0
+   },
+   "scored": {
+    "scored": 359,
+    "unscored": {
+     "notACall": 14
+    },
+    "underivableShare": 0.0
+   },
+   "siblingSweep": {
+    "trigger": "AS ordinal 49, cell external:stdlib:time",
+    "sites": [
+     27,
+     69,
+     360
+    ],
+    "overturns": 0
+   }
+  },
+  "v1_12": {
+   "perStratumResidual": {
+    "AI": {
+     "N_s": 115,
+     "n": 60,
+     "unreadRemainder": 55,
+     "r_s": 0,
+     "wilson95Upper": 0.0602,
+     "expectedResidual": 0.0,
+     "conservativeResidual": 3.311
+    },
+    "AE": {
+     "N_s": 195,
+     "n": 60,
+     "unreadRemainder": 135,
+     "r_s": 0,
+     "wilson95Upper": 0.0602,
+     "expectedResidual": 0.0,
+     "conservativeResidual": 8.127
+    },
+    "AS": {
+     "N_s": 28,
+     "n": 28,
+     "unreadRemainder": 0,
+     "r_s": 1,
+     "wilson95Upper": 0.1771,
+     "expectedResidual": 0.0,
+     "conservativeResidual": 0.0
+    }
+   },
+   "e_all_labelOnlyVariant": 0.0241,
+   "v1_10_would_have_said": {
+    "figure": "e_h point (with role errors)",
+    "point": 0.0268,
+    "conservative": 0.0768,
+    "flag": false,
+    "note": "v1.10 flag used e_h point 0.0268 -> not noise-limited; the conservative 0.0768 was reported beside it"
+   },
+   "closedClassShare": {
+    "count": 0,
+    "share": 0.0,
+    "cap": 0.1,
+    "tripwire": false
+   },
+   "sweep": {
+    "trigger": "AS ordinal 49 (target error), cell external:stdlib:time",
+    "sites": [
+     "0089f6ad92f36b57",
+     "0153eae140bfb1da",
+     "06efc783d4ae434e"
+    ],
+    "overturns": 0,
+    "basisNote": "ordinals 69 and 360 (re-read in the sweep, not queued) moved agreed -> audit-confirmed by v1.12 step 6 precedence"
+   },
+   "basisChanges": {
+    "agreedToAuditConfirmed": [
+     69,
+     360
+    ]
+   },
+   "note": "e_res excludes AS (census, N_s=n); ordinal 49 is corrected in final and leaves no residual"
+  }
+ }
+}
