@@ -1,0 +1,1035 @@
+{
+ "lang": "cpp",
+ "N": 187,
+ "comparable": 157,
+ "referenceSilent": 30,
+ "agreement": {
+  "agreed": 84,
+  "comparable": 157,
+  "rate": 0.535,
+  "wilson95": [
+   0.4571,
+   0.6113
+  ]
+ },
+ "adjudicated": {
+  "n": 89,
+  "W": 49,
+  "byWrong": {
+   "both": 38,
+   "label": 11,
+   "neither": 20,
+   "reference": 20
+  },
+  "byErrorKind": {
+   "target": 46,
+   "none": 40,
+   "shape": 3
+  }
+ },
+ "referenceError": {
+  "wrong": 58,
+  "comparable": 157,
+  "rate": 0.3694,
+  "wilson95": [
+   0.2979,
+   0.4472
+  ]
+ },
+ "audit": {
+  "AI": {
+   "N_s": 72,
+   "n": 60,
+   "k": 0,
+   "wilson95": [
+    0,
+    0.0602
+   ]
+  },
+  "AE": {
+   "N_s": 12,
+   "n": 12,
+   "k": 0,
+   "wilson95": null
+  },
+  "AS": {
+   "N_s": 14,
+   "n": 14,
+   "k": 0,
+   "wilson95": null
+  }
+ },
+ "handError": {
+  "e_all": {
+   "point": 0.262,
+   "conservative": 0.2852
+  },
+  "e_res": {
+   "point": 0.0,
+   "conservative": 0.0039
+  },
+  "noiseLimited": false
+ },
+ "census": {
+  "targetsRead": 175
+ },
+ "closedClasses": {
+  "count": 4,
+  "byKind": {
+   "role": [
+    69
+   ],
+   "coordinate": [],
+   "shape": [
+    16,
+    33,
+    109
+   ]
+  }
+ },
+ "unscored": {
+  "byReason": {
+   "notACall": 10,
+   "dynamic": 1
+  },
+  "underivable": 0
+ },
+ "basisCounts": {
+  "audit-confirmed": 86,
+  "adjudicated": 90,
+  "agreed": 11
+ },
+ "flagByVersion": {
+  "v1.10": {
+   "figure": 0.262,
+   "flagged": true
+  },
+  "v1.11": {
+   "figure": 0.246,
+   "flagged": true
+  },
+  "v1.12": {
+   "figure": 0.0,
+   "flagged": false
+  }
+ },
+ "openPointsS27": {
+  "classLineTargets": "none found: scan of the 148 distinct final T (path, defLine) lines for a class/struct head line (regex ^(template<..>)?(class|struct)\\b) returned 0; the 3 census rows decided 'type' (gmock-actions.h:508, gmock-matchers.h:2040, gtest-param-util.h:230) are wrong targets and are in no final T",
+  "anonymousLambdaIndices": "none: no final T qname carries a lambda index; one qname contains an anonymous-namespace marker (<anonns>), googlemock/test/gmock-matchers-misc_test.cc BacktrackingMaxBPMState.Compute",
+  "externalsPackageAbsentFromTree": {
+   "note": "external header names whose source is absent from the corpus tree (no 'absl' path under cpg/.ccg-work/corpora/cpp/src)",
+   "byName": {
+    "header:absl/flags/flag.h": [
+     17,
+     57
+    ],
+    "header:io.h": [
+     148
+    ],
+    "header:sys/socket.h": [
+     99
+    ],
+    "header:windows.h": [
+     92
+    ]
+   }
+  },
+  "macroGeneratedTargets": 5
+ },
+ "detail": {
+  "v111Original": {
+   "lang": "cpp",
+   "N": 187,
+   "comparable": {
+    "comparable": 157,
+    "silent": 30,
+    "share": 0.8396
+   },
+   "agreement": {
+    "agreed_all": 98,
+    "agreed_comparable": 84,
+    "rate": 0.535,
+    "wilson95": [
+     0.4571,
+     0.6113
+    ],
+    "note": "AS agreed sites are single-source and excluded from numerator and denominator",
+    "perStratum": {
+     "AI_ref_internal": {
+      "comparable": 120,
+      "agreed": 72,
+      "rate": 0.6,
+      "wilson": [
+       0.5106,
+       0.6832
+      ]
+     },
+     "AE_ref_external_local": {
+      "comparable": 37,
+      "agreed": 12,
+      "rate": 0.3243,
+      "wilson": [
+       0.1963,
+       0.4854
+      ]
+     },
+     "relaxed": {
+      "comparable": 46,
+      "agreed": 37,
+      "rate": 0.8043,
+      "wilson": [
+       0.6683,
+       0.8935
+      ]
+     },
+     "byConstruction": {
+      "comparable": 0,
+      "agreed": 0,
+      "rate": null,
+      "wilson": [
+       null,
+       null
+      ]
+     },
+     "ambiguous": {
+      "comparable": 0,
+      "agreed": 0,
+      "rate": null,
+      "wilson": [
+       null,
+       null
+      ]
+     },
+     "declared": {
+      "comparable": 1,
+      "agreed": 1,
+      "rate": 1.0,
+      "wilson": [
+       0.2065,
+       1
+      ]
+     },
+     "macro": {
+      "comparable": 47,
+      "agreed": 0,
+      "rate": 0.0,
+      "wilson": [
+       0.0,
+       0.0756
+      ]
+     }
+    }
+   },
+   "adjudicated": {
+    "n": 89,
+    "byWrong": {
+     "both": 38,
+     "neither": 20,
+     "label": 11,
+     "reference": 20
+    },
+    "byErrorKind": {
+     "target": 46,
+     "none": 40,
+     "schema": 3
+    },
+    "W": 49,
+    "W_note": "adjudicated sites with the label wrong (wrong in label|both)"
+   },
+   "audit": {
+    "AI": {
+     "N_s": 72,
+     "n": 60,
+     "k": 0,
+     "census": false,
+     "wilson": [
+      0,
+      0.0602
+     ]
+    },
+    "AE": {
+     "N_s": 12,
+     "n": 12,
+     "k": 0,
+     "census": true,
+     "wilson": null
+    },
+    "AS": {
+     "N_s": 14,
+     "n": 14,
+     "k": 0,
+     "census": true,
+     "wilson": null
+    },
+    "drawC": {
+     "n": 1,
+     "errors": 0,
+     "cells": [
+      "in:internal@googletest/test/googletest-port-test.cc"
+     ],
+     "pooled": false
+    }
+   },
+   "census": {
+    "targetsRead": 175,
+    "distinctLabelReferenceAndDecidedTargets": 175,
+    "equal": true,
+    "missingFromCensus": 0,
+    "extraInCensus": 0,
+    "roleErrors": [
+     {
+      "path": "googlemock/test/gmock-function-mocker_test.cc",
+      "defLine": 126,
+      "siteOrdinals": [
+       69
+      ]
+     }
+    ],
+    "fcDiffers": 3
+   },
+   "closedClasses": {
+    "shape": {
+     "ordinals": [
+      16,
+      33,
+      109
+     ],
+     "note": "empty callees with neither notACall nor dynamic; found by the script/schema scan of every label line, corrected in final"
+    },
+    "role": {
+     "ordinals": [
+      69
+     ],
+     "note": "census item gmock-function-mocker_test.cc:126; the site (69) is already in W as a target error, so it adds nothing to W and stays residual",
+     "alsoInW": [
+      69
+     ]
+    },
+    "instances": 4,
+    "share_of_N": 0.0214,
+    "cap": 0.1
+   },
+   "handErrorRate": {
+    "e_all": {
+     "point": 0.262,
+     "conservative": 0.2852
+    },
+    "e_res": {
+     "point": 0.246,
+     "conservative": 0.2692
+    },
+    "W_residual": 46,
+    "extrapolatedTerm_point": 0.0,
+    "extrapolatedTerm_conservative": 4.334,
+    "note": "AE and AS audits are censuses (no extrapolation); AI term N_s*k/n and N_s*Wilson upper (k=0, n=60); draw C not pooled"
+   },
+   "noiseLimited": true,
+   "noiseLimitedBasis": "e_res point estimate > 0.05",
+   "conservativeAlso_above_0.05": true,
+   "referenceError": {
+    "adjudicatedRefErrors_comparable": 58,
+    "comparable": 157,
+    "point": 0.3694,
+    "wilson95": [
+     0.2979,
+     0.4472
+    ],
+    "conservative_with_AI_audit_upper": 0.397
+   },
+   "macroStratum": {
+    "viaMacro": {
+     "N": 53,
+     "W": 39,
+     "residualW": 39,
+     "W_over_N": 0.7358,
+     "wilson": [
+      0.6042,
+      0.8356
+     ],
+     "byKind": {
+      "target": 39
+     }
+    },
+    "nonMacro": {
+     "N": 134,
+     "W": 10,
+     "residualW": 7,
+     "W_over_N": 0.0746,
+     "wilson": [
+      0.041,
+      0.1319
+     ],
+     "byKind": {
+      "target": 7,
+      "schema": 3
+     }
+    },
+    "macroUnderdetermined": {
+     "count": 0,
+     "share": 0.0,
+     "cap": 0.3
+    },
+    "relabelCost": {
+     "macroSites": 53,
+     "distinctMacros": 24,
+     "finalLinesWhoseBasisWouldChange": 53
+    }
+   },
+   "relaxed": {
+    "n": 46,
+    "referenceErrors": 4,
+    "share": 0.087,
+    "cap": 0.1
+   },
+   "typeCtorMerged": {
+    "sites": 6,
+    "referenceErrors": 0,
+    "withdrawAt": 3
+   },
+   "byConstruction": {
+    "n": 14,
+    "referenceErrors": 0
+   },
+   "ambiguous": {
+    "n": 2,
+    "referenceErrors": 0
+   },
+   "unscored": {
+    "notACall": 10,
+    "dynamic": 1
+   },
+   "underivable": {
+    "count": 0,
+    "share": 0.0,
+    "cap": 0.05
+   },
+   "perCellErrors": {
+    "empty": {
+     "sites": 3,
+     "labelErrors": 3,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:header:absl/flags/flag.h": {
+     "sites": 2,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:header:io.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:header:sys/socket.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:header:windows.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:ctype.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:memory": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:signal.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:stdlib.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:string": {
+     "sites": 6,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 5,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:string_view": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:utility": {
+     "sites": 4,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 4,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "ext:stdlib:vector": {
+     "sites": 4,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 2,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:declared@googlemock/src/gmock-spec-builders.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:declared@googletest/include/gtest/internal/gtest-param-util.h;internal@googletest/include/gtest/internal/gtest-param-util.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:declared@googletest/samples/prime_tables.h;internal@googletest/samples/prime_tables.h": {
+     "sites": 1,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-actions.h": {
+     "sites": 8,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 5,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-cardinalities.h": {
+     "sites": 3,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 2,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-matchers.h": {
+     "sites": 22,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 16,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-matchers.h;internal@googletest/include/gtest/gtest-assertion-result.h;internal@googletest/src/gtest.cc": {
+     "sites": 10,
+     "labelErrors": 10,
+     "residualLabelErrors": 10,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-more-matchers.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/include/gmock/gmock-spec-builders.h": {
+     "sites": 2,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/src/gmock-internal-utils.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/src/gmock-spec-builders.cc": {
+     "sites": 2,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 2,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-function-mocker_test.cc": {
+     "sites": 1,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-matchers-comparisons_test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-matchers-containers_test.cc": {
+     "sites": 2,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-matchers-misc_test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-matchers_test.h": {
+     "sites": 4,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 3,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-more-actions_test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googlemock/test/gmock-spec-builders_test.cc": {
+     "sites": 3,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-assertion-result.h;internal@googletest/include/gtest/gtest.h;internal@googletest/src/gtest.cc": {
+     "sites": 13,
+     "labelErrors": 12,
+     "residualLabelErrors": 12,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-assertion-result.h;internal@googletest/include/gtest/gtest_pred_impl.h;internal@googletest/src/gtest.cc": {
+     "sites": 2,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-assertion-result.h;internal@googletest/include/gtest/internal/gtest-death-test-internal.h;internal@googletest/src/gtest-death-test.cc;internal@googletest/src/gtest.cc": {
+     "sites": 3,
+     "labelErrors": 3,
+     "residualLabelErrors": 3,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-assertion-result.h;internal@googletest/src/gtest.cc": {
+     "sites": 4,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-matchers.h": {
+     "sites": 5,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 3,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-message.h;internal@googletest/include/gtest/internal/gtest-internal.h;internal@googletest/src/gtest-death-test.cc;internal@googletest/src/gtest.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest-printers.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/gtest.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/internal/gtest-filepath.h": {
+     "sites": 3,
+     "labelErrors": 3,
+     "residualLabelErrors": 3,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/internal/gtest-internal.h": {
+     "sites": 1,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/internal/gtest-param-util.h": {
+     "sites": 1,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/include/gtest/internal/gtest-type-util.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/samples/sample3-inl.h": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/src/gtest-filepath.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/src/gtest-internal-inl.h": {
+     "sites": 3,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 3,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/src/gtest-port.cc": {
+     "sites": 3,
+     "labelErrors": 1,
+     "residualLabelErrors": 1,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/src/gtest.cc": {
+     "sites": 30,
+     "labelErrors": 12,
+     "residualLabelErrors": 12,
+     "auditU": 11,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/test/googletest-listener-test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/test/googletest-port-test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 0,
+     "auditUerr": 0,
+     "auditC": 1,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/test/gtest-unittest-api_test.cc": {
+     "sites": 1,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 1,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/test/gtest_pred_impl_unittest.cc": {
+     "sites": 4,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 3,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "in:internal@googletest/test/gtest_unittest.cc": {
+     "sites": 4,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 2,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    },
+    "notACall": {
+     "sites": 10,
+     "labelErrors": 0,
+     "residualLabelErrors": 0,
+     "auditU": 8,
+     "auditUerr": 0,
+     "auditC": 0,
+     "auditCerr": 0
+    }
+   },
+   "siblingSweep": "not triggered: 0 audit errors"
+  },
+  "v112": {
+   "e_all_note": "labeller noise, disclosure only; W=label|both adjudicated, plus role instance not already in W (0), plus AI audit extrapolation (0 errors)",
+   "W": 49,
+   "W_labelOnlyVariant": 11,
+   "e_all_labelOnlyVariant": 0.0588,
+   "e_res_formula": "sum_s (N_s-n_s)*r_s/n_s / N, r_s = audited target|kind errors; AE and AS are censuses and contribute 0",
+   "perStratum": {
+    "AI": {
+     "N_s": 72,
+     "n": 60,
+     "k": 0,
+     "r": 0,
+     "remainder": 12,
+     "census": false,
+     "wilson95": [
+      0,
+      0.0602
+     ]
+    },
+    "AE": {
+     "N_s": 12,
+     "n": 12,
+     "k": 0,
+     "r": 0,
+     "remainder": 0,
+     "census": true,
+     "wilson95": null
+    },
+    "AS": {
+     "N_s": 14,
+     "n": 14,
+     "k": 0,
+     "r": 0,
+     "remainder": 0,
+     "census": true,
+     "wilson95": null
+    }
+   },
+   "drawC": {
+    "n": 1,
+    "errors": 0,
+    "cells": [
+     "in:internal@googletest/test/googletest-port-test.cc"
+    ],
+    "pooled": false
+   },
+   "noiseLimited_v112": false,
+   "readout": "labeller noisy, final labels repaired (e_all>0.05, e_res<=0.05); corrected sites rest on DS's source reading (analyst Pass 3: 0 wrong in 14 for C++)",
+   "macroStratum": {
+    "viaMacro": {
+     "N": 53,
+     "W": 39,
+     "residualW": 39,
+     "W_over_N": 0.7358,
+     "wilson": [
+      0.6042,
+      0.8356
+     ],
+     "byKind": {
+      "target": 39
+     }
+    },
+    "nonMacro": {
+     "N": 134,
+     "W": 10,
+     "residualW": 7,
+     "W_over_N": 0.0746,
+     "wilson": [
+      0.041,
+      0.1319
+     ],
+     "byKind": {
+      "target": 7,
+      "schema": 3
+     }
+    },
+    "macroUnderdetermined": {
+     "count": 0,
+     "share": 0.0,
+     "cap": 0.3
+    },
+    "relabelCost": {
+     "macroSites": 53,
+     "distinctMacros": 24,
+     "finalLinesWhoseBasisWouldChange": 53
+    }
+   },
+   "relaxed": {
+    "n": 46,
+    "referenceErrors": 4,
+    "share": 0.087,
+    "wilson95": [
+     0.0343,
+     0.2032
+    ],
+    "cap": 0.1
+   },
+   "typeCtorMerged": {
+    "sites": 6,
+    "referenceErrors": 0,
+    "wilson95": [
+     0,
+     0.3903
+    ],
+    "withdrawAt": 3,
+    "ordinals": [
+     66,
+     73,
+     80,
+     136,
+     162,
+     176
+    ]
+   },
+   "closedClassNotes": {
+    "shape": "errorKind 'schema' in the S57 decisions renamed 'shape' (v1.12): empty callees, neither notACall nor dynamic",
+    "role": "gmock-function-mocker_test.cc:126 (site 69); the site is also in W as a target error and stays a residual candidate only via the audit, which found none",
+    "share_of_N": 0.0214,
+    "tripwire": 0.1
+   },
+   "census_note": {
+    "targetsRead": 175,
+    "distinctLabelReferenceAndDecidedTargets": 175,
+    "equal": true,
+    "missingFromCensus": 0,
+    "extraInCensus": 0,
+    "roleErrors": [
+     {
+      "path": "googlemock/test/gmock-function-mocker_test.cc",
+      "defLine": 126,
+      "siteOrdinals": [
+       69
+      ]
+     }
+    ],
+    "fcDiffers": 3
+   }
+  }
+ }
+}
