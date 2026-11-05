@@ -313,3 +313,150 @@ Excluding the default-ignored directories, pooled recall is cpp 116/240 = 0.483,
 **Why recall is low (checked once, Java).** A parameter's second and later uses are not connected: Joern's REACHING_DEF for `owner` at line 218 of `JdbcOwnerRepositoryImpl.delete` runs from the earlier `owner` identifier at line 217, not from the parameter, and `extract.sc`'s `defsOf` follows an identifier's definition only when it is an assignment target. This probe (`rdprobe.sc`, scratch) is one method; its generality is unverified. Missed pairs also include values built by `new HashMap<>()` and then `put`, tuple and spread literals, `for` headers and switch labels; those mechanisms were not probed. The miss rows carry the evidence; `proposedCause` is the data-scientist's.
 
 **`flowAvailable`, provisional (ML §8.4): false for python, javascript, go, java, csharp and cpp; Kotlin unmeasured.** Pooled recall is below 0.95 in both configurations everywhere (best 0.675), pairs exceed 120 everywhere, and C# additionally fails the precondition as shipped (0/5,897). Omission rate and the truth-incomplete flag await the adjudication of the spurious samples; no decision depends on them, since no language is near 0.95.
+
+## §a2.2 S28 adjudication of misses and spurious pairs, and the final `flowAvailable`
+
+By `data-scientist`, 2026-11-05, under ML §8.4 (the second check on flow truth), §7.3 and §6.4's stopping conditions, with the §a2.0 rulings. Decisions are in two new files per language.
+`adjudication/<lang>-flow-misses.adj.jsonl` covers every miss. It has `proposedCause` = `<side>:<cause>`, plus `causeSide` and `adjudication` (`miss-stands`, `overturned` or `endpoint-naming-error`). It also has `counterfactual` {R1, R2, R3}, defined in a2.2.1.
+`adjudication/<lang>-flow-spurious.adj.jsonl` covers every sampled pair, with `verdict` (`omission`, `spurious` or `duplicate-of-golden`) and `verdictReason`. The S28 inputs, `measure.sc`, the truth files and the census files are unedited.
+Off and on agree on every pair (§a2.1), so the off figures below hold for both configurations. Kotlin is unmeasured and has no adjudication.
+
+**Sides.** Each side names where the miss would have to be fixed:
+- `projection`: `extract.sc` could connect the pair from what the CPG already holds.
+- `join`: the point exists in the projection, but S28's scoring join (`s28_core.py`) cannot name it.
+- `frontend`: the CPG lacks the node, the edge or the method. This covers the frontend and Joern's shared CFG and DDG passes.
+- `definition`: the CDG reaches the sink through a chain of two or more CONTROLLED_BY edges, but §7.3 requires a direct edge.
+- `label`: the golden pair, or its naming, is wrong.
+- `undetermined`: the cause is unknown.
+
+**Evidence levels.** A `projection` cause marked R1, R2 or R3 is verified per pair by a counterfactual projection. Probed mechanisms were checked on one or two methods with a Joern probe and then assigned by pattern. Every other cause was assigned from source against the projection's points, method by method.
+
+### a2.2.1 The graph-dba's hypothesis: verified at scale, projection-side
+
+Three scratch variants were built from `s28-extract-bodiless-guard.sc` and run through `offline-run.sh --mode offline` on copies of the S27 off CPGs. They were scored with the unchanged `s28_metrics.analyse_cfg`. The shipped walk ran beside each variant in the same run and reproduced the §a2.1 pooled figures exactly in all six languages.
+- **R1**: `defsOf` also follows a REACHING_DEF whose source is an earlier same-name identifier that is not an assignment target, through that identifier's own reaching definitions.
+- **R2**: R1, plus the receiver of a `<init>` call is defined by that call.
+- **R3**: R2, plus frontend-synthetic calls (calls whose name is not in the source, such as iterator `next`) are transparent intermediates, computed at scoring time.
+
+| | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| shipped, all pairs | 307/480 | 60/151 | 246/433 | 314/465 | 227/392 | 116/349 |
+| R1 | 374/480 = 0.779 | 66/151 = 0.437 | 342/433 = 0.790 | 384/465 = 0.826 | 253/392 = 0.645 | 138/349 = 0.395 |
+| R2 | 374/480 | 66/151 | 342/433 | 412/465 = 0.886 | 253/392 | 138/349 |
+| R3 | 391/480 = 0.815 | 69/151 = 0.457 | 342/433 | 450/465 = 0.968 | 261/392 = 0.666 | 138/349 |
+| spurious pairs, shipped → R3 | 91/396 → 102/493 | 49/109 → 53/122 | 41/284 → 42/382 | 16/325 → 17/461 | 54/278 → 64/325 | 45/161 → 56/194 |
+
+**The hypothesis holds.** R1 alone connects 287 of the 1,000 misses (python 67, javascript 6, go 96, java 70, csharp 26, cpp 22). It loses no connected pair, and the spurious rate does not rise in any language. Joern does hold a REACHING_DEF chain from the earlier use to the later one, and `extract.sc` discards it, so the pattern is **projection-side**.
+Across the whole CPGs, the shipped walk drops reaching-definition sources that are an earlier call-argument identifier this many times: python 7,788, javascript 469, go 5,663, java 555, csharp 8,981, cpp 1,808.
+An upper-bound variant that follows every reaching-definition source finished for java and javascript only, and gained 0 pairs beyond R1 there; it ran out of Java heap on the other four.
+
+**Caveat on the counterfactuals.** R1 tests the graph-dba's hypothesis, which was stated before this adjudication. R2 and R3 I designed after reading these misses. So the 30 methods per language are now development contact for any `extract.sc` fix. The R rows say where the gap is; they are not a measurement of a fixed projection. A fixed projection must be measured on a fresh flow draw with a new seed prefix.
+
+### a2.2.2 Miss causes
+
+| side (misses) | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| projection | 111 | 18 | 98 | 145 | 38 | 23 |
+|   of which counterfactual-verified (R1 / R2 / R3) | 67 / 0 / 17 | 6 / 0 / 3 | 96 / 0 / 0 | 70 / 28 / 38 | 26 / 0 / 8 | 22 / 0 / 0 |
+| join | 40 | 4 | 0 | 0 | 21 | 0 |
+| frontend | 9 | 62 | 64 | 5 | 99 | 202 |
+| definition (CDG chain of 2 or more edges) | 9 | 4 | 20 | 1 | 5 | 7 |
+| label | 0 | 0 | 1 | 0 | 1 | 1 |
+| undetermined | 4 | 3 | 4 | 0 | 1 | 0 |
+| total misses | 173 | 91 | 187 | 151 | 165 | 233 |
+
+- **Projection-side, unverified by counterfactual.** These causes were assigned from source: Java/JS `new` expressions in block form, where `objFields` reads the alloc block as an empty object literal (java 8, javascript 2); Python comprehension or generator scopes, which are separate METHODs (12); a call that is itself a CDG source, so `pointOf` maps it to the cond and never to the call (python 10, java 1, javascript 1, csharp 1, cpp 1); dict, array or spread literals (python 4, javascript 5); field and element writes read back later (go 2, csharp 1); C# `foreach` loop-variable lowering (2); a Python bound-method alias (1).
+- **Join-side.** Python `for` headers are CDG nodes coded `iteratorNonEmptyOrException` (36). C# `foreach` is coded `_idx_ < X.Count` (8), and target-typed `new(...)` has no callee name in the source (10). In python ordinal 9, the contains-join resolves the label `not (self._open or ...)` to the operand `self._open`, because Joern prints the node `not self._open or ...` (4 pairs). C# ordinal 10 has the same problem.
+- **Frontend-side, probed.**
+  - Python `raise` and Java `throw` have the next statement as their CFG successor, so no guard reaches later points through the CDG. Probes: `UserServiceImpl.java` throw at line 21 → `$iterLocal0` at line 24; `guards.py` `_validate_path` raise at line 427 → `tmp7` at line 430. This accounts for python 9 and java 3 misses; Go `panic` follows the same pattern (2, not probed).
+  - Go: a use of a parameter gets its REACHING_DEF from METHOD rather than from the parameter (`binder.go:243`); 6 misses.
+  - Go: a multi-value `a, err := f()` has no LHS identifiers (`ip_test.go:15`: 0 `err` identifiers); 16 misses.
+  - Go: uses after a `range` loop have no incoming REACHING_DEF (`binder.go:975`, `binder.go:978`). Together with `range` headers that have no cond node, this accounts for 24 misses.
+- **Frontend-side, from source against the projection's points.**
+  - C# drops brace-less `if`/`foreach` bodies and a `lock` body from the AST in 10 of the 30 methods. Example: `IPSecurityPolicy.cs:14` has no `OkResponse` call. This accounts for 47 misses.
+  - C# `?.` calls, `??`/`??=` operands and switch-expression arms emit no node (12 misses).
+  - Switch case labels have no CDG node; the discriminant is the only cond (javascript 52, csharp 8, cpp 6).
+  - C++ `::std::get<I>()` and `T x(args);` constructors have no CALL node (19 misses); C++ `GTEST_*` macros account for 7 more.
+  - Absent methods: the default-ignored `test`/`tests` directories (cpp 108 after one overturn) and `src/i18n` (javascript 9); per-file parse failures (go 8, csharp 30); C++ methods with no METHOD in a parsed file (62, not individually probed).
+- **Correction to §a2.1.** The Go method Joern has no METHOD for is ordinal 26 (`BenchmarkValueBinder_BindInt64_single`, `binder_test.go`, 8 pairs), not `csrf.go`. `binder_test.go` is one of the three per-file-exception files of §a1.4.
+- **Overturned misses.** Two pairs are not real under Part F ruling 7: go ordinal 6 pair 11 and cpp ordinal 17 pair 0, where the source is only a subscript key. A targeted text scan of every data miss whose source sits inside a subscript of the sink line found no others. That scan is not exhaustive for other invalid conventions.
+
+### a2.2.3 Stopping condition (b): endpoint-unresolved, split before any §8.4 decision
+
+| | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| endpoint-unresolved pairs | 36 | 56 | 19 | 0 | 79 | 25 |
+| labeller naming error | 0 | 0 | 0 | 0 | 1 | 0 |
+| join gap (the point exists, under another code or name) | 36 | 4 | 0 | 0 | 20 | 0 |
+| frontend gap (no point in the CPG) | 0 | 52 | 19 | 0 | 58 | 25 |
+
+Of the 215 unresolved pairs, 1 is a labeller naming error. In csharp ordinal 6, the label puts `ret` on line 25, but `return true;` is on line 26, where the projection has it. That pair is excluded from the adjudicated denominator and not re-keyed. All other unresolved pairs are projection-join or frontend gaps, so they stay misses in the headline and are excluded only in the strata of a2.2.5. C++ has no unresolved `param` endpoint, so there is no `this` offset.
+
+### a2.2.4 Spurious samples: omission rate and the truth-incomplete flag
+
+| | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| sampled | 50 | 49 | 41 | 16 | 50 | 45 |
+| spurious / duplicate-of-golden / omission | 32 / 17 / 1 | 16 / 32 / 1 | 39 / 0 / 2 | 16 / 0 / 0 | 37 / 7 / 6 | 42 / 3 / 0 |
+| omission rate, all sampled (rule's n), Wilson | 1/50 = 0.020 [0.004, 0.105] | 1/49 = 0.020 [0.004, 0.107] | 2/41 = 0.049 [0.014, 0.161] | 0/16 [0, 0.194] | 6/50 = 0.120 [0.056, 0.238] | 0/45 [0, 0.079] |
+| flag (> 0.05, n ≥ 20) | no | no | no | insufficient | **truth-incomplete** | no |
+| omission rate, duplicates excluded | 1/33 = 0.030 | 1/17, insufficient | 2/41 | 0/16, insufficient | 6/43 = 0.140, flag | 0/42 |
+
+A `duplicate-of-golden` pair is a golden pair under another point name. It covers lowered loop headers, a switch discriminant standing for its case labels, and cond-code text. It is neither an omission nor a spurious edge.
+**Every omission is a control pair.** They are:
+- a later point an early exit skips (Ruling 3): python 1, go 2, csharp 4;
+- a call nested in a short-circuit right side (Ruling 2): csharp 2;
+- a cond deciding the `ret` in its own body: javascript ordinal 1, `if (!sent) return [...rows];`.
+The C# flag means C#'s control truth is incomplete for these two conventions; no decision depends on it.
+**Spurious pairs** are mostly structural CDG artefacts:
+- a short-circuit operand whose right side has no call, which the brief does not make a cond;
+- an operand's edge to its enclosing expression;
+- frontend-synthetic conds, from `try`/`with`/`finally`/`lock`, defaults, `null` literals and chained comparisons;
+- C++ macro-internal conds (23 of cpp's 42);
+- ternary selectors;
+- loop-carried control.
+
+### a2.2.5 Recall under every defensible stratum (as-shipped projection; off = on)
+
+The adjudicated set:
+- removes the 2 overturned misses and the 1 naming error;
+- adds each confirmed omission as a connected pair (§11 N7).
+
+| Stratum | python | javascript | go | java | csharp | cpp |
+|---|---|---|---|---|---|---|
+| As shipped, all pairs (§a2.1, provisional) | 307/480 = 0.640 | 60/151 = 0.397 | 246/433 = 0.568 | 314/465 = 0.675 | 227/392 = 0.579 | 116/349 = 0.332 |
+| **Adjudicated, all pairs (headline)** | 308/481 = 0.640 | 61/152 = 0.401 | 248/434 = 0.571 | 314/465 = 0.675 | 233/397 = 0.587 | 116/348 = 0.333 |
+| Adjudicated: Wilson 95% | [0.597, 0.682] | [0.327, 0.481] | [0.524, 0.617] | [0.631, 0.716] | [0.538, 0.634] | [0.286, 0.384] |
+| Adjudicated: cluster 95% (§7.3) | [0.565, 0.716] | [0.244, 0.559] | [0.515, 0.627] | [0.621, 0.729] | [0.467, 0.707] | [0.174, 0.493] |
+| excluding frontend-default-ignored dirs | 308/481 | 61/143 = 0.427 | 248/434 | 314/465 | 233/397 | 116/240 = 0.483 |
+| excluding all endpoint-unresolved | 308/445 = 0.692 | 61/96 = 0.635 | 248/415 = 0.598 | 314/465 | 233/319 = 0.730 | 116/323 = 0.359 |
+| excluding only join- and label-side unresolved | 308/445 = 0.692 | 61/148 = 0.412 | 248/434 | 314/465 | 233/377 = 0.618 | 116/348 |
+| excluding default-ignored dirs and all unresolved | 308/445 | 61/87 = 0.701 | 248/415 | 314/465 | 233/319 | 116/215 = 0.539 |
+| matched methods only | 308/481 | 61/143 = 0.427 | 248/426 = 0.582 | 314/465 | 233/367 = 0.635 | 116/178 = 0.652 |
+| data / control | 191/304 = 0.628 / 117/177 = 0.661 | 36/80 = 0.450 / 25/72 = 0.347 | 145/293 = 0.495 / 103/141 = 0.731 | 150/296 = 0.507 / 164/169 = 0.970 | 150/258 = 0.581 / 83/139 = 0.597 | 65/187 = 0.348 / 51/161 = 0.317 |
+| `early-exit` (matched methods) | 0/5 | 2/4 | 12/38 = 0.316 | 3/5 | 4/8 | 10/17 (10/34 with absent methods) |
+| `callee-value`, valid / `alias` | 0/1 / none | none | none / 0/2 | none | none | none |
+| counterfactual R3, adjudicated (not a decision input) | 392/481 = 0.815 | 70/152 = 0.461 | 344/434 = 0.793 | 450/465 = 0.968 | 267/397 = 0.672 | 138/348 = 0.397 |
+
+- **`early-exit` misses** are mostly `definition` (a CDG chain, not a direct edge): go 20, cpp 7. In the other languages they are the probed frontend `throw`/`raise` fall-through or a C# dropped statement.
+- **Go `callee-value` contradiction pairs.** Part F ruled four Go pairs invalid: three `callee-value` and one `field-write`. Two independent labellers had marked them `unsure`, and §a2.0 tags those rulings for reversal. Reinstated, none of the four is connected. Ordinal 5's sink `<dynamic>` has no CALL node; ordinals 4, 24 and 18 are not connected. Go would read 248/438 = 0.566. Reversing the rulings changes nothing.
+- **Counts below 120.** JS has fewer than 120 pairs in the two strata that exclude all unresolved pairs (96 and 87), so §8.4 would call them insufficient. Every other cell has at least 120 pairs.
+
+### a2.2.6 `flowAvailable` (final, ML §8.4)
+
+**`flowAvailable` is false for python, javascript, go, java, csharp and cpp in both configurations. Kotlin is unmeasured.**
+- **No pooled stratum comes near 0.95.** The best headline is java 0.675, and the best pooled figure under any stratum is csharp's 0.730 excluding all unresolved pairs (n = 319). The data/control split is not a pooled figure: java control reads 164/169 = 0.970, but java data reads 0.507.
+- **C# also fails the precondition as shipped.** `extract.sc` emits 0 of 5,897 methods. Its recall comes from the guarded copy, which differs only in the four guarded lines (checked by `diff`), so it is secondary and cannot change the decision.
+- **The configurations agree.** Both configurations give the same result, so neither drives the decision.
+- **Census reach is unchanged.** Recomputed from `truth/<lang>.defs.jsonl` as it stands now (modified 2026-11-05 09:17:32–09:17:37), census reach equals §a2.1 in every language: 4046/4046, 127/133, 1381/1439, 387/543, 3754/4639, 1903/3490. The decision does not depend on it.
+
+### a2.2.7 Rulings made after seeing the S28 results (disclosed)
+
+1. A third spurious verdict, `duplicate-of-golden`, was added. The flag uses the rule's n (all sampled pairs), and the rate excluding duplicates is reported beside it. Neither choice changes a flag except JS, whose flag becomes insufficient.
+2. **Loop-carried control is not asked for.** A cond in a loop body does not decide the loop's own header, or earlier body points, through an exit. This extends Part F's "a source never equals its sink even across loop iterations".
+3. **Nearest governing cond.** A loop header does not decide a point after the loop that an inner early exit can skip, and an enclosing `if` does not decide points after a nested early exit. Ruling 3 gives such points to the early exit's cond.
+4. **Go type conversions `T(x)` and C# `nameof(...)` are language operators, not call sites.** Both golden labellers labelled them that way.
+5. **Some conds are not points under the brief.** These are frontend-synthetic conds (`try`/`with`/`finally`/`lock`, default parameters, `null` literals, chained-comparison temporaries, generator loops) and macro-internal conds.
+6. **Two misses overturned.** Go ordinal 6 pair 11 and cpp ordinal 17 pair 0 are overturned under Part F ruling 7 (`index-as-selector`).
+7. **The one labeller naming error is excluded, not re-keyed.**
+8. **Confirmed omissions are added as connected pairs.** Only sampled omissions are known, so the adjudicated recall slightly understates the omissions' effect. No decision is near enough for this to matter.
