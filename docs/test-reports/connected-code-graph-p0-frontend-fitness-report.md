@@ -2,7 +2,7 @@
 
 > **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10)
 
-Sections: §a1 (S27, below), §a2 (S28, not yet written). Protocol: `docs/plans/connected-code-graph-p0-ml.md` (ML, v1.14).
+Sections: §a1 (S27), §a2.0 (Part F flow-label audit), §a2.1 (S28 run), §a2.2 (S28 adjudication and final `flowAvailable`). Protocol: `docs/plans/connected-code-graph-p0-ml.md` (ML, v1.17).
 Recall, precision, remedy and stratum figures were recomputed from `cpg/spikes/frontend-fitness/results/<lang>.answers.jsonl`,
 `truth/<lang>.final2.jsonl` and `truth/<lang>.ref.jsonl` by a scratch script (Wilson 95%, z = 1.959964), and the fan-out
 shares from `results/<lang>.json`'s `measureFiles`; they agree with `results/<lang>.json`. Match rates, file-node counts, `gate83`
@@ -138,9 +138,11 @@ current `*.measure.jsonl` carries no argument or annotation data. All code lives
 - `{"k":"def","path","name","nameKey","nameLine","endLine","declStartLine","symbol","decorators":[{"name","node","literalArgs":[{"name":str|null,"value":str}]}]}`.
   `nameLine` is the line of the name (decorators and annotations excluded); `declStartLine` includes them. `symbol` is set by the per-language table of rule 8 in the bundle
   spec in force (`docs/plans/connected-code-graph-bundle-spec3.md` §4.1, as amended by `-spec4.md`); a bodyless non-symbol is kept with `symbol:false` and left out of coverage.
+  **C++ macros.** A bare all-caps definition with no return type and a brace body (a macro-generated `TEST`-style body) is `kind: macro`, `symbol:false`, outside the headline denominator.
+  A typed all-caps function is not a macro; the one listed exception is `RUN_ALL_TESTS`. A trailing annotation macro is re-attached to its definition.
   Each rule-8 case (the lists in ML §2) gets a planted fixture and an expected `symbol` value in the tests.
 - **`nameKey`** is the short name: the last segment after `.`, `::` or a Go receiver; template and type arguments stripped; operators as written (`operator==`), destructors with `~`;
-  constructors are `<init>` and the type name (Java/C#/Kotlin/C++), `__init__` (Python), `constructor` (JS); overloads share the short name and are told apart by source order. The accepted
+  constructors are `<init>` and the type name (Java/C#/Kotlin/C++; a name equal to its enclosing class is a constructor even when tree-sitter lost the class context), `__init__` (Python), `constructor` (JS); overloads share the short name and are told apart by source order. The accepted
   Joern names per frontend come from `matcher-table.md` and `s27_metrics.py` `spec_names` (the existing rule source; the coder extends it, never redefines it). A census definition with
   no name (arrow function, lambda, anonymous class) matches by position only: a METHOD named `<lambda>N`, `<anon>…` or `:program`-nested whose start line is the definition's.
   JS object-literal and class-field functions take the property key as name; Python nested defs their own name.
@@ -159,15 +161,26 @@ the frontend-only CPG (`importCpg(cpg, name, false)`, no overlays) coverage, lin
 - **Matching (one-to-one):** per file, definitions in `(nameLine, source order)`. Candidate METHODs are those in the file not yet claimed, whose name satisfies the name rule, and whose
   start line equals `nameLine` or `declStartLine` at the frontend's offset (`METHOD_LINE_OFFSET`: C# -1, others 0); failing that, the innermost unclaimed METHOD whose span holds
   `nameLine` within 8 lines of its start. Prefer the exact start; ties by smallest line distance, then source order. A METHOD is claimed once; a definition with no candidate is uncovered; files with no FILE node are uncovered.
+  **Operator alias:** a METHOD name is accepted if it is the definition's name or its bare operator token. c2cpg emits `()`, `=`, `==` and `<<`, and maps `operator new` to `new`. With the alias, 67 of 85 in-CPG C++ operator definitions match, against 0 without; the 18 others have no METHOD at all (re-derived in review Pass 11, `docs/reviews/connected-code-graph-frontend-fitness.md`). C# needs no alias and none was observed; Kotlin has none.
 - **Line fidelity:** exact for every language (ML §7.2): `lineNumber` equals the name-line start (variant: the decorator-inclusive start), and `lineNumberEnd` equals the census end line. No
   "span and name" rule.
+  `lineFidelityStartOnly` reports the start alone, and `lineEndDelta` is the histogram of METHOD `lineNumberEnd` minus the census end.
+  For Python, +2 dominates: 3,332 of 4,121 histogram entries (4,231 matched definitions); `lineFidelity` is 289/4231 but `lineFidelityStartOnly` is 4231/4231. Kotlin's deltas are negative (0: 1,043; −2: 215; −3: 109).
 - **Parse success:** frame files with a FILE node and at least one non-external METHOD ÷ frame files. Both configurations are computed separately.
+  For Python and JS a parsed file always carries its synthetic module METHOD, so this cannot fail on a parsed file. `parseSuccessStrict` is its companion: over frame files with a `symbol:true` definition, the share with at least one non-synthetic METHOD.
 - **Value-set recovery:** an `arg` record is recovered if the matched Joern call (§7.1, same siteKey) has that argument as a `Literal` with the same normalised value, or if the argument has exactly one reaching
   definition which is such a `Literal` (needs the dataflow overlay). An `arg` whose call is unmatched counts as not recovered.
+  `valueSetUnrecoveredBy` classes each unrecovered argument by cause (`callUnmatched`, `notALiteralNoSingleLiteralDefinition`, `matchedCallHasNoArgumentNodes`, `literalValueDiffers`, `noArgumentAtIndex`). Kotlin's frontend-only import has no dataflow overlay, so its recovery is `{"status":"unmeasured"}`.
 - **Decorator shape:** the denominator is definitions with at least one decorator, annotation or attribute node. Name share: Joern exposes the decorator name, compared on the last dotted segment
   (`app.route` equals `route`; Java qualified names reduce to the simple name), case-sensitive. Literal share: over decorators with at least one literal argument, all literal values present. The tree-sitter node
   per language: Python `decorator`; TS/JS `decorator`; Java `annotation`/`marker_annotation`; Kotlin `annotation`; C# `attribute`; C++ `attribute_declaration`; Go none. The Joern node that carries it (ANNOTATION on the METHOD,
   or a call for Python decorators) is unverified: the coder records it from a one-file probe per language, in the format `{lang, node, example}`, before step 2. One worked example per language is a deliverable for S30.
+  **Unmeasured, never 0.** Where the frontend exposes no decorator node (C++ attributes, Go), name and literal shares are `{"status":"unmeasured"}`.
+  JS ANNOTATION nodes carry no literal nodes, so JS's headline `literalShare` is unmeasured and `literalShareFromCode` (parsed from the code text) is reported apart.
+  `nameShareMatchedDefs` restricts the name share to matched definitions, separating a decorator Joern does not expose from a file Joern lacks (Java: 187/335 overall, 187/187 on matched definitions).
+- **Strata and macro stratum.** The headline is over the whole frame, as shipped. `strata.inCpgFiles` and `strata.absentFiles` split it by whether the file has a FILE node; absent files stay in the denominator, and the strata sum to the headline in all seven languages.
+  For C++, `macroStratum` reports `macroDefs`, `macroDefsMatched` and `methodCoverageWithMacros`. In `results/cpp.census.json` there are 7,851 defs, 3,703 `symbol:true`, coverage 1938/3703 = 0.523, 3,441 macro definitions with 0 matched, and coverage with macros 1938/7144 = 0.271.
+  **Known misses:** two real C++ definitions are still absent from `truth/cpp.defs.jsonl`: `PrintToString` (`gtest-printers.h:1230`) and `CmpHelperFloatingPointEQ` (`gtest.h:1591`).
 
 **Acceptance.** (a) One `def` record per tree-sitter definition in every frame file, counts published; (b) every `(path, defLine)` that is a `T` member in `final2` or a reference `static`/`impls` target with a body appears in
 `defs.jsonl` with `symbol:true`; (c) 3 hand-counted files per language; (d) per language, a fixture with one planted definition per rule-8 case, one argument of each kind (a)–(d), and one decorator with a literal argument,
@@ -379,7 +392,7 @@ An upper-bound variant that follows every reaching-definition source finished fo
   - C++ `::std::get<I>()` and `T x(args);` constructors have no CALL node (19 misses); C++ `GTEST_*` macros account for 7 more.
   - Absent methods: the default-ignored `test`/`tests` directories (cpp 108 after one overturn) and `src/i18n` (javascript 9); per-file parse failures (go 8, csharp 30); C++ methods with no METHOD in a parsed file (62, not individually probed).
 - **Correction to §a2.1.** The Go method Joern has no METHOD for is ordinal 26 (`BenchmarkValueBinder_BindInt64_single`, `binder_test.go`, 8 pairs), not `csrf.go`. `binder_test.go` is one of the three per-file-exception files of §a1.4.
-- **Overturned misses.** Two pairs are not real under Part F ruling 7: go ordinal 6 pair 11 and cpp ordinal 17 pair 0, where the source is only a subscript key. A targeted text scan of every data miss whose source sits inside a subscript of the sink line found no others. That scan is not exhaustive for other invalid conventions.
+- **Overturned misses.** Two pairs are not real under Part F ruling 7: go ordinal 6 pair 11 and cpp ordinal 17 pair 0, where the source is only a subscript key. A text scan of every golden data pair, connected or not, whose source sits inside a subscript of the sink line found 12 pairs. The other 10 are valid: python ordinal 17 pair 13 is the receiver of `.end()`; go ordinal 6 pair 10 is `len(...)` passed as an argument to `Intn` (Intn's result is the subscript key, pair 11); go pairs 4, 5 and 7 are field reads of the receiver; javascript ordinal 1 pairs 1 to 5 are spread operands. Python ordinal 17 pair 14, which the review flagged but the scan does not catch, is a slice bound, an operand under ruling 7, so it is valid too. So no connected pair is overturned and no figure changes. The scan is not exhaustive for other invalid conventions.
 
 ### a2.2.3 Stopping condition (b): endpoint-unresolved, split before any §8.4 decision
 
@@ -436,10 +449,11 @@ The adjudicated set:
 | data / control | 191/304 = 0.628 / 117/177 = 0.661 | 36/80 = 0.450 / 25/72 = 0.347 | 145/293 = 0.495 / 103/141 = 0.731 | 150/296 = 0.507 / 164/169 = 0.970 | 150/258 = 0.581 / 83/139 = 0.597 | 65/187 = 0.348 / 51/161 = 0.317 |
 | `early-exit` (matched methods) | 0/5 | 2/4 | 12/38 = 0.316 | 3/5 | 4/8 | 10/17 (10/34 with absent methods) |
 | `callee-value`, valid / `alias` | 0/1 / none | none | none / 0/2 | none | none | none |
-| counterfactual R3, adjudicated (not a decision input) | 392/481 = 0.815 | 70/152 = 0.461 | 344/434 = 0.793 | 450/465 = 0.968 | 267/397 = 0.672 | 138/348 = 0.397 |
+| counterfactual R3, adjudicated (scoring-time relaxation; a pointer, not a measurement) | 392/481 = 0.815 | 70/152 = 0.461 | 344/434 = 0.793 | 450/465 = 0.968 | 267/397 = 0.672 | 138/348 = 0.397 |
 
 - **`early-exit` misses** are mostly `definition` (a CDG chain, not a direct edge): go 20, cpp 7. In the other languages they are the probed frontend `throw`/`raise` fall-through or a C# dropped statement.
 - **Go `callee-value` contradiction pairs.** Part F ruled four Go pairs invalid: three `callee-value` and one `field-write`. Two independent labellers had marked them `unsure`, and §a2.0 tags those rulings for reversal. Reinstated, none of the four is connected. Ordinal 5's sink `<dynamic>` has no CALL node; ordinals 4, 24 and 18 are not connected. Go would read 248/438 = 0.566. Reversing the rulings changes nothing.
+- **R3 is not a projection.** Its synthetic-call transparency is applied in scoring (`variants.py`), not in `extract.sc`, and the variants were designed on these same methods. Java's 0.968 says where Java's gap lies; it is not evidence that a fixed projection would pass, and no decision uses it.
 - **Counts below 120.** JS has fewer than 120 pairs in the two strata that exclude all unresolved pairs (96 and 87), so §8.4 would call them insufficient. Every other cell has at least 120 pairs.
 
 ### a2.2.6 `flowAvailable` (final, ML §8.4)
@@ -452,11 +466,9 @@ The adjudicated set:
 
 ### a2.2.7 Rulings made after seeing the S28 results (disclosed)
 
-1. A third spurious verdict, `duplicate-of-golden`, was added. The flag uses the rule's n (all sampled pairs), and the rate excluding duplicates is reported beside it. Neither choice changes a flag except JS, whose flag becomes insufficient.
-2. **Loop-carried control is not asked for.** A cond in a loop body does not decide the loop's own header, or earlier body points, through an exit. This extends Part F's "a source never equals its sink even across loop iterations".
-3. **Nearest governing cond.** A loop header does not decide a point after the loop that an inner early exit can skip, and an enclosing `if` does not decide points after a nested early exit. Ruling 3 gives such points to the early exit's cond.
-4. **Go type conversions `T(x)` and C# `nameof(...)` are language operators, not call sites.** Both golden labellers labelled them that way.
-5. **Some conds are not points under the brief.** These are frontend-synthetic conds (`try`/`with`/`finally`/`lock`, default parameters, `null` literals, chained-comparison temporaries, generator loops) and macro-internal conds.
-6. **Two misses overturned.** Go ordinal 6 pair 11 and cpp ordinal 17 pair 0 are overturned under Part F ruling 7 (`index-as-selector`).
-7. **The one labeller naming error is excluded, not re-keyed.**
-8. **Confirmed omissions are added as connected pairs.** Only sampled omissions are known, so the adjudicated recall slightly understates the omissions' effect. No decision is near enough for this to matter.
+The `duplicate-of-golden` verdict and three control-pair rules (loop-carried control, nearest governing cond, synthetic and macro-internal conds) were made after these results were seen. They now live in ML §8.4's second check (v1.17), which says so. The rest are applications made here:
+
+1. **Go type conversions `T(x)` and C# `nameof(...)` are language operators, not call sites.** Both golden labellers labelled them that way.
+2. **Two misses overturned.** Go ordinal 6 pair 11 and cpp ordinal 17 pair 0 are overturned under Part F ruling 7 (`index-as-selector`).
+3. **The one labeller naming error is excluded, not re-keyed.**
+4. **Confirmed omissions are added as connected pairs.** The spurious sample is drawn from projection pairs, so every omission it can find is one the projection already connects, and adding it can only raise recall. The omissions that would matter, real pairs the projection also misses, cannot be sampled. So the flag is one-directional: it detects an incomplete golden set, but it cannot show how far that incompleteness makes the adjudicated recall overstate the truth. No decision is near enough to 0.95 for this to matter.

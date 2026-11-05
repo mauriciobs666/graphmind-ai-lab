@@ -1,8 +1,8 @@
 # Connected code graph — P0(a) frontend-fitness measurement protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.16 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.17 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S05)
 
-*Revision 2026-11-05 (v1.16): §5.4 Part F records the per-language hash keys as used (Java's pair key has no `|`) and a closed coordinate class for the flow audit; post-hoc clarifications, not rule changes. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
+*Revision 2026-11-05 (v1.17): §8.4's second check gains the `duplicate-of-golden` verdict and three control-pair adjudication rules, all made after S28's results were seen. Earlier revision history: `docs/plans/connected-code-graph-coordination.md`.*
 
 ## 0. Question and the decision it serves
 
@@ -1309,8 +1309,11 @@ adjudicates, with cited source evidence as in §5.1:
 - **every golden pair the projection misses** (a miss is overturned only by evidence that the pair
   is not real), so false misses cannot fail a language;
 - **a seeded sample of up to 50 spurious pairs** (projection pairs not in the golden set, drawn by
-  the §4.4 hash sort with prefix `ccg-p0a-v1-spur|`). Each is judged either a real pair the labeller
-  omitted or a true spurious edge. The omission rate is reported. It bounds how much an
+  the §4.4 hash sort with prefix `ccg-p0a-v1-spur|`). Each is judged a real pair the labeller
+  omitted, a true spurious edge, or `duplicate-of-golden`: a golden pair the projection names
+  differently (a lowered loop header, a switch discriminant standing for its case labels, a cond's
+  printed code). A duplicate is neither an omission nor a spurious edge. The flag below uses all
+  sampled pairs as n, and the rate excluding duplicates is reported beside it. The omission rate is reported. It bounds how much an
   incomplete golden set flatters recall, since an omitted pair the projection would also miss is
   invisible. **Flag rule (review P2-3):** with n ≥ 20 sampled spurious pairs, the language's flow
   recall is flagged *truth-incomplete* iff the observed omission rate is **> 0.05**, reported as k/n
@@ -1320,6 +1323,18 @@ adjudicates, with cited source evidence as in §5.1:
   probability 0.08 at a true omission rate of 0.02, 0.46 at 0.05 and 0.89 at 0.10. At n = 20, ≥ 2
   omissions: 0.06, 0.26 and 0.61. The flag is a report qualifier, not a decision input, so this
   sensitivity is enough.
+- **Control-pair adjudication rules** (applied to misses and spurious pairs alike; the brief's
+  "directly decides" read strictly):
+  - *Loop-carried control is not asked for.* A cond in a loop body does not decide the loop's own
+    header, or earlier body points, through an exit. This extends Part F's "a source never equals
+    its sink even across loop iterations".
+  - *Nearest governing cond.* A loop header does not decide a point after the loop that an inner
+    early exit can skip, and an enclosing `if` does not decide the points after a nested early exit;
+    Part F's early-exit ruling gives such points to the exit's cond.
+  - *Synthetic and macro-internal conds are not points.* CDG sources a frontend creates for `try`,
+    `with`, `finally`, `lock`, default parameters, `null` literals, chained-comparison temporaries and
+    generator loops, and conds internal to a C/C++ macro expansion, have no source condition the brief
+    could name, so a pair touching one is spurious.
 
 For Python and TS, S28's figures are cross-checked against S14's. A disagreement of more than 0.05
 in projection success is investigated before the rule is applied.
