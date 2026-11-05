@@ -1,0 +1,739 @@
+{
+ "definitions": {
+  "args": 3236,
+  "defs": 2640,
+  "files": 113,
+  "symbolDefs": 2638
+ },
+ "frontendOnly": false,
+ "label": "frontend+overlays",
+ "lang": "go",
+ "off": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 0,
+   "decorators": 0,
+   "decoratorsWithLiteralArgs": 0,
+   "literalShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareDecorators": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareMatchedDefs": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   }
+  },
+  "lineEndDelta": {
+   "0": 2446
+  },
+  "lineFidelity": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/go.census-off.measure.jsonl",
+  "methodCoverage": {
+   "k": 2446,
+   "n": 2638,
+   "p": 0.9272,
+   "wilson95": [
+    0.9167,
+    0.9365
+   ]
+  },
+  "parseSuccess": {
+   "k": 110,
+   "n": 113,
+   "p": 0.9735,
+   "wilson95": [
+    0.9248,
+    0.9909
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 109,
+   "n": 112,
+   "p": 0.9732,
+   "wilson95": [
+    0.9242,
+    0.9908
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 100,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.037
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 286,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.0133
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "const": {
+      "k": 0,
+      "n": 1,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.7935
+      ]
+     },
+     "string": {
+      "k": 0,
+      "n": 285,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0133
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 286
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {
+     "0": 2446
+    },
+    "lineFidelity": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 2446,
+     "n": 2538,
+     "p": 0.9638,
+     "wilson95": [
+      0.9558,
+      0.9703
+     ]
+    },
+    "parseSuccess": {
+     "k": 110,
+     "n": 110,
+     "p": 1.0,
+     "wilson95": [
+      0.9663,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 109,
+     "n": 109,
+     "p": 1.0,
+     "wilson95": [
+      0.966,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 2826,
+     "n": 2950,
+     "p": 0.958,
+     "wilson95": [
+      0.9501,
+      0.9646
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 4,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.4899
+      ]
+     },
+     "const": {
+      "k": 0,
+      "n": 22,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.1487
+      ]
+     },
+     "string": {
+      "k": 2826,
+      "n": 2924,
+      "p": 0.9665,
+      "wilson95": [
+       0.9593,
+       0.9724
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 93,
+     "literalValueDiffers": 1,
+     "noArgumentAtIndex": 4,
+     "notALiteralNoSingleLiteralDefinition": 26
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 2826,
+   "n": 3236,
+   "p": 0.8733,
+   "wilson95": [
+    0.8614,
+    0.8843
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 0,
+    "n": 4,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.4899
+    ]
+   },
+   "const": {
+    "k": 0,
+    "n": 23,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.1431
+    ]
+   },
+   "string": {
+    "k": 2826,
+    "n": 3209,
+    "p": 0.8806,
+    "wilson95": [
+     0.869,
+     0.8914
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 379,
+   "literalValueDiffers": 1,
+   "noArgumentAtIndex": 4,
+   "notALiteralNoSingleLiteralDefinition": 26
+  }
+ },
+ "on": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 0,
+   "decorators": 0,
+   "decoratorsWithLiteralArgs": 0,
+   "literalShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareDecorators": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareMatchedDefs": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   }
+  },
+  "lineEndDelta": {
+   "0": 2446
+  },
+  "lineFidelity": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 2446,
+   "n": 2446,
+   "p": 1.0,
+   "wilson95": [
+    0.9984,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/go.census-on.measure.jsonl",
+  "methodCoverage": {
+   "k": 2446,
+   "n": 2638,
+   "p": 0.9272,
+   "wilson95": [
+    0.9167,
+    0.9365
+   ]
+  },
+  "parseSuccess": {
+   "k": 110,
+   "n": 113,
+   "p": 0.9735,
+   "wilson95": [
+    0.9248,
+    0.9909
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 109,
+   "n": 112,
+   "p": 0.9732,
+   "wilson95": [
+    0.9242,
+    0.9908
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 100,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.037
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 3,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.5615
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 286,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.0133
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "const": {
+      "k": 0,
+      "n": 1,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.7935
+      ]
+     },
+     "string": {
+      "k": 0,
+      "n": 285,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0133
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 286
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {
+     "0": 2446
+    },
+    "lineFidelity": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 2446,
+     "n": 2446,
+     "p": 1.0,
+     "wilson95": [
+      0.9984,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 2446,
+     "n": 2538,
+     "p": 0.9638,
+     "wilson95": [
+      0.9558,
+      0.9703
+     ]
+    },
+    "parseSuccess": {
+     "k": 110,
+     "n": 110,
+     "p": 1.0,
+     "wilson95": [
+      0.9663,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 109,
+     "n": 109,
+     "p": 1.0,
+     "wilson95": [
+      0.966,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 2826,
+     "n": 2950,
+     "p": 0.958,
+     "wilson95": [
+      0.9501,
+      0.9646
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 4,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.4899
+      ]
+     },
+     "const": {
+      "k": 0,
+      "n": 22,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.1487
+      ]
+     },
+     "string": {
+      "k": 2826,
+      "n": 2924,
+      "p": 0.9665,
+      "wilson95": [
+       0.9593,
+       0.9724
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 93,
+     "literalValueDiffers": 1,
+     "noArgumentAtIndex": 4,
+     "notALiteralNoSingleLiteralDefinition": 26
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 2826,
+   "n": 3236,
+   "p": 0.8733,
+   "wilson95": [
+    0.8614,
+    0.8843
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 0,
+    "n": 4,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.4899
+    ]
+   },
+   "const": {
+    "k": 0,
+    "n": 23,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.1431
+    ]
+   },
+   "string": {
+    "k": 2826,
+    "n": 3209,
+    "p": 0.8806,
+    "wilson95": [
+     0.869,
+     0.8914
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 379,
+   "literalValueDiffers": 1,
+   "noArgumentAtIndex": 4,
+   "notALiteralNoSingleLiteralDefinition": 26
+  }
+ }
+}

@@ -548,14 +548,14 @@ def synth_measure(lang):
             seen.add(r["siteKey"])
             rows.append({"k": "site", "key": r["siteKey"], "matched": True})
         rows.append({"k": "carg", "key": r["siteKey"], "order": r["argIndex"] + 1 + (1 if recv else 0), "recv": recv,
-                     "kind": "LITERAL", "lit": json.dumps(r["value"]) if r["valueKind"] != "const" else None,
+                     "kind": "LITERAL" if r["valueKind"] != "const" else "IDENTIFIER", "lit": json.dumps(r["value"]) if r["valueKind"] != "const" else None,
                      "nreach": 0 if r["valueKind"] != "const" else 1, "reach": [] if r["valueKind"] != "const" else [json.dumps(r["value"])]})
     return rows
 
 
 @pytest.mark.parametrize("lang", sorted(FIX))
 def test_committed_synthetic_measure_fixture_per_frontend_round_trips(lang, tmp_path):
-    path = DATA / f"{lang}.measure.jsonl"
+    path = DATA / f"{lang}.synthetic.measure.jsonl"
     assert [json.loads(l) for l in path.read_text().splitlines()] == synth_measure(lang), "regenerate tests/data/census"
     M_ = cm.read_measure(path)
     d, a, _ = mdc.census_file(lang, FIX[lang][0], FIX[lang][1].encode())
@@ -563,6 +563,89 @@ def test_committed_synthetic_measure_fixture_per_frontend_round_trips(lang, tmp_
     b = cm.census_block(lang, D, M_)
     assert b["methodCoverage"]["k"] == b["methodCoverage"]["n"] and b["lineFidelity"]["k"] == b["lineFidelity"]["n"]
     assert b["valueSetRecovery"]["k"] == b["valueSetRecovery"]["n"] == len(a)
+
+
+# ---------------------------------------------------------------------------------------------------------- real Joern shapes
+# tests/data/census/<lang>.real.measure.jsonl are frozen measure.sc outputs (Joern 4.0.579) over tests/data/census/real-src/<lang>/src.
+def real_block(lang, arg_filter=None):
+    import collections
+    root = DATA / "real-src" / lang / "src"
+    recs, meta = mdc.build(lang, root=root, cfg={})
+    D = {"meta": meta, "files": [r["path"] for r in recs if r["k"] == "file"], "defs": collections.defaultdict(list),
+         "args": [r for r in recs if r["k"] == "arg" and (arg_filter is None or arg_filter(r))]}
+    for r in recs:
+        if r["k"] == "def":
+            D["defs"][r["path"]].append(r)
+    return cm.census_block(lang, D, cm.read_measure(DATA / f"{lang}.real.measure.jsonl"))
+
+
+def kn(x):
+    return (x["k"], x["n"])
+
+
+REAL = {  # lang: (coverage, line fidelity, value-set recovery, unrecovered-by)  -- observed on the frozen real captures
+    "python": ((6, 6), (6, 6), (6, 9), {"notALiteralNoSingleLiteralDefinition": 3}),
+    "javascript": ((8, 10), (8, 8), (6, 7), {"notALiteralNoSingleLiteralDefinition": 1}),
+    "java": ((11, 11), (10, 11), (4, 6), {"notALiteralNoSingleLiteralDefinition": 2}),
+    "csharp": ((8, 9), (8, 8), (3, 7), {"matchedCallHasNoArgumentNodes": 4}),
+    "go": ((2, 8), (2, 2), (5, 10), {"callUnmatched": 4, "notALiteralNoSingleLiteralDefinition": 1}),
+    "cpp": ((7, 7), (7, 7), (7, 7), {}),
+}
+
+
+@pytest.mark.parametrize("lang", sorted(REAL))
+def test_real_capture_joins_with_the_expected_figures(lang):
+    b = real_block(lang)
+    cov, fid, vs, why = REAL[lang]
+    assert kn(b["methodCoverage"]) == cov and kn(b["lineFidelity"]) == fid and kn(b["valueSetRecovery"]) == vs
+    assert b["valueSetUnrecoveredBy"] == why
+
+
+def test_real_kotlin_is_frontend_only_value_set_unmeasured_and_annotations_measured():
+    b = real_block("kotlin")
+    assert b["valueSetRecovery"]["status"] == "unmeasured" and kn(b["methodCoverage"]) == (7, 7)
+    d = b["decorators"]
+    assert kn(d["nameShare"]) == (2, 2) and kn(d["literalShare"]) == (3, 3)      # ANNOTATION_LITERAL keeps its quotes
+
+
+def test_real_python_decorators_are_calls_and_kwargs_keep_their_slot():
+    b = real_block("python")
+    assert kn(b["decorators"]["nameShare"]) == (2, 2) and kn(b["decorators"]["literalShare"]) == (2, 2)   # `route("/x", methods=["GET"])` lits
+    kw = real_block("python", lambda a: a["argName"] is not None)["valueSetRecovery"]
+    assert kn(kw) == (1, 1) and kn(b["valueSetRecoveryByKind"]["string"]) == (5, 6)     # k="z" has argumentIndex -1; f"p" is a CALL in Joern
+
+
+def test_real_java_annotation_literal_is_unquoted_and_marker_annotations_count():
+    d = real_block("java")["decorators"]
+    assert kn(d["literalShare"]) == (3, 3) and kn(d["byNode"]["marker_annotation"]["nameShareDecorators"]) == (2, 2)
+
+
+def test_real_javascript_literals_exist_only_in_the_annotation_code_text():
+    d = real_block("javascript")["decorators"]
+    assert d["literalShare"]["status"] == "unmeasured" and kn(d["literalShareFromCode"]) == (2, 2) and kn(d["nameShare"]) == (2, 2)
+
+
+@pytest.mark.parametrize("lang", ["cpp", "go"])
+def test_real_frontends_without_a_decorator_node_are_unmeasured_not_zero(lang):
+    d = real_block(lang)["decorators"]
+    assert d["nameShare"]["status"] == "unmeasured" and d["literalShare"]["status"] == "unmeasured"
+
+
+def test_real_cpp_adjacent_string_literal_is_one_literal():
+    assert cm.joern_literal_value("cpp", '"a" "b"') == "ab" and cm.joern_literal_value("cpp", 'R"(raw)"') == "raw"
+    assert cm.joern_literal_value("java", "/x", "ANNOTATION_LITERAL") == "/x"
+
+
+def test_real_csharp_unqualified_call_has_no_argument_nodes_so_it_is_a_named_cause_not_a_miss_of_the_literal():
+    b = real_block("csharp")
+    assert b["valueSetUnrecoveredBy"] == {"matchedCallHasNoArgumentNodes": 4}
+
+
+def test_line_fidelity_start_only_and_end_delta_expose_a_constant_end_offset(tmp_path):
+    defs = [mdef("a.py", f"f{i}", 10 * i + 1, 10 * i + 1, 10 * i + 3) for i in range(3)]
+    rows = [{"k": "file", "path": "a.py", "methods": 3}] + [M(f"f{i}", 10 * i + 1, 10 * i + 5) for i in range(3)]
+    r = run_join(tmp_path, "python", defs, ["a.py"], rows)["off"]
+    assert r["lineFidelity"]["k"] == 0 and r["lineFidelityStartOnly"]["k"] == 3 and r["lineEndDelta"] == {"2": 3}
 
 
 # ---------------------------------------------------------------------------------------------------------- mutants
@@ -609,6 +692,12 @@ MUTANTS = {
     "F2_macro_stratum_dropped": ("make_defs_census.py", [("MACRO_NAME = re.compile(r\"[A-Z][A-Z0-9_]+\")", "MACRO_NAME = re.compile(r\"(?!x)x\")")]),
     "F5_escaped_brace_check_dropped": ("make_defs_census.py", [('        if lang == "csharp" and re.search(', '        if False and re.search(')]),
     "F7_python_end_line_includes_comment": ("make_defs_census.py", [('        if lang == "python" and end_node is None:', "        if False:")]),
+    "R1_java_unquoted_literal": ("s27_census_metrics.py", [('if lang == "java" and node == "ANNOTATION_LITERAL":', 'if False:')]),
+    "R2_cpp_adjacent_literals": ("s27_census_metrics.py", [("        if len(parts) > 1:", "        if False:")]),
+    "R3_no_decorator_node_measured_as_zero": ("s27_census_metrics.py", [('NO_DECORATOR_NODE = {"cpp", "go"}', "NO_DECORATOR_NODE = set()")]),
+    "R4_js_literals_taken_as_nodes": ("s27_census_metrics.py", [('LITERALS_ONLY_IN_CODE = {"javascript"}', "LITERALS_ONLY_IN_CODE = set()")]),
+    "R5_no_argument_nodes_cause_dropped": ("s27_census_metrics.py", [('elif a["siteKey"] not in M["cargs"]:', "elif False:")]),
+    "R6_end_delta_dropped": ("s27_census_metrics.py", [("            end_delta[m[\"le\"] - (d[\"endLine\"] + off)] += 1", "            pass")]),
     "F1_operator_alias_dropped": ("s27_census_metrics.py", [('        if k.startswith("operator"):', '        if False:')]),
 }
 

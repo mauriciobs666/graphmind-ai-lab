@@ -1,0 +1,14 @@
+{"k": "meta", "lang": "javascript", "censusSchema": 1, "synthetic": true}
+{"k": "file", "path": "m.ts", "methods": 9}
+{"k": "method", "file": "m.ts", "name": "m", "fullName": "m.ts:m.ts::I.m", "l": 2, "le": 2, "vendored": false, "ann": []}
+{"k": "method", "file": "m.ts", "name": "t", "fullName": "m.ts:m.ts::t", "l": 3, "le": 3, "vendored": false, "ann": []}
+{"k": "method", "file": "m.ts", "name": "am", "fullName": "m.ts:m.ts::A.am", "l": 5, "le": 5, "vendored": false, "ann": []}
+{"k": "method", "file": "m.ts", "name": "o", "fullName": "m.ts:m.ts::A.o", "l": 7, "le": 7, "vendored": false, "ann": []}
+{"k": "method", "file": "m.ts", "name": "route", "fullName": "m.ts:m.ts::A.route", "l": 8, "le": 8, "vendored": false, "ann": [{"name": "Get", "node": "ANNOTATION", "lits": ["\"/p\""]}]}
+{"k": "method", "file": "m.ts", "name": "fn", "fullName": "m.ts:m.ts::fn", "l": 10, "le": 10, "vendored": false, "ann": []}
+{"k": "method", "file": "m.ts", "name": "sh", "fullName": "m.ts:m.ts::sh", "l": 11, "le": 11, "vendored": false, "ann": []}
+{"k": "site", "key": "m.ts:10:18:call", "matched": true}
+{"k": "carg", "key": "m.ts:10:18:call", "order": 1, "recv": false, "kind": "LITERAL", "lit": "\"s\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.ts:10:18:call", "order": 2, "recv": false, "kind": "LITERAL", "lit": "\"t\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.ts:10:18:call", "order": 3, "recv": false, "kind": "LITERAL", "lit": "\"ab\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.ts:10:18:call", "order": 4, "recv": false, "kind": "IDENTIFIER", "lit": null, "nreach": 1, "reach": ["\"u\""]}

@@ -1,0 +1,879 @@
+{
+ "definitions": {
+  "args": 4483,
+  "defs": 7824,
+  "files": 156,
+  "symbolDefs": 3671
+ },
+ "frontendOnly": false,
+ "label": "frontend+overlays",
+ "lang": "cpp",
+ "off": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 10,
+   "decorators": 10,
+   "decoratorsWithLiteralArgs": 6,
+   "literalShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareDecorators": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareMatchedDefs": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   }
+  },
+  "lineEndDelta": {
+   "0": 1917
+  },
+  "lineFidelity": {
+   "k": 1867,
+   "n": 1917,
+   "p": 0.9739,
+   "wilson95": [
+    0.9658,
+    0.9802
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 1510,
+   "n": 1917,
+   "p": 0.7877,
+   "wilson95": [
+    0.7688,
+    0.8054
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 1867,
+   "n": 1917,
+   "p": 0.9739,
+   "wilson95": [
+    0.9658,
+    0.9802
+   ]
+  },
+  "macroStratum": {
+   "macroDefs": 3446,
+   "macroDefsMatched": {
+    "k": 2,
+    "n": 3446,
+    "p": 0.0006,
+    "wilson95": [
+     0.0002,
+     0.0021
+    ]
+   },
+   "methodCoverageWithMacros": {
+    "k": 1919,
+    "n": 7117,
+    "p": 0.2696,
+    "wilson95": [
+     0.2595,
+     0.2801
+    ]
+   }
+  },
+  "measure": "spikes/frontend-fitness/results/cpp.census-off.measure.jsonl",
+  "methodCoverage": {
+   "k": 1917,
+   "n": 3671,
+   "p": 0.5222,
+   "wilson95": [
+    0.506,
+    0.5383
+   ]
+  },
+  "parseSuccess": {
+   "k": 74,
+   "n": 156,
+   "p": 0.4744,
+   "wilson95": [
+    0.3976,
+    0.5524
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 50,
+   "n": 121,
+   "p": 0.4132,
+   "wilson95": [
+    0.3295,
+    0.5023
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "macroStratum": {
+     "macroDefs": 2756,
+     "macroDefsMatched": {
+      "k": 0,
+      "n": 2756,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0014
+      ]
+     },
+     "methodCoverageWithMacros": {
+      "k": 0,
+      "n": 4043,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0009
+      ]
+     }
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 1287,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.003
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 82,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.0448
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 66,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.055
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 3993,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.001
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 202,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0187
+      ]
+     },
+     "const": {
+      "k": 0,
+      "n": 3,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "string": {
+      "k": 0,
+      "n": 3788,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.001
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 3993
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 10,
+     "decorators": 10,
+     "decoratorsWithLiteralArgs": 6,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {
+     "0": 1917
+    },
+    "lineFidelity": {
+     "k": 1867,
+     "n": 1917,
+     "p": 0.9739,
+     "wilson95": [
+      0.9658,
+      0.9802
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 1510,
+     "n": 1917,
+     "p": 0.7877,
+     "wilson95": [
+      0.7688,
+      0.8054
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 1867,
+     "n": 1917,
+     "p": 0.9739,
+     "wilson95": [
+      0.9658,
+      0.9802
+     ]
+    },
+    "macroStratum": {
+     "macroDefs": 690,
+     "macroDefsMatched": {
+      "k": 2,
+      "n": 690,
+      "p": 0.0029,
+      "wilson95": [
+       0.0008,
+       0.0105
+      ]
+     },
+     "methodCoverageWithMacros": {
+      "k": 1919,
+      "n": 3074,
+      "p": 0.6243,
+      "wilson95": [
+       0.607,
+       0.6412
+      ]
+     }
+    },
+    "methodCoverage": {
+     "k": 1917,
+     "n": 2384,
+     "p": 0.8041,
+     "wilson95": [
+      0.7877,
+      0.8195
+     ]
+    },
+    "parseSuccess": {
+     "k": 74,
+     "n": 74,
+     "p": 1.0,
+     "wilson95": [
+      0.9507,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 50,
+     "n": 55,
+     "p": 0.9091,
+     "wilson95": [
+      0.8042,
+      0.9605
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 361,
+     "n": 490,
+     "p": 0.7367,
+     "wilson95": [
+      0.696,
+      0.7738
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 20,
+      "n": 46,
+      "p": 0.4348,
+      "wilson95": [
+       0.3021,
+       0.5775
+      ]
+     },
+     "const": {
+      "k": 5,
+      "n": 20,
+      "p": 0.25,
+      "wilson95": [
+       0.1119,
+       0.4687
+      ]
+     },
+     "string": {
+      "k": 336,
+      "n": 424,
+      "p": 0.7925,
+      "wilson95": [
+       0.7513,
+       0.8283
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 115,
+     "matchedCallHasNoArgumentNodes": 1,
+     "notALiteralNoSingleLiteralDefinition": 13
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 361,
+   "n": 4483,
+   "p": 0.0805,
+   "wilson95": [
+    0.0729,
+    0.0889
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 20,
+    "n": 248,
+    "p": 0.0806,
+    "wilson95": [
+     0.0528,
+     0.1213
+    ]
+   },
+   "const": {
+    "k": 5,
+    "n": 23,
+    "p": 0.2174,
+    "wilson95": [
+     0.0966,
+     0.419
+    ]
+   },
+   "string": {
+    "k": 336,
+    "n": 4212,
+    "p": 0.0798,
+    "wilson95": [
+     0.072,
+     0.0883
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 4108,
+   "matchedCallHasNoArgumentNodes": 1,
+   "notALiteralNoSingleLiteralDefinition": 13
+  }
+ },
+ "on": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 10,
+   "decorators": 10,
+   "decoratorsWithLiteralArgs": 6,
+   "literalShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShare": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareDecorators": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   },
+   "nameShareMatchedDefs": {
+    "reason": "frontend exposes no decorator node (decorator-probe)",
+    "status": "unmeasured"
+   }
+  },
+  "lineEndDelta": {
+   "0": 1917
+  },
+  "lineFidelity": {
+   "k": 1867,
+   "n": 1917,
+   "p": 0.9739,
+   "wilson95": [
+    0.9658,
+    0.9802
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 1510,
+   "n": 1917,
+   "p": 0.7877,
+   "wilson95": [
+    0.7688,
+    0.8054
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 1867,
+   "n": 1917,
+   "p": 0.9739,
+   "wilson95": [
+    0.9658,
+    0.9802
+   ]
+  },
+  "macroStratum": {
+   "macroDefs": 3446,
+   "macroDefsMatched": {
+    "k": 2,
+    "n": 3446,
+    "p": 0.0006,
+    "wilson95": [
+     0.0002,
+     0.0021
+    ]
+   },
+   "methodCoverageWithMacros": {
+    "k": 1919,
+    "n": 7117,
+    "p": 0.2696,
+    "wilson95": [
+     0.2595,
+     0.2801
+    ]
+   }
+  },
+  "measure": "spikes/frontend-fitness/results/cpp.census-on.measure.jsonl",
+  "methodCoverage": {
+   "k": 1917,
+   "n": 3671,
+   "p": 0.5222,
+   "wilson95": [
+    0.506,
+    0.5383
+   ]
+  },
+  "parseSuccess": {
+   "k": 74,
+   "n": 156,
+   "p": 0.4744,
+   "wilson95": [
+    0.3976,
+    0.5524
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 50,
+   "n": 121,
+   "p": 0.4132,
+   "wilson95": [
+    0.3295,
+    0.5023
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "macroStratum": {
+     "macroDefs": 2756,
+     "macroDefsMatched": {
+      "k": 0,
+      "n": 2756,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0014
+      ]
+     },
+     "methodCoverageWithMacros": {
+      "k": 0,
+      "n": 4043,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0009
+      ]
+     }
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 1287,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.003
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 82,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.0448
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 66,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.055
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 3993,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.001
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 202,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0187
+      ]
+     },
+     "const": {
+      "k": 0,
+      "n": 3,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.5615
+      ]
+     },
+     "string": {
+      "k": 0,
+      "n": 3788,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.001
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 3993
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 10,
+     "decorators": 10,
+     "decoratorsWithLiteralArgs": 6,
+     "literalShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShare": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareDecorators": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     },
+     "nameShareMatchedDefs": {
+      "reason": "frontend exposes no decorator node (decorator-probe)",
+      "status": "unmeasured"
+     }
+    },
+    "lineEndDelta": {
+     "0": 1917
+    },
+    "lineFidelity": {
+     "k": 1867,
+     "n": 1917,
+     "p": 0.9739,
+     "wilson95": [
+      0.9658,
+      0.9802
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 1510,
+     "n": 1917,
+     "p": 0.7877,
+     "wilson95": [
+      0.7688,
+      0.8054
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 1867,
+     "n": 1917,
+     "p": 0.9739,
+     "wilson95": [
+      0.9658,
+      0.9802
+     ]
+    },
+    "macroStratum": {
+     "macroDefs": 690,
+     "macroDefsMatched": {
+      "k": 2,
+      "n": 690,
+      "p": 0.0029,
+      "wilson95": [
+       0.0008,
+       0.0105
+      ]
+     },
+     "methodCoverageWithMacros": {
+      "k": 1919,
+      "n": 3074,
+      "p": 0.6243,
+      "wilson95": [
+       0.607,
+       0.6412
+      ]
+     }
+    },
+    "methodCoverage": {
+     "k": 1917,
+     "n": 2384,
+     "p": 0.8041,
+     "wilson95": [
+      0.7877,
+      0.8195
+     ]
+    },
+    "parseSuccess": {
+     "k": 74,
+     "n": 74,
+     "p": 1.0,
+     "wilson95": [
+      0.9507,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 50,
+     "n": 55,
+     "p": 0.9091,
+     "wilson95": [
+      0.8042,
+      0.9605
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 361,
+     "n": 490,
+     "p": 0.7367,
+     "wilson95": [
+      0.696,
+      0.7738
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 20,
+      "n": 46,
+      "p": 0.4348,
+      "wilson95": [
+       0.3021,
+       0.5775
+      ]
+     },
+     "const": {
+      "k": 5,
+      "n": 20,
+      "p": 0.25,
+      "wilson95": [
+       0.1119,
+       0.4687
+      ]
+     },
+     "string": {
+      "k": 336,
+      "n": 424,
+      "p": 0.7925,
+      "wilson95": [
+       0.7513,
+       0.8283
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 115,
+     "matchedCallHasNoArgumentNodes": 1,
+     "notALiteralNoSingleLiteralDefinition": 13
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 361,
+   "n": 4483,
+   "p": 0.0805,
+   "wilson95": [
+    0.0729,
+    0.0889
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 20,
+    "n": 248,
+    "p": 0.0806,
+    "wilson95": [
+     0.0528,
+     0.1213
+    ]
+   },
+   "const": {
+    "k": 5,
+    "n": 23,
+    "p": 0.2174,
+    "wilson95": [
+     0.0966,
+     0.419
+    ]
+   },
+   "string": {
+    "k": 336,
+    "n": 4212,
+    "p": 0.0798,
+    "wilson95": [
+     0.072,
+     0.0883
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 4108,
+   "matchedCallHasNoArgumentNodes": 1,
+   "notALiteralNoSingleLiteralDefinition": 13
+  }
+ }
+}

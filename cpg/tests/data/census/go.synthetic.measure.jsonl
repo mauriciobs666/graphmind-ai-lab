@@ -1,0 +1,13 @@
+{"k": "meta", "lang": "go", "censusSchema": 1, "synthetic": true}
+{"k": "file", "path": "m.go", "methods": 7}
+{"k": "method", "file": "m.go", "name": "A", "fullName": "m.go:m.go::I.A", "l": 3, "le": 3, "vendored": false, "ann": []}
+{"k": "method", "file": "m.go", "name": "B", "fullName": "m.go:m.go::J.B", "l": 4, "le": 4, "vendored": false, "ann": []}
+{"k": "method", "file": "m.go", "name": "f", "fullName": "m.go:m.go::f", "l": 5, "le": 5, "vendored": false, "ann": []}
+{"k": "method", "file": "m.go", "name": "asm", "fullName": "m.go:m.go::asm", "l": 6, "le": 6, "vendored": false, "ann": []}
+{"k": "method", "file": "m.go", "name": "g", "fullName": "m.go:m.go::g", "l": 7, "le": 7, "vendored": false, "ann": []}
+{"k": "method", "file": "m.go", "name": "sh", "fullName": "m.go:m.go::sh", "l": 8, "le": 8, "vendored": false, "ann": []}
+{"k": "site", "key": "m.go:7:12:call", "matched": true}
+{"k": "carg", "key": "m.go:7:12:call", "order": 1, "recv": false, "kind": "LITERAL", "lit": "\"s\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.go:7:12:call", "order": 2, "recv": false, "kind": "LITERAL", "lit": "\"ab\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.go:7:12:call", "order": 3, "recv": false, "kind": "LITERAL", "lit": "\"raw\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.go:7:12:call", "order": 4, "recv": false, "kind": "IDENTIFIER", "lit": null, "nreach": 1, "reach": ["\"k\""]}

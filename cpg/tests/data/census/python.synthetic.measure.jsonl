@@ -1,0 +1,12 @@
+{"k": "meta", "lang": "python", "censusSchema": 1, "synthetic": true}
+{"k": "file", "path": "m.py", "methods": 5}
+{"k": "method", "file": "m.py", "name": "shadow", "fullName": "m.py:m.py::shadow", "l": 3, "le": 4, "vendored": false, "ann": []}
+{"k": "method", "file": "m.py", "name": "f", "fullName": "m.py:m.py::f", "l": 5, "le": 6, "vendored": false, "ann": []}
+{"k": "method", "file": "m.py", "name": "stub", "fullName": "m.py:m.py::P.stub", "l": 8, "le": 8, "vendored": false, "ann": []}
+{"k": "method", "file": "m.py", "name": "h", "fullName": "m.py:m.py::h", "l": 12, "le": 12, "vendored": false, "ann": [{"name": "app.route", "node": "ANNOTATION", "lits": ["\"/x\"", "\"GET\""]}]}
+{"k": "site", "key": "m.py:6:5:call", "matched": true}
+{"k": "carg", "key": "m.py:6:5:call", "order": 1, "recv": false, "kind": "LITERAL", "lit": "\"s\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.py:6:5:call", "order": 2, "recv": false, "kind": "LITERAL", "lit": "\"ab\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.py:6:5:call", "order": 3, "recv": false, "kind": "LITERAL", "lit": "\"cd\"", "nreach": 0, "reach": []}
+{"k": "carg", "key": "m.py:6:5:call", "order": 4, "recv": false, "kind": "IDENTIFIER", "lit": null, "nreach": 1, "reach": ["\"lim\""]}
+{"k": "carg", "key": "m.py:6:5:call", "order": 5, "recv": false, "kind": "LITERAL", "lit": "\"p\"", "nreach": 0, "reach": []}

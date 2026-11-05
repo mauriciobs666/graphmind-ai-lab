@@ -1,0 +1,777 @@
+{
+ "definitions": {
+  "args": 139,
+  "defs": 178,
+  "files": 46,
+  "symbolDefs": 178
+ },
+ "frontendOnly": false,
+ "label": "frontend+overlays",
+ "lang": "javascript",
+ "off": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 0,
+   "decorators": 0,
+   "decoratorsWithLiteralArgs": 0,
+   "literalShare": {
+    "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+    "status": "unmeasured"
+   },
+   "literalShareFromCode": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShare": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShareDecorators": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShareMatchedDefs": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   }
+  },
+  "lineEndDelta": {
+   "0": 170
+  },
+  "lineFidelity": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/javascript.census-off.measure.jsonl",
+  "methodCoverage": {
+   "k": 170,
+   "n": 178,
+   "p": 0.9551,
+   "wilson95": [
+    0.9138,
+    0.9771
+   ]
+  },
+  "parseSuccess": {
+   "k": 41,
+   "n": 46,
+   "p": 0.8913,
+   "wilson95": [
+    0.7696,
+    0.9527
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 34,
+   "n": 38,
+   "p": 0.8947,
+   "wilson95": [
+    0.7587,
+    0.9583
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+      "status": "unmeasured"
+     },
+     "literalShareFromCode": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 8,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.3244
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "string": {
+      "k": 0,
+      "n": 2,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.6576
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 2
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+      "status": "unmeasured"
+     },
+     "literalShareFromCode": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {
+     "0": 170
+    },
+    "lineFidelity": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "parseSuccess": {
+     "k": 41,
+     "n": 41,
+     "p": 1.0,
+     "wilson95": [
+      0.9143,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 34,
+     "n": 34,
+     "p": 1.0,
+     "wilson95": [
+      0.8985,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 137,
+     "n": 137,
+     "p": 1.0,
+     "wilson95": [
+      0.9727,
+      1.0
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "string": {
+      "k": 137,
+      "n": 137,
+      "p": 1.0,
+      "wilson95": [
+       0.9727,
+       1.0
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {}
+   }
+  },
+  "valueSetRecovery": {
+   "k": 137,
+   "n": 139,
+   "p": 0.9856,
+   "wilson95": [
+    0.9491,
+    0.996
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "string": {
+    "k": 137,
+    "n": 139,
+    "p": 0.9856,
+    "wilson95": [
+     0.9491,
+     0.996
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 2
+  }
+ },
+ "on": {
+  "decorators": {
+   "byNode": {},
+   "decoratedDefs": 0,
+   "decorators": 0,
+   "decoratorsWithLiteralArgs": 0,
+   "literalShare": {
+    "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+    "status": "unmeasured"
+   },
+   "literalShareFromCode": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShare": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShareDecorators": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   },
+   "nameShareMatchedDefs": {
+    "k": 0,
+    "n": 0,
+    "p": null,
+    "wilson95": [
+     null,
+     null
+    ]
+   }
+  },
+  "lineEndDelta": {
+   "0": 170
+  },
+  "lineFidelity": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 170,
+   "n": 170,
+   "p": 1.0,
+   "wilson95": [
+    0.9779,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/javascript.census-on.measure.jsonl",
+  "methodCoverage": {
+   "k": 170,
+   "n": 178,
+   "p": 0.9551,
+   "wilson95": [
+    0.9138,
+    0.9771
+   ]
+  },
+  "parseSuccess": {
+   "k": 41,
+   "n": 46,
+   "p": 0.8913,
+   "wilson95": [
+    0.7696,
+    0.9527
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 34,
+   "n": 38,
+   "p": 0.8947,
+   "wilson95": [
+    0.7587,
+    0.9583
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+      "status": "unmeasured"
+     },
+     "literalShareFromCode": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 8,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.3244
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 5,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.4345
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 4,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.4899
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 2,
+     "p": 0.0,
+     "wilson95": [
+      0.0,
+      0.6576
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "string": {
+      "k": 0,
+      "n": 2,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.6576
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 2
+    }
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "reason": "ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)",
+      "status": "unmeasured"
+     },
+     "literalShareFromCode": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {
+     "0": 170
+    },
+    "lineFidelity": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 170,
+     "n": 170,
+     "p": 1.0,
+     "wilson95": [
+      0.9779,
+      1.0
+     ]
+    },
+    "parseSuccess": {
+     "k": 41,
+     "n": 41,
+     "p": 1.0,
+     "wilson95": [
+      0.9143,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 34,
+     "n": 34,
+     "p": 1.0,
+     "wilson95": [
+      0.8985,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 137,
+     "n": 137,
+     "p": 1.0,
+     "wilson95": [
+      0.9727,
+      1.0
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "string": {
+      "k": 137,
+      "n": 137,
+      "p": 1.0,
+      "wilson95": [
+       0.9727,
+       1.0
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {}
+   }
+  },
+  "valueSetRecovery": {
+   "k": 137,
+   "n": 139,
+   "p": 0.9856,
+   "wilson95": [
+    0.9491,
+    0.996
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "string": {
+    "k": 137,
+    "n": 139,
+    "p": 0.9856,
+    "wilson95": [
+     0.9491,
+     0.996
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 2
+  }
+ }
+}

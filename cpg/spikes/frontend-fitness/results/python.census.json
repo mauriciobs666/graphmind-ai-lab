@@ -1,0 +1,925 @@
+{
+ "definitions": {
+  "args": 9635,
+  "defs": 4231,
+  "files": 107,
+  "symbolDefs": 4231
+ },
+ "frontendOnly": false,
+ "label": "frontend+overlays",
+ "lang": "python",
+ "off": {
+  "decorators": {
+   "byNode": {
+    "decorator": {
+     "literalShare": {
+      "k": 212,
+      "n": 212,
+      "p": 1.0,
+      "wilson95": [
+       0.9822,
+       1.0
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 357,
+      "n": 357,
+      "p": 1.0,
+      "wilson95": [
+       0.9894,
+       1.0
+      ]
+     }
+    }
+   },
+   "decoratedDefs": 349,
+   "decorators": 357,
+   "decoratorsWithLiteralArgs": 212,
+   "literalShare": {
+    "k": 212,
+    "n": 212,
+    "p": 1.0,
+    "wilson95": [
+     0.9822,
+     1.0
+    ]
+   },
+   "nameShare": {
+    "k": 349,
+    "n": 349,
+    "p": 1.0,
+    "wilson95": [
+     0.9891,
+     1.0
+    ]
+   },
+   "nameShareDecorators": {
+    "k": 357,
+    "n": 357,
+    "p": 1.0,
+    "wilson95": [
+     0.9894,
+     1.0
+    ]
+   },
+   "nameShareMatchedDefs": {
+    "k": 349,
+    "n": 349,
+    "p": 1.0,
+    "wilson95": [
+     0.9891,
+     1.0
+    ]
+   }
+  },
+  "lineEndDelta": {
+   "0": 289,
+   "10": 24,
+   "11": 23,
+   "2": 3332,
+   "4": 151,
+   "5": 251,
+   "8": 23,
+   "9": 28
+  },
+  "lineFidelity": {
+   "k": 289,
+   "n": 4231,
+   "p": 0.0683,
+   "wilson95": [
+    0.0611,
+    0.0763
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 276,
+   "n": 4231,
+   "p": 0.0652,
+   "wilson95": [
+    0.0582,
+    0.0731
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 4231,
+   "n": 4231,
+   "p": 1.0,
+   "wilson95": [
+    0.9991,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/python.census-off.measure.jsonl",
+  "methodCoverage": {
+   "k": 4231,
+   "n": 4231,
+   "p": 1.0,
+   "wilson95": [
+    0.9991,
+    1.0
+   ]
+  },
+  "parseSuccess": {
+   "k": 107,
+   "n": 107,
+   "p": 1.0,
+   "wilson95": [
+    0.9653,
+    1.0
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 104,
+   "n": 104,
+   "p": 1.0,
+   "wilson95": [
+    0.9644,
+    1.0
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "valueSetRecoveryByKind": {},
+    "valueSetUnrecoveredBy": {}
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {
+      "decorator": {
+       "literalShare": {
+        "k": 212,
+        "n": 212,
+        "p": 1.0,
+        "wilson95": [
+         0.9822,
+         1.0
+        ]
+       },
+       "nameShareDecorators": {
+        "k": 357,
+        "n": 357,
+        "p": 1.0,
+        "wilson95": [
+         0.9894,
+         1.0
+        ]
+       }
+      }
+     },
+     "decoratedDefs": 349,
+     "decorators": 357,
+     "decoratorsWithLiteralArgs": 212,
+     "literalShare": {
+      "k": 212,
+      "n": 212,
+      "p": 1.0,
+      "wilson95": [
+       0.9822,
+       1.0
+      ]
+     },
+     "nameShare": {
+      "k": 349,
+      "n": 349,
+      "p": 1.0,
+      "wilson95": [
+       0.9891,
+       1.0
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 357,
+      "n": 357,
+      "p": 1.0,
+      "wilson95": [
+       0.9894,
+       1.0
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 349,
+      "n": 349,
+      "p": 1.0,
+      "wilson95": [
+       0.9891,
+       1.0
+      ]
+     }
+    },
+    "lineEndDelta": {
+     "0": 289,
+     "10": 24,
+     "11": 23,
+     "2": 3332,
+     "4": 151,
+     "5": 251,
+     "8": 23,
+     "9": 28
+    },
+    "lineFidelity": {
+     "k": 289,
+     "n": 4231,
+     "p": 0.0683,
+     "wilson95": [
+      0.0611,
+      0.0763
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 276,
+     "n": 4231,
+     "p": 0.0652,
+     "wilson95": [
+      0.0582,
+      0.0731
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 4231,
+     "n": 4231,
+     "p": 1.0,
+     "wilson95": [
+      0.9991,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 4231,
+     "n": 4231,
+     "p": 1.0,
+     "wilson95": [
+      0.9991,
+      1.0
+     ]
+    },
+    "parseSuccess": {
+     "k": 107,
+     "n": 107,
+     "p": 1.0,
+     "wilson95": [
+      0.9653,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 104,
+     "n": 104,
+     "p": 1.0,
+     "wilson95": [
+      0.9644,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 9234,
+     "n": 9635,
+     "p": 0.9584,
+     "wilson95": [
+      0.9542,
+      0.9622
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 227,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0166
+      ]
+     },
+     "const": {
+      "k": 166,
+      "n": 330,
+      "p": 0.503,
+      "wilson95": [
+       0.4494,
+       0.5566
+      ]
+     },
+     "string": {
+      "k": 9068,
+      "n": 9078,
+      "p": 0.9989,
+      "wilson95": [
+       0.998,
+       0.9994
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 8,
+     "literalValueDiffers": 2,
+     "notALiteralNoSingleLiteralDefinition": 391
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 9234,
+   "n": 9635,
+   "p": 0.9584,
+   "wilson95": [
+    0.9542,
+    0.9622
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 0,
+    "n": 227,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0166
+    ]
+   },
+   "const": {
+    "k": 166,
+    "n": 330,
+    "p": 0.503,
+    "wilson95": [
+     0.4494,
+     0.5566
+    ]
+   },
+   "string": {
+    "k": 9068,
+    "n": 9078,
+    "p": 0.9989,
+    "wilson95": [
+     0.998,
+     0.9994
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 8,
+   "literalValueDiffers": 2,
+   "notALiteralNoSingleLiteralDefinition": 391
+  }
+ },
+ "on": {
+  "decorators": {
+   "byNode": {
+    "decorator": {
+     "literalShare": {
+      "k": 212,
+      "n": 212,
+      "p": 1.0,
+      "wilson95": [
+       0.9822,
+       1.0
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 357,
+      "n": 357,
+      "p": 1.0,
+      "wilson95": [
+       0.9894,
+       1.0
+      ]
+     }
+    }
+   },
+   "decoratedDefs": 349,
+   "decorators": 357,
+   "decoratorsWithLiteralArgs": 212,
+   "literalShare": {
+    "k": 212,
+    "n": 212,
+    "p": 1.0,
+    "wilson95": [
+     0.9822,
+     1.0
+    ]
+   },
+   "nameShare": {
+    "k": 349,
+    "n": 349,
+    "p": 1.0,
+    "wilson95": [
+     0.9891,
+     1.0
+    ]
+   },
+   "nameShareDecorators": {
+    "k": 357,
+    "n": 357,
+    "p": 1.0,
+    "wilson95": [
+     0.9894,
+     1.0
+    ]
+   },
+   "nameShareMatchedDefs": {
+    "k": 349,
+    "n": 349,
+    "p": 1.0,
+    "wilson95": [
+     0.9891,
+     1.0
+    ]
+   }
+  },
+  "lineEndDelta": {
+   "0": 289,
+   "10": 24,
+   "11": 23,
+   "2": 3332,
+   "4": 151,
+   "5": 251,
+   "8": 23,
+   "9": 28
+  },
+  "lineFidelity": {
+   "k": 289,
+   "n": 4231,
+   "p": 0.0683,
+   "wilson95": [
+    0.0611,
+    0.0763
+   ]
+  },
+  "lineFidelityDeclStart": {
+   "k": 276,
+   "n": 4231,
+   "p": 0.0652,
+   "wilson95": [
+    0.0582,
+    0.0731
+   ]
+  },
+  "lineFidelityStartOnly": {
+   "k": 4231,
+   "n": 4231,
+   "p": 1.0,
+   "wilson95": [
+    0.9991,
+    1.0
+   ]
+  },
+  "measure": "spikes/frontend-fitness/results/python.census-on.measure.jsonl",
+  "methodCoverage": {
+   "k": 4231,
+   "n": 4231,
+   "p": 1.0,
+   "wilson95": [
+    0.9991,
+    1.0
+   ]
+  },
+  "parseSuccess": {
+   "k": 107,
+   "n": 107,
+   "p": 1.0,
+   "wilson95": [
+    0.9653,
+    1.0
+   ]
+  },
+  "parseSuccessStrict": {
+   "k": 104,
+   "n": 104,
+   "p": 1.0,
+   "wilson95": [
+    0.9644,
+    1.0
+   ]
+  },
+  "strata": {
+   "absentFiles": {
+    "decorators": {
+     "byNode": {},
+     "decoratedDefs": 0,
+     "decorators": 0,
+     "decoratorsWithLiteralArgs": 0,
+     "literalShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShare": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 0,
+      "n": 0,
+      "p": null,
+      "wilson95": [
+       null,
+       null
+      ]
+     }
+    },
+    "lineEndDelta": {},
+    "lineFidelity": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "methodCoverage": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "parseSuccess": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 0,
+     "n": 0,
+     "p": null,
+     "wilson95": [
+      null,
+      null
+     ]
+    },
+    "valueSetRecoveryByKind": {},
+    "valueSetUnrecoveredBy": {}
+   },
+   "inCpgFiles": {
+    "decorators": {
+     "byNode": {
+      "decorator": {
+       "literalShare": {
+        "k": 212,
+        "n": 212,
+        "p": 1.0,
+        "wilson95": [
+         0.9822,
+         1.0
+        ]
+       },
+       "nameShareDecorators": {
+        "k": 357,
+        "n": 357,
+        "p": 1.0,
+        "wilson95": [
+         0.9894,
+         1.0
+        ]
+       }
+      }
+     },
+     "decoratedDefs": 349,
+     "decorators": 357,
+     "decoratorsWithLiteralArgs": 212,
+     "literalShare": {
+      "k": 212,
+      "n": 212,
+      "p": 1.0,
+      "wilson95": [
+       0.9822,
+       1.0
+      ]
+     },
+     "nameShare": {
+      "k": 349,
+      "n": 349,
+      "p": 1.0,
+      "wilson95": [
+       0.9891,
+       1.0
+      ]
+     },
+     "nameShareDecorators": {
+      "k": 357,
+      "n": 357,
+      "p": 1.0,
+      "wilson95": [
+       0.9894,
+       1.0
+      ]
+     },
+     "nameShareMatchedDefs": {
+      "k": 349,
+      "n": 349,
+      "p": 1.0,
+      "wilson95": [
+       0.9891,
+       1.0
+      ]
+     }
+    },
+    "lineEndDelta": {
+     "0": 289,
+     "10": 24,
+     "11": 23,
+     "2": 3332,
+     "4": 151,
+     "5": 251,
+     "8": 23,
+     "9": 28
+    },
+    "lineFidelity": {
+     "k": 289,
+     "n": 4231,
+     "p": 0.0683,
+     "wilson95": [
+      0.0611,
+      0.0763
+     ]
+    },
+    "lineFidelityDeclStart": {
+     "k": 276,
+     "n": 4231,
+     "p": 0.0652,
+     "wilson95": [
+      0.0582,
+      0.0731
+     ]
+    },
+    "lineFidelityStartOnly": {
+     "k": 4231,
+     "n": 4231,
+     "p": 1.0,
+     "wilson95": [
+      0.9991,
+      1.0
+     ]
+    },
+    "methodCoverage": {
+     "k": 4231,
+     "n": 4231,
+     "p": 1.0,
+     "wilson95": [
+      0.9991,
+      1.0
+     ]
+    },
+    "parseSuccess": {
+     "k": 107,
+     "n": 107,
+     "p": 1.0,
+     "wilson95": [
+      0.9653,
+      1.0
+     ]
+    },
+    "parseSuccessStrict": {
+     "k": 104,
+     "n": 104,
+     "p": 1.0,
+     "wilson95": [
+      0.9644,
+      1.0
+     ]
+    },
+    "valueSetRecovery": {
+     "k": 9234,
+     "n": 9635,
+     "p": 0.9584,
+     "wilson95": [
+      0.9542,
+      0.9622
+     ]
+    },
+    "valueSetRecoveryByKind": {
+     "concat": {
+      "k": 0,
+      "n": 227,
+      "p": 0.0,
+      "wilson95": [
+       0.0,
+       0.0166
+      ]
+     },
+     "const": {
+      "k": 166,
+      "n": 330,
+      "p": 0.503,
+      "wilson95": [
+       0.4494,
+       0.5566
+      ]
+     },
+     "string": {
+      "k": 9068,
+      "n": 9078,
+      "p": 0.9989,
+      "wilson95": [
+       0.998,
+       0.9994
+      ]
+     }
+    },
+    "valueSetUnrecoveredBy": {
+     "callUnmatched": 8,
+     "literalValueDiffers": 2,
+     "notALiteralNoSingleLiteralDefinition": 391
+    }
+   }
+  },
+  "valueSetRecovery": {
+   "k": 9234,
+   "n": 9635,
+   "p": 0.9584,
+   "wilson95": [
+    0.9542,
+    0.9622
+   ]
+  },
+  "valueSetRecoveryByKind": {
+   "concat": {
+    "k": 0,
+    "n": 227,
+    "p": 0.0,
+    "wilson95": [
+     0.0,
+     0.0166
+    ]
+   },
+   "const": {
+    "k": 166,
+    "n": 330,
+    "p": 0.503,
+    "wilson95": [
+     0.4494,
+     0.5566
+    ]
+   },
+   "string": {
+    "k": 9068,
+    "n": 9078,
+    "p": 0.9989,
+    "wilson95": [
+     0.998,
+     0.9994
+    ]
+   }
+  },
+  "valueSetUnrecoveredBy": {
+   "callUnmatched": 8,
+   "literalValueDiffers": 2,
+   "notALiteralNoSingleLiteralDefinition": 391
+  }
+ }
+}

@@ -97,6 +97,38 @@ def last_segment(name: str) -> str:
     return re.split(r"\.|::", name.strip())[-1] if name else ""
 
 
+# Observed per frontend (results/<lang>.decorator-probe.json, matcher-table.md "Census fields"): which decorator facts Joern exposes.
+NO_DECORATOR_NODE = {"cpp", "go"}          # no ANNOTATION/CALL node: name share and literal share are unmeasurable, not 0
+LITERALS_ONLY_IN_CODE = {"javascript"}     # ANNOTATION has no literal children: the arguments are only in `code`
+_CPP_STR = re.compile(r'(?:u8|u|U|L)?R"[^()\\ ]{0,16}\(.*?\)[^()\\ ]{0,16}"|(?:u8|u|U|L)?"(?:\\.|[^"\\])*"', re.S)
+_ANY_STR = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`', re.S)
+
+
+def joern_literal_value(lang: str, raw, node=None):
+    """Normalised value of a Literal's source `code` as Joern reports it. Java ANNOTATION_LITERAL.code is already unquoted;
+    C++ keeps adjacent literals (`"a" "b"`) as one LITERAL."""
+    if raw is None:
+        return None
+    if lang == "java" and node == "ANNOTATION_LITERAL":
+        return raw
+    if lang == "cpp":
+        parts = _CPP_STR.findall(raw)
+        if len(parts) > 1:
+            vals = [mdc.normalise_literal("cpp", x) for x in parts]
+            return None if any(v is None for v in vals) else "".join(vals)
+    return mdc.normalise_literal(lang, raw)
+
+
+def ann_values(lang: str, a: dict) -> set:
+    nodes = a.get("litNodes") or [None] * len(a.get("lits") or [])
+    return {joern_literal_value(lang, x, n) for x, n in zip(a.get("lits") or [], nodes)}
+
+
+def code_literals(lang: str, code: str) -> set:
+    """JS: string literals parsed out of the ANNOTATION `code` text (the only place Joern keeps them)."""
+    return {mdc.normalise_literal(lang, x) for x in _ANY_STR.findall(code or "")}
+
+
 def read_measure(path) -> dict:
     meta, files = {}, {}
     methods = collections.defaultdict(list)
@@ -194,6 +226,7 @@ def _census_core(lang: str, D: dict, M: dict) -> dict:
     frontend_only = bool(meta.get("frontendOnly"))
     sym = ncov = nstart = nstart_decl = nend_ok = 0
     nline = nline_decl = 0
+    end_delta = collections.Counter()
     matched_by = {}
     for path, defs in D["defs"].items():
         symbols = [d for d in defs if d["symbol"]]
@@ -206,6 +239,8 @@ def _census_core(lang: str, D: dict, M: dict) -> dict:
             d = defs[i]
             ncov += 1
             end_ok = m["le"] == d["endLine"] + off
+            nstart += 1 if m["l"] == d["nameLine"] + off else 0
+            end_delta[m["le"] - (d["endLine"] + off)] += 1
             nline += 1 if (m["l"] == d["nameLine"] + off and end_ok) else 0
             nline_decl += 1 if (m["l"] == d["declStartLine"] + off and end_ok) else 0
     parsed = sum(1 for p in D["files"] if p in M["files"] and (M["files"][p] > 0 or M["methods"].get(p)))
@@ -220,6 +255,9 @@ def _census_core(lang: str, D: dict, M: dict) -> dict:
         "methodCoverage": sm.prop(ncov, sym),
         "lineFidelity": sm.prop(nline, ncov),
         "lineFidelityDeclStart": sm.prop(nline_decl, ncov),
+        "lineFidelityStartOnly": sm.prop(nstart, ncov),
+        # METHOD.lineNumberEnd minus the census end line (offset applied), most common first: a constant offset reads here as one bucket
+        "lineEndDelta": {str(k): v for k, v in end_delta.most_common(8)},
     }
     if macro_defs:
         mk_ = tot = 0
@@ -236,20 +274,33 @@ def _census_core(lang: str, D: dict, M: dict) -> dict:
         block["valueSetRecovery"] = _unmeasured("measure output lacks censusSchema")
     else:
         rec, byk = 0, collections.defaultdict(lambda: [0, 0])
+        why = collections.Counter()
         for a in D["args"]:
             s = M["sites"].get(a["siteKey"])
-            ok = False
-            if s and s.get("matched"):
-                c = M["cargs"].get(a["siteKey"], {}).get(a["argIndex"])
-                if c:
-                    if c.get("kind") == "LITERAL" and c.get("lit") is not None and mdc.normalise_literal(lang, c["lit"]) == a["value"]:
-                        ok = True
-                    elif c.get("nreach") == 1 and len(c.get("reach") or []) == 1 and mdc.normalise_literal(lang, c["reach"][0]) == a["value"]:
-                        ok = True
+            ok, cause = False, None
+            if not (s and s.get("matched")):
+                cause = "callUnmatched"
+            elif a["siteKey"] not in M["cargs"]:
+                cause = "matchedCallHasNoArgumentNodes"      # e.g. csharp unqualified calls: zero `argument`s in csharpsrc2cpg
+            else:
+                c = M["cargs"][a["siteKey"]].get(a["argIndex"])
+                if c is None:
+                    cause = "noArgumentAtIndex"
+                elif c.get("kind") == "LITERAL" and c.get("lit") is not None and joern_literal_value(lang, c["lit"]) == a["value"]:
+                    ok = True
+                elif c.get("kind") == "LITERAL":
+                    cause = "literalValueDiffers"
+                elif c.get("nreach") == 1 and len(c.get("reach") or []) == 1 and joern_literal_value(lang, c["reach"][0]) == a["value"]:
+                    ok = True
+                else:
+                    cause = "notALiteralNoSingleLiteralDefinition"
             rec += ok
+            if cause:
+                why[cause] += 1
             byk[a["valueKind"]][0] += ok
             byk[a["valueKind"]][1] += 1
         block["valueSetRecovery"] = sm.prop(rec, len(D["args"]))
+        block["valueSetUnrecoveredBy"] = dict(sorted(why.items()))
         block["valueSetRecoveryByKind"] = {k: sm.prop(v[0], v[1]) for k, v in sorted(byk.items())}
     if not schema:
         block["decorators"] = _unmeasured("measure output lacks censusSchema")
@@ -259,7 +310,7 @@ def _census_core(lang: str, D: dict, M: dict) -> dict:
 
 
 def decorator_block(lang, D, matched_by) -> dict:
-    defs_k = defs_n = dec_k = dec_n = lit_k = lit_n = 0
+    defs_k = defs_n = dec_k = dec_n = lit_k = lit_n = code_k = dm_k = dm_n = 0
     by_node = collections.defaultdict(lambda: [0, 0, 0, 0])  # name k, name n, lit k, lit n
     for path, defs in D["defs"].items():
         mm = matched_by.get(path, (defs, {}))[1]
@@ -268,8 +319,10 @@ def decorator_block(lang, D, matched_by) -> dict:
                 continue
             m = mm.get(i)
             exposed = collections.defaultdict(set)
+            from_code = collections.defaultdict(set)
             for a in (m.get("ann") or []) if m else []:
-                exposed[last_segment(a["name"])].update(mdc.normalise_literal(lang, x) for x in a.get("lits") or [])
+                exposed[last_segment(a["name"])].update(ann_values(lang, a))
+                from_code[last_segment(a["name"])].update(code_literals(lang, a.get("code")))
             all_ok = True
             for dec in d["decorators"]:
                 seg = last_segment(dec["name"])
@@ -281,14 +334,28 @@ def decorator_block(lang, D, matched_by) -> dict:
                 by_node[dec["node"]][0] += ok
                 if dec["literalArgs"]:
                     lok = ok and all(x["value"] in exposed[seg] for x in dec["literalArgs"])
+                    code_k += ok and all(x["value"] in from_code[seg] for x in dec["literalArgs"])
                     lit_n += 1
                     lit_k += lok
                     by_node[dec["node"]][3] += 1
                     by_node[dec["node"]][2] += lok
             defs_n += 1
             defs_k += all_ok
-    return {"nameShare": sm.prop(defs_k, defs_n), "nameShareDecorators": sm.prop(dec_k, dec_n), "literalShare": sm.prop(lit_k, lit_n),
-            "byNode": {k: {"nameShareDecorators": sm.prop(v[0], v[1]), "literalShare": sm.prop(v[2], v[3])} for k, v in sorted(by_node.items())}}
+            if m is not None:
+                dm_n += 1
+                dm_k += all_ok
+    out = {"nameShare": sm.prop(defs_k, defs_n), "nameShareDecorators": sm.prop(dec_k, dec_n), "literalShare": sm.prop(lit_k, lit_n),
+           "byNode": {k: {"nameShareDecorators": sm.prop(v[0], v[1]), "literalShare": sm.prop(v[2], v[3])} for k, v in sorted(by_node.items())},
+           "nameShareMatchedDefs": sm.prop(dm_k, dm_n), "decoratedDefs": defs_n, "decorators": dec_n, "decoratorsWithLiteralArgs": lit_n}
+    if lang in NO_DECORATOR_NODE:
+        why = _unmeasured("frontend exposes no decorator node (decorator-probe)")
+        out.update(nameShareMatchedDefs=why, nameShare=why, nameShareDecorators=why, literalShare=why, byNode={})
+    elif lang in LITERALS_ONLY_IN_CODE:
+        out["literalShare"] = _unmeasured("ANNOTATION has no literal nodes; arguments only in its code text (see literalShareFromCode)")
+        out["literalShareFromCode"] = sm.prop(code_k, lit_n)
+        for v in out["byNode"].values():
+            v["literalShare"] = out["literalShare"]
+    return out
 
 
 def run(lang: str, off_path=None, on_path=None, defs_path=None) -> dict:
