@@ -1,0 +1,1571 @@
+{
+"370": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/csrf/CsrfManager.kt",
+"calleeName": "generateToken",
+"nCandidates": 0,
+"first10": []
+},
+"178": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/MongoClientRepository.kt",
+"calleeName": "getCollection",
+"nCandidates": 6,
+"first10": [
+212,
+194,
+400,
+420,
+411,
+348
+]
+},
+"277": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/processors/mongo/MongoCollectionProcessor.kt",
+"calleeName": "getDatabaseKey",
+"nCandidates": 2,
+"first10": [
+150,
+403
+]
+},
+"358": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/utils/ErrorHandler.kt",
+"calleeName": "badRequest",
+"nCandidates": 3,
+"first10": [
+247,
+296,
+350
+]
+},
+"179": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepositoryIntegrationTest.kt",
+"calleeName": "execute",
+"nCandidates": 5,
+"first10": [
+118,
+317,
+4,
+372,
+310
+]
+},
+"390": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/modules/list/PanelListController.kt",
+"calleeName": "calculateMaxPages",
+"nCandidates": 0,
+"first10": []
+},
+"212": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/MongoClientRepository.kt",
+"calleeName": "getCount",
+"nCandidates": 6,
+"first10": [
+178,
+194,
+400,
+420,
+411,
+348
+]
+},
+"214": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/DataWithPrimaryKey.kt",
+"calleeName": "DataWithPrimaryKey",
+"nCandidates": 0,
+"first10": []
+},
+"39": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/provider/defaultvalue/DefaultValueProviderRegistry.kt",
+"calleeName": "get",
+"nCandidates": 11,
+"first10": [
+290,
+397,
+125,
+88,
+163,
+108,
+128,
+418,
+213,
+80
+]
+},
+"323": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/Limit.kt",
+"calleeName": "Limit",
+"nCandidates": 2,
+"first10": [
+225,
+209
+]
+},
+"275": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/action/ActionOptions.kt",
+"calleeName": "ActionOptions",
+"nCandidates": 0,
+"first10": []
+},
+"14": {
+"stratum": "AI",
+"cell": "internal|sample/src/main/kotlin/ir/amirreza/dashboard/CustomDashboard.kt",
+"calleeName": "Task4TextSection",
+"nCandidates": 2,
+"first10": [
+91,
+286
+]
+},
+"87": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/modules/error/ErrorHandler.kt",
+"calleeName": "configureErrorHandler",
+"nCandidates": 0,
+"first10": []
+},
+"141": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "getTextData",
+"nCandidates": 12,
+"first10": [
+131,
+111,
+321,
+251,
+61,
+313,
+398,
+171,
+340,
+346
+]
+},
+"330": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/crypto/CryptoManager.kt",
+"calleeName": "decryptData",
+"nCandidates": 0,
+"first10": []
+},
+"131": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "updateSelectedReferenceInListReference",
+"nCandidates": 12,
+"first10": [
+141,
+111,
+321,
+251,
+61,
+313,
+398,
+171,
+340,
+346
+]
+},
+"293": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/panels/AdminJdbcTable.kt",
+"calleeName": "getAllAllowToShowColumnsInUpsert",
+"nCandidates": 3,
+"first10": [
+329,
+407,
+402
+]
+},
+"105": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/response/Response.kt",
+"calleeName": "Error",
+"nCandidates": 1,
+"first10": [
+151
+]
+},
+"139": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/authentication/PanelAuthorizationTest.kt",
+"calleeName": "setupTestAuthAndRouting",
+"nCandidates": 3,
+"first10": [
+63,
+266,
+211
+]
+},
+"73": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/configuration/KtorAdminConfiguration.kt",
+"calleeName": "registerCustomAdminAction",
+"nCandidates": 4,
+"first10": [
+134,
+195,
+256,
+278
+]
+},
+"63": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/authentication/PanelAuthorizationTest.kt",
+"calleeName": "setupTestAuthAndRouting",
+"nCandidates": 3,
+"first10": [
+139,
+266,
+211
+]
+},
+"247": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/utils/ErrorHandler.kt",
+"calleeName": "invalidateRequest",
+"nCandidates": 3,
+"first10": [
+358,
+296,
+350
+]
+},
+"329": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/panels/AdminJdbcTable.kt",
+"calleeName": "getAllAllowToShowColumnsInUpsert",
+"nCandidates": 3,
+"first10": [
+293,
+407,
+402
+]
+},
+"415": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/AnnotationRepository.kt",
+"calleeName": "createStringListFunction",
+"nCandidates": 0,
+"first10": []
+},
+"176": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/modules/add/GetAddsController.kt",
+"calleeName": "handleAddNewItem",
+"nCandidates": 0,
+"first10": []
+},
+"382": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/modules/update/PatchUpdatesController.kt",
+"calleeName": "respondJson",
+"nCandidates": 1,
+"first10": [
+395
+]
+},
+"50": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/getters/ColumnType.kt",
+"calleeName": "toTypedValue",
+"nCandidates": 1,
+"first10": [
+72
+]
+},
+"68": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/authentication/KtorAdminAuthenticationTest.kt",
+"calleeName": "configureTokenAuthTestApp",
+"nCandidates": 0,
+"first10": []
+},
+"90": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/dashboard/grid/Grid.kt",
+"calleeName": "addSection",
+"nCandidates": 1,
+"first10": [
+16
+]
+},
+"396": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/translator/KtorAdminTranslator.kt",
+"calleeName": "translate",
+"nCandidates": 1,
+"first10": [
+292
+]
+},
+"311": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/PropertiesRepository.kt",
+"calleeName": "getComputed",
+"nCandidates": 1,
+"first10": [
+226
+]
+},
+"52": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/ColumnSet.kt",
+"calleeName": "ColumnSet",
+"nCandidates": 2,
+"first10": [
+221,
+97
+]
+},
+"298": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/utils/Extensions.kt",
+"calleeName": "formatAsIntegerIfPossible",
+"nCandidates": 3,
+"first10": [
+49,
+103,
+42
+]
+},
+"189": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/TestFixtures.kt",
+"calleeName": "column",
+"nCandidates": 0,
+"first10": []
+},
+"317": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepositoryIntegrationTest.kt",
+"calleeName": "deleteAllUsers",
+"nCandidates": 4,
+"first10": [
+179,
+4,
+372,
+310
+]
+},
+"8": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/panels/AdminPanel.kt",
+"calleeName": "getAllCustomActions",
+"nCandidates": 0,
+"first10": []
+},
+"306": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/events/ColumnEvent.kt",
+"calleeName": "ColumnEvent",
+"nCandidates": 0,
+"first10": []
+},
+"17": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/validators/Validators.kt",
+"calleeName": "validateColumnParameter",
+"nCandidates": 1,
+"first10": [
+234
+]
+},
+"394": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/formatters/Database.kt",
+"calleeName": "restore",
+"nCandidates": 3,
+"first10": [
+339,
+27,
+146
+]
+},
+"407": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/panels/AdminJdbcTable.kt",
+"calleeName": "getAllAutoNowDateUpdateColumns",
+"nCandidates": 3,
+"first10": [
+293,
+329,
+402
+]
+},
+"225": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/Limit.kt",
+"calleeName": "toFormattedString",
+"nCandidates": 3,
+"first10": [
+323,
+361,
+209
+]
+},
+"136": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/template/DefaultAdminTemplate.kt",
+"calleeName": "toVelocityModel",
+"nCandidates": 1,
+"first10": [
+408
+]
+},
+"78": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/processors/hibernate/HibernateTableProcessor.kt",
+"calleeName": "getAnnotationArguments",
+"nCandidates": 0,
+"first10": []
+},
+"258": {
+"stratum": "AI",
+"cell": "declared|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/providers/StorageProvider.kt",
+"calleeName": "deleteFile",
+"nCandidates": 0,
+"first10": []
+},
+"339": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/formatters/Database.kt",
+"calleeName": "formatToDisplayInTable",
+"nCandidates": 3,
+"first10": [
+394,
+27,
+146
+]
+},
+"201": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/models/filters/FiltersData.kt",
+"calleeName": "FiltersData",
+"nCandidates": 0,
+"first10": []
+},
+"234": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/validators/Validators.kt",
+"calleeName": "validateLong",
+"nCandidates": 1,
+"first10": [
+17
+]
+},
+"111": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "getTextData",
+"nCandidates": 12,
+"first10": [
+141,
+131,
+321,
+251,
+61,
+313,
+398,
+171,
+340,
+346
+]
+},
+"194": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/MongoClientRepository.kt",
+"calleeName": "ConnectionConfig",
+"nCandidates": 6,
+"first10": [
+178,
+212,
+400,
+420,
+411,
+348
+]
+},
+"49": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/utils/Extensions.kt",
+"calleeName": "allIndexed",
+"nCandidates": 3,
+"first10": [
+298,
+103,
+42
+]
+},
+"16": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/dashboard/grid/Grid.kt",
+"calleeName": "toSectionInfo",
+"nCandidates": 1,
+"first10": [
+90
+]
+},
+"321": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "getAllReferences",
+"nCandidates": 12,
+"first10": [
+141,
+131,
+111,
+251,
+61,
+313,
+398,
+171,
+340,
+346
+]
+},
+"60": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/filters/JdbcFilters.kt",
+"calleeName": "handleSimpleFilter",
+"nCandidates": 2,
+"first10": [
+32,
+263
+]
+},
+"402": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/panels/AdminJdbcTable.kt",
+"calleeName": "getAllAllowToShowColumnsInUpsert",
+"nCandidates": 3,
+"first10": [
+293,
+329,
+407
+]
+},
+"315": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/utils/Types.kt",
+"calleeName": "guessFieldPropertyType",
+"nCandidates": 2,
+"first10": [
+38,
+419
+]
+},
+"245": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/FileRepository.kt",
+"calleeName": "generateMediaUrl",
+"nCandidates": 0,
+"first10": []
+},
+"251": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "usingDataSource",
+"nCandidates": 12,
+"first10": [
+141,
+131,
+111,
+321,
+61,
+313,
+398,
+171,
+340,
+346
+]
+},
+"292": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/translator/KtorAdminTranslator.kt",
+"calleeName": "translate",
+"nCandidates": 1,
+"first10": [
+396
+]
+},
+"61": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/JdbcQueriesRepository.kt",
+"calleeName": "getData",
+"nCandidates": 12,
+"first10": [
+141,
+131,
+111,
+321,
+251,
+313,
+398,
+171,
+340,
+346
+]
+},
+"400": {
+"stratum": "AI",
+"cell": "internal|KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/repository/MongoClientRepository.kt",
+"calleeName": "toStringId",
+"nCandidates": 6,
+"first10": [
+178,
+212,
+194,
+420,
+411,
+348
+]
+},
+"319": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "mapOf",
+"nCandidates": 83,
+"first10": [
+289,
+188,
+130,
+235,
+175,
+36,
+77,
+332,
+405,
+232
+]
+},
+"117": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "append",
+"nCandidates": 32,
+"first10": [
+285,
+93,
+192,
+392,
+204,
+239,
+386,
+357,
+324,
+387
+]
+},
+"289": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "listOf",
+"nCandidates": 83,
+"first10": [
+319,
+188,
+130,
+235,
+175,
+36,
+77,
+332,
+405,
+232
+]
+},
+"342": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.test",
+"calleeName": "assertEquals",
+"nCandidates": 16,
+"first10": [
+309,
+34,
+414,
+328,
+56,
+24,
+191,
+412,
+374,
+12
+]
+},
+"44": {
+"stratum": "AE",
+"cell": "external|io.ktor.http.content",
+"calleeName": "release",
+"nCandidates": 1,
+"first10": [
+359
+]
+},
+"172": {
+"stratum": "AE",
+"cell": "external|stdlib:java.time",
+"calleeName": "plusMillis",
+"nCandidates": 2,
+"first10": [
+371,
+58
+]
+},
+"112": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.statement",
+"calleeName": "bodyAsText",
+"nCandidates": 1,
+"first10": [
+76
+]
+},
+"188": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "emptyList",
+"nCandidates": 83,
+"first10": [
+319,
+289,
+130,
+235,
+175,
+36,
+77,
+332,
+405,
+232
+]
+},
+"285": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "append",
+"nCandidates": 32,
+"first10": [
+117,
+93,
+192,
+392,
+204,
+239,
+386,
+357,
+324,
+387
+]
+},
+"222": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "takeIf",
+"nCandidates": 30,
+"first10": [
+287,
+147,
+208,
+362,
+92,
+129,
+246,
+241,
+133,
+280
+]
+},
+"130": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "add",
+"nCandidates": 84,
+"first10": [
+319,
+289,
+188,
+235,
+175,
+36,
+77,
+367,
+332,
+405
+]
+},
+"273": {
+"stratum": "AE",
+"cell": "external|io.ktor.server.request",
+"calleeName": "receiveMultipart",
+"nCandidates": 1,
+"first10": [
+304
+]
+},
+"269": {
+"stratum": "AE",
+"cell": "external|com.google.devtools.ksp.symbol",
+"calleeName": "resolve",
+"nCandidates": 8,
+"first10": [
+352,
+334,
+302,
+248,
+170,
+164,
+2,
+190
+]
+},
+"93": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "isNotEmpty",
+"nCandidates": 31,
+"first10": [
+117,
+285,
+192,
+392,
+204,
+239,
+386,
+357,
+324,
+387
+]
+},
+"352": {
+"stratum": "AE",
+"cell": "external|com.google.devtools.ksp.symbol",
+"calleeName": "asString",
+"nCandidates": 8,
+"first10": [
+269,
+334,
+302,
+248,
+170,
+164,
+2,
+190
+]
+},
+"287": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "let",
+"nCandidates": 30,
+"first10": [
+222,
+147,
+208,
+362,
+92,
+129,
+246,
+241,
+133,
+280
+]
+},
+"325": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "parameterizedBy",
+"nCandidates": 14,
+"first10": [
+9,
+22,
+66,
+202,
+18,
+199,
+364,
+174,
+215,
+13
+]
+},
+"156": {
+"stratum": "AE",
+"cell": "external|stdlib:java.sql",
+"calleeName": "setNull",
+"nCandidates": 6,
+"first10": [
+427,
+118,
+376,
+237,
+159,
+21
+]
+},
+"59": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.request",
+"calleeName": "post",
+"nCandidates": 7,
+"first10": [
+422,
+88,
+268,
+128,
+80,
+121,
+213
+]
+},
+"397": {
+"stratum": "AE",
+"cell": "external|io.ktor.server.routing",
+"calleeName": "get",
+"nCandidates": 14,
+"first10": [
+39,
+88,
+128,
+108,
+75,
+418,
+290,
+80,
+125,
+231
+]
+},
+"309": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.test",
+"calleeName": "assertFalse",
+"nCandidates": 16,
+"first10": [
+342,
+34,
+414,
+328,
+56,
+24,
+191,
+412,
+374,
+12
+]
+},
+"192": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "removeSuffix",
+"nCandidates": 31,
+"first10": [
+117,
+285,
+93,
+392,
+204,
+239,
+386,
+357,
+324,
+387
+]
+},
+"142": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.request.forms",
+"calleeName": "submitForm",
+"nCandidates": 0,
+"first10": []
+},
+"147": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "toString",
+"nCandidates": 31,
+"first10": [
+222,
+287,
+208,
+362,
+92,
+129,
+246,
+241,
+133,
+280
+]
+},
+"175": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "last",
+"nCandidates": 83,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+36,
+77,
+332,
+405,
+232
+]
+},
+"181": {
+"stratum": "AE",
+"cell": "external|com.mongodb.client.model",
+"calleeName": "project",
+"nCandidates": 4,
+"first10": [
+301,
+274,
+219,
+135
+]
+},
+"422": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.request",
+"calleeName": "post",
+"nCandidates": 7,
+"first10": [
+59,
+88,
+268,
+128,
+80,
+121,
+213
+]
+},
+"36": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "filterNotNull",
+"nCandidates": 83,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+175,
+77,
+332,
+405,
+232
+]
+},
+"9": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "addStatement",
+"nCandidates": 14,
+"first10": [
+325,
+22,
+66,
+202,
+18,
+199,
+364,
+174,
+215,
+13
+]
+},
+"77": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "filterIsInstance",
+"nCandidates": 83,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+175,
+36,
+332,
+405,
+232
+]
+},
+"132": {
+"stratum": "AE",
+"cell": "external|software.amazon.awssdk.services.s3",
+"calleeName": "deleteObject",
+"nCandidates": 0,
+"first10": []
+},
+"367": {
+"stratum": "AE",
+"cell": "external|com.itextpdf.layout.element",
+"calleeName": "add",
+"nCandidates": 8,
+"first10": [
+130,
+332,
+114,
+356,
+217,
+64,
+383,
+314
+]
+},
+"22": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "builder",
+"nCandidates": 14,
+"first10": [
+325,
+9,
+66,
+202,
+18,
+199,
+364,
+174,
+215,
+13
+]
+},
+"153": {
+"stratum": "AE",
+"cell": "external|org.jetbrains.exposed.sql",
+"calleeName": "nullable",
+"nCandidates": 3,
+"first10": [
+253,
+424,
+259
+]
+},
+"66": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "addModifiers",
+"nCandidates": 14,
+"first10": [
+325,
+9,
+22,
+202,
+18,
+199,
+364,
+174,
+215,
+13
+]
+},
+"208": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "let",
+"nCandidates": 30,
+"first10": [
+222,
+287,
+147,
+362,
+92,
+129,
+246,
+241,
+133,
+280
+]
+},
+"332": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "add",
+"nCandidates": 84,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+175,
+36,
+77,
+367,
+405
+]
+},
+"301": {
+"stratum": "AE",
+"cell": "external|com.mongodb.client.model",
+"calleeName": "fields",
+"nCandidates": 4,
+"first10": [
+181,
+274,
+219,
+135
+]
+},
+"253": {
+"stratum": "AE",
+"cell": "external|org.jetbrains.exposed.sql",
+"calleeName": "create",
+"nCandidates": 3,
+"first10": [
+153,
+424,
+259
+]
+},
+"405": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "filterIsInstance",
+"nCandidates": 83,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+175,
+36,
+77,
+332,
+232
+]
+},
+"34": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.test",
+"calleeName": "assertEquals",
+"nCandidates": 16,
+"first10": [
+342,
+309,
+414,
+328,
+56,
+24,
+191,
+412,
+374,
+12
+]
+},
+"392": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "lowercaseChar",
+"nCandidates": 31,
+"first10": [
+117,
+285,
+93,
+192,
+204,
+239,
+386,
+357,
+324,
+387
+]
+},
+"122": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.sequences",
+"calleeName": "firstOrNull",
+"nCandidates": 6,
+"first10": [
+271,
+353,
+177,
+316,
+279,
+252
+]
+},
+"362": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "assert",
+"nCandidates": 30,
+"first10": [
+222,
+287,
+147,
+208,
+92,
+129,
+246,
+241,
+133,
+280
+]
+},
+"232": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "map",
+"nCandidates": 84,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+224,
+175,
+36,
+77,
+332
+]
+},
+"92": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "getOrNull",
+"nCandidates": 31,
+"first10": [
+222,
+287,
+147,
+208,
+362,
+129,
+246,
+241,
+133,
+280
+]
+},
+"202": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "addFunction",
+"nCandidates": 14,
+"first10": [
+325,
+9,
+22,
+66,
+18,
+199,
+364,
+174,
+215,
+13
+]
+},
+"129": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "takeIf",
+"nCandidates": 30,
+"first10": [
+222,
+287,
+147,
+208,
+362,
+92,
+246,
+241,
+133,
+280
+]
+},
+"76": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.statement",
+"calleeName": "bodyAsText",
+"nCandidates": 1,
+"first10": [
+112
+]
+},
+"246": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin",
+"calleeName": "IllegalStateException",
+"nCandidates": 30,
+"first10": [
+222,
+287,
+147,
+208,
+362,
+92,
+129,
+241,
+133,
+280
+]
+},
+"204": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.text",
+"calleeName": "append",
+"nCandidates": 32,
+"first10": [
+117,
+285,
+93,
+192,
+392,
+239,
+386,
+357,
+324,
+387
+]
+},
+"71": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.io",
+"calleeName": "println",
+"nCandidates": 2,
+"first10": [
+47,
+206
+]
+},
+"88": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.request",
+"calleeName": "get",
+"nCandidates": 15,
+"first10": [
+59,
+397,
+422,
+39,
+268,
+128,
+108,
+75,
+418,
+290
+]
+},
+"427": {
+"stratum": "AE",
+"cell": "external|stdlib:java.sql",
+"calleeName": "executeQuery",
+"nCandidates": 6,
+"first10": [
+156,
+118,
+376,
+237,
+159,
+21
+]
+},
+"414": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.test",
+"calleeName": "assertEquals",
+"nCandidates": 16,
+"first10": [
+342,
+309,
+34,
+328,
+56,
+24,
+191,
+412,
+374,
+12
+]
+},
+"47": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.io",
+"calleeName": "println",
+"nCandidates": 2,
+"first10": [
+71,
+206
+]
+},
+"268": {
+"stratum": "AE",
+"cell": "external|io.ktor.client.request",
+"calleeName": "patch",
+"nCandidates": 7,
+"first10": [
+59,
+422,
+88,
+128,
+80,
+121,
+213
+]
+},
+"18": {
+"stratum": "AE",
+"cell": "external|com.squareup.kotlinpoet",
+"calleeName": "builder",
+"nCandidates": 14,
+"first10": [
+325,
+9,
+22,
+66,
+202,
+199,
+364,
+174,
+215,
+13
+]
+},
+"368": {
+"stratum": "AE",
+"cell": "external|stdlib:kotlin.collections",
+"calleeName": "find",
+"nCandidates": 85,
+"first10": [
+319,
+289,
+188,
+130,
+235,
+175,
+36,
+77,
+332,
+405
+]
+},
+"283": {
+"stratum": "AE",
+"cell": "external|stdlib:java.lang",
+"calleeName": "currentTimeMillis",
+"nCandidates": 1,
+"first10": [
+260
+]
+}
+}

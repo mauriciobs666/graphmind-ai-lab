@@ -1,0 +1,23 @@
+{
+ "AI": {
+  "population": 127,
+  "U": 60,
+  "cells": 66,
+  "cellsHitByU": 40,
+  "C": 26
+ },
+ "AE": {
+  "population": 275,
+  "U": 60,
+  "cells": 45,
+  "cellsHitByU": 21,
+  "C": 24
+ },
+ "AS": {
+  "population": 0,
+  "U": 0,
+  "cells": 0,
+  "cellsHitByU": 0,
+  "C": 0
+ }
+}
