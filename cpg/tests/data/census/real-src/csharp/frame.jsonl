@@ -1,0 +1,3 @@
+{"callText": "F", "calleeName": "F", "column": 37, "grammar": "csharp", "kind": "plain", "line": 3, "nameColumn": 37, "nameLine": 3, "nodeType": "call", "path": "C.cs", "siteKey": "C.cs:3:37:F"}
+{"callText": "obj.Call", "calleeName": "Call", "column": 16, "grammar": "csharp", "kind": "method", "line": 2, "nameColumn": 16, "nameLine": 2, "nodeType": "call", "path": "R.cs", "siteKey": "R.cs:2:16:obj.Call"}
+{"callText": "this.Call", "calleeName": "Call", "column": 36, "grammar": "csharp", "kind": "method", "line": 2, "nameColumn": 36, "nameLine": 2, "nodeType": "call", "path": "R.cs", "siteKey": "R.cs:2:36:this.Call"}

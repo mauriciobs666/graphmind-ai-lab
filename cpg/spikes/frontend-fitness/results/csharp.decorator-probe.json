@@ -1,0 +1,79 @@
+{
+ "annotationNodes": 4,
+ "annotationParentLabels": [
+  "METHOD"
+ ],
+ "example": {
+  "annotation": {
+   "children": [
+    {
+     "code": "\"/a\"",
+     "kids": [],
+     "label": "LITERAL"
+    }
+   ],
+   "code": "HttpGet(\"/a\")",
+   "file": "C.cs",
+   "fullName": "HttpGetAttribute",
+   "line": 2,
+   "name": "HttpGet",
+   "parent": {
+    "code": "[HttpGet(\"/a\")] public void M() { F(\"s\", \"a\" + \"b\", $\"t\", K); }",
+    "label": "METHOD",
+    "line": 2
+   }
+  },
+  "lang": "csharp",
+  "node": "LITERAL"
+ },
+ "joern": "4.0.579",
+ "lang": "csharp",
+ "methodsWithAnnotation": [
+  {
+   "annotations": 1,
+   "file": "C.cs",
+   "l": 2,
+   "name": "M"
+  },
+  {
+   "annotations": 2,
+   "file": "R.cs",
+   "l": 2,
+   "name": "M2"
+  },
+  {
+   "annotations": 1,
+   "file": "R.cs",
+   "l": 3,
+   "name": "M3"
+  }
+ ],
+ "node": "ANNOTATION",
+ "notExposed": [
+  "a plain unqualified call `F(...)` has zero `argument`s in csharpsrc2cpg although its code holds the arguments (relevant to the argument census, not to attributes)"
+ ],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "[HttpGet(\"/a\")] public void M()",
+   "example": "METHOD M -> ANNOTATION HttpGet -> LITERAL '\"/a\"'",
+   "joern": "ANNOTATION name `HttpGet`, fullName `HttpGetAttribute`, code `HttpGet(\"/a\")` (no brackets), parent METHOD; one child of label LITERAL with code `\"/a\"`.",
+   "where": "C.cs:2"
+  },
+  {
+   "construct": "[Route(\"/a\"), Obsolete(\"old\")] void M2()",
+   "joern": "Two ANNOTATION nodes on METHOD `M2`, each with a LITERAL child.",
+   "where": "R.cs:2"
+  },
+  {
+   "construct": "[HttpGet] void M3()",
+   "joern": "ANNOTATION with no children.",
+   "where": "R.cs:3"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/csharp/src",
+ "unobserved": [
+  "attributes on classes, properties or parameters",
+  "named attribute arguments"
+ ]
+}

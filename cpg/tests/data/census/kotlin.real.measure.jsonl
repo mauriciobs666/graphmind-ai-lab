@@ -1,0 +1,17 @@
+{"k":"meta","cpg":"/out/kotlin.real.cpg.bin","lang":"kotlin","files":2,"methods":11,"calls":4,"callsWithoutMethod":4,"frameSites":3,"censusSchema":1,"frontendOnly":true,"real":true}
+{"k":"file","path":"m.kt","methods":7}
+{"k":"file","path":"r.kt","methods":4}
+{"k":"method","file":"m.kt","name":"<global>","fullName":"m.kt:<global>.global","l":1,"le":1,"vendored":false,"ann":[]}
+{"k":"method","file":"m.kt","name":"a","fullName":"a:int()","l":3,"le":3,"vendored":false,"ann":[{"name":"Foo","node":"ANNOTATION","code":"@Foo(\"fa\")","lits":["\"fa\""],"litNodes":["ANNOTATION_LITERAL"]}]}
+{"k":"method","file":"m.kt","name":"b","fullName":"b:void(java.lang.String)","l":4,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"m.kt","name":"<init>","fullName":"K.<init>:void(int)","l":5,"le":5,"vendored":false,"ann":[]}
+{"k":"method","file":"m.kt","name":"ab","fullName":"K.ab:void()","l":6,"le":6,"vendored":false,"ann":[]}
+{"k":"method","file":"m.kt","name":"ex","fullName":"K.ex:void()","l":7,"le":7,"vendored":false,"ann":[]}
+{"k":"method","file":"m.kt","name":"e","fullName":"e:void()","l":9,"le":9,"vendored":false,"ann":[]}
+{"k":"method","file":"r.kt","name":"<init>","fullName":"R.<init>:void()","l":-1,"le":-1,"vendored":false,"ann":[]}
+{"k":"method","file":"r.kt","name":"<global>","fullName":"r.kt:<global>.global","l":1,"le":1,"vendored":false,"ann":[]}
+{"k":"method","file":"r.kt","name":"run","fullName":"R.run:void()","l":2,"le":2,"vendored":false,"ann":[]}
+{"k":"method","file":"r.kt","name":"m2","fullName":"R.m2:void()","l":3,"le":3,"vendored":false,"ann":[{"name":"GetMapping","node":"ANNOTATION","code":"@GetMapping(\"/a\")","lits":["\"/a\""],"litNodes":["ANNOTATION_LITERAL"]},{"name":"Deprecated","node":"ANNOTATION","code":"@Deprecated(\"old\")","lits":["\"old\""],"litNodes":["ANNOTATION_LITERAL"]}]}
+{"k":"site","key":"m.kt:3:23:g","matched":false,"nm":0,"res":[]}
+{"k":"site","key":"r.kt:2:15:obj.call","matched":false,"nm":0,"res":[]}
+{"k":"site","key":"r.kt:2:35:this.call","matched":false,"nm":0,"res":[]}

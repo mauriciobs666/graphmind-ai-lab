@@ -1,0 +1,3 @@
+{"callText": "g", "calleeName": "g", "column": 23, "grammar": "kotlin", "kind": "plain", "line": 3, "nameColumn": 23, "nameLine": 3, "nodeType": "call", "path": "m.kt", "siteKey": "m.kt:3:23:g"}
+{"callText": "obj.call", "calleeName": "call", "column": 15, "grammar": "kotlin", "kind": "method", "line": 2, "nameColumn": 15, "nameLine": 2, "nodeType": "call", "path": "r.kt", "siteKey": "r.kt:2:15:obj.call"}
+{"callText": "this.call", "calleeName": "call", "column": 35, "grammar": "kotlin", "kind": "method", "line": 2, "nameColumn": 35, "nameLine": 2, "nodeType": "call", "path": "r.kt", "siteKey": "r.kt:2:35:this.call"}

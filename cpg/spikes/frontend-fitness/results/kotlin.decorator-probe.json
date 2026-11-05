@@ -1,0 +1,67 @@
+{
+ "annotationNodes": 3,
+ "annotationParentLabels": [
+  "METHOD"
+ ],
+ "example": {
+  "annotation": {
+   "children": [
+    {
+     "code": "\"fa\"",
+     "kids": [],
+     "label": "ANNOTATION_LITERAL"
+    }
+   ],
+   "code": "@Foo(\"fa\")",
+   "file": "m.kt",
+   "fullName": "<unresolvedNamespace>.Foo",
+   "line": 2,
+   "name": "Foo",
+   "parent": {
+    "code": "a",
+    "label": "METHOD",
+    "line": 3
+   }
+  },
+  "lang": "kotlin",
+  "node": "ANNOTATION_LITERAL"
+ },
+ "frontendOnly": true,
+ "joern": "4.0.579",
+ "lang": "kotlin",
+ "methodsWithAnnotation": [
+  {
+   "annotations": 1,
+   "file": "m.kt",
+   "l": 3,
+   "name": "a"
+  },
+  {
+   "annotations": 2,
+   "file": "r.kt",
+   "l": 3,
+   "name": "m2"
+  }
+ ],
+ "node": "ANNOTATION",
+ "notExposed": [],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "@Foo(\"fa\") fun a()",
+   "example": "METHOD a -> ANNOTATION Foo -> ANNOTATION_LITERAL '\"fa\"'",
+   "joern": "ANNOTATION name `Foo`, fullName `<unresolvedNamespace>.Foo`, code `@Foo(\"fa\")` (line 2), AST parent METHOD `a` (line 3); one direct child ANNOTATION_LITERAL with code `\"fa\"` (quotes kept).",
+   "where": "m.kt:2-3"
+  },
+  {
+   "construct": "@GetMapping(\"/a\") @Deprecated(\"old\") fun m2()",
+   "joern": "Two ANNOTATION nodes on METHOD `m2`, each with one ANNOTATION_LITERAL child; `Deprecated` resolves to `kotlin.Deprecated`.",
+   "where": "r.kt:3"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/kotlin/src",
+ "unobserved": [
+  "annotations on classes or properties",
+  "an overlay-complete CPG: the default overlays abort on Kotlin (ReachingDefPass), every figure here is from the overlay-free import"
+ ]
+}

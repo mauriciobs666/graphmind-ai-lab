@@ -1,0 +1,14 @@
+{
+ "annotationNodes": 0,
+ "annotationParentLabels": [],
+ "joern": "4.0.579",
+ "lang": "go",
+ "methodsWithAnnotation": [],
+ "node": null,
+ "notExposed": [],
+ "note": "Go has no decorator or annotation construct (report \u00a7a1.6: tree-sitter node none); the Go CPG of the planted sources has no ANNOTATION node.",
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [],
+ "source": "cpg/tests/data/census/real-src/go/src",
+ "unobserved": []
+}

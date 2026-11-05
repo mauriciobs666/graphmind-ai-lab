@@ -1,0 +1,3 @@
+{"callText": "call", "calleeName": "call", "column": 5, "grammar": "python", "kind": "plain", "line": 6, "nameColumn": 5, "nameLine": 6, "nodeType": "call", "path": "m.py", "siteKey": "m.py:6:5:call"}
+{"callText": "obj.call", "calleeName": "call", "column": 9, "grammar": "python", "kind": "method", "line": 3, "nameColumn": 9, "nameLine": 3, "nodeType": "call", "path": "r.py", "siteKey": "r.py:3:9:obj.call"}
+{"callText": "self.call", "calleeName": "call", "column": 9, "grammar": "python", "kind": "method", "line": 4, "nameColumn": 9, "nameLine": 4, "nodeType": "call", "path": "r.py", "siteKey": "r.py:4:9:self.call"}

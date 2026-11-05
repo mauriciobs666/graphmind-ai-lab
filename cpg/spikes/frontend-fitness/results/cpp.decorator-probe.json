@@ -1,0 +1,24 @@
+{
+ "annotationNodes": 0,
+ "annotationParentLabels": [],
+ "joern": "4.0.579",
+ "lang": "cpp",
+ "methodsWithAnnotation": [],
+ "node": null,
+ "notExposed": [
+  "attribute name and argument as nodes"
+ ],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "[[nodiscard(\"why\")]] int f()  /  [[deprecated(\"old\")]] void d1()  /  [[nodiscard]] int d2()",
+   "joern": "No ANNOTATION node and no CALL/LITERAL/IDENTIFIER for the attribute exists in the CPG: the planted attribute text occurs only inside the `code` property of the METHOD (`[[nodiscard(\"why\")]] int f() {...`) and of the file's `<global>` AST child.",
+   "where": "m.cpp:10, r.cpp:3-4"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/cpp/src",
+ "unobserved": [
+  "attributes on classes or variables",
+  "GNU `__attribute__` / MSVC `__declspec`"
+ ]
+}

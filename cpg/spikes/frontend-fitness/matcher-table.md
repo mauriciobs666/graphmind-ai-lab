@@ -57,6 +57,26 @@ column (the start of the whole expression), exactly like the two frame sites; th
   per configuration; **a matcher error is fixed and the run repeated until zero remain** (ML §7.1); no metric is computed
   before that (S27).
 
+## Census fields (what `measure.sc` records for S27c; `censusSchema` 1)
+
+Observed on the planted sources of `cpg/tests/data/census/real-src/<lang>/` (Joern 4.0.579; frozen outputs `cpg/tests/data/census/<lang>.real.measure.jsonl`,
+decorator shapes `results/<lang>.decorator-probe.json`). The field definitions are in `measure.sc`'s header; what differs per frontend:
+
+* **Receiver / `recv`.** `recv` = the call has an argument with `argumentIndex` 0. java, csharp and cpp also put the RECEIVER edge on it; python and
+  javascript put the RECEIVER edge on the callee expression and still carry the instance as argument 0; javascript adds an implicit `this` at 0 to a
+  plain call (`call(x)` has `this`, `x`); go has no receiver argument (`obj.call("x")` has one argument); a plain python or cpp call has none.
+  csharp: a plain unqualified call `F("s")` has **zero** `argument`s (the arguments exist only in `code`).
+* **Keyword arguments (python).** `k=v` has `argumentIndex` -1 and AST `order` = source position; `order` ranks such a call by AST `order`; `ai` and `aname` are in the record.
+* **Literal `lit` text.** python/java/csharp/cpp/go `LITERAL.code` is the source text (cpp keeps adjacent-string `"a" "b"` as one LITERAL and `R"(raw)"`);
+  javascript template literal `` `t` `` is a LITERAL with code `"t"`; python `"a" "b"` and `"c" + "d"` and f-strings are CALLs, java `"t" + "u"` and a static constant `J.K` are CALLs.
+* **Annotations (`ann`).** ANNOTATION on the METHOD for java, kotlin, csharp and javascript/typescript; **python decorators are CALLs** (rewrite `f = deco(<METHOD_REF>)`),
+  the METHOD itself carries nothing; go and cpp expose no node. javascript ANNOTATIONs have no literal children (arguments only in `code`); java `ANNOTATION_LITERAL.code`
+  is **unquoted** (`/x`), kotlin's and csharp's keep their quotes. Per-language detail: `results/<lang>.decorator-probe.json`.
+* **Kotlin.** Default overlays abort (`ReachingDefPass`), so the CPG is imported overlay-free (`--param frontendOnly=true`); every call then lacks an enclosing METHOD
+  (`meta.callsWithoutMethod` = `meta.calls`), no site matches and no `carg` is written. Coverage, line fidelity and annotations are measured.
+* **Reaching definitions (`nreach`, `reach`).** REACHING_DEF sources that are the METHOD entry node or sibling arguments of the same call are not definitions (the engine routes
+  every argument into every other of an unresolved call). An assignment's target identifier and its literal are one definition.
+
 ## Known unmatched-by-construction classes (not matcher errors)
 
 JSX component use (JS/TS), Kotlin delegation-specifier constructor calls, Go generic instantiation calls, C++ calls that

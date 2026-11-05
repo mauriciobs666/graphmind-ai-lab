@@ -1,0 +1,22 @@
+{"k":"meta","cpg":"/out/csharp.real.cpg.bin","lang":"csharp","files":3,"methods":10,"calls":4,"callsWithoutMethod":0,"frameSites":3,"censusSchema":1,"frontendOnly":false,"real":true}
+{"k":"file","path":"<unknown>","methods":0}
+{"k":"file","path":"C.cs","methods":7}
+{"k":"file","path":"R.cs","methods":3}
+{"k":"method","file":"C.cs","name":"<init>","fullName":"C.<init>:System.Void()","l":-1,"le":-1,"vendored":false,"ann":[]}
+{"k":"method","file":"C.cs","name":"M","fullName":"C.M:System.Void()","l":2,"le":2,"vendored":false,"ann":[{"name":"HttpGet","node":"ANNOTATION","code":"HttpGet(\"/a\")","lits":["\"/a\""],"litNodes":["LITERAL"]}]}
+{"k":"method","file":"C.cs","name":"Sh","fullName":"C.Sh:System.Void(System.String)","l":3,"le":3,"vendored":false,"ann":[]}
+{"k":"method","file":"C.cs","name":"Ab","fullName":"C.Ab:System.Void()","l":4,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"C.cs","name":"E","fullName":"C.E:System.Void()","l":5,"le":5,"vendored":false,"ann":[]}
+{"k":"method","file":"C.cs","name":"Pt","fullName":"C.Pt:System.Void()","l":6,"le":6,"vendored":false,"ann":[]}
+{"k":"method","file":"C.cs","name":"Im","fullName":"I.Im:System.Void()","l":8,"le":8,"vendored":false,"ann":[]}
+{"k":"method","file":"R.cs","name":"Run","fullName":"R.Run:System.Void()","l":1,"le":1,"vendored":false,"ann":[]}
+{"k":"method","file":"R.cs","name":"M2","fullName":"R.M2:System.Void()","l":2,"le":2,"vendored":false,"ann":[{"name":"Route","node":"ANNOTATION","code":"Route(\"/a\")","lits":["\"/a\""],"litNodes":["LITERAL"]},{"name":"Obsolete","node":"ANNOTATION","code":"Obsolete(\"old\")","lits":["\"old\""],"litNodes":["LITERAL"]}]}
+{"k":"method","file":"R.cs","name":"M3","fullName":"R.M3:System.Void()","l":3,"le":3,"vendored":false,"ann":[{"name":"HttpGet","node":"ANNOTATION","code":"HttpGet","lits":[],"litNodes":[]}]}
+{"k":"site","key":"C.cs:3:37:F","matched":true,"nm":0,"res":[{"fullName":"<unresolvedNamespace>.F:<unresolvedSignature>","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"F","l":2,"c":36,"code":"F(\"s\", \"a\" + \"b\", $\"t\", K)"}}
+{"k":"site","key":"R.cs:2:16:obj.Call","matched":true,"nm":0,"res":[{"fullName":"<unresolvedNamespace>.Call:<unresolvedSignature>","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"Call","l":1,"c":15,"code":"obj.Call(\"x\", \"y\")"}}
+{"k":"carg","key":"R.cs:2:16:obj.Call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"R.cs:2:16:obj.Call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"x\"","nreach":0,"reach":[]}
+{"k":"carg","key":"R.cs:2:16:obj.Call","order":3,"recv":true,"ai":2,"kind":"LITERAL","lit":"\"y\"","nreach":0,"reach":[]}
+{"k":"site","key":"R.cs:2:36:this.Call","matched":true,"nm":0,"res":[{"fullName":"R.Call:<unresolvedSignature>","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"Call","l":1,"c":35,"code":"this.Call(\"w\")"}}
+{"k":"carg","key":"R.cs:2:36:this.Call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":1,"reach":[]}
+{"k":"carg","key":"R.cs:2:36:this.Call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"w\"","nreach":0,"reach":[]}

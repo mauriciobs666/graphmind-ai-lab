@@ -1,0 +1,40 @@
+{"k":"meta","cpg":"/out/python.real.cpg.bin","lang":"python","files":3,"methods":21,"calls":24,"callsWithoutMethod":0,"frameSites":3,"censusSchema":1,"frontendOnly":false,"real":true}
+{"k":"file","path":"N/A","methods":0}
+{"k":"file","path":"m.py","methods":11}
+{"k":"file","path":"r.py","methods":10}
+{"k":"method","file":"m.py","name":"<module>","fullName":"m.py:<module>","l":1,"le":12,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"shadow","fullName":"m.py:<module>.shadow","l":3,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"f","fullName":"m.py:<module>.f","l":5,"le":6,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"<body>","fullName":"m.py:<module>.P.<body>","l":7,"le":10,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"<fakeNew>","fullName":"m.py:<module>.P.<fakeNew>","l":7,"le":10,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"<metaClassCallHandler>","fullName":"m.py:<module>.P.<metaClassCallHandler>","l":7,"le":10,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"stub","fullName":"m.py:<module>.P.stub","l":8,"le":8,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"stub<metaClassAdapter>","fullName":"m.py:<module>.P.stub<metaClassAdapter>","l":8,"le":8,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"ov","fullName":"m.py:<module>.P.ov","l":10,"le":10,"vendored":false,"ann":[{"name":"overload","node":"CALL","code":"overload","lits":[],"litNodes":[]}]}
+{"k":"method","file":"m.py","name":"ov<metaClassAdapter>","fullName":"m.py:<module>.P.ov<metaClassAdapter>","l":10,"le":10,"vendored":false,"ann":[]}
+{"k":"method","file":"m.py","name":"h","fullName":"m.py:<module>.h","l":12,"le":12,"vendored":false,"ann":[{"name":"route","node":"CALL","code":"app.route(\"/x\", methods = [\"GET\"])","lits":["\"/x\"","\"GET\""],"litNodes":["LITERAL","LITERAL"]}]}
+{"k":"method","file":"r.py","name":"<module>","fullName":"r.py:<module>","l":1,"le":9,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"<body>","fullName":"r.py:<module>.Q.<body>","l":1,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"<fakeNew>","fullName":"r.py:<module>.Q.<fakeNew>","l":1,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"<metaClassCallHandler>","fullName":"r.py:<module>.Q.<metaClassCallHandler>","l":1,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"run","fullName":"r.py:<module>.Q.run","l":2,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"run<metaClassAdapter>","fullName":"r.py:<module>.Q.run<metaClassAdapter>","l":2,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"deco2","fullName":"r.py:<module>.deco2","l":7,"le":7,"vendored":false,"ann":[{"name":"dec","node":"CALL","code":"dec","lits":[],"litNodes":[]},{"name":"route","node":"CALL","code":"pkg.mod.route(\"/a\", methods = [\"GET\", \"POST\"], name = \"n\")","lits":["\"/a\"","\"GET\"","\"POST\"","\"n\""],"litNodes":["LITERAL","LITERAL","LITERAL","LITERAL"]}]}
+{"k":"method","file":"r.py","name":"<body>","fullName":"r.py:<module>.Cls.<body>","l":9,"le":9,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"<fakeNew>","fullName":"r.py:<module>.Cls.<fakeNew>","l":9,"le":9,"vendored":false,"ann":[]}
+{"k":"method","file":"r.py","name":"<metaClassCallHandler>","fullName":"r.py:<module>.Cls.<metaClassCallHandler>","l":9,"le":9,"vendored":false,"ann":[]}
+{"k":"site","key":"m.py:6:5:call","matched":true,"nm":0,"res":[],"call":{"name":"call","l":6,"c":5,"code":"call(\"s\", \"a\" \"b\", \"c\" + \"d\", LIMIT, f\"p\", f\"q{x}\")"}}
+{"k":"carg","key":"m.py:6:5:call","order":1,"recv":false,"ai":1,"kind":"LITERAL","lit":"\"s\"","nreach":0,"reach":[]}
+{"k":"carg","key":"m.py:6:5:call","order":2,"recv":false,"ai":2,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"m.py:6:5:call","order":3,"recv":false,"ai":3,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"m.py:6:5:call","order":4,"recv":false,"ai":4,"kind":"IDENTIFIER","lit":null,"nreach":1,"reach":["\"lim\""]}
+{"k":"carg","key":"m.py:6:5:call","order":5,"recv":false,"ai":5,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"m.py:6:5:call","order":6,"recv":false,"ai":6,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"site","key":"r.py:3:9:obj.call","matched":true,"nm":0,"res":[],"call":{"name":"call","l":3,"c":9,"code":"obj.call(\"x\", \"y\", k = \"z\")"}}
+{"k":"carg","key":"r.py:3:9:obj.call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"r.py:3:9:obj.call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"x\"","nreach":0,"reach":[]}
+{"k":"carg","key":"r.py:3:9:obj.call","order":3,"recv":true,"ai":2,"kind":"LITERAL","lit":"\"y\"","nreach":0,"reach":[]}
+{"k":"carg","key":"r.py:3:9:obj.call","order":4,"recv":true,"ai":-1,"kind":"LITERAL","lit":"\"z\"","nreach":0,"reach":[],"aname":"k"}
+{"k":"site","key":"r.py:4:9:self.call","matched":true,"nm":0,"res":[],"call":{"name":"call","l":4,"c":9,"code":"self.call(\"w\")"}}
+{"k":"carg","key":"r.py:4:9:self.call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":1,"reach":[]}
+{"k":"carg","key":"r.py:4:9:self.call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"w\"","nreach":0,"reach":[]}

@@ -1,0 +1,30 @@
+{"k":"meta","cpg":"/out/java.real.cpg.bin","lang":"java","files":3,"methods":14,"calls":4,"callsWithoutMethod":0,"frameSites":3,"censusSchema":1,"frontendOnly":false,"real":true}
+{"k":"file","path":"<unknown>","methods":0}
+{"k":"file","path":"J.java","methods":9}
+{"k":"file","path":"R.java","methods":4}
+{"k":"method","file":"<empty>","name":"<clinit>","fullName":"J.<clinit>:void()","l":1,"le":9,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"<init>","fullName":"J.<init>:void()","l":1,"le":-1,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"ab","fullName":"J.ab:void()","l":3,"le":3,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"nat","fullName":"J.nat:void()","l":4,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"im","fullName":"J$I.im:void()","l":5,"le":5,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"ov","fullName":"J.ov:void()","l":6,"le":6,"vendored":false,"ann":[{"name":"Override","node":"ANNOTATION","code":"@Override","lits":[],"litNodes":[]}]}
+{"k":"method","file":"J.java","name":"m","fullName":"J.m:void()","l":7,"le":7,"vendored":false,"ann":[{"name":"GetMapping","node":"ANNOTATION","code":"@GetMapping(\"/x\")","lits":["/x"],"litNodes":["ANNOTATION_LITERAL"]}]}
+{"k":"method","file":"J.java","name":"sh","fullName":"J.sh:void(java.lang.String)","l":8,"le":8,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"<init>","fullName":"R.<init>:void(int)","l":10,"le":-1,"vendored":false,"ann":[]}
+{"k":"method","file":"J.java","name":"x","fullName":"R.x:int()","l":10,"le":10,"vendored":false,"ann":[]}
+{"k":"method","file":"R.java","name":"<init>","fullName":"R.<init>:void()","l":1,"le":-1,"vendored":false,"ann":[]}
+{"k":"method","file":"R.java","name":"run","fullName":"R.run:void()","l":2,"le":2,"vendored":false,"ann":[]}
+{"k":"method","file":"R.java","name":"m2","fullName":"R.m2:void()","l":3,"le":3,"vendored":false,"ann":[{"name":"RequestMapping","node":"ANNOTATION","code":"@RequestMapping(value = \"/a\", method = RequestMethod.GET)","lits":["/a"],"litNodes":["ANNOTATION_LITERAL"]},{"name":"Deprecated","node":"ANNOTATION","code":"@Deprecated","lits":[],"litNodes":[]}]}
+{"k":"method","file":"R.java","name":"m3","fullName":"R.m3:void()","l":4,"le":4,"vendored":false,"ann":[{"name":"SuppressWarnings","node":"ANNOTATION","code":"@SuppressWarnings({ \"a\", \"b\" })","lits":["a","b"],"litNodes":["ANNOTATION_LITERAL","ANNOTATION_LITERAL"]}]}
+{"k":"site","key":"J.java:7:32:call","matched":true,"nm":0,"res":[{"fullName":"J.call:<unresolvedSignature>(3)","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"call","l":7,"c":32,"code":"call(\"s\", \"t\" + \"u\", K)"}}
+{"k":"carg","key":"J.java:7:32:call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":1,"reach":[]}
+{"k":"carg","key":"J.java:7:32:call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"s\"","nreach":0,"reach":[]}
+{"k":"carg","key":"J.java:7:32:call","order":3,"recv":true,"ai":2,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"J.java:7:32:call","order":4,"recv":true,"ai":3,"kind":"CALL","lit":null,"nreach":0,"reach":[]}
+{"k":"site","key":"R.java:2:16:obj.call","matched":true,"nm":0,"res":[{"fullName":"<unresolvedNamespace>.call:<unresolvedSignature>(2)","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"call","l":2,"c":16,"code":"call(\"x\", \"y\")"}}
+{"k":"carg","key":"R.java:2:16:obj.call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":0,"reach":[]}
+{"k":"carg","key":"R.java:2:16:obj.call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"x\"","nreach":0,"reach":[]}
+{"k":"carg","key":"R.java:2:16:obj.call","order":3,"recv":true,"ai":2,"kind":"LITERAL","lit":"\"y\"","nreach":0,"reach":[]}
+{"k":"site","key":"R.java:2:36:this.call","matched":true,"nm":0,"res":[{"fullName":"R.call:<unresolvedSignature>(1)","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"call","l":2,"c":36,"code":"call(\"w\")"}}
+{"k":"carg","key":"R.java:2:36:this.call","order":1,"recv":true,"ai":0,"kind":"IDENTIFIER","lit":null,"nreach":1,"reach":[]}
+{"k":"carg","key":"R.java:2:36:this.call","order":2,"recv":true,"ai":1,"kind":"LITERAL","lit":"\"w\"","nreach":0,"reach":[]}

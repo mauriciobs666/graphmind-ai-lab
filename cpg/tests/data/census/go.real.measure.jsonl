@@ -1,0 +1,19 @@
+{"k":"meta","cpg":"/out/go.real.cpg.bin","lang":"go","files":4,"methods":4,"calls":3,"callsWithoutMethod":0,"frameSites":4,"censusSchema":1,"frontendOnly":false,"real":true}
+{"k":"file","path":"/","methods":0}
+{"k":"file","path":"<unknown>","methods":0}
+{"k":"file","path":"p","methods":1}
+{"k":"file","path":"r.go","methods":3}
+{"k":"method","file":"p","name":"p<clinit>","fullName":"p<clinit>","l":0,"le":0,"vendored":false,"ann":[]}
+{"k":"method","file":"r.go","name":"p.r.go","fullName":"r.go:p.r.go","l":1,"le":4,"vendored":false,"ann":[]}
+{"k":"method","file":"r.go","name":"call","fullName":"p.call","l":3,"le":3,"vendored":false,"ann":[]}
+{"k":"method","file":"r.go","name":"run","fullName":"p.run","l":4,"le":4,"vendored":false,"ann":[]}
+{"k":"site","key":"m.go:7:12:call","matched":false,"nm":1,"res":[]}
+{"k":"site","key":"r.go:4:14:obj.call","matched":true,"nm":1,"res":[{"fullName":"<unknown>.<obj>.call","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"call","l":4,"c":14,"code":"obj.call(\"x\", \"y\")"}}
+{"k":"carg","key":"r.go:4:14:obj.call","order":1,"recv":false,"ai":1,"kind":"LITERAL","lit":"\"x\"","nreach":0,"reach":[]}
+{"k":"carg","key":"r.go:4:14:obj.call","order":2,"recv":false,"ai":2,"kind":"LITERAL","lit":"\"y\"","nreach":0,"reach":[]}
+{"k":"site","key":"r.go:4:34:s.call","matched":true,"nm":1,"res":[{"fullName":"<unknown>.<s>.call","file":"<empty>","l":-1,"vendored":false,"ext":true}],"call":{"name":"call","l":4,"c":34,"code":"s.call(\"w\")"}}
+{"k":"carg","key":"r.go:4:34:s.call","order":1,"recv":false,"ai":1,"kind":"LITERAL","lit":"\"w\"","nreach":0,"reach":[]}
+{"k":"site","key":"r.go:4:47:call","matched":true,"nm":1,"res":[{"fullName":"p.call","file":"r.go","l":3,"vendored":false,"ext":false}],"call":{"name":"call","l":4,"c":47,"code":"call(\"p\", \"q\", K2)"}}
+{"k":"carg","key":"r.go:4:47:call","order":1,"recv":false,"ai":1,"kind":"LITERAL","lit":"\"p\"","nreach":0,"reach":[]}
+{"k":"carg","key":"r.go:4:47:call","order":2,"recv":false,"ai":2,"kind":"LITERAL","lit":"\"q\"","nreach":0,"reach":[]}
+{"k":"carg","key":"r.go:4:47:call","order":3,"recv":false,"ai":3,"kind":"CALL","lit":null,"nreach":0,"reach":[]}

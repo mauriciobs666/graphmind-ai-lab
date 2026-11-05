@@ -1,0 +1,83 @@
+{
+ "annotationNodes": 5,
+ "annotationParentLabels": [
+  "METHOD"
+ ],
+ "example": {
+  "annotation": {
+   "children": [],
+   "code": "@Override",
+   "file": "J.java",
+   "fullName": "java.lang.Override",
+   "line": 6,
+   "name": "Override",
+   "parent": {
+    "code": "void ov()",
+    "label": "METHOD",
+    "line": 6
+   }
+  },
+  "lang": "java",
+  "node": "ANNOTATION"
+ },
+ "joern": "4.0.579",
+ "lang": "java",
+ "methodsWithAnnotation": [
+  {
+   "annotations": 1,
+   "file": "J.java",
+   "l": 7,
+   "name": "m"
+  },
+  {
+   "annotations": 1,
+   "file": "J.java",
+   "l": 6,
+   "name": "ov"
+  },
+  {
+   "annotations": 2,
+   "file": "R.java",
+   "l": 3,
+   "name": "m2"
+  },
+  {
+   "annotations": 1,
+   "file": "R.java",
+   "l": 4,
+   "name": "m3"
+  }
+ ],
+ "node": "ANNOTATION",
+ "notExposed": [
+  "ANNOTATION_LITERAL code is the decoded text without quotes (`/x`), unlike C# LITERAL (`\"/a\"`) and Kotlin ANNOTATION_LITERAL (`\"fa\"`)"
+ ],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "@GetMapping(\"/x\") void m()",
+   "example": "METHOD m -> ANNOTATION GetMapping -> ANNOTATION_PARAMETER_ASSIGN -> [ANNOTATION_PARAMETER value, ANNOTATION_LITERAL '/x']",
+   "joern": "ANNOTATION name `GetMapping`, fullName `ANY`, parent METHOD; child ANNOTATION_PARAMETER_ASSIGN (code `\"/x\"`) with children ANNOTATION_PARAMETER `value` and ANNOTATION_LITERAL whose code is `/x` (no quotes).",
+   "where": "J.java:7"
+  },
+  {
+   "construct": "@Override void ov()  /  @Deprecated",
+   "joern": "Marker annotation: ANNOTATION node, no children; fullName is the resolved `java.lang.Override` / `java.lang.Deprecated`.",
+   "where": "J.java:6, R.java:3"
+  },
+  {
+   "construct": "@RequestMapping(value = \"/a\", method = RequestMethod.GET)",
+   "joern": "Two ANNOTATION_PARAMETER_ASSIGN children; `value = \"/a\"` has an ANNOTATION_LITERAL `/a`, `method = RequestMethod.GET` has only the ANNOTATION_PARAMETER `method` (the non-literal value is not a literal node).",
+   "where": "R.java:3"
+  },
+  {
+   "construct": "@SuppressWarnings({\"a\", \"b\"})",
+   "joern": "ANNOTATION_PARAMETER_ASSIGN whose value child is an ARRAY_INITIALIZER (code `{ \"a\", \"b\" }`); its children are ANNOTATION_LITERALs with code `a` and `b` (no quotes).",
+   "where": "R.java:4"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/java/src",
+ "unobserved": [
+  "annotations on classes, fields or parameters"
+ ]
+}

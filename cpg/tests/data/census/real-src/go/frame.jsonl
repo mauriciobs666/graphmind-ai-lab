@@ -1,0 +1,4 @@
+{"callText": "call", "calleeName": "call", "column": 12, "grammar": "go", "kind": "plain", "line": 7, "nameColumn": 12, "nameLine": 7, "nodeType": "call", "path": "m.go", "siteKey": "m.go:7:12:call"}
+{"callText": "obj.call", "calleeName": "call", "column": 14, "grammar": "go", "kind": "method", "line": 4, "nameColumn": 14, "nameLine": 4, "nodeType": "call", "path": "r.go", "siteKey": "r.go:4:14:obj.call"}
+{"callText": "s.call", "calleeName": "call", "column": 34, "grammar": "go", "kind": "method", "line": 4, "nameColumn": 34, "nameLine": 4, "nodeType": "call", "path": "r.go", "siteKey": "r.go:4:34:s.call"}
+{"callText": "call", "calleeName": "call", "column": 47, "grammar": "go", "kind": "plain", "line": 4, "nameColumn": 47, "nameLine": 4, "nodeType": "call", "path": "r.go", "siteKey": "r.go:4:47:call"}

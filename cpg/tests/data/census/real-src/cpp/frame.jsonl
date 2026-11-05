@@ -1,0 +1,3 @@
+{"callText": "call", "calleeName": "call", "column": 32, "grammar": "cpp", "kind": "plain", "line": 10, "nameColumn": 32, "nameLine": 10, "nodeType": "call", "path": "m.cpp", "siteKey": "m.cpp:10:32:call"}
+{"callText": "p->call", "calleeName": "call", "column": 23, "grammar": "cpp", "kind": "plain", "line": 2, "nameColumn": 23, "nameLine": 2, "nodeType": "call", "path": "r.cpp", "siteKey": "r.cpp:2:23:p->call"}
+{"callText": "o.call", "calleeName": "call", "column": 42, "grammar": "cpp", "kind": "method", "line": 2, "nameColumn": 42, "nameLine": 2, "nodeType": "call", "path": "r.cpp", "siteKey": "r.cpp:2:42:o.call"}

@@ -1,0 +1,35 @@
+{
+ "annotationNodes": 0,
+ "annotationParentLabels": [],
+ "joern": "4.0.579",
+ "lang": "python",
+ "methodsWithAnnotation": [],
+ "node": "CALL (no ANNOTATION node)",
+ "notExposed": [
+  "a keyword argument carries argumentIndex -1 (see measure.sc `order` note)",
+  "the decorator's receiver path (`pkg.mod`) is split over a fieldAccess CALL, only the final name is the CALL's `name`"
+ ],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "@app.route(\"/x\", methods=[\"GET\"]) def h",
+   "example": "CALL route <- receiver of CALL '' (args: METHOD_REF h) <- argument 2 of CALL <operator>.assignment h = ...",
+   "joern": "pysrc2cpg rewrites the definition to `h = app.route(\"/x\", methods = [\"GET\"])(def h(...))`. The METHOD `h` has annotation count 0 and no decorator child. The decorator is a CALL (name `route`, code `app.route(\"/x\", methods = [\"GET\"])`, line 11) whose LITERAL arguments are `\"/x\"` and, inside a `<operator>.listLiteral` CALL argument, `\"GET\"`. It is the receiver of a dynamic-dispatch CALL with an empty name whose argument 1 is the METHOD_REF of `h`.",
+   "where": "m.py:11-12"
+  },
+  {
+   "construct": "@overload def ov",
+   "joern": "Bare decorator: CALL named `overload` (code `overload(def ov(...))`) with the METHOD_REF as argument 1, no literals.",
+   "where": "m.py:9-10"
+  },
+  {
+   "construct": "@dec @pkg.mod.route(\"/a\", methods=[\"GET\",\"POST\"], name=\"n\") def deco2",
+   "joern": "Nested: CALL `dec` whose argument 1 is a BLOCK (`tmp0 = pkg.mod` then the CALL `route` with LITERALs \"/a\", \"GET\", \"POST\" and keyword literal \"n\" (argumentName `name`)) applied to the METHOD_REF. The outer CALL's line is the first decorator's line (5); `route` is on line 6.",
+   "where": "r.py:5-7"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/python/src",
+ "unobserved": [
+  "decorators on a class: the planted `@dec2() class Cls` left no node containing `dec2` in the CPG (grep of the probe output), so a class decorator is not exposed in this sample"
+ ]
+}

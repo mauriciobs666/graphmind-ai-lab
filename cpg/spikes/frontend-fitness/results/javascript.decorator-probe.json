@@ -1,0 +1,73 @@
+{
+ "annotationNodes": 4,
+ "annotationParentLabels": [
+  "MEMBER",
+  "METHOD",
+  "TYPE_DECL"
+ ],
+ "example": {
+  "annotation": {
+   "children": [],
+   "code": "@Get(\"/p\")",
+   "file": "m.ts",
+   "fullName": "Get",
+   "line": 8,
+   "name": "Get",
+   "parent": {
+    "code": "@Get(\"/p\") route() {}",
+    "label": "METHOD",
+    "line": 8
+   }
+  },
+  "lang": "javascript",
+  "node": "ANNOTATION"
+ },
+ "joern": "4.0.579",
+ "lang": "javascript",
+ "methodsWithAnnotation": [
+  {
+   "annotations": 1,
+   "file": "m.ts",
+   "l": 8,
+   "name": "route"
+  },
+  {
+   "annotations": 1,
+   "file": "r.ts",
+   "l": 5,
+   "name": "onClick"
+  }
+ ],
+ "node": "ANNOTATION",
+ "notExposed": [
+  "literal arguments are not nodes: they are only in the ANNOTATION `code` text"
+ ],
+ "script": "cpg/spikes/frontend-fitness/decorator-probe.sc",
+ "shapes": [
+  {
+   "construct": "@Get(\"/p\") route() {}  (TypeScript, .ts)",
+   "example": "METHOD route -> ANNOTATION '@Get(\"/p\")' (children: none)",
+   "joern": "ANNOTATION node, name `Get`, fullName `Get`, code `@Get(\"/p\")`, AST child of the METHOD `route` (annotation count 1). The ANNOTATION has no AST children: the argument `\"/p\"` is only in its `code`.",
+   "where": "m.ts:8"
+  },
+  {
+   "construct": "@HostListener(\"click\", [\"$event\"]) onClick(e) {}",
+   "joern": "ANNOTATION `HostListener` under METHOD `onClick`, no children, arguments only in `code`.",
+   "where": "r.ts:5"
+  },
+  {
+   "construct": "@Component({selector: \"s\"}) class Cmp",
+   "joern": "ANNOTATION `Component` whose AST parent is the TYPE_DECL `Cmp`, no children.",
+   "where": "r.ts:4"
+  },
+  {
+   "construct": "@Input() x: string;  (class field)",
+   "joern": "ANNOTATION `Input` whose AST parent is a MEMBER.",
+   "where": "r.ts:5"
+  }
+ ],
+ "source": "cpg/tests/data/census/real-src/javascript/src",
+ "unobserved": [
+  "plain .js files with decorators (the sources are .ts)"
+ ]
+}
