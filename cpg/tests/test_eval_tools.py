@@ -38,6 +38,7 @@ def _load(name):
 audit = _load("audit")
 export_kit = _load("export_kit")
 strip_gold = _load("strip_gold")
+mk = _load("match_keys")
 
 PY = sys.executable
 
@@ -1675,3 +1676,1239 @@ if __name__ == "__main__":                                     # pragma: no cove
         for n, t in all_derived().items():
             (FIX / n).write_text(t)
         print(f"wrote {len(all_derived())} fixtures")
+
+
+# =============================================================================================
+# match_keys.py (S49 / P0-42a): EP2 §2 oracle K1-K48, EP §13.4 oracle cases for the library,
+# validate / scope / sample / leak check
+# =============================================================================================
+
+def _nk(kind, key, form="provider"):
+    return mk.normalize_contract({"type": "contract", "kind": kind, "keyNorm": key}, form)["keyNorm"]
+
+
+# (id, kind, input, expected). Every http output in K1-K33 and K42-K47 must also be a fixed point.
+K_UNIT = [
+    ("K1", "http", "GET /shop/api/health", "GET /shop/api/health"),
+    ("K2", "http", "POST /hooks/x7k2q9w4m1p8z3v6", "POST /hooks/{#}"),
+    ("K3", "http", "POST /hooks/a1b2c3d4e5f6g7h8", "POST /hooks/{#}"),
+    ("K4", "http", "POST /hooks/{}", "POST /hooks/{}"),
+    ("K5", "http", "POST /notify/x7k2-q9w4-m1p8-z3v6", "POST /notify/{#}"),
+    ("K6", "http", "POST /notify/x7k2+q9w4+m1p8+z3v6", "POST /notify/{#}"),
+    ("K7", "http", "GET /builds/3f2a9c1e5b7d", "GET /builds/{#}"),
+    ("K8", "http", "DELETE /items/550e8400-e29b-41d4-a716-446655440000", "DELETE /items/{#}"),
+    ("K9", "http", "POST /cb/sk-abcdefghijklmnopqrs", "POST /cb/{#}"),
+    ("K10", "http", "POST /services/T024BE7LD/B01ABCDEFGH/abcdefghijklmnopqrstuvwx",
+     "POST /services/T024BE7LD/B01ABCDEFGH/{#}"),
+    ("K11", "http", "GET /t/3f2a9c1e5b7d/x7k2q9w4m1p8z3v6/info", "GET /t/{#}/{#}/info"),
+    ("K12", "http", "post hooks//x7k2q9w4m1p8z3v6/", "POST /hooks/{#}/"),
+    ("K13", "http", "GET /hooks/x7k2q9w4%6d1p8z3v6", "GET /hooks/{#}"),
+    ("K14", "http", "GET /a/x7k2q9w4%2fm1p8z3v6", "GET /a/x7k2q9w4%2Fm1p8z3v6"),
+    ("K15", "http", "GET /x/{x7k2q9w4m1p8z3v6}", "GET /x/{}"),
+    ("K16", "http", "GET /static/{p:path}", "GET /static/{**}"),
+    ("K17", "http", "GET /ntfy/kxqzmwvptryhbnjdlc", "GET /ntfy/kxqzmwvptryhbnjdlc"),
+    ("K18", "http", "GET /wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "GET /wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+    ("K19", "http", "GET /release-2024-notes/s3-bucket-v2-us-east-1", "GET /release-2024-notes/s3-bucket-v2-us-east-1"),
+    ("K20", "http", "POST /hooks/{#}", "POST /hooks/{#}"),
+    ("K21", "http", "GET /x/{?}", "GET /x/{?}"),
+    ("K22", "http", "GET /x7k2q9w4m1p8z3v6", "GET /{#}"),
+    ("K23", "mcp_tool", "mcp__falkor__x7k2q9w4m1p8z3v6", "x7k2q9w4m1p8z3v6"),
+    ("K30", "http", "GET /f/{x7k2q9w4m1p8z3v6}.json", "GET /f/{#}"),
+    ("K31", "http", "GET /a/x7k2q9w4m1p8z3v6/../b", "GET /a/b"),
+    ("K32", "http", "GET /a/./x7k2q9w4m1p8z3v6", "GET /a/{#}"),
+    ("K33", "http", "POST /hooks/x7k2q9w4m1p8", "POST /hooks/x7k2q9w4m1p8"),
+    ("K42", "http", "GET /a/%2E%2E/b", "GET /b"),
+    ("K43", "http", "GET /a/b/..", "GET /a/"),
+    ("K44", "http", "GET /a/b/.", "GET /a/b/"),
+    ("K45", "http", "GET /a/b/%2E%2E", "GET /a/"),
+    ("K46", "http", "GET /a/..", "GET /"),
+    ("K47", "http", "GET /..", "GET /"),
+    ("K48", "http", "GET /a/%2%45%2%45/b", "GET /a/%2E%2E/b"),
+]
+
+
+@pytest.mark.parametrize("kid,kind,inp,want", K_UNIT, ids=[r[0] for r in K_UNIT])
+def test_oracle_k_unit(kid, kind, inp, want):
+    assert _nk(kind, inp) == want
+    if kid != "K48":                                           # K48's output is NOT a fixed point (EP2 §1.1)
+        assert _nk(kind, want) == want, "fixed point"
+
+
+def test_oracle_k48_second_pass_changes_it():
+    assert _nk("http", "GET /a/%2E%2E/b") == "GET /b"          # i.e. a second pass of K48's output decodes again
+
+
+def test_oracle_count_is_48():
+    unit_ids = {r[0] for r in K_UNIT} | {"K48"}
+    integration = {f"K{n}" for n in (24, 25, 26, 27, 28, 29, 34, 35, 36, 37, 38, 39, 40, 41)}
+    assert len(unit_ids) == 34 and len(unit_ids | integration) == 48
+
+
+def test_http_bad_verb_and_form_are_refused():
+    with pytest.raises(ValueError):
+        mk.normalize_http_key("FETCH /x")
+    with pytest.raises(ValueError):
+        mk.normalize_http_key("GET /x", form="both")
+    assert mk.normalize_http_key("/bare/path") == "* /bare/path"
+
+
+def test_consumer_form_only_changes_the_placeholder():
+    assert _nk("http", "POST /hooks/x7k2q9w4m1p8z3v6", "consumer") == "POST /hooks/{?}"
+    assert _nk("mcp_tool", "mcp__falkor__query", "consumer") == "query"          # form has no effect
+
+
+def test_pre_8a_form_keeps_the_literal_and_drops_parameter_syntax():
+    assert mk.normalize_http_key("post /hooks/x7k2q9w4m1p8z3v6", mask=False) == "POST /hooks/x7k2q9w4m1p8z3v6"
+    assert mk.normalize_http_key("get /api/items/{item_id}", mask=False) == "GET /api/items/{}"
+
+
+def _cid(key, kind="http", form="provider"):
+    return mk.contract_id({"type": "contract", "kind": kind, "keyNorm": key}, form)
+
+
+def test_oracle_k24_k34_merge_and_placeholder_identity():
+    cp = _ids_cp("http", "POST /hooks/{#}")
+    assert _cid("POST /hooks/x7k2q9w4m1p8z3v6") == _cid("POST /hooks/a1b2c3d4e5f6g7h8") == cp   # K24
+    assert _cid("POST /hooks/x7k2q9w4m1p8z3v6") == _cid("POST /hooks/{#}") == cp                  # K34
+
+
+def _ids_cp(kind, key):
+    from ccg import ids
+    return ids.contract_point_id(kind, key)
+
+
+def test_oracle_k28_gold_stored_normalized():
+    gold = mk.normalize_contract({"type": "contract", "kind": "http", "keyNorm": "POST /hooks/x7k2q9w4m1p8z3v6"})
+    assert _ids_cp(gold["kind"], gold["keyNorm"]) == _ids_cp("http", "POST /hooks/{#}")
+
+
+def test_oracle_k39_unserved_gold():
+    k10 = {"type": "contract", "kind": "http", "keyNorm": "POST /services/T024BE7LD/B01ABCDEFGH/abcdefghijklmnopqrstuvwx"}
+    k1 = {"type": "contract", "kind": "http", "keyNorm": "GET /shop/api/health"}
+    served = {mk.contract_id(k1)}
+    assert mk.unserved_gold_candidate(k10, served) is True
+    assert mk.normalize_contract(k10, "consumer")["keyNorm"] == "POST /services/T024BE7LD/B01ABCDEFGH/{?}"
+    assert mk.unserved_gold_candidate(k1, set()) is False              # no masked segment: never applied
+    assert mk.unserved_gold_candidate(k10, {mk.contract_id(k10)}) is False   # it IS served
+
+
+def test_oracle_k27_contact_shares_the_anchor_id(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    obj = _kitem(1, {"type": "contract", "kind": "http", "keyNorm": "POST /hooks/a1b2c3d4e5f6g7h8"},
+                 _sym("a.py::f"), provider=_sym("a.py::f"))
+    rec, _ = mk.normalize_item(obj, "KA", units, kit)
+    c_raw = {"type": "contract", "kind": "http", "keyNorm": "POST /hooks/x7k2q9w4m1p8z3v6"}
+    assert mk.contract_id(c_raw) == rec["anchorId"]              # same anchorId -> the item is contacted
+
+
+# --- the library: E, H1, §5.4 (P2-2a-d) -----------------------------------------------------
+
+def _P22():
+    """Class C in a.py: getter C.x (10-12), setter C.x#2 (14-16), nested C.x#2.check (line 15)."""
+    return [{"qname": "a.py::C.x", "lineStart": 10, "lineEnd": 12},
+            {"qname": "a.py::C.x#2", "lineStart": 14, "lineEnd": 16},
+            {"qname": "a.py::C.x#2.check", "lineStart": 15, "lineEnd": 15}]
+
+
+@pytest.mark.parametrize("q,want", [
+    ("a.py::C.x#2", "a.py::C.x"), ("a.py::C.x#2.check", "a.py::C.x.check"), ("a.py::f.<anon>#1.g", "a.py::f"),
+    ("a.py::<anon>#1", "a.py::<module>"), ("s.sh::<anon>#1", "s.sh::<script>"), ("d.md::<anon>#2", "d.md::<document>"),
+    ("a.py::C.x", "a.py::C.x"), ("a.py::f#12.g#3", "a.py::f.g")])
+def test_E(q, want):
+    assert mk.E(q) == want
+
+
+def test_p22a_duplicate_getter_setter():
+    getter, setter, _ = _P22()
+    e = {"qname": "a.py::C.x"}
+    assert mk.h1_symbol_credit(getter, e, [15]) is False         # the getter must NOT be credited
+    assert mk.h1_symbol_credit(setter, e, [15]) is True          # the setter is
+
+
+def test_p22b_plain_element_still_hits():
+    getter = _P22()[0]
+    assert mk.h1_symbol_credit(getter, {"qname": "a.py::C.x"}, [11]) is True
+
+
+def test_p22b_owned_region_counts_and_both_conditions_are_required():
+    x = {"qname": "a.py::C", "lineStart": 1, "lineEnd": 3, "ownedRegions": [[20, 22]]}
+    assert mk.h1_symbol_credit(x, {"qname": "a.py::C"}, [21]) is True
+    assert mk.h1_symbol_credit(x, {"qname": "a.py::C"}, [10]) is False
+    assert mk.h1_symbol_credit(dict(x, qname="a.py::D"), {"qname": "a.py::C"}, [2]) is False
+
+
+def test_p22c_no_correction_back_to_an_ineligible_id():
+    e = {"qname": "a.py::C.x.check"}
+    assert mk.source_check_needed(e, [15], _P22()) is False      # C.x#2.check qualifies under E
+    assert mk.source_check_needed(e, [15], _P22()[:2]) is True   # nothing in the snapshot has that E
+
+
+def test_p22d_line_outside_every_qualifying_span():
+    assert mk.source_check_needed({"qname": "a.py::C.x"}, [30], _P22()) is True
+
+
+# --- synthetic kit + item helpers ------------------------------------------------------------
+
+KIT_PY = '''import os
+
+
+class C:
+    def x(self):
+        return 1
+
+    @property
+    def p(self):
+        return lambda: 2
+
+
+def f(a):
+    b = a
+    return b
+
+
+def f(a):
+    return a
+'''
+
+
+def _mk_kit(tmp_path):
+    kit = tmp_path / "kit"
+    (kit / "pkg").mkdir(parents=True, exist_ok=True)
+    (kit / "pkg" / "a.py").write_text(KIT_PY)
+    (kit / "pkg" / "run.py").write_text("print('x')\nif __name__ == '__main__':\n    pass\n")
+    (kit / "s.sh").write_text("#!/bin/sh\necho hi\n")
+    (kit / ".mcp.json").write_text(json.dumps({"mcpServers": {"cypher": {"command": "x", "args": ["a", "b"]}}}))
+    (kit / "compose.yaml").write_text("services:\n  db:\n    ports:\n      - '6379:6379'\n")
+    (kit / "mcp-monitor").mkdir(exist_ok=True)
+    (kit / "mcp-monitor" / "c.toml").write_text("[server.f]\nurl = 'x'\n\n[[watch]]\nname = 'w'\n")
+    (kit / ".env.example").write_text("SERVER_URL=http://localhost:8080\nOTHER=1\n")
+    (kit / "AGENTS.md").write_text("# agents\nrun it\n")
+    (kit / "web").mkdir(exist_ok=True)
+    (kit / "web" / "ui.ts").write_text("export function g() {\n  return 1;\n}\n")
+    units = [{"rootPath": "pkg", "lang": "python", "ports": [8080]}, {"rootPath": "web", "lang": "javascript", "ports": []},
+             {"rootPath": "cypher-mcp", "lang": "python", "ports": []}]
+    return kit, units
+
+
+def _sym(qname, **kw):
+    path = qname.split("::")[0]
+    d = {"type": "symbol", "repoId": "graphmind-ai-lab", "path": path, "qname": qname}
+    d.update(kw)
+    return d
+
+
+def _kitem(seq, anchor, impacted, provider=None, serves=(), lines=(1,), chain=(), stratum="http"):
+    return {"schema": "ccg-key-v1", "seq": seq, "stratum": stratum, "anchor": anchor, "provider": provider,
+            "serves": list(serves), "impacted": impacted, "lines": list(lines), "chain": list(chain),
+            "hops": len(chain), "why": "w", "deployment": "default"}
+
+
+HTTP = lambda k: {"type": "contract", "kind": "http", "keyNorm": k}
+
+
+# --- normalize (EP §13.4) --------------------------------------------------------------------
+
+def test_normalize_item_basics(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(3, HTTP("post /hooks/x7k2q9w4m1p8z3v6"), {"type": "symbol", "path": "./pkg//a.py", "qname": "pkg/a.py::C.x#2.<anon>#1"},
+               provider={"type": "symbol", "path": "pkg/a.py", "qname": "pkg/a.py::f"}, lines=(3, 2, 3))
+    o["why"] = "  café  "                                 # NFC + strip
+    rec, log = mk.normalize_item(o, "KA", units, kit)
+    assert rec["impacted"] == {"type": "symbol", "repoId": "graphmind-ai-lab", "path": "pkg/a.py", "qname": "pkg/a.py::C.x"} \
+        and rec["anchor"]["keyNorm"] == "POST /hooks/{#}" and rec["why"] == "café" and rec["lines"] == [2, 3]
+    assert {"seq": 3, "rule": "8a", "masked": 1} in log and {"seq": 3, "rule": "E"} in log
+    assert rec["anchorId"] == _ids_cp("http", "POST /hooks/{#}") and rec["strategy"] == "provider-first"
+    from ccg import ids
+    assert rec["itemId"] == ids.tuple_id(["evalItem", rec["anchorId"], rec["impactedId"]])
+    assert mk.normalize_item(o, "KB", units, kit)[0]["strategy"] == "consumer-first"
+
+
+def test_normalize_repoid_default_and_mismatch(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(1, HTTP("GET /a"), _sym("pkg/a.py::f"))
+    assert mk.normalize_item(o, "KA", units, kit)[0]["impacted"]["repoId"] == "graphmind-ai-lab"
+    o["impacted"]["repoId"] = "other"
+    with pytest.raises(mk.Invalid, match="repoId"):
+        mk.normalize_item(o, "KA", units, kit)
+
+
+def test_normalize_mcp_namespace_and_log_without_literals(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(1, {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__cypher__query"}, _sym("pkg/a.py::f"), stratum="mcp")
+    rec, log = mk.normalize_item(o, "KA", units, kit)
+    assert rec["anchor"]["keyNorm"] == "query" and log == [{"seq": 1, "rule": "V3"}]
+
+
+def test_oracle_k26_v3_log_and_stdout_has_no_literal(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(7, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), _sym("pkg/a.py::f"), provider=_sym("pkg/a.py::f"))
+    (tmp_path / "KA.jsonl").write_text(json.dumps(o) + "\n")
+    ctx = tmp_path / "ctx.json"
+    ctx.write_text(json.dumps({"units": units}))
+    res = subprocess.run([PY, str(TOOLS / "match_keys.py"), "normalize", "--writer", "KA", "--in", str(tmp_path / "KA.jsonl"),
+                          "--out", str(tmp_path / "n.jsonl"), "--log", str(tmp_path / "log.jsonl"), "--kit-src", str(kit),
+                          "--context", str(ctx)], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    rec = json.loads((tmp_path / "n.jsonl").read_text())
+    assert rec["anchor"]["keyNorm"] == "POST /hooks/{#}"                    # valid, not invalidated
+    assert json.loads((tmp_path / "log.jsonl").read_text()) == {"masked": 1, "rule": "8a", "seq": 7}
+    assert "x7k2" not in res.stdout and "hooks" not in res.stdout and "rewrites" in res.stdout
+
+
+def test_normalize_drops_unparseable_final_line_and_is_deterministic(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    good = json.dumps(_kitem(1, HTTP("GET /a"), _sym("pkg/a.py::f")))
+    (tmp_path / "KA.jsonl").write_text(good + "\n" + '{"schema": "ccg-key-v1", "seq": 2, "anc')
+    r1, inv, log, dropped = mk.run_normalize("KA", tmp_path / "KA.jsonl", {"units": units}, kit)
+    assert len(r1) == 1 and dropped == 1 and inv == []
+    r2 = mk.run_normalize("KA", tmp_path / "KA.jsonl", {"units": units}, kit)[0]
+    assert [mk.canon(x) for x in r1] == [mk.canon(x) for x in r2]
+    (tmp_path / "KA.jsonl").write_text("{bad\n" + good + "\n")                 # a bad NON-final line is an error
+    with pytest.raises(ValueError):
+        mk.run_normalize("KA", tmp_path / "KA.jsonl", {"units": units}, kit)
+
+
+def test_normalize_merges_duplicates_within_a_writer(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    a = _kitem(2, HTTP("GET /a"), _sym("pkg/a.py::f"), lines=(13,), chain=[{"kind": "link", "from": "x:1", "to": "y:2"}])
+    b = _kitem(1, HTTP("get a/"), _sym("pkg/a.py::f#2"), lines=(17,), chain=[{"kind": "caller", "from": "p:1", "to": "q:2"}])
+    ra, _ = mk.normalize_item(a, "KA", units, kit)
+    rb, _ = mk.normalize_item(b, "KA", units, kit)
+    assert ra["itemId"] != rb["itemId"]                                       # "GET /a/" keeps its trailing slash
+    b2 = _kitem(1, HTTP("get /a"), _sym("pkg/a.py::f#2"), lines=(17,), chain=[{"kind": "caller", "from": "p:1", "to": "q:2"}])
+    rb2, _ = mk.normalize_item(b2, "KA", units, kit)
+    assert ra["itemId"] == rb2["itemId"]
+    (m,) = mk.merge_within_writer([ra, rb2])
+    assert m["lines"] == [13, 17] and m["chain"][0]["kind"] == "caller"      # first chain BY SEQ (seq 1)
+
+
+def test_normalize_config_grain_and_reanchor(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    imp = {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher.args[1]"}
+    o = _kitem(1, {"type": "contract", "kind": "mcp_tool", "keyNorm": "query"}, imp, provider=_sym("cypher-mcp/server.py::query"),
+               stratum="wiring")
+    rec, log = mk.normalize_item(o, "KB", units, kit)
+    assert rec["impacted"]["keyPath"] == "mcpServers.cypher"
+    assert rec["anchor"] == {"type": "unit", "repoId": "graphmind-ai-lab", "rootPath": "cypher-mcp", "lang": "python"}
+    assert rec["serves"] == [{"type": "contract", "kind": "mcp_tool", "keyNorm": "query"}]
+    assert {"seq": 1, "rule": "reanchor"} in log and {"seq": 1, "rule": "config-grain"} in log
+    o["provider"] = None
+    with pytest.raises(mk.Invalid, match="reanchor"):
+        mk.normalize_item(o, "KB", units, kit)
+    o["provider"] = _sym("elsewhere/x.py::f")
+    with pytest.raises(mk.Invalid, match="reanchor"):
+        mk.normalize_item(o, "KB", units, kit)
+
+
+def test_normalize_unit_anchor_rules(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    unit = {"type": "unit", "repoId": "graphmind-ai-lab", "rootPath": "cypher-mcp", "lang": "python"}
+    ok = _kitem(1, unit, {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher"}, serves=[{"type": "contract", "kind": "mcp_tool", "keyNorm": "query"}])
+    assert mk.normalize_item(ok, "KA", units, kit)[0]["anchor"]["rootPath"] == "cypher-mcp"
+    with pytest.raises(mk.Invalid, match="unit-not-listed"):
+        mk.normalize_item(dict(ok, anchor=dict(unit, rootPath="nope")), "KA", units, kit)
+    with pytest.raises(mk.Invalid, match="class-mismatch"):                    # a contract-class entry under a unit anchor
+        mk.normalize_item(dict(ok, impacted={"type": "config", "path": ".mcp.json", "keyPath": "other.thing"}), "KA", units, kit)
+    with pytest.raises(mk.Invalid, match="unit-anchor-needs-config"):
+        mk.normalize_item(dict(ok, impacted=_sym("pkg/a.py::f")), "KA", units, kit)
+
+
+@pytest.mark.parametrize("extra", [{"within": "pkg/a.py::f", "line": 3, "nth": 1}, {"within": "pkg/a.py::f"}, {"nth": 1}])
+def test_normalize_refuses_ancestor_plus_line_form(tmp_path, extra):
+    kit, units = _mk_kit(tmp_path)                   # keyed on `within` OR `nth` each alone (n-1); the form has no qname
+    o = _kitem(1, HTTP("GET /a"), dict({"type": "symbol", "path": "pkg/a.py", "qname": "pkg/a.py::f"}, **extra))
+    with pytest.raises(mk.Invalid, match="ancestor-plus-line"):
+        mk.normalize_item(o, "KA", units, kit)
+
+
+@pytest.mark.parametrize("path,kp,env,want", [
+    (".mcp.json", "mcpServers.cypher.args[0]", None, ("mcpServers.cypher", "server")),
+    ("k/.kiro/agents/a.json", "mcpServers.x.cmd", None, ("mcpServers.x", "server")),
+    ("k/.kiro/agents/a.json", "tools[3]", None, ("tools[3]", "contract")),
+    ("k/.kiro/agents/a.json", "allowedTools[0].x", None, ("allowedTools[0]", "contract")),
+    ("k/.kiro/agents/a.json", "toolAliases.q.z", None, ("toolAliases.q", "contract")),
+    ("k/.kiro/agents/a.json", "includeMcpJson", None, ("includeMcpJson", "server")),
+    ("k/.kiro/agents/a.json", "name.first.x", None, ("name.first", "contract")),
+    (".claude/settings.json", "enabledMcpjsonServers[2]", None, ("enabledMcpjsonServers[2]", "server")),
+    (".claude/settings.local.json", "permissions.allow[1].deep", None, ("permissions.allow[1]", "contract")),
+    (".claude/settings.json", "hooks.PreToolUse[0].hooks[0]", None, ("hooks.PreToolUse[0]", "contract")),
+    ("mcp-monitor/c.toml", "server.f.url", None, ("server.f", "server")),
+    ("mcp-monitor/c.toml", "watch[0].name", None, ("watch[0]", "contract")),
+    ("falkor-chat/compose.yaml", "services.db.ports[0]", None, ("services.db", "server")),
+    ("docker-compose.dev.yml", "services.db", None, ("services.db", "server")),
+    ("a/settings.yaml", "a.b.c.d", None, ("a.b", "contract")),
+    ("a/x.json", 'a["b.c"][0].d', None, ('a["b.c"]', "contract")),
+    ("a/x.toml", "[0].k", None, ("[0].k", "contract")),
+])
+def test_config_grain_table(path, kp, env, want):
+    assert mk.config_grain(path, kp, env) == want
+
+
+def test_config_grain_env_class_from_value_and_ports():
+    units = [{"rootPath": "p", "lang": "python", "ports": [8080]}]
+    g = lambda v: mk.config_grain(".env.example", "SERVER_URL", v, units)
+    assert g("http://localhost:8080") == ("SERVER_URL", "server")
+    assert g("http://localhost:9999") == ("SERVER_URL", "contract")
+    assert mk.config_grain(".env", "PORT", "8080", units)[1] == "server"
+    assert mk.config_grain(".env", "PORT", "81", units)[1] == "contract"
+    assert g("http://h/x") == ("SERVER_URL", "contract")                       # default port 80 is nobody's
+    assert mk.config_grain(".env", "X", "http://h:8080/", units)[1] == "server"
+
+
+# --- validate (V1/V2/V3) ---------------------------------------------------------------------
+
+def _val(tmp_path, impacted, lines=(1,), anchor=None, provider=None, decisions=()):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(1, anchor or HTTP("GET /a"), impacted, provider=provider or _sym("pkg/a.py::f"), lines=lines)
+    rec, _ = mk.normalize_item(o, "KA", units, kit)
+    return mk.validate_records([rec], kit, decisions), rec
+
+
+def test_validate_valid_python_symbol_and_lines(tmp_path):
+    (valid, invalid, _), _ = _val(tmp_path, _sym("pkg/a.py::f"), lines=(13, 14))
+    assert len(valid) == 1 and invalid == []
+    (valid, invalid, _), _ = _val(tmp_path, _sym("pkg/a.py::C.p.<get>"), lines=(9, 10))   # decorator line is in the span
+    assert len(valid) == 1, invalid
+
+
+@pytest.mark.parametrize("impacted,lines,check", [
+    (_sym("pkg/a.py::nope"), (1,), "V1:name-not-in-file"),
+    (_sym("pkg/a.py::C.os"), (1,), "V2:qname-not-derived"),             # every token exists in the file; the chain does not
+    (_sym("pkg/missing.py::f"), (1,), "V1:path-not-in-kit"),
+    (_sym("pkg/a.py::f"), (999,), "V1:line-out-of-range"),
+    (_sym("pkg/a.py::f"), (5,), "V2:line-outside-span"),                  # a line of C.x, not of f
+    (_sym("pkg/a.py::f"), (0,), "V1:line-out-of-range"),
+    (_sym("tests/test_a.py::f"), (1,), "V1:path-scope"),
+    (_sym("cpg/ccg/ids.py::f"), (1,), "V1:path-scope"),
+    (_sym("AGENTS.md::x"), (1,), "V1:name-not-in-file"),
+    ({"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.nope"}, (1,), "V2:keypath-unresolved"),
+    ({"type": "config", "path": "mcp-monitor/c.toml", "keyPath": "server.zzz"}, (1,), "V2:keypath-unresolved"),
+    ({"type": "config", "path": "compose.yaml", "keyPath": "services.web"}, (1,), "V2:keypath-unresolved"),
+])
+def test_validate_failures(tmp_path, impacted, lines, check):
+    (valid, invalid, _), rec = _val(tmp_path, impacted, lines)
+    assert valid == [] and check in invalid[0]["checks"] and invalid[0]["itemId"] == rec["itemId"]
+
+
+def test_validate_config_files_that_resolve(tmp_path):
+    for imp in ({"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher"},
+                {"type": "config", "path": "mcp-monitor/c.toml", "keyPath": "server.f"},
+                {"type": "config", "path": "mcp-monitor/c.toml", "keyPath": "watch[0]"},
+                {"type": "config", "path": "compose.yaml", "keyPath": "services.db"},
+                {"type": "config", "path": ".env.example", "keyPath": "OTHER"}):
+        (valid, invalid, _), _ = _val(tmp_path / imp["path"].replace("/", "_"), imp)
+        assert len(valid) == 1, (imp, invalid)
+
+
+def test_validate_decisions_by_item_id(tmp_path):
+    (valid, invalid, dropped), rec = _val(tmp_path, _sym("pkg/a.py::nope"))
+    assert len(invalid) == 1
+    (valid, invalid, dropped), rec = _val(tmp_path / "d", _sym("pkg/a.py::nope"), decisions=[{"itemId": _val(tmp_path / "e", _sym("pkg/a.py::nope"))[1]["itemId"], "action": "drop"}])
+    assert valid == [] and invalid == [] and dropped["KA|V1:name-not-in-file"] == 1
+
+
+def test_py_symbols_spans_and_names():
+    syms = {s["chain"]: (s["lineStart"], s["lineEnd"]) for s in mk.py_symbols(KIT_PY)}
+    assert syms["<module>"] == (1, 19) and syms["C"] == (4, 10) and syms["C.x"] == (5, 6)
+    assert syms["C.p.<get>"] == (8, 10) and syms["C.p.<get>.<anon>#1"] == (10, 10)      # decorator line in the span
+    assert syms["f"] == (13, 15) and syms["f#2"] == (18, 19)
+    over = "from typing import overload\n@overload\ndef g(a: int): ...\n@overload\ndef g(a: str): ...\ndef g(a):\n    return a\n"
+    assert [s["chain"] for s in mk.py_symbols(over)] == ["<module>", "g"]                # overloads are not symbols
+    deco = "def d(f):\n    return f\n\n@d\ndef h(a=lambda: 1):\n    return lambda: 2\n"
+    ch = {s["chain"] for s in mk.py_symbols(deco)}
+    assert "<anon>#1" in ch and "h.<anon>#1" in ch                                       # a default's lambda is the ENCLOSING scope's
+
+
+# --- stratum, match, near-miss, scope, sample ------------------------------------------------
+
+CTX = {"flowAnchors": ["web/ui.ts::g"], "cypherMcpTools": ["query"],
+       "units": [{"rootPath": "pkg", "lang": "python", "ports": []}, {"rootPath": "web", "lang": "javascript", "ports": []},
+                 {"rootPath": "cypher-mcp", "lang": "python", "ports": []}]}
+
+
+def _rec(tmp_path, anchor, impacted, writer="KA", stratum="http", **kw):
+    kit, units = _mk_kit(tmp_path)
+    r, _ = mk.normalize_item(_kitem(kw.pop("seq", 1), anchor, impacted, stratum=stratum, **kw), writer, CTX["units"], kit)
+    r["derivedStratum"] = mk.derive_stratum(r, CTX, kit)
+    return r
+
+
+def test_derive_stratum_rules_in_order(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    d = lambda anchor, imp, **kw: _rec(tmp_path, anchor, imp, **kw)["derivedStratum"]
+    assert d(HTTP("GET /a"), _sym("pkg/a.py::f")) == "http"
+    assert d({"type": "contract", "kind": "mcp_tool", "keyNorm": "other"}, _sym("pkg/a.py::f")) == "mcp"
+    assert d({"type": "contract", "kind": "mcp_tool", "keyNorm": "query"}, _sym("pkg/a.py::f")) == "scripts"      # cypherMcpTools
+    assert d(HTTP("GET /a"), _sym("s.sh::<script>")) == "scripts"                                                   # shell impacted
+    assert d(_sym("s.sh::<script>"), _sym("pkg/a.py::f")) == "scripts"
+    assert d(_sym("pkg/run.py::<module>"), _sym("pkg/a.py::f")) == "scripts"                                        # __main__ guard
+    assert d(_sym("pkg/a.py::<module>"), _sym("pkg/a.py::f")) is None                                               # unclassified
+    assert d(_sym("web/ui.ts::g"), _sym("pkg/a.py::f")) == "flow"                                                   # rule 1 first
+    assert d(_sym("web/ui.ts::g"), {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher"}) == "flow"
+    assert d(HTTP("GET /a"), {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher.x"},
+             provider=_sym("pkg/a.py::f")) == "wiring"
+
+
+def _grp(tmp_path, seed_anchor, imp_q, writer, **kw):
+    return _rec(tmp_path, seed_anchor, _sym(imp_q), writer=writer, **kw)
+
+
+def test_match_on_item_id_k24(tmp_path):
+    a = _rec(tmp_path, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), _sym("pkg/a.py::f"), writer="KA", lines=(13,))
+    b = _rec(tmp_path, HTTP("POST /hooks/a1b2c3d4e5f6g7h8"), _sym("pkg/a.py::f"), writer="KB", lines=(15,))
+    m = mk.match_records([a, b])
+    (g,) = m["records"]
+    assert g["sessions"] == ["KA", "KB"] and g["strategies"] == ["consumer-first", "provider-first"] and g["history"] == "101"
+    assert nearmiss_of(m) == []
+
+
+def nearmiss_of(m):
+    return mk.nearmiss_pairs(m)
+
+
+def test_k25_no_false_match_and_an_n2_pair(tmp_path):
+    a = _rec(tmp_path, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), _sym("pkg/a.py::f"), writer="KA")
+    b = _rec(tmp_path, HTTP("POST /hooks/{}"), _sym("pkg/a.py::f"), writer="KB")
+    m = mk.match_records([a, b])
+    assert len(m["records"]) == 2                                          # no mechanical match
+    (p,) = mk.nearmiss_pairs(m)
+    assert p["rule"] == "N2" and p["stratum"] == "http" and len(p["pairId"]) == 12 and p["x"]["writer"] == "KA"
+    from hashlib import sha256
+    assert p["pairId"] == sha256(f"ccg-p0f-pair-v1|{a['itemId']}|{b['itemId']}".encode()).hexdigest()[:12]
+
+
+def test_nearmiss_n1_n2provider_n3_and_exclusions(tmp_path):
+    f1, f2 = _sym("pkg/a.py::f"), _sym("pkg/a.py::C.x")
+    # N1: same anchor, same path, different impacted
+    m = mk.match_records([_rec(tmp_path, HTTP("GET /a"), f1, writer="KA"), _rec(tmp_path, HTTP("GET /a"), f2, writer="KB")])
+    assert [p["rule"] for p in mk.nearmiss_pairs(m)] == ["N1"]
+    # N1 across paths: no
+    m = mk.match_records([_rec(tmp_path, HTTP("GET /a"), f1, writer="KA"), _rec(tmp_path, HTTP("GET /a"), _sym("web/ui.ts::g"), writer="KB")])
+    assert mk.nearmiss_pairs(m) == []
+    # N2 through equal provider ids even when the keys differ
+    prov = _sym("pkg/a.py::f")
+    m = mk.match_records([_rec(tmp_path, HTTP("GET /a/b"), f2, writer="KA", provider=prov),
+                          _rec(tmp_path, HTTP("GET /zz/other"), f2, writer="KB", provider=prov)])
+    assert [p["rule"] for p in mk.nearmiss_pairs(m)] == ["N2"]
+    # N2 casefold + trailing slash + {…} -> {}
+    m = mk.match_records([_rec(tmp_path, HTTP("GET /A/{id}/"), f2, writer="KA"), _rec(tmp_path, HTTP("GET /a/{n}"), f2, writer="KB")])
+    assert [p["rule"] for p in mk.nearmiss_pairs(m)] == ["N2"]
+    # same strategy never pairs (KA vs KA2)
+    m = mk.match_records([_rec(tmp_path, HTTP("GET /a"), f1, writer="KA"), _rec(tmp_path, HTTP("GET /a"), f2, writer="KA2")])
+    assert mk.nearmiss_pairs(m) == []
+    # N3: two unit anchors, one impacted
+    cfg = {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher"}
+    u1 = {"type": "unit", "repoId": "graphmind-ai-lab", "rootPath": "cypher-mcp", "lang": "python"}
+    u2 = dict(u1, rootPath="pkg")
+    sv = [{"type": "contract", "kind": "mcp_tool", "keyNorm": "query"}]
+    m = mk.match_records([_rec(tmp_path, u1, cfg, writer="KA", serves=sv, stratum="wiring"), _rec(tmp_path, u2, cfg, writer="KB", serves=sv, stratum="wiring")])
+    assert [p["rule"] for p in mk.nearmiss_pairs(m)] == ["N3"]
+
+
+def test_match_counts_unclassified_and_stratum_disagreements(tmp_path):
+    a = _rec(tmp_path, _sym("pkg/a.py::<module>"), _sym("pkg/a.py::f"), writer="KA")
+    b = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::f"), writer="KA", stratum="mcp")
+    m = mk.match_records([a, b])
+    assert m["unclassified"] == 1 and m["stratumDisagreements"] == 1 and len(m["records"]) == 1
+
+
+def _flow_group(tmp_path, anchor_q, imp_q, chain, writer="KA"):
+    return _rec(tmp_path, _sym(anchor_q), _sym(imp_q), writer=writer, stratum="flow", chain=chain)
+
+
+FLOW = lambda *k: [{"kind": kk, "from": "a:1", "to": "b:2"} for kk in k]
+
+
+def test_scope_v4_per_item_and_counting_m6(tmp_path):
+    ctx = dict(CTX, flowAnchors=["web/ui.ts::g", "pkg/a.py::f"])
+    kit, units = _mk_kit(tmp_path)
+    # in scope: hops <= 2 with a flow hop; cross-unit counts, same-unit does not
+    same = _rec(tmp_path, _sym("pkg/a.py::f"), _sym("pkg/a.py::C.x"), stratum="flow", chain=FLOW("return-use"))
+    cross = _rec(tmp_path, _sym("web/ui.ts::g"), _sym("pkg/a.py::f"), stratum="flow", chain=FLOW("callee-arg", "caller"))
+    callonly = _rec(tmp_path, _sym("web/ui.ts::g"), _sym("pkg/a.py::C.x"), stratum="flow", chain=FLOW("caller", "caller"))
+    toolong = _rec(tmp_path, _sym("pkg/a.py::f"), _sym("pkg/a.py::C.p.<get>"), stratum="flow", chain=FLOW("control", "caller", "caller"))
+    for r in (same, cross, callonly, toolong):
+        r["derivedStratum"] = mk.derive_stratum(r, ctx, kit)
+    http = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::f"))
+    m = mk.match_records([same, cross, callonly, toolong, http])
+    m, oos, summary = mk.scope_records(m, ctx["units"])
+    assert sorted(oos) == sorted([callonly["itemId"], toolong["itemId"]])
+    by = {g["itemId"]: g for g in m["records"]}
+    assert by[same["itemId"]]["counting"] is False and by[cross["itemId"]]["counting"] is True and by[http["itemId"]]["counting"] is True
+    assert summary["H_all"] == 3 and summary["H"] == 2 and summary["outOfScope"] == 2
+
+
+def test_scope_one_in_scope_member_keeps_the_item_m1(tmp_path):
+    ctx = dict(CTX, flowAnchors=["web/ui.ts::g"])
+    kit, units = _mk_kit(tmp_path)
+    a = _rec(tmp_path, _sym("web/ui.ts::g"), _sym("pkg/a.py::f"), writer="KA", stratum="flow", chain=FLOW("caller", "caller", "caller"))
+    b = _rec(tmp_path, _sym("web/ui.ts::g"), _sym("pkg/a.py::f"), writer="KB", stratum="flow", chain=FLOW("return-use"))
+    for r in (a, b):
+        r["derivedStratum"] = mk.derive_stratum(r, ctx, kit)
+    m, oos, s = mk.scope_records(mk.match_records([a, b]), ctx["units"])
+    assert oos == [] and s["H_all"] == 1
+
+
+def test_oracle_m6_counting_below_75_while_all_items_at_least_75():
+    recs = [{"itemId": f"i{i:03d}", "derivedStratum": "flow" if i < 20 else "http", "strategies": ["provider-first"],
+             "sessions": ["KA"], "members": [{"anchor": {"type": "symbol", "path": "pkg/a.py", "repoId": "graphmind-ai-lab"},
+                                              "impacted": {"type": "symbol", "path": "pkg/b.py", "repoId": "graphmind-ai-lab"},
+                                              "chain": FLOW("return-use")}]} for i in range(80)]
+    m, oos, s = mk.scope_records({"records": recs}, CTX["units"])
+    assert s["H_all"] == 80 >= 75 and s["H"] == 60 < 75           # same-unit flow items do not count
+
+
+def _spot_match(counts, tag="s"):
+    """counts: {(stratum, class): n} -> a match dict of synthetic records."""
+    recs = []
+    for (s, c), n in counts.items():
+        for i in range(n):
+            recs.append({"itemId": f"{tag}-{s}-{c}-{i:02d}", "derivedStratum": s,
+                         "strategies": ["provider-first"] if c == "singleton" else ["consumer-first", "provider-first"]})
+    return {"records": recs}
+
+
+def _full():
+    return {(s, c): 6 for s in mk.STRATA for c in ("singleton", "doubleton")}
+
+
+def test_sample_spot_is_4_plus_4_per_stratum_by_hash_sort():
+    m = _spot_match(_full())
+    spot = mk.spot_sample(m, "E" * 40)
+    assert len(spot) == 40
+    for s in mk.STRATA:
+        for c in ("singleton", "doubleton"):
+            got = sorted(r["itemId"] for r in spot if r["cell"] == f"{s}/{c}")
+            ranked = sorted((r["itemId"] for r in m["records"] if r["derivedStratum"] == s and (len(r["strategies"]) == 1) == (c == "singleton")),
+                            key=lambda i: hashlib.sha256(f"ccg-p0f-spot-v1|{'E' * 40}|{i}".encode()).hexdigest())
+            assert got == sorted(ranked[:4])
+
+
+def test_sample_spot_seed_depends_on_eval_commit():
+    m = _spot_match(_full())
+    assert [r["itemId"] for r in mk.spot_sample(m, "A" * 40)] != [r["itemId"] for r in mk.spot_sample(m, "B" * 40)]
+
+
+def test_sample_spot_shortfall_goes_to_next_stratum_same_class_wrapping():
+    counts = _full()
+    counts[("flow", "singleton")] = 1            # short by 3 -> wraps to http's singleton surplus (6 - 4 = 2) then mcp's
+    m = _spot_match(counts)
+    spot = mk.spot_sample(m, "E" * 40)
+    assert len(spot) == 40
+    flow_s = [r for r in spot if r["cell"] == "flow/singleton"]
+    assert len(flow_s) == 4 and {r["stratum"] for r in flow_s} == {"flow", "http", "mcp"}
+    assert sum(1 for r in flow_s if r["stratum"] == "http") == 2 and sum(1 for r in flow_s if r["stratum"] == "mcp") == 1
+    assert len({r["itemId"] for r in spot}) == 40                                  # nobody twice
+
+
+def test_sample_spot_shortfall_falls_back_to_the_other_class():
+    counts = _full()
+    for s in mk.STRATA:
+        counts[(s, "singleton")] = 4                                             # no surplus of singletons anywhere
+    counts[("mcp", "singleton")] = 2                                              # short by 2
+    spot = mk.spot_sample(_spot_match(counts), "E" * 40)
+    assert len(spot) == 40
+    taken = [r for r in spot if r["cell"] == "mcp/singleton"]
+    assert len(taken) == 4 and sum(1 for r in taken if r["class"] == "doubleton") == 2
+
+
+def test_sample_spot_takes_all_when_the_whole_union_is_small():
+    spot = mk.spot_sample(_spot_match({("http", "singleton"): 2, ("flow", "doubleton"): 1}), "E" * 40)
+    assert len(spot) == 3
+
+
+def _qw_sample(n_pt_una=9, n_pt_amb=3, n_en=10):
+    rows = []
+    for i in range(n_pt_una):
+        rows.append({"qid": f"QW-pt-u{i}", "lang": "pt", "intent": "unambiguous", "text": "t"})
+    for i in range(n_pt_amb):
+        rows.append({"qid": f"QW-pt-a{i}", "lang": "pt", "intent": "ambiguous", "text": "t"})
+    for i in range(n_en):
+        rows.append({"qid": f"QW-en-{i}", "lang": "en", "intent": "unambiguous" if i % 3 else "ambiguous", "text": "t"})
+    return rows
+
+
+def test_sample_lang_gold_6_plus_2_by_hash_sort():
+    c = "C" * 40
+    got = mk.lang_gold_sample(_qw_sample(), "pt", "ccg-p0f-ptgold-v1", c)
+    assert len(got) == 8 and sum(1 for q in got if q["intent"] == "ambiguous") == 2 and all(q["lang"] == "pt" for q in got)
+    una = sorted((q["qid"] for q in _qw_sample() if q["lang"] == "pt" and q["intent"] == "unambiguous"),
+                 key=lambda i: hashlib.sha256(f"ccg-p0f-ptgold-v1|{c}|{i}".encode()).hexdigest())
+    assert {q["qid"] for q in got if q["intent"] == "unambiguous"} == set(una[:6])
+    en = mk.lang_gold_sample(_qw_sample(), "en", "ccg-p0f-engold-v1", c)
+    assert len(en) == 8 and all(q["lang"] == "en" for q in en)
+    assert {q["qid"] for q in en} != {q["qid"] for q in mk.lang_gold_sample(_qw_sample(), "en", "ccg-p0f-ptgold-v1", c)}   # the tag is part of the seed
+    short = mk.lang_gold_sample(_qw_sample(n_pt_amb=1), "pt", "ccg-p0f-ptgold-v1", c)
+    assert len(short) == 8 and sum(1 for q in short if q["intent"] == "ambiguous") == 1       # a short class is filled from the other
+
+
+def test_sample_cli_writes_files_and_prints_counts_only(tmp_path):
+    m = _spot_match(_full())
+    (tmp_path / "match.json").write_text(json.dumps(m))
+    (tmp_path / "QW.jsonl").write_text("".join(json.dumps(q) + "\n" for q in _qw_sample()))
+    cmd = [PY, str(TOOLS / "match_keys.py"), "sample", "--match", str(tmp_path / "match.json"), "--qw", str(tmp_path / "QW.jsonl"),
+           "--eval-commit", "E" * 40, "--out-dir", str(tmp_path / "work")]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    assert r.returncode == 0 and "spot: 40" in r.stdout and "ptgold: 8" in r.stdout and "QW-pt" not in r.stdout and "s-http" not in r.stdout
+    first = (tmp_path / "work" / "spot.jsonl").read_bytes()
+    subprocess.run(cmd, capture_output=True)
+    assert (tmp_path / "work" / "spot.jsonl").read_bytes() == first                  # deterministic rerun
+    assert len((tmp_path / "work" / "engold.jsonl").read_text().splitlines()) == 8
+
+
+# --- renormalize-check: the drift guard (K35, K40) -----------------------------------------------
+
+def _stored(loc, form="provider"):
+    return {"id": mk.contract_id(loc, form), "locator": loc, "form": form}
+
+
+K33 = {"type": "contract", "kind": "http", "keyNorm": "POST /hooks/x7k2q9w4m1p8"}
+K10L = {"type": "contract", "kind": "http", "keyNorm": "POST /services/T024BE7LD/B01ABCDEFGH/abcdefghijklmnopqrstuvwx"}
+
+
+def _strict_screen(monkeypatch):
+    from ccg import keynorm
+    orig = keynorm.screen_fails
+    monkeypatch.setattr(keynorm, "screen_fails", lambda t: orig(t) or len(t) >= 12)       # "T1 lowered to 12" (a test double)
+
+
+def test_oracle_k35_drift_guard(monkeypatch):
+    entries = [_stored(K33), _stored({"type": "contract", "kind": "http", "keyNorm": "POST /hooks/x7k2q9w4m1p8z3v6"}),
+               _stored({"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__s__query"})]
+    assert mk.renormalize_check(entries) == {"checked": 3, "differences": 0, "diffs": []}
+    _strict_screen(monkeypatch)
+    res = mk.renormalize_check(entries)
+    assert res["differences"] == 1 and res["diffs"][0]["stored"] == entries[0]["id"]      # only K33's id changed
+
+
+def test_oracle_k40_consumer_form_gold_under_the_drift_guard(monkeypatch):
+    stored = _stored(K10L, "consumer")
+    assert stored["id"] != _stored(K10L, "provider")["id"]
+    assert mk.renormalize_check([stored])["differences"] == 0
+    assert mk.renormalize_check([dict(stored, form="provider")])["differences"] == 1      # why the form is an input
+    _strict_screen(monkeypatch)
+    assert mk.renormalize_check([stored])["differences"] == 0                              # K10's segment is masked either way
+
+
+def test_renormalize_check_cli_exit_codes_and_output(tmp_path):
+    f = tmp_path / "s.jsonl"
+    f.write_text("".join(json.dumps(e) + "\n" for e in [_stored(K10L, "consumer")]))
+    cmd = [PY, str(TOOLS / "match_keys.py"), "renormalize-check", "--in", str(f)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    assert r.returncode == 0 and "differences: 0" in r.stdout and "T024BE7LD" not in r.stdout
+    f.write_text(json.dumps(dict(_stored(K10L, "consumer"), form="provider")) + "\n")
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    assert r.returncode == 1 and "differences: 1" in r.stdout and "T024BE7LD" not in r.stdout
+
+
+# --- the report leak check (EP §9.4, EP2 §1.4): K29, K36-K38, K41, m4, P2-3 ------------------------
+
+def _h(n):
+    return hashlib.sha256(str(n).encode()).hexdigest()[:32]
+
+
+def _ac5(n, anchor, impacted, lines=(5,), provider=None, serves=(), anchor_id=None, path=None):
+    o = _kitem(n, anchor, impacted, provider=provider, serves=serves, lines=lines)
+    return {"itemId": _h(f"i{n}"), "anchorId": anchor_id or _h(f"a{n}"), "impactedId": _h(f"p{n}"), "original": o}
+
+
+def _ac24(n, text, anchors):
+    return {"qid": f"QW-{n}", "text": text, "original": {"text": text, "gold": {"anchors": anchors}, "goldOptions": None}}
+
+
+def _leak(report, ho, dev=(), contact=()):
+    hits, n = mk.leak_check(report, list(ho), list(dev), list(contact))
+    return hits
+
+
+SYM = lambda q, **kw: _sym(q, **kw)
+
+
+def test_k29_masked_twin_both_probes():
+    ho = _ac5(1, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), SYM("pkg/a.py::f"))
+    dev = _ac5(2, HTTP("GET /other/route"), SYM("pkg/a.py::g"), serves=[HTTP("POST /hooks/a1b2c3d4e5f6g7h8")])
+    assert _leak("missed post /hooks/x7k2q9w4m1p8z3v6 here", [ho], [dev])                    # (a) the pre-8a probe survives
+    assert not _leak("missed post /hooks/{#} here", [ho], [dev])                              # (b) removed by dev equality
+    # without the dev twin the normalized probe is live
+    assert _leak("missed post /hooks/{#} here", [ho], [])
+
+
+def test_k29_a_dev_ac24_gold_twin_works_too():
+    ho = _ac5(1, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), SYM("pkg/a.py::f"))
+    dev = _ac24(1, "something unrelated about the weather today", [HTTP("POST /hooks/a1b2c3d4e5f6g7h8")])
+    assert not _leak("missed post /hooks/{#} here", [ho], [dev]) and _leak("missed post /hooks/x7k2q9w4m1p8z3v6 here", [ho], [dev])
+
+
+def test_k36_writer_spelling_is_not_a_false_positive():
+    ho = _ac5(1, HTTP("get /shop/api/products"), SYM("pkg/a.py::f"))
+    dev = _ac5(2, HTTP("GET /shop/api/products"), SYM("pkg/a.py::g"))
+    assert not _leak("the report names GET /shop/api/products openly", [ho], [dev])
+
+
+def test_k37_no_new_probe_class_for_parameter_names():
+    ho = _ac5(1, HTTP("GET /api/items/{item_id}"), SYM("pkg/a.py::f"))
+    assert not _leak("a report containing GET /api/items/{item_id} here", [ho])
+    assert _leak("a report containing GET /api/items/{} here", [ho])                          # the normalized probe IS live
+
+
+def test_k38_normalized_probe_without_a_twin_fails_under_trailing_punctuation():
+    ho = _ac5(1, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), SYM("pkg/a.py::f"))
+    assert _leak("missed post /hooks/{#}.", [ho])
+
+
+def test_k41_gold_probes_come_from_the_writer_original():
+    gold = HTTP("post /hooks/x7k2q9w4m1p8z3v6")
+    ho = _ac24(12, "a held-out question about something quite different here", [gold])
+    assert _leak("q12 gold post /hooks/x7k2q9w4m1p8z3v6 not understood", [ho])                 # (a)
+    dev = _ac24(3, "a dev question about the very weather in the north", [gold])
+    assert not _leak("dev q3 gold post /hooks/x7k2q9w4m1p8z3v6", [ho], [dev])                 # (b)
+    # a STORED normalized gold carries no literal: the probe must not be derived from it
+    stored = {"qid": "QW-12", "text": "x", "original": {"gold": {"anchors": [HTTP("post /hooks/x7k2q9w4m1p8z3v6")]}},
+              "gold": {"anchors": [HTTP("POST /hooks/{#}")]}}
+    assert _leak("q12 gold post /hooks/x7k2q9w4m1p8z3v6 not understood", [stored])
+
+
+def test_k41_dev_with_a_different_literal_does_not_remove_it():
+    ho = _ac24(12, "some held-out question that goes on for a while here", [HTTP("post /hooks/x7k2q9w4m1p8z3v6")])
+    dev = _ac24(3, "some dev question that goes on for a while there", [HTTP("post /hooks/a1b2c3d4e5f6g7h8")])
+    assert _leak("gold post /hooks/x7k2q9w4m1p8z3v6", [ho], [dev])
+
+
+def _qrec(n, qname, line=12, path="pkg/a.py"):
+    return _ac5(n, HTTP(f"GET /route/{n}"), SYM(qname, path=path), lines=(line,))
+
+
+def test_m4_planted_qname_fails_contacted_and_dev_prefix_do_not():
+    ho = _qrec(1, "a.py::f", path="a.py")                     # the oracle's own literal (7 chars)
+    assert _leak("held-out item a.py::f in the report", [ho]) and _leak("held-out item a.py::f.", [ho])
+    assert _leak("a.py::f: missed", [ho])
+    assert not _leak("held-out item a.py::f in the report", [ho], contact=[SYM("a.py::f")])
+    dev0 = _qrec(2, "a.py::f.g", path="a.py")
+    assert _leak("a.py::f here", [ho], [dev0]) and not _leak("only a.py::f.g here", [ho], [dev0])
+    ho = _qrec(1, "pkg/a.py::f")
+    assert _leak("held-out item pkg/a.py::f in the report", [ho])
+    assert not _leak("held-out item pkg/a.py::f in the report", [ho], contact=[SYM("pkg/a.py::f")])     # contacted: public
+    dev = _qrec(2, "pkg/a.py::f.g")
+    assert _leak("pkg/a.py::f here", [ho], [dev])                                              # dev a.py::f.g does NOT remove a.py::f
+    assert not _leak("only pkg/a.py::f.g here", [ho], [dev])                                   # ... nor does the probe hit inside it
+
+
+@pytest.mark.parametrize("text", ["held-out item pkg/a.py::f.", "pkg/a.py::f: missed", "pkg/a.py::f..", "./pkg/a.py::f",
+                                  "pkg/a.py:12.", "get /api/items/{}: missed", "(pkg/a.py::f)", "see pkg/a.py::f, then", "PKG/A.PY::F"])
+def test_p23_trailing_punctuation_hits(text):
+    ho = _ac5(1, HTTP("GET /api/items/{id}"), SYM("pkg/a.py::f"), lines=(12,))
+    assert _leak(text, [ho]), text
+
+
+@pytest.mark.parametrize("text", ["held-out item a.py::f.", "a.py::f: missed", "a.py::f..", "./a.py::f", "(a.py::f)", "A.PY::F"])
+def test_p23_oracle_literal_a_py_f_hits(text):
+    ho = _ac5(1, HTTP("GET /api/items/{id}"), SYM("a.py::f"), lines=(12,))
+    assert _leak(text, [ho]), text
+
+
+@pytest.mark.parametrize("text", ["a.py::f.g", "x/a.py::f", "a.py::fg", "a.py::f::g"])
+def test_p23_oracle_literal_a_py_f_no_hit(text):
+    ho = _ac5(1, HTTP("GET /api/items/{id}"), SYM("a.py::f"), lines=(12,))
+    assert not _leak(text, [ho]), text
+
+
+@pytest.mark.parametrize("text", ["pkg/a.py::f.g", "x/pkg/a.py::f", "pkg/a.py::fg", "pkg/a.py::f::g", "pkg/a.py::f.:g",
+                                  "pkg/a.py:123", "get /api/items/{}/x", "pkg/a.py::f_x", "pkg/a.py::f-x"])
+def test_p23_no_hit(text):
+    ho = _ac5(1, HTTP("GET /api/items/{id}"), SYM("pkg/a.py::f"), lines=(12,))
+    assert not _leak(text, [ho]), text
+
+
+def test_leak_check_floor_drops_only_bare_short_probes_ep_9_4():
+    ho = _ac5(1, HTTP("GET /q"), SYM("a.py::f"))                 # the oracle literal: 7 chars but NOT bare ('::')
+    assert _leak("held-out item a.py::f.", [ho]) and _leak("a.py::f: missed", [ho])
+    tool = _ac5(3, {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__cypher__query"}, SYM("pkg/a.py::f"))
+    assert not _leak("the query tool and the cypher query", [tool])       # bare 'query' (5 chars) stays dropped
+    for bare_ok in ("a/b", "a#b", "get /q"):                                 # each non-bare marker keeps a short probe
+        assert not mk._bare_short(bare_ok), bare_ok
+    assert mk._bare_short("query") and mk._bare_short("a.py:12") and not mk._bare_short("abcdefgh")
+    assert not mk._bare_short("a b")
+    ho2 = _ac5(2, HTTP("GET /q"), SYM("pkg/a.py::f"))
+    for v in (ho2["itemId"], ho2["itemId"][:12], ho2["anchorId"], ho2["impactedId"][:12]):
+        assert _leak(f"xx{v}yy", [ho2]), v
+    assert not _leak("nothing here at all", [ho2])
+
+
+def test_leak_check_text_shingles_are_substrings_and_removed_by_dev_equality():
+    q = _ac24(1, "What breaks in the storefront if I change the products route today?", [HTTP("GET /shop/api/products")])
+    assert _leak("... storefront IF I change   the products ...", [q])
+    dev = _ac24(2, "What breaks in the storefront if I change the products route today?", [HTTP("GET /other/one")])
+    assert not _leak("... storefront if I change the products ...", [q], [dev])
+
+
+def test_leak_check_output_names_probes_by_hash_only(tmp_path):
+    ho = _ac5(1, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), SYM("pkg/a.py::f"))
+    (tmp_path / "ho.jsonl").write_text(json.dumps(ho) + "\n")
+    (tmp_path / "report.md").write_text("missed post /hooks/x7k2q9w4m1p8z3v6 and pkg/a.py::f\n")
+    r = subprocess.run([PY, str(TOOLS / "match_keys.py"), "check-report", "--report", str(tmp_path / "report.md"),
+                        "--heldout", str(tmp_path / "ho.jsonl")], capture_output=True, text=True)
+    assert r.returncode == 1 and "hits: 2" in r.stdout and "x7k2" not in r.stdout + r.stderr and "a.py" not in r.stdout
+    assert re.findall(r"hit: ([0-9a-f]{12})", r.stdout)
+    (tmp_path / "report.md").write_text("a clean report with counts only\n")
+    assert subprocess.run([PY, str(TOOLS / "match_keys.py"), "check-report", "--report", str(tmp_path / "report.md"),
+                           "--heldout", str(tmp_path / "ho.jsonl")], capture_output=True).returncode == 0
+
+
+# --- CLI pipeline -----------------------------------------------------------------------------
+
+def test_cli_pipeline_normalize_validate_match_nearmiss_scope(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    ctx = tmp_path / "ctx.json"
+    ctx.write_text(json.dumps(CTX))
+    ka = [_kitem(1, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), _sym("pkg/a.py::f"), provider=_sym("pkg/a.py::f"), lines=(13,))]
+    kb = [_kitem(1, HTTP("POST /hooks/{}"), _sym("pkg/a.py::f"), lines=(14,)),
+          _kitem(2, HTTP("GET /bad"), _sym("pkg/a.py::nope"))]
+    for name, rows in (("KA", ka), ("KB", kb)):
+        (tmp_path / f"{name}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    run = lambda *a: subprocess.run([PY, str(TOOLS / "match_keys.py"), *map(str, a)], capture_output=True, text=True)
+    w = tmp_path / "work"
+    for name in ("KA", "KB"):
+        assert run("normalize", "--writer", name, "--in", tmp_path / f"{name}.jsonl", "--out", w / f"n{name}.jsonl",
+                   "--kit-src", kit, "--context", ctx).returncode == 0
+    v = run("validate", "--in", w / "nKA.jsonl", w / "nKB.jsonl", "--kit-src", kit, "--out-dir", w)
+    assert v.returncode == 1 and "valid: 2" in v.stdout and "invalid: 1" in v.stdout
+    assert "V1:name-not-in-file" in json.loads((w / "invalid.jsonl").read_text())["checks"]
+    assert run("match", "--in", w / "valid.jsonl", "--out", w / "match.json").returncode == 0
+    nm = run("nearmiss", "--match", w / "match.json", "--out", w / "nearmiss.jsonl")
+    assert nm.returncode == 0 and "N2: 1" in nm.stdout
+    sc = run("scope", "--match", w / "match.json", "--context", ctx, "--out", w / "scoped.json", "--out-of-scope", w / "oos.jsonl")
+    assert sc.returncode == 0 and '"H":2' in sc.stdout
+    first = (w / "nearmiss.jsonl").read_bytes()
+    run("nearmiss", "--match", w / "match.json", "--out", w / "nearmiss.jsonl")
+    assert (w / "nearmiss.jsonl").read_bytes() == first
+
+
+def test_normalize_contract_strips_nfc_and_keeps_only_the_namespace_prefix():
+    assert _nk("mcp_tool", "  mcp__srv__tool__x  ") == "tool__x"                 # only the first namespace is stripped
+    assert _nk("mcp_tool", "plain_tool") == "plain_tool"
+    assert _nk("http", "  get   /café  ") == "GET /café"
+    assert mk.normalize_contract({"type": "contract", "kind": "http", "keyNorm": "GET /a", "extra": "kept"})["extra"] == "kept"
+    src = {"type": "contract", "kind": "http", "keyNorm": "get /a"}
+    mk.normalize_contract(src)
+    assert src["keyNorm"] == "get /a"                                              # a pure function: the input is untouched
+
+
+def test_py_symbols_decorated_class_span_starts_at_its_decorator():
+    syms = {s["chain"]: (s["lineStart"], s["lineEnd"]) for s in mk.py_symbols("def d(c):\n    return c\n\n@d\nclass K:\n    pass\n")}
+    assert syms["K"] == (4, 6)
+
+
+def test_validate_contract_kind_must_be_http_or_mcp_tool(tmp_path):
+    (valid, invalid, _), _ = _val(tmp_path, _sym("pkg/a.py::f"), anchor={"type": "contract", "kind": "rpc", "keyNorm": "/svc.A/B"})
+    assert valid == [] and "V3:kind" in invalid[0]["checks"]
+    (valid, invalid, _), _ = _val(tmp_path / "ok", _sym("pkg/a.py::f"), lines=(13,), anchor={"type": "contract", "kind": "mcp_tool", "keyNorm": "query"})
+    assert len(valid) == 1
+
+
+def test_nearmiss_never_pairs_records_found_by_both_strategies(tmp_path):
+    f1, f2 = _sym("pkg/a.py::f"), _sym("pkg/a.py::C.x")
+    both = [_rec(tmp_path, HTTP("GET /a"), f1, writer=w) for w in ("KA", "KB")]       # one item, found by both
+    other = _rec(tmp_path, HTTP("GET /a"), f2, writer="KB")                             # an N1 candidate against it
+    m = mk.match_records(both + [other])
+    assert mk.nearmiss_pairs(m) == []                                                   # the matched record is not "unmatched"
+
+
+# --- fix round (Pass 7): M-2, m-1, M-3, m-2, m-3, m-4, adjudicate ---------------------------------
+
+def _mkcli(*a):
+    return subprocess.run([PY, str(TOOLS / "match_keys.py"), *map(str, a)], capture_output=True, text=True)
+
+
+def _jl(path, rows):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+KIRO = "kiro/.kiro/agents/x.json"
+KIRO_LOC = {"type": "config", "repoId": "graphmind-ai-lab", "path": KIRO, "keyPath": "includeMcpJson"}
+
+
+@pytest.mark.parametrize("val,ok", [(True, True), (False, False), ("true", False), (1, False), (None, False)])
+def test_v2_kiro_include_mcp_json_must_be_true(tmp_path, val, ok):
+    kit = tmp_path / "kit"
+    (kit / KIRO).parent.mkdir(parents=True)
+    (kit / KIRO).write_text(json.dumps({"name": "x", "includeMcpJson": val}))
+    assert mk.check_locator(KIRO_LOC, kit) == ([] if ok else ["V2:includeMcpJson-not-true"])
+
+
+def test_v2_include_mcp_json_rule_is_for_that_key_in_kiro_agents_only(tmp_path):
+    kit = tmp_path / "kit"
+    (kit / KIRO).parent.mkdir(parents=True)
+    (kit / KIRO).write_text(json.dumps({"mcpServers": {"s": {}}, "includeMcpJson": False, "tools": [False]}))
+    assert mk.check_locator(dict(KIRO_LOC, keyPath="mcpServers.s"), kit) == []
+    assert mk.check_locator(dict(KIRO_LOC, keyPath="tools[0]"), kit) == []
+    (kit / "other.json").write_text(json.dumps({"includeMcpJson": False}))
+    assert mk.check_locator(dict(KIRO_LOC, path="other.json"), kit) == []
+
+
+def test_config_grain_include_mcp_json_false_is_not_a_server_entry(tmp_path):
+    g = lambda **kw: mk.config_grain(KIRO, "includeMcpJson", **kw)
+    assert g(value=True) == ("includeMcpJson", "server") and g() == ("includeMcpJson", "server")
+    for v in (False, "true", 1, None):
+        assert g(value=v) == ("includeMcpJson", "contract"), v
+    kit = tmp_path / "kit"
+    (kit / KIRO).parent.mkdir(parents=True)
+    for val, cls in ((True, "server"), (False, "contract")):
+        (kit / KIRO).write_text(json.dumps({"includeMcpJson": val}))
+        assert mk._norm_locator(dict(KIRO_LOC), 1, [], [], kit)["_class"] == cls
+
+
+ENV_IMPACTED = {"type": "config", "path": ".env.example", "keyPath": "SERVER_URL"}
+PKG_UNIT = {"type": "unit", "repoId": "graphmind-ai-lab", "rootPath": "pkg", "lang": "python"}
+
+
+def test_env_locator_without_a_kit_is_refused_not_defaulted_to_contract(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    o = _kitem(1, PKG_UNIT, ENV_IMPACTED)
+    with pytest.raises(mk.NeedsKit, match="--kit-src"):
+        mk.normalize_item(o, "KA", units, None)
+    rec, _ = mk.normalize_item(o, "KA", units, kit)                         # with the kit: the value is read -> server
+    assert rec["anchor"]["rootPath"] == "pkg" and "_class" not in rec["impacted"]
+
+
+def test_normalize_cli_env_locator_needs_kit_src_exit_2(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    _jl(tmp_path / "KA.jsonl", [_kitem(1, PKG_UNIT, ENV_IMPACTED)])
+    _jl(tmp_path / "ctx.json", [])
+    (tmp_path / "ctx.json").write_text(json.dumps(CTX | {"units": units}))
+    base = ["normalize", "--writer", "KA", "--in", tmp_path / "KA.jsonl", "--out", tmp_path / "out.jsonl", "--context", tmp_path / "ctx.json"]
+    r = _mkcli(*base)
+    assert r.returncode == 2 and "--kit-src" in r.stderr and not (tmp_path / "out.jsonl").exists()
+    r = _mkcli(*base, "--kit-src", kit)
+    assert r.returncode == 0 and "records: 1" in r.stdout
+
+
+def test_normalize_non_env_config_still_works_without_a_kit(tmp_path):
+    _, units = _mk_kit(tmp_path)
+    rec, _ = mk.normalize_item(_kitem(1, PKG_UNIT, {"type": "config", "path": ".mcp.json", "keyPath": "mcpServers.cypher.args"}),
+                               "KA", units + [{"rootPath": "pkg", "lang": "python", "ports": []}], None)
+    assert rec["impacted"]["keyPath"] == "mcpServers.cypher"
+
+
+# --- M-3: the plumbing of sample (CLI) and normalize ----------------------------------------------
+
+def _ids_of(path):
+    return [json.loads(l) for l in Path(path).read_text().splitlines()]
+
+
+def test_sample_cli_draws_use_their_own_tags_languages_and_the_eval_commit(tmp_path):
+    commit = "F" * 40
+    m, qw = _spot_match(_full()), _qw_sample()
+    (tmp_path / "match.json").write_text(json.dumps(m))
+    _jl(tmp_path / "QW.jsonl", qw)
+    r = _mkcli("sample", "--match", tmp_path / "match.json", "--qw", tmp_path / "QW.jsonl", "--eval-commit", commit, "--out-dir", tmp_path / "w")
+    assert r.returncode == 0
+    spot = [x for x in _ids_of(tmp_path / "w" / "spot.jsonl") if "itemId" in x]
+    pt, en = _ids_of(tmp_path / "w" / "ptgold.jsonl"), _ids_of(tmp_path / "w" / "engold.jsonl")
+    # the library at the SAME commit, with each file's own language and tag
+    assert [x["itemId"] for x in spot] == [x["itemId"] for x in mk.spot_sample(m, commit)]
+    assert pt == mk.lang_gold_sample(qw, "pt", "ccg-p0f-ptgold-v1", commit)
+    assert en == mk.lang_gold_sample(qw, "en", "ccg-p0f-engold-v1", commit)
+    # ... and these fixtures can tell the wrong plumbing apart: another commit, tag or language gives other rows
+    assert [x["itemId"] for x in spot] != [x["itemId"] for x in mk.spot_sample(m, "0" * 40)]
+    assert pt != mk.lang_gold_sample(qw, "pt", "ccg-p0f-engold-v1", commit) and pt != mk.lang_gold_sample(qw, "pt", "ccg-p0f-ptgold-v1", "0" * 40)
+    assert en != mk.lang_gold_sample(qw, "en", "ccg-p0f-ptgold-v1", commit) and en != mk.lang_gold_sample(qw, "en", "ccg-p0f-engold-v1", "0" * 40)
+    assert all(q["lang"] == "pt" for q in pt) and all(q["lang"] == "en" for q in en) and pt != en
+
+
+def test_normalize_serves_are_normalized_masked_deduped_and_kept(tmp_path):
+    kit, units = _mk_kit(tmp_path)
+    serves = [HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), HTTP("post /hooks//a1b2c3d4e5f6g7h8/"),
+              {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__cypher__query"}, HTTP("POST /hooks/x7k2q9w4m1p8z3v6")]
+    o = _kitem(1, HTTP("GET /a"), _sym("pkg/a.py::f"), provider=_sym("pkg/a.py::f"), serves=serves)
+    rec, log = mk.normalize_item(o, "KA", units, kit)
+    assert [(s["kind"], s["keyNorm"]) for s in rec["serves"]] == [("http", "POST /hooks/{#}"), ("http", "POST /hooks/{#}/"), ("mcp_tool", "query")]
+    assert len(rec["original"]["serves"]) == 4                                     # the writer's own list is untouched
+    dup = _kitem(1, HTTP("GET /a"), _sym("pkg/a.py::f"), serves=[HTTP("GET /s/{id}"), HTTP("GET /s/:x")])
+    assert [s["keyNorm"] for s in mk.normalize_item(dup, "KA", units, kit)[0]["serves"]] == ["GET /s/{}"]
+
+
+# --- m-2: the shortfall marker --------------------------------------------------------------------
+
+def test_spot_shortfall_record_only_when_short():
+    assert mk.spot_shortfall_record(mk.spot_sample(_spot_match(_full()), "E" * 40)) is None
+    small = mk.spot_sample(_spot_match({("http", "singleton"): 2, ("flow", "doubleton"): 1}), "E" * 40)
+    assert mk.spot_shortfall_record(small) == {"record": "shortfall", "expected": 40, "got": 3, "short": 37}
+
+
+def test_sample_cli_says_so_in_spot_jsonl_and_stdout_when_short(tmp_path):
+    (tmp_path / "match.json").write_text(json.dumps(_spot_match({("http", "singleton"): 2, ("flow", "doubleton"): 1})))
+    _jl(tmp_path / "QW.jsonl", _qw_sample())
+    run = lambda d: _mkcli("sample", "--match", tmp_path / "match.json", "--qw", tmp_path / "QW.jsonl", "--eval-commit", "E" * 40, "--out-dir", tmp_path / d)
+    r = run("w")
+    rows = _ids_of(tmp_path / "w" / "spot.jsonl")
+    assert r.returncode == 0 and "spot: 3\n" in r.stdout and "spot-shortfall: 37" in r.stdout
+    assert rows[-1] == {"record": "shortfall", "expected": 40, "got": 3, "short": 37} and sum(1 for x in rows if "itemId" in x) == 3
+    (tmp_path / "match.json").write_text(json.dumps(_spot_match(_full())))
+    r = run("w2")
+    assert "spot-shortfall: 0" in r.stdout and all("itemId" in x for x in _ids_of(tmp_path / "w2" / "spot.jsonl"))
+
+
+# --- m-3: nothing from a stored entry on stderr ---------------------------------------------------
+
+def test_renormalize_check_names_a_failing_entry_by_stored_id_only(tmp_path):
+    bad = {"id": "a" * 32, "locator": {"type": "contract", "kind": "http", "keyNorm": "SECRETVERB /x"}, "form": "provider"}
+    good = _stored(K33)
+    _jl(tmp_path / "s.jsonl", [good, bad, "not-a-dict", {"locator": None}])
+    r = _mkcli("renormalize-check", "--in", tmp_path / "s.jsonl")
+    assert r.returncode == 1 and "SECRETVERB" not in r.stdout + r.stderr
+    assert "checked: 4" in r.stdout and f"changed: {'a' * 32} -> (does not normalize)" in r.stdout
+    assert mk.renormalize_check([bad])["diffs"] == [{"stored": "a" * 32, "now": None}]
+
+
+def test_cli_error_paths_print_no_stored_text(tmp_path):
+    (tmp_path / "bad.jsonl").write_text("SECRETTEXT\n{}\n")
+    r = _mkcli("renormalize-check", "--in", tmp_path / "bad.jsonl")
+    assert r.returncode == 4 and "SECRETTEXT" not in r.stderr and "line 1" in r.stderr
+    kit, units = _mk_kit(tmp_path)
+    _jl(tmp_path / "KA.jsonl", [_kitem(1, PKG_UNIT, ENV_IMPACTED)])
+    (tmp_path / "ctx.json").write_text(json.dumps({"units": [{"rootPath": "pkg", "lang": "python", "ports": ["SECRETPORT"]}]}))
+    r = _mkcli("normalize", "--writer", "KA", "--in", tmp_path / "KA.jsonl", "--out", tmp_path / "o.jsonl", "--kit-src", kit, "--context", tmp_path / "ctx.json")
+    assert r.returncode == 4 and "SECRETPORT" not in r.stderr and "ValueError" in r.stderr
+
+
+# --- m-4: the match.json contract for capture.py --------------------------------------------------
+
+def test_match_json_carries_t_per_stratum_and_the_contract_is_documented(tmp_path):
+    a = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::f"), writer="KA")
+    k2 = _rec(tmp_path, HTTP("GET /b"), _sym("pkg/a.py::f"), writer="KA2", seq=2)
+    m = mk.match_records([a])
+    assert m["t"] == {s: 2 for s in mk.STRATA}
+    m = mk.match_records([a, k2])
+    assert m["t"]["http"] == 3 and all(m["t"][s] == 2 for s in mk.STRATA if s != "http")
+    assert mk.match_records([a], ka2_strata=["flow"])["t"]["flow"] == 3
+    assert [g["history"] for g in m["records"]] == ["100", "010"]                  # (KA, KA2, KB) order
+    for needle in ("match.json", "inScope", "scope", "capture.py", "``t``", "history", "KA2", "adjudicate"):
+        assert needle in mk.__doc__, needle
+
+
+def test_match_cli_ka2_strata_and_scope_keeps_t_and_marks_every_record(tmp_path):
+    _, units = _mk_kit(tmp_path)
+    r = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::f"), writer="KA")
+    _jl(tmp_path / "v.jsonl", [r])
+    assert _mkcli("match", "--in", tmp_path / "v.jsonl", "--out", tmp_path / "m.json", "--ka2-strata", "scripts", "wiring").returncode == 0
+    m = json.loads((tmp_path / "m.json").read_text())
+    assert m["t"] == {"http": 2, "mcp": 2, "scripts": 3, "wiring": 3, "flow": 2}
+    (tmp_path / "ctx.json").write_text(json.dumps(CTX))
+    assert _mkcli("scope", "--match", tmp_path / "m.json", "--context", tmp_path / "ctx.json", "--out", tmp_path / "s.json", "--out-of-scope", tmp_path / "o.jsonl").returncode == 0
+    s = json.loads((tmp_path / "s.json").read_text())
+    assert s["t"] == m["t"] and all(g["inScope"] is True for g in s["records"])
+
+
+# --- adjudicate (EP §6.3, §13.4) ------------------------------------------------------------------
+
+def _adj_fixture(tmp_path, ka_writer="KA"):
+    a = _rec(tmp_path, HTTP("POST /hooks/x7k2q9w4m1p8z3v6"), _sym("pkg/a.py::f"), writer=ka_writer)
+    b = _rec(tmp_path, HTTP("POST /hooks/{}"), _sym("pkg/a.py::f"), writer="KB")
+    m = mk.match_records([a, b])
+    return a, b, m, mk.nearmiss_pairs(m)
+
+
+def _vd(pairs, verdict="same", keep="x"):
+    return [{"pairId": p["pairId"], "verdict": verdict, "keep": keep} for p in pairs]
+
+
+def test_adjudicate_same_makes_one_matched_record_and_keeps_the_keep_side(tmp_path):
+    a, b, m, pairs = _adj_fixture(tmp_path)
+    assert len(pairs) == 1 and pairs[0]["x"]["itemId"] == a["itemId"]
+    for keep, survivor, gone in (("x", a, b), ("y", b, a)):
+        out, log, summary = mk.apply_verdicts(m, pairs, _vd(pairs, keep=keep))
+        (g,) = out["records"]
+        assert g["itemId"] == survivor["itemId"] and g["anchorId"] == survivor["anchorId"] and g["absorbed"] == [gone["itemId"]]
+        assert g["sessions"] == ["KA", "KB"] and g["history"] == "101" and g["strategies"] == ["consumer-first", "provider-first"]
+        assert len(g["members"]) == 2
+        assert log == [{"pairId": pairs[0]["pairId"], "verdict": "same", "keep": keep}]
+        assert summary == {"pairs": 1, "verdicts": 1, "same": 1, "different": 0, "unadjudicated": 0}
+    assert len(m["records"]) == 2                                              # the input match was not changed in place
+    assert mk.nearmiss_pairs(out) == []                                        # a merged record is found by both strategies
+
+
+def test_adjudicate_ka2_pair_history_is_011(tmp_path):
+    _, _, m, pairs = _adj_fixture(tmp_path, ka_writer="KA2")
+    (g,) = mk.apply_verdicts(m, pairs, _vd(pairs))[0]["records"]
+    assert g["history"] == "011" and g["sessions"] == ["KA2", "KB"]
+
+
+def test_adjudicate_different_and_unadjudicated_pairs_count_as_different(tmp_path):
+    _, _, m, pairs = _adj_fixture(tmp_path)
+    for verdicts, want in (([], {"different": 0, "unadjudicated": 1}), (_vd(pairs, "different", "x"), {"different": 1, "unadjudicated": 0})):
+        out, log, summary = mk.apply_verdicts(m, pairs, verdicts)
+        assert len(out["records"]) == 2 and out["records"] == m["records"]
+        assert summary["same"] == 0 and {k: summary[k] for k in want} == want
+        assert [e["verdict"] for e in log] == [v["verdict"] for v in verdicts]
+
+
+def _fan_in(tmp_path):
+    x = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::f"), writer="KA")
+    y1 = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::C.x"), writer="KB")
+    y2 = _rec(tmp_path, HTTP("GET /a"), _sym("pkg/a.py::C.p.<get>"), writer="KB", seq=2)
+    m = mk.match_records([x, y1, y2])
+    return m, mk.nearmiss_pairs(m)
+
+
+def test_adjudicate_rejects_a_record_that_is_same_in_two_pairs_and_applies_nothing(tmp_path):
+    m, pairs = _fan_in(tmp_path)
+    assert len(pairs) == 2 and {p["rule"] for p in pairs} == {"N1"}
+    with pytest.raises(mk.Inconsistent) as e:
+        mk.apply_verdicts(m, pairs, _vd(pairs))
+    assert sorted(e.value.args[0]) == sorted(("record-same-twice", p["pairId"]) for p in pairs)
+    out, _, s = mk.apply_verdicts(m, pairs, [_vd(pairs)[0], dict(_vd(pairs)[1], verdict="different")])    # one same + one different is fine
+    assert s["same"] == 1 and len(out["records"]) == 2
+
+
+@pytest.mark.parametrize("mut,code", [
+    (lambda v, p: [dict(v[0], pairId="ffffffffffff")], "unknown-pair"),
+    (lambda v, p: [v[0], v[0]], "repeated-pair"),
+    (lambda v, p: [dict(v[0], verdict="maybe")], "bad-verdict"),
+    (lambda v, p: [dict(v[0], keep="z")], "bad-keep"),
+    (lambda v, p: [{k: x for k, x in v[0].items() if k != "keep"}], "bad-keep"),
+])
+def test_adjudicate_rejects_malformed_verdicts(tmp_path, mut, code):
+    _, _, m, pairs = _adj_fixture(tmp_path)
+    with pytest.raises(mk.Inconsistent) as e:
+        mk.apply_verdicts(m, pairs, mut(_vd(pairs), pairs))
+    assert code in {c for c, _ in e.value.args[0]}
+
+
+def test_adjudicate_rejects_a_pair_whose_items_are_not_in_the_match(tmp_path):
+    _, _, m, pairs = _adj_fixture(tmp_path)
+    stale = dict(m, records=m["records"][:1])
+    with pytest.raises(mk.Inconsistent) as e:
+        mk.apply_verdicts(stale, pairs, _vd(pairs))
+    assert ("item-not-in-match", pairs[0]["pairId"]) in e.value.args[0]
+
+
+def test_adjudicate_cli_applies_logs_and_rejects(tmp_path):
+    a, b, m, pairs = _adj_fixture(tmp_path)
+    (tmp_path / "match.json").write_text(mk.canon(m) + "\n")
+    _jl(tmp_path / "nm.jsonl", pairs)
+    _jl(tmp_path / "v.jsonl", _vd(pairs, keep="y"))
+    r = _mkcli("adjudicate", "--match", tmp_path / "match.json", "--nearmiss", tmp_path / "nm.jsonl", "--verdicts", tmp_path / "v.jsonl",
+             "--out", tmp_path / "adj.json", "--log", tmp_path / "work" / "adjudication.jsonl")
+    assert r.returncode == 0 and "same: 1" in r.stdout and "unadjudicated: 0" in r.stdout and "records: 1" in r.stdout
+    assert "POST" not in r.stdout + r.stderr
+    (g,) = json.loads((tmp_path / "adj.json").read_text())["records"]
+    assert g["itemId"] == b["itemId"] and g["absorbed"] == [a["itemId"]]
+    assert _ids_of(tmp_path / "work" / "adjudication.jsonl") == [{"pairId": pairs[0]["pairId"], "verdict": "same", "keep": "y"}]
+    # a rejected list: exit 1, ids only on stderr, nothing written
+    m2, pairs2 = _fan_in(tmp_path / "fan")
+    (tmp_path / "m2.json").write_text(mk.canon(m2) + "\n")
+    _jl(tmp_path / "nm2.jsonl", pairs2)
+    _jl(tmp_path / "v2.jsonl", _vd(pairs2))
+    r = _mkcli("adjudicate", "--match", tmp_path / "m2.json", "--nearmiss", tmp_path / "nm2.jsonl", "--verdicts", tmp_path / "v2.jsonl",
+             "--out", tmp_path / "adj2.json", "--log", tmp_path / "adj2.log")
+    assert r.returncode == 1 and "record-same-twice" in r.stderr and pairs2[0]["pairId"] in r.stderr
+    assert not (tmp_path / "adj2.json").exists() and not (tmp_path / "adj2.log").exists()
+    assert subprocess.run([PY, str(TOOLS / "match_keys.py"), "adjudicate", "--help"], capture_output=True).returncode == 0
+
+
+def test_adjudicate_then_scope_keeps_the_merged_record(tmp_path):
+    _, _, m, pairs = _adj_fixture(tmp_path)
+    out, _, _ = mk.apply_verdicts(m, pairs, _vd(pairs))
+    out, oos, summary = mk.scope_records(out, CTX["units"])
+    assert oos == [] and summary["H_all"] == 1 and out["records"][0]["inScope"] is True

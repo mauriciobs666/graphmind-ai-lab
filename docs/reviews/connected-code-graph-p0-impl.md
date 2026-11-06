@@ -5690,3 +5690,28 @@ Capture matches Appendix A at 1e-9 over 20k fuzz cases, t=2 and t=3, integer-sty
 
 ### Stopping condition (falsifiable)
 Re-gate passes when: (1) the planted item-less contacted-`t2` case is red before and green after M-1's fix, with a `served-anchor` log entry; (2) a `match.json` with `t.http = 3` and no KA2 bits yields `t = 3` and N̂h = 29 for histories (10, 9, 3), red before; (3) mutants (a)-(d) of M-3 are each killed by a test; (4) the method owner's rulings on `inScope`, contact-file shape, and `t` source are recorded and the tools refuse an unscoped `match.json` (m-2).
+
+## Pass 7b — S49 P0-42a re-gate (fix round on disk; EP v1.6)
+
+**Verdict: approve with suggestions.** All five Pass 7 stopping conditions hold by execution; no blocker or major found in the new surface. CPG: considered, not relevant (new untracked tool file). Suite run by me: `tests/test_eval_tools.py tests/test_eval_tools_split.py` = 478 passed.
+
+**Dispositions.**
+- **M-1 fixed.** `_bare_short` drops only a bare probe under 8 chars. Mutants in a scratch copy (baseline 478 green there): `or _bare_short(v)` to `or False` killed; floor back to plain `len<8` killed (8 failed); dropping the space from the exempt set killed. The m4/P2-3 tests now use the 7-char `a.py::f`.
+- **M-2 fixed.** `V2:includeMcpJson-not-true` (my suggestion was `keypath-unresolved`; the named check is better, since a distinct code lets the owner tell a value problem from a missing key: accepted). `config_grain` falls through to the generic row when the parsed value is not `True`. Mutants `value is True` to `True` and removing the V2 test: killed (1 and 4 failures). Cross-check with normalize: `false` classes as contract, so a unit-anchored item fails `class-mismatch` first and a contract-anchored one reaches V2; both end invalid.
+- **M-3 fixed.** I re-ran (a) `pt` tag swapped, (b) `en` tag swapped, (c) `pt` drawn from `en`, (d) `--eval-commit` replaced in `spot_sample`, (e) the same in both gold draws, (f) `serves = []` in `normalize_item`: each killed by exactly one test (baseline of the copy: 478 passed).
+- **m-1 fixed, ruling accepted.** `.env` without `--kit-src` raises `NeedsKit`, exit 2, before anything is written; a usage error is right because the omission is the operator's, not the item's.
+- **m-2 fixed** (`spot.jsonl` ends with a `shortfall` record). **m-3, m-4: fixed** (`match.json` contract in the module docstring: `t`, `inScope`, `absorbed`, verb order, "refuse a record with no `inScope`"). **n-1 fixed** (`within` and `nth` each alone are tested). I did not re-check m-3's stderr text; not rerun.
+- **`line` alone not rejected: accepted.** The spec3 §3.5 form is `{within, line, nth?}` and `line` is a legitimate field elsewhere (V1 checks it); keying on `within`/`nth` is the discriminating test.
+
+**New surface (`adjudicate`, `t`, `--ka2-strata`, `absorbed`).** Read and exercised: verdict lists are rejected whole (unknown/repeated pair, bad verdict/keep, item not in match, a record `same` twice), nothing written, stderr names pair ids only; `different` and unadjudicated pairs change nothing; a `same` pair re-derives sessions/strategies/history via `_finish_group` (KA+KB gives `101`, KA2+KB `011`), and the merged record has both strategies, so a re-run of `nearmiss` cannot pair it again. I tried to find a case where `scope`'s `counting` reads the dropped side's locators (`members[0]` is writer-ordered, not keep-ordered) and could not: N1, the only pairing a flow item can have, requires the same anchor and the same impacted `path`, so both ends are in the same units. No finding.
+
+**New findings.**
+- **n-2 (nit, inferred):** `t` is 3 only when a KA2 record exists or `--ka2-strata` names the stratum; an operator who forgets the flag for a KA2 pass that found nothing gets `t=2` silently. EP v1.6 §6.4 makes the flag the declaration, so this is by design; S45's runbook should make the flag mandatory whenever KA2 ran.
+- **n-3 (nit, inferred):** the bare-probe floor would still drop a root-level `a.py:5` path:line probe (no `::`, `/`, `#` or space). Real kit paths have directories, so exposure is nil today.
+
+**EP v1.4 to v1.6 diff (`docs/plans/connected-code-graph-eval-protocol-ml.md`, 25550 to 25851 words, +301).** Internally consistent: §2.3, §7.1, §13.4 agree that ancestor-plus-line is V1-invalid, never converted; the floor (§9.4), `includeMcpJson` (§2.4 table row and §7.1), N2 (§6.3), shortfall (§7.3) and `inScope`/`t` (§6.4, §13.5) match the code. One loose end: §2.3 line ~189 still contrasts with "§3.5's converter conditions", which now reads as history rather than a live rule; harmless. Growth-stops: the additions are new contract text (a `contact.jsonl` file format and its only producer, the in-scope rule, the file-completeness rule, shortfall order, per-record hops count), not restated history or findings; two edits replace text in place (§2.3, §13.4). I would not tighten them, with one exception: the `contact.jsonl` paragraph could drop its second sentence's restatement of EP2 §1.2 and cite it. The v1.5 note was replaced by a single dated v1.6 line, as the rule requires.
+
+### Proposed REVIEW.md lines
+None.
+
+Stopping condition: met; no further pass needed on 42a.
