@@ -577,3 +577,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-05: KB-http ended exit 0 (audit queued); KB-mcp started.
 2026-11-05 KA-flow and KB-mcp ended exit 0 (audits queued); KB-scripts and KB-wiring started.
 2026-11-06 KB-scripts, KB-wiring ended exit 0 (audits queued); KB-flow and QW started.
+2026-11-06 S41/S42 audits: KA-flow + KB http/mcp/scripts/wiring clean (0 schema failures, none voided); keys copied to work/keys/. KA keys 5/5 done; KB 4/5 audited, KB-flow running.
