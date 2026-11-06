@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.7 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.8 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-06 (v1.7): S45 ruling on a high invalid share (§7.2); v1.6's S49 rulings stand, and the v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
+*2026-11-06 (v1.8): S50 cleanups (§2.3, §2.4, §5.3, §8.2, §9.3, §13.2, Appendix B); v1.7's §7.2 rule stands, and the v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -186,7 +186,7 @@ the ancestor-plus-line form arrives, it is a grammar violation: V1 invalid, neve
   user's terms, because the listed code is the code that breaks.
 - **None on the key writers' protocol.** E1 makes their output simpler. S52's prompts quote one
   rule, "name the nearest enclosing named function, or the file if there is none, and give the
-  line", instead of §3.5's converter conditions.
+  line", instead of the bundle spec's converter conditions.
 
 ### 2.4 `config` grain, per format (M3, m3)
 
@@ -216,8 +216,7 @@ pattern's length. The **class** decides wiring's two shapes (§3.5): a `server` 
   pairs it with the indexed form. A `.env` class reads the value from the kit.
 - **Unit ports (P2-4).** Each listed unit in `eval-manifest.yaml` carries `ports`: the TCP ports it
   listens on, recorded by S40 from the unit's own source (a Compose service that builds it: the
-  container side of `ports`; a Dockerfile `EXPOSE`; a literal `--port`/`port=` in its start
-  script), possibly empty. It is frozen data, checked by the method owner at S40, never a GC
+  container side of `ports`; a Dockerfile `EXPOSE`; a literal `--port`/`port=` in a service start script, or the default that script resolves to), possibly empty. It is frozen data, checked by the method owner at S40, never a GC
   judgment. At the working tree, `falkor-chat/server/.env.example`'s only port-like values are
   FalkorDB's, which is not a listed unit, so no `.env` entry is server class today.
 - **A class mismatch the re-anchoring cannot fix** (a contract-class entry under a `unit` anchor)
@@ -657,7 +656,7 @@ with `edgeType` `LAUNCHES` (class X) must each be a harness error, neither a hit
 ### 5.3 How the gate reports
 
 All results are first run, never a post-fix rerun (ML §4.1):
-- **Item recall**, per stratum and pooled, as `k/n` with a Wilson 95% interval.
+- **Item recall**, per stratum and pooled, as `k/n` with a Wilson 95% interval. It treats items as independent, so it is optimistic where items share an anchor.
 - **Anchor recall**, per stratum and pooled, over distinct anchors. An anchor counts only if all of
   its items are hits. This is the conservative figure.
 - **The pass condition is AC-5's:** every held-out item is a hit, over at least 75 **counting**
@@ -961,7 +960,7 @@ SQ-P0-1's trigger (plan §12), never a reason to un-contact an anchor.
   `work/contact.jsonl`: canonical JSONL, one `{anchorId, locator, source}` per line, sorted by
   `anchorId`, deduplicated, `locator` the normalized form. Its only producer is
   `split_manifest.py contact --in <raw {locator, source} lines> --out work/contact.jsonl`, which
-  applies `normalize_contract` (EP2 §1.2) and `E` (§2.3), then `match_keys.locator_id`. `split`, `manifest` and `check-report`
+  converts per EP2 §1.2 (contracts) and `E` (§2.3, symbols). `split`, `manifest` and `check-report`
   read that file and no other. The ground-truth report lists the contacted anchors by locator.
   They are dev, so they are not secret.
 - **Timing.** C is applied at S47. The flow draw (S40) does not wait for C (§3.6).
@@ -1135,7 +1134,7 @@ Every file is canonical JSONL:
 {
   "schema": "ccg-heldout-manifest-v1",
   "evalCommit": "<40 hex>",
-  "protocol": "docs/plans/connected-code-graph-eval-protocol-ml.md@1.4+docs/plans/connected-code-graph-eval-protocol2-ml.md@1.4",
+  "protocol": "docs/plans/connected-code-graph-eval-protocol-ml.md@<EP version>+docs/plans/connected-code-graph-eval-protocol2-ml.md@<EP2 version>",
   "splitSeed": "ccg-p0f-split-v1|<40 hex>",
   "files": [{"name": "ac5-http.jsonl", "sha256": "<64 hex>", "bytes": 0, "items": 0, "countingItems": 0, "anchors": 0}],
   "contactAnchors": 0,
@@ -1675,7 +1674,7 @@ Common to every tool:
 
 ### 13.2 `strip_gold.py` (S48; run in S43a)
 
-- **Input:** `QW.jsonl`. **Output:** `QW-nogold.jsonl`, by a **whitelist**: each line is exactly
+- **Input:** `QW.jsonl`, QW's raw output plus a GC-assigned `qid` per line (`QW-<seq>`, §10.2). **Output:** `QW-nogold.jsonl`, by a **whitelist**: each line is exactly
   `{aid, lang, text}`, where `aid = SHA-256("ccg-p0f-an-v1|" + EVAL_COMMIT + "|" + qid)`, first
   12 hex. Lines are sorted by `aid`, so neither QW's order nor its numbering reaches the
   annotators (QW may write its ambiguous items last).
@@ -2055,11 +2054,13 @@ if __name__ == "__main__":
 - Each paster fills only the `{…}` slots, from `eval-manifest.yaml` and S40's draw.
 - **The `{grammarExtract}` slot** takes the bundle spec's §4.0, §4.1 rules 1–4, 6 and 8–10, and the
   rule bullets of §4.2 for Python, TS/JS, shell and Markdown, plus §6's `http` and `mcp_tool`
-  rows. It **omits** §4.1 rules 5 and 7, every worked-example table, and §6's example column (those
-  name real proving-repo elements, the slice's among them), and §6 `http` step 7's catch-all clause
-  (`{**}` and the list of catch-all syntaxes). The extract's unused-rule line reads "(Rules 5 and 7
-  are not used in this brief.)". S40 generates the extract once; S52's four definitions and the
-  brief hold byte-identical copies.
+  rows. It **omits** §4.1 rules 5 and 7, §6 `http` step 7's catch-all clause (`{**}` and the list of
+  catch-all syntaxes), and **anything else that names a proving-repo element or a section that is
+  not pasted**: worked-example tables, §6's example column, cited files and lines, unpasted `§`
+  references. The unused-rule line reads "(Rules 5 and 7 are not used in this brief.)". The cut is
+  stated as this rule, not as a list, because the bundle spec's text can change; the cuts made are
+  recorded in `cpg/eval/headless/S52-NOTES.md`. S40 generates the extract once; S52's four
+  definitions and the brief hold byte-identical copies.
 - **B.0 governs what a writer writes; the extract governs what counts as named.** The extract's
   `<anon>#N` and `#N` in the grammar block, and the Python lambda and TS/JS binding bullets, say
   which scopes are anonymous, so that "the nearest enclosing named function" is decidable (a `const f

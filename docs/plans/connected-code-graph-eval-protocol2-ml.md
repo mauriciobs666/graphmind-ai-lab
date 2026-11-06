@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol, key-normalizer amendment (step 8a)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-eval-protocol-ml.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-eval-protocol2-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-eval-protocol-ml.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-eval-protocol2-ml.md`
 
-*2026-11-01 (v1.4): idempotence narrowed to what holds, K48 added (P3-m1); the run log is cut to one line.*
+*2026-11-06 (v1.5): §1.5 pins stated as a format with a build-time rule (S50); v1.4's K48 and idempotence changes stand.*
 
 ## 0. What this is, and how to read it
 
@@ -214,7 +214,7 @@ masked something.
 
 - **Versioning.** `eval-manifest.yaml`'s "this note's path and version" (EP §13.1 step 8, written
   by S40) records both documents. So does the held-out manifest's `protocol` field (EP §9.3), as
-  `docs/plans/connected-code-graph-eval-protocol-ml.md@1.2+docs/plans/connected-code-graph-eval-protocol2-ml.md@1.3`.
+  `<EP path>@<version>+<EP2 path>@<version>`. Each records the versions in force when it was written: `eval-manifest.yaml` at S40, the held-out manifest at S47. Both are build-time records, so a later revision never bumps them.
 - **The screen record.** `eval-manifest.yaml` also records `screen: {specVersion, bundlePySha256}`:
   spec3's version, and the SHA-256 of `cpg/ccg/bundle.py` at `EVAL_COMMIT`. The record is for
   diagnosis. It is **not** a stop condition, because any unrelated edit to `bundle.py` would
