@@ -288,5 +288,54 @@
       "claude/devops/ops-quirks.md": [
           "50dc6b7ed8fd4c47a0de3f145a961b40"
       ]
+  },
+  "_dispositioned_raw_distillation3": {
+      "_note": "Raw (Fact:-prefixed) ws:agent-team entries already processed by the 2026-11-06 distillation 3 (docs/reviews/team-learnings-distillation3-sweep.md). User decision 2026-11-06: mark them dispositioned, do not delete them. A later pass must exclude these ids when listing pending raw entries (agent-maintenance SKILL \u00a75 step 1).",
+      "dispositioned_not_deleted": [
+          "d1f94b35119a400bbe166dd5e9229f44",
+          "12eb7b6c4d964b3b90c8f1aa12b29d5d",
+          "3f4ac75024334e0c91f311e3f8482711",
+          "e34f31430df0489ab5709e8213255bb9",
+          "35649df3b12d4e2e8207571a748b26ac",
+          "9d10d45bb85041d4b008ab49c313ac79",
+          "38cd49cddb004207a5c7abd10181a4eb",
+          "68e28ff86efe4c4fa350d21e9efd0060",
+          "d0b47b2ccc874f1ebdda87b977d9dd1e",
+          "69d50ac7f38043e48e39edbef7e6293d",
+          "8e13f3855d404fe48969f3e649fe4233",
+          "44a4e24632fb4a029de2aea9989bcd8b",
+          "d9cb242eee5f41b5843ecf89ca685d3f",
+          "60aba8dbe7bb48b28bda2a4c8cdb419c",
+          "b7154a94b30848c8992c7914ce45fddd",
+          "6ce4a2321bcb44989d382e2c762edd0f",
+          "9d13903978f34c56956fe36d478751ee",
+          "681f7f73614c42cfb7ec44129ef58294",
+          "48ef66f5f1cc4988ba176f6f1bc2bf05",
+          "6eca9311b6f84a879543c31545ca68c0",
+          "605a44a9374041ca8754f84de3262883",
+          "7f84105d3ce34a118c04c3457318cf83",
+          "665c85384af54b73886d31ea6b0cd9bb",
+          "0ed79bfdcd634759bcda16edec35c45e",
+          "5caea04970e944fa9707412271c80261",
+          "a2cf142e9ed0466aac2abcb9a629f44b",
+          "e7f3f1195dd8490d939c896311ff28ba",
+          "a767dde2eb154f09923e8e80eaabef03",
+          "c6f11ae1688747da9c7ec82f8dba2365",
+          "92e938a3c14b4d0890fc8cafa15b8623",
+          "df558abfd4374f49bc7cdc5a88f2d591",
+          "2fa57985e9054a37a896deae9b5b6d49",
+          "410ce035bf6847a68d5af642e41f050b",
+          "4c052e37c4b64d1cb2d4fdd5298fb2e5",
+          "860c397b0ecf4de4891544a6895d67ba"
+      ],
+      "deleted": [
+          "4da25923b0214ed0ba20a91dd2132c50",
+          "ca7ba5b09ab24d3e9edab13c1d58de65",
+          "5f57a8bb5fa142bb97c84482fd0681ee",
+          "672902db61f94121aa9fc72c2da7c5dc"
+      ],
+      "kept_open_still_pending_action": [
+          "d88545b54f604dc0bcb4297182942b43"
+      ]
   }
 }

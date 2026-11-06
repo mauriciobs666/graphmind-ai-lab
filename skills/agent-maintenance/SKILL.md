@@ -419,7 +419,11 @@ distills — on request, and folded into every certification pass (§4):
    STARTS WITH 'Fact:' RETURN d.documentId, d.createdAt, d.title ORDER BY d.createdAt")` — a raw
    entry's text starts with `Fact:`, a KB claim's never does (cross-check against
    `claude/cobb/scripts/kb-claim-manifest.json`). The tool truncates long text cells, so fetch
-   each entry's text with `get_document`. Entries ingested outside `produced_by` show
+   each entry's text with `get_document`. **Exclude already-processed entries:** ids listed in
+   `claude/cobb/scripts/kb-claim-manifest.json` under `_dispositioned_raw_*` (`dispositioned_not_deleted`,
+   `deleted`, `kept_open_still_pending_action`) were swept and logged in `history.md`; a pass
+   skips them (add `AND NOT d.documentId IN [...]`) and appends its own ids under a new such key
+   when raw deletion is not approved. Entries ingested outside `produced_by` show
    `ingestedByKind: User, ingestedById: u1` — attribution lost; infer the producer from the
    `Context:` line and say so in the disposition.
 
