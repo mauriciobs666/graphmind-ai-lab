@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `dfbcdf08`, `31115c98`, `9b6886df`, `78040b73`, `72e164b3`, `26255ae0`, `ebcf3cf5`, `2cc6debd` (all doc'd in `cpg/infra`, `cpg/sandbox`, `opencode/agents/tank/README.md`), `a46d1844` (promoted: `ops-quirks.md` redis-cli claim, KB `ec14609e`; the `NOAUTH` rc half was not re-run).
+- **Why:** distillation 4 (`docs/reviews/team-learnings-distillation4-sweep.md`); each row there carries the evidence.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 2 raw entries dispositioned
 
 - **What:** `a2cf142e` (`--reload` reloader parent survives): re-run live 2026-11-06 — the app imports twice (confirmed) but `ss` listed both PIDs and one TERM ended everything, so the 'kills only the worker' claim did not reproduce; discarded.

@@ -707,6 +707,15 @@ the always-loaded project memory (`CLAUDE.md`).
   `docs/plans/small-model-benchmarking.md` re-run under both binaries agreed on every one
   (2026-09-08) — but agreement has to be measured, not assumed.
 
+- **`grep -qv` exit codes diverge between the shim and GNU grep, and `pkill -f <pattern>` kills the
+  tool's own shell.** Measured 2026-11-06 (ugrep 7.8.4 vs GNU grep 3.11): `printf '' | grep -qv x`
+  → shim **0**, GNU **1**; `printf 'a\nb\n' | grep -qv a` → shim **1**, GNU **0**; the single-line
+  case `printf 'a\n' | grep -qv x` agreed (0, 0). Test a script's `grep -qv` logic with
+  `/usr/bin/grep` or `bash script.sh`. Separately, `pkill -f "<pattern>"` inside a Bash tool call
+  matches the call's own shell when the pattern appears on its command line: a probe doing it exited
+  144 and terminated the whole call. Match by pid, or build the pattern so it is not literally
+  in the command line (e.g. `[p]attern`; this workaround was not tested).
+
 - **The shim's `ugrep -G` rejects a bounded-context `grep -o` pattern outright — use `grep -in` +
   `sed -n` on the returned line numbers instead.** `grep -o '.\{0,90\}PATTERN.\{0,90\}'` (the
   common trick for a cheap surrounding-context extract) errors under the shim with `ugrep: error:

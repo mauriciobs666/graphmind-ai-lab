@@ -1744,3 +1744,23 @@ Origin: `claude/cobb/scripts/check_content_loss.py` — monkeypatched `build_nor
 identity passthrough and reran `check_content_loss_selftest.main()`; all 5 existing mutation
 checks still passed (exit 0), despite the module docstring spending ~15 lines justifying
 normalization against a real observed re-wrapped-claim defect in `coordination-techniques.md`.
+
+## A git pathspec is resolved against the cwd — a repo-root-relative path run from a subdirectory matches nothing, so `git diff --quiet` and `git status` guards pass vacuously
+
+Run from inside `falkor-chat/server`, a repo-root-relative pathspec such as `falkor-chat/server`
+resolves to `falkor-chat/server/falkor-chat/server` and matches no file. With `git diff --quiet
+<a> <b> -- <path>` that exits **0** ("no diff"), and `git status --short <path>` prints nothing on
+stdout (only a stderr warning), so a guard, baseline check or sha check built on either command
+passes whatever changed. `git archive <rev> -- <path>` with the same pathspec fails loudly
+(`fatal: pathspec ... did not match any files`, rc 128), so it does not have this defect. The
+top-anchored magic pathspec `':/falkor-chat/server'` (or a cwd-relative `../server`) works from any
+cwd.
+
+Verified 2026-11-06 (git in this repo, commit `6286de44`, which touches `falkor-chat/server`): from
+`falkor-chat/server`, `git diff --quiet 6286de44^ 6286de44 -- falkor-chat/server` → rc 0;
+`-- ':/falkor-chat/server'` → rc 1; `-- ../server` → rc 1; `git archive 6286de44 -- falkor-chat/server`
+→ rc 128. **When reviewing a plan's guard, check which cwd it runs from, and make the guard's
+negative case (a known-changed path) return non-zero from that cwd.**
+
+Origin: a plan-gate review of `falkor-chat/docs/plans/salesperson-query-graph-data.md`, where the
+same defect appeared in v1's eval-baseline guard and again in v2's Run 0 sha guard.

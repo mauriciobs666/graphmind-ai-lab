@@ -211,3 +211,32 @@ mis-targeted) probe silently becomes a second live document via auto-supersede r
 Verify cleanup by querying the workspace's actual `Document` count back to what it was before the
 probe (or to 0, for a dedicated probe workspace), not by trusting a single successful
 `delete_document` call on the id the last `ingest_document` handed back.
+
+## `redis-cli` 7.0.15 exits 0 on an error reply, and a wrong `REDISCLI_AUTH` against a password-less server still answers — judge by the reply text, never the exit code
+
+Verified 2026-11-06 against the dev FalkorDB on `:6379` (no `requirepass`), `redis-cli 7.0.15`:
+- `redis-cli FOO` prints `ERR unknown command 'FOO'` and exits **0**.
+- `REDISCLI_AUTH=bogus redis-cli PING` prints `AUTH failed: ERR AUTH <password> called without any
+  password configured for the default user.` on stderr, then `PONG`, and exits **0**.
+
+So a successful authenticated call does not show that auth is enforced, and `redis-cli FLUSHALL
+>/dev/null` with a wrong password would "succeed" silently. Check the reply text (`OK`, `PONG`, a
+`# Keyspace` header) and re-read the state afterwards. To prove `requirepass` is on, run
+`env -u REDISCLI_AUTH redis-cli ... PING` and require a reply that starts with `NOAUTH`. **Not
+re-run on this date:** the `NOAUTH Authentication required.` exit code (no password-protected
+server was up); the entry that reported it was `cpg/infra/ccg-falkordb.sh` (`ccg-falkordb`, port
+6390), whose `status` and `reset-p0` now check the reply text. The same error-reply-exits-0 rule is
+recorded for the CPG load in `skills/joern-cpg/SKILL.md` (`pipeline.sh`'s `rq()`).
+
+## The repo-root `.gitignore` line `lib/` is unanchored, so a new `lib/` directory in any component never shows in `git status` and a commit silently drops it
+
+Verified 2026-11-06: `.gitignore` line 17 is `lib/`, and `git check-ignore -v
+salesperson/scripts/lib/x.py` and `git check-ignore -v falkor-chat/scripts/lib/x.sh` both print
+`.gitignore:17:lib/`. A file added there is untracked-and-ignored: `git status` prints nothing for
+it. What `git add` does depends on how the path is named (checked 2026-11-06 with `--dry-run`, which
+mutates nothing): an explicit `git add <ignored-path>` (the file, or the ignored `lib/` dir itself,
+even with `-A`) prints "The following paths are ignored" and exits **1**; but `git add -A <dir>` or
+`git add .` where `<dir>` is an **ancestor** of the ignored directory skips it silently, rc 0 and no
+output, so a bulk add followed by a commit drops the files without a word. **Name helper directories something else** (falkor-chat uses
+`scripts/shlib/`), or run `git check-ignore -v <path>` before relying on a new directory. Fixing the
+rule itself (anchoring or narrowing it) is a repo-owner decision, not made here.

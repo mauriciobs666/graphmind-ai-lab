@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `0f3111eb` (doc'd, cart-product-id RCA DEF-1), `9b26f2eb` (doc'd, `falkor-chat/AGENTS.md` line 115), `f7c51ef6` (one-off tooling, not in repo), `510c9f16` (misattributed: p95 lives in `cart_outcome_analysis.py`), `9914bed9` (promoted: KB claim `68509210` (supersedes `040a2630`, pending the user's delete), `lib/` gitignore), `a792f59a` (promoted: `SERVER.md` §1.7 bullet), `5bea48c1` (doc'd; defect still open), `7bf10aeb`, `e02bb248` (doc'd), `9a5e835d` (duplicate of the doc'd `.pyc` same-second section).
+- **Why:** distillation 4 (`docs/reviews/team-learnings-distillation4-sweep.md`); each row there carries the evidence.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 4 raw `ws:agent-team` entries dispositioned
 
 - **What:** `d1f94b35` (resume a rate-limit-killed subagent via SendMessage): discarded, duplicate of `coordination-techniques.md` 'What decides resume-versus-fresh'.

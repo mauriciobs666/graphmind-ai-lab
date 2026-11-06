@@ -963,3 +963,15 @@ raises it at call time (`nonnumeric port: 'abc'`) for a URL that `urlparse` acce
 that classifies `http.client.HTTPException` as "network/transient" **before** a `ValueError`
 "malformed URL" rung therefore files a permanent misconfiguration as transient and retries it.
 Catch `InvalidURL` first (falkor-chat `transport.py` rung 3a does).
+
+## pytest `--deselect` with an absolute path matches nothing, silently — even when cwd is the rootdir
+
+`--deselect` compares against rootdir-relative node ids. Verified 2026-11-06 (pytest 9.1.1, a
+two-test scratch project): `pytest --deselect <abs>/tests/test_x.py::test_b_live tests/test_x.py`
+run **from the rootdir** → `2 passed` (no "deselected" count, no error), while the same flag with
+`tests/test_x.py::test_b_live` → `1 passed, 1 deselected`, and `-k "not _live"` from a cwd outside
+the rootdir → `1 passed, 1 deselected`. The earlier-reported "only from outside the rootdir"
+condition did not reproduce: absolute ids never match. A mutation or scratch-copy run that relies on
+`--deselect` to skip DB-touching tests therefore runs them (origin: falkor-chat `*_live` tests
+wiping `ws:test`). Use relative ids from the rootdir or `-k`, and read the summary for a
+"deselected" count.

@@ -631,6 +631,11 @@ hazard documented in `falkor-chat/AGENTS.md`'s "Key scripts" table:
   unreachable, `conftest._falkordb_reachable()` turns the whole integration suite into
   `pytest.skip` rather than failures, so the run still exits 0 with roughly half the tests
   silently skipped. Always read `N passed, M skipped`, never just the absence of failures.
+- **Three `test_tools.py` tests end in `_live` and write `ws:test` through the `repo`/`fresh_vector_index`
+  fixtures even in a default run.** For a stub-only run use `-k "not _live"` (collection from
+  `server/`: 129 tests, 126 with the filter, 3 deselected); excluding one named test with `-k` leaves
+  the other two running. `--deselect` with absolute node ids silently deselects nothing
+  (`skills/python-web-quirks/SKILL.md`).
 - **`ruff check .` is clean but is not a wired gate.** `pyproject.toml` configures ruff and ships
   it as a dev dependency, but no script or hook runs it — a clean manual run is evidence of that
   one run only. The real gates here are `pytest` and (coordinator-run) `scripts/test_queries.sh`.

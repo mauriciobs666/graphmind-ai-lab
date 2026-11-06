@@ -297,6 +297,10 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
   frontend). `joern-parse --list-languages` shows both tokens. **Worse, a failed
   frontend still exits 0** with an empty CPG — `pipeline.sh` guards this by
   asserting the export produced node data before loading.
+- **`c2cpg` silently skips Arduino `.ino` files.** Verified 2026-11-06 (Joern 4.0.579): `c2cpg.sh`
+  on a directory holding one `a.ino` exits 0 and writes a 16,341 B (empty-baseline) `cpg.bin`; the
+  same source renamed `a.cpp` gives 24,532 B. `c2cpg --help` has no extension option. Preprocess or
+  copy to `.cpp` before parsing, and judge the result by its content, not its exit code.
 - **Loading at scale needs one persistent connection.** `--load` streams over a
   single socket for exactly this reason: a per-statement `redis-cli` hits Linux's
   128KB per-argv limit on a batched CREATE (`Argument list too long`) and, at

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: sweep of 40 more raw entries
+
+- **What:** Distillation 4: oldest 40 of 98 pending raw entries swept (report `docs/reviews/team-learnings-distillation4-sweep.md`). 7 promoted: `skills/python-web-quirks/SKILL.md` (absolute `--deselect`, corrected: also fails with cwd = rootdir), `skills/agent-standards/claude-code.md` (`grep -qv` shim divergence, `pkill -f` self-kill), `skills/joern-cpg/SKILL.md` (c2cpg skips `.ino`), `falkor-chat/docs/SERVER.md` §1.7 (`-k "not _live"`), and 3 KB claims (`review-techniques.md` pathspec, `ops-quirks.md` redis-cli and `lib/` gitignore) ingested one at a time with the embedder probed; all observed `ready`. 33 rejected with a cited file/symbol or a re-run. No raw document deleted; ids recorded under `_dispositioned_raw_distillation4`.
+- **Why:** `agent-maintenance` §5, K-063. Applied the distillation 3 review's lessons: re-ran promoted claims (two entry details did not reproduce and are stated as such), rejections cite evidence, no latency figures carried.
+- **Plan items:** K-063 rewritten (58 remain).
+
 ## 2026-11-06 — Distillation 3: sweep of the oldest 40 of 138 raw entries; machinery fixes
 
 - **What:** Report: `docs/reviews/team-learnings-distillation3-sweep.md`. 5 entries carry `ingestedById: u1` (attribution lost): `5f57a8bb` promoted to `skills/cpg-analysis/SKILL.md` (with the completeness bound the entry omitted); `12eb7b6c` promoted to `falkor-chat/docs/SERVER.md` testing hazards (figures not carried); `e34f3143`, `6ce4a232`, `b7154a94` discarded (generic shell fact / already in `review-techniques.md` and `ops-quirks.md` / stale kaizen-write-scope fact). `4da25923` (own, `produced_by` fails loudly) discarded: in `agent-maintenance` §5 and `SERVER.md`.

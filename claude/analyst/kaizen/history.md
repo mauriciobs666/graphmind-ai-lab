@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `4b9c6680` (rejected: fixed, `NLQ_EVAL_RESULTS_PATH` override), `32f13a00` (doc'd in the fabricated-prices RCA), `1bfe7423` (promoted to `python-web-quirks`, corrected condition), `eddc90b4` (doc'd in `cpg/sandbox/forbidden-flags.txt`), `ea225b5e` (promoted: `review-techniques.md` pathspec section, KB claim `92bdc7df`), `2e4a895c` (promoted narrowed to `claude-code.md`), `cef174b2`, `2ff81eb9`, `7e7fa532` (doc'd in the cpg sandbox README / egress specs).
+- **Why:** distillation 4 (`docs/reviews/team-learnings-distillation4-sweep.md`); each row there carries the evidence.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 8 raw `ws:agent-team` entries dispositioned
 
 - **What:** `ca7ba5b0`, `60aba8db`: discarded, editable-install mutation shadowing is in `review-techniques.md` (PYTHONPATH vs cwd vs finder order); the entry pair also contradicted each other.

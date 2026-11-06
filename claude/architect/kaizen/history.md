@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `443b6cf8` (doc'd, `DESIGN.md` line 453), `f92a6f31` (doc'd in the originating plan), `b71764b0` (promoted: `.ino` gotcha in `skills/joern-cpg/SKILL.md`, re-run), `56fac9ed` (doc'd, `claude-code.md`), `39c9b4cf` (rejected: wrong, corrected by `b3257162`), `b3257162`, `a14fafa1`, `8e05d0f8`, `b0060e9a`, `a0d7766f`, `eec5f55e` (doc'd in the CCG egress spec / sandbox README / headless README).
+- **Why:** distillation 4 (`docs/reviews/team-learnings-distillation4-sweep.md`); each row there carries the evidence.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 4 raw entries dispositioned
 
 - **What:** `38cd49cd` (BackgroundTasks sequential) and `d0b47b2c` (`InvalidURL` is not a `ValueError`): promoted to `skills/python-web-quirks/SKILL.md`, both re-run live.

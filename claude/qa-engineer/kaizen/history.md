@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-11-06 — Distillation 4: raw entries dispositioned
+
+- **What:** Entry swept (dispositioned, not deleted): `9f9c7e1e`. WDDM-counter half doc'd in the single-model fit report (Instrument caveat); the `pkill -f` self-kill half promoted to `skills/agent-standards/claude-code.md` after reproducing it (exit 144).
+- **Why:** distillation 4 (`docs/reviews/team-learnings-distillation4-sweep.md`); each row there carries the evidence.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 7 raw entries dispositioned
 
 - **What:** `69d50ac7`, `6eca9311`, `605a44a9`, `2fa57985`: merged into one `data-scientist/lm-studio-model-notes.md` section, marked single-source (fault injection not re-run).
