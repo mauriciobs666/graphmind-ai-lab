@@ -73,3 +73,28 @@ Same `audit.py` command and lists; outputs `work/audit-KB-<stratum>.json`/`.deta
 All five copied byte-identical to `work/keys/`. The `stratum` field is "recorded but not trusted" (EP §3.1), so mismatches are not schema failures.
 
 All 5 KA and all 5 KB key files are in `work/keys/` (sha256 recomputed at this audit; the nine earlier hashes are unchanged): `KA-flow` 88 lines `5aeb24c52523113c01fe2c20f29857f9840c30ba1bddf26d8cd90e74befaec90`; `KA-http` 52 lines `3cd6f823a8627aff4a20589b780fec325b87b4a8d66725ceb660b89dbc5ccc92`; `KA-mcp` 103 lines `6af69fe0234adf87fdbccef67571bee722d324810108de83d2c6c02e738af929`; `KA-scripts` 167 lines `c6060f4623c712662e568cac542687c3743919e3e27652a380271720d11f2631`; `KA-wiring` 20 lines `7f2e88b61e468726dfe39745b7579624ae0a6a618b2beab95228d2e6d9d76999`; `KB-flow` 31 lines `cf3c2433821b2a5e2a97f9abc1bad9f0663f2bebcd2192ce2001371ee0c6ce72`; `KB-http` 29 lines `ababf45222401c24597a9c41a33c6890bc33336139da4909acff68da48844012`; `KB-mcp` 57 lines `4cedcb40b7961589af51c7058ebd1e634043fa4b2107d942a89c428109bdb61e`; `KB-scripts` 120 lines `823853351f419908f08f551c77183fb23ac073691845f2c21e98f781cecea2c6`; `KB-wiring` 11 lines `6627d535539a0e0624f309b7bd3859e370d5e7a997e1c69386023178f7c4fbc4`.
+
+## S43 audit (QW/impact)
+
+Same `audit.py` command and lists; outputs `work/audit-QW-impact.json`/`.details`. Counts only.
+
+| Session | Attempts | Tool calls | Verdict | Refused | Void | Init | Result | Question lines | Schema (EP §4.2) |
+|---|---|---|---|---|---|---|---|---|---|
+| QW/impact `f54653d7` | 1 | 57 | clean (exit 0) | 0 | 0 | isolation set (same as KA/KB; `claude-opus-5-5`) | success, 2.0253176 USD, 58 turns | 48 (`en` 24, `pt` 24) | 0 unparsable, 0 failures (conditional `gold`/`goldOptions`/`ambiguityKind` rules checked), 0 duplicate `seq`; 36 unambiguous (18 `code-location`, 18 `contract-point`), 12 ambiguous (9 `code-location`, 3 `contract-point`) |
+
+`streamTruncatedCalls` 0, `unpinned` empty. The raw output (sha256 `3e840f8bbb4aa63b3dc25f2cd6d84fbda43f7efe1243635e693012c1abe60811`, 48 lines) is kept byte-identical at `work/questions/QW-raw.jsonl`.
+
+## S43a (strip_gold)
+
+`strip_gold.py` requires a `qid` the writer's schema does not carry (EP §4.2 has `seq`); EP §10.2 says GC assigns `QW-<seq>` when it copies the file. `work/questions/QW.jsonl` is therefore the raw file with `"qid":"QW-<seq>"` prepended to each line and every other field unchanged (checked: all 48 lines equal the raw line plus `qid`); sha256 `c7cde6f39c57b075d7a869e8510f117534dfbb44d8329a95b4e41fcf68c4eee7`. EP §13.2 should state this step explicitly.
+
+| Step | Result |
+|---|---|
+| `strip_gold.py` | exit 0, 48 items |
+| `strip_gold.py --verify` | `verify: ok`, `errors: 0`, 48 items, exit 0 |
+| `QW-nogold.jsonl` | 48 lines, each with exactly the keys {`aid`, `lang`, `text`}; `en` 24, `pt` 24; sha256 `2be2b92fb37b730f7d2e2d78e471cea04c9751c563e0dd6558b7f6a0b1464126` |
+| `work/aid-map.jsonl` | sha256 `97698e88404d678ec74d48152daaf3cb6b054c8113f24125be1a98d698b6be01` |
+| `roles/AN1-impact/QW-nogold.jsonl` | mode 0444, sha256 equal to the above |
+| `roles/AN2-impact/QW-nogold.jsonl` | mode 0444, sha256 equal to the above |
+
+Placement is the role root (the brief's "`QW-nogold.jsonl` in your working directory"). No AN session was started.

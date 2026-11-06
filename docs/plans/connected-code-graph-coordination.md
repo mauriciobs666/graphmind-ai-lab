@@ -579,3 +579,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 2026-11-06 KB-scripts, KB-wiring ended exit 0 (audits queued); KB-flow and QW started.
 2026-11-06 S41/S42 audits: KA-flow + KB http/mcp/scripts/wiring clean (0 schema failures, none voided); keys copied to work/keys/. KA keys 5/5 done; KB 4/5 audited, KB-flow running.
 2026-11-06 S42 audit complete: KB-flow clean (31 lines, 0 failures). All 10 key files (5 KA, 5 KB) in work/keys/. S41/S42 done pending QW-impact (running).
+2026-11-06 S43 QW-impact audited clean (48 questions, 24 en/24 pt; QW.jsonl = raw + qid per EP §10.2, EP §13.2 should state this step). S43a done: QW-nogold.jsonl (sha 2be2b92f…) placed in AN1/AN2 role roots. S44: AN1 and AN2 started.
