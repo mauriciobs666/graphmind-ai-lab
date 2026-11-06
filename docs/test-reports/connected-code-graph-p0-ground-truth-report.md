@@ -210,3 +210,32 @@ Flow: f1 68, f2 38, f3 21; **flow: completeness below threshold** (0.765 < 0.95)
 **EP §7.2 (invalid items):** 15 items, all KA-flow, all still invalid and counted as not found by KA (KA2 re-found 6 of them by identity, now valid). By file (anonymised): F1 10, F2 3, F3 1, F4 1. KA-flow invalid share 15/88 = 17%, above the 10% line. The held-out count by file is not available until S47's split; this table is the concentration input.
 
 **S45 part 2:** near-miss check on the new `match.json`: 0 pairs (N1 0, N2 0, N3 0), so no adjudicate. Scope (V4): 0 out of scope; H 294, H_all 420 (flow 127, http 49, mcp 67, scripts 154, wiring 23). Capture: above. Sample (`sample`): `work/spot.jsonl` 40 union items (8 per stratum; 20 singleton, 20 doubleton, 4 per cell), shortfall records 0; `work/ptgold.jsonl` 8, `work/engold.jsonl` 8. Hashes (prefixes): `match.json` fc411944dd9a05cf, `capture.json` 71371bf01519fd78, `spot.jsonl` 3ce35a6732b6cf29, `ptgold.jsonl` 1f08b438f11d7e25, `engold.jsonl` 419734bea1d625ad, `nearmiss.jsonl` empty.
+
+## S45 KA2 (http2, mcp2)
+
+Counts only. Both are KA2 passes under EP §6.5 (http 0.939 and mcp 0.851 were below 0.95), original KA-http and KA-mcp briefs unchanged; normalized with `--writer KA2`.
+
+| Session | Audit | Tool calls | Refused | Void | Cost / turns | Lines | Schema | Valid / invalid | Invalid share | sha256 of `work/keys/KA2-<stratum>.jsonl` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| KA-http2 `6aa23e3a` | clean (exit 0), init matches the isolation set | 51 | path-outside-root 1 | 0 | 2.6173528 USD / 52 | 59 | 0 unparsable, 0 failures, 0 duplicate `seq` | 59 / 0 | 0% | `f977ea9a948e0b1f036c953727ca661512f8bc283d863bad75a8c07bda5277c3` |
+| KA-mcp2 `bf1937fb` | clean (exit 0), init matches the isolation set | 48 | 0 | 0 | 2.308611 USD / 49 | 77 | 0 unparsable, 0 failures, 0 duplicate `seq` | 77 / 0 | 0% | `6f2e085f51bba8bd6704c8db5b8aaab1dd2a0ebe62a13531ee18623133e8aaef` |
+
+No invalid items, so no breakdown by reason or file; the EP §7.2 invalid-share rule (10%) does not apply to either. Invalid items overall: still the 15 KA-flow items (F1 10, F2 3, F3 1, F4 1; 17% of that session).
+
+**Off-stratum KA2 records (my call under the `match` contract, which sets `t` = 3 for any stratum holding a KA2 record).** Matching used each KA2 session's records that derive to its own stratum only: flow 107 (flow2), http 49 (http2), mcp 43 (mcp2). Excluded: http2 derives scripts 6 and wiring 4; mcp2 scripts 18 and wiring 16; flow2 http 4. Of these 48 excluded records, 48 were already held by KA or KB (history already present in the earlier match) and 1 (mcp2, derived scripts) was found by no session. That one item is left out so scripts and wiring keep `t` = 2; including it would add 1 record to scripts and make scripts `t` = 3 without a scripts KA2 pass. Reversible: say if you want it in.
+
+**Re-match** (`--ka2-strata flow http mcp`; `t`: flow 3, http 3, mcp 3, scripts 2, wiring 2): 420 records, same as before (neither new pass found an unheld in-stratum item); `unclassified` 0, `stratumDisagreements` 82. Histories (KA, KA2, KB): http `111` 29, `110` 20; mcp `111` 29, `110` 14, `100` 24; scripts and wiring unchanged. Previous files kept: `work/s45/match-part2a.json`, `capture-part2a.json`, `spot-part2a.jsonl`, `ptgold-part2a.jsonl`, `engold-part2a.jsonl`.
+
+**Estimates (§6.1-§6.4; n1 = found by KA or KA2, n2 = KB, n3 = KA2 alone count shown as sessions):**
+
+| Stratum | n1 | n2 | n3 (KA2) | m | t | Chapman N | Chao N | N* | Completeness | Flag |
+|---|---|---|---|---|---|---|---|---|---|---|
+| http | 49 | 29 | 49 | 29 | 3 | 49 | 49.00 | 49.00 (Chapman binds) | 1.000 | |
+| mcp | 67 | 29 | 43 | 29 | 3 | 67 | 79.27 | 79.27 (Chao binds) | 0.845 | completeness below threshold |
+| scripts | 152 | 114 | 0 | 112 | 2 | 154.71 | 157.81 | 157.81 | 0.976 | |
+| wiring | 23 | 19 | 0 | 19 | 2 | 23 | 23.15 | 23.15 | 0.994 | |
+| flow | 127 | 31 | 107 | 31 | 3 | 127 | 165.94 | 165.94 | 0.765 | completeness below threshold |
+
+http f1 0, f2 20, f3 29; mcp f1 24, f2 14, f3 29. Pooled: r 420, N* 475.17, completeness 0.884. Chapman intervals are degenerate except scripts (154.09 to 159.40). mcp (0.845) and flow (0.765) stay below 0.95 after their extra pass; no further passes run.
+
+**S45 part 2 redrawn:** near-miss 0 pairs (N1 0, N2 0, N3 0), no adjudicate; scope 0 out of scope (H 294, H_all 420); capture as above (15 invalid items); sample: `work/spot.jsonl` 40 union items (8 per stratum; 20 singleton, 20 doubleton), shortfall records 0; `work/ptgold.jsonl` 8, `work/engold.jsonl` 8. Hashes (prefixes): `match.json` dc01128e989a12f3, `capture.json` 44d0006dd5f7b5d3, `spot.jsonl` 379629ac97ae4cc4, `ptgold.jsonl` 1f08b438f11d7e25 (equals the previous draw), `engold.jsonl` 419734bea1d625ad (equals the previous draw).
