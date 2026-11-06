@@ -5845,3 +5845,27 @@ None.
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 13 — S51 P0-close edits (uncommitted `docs/HISTORY.md`, `docs/BACKLOG.md`, root `AGENTS.md`; static, read-only, nothing live touched)
+
+**Verdict: approve with suggestions.** No blocker. Two majors are wording errors a one-line edit each fixes. CPG: considered, not relevant — a documentation-only gate. Method: each count/date/id re-derived against the ledger, the ground-truth and fitness reports, plan p0-2 §10/§15, and `git log` (commits `88eb134d` 2026-11-01, `036e2cb9`; suites not re-run, so test counts are as cited, not re-executed).
+
+**M-1 (major, verified): group 5 (5/9) quotes the provisional flow recall, not the final headline.** HISTORY gives TS/JS .397, Go .568, C# .579, C++ .332. Those are the §a2.1 as-shipped figures (fitness report line 440, "provisional"). The adjudicated headline (line 441, which the final `flowAvailable` verdict at §a2.2.6 uses) is Python .640, TS/JS .401, Go .571, Java .675, C# .587, C++ .333. The verdict (false for six) is unchanged. Replace the four values and say "adjudicated".
+
+**M-2 (major, verified): group 7 mislabels the held-out size.** "held-out set 159 items (258 pooled)" inverts the report (§S47: `H` 159 beside `H_all` 258; ledger: http 26, mcp 46, scripts 79, wiring 8, flow 99 = 258). Held-out is 258 items, of which 159 are counting items (flow contributes 0). Reword so AC-5's floor of 75 is not read against the wrong number.
+
+**m-1 (minor): the 678 / 663 / 420 question is not a discrepancy; the wording hides that.** Ruling: 678 = key-file lines (KA 415 + KB 248 valid = 663; 15 invalid, all KA-flow); the matcher collapses lines into distinct items: 368 records from the 663 (report "S45 matching (part 1)"), then 420 after the KA2 flow pass adds 52 flow items (75 to 127; http2/mcp2 added none), then 419 after S47's removal. Units differ (lines vs items). Say "678 key lines (663 valid) matched into 368 items, 420 after the KA2 passes, 419 after the S46 removal"; "records" is the matcher's word for items and misleads here.
+
+**m-2 (minor): disclosures are complete by reference, thin inline.** Present and correct in HISTORY: AI labels with human check on the 8 PT gold only (EN gold analyst-checked per ledger 609), rules revised after results (group 5), invalid-line outcomes only indirectly, KA2 passes, Kotlin unmeasured, the ACL slip (matches ledger 614: temp user plus six keys, deleted, read back clean, nine denial entries). Absent from HISTORY entirely: wiring held-out exactly at its floor of 8 ("screened", not "certified"); the 15 invalid KA-flow lines and flow completeness 0.765 as a lower bound (the entry says "0 schema failures" without saying 15 lines failed V1/V2); EP v1.7 written after that finding; the S54 open items O1-O3; the S57 firewall slips; the S47 steps scripted, P1 owing the verbs. Add three one-line bullets to the close entry (wiring floor; KA-flow 15 and the lower bound; firewall slips and rules-after-results) and keep the rest by reference.
+
+**m-3 (minor): the ACL slip is not in the report.** Ledger 614 says it "must be disclosed in the P0 report"; `## P0 disclosures` has no such bullet (grep: no `ACL` or `falkordb-dev` in the report). HISTORY and the review carry it, so the record is honest, but HISTORY points to the report as the disclosure home. Route a bullet to the report's owner. Same owner: report line 249 says the EN gold sample "has no recorded verdict", contradicting ledger 609 and disclosure bullet 1 (8 of 8 correct).
+
+**m-4 (minor): numbering.** The close entry carries no "(9/9)" but the text cites "group 9" three times (groups 5, 7 and the S50 reference); add "(9/9)" to its title. Group 5's title omits S27c, whose work the body records. S07/S09/S10 in group 2 are a sound placement (plan §10 lists no group for them, and the entry says so); group order is chronological, not numeric, which is fine for a lookup log.
+
+**n-1 (nit): namespace.** "decision S36" appears in the same file where S36 is the fx-svc step (ledger line 95 already records this collision); write "stakeholder decision S36". The BACKLOG item pins "v3.4" and the file header still reads "Last reviewed: 2026-08-25"; refresh both.
+
+### Checks passed
+- **No held-out or key content**: counts and hashes only; the nine contact files are counted, not named. Dates, S-ids, commit ids, counts for groups 1-4, 6, 8 spot-checked against ledger/reviews (189, 1383, 327, 162/42, 101, 230, 13 briefs, 48 questions, 132/44/21, 11 constraints, 85,536) all match.
+- **BACKLOG C-1001**: the old Proposed 🔵 item is removed and replaced by one In-progress 🟡 body (rewritten, not appended; legend line 13 defines 🟡), forward-looking: remaining phases in the stakeholder's order, next step, egress Q1 at P1. The sentence stating P0 delivered is a pointer, acceptable.
+- **Root `AGENTS.md`**: one clause in the `cpg/` bullet plus `cpg/README.md` in the table row (file exists); no history. 3,156 to 3,170 words (+14); already over the ~2,500 smell before this edit, no line over 700 characters. Acceptable; the full rewrite is owed at P1 per p0-2 §10.
+- **HISTORY growth**: about +2,600 words in a read-by-lookup file, correct under the growth rule.

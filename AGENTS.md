@@ -27,7 +27,8 @@ engineering** (Claude Code and OpenCode artifacts).
   covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, is what `tank` builds on.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
-  FalkorDB. The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
+  FalkorDB, and the connected-code-graph (`ccg`) contracts, schemas, sandbox, fixtures and eval data
+  (`cpg/README.md`). The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
   CPG-specific. **Root `docs/HISTORY.md`/`docs/BACKLOG.md` are this component's own** (their own
   headers say so) despite living at the repo root where they look like a project-wide log — a
   delivery entry or backlog item for any other component belongs in that component's own `docs/`
@@ -77,7 +78,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · live spec: `falkor-chat/docs/DESIGN.md` (graph), `falkor-chat/docs/SERVER.md` (server process), `falkor-chat/docs/QUERIES.md` |
 | `salesperson/` | `salesperson/README.md` · `salesperson/AGENTS.md` · `docs/requirements/salesperson-ui.md` · `docs/plans/salesperson-ui.md` |
 | `opencode/` | `opencode/AGENTS.md` · `opencode/docs/manuals/local-llm.md` · `opencode/agents/tank/README.md` |
-| `cpg/` | `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
+| `cpg/` | `cpg/README.md` · `docs/HISTORY.md` · `docs/BACKLOG.md` · `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
 | `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |

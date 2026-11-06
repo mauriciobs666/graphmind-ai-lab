@@ -5,6 +5,250 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-11-06 — C-1001 P0 (9/9) close: contracts frozen, evidence gathered, P1 next (S50, S51) ✅
+
+Phase P0 of the connected code graph (`docs/plans/connected-code-graph-p0-2.md`, coordinated in
+`docs/plans/connected-code-graph-coordination.md`, requirements `docs/requirements/connected-code-graph.md`)
+is delivered in eight groups (the entries just below). **S50** folded the P0
+measurements into the proposal (`docs/plans/connected-code-graph.md` v3.4) and the plan (v1.6); the gate
+(`docs/reviews/connected-code-graph-p0-impl.md`, Pass 9/9b) approved with suggestions and confirmed the ACL key
+pattern `~ccg_<s> ~ccg_<s>__*` by a live planted test. P0's exit also required `-spec3` accepted (group 3).
+The stakeholder reordered the remaining phases on 2026-11-01: P0, P1, P3, P4, P5, then P2 (optional,
+last), then the Arduino slot; the feature stays open until P2 is built and AC-8 closes at P2 exit.
+
+**The P0 disclosures** (post-result rule changes, process slips, reversible rulings, deviations) are in
+`docs/test-reports/connected-code-graph-p0-ground-truth-report.md`, `## P0 disclosures`. The outcomes that matter:
+
+- **No measured language passes the call-site recall screen on its decision stratum**, and Kotlin is
+  unmeasured (Joern builds no CPG for it); the remedy per language (reference-indexer adoption or
+  recognizer work) is in the fitness report (group 5).
+- **`flowAvailable` is false for all six measured languages**, so P1 flow for Python and TypeScript is
+  call-level until the projection is fixed (group 5).
+- **Census completeness is below 0.95 for `mcp` (0.845) and `flow` (0.765)**; the pooled figure is 0.884
+  (group 7).
+- **Wiring's held-out set sits exactly at its floor of 8**: screened, not certified. Flow completeness
+  0.765 is a lower bound: 15 KA-flow key lines failed validation (V1/V2), which led to EP v1.7.
+- **Process slips and rule changes after results** (firewall slips in S57, S54 open items O1-O3, rules
+  revised after results) are itemised in the report's disclosures, not repeated here.
+- **The labels are AI-agent labels**, with a human check only on the 8 PT gold items; the 40 code
+  entries of the spot-check were AI-verified, not human-checked (a deviation from stakeholder decision S36).
+
+**Slip, disclosed:** during the S50 gate the reviewing `analyst` planted an ACL user and six keys on the
+shared `falkordb-dev` (port 6379) instead of a scratch instance; the brief had not fenced live
+writes. They were deleted and the instance was independently read back clean (no such user or keys);
+its ACL log keeps nine denial entries from the test. The ACL finding stands (glob matching does not
+depend on the instance); **P1's ACL test runs on `ccg-falkordb`**.
+
+**Open:** C-1001 in `docs/BACKLOG.md` (P1 onward; the P1-bound obligations are
+`docs/plans/connected-code-graph-p0-2.md` §15). Root `AGENTS.md`'s `cpg/` bullet gained one clause;
+its full rewrite is a P1 item.
+
+## 2026-11-06 — C-1001 P0 (7/9): fixtures and ground truth (S35–S55, S59) ✅
+
+The synthetic multi-repo fixture system and the isolated ground-truth process that produced the AC-5
+held-out set. Counts only: no held-out or key content is recorded in this file or in the repo's docs.
+Records: `docs/test-plans/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures.md`
+(and `-fixtures-trees`, `-fixtures-materializer`, `-fixtures-ml`), `docs/reviews/connected-code-graph-eval-kit-ml.md`,
+`docs/reviews/connected-code-graph-p0-impl.md`, `docs/test-reports/connected-code-graph-p0-ground-truth-report.md`,
+protocol `docs/plans/connected-code-graph-eval-protocol-ml.md` (v1.8) and
+`docs/plans/connected-code-graph-eval-protocol2-ml.md` (v1.5).
+
+- **Fixtures (S35–S39):** a plan of 132 planted rows (44 link rows, 21 gateable at P3) over four repos
+  (`fx-svc`, `fx-web`, `fx-lib`, `fx-job`), a materializer with `cross.yaml` and a fixture-manifest
+  schema (`cpg/tests/test_fixtures.py`, 73 tests at acceptance), and a Compose-binding decision
+  (`docs/plans/connected-code-graph-p0-compose-binding.md`). Each repo's gate sent fixes back.
+- **Isolation machinery (S52–S55):** headless agent definitions and a path guard
+  (`cpg/eval/headless/`, 101 guard tests), a launcher (162 tests, 0 of 42 mutants surviving), and a
+  rehearsal that **failed once** (the guard missed brace and backslash traversal in path-less
+  globs) and passed after the fix. A real capture session (S55) recorded the CLI's output shapes.
+- **Tools (S48, S49):** export, gold-strip and audit (230 tests); key matching, capture and split
+  (508 tests). Both were gated by `analyst` with method rulings by `data-scientist`.
+- **Sessions (S40–S44):** a kit pinned at one eval commit with 13 briefs; five strata (http, mcp,
+  scripts, wiring, flow) written by two independent writer roles (KA, KB), a 48-question set (24 English,
+  24 Portuguese) and two blind answer sessions. Every session was audited clean (0 schema failures, none
+  voided).
+- **Matching (S45):** 678 key lines (663 valid; the 15 invalid are all KA-flow) matched into 368 items, 420 after the second passes,
+  419 after the S46 removal; extra passes ran for flow,
+  http and mcp under the protocol's rule. Census completeness: http 1.000, mcp 0.845, scripts 0.976,
+  wiring 0.994, flow 0.765, pooled 0.884; no near-miss pairs were found.
+- **Spot-check (S46):** the 40 code entries were verified by `analyst` (47 of 48 sheet entries correct,
+  one removed), not by a human; the stakeholder checked the 8 PT gold items, and the 8 EN gold
+  items were checked by `analyst`.
+- **Split (S47, S59):** union of 419 items, held-out set 258 items (159 of them counting items; flow contributes 0), reserve 35, leak check 0, AC-24
+  30 held-out and 14 development; the development-contact list (S59) is 7 Python and 2 TS/JS files.
+
+## 2026-11-05 — C-1001 P0 (5/9): frontend fitness (S25–S28, S27c, S56, S57) ✅
+
+Whether Joern's frontends are good enough to be the extraction layer for each of the seven languages,
+measured against a blind reference. Record: `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md`
+(§a1 call-site recall and census, §a2 flow), protocol `docs/plans/connected-code-graph-p0-ml.md` (v1.17),
+gates in `docs/reviews/connected-code-graph-frontend-fitness.md`. **The labels are AI-agent labels** (blind
+labellers, then adjudication); the only human check in P0 is the 8 PT gold items (group 9).
+
+- **Corpora and labels (S25, S26, S56):** seven corpora drawn, one per language, with Kotlin added
+  after the stakeholder authorised a sandboxed Gradle build. The TS/JS frame was 87% test code while
+  the bundle excludes TS/JS tests, so the stakeholder chose a production-only census of 523 sites.
+  Call-site label sets: Python 240, TS/JS 523, Go 373, Java 500, C# 313, C++ 187, Kotlin 430. Flow
+  pairs after audit: Python 480, TS/JS 151, Go 433, Java 465, C# 392, C++ 349, Kotlin 477.
+- **Adjudication (S57):** each language adjudicated site by site, audited, and validated by
+  `validate_final.py`; the noise-flag rule was amended twice after results were seen (ML v1.11, v1.12)
+  and both outcomes per language are in the report.
+- **Call-site recall (S27, S27c):** strict recall Python .981, TS/JS .625, Go .767, Java .447 (.921 with
+  the test-path override), C# .54, C++ .132 (.513 with the override). Python's decision stratum
+  (files with no development contact) is 146 of 149, under the screen, and the verdict depends on the
+  contact definition (143 of 145 with any-file contact). **No measured language passes the recall
+  screen on its decision stratum.** Kotlin is unmeasured: Joern's `ReachingDefPass` crashes and no CPG
+  loads. A definitions census (S27c) records macro, operator and decorator limits.
+- **Flow (S28):** pooled flow recall Python .640, TS/JS .401, Go .571, Java .675, C# .587, C++ .333 (adjudicated figures).
+  **`flowAvailable` is false for all six measured languages**; the adjudicated misses are
+  projection-side (`defsOf` follows only assignment targets; a variant reached .968 for Java, but on
+  the data it was designed on). It reopens on a fresh draw of at least 120 pairs reaching .95 on both
+  configurations with projection success of .95.
+- **Disclosures** (post-result rule changes: C5 classes for C#/C++, v1.11 to v1.17): in the report and
+  the P0 close entry (group 9).
+
+## 2026-11-04 — C-1001 P0 (6/9): rule-pack and answer contracts (S30–S34) ✅
+
+The two contracts P1 implements against, each with schema code and tests, each gated by `analyst` and
+by `data-scientist` for method. Records: `docs/reviews/connected-code-graph-rule-pack-spec.md` and
+`docs/reviews/connected-code-graph-rule-pack-spec-ml.md`, `docs/reviews/connected-code-graph-answer-spec.md`
+and `docs/reviews/connected-code-graph-answer-spec-ml.md`, `docs/reviews/connected-code-graph-answer-impl.md`.
+
+- **Rule-pack spec (S30)** `docs/plans/connected-code-graph-rule-pack-spec.md` (v1.5 now; v1.3 accepted
+  after three passes by each reviewer): topics are modelled as `PROVIDES`/`CONSUMES` plus `Link`, per
+  AC-23 and the frozen `-spec3` §7.2. `cpg/tests/test_rule_pack_spec.py` (104 tests at acceptance)
+  was hardened against surviving mutants.
+- **Schema, packs and leaf harness (S31, S32):** the pack schema and `cpg/ccg/rulepack.py`, `reasons.yaml`
+  and the packs, then seven packs that validate, with a leaf mutation
+  harness (562 leaves killed, 24 P1-only survivors); 897 tests passed at the S32 follow-up.
+  **Limit:** 34 of 45 signatures are authored and unvalidated; the probe set is a regression pin, not
+  validation (carried to P1, `docs/plans/connected-code-graph-p0-2.md` §15).
+- **Answer spec (S33)** `docs/plans/connected-code-graph-answer-spec.md` (v1.3): the first version's
+  masking patterns could not validate (B1); v1.1 and v1.2 fixed it, v1.3 added the V16 span rule and
+  the `.PY` case rule.
+- **Answer code (S34):** `cpg/ccg/answer.py` and its tests, 577 tests at acceptance (the whole `cpg`
+  suite 2978 passed); the gate's real bugs (a lone surrogate raised, sort-key ties accepted) were fixed.
+
+## 2026-11-04 — C-1001 P0 (4/9): store spikes (S20–S23) ✅
+
+Live measurements on `ccg-falkordb` that fix the answer engine's traversal and the loader's limits.
+Record: `docs/reviews/connected-code-graph-store-spikes.md` (Passes 1–3), measurement text in
+`docs/plans/connected-code-graph-p0-graph.md`, quirks in `claude/graph-dba/falkordb-quirks.md`.
+
+- **Traversal (S20, S21):** the in-process breadth-first search (`bfs-v1`) is the decision; `SSpaths`
+  was rejected. The gate's blocker was a wrong cause: the 10,000-row ceiling is `pathCount`, not
+  `RESULTSET_SIZE`, corrected in all four places that stated it.
+- **Incident:** a `pathCount` 3,000,000 probe OOM-killed `ccg-falkordb` at its 2 GB cap and, with no
+  persistence, lost both spike and slice graphs; the spike was rebuilt, the slice reloaded from the
+  bundles on 2026-11-04. The rule that followed: a probe sweeping a memory-scaling parameter states
+  its ceiling first (S22/S23 ran under a 1 GB RSS ceiling).
+- **Loader limits (S22, S23):** `TIMEOUT_MAX` 10,000 ms, lock ttl 2,000 ms, `BATCH_MAX` 20,000 rows
+  (ceiling 100k). The `PING` stall on a single 100k-edge write was **not reproduced** (an un-indexed
+  write explanation was inferred and not run). These are P0-scale defaults that P1 re-derives.
+- **ACL:** the proposal's §3.5 user shape, as written, breaks the release script's `GET`; `ccg_build`
+  needs `+exists` and every user `+info`. Carried into S50 (group 9). Live store tests run serially
+  (the ACL test uses fixed user and key names).
+
+## 2026-11-01 — C-1001 P0 (3/9): vertical slice, freeze gate and graph model (S11–S17) ✅
+
+An end-to-end slice (extract, assemble, load, impact answer) over the proving repos, scored against
+SL-1…SL-7, then the **freeze of bundle schema v1 and graph model v1 at S15**. Record: the slice report
+`docs/test-reports/connected-code-graph-p0-slice-report.md` and the gate Passes in
+`docs/reviews/connected-code-graph-p0.md`.
+
+- **Slice (S11–S13)** in `cpg/spikes/vertical-slice/`: extraction, `assemble.py` (11 links, 0 unmatched on
+  the real bundles), and a live load and impact query against `ccg_p0slice` (11 live tests passed).
+  Each step's gate sent fixes back (S11: the JS bundle's 33 absent files traced to `jssrc2cpg` default
+  exclusions; S12: an unresolved alternative left a link confirmed).
+- **Verdicts (S14):** SL-1…SL-4, SL-6 and SL-7 pass; SL-5 passes on density, and on time under the
+  plan's reading of "projection stage" (extract plus normalize is 4.1–4.2x parse under the widest
+  reading). SL-4 carries a design caveat: value-mode callers are not reached through path-matched
+  `DATA`.
+- **Freeze (S15):** `analyst` and `graph-dba` approved; the freeze took effect when `-spec4` was
+  accepted (commit `88eb134d`), with schema, validator and tests landing in the same commit. The
+  stakeholder ruled the open question (Q3): production files are included when `jssrc2cpg`'s ignore
+  can be overridden, and TS tests are excluded by design with a skipped-file list, which added the
+  optional `header.skippedFiles` inside schema 1.0.
+- **Contracts consolidated (S16):** `docs/plans/connected-code-graph-bundle-spec3.md` (v1.2,
+  `Supersedes:` the bundle spec and `-spec2`) and `docs/plans/connected-code-graph-bundle-spec4.md`;
+  `test_bundle.py` and `test_ids.py` re-pointed at them.
+- **Graph model and loader (S17):** `docs/plans/connected-code-graph-p0-graph.md`, `ddl_v1.cypher`
+  with `test_ddl_live.py`, and loader changes (zero-retry, `SkippedFile` lookup, M2 labelling of
+  value-mode items as possible); the `cpg` suite was 1383 passed at the DDL unit's acceptance, and
+  the slice graph held 11 constraints (the coder's count after the reload).
+
+## 2026-11-01 — C-1001 P0 (1/9): environment and sandbox (S01, S02, S08, S24) ✅
+
+The runnable P0 environment, all under `cpg/`, each unit gated by `analyst`
+(`docs/reviews/connected-code-graph-p0-impl.md`, `docs/reviews/connected-code-graph-toolchain.md`).
+
+- **S01 — `ccg-falkordb`** (`cpg/infra/ccg-falkordb.sh`, `cpg/infra/README.md`): a dedicated FalkorDB
+  instance on 127.0.0.1:6390, 2 GB memory cap, ownership-label guard, separate from the shared
+  `falkordb-dev`. It has no persistence, so a restart or OOM loses every graph; bundles on disk are
+  the source. Stub-harness test 327 passed after the fix round.
+- **S02 — toolchain image** (`cpg/infra/toolchain/`): the image tag is the hash of its build inputs, an
+  apt snapshot pin and a `ccg-versions` check that exits non-zero on failure (both found by the
+  Pass 1 gate).
+- **S24 — truth tools** layered onto the same image (final tag `a82faf5219b3`): `ccg-truth-smoke` 8 of
+  8 passed under `--network none`. Whether the clang-built corpus was usable was left to S25
+  (group 5).
+- **S08 — offline sandbox runner** (`cpg/sandbox/offline-run.sh`, allowed/forbidden flag lists,
+  `cpg/sandbox/README.md`), enforcing the egress spec (group 2). Four gate passes ended at approve with
+  suggestions: a `//>` directive bypass through control characters, a leaked container on early
+  SIGTERM, and a scratch-directory leak were found and fixed; the solo suite ran 452 passed, 0 failed,
+  with a per-mutant timeout added to the mutation script. The S08 image-dependent tests (3/6/9/10)
+  were reported 132 passed by `devops` and not independently re-run.
+
+## 2026-10-30 — C-1001 P0 (8/9): the `bindValue` advisory (S58) ✅
+
+A `security-expert` advisory (not a gate) on how a bundle may carry bound values without storing
+secrets, ordered before P1 by the P0 plan. Record: `docs/reviews/connected-code-graph-bindvalue.md`
+(Passes 1–3). Pass 1 said **needs changes before P1** and not a P0-slice blocker: SA-1 (`launchFact`
+`default`/`args` in clear) and SA-9(a) (an `http` `keyNorm` carrying a webhook token) had to land
+before S15. Pass 2 (on `-bundle-spec2`) and Pass 3 (on v1.1) found the same argv-gap class twice,
+which the spec amendments closed at v1.3.
+
+- **Stakeholder decisions folded in:** FR-15's "never stores" covers the graph and answers, not the
+  local bundle files; internal hostnames in clear are acceptable (SA-13).
+- **Closure evidence:** the analyst's stopping condition (no Pass 4) was met by an oracle run — 17,280
+  grid cells and 6,480 separator-axis cells with 0 values in clear; the S10 follow-up added an
+  85,536-cell allow-list grid, 0 in clear (`docs/reviews/connected-code-graph-p0-impl.md`). One
+  accepted residual: a bare positional value (BV-11) in a transplant grid of 675 cells.
+- **Carried to P1** (`docs/plans/connected-code-graph-p0-2.md` §15): the writer-side obligations (F-10,
+  F-6, F-7, F-9, F-1), including bundle-file mode and retention before the first non-proving-repo build.
+
+Specs: `docs/plans/connected-code-graph-bundle-spec2.md`, `docs/plans/connected-code-graph-egress-spec2.md`
+(consolidated in `docs/plans/connected-code-graph-bundle-spec3.md`, group 3).
+
+## 2026-10-29 — C-1001 P0 (2/9): contracts and their code (S03–S06, with S07, S09, S10) ✅
+
+The written contracts the rest of P0 builds against, each gated by `analyst` (and `graph-dba` for
+the graph mapping) before anything depended on it; the unit-by-unit trail is
+`docs/plans/connected-code-graph-coordination.md` and the gate text is
+`docs/reviews/connected-code-graph-p0-impl.md`. S07, S09 and S10 fall between the plan's delivery
+groups, so they are recorded here with the contracts they implement.
+
+- **S03 — bundle spec** (`docs/plans/connected-code-graph-bundle-spec.md`, accepted at v1.3): path-based
+  `qname`, 22 golden vectors (recomputed independently by the gate), Go interface specs and vendored
+  paths ruled. Pass 1 found a blocker (the `fieldAccess` id omitted `path`); Pass 3 approved.
+- **S04 — egress spec** (`docs/plans/connected-code-graph-egress-spec.md`, accepted at v1.3): escape axes
+  A1–A7, the AC-8 check map, a closed `joern --script` form, 13 forbidden and 3 allowed flags in the
+  help sweep. Pass 2 showed by execution that `--tmpfs /tmp:noexec` breaks the frontends (the revised shape
+  keeps `/tmp` executable); Pass 3 approved. Whether a host-granular git tunnel is acceptable (egress Q1) stays open for the
+  stakeholder at P1.
+- **S05 and S06 — method notes** (`docs/plans/connected-code-graph-p0-ml.md`, accepted at v1.2 here;
+  `docs/plans/connected-code-graph-eval-protocol-ml.md`, accepted at v1.2 here): both were amended later
+  in P0 and are recorded in the groups that forced the amendments (5 and 7).
+- **S07** — `claude/graph-dba/falkordb-quirks.md`: seven entries re-verified on FalkorDB 4.18.11.
+- **S09 and S10 — contract code**: `cpg/ccg/ids.py` (189 tests passed at acceptance) and
+  `cpg/ccg/bundle.py` with `cpg/ccg/schemas/bundle-v1.schema.json` (1213 tests passed in the `cpg`
+  suite at acceptance).
+- **Amendments**: the `bindValue` advisory (group 8) produced `-bundle-spec2` and `-egress-spec2`
+  (both `Extends:`), consolidated into `-bundle-spec3` at S16 (group 3).
+
+Documents: `docs/plans/connected-code-graph-bundle-spec.md`, `docs/plans/connected-code-graph-egress-spec.md`,
+`docs/plans/connected-code-graph-p0-ml.md`, `docs/plans/connected-code-graph-eval-protocol-ml.md`.
+
 ## 2026-10-15 — `cpg_falkorchat` rebuilt to current source; reload artifacts refreshed
 
 **What:** teco-dispatched, stakeholder-approved rebuild of `cpg_falkorchat` by `graph-dba`, using

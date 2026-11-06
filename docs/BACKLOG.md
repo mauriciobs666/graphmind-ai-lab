@@ -11,13 +11,31 @@
 > Item IDs use the `C-` prefix (distinct from falkor-chat's `K-`); the hundreds digit tracks the
 > milestone the item was opened under (C-2xx = M2, C-3xx = M3).
 > Status: 🔵 proposed · 🟡 in-progress · ⚪ deferred
-> Last reviewed: 2026-08-25.
+> Last reviewed: 2026-11-06.
 
 **Where the component is:** M1…M8 delivered, M8 (kaizen agent/learning-note ontology) closed
 2026-08-22. Each milestone's scope, items and gate trail is one entry in
 [`HISTORY.md`](./HISTORY.md).
 
 ## Open
+
+### In progress 🟡
+
+- **C-1001 — Connected code graph: code maps linked across languages, components and
+  repositories, serving five use cases.** 🟡 The use cases are impact mapping, root-cause analysis,
+  code review, test coverage map and security. Requirements: `docs/requirements/connected-code-graph.md`;
+  architecture proposal: `docs/plans/connected-code-graph.md`. **Phase P0 is delivered**
+  (contracts and graph model frozen, fixtures, ground truth, frontend fitness; record in
+  `HISTORY.md`, the 2026-11-06 close entry and the eight group entries beneath it). **What remains:** phases P1, P3, P4, P5
+  and then P2 (optional, last, per the stakeholder's 2026-11-01 order P0 → P1 → P3 → P4 → P5 → P2),
+  then the Arduino `.ino` slot, which needs P2's C/C++ extractor and gates no phase. The feature
+  stays open until P2 is built: AC-8 closes at P2 exit and nothing is descoped. **Next step: the P1
+  plan** (`architect`, coordinated by `teco`). It starts from the P1-bound obligations in
+  `docs/plans/connected-code-graph-p0-2.md` §15 ("Named handoffs to P1"), the P0 disclosures in
+  `docs/test-reports/connected-code-graph-p0-ground-truth-report.md` (`## P0 disclosures`), and the
+  fact that `flowAvailable` is false for the six measured languages, so P1's flow gate has to be
+  settled in the plan (`HISTORY.md`, P0 group 5). The stakeholder's egress decision (git tunnel
+  granularity, egress Q1) is due at P1. Owner: `teco`.
 
 ### Proposed 🔵
 
@@ -89,16 +107,6 @@
   look at whether `cobb`'s tooling could compute the count and select the branch automatically
   rather than relying purely on manual arithmetic every pass. Owner: `cobb`/`architect`, next time
   this distillation mechanism is revisited.
-
-- **C-1001 — Connected code graph: code maps linked across languages, components and
-  repositories, serving five use cases.** 🔵 The use cases are impact mapping, root-cause analysis,
-  code review, test coverage map and security. Requirements: `docs/requirements/connected-code-graph.md`
-  (Ready for design). The architecture proposal `docs/plans/connected-code-graph.md` is v3.3: the
-  analyst approved v3.2 (`docs/reviews/connected-code-graph.md`), and v3.3 adds the Arduino `.ino`
-  sketches (FR-1, AC-26) as an optional slot after P2 that gates no phase. Its `-graph`/`-ml` notes
-  are current. The docs chain is complete. Next step: phase P0, which needs implementers and so
-  goes to `teco` (`docs/plans/connected-code-graph-coordination.md` is the state of record).
-  Owner: `teco`.
 
 - **C-324 — Decide what to do with the `cpg_deprecated_salesperson` worked example in the CPG
   skills.** 🔵 The graph is deleted (2026-09-18) and the component it described is gone from the
