@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.4 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.5 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-05 (v1.4): `docs/reviews/connected-code-graph-p0-impl.md` §S06 Pass 3 and 4 addressed (replay table, planted inputs, cache bypass, AC-16 raw leg, AC-24 record with `packSetHash` in §12.3); §16 removed; Appendix B grammar-slot rule (S52 M-1).*
+*2026-11-06 (v1.5): S49 P0-42a spec rulings (§2.3, §2.4, §6.3, §7.1, §7.3, §9.4, §13.4); the 2026-11-05 v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -151,8 +151,8 @@ write `#2`" rule produces (`f` for a redefined `f#2`), so writers and the normal
 span-contains-line test (§5.2 H1) then decides which definition gets credit. V2's `ast` set is
 compared with the suffixes removed (§7.1). If a writer submits an
 ineligible `qname` anyway, GC's normalizer rewrites it to `E(q)` and logs the rewrite (§13.4). If
-the ancestor-plus-line form arrives, the tool converts it with bundle spec §3.5's converter and
-then applies `E`. **Writers are never asked to count ordinals.**
+the ancestor-plus-line form arrives, it is a grammar violation: V1 invalid, never converted (E1;
+§7.2). **Writers are never asked to count ordinals.**
 
 **Why not make them eligible with the ancestor-plus-line form.**
 1. **What is being measured.** AC-5 asks whether a real impact appears. A developer who is told
@@ -211,7 +211,9 @@ pattern's length. The **class** decides wiring's two shapes (§3.5): a `server` 
 | `.env`, `.env.*` | `<VAR>` (the whole variable) | server if its value is a URL whose port (explicit, or the scheme's default) is in some listed unit's `ports`, or an integer in some listed unit's `ports` (v1.2, P2-4); otherwise contract |
 | any other JSON, YAML or TOML | the first two segments of the `keyPath`, an array index counting as a segment | contract |
 
-- Each `<name>`, `<svc>` or `<key>` is one segment, and `[i]` is one segment.
+- Each `<name>`, `<svc>` or `<key>` is one segment, and `[i]` is one segment. A `keyPath` shorter
+  than its row's pattern (`hooks.<Event>` with no index) falls through to the last row; N1 (§6.3)
+  pairs it with the indexed form. A `.env` class reads the value from the kit.
 - **Unit ports (P2-4).** Each listed unit in `eval-manifest.yaml` carries `ports`: the TCP ports it
   listens on, recorded by S40 from the unit's own source (a Compose service that builds it: the
   container side of `ports`; a Dockerfile `EXPOSE`; a literal `--port`/`port=` in its start
@@ -722,7 +724,7 @@ still unmatched, when either rule below holds.
 | Rule | Condition | Typical cause |
 |---|---|---|
 | **N1** | same `anchorId`; `impacted` in the same `path`; different `impactedId` | different named ancestor chosen (a nested function vs its parent), or a `qname` slip; or, for `config`, two `keyPath`s of which one is a segment-prefix of the other |
-| **N2** | same `impactedId`; different `anchorId`; and either both anchors are `contract` locators of one `kind` with equal `provider` ids, or their `keyNorm`s are equal after casefolding, dropping a trailing `/`, and replacing every `{…}` segment with `{}` | `keyNorm` normalization slips (a mount prefix, a parameter syntax) |
+| **N2** | same `impactedId`; different `anchorId`; and either both anchors are `contract` locators of one `kind` with equal `provider` ids (the id of the normalized provider symbol; absent in either record, this branch does not fire), or their `keyNorm`s are equal after casefolding, dropping a trailing `/`, and replacing every `{…}` segment with `{}` | `keyNorm` normalization slips (a mount prefix, a parameter syntax) |
 | **N3** | same `impactedId`; both anchors are `unit` locators; different `anchorId` | two writers credit one server binding to different listed units, for example a parent and a child directory (m3) |
 
 - **Pair id:** `pairId = SHA-256("ccg-p0f-pair-v1|" + itemId(x) + "|" + itemId(y))`, first 12 hex.
@@ -857,7 +859,7 @@ Every check runs against `kit-src/` at `EVAL_COMMIT`, never against the system.
 | Level | Applies to | Check |
 |---|---|---|
 | **V1**, lexical, required | every locator | `repoId = graphmind-ai-lab`; `path` is a file in the kit and in census scope (§3.3); a `symbol`'s `qname` starts with `path + "::"`, its chain matches bundle spec §4.1's grammar, and after `E` (§2.3) every NAME segment occurs in the file as a whole-word token; every `lines` element and `line` lies in `1 … lineCount` |
-| **V2**, parsed, required where a stdlib parser exists | Python `symbol`; every `config` | **Python:** the `qname` is in the set `{E(q)}` over the `qname`s derived by `ast` per bundle spec §4.1–§4.2 (Python), and each line lies in the span of some symbol whose `E` is that `qname`, decorators included. **`config`:** the file parses (`json`, `tomllib`, a YAML parser, or `KEY=` lines for `.env`), and `keyPath` resolves to a node. |
+| **V2**, parsed, required where a stdlib parser exists | Python `symbol`; every `config` | **Python:** the `qname` is in the set `{E(q)}` over the `qname`s derived by `ast` per bundle spec §4.1–§4.2 (Python), and each line lies in the span of some symbol whose `E` is that `qname`, decorators included. **`config`:** the file parses (`json`, `tomllib`, a YAML parser, or `KEY=` lines for `.env`), and `keyPath` resolves to a node (Kiro `includeMcpJson` must be `true`). |
 | **V3**, contract | every `contract` | `kind` ∈ {`http`, `mcp_tool`}; `keyNorm` is unchanged by GC's mechanical normalization (§13.4). A changed one is replaced by the normalized form and logged, not invalidated. |
 | **V4**, stratum rules, **per item after matching** (m1) | `flow` items | the anchor is in the drawn sample, and **some** member record's chain has `hops ≤ 2` and at least one flow hop (§3.6). If none does, the item is **out of scope** (counted), not invalid. |
 
@@ -887,6 +889,10 @@ and per check.
   - **Shortfall:** if a cell has fewer than 4 items, all of them are taken, and the deficit goes,
     in stratum order `http, mcp, scripts, wiring, flow`, **wrapping from `flow` back to `http`**,
     to the same class of the next stratum that has a surplus, then to the other class.
+    Deficit cells are served in stratum order, singleton first, one item at a time, each donor
+    giving its next not-yet-taken item in hash order. The same class is tried over the following
+    strata, wrapping to the cell's own; then the other class, from the cell's own stratum. With no
+    surplus anywhere the sample stays short and `work/spot.jsonl` says so.
 - **Why this split.** Singletons are where a false item hides: an item only one writer believes
   in. Doubletons give the comparison. The count also bounds the error rate. Computed Wilson upper
   bounds on the incorrect rate are **0.088** at 0/40, **0.129** at 1/40 and **0.165** at 2/40.
@@ -1142,7 +1148,8 @@ Every file is canonical JSONL:
   some dev item or in C (m4). Equality is on the whole string. Containment does not count: a
   held-out `a.py::f` stays a probe when dev holds only `a.py::f.g`. Removed probes are public
   (§8.2), and keeping them would fail the check on a contacted anchor named legitimately. Also
-  drop probes shorter than 8 characters, such as a bare tool name like `query`.
+  drop a **bare** probe shorter than 8 characters (none of `::`, `/`, `#` or a space), such as a
+  tool name like `query`.
 - **Test.** The report is casefolded and whitespace-collapsed, and must contain **no** probe:
   - a `qname`, `keyNorm` or `path:…` probe is matched **as a whole token**, bounded on both sides
     by the start or end of the text, or by a character outside `[A-Za-z0-9_.:/#<>-]`. So
@@ -1680,8 +1687,8 @@ Verbs, in order:
   - make `path` repo-relative POSIX, with no leading `./`;
   - set `repoId` to `graphmind-ai-lab` where it is missing; if a different value is given, the item
     fails V1;
-  - **`E(qname)`** (§2.3). An ancestor-plus-line locator is first converted by bundle spec §3.5's
-    converter. Each rewrite is logged;
+  - **`E(qname)`** (§2.3). An ancestor-plus-line locator is not converted (E1): it is invalid under V1. Each
+    rewrite is logged;
   - **http `keyNorm`:** apply bundle spec §6, steps 1, 4, 5, 6 and 7 to the writer's string: an
     uppercase verb; a leading `/`; runs of `/` collapsed; RFC 3986 percent-decoding; every
     parameter syntax rewritten to `{}`/`{**}`. Step 3, mount composition, is the writer's job
