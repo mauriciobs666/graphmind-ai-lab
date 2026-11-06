@@ -1,6 +1,6 @@
 # Connected code graph — requirements review & architecture proposal
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.4 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md`, `docs/plans/connected-code-graph-p0.md`, `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-bundle-spec.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (`docs/requirements/connected-code-graph.md`) · **Version:** 3.4 (proposal) · **Extended by:** `docs/plans/connected-code-graph-graph.md`, `docs/plans/connected-code-graph-ml.md`, `docs/plans/connected-code-graph-p0.md`, `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-bundle-spec.md`, `docs/plans/connected-code-graph-p0-2.md` · **Reviews:** `docs/reviews/connected-code-graph.md`
 
 **This is an architecture *proposal*.** The requirements it answers
 (`docs/requirements/connected-code-graph.md`) are `Ready for design` (2026-10-28), and their AC
@@ -8,7 +8,7 @@ review is complete (decisions S1–S38 plus the use-case re-check, all in that d
 Nothing here is approved for implementation.
 
 Two notes extend this plan and are authoritative in their own domains:
-- the **graph note** (`docs/plans/connected-code-graph-graph.md` v2): graph model, DDL, traversal
+- the **graph note** (`docs/plans/connected-code-graph-graph.md` v2.1): graph model, DDL, traversal
   directions, sizing, store mechanics;
 - the **ML note** (`docs/plans/connected-code-graph-ml.md` v2): every LLM touchpoint, RCA and risk
   ranking, the evaluation design.
@@ -26,7 +26,7 @@ folded in as decided (FR-9, FR-13, FR-14, FR-15, FR-21, FR-29, AC-8, AC-21a, AC-
 stakeholder questions.*
 *Revision 2026-10-28 (v3.2): review Pass 3 P3-1. A resolved call's other same-name candidates are
 never dropped. They stay *possible* and are folded away in rendering (decision log 2026-10-28).*
-*Revision 2026-11-01 (v3.4): P2 (generality) is scheduled last, not descoped (order P0 → P1 → P3 → P4 → P5 → P2); AC closure points are in §4.1.*
+*Revision 2026-11-06 (v3.4): P0's results folded in place (§3.2, §3.5, §3.8, §4, §6); P2 (generality) is scheduled last, not descoped (order P0 → P1 → P3 → P4 → P5 → P2), AC closure points in §4.1.*
 
 ## 0. Goal & scope
 
@@ -366,21 +366,28 @@ plus `git-provenance.sh`) produces `cpg.bin`. A Joern script then writes the fac
 A per-frontend normalizer absorbs frontend quirks, so nothing downstream sees them. `cpg.bin`
 stays on disk for deep REPL work and for re-extraction without a re-parse.
 
-| FR-1 language | Frontend | Expected fit (P0 measures) | Weak spots | Local-only build flags (§3.12) | Fallback if P0 says so |
+| FR-1 language | Frontend | Measured at P0: strict fallback recall as shipped (gate ≥ ~0.98), resolved-call precision (gate ≥ 0.95), fan-out | Weak spots, measured | Local-only build flags (§3.12) | Indexer and fold/list decision |
 |---|---|---|---|---|---|
-| Python | `pysrc2cpg` | Verified here; decorators visible | Sparse resolution (34%); cross-object dispatch | none needed | name-match *possible*; optional precise indexer |
-| TS/JS | `jssrc2cpg` (astgen bundled) | Mature per Joern | Template literals, wrappers, dynamic imports | none needed | precise indexer |
-| Java | `javasrc2cpg` / `jimple2cpg` | Strongest typed frontend; best with dependency jars | DI, reflection | **no** `--fetch-dependencies`; pre-provisioned jars only | `jimple2cpg` on locally built bytecode |
-| Kotlin | `kotlin2cpg` | Maturing; needs classpath | DSLs, coroutines | **no** `--download-dependencies`; **never** `--jar4import-url` | as Java |
-| C#/.NET | `csharpsrc2cpg` (dotnetastgen bundled) | Least proven | Cross-project types, attribute routing | **no** `--download-dependencies` | Roslyn-based indexer, offline |
-| Go | `gosrc2cpg` (goastgen bundled) | New in 2023 | Interface dispatch, generated stubs | **no** `--fetch-dependencies`; vendored modules only | Go indexer, offline |
-| C/C++ | `c2cpg` | Oldest; fuzzy parsing | Macros without build flags | none needed | `compile_commands.json`-aware parse |
+| Python | `pysrc2cpg` | Recall 152/155 = 0.981 pooled; the non-contact decision stratum 146/149 has 3 misses against a budget of 2, so it **fails by one site**. Precision 110/116 = 0.948. Fan-out p90 5; 9.8% of sites above 5 | Function-value misses (3); 6 wrong-resolved sites, all Joern errors | none needed | **Indexer adopted on precision**, not recall (one correct site from flipping). **List** |
+| TS/JS | `jssrc2cpg` (astgen bundled) | Recall 115/184 = 0.625 pooled; decision stratum 96/165 = 0.582. Precision 102/102. Fan-out p90 0 | JSX component tags emit no `CALL` (33 of 69 misses); function values 18; skips `i18n`, `test`, `tests` (5 of 40 frame files) | none needed | **Indexer adopted on recall** (165/184 = 0.897 with the reference). **Fold** |
+| Java | `javasrc2cpg` / `jimple2cpg` | Recall 51/114 = 0.447; 105/114 = 0.921 with `test` path segments renamed (secondary). Precision unmeasured as shipped (n_P 47, below 60) | Skips every `src/test` (15 of 64 frame files) | **no** `--fetch-dependencies`; pre-provisioned jars only | **Indexer adopted on recall** (100/114 = 0.877 with the reference); precision unmeasured (the override run, 99/108 = 0.917, would adopt). **List** |
+| Kotlin | `kotlin2cpg` | **Unmeasured:** Joern's default-overlay stage aborts on the corpus; a frontend-only CPG builds (2,824 methods) | — | **no** `--download-dependencies`; **never** `--jar4import-url` | Not decided by any rule. **List** (default) |
+| C#/.NET | `csharpsrc2cpg` (dotnetastgen bundled) | Recall 81/150 = 0.540. Precision 22/25, unmeasured. Fan-out p90 6; 11.1% above 5 | 69 of 547 frame files fail to parse (frontend defects) | **no** `--download-dependencies` | **Indexer adopted on recall** (137/150 = 0.913). **List** |
+| Go | `gosrc2cpg` (goastgen bundled) | Recall 112/146 = 0.767. Precision 108/108. Fan-out p90 2 | Function values 13 and absent 12 of 34 misses; 3 files fail on per-file exceptions; named-interface method specs get no `METHOD` | **no** `--fetch-dependencies`; vendored modules only | **No indexer** (the reference closes 10 of 34): recognizer work. **Fold** |
+| C/C++ | `c2cpg` | Recall 20/152 = 0.132. Precision 5/5, unmeasured. Fan-out p90 5; 8.5% above 5 | Skips `test`, `tests` (71 of 132 frame files); 49 macro misses | none needed | **Indexer adopted on recall, fragile** (87/152 = 0.572, one site over half). **List** |
 | C++ (Arduino `.ino`) | `c2cpg`, on the sketch preprocessor's output (below) | Measured in its own optional slot (§4), not in P0 | Core/library headers absent unless pre-provisioned; prototype generation on unusual signatures | none needed; **no** board-core or library download | pre-provisioned core include paths (`--include`); else unresolved calls *possible* |
 
-**Flow availability (FR-11, Q-R9).** `Unit.flowAvailable` is set per language from P0's
-measurements. It is false for shell, for structured config and for any frontend P0 rates too weak.
+**"Indexer adopted" names a remedy, not a pass:** no language passes the recall screen on its decision stratum (Python by one site).
+
+Source: `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a1.1–§a1.4 (truth is `final2`; Wilson intervals and miss causes are there). Fetching on and off gave the same recall wherever both were measured (Go, Java, C#), and identical parses elsewhere. Every "indexer adopted" cell carries the report's caveat: the reference counterfactual is biased upward and ran with dependencies, so an indexer's offline efficacy is unmeasured. The rule changed after the results were seen (ML v1.14 follows §7.1); it moved two recall remedies, TS/JS and C++, from recognizer work to indexer, and the report discloses it.
+
+**Frontend default exclusions.** `jssrc2cpg`, `javasrc2cpg` and `c2cpg` parse files under ignored path segments to zero methods, and no option re-includes them; `gosrc2cpg` and `csharpsrc2cpg` lose files to per-file exceptions. Tests are ordinary files for this design, so these files reach the bundle as `skippedFiles` and answer "not mapped" (graph model v1, `docs/plans/connected-code-graph-p0-graph.md` §1.3).
+
+**Census metrics (ML §7.2; parse success, method coverage, line fidelity, value-set recovery, decorator shares).** Every figure is in `cpg/spikes/frontend-fitness/results/<lang>.census.json` (per language, off and on; off equals on except Java value-set recovery), with the operating rules in the report §a1.6. Files the frontend skips stay in the denominator. Headlines: Python's exact line fidelity fails on the end line only (Joern's `lineNumberEnd` is two lines past the definition's end in 3,332 methods; the start line is exact); C++ method coverage is 0.523, or 0.271 with macro-generated definitions in the denominator (report §a1.6); Kotlin is frontend-only, so its value-set recovery is unmeasured; Go and C++ expose no decorator node, so their decorator shares are unmeasured. The census frame differs from the call-site frame, so denominators differ from the recall rows.
+
+**Flow availability (FR-11, Q-R9).** `Unit.flowAvailable` is **false for Python, TS/JS, Go, Java, C# and C++ in both configurations; Kotlin is unmeasured** (report §a2.2.6, ML §8.4's threshold 0.95). The best pooled headline is Java's 0.675, and the best pooled figure under any stratum is C#'s 0.730 with all unresolved endpoints excluded. C# also fails the precondition as shipped: `extract.sc` emits 0 of 5,897 methods. Part of the low recall is projection-side: the shipped walk discards the reaching-definition chain from an earlier use of the same name (a counterfactual that follows it connects 287 of 1,000 misses and loses none; report §a2.2.1); the rest is mostly frontend (§a2.2.2). It is also false for shell, for structured config and for any frontend P0 rates too weak.
 Through such a unit, impact falls back to call-level reach, and every item is shown as *possible*,
-`reason: flow-unavailable:<language>`.
+`reason: flow-unavailable:<language>`. **Consequence for P1:** until the projection is fixed and re-measured on a fresh flow draw (`docs/plans/connected-code-graph-p0-2.md` §15), P1's Python and TS impact is call-level.
 
 **Arduino sketches (FR-1, AC-26).** A sketch is **one C++ unit** (`lang` = C++): its several
 `.ino` files are one program, and any `.cpp`/`.h` beside them are ordinary C++ files of the same
@@ -439,6 +446,7 @@ vocabulary and touches no core code, so it is an AC-22-shaped addition (FR-26).
   fallback call recall below the gate, name-match fan-out beyond the noise bound, or resolved-call
   precision below 0.95 (ML m4, review m1). The same 0.95 measurement also decides whether a resolved
   call's other candidates are folded or listed; they are never dropped (§3.7, P2-5, P3-1).
+  P0's outcome per language is the table's last column. Which indexer to adopt, and for which language, is the plan of the phase that needs it: P1 for TS/JS (recall) and Python (precision), P2 for the rest.
 
 ### 3.3 Fact bundles, the flow projection, rule packs and extension units
 
@@ -581,11 +589,17 @@ dependency findings are materialized the same way (§3.7).
 - **One graph per system, `ccg_<system>`**, because FalkorDB cannot traverse across graph keys
   (graph note V1). Everything an answer joins with must therefore be inside the snapshot,
   including verdicts and an overlay's base facts.
-- **Size (graph note §6.4, estimated from synthetic V11 plus measured V15 densities; P0
-  measures):** with projected flow points, ~455 nodes / ~2,400 edges / ~0.3–0.35 MB per source
-  file, so ~3–4 GB for a 10k-file system. **Peak with the decided preview cap of 2** (FR-23, Q-R8):
-  1 live + 1 building + 2 previews, +20%, about **18 GB**. Copying Joern's statement-level layers
-  instead would be ~12 GB per snapshot and is rejected (§3.14).
+- **Size.** The graph note's estimate (§6.4, from synthetic V11 plus measured V15 densities) is
+  ~455 nodes / ~2,400 edges / ~0.3–0.35 MB per source file with projected flow points, so ~3–4 GB for
+  a 10k-file system. **Peak with the decided preview cap of 2** (FR-23, Q-R8): 1 live + 1 building +
+  2 previews, +20%, about **18 GB**. P0 measured the slice at one scale
+  (`docs/test-reports/connected-code-graph-p0-slice-report.md` §2.5): `falkor-chat/server` is 342
+  nodes, 821 edges and 0.196 MB (`GRAPH.MEMORY USAGE`; 0.287 MiB by `used_memory` delta) per `File`
+  node over 107 files; `salesperson/` is 36 nodes and 69 edges per file, its MB a bound only (the
+  report's integer-MB reading). Both are below the estimate on every axis. A projection fixed per
+  §3.2 can only add `DATA` edges, so these are floors for the projection layer only (P1 adds shell, config, contract and `Link` layers the slice did not load), and the 18 GB peak stays an estimate:
+  re-estimated at P1, measured at P2. Copying Joern's statement-level layers instead would be
+  ~12 GB per snapshot and is rejected (§3.14).
 - **A dedicated FalkorDB instance** (G8), `noeviction`, with persistence off or infrequent: every
   graph is rebuildable from bundles, and the verdict log is a file. Bring-up is `devops`'s.
 - **Swap:** build into `ccg_<system>__build_<id>` (indexes first, one connection, no write retries;
@@ -593,18 +607,32 @@ dependency findings are materialized the same way (§3.7).
   to `OPERATIONAL`; a `FAILED` constraint fails the build (G9). Write `:Snapshot` last. Then,
   under the verdict lock: replay verdicts past the stamped offset, `RENAME` over the live key
   (atomic, and safe for readers already running, V2), and replay any remainder before releasing
-  (§3.8).
+  (§3.8). P0 measured the swap (`docs/plans/connected-code-graph-p0-graph.md` §6, row 11): `MULTI` does not
+  roll back, so the form is a plain `RENAME build live` (0.4 ms with a 12 s reader in flight), and
+  a guarded `EVAL` only where a kept `prev` is wanted. Loading follows graph note §3.5 with
+  p0-graph §4: batches of at most 20,000 rows (the measured hard ceiling is 100,000, never a
+  target) and an explicit query `timeout` on every load query whenever `TIMEOUT_MAX` is nonzero.
   - **Zero** old snapshots are kept; rollback means re-assembling the last-good bundles.
   - Key names come only from the manifest, always `ccg_`-prefixed. Only the build credential may
     `RENAME`/`EXPIRE` (G7), because neither is visible to the lab's destructive-ops guard.
 - **`:Snapshot`** carries `snapshotId`, versions, `verdictLogOffset` and `verdictLogHash`.
   Together they are the **code-snapshot + decision-state stamp** on every answer (FR-19, AC-9, S4).
 - **ACL users** (graph note §6.4, V5/V16–V18):
-  - `ccg_build` (write, `RENAME`, `EXPIRE` on `~ccg_<system>*`);
+  - `ccg_build` (write, `RENAME`, `EXPIRE` on `~ccg_<system> ~ccg_<system>__*`, plus the lock
+    selector below, since the pattern does not cover `ccg_<system>:verdict_lock`). A bare
+    `~ccg_<system>*` also matches every system whose name begins with it and the lock key. The
+    two-key form was seen in an earlier planted run to grant `ccg_s` and `ccg_s__build_1` and deny
+    `ccg_s2`, `ccg_sa__b` and `ccg_s:verdict_lock` (review `docs/reviews/connected-code-graph-p0-impl.md`
+    Pass 9). The pattern is interpolated, so **system names are a charset whitelist**: none of
+    `*`, `?`, `[`, `]`, `\`, `:`, and no `__`. The acceptance check is P1's ACL test on `ccg-falkordb`, planting `shop` with `shop2` and `shop`
+    with `shop__x` and pinning the lock selector;
   - `ccg_verdict` (`GRAPH.QUERY` on the live key only);
   - **lock grants (P2-3):** both `ccg_verdict` and `ccg_build` also get `+set +del +eval` (for a
-    compare-and-delete release) on the single key `ccg_<system>:verdict_lock`, and nothing else
-    beyond their lists above;
+    compare-and-delete release) and `+get` on the single key `ccg_<system>:verdict_lock` as a
+    key-scoped selector (a flat `+del` would let either user delete the live graph), and nothing
+    else beyond their lists above; `ccg_build` also needs
+    `+exists`, and all four users `+info` (p0-graph §6, row 10: 4 users × 19 cells, 0 differences
+    from the proposal otherwise);
   - `ccg_engine` (read);
   - `ccg_raw_<system>`: `-@all +graph.ro_query +graph.explain +info ~ccg_<system>
     ~ccg_<system>__ov_*`. **No `GRAPH.LIST`**, which leaks every key name (V16). `+info` is needed
@@ -613,9 +641,13 @@ dependency findings are materialized the same way (§3.7).
   An **instance-wide `TIMEOUT_MAX`** (V18) is FR-21's one exception, the **configurable time limit
   for raw queries** (SQ-F). Because it binds every read, the engine's per-level BFS queries are
   sized to fit under it. Built-in answers stay unbounded overall, because each is many short
-  queries.
+  queries. **P0's default is 10,000 ms** (ten times the worst per-edge-type p99 of 537.6 ms, in the
+  1-2-5 series), and P1 re-derives it (p0-graph §6, row 5). A nonzero cap also kills writes, so
+  the load rule above is required, not optional (rows 6 and 7).
 - **Telemetry streams** (V10/G13): operators pass ids, never code text, as parameters. No
-  non-admin ACL pattern covers `telemetry{…}`. P0 checks whether the stream can be capped.
+  non-admin ACL pattern covers `telemetry{…}`. P0: set `MAX_INFO_QUERIES` to 0 (no stream) or a
+  small value on the instance; `XTRIM` is no cap, because the stream regrows. Removal lags a
+  `GRAPH.DELETE` by 13–36 ms, so a retention check polls (p0-graph §6, row 12).
 - **Deviation, stated:** interprocedural flow is projected per method at build time and composed by
   traversal at answer time. Whole-program taint is computed in Joern at build time and stored as
   findings. Cypher has no context-sensitive data-flow engine. Every *answer* is still Cypher over
@@ -830,8 +862,9 @@ Adopts graph note Q6 and §6.4 (FR-28/29 + B6 row).
 - **Immediate effect (S23) without loss across a swap (B6).**
   - **The lock.** Both the `verdict` command and the swap take
     `SET ccg_<system>:verdict_lock <token> NX PX <ttl>`, granted on that one key (§3.5). Release is
-    a compare-and-delete on the token. The ttl is sized well above the worst measured replay plus
-    swap time (P0(c) measures it).
+    a compare-and-delete on the token. The ttl is **2,000 ms**: the worst measured replay of 1,000
+    entries plus `RENAME` and the remainder check was 0.464 s on 20,000 `Link`s, and three times
+    that is 1.39 s (p0-graph §6, row 8; P1 re-derives it).
   - **A verdict:** under the lock, append and fsync to the log, then **in one query** patch the
     live key and advance `:Snapshot.verdictLogOffset`.
   - **A swap:** assembly stamps the offset it read. Under the lock, replay every log entry past
@@ -851,6 +884,14 @@ Adopts graph note Q6 and §6.4 (FR-28/29 + B6 row).
   - **Elsewhere** (Python, TS/JS, Go, C), the signature is not in the id. Sameness is provable, so
     a signature change is an ordinary change: the fingerprint differs and the earlier verdict is
     noted (decided SQ-C, FR-29, AC-21a).
+  - **Re-binding on sibling insertion (the fourth case; BF16).** Anonymous scopes and duplicate
+    siblings are named by order (`<anon>#N`, `#k`; bundle spec3 §4.1, rules 5 and 7). Inserting an
+    earlier sibling re-binds the id to a different element. The id still resolves and the
+    fingerprint differs, so the item returns as *possible* with the earlier verdict noted, but the
+    note is about another function. An id with no anchor but order cannot prevent this. Mitigation:
+    the verdict log already stores both end fingerprints (above), so P4 compares them with the
+    current ones before it renders the note. Ground truth is unaffected, because `EVAL_COMMIT` pins
+    both sides.
 - **"Show dismissed"** lists dismissed items with who, when and why.
 
 ### 3.9 Overlays and the review delta (FR-23)
@@ -1008,7 +1049,7 @@ needs (B5), except the ACs that need what only P2 builds (§4.1). An AC that spa
 | Phase | Delivers | ACs gated (✓ = closed at this phase's exit) |
 |---|---|---|
 | **P0: Foundation contracts, spikes, ground truth** | (a) **Frontend fitness**, all 7 FR-1 languages, **with dependency fetching off** (the local-only configuration) **and on** (B4). Measures parse success, line fidelity, **fallback call recall** (gate ≥ ~0.98) and **name-match fan-out** (ML m4), **resolved-call precision** (gate ≥ 0.95 observed; review m1), decorator/annotation shape, value-set recovery, and per-file density and build time of the **flow projection**. Output: the §3.2 table measured, plus `flowAvailable` and the indexer decision per language. (b) **Vertical slice (B2):** real bundles for `falkor-chat/server` + `salesperson/`, value sets, projection, two-level field-sensitive lifting, mount-prefix composition, and the AC-1 link computed end to end with its chain. **Bundle schema v1 and the graph model freeze only when the slice passes**; otherwise they stay provisional until P1 exit. (c) **Store spikes:** stateful BFS vs `algo.SSpaths` incl. the FR-19 repeat-diff; `MULTI`/`RENAME` rollback; telemetry cap; the four ACL users plus the lock grants; `TIMEOUT_MAX` sizing; the verdict lock, its ttl and replay, incl. a mid-swap expiry (B6, P2-3). The **dedicated instance** is brought up by `devops`. (d) **Rule-pack format v1**, proven on paper against FastAPI (incl. mount composition), fetch-with-wrapper, FastMCP + URL binding with framework-default ports, Kafka, and an invented in-house bus. (e) **Egress broker contract and the offline build sandbox**. (f) **Evaluation protocol** (ML note §4, §8): splits, pre-registration (per stratum for AC-7), the hit rule, the noise bound by distance band, and the AC-5 fail procedure. (g) **Fixture system** (4 repos: `fx-svc` Python, `fx-web` TS, `fx-job` Python/config, `fx-lib` Java, which gates only at P2; every link kind and status, planted unprovable kinds ×3 including a query or label built at runtime for P3, B1's four assertions). **P1's held-out strata** (HTTP, MCP, scripts, flow-shaped impacts) are written by **two isolated key-writing agents** for capture–recapture (S36, ML §8.2), plus the **bilingual impact cells** of the AC-24 set. (h) Canonical answer schema (interpretation, recipe, stamp, provenance). | none (contracts and data); de-risks all |
-| **P1: Impact on this repo, every client** | Unit discovery; Joern extractor + flow projection for Python and TS; extractors for shell, JSON/YAML/TOML/Compose/`.mcp.json`/Kiro, prompts, example configs; packs: FastAPI (mount composition), fetch + lifting, FastMCP, MCP URL binding + launch facts (uvicorn defaults, env defaults, Dockerfile), `.mcp.json` launch chain, Compose; linker; store with swap, stamp, ACL users; refresh (on demand) with stale-kept and not-mapped; answer engine (code-location and contract-point anchors, stateful BFS, impact + reverse question, distance/grouping, evidence, staleness); `ccg` MCP server, CLI, `raw_query`; **egress broker** with local allow-list and offline local-only builds; **plain-language front** (parsers first, schema-constrained interpretation, cache, ambiguity options, aggregate-only summary) and Markdown reports for impact. **`teco` v1:** impact in architect/implementer briefs (a `cobb` unit). Noise measured from here on. | AC-1 ✓, AC-2 ✓, AC-4 ✓, AC-5 on the HTTP/MCP/scripts/flow strata, AC-6 for the P1 kinds (runtime-built URL, dynamic import, example config, prompt mention), AC-8 part 1 (full refresh + queries in the sandbox: offline Python/TS builds, git-remote fetch only, system-wide local model calls in a mixed-system fixture, hosted override refused), AC-9 (code-snapshot stamp), AC-9b ✓, AC-10 (impact stages), AC-11 (impact), AC-16 ✓ (impact, all four clients), AC-17 (code location, contract point), AC-18 (impact answers), AC-21 ✓, AC-24 smoke (impact cells, EN+PT), AC-25 ✓ |
+| **P1: Impact on this repo, every client** | Unit discovery; Joern extractor + flow projection for Python and TS (P0 leaves `flowAvailable` false for both; P1 fixes the projection and re-measures it on a fresh flow draw, §3.2; the `flow` stratum of AC-5 closes at P1 only if that re-measurement turns `flowAvailable` true, otherwise it is reported not closed); extractors for shell, JSON/YAML/TOML/Compose/`.mcp.json`/Kiro, prompts (the prompt extractor classifies Markdown by the glob list in `eval-manifest.yaml`, eval-protocol Q3, so census scope equals evaluated scope), example configs; packs: FastAPI (mount composition), fetch + lifting, FastMCP, MCP URL binding + launch facts (uvicorn defaults, env defaults, Dockerfile), `.mcp.json` launch chain, Compose; linker; store with swap, stamp, ACL users; refresh (on demand) with stale-kept and not-mapped; answer engine (code-location and contract-point anchors, stateful BFS with a **shipped default depth bound of at least 2** (eval-protocol Q1: a smaller bound fails `flow`'s distance-2 items by construction), impact + reverse question, distance/grouping, evidence, staleness); `ccg` MCP server, CLI, `raw_query`; **egress broker** with local allow-list and offline local-only builds; **plain-language front** (parsers first, schema-constrained interpretation, cache, ambiguity options, aggregate-only summary) and Markdown reports for impact. **`teco` v1:** impact in architect/implementer briefs (a `cobb` unit). Noise measured from here on. | AC-1 ✓, AC-2 ✓, AC-4 ✓, AC-5 on the HTTP/MCP/scripts/flow strata, AC-6 for the P1 kinds (runtime-built URL, dynamic import, example config, prompt mention), AC-8 part 1 (full refresh + queries in the sandbox: offline Python/TS builds, git-remote fetch only, system-wide local model calls in a mixed-system fixture, hosted override refused), AC-9 (code-snapshot stamp), AC-9b ✓, AC-10 (impact stages), AC-11 (impact), AC-16 ✓ (impact, all four clients), AC-17 (code location, contract point), AC-18 (impact answers), AC-21 ✓, AC-24 smoke (impact cells, EN+PT), AC-25 ✓ |
 | **P3: Data, tests, change, review** | Embedded SQL/Cypher parsing, schema/migration extractors, NoSQL/cache packs, config-value shared state; test packs + kinds; per-test runtime importers for Python/TS (lcov, Cobertura, coverage.py; JaCoCo and Go cover are P2), function-level `RAN`, stale-run handling, coverage aggregates; change anchors (diff, commit range, branch; optional PR adapter via the broker, allow-listed under local-only); overlays (cap 2) + **review delta**; review operator (contracts, test impact, config/wiring; the topic and library-signature contract kinds need P2's packs); test map, tests-for-a-change, risk score (security relevance from pack marks; finding-based relevance arrives in P5); schedule, staleness-threshold and CI triggers. **`teco` v2:** review answer at the analyst gate, test map at QA dispatch. All of P3 is Python/TS (+ shell/config); the demo's SQL/cache stratum is contacted at P2 exit (§4.1). **K4 hedge (non-closing):** at P3 exit a second author, working from the pack-format document alone, writes the Kafka producer/consumer pack (the P0(d) paper pack) for the fixture's `fx-svc` and `fx-web` and checks its topic links; any need for an engine change is a K4 finding. It gates nothing and does not count toward AC-23. | AC-3 ✓, AC-5 data stratum (proving repo), AC-6 (adds a query or label built at runtime), AC-8 re-run (PR add-on), AC-9a ✓, AC-10 (review, QA stages), AC-11 (review, test map), AC-13 for the endpoint, table/label and MCP-tool kinds except the security element, AC-14 ✓, AC-17 (branch), AC-19 ✓ |
 | **P4: Trust & governance** | Verdict log, `verdict` command, lock + replay (B6), expiry incl. confirmations and orphans; owners file + identity (OS user / IdP adapter via broker, allow-listed under local-only); access provider, content-only redaction, agent/CI principals, raw access for all-repo readers. | AC-8 re-run (IdP and access-check adapters), AC-9 ✓ (decision-state stamp now non-trivial), AC-20 ✓, AC-21a (all but the overloading-language half, §4.1) |
 | **P5: RCA & security, and closure** | Failure-evidence anchors (Python/TS traces, log templates, tiered matching, symptom → lexical anchors), infrastructure-signature pack, RCA operator + deterministic ranker + feedback + "no match"; security packs for Python/TS (sources, sinks, sanitizers, auth checks, sensitive marks), build-time `reachableBy` findings, missing-auth, risky-config, git-history secret scan with HMAC fingerprints (local), local OSV matching with two-level reachability fed by the allow-listed OSV refresh job, severity rules, finding verdicts; security element of the review delta. **`teco` v3:** RCA and security stages. **Closure:** AC-22 re-asserted with all five use cases across a newly added fixture-only pack. The gate has a planted failing input: the same unit with its diff also editing one existing file must fail the contract test (§5.1). AC-24's full gate. | AC-8 (re-run with the full outbound surface of P1–P5), AC-10 ✓, AC-11 ✓ (RCA, security), AC-12 ✓, AC-13 (security element for the P3 kinds), AC-15 ✓, AC-17 (stack trace, test name), AC-18 ✓ (every answer kind), AC-22 (fixture unit), AC-24 ✓, AC-5 ✓ (proving-repo strata re-run on fresh held-out items) |
@@ -1204,17 +1245,17 @@ The method is the ML note's (§4, §8). This section records only what binds the
 
 | # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| K1 | **Joern frontend quality outside Python is unmeasured**, worst offline (C#, Go, Kotlin without a classpath) | Noise, or call-level fallback for whole languages | P0(a) measured with fetching on and off; `flowAvailable`; indexers per language |
+| K1 | **Joern frontend quality outside Python is weak** (P0 measured: no language passes the recall gate on its decision stratum, Python failing by one site; Kotlin does not build the overlays) | Noise, or call-level fallback for whole languages; `flowAvailable` is false for all six measured languages | Indexers per language (§3.2's last column); fetching on and off measured the same recall for Go, Java and C# |
 | K2 | **Dynamic wiring dominates in some codebases** | Floods of *possible* links | Bindings, convention packs, the runtime oracle, noise by distance band. Workplace statistics were declined (S38), so this is checked on this repo and the demo only. **Risk accepted.** |
 | K3 | **Summary-composition taint is an approximation** | Security misses across complex flows | Stated in answers; within-unit `reachableBy`; AC-15 sets with the never-unreachable gate |
 | K4 | **The rule-pack format is not expressive enough** (mount composition, URL binding, in-house buses) | AC-23 fails or code creeps into packs | P0(d) paper test; P2 second-author test (last, so a format flaw is found late); bundle-query escape hatch |
 | K5 | **Unbounded edge families and the cost of flow points** (`DATA` fan-out under field paths, `RAN` volume, name products) | Memory, BFS state blow-up | `Name` indirection, direct facts only, depth-3 paths, P0 density measurement; the peak at preview cap 2 is ~18 GB (graph note §6.4) |
 | K6 | **Overlay latency in the `teco` flow** (Joern on changed units) | Slow dispatches | Changed units only; bundle cache; base-snapshot impact first, overlay as follow-up |
-| K7 | **The projection's build cost is unmeasured** (B2) | Long refreshes | Timed in the P0 vertical slice; schema freeze waits for it |
+| K7 | **The projection's build cost** (B2) | Long refreshes | Measured in the P0 slice (slice report §2.5): `extract.sc` is 0.99× Joern's parse for the Python unit and 1.10–1.19× for `salesperson/`, within 2× on that reading; SL-5's reading is open (slice report Q2). The host normalizer, dominated by `git blame`, brings extract plus normalize to 4.1–4.2× parse for the Python unit, so P1 splits that stage |
 | K8 | **An instance-wide FalkorDB crash from arbitrary keys** (G2) | Everything on the instance down | Hashed ids, stripped keys, fuzz test on a throwaway instance, dedicated instance |
 | K9 | **Key destruction invisible to the destructive-ops guard** (`RENAME`/`EXPIRE`) | Silent loss of a graph | Manifest-only `ccg_` names; only the build credential may rename or expire |
 | K10 | **Ground-truth cost**: two key agents, 75+ items per gate, 40+ bugs, ~140 questions bilingual, ~100 security cases | Evaluation is the bottleneck | Mechanical derivation where possible (`.proto`, Compose); mutation for bugs; strata per phase |
-| K11 | **Offline local-only precision** (S18): no dependency downloads | More *possible* items for Java/Kotlin/C#/Go | Pre-provisioned caches documented per codebase; P0 measures the gap |
+| K11 | **Offline local-only precision** (S18): no dependency downloads | More *possible* items for Java/Kotlin/C#/Go | Pre-provisioned caches documented per codebase. P0: recall on and off is equal for Go, Java and C#; Java and C# precision is unmeasured (§3.2) |
 | K12 | **A first-run AC-5 failure is likely even for a good system** (~47% pass at true recall 0.99, ML §8.2) | Repeated gate cycles | The decided fail procedure (new blind list); plan for it in P1's schedule |
 | K13 | **Scope** | Long road to workplace value | Impact with flow and plain language in P1; generality in P2, scheduled last |
 | K14 | **Arduino core and library headers missing under local-only** (nothing downloaded) | `c2cpg` resolution degrades: overloads and library types unresolved, more *possible* items | Pre-provisioned core include paths per codebase; `headers-unavailable` reason; AC-26 needs only the sketch's own cross-file calls; measured with and without headers (§4 optional slot) |
@@ -1223,15 +1264,20 @@ The method is the ML note's (§4, §8). This section records only what binds the
 ### 6.2 Open decisions
 
 - **For the stakeholder:** none. V3-Q1–V3-Q5 and SQ-A–SQ-G are decided (§2.3).
-- **For P0 to settle (engineering, no stakeholder input):**
-  - resolved-call precision and the indexer adoption per language;
-  - `flowAvailable` per language;
-  - BFS vs `algo.SSpaths`;
-  - `MULTI`/`RENAME` rollback;
-  - whether telemetry can be capped;
-  - `TIMEOUT_MAX` sizing (the raw-query limit's default, FR-21) and the verdict-lock ttl;
-  - the infrastructure-signature pack's initial content;
-  - the severity rule table for non-dependency findings.
+- **Settled by P0 (engineering, no stakeholder input):**
+  - the indexer remedy per language: §3.2's table, from the frontend-fitness report §a1. Resolved-call
+    precision is **not** settled for Java, C#, C++ (too few sampled sites) or Kotlin (unmeasured);
+    P1 measures it;
+  - `flowAvailable` per language: false for six, Kotlin unmeasured (§3.2; report §a2.2.6);
+  - BFS vs `algo.SSpaths`: `bfs-v1`, `SSpaths` not adopted (`docs/plans/connected-code-graph-p0-graph.md` §6, row 1);
+  - `MULTI`/`RENAME` rollback: `MULTI` does not roll back, plain `RENAME` (§3.5; p0-graph §6, row 11);
+  - whether telemetry can be capped: §3.5 (p0-graph §6, row 12);
+  - `TIMEOUT_MAX` sizing and the verdict-lock ttl: 10,000 ms and 2,000 ms (§3.5, §3.8; p0-graph §6,
+    rows 5 and 8);
+  - the infrastructure-signature pack's initial content: `docs/plans/connected-code-graph-rule-pack-spec.md`
+    §8 (an independent provoked-log set per runtime is owed, `docs/plans/connected-code-graph-p0-2.md` §15);
+  - the severity rule table for non-dependency findings: the same spec, §9.
+- **For the P1 plan:** which indexer to adopt for TS/JS and Python (§3.2), and the projection fix with its fresh-draw re-measurement (`docs/plans/connected-code-graph-p0-2.md` §15).
 - **For `graph-dba`:** fold the four quirk entries (graph note §1) into
   `claude/graph-dba/falkordb-quirks.md`, plus V16–V18.
 - **For `security-expert` (optional, before P5):** review the HMAC-fingerprint and canary design
@@ -1260,7 +1306,7 @@ Digest:
   treats data, fields and config values as shared state, links topics as `PROVIDES`/`CONSUMES`, and materializes security
   findings and review deltas.
 - **One FalkorDB snapshot graph per system**, on a dedicated instance: ~3–4 GB at 10k files,
-  ~18 GB peak with two previews. It stores direct facts with hashed ids, edges one way, and is
+  ~18 GB peak with two previews (estimates; the P0 slice measured below them, §3.5). It stores direct facts with hashed ids, edges one way, and is
   swapped by `RENAME`. Verdicts are replayed under a lock so none is lost across a swap.
 - **One deterministic answer engine** runs a stateful BFS whose direction is chosen per question.
   It serves MCP, CLI/CI and plain language (in P1). Every answer carries its interpretation,

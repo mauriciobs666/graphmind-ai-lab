@@ -5823,3 +5823,25 @@ Approve (no pass 10) when M-1 and M-2 are reworded, the pins of m-5 read v1.8/v1
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 9b — S50 re-gate (rework in place; read-only pass, no database or service touched)
+
+**Verdict: approve with suggestions.** No blocker or major open. Word counts against HEAD: proposal 15,455 to 16,942 (+1,487; +66 over Pass 9, the census table became a paragraph and the caption, ACL and P1-row sentences were added); p0-2 30,244 to 30,778 (+534; -46 against Pass 9). The added text is new scope or in-place rework; no finding table, no dated Update clause.
+
+### Dispositions of Pass 9
+- **M-1: fixed** (read). §6.2 now says the indexer remedy is settled and precision "is not settled for Java, C#, C++ or Kotlin"; K1 now reads "no language passes the recall gate on its decision stratum, Python failing by one site". The §3.2 caption, K1 and §6.2 agree with each other and with the report §a1.2.
+- **M-2: fixed.** The P1 row says the `flow` stratum of AC-5 "closes at P1 only if that re-measurement turns `flowAvailable` true, otherwise it is reported not closed"; it agrees with §3.2's Consequence sentence and p0-2 §15's `extract.sc` item.
+- **m-1, m-2, m-3, m-4: fixed** ("best pooled figure under any stratum"; K7 "SL-5's reading is open (slice report Q2)"; "floors for the projection layer only"; "off equals on except Java value-set recovery").
+- **m-5: fixed** (sweep). p0-2 has no `v1.7`/`EP2 v1.4` current pin left: S06 row, line 599, 1429, §14 heading and body, 1663, 1786 read v1.8/v1.5; the only `@1.x` manifest pin is not in p0-2 and was not touched. `§16` and `to settle` hits are the plan's own table or a label, as ruled in Pass 9.
+- **ACL points 1-4: fixed.** Proposal §3.5 states the two-key form, the lock selector, the whitelist (`* ? [ ] \ :` and `__`), and the `shop`/`shop2` and `shop`/`shop__x` test; p0-2 §15 assigns the graph-note line edit to `graph-dba`.
+- **Census trim:** the per-language table is gone; the remaining paragraph carries the figures the plan cites later (3,332; 0.523/0.271), and nothing else in either document cites a census cell (grep). The committed `results/<lang>.census.json` files are the home.
+
+### New findings
+**N-1 (minor, verified): my own error is in the plan.** §3.2's caption says "eight of the ten recall verdicts fail it". That count came from my Pass 9 sentence and is wrong: the report has eight verdicts (six pooled, plus Python's and TS/JS's decision strata), of which seven fail (Python pooled passes). I have corrected Pass 9. Fix the caption to "no language passes the recall screen on its decision stratum (Python fails by one site)" and drop the count.
+
+**N-2 (minor, verified): the ACL evidence citation.** §3.5 says the two-key form "was verified by a planted run" and cites Pass 9. That run was made on the shared `falkordb-dev`, which should not be written to, and is not repeatable under the fence. Keep the citation as the prior result, but make the P1 ACL test the acceptance check, run on the CCG instance (`ccg-falkordb`), and say so.
+
+**n-1 (nit, verified): S27c's done-condition** still says the four §a1.2 rows are filled in the report; the report's §a1.5 still defers them and holds no census table. With the table removed from the proposal, the committed census files are the only home. Either fill the rows or reword S27c's done-condition to "census files written and reviewed".
+
+### Proposed REVIEW.md lines
+None.

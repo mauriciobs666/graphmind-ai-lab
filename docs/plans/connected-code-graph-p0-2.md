@@ -1,13 +1,13 @@
 # Connected code graph — phase P0 implementation plan (successor)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.5 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.6 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
 
-*2026-11-05 (v1.5): in place; adds S27c (the ML §5.3 definitions census, a sub-unit of S27) to the step table, §4.6, the chains and the S30/S50 dependencies. v1.4 was the successor to v1.3; disposition table: §16.*
+*2026-11-06 (v1.6): in place; S50 owed items folded: §6 wording from the S54/S48 results (plugins, control file, resume, truncation), S45 `--ka2-strata`, S27c/S59 rows, EP pins and citations, `{grammarExtract}`, and the P1 owed items (§15). v1.4 was the successor to v1.3; disposition table: §16.*
 
 ## 0. Goal & scope
 
 **Goal.** Unchanged from v1.3: execute phase P0 of `docs/plans/connected-code-graph.md` §4 —
-deliver (a)–(h), settle every §6.2 "for P0 to settle" decision with a recorded measurement, and
+deliver (a)–(h), settle every §6.2 P0 decision with a recorded measurement, and
 either freeze bundle schema v1 and the graph model or record that they stay provisional until P1
 exit. P0 gates no AC; its exit condition is the ledger's P0 definition of done
 (`docs/plans/connected-code-graph-coordination.md`, "Phase P0").
@@ -367,7 +367,7 @@ contract is the cited document; this table does not re-decide it.
 | S03 | P0-03a | acc | `architect` | C | `docs/plans/connected-code-graph-bundle-spec.md` v1.3 **plus** `-spec2` v1.3 (accepted, ledger 2026-10-30) | — | As accepted (U22, U32). The contract is the two read together until `-spec3` (§2 D5). Downstream items: §4.2 and §16. | an + gd | — |
 | S04 | P0-03b | acc | `architect` | C | `docs/plans/connected-code-graph-egress-spec.md` v1.3 | — | As accepted (U23), with `docs/plans/connected-code-graph-egress-spec2.md` v1.2 (accepted, U32), which replaces v1.0's errata E1–E2 (§2 D18). | an | — |
 | S05 | P0-04 | acc | `data-scientist` | C | `docs/plans/connected-code-graph-p0-ml.md` v1.3 | — | As accepted (U24). Its step outputs are S24–S28, S56, S57 here (§16). | an | — |
-| S06 | P0-05 | acc | `data-scientist` | C | `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.2 **plus** `docs/plans/connected-code-graph-eval-protocol2-ml.md` (EP2, `Extends:`, step 8a; in re-gate) | S03 | As accepted (U26, no Pass 3): P0(f) complete, incl. the development-contact rule and GC's procedures. **The contract is EP v1.2 plus EP2 once EP2 is accepted**; EP2 controls in the clauses its §1 names. Hand-offs absorbed (§14, §16.1). | an | S03 |
+| S06 | P0-05 | acc | `data-scientist` | C | `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.8 **plus** `docs/plans/connected-code-graph-eval-protocol2-ml.md` v1.5 (EP2, `Extends:`, step 8a) | S03 | As accepted (U26, no Pass 3): P0(f) complete, incl. the development-contact rule and GC's procedures. **The contract is EP v1.8 plus EP2 v1.5, both accepted**; EP2 controls in the clauses its §1 names. Hand-offs absorbed (§14, §16.1). | an | S03 |
 | S07 | P0-06 | acc | `graph-dba` | Doc | `claude/graph-dba/falkordb-quirks.md` | — | As accepted (U25). | tc | — |
 | S08 | P0-07 | acc + follow-up | `devops` | D | `cpg/sandbox/{offline-run.sh, forbidden-flags.txt, allowed-flags.txt, tests/test_sandbox.sh, README.md}`; `.audit/` in `cpg/.gitignore` | S04 + ES2; image from S02 | Accepted (U28, Pass 2). **Egress spec §10 tests 1–10 pass as amended by `docs/plans/connected-code-graph-egress-spec2.md`**; §7.1.1 controls N1. (Supersedes v1.3's "the seven tests of §4.1".) **Follow-up round (ES2 §3, then the S08 Pass 2 carry-overs):** ES2 §1.1's replaced test 10(b) (leading-byte coverage probe over 0x00–0x20 and 0x7f; the `x\r//>` fixture; existing shapes kept); §1.3's one-`--output`-per-live-invocation refusal with the lock outside the overlay `upperdir`, and its two-concurrent-invocations test (exactly one refusal); §1.4's namespace `/usr` cell; §1.5's `usage` path, `netnsDistinct`/`egressMode` on refusals and the `toolArgv` tests; **§1.7's closed runner environment** (`env -i` re-exec with a fixed `PATH`, a set `DOCKER_HOST`, a runner-owned `DOCKER_CONFIG` directory verified empty/owner/`0700` or exit 69, passwd-derived `HOME`, the two `CCG_*` names; the `-p` shebang kept) and its **polluted-environment test** run through `#!` (fake `docker` on `PATH`, `DOCKER_*` redirected, `SHELLOPTS`, an exported function, `BASH_ENV`/`ENV` marker, a foreign `config.json`, a pre-populated config directory → 69; a no-`-p` mutant fails); §1.8's A6(b′) in test 1 and the launch-equivalence check; the README's backend table and concurrency claim; and Pass 2's p2-m1 (scoped hygiene catches unlabelled and killed-runner containers), p2-n1 (lock survives a killed `docker run` client), p2-n2 (no leaked `/tmp/ccg-sbx.*`). **Also (P3-7, §2 D15):** promote test 3's inline Scala script (the one printing `METHODS <cpg>=…` from `cpg.method.isExternal(false)`) to a durable, runner-staged **`cpg/sandbox/scripts/cpg-content-check.sc`** that prints the non-external `METHOD` count per CPG and per source file; test 3 calls it; it is the one content check S11, S25, S28 and S39 use. | an | S02, S04 |
 | S09 | P0-08 | acc | `tdd-engineer` | CC | `cpg/pyproject.toml` (extras frozen), `cpg/README.md`, `cpg/.gitignore`, `cpg/ccg/{__init__,ids}.py`, `cpg/tests/test_ids.py` | S03 §3 | As accepted (commit `6f4e34f9`): the 22 golden vectors reproduce; `dependency_record_id` included; `spike` extra carries ML §11 N6. | an | S03 |
@@ -389,7 +389,7 @@ contract is the cited document; this table does not re-decide it.
 | S56 | P0-47a…g | del | `qa-engineer`, one fresh instance per language (seven, parallel; never an S26 labeller) | GT | `labels/<lang>-flow.jsonl` | `sample/<lang>-flow.jsonl`; that corpus only; bundle spec point names (§5.4–§5.6) | **§4.6 S56** (ML §11 N3). **Flow brief per language** (`flow-brief.template.md` instantiated per language; direct pairs only; call results as sources, conditions as data sinks and cond→cond control; no field-write sinks or implicit-`this` reads; ML §6.4, v1.5). **Floor: 120 realized direct pairs per language** (ML §8.4); **TS/JS: 12 methods, prod files only, plus a tier-2 draw of 3 methods of 26–60 lines** if the 12 yield fewer than 120 (ML §6.4, §8.4; v1.5, v1.6). Delivered for all seven languages. Its methods are development contact for flow anchors (eval-protocol §8.2), recorded in `contact.json` apart from the call-site strata (S59; ML §3.1, v1.8), so its output is an input to S47's contact set. | ds | S25, S03 |
 | S57 | P0-48a…g | | `data-scientist` decides; fresh `qa-engineer` fitness custodian (FC) runs and writes, one per language | GT | `adjudication/<lang>.input.jsonl`, `adjudication/<lang>.jsonl`, `truth/<lang>.final.jsonl` | `labels/<lang>.jsonl`, `truth/<lang>.ref.jsonl`; never `results/` or any Joern output | **§4.6 S57** (ML §11 N4; owner per §2 D13). | an | S26 (that language), S25 |
 | S27 | P0-20 | | `graph-dba` runs; `data-scientist` adjudicates misses | M | `results/*.json`; `adjudication/<lang>-misses.jsonl`; `truth/<lang>.final2.jsonl`; fitness report §a1 | S25 results; S57 truth; **`contact.json` (S59)** | **§4.6 S27** (ML §11 N5). **Strata:** for Python and TS/JS, sites in `contact.json`-listed files form their own stratum; the language passes the recall screen only if the non-contact stratum alone meets ML §8.1's gate with ≥ 50 internal sites (counted on `final2`), else *insufficient* (ML §3.1, v1.6–v1.8; not restated). | an + ds | S57 (all languages), **S59** |
-| S27c | P0-20c | | `coder` (extractor, join, metrics scripts, with tests); `graph-dba` (`measure.sc` change, the 12 reruns); `data-scientist` (the definitions) | M | `cpg/spikes/frontend-fitness/{make_defs_census.py, s27_census_metrics.py, measure.sc, truth/<lang>.defs.jsonl, results/*.measure.jsonl}`, `cpg/tests/test_defs_census.py`; fitness report §a1.2 (four rows) and §a1.5 | S27 steps (1)–(4) (`truth/<lang>.final2.jsonl`); S59 (`contact.json`); S08's follow-up round (runner); **fitness report §a1.6 as the specification, and ML §7.2 as amended, both with no open item** (the `data-scientist` closes them first) | **Sequence, extractor, `measure.sc` additions, metrics and acceptance (a)–(d): fitness report §a1.6** (ML §5.3, §7.2; not restated). Done when §a1.6's acceptance (a)–(d) hold and its sequence (1)–(5) is complete: the four §a1.2 rows (method coverage, line fidelity, value-set recovery, decorator/annotation shapes) are filled from `s27_census_metrics.py` output under ML §7.2's definitions, with the worked example per language for S30 in the report. Tests (`test_defs_census.py`, incl. §a1.6 (d)'s mutation test) pass before the rerun. The `measure.sc` change is `analyst`-gated as code before the rerun, like S25's. | an (+ ds on the definitions and metrics) | S27, S59, S08's follow-up round |
+| S27c | P0-20c | | `coder` (extractor, join, metrics scripts, with tests); `graph-dba` (`measure.sc` change, the 12 reruns); `data-scientist` (the definitions) | M | `cpg/spikes/frontend-fitness/{make_defs_census.py, s27_census_metrics.py, measure.sc, truth/<lang>.defs.jsonl, results/*.measure.jsonl}`, `cpg/tests/test_defs_census.py`; fitness report §a1.2 (four rows) and §a1.5 | S27 steps (1)–(4) (`truth/<lang>.final2.jsonl`); S08's follow-up round (runner); **fitness report §a1.6 as the specification, and ML §7.2 as amended, both with no open item** (the `data-scientist` closes them first) | **Sequence, extractor, `measure.sc` additions, metrics and acceptance (a)–(e): fitness report §a1.6** (ML §5.3, §7.2; not restated). Done when §a1.6's acceptance (a)–(e) hold and its sequence (1)–(5) is complete: the four metrics (method coverage, line fidelity, value-set recovery, decorator/annotation shapes) are in the committed `results/<lang>.census.json` from `s27_census_metrics.py` under ML §7.2's definitions, with the worked example per language for S30 (`results/<lang>.decorator-probe.json`). Tests (`test_defs_census.py`, incl. §a1.6 (e)'s mutation test) pass before the rerun. The `measure.sc` change is `analyst`-gated as code before the rerun, like S25's. | an (+ ds on the definitions and metrics) | S27, S08's follow-up round |
 | S28 | P0-21 | | `graph-dba` runs; `data-scientist` adjudicates | M | fitness report §a2; `results/projection-*.json`; `adjudication/<lang>-flow-{misses,spurious}.jsonl` | S11 `extract.sc`; S56 labels; ML §7.3, §8.4 | **§4.6 S28** (ML §11 N7). | an + ds | S56, S27, S15, **S08's follow-up round** (P3-10) |
 | S30 | P0-22 | acc | `architect` | C | `docs/plans/connected-code-graph-rule-pack-spec.md` | S03 (+S16), S14 bundles, **S27c's decorator/annotation shapes**; proposal §3.3–§3.4 | Format v1, five paper packs walked through, infrastructure-signature pack v0, the severity rule table (§4.2). **Every proving-repo anchor the walkthroughs touch is listed as a locator, by eval-protocol §8.2, hops excluded.** **The server-binding walkthrough runs on `falkor-chat/server`, or on S35's fixture — never on `cypher-mcp` or `mcp-monitor`** (eval-protocol §14, §15 Q10, R9): walking `.mcp.json` → `cypher` would cost `wiring` 3 of its at most 10 eligible items and cap it at 7, short of 8. | an (+ ds consult) | S15, S27, **S27c**, S16 if it runs |
 | S31 | P0-23 | acc | `tdd-engineer` | CC | `cpg/ccg/schemas/rule-pack-v1.schema.json`, `cpg/tests/test_rule_pack_schema.py`, `cpg/packs/{fastapi,fetch,fastmcp}/pack.yaml`, `cpg/ccg/registry/reasons.yaml` (registry cells incl. `PROVIDES topic` on runtime-built/config-derived, O-16) | S30 | Schema = S30. The three packs validate. Each negative example in S30 is rejected. | an | S30 |
@@ -408,7 +408,7 @@ contract is the cited document; this table does not re-decide it.
 | S43 | P0-35 | | `teco` runs the launcher; headless QW session | GT | `roles/QW/out/QW.jsonl` | role root; eval-protocol §10.1; Appendix B's QW part (in the brief) | The bilingual impact questions written natively, with gold, in eval-protocol §10.1's counts (48 questions). The audit is clean. | (in S47) | S54 |
 | S43a | P0-35a | | GC (`qa-engineer`) | GT | `QW-nogold.jsonl`, placed in the AN1 and AN2 role roots | S43; eval-protocol §13.2 | `strip_gold.py --verify`: every question present, no gold field. | ds | S43 |
 | S44 | P0-36 | | `teco` runs the launcher; headless AN1 ∥ AN2 sessions | GT | `roles/AN{1,2}/out/AN{1,2}.jsonl` | S43a; eval-protocol Appendix B's AN part (in the brief) | Each annotator has independently labelled every question ambiguous or unambiguous. The audit is clean. | (in S47) | S43a |
-| S45 | P0-37 | | GC runs; `data-scientist` adjudicates near-misses by pair id and checks | GT | `~/.local/share/ccg-eval/<E>/work/{audit,match,nearmiss,capture}.json` | S41, S42 outputs; `runs/`; transcripts; eval-protocol §6, §7.1–§7.3, §13.4–§13.5; tooling from S48–S49 | Every session in the run index audited and clean, or voided and redone. Locators validated (eval-protocol §7.1) and scope checked (`match_keys.py scope`, V4 per item after matching). Items matched, incl. N3 pairs (§6.3). **`normalize` applies EP2's `http` `keyNorm` rule as written there** (its step list and order are EP2's, not restated here; step 8a via `mask_http_segments`); each 8a rewrite is a V3 **replace-and-log** entry (item `seq`, rule `8a`, masked-segment count, no item content on stdout), and the method owner reviews that log. N̂ and completeness per stratum by eval-protocol §6.4–§6.5 (at most one extra provider-first pass per stratum). The union and spot-check sample drawn (§6.4). | ds | S41, S42, S49 (and through it EP2 and P0-11a) |
+| S45 | P0-37 | | GC runs; `data-scientist` adjudicates near-misses by pair id and checks | GT | `~/.local/share/ccg-eval/<E>/work/{audit,match,nearmiss,capture}.json` | S41, S42 outputs; `runs/`; transcripts; eval-protocol §6, §7.1–§7.3, §13.4–§13.5; tooling from S48–S49 | Every session in the run index audited and clean, or voided and redone. Locators validated (eval-protocol §7.1) and scope checked (`match_keys.py scope`, V4 per item after matching). Items matched, incl. N3 pairs (§6.3). **`match` runs with `--ka2-strata` naming every stratum whose KA2 session ran, even one that found nothing** (EP §6.4; the flag is how `match.json` declares `t` = 3, and the KA2 column of `history` is data only where it did). **`normalize` applies EP2's `http` `keyNorm` rule as written there** (its step list and order are EP2's, not restated here; step 8a via `mask_http_segments`); each 8a rewrite is a V3 **replace-and-log** entry (item `seq`, rule `8a`, masked-segment count, no item content on stdout), and the method owner reviews that log. N̂ and completeness per stratum by eval-protocol §6.4–§6.5 (at most one extra provider-first pass per stratum). The union and spot-check sample drawn (§6.4). | ds | S41, S42, S49 (and through it EP2 and P0-11a) |
 | S46 | gate | | stakeholder (via `teco`/`tico`) | gate | marks on the spot-check sample | S45 sample (eval-protocol §7.3: 40 union items + 8 PT gold) | Each sampled item marked correct or incorrect, with a note on each incorrect one (decision S36; ML §8.3). | sh | S45, S44 |
 | S47 | P0-38 | | GC runs; `data-scientist` checks | GT | `cpg/eval/dev/*.jsonl`, `cpg/eval/heldout-manifest.json`, `docs/test-reports/connected-code-graph-p0-ground-truth-report.md`; `~/.local/share/ccg-eval/<E>/heldout/*.jsonl` (D11) | S45, S46, S44; **S59's `contact.json` (`files` and `flowAnchors`, unioned into the contact set)**; eval-protocol §7.4, §8, §9, §10.2–§10.3, §13.6 | Corrections applied. **Every contact-set source goes through EP2 §1.2's `normalize_contract` before `anchorId`**; **AC-24 gold is stored normalized, each locator with its stored form — provider `{#}` or consumer `{?}`** (EP2 §1.2) — each rewrite logged and counted in the report, and the unserved-gold check run (EP2 §1.2). The development-contact rule (eval-protocol §8, E6) applied to the contact set from S14, S30, the P0 golden tests (incl. S34's `answer-ac1.json`) and S56 — **all of which are closed before S47 starts (Deps, P3-1)** — by **probe cluster** (§5.1: the probe is the served point with the fewest items), then the seeded split (§9, E7) with step 3b's **served-anchor rule** and step 4's eligibility guard. The **reserve** file (up to 35 counting items, never exposed) and an **empty `exposure.jsonl`** are written. Held-out written outside the repo; manifest committed (D11). The report carries counts, N̂, completeness, manifest hashes and held-out anchors per stratum, **the counting `H` beside `H_all`** (E11), and the `served-anchor` moves **as a count**. The manifest's `protocol` string names both documents per EP2 §1.5. The leak check (`--check-report`, EP2 §1.4's two probes: normalized and pre-8a forms) finds **no held-out content** (§6.4). | an + ds + sh (counts only) | S46, **S14, S30, S34, S56** (P3-1), S49 (EP2), **S59**, **EP v1.3 accepted** (`docs/plans/connected-code-graph-eval-protocol-ml.md`: HA assertions, §10.4 status predicate, AC-16 pin-and-replay) |
 | S48 | P0-41 | | `qa-engineer` (tooling author; non-builder, never sees keys) | D | `cpg/eval/tools/{export_kit.py, strip_gold.py, audit.py}`, `cpg/tests/test_eval_tools.py`, `cpg/tests/fixtures/headless/` (built from S55's real capture) | eval-protocol §13.1–§13.3; §6.5; S55 capture | Each tool passes its tests, incl. **`export_kit.py --draw-flow-anchors`** (eval-protocol §13.1: Python `ast` and py-tree-sitter **from the `spike` extra**, not S02's image) reproducing a seeded draw, and **`--list-units`** and **`--list-cypher-tools`** (§13.1, §2.4). `audit.py` passes on fixtures shaped like S55's real capture: flags an absolute repo read, a relative `../` read, a sibling-root read, an MCP call, a disallowed tool, a write outside `out/`, an init tool set unequal to `--tools`; does not flag a legitimate in-root read; flags a stream/transcript mismatch and a missing transcript; on a two-attempt session (start, kill with a truncated last line, resume) consumes both attempt logs with no false violation. | an | S06, S09, S55 |
@@ -418,7 +418,7 @@ contract is the cited document; this table does not re-decide it.
 | S54 | P0-45 | | `teco` runs the launcher; GC runs `audit.py`; `devops`/`cobb` fix on failure | gate | rehearsal result in the ground-truth report §Rehearsal (written by GC) | S52, S53, S48, S40 | §6.3's planted-breach rehearsal passes in full, incl. the init-event checks and the **kill-and-resume case**. **No real writer starts before it does.** | an (stakeholder informed) | S52, S53, S48, S40 |
 | S55 | P0-46 | | `teco` runs the launcher (`run-writer.sh start capture`) | GT (fixture) | `cpg/tests/fixtures/headless/capture.{1.stream.jsonl,transcript.jsonl}`, scrubbed of the account id; a note in `cpg/eval/headless/README.md` | S53 | One trivial real session, role `capture`, in a **dummy** role root built from a one-file dummy kit (so no S40 kit, no cycle). A one-line brief ("read `kit-src/README.md`, write `out/done.txt`") through the real argv. Settles (a) the real stream-json and transcript shapes, (b) whether `--verbose` is required, (c) that OAuth works under `--restricted`. If (c) fails, the chain stops and goes back to the stakeholder. | an | S53 |
 | S58 | P0-49 | acc | `security-expert` (advisory); `architect` dispositions | Doc | `docs/reviews/connected-code-graph-bindvalue.md` (Passes 1–3); dispositions recorded **in `-spec2`** (§2, §5 there) | bundle spec §5.17, BF8; review §S03 F6 | Accepted (U31; dispositions accepted with `-spec2` v1.3, ledger 2026-10-30), before S15. Remaining follow-ups are `-spec2` §3's, owned there (§15). Not a gate (§2 D17). | — | S03 |
-| S59 | P0-50 | gated | `graph-dba` | M | `cpg/spikes/frontend-fitness/{make_contact.py, contact.json}`, `cpg/tests/test_contact.py` | S11, S14, S30; S56's flow-method files, recorded apart from `files` as `flowAnchors` (the data-scientist's G1 ruling, ML §3.1 and §10 R6, v1.8) | `contact.json` carries `files`, `derivedFrom` and `flowAnchors`, with the development sources and exclusions fixed by ML §10 R6. **Done when `make_contact.py --check` exits 0, i.e. `contact.json` re-derives from committed blobs** (the tree `derivedFrom` names, never the working tree), and `test_contact.py` passes. Delivered; analyst Pass 2: approve with suggestions (G1 closed by ML v1.8; G3 is this row; G2 is the generator's source-exclusion and `derivedFrom` pin, checked at the next gate pass). Feeds S27 (strata) and S47 (contact set). | an | S11, S14, S30, S56 |
+| S59 | P0-50 | gated | `graph-dba` | M | `cpg/spikes/frontend-fitness/{make_contact.py, contact.json}`, `cpg/tests/test_contact.py` | S11, S14; S56's flow-method files, recorded apart from `files` as `flowAnchors` (the data-scientist's G1 ruling, ML §3.1 and §10 R6, v1.8) | `contact.json` carries `files`, `derivedFrom` and `flowAnchors`, with the development sources and exclusions fixed by ML §10 R6. **Done when `make_contact.py --check` exits 0, i.e. `contact.json` re-derives from committed blobs** (the tree `derivedFrom` names, never the working tree), and `test_contact.py` passes. Delivered; analyst Pass 2: approve with suggestions (G1 closed by ML v1.8; G3 is this row; G2 is the generator's source-exclusion and `derivedFrom` pin, checked at the next gate pass). Feeds S27 (strata) and S47 (contact set). | an | S11, S14, S56 |
 | S50 | P0-39 | | `architect` | Doc | `docs/plans/connected-code-graph.md` v3.4 (in place, one dated line) | every results note; bundle spec BF16 | §3.2's table restated as measured; `flowAvailable` and the indexer decisions recorded; §3.5's sizes at P0 scale; §6.2's P0 items marked settled with a pointer each. **§3.8 gains the fourth orphan case, "re-binding on sibling insertion" (BF16)**, with its mitigation (both end fingerprints in the verdict log). **§4's P1 row records eval-protocol Q1** (shipped default depth bound ≥ 2) **and Q3** (prompt extractor classifies by `eval-manifest.yaml`'s glob list). The proposal's `Extended by:` gains this document. | an | all gates |
 | S51 | P0-40 | | `teco` | Doc | `docs/HISTORY.md`, `docs/BACKLOG.md` (C-1001), root `AGENTS.md` `cpg/` bullet (one clause) | §10 | §10's list is applied. | tc | S50 |
 
@@ -431,8 +431,8 @@ ordering only, and a dependency on an accepted step is satisfied.
 - **Slice chain:** S11 → S12 (P0-11b) → P0-12 (S13 → S14) → S15.
 - **Store chain:** P0-15 (S20 → S21) → P0-16 (S22 → S23), all exclusive.
 - **Fitness chain:** S24 → S25 (P0-18a, then P0-18b) → {S26 (seven) ∥ S56 (seven)} → S57 (per
-  language, as that language's S26 lands) → S27 → {S27c ∥ S28} (S28 also after S15). **S59** (after S11, S14, S30
-  and S56) runs beside S57 and must be accepted before S27 reads its strata; S47 also waits on it.
+  language, as that language's S26 lands) → S27 → {S27c ∥ S28} (S28 also after S15). **S59** (after S11, S14
+  and S56) runs beside S57 and must be accepted before S27 reads its strata; S47 also waits on it. S30 is not an input to S59: its walkthrough anchors reach the contact set at S47 by their own list (EP §8.2), and S30 waits on S27, so an S59 → S30 edge would close a cycle.
 - **Fixtures:** S36 ∥ S37 ∥ S38 ∥ S35b → S39.
 - **Ground truth (§6):** S40 waits on S48; **S54** waits on S40, S52 and S53, and no writer starts
   before it passes; then S41 (five KA), S42 (five KB) and S43 (QW), **at most two at a time**
@@ -596,7 +596,7 @@ frame, simple random sample by inverse sampling with a cap of 500, which superse
 ratified by §2 D14, the decision rules (§8). Its step outputs became S24–S28, S56 and S57 (§16).
 v1.3 §4.3's S05 bullet list is superseded.
 
-**S06 (accepted at v1.2): the eval-protocol note controls** the strata,
+**S06 (accepted; EP v1.8): the eval-protocol note controls** the strata,
 counts, item schemas, hit rule, matching, estimators, completeness trigger, development-contact
 rule, split, held-out manifest, leak check, AC-24 counts, noise bound, AC-5 fail procedure, planted
 minimums, pre-registration format and GC's tooling procedures. What each step takes from it is its
@@ -983,7 +983,7 @@ finished item to its output file as it goes. If a session is killed (usage limit
    is discarded and a fresh session of the same role and stratum starts from an empty output.
 2. **Resume through the same argv builder.** `teco` runs `run-writer.sh resume <role> <stratum>`,
    which calls the same `build_argv` with `--resume <uuid>`, the fixed continuation prompt
-   ("continue; your output file lists what is already done") and the next attempt number `<n>`.
+   ("continue; your output file lists what is already done") the next attempt number `<n>` and the timeout recorded for the session (reused unless `--timeout` is passed).
 3. **The output survives truncation.** The reader drops an unparseable final line left by
    `timeout`; the writer's next append starts on a fresh line.
 4. **Each attempt is audited.** Each attempt is recorded in the run index; the final audit covers
@@ -1021,7 +1021,7 @@ first 12 characters of `EVAL_COMMIT`:
   `chmod -R a-w`.
 - **`BRIEF.md`** (one per role and stratum) contains: the role's strategy; **eval-protocol
   Appendix B pasted verbatim** (stratum definitions, item schemas and E1's naming rule in
-  writer-facing form; nothing else from that note); the rubric "a real dependency
+  writer-facing form; nothing else from that note); **the `{grammarExtract}` slot, which is bundle spec3 §4 and §6 as cut by Appendix B's pasters rule and by the name and section cuts recorded in `cpg/eval/headless/S52-NOTES.md` (spec3 itself is not edited: it contradicts Appendix B's "no proving-repo element" claim until cut). The brief and S52's four agent definitions hold one byte-identical copy, pinned by `eval-manifest.yaml`'s `writerBriefs.grammarExtract`**; the rubric "a real dependency
   exists in at least one deployable configuration"; for `flow`, the **shared anchor list** drawn by
   S40 (`export_kit.py --draw-flow-anchors`, recorded seed, eval-protocol §3.6), identical for KA and
   KB; the output path, and a plain statement of what the session cannot reach. QW's brief adds the
@@ -1110,7 +1110,7 @@ event:
 2. **User agents:** `~/.claude/agents/` holds symlinks into the repo's `claude/` folders, plus
    `prontuarios`. `Agent` is not in `--tools`, so at most a catalog description could leak, and with
    `Agent` absent even that goes. Check the init event's agent list, as a context-leak check.
-3. **Plugins:** the init event's plugin list is empty.
+3. **Plugins:** the init event's plugin list equals the set of CLI-bundled plugins S54 accepted: each `path` is `builtin` and each `source` ends in `@builtin` (S55's capture lists `cc-plugin-agents-md`, `cc-plugin-telemetry`, `cc-plugin-plugin-authoring`). Any other plugin, or a different bundled set, is a violation.
 4. **Auto-memory:** no memory content appears, and the session cannot write a memory file outside
    its role root.
 5. **OAuth works under `--restricted`**, and plan usage is charged; settled by S55 before S48 and
@@ -1123,14 +1123,16 @@ read `/home/mauricio/prg/graphmind-ai-lab/AGENTS.md` by absolute path; `Grep` wi
 `../../..` path; read a sibling role's `out/` (a dummy role root with a dummy output); read
 `~/.claude/history.jsonl` and `~/.claude/projects/`; read a file under `/tmp`; write outside `out/`;
 call `mcp__cypher__query`, `mcp__falkor-chat-agent-team__search_documents` and `ingest_document`;
-run Bash, `WebFetch` and `Agent`; read `kit-src/README.md`, a legitimate read, as the control.
+run Bash, `WebFetch` and `Agent`; read `kit-src/cypher-mcp/README.md`, a legitimate read, as the control.
 
-**Kill-and-resume case.** A second rehearsal session does legitimate reads, appending to its
-output, and `timeout` kills it mid-run. Then: GC audits the partial session; `teco` runs
-`run-writer.sh resume`; the resumed attempt makes one more legitimate read and one planted
-out-of-root read. **Pass when** both attempts' logs exist under distinct names, the resumed
-attempt's init event shows the full isolation flag set, the audit reports no false violation
-across the two attempts, and it flags the planted read in attempt 2.
+**Kill-and-resume case.** Two rehearsal sessions, each with legitimate reads appended to its
+output and killed mid-run by `timeout`: `resume` (clean) and `resume2` (the planted-read case). Then:
+GC audits the partial session; `teco` runs `run-writer.sh resume` (§6.1: the recorded timeout is reused unless `--timeout` is passed); the resumed attempt makes one more legitimate read, and in
+`resume2` one planted out-of-root read. The resume prompt is fixed, so the planted read must be
+briefed to the writer before the kill. **Pass when** both attempts' logs exist under distinct
+names, the resumed attempt's init event shows the full isolation flag set, the audit reports no
+false violation across the two attempts of `resume`, and it flags the planted read in attempt 2 of
+`resume2`.
 
 **Pass when:** every illegitimate attempt is refused; the audit (S48) flags every attempt, refused
 or not; the control read succeeds and is **not** flagged; items 1–5 are confirmed from the init
@@ -1199,13 +1201,14 @@ specification) runs on every writer session, each resume included, and on the re
   (`~/.claude/projects/*/<session-id>.jsonl`), with no assumption about the directory name.
 - **Cross-check over the union of attempts.** Every `tool_use` id in the transcript must appear in
   some attempt's stream log and vice versa; a mismatch, a missing transcript or a missing attempt
-  log is a violation. **One exception:** if a call's only stream-side record is the line `timeout`
-  cut off at the end of an attempt's log, the call is checked from the transcript alone and
-  reported as "stream-truncated". S48's two-attempt fixture proves both rules.
+  log is a violation. **One exception:** a truncated tool call is the final line of an attempt's log,
+  cut off by `timeout`; the call belongs to the transcript message that line begins. It is checked
+  from the transcript alone and reported as "stream-truncated". A call missing mid-session stays a
+  violation. S48's two-attempt fixture proves both rules.
 
 **Checks.**
 1. **Init event, in every attempt:** MCP servers empty; the tool set **equal** to `--tools`; the
-   plugin list empty; no skills and no slash commands; the agent list as S54 accepted it; the model
+   plugin list as §6.3 item 3 states; no skills and no slash commands; the agent list as S54 accepted it; the model
    and CLI version equal the run index's; the hashes of `settings.json` and `agents.json` unchanged
    across attempts.
 2. **Every `tool_use`:** the tool name is in the allowed set; every path-bearing input (`file_path`,
@@ -1287,7 +1290,7 @@ file reading and grep inside the corpus checkout; S57 Python and the venv (FC), 
 (`data-scientist`); S27, S28 the sandbox and Python; S39 Python, `git`, the sandbox; S40–S49
 `git` and Python; S41–S44, S54, S55 the `claude` CLI, launched by `teco` through S53.
 
-## 8. §6.2 "for P0 to settle" → where each is settled
+## 8. §6.2 P0 decisions → where each is settled
 
 | §6.2 item | Settled in | Decision rule or method | Recorded in |
 |---|---|---|---|
@@ -1423,7 +1426,7 @@ has since acted on them. F14–F18 are new. None stops P0.
     seen in access logs or HTTP-client instrumentation while the suites run). This **conflicts with
     ML §4.1**, which says oracle edges are reported next to seeded recall and never pooled. So (e)
     is available only if `data-scientist` explicitly revises that rule, with its reason, **and**
-    names a collection step. Eval-protocol v1.2 does neither, so today (e) is off the table.
+    names a collection step. The eval-protocol (v1.8) does neither, so today (e) is off the table.
   - **Needing the stakeholder:** (a) top up with planted items in a fixture repo kept outside the
     repo like the held-out set (D11), written by an isolated agent and reported as its own stratum
     (ML §4.1) — **this amends AC-5**, because a fixture repo is not "in the proving repo" (F7);
@@ -1486,15 +1489,14 @@ requirements, ledger follow-up):
 | **K-P0-17** | Fresh items are scarce for a re-gate (eval-protocol R7) | A re-gate passes on every item yet cannot count as an AC-5 pass | The reserve (S47); a top-up census; a new commit; then the Q7 question in §12 |
 | **K-P0-18** | The served-anchor rule leaves `wiring` short (eval-protocol R9) | SQ-P0-1 fires at S47 | S30's walkthrough on `falkor-chat/server` or the fixture (§3 S30); then SQ-P0-1's path |
 
-## 14. S06 hand-offs (eval-protocol v1.2, accepted)
+## 14. S06 hand-offs (eval-protocol v1.8 and EP2 v1.5, accepted)
 
-S06 is **accepted at v1.2** (`docs/plans/connected-code-graph-eval-protocol-ml.md`; ledger U26,
-no Pass 3). Its §14 table and §15 questions are folded into the rows of §3, §6, §12, §13 and §15.
+S06 is **accepted** (`docs/plans/connected-code-graph-eval-protocol-ml.md` v1.8; ledger U26 for v1.2,
+then the gated amendments to v1.8). Its §14 table and §15 questions are folded into the rows of §3, §6, §12, §13 and §15.
 The item-by-item record, including what changed from v1.0 to v1.2, is the traceability table
 §16.1 (source **EP**); this section does not repeat it.
 
-**EP2** (`docs/plans/connected-code-graph-eval-protocol2-ml.md`, `Extends:` EP; F-8, step 8a; in
-re-gate) is a consumer source too: its §3 obligations are folded into S06, S12, S40, S45, S47, S49,
+**EP2** (`docs/plans/connected-code-graph-eval-protocol2-ml.md` v1.5, `Extends:` EP; F-8, step 8a) is a consumer source too: its §3 obligations are folded into S06, S12, S40, S45, S47, S49,
 §15's P1 gate harness and P1 assembler, and §16.1 (rows EP2-*). This plan cites EP2 by section and
 encodes no `keyNorm` step order of its own (§2 D19).
 
@@ -1513,7 +1515,14 @@ What the fold changed, in one line each:
 - **Stakeholder decisions:** Q5's reading, the fresh-item floor E12, the flow-boundary rule E11 (§12).
 - **For P1:** depth bound ≥ 2 (Q1), the prompt glob list (Q3), the gate harness's floor, exposure
   record and four-field pre-registration comparison, and the `coreTreeHash` `*.md` condition (§15).
-- **Also for P1/S50:** the answer spec's carry-over items C1-C9 (`docs/plans/connected-code-graph-answer-spec.md`, "Carry-over to P1/S50"); the EP §10.4/§5.2 amendments they name (`data-scientist`, before S47/S49); the S22/S23 ACL findings for proposal §3.5 (`docs/plans/connected-code-graph-p0-graph.md` §6); the gate harness and AC-16 pin-and-replay code (EP v1.3 §5.2.1, §10.6, `docs/plans/connected-code-graph-eval-protocol-ml.md`), and S47 depends on EP v1.3 accepted (`CAP` is pre-registered with the held-out ambiguity set); an independent provoked-log set per runtime to validate the 34 authored infra signatures (`docs/reviews/connected-code-graph-rule-pack-spec.md` Pass 5, P5-2; owner `qa-engineer` or `data-scientist`).
+- **Also for P1:** the answer spec's carry-over items C1-C9 (`docs/plans/connected-code-graph-answer-spec.md`, "Carry-over to P1/S50"; S50 records C4's depth bound in proposal §4); the gate harness and AC-16 pin-and-replay code (EP §5.2.1, §10.6, `docs/plans/connected-code-graph-eval-protocol-ml.md`; `CAP` is pre-registered with the held-out ambiguity set); an independent provoked-log set per runtime to validate the 34 authored infra signatures (`docs/reviews/connected-code-graph-rule-pack-spec.md` Pass 5, P5-2; owner `qa-engineer` or `data-scientist`).
+- **Owed to P1 by the P0 results** (not P0 work):
+  - **Answer engine and answer spec (N-3; `architect`).** The engine exposes the documented cache-bypass input of EP §10.4 (recorded as `cacheBypass`), and answer spec §3 cites that predicate rather than restating it. The four class-X edge types of EP §5.2.1 are carried by no P1 answer hop; answer spec §4.4 and C4 cite the proposal's depth bound.
+  - **Store DDL and ACL (`graph-dba`).** An index on `ConfigEntry.entryId` before the load (EP §5.2.1 HA-1; `docs/plans/connected-code-graph-p0-graph.md` §1.6 defers it). The graph note `docs/plans/connected-code-graph-graph.md` (its `ccg_build` ACL line, `~ccg_<system>*`) is edited to the pattern of proposal §3.5. The loader's ACL test plants `shop` with `shop2` and `shop` with `shop__x`, pins the lock selector, and enforces the system-name whitelist.
+  - **`extract.sc` fix scope.** The shipped walk drops the reaching-definition chain from an earlier same-name use, and aborts on a bodiless C# method (`docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` §a2.1, §a2.2.1). The fix is those two projection changes (counterfactuals R1 and R2) plus the C# guard. R3 is a scoring-time relaxation, not a projection. The causes marked frontend (§a2.2.2) are not fixable there. The 30 methods per language are development contact, so the fixed projection is measured on a fresh flow draw with a new seed prefix, and `flowAvailable` stays false until it is.
+  - **Tooling (`qa-engineer`).** `split_manifest.py`'s AC-24 half and the `regate-list` and `exposure` verbs. P0 ran the scripted §10.2, §10.3 and correction steps from `cpg/eval/tools/s47_scripted_steps.py`, an untested replay record that P1's verbs replace.
+  - **Linker and S30 owner.** The cross-repo Compose build-context to unit resolution is inferred and unspecified (`docs/plans/connected-code-graph-p0-compose-binding.md`); check it on a real cross-repo case. If it fails, the fallback is a bundle-spec image-name rule: escalate, do not patch fixtures.
+  - **Anchor rule (Q7 of the slice report).** `ownedRegions` is unexercised by data (0 of the slice's 4,943 symbols carry one); its first test is a P1 fixture (`docs/plans/connected-code-graph-p0-graph.md` §1.4).
 
 ## 15. Ready to implement
 
@@ -1553,7 +1562,7 @@ the first P1 measurement** (ML §4.2, the "Thresholds" paragraph: the floor cann
 measures; restored from v1.3, P3-6); and reports the **runtime oracle** beside seeded recall, never
 pooled, each oracle miss feeding the next held-out set (ML §4.1; eval-protocol §15.1 R1)). **The P1
 assembler imports `mask_http_segments` from `cpg/ccg/keynorm.py`**, the function S12's P0-11a
-writes, and never reimplements step 8a (EP2 §3, P1 assembler row; §2 D19). **P1 condition (eval-protocol §16, M5 nit):** if P1 keeps interpreter prompts
+writes, and never reimplements step 8a (EP2 §3, P1 assembler row; §2 D19). **P1 condition (eval-protocol §12.3, M5 nit):** if P1 keeps interpreter prompts
 as `.md` under `cpg/`, narrow `coreTreeHash`'s `*.md` exclusion before the first pre-registration; the AC-24 smoke harness (eval-protocol §10.5); `teco` v1 integration (a `cobb` unit);
 the full root `AGENTS.md` `cpg/` rewrite; porting or deleting `cpg/spikes/`; re-reading `flowAvailable`
 if P1's design makes call-level reach not a superset of flow reach (ML §8.4). **From `-spec2` §3
@@ -1651,15 +1660,15 @@ Every item this successor absorbed, its source, and where it landed. "ML" = `doc
 
 ### 16.1 v1.1 traceability (one row per handed-onward item)
 
-Sources: **EP** = `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.2 (§14 table, §15.2,
-§16); **BS2** = `docs/plans/connected-code-graph-bundle-spec2.md` v1.3 (§0, §3, §4.1, §4.2);
+Sources: **EP** = `docs/plans/connected-code-graph-eval-protocol-ml.md` v1.8 (§14 table, §15.2,
+§12.3); **BS2** = `docs/plans/connected-code-graph-bundle-spec2.md` v1.3 (§0, §3, §4.1, §4.2);
 **ES2** = `docs/plans/connected-code-graph-egress-spec2.md` v1.2 (§0, §3); **L** = the ledger,
 notes 2026-10-29 to 2026-10-30. "Declined" means not placed in a P0 step, with the reason.
 
 | # | Item | Source | Landed in / reason declined |
 |---|---|---|---|
 | EP-1 | S33: interpreted symbol anchors carry `qname` (for §10.4's `E`) | EP §14 S33, §15.2 Q1 (v1.1) | §3 S33 |
-| EP-2 | S35: assertion column for AC-25's four shape properties; S39 tests it | EP §14 S35, §16 m6 | §3 S35, S39 |
+| EP-2 | S35: assertion column for AC-25's four shape properties; S39 tests it | EP §14 S35; `docs/reviews/connected-code-graph-p0-impl.md` §S06 m6 | §3 S35, S39 |
 | EP-3 | S40: paste Appendix B verbatim and nothing else (not §3/§4) | EP §14 S40 (M3) | §3 S40; §6.2 |
 | EP-4 | S40: `eval-manifest.yaml` gains `units`, `cypherMcpTools`, grain table | EP §14 S40 (v1.1) | §3 S40 |
 | EP-5 | S40: units carry `ports` from source; grain table Kiro rows | EP §14 S40 (v1.2, P2-4) | §3 S40 |
@@ -1692,7 +1701,7 @@ notes 2026-10-29 to 2026-10-30. "Declined" means not placed in a P0 step, with t
 | EP-32 | Q9: `H` < 75 while `H_all` ≥ 75 fires SQ-P0-1 as usual | EP §15.2 Q9 | §12 SQ-P0-1 trigger |
 | EP-33 | E11 (flow counts across a boundary) and E12 (floor) as stakeholder decisions | EP §0, L 2026-10-29 | §12 decided; §6.4; §6.5 |
 | EP-34 | R7, R9 | EP §15.1 | K-P0-17, K-P0-18 |
-| EP-35 | M5 nit: narrow `coreTreeHash`'s `*.md` exclusion if P1 keeps prompts as `.md` | EP §16 Pass 2 | §15 P1 condition |
+| EP-35 | M5 nit: narrow `coreTreeHash`'s `*.md` exclusion if P1 keeps prompts as `.md` | EP §12.3 | §15 P1 condition |
 | BS2-1 | §2 D5: `-spec2` via S16 → `-spec3`; frozen contract = spec + `-spec2` | BS2 §4.2 row 1, §0 | §2 D5; §3 S16 |
 | BS2-2 | §2 D17, S58 row, §5.3's S58 row, K-P0-16: dispositions recorded in `-spec2`, before S15; K-P0-16 mitigated | BS2 §4.2 row 2 | §2 D17; §3 S58; §5.3 S58 row; K-P0-16 |
 | BS2-3 | §4.0 deliverable (b) row: "bundle spec + `-spec2`; `-spec3` required before P0 exit" | BS2 §4.2 row 3 | §4.0 (b) row |
@@ -1774,7 +1783,7 @@ step (or section) whose done-condition encodes the fix, so `teco` can grep it th
 | R-7 | W1 implicit | Rev3 recount | = n-c, §3 S10 |
 | R-8 | FR-15/hostnames decision, no row | Rev3 recount | = P3-9; §12 decided list |
 | R-9 | Dropped v1.3 texts: K-P0-12, possible-precision, §12 G5 paragraph | Rev3 recount | = P3-5, P3-6, n-b |
-| EP2-1 | §3 S06 / §14: contract is EP v1.2 plus EP2; §14 consumers gain EP2 | EP2 §3 | §3 S06; §14 "EP2 … is a consumer source" |
+| EP2-1 | §3 S06 / §14: contract is EP v1.8 plus EP2 v1.5; §14 consumers gain EP2 | EP2 §3 | §3 S06; §14 "EP2 … is a consumer source" |
 | EP2-2 | §3 S10: nothing new | EP2 §3 | nothing to place |
 | EP2-3 | §3 S12: writes the shared 8a function in `cpg/ccg/`; K1–K22, K30–K33 and K42–K48 provider form; SL-1/SL-2 unchanged | EP2 §3, §1.1 | §3 S12 P0-11a "K1–K22, K30–K33 and K42–K48"; §9.1 `keynorm.py` row |
 | EP2-4 | m4 / Q1: file and module for the shared function; S12 → S49 ordering | EP2 §1.1, §4 Q1, §5 m4 | §2 D19 (`cpg/ccg/keynorm.py`, `mask_http_segments`; S49 after P0-11a); §5.2 `keynorm.py` row |
