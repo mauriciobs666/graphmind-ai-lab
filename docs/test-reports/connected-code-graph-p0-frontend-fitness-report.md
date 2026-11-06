@@ -1,6 +1,6 @@
 # Connected code graph — P0(a) frontend-fitness report
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10)
 
 Sections: §a1 (S27), §a2.0 (Part F flow-label audit), §a2.1 (S28 run), §a2.2 (S28 adjudication and final `flowAvailable`). Protocol: `docs/plans/connected-code-graph-p0-ml.md` (ML, v1.17).
 Recall, precision, remedy and stratum figures were recomputed from `cpg/spikes/frontend-fitness/results/<lang>.answers.jsonl`,

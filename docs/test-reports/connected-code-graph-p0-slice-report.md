@@ -1,6 +1,6 @@
 # Connected code graph: P0 vertical-slice report (S14, P0-12)
 
-> **Status:** active · **Owner:** `coder` · **Tracks:** P0-12 (S14)
+> **Status:** archived · **Owner:** `coder` · **Tracks:** P0-12 (S14)
 
 This is step S14 of `docs/plans/connected-code-graph-p0-2.md`: it scores the slice (S11 extraction,
 S12 assembly, S13 load and impact) against SL-1..SL-7 (§4.4) and carries the findings S15 needs.

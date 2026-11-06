@@ -1,6 +1,6 @@
 # Connected code graph P0 — ground-truth report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 P0 (S54/S45–S47)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** C-1001 P0 (S54/S45–S47)
 
 CPG: not applicable — this report audits headless-session logs and guard behaviour; no code-level graph question is asked.
 

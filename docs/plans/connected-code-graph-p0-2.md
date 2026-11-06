@@ -1,6 +1,6 @@
 # Connected code graph — phase P0 implementation plan (successor)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.6 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Version:** 1.6 · **Supersedes:** `docs/plans/connected-code-graph-p0.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md`
 
 *2026-11-06 (v1.6): in place; S50 owed items folded: §6 wording from the S54/S48 results (plugins, control file, resume, truncation), S45 `--ka2-strata`, S27c/S59 rows, EP pins and citations, `{grammarExtract}`, and the P1 owed items (§15). v1.4 was the successor to v1.3; disposition table: §16.*
 
