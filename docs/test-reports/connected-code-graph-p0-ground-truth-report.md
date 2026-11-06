@@ -239,3 +239,46 @@ No invalid items, so no breakdown by reason or file; the EP §7.2 invalid-share 
 http f1 0, f2 20, f3 29; mcp f1 24, f2 14, f3 29. Pooled: r 420, N* 475.17, completeness 0.884. Chapman intervals are degenerate except scripts (154.09 to 159.40). mcp (0.845) and flow (0.765) stay below 0.95 after their extra pass; no further passes run.
 
 **S45 part 2 redrawn:** near-miss 0 pairs (N1 0, N2 0, N3 0), no adjudicate; scope 0 out of scope (H 294, H_all 420); capture as above (15 invalid items); sample: `work/spot.jsonl` 40 union items (8 per stratum; 20 singleton, 20 doubleton), shortfall records 0; `work/ptgold.jsonl` 8, `work/engold.jsonl` 8. Hashes (prefixes): `match.json` dc01128e989a12f3, `capture.json` 44d0006dd5f7b5d3, `spot.jsonl` 379629ac97ae4cc4, `ptgold.jsonl` 1f08b438f11d7e25 (equals the previous draw), `engold.jsonl` 419734bea1d625ad (equals the previous draw).
+
+## S47 split and manifest
+
+Counts, hashes and the contacted anchors only; no held-out content. `E` = `cf7b2042cce7bad5d0ab7876940bcea00343d914`; seed `ccg-p0f-split-v1|E`; protocol `docs/plans/connected-code-graph-eval-protocol-ml.md@1.7+docs/plans/connected-code-graph-eval-protocol2-ml.md@1.4`.
+
+**Procedure (honest record).** S46: the 40 union items were verified against source by an independent analyst (AI), not checked by a human: 47 of 48 entries correct (the 40 union items 39 correct, 1 incorrect). The 8 Portuguese gold items (entries 41-48) were human-confirmed by the stakeholder ("all fit"): 0 of 8 incorrect. The analyst re-verified entry 28 after a partial first check.
+
+**Corrections (EP §7.4).** Entry 26 is incorrect (scripts stratum, found by KB only, counting; the cited script only prints a hint and never runs the command). The note gives no locator, so the item is removed (logged in `work/corrections.jsonl`). Incorrect by stratum: scripts 1 of 8 (Wilson 95% [0.022, 0.471]); other strata 0 of 8 each (Wilson [0.000, 0.324]); pooled 1 of 40 (Wilson [0.004, 0.129]). Escalation (a stratum with 2 or more of 8, or 4 or more of 40): not triggered, so no singleton review. PT gold check: 0 of 8 incorrect; the EN gold sample (`work/engold.jsonl`, 8 items) was not part of the stakeholder check and has no recorded verdict. No re-estimation: N* below stands; the post-correction union is 419 items (420 before).
+
+**Estimates (unchanged from S45; `work/capture.json`):**
+
+| Stratum | n1 | n2 | m | t | N* | Completeness | Flag |
+|---|---|---|---|---|---|---|---|
+| http | 49 | 29 | 29 | 3 | 49.00 | 1.000 | |
+| mcp | 67 | 29 | 29 | 3 | 79.27 | 0.845 | completeness below threshold |
+| scripts | 152 | 114 | 112 | 2 | 157.81 | 0.976 | |
+| wiring | 23 | 19 | 19 | 2 | 23.15 | 0.994 | |
+| flow | 127 | 31 | 31 | 3 | 165.94 | 0.765 | completeness below threshold |
+
+Post-correction union by stratum: http 49, mcp 67, scripts 153, wiring 23, flow 127 (419). The scripts item removed was a KB-only record, so scripts n2 114 stands in the table above as estimated.
+
+**Contact set (EP §8.2).** Every source is closed and committed: S14 (slice report §4), S30 (rule-pack spec §11), the P0 golden tests (`cpg/tests/golden/answer-ac1.json`, the only golden file), S56 flow labels (all seven languages) and S59 `contact.json` (`files` 9 over the two corpora, `flowAnchors` 33 paths, union 39 distinct paths). Rewrites through `normalize_contract` (contract) and `E` (symbol): 0 of 9 raw lines changed. `work/contact.jsonl`: 9 lines, 6 distinct anchors, listed by locator (they are dev): `GET /shop/api/health` (S14, S30, golden), `GET /health` (S14, S30), `GET /x/api/health` (S14), the `salesperson/src/api/client.ts` symbol `buildUrl` (S14), MCP tool `send_message` (S30), and the unit `falkor-chat/server` (python) (S30). S59's paths and S56's flow methods are path-level; no item in the union has an anchor, impacted element or provider in any of those 39 paths, so they contacted 0 anchors (checked by path on the union). Contact sent 4 clusters to dev.
+
+**Split (EP §9.1).** 136 clusters; 43 dev clusters (4 contacted, 39 by rank); held clusters per stratum: flow 12, http 15, mcp 3, scripts 36, wiring 4; 23 reserve clusters. Step 3b `served-anchor` moves: 0. Step 4 top-up: none needed (no marked stratum). SQ-P0-1 trigger: false.
+
+| Stratum | Held-out items | of which counting | Held-out anchors | Dev items |
+|---|---|---|---|---|
+| http | 26 | 26 | 15 | 18 |
+| mcp | 46 | 46 | 4 | 20 |
+| scripts | 79 | 79 | 36 | 49 |
+| wiring | 8 | 8 | 7 | 11 |
+| flow | 99 | 0 | 12 | 28 |
+| reserve | 35 (counting 35) | | 23 | |
+
+`H` (held-out counting items, pooled) 159 beside `H_all` 258; the AC-5 floor of 75 is met by the four non-flow strata alone; flow contributes 0 counting items (E11). wiring sits at its minimum of 8. Files: held-out `ac5-<stratum>.jsonl` x5, `ac5-reserve.jsonl`, `ac24.jsonl`, an empty `exposure.jsonl`, in `~/.local/share/ccg-eval/cf7b2042cce7/heldout/`; dev `cpg/eval/dev/ac5-<stratum>.jsonl` x5 and `ac24.jsonl`.
+
+**AC-24 (EP §10.2-§10.3).** Annotators AN1 and AN2 agree on 47 of 48 `aid`s (raw agreement 0.9792; Cohen's kappa 0.9286, diagnostic only). Outcomes: unambiguous set 36 (en 18, pt 18); ambiguity set 8 (en 4, pt 4); dropped "writer-ambiguous, annotators-unambiguous" 3 (en 2, pt 1); dropped annotators disagree 1 (pt); "writer-unambiguous, annotators-ambiguous" 0. Split: held-out 30 (unambiguous 24: 6 per language and group cell; ambiguous 6: en 3, pt 3); dev 14 (unambiguous 12; ambiguous 2). Gold stored normalized with `form` `provider` and the writer's original object beside it; gold `contract` locators rewritten: 0; masked `http` gold anchors needing the unserved-gold check: 0.
+
+**EP §7.2: invalid KA-flow items in held-out.** The 15 KA-flow items with invalid lines count as not found by KA. All 15 are held-out flow items (their identities were re-found by KA2, 6 also by KB). By file (anonymised): F1 10, F2 3, F3 1, F4 1. The held-out concentration is therefore 10 of 15 in one file, and 15 of the 99 held-out flow items.
+
+**Manifest** `cpg/eval/heldout-manifest.json` (sha256 `ce2bb8b1c1c7941ede76e742b03ce3a0e7777128cfe376303ae07eccfc6f800d`, 70 raw artifacts, `verify`: 77 checked, 0 mismatches). File sha256: `ac5-http` 24237acd7832db4f54d74dfcc84398802ab00e1e2246c421daa87e8ed65add89; `ac5-mcp` 04f2e39f7a171ffd6226148a2148518281e9677adf79bc6f43e8b0b8f978020c; `ac5-scripts` 842162dff65823bd129673f3dfa9dd3edac07a50af7bfe5525c995ba086818a5; `ac5-wiring` 55df0ab263b4e9d74fdc46bbae62739029306aabb832d888d21f0152e4ecb8d8; `ac5-flow` db7f5244b20fb0f99c9d53bd99d21e25a2748ee3083509b1976f7a81d28c430a; `ac5-reserve` 118e460ace4b079d8d9f5a4bed89b483d240436d6c76d8dda0346b57c8161676; `ac24` 1fc707eecc852b29605e6767fc220db03827a082bd63ace0e397dc8468117169. Dev sha256: `ac5-flow` a67ca4c19db71d6231669bec9fc93ec8bd54d19cb9943255199446d957e4c66d; `ac5-http` 197d15e6a0450b5c31929f926c32ac2dbc9af1ac24d3e6b1fe356bc91052f90f; `ac5-mcp` 90c704f102ae2fe4e67ffd15a251e18ed27a2e163c08155fe0b5ae685a6d283b; `ac5-scripts` 132106ea0363dafe71d276e2a1cfb0516f9b2dd934fca3d657878a6d478244dd; `ac5-wiring` 8ec9cc3a92b1c498d6c4c815535c320c4f4471825558de4414fa23eec5b179b1; `ac24` 153996d69e2470834c3a98297a6bf06f5eaee42fc2b0590a07044c8784d038eb. The 70 raw artifacts cover `runs/` logs and index, role `out/` files, key and question files, and the match, capture, contact, corrections and aid-map files; session transcripts live under `~/.claude/projects/` and are not hashed.
+
+**Leak check.** `split_manifest.py check-report` (held-out directory, dev files and `contact.jsonl`; EP2 §1.4 probes, normalized and pre-8a forms): 1761 probes, 0 hits, exit 0.
