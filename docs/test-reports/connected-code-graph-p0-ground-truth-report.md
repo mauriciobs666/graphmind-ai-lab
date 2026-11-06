@@ -109,3 +109,77 @@ Same `audit.py` command and lists; outputs `work/audit-AN1-impact.*` and `work/a
 | AN2 `67033772` | 1 | 17 | clean (exit 0) | 0 | 0 | isolation set, `claude-opus-5-5` | success, 0.693197 USD, 18 turns | 48 | 0 unparsable, 0 failures | 48 distinct, 0 duplicate, 0 missing, 0 unknown | ambiguous 9, unambiguous 39 | `2b0beceb98e5c407a819b822557f7dfba6d733ffdfdaa7926f90d41223eb15be` |
 
 Schema check: exactly the keys {`schema`, `aid`, `label`, `reason`}, `schema` = `ccg-annotation-v1`, `label` in {`ambiguous`, `unambiguous`}, `reason` a string of at most 200 characters. The `aid` set is compared with the 48 in `QW-nogold.jsonl`. `streamTruncatedCalls` 0, `unpinned` empty for both; both outputs copied byte-identical.
+
+## S45 matching (part 1)
+
+Tools: `cpg/eval/tools/match_keys.py` via `cpg/.venv`; working files under `work/s45/` and `work/` of the eval dir. Context file `work/s45-context.json` is built from `work/units.json`, `work/cypher-tools.json` and the `qname`s of `work/flow-anchors.jsonl`. Kit: `kit-src`. Counts only. Order run: `normalize` per file (writer KA or KB, `--log`, `--invalid`), `validate` per file and on the union, `match` on the valid union, `nearmiss`, `scope`.
+
+**Validation (V1-V3), per key file**
+
+| File | Lines | Valid | Invalid |
+|---|---|---|---|
+| KA-http | 52 | 52 | 0 |
+| KA-mcp | 103 | 103 | 0 |
+| KA-scripts | 167 | 167 | 0 |
+| KA-wiring | 20 | 20 | 0 |
+| KA-flow | 88 | 73 | 15 |
+| KB-http | 29 | 29 | 0 |
+| KB-mcp | 57 | 57 | 0 |
+| KB-scripts | 120 | 120 | 0 |
+| KB-wiring | 11 | 11 | 0 |
+| KB-flow | 31 | 31 | 0 |
+| Total | 678 | 663 | 15 |
+
+Invalid by check: `V2:line-outside-span` 13, `V1:line-out-of-range` 2; all in KA-flow, seq 1-11, 13, 14, 17, 32 (clustered in the first items; flagged for the method owner and `teco` as a possible systematic line-numbering slip, not investigated). Invalid items stay out of matching. The tool's `dropped` counts are `{}`. `normalize`: 0 unparsable final lines; rewrites logged: `config-grain` 1 (KA-wiring seq 20), step 8a rewrites 0 (no V3 8a entries, so no masked-segment count to review), `E` rewrites 0.
+
+**Matching.** `runs/index.jsonl` holds 0 `KA2` sessions: no `--ka2-strata`, `t` = 2 in all five strata.
+
+| Measure | Value |
+|---|---|
+| Valid items by writer | KA 415, KB 248 |
+| Valid items by derived stratum and writer | scripts KA 167 / KB 122; flow KA 69 / KB 31; mcp KA 67 / KB 34; wiring KA 59 / KB 32; http KA 53 / KB 29 |
+| `match.json` records | 368 (http 49, mcp 67, scripts 154, flow 75, wiring 23) |
+| Matched (found by both KA and KB, history `101`) | http 29, mcp 29, scripts 112, flow 25, wiring 19; total 214 |
+| KA only (`100`) / KB only (`001`) | 146 / 8 (KB only: scripts 2, flow 6) |
+| `unclassified` | 0 |
+| `stratumDisagreements` | 82 |
+| Near-miss pairs | 0 (N1 0, N2 0, N3 0) |
+| Out-of-scope (V4) | 0; scope summary H 293, H_all 368; per stratum flow 75, http 49, mcp 67, scripts 154, wiring 23 |
+
+Files (sha256 prefix): `work/match.json` 510bc3f4942f2e62, `work/nearmiss.jsonl` empty (e3b0c44298fc1c14), `work/s45/match-scoped.json` f5c86cb2bb082b44. Stopped before adjudication; `adjudicate`, `capture`, `sample` and `split` not run.
+
+### S45 diagnostics (A: the 15 invalid KA-flow items; B: the empty near-miss result)
+
+Counts and numbers only. Nothing was repaired or re-validated; `work/match.json` unchanged (sha256 prefix 510bc3f4942f2e62).
+
+**A. Invalid KA-flow items (seqs 1-11, 13, 14, 17, 32).**
+- **Distance from the cited line to the nearest edge of the symbol's span** (signed; positive = after the span's last line, negative = before its first). `V2` items, one value per cited line (13 items, 16 lines): +896, +996 (seq 1); +42 (17); +395 (3); +378 (7); +157 (4); -47 (14); +342 (8); +816 (6); +903, +1004 (2); +310 (9); +152, +165 (32); +90 (13); +105 (5). Every `V2` item has exactly one candidate span for its qname (no ambiguity). `V1` items (seq 10, 11): the cited line is past the end of the file by +108 and +118 lines (file length 1005 in both). Cited line inside the file: yes for the 13 `V2` items, no for the 2 `V1` items.
+- **Pattern:** scattered, not one constant offset. Magnitudes 42 to 1004, 15 of 16 `V2` lines positive (one -47); no value repeats across items. 10 of the 15 items point into one 1163-line file, 3 into a 1005-line file, 1 each into files of 247 and 393 lines. Not a "+1" slip and not a fixed header length; the cited lines are mostly far below the named element.
+- **Stratum-tag mismatch:** none of the 15 (all 15 are tagged `flow` and derived `flow`). The 82 `stratumDisagreements` do not include them.
+- **Would have matched a KB record** (same `itemId`, i.e. same anchor and impacted identity, line check ignored): 6 of 15 (seqs 3, 4, 5, 6, 8, 9). The other 9 have no KB item with the same impacted element (0 share even the impacted id). These 6 are exactly the 6 KB-only flow records (6 of 6 `itemId`s equal), so the "KB-only" flow count is wholly explained by the invalid KA twins.
+
+**B. Is zero near-misses a blind check?** Unmatched sets per stratum (KA-only / KB-only): http 20 / 0, mcp 38 / 0, scripts 40 / 2, wiring 4 / 0, flow 44 / 6; 344 candidate (KA-only x KB-only) pairs in total (scripts 80, flow 264).
+
+| Definition | scripts (80 pairs) | flow (264 pairs) | total (344) |
+|---|---|---|---|
+| (1) N1/N2/N3 as run | 0 | 0 | 0 |
+| (2) share any file path (anchor or impacted) | 4 | 18 | 22 |
+| (3) same impacted-element path, anchor ignored | 0 | 6 | 6 |
+| (4a) same impacted top-level container (path plus first name segment) | 0 | 0 | 0 |
+| (4b) same `anchorId` (any impacted) | 3 | 12 | 15 |
+
+Strata with KB-only 0 (http, mcp, wiring) have no candidate pairs by construction. No pair has equal `impactedId`, so N2 and N3 cannot fire on this data; N1 needs equal anchor and equal impacted path, and no pair meets both.
+
+**Does the verb see what it should?** On a scratch copy of `match.json` (`work/s45/scratch/`, never `work/match.json`), I injected (a) a provider-only duplicate of a real KB-only record with its cited lines shifted by one and a different `impactedId`: `nearmiss` returned 6 pairs, all N1, each including the injected record (it shares anchor and impacted path with the 6 flow KB-only records, which share one anchor and one file); (b) a provider-only/consumer-only pair of http anchors with different `anchorId` and `keyNorm`s differing by a trailing `/`: `nearmiss` returned 1 pair, N2. N3 was not exercised. So N1 and N2 are not blind; the real result is a true zero under the rules, with the caveat that the line-shift in (a) has no effect on the verdict (anchors carry no line; `itemId` ignores lines).
+
+**Feed for `capture` (read-only; per stratum n1 = found by KA, n2 = found by KB, m = both; `t` = 2):**
+
+| Stratum | n1 | n2 | m |
+|---|---|---|---|
+| http | 49 | 29 | 29 |
+| mcp | 67 | 29 | 29 |
+| scripts | 152 | 114 | 112 |
+| wiring | 23 | 19 | 19 |
+| flow | 69 | 31 | 25 |
+
+If the 6 invalid KA-flow twins were valid, flow would read n1 75, n2 31, m 31 (a computation from the counts above, not a run).
