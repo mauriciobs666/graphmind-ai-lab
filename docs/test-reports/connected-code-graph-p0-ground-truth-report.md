@@ -183,3 +183,30 @@ Strata with KB-only 0 (http, mcp, wiring) have no candidate pairs by constructio
 | flow | 69 | 31 | 25 |
 
 If the 6 invalid KA-flow twins were valid, flow would read n1 75, n2 31, m 31 (a computation from the counts above, not a run).
+
+## S45 KA2 (flow2)
+
+Session `90a53928` (run-index role `KA`, stratum token `flow2`; treated as KA2 and normalized with `--writer KA2`, since the run index has no `KA2` role). Counts only.
+
+**Audit:** clean (exit 0), 1 attempt, 97 tool calls, 0 refused, 0 void, `streamTruncatedCalls` 0, init matches the isolation set (`claude-opus-5-5`), result success, 4.6156886 USD, 98 turns. Output copied to `work/keys/KA2-flow.jsonl` (byte-identical), 111 lines, sha256 `d98dabd5cef031e777045a720fd1a979c96eb18e5b8c80d34a36eff639a8f96c`; 0 unparsable, 0 schema failures, 0 duplicate `seq`; stratum tags `flow` 107, `http` 4.
+
+**Normalize and validate:** 111 records, 111 valid, 0 invalid (so 0 by reason, 0 by file); 0 rewrites. Derived stratum: flow 107, http 4. The 4 http-derived KA2 records were left out of matching: the `match` contract sets `t` = 3 for any stratum with a KA2 record, and KA2 was a flow pass; all 4 are already held by KA and KB (history `101`), so they add nothing. Matching used the 663 valid part-1 records plus the 107 flow records of KA2. The 15 invalid KA-flow items stay out.
+
+**Re-match (`--ka2-strata flow`):** 420 records (part 1: 368), `t` flow 3, others 2; `unclassified` 0, `stratumDisagreements` 82. Flow: 127 records. History (KA, KA2, KB): `111` 21, `110` 28, `101` 4, `100` 16, `011` 6, `010` 52. The 6 formerly KB-only flow records are now `011` (KA2 re-found them with valid lines). Other strata unchanged (http 49, mcp 67, scripts 154, wiring 23). The part-1 `match.json` is kept as `work/s45/match-part1.json`.
+
+**Estimates (§6.1-§6.4, `capture.py` on the scoped file, `work/capture.json`):**
+
+| Stratum | n1 | n2 | m | t | Chapman N | Chao N | N* | Completeness | Trigger |
+|---|---|---|---|---|---|---|---|---|---|
+| flow | 127 (KA 69, KA2 107) | 31 | 31 | 3 | 127 (interval degenerate) | 165.94 | 165.94 (Chao binds) | 0.765 | yes |
+| http | 49 | 29 | 29 | 2 | 49 | 52.17 | 52.17 | 0.939 | yes |
+| mcp | 67 | 29 | 29 | 2 | 67 | 78.72 | 78.72 | 0.851 | yes |
+| scripts | 152 | 114 | 112 | 2 | 154.71 | 157.81 | 157.81 | 0.976 | no |
+| wiring | 23 | 19 | 19 | 2 | 23 | | | 0.994 | no |
+| pooled | r 420 | | | | | | 477.78 | 0.879 | |
+
+Flow: f1 68, f2 38, f3 21; **flow: completeness below threshold** (0.765 < 0.95). No third pass runs. http (0.939) and mcp (0.851) also fall below 0.95 and were not asked about; they are for `teco`'s decision (EP §6.5: at most one extra pass per stratum).
+
+**EP §7.2 (invalid items):** 15 items, all KA-flow, all still invalid and counted as not found by KA (KA2 re-found 6 of them by identity, now valid). By file (anonymised): F1 10, F2 3, F3 1, F4 1. KA-flow invalid share 15/88 = 17%, above the 10% line. The held-out count by file is not available until S47's split; this table is the concentration input.
+
+**S45 part 2:** near-miss check on the new `match.json`: 0 pairs (N1 0, N2 0, N3 0), so no adjudicate. Scope (V4): 0 out of scope; H 294, H_all 420 (flow 127, http 49, mcp 67, scripts 154, wiring 23). Capture: above. Sample (`sample`): `work/spot.jsonl` 40 union items (8 per stratum; 20 singleton, 20 doubleton, 4 per cell), shortfall records 0; `work/ptgold.jsonl` 8, `work/engold.jsonl` 8. Hashes (prefixes): `match.json` fc411944dd9a05cf, `capture.json` 71371bf01519fd78, `spot.jsonl` 3ce35a6732b6cf29, `ptgold.jsonl` 1f08b438f11d7e25, `engold.jsonl` 419734bea1d625ad, `nearmiss.jsonl` empty.
