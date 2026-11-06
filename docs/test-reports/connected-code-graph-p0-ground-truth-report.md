@@ -58,9 +58,9 @@ All four outputs copied to `work/keys/KA-<stratum>.jsonl` (byte-identical): `KA-
 
 `KA-flow` copied to `work/keys/KA-flow.jsonl` (byte-identical): 88 lines, sha256 `5aeb24c52523113c01fe2c20f29857f9840c30ba1bddf26d8cd90e74befaec90`.
 
-## S42 audit (KB/http, KB/mcp, KB/scripts, KB/wiring)
+## S42 audit (KB/http, KB/mcp, KB/scripts, KB/wiring, KB/flow)
 
-Same `audit.py` command and lists; outputs `work/audit-KB-<stratum>.json`/`.details`. Tallies only. KB/flow is still running and is not audited here. All four: 1 attempt, `streamTruncatedCalls` 0, `unpinned` empty, init matches the isolation set (same tools, no MCP/skills/commands, 3 builtin plugins, 10 agents, `dontAsk`), model `claude-sonnet-5-5`, result success, 0 refused, 0 void.
+Same `audit.py` command and lists; outputs `work/audit-KB-<stratum>.json`/`.details`. Tallies only. All five: 1 attempt, `streamTruncatedCalls` 0, `unpinned` empty, init matches the isolation set (same tools, no MCP/skills/commands, 3 builtin plugins, 10 agents, `dontAsk`), model `claude-sonnet-5-5`, result success, 0 refused, 0 void.
 
 | Session | Tool calls | Verdict | Cost / turns | Key lines | Schema (EP §4.1) | Stratum mismatches | sha256 of `work/keys/KB-<stratum>.jsonl` |
 |---|---|---|---|---|---|---|---|
@@ -68,5 +68,8 @@ Same `audit.py` command and lists; outputs `work/audit-KB-<stratum>.json`/`.deta
 | KB/mcp `76f2439b` | 27 | clean | 0.8185354 USD / 28 | 57 | same, 0 | 11 (`wiring`) | `4cedcb40b7961589af51c7058ebd1e634043fa4b2107d942a89c428109bdb61e` |
 | KB/scripts `a4728922` | 42 | clean | 1.2789739 USD / 43 | 120 | same, 0 | 17 (7 `wiring`, 10 `mcp`) | `823853351f419908f08f551c77183fb23ac073691845f2c21e98f781cecea2c6` |
 | KB/wiring `4ae79f7c` | 18 | clean | 0.2668278 USD / 19 | 11 | same, 0 | 3 (`mcp`) | `6627d535539a0e0624f309b7bd3859e370d5e7a997e1c69386023178f7c4fbc4` |
+| KB/flow `19636ffc` | 46 | clean | 0.7265691 USD / 47 | 31 | same, 0 | 0 | `cf3c2433821b2a5e2a97f9abc1bad9f0663f2bebcd2192ce2001371ee0c6ce72` |
 
-All four copied byte-identical to `work/keys/`. The `stratum` field is "recorded but not trusted" (EP §3.1), so mismatches are not schema failures.
+All five copied byte-identical to `work/keys/`. The `stratum` field is "recorded but not trusted" (EP §3.1), so mismatches are not schema failures.
+
+All 5 KA and all 5 KB key files are in `work/keys/` (sha256 recomputed at this audit; the nine earlier hashes are unchanged): `KA-flow` 88 lines `5aeb24c52523113c01fe2c20f29857f9840c30ba1bddf26d8cd90e74befaec90`; `KA-http` 52 lines `3cd6f823a8627aff4a20589b780fec325b87b4a8d66725ceb660b89dbc5ccc92`; `KA-mcp` 103 lines `6af69fe0234adf87fdbccef67571bee722d324810108de83d2c6c02e738af929`; `KA-scripts` 167 lines `c6060f4623c712662e568cac542687c3743919e3e27652a380271720d11f2631`; `KA-wiring` 20 lines `7f2e88b61e468726dfe39745b7579624ae0a6a618b2beab95228d2e6d9d76999`; `KB-flow` 31 lines `cf3c2433821b2a5e2a97f9abc1bad9f0663f2bebcd2192ce2001371ee0c6ce72`; `KB-http` 29 lines `ababf45222401c24597a9c41a33c6890bc33336139da4909acff68da48844012`; `KB-mcp` 57 lines `4cedcb40b7961589af51c7058ebd1e634043fa4b2107d942a89c428109bdb61e`; `KB-scripts` 120 lines `823853351f419908f08f551c77183fb23ac073691845f2c21e98f781cecea2c6`; `KB-wiring` 11 lines `6627d535539a0e0624f309b7bd3859e370d5e7a997e1c69386023178f7c4fbc4`.
