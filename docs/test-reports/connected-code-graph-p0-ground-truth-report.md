@@ -98,3 +98,14 @@ Same `audit.py` command and lists; outputs `work/audit-QW-impact.json`/`.details
 | `roles/AN2-impact/QW-nogold.jsonl` | mode 0444, sha256 equal to the above |
 
 Placement is the role root (the brief's "`QW-nogold.jsonl` in your working directory"). No AN session was started.
+
+## S44 audit (AN1/impact, AN2/impact)
+
+Same `audit.py` command and lists; outputs `work/audit-AN1-impact.*` and `work/audit-AN2-impact.*`. Counts only; no agreement or gold comparison.
+
+| Session | Attempts | Tool calls | Verdict | Refused | Void | Init | Result | Lines | Schema (EP §4.3) | Coverage of the 48 `aid`s | Labels | sha256 of `work/questions/AN<n>.jsonl` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AN1 `01e4fd28` | 1 | 7 | clean (exit 0) | 0 | 0 | isolation set, `claude-sonnet-5-5` | success, 0.2044846 USD, 8 turns | 48 | 0 unparsable, 0 failures | 48 distinct, 0 duplicate, 0 missing, 0 unknown | ambiguous 8, unambiguous 40 | `872b97e7f8b8b03571b49597d6f30230c284229248eebf05f5508ba6586c5845` |
+| AN2 `67033772` | 1 | 17 | clean (exit 0) | 0 | 0 | isolation set, `claude-opus-5-5` | success, 0.693197 USD, 18 turns | 48 | 0 unparsable, 0 failures | 48 distinct, 0 duplicate, 0 missing, 0 unknown | ambiguous 9, unambiguous 39 | `2b0beceb98e5c407a819b822557f7dfba6d733ffdfdaa7926f90d41223eb15be` |
+
+Schema check: exactly the keys {`schema`, `aid`, `label`, `reason`}, `schema` = `ccg-annotation-v1`, `label` in {`ambiguous`, `unambiguous`}, `reason` a string of at most 200 characters. The `aid` set is compared with the 48 in `QW-nogold.jsonl`. `streamTruncatedCalls` 0, `unpinned` empty for both; both outputs copied byte-identical.
