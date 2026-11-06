@@ -1,6 +1,6 @@
 # Team learnings distillation (2026-11) — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (stakeholder-triggered `cobb` sweep of raw learnings in `ws:agent-team`) · **Extends:** `docs/plans/kaizen-inbox-distillation2-coordination.md`
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (stakeholder-triggered `cobb` sweep of raw learnings in `ws:agent-team`) · **Extends:** `docs/plans/kaizen-inbox-distillation2-coordination.md`
 
 Goal: `cobb` verifies and promotes (or rejects) the raw learnings captured in `ws:agent-team` since the last sweep, per `skills/agent-maintenance/SKILL.md`; `analyst` gates the result.
 
