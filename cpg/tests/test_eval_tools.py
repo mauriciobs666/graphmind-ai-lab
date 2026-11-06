@@ -2534,6 +2534,21 @@ def test_leak_check_floor_drops_only_bare_short_probes_ep_9_4():
     assert not _leak("nothing here at all", [ho2])
 
 
+def test_leak_check_bare_floor_parameter_changes_the_outcome():
+    tool = _ac5(3, {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__cypher__query"}, SYM("pkg/a.py::f"))
+    text = "the query tool"
+    assert not mk.leak_check(text, [tool], [], [])[0]                          # default floor 8: bare 'query' dropped
+    assert not mk.leak_check(text, [tool], [], [], bare_floor=8)[0]
+    assert mk.leak_check(text, [tool], [], [], bare_floor=5)[0]                # 5 is not below 5: the probe stays
+    assert mk.leak_check(text, [tool], [], [], bare_floor=3)[0]
+    assert not mk.leak_check(text, [tool], [], [], bare_floor=6)[0]
+    assert mk._bare_short("query", 6) and not mk._bare_short("query", 5) and mk._bare_short("query")
+    t7 = _ac5(4, {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__srv__abcdefg"}, SYM("pkg/a.py::f"))
+    t8 = _ac5(5, {"type": "contract", "kind": "mcp_tool", "keyNorm": "mcp__srv__abcdefgh"}, SYM("pkg/b.py::f"))
+    assert not mk.leak_check("uses abcdefg here", [t7], [], [])[0]             # default floor: 7 chars dropped
+    assert mk.leak_check("uses abcdefgh here", [t8], [], [])[0]                # 8 chars kept
+
+
 def test_leak_check_text_shingles_are_substrings_and_removed_by_dev_equality():
     q = _ac24(1, "What breaks in the storefront if I change the products route today?", [HTTP("GET /shop/api/products")])
     assert _leak("... storefront IF I change   the products ...", [q])

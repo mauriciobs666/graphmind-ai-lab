@@ -5715,3 +5715,52 @@ Re-gate passes when: (1) the planted item-less contacted-`t2` case is red before
 None.
 
 Stopping condition: met; no further pass needed on 42a.
+
+## Pass 8b — S49 P0-42b re-gate (fix round on disk, EP v1.6)
+
+**Verdict: needs changes** (one new major, N-1; the rest approve-with-suggestions). Ran on copies via `CCG_TOOLS_DIR` (never in place): `tests/test_eval_tools_split.py` 79 passed.
+
+### Dispositions of Pass 8
+- **M-1: fixed (executed).** Planted item-less contacted `t2` now logs `served-anchor` (unit to dev); `t1` still `contact`. Mutant removing the `a in ctx["C"]` guard is killed.
+- **M-2: fixed (executed).** `--ka2-ran` is gone; `capture.build` takes t from `match.json`'s per-stratum `t` and refuses a missing or invalid map (`set(tmap) == STRATA`, values 2/3). Mutants removing the value check and the key check are each killed. `apply_verdicts` returns `dict(match, records=...)` and `scope_records` mutates in place, so `t` survives adjudicate and scope (run: adjudicate keeps `t`; scope by reading, my synthetic fixture had no members).
+- **M-3 (a)-(d): fixed (executed).** Mutants (a) counting branch `cand[-1]`, (b) cluster rank `max`, (c) reserve `n_count < 1` skip removed, (d) `inScope` filter removed: all four killed. Seed, H_s key and history-bit-order mutants still killed.
+- **m-1: fixed (executed).** `<=` trigger, `informative` 7, and `hops` mutants killed.
+- **m-2: fixed (executed).** Both tools refuse a record without a boolean `inScope` (`capture.py:101`, `split_manifest.py:103`); mutant killed.
+- **m-3: fixed (executed).** `verify` reports `<name>: not listed` for any of the six names (and `ac24.jsonl` if it exists); mutant killed.
+- **m-4: partly fixed, see N-1.** `--heldout-dir` and explicit-list refusal exist; the dir path has no completeness check.
+- **n-1: open, nit** (the `--log` placement note and the `trigger` after KA2 flag were not addressed; no effect on correctness).
+
+### New findings
+**N-1 (major, verified by run): `check-report --heldout-dir` passes vacuously.** EP §9.4 "Files": every held-out file takes part. `heldout_files` is a bare glob (`split_manifest.py` around `heldout_files`), and the completeness check (`check_heldout_list`) runs only for an explicit list. Run: an empty dir, a nonexistent dir, and a dir without `ac5-reserve.jsonl` holding a report that names a held-out qname all print `probes: 0`/`hits: 0` (the reserve-less case: reserve items unprobed) and exit 0. A mistyped path yields a clean leak check. Fix, run on a copy (79/79, three cases now exit 2 with `holds no ac5-*.jsonl` / `omits ['ac5-reserve.jsonl']`): after `files = a.heldout or heldout_files(...)`, when `a.heldout_dir` apply `check_heldout_list(files)` (and refuse an empty list). Test: the three planted dirs.
+
+**N-2 (minor, verified by mutation): three new checks cannot fail.** Surviving mutants: (i) `check_report`'s `finally` restore removed (the test restores the constant to 8 before asserting, and the leftover lambda equals match_keys' own at 8, so the assertion cannot distinguish; set the constant to 3, call, then assert `mk._bare_short is <original object>`; also one raising `leak_check`); (ii) giving both `--heldout` and `--heldout-dir` (the explicit list silently wins; the code refuses only neither, since `bool == bool` also rejects both, my mutant is the "neither only" form, so the real code is right but no test pins "both"); (iii) `nfc_strip` removed from the contact normalizer (no decomposed-Unicode contact fixture).
+
+**N-3 (minor, verified by run): `t = 2` with KA2 bits is accepted.** `match_of({"flow": THREE}, t={"flow": 2})` is a test of acceptance (line 242); the result `nChao = 47.36` ignores f3 and the third session. A hand-edited map can understate t. Refuse t=2 where any history has a KA2 bit (t=3 with none is legitimate: KA2 ran and found nothing).
+
+**N-4 (nit, verified): the `contact` verb accepts `config` locators** (not an anchor type, §8.2 lists anchors) without grain truncation; reject or document. Otherwise verified: differential check of `normalize_contact_locator` against `match_keys._norm_locator` + `locator_id` over nine locators (symbol with `./`, backslash, `#2`, `<anon>#1`; http `:id`, trailing `/`, `%7B`, `{*rest}`; mcp `mcp__cypher__query`; unit): all same ids. Output is canonical, sorted, deduplicated, deterministic across runs; a raw file (`{"anchorId"}` or `{"source"}` only) is refused with exit 4 by `split`, `manifest` and `check-report`.
+
+### The `_bare_short` monkeypatch (judgment)
+Acceptable for now, not a blocker, and it cannot mis-probe in the current use. Reasons: it is restored in a `finally` (exception-safe, verified by reading, though the restore itself is untested, N-2); the CLI is single-threaded; the lambda matches `match_keys._bare_short` exactly at the default floor (8), so a missing or inert patch would change nothing silently. Costs: it mutates a sibling module's private global (not thread-safe if a harness ever imports both and calls concurrently), it breaks loudly (`AttributeError`) if `_bare_short` is renamed but silently does nothing if `leak_check` inlines it, and `is_bare` now duplicates `_bare_short`'s predicate. **Follow-up request (to the match_keys owner, not a blocker):** `leak_check(..., bare_floor=8)` and have `split_manifest.MIN_BARE_PROBE_LEN` pass it; then delete the patch and `is_bare`.
+
+### Same-revision interaction checks
+`inScope` refusal vs the `contact` verb: no overlap (contact lines carry no `inScope`; `split` reads `anchorId` only). `t`-map validation vs adjudicate-merged records: `t` survives (above), and history is re-derived by `_finish_group`; N-3 is the one gap (t versus the merged histories). `heldout-dir` vs `verify`'s file rule: `verify` enforces completeness against the manifest, the directory check does not (N-1).
+
+### Stopping condition (falsifiable)
+Approve when: (1) the three N-1 dirs (empty, nonexistent, reserve missing) exit 2 and a complete dir with a planted held-out qname exits 1; (2) a test fails with the `finally` restore removed and with `nfc_strip` removed; (3) `t=2` with a KA2 bit is refused (N-3). The `bare_floor` parameter is a tracked follow-up, not a condition.
+
+## Pass 8c — S49 P0-42b re-gate, round 3
+
+**Verdict: approve.** No blocker or major open. Ran on copies via `CCG_TOOLS_DIR`: `tests/test_eval_tools_split.py` 84 passed; `tests/test_eval_tools.py` + split file 508 passed (live tree).
+
+### Dispositions of Pass 8b
+- **N-1: fixed (executed).** `check-report --heldout-dir` on an empty dir and a nonexistent dir exits 2 (`holds no ac5-*.jsonl`); a dir without `ac5-reserve.jsonl` exits 2 (`omits ['ac5-reserve.jsonl']`); a complete dir with planted `a.py::f` in the report exits 1 with one hash. Mutants dropping the empty-list refusal and the reserve requirement are killed.
+- **N-2: fixed (executed).** The `_bare_short` patch and `finally` are gone, so the restore check no longer exists. "Both flags" and "neither flag" mutants are each killed; removing `nfc_strip` from the contact normalizer is killed.
+- **N-3: fixed (executed).** `capture.build` raises for `t = 2` with any KA2 bit (`capture.py:118-119`); removing the guard is killed, and so is widening it to `t = 3` (legitimate case still accepted).
+- **N-4: fixed (executed).** `contact` exits 4 on a `config` locator; deleting the raise is killed. (Adding `config` to the `repoId` default alone is an equivalent mutant: the raise still follows.)
+- **Follow-up request (`bare_floor`): done.** Reviewed the `match_keys.py` edit (`git diff`, 4 lines): `_bare_short(v, floor=8)` and `leak_check(..., bare_floor=8)` with the default unchanged, `split_manifest.check_report` passes `bare_floor=MIN_BARE_PROBE_LEN`. The other callers (`test_eval_tools.py:2420`, `:2528-2530`, `split_manifest` tests) use the default, so behavior is unchanged. `test_eval_tools.py` loads tools from a fixed path and cannot see a `CCG_TOOLS_DIR` copy; the split file covers the new parameter: mutants (floor hardcoded to 8, `bare_floor` ignored in `leak_check`, `split_manifest` not passing it, `<` to `<=`) are all killed by split-file tests (planted 7- and 8-char bare probes with `bare_floor=7`).
+
+### Same-revision interactions
+`bare_floor` default vs the 42a floor tests: unchanged and green. Config refusal vs the contact differential from Pass 8b: the nine anchor-type locators still agree. N-3 refusal vs adjudicate-merged records: merged histories keep KA2 bits and `t` is preserved, so a legitimate t=3 stratum is not refused. Heldout-dir check vs `verify`: independent rules, both tested.
+
+### Residuals (not blocking)
+`trigger` stays true after KA2 has run (Pass 8 n-1); the `--log` file carries held-out anchor ids, so keep it under `work/`. Both are documentation-level.

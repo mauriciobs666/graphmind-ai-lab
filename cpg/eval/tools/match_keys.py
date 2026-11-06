@@ -1201,13 +1201,13 @@ def contact_probes(loc: dict) -> list[tuple[str, str]]:
     return _locator_probes(loc)
 
 
-def _bare_short(v: str) -> bool:
+def _bare_short(v: str, floor: int = 8) -> bool:
     """EP §9.4: the floor drops only a BARE probe under 8 characters (none of ``::``, ``/``, ``#`` or a
     space), such as a tool name like ``query``. A 7-character qname ``a.py::f`` stays a probe."""
-    return len(v) < 8 and not any(c in v for c in ("::", "/", "#", " "))
+    return len(v) < floor and not any(c in v for c in ("::", "/", "#", " "))
 
 
-def leak_check(report: str, heldout: list[dict], dev: list[dict], contact: list[dict]):
+def leak_check(report: str, heldout: list[dict], dev: list[dict], contact: list[dict], bare_floor: int = 8):
     """-> ``(hits, n_probes)`` where hits are probe hashes only. A held-out probe is removed when it is
     EXACTLY equal to the same kind of value in some dev item or in C (computed from writer originals)."""
     public: dict[str, set] = {}
@@ -1220,7 +1220,7 @@ def leak_check(report: str, heldout: list[dict], dev: list[dict], contact: list[
     probes: dict[str, str] = {}
     for rec in heldout:
         for k, v in record_probes(rec):
-            if v in public.get(k, ()) or _bare_short(v):
+            if v in public.get(k, ()) or _bare_short(v, bare_floor):
                 continue
             probes[collapse(v)] = k
     text = collapse(report)
