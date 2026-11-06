@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 8 raw `ws:agent-team` entries dispositioned
+
+- **What:** `ca7ba5b0`, `60aba8db`: discarded, editable-install mutation shadowing is in `review-techniques.md` (PYTHONPATH vs cwd vs finder order); the entry pair also contradicted each other.
+  - `35649df3` (ORDER BY nulls), `7f84105d`/`0ed79bfd` (full-text tokenizer, empty query): promoted to `graph-dba/falkordb-quirks.md`, re-run live. `68e28ff8` (8200 log holds only the current launch): promoted to `SERVER.md` §1.10. `860c397b` (PostToolUseFailure): promoted to `skills/agent-standards/claude-code.md`, Bash-non-zero case flagged unverified.
+  - `e7f3f119`: discarded, already in `SERVER.md` §1.10.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

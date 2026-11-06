@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 7 raw entries dispositioned
+
+- **What:** `69d50ac7`, `6eca9311`, `605a44a9`, `2fa57985`: merged into one `data-scientist/lm-studio-model-notes.md` section, marked single-source (fault injection not re-run).
+  - `44a4e246` (rank_report drops n=0): discarded, fixed in the catalog-sweep defect wave (`model-bench/docs/HISTORY.md` U186).
+  - `df558abf` (storefront calls two LLMs): rejected as superseded; `run["stepModel"]` now makes `query_graph_data` inherit the assistant step's model.
+  - `d88545b5` (mermaid-cli via Windows npx): kept open, unverified, the live check was blocked by the harness classifier (downloads external code); plan K-062 (cobb).
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

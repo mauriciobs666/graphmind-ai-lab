@@ -942,3 +942,24 @@ large pre-existing file this turns a small intended change into a diff spanning 
 burying the actual change and making review of "what changed" far harder than the fix itself.
 Prefer a targeted fix (rewrap the flagged line(s) by hand, or use `ruff format --diff` to preview
 before applying) over running the formatter over an entire pre-existing file for a small fix.
+
+## Starlette `BackgroundTasks` runs one request's tasks sequentially — a slow task delays every later task of the same request
+
+The bounded-pool entry above is about *total* parallelism; this is the per-request half.
+`BackgroundTasks.__call__` is `for task in self.tasks: await task()` (verified 2026-11-06,
+starlette in `falkor-chat/server/.venv`, `inspect.getsource`), so tasks added to **one** response run
+one after another; each sync task additionally goes through `run_in_threadpool`. Consequences: a
+sleep, retry or slow provider call inside one task delays every later task of that same request
+(not other requests, not the event loop). A hand-rolled `threading.Thread`-per-job dispatcher
+(falkor-chat's MCP path) has the opposite shape: every job starts at once, so a provider hiccup hits
+all of a document's jobs together and recovers as a thundering herd. Design retry/backoff for the
+path's actual scheduler, not for "background work" in general.
+
+## `http.client.InvalidURL` is an `HTTPException`, not a `ValueError` — `urlopen` raises it at call time
+
+`InvalidURL`'s MRO is `InvalidURL -> HTTPException -> Exception`; `issubclass(InvalidURL, ValueError)`
+is `False` (verified 2026-11-06, CPython 3.12). `urllib.request.urlopen('http://localhost:abc/x')`
+raises it at call time (`nonnumeric port: 'abc'`) for a URL that `urlparse` accepted. An except-ladder
+that classifies `http.client.HTTPException` as "network/transient" **before** a `ValueError`
+"malformed URL" rung therefore files a permanent misconfiguration as transient and retries it.
+Catch `InvalidURL` first (falkor-chat `transport.py` rung 3a does).

@@ -222,6 +222,10 @@ MATCH (caller:METHOD)-[:CONTAINS]->(c:CALL {NAME: 'post_message'})
 RETURN DISTINCT caller.FULL_NAME, caller.FILENAME, caller.LINE_NUMBER
 ORDER BY caller.FILENAME, caller.LINE_NUMBER
 ```
+This also settles a *completeness* claim ("no consumer of this return shape besides X, so adding
+fields is safe") in one query (tens of ms), where a grep only shows what you thought to search for.
+Its bound: complete for call sites **by name, as of the CPG's build** — not dynamic dispatch,
+`getattr`/string-keyed calls, or code newer than the load (check the build date first).
 
 **Callees of a method — resolved `CALL` edge** (clean, first-party; misses
 dynamic/cross-object dispatch, which is unresolved):

@@ -51,6 +51,18 @@ never yours: it routes to `devops`/`graph-dba` behind their guards. If the bring
 that is a real environment blocker: dispatch `devops`, don't hand it to the user. A missing
 service is a task you complete, not a caveat you report.
 
+## A delegate's Bash edit whose text merely mentions a guarded string stalls on a permission prompt
+
+The destructive-ops `ask` rules in `.claude/settings.json` and `claude/scripts/guard-destructive-ops.sh`
+match the whole Bash command text, not only what executes. A delegated `graph-dba` that rewrote its
+own Markdown note through a `python3` heredoc whose prose said "deleted with `GRAPH.DELETE`" sat
+with no tool result for 25+ minutes; an earlier 14-minute stall coincided with a probe containing
+`docker rm -f` (both patterns are in the settings `ask` list; the guard script's own comment calls
+over-asking its safe failure direction). A headless delegate cannot answer the prompt. Tell
+delegates that write prose about destructive operations to use the `Edit`/`Write` tools for the
+document, or to paraphrase the literal, and treat a long silent stall on such a unit as a
+permission wait before re-dispatching.
+
 ## Editing the coordination ledger: assert the match, and anchor on a row, not a header
 
 A scripted string replace that asserts nothing no-ops silently and leaves a `Status` cell stale —
@@ -189,17 +201,19 @@ neighbour.
 
 ## Fencing note: a graph-write fence has to name the exception, not just the subtree
 
-Raw learnings capture is a graph write (`mcp__cypher__query` against `kaizen_team`,
-author-partitioned), not a file write, so a brief excluding a subtree (e.g. "don't touch `claude/`"
-to dodge a collision) does not block it — no carve-out is needed for that step. If a brief
-separately needs a delegate to append to its own `kaizen/history.md` inside an excluded tree (a
-distillation step, normally `cobb`'s job), carve that file out explicitly instead. The same trap in
-the other direction: a "no graph writes" fence — drawn against destructive/shared-state ops — reads
-on the delegate as barring the additive, agent-partitioned `kaizen_team` producer-write every agent
-is supposed to make, so carve that out by name too. Fence by file, not by directory, and assume
-nothing is obvious: a delegate cannot tell an intentional bar from an over-broad one, and the
-correct thing for it to do with the doubt is to comply and report — which costs a round trip to
-lift.
+Raw learnings capture is a document write (`ingest_document` into `ws:agent-team`), not a file
+write, so a brief excluding a subtree (e.g. "don't touch `claude/`" to dodge a collision) does not
+block it — no carve-out is needed for that step. If a brief separately needs a delegate to append
+to its own `kaizen/history.md` inside an excluded tree (a distillation step, normally `cobb`'s job),
+carve that file out explicitly instead. The same trap in the other direction, and the one that
+bites: a "never write to `ws:agent-team`" fence drawn as a data-safety bar for a live test also
+stops the delegate's legitimate learning-capture ingest (a `qa-engineer` reported exactly that and
+filed nothing), because the protected data and the learnings store live in one workspace. **Fence
+the data, not the workspace:** "never ingest test documents into `ws:agent-team`; learning-capture
+documents are fine". Likewise a "no graph writes" fence reads as barring the additive capture
+write. Fence by file, not by directory, and assume nothing is obvious: a delegate cannot tell an
+intentional bar from an over-broad one, and the correct thing for it to do with the doubt is to
+comply and report — which costs a round trip to lift.
 
 ## A `completed` notification's result can be a stale mid-task placeholder
 

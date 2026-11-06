@@ -118,6 +118,18 @@ to the general fact here.
   pre-fix version crashed on the syntax error, the stripped-character post-fix version passed, and
   neither surfaces the token-merging side effect as a failure — it has to be checked for
   separately against a characterization table of titles carrying those metacharacters.
+- **Full-text tokenization and fuzzy-term syntax are ASCII-only, and an empty query is not an error.**
+  The index separates stored text on ASCII whitespace and ASCII punctuation except `_` and `\`;
+  non-ASCII punctuation and Unicode whitespace (en/em dash, curly quotes, arrows, NBSP) stay inside
+  the term, so a stored `A1–A15` is one term and a query builder splitting on Python `[^\w]+`
+  never finds it. In the query parser, any ASCII punctuation except `_` or any ASCII control
+  character between word characters inside `%term%` is a syntax error; a lone `%_%` errors while
+  `%__%` parses. Build fuzzy terms by splitting on space/tab/ASCII punctuation (not stripping, which
+  glues `model-bench` into a term the index never holds), deleting control characters and `\`, and
+  dropping underscore-only tokens. `CALL db.idx.fulltext.queryNodes('<Label>', '')` (or whitespace)
+  returns 0 rows without raising, so skipping the call saves a round trip, not an exception.
+  Per-character store-and-query probes by `analyst` and `tdd-engineer` (K-068/K-075, 2026-10-16/17);
+  empty query, `%_%`, `%a-b%` and `%__%` re-run live 2026-11-06 on `ws:agent-team`.
 - **`db.labels()` and `db.relationshipTypes()` are asymmetric for zero-data schema elements.** A
   node label registers in `db.labels()` (count 0) as soon as `CREATE INDEX FOR (n:Label) ON (...)`
   runs — it's index metadata, not data. A relationship type registers in `db.relationshipTypes()`
@@ -381,6 +393,11 @@ to the general fact here.
   There is nothing to catch.
 - **`(:A | :B)` union-label syntax** in a pattern is unverified on this build —
   use `coalesce()` over two label-specific `OPTIONAL MATCH`es instead.
+- **`ORDER BY` puts null last ascending and first descending** (a node property the node does not
+  carry counts as null), and the order among equal keys is not guaranteed — nulls are not reversed
+  between ASC and DESC. A reimplementation that relies on Python's stable sort for ties is not
+  mirroring the engine. Re-run live 2026-11-06 (`UNWIND` of maps, one key absent on some rows);
+  first seen 2026-10-15 on `ws:nlq-eval` (`Message.toolsUsed` absent on 7 of 15 nodes).
 - **`length(path)` in `ORDER BY`** is not supported — order by a property instead.
 - **`STARTS WITH` on an indexed string property does NOT plan as an index range scan**
   (verified 2026-07-09, module 999999). A prefix predicate like `WHERE n.key STARTS WITH

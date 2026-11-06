@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 2 raw entries dispositioned
+
+- **What:** `c6f11ae1` (update rule omits the team manual): verified, promoted into the `claude/AGENTS.md` add/edit/rename rule.
+  - `92e938a3` (KB drift): verified for two cases (stale `ddfbb4bb`, missing 13.1 s claim), both fixed by the KB sync above except the owed delete; the '4 files omitted from the manifest' part is wrong.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 3 raw entries dispositioned
+
+- **What:** `3f4ac750` (live server serves stale code): promoted to `SERVER.md` testing hazards, deploy-verification tells kept.
+  - `8e13f385` (cypher display truncation): discarded, `cypher-mcp/README.md` documents `CYPHER_MCP_MAX_CELL` and `…(+N chars)`.
+  - `9d139039` (search_documents lexical syntax error): rejected as fixed; a query with parens, `$()`, hyphens and `%` returned results on 2026-11-06.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

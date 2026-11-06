@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 4 raw `ws:agent-team` entries dispositioned
+
+- **What:** `d1f94b35` (resume a rate-limit-killed subagent via SendMessage): discarded, duplicate of `coordination-techniques.md` 'What decides resume-versus-fresh'.
+  - `9d10d45b` (compound Bash call denied by the classifier): discarded, not reproducible and covered by the 'standing commit grant ... platform classifier' section.
+  - `48ef66f5` (fence the data, not the workspace): promoted into `coordination-techniques.md` fencing note (rewritten in place; it also still named the retired `kaizen_team`); claim re-ingested.
+  - `681f7f73` (falkor-chat logging dropped under uvicorn): discarded, already in `falkor-chat/docs/SERVER.md` §1.10.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

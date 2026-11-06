@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 2 raw entries dispositioned
+
+- **What:** `a2cf142e` (`--reload` reloader parent survives): re-run live 2026-11-06 — the app imports twice (confirmed) but `ss` listed both PIDs and one TERM ended everything, so the 'kills only the worker' claim did not reproduce; discarded.
+  - `a767dde2`: discarded, in `SERVER.md` §1.10.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

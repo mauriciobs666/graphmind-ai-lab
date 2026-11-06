@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: 4 raw entries dispositioned
+
+- **What:** `38cd49cd` (BackgroundTasks sequential) and `d0b47b2c` (`InvalidURL` is not a `ValueError`): promoted to `skills/python-web-quirks/SKILL.md`, both re-run live.
+  - `410ce035` (heredoc prose trips destructive-ops ask rules): promoted to `teco/coordination-techniques.md`, credit here.
+  - `4c052e37` (nlq denominator): discarded, in the `extraction.py` `score_item` docstring.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

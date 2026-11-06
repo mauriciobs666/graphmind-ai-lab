@@ -678,6 +678,15 @@ count with no FalkorDB connection and no writes — the correct way to check a p
 - **MCP-scheduled jobs do not survive a restart** (schedulers: §1.12). A black-box check that
   restarts the server mid-pass can lose MCP-scheduled replies, embeddings or extractions with
   nothing in any response saying so.
+- **A long-running server serves the code it was started with.** `start_agent_team.sh` (`:8200`)
+  runs without `--reload`, so a merged `services.py` change reaches live `ws:agent-team` searches
+  only after a restart, and an offline suite cannot show the live process is stale. Compare the
+  process start time (`ps -eo pid,lstart,cmd`) with the commit before trusting a live gate.
+- **The full pytest suite is not a reliable baseline while other sessions share the FalkorDB
+  instance.** With concurrent agent sessions or `uvicorn` processes on the same instance, two
+  consecutive full runs of an identical tree failed different test sets (observed 2026-09-20), while
+  each affected file passed alone. Verify a diff by running the files it can plausibly affect in
+  isolation, not by one full-suite failure count.
 - **An `opencode.json` that omits `options.baseURL` parses but does not resolve** (the rule:
   §1.8; OpenCode's own `@ai-sdk/openai` has a default, this seam has none). It fails only at
   resolution (`ModelConfigError: ... no options.baseURL ...`). Any example
@@ -887,6 +896,11 @@ Stated in `DESIGN.md` §6.1, agent node loop, "Prompt" bullet.
   them only to a dict config), so colour follows whether stdout is a terminal. `--log-level`
   still reaches the `uvicorn.*` loggers but never `falkorchat`. Change either by editing the file
   or by pointing `UVICORN_LOG_CONFIG` at another one.
+- **The shared `:8200` server's log (`~/.local/state/graphmind-ai-lab/agent-team-8200.log`) holds
+  only the current launch** (observed 2026-10-15: it began with that launch's header). A past
+  background-job traceback is gone after a restart; the graph keeps the outcome (`Document.status`,
+  `pendingJobs`, a missing `Chunk.embedding`), never the exception. Capture the log before restarting
+  when a failure must be diagnosed.
 - **Configuring logging in app code was rejected.** It would also run under pytest, where
   `falkorchat.propagate: false` would blind every `caplog` test, and inside every embedding of
   the app.

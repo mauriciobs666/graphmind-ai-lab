@@ -224,6 +224,34 @@ recorded by hand.
 **Context:** `docs/plans/small-model-benchmarking.md` (model-bench FR-7 environment fingerprint,
 FR-11 latency/RAM reporting).
 
+## LM Studio fault shapes, the `lms` log stream, and JIT residency on the WSL dev box
+
+*Single-source, from `qa-engineer`'s K-067 Half B live legs (2026-10-16, `falkor-chat/docs/test-reports/extract-transient-retry-report.md`) and the 2026-10-20 dedicated-instance rerun (`falkor-chat/docs/test-reports/salesperson-language-salience2-report.md`); not re-run in the 2026-11-06 distillation (fault injection unloads models).*
+
+- **Mid-generation unload** answers the in-flight chat completion with HTTP 400
+  `{"error":"Model unloaded by user or API request."}`; LM Studio's own log shows
+  `[ERROR][<model>] Error: Channel Error`, which never reaches the HTTP body. `lms server stop`
+  surfaces in flight as `http.client.RemoteDisconnected`, then `[Errno 111] Connection refused`
+  until `lms server start`; loaded models stay loaded and `lms log stream` survives the stop. A
+  cold JIT load hit by ~8 concurrent `/v1/chat/completions` returns HTTP 500 to most of them (an
+  Express HTML `Internal Server Error` page, no line in the server log); a retry 2-3 s later
+  succeeded.
+- **`lms.exe ps --json` can transiently exit rc=1 `Model does not exist.`** while a model is
+  JIT-loading; the next poll succeeds. Treat one failed poll as retryable.
+- **`lms log stream --source server --json` is a usable request tracer**: `GET /v1/models` logs one
+  `Returning {...` line (a positive control), `POST /v1/embeddings` logs `Received request to
+  embed`, a chat completion logs `Running chat completion on conversation with N messages` then
+  `Prompt processing progress`, `lms unload` logs `Unloading model` then the Channel Error. Every
+  `lms.exe` call also writes `[LMSAuthenticator][Client=lms-cli]` lines into the same stream, so
+  `lms ps` polling pollutes any quiet-window check run alongside it.
+- **JIT keeps only one model resident.** One warm-up request to each of three models left only the
+  last loaded (`/api/v0/models`). To hold several co-resident (the storefront demo needs `ministral-3-3b` plus the
+  embedding model; the 2026-10-20 rerun predates K-066, when `query_graph_data` still used the
+  `qwen3-4b-2507` step default), load them explicitly:
+  `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe load <model> -c 8192 -y`. Explicit loads show no TTL and
+  `PARALLEL 4` in `lms ps`; JIT loads show a 60 m idle TTL. `lms ps` and `lms load --estimate-only`
+  are read-only. The pinned set had 6 of 1,125 turns dead (0.5%) against ~63-67% on JIT-swapping runs.
+
 ## More targeted wording guidance is not monotonically safer — on `mistralai/ministral-3-3b`, a second iteration cut net correctness 80% → 70% by suppressing a protective multi-call self-correction
 
 **Verified 2026-09-07** against `falkor-chat/docs/HISTORY.md` (2026-08-31, K-057) and

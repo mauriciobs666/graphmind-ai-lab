@@ -306,6 +306,6 @@ as its having vanished from your untracked list. Confirm with `ls` plus `git ls-
   destructive-shaped capability), landing at `claude/docs/requirements/<slug>.md`. Only once that
   doc reaches **Ready for design** does `cobb` design the actual agent (name, prompt, tools,
   hooks) from it. Precedent: `claude/docs/requirements/security-expert.md`.
-- Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md`, the full catalog entry in [`README.md`](./README.md), and the name roster here, in the same change.
+- Adding/editing/renaming/removing an agent → update the agent source, its `kaizen/{plan,history}.md`, the full catalog entry in [`README.md`](./README.md), the name roster here, and — when team behavior or roster changes — the end-user manual `claude/docs/manuals/agent-team.md`, in the same change.
 - Skills live in the repo-root [`skills/`](../skills/) home, not here. Their catalog is [`skills/README.md`](../skills/README.md); cobb's kaizen logs changes to `agent-maintenance`/`agent-standards`.
 - Don't paste full system prompts or duplicate the README catalog here — point to the source.

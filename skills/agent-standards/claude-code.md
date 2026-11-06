@@ -379,6 +379,13 @@ the always-loaded project memory (`CLAUDE.md`).
   per-task re-run already covers it. Verified against
   `code.claude.com/docs/en/hooks` and `/en/sub-agents` ("All hook events are supported"
   in frontmatter) 2026-10-14.
+- **`PostToolUse` fires only after a tool call succeeds; `PostToolUseFailure` fires after one
+  fails** (both filter on tool name; exit 2 shows stderr to Claude for both). A post-edit hook
+  (formatter, sync) registered on `PostToolUse` alone skips every failed call, so register both.
+  Verified 2026-11-06 against `code.claude.com/docs/en/hooks` (events and exit-code tables only;
+  the page's PostToolUse sections were beyond the read window); **unverified live: whether a Bash
+  command that exits non-zero counts as a "failure"** — probe with a `false` command before
+  relying on it.
 - **A distinct layer: auto mode's built-in Bash safety classifier.** Separate
   from any project's `PreToolUse` hooks — it's a product-level check, not
   something a repo's `guard-*.sh` scripts can see or special-case. Observed

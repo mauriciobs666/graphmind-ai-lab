@@ -412,6 +412,17 @@ distills — on request, and folded into every certification pass (§4):
    already-seeded `Agent` node, raising `AgentNotFoundError` rather than
    silently falling back, so `ingestedById` is trustworthy for attribution.
 
+   **At corpus scale `list_documents` cannot enumerate raw entries.** It is oldest-first with a
+   200 cap and no offset, and the workspace also holds the migrated KB claims (470 documents on
+   2026-11-06, of which the oldest 200 were nearly all KB claims). Enumerate with a plain read
+   instead: `mcp__cypher__query(graph='ws:agent-team', cypher="MATCH (d:Document) WHERE d.text
+   STARTS WITH 'Fact:' RETURN d.documentId, d.createdAt, d.title ORDER BY d.createdAt")` — a raw
+   entry's text starts with `Fact:`, a KB claim's never does (cross-check against
+   `claude/cobb/scripts/kb-claim-manifest.json`). The tool truncates long text cells, so fetch
+   each entry's text with `get_document`. Entries ingested outside `produced_by` show
+   `ingestedByKind: User, ingestedById: u1` — attribution lost; infer the producer from the
+   `Context:` line and say so in the disposition.
+
    **The predecessor store's two reads (a legacy `author`-property query and
    a post-M8 `PRODUCED`/`MENTIONS`-edge traversal against `kaizen_team`), its
    truncated-cell paging discipline, and its `PRODUCED.sessionId`

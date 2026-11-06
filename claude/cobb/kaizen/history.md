@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-11-06 — Distillation 3: sweep of the oldest 40 of 138 raw entries; machinery fixes
+
+- **What:** Report: `docs/reviews/team-learnings-distillation3-sweep.md`. 5 entries carry `ingestedById: u1` (attribution lost): `5f57a8bb` promoted to `skills/cpg-analysis/SKILL.md` (with the completeness bound the entry omitted); `12eb7b6c` promoted to `falkor-chat/docs/SERVER.md` testing hazards (figures not carried); `e34f3143`, `6ce4a232`, `b7154a94` discarded (generic shell fact / already in `review-techniques.md` and `ops-quirks.md` / stale kaizen-write-scope fact). `4da25923` (own, `produced_by` fails loudly) discarded: in `agent-maintenance` §5 and `SERVER.md`.
+  - `agent-maintenance` §5 step 1: `list_documents` cannot enumerate raw entries at 470 documents (oldest-first, 200 cap, KB claims first); added the cypher `STARTS WITH 'Fact:'` enumeration and the `u1` caveat.
+  - KB sync (§5 step 5): 7 claims ingested (fence replaced `f6a73bf7`, deleted; readiness, destructive-guard, ORDER BY, full-text, LM Studio, WSL2 spawn-stall added) and recorded in `kb-claim-manifest.json` under `_cobb_distillation3_2026_11_06`. The delete of the stale `ddfbb4bb` was denied by the harness classifier and is owed (plan K-061 (cobb)). `92e938a3`'s claim that the manifest omits 4 KB files is wrong: they are tracked under the underscore-prefixed keys.
+- **Why:** `ws:agent-team` raw-capture distillation (§5), report `docs/reviews/team-learnings-distillation3-sweep.md`. Raw documents were not cleared (delete needs approval).
+- **Plan items:** none.
+
 ## 2026-10-31 — `agent-maintenance` §5: a claim's title is decided once and recorded, so a shortened title survives an interrupted re-ingest
 
 - **What:** `skills/agent-maintenance/SKILL.md` §5, KB claim sync. A new bullet, "Decide the claim's title once, before any write, and record it", says to build the title from the `"<family-slug> — <claim-title>"` convention (or the plain heading), shorten `<claim-title>` (never the slug) if it is over 200 characters, and use that one **recorded title** everywhere. The "Existing claim, text changed" step now writes `title` in the same manifest write that sets `verified: "pending"`, and `ingest_document` uses that recorded title. "New claim" ingests with the recorded title and writes the same title to the manifest. The orphan sweep matches the manifest's recorded `title`, never a title rebuilt from the convention, and the split-sibling lookup says "recorded `title`". Also dropped the backticks around `<claim-title>` inside the re-ingest code span; that text is now prose.
