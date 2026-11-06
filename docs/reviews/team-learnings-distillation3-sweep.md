@@ -14,9 +14,7 @@
   oldest-first, capped at 200, and its 200 returned rows were 198 KB-manifest ids plus 2 raw entries. (Fix recorded in
   `skills/agent-maintenance/SKILL.md` §5 step 1.)
 - **Cut.** Oldest 40 of 138 processed (through createdAt 1792625651910); 98 remain (named backlog below).
-- **Clearing.** No raw document was deleted: the harness classifier denies `delete_document` on irreversible deletion
-  (one stale KB claim delete was denied, one replaced-claim delete was allowed), and the brief reserves raw deletion.
-  All 40 below are dispositioned and logged in the producers' `kaizen/history.md`; deleting them is owed on approval.
+- **Clearing.** The user approved deleting the stale KB claim `ddfbb4bb` and the 40 dispositioned raw documents (except the kept-open `d88545b5`, so 39). Observed 2026-11-06: 4 raw documents deleted (`4da25923`, `ca7ba5b0`, `5f57a8bb`, `672902db`); the harness classifier then blocked the delete of `ddfbb4bb` and of `d1f94b35` (it allowed neighbouring calls), so I stopped. Cypher read afterwards: 134 raw (`Fact:`) documents remain of 138; both blocked ids still exist; the 7 new claims are all `ready`. Still to delete: 35 dispositioned raw documents (all report ids except the four above and `d88545b5`) plus `ddfbb4bb`.
 - **Attribution.** 5 entries show `ingestedByKind: User, ingestedById: u1` (not `produced_by`-attributed); producer
   inferred from content and logged in `cobb`'s history. Marked `u1` below.
 
