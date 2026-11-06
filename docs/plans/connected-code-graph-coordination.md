@@ -576,3 +576,4 @@ Steps that must not encode the old order: S12 / P0-11a, S35/S39 fixture keys, S4
 - 2026-11-05: S41 audit batch 2: KA-wiring (20 lines, sha 7f2e88b6…) and KA-scripts (167 lines, sha c6060f46…) clean; keys in work/keys/. Stratum-tag mismatches (http 0, mcp 17, wiring 4, scripts 28): the field is untrusted by EP §3.1; matching is by locator; scope overlap between KA writers is a prior for the report, not a defect.
 - 2026-11-05: KB-http ended exit 0 (audit queued); KB-mcp started.
 2026-11-05 KA-flow and KB-mcp ended exit 0 (audits queued); KB-scripts and KB-wiring started.
+2026-11-06 KB-scripts, KB-wiring ended exit 0 (audits queued); KB-flow and QW started.
