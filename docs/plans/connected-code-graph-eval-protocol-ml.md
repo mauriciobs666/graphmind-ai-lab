@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.6 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.7 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-06 (v1.6): S49 P0-42a/42b spec rulings (§2.3, §2.4, §6.3, §6.4, §6.6, §7.1, §7.3, §8.2, §9.1, §9.3, §9.4, §13.4, §13.5); the 2026-11-05 v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
+*2026-11-06 (v1.7): S45 ruling on a high invalid share (§7.2); v1.6's S49 rulings stand, and the v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -883,6 +883,15 @@ GC lists invalid items in `work/invalid.jsonl` (item id, check failed). The meth
 in place and fixes each one from source, by `qname` grammar or file content, or drops it, and
 returns the decisions by item id only. Fixed items re-enter matching. Drops are counted per writer
 and per check.
+
+**Invalid share (v1.7).** A held-out item counts as not found by its writer, and nobody repairs
+its lines: a cited line far from the named element leaves open whether the line or the `qname` is
+wrong. Estimates then run on the valid items, so completeness is a lower bound (§6.4). If one
+session's invalid share in a stratum exceeds **10%** (invalid / lines in that session's key file),
+the stratum's §6.5 pass is launched whatever its completeness, with a line-citation note in the
+brief (lines are those of the cited symbol's span in the kit file, read in the session). The
+report states the held-out count and its concentration by file. The session is never voided for
+invalid share; only audit findings void it (§6.1, item 1).
 
 ### 7.3 The spot-check sample (S46; E10)
 
