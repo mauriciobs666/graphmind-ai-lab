@@ -1,8 +1,8 @@
 # Connected code graph — evaluation protocol (P0(f))
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.5 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-ml.md` · **Version:** 1.6 · **Extended by:** `docs/plans/connected-code-graph-eval-protocol2-ml.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md` (§S06 (P0-05)), `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
-*2026-11-06 (v1.5): S49 P0-42a spec rulings (§2.3, §2.4, §6.3, §7.1, §7.3, §9.4, §13.4); the 2026-11-05 v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
+*2026-11-06 (v1.6): S49 P0-42a/42b spec rulings (§2.3, §2.4, §6.3, §6.4, §6.6, §7.1, §7.3, §8.2, §9.1, §9.3, §9.4, §13.4, §13.5); the 2026-11-05 v1.4 edits are in `docs/reviews/connected-code-graph-p0-impl.md` §S06.*
 
 This is step S06 (unit P0-05) of the P0 plan. v1.0 cited `docs/plans/connected-code-graph-p0.md`.
 That plan is now superseded by `docs/plans/connected-code-graph-p0-2.md`, whose §6 and §12 keep
@@ -748,11 +748,14 @@ still unmatched, when either rule below holds.
 Per derived stratum, the writers are grouped into **lists by strategy** (plan §6.1, ML §8.2): list
 P = the union of provider-first writers' records (KA, plus the extra pass KA2 if one ran), and
 list C = the consumer-first writer's (KB). Then:
-- `n₁ = |P|`, `n₂ = |C|`, `m = |P ∩ C|` (after §6.2–§6.3), `r = |P ∪ C| = n₁ + n₂ − m`;
+- `n₁ = |P|`, `n₂ = |C|`, `m = |P ∩ C|` (after §6.2–§6.3), `r = |P ∪ C| = n₁ + n₂ − m`, over
+  in-scope items only: V4 out-of-scope items (§7.1) are outside the census and are reported
+  as a count, never entering §6.4 or §9.1. `capture` and `split` refuse a record with no boolean `inScope`;
 - **Chapman:** `N̂c = (n₁+1)(n₂+1)/(m+1) − 1`, with
   `Var = (n₁+1)(n₂+1)(n₁−m)(n₂−m) / ((m+1)²(m+2))`;
 - **Chao's heterogeneity lower bound** over the *t* individual writing sessions (t = 2, or 3 with
-  KA2): from the capture histories, `f₁` and `f₂` are the counts of records found by exactly one
+  KA2; `t` is `match.json`'s per-stratum value, 3 iff KA2 ran there, declared by `match
+  --ka2-strata` even when it found nothing): from the capture histories, `f₁` and `f₂` are the counts of records found by exactly one
   and exactly two sessions, and `N̂h = r + ((t−1)/t) · f₁(f₁−1) / (2(f₂+1))`;
 - **`N̂* = max(N̂c, N̂h)`**, and **completeness = r / N̂***;
 - **The Chapman interval** (Chao's log-normal, on `f₀ = N̂c − r`): `K = exp(1.96·√ln(1 + Var/f₀²))`,
@@ -846,7 +849,7 @@ keeps the runtime oracle as the independent check (ML §4.1).
 - invalid items, and how each was fixed or dropped;
 - the unclassified count;
 - the count of disagreements between the writer's stratum and the derived one;
-- the writers' `hops` distribution.
+- the writers' `hops` distribution, counted per member record, not per item.
 
 All of it is counts, with no locators.
 
@@ -946,7 +949,11 @@ SQ-P0-1's trigger (plan §12), never a reason to un-contact an anchor.
 
 - **The lists.** C is the union of these lists, each converted to `anchorId` by §2.2. S14 and S30
   list their anchors as locators (plan §3). GC records C, with its source per entry, in
-  `work/contact.jsonl`, and the ground-truth report lists the contacted anchors by locator.
+  `work/contact.jsonl`: canonical JSONL, one `{anchorId, locator, source}` per line, sorted by
+  `anchorId`, deduplicated, `locator` the normalized form. Its only producer is
+  `split_manifest.py contact --in <raw {locator, source} lines> --out work/contact.jsonl`, which
+  applies `normalize_contract` (EP2 §1.2) and `E` (§2.3), then `match_keys.locator_id`. `split`, `manifest` and `check-report`
+  read that file and no other. The ground-truth report lists the contacted anchors by locator.
   They are dev, so they are not secret.
 - **Timing.** C is applied at S47. The flow draw (S40) does not wait for C (§3.6).
 - **Probe clusters (B1).** Contacting a unit or its probe contact point contacts both, because the
@@ -987,8 +994,8 @@ re-opened to bring an anchor back.
 ### 9.1 The AC-5 split (S47; E7)
 
 **Input:**
-- U, the corrected union of matched records, each with `itemId`, `anchorId`, `derivedStratum` and
-  `counting` (§3.7);
+- U, the corrected union of matched in-scope records (§6.4), each with `itemId`, `anchorId`,
+  `derivedStratum` and `counting` (§3.7);
 - C, the contact set (§8);
 - each unit anchor's probe (§5.1) and served set S(u) (§3.5);
 - `seed = "ccg-p0f-split-v1|" + EVAL_COMMIT`;
@@ -1002,14 +1009,15 @@ For each stratum *s*:
 1. **Clusters (B1).** Join each unit anchor with its probe contract point by union-find. Do this
    even when the probe has no items of its own. Every other anchor is its own cluster.
    - A cluster's `rank` is the smallest `rank` among its anchors.
-   - A cluster's **primary stratum** is the stratum holding most of its items. A tie goes to the
+   - A cluster's **primary stratum** is the stratum holding most of its items, counting or not. A tie goes to the
      earlier stratum in the order `http, mcp, scripts, wiring, flow`.
    - Every later step moves whole clusters.
 2. **Contact.** A cluster with any anchor in C goes to dev.
 3. **Share.** For each stratum *s*:
    - let A_s be the clusters whose primary stratum is *s* and that are not in dev, sorted by
      `rank` ascending;
-   - let `T_s = ceil(0.7 × (items of A_s))`;
+   - let `T_s = ceil(0.7 × (items of A_s))`, counting every item of those clusters, whatever its
+     stratum, counting or not;
    - walk A_s in order, assigning each cluster to held-out until the held-out items of A_s reach
      `T_s`;
    - assign the rest to dev.
@@ -1132,11 +1140,14 @@ Every file is canonical JSONL:
   the session transcripts, which stay beside `heldout/` (plan §6.4).
 - **The manifest holds no locator, keyNorm, qname, line or question text.** Counts and hashes only.
 - **`--verify`** re-hashes every listed file and re-counts its lines. Any mismatch in `sha256`,
-  `bytes` or `items`, or a missing file, exits non-zero, and the gate stops (plan §6.5). It detects
-  modification, not reading (D11, K-P0-7).
+  `bytes` or `items`, or a missing file, exits non-zero, and the gate stops (plan §6.5). It also
+  fails when `files` omits any of the six AC-5 names, or `ac24.jsonl` where it exists in `heldout/`.
+  It detects modification, not reading (D11, K-P0-7).
 
 ### 9.4 The report leak check (`split_manifest.py --check-report`)
 
+- **Files.** Every held-out file takes part (`--heldout-dir` globs them). An explicit file list that omits
+  any `ac5-*.jsonl`, the reserve included, or an existing `ac24.jsonl`, is refused.
 - **Probe set.** For every held-out item:
   - its `itemId`, `anchorId` and `impactedId`, both at 32 hex and at their first 12 hex;
   - every `qname`;
@@ -1732,8 +1743,8 @@ Verbs, in order:
 
 ### 13.5 `capture.py` (S49; run in S45)
 
-- For each derived stratum, build lists P and C and the per-session histories from
-  `work/match.json`, then compute §6.4 exactly as written, in floating point with no rounding
+- For each derived stratum, build lists P and C and the per-session histories from the scoped
+  `match.json` (§13.4 `scope`), taking `t` from its `t` map, not from a flag, then compute §6.4 exactly as written, in floating point with no rounding
   before output.
 - **Output:** `work/capture.json`, with the §6.6 counts plus N̂c, Var, the Chapman interval, N̂h,
   N̂*, which estimate binds, completeness and `trigger: true | false` for each stratum, and the
