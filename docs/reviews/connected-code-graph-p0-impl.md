@@ -5764,3 +5764,62 @@ Approve when: (1) the three N-1 dirs (empty, nonexistent, reserve missing) exit 
 
 ### Residuals (not blocking)
 `trigger` stays true after KA2 has run (Pass 8 n-1); the `--log` file carries held-out anchor ids, so keep it under `work/`. Both are documentation-level.
+
+## Pass 9 — S50 (P0-39): proposal v3.4 + p0-2 v1.6 (uncommitted diff)
+
+**Verdict: approve with suggestions.** No blocker. CPG: considered, not relevant — a documentation-only gate on plans, results and Redis semantics. Word counts against HEAD: proposal 15,455 to 16,876 (+1,421); p0-2 30,244 to 30,824 (+580).
+
+**Growth-stops.** Proposal growth is mostly new scope the S50 row asks for (measured §3.2 table, census table, §3.8 fourth case, §3.5 P0 values). Rework is in place: the "For P0 to settle" list is replaced by "Settled by P0", K1/K7/K11 are rewritten, the p0-2 truncation, resume and plugins text replaces its old text, and there is no finding table or dated Update clause. Restated facts: the census table copies figures that have a home in `<lang>.census.json` and the report. It is the S50 row's "restated as measured", so I leave it, but the P1 plan should cite and not re-copy. The p0-2 "Owed to P1" block (+~450 words) restates EP §10.4/§5.2.1 detail (the four class-X edge names), which the EP owns; cite instead (nit).
+
+### Checks done (verified unless marked)
+- **Recomputed from `results/<lang>.census.json`** (all seven languages, off and on, parse, coverage, line fidelity, value-set, decorator name/literal shares): every census-table cell matches. Python 3,332 end-line delta, C++ 0.2713 vs 0.5234, Kotlin 2,006/2,692 match. **Recomputed from `results/<lang>.json`**: recall k/n for all six, Python decision stratum 146/149, fan-out p90 and shares, JS/Go/Python precision, Java/C# n_P: all match. Report §a1.2/§a1.3 and §a2.2.6/§a2.2.1 (287 of 1,000, 0.675, 0.730, 0/5,897) match. Slice report §2.5 (0.196/0.287 MB, 342/821, 0.99x and 1.10-1.19x, 4.1-4.2x) and p0-graph §6 rows 1, 5, 8, 10, 11, 12 match. Not recomputed: the salesperson 36/69 per-file figures and the Kotlin 2,824 (read in the report only).
+- **Decisions** (indexer per language, Go none, Kotlin List/unmeasured, `flowAvailable` false for six, Kotlin unmeasured) match the report and the ledger. "Unmeasured" is labelled as such in the table; see M-1 for where it is lost.
+
+### Findings
+**M-1 (major, verified): §6.2 "Settled by P0" and K1 can read as gates passed.** (a) "resolved-call precision and the indexer adoption per language: §3.2's table" is listed settled, but precision is unmeasured for Java (as shipped), C#, C++ and Kotlin (the table says so, the bullet does not). (b) K1 says "only Python's pooled recall reaches the gate"; Python's decision stratum (146/149) fails by one site (§3.2 row, report §a1.2), and the decision stratum is what ML §8.1 uses. Fix: bullet (a) "settled except precision, unmeasured for Java, C#, C++ (n_P below 60 or sample too small) and Kotlin (unmeasured)"; K1 "no language passes the recall gate on its decision stratum (Python fails by one site)".
+
+**M-2 (major, inferred): the P1 row still claims flow-dependent closure.** The P1 row keeps "AC-5 on the HTTP/MCP/scripts/flow strata" while §3.2 now says P1's impact is call-level until the projection is fixed and re-measured, and EP Q1 says `flow` items sit at distance 2. Nothing says what P1's AC-5 `flow` stratum does if the re-measurement leaves `flowAvailable` false. Fix: one sentence in the P1 row, "the `flow` stratum closes at P1 only if the fresh-draw re-measurement turns `flowAvailable` true; otherwise it is reported not closed".
+
+**m-1 (minor, verified): §3.2 "best under any stratum is C#'s 0.730"** contradicts the report's own caveat (§a2.2.6): the data/control split is not a pooled figure and Java control reads 164/169 = 0.970. Say "best pooled figure under any stratum", as the report does.
+
+**m-2 (minor, verified): K7** gives `extract.sc` 0.99x-1.19x ("within 2x") and the 4.1-4.2x total, but not that the slice report left SL-5's reading open (its Q2; "PASS under one reading, FAIL under the widest"). Add "SL-5's reading is open (slice report Q2)".
+
+**m-3 (minor, inferred): "these are floors for P1"** (§3.5 size): the DATA-edge argument covers the projection only. P1 adds shell, config, contract and Link layers the slice did not load, so the measured densities are floors for the projection layer, not for the P1 store. Narrow the sentence.
+
+**m-4 (minor, verified): census table caption "as shipped, off equals on"** is false for Java value-set recovery (190 vs 182); the cell shows both, so say "off equals on except Java value-set recovery".
+
+**m-5 (minor, verified): stale pins (the coordinator's premise change).** EP is now v1.8 and EP2 v1.5 (both headers verified: EP v1.8, EP2 v1.5). In `docs/plans/connected-code-graph-p0-2.md` set the current-version pins to EP v1.8 + EP2 v1.5 at: the S06 row (line 370, both occurrences and "EP2 v1.4"), line 599 ("EP v1.7"), line 1429 ("eval-protocol (v1.7)"), the §14 heading (1492), 1494-95 ("v1.7"), 1499 (EP2 v1.4), 1663 (Sources: EP v1.7), 1786 (EP2-1 row). The held-out manifest's `@1.7+@1.4` pin stays. Every EP citation I checked exists in v1.8: §10.4 (`cacheBypass`, lines 1289-1299), §5.2.1 (class X rows, `LAUNCHES`, `DEFINED_BY`, `DEPENDS_ON`, `FROM_DEP`; HA-1 `entryId`), §12.3 (`coreTreeHash` condition, line 1599), §6.4 (`--ka2-strata`, line 757), §13.4-§13.5, §8.2.
+
+**Leftover-pin sweep (unfiltered, both documents).** `§16` hits in p0-2: all remaining ones (lines 50, 369, 596, 1497, 1500, 1725, 1773, 1798) are p0-2's own §16 disposition table: no change. The three EP `§16` citations are replaced (EP has no §16; EP-2 now cites the review's §S06 m6, which exists at line 2963 of this file; EP-35 now cites EP §12.3, which holds the condition). `v1.2` hits: lines 218, 330, 368, 1494-1496, 1628, 1665, 1674-1692, 1725-1753, 1799-1812 are source-version tags in the traceability tables or other documents' versions (egress-spec2, BS, ES2): historical, no change. Line 1686 ("§9.4's v1.2 pattern") describes a v1.2-era item in a source column: leave. `for P0 to settle`: the proposal has none left; p0-2 lines 10 and 1293 quote the former §6.2 heading as a label, and §8 maps each, so they are correct as a pointer but now cite a heading that no longer exists: rename to "§6.2 P0 decisions" (nit).
+
+### Item 3: the ACL key pattern (planted run on the live instance, then removed)
+The inference is **right**. I planted keys and an ACL user with `-@all +get` and ran GET: pattern `~zzrev_s ~zzrev_s__*` grants `zzrev_s` and `zzrev_s__build_1`, `zzrev_s__x__y`, and denies `zzrev_s2`, `zzrev_sa__b` and `zzrev_s:verdict_lock` (NOPERM). The old `~zzrev_s*` grants `zzrev_s2` and the lock key. So a glob without a wildcard matches exactly one key and cannot reach a sibling like `ccg_<s>2`. Safe to record as a P1 obligation, with these points the text lacks:
+1. Replace "inferred, not yet run" with "verified by a planted run" (above), and keep the P1 ACL test with a prefix-sharing second system (`shop` and `shop2`, and `shop` and `shop__x` to prove the `__` rule).
+2. **The system-name rule must be a charset whitelist, not only "no `__`".** The pattern is interpolated: a name containing `*`, `?`, `[`, `]` or `\` becomes a glob (verified: `~zzrev_s[0-9]` grants `zzrev_s2`). `:` should go too, since `ccg_<s>:verdict_lock` is the lock key and a system named `x:verdict_lock` would collide with it.
+3. The lock key `ccg_<s>:verdict_lock` is not covered by the new pattern, so `ccg_build` needs the key-scoped lock selector as well. The text says "either user", which is right; the test should pin it.
+4. **Another document says otherwise:** graph note `docs/plans/connected-code-graph-graph.md` line 284 still gives `ccg_build` `EXPIRE` on `~ccg_<system>*`, and the graph note is authoritative for store mechanics. Its raw-user pattern (line 275) is already the safe form. Record the graph-note edit (`graph-dba`) as a P1 obligation; no live spec exists yet (the code has no ACL setup under `cpg/ccg`).
+
+### Item 4: p0-2 owed items
+- **Plugins** (§6.3 item 3, §6.5 check 1): matches the init capture (`cpg/tests/fixtures/headless/capture.1.stream.jsonl`: three plugins, `path: builtin`, `source: …@builtin`). §6.5 check 1 points at §6.3 item 3, consistent. Fixed.
+- **Truncation definition** (final line of an attempt's log, transcript message that line begins, mid-session gap stays a violation): matches `audit.py` docstring (line 17); fixed.
+- **Control file** `kit-src/cypher-mcp/README.md`: the old `kit-src/README.md` was absent per the ledger (D2); fixed. **Resume/resume2**, recorded timeout reuse (D3: `run-writer.sh` `--timeout` usage), planted read briefed before the kill: fixed.
+- **D3/D4** (ledger 2026-11-05 Pass 9 residuals): S27c now cites acceptance (a)-(e) and drops S59 as an input; the S59 row no longer lists S30, and the new sentence explains the cycle (S30 waits on S27, S27 waits on S59), checked against the S27/S30 rows and EP §8.2. Fixed.
+- **N-3 and hop kinds** (EP §10.4 `cacheBypass`; EP §5.2.1 class X for `DEFINED_BY`, `LAUNCHES`, `DEPENDS_ON`, `FROM_DEP`): matches; the 21-name list is in the answer spec §5.2 (EP line 645). Fixed.
+- **`--ka2-strata`** in S45: matches EP §6.4 and `match_keys.py` (line 15, 31). Fixed.
+- **`{grammarExtract}`**: wording cites bundle spec3 §4/§6, Appendix B's pasters rule and `S52-NOTES.md`; `writerBriefs.grammarExtract` is named in `eval-manifest.yaml`. I did not open `eval-manifest.yaml` (inferred).
+- **P1-owed list**: complete against the ledger's open items (answer-spec text, ACL test, `extract.sc` scope, tooling verbs, compose binding, `ownedRegions`). The P1 `extract.sc` item says the fixed projection is measured on a fresh draw and `flowAvailable` stays false until then: good, and it is the sentence M-2 asks the P1 row to echo.
+
+### Item 5: answer spec
+`docs/plans/connected-code-graph-answer-spec.md` was not edited. I found no contradiction with v3.4. §4.4 and carry-over C4 say "S50 records the bound" (done now, proposal §4 P1 row, "at least 2"): rewrite to cite the proposal at P1 start. Its restated predicate/`cacheKey` text is consistent with EP §10.4 (`cacheHit` outside the facts). Disclosure for P1 start, not a blocker.
+
+### Item 6: misreadable-as-passed
+M-1 and M-2 are the cases. "Indexer adopted" in the §3.2 last column is a remedy label, not a pass: eight of the ten recall verdicts fail the 0.98 screen; the table lists the recall but never says "fails". Suggest a caption line: "Recall below 0.98 on the decision stratum for every language; 'adopted' names the remedy, not a pass."
+
+### What is solid
+Every measured number I traced reproduces; Go "none", Kotlin default List and unmeasured, and `flowAvailable` are stated as the results say; the rule-change-after-results disclosure is carried into §3.2; §3.5's lock ttl, `TIMEOUT_MAX` and `RENAME` values trace to p0-graph §6 with "P1 re-derives".
+
+### Stopping condition
+Approve (no pass 10) when M-1 and M-2 are reworded, the pins of m-5 read v1.8/v1.5, and the ACL text carries points 1-4 above.
+
+### Proposed REVIEW.md lines
+None.
