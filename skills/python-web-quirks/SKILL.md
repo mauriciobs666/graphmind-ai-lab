@@ -1,76 +1,17 @@
 ---
 name: python-web-quirks
 description: >-
-  Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus several
-  pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
-  BackgroundTasks' bounded thread pool (anyio's default limiter, total_tokens 40, raisable only
-  from inside a running event loop, and silently accepting 0 — which deadlocks every sync call the
-  app offloads) vs. unbounded threading.Thread; uvicorn defaulting
-  proxy_headers=True so ProxyHeadersMiddleware rewrites scope["client"] from X-Forwarded-For,
-  falsifying any "request came from localhost" gate; response_model_exclude_unset
-  dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
-  constructor kwargs suppress them) falsifying any "registers only these routes" claim, while an
-  included router's own routes are absent from app.routes entirely and its include_router(prefix=)
-  never reaches the inner path, and a GET route not matching HEAD at all (starlette Route adds
-  HEAD, fastapi APIRoute does not) so HEAD falls through to any path-matching Mount and reads as
-  a 404 while every other method reads as an indistinguishable 405; StaticFiles(html=True) serving
-  a directory's 404.html by direct return rather than by raising, silently bypassing an
-  SPA-fallback subclass override that only catches a raised exception; responses={...}
-  being keyed by status code alone, so two error bodies at one status collapse — though an x-
-  extension inside a status entry does survive verbatim onto route.responses and into app.openapi();
-  FastAPI/Starlette's exception-handler registry resolving by the raised class's MRO, keyed on
-  starlette.exceptions.HTTPException rather than fastapi.HTTPException, and replaced silently (but
-  readably) by a second add_exception_handler on the same type; pydantic
-  Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError
-  connect-phase taxonomy plus a read-phase gap one layer down — http.client.IncompleteRead is not
-  an OSError subclass, a try/except wrapped only around urlopen() leaves resp.read() unguarded
-  outside it, and HTTPError is itself a response object whose own exc.read() can fail independently
-  of the connect-phase guard — and redis-py's sibling TimeoutError/ConnectionError, both falsifying
-  a handler map claimed total by exception type; json.loads parsing bare NaN/Infinity/-Infinity by
-  default, so a numeric-coercion boundary must reject non-finite floats via math.isfinite
-  explicitly; a typing.Protocol's declared methods being derivable from vars(cls) as plain callables
-  (runtime_checkable or not) for a coverage-equals-declared-set test with no hand-written method
-  list; pytest's default capture making an in-test input() call raise OSError
-  (DontReadFromInput) rather than block or read — worth recognizing when a mutation-testing kill
-  shows up with that traceback shape instead of AssertionError; a test that gates itself on
-  config.option.keyword rather than on
-  what request.session.items collected, so a node id, --lf and --deselect all slip past it; an
-  OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
-  parser failing silently on a fenced completion; an env var set after import (a monkeypatch.setenv
-  or a script's own os.environ assignment in main()) being a no-op against an import-frozen
-  constant; a same-second, byte-length-preserving source edit matching a stale __pycache__ entry on
-  both fields CPython's default timestamp validation checks, so the pre-edit bytecode is imported
-  and PYTHONDONTWRITEBYTECODE=1 does not rescue a cache that already exists; a bare pytest.raises with no match= passing on an unrelated same-type raise from an
-  earlier check in the same validator; a function-local deferred import re-resolving each call vs. a
-  def-time-bound default arg; a one-way circular import between two modules that fails in every
-  load order unless the deferred import is inside a function body (not a class body); and
-  starlette TestClient's teardown cancelling every still-running task regardless of whether the
-  app's own lifespan cancels it, and its default raise_server_exceptions=True re-raising an unhandled
-  server exception into the calling test so the plain-text 500 a real client receives cannot be
-  asserted at all (and the parity the False setting buys comes from ServerErrorMiddleware, not from
-  the flag: outside that middleware TestClient synthesizes a headerless, empty-bodied 500); bounding a call whose deadline the code under test computes with a
-  daemon thread plus join(timeout) rather than an elapsed-time assert that a hang never reaches —
-  stamping the start instant inside the thread body, since one taken before Thread.start()
-  absorbs the scheduling gap and passes on a call that did nothing; and an application lock held across ThreadPoolExecutor.submit()
-  delaying interpreter exit by the lock's hold time rather than deadlocking it (nothing holds
-  _global_shutdown_lock across a join), while submit() enqueues the work item *before* it grows the
-  pool, so its "can't start new thread" RuntimeError leaves the job running where the
-  same-typed post-shutdown RuntimeError does not — one compensating except-branch cannot serve both. Use for asyncio.create_task scheduling, threading/executor
-  lock-ordering questions, background-task dispatch, a
-  FastAPI response model using exclude_unset, an assertion over an app's route table or its
-  responses={...} declarations, a method-matching or static-mount-shadowing question, an
-  SPA-fallback override on top of StaticFiles(html=True), a test that
-  must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
-  endpoints (including its read-phase exception handling), a numeric-coercion boundary parsing
-  untrusted JSON, a coverage-equals-declared-set test over a typing.Protocol, a mutation test whose
-  kill surfaces as an unexpected OSError from input(), an LLM-judge parser, a pytest monkeypatch
-  touching an env var or deferred import, a
-  circular-import fix, an edit or scripted mutation that appears not to take effect, a
-  TestClient-driven lifespan/background-task test, or an acceptance assertion
-  on what a client actually receives from an unhandled server error — coder, tdd-engineer, architect,
-  analyst, qa-engineer in a Python codebase. Also: FastMCP tool arguments being pydantic-validated
-  (bound violations arrive as isError results) and where a bound sits in the published schema;
-  `pytest -q -q` printing no "N failed" line; `PYTHONPYCACHEPREFIX` as a stale-.pyc remedy.
+  Live-verified Python gotchas (web/async plus pytest/import-timing traps); load when a
+  Python behavior contradicts a quick docs read. Triggers: asyncio.create_task or
+  BackgroundTasks/ThreadPoolExecutor/lock/thread-limit questions; a FastAPI/Starlette route
+  table, HEAD/405, StaticFiles(html=True) SPA fallback, responses={...}, exception-handler or
+  exclude_unset assertion; uvicorn X-Forwarded-For/"is localhost" gates; urllib/redis/OpenAI-
+  compatible client error handling; json.loads NaN or fenced LLM-judge output; pydantic
+  min_length; FastMCP argument bounds; TestClient lifespan or 500 tests; a test that must bound
+  a hang; an env-var or deferred-import monkeypatch; circular imports; a typing.Protocol
+  coverage test; a pytest.raises without match= passing on the wrong raise; input() OSError in a mutation kill; an edit or mutation that "does not take
+  effect" (stale .pyc); pytest -q -q or --deselect oddities. For coder, tdd-engineer,
+  architect, analyst, qa-engineer.
 allowed-tools: Read, WebFetch, WebSearch
 ---
 

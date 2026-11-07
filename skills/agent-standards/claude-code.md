@@ -481,6 +481,26 @@ the always-loaded project memory (`CLAUDE.md`).
      without re-verifying against this note — the premise is only half true, and the half that's
      false (the auto-mode classifier) is not something a repo-local hook script can see or
      special-case, the same caveat already logged above for the Bash classifier.
+  3. **What the transcript records for hook decisions, and for a hook "allow" under `-p`** (scan of
+     this repo's session files, 2026-11-07, plus the 2.1.316 headless-probe transcripts under
+     `~/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-<session>-scratchpad-dm-probe-headless`).
+     A `tool_result` entry carries a top-level `permissionDecision`. 6,708 results carry
+     `{accept, source: hook, reasonType: hook}` and every one has a PreToolUse `hook_success`
+     attachment placed **before** it (a run killed in between loses the attachment). 109 `is_error`
+     results carry no `permissionDecision` at all; 107 begin `<tool_use_error>` (input validation,
+     unknown tool, a `Blocked:` message) and carry no decision (that they never reached the
+     permission step is inferred, not shown). In probe session `b0bbcc3d` (2.1.316) a hook **deny**
+     and an `"onFailure": "block"` failure both produced `is_error`, `permissionDecision {reject,
+     hook, reasonCode "hook:PreToolUse"}`, `toolDenialKind: "permission-rule"` and **no
+     attachment**; only the content text tells them apart. A hook that exits 0 with no output also
+     leaves no attachment and the call is decided by the mode (`accept`/`config`/`mode`). So "no
+     `hook_success`" means deny, failure or no opinion: read the result entry. Under `-p` plus
+     `acceptEdits` the probe's planted out-of-bounds subagent `Write` succeeded with `accept/hook`
+     (session `973830b1`); the same write without the hook was not tested, so that `acceptEdits`
+     alone would have refused it is not shown here (counterfactual not run). Per the hooks docs (not
+     re-read), a crashing, timing-out or garbage-output hook falls through to the normal flow unless
+     the handler sets `"onFailure": "block"` (v2.1.295+); settings deny/ask rules still apply after
+     an allow (point 1).
 - **Resolution/update, 2026-08-24 (`claude/docs/plans/write-guard-classifier-gap-coordination.md`
   §U7, `claude/docs/plans/permission-default-mode.md`):** the live test the note above called for
   has now run, twice, and both attempted fixes are refuted for the delegated-write case. (1) A
@@ -851,24 +871,6 @@ the always-loaded project memory (`CLAUDE.md`).
   is a processed total, not a context size: the median of sum over the last message's context is 40.8
   in files with a leg and 19.1 in those without; for `agent-a24f61274678bd8b3` it is 14.15M against
   258k. Nested spawns' `.meta.json` carry `parentAgentId` (2 files, both `spawnDepth` 2).
-- **Hook decisions as the transcript records them, and what it shows for a hook "allow" under `-p`** (scan
-  of the same files, 2026-11-07, plus the 2.1.316 headless-probe transcripts under
-  `~/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-<session>-scratchpad-dm-probe-headless`).
-  A `tool_result` entry carries a top-level `permissionDecision`. In this repo's files, 6,708
-  results carry `{accept, source: hook, reasonType: hook}` and every one has a PreToolUse
-  `hook_success` attachment placed **before** it (a run killed in between loses the attachment). 109
-  `is_error` results carry no `permissionDecision` at all; 107 begin `<tool_use_error>` (input
-  validation, unknown tool, a `Blocked:` message), which carry no decision (that they never reached the permission step is inferred, not shown). In probe
-  session `b0bbcc3d` (2.1.316) a hook **deny** and an `"onFailure": "block"` failure both produced
-  `is_error`, `permissionDecision {reject, hook, reasonCode "hook:PreToolUse"}`,
-  `toolDenialKind: "permission-rule"` and **no attachment**; only the content text tells them apart;
-  a hook that exits 0 with no output also leaves no attachment and the call is decided by the mode
-  (`accept`/`config`/`mode`). So "no `hook_success`" means deny, failure or no opinion: read the
-  result entry. Under `-p` plus `acceptEdits` the probe's planted out-of-bounds subagent `Write`
-  succeeded with `accept/hook` (session `973830b1`); I did not test the same write without the hook,
-  so that `acceptEdits` alone would have refused it is not shown here. Per the hooks docs (not re-read),
-  a crashing, timing-out or garbage-output hook falls through to the normal flow unless the handler
-  sets `"onFailure": "block"` (v2.1.295+); settings deny/ask rules still apply after an allow.
 - **A user-level settings file can switch off a project's hook guard and change an unattended `-p`
   run** (settings reference fetched 2026-11-07; 248 index rows). `disableAllHooks` has scope "Any
   file": set outside managed settings it turns hooks off, so `~/.claude/settings.json` disables a

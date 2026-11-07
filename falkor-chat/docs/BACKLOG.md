@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-102
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-103
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -92,6 +92,19 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 > document after its embed. Two asks: root-cause why they failed, and decide whether a failed
 > document's chunks are re-embedded (a retry/repair path) or left as-is.
 - **Owner:** `analyst` (RCA), then an implementer.
+
+### K-103 — `extraction.normalize_name` keeps zero-width characters (U+200B), so names differing only by one don't fuse (🔵 proposed — `docs/reviews/salesperson-cart-product-id2-impl.md` Learnings, `docs/reviews/team-learnings-distillation4-sweep.md` row 13, 2026-11-07)
+
+> `normalize_name` is `_WHITESPACE_RE.sub(" ", name.strip()).casefold()` with `\s+`, and neither
+> `str.strip()` nor `\s` treats U+200B as whitespace. Reproduced offline (`falkor-chat/server`
+> venv): `normalize_name('Foo\u200bBar')` returns `'foo\u200bbar'` (not equal to `normalize_name('FooBar')`
+> = `'foobar'`); a leading or trailing U+200B survives; U+200D and U+FEFF survive too. NBSP and
+> U+3000 become a plain space (`'foo bar'`), so they are not a gap. The helper is the one shared
+> key for `Entity.nameNormalized` writes, stub repair, `Product.nameNormalized`/`categoryNormalized`
+> and NLQ value normalization, so such names get distinct keys and don't fuse or match. Open: strip
+> only U+200B or the whole zero-width/format class (U+200C/D, U+2060, U+FEFF), and whether already
+> stored `nameNormalized` values need a backfill.
+- **Owner:** `architect` (scope), then an implementer.
 
 ### K-079 — Storefront fabricated-price detection: remaining RCA fixes F4, F5 (🟡 in-progress — F1/F3 delivered 2026-10-22/23, F2 2026-10-28, `docs/reviews/salesperson-fabricated-prices-rca.md`)
 

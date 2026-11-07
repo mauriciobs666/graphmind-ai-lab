@@ -25,6 +25,9 @@
   that edits it, or an explicit no-change ruling. A filtered or path-limited sweep, or a pattern
   that matches only the already-known sites, is a bound, not proof. Run a prescribed check
   command verbatim, from the working directory it states.
+- A narrowing based on "did not reproduce" re-runs the entry's original invocation, with the same
+  parameters (for a tool behaviour: the same flags, `offset`/`limit` included), and records which
+  form was run. A negative from a different call form is a bound, not a refutation.
 - In a spec-update check, read the lines the update left unchanged too. A contradiction
   carried over from the previous text is a finding, the same as a new one.
 - In a live-spec check, a fact stated in two sections of the spec set is a finding, and every
