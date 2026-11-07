@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-11-07 — Distillation 5: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `898523d4` (grep shim doc'd; awk `substr` generic), `2885564b` (doc'd in `SERVER.md` line 430 and `DESIGN.md` line 638; re-run offline, `evaluate_guard` propagates a raising judge), `1489efec` (fixed: `RunResult.requestTimeoutSeconds`), `31f5557a` (fixed: root `AGENTS.md` uses `FNR`), `06b32c43` (doc'd in `docs/plans/live-specs.md`), `3cab6295` (duplicate of the `.pyc` section; the `PYTHONPYCACHEPREFIX` remedy promoted to `python-web-quirks`), `f5d536b3` (doc'd in `falkor-chat/AGENTS.md`), `23d09f2b`, `7fde1fc1` (promoted, merged: FastMCP validation section in `python-web-quirks`), `87816ba2`, `f4a9728c`, `3b42b6f9` (promoted, merged into `claude-code.md`: transcript accounting, hooks and MCP instructions in subagents), `50e13c02`, `d1b20a23` (promoted narrowed: Read tool 25k-token refusal; the truncation variant did not reproduce), `1455ae5d` (doc'd in the `-ml` plan).
+- **Why:** distillation 5 (`docs/reviews/team-learnings-distillation5-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 4: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `4b9c6680` (rejected: fixed, `NLQ_EVAL_RESULTS_PATH` override), `32f13a00` (doc'd in the fabricated-prices RCA), `1bfe7423` (promoted to `python-web-quirks`, corrected condition), `eddc90b4` (doc'd in `cpg/sandbox/forbidden-flags.txt`), `ea225b5e` (promoted: `review-techniques.md` pathspec section, KB claim `92bdc7df`), `2e4a895c` (promoted narrowed to `claude-code.md`), `cef174b2`, `2ff81eb9`, `7e7fa532` (doc'd in the cpg sandbox README / egress specs).

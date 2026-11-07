@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-11-07 — Distillation 5: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `18988b5c` (doc'd in `embedder-context-report.md` and BACKLOG K-100; re-run today: an over-context `/v1/embeddings` input returns HTTP 200 with the same vector as a shorter one).
+- **Why:** distillation 5 (`docs/reviews/team-learnings-distillation5-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 4: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `dfbcdf08`, `31115c98`, `9b6886df`, `78040b73`, `72e164b3`, `26255ae0`, `ebcf3cf5`, `2cc6debd` (all doc'd in `cpg/infra`, `cpg/sandbox`, `opencode/agents/tank/README.md`), `a46d1844` (promoted: `ops-quirks.md` redis-cli claim, KB `ec14609e`; the `NOAUTH` rc half was not re-run).

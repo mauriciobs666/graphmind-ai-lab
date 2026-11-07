@@ -310,3 +310,22 @@ check the card, then check the corpus.
 **Context:** `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (data-scientist's K-030
 method note, which works this exact question for a genuinely asymmetric corpus and recommends
 adopting the query-side prefix there).
+
+## LM Studio's per-load GPU placement decisions are logged only in the Windows app's `main.log` — not in `~/.lmstudio/server-logs/`
+
+Checked 2026-11-07 on the WSL2 dev box (LM Studio 0.4.26+4). The lines that explain where a load
+went, `Resolved GPU config options:` followed by `Num Offload Layers: …`, and `Strict GPU VRAM cap
+is OFF: GPU offload layers will not be checked for adjustment`, are written to the Windows app's
+`%APPDATA%\LM Studio\logs\main.log` (reachable from WSL as `/mnt/c/Users/<user>/AppData/Roaming/LM
+Studio/logs/main.log`; `main.old.log` beside it holds the rotated part). In that file `Num Offload
+Layers` appeared 127 times and `Strict GPU VRAM cap` 58 times. The one file under
+`.lmstudio/server-logs/` that contains the string `Num Offload Layers` is a logged chat request that
+quotes it, not a placement line, so `server-logs/` is the wrong place to look for why a model sits in
+RAM while VRAM is free. Read the tail of `main.log` around the load, not `lms log stream`, for the
+settings that were in force. **Not re-run on this date:** that llama.cpp's own layer-split lines are
+not persisted anywhere and show only in `lms log stream -s runtime` during a fresh load (the entry
+that reported it said so; this check only confirmed `lms log stream` takes a source option);
+and the effect of "Limit weight offload to dedicated GPU Memory" being off (spill to WDDM shared
+memory, invisible to `nvidia-smi`), which `falkor-chat/docs/test-reports/salesperson-single-model-fit-report.md`
+records with its per-process counters.
+

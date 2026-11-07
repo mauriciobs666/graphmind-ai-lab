@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-11-07 — Distillation 5: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `cd8b3a60` (superseded by the live probe), `a1ed1084` (doc'd in the `-ml` plan), `7cd73007` (promoted, merged into the `claude-code.md` transcript bullet; the 22k-47k floor not carried), `85a1600e` (doc'd in `typed-decision-models-coordination.md`).
+- **Why:** distillation 5 (`docs/reviews/team-learnings-distillation5-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 3 raw entries dispositioned
 
 - **What:** `3f4ac750` (live server serves stale code): promoted to `SERVER.md` testing hazards, deploy-verification tells kept.

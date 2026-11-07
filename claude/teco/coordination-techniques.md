@@ -146,6 +146,26 @@ artifact"* indistinguishably. So brief two probes the delegate's own table canno
 the check's input from the **spec's own literal**, never from the unit's fixtures, and confirm no
 two stubs in a fixture share a value the assertion depends on.
 
+## A coordinator's "this surviving mutant is equivalent" verdict is itself a claim — execute it
+
+When an integration mutant survives, do not clear it by arguing that another check already covers
+the same invariant. Two invariants that read alike can key on different fields, and an equivalence
+argued from names is exactly what a real gap hides behind. In typed-decision-models U3c.2 the
+integration mutant restricted `model-bench`'s `report._pack_content_reason` to the first run of each
+replicate group and survived; it was judged equivalent because "`_replicate_groups` already refuses
+two content hashes in one group". The analyst's probe showed that refusal is keyed on
+`candidateContentHash`, while `_pack_content_reason` compares each run's **`packContentHash`**, so an
+input edit in replicate 2 printed "FR-1 met / FR-2 met" under the mutant: not equivalent. Before
+accepting "equivalent", write the input that would tell the two apart (here: change only the field
+the claimed covering check does not key on) and run the mutant against it; if it cannot be written,
+say so in the ledger instead of calling the mutant equivalent.
+
+Re-derived 2026-11-07 by reading the current code, not by re-running the original probe:
+`modelbench/report.py` `ReplicateGroup`'s docstring says a group is "all of one
+`candidateContentHash`", and `_pack_content_reason` builds its hash set from every run's
+`fingerprint["packContentHash"]` plus the loaded pack's. The replicate-2 report output itself was not
+re-run.
+
 ## Brief for the kill: land incrementally, and make the artifact re-derivable
 
 This harness kills long runs without warning, and the answer is not to shorten or serialize

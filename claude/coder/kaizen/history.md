@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-11-07 — Distillation 5: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `0688b13b` (fixed; general lesson doc'd), `824ea793` (duplicate of the scratchpad collision in `claude-code.md`), `2d0168ef` (promoted: `pytest -q -q` section in `python-web-quirks`).
+- **Why:** distillation 5 (`docs/reviews/team-learnings-distillation5-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 1 raw entry dispositioned
 
 - **What:** `672902db` (same-second `.pyc` reuse): discarded, already in `skills/python-web-quirks/SKILL.md`.

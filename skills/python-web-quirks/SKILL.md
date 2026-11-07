@@ -68,7 +68,9 @@ description: >-
   circular-import fix, an edit or scripted mutation that appears not to take effect, a
   TestClient-driven lifespan/background-task test, or an acceptance assertion
   on what a client actually receives from an unhandled server error — coder, tdd-engineer, architect,
-  analyst, qa-engineer in a Python codebase.
+  analyst, qa-engineer in a Python codebase. Also: FastMCP tool arguments being pydantic-validated
+  (bound violations arrive as isError results) and where a bound sits in the published schema;
+  `pytest -q -q` printing no "N failed" line; `PYTHONPYCACHEPREFIX` as a stale-.pyc remedy.
 allowed-tools: Read, WebFetch, WebSearch
 ---
 
@@ -975,3 +977,40 @@ condition did not reproduce: absolute ids never match. A mutation or scratch-cop
 `--deselect` to skip DB-touching tests therefore runs them (origin: falkor-chat `*_live` tests
 wiping `ws:test`). Use relative ids from the rootdir or `-k`, and read the summary for a
 "deselected" count.
+
+## FastMCP validates tool arguments with pydantic — a bound violation is an `isError` result, and the bound's position in the published schema varies
+
+Verified 2026-11-07 (mcp 1.28.1, pydantic 2.13.4, a scratch `FastMCP` server driven through
+`mcp.shared.memory.create_connected_server_and_client_session`): a `@mcp.tool()` signature becomes a
+pydantic argument model, so `Annotated[T, Field(max_length=, le=, max_length= on a list)]` bounds are
+enforced **before the body runs** and a violation reaches the client as `CallToolResult(isError=True)`
+with one text block, `Error executing tool <tool>: 1 validation error for <tool>Arguments`, then the
+field name and pydantic's own message (`String should have at most 8 characters`, `Input should be
+less than or equal to 10`, `List should have at most 2 items after validation, not 3`). A claim that
+"MCP has no schema layer" is therefore false for a FastMCP tool whose signature carries types or
+`Field` bounds. The bounds are published in `inputSchema`, but not always on the property node: an
+`Optional[...]` argument's bound sits inside the non-null `anyOf` branch, a list-element bound under
+`items`, a dict-key bound under `propertyNames`, and an Enum-class argument is a `$ref` (a `Literal`
+is an inline `enum`). A coverage or parity walker that reads constraint keys only on `properties`
+nodes misses the nested positions (observed on the same scratch server; FastAPI's OpenAPI put the
+list-element bound under `items` in the same way). A FastAPI Enum-class *query* parameter is a plain `$ref`
+when required or defaulted, and an `anyOf` of the `$ref` and `null` only when it is `Optional`.
+
+## `pytest -q -q` prints no "N failed, M passed" line on a failing run — a script that parses it reads zero failures
+
+Verified 2026-11-07 (pytest 9.1.1, a two-test scratch file, one failing): `pytest -q` ends with
+`1 failed, 1 passed in 0.01s`; `pytest -q -q` prints the failure traceback and the `short test summary
+info` block (`FAILED test_x.py::test_a - assert 0`) but **no** final counts line, with or without
+`-ra`. A mutation runner that greps the counts line therefore sees "no summary" or zero failures for a
+mutant that breaks hundreds of tests. Count lines starting with `FAILED ` / `ERROR ` instead, or use a
+single `-q` (origin: model-bench's U4.1 mutation runner).
+
+## `PYTHONPYCACHEPREFIX=<fresh empty dir>` is a stale-`.pyc` remedy that leaves the source tree's `__pycache__` alone
+
+Complements the same-second section above. Verified 2026-11-07 (CPython 3.12.3, a one-module scratch
+project): `V = "AAAA"` imported, then rewritten to `V = "BBBB"` with its mtime reset to the cached
+`.pyc`'s second, still printed `AAAA` under the default cache, and printed `BBBB` with
+`PYTHONPYCACHEPREFIX=<a new empty dir>` (the interpreter reads and writes bytecode under the prefix,
+so a stale entry in the tree is never consulted). Use a fresh prefix per mutant run when deleting the
+tree's `__pycache__` is undesirable. Not observed: the pytest assertion-rewrite cache specifically,
+and whether `python -I` (isolated mode) honours the variable.

@@ -798,6 +798,46 @@ the always-loaded project memory (`CLAUDE.md`).
   for `SendMessage` inside the session that spawned it (above) — what this recovers is the id, not a
   dead session's ability to use it.
 
+- **Reading token use and context out of subagent transcripts — what the entries carry and how to
+  count** (measured 2026-11-07, CLI 2.1.319, a Python scan of 464 `subagents/agent-*.jsonl` in
+  graphmind-ai-lab). Each `assistant` entry has `message.model` (the resolved id: `claude-opus-5-5`,
+  `claude-sonnet-5-5`, `claude-haiku-5-5` or `<synthetic>` here, so pin a labeller or cost model by
+  this, not by a tier alias), `message.id` and `message.usage`. **One API message is written as
+  several entries sharing a `message.id`** (18,364 of 23,877 ids here), and the repeated `usage` is
+  *usually* but not always identical: **120** ids differed (e.g. `output_tokens` 3 on the first
+  entry, 2087 on the last). **Dedupe by `message.id` and take the LAST entry's `usage`**: summing
+  every entry over-counts hugely, and taking the first undercounts output tokens (25,230,582 vs
+  25,550,184 over all ids here, about 1.3%). `message.model == "<synthetic>"` entries are
+  harness-generated: all 20 in these subagent files carried `error: rate_limit` and a "You've hit
+  your session/5-hour/weekly limit" text (a `authentication_failed` or error-less synthetic entry
+  reported for main-session transcripts was not looked for). The first `user` entry is the parent's
+  spawn prompt; `attachment` entries carry the injected `instructions` files and `session_context`;
+  `api-request` entries carry `params.thinking` and `params.output_config.effort`; `.meta.json`
+  carries `agentType`.
+- **A custom main agent's frontmatter hooks also fire for its subagents' tool calls, and a subagent
+  receives MCP server instructions for servers whose tools it does not have** (read from one
+  transcript, 2026-11-07; not re-run live). In an `architect` subagent run under `claude --agent
+  teco`, six tool uses (Write/Edit) each carry **two** `hook_success` attachments with one
+  `toolUseID`: the architect's own `guard-plan-doc-writes.sh` and teco's `guard-repo-writes.sh`. The
+  hook docs' wording that frontmatter hooks apply "only while that subagent is active" does not
+  describe the main-agent case (docs not re-read this run). The same transcript has one
+  `mcp_instructions_delta` attachment adding `claude-artifacts`, `claude.ai Claude Docs` and
+  `cypher`; the architect's `tools:` allowlist has `mcp__cypher__query` and the falkor-chat tools,
+  so `claude-artifacts` and `claude.ai Claude Docs` are servers it has no tool for. `hook_success`
+  records that the hook **ran**, not that its decision was enforced (see the Auto Mode `ask` notes
+  above). Design guard hooks for stacking, and do not treat an allowlist as hiding a server's
+  instructions from a delegate.
+- **The Read tool caps one read at 25,000 tokens, and what happens past the cap depends on whether
+  `offset`/`limit` is passed** (2.1.319, 2026-11-07, re-run in both forms). **With** `offset`/`limit`:
+  `Read(offset=1, limit=10)` of ten ~7,260-char JSON lines (Portuguese-like text with `\n` and `\"`
+  escapes) answered `File content (50211 tokens) exceeds maximum allowed tokens (25000)` and returned
+  nothing; `limit=1` on a 233,928-char one-line file was refused the same way (161,817 tokens).
+  **Without** them: a plain `Read` of that same one-line file (under the 256 KB size limit) returned a
+  **partial view**, the first 30,719 of 233,928 characters, with a notice that it "has very long
+  lines and cannot be paginated by line". It is not an error, so a reader that does not see the notice
+  reasons from a prefix; a file over 256 KB is refused on size first. For escape-heavy text this ran
+  at about 1.5 chars/token for the paged case; the ratio varies with the text, so no safe character
+  budget is stated. Search with `Grep`, or split a one-line dump into lines before reading.
 - **`subagents/agent-<agentId>.jsonl`'s mtime is the cheap live-vs-dead discriminator for a
   dispatched subagent — an empty `git status` is not one.** Where the delegated procedure verifies a
   whole batch before writing anything, a long stretch with nothing on disk is its normal mid-run

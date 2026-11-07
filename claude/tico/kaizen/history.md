@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-07 — Distillation 5: raw entries dispositioned
+
+- **What:** Entries swept (all dispositioned, not deleted): `316050e8` (laya `/v1/decisions` schema: doc'd in `docs/plans/typed-decision-models.md` §2.3 and `decisions.py`), `8d9008f4` (promoted: KB claim `fd27e4a9`, `lm-studio-model-notes.md`, GPU placement is logged only in the Windows `main.log`).
+- **Why:** distillation 5 (`docs/reviews/team-learnings-distillation5-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-06 — Distillation 3: 2 raw entries dispositioned
 
 - **What:** `c6f11ae1` (update rule omits the team manual): verified, promoted into the `claude/AGENTS.md` add/edit/rename rule.

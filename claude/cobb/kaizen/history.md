@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+
+## 2026-11-07 — Distillation 5: 40 raw `ws:agent-team` entries swept
+
+- **What:** Processed the oldest 40 of 58 pending raw entries (18 remain, recomputed from the manifest and the graph). 15 promoted (some merged), 25 rejected (doc'd, fixed, duplicate, superseded or unreproducible; `2885564b` included as doc'd in SERVER.md and DESIGN.md), 0 deferred. Promotions: `skills/python-web-quirks/SKILL.md` (FastMCP validation, `pytest -q -q`, `PYTHONPYCACHEPREFIX`), `skills/agent-standards/claude-code.md` (three bullets: transcript accounting, main-agent hooks and MCP instructions in subagents, Read-tool 25k refusal), KB claims `fd27e4a9` (`claude/data-scientist/lm-studio-model-notes.md`) and `ab95ba9f` (`claude/teco/coordination-techniques.md`), both observed `ready` with 2 of 2 chunks embedded. Manifest keys `_cobb_distillation5_2026_11_07` and `_dispositioned_raw_distillation5`; K-063 rewritten with the remainder. No raw deletions; `040a2630` untouched.
+- **Why:** the standing raw-capture backlog (K-063); report `docs/reviews/team-learnings-distillation5-sweep.md` carries each row's evidence and what was not re-run. One entry claim was narrowed (the 3% first-entry undercount, measured 1.3%); the Read-tool one-line-file claim was first recorded as not reproduced and, after the gate, re-run in both call forms and corrected (a plain `Read` returns a partial view, `limit` is refused).
+- **Plan items:** K-063 (rewritten).
+
 ## 2026-11-06 — Distillation 4: sweep of 40 more raw entries
 
 - **What:** Distillation 4: oldest 40 of 98 pending raw entries swept (report `docs/reviews/team-learnings-distillation4-sweep.md`). 7 promoted: `skills/python-web-quirks/SKILL.md` (absolute `--deselect`, corrected: also fails with cwd = rootdir), `skills/agent-standards/claude-code.md` (`grep -qv` shim divergence, `pkill -f` self-kill), `skills/joern-cpg/SKILL.md` (c2cpg skips `.ino`), `falkor-chat/docs/SERVER.md` §1.7 (`-k "not _live"`), and 3 KB claims (`review-techniques.md` pathspec, `ops-quirks.md` redis-cli and `lib/` gitignore) ingested one at a time with the embedder probed; all observed `ready`. 33 rejected with a cited file/symbol or a re-run. No raw document deleted; ids recorded under `_dispositioned_raw_distillation4`.

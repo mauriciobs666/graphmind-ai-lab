@@ -339,7 +339,7 @@
       ]
   },
   "_cobb_distillation4_2026_11_06": {
-    "_note": "Three KB claims added by distillation 4, each observed status ready 2026-11-06 after a single ingest with the embedder resident (probed via /api/v0/models before and after). Byte-exact get_document vs .md check not run (text compared by eye; the .md section bodies were pasted). The gitignore `lib/` claim was re-ingested after the analyst gate (M1: `git add` exit-code details); the first version 040a26300285410597f785fda48eed9a is SUPERSEDED and still present in ws:agent-team, pending the user's delete (not deleted by cobb).",
+    "_note": "Three KB claims added by distillation 4, each observed status ready 2026-11-06 after a single ingest with the embedder resident (probed via /api/v0/models before and after). Byte-exact get_document vs .md check not run (text compared by eye; the .md section bodies were pasted). The gitignore `lib/` claim was re-ingested after the analyst gate (M1: `git add` exit-code details); the first version 040a26300285410597f785fda48eed9a was SUPERSEDED and deleted by the user (confirmed absent 2026-11-07).",
     "claude/analyst/review-techniques.md": [
       "92bdc7df09894f05836febd1d06a391f"
     ],
@@ -436,6 +436,106 @@
       "7e7fa532b84a423eb94ffa681f83be7b",
       "2cc6debd49f24f58b87f4d8a0d91ea1f"
     ],
+    "deleted": []
+  },
+  "_cobb_distillation5_2026_11_07": {
+    "_note": "Two KB claims added by distillation 5, each observed status ready (2 of 2 chunks embedded) in ws:agent-team after a single ingest with text-embedding-qwen3-embedding-0.6b loaded (probed via /api/v0/models before and after each ingest). get_document text length compared to the .md section body (1416 and 1407 characters, equal); a full content compare was not run.",
+    "claude/data-scientist/lm-studio-model-notes.md": [
+      "fd27e4a9cf7b4333be7ac9f7445a0e46"
+    ],
+    "claude/teco/coordination-techniques.md": [
+      "ab95ba9f782d40119eeed4c8dd8ea31b"
+    ]
+  },
+  "_dispositioned_raw_distillation5": {
+    "_note": "Raw (Fact:-prefixed) ws:agent-team entries processed by the 2026-11-07 distillation 5 (docs/reviews/team-learnings-distillation5-sweep.md). Not deleted (standing user decision). A later pass must exclude these ids with the distillation 3 and 4 ids (agent-maintenance SKILL §5 step 1). Three are cited by repo docs/fixtures and must not be deleted: 480ef825, a1d388f4, a93905a6 (typed-decision-models plans and model-bench fixtures). 2885564b is rejected as documented (falkor-chat SERVER.md line 430, DESIGN.md line 638).",
+    "dispositioned_not_deleted": [
+      "316050e8f3ef4135a7fc0605e5d79689",
+      "898523d4608f4012b77fc0c8246f9910",
+      "35b0029bb9404f3e9e27fa2b95a01340",
+      "7d1e39a2e2f9446cb078261becb42e45",
+      "cd8b3a6061734282895ad52604b7e753",
+      "2885564bbe764f0c99a507a4c207a023",
+      "1489efec662941f2b6d9e25d8080d47d",
+      "3bc8105b080d4196a3349854fbb65761",
+      "8d9008f4f11b46bfb06369678f6e23ec",
+      "480ef825c67d4f9c8e177b16174791c7",
+      "a1ed108467814097be34dcec1c8ca789",
+      "a1d388f459b74c4db5c1d13b2a22e66a",
+      "a93905a62ec949e3a25d7c59106824e1",
+      "3fa0de22e50f4d84b0e4114a358dd453",
+      "31f5557a56aa419ba67507f822a332c6",
+      "06b32c4385284d4b8b1dc7a524ce1f0d",
+      "3cab6295c3994cdab3b2eb4cd06befed",
+      "0688b13bee8e464e96ae545c59aaebf2",
+      "18988b5c0af04482a3b2f78c99acd9e8",
+      "f5d536b314ef4a768833a6f674355778",
+      "cadd1d197c39447aa72f115438d5d441",
+      "23d09f2bd0f34d3eb925fb2b65bf2326",
+      "0876339df6604037a8ca60516c904cf1",
+      "7fde1fc1f1924749b89dbad8ccf147bc",
+      "14745ca484644f8db040438b6f3932bb",
+      "7cd73007ce3d44929eec6a9c64506166",
+      "00b1922619934081a9957f3c4bb8cc2e",
+      "87816ba251b440c1a2236209ed9636d1",
+      "6e4c5414f68c4ee3b406aeb4d8e52863",
+      "50e13c02ab8247e28d654ca70063664b",
+      "f4a9728c0a564eccbec52a6b6672ed26",
+      "3b42b6f9458947e5a14d03086f906c88",
+      "5541a3cb55d14262957fd4ab8bfcbd02",
+      "d1b20a23dbd94da2b0f8b8ef3a021089",
+      "def9b95a0569436ab7fdfa3b76324a5f",
+      "e758c2825e814c229e13913beb95a686",
+      "824ea793f23c4edc82ceeb730500e2df",
+      "1455ae5d7594490eaacaf4d2981e50af",
+      "2d0168efb3db4552bff3952f28c543d3",
+      "85a1600ecda746a6b611aeca655ffae6"
+    ],
+    "promoted": [
+      "8d9008f4f11b46bfb06369678f6e23ec",
+      "3cab6295c3994cdab3b2eb4cd06befed",
+      "23d09f2bd0f34d3eb925fb2b65bf2326",
+      "7fde1fc1f1924749b89dbad8ccf147bc",
+      "14745ca484644f8db040438b6f3932bb",
+      "7cd73007ce3d44929eec6a9c64506166",
+      "87816ba251b440c1a2236209ed9636d1",
+      "6e4c5414f68c4ee3b406aeb4d8e52863",
+      "50e13c02ab8247e28d654ca70063664b",
+      "f4a9728c0a564eccbec52a6b6672ed26",
+      "3b42b6f9458947e5a14d03086f906c88",
+      "5541a3cb55d14262957fd4ab8bfcbd02",
+      "d1b20a23dbd94da2b0f8b8ef3a021089",
+      "def9b95a0569436ab7fdfa3b76324a5f",
+      "2d0168efb3db4552bff3952f28c543d3"
+    ],
+    "rejected": [
+      "316050e8f3ef4135a7fc0605e5d79689",
+      "898523d4608f4012b77fc0c8246f9910",
+      "35b0029bb9404f3e9e27fa2b95a01340",
+      "7d1e39a2e2f9446cb078261becb42e45",
+      "cd8b3a6061734282895ad52604b7e753",
+      "1489efec662941f2b6d9e25d8080d47d",
+      "3bc8105b080d4196a3349854fbb65761",
+      "480ef825c67d4f9c8e177b16174791c7",
+      "a1ed108467814097be34dcec1c8ca789",
+      "a1d388f459b74c4db5c1d13b2a22e66a",
+      "a93905a62ec949e3a25d7c59106824e1",
+      "3fa0de22e50f4d84b0e4114a358dd453",
+      "31f5557a56aa419ba67507f822a332c6",
+      "06b32c4385284d4b8b1dc7a524ce1f0d",
+      "0688b13bee8e464e96ae545c59aaebf2",
+      "18988b5c0af04482a3b2f78c99acd9e8",
+      "f5d536b314ef4a768833a6f674355778",
+      "cadd1d197c39447aa72f115438d5d441",
+      "0876339df6604037a8ca60516c904cf1",
+      "00b1922619934081a9957f3c4bb8cc2e",
+      "e758c2825e814c229e13913beb95a686",
+      "824ea793f23c4edc82ceeb730500e2df",
+      "1455ae5d7594490eaacaf4d2981e50af",
+      "85a1600ecda746a6b611aeca655ffae6",
+      "2885564bbe764f0c99a507a4c207a023"
+    ],
+    "deferred_to_owner": [],
     "deleted": []
   }
 }
