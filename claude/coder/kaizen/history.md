@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-11-07 — Distillation 6: raw entries dispositioned
+
+- **What:** `629325c2` (mutation-test copy needs `results/` and `PYTHONPATH=<copy>`) and the fd 0 half of `c590ed3a` (pytest fd capture puts `/dev/null` on fd 0) promoted to `skills/python-web-quirks/SKILL.md`, re-run; the `-q -q` half duplicates distillation 5's section. `15de3552` rejected (FalkorDB facts doc'd in `falkordb-quirks.md`). All swept entries are dispositioned, not deleted.
+- **Why:** distillation 6, the last of K-063 (`docs/reviews/team-learnings-distillation6-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `0688b13b` (fixed; general lesson doc'd), `824ea793` (duplicate of the scratchpad collision in `claude-code.md`), `2d0168ef` (promoted: `pytest -q -q` section in `python-web-quirks`).

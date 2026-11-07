@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-07 — Distillation 6: the last 18 raw `ws:agent-team` entries swept (K-063 closes)
+
+- **What:** Swept all 18 pending raw entries (report `docs/reviews/team-learnings-distillation6-sweep.md`): 14 promoted or merged, 4 rejected (doc'd in `lm-studio-model-notes.md`, `falkordb-quirks.md` twice, or a one-off the user accepted), 0 kept open, 0 KB claims ingested. Skills: three bullets in `skills/agent-standards/claude-code.md` (transcript shape, hook decisions as recorded, user settings vs a project hook guard) and four sections in `skills/python-web-quirks/SKILL.md` (`python -I` and the pycache prefix, pytest fd 0, group-kill, mutation-test copies); `cpg/infra/toolchain/README.md` (offline `tsc`). Ids are under `_dispositioned_raw_distillation6`; nothing deleted. `8b09c509` is mine: the docs' `CLAUDE_CODE_FORK_SUBAGENT=0` foreground lever stayed background in the interactive probe.
+- **Why:** closing K-063. Applied distillation 5's lessons: every promoted fact re-run with its bound stated (hook-allow counterfactual, FORK_SUBAGENT and `sys.pycache_prefix` not run), rejections cite lines, one first-draft error (node is on the image `PATH`) caught by a second run.
+- **Plan items:** K-063 rewritten (0 raw remain apart from K-062).
+
 ## 2026-11-07 — Distillation 5: 40 raw `ws:agent-team` entries swept
 
 - **What:** Processed the oldest 40 of 58 pending raw entries (18 remain, recomputed from the manifest and the graph). 15 promoted (some merged), 25 rejected (doc'd, fixed, duplicate, superseded or unreproducible; `2885564b` included as doc'd in SERVER.md and DESIGN.md), 0 deferred. Promotions: `skills/python-web-quirks/SKILL.md` (FastMCP validation, `pytest -q -q`, `PYTHONPYCACHEPREFIX`), `skills/agent-standards/claude-code.md` (three bullets: transcript accounting, main-agent hooks and MCP instructions in subagents, Read-tool 25k refusal), KB claims `fd27e4a9` (`claude/data-scientist/lm-studio-model-notes.md`) and `ab95ba9f` (`claude/teco/coordination-techniques.md`), both observed `ready` with 2 of 2 chunks embedded. Manifest keys `_cobb_distillation5_2026_11_07` and `_dispositioned_raw_distillation5`; K-063 rewritten with the remainder. No raw deletions; `040a2630` untouched.

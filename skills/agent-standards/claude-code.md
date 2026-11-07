@@ -535,11 +535,9 @@ the always-loaded project memory (`CLAUDE.md`).
      `Agent`/`Task` tool itself to opt out — only the session-level env var
      `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: *"Claude Code runs the subagent in the foreground,
      in every kind of session and whether or not fork mode is on"* (`/docs/en/sub-agents`
-     § "Run subagents in foreground or background", quote re-verified 2026-09-08). **Don't look
-     for it in the env-vars reference — it isn't there** (re-checked 2026-09-08): `/docs/en/env-vars`
-     documents the *opposite* lever, `CLAUDE_AUTO_BACKGROUND_TASKS=1` (force-enable backgrounding
-     after ~2 min), and never names the disable one, so a reader who searches only the reference
-     page concludes no such toggle exists.
+     § "Run subagents in foreground or background", quote re-verified 2026-09-08). **The env-vars reference now lists it** (row `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS`, and a
+     `CLAUDE_CODE_FORK_SUBAGENT` row; fetched 2026-11-07). The 2026-09-08 check found neither there,
+     so an older reading of that page concluding "no such toggle" is stale.
   2. **The "Background Subagents" doc section describes *where* a needed prompt surfaces, not
      whether one is needed** ("Claude Code surfaces the prompt in your main session and names the
      subagent that is asking") — and sits immediately adjacent to the parent-mode-inheritance
@@ -827,6 +825,59 @@ the always-loaded project memory (`CLAUDE.md`).
   records that the hook **ran**, not that its decision was enforced (see the Auto Mode `ask` notes
   above). Design guard hooks for stacking, and do not treat an allowlist as hiding a server's
   instructions from a delegate.
+- **Transcript shape a reader must not assume: duplicate `tool_use`s, `async_launched` spawns, the
+  terminal entry, resumed legs** (Python scan 2026-11-07, CLI 2.1.319 reading this repo's 29
+  main-session and 466 `subagents/agent-*.jsonl` files; the version mix is wider, 2.1.300-2.1.319 per
+  the source entries). (1) Almost every assistant `tool_use` is also replayed with the same `id` in
+  `api-request-blob` entries (per-id check over the 29 main files: 4,924 assistant ids, 4,932 blob
+  blocks of 4,920 distinct ids, so 12 duplicate blocks; 4 assistant ids absent from every blob, all in
+  one file; 0 blob ids absent from the assistant entries), so count from `type: "assistant"`
+  entries or dedupe by id. (2) All 464
+  `Agent` tool_results in the main sessions have `toolUseResult.status: "async_launched"`, including
+  the 380 whose `tool_use` input has no `run_in_background` key (84 have it), so "a tool_result
+  exists" does not mean the subagent finished; `.meta.json` `finished: true` does (430 of 466 files,
+  absent otherwise). The docs name `CLAUDE_CODE_FORK_SUBAGENT=0` as a way to get foreground spawns;
+  the interactive probe (`docs/test-reports/typed-decision-models-harness-probe-report.md` §4.2/§4.3,
+  not re-run by me) saw it stay background and only `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` block.
+  (3) 462 of 466 subagent files contain a `SubagentHandback` `tool_use` although no `claude/*/*.md`
+  definition lists it in `tools:`; the last conversation entry is a `tool_result` in 456 and an
+  `end_turn` reply in 4 (the other 6 are neither: 5 non-`tool_result` user entries, 1 `tool_use`). That is this host's shape (an SDK-hosted coordinating session, per
+  `docs/plans/typed-decision-models6.md` line 62); the same report's F3 records interactive runs
+  ending `END_TURN` with no hand-back, so hard-code neither terminal shape. (4) A `SendMessage` leg
+  is a `user` entry with `origin.kind == "coordinator"` ("The coordinator sent a message while you
+  were working:"): 280 of 466 files hold at least one, 274 of them after an earlier
+  `SubagentHandback`, so a resumed subagent appends to the same file and one file can hold several
+  units' passes; split per leg before attributing tokens. Summed usage (last entry per `message.id`)
+  is a processed total, not a context size: the median of sum over the last message's context is 40.8
+  in files with a leg and 19.1 in those without; for `agent-a24f61274678bd8b3` it is 14.15M against
+  258k. Nested spawns' `.meta.json` carry `parentAgentId` (2 files, both `spawnDepth` 2).
+- **Hook decisions as the transcript records them, and what it shows for a hook "allow" under `-p`** (scan
+  of the same files, 2026-11-07, plus the 2.1.316 headless-probe transcripts under
+  `~/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-<session>-scratchpad-dm-probe-headless`).
+  A `tool_result` entry carries a top-level `permissionDecision`. In this repo's files, 6,708
+  results carry `{accept, source: hook, reasonType: hook}` and every one has a PreToolUse
+  `hook_success` attachment placed **before** it (a run killed in between loses the attachment). 109
+  `is_error` results carry no `permissionDecision` at all; 107 begin `<tool_use_error>` (input
+  validation, unknown tool, a `Blocked:` message), which carry no decision (that they never reached the permission step is inferred, not shown). In probe
+  session `b0bbcc3d` (2.1.316) a hook **deny** and an `"onFailure": "block"` failure both produced
+  `is_error`, `permissionDecision {reject, hook, reasonCode "hook:PreToolUse"}`,
+  `toolDenialKind: "permission-rule"` and **no attachment**; only the content text tells them apart;
+  a hook that exits 0 with no output also leaves no attachment and the call is decided by the mode
+  (`accept`/`config`/`mode`). So "no `hook_success`" means deny, failure or no opinion: read the
+  result entry. Under `-p` plus `acceptEdits` the probe's planted out-of-bounds subagent `Write`
+  succeeded with `accept/hook` (session `973830b1`); I did not test the same write without the hook,
+  so that `acceptEdits` alone would have refused it is not shown here. Per the hooks docs (not re-read),
+  a crashing, timing-out or garbage-output hook falls through to the normal flow unless the handler
+  sets `"onFailure": "block"` (v2.1.295+); settings deny/ask rules still apply after an allow.
+- **A user-level settings file can switch off a project's hook guard and change an unattended `-p`
+  run** (settings reference fetched 2026-11-07; 248 index rows). `disableAllHooks` has scope "Any
+  file": set outside managed settings it turns hooks off, so `~/.claude/settings.json` disables a
+  project `PreToolUse` guard. `autoContinueAtUsageLimit` defaults to `true` and is read only from
+  user, `--settings` and managed settings (a project file can only turn it off).
+  `switchModelsOnFlag` unset means a safety-flagged request is re-run on a fallback model; `false`
+  ends it as an error under `-p`. A named deny-list of dangerous keys fails open at this key count;
+  design the unattended run to pin what it needs (`docs/plans/typed-decision-models6.md` lines 38-46,
+  111-128).
 - **The Read tool caps one read at 25,000 tokens, and what happens past the cap depends on whether
   `offset`/`limit` is passed** (2.1.319, 2026-11-07, re-run in both forms). **With** `offset`/`limit`:
   `Read(offset=1, limit=10)` of ten ~7,260-char JSON lines (Portuguese-like text with `\n` and `\"`

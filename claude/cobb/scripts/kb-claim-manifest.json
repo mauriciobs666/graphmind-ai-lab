@@ -537,5 +537,55 @@
     ],
     "deferred_to_owner": [],
     "deleted": []
+  },
+  "_cobb_distillation6_2026_11_07": {
+    "_note": "Distillation 6 (final sweep of K-063, docs/reviews/team-learnings-distillation6-sweep.md) ingested no KB claim: every promotion landed in a skill (skills/agent-standards/claude-code.md, skills/python-web-quirks/SKILL.md) or a project doc (cpg/infra/toolchain/README.md). No embedder probe was needed."
+  },
+  "_dispositioned_raw_distillation6": {
+    "_note": "Raw (Fact:-prefixed) ws:agent-team entries processed by the 2026-11-07 distillation 6 (docs/reviews/team-learnings-distillation6-sweep.md), the last of K-063. Not deleted (standing user decision). A later pass must exclude these ids with the distillation 3, 4 and 5 ids (agent-maintenance SKILL section 5 step 1). No repo document cites them by id except the distillation 5 reports naming 98a4de01 as first pending, so deletion is safe by citation. c590ed3a had status processing and 15de3552, 710a0b5e, d0a55c70 status failed (embedding of the raw document) when read.",
+    "dispositioned_not_deleted": [
+      "98a4de014ceb49ac8d6f5cd05a6309df",
+      "0729de87b738451faecbe180c3d1271e",
+      "8b09c509eb334d50aab16ac727ec6ed0",
+      "629325c220234d9b94cea8109f032bde",
+      "b50e21d6003146a9a68968c6798ae1c7",
+      "d5be833ccf044558a32e29446c34fef3",
+      "2f9e2cc6e2d54c6dbddc30748ba72e6a",
+      "b169cd4e59c340608e419e9afab04801",
+      "6d115b95c0264c9aa4552547504eae89",
+      "605f76ea19904c80a1d5eb9e03bd0c64",
+      "3ab71d8271e04dd093ecc270a800ff13",
+      "c590ed3adacc41f8a10366bb8d568e14",
+      "95ab714455f146fbab7ffb137c158762",
+      "5b5f0ab67a494683b6b33ad1df3483e4",
+      "15de3552dbd3499a9f4ce7b00badc09e",
+      "710a0b5e10e847e59da92fe4167d74c1",
+      "c470c19d70f54efba2b1f00cccb5dd95",
+      "d0a55c70384c4c8aa28ea35c2a8485a1"
+    ],
+    "promoted": [
+      "98a4de014ceb49ac8d6f5cd05a6309df",
+      "0729de87b738451faecbe180c3d1271e",
+      "8b09c509eb334d50aab16ac727ec6ed0",
+      "629325c220234d9b94cea8109f032bde",
+      "b50e21d6003146a9a68968c6798ae1c7",
+      "d5be833ccf044558a32e29446c34fef3",
+      "2f9e2cc6e2d54c6dbddc30748ba72e6a",
+      "b169cd4e59c340608e419e9afab04801",
+      "6d115b95c0264c9aa4552547504eae89",
+      "3ab71d8271e04dd093ecc270a800ff13",
+      "c590ed3adacc41f8a10366bb8d568e14",
+      "95ab714455f146fbab7ffb137c158762",
+      "5b5f0ab67a494683b6b33ad1df3483e4",
+      "c470c19d70f54efba2b1f00cccb5dd95"
+    ],
+    "rejected": [
+      "605f76ea19904c80a1d5eb9e03bd0c64",
+      "15de3552dbd3499a9f4ce7b00badc09e",
+      "710a0b5e10e847e59da92fe4167d74c1",
+      "d0a55c70384c4c8aa28ea35c2a8485a1"
+    ],
+    "deferred_to_owner": [],
+    "deleted": []
   }
 }

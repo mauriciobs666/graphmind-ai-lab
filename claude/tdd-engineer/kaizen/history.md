@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-11-07 — Distillation 6: raw entries dispositioned
+
+- **What:** `98a4de01` promoted (merged) to `skills/agent-standards/claude-code.md`, bullet "Transcript shape a reader must not assume": `tool_use` replay in `api-request-blob`, `async_launched` spawns. Re-run over this repo's transcripts; the entry's 233 Agent results is 464 now. All swept entries are dispositioned, not deleted.
+- **Why:** distillation 6, the last of K-063 (`docs/reviews/team-learnings-distillation6-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `7d1e39a2` (doc'd in `cpg/sandbox/README.md`), `0876339d` (doc'd in `storefront_api.py` and the guard tests), `14745ca4` (promoted, merged: FastMCP section in `python-web-quirks`).

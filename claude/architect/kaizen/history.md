@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-11-07 — Distillation 6: raw entries dispositioned
+
+- **What:** `b50e21d6` (hook allow is the permission decision under `-p`, counterfactual not run), `b169cd4e` (resumed subagent appends; summed usage is a processed total) promoted into `claude-code.md` bullets; `5b5f0ab6` (user settings can disable a project hook guard) promoted as a third bullet, re-checked against the settings reference fetched today. All swept entries are dispositioned, not deleted.
+- **Why:** distillation 6, the last of K-063 (`docs/reviews/team-learnings-distillation6-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `35b0029b` (doc'd in `llm-provider-config.md`), `3fa0de22` (doc'd in `standard-local-model.md`), `6e4c5414`, `5541a3cb` (merged into the `claude-code.md` transcript bullet; `5541a3cb` is the correction).

@@ -1012,5 +1012,48 @@ project): `V = "AAAA"` imported, then rewritten to `V = "BBBB"` with its mtime r
 `.pyc`'s second, still printed `AAAA` under the default cache, and printed `BBBB` with
 `PYTHONPYCACHEPREFIX=<a new empty dir>` (the interpreter reads and writes bytecode under the prefix,
 so a stale entry in the tree is never consulted). Use a fresh prefix per mutant run when deleting the
-tree's `__pycache__` is undesirable. Not observed: the pytest assertion-rewrite cache specifically,
-and whether `python -I` (isolated mode) honours the variable.
+tree's `__pycache__` is undesirable. Not observed: the pytest assertion-rewrite cache specifically.
+
+**`python -I` ignores the variable** (it implies `-E`). Same CPython 3.12.3, a scratch package put on
+`sys.path` by the script and imported with `PYTHONPYCACHEPREFIX=<dir>` set: under `-I` the prefix
+directory was never created and `pkg/__pycache__` appeared in the source tree; under `-P`, `-s` and
+no flag the prefix directory was created and the tree stayed clean. So a read-only probe of a live
+package run with `-I` writes bytecode into that package. To avoid the bytecode write, drop `-I` (`-P` and `-s` honoured the prefix in the run above; neither flag ignores `PYTHON*` variables).
+Setting `sys.dont_write_bytecode = True` at the top of the script also kept the tree clean under `-I`;
+`sys.pycache_prefix` inside the script was not tried.
+
+## Under pytest's default capture, fd 0 is `/dev/null`, so an in-process test cannot see a child's `stdin=DEVNULL`
+
+Verified (pytest 9.1.1, CPython 3.12.3, Linux, the test run with a pipe on stdin): a test printing
+`os.readlink("/proc/self/fd/0")` and a child's `/proc/self/fd/0` (a `subprocess.run` with no `stdin=`)
+saw `/dev/null` for both under default fd capture, and the same `pipe:[...]` the shell gave pytest
+with `-s` or `--capture=sys`. A child launched in-process therefore inherits `/dev/null` whether or
+not the code passes `stdin=subprocess.DEVNULL`, and a mutant that drops that argument survives. Run
+the code under test as a separate process started with `stdin=subprocess.PIPE` and let a fake child
+record `readlink("/proc/self/fd/0")`. This is separate from the `input()` section above, which is
+about `sys.stdin`, not the descriptor.
+
+## `Popen.wait()` after `os.killpg(pgid, SIGTERM)` leaves a TERM-ignoring descendant alive, and it keeps any `pass_fds` flock
+
+Verified (CPython 3.12.3, Linux, a scratch script): the parent took `flock(LOCK_EX)` on a file and
+passed the descriptor with `pass_fds` to a `start_new_session` `sh` leader whose child ignored
+SIGTERM, then closed its own copy. Kill form A, SIGTERM the group, `wait()` on the leader, SIGKILL
+the group only if the leader is still alive: the leader exited, the group was still alive and a new
+`flock(LOCK_NB)` on the file failed (lock held). Kill form B, SIGTERM then poll `os.killpg(pgid, 0)`
+with `p.poll()` in the loop until the grace ends, then SIGKILL the group: the group was gone and the
+lock was free. `killpg(pgid, 0)` still reports the group alive for an unreaped zombie leader (alive
+`True` after the leader's SIGKILL, `False` after `wait()`), so reap the leader inside the loop. A
+test child that dies on SIGTERM (`sleep`) cannot tell A from B (the source entry's mutants; not re-run). The shipped form is
+`decision-models/decisionmodels/runner.py` `_kill_group` (lines 376-388).
+
+## A private copy for mutation testing: `pytest` imports the editable install's live tree unless `PYTHONPATH` points at the copy, and the copy needs the data directories tests read
+
+Verified on `model-bench` (editable install via a setuptools `__editable__` finder; copy made with
+`rsync` excluding `.venv`): `import modelbench` from the copy's directory resolved into the copy under
+`python -c` and `python -m pytest` (the cwd is on `sys.path`), but a test run through the `pytest`
+launcher resolved into the live tree unless `PYTHONPATH=<copy>` was set, so a mutant edited in the
+copy would never run. Without the copy's `results/` directory, two tests that read stored run records
+failed (`test_every_stored_run_record_still_validates_unchanged`,
+`test_a_legacy_record_without_request_timeout_loads_it_as_none`) and passed with it. The full-suite
+figure in the source entry (3426 passed, 3 skipped) was not re-run. Check which tree ran:
+`print(modelbench.__file__)` in a throwaway test.

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-11-07 — Distillation 6: raw entries dispositioned
+
+- **What:** `2f9e2cc6` (a PreToolUse deny or `onFailure: block` failure persists no hook attachment) merged into the `claude-code.md` hook-records bullet; re-read on the cited probe transcript (2.1.316), not re-run on 2.1.319. All swept entries are dispositioned, not deleted.
+- **Why:** distillation 6, the last of K-063 (`docs/reviews/team-learnings-distillation6-sweep.md`); each row there carries the evidence and what was not re-run.
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `18988b5c` (doc'd in `embedder-context-report.md` and BACKLOG K-100; re-run today: an over-context `/v1/embeddings` input returns HTTP 200 with the same vector as a shorter one).

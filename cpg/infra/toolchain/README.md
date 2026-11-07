@@ -94,6 +94,11 @@ cross-checked against Maven Central's `.sha1`).
 | `uv` | 0.13.6 | corpus venv | GitHub release, sha256 |
 | python3 + venv + pip | 3.12.3 | `scip-python` shells out to `pip list`; corpus venv | apt snapshot |
 
+**Offline type-check of TS fixtures.** The `tsc` that `scip-typescript` depends on (6.0.3, observed
+2026-11-07) is at `/opt/truth/npm/scip-typescript/node_modules/.bin/tsc`; it is not on the image's `PATH`, though `node`
+(`/opt/truth/node/bin`) is. Run it in this image with `--network none`. The WSL host has `javac`
+(JDK 21) but no `node` or `tsc`.
+
 Not in the image: py-tree-sitter and its ten grammars (a `cpg/pyproject.toml` `spike`-extra
 dependency; ML note §11 N6, S09's), and any corpus dependency (fetched by S25 at truth time).
 
