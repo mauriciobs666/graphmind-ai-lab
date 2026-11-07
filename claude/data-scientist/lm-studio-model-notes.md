@@ -318,10 +318,12 @@ went, `Resolved GPU config options:` followed by `Num Offload Layers: …`, and 
 is OFF: GPU offload layers will not be checked for adjustment`, are written to the Windows app's
 `%APPDATA%\LM Studio\logs\main.log` (reachable from WSL as `/mnt/c/Users/<user>/AppData/Roaming/LM
 Studio/logs/main.log`; `main.old.log` beside it holds the rotated part). In that file `Num Offload
-Layers` appeared 127 times and `Strict GPU VRAM cap` 58 times. The one file under
-`.lmstudio/server-logs/` that contains the string `Num Offload Layers` is a logged chat request that
-quotes it, not a placement line, so `server-logs/` is the wrong place to look for why a model sits in
-RAM while VRAM is free. Read the tail of `main.log` around the load, not `lms log stream`, for the
+Layers` appeared 127 times and `Strict GPU VRAM cap` 58 times. Under
+`.lmstudio/server-logs/` (138 files when counted 2026-11-07) the string `Num Offload Layers` occurs in
+only two, and each hit is a logged request/response body that quotes it (entity-extraction output
+from ingesting this very fact), not a placement line; the count grows whenever such a text is
+processed again. So `server-logs/` is the wrong place to look for why a model sits in RAM while VRAM
+is free. Read the tail of `main.log` around the load, not `lms log stream`, for the
 settings that were in force. **Not re-run on this date:** that llama.cpp's own layer-split lines are
 not persisted anywhere and show only in `lms log stream -s runtime` during a fresh load (the entry
 that reported it said so; this check only confirmed `lms log stream` takes a source option);

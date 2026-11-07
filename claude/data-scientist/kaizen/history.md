@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-11-07 — `lm-studio-model-notes.md`: server-logs count corrected
+
+- **What:** The "the one file under `server-logs/`" sentence now states the count observed (2 of 138 files, both logged request/response bodies quoting the string); KB claim re-ingested (`fd27e4a9` -> `d9efef15`).
+- **Why:** distillation 5 follow-up 7; report `docs/reviews/team-learnings-followups-sweep.md`.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `cd8b3a60` (superseded by the live probe), `a1ed1084` (doc'd in the `-ml` plan), `7cd73007` (promoted, merged into the `claude-code.md` transcript bullet; the 22k-47k floor not carried), `85a1600e` (doc'd in `typed-decision-models-coordination.md`).

@@ -1239,6 +1239,10 @@ to the general fact here.
 - **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
   `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
   vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.
+  **Every figure it prints is an integer count of MB**, so a small graph reads `0` or `1`
+  (observed 2026-11-07, module `41811`: `total_graph_sz_mb` 1 for `ws:acme` with 874 nodes, 0 for
+  `ws:test` with 5 nodes and for `ws:eval` with 142; `ws:agent-team` read 12), so it cannot size a
+  small graph.
 - **`GRAPH.PROFILE` is not read-only, and neither `GRAPH.RO_QUERY` nor a `PROFILE`/`EXPLAIN`
   prefix inside a query string is honored as a planning directive — the query just executes.**
   Per docs.falkordb.com/commands/graph.profile: unlike `GRAPH.EXPLAIN`, `GRAPH.PROFILE`

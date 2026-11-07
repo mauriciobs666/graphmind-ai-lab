@@ -587,5 +587,18 @@
     ],
     "deferred_to_owner": [],
     "deleted": []
+  },
+  "_cobb_followups_2026_11_07": {
+    "_note": "Follow-up pass (docs/reviews/team-learnings-followups-sweep.md): two KB claims re-ingested because their source text changed, one at a time, embedder text-embedding-qwen3-embedding-0.6b probed loaded before and after each. Both observed status ready with every chunk embedded; size(text) equals the .md body length (1581 and 527 characters); a full content compare was not run. SUPERSEDED, pending the user's delete: fd27e4a9cf7b4333be7ac9f7445a0e46 (lm-studio-model-notes) and 9bdc41de8e5e469687417a72314b90f6 (falkordb-quirks GRAPH.MEMORY USAGE).",
+    "claude/data-scientist/lm-studio-model-notes.md": {
+      "title": "LM Studio's per-load GPU placement decisions are logged only in the Windows app's `main.log` — not in `~/.lmstudio/server-logs/`",
+      "supersedes": "fd27e4a9cf7b4333be7ac9f7445a0e46",
+      "documentId": "d9efef15867747fd8d5c3c22ac0d218c"
+    },
+    "claude/graph-dba/falkordb-quirks.md": {
+      "title": "GRAPH.MEMORY USAGE under-reports vector-index memory",
+      "supersedes": "9bdc41de8e5e469687417a72314b90f6",
+      "documentId": "424a70a212474976bef248e17f4958f2"
+    }
   }
 }

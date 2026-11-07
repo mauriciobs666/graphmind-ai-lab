@@ -2,6 +2,11 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-11-07 — `GRAPH.MEMORY USAGE` integer-MB clause
+
+- **What:** `claude/graph-dba/falkordb-quirks.md` (Ops, config & tooling): the `GRAPH.MEMORY USAGE` bullet now says every figure is an integer MB, with the observed values; its KB claim was re-ingested (`9bdc41de` -> `424a70a2`).
+- **Why:** distillation 6 row 15 follow-up; report `docs/reviews/team-learnings-followups-sweep.md`.
+
 ## 2026-11-06 — Distillation 3: 1 raw entry dispositioned
 
 - **What:** `d9cb242e` (server venv has falkordb-py): discarded, a tooling convenience already visible from `falkor-chat/AGENTS.md`.

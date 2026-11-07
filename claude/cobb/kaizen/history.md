@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-07 — Follow-ups: two KB claims re-ingested; failed raw-document embeddings left (no re-embed path)
+
+- **What:** Re-ingested KB claims `fd27e4a9` (-> `d9efef15`, `claude/data-scientist/lm-studio-model-notes.md`: the "one file" count corrected to 2 of 138 observed) and `9bdc41de` (-> `424a70a2`, `claude/graph-dba/falkordb-quirks.md`: integer-MB clause), both `ready`; manifest key `_cobb_followups_2026_11_07`. Old ids await the user's delete. Raw-document re-embed (item A) not done: falkor-chat has no per-document re-embed path; options in `docs/reviews/team-learnings-followups-sweep.md`.
+- **Why:** distillation 5/6 follow-ups 7 and 3.
+- **Plan items:** K-063 (5) closed.
+
 ## 2026-11-07 — Distillation 6: the last 18 raw `ws:agent-team` entries swept (K-063 closes)
 
 - **What:** Swept all 18 pending raw entries (report `docs/reviews/team-learnings-distillation6-sweep.md`): 14 promoted or merged, 4 rejected (doc'd in `lm-studio-model-notes.md`, `falkordb-quirks.md` twice, or a one-off the user accepted), 0 kept open, 0 KB claims ingested. Skills: three bullets in `skills/agent-standards/claude-code.md` (transcript shape, hook decisions as recorded, user settings vs a project hook guard) and four sections in `skills/python-web-quirks/SKILL.md` (`python -I` and the pycache prefix, pytest fd 0, group-kill, mutation-test copies); `cpg/infra/toolchain/README.md` (offline `tsc`). Ids are under `_dispositioned_raw_distillation6`; nothing deleted. `8b09c509` is mine: the docs' `CLAUDE_CODE_FORK_SUBAGENT=0` foreground lever stayed background in the interactive probe.
