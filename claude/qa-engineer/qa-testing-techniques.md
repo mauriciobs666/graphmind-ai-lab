@@ -281,3 +281,7 @@ number, not just a qualitative "probably worse than reported." `model-bench` S7
 **Technique:** report the spot-check's corrected estimate as an explicit number, not a hedge — it
 gives the eventual fix's re-run something falsifiable to confirm or refute, and is worth doing
 even when reproducing every item live is too expensive for the pass at hand.
+
+## Parse-checking Mermaid blocks from WSL: use the Windows `npx` via `cmd.exe` and UNC paths; the exit code is the check
+
+- From `cwd=/mnt/c/Users/<user>`: `cmd.exe /c "npx -y @mermaid-js/mermaid-cli@11.4.2 -i \\wsl.localhost\Ubuntu\<dir>\x.mmd -o \\wsl.localhost\Ubuntu\<dir>\x.svg"`. Observed: valid input rc=0 (svg written); broken input rc=1, "Error: Parse error on line 5", no svg. Bound: this WSL has no Linux `node` (`npx` on PATH is the Windows one), so no native alternative exists; first run downloads, needs network. Use rc, not grep of the svg.
