@@ -1236,13 +1236,14 @@ to the general fact here.
     (0.2 s uncapped in the same run; 0.65-1.1 s in earlier runs) and `db.idx.fulltext.createNodeIndex` in 1.65 s (1.5-1.7 s
     uncapped), neither killed; both commands return in 0.001-0.03 s and are polled, not waited on. Verify: the commands above
     after `GRAPH.CONFIG SET TIMEOUT_MAX 3000`; restore `TIMEOUT_MAX 0`.
-- **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
-  `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
-  vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.
-  **Every figure it prints is an integer count of MB**, so a small graph reads `0` or `1`
-  (observed 2026-11-07, module `41811`: `total_graph_sz_mb` 1 for `ws:acme` with 874 nodes, 0 for
-  `ws:test` with 5 nodes and for `ws:eval` with 142; `ws:agent-team` read 12), so it cannot size a
-  small graph.
+- **`GRAPH.MEMORY USAGE` reads `indices_sz_mb: 0` for a small vector index: integer-MB rounding, not
+  proven under-reporting.** Every figure is an integer count of MB and `indices_sz_mb` also covers
+  RANGE/FULLTEXT indexes. Observed 2026-11-08, module `41811`, 1024-dim cosine HNSW (M 16), read-only;
+  raw payload = vectors x 1024 x 4 B: `ws:eval` 121 vectors = 0.47 MB, reads 0; `ws:acme` 71 = 0.28 MB,
+  reads 0 (`total_graph_sz_mb` 1); `ws:agent-team` 751 = 2.93 MB, reads 3 (but 10,539 Entity nodes also
+  carry indexes). Bound: a graph whose vector payload is under ~0.5 MB reads 0. HNSW overhead and the
+  vector-vs-range split were not isolated (no scratch graph), so do not size small graphs from this
+  output; for sizing use vectors x dim x 4 B plus `INFO memory` deltas.
 - **`GRAPH.PROFILE` is not read-only, and neither `GRAPH.RO_QUERY` nor a `PROFILE`/`EXPLAIN`
   prefix inside a query string is honored as a planning directive — the query just executes.**
   Per docs.falkordb.com/commands/graph.profile: unlike `GRAPH.EXPLAIN`, `GRAPH.PROFILE`
