@@ -13,7 +13,7 @@ CPG: considered, not relevant — requirements document; the claims checked are 
 
 | Claim | Result |
 |---|---|
-| `~/.claude/agents` symlinks to this repo's `claude/` | Verified: `ls -l` shows `agents -> /home/mauricio/prg/graphmind-ai-lab/claude`. |
+| `~/.claude/agents` symlinks to this repo's `claude/` | Verified: `ls -l` shows `agents -> /home/<user>/prg/graphmind-ai-lab/claude`. |
 | Skills live in repo-root `skills/` | Verified. `~/.claude/skills/` holds only the platform's `synced/` bundles, none of the team's skills. This supports FR-6 being a real gap. |
 | Agents name `mcp__falkor-chat-agent-team__ingest_document` | Verified: all 13 `claude/*/*.md` agent files. |
 | `ws:agent-team` pinned by `start_agent_team.sh` | Verified (`FALKORCHAT_WS_ID=agent-team`, port 8200). |
