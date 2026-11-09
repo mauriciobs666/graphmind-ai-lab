@@ -481,6 +481,572 @@ def t9c_units_cli_fails_on_an_unruled_hit():
         assert "UNRULED" in out.getvalue() and "BUILD FAILS" in out.getvalue()
 
 
+
+# ======================================================================== S3a: T16-T23
+import hashlib  # noqa: E402
+import json  # noqa: E402
+
+PROD_URL, TEST_URL = "http://fake-prod:8200", "http://fake-test:8210"
+FAKE_TARGETS = {"agent-team": PROD_URL, "pwq-test": TEST_URL}
+MINI_SRC = "# H\n\n> waived blockquote\n\n## Alpha title\n\nalpha body\n\n## Beta title\n\nbeta body\n\n## Gamma title\n\ngamma body\n"
+SCHEMA_FIELDS = None
+
+
+def schema_fields() -> set[str]:
+    """IngestDocumentIn's field names, read from falkor-chat's schemas.py (the fake is built from them)."""
+    global SCHEMA_FIELDS
+    if SCHEMA_FIELDS is None:
+        src = (REPO / "falkor-chat/server/falkorchat/schemas.py").read_text()
+        body = src.split("class IngestDocumentIn(BaseModel):", 1)[1].split("\nclass ", 1)[0]
+        SCHEMA_FIELDS = set(re.findall(r"^    (\w+): ", body, re.M))
+    return SCHEMA_FIELDS
+
+
+class FakeServer:
+    """One workspace's REST server + Cypher fetcher. REST body handling follows pydantic's default:
+    declared fields kept, unknown keys silently ignored, `text` required and non-empty."""
+
+    def __init__(self, base):
+        self.base, self.docs, self.n = base, {}, 0
+
+    def post(self, body):
+        fields = {k: v for k, v in body.items() if k in schema_fields()}
+        if not isinstance(fields.get("text"), str) or not fields["text"]:
+            return 422, {"detail": "text required"}
+        if fields.get("producedBy") != "cobb":
+            return 400, {"detail": "fake: producedBy must be 'cobb'"}
+        for d in self.docs.values():  # byte-identical text auto-supersedes the older current doc
+            if d["current"] and d["text"] == fields["text"]:
+                d["current"] = False
+        self.n += 1
+        did = f"{self.base[-4:]}-doc{self.n}"
+        self.docs[did] = dict(documentId=did, title=fields.get("title"), text=fields["text"], status="processing",
+                              current=True, chunks=2, embedded=2, producedBy=fields["producedBy"], fields=fields)
+        return 201, {"documentId": did, "chunkCount": 2, "status": "processing"}
+
+
+class FakeWorld:
+    def __init__(self):
+        self.servers = {PROD_URL: FakeServer(PROD_URL), TEST_URL: FakeServer(TEST_URL)}
+        self.requests: list[tuple[str, str]] = []
+
+    def srv(self, ws):
+        return self.servers[FAKE_TARGETS[ws]]
+
+    def transport(self, method, url, body=None):
+        self.requests.append((method, url))
+        base = next(b for b in self.servers if url.startswith(b + "/"))
+        srv, path = self.servers[base], url[len(base) + 1:]
+        if method == "POST" and path == "documents":
+            return srv.post(body or {})
+        if method == "DELETE" and path.startswith("documents/"):
+            return (200, {"deleted": True}) if srv.docs.pop(path.split("/", 1)[1], None) else (404, {})
+        return 404, {"detail": "fake has no such route"}
+
+    # fetcher interface
+    def current_docs(self, ws, titles, ids):
+        return [dict(documentId=d["documentId"], title=d["title"], text=d["text"], status=d["status"])
+                for d in self.srv(ws).docs.values() if d["current"] and (d["title"] in titles or d["documentId"] in ids)]
+
+    def embedding_counts(self, ws, ids):
+        return {i: (None if i not in self.srv(ws).docs else
+                    dict(chunks=self.srv(ws).docs[i]["chunks"], embedded=self.srv(ws).docs[i]["embedded"],
+                         status=self.srv(ws).docs[i]["status"])) for i in ids}
+
+    def post_count(self):
+        return sum(1 for m, _ in self.requests if m == "POST")
+
+    def delete_count(self):
+        return sum(1 for m, _ in self.requests if m == "DELETE")
+
+
+def mini_copy() -> str:
+    s = kb.parse_source(MINI_SRC)
+    return kb.render_copy(s, kb.build_units(s), "2026-11-09", "abc1234")
+
+
+def run_ingest(world, copy, ws="pwq-test", manifest=None, confirm=False, base=None):
+    return kb.ingest(copy, ws=ws, base_url=base or FAKE_TARGETS[ws], manifest_path=manifest, transport=world.transport,
+                     fetcher=world, confirm_production=confirm, targets=FAKE_TARGETS,
+                     read_source=lambda pin: MINI_SRC)
+
+
+def tmpm():
+    d = tempfile.mkdtemp()
+    return Path(d, "m.json")
+
+
+def actions(results):
+    return {r.id: r.action for r in results}
+
+
+def t16_ingest_sends_producedby_cobb_and_the_stored_text_verbatim():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    res = run_ingest(w, copy, manifest=m)
+    assert actions(res) == {"u01": "ingest", "u02": "ingest", "u03": "ingest"}, actions(res)
+    docs = list(w.srv("pwq-test").docs.values())
+    assert [d["producedBy"] for d in docs] == ["cobb"] * 3
+    cu = kb.parse_copy(copy).units
+    assert [d["text"] for d in docs] == [u.text for u in cu]  # byte-identical stored text
+    assert [d["title"] for d in docs] == ["Alpha title", "Beta title", "Gamma title"]
+    assert all(d["fields"].get("sourceFormat") for d in docs)
+    assert all(set(d["fields"]) <= schema_fields() for d in docs)  # only declared IngestDocumentIn fields
+    assert {"producedBy", "sourceFormat", "text", "title"} <= schema_fields()
+    # every request hit the validated base URL, only POST /documents
+    assert w.requests == [("POST", TEST_URL + "/documents")] * 3, w.requests
+    mf = json.loads(m.read_text())
+    assert list(mf) == ["pin", "migratedOn", "units", "waivedSpans"], list(mf)
+    assert mf["pin"] == "abc1234" and mf["migratedOn"] == "2026-11-09" and mf["waivedSpans"] == ["> waived blockquote"]
+    assert [list(u) for u in mf["units"]] == [["id", "title", "headings", "documentId", "sha256"]] * 3
+    assert [u["documentId"] for u in mf["units"]] == [d["documentId"] for d in docs]
+    assert [u["sha256"] for u in mf["units"]] == [hashlib.sha256(u.text.encode()).hexdigest() for u in cu]
+    assert mf["units"][0]["headings"] == ["Alpha title"]
+
+
+def t16_a_server_rejection_is_an_error_not_a_silent_skip():
+    w = FakeWorld()
+    bad = lambda method, url, body=None: (400, {"detail": "nope"})
+    e = raises(kb.KBError, kb.ingest, mini_copy(), ws="pwq-test", base_url=TEST_URL, manifest_path=tmpm(), transport=bad,
+               fetcher=w, targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC)
+    assert "400" in str(e)
+
+
+def t17_rerun_skips_every_unit_and_posts_nothing():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    before = m.read_text()
+    w.requests.clear()
+    res = run_ingest(w, copy, manifest=m)
+    assert actions(res) == {"u01": "skip", "u02": "skip", "u03": "skip"}, actions(res)
+    assert w.post_count() == 0 and m.read_text() == before
+
+
+def t17_edited_unit_with_a_registered_current_document_is_refused_not_reposted():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    w.requests.clear()
+    edited = copy.replace("beta body", "beta body EDITED")
+    res = run_ingest(w, edited, manifest=m)
+    assert actions(res) == {"u01": "skip", "u02": "refuse", "u03": "skip"}, actions(res)
+    old = json.loads(m.read_text())["units"][1]["documentId"]
+    r = next(r for r in res if r.id == "u02")
+    assert f"curl -X DELETE {TEST_URL}/documents/{old}" in r.note, r.note
+    assert w.post_count() == 0
+
+
+def t18_identical_current_documents_are_adopted_without_a_post():
+    w, copy = FakeWorld(), mini_copy()
+    run_ingest(w, copy, manifest=tmpm())  # ingest, then lose the manifest
+    ids = {d["title"]: d["documentId"] for d in w.srv("pwq-test").docs.values()}
+    w.srv("pwq-test").docs[ids["Alpha title"]]["status"] = "ready"  # one ready, the others still processing
+    w.requests.clear()
+    m2 = tmpm()
+    res = run_ingest(w, copy, manifest=m2)
+    assert actions(res) == {"u01": "adopt", "u02": "adopt", "u03": "adopt"}, actions(res)
+    assert w.post_count() == 0
+    mf = json.loads(m2.read_text())
+    assert {u["title"]: u["documentId"] for u in mf["units"]} == ids
+
+
+def t18_a_failed_identical_document_is_not_adopted():
+    w, copy = FakeWorld(), mini_copy()
+    run_ingest(w, copy, manifest=tmpm())
+    failed = next(d for d in w.srv("pwq-test").docs.values() if d["title"] == "Beta title")
+    failed["status"] = "failed"
+    w.requests.clear()
+    m2 = tmpm()
+    res = run_ingest(w, copy, manifest=m2)
+    assert actions(res) == {"u01": "adopt", "u02": "ingest", "u03": "adopt"}, actions(res)
+    assert w.post_count() == 1
+    new_id = next(u["documentId"] for u in json.loads(m2.read_text())["units"] if u["id"] == "u02")
+    assert new_id != failed["documentId"]
+    # (auto-supersede in the fake demoted the failed one: the old document is no longer current)
+    assert failed["current"] is False
+
+
+def t18_a_failed_identical_document_in_production_refuses_with_the_curl_line():
+    w, copy = FakeWorld(), mini_copy()
+    run_ingest(w, copy, ws="agent-team", manifest=tmpm(), confirm=True)
+    failed = next(d for d in w.srv("agent-team").docs.values() if d["title"] == "Beta title")
+    failed["status"] = "failed"
+    w.requests.clear()
+    res = run_ingest(w, copy, ws="agent-team", manifest=tmpm(), confirm=True)
+    r = next(r for r in res if r.id == "u02")
+    assert r.action == "refuse" and f"curl -X DELETE {PROD_URL}/documents/{failed['documentId']}" in r.note, (r.action, r.note)
+    assert w.post_count() == 0
+
+
+def t18_a_current_document_with_different_text_under_the_title_refuses():
+    for ws in ("pwq-test", "agent-team"):
+        w, copy = FakeWorld(), mini_copy()
+        w.srv(ws).post(dict(text="Gotcha: Beta title\nsomething else\n", title="Beta title", producedBy="cobb"))
+        stray = next(iter(w.srv(ws).docs.values()))
+        res = run_ingest(w, copy, ws=ws, manifest=tmpm(), confirm=True)
+        assert actions(res) == {"u01": "ingest", "u02": "refuse", "u03": "ingest"}, (ws, actions(res))
+        r = next(r for r in res if r.id == "u02")
+        assert f"curl -X DELETE {FAKE_TARGETS[ws]}/documents/{stray['documentId']}" in r.note, r.note
+        assert w.post_count() == 2 and len(w.srv(ws).docs) == 3  # u02 never posted over it
+
+
+def t18_a_renamed_unit_whose_registered_document_has_the_old_title_refuses():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    w.requests.clear()
+    renamed = copy.replace("Beta title", "Beta retitled")
+    res = run_ingest(w, renamed, manifest=m)
+    assert actions(res)["u02"] == "refuse" and w.post_count() == 0, actions(res)
+
+
+def t19_target_table_pairs_are_enforced_on_the_url_actually_written_to():
+    cases = [
+        (("pwq-test", PROD_URL, False), "does not match"),
+        (("agent-team", TEST_URL, True), "does not match"),
+        (("agent-team", "http://localhost:8200x", True), "does not match"),
+        (("nope", TEST_URL, False), "unknown workspace"),
+        (("agent-team", PROD_URL, False), "--confirm-production"),
+    ]
+    for (ws, url, conf), msg in cases:
+        w = FakeWorld()
+        e = raises(kb.TargetRefused, run_ingest, w, mini_copy(), ws=ws if ws in FAKE_TARGETS else "pwq-test", base=url,
+                   manifest=tmpm(), confirm=conf) if ws in FAKE_TARGETS else raises(
+            kb.TargetRefused, kb.check_target, ws, url, FAKE_TARGETS, confirm_production=conf)
+        assert msg in str(e), (ws, url, str(e))
+        assert w.requests == []  # refused before any request
+    t = kb.check_target("pwq-test", TEST_URL + "/", FAKE_TARGETS)
+    assert t.base_url == TEST_URL and not t.production
+    t = kb.check_target("agent-team", PROD_URL, FAKE_TARGETS, confirm_production=True)
+    assert t.production
+    # the committed table is exactly the plan's
+    assert kb.TARGETS == {"agent-team": "http://localhost:8200", "pwq-test": "http://localhost:8210"}
+    # non-production runs need an explicit manifest so a test run cannot rewrite the production one
+    e = raises(kb.TargetRefused, kb.ingest, mini_copy(), ws="pwq-test", base_url=TEST_URL, manifest_path=None,
+               transport=FakeWorld().transport, fetcher=FakeWorld(), targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC)
+    assert "--manifest" in str(e)
+
+
+def t19_production_ingest_posts_to_the_production_url_only():
+    w = FakeWorld()
+    run_ingest(w, mini_copy(), ws="agent-team", manifest=tmpm(), confirm=True)
+    assert w.requests == [("POST", PROD_URL + "/documents")] * 3 and len(w.srv("pwq-test").docs) == 0
+
+
+def t20_replace_and_retire_refuse_production_with_and_without_the_flag():
+    for conf in (False, True):
+        w, m, copy = FakeWorld(), tmpm(), mini_copy()
+        run_ingest(w, copy, ws="agent-team", manifest=m, confirm=True)
+        did = json.loads(m.read_text())["units"][1]["documentId"]
+        w.requests.clear()
+        for fn in (kb.retire, kb.replace):
+            e = raises(kb.TargetRefused, fn, copy, unit="u02", ws="agent-team", base_url=PROD_URL, manifest_path=m,
+                       transport=w.transport, fetcher=w, confirm_production=conf, targets=FAKE_TARGETS,
+                       read_source=lambda p: MINI_SRC)
+            assert f"curl -X DELETE {PROD_URL}/documents/{did}" in str(e), str(e)
+            assert "production" in str(e)
+        assert w.requests == [] and did in w.srv("agent-team").docs  # nothing deleted, nothing posted
+
+
+def t20_a_production_client_cannot_delete_at_all():
+    w = FakeWorld()
+    c = kb.RestClient(kb.check_target("agent-team", PROD_URL, FAKE_TARGETS, confirm_production=True), w.transport)
+    raises(kb.TargetRefused, c.delete_document, "x")
+    assert w.requests == []
+    c2 = kb.RestClient(kb.check_target("pwq-test", TEST_URL, FAKE_TARGETS), w.transport)
+    raises(kb.KBError, c2.delete_document, "missing-id")  # 404 surfaces as an error
+    assert w.requests == [("DELETE", TEST_URL + "/documents/missing-id")]
+
+
+def t20_retire_and_replace_on_the_test_target():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    old = {u["id"]: u["documentId"] for u in json.loads(m.read_text())["units"]}
+    w.requests.clear()
+    kb.retire(copy, unit="u03", ws="pwq-test", base_url=TEST_URL, manifest_path=m, transport=w.transport, fetcher=w,
+              targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC)
+    assert w.requests == [("DELETE", f"{TEST_URL}/documents/{old['u03']}")]
+    assert [u["id"] for u in json.loads(m.read_text())["units"]] == ["u01", "u02"]
+    w.requests.clear()
+    edited = copy.replace("beta body", "beta body EDITED")
+    kb.replace(edited, unit="u02", ws="pwq-test", base_url=TEST_URL, manifest_path=m, transport=w.transport, fetcher=w,
+               targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC)
+    assert [mm for mm, _ in w.requests] == ["DELETE", "POST"], w.requests  # delete first, then post
+    assert w.requests[0][1].endswith(old["u02"])
+    new = next(u for u in json.loads(m.read_text())["units"] if u["id"] == "u02")
+    assert new["documentId"] != old["u02"] and "EDITED" in w.srv("pwq-test").docs[new["documentId"]]["text"]
+    assert new["sha256"] == hashlib.sha256(w.srv("pwq-test").docs[new["documentId"]]["text"].encode()).hexdigest()
+    assert old["u02"] not in w.srv("pwq-test").docs
+
+
+class Clock:
+    def __init__(self):
+        self.t, self.sleeps = 0.0, 0
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, s):
+        self.sleeps += 1
+        assert self.sleeps < 200, "poll loop never ends"
+        self.t += s
+
+
+def gate_setup(**over):
+    w, m = FakeWorld(), tmpm()
+    run_ingest(w, mini_copy(), manifest=m)
+    mf = kb.load_manifest(m)
+    return w, mf
+
+
+def run_gate(w, mf, clock=None, **kw):
+    clock = clock or Clock()
+    return kb.run_gate(w, "pwq-test", mf, sleep=clock.sleep, monotonic=clock.monotonic, **kw), clock
+
+
+def t21_gate_passes_when_every_chunk_is_embedded_and_prints_a_per_unit_table():
+    w, mf = gate_setup()
+    (ok, table), clock = run_gate(w, mf)
+    assert ok and clock.sleeps == 0
+    lines = table.strip().split("\n")
+    assert len(lines) == 3 + 1 and lines[0].split() == ["unit", "chunks", "embedded", "status"]
+    assert lines[1].split()[:3] == ["u01", "2", "2"], lines[1]
+
+
+def t21_gate_fails_on_one_null_embedding_after_the_timeout():
+    w, mf = gate_setup()
+    w.srv("pwq-test").docs[mf["units"][1]["documentId"]]["embedded"] = 1
+    (ok, table), clock = run_gate(w, mf, timeout=60, poll=5)
+    assert not ok and "u02" in table and "UNEMBEDDED 1/2" in table, table
+    assert 11 <= clock.sleeps <= 13  # 60s window / 5s poll, then stop
+    assert "u01" in table and "ok" in table.split("u01")[1].split("\n")[0]
+
+
+def t21_gate_waits_for_embeddings_that_arrive_late():
+    w, mf = gate_setup()
+    doc = w.srv("pwq-test").docs[mf["units"][0]["documentId"]]
+    doc["embedded"] = 0
+    clock = Clock()
+    orig = clock.sleep
+
+    def sleep(s):
+        orig(s)
+        if clock.sleeps == 3:
+            doc["embedded"] = 2
+
+    ok, table = kb.run_gate(w, "pwq-test", mf, sleep=sleep, monotonic=clock.monotonic, timeout=600, poll=5)
+    assert ok and clock.sleeps == 3, (ok, clock.sleeps, table)
+
+
+def t21_gate_fails_at_once_on_failed_status_and_on_a_missing_document():
+    w, mf = gate_setup()
+    w.srv("pwq-test").docs[mf["units"][2]["documentId"]]["status"] = "failed"
+    (ok, table), clock = run_gate(w, mf)
+    assert not ok and clock.sleeps == 0 and "FAILED" in table.split("u03")[1], table
+    w, mf = gate_setup()
+    del w.srv("pwq-test").docs[mf["units"][0]["documentId"]]
+    (ok, table), clock = run_gate(w, mf)
+    assert not ok and "MISSING" in table.split("u01")[1].split("\n")[0], table
+
+
+def t21_gate_with_zero_chunks_fails_and_defaults_are_ten_minutes():
+    w, mf = gate_setup()
+    w.srv("pwq-test").docs[mf["units"][0]["documentId"]].update(chunks=0, embedded=0)
+    (ok, table), _ = run_gate(w, mf, timeout=10, poll=5)
+    assert not ok and "NO CHUNKS" in table
+    assert kb.GATE_TIMEOUT == 600 and kb.GATE_POLL == 5
+
+
+def t21_gate_cli_exit_codes():
+    w, m = FakeWorld(), tmpm()
+    run_ingest(w, mini_copy(), manifest=m)
+    mf = kb.load_manifest(m)
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert kb.main(["gate", "--ws", "pwq-test", "--manifest", str(m)], fetcher=w, targets=FAKE_TARGETS) == 0
+        w.srv("pwq-test").docs[mf["units"][0]["documentId"]]["status"] = "failed"
+        assert kb.main(["gate", "--ws", "pwq-test", "--manifest", str(m)], fetcher=w, targets=FAKE_TARGETS) == 1
+
+
+def diverge_world():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    return w, m, copy
+
+
+def run_diverge(w, m, copy, ws="pwq-test"):
+    return kb.diverge(copy, ws=ws, manifest=kb.load_manifest(m), fetcher=w)
+
+
+def t22_diverge_is_clean_on_a_faithful_workspace():
+    w, m, copy = diverge_world()
+    assert run_diverge(w, m, copy) == []
+
+
+def t22_missing_stale_duplicate_orphan_and_title_drift_each_by_unit():
+    w, m, copy = diverge_world()
+    ids = {u["id"]: u["documentId"] for u in kb.load_manifest(m)["units"]}
+    srv = w.srv("pwq-test")
+    del srv.docs[ids["u03"]]
+    assert run_diverge(w, m, copy) == [("MISSING", "u03", "Gamma title")]
+    w, m, copy = diverge_world()
+    w.srv("pwq-test").docs[ids["u01"]]["text"] += " "  # trailing whitespace is a difference
+    assert run_diverge(w, m, copy) == [("STALE", "u01", "Alpha title")]
+    w, m, copy = diverge_world()
+    w.srv("pwq-test").post(dict(text="Gotcha: Beta title\nother\n", title="Beta title", producedBy="cobb"))
+    assert run_diverge(w, m, copy) == [("DUPLICATE", "u02", "Beta title")]
+    w, m, copy = diverge_world()
+    gone = kb.render_copy(kb.parse_source(MINI_SRC.replace("## Gamma title\n\ngamma body\n", "")), kb.build_units(
+        kb.parse_source(MINI_SRC.replace("## Gamma title\n\ngamma body\n", ""))), "2026-11-09", "abc1234")
+    assert run_diverge(w, m, gone) == [("ORPHAN", "u03", "Gamma title")]
+    w, m, copy = diverge_world()
+    w.srv("pwq-test").docs[ids["u01"]]["title"] = "Alpha retitled"
+    assert run_diverge(w, m, copy) == [("TITLE-DRIFT", "u01", "Alpha title")]
+
+
+def t22_a_43rd_unit_is_missing_until_it_is_ingested():
+    w, m, copy = diverge_world()
+    s = kb.parse_source(MINI_SRC + "\n## Delta title\n\ndelta body\n")
+    bigger = kb.render_copy(s, kb.build_units(s), "2026-11-09", "abc1234")
+    assert run_diverge(w, m, bigger) == [("MISSING", "u04", "Delta title")]
+    assert "Delta title" in kb.listing(bigger)  # shown in the D6 listing
+    run_ingest(w, bigger, manifest=m)
+    assert run_diverge(w, m, bigger) == []
+
+
+def t22_diverge_cli_exit_codes_and_report_lines():
+    w, m, copy = diverge_world()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy)
+    args = ["diverge", "--copy", str(cp), "--ws", "pwq-test", "--manifest", str(m)]
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert kb.main(args, fetcher=w, targets=FAKE_TARGETS) == 0
+        w.srv("pwq-test").docs[kb.load_manifest(m)["units"][0]["documentId"]]["text"] += "x"
+        assert kb.main(args, fetcher=w, targets=FAKE_TARGETS) == 1
+    assert "STALE u01 Alpha title" in out.getvalue()
+
+
+def t23_a_unit_hidden_from_the_listing_is_caught_by_diverge():
+    w, m, copy = diverge_world()
+    block = unit_block(copy, "u02")
+    hidden = block.replace("<!-- unit u02 -->\n", "").replace("## Beta title", "### Beta title")
+    found = run_diverge(w, m, copy.replace(block, hidden))
+    assert ("UNLISTED", "-", "Beta title") in found, found
+    assert "Beta title" not in "".join(ln for ln in kb.listing(copy.replace(block, hidden)).split("\n") if "Beta" in ln and "###" not in ln)
+    # a fence whose heading was demoted but still fenced is a stale body, found as such
+    demoted = block.replace("## Beta title", "### Beta title")
+    found = run_diverge(w, m, copy.replace(block, demoted))
+    assert [k for k, u, _ in found if u == "u02"] == ["STALE"], found
+    assert run_diverge(w, m, copy) == []  # control
+
+
+def t23_real_transport_speaks_http_to_a_loopback_listener():
+    import http.server, threading
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            n = int(self.headers["Content-Length"])
+            seen.append((self.command, self.path, self.headers["Content-Type"], json.loads(self.rfile.read(n))))
+            self.send_response(201); self.send_header("Content-Type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"documentId": "x1"}')
+
+        def do_DELETE(self):
+            seen.append((self.command, self.path, None, None))
+            self.send_response(404); self.send_header("Content-Type", "application/json"); self.end_headers()
+            self.wfile.write(b'{"detail": "gone"}')
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        assert srv.server_address[1] not in (8200, 8210)
+        status, body = kb.urllib_transport("POST", base + "/documents", {"text": "t", "producedBy": "cobb"})
+        assert (status, body) == (201, {"documentId": "x1"})
+        assert seen[0] == ("POST", "/documents", "application/json", {"text": "t", "producedBy": "cobb"})
+        assert kb.urllib_transport("DELETE", base + "/documents/q", None) == (404, {"detail": "gone"})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def t23_real_fetcher_snippets_compile_and_name_the_gate_query():
+    compile(kb.FETCH_SNIPPET, "fetch", "exec")
+    for frag in ("-[:HAS_CHUNK]->(c:Chunk)", "count(c.embedding)", "d.status", "currentVersion"):
+        assert frag in kb.FETCH_SNIPPET, frag
+
+
+def t19_cli_refusals_exit_3_before_any_request_and_say_why():
+    w, m = FakeWorld(), tmpm()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())  # the CLI reads the pinned source for the waived span, so use the real pin
+    base = ["--copy", str(cp), "--manifest", str(m)]
+    kw = dict(transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    for args, msg in (
+        (["ingest", "--ws", "pwq-test", "--base-url", PROD_URL], "does not match"),
+        (["ingest", "--ws", "agent-team", "--base-url", PROD_URL], "--confirm-production"),
+    ):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            assert kb.main(args + base, **kw) == 3, args
+        assert msg in err.getvalue(), (args, err.getvalue())
+        assert w.requests == []
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert kb.main(["ingest", "--ws", "pwq-test", "--base-url", TEST_URL] + base, **kw) == 0
+    assert out.getvalue().count(" ingest ") == 36 and w.post_count() == 36
+
+
+def t20_cli_production_retire_prints_the_curl_line_and_deletes_nothing():
+    w, m = FakeWorld(), tmpm()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())
+    kw = dict(transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert kb.main(["ingest", "--copy", str(cp), "--manifest", str(m), "--ws", "agent-team", "--base-url", PROD_URL,
+                        "--confirm-production"], **kw) == 0
+    did = kb.load_manifest(m)["units"][0]["documentId"]
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        assert kb.main(["retire", "--copy", str(cp), "--manifest", str(m), "--unit", "u01", "--ws", "agent-team",
+                        "--base-url", PROD_URL], **kw) == 3
+    assert f"curl -X DELETE {PROD_URL}/documents/{did}" in err.getvalue()
+    assert w.delete_count() == 0
+
+
+def t23_real_pin_copy_ingests_with_the_pinned_waived_span_and_diverges_clean():
+    w, m = FakeWorld(), tmpm()
+    res = kb.ingest(copy_text(), ws="pwq-test", base_url=TEST_URL, manifest_path=m, transport=w.transport, fetcher=w,
+                    targets=FAKE_TARGETS, read_source=lambda pin: pin_text())
+    assert len(res) == 36 and {r.action for r in res} == {"ingest"}
+    mf = kb.load_manifest(m)
+    want = "\n".join(ln for ln in pin_text().split("\n") if ln.startswith(">"))
+    assert mf["waivedSpans"] == [want] and want.startswith("> **This is a cache, not the source of truth.**")
+    assert mf["pin"] == PIN and len(mf["units"]) == 36
+    assert kb.diverge(copy_text(), ws="pwq-test", manifest=mf, fetcher=w) == []
+    assert all(len(d["text"]) < 500_000 and len(d["title"]) <= 200 for d in w.srv("pwq-test").docs.values())
+
+
+def t16_manifest_keeps_a_unit_dropped_from_the_copy_registered_for_orphan_detection():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    src = MINI_SRC.replace("## Gamma title\n\ngamma body\n", "")
+    shrunk = kb.render_copy(kb.parse_source(src), kb.build_units(kb.parse_source(src)), "2026-11-09", "abc1234")
+    run_ingest(w, shrunk, manifest=m)
+    mf = kb.load_manifest(m)
+    assert [u["id"] for u in mf["units"]] == ["u01", "u02", "u03"], mf["units"]
+    assert kb.diverge(shrunk, ws="pwq-test", manifest=mf, fetcher=w) == [("ORPHAN", "u03", "Gamma title")]
+
+
+def t22_a_manifest_unit_missing_from_the_copy_whose_document_is_gone_is_not_an_orphan():
+    w, m, copy = diverge_world()
+    mf = kb.load_manifest(m)
+    del w.srv("pwq-test").docs[next(u["documentId"] for u in mf["units"] if u["id"] == "u03")]
+    src = MINI_SRC.replace("## Gamma title\n\ngamma body\n", "")
+    gone = kb.render_copy(kb.parse_source(src), kb.build_units(kb.parse_source(src)), "2026-11-09", "abc1234")
+    assert run_diverge(w, m, gone) == []
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items()) if re.match(r"t\d", n) and callable(f)]
     tests.sort(key=lambda nf: nf[0])

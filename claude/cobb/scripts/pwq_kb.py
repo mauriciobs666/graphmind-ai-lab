@@ -13,6 +13,10 @@ from HEAD or the working tree):
   render-copy            render the copy of record (`claude/knowledge/python-web-quirks.md`)
                          to stdout, or to --out
   verify-copy --copy F   recompute every header and compare every body with the pinned source
+  ingest / gate / diverge / replace / retire
+                         S3a: the KB side. Every command names `--ws` and (for writes) `--base-url`;
+                         the pair must match the committed TARGETS table. `replace`/`retire` refuse
+                         production outright and print the stakeholder's `curl -X DELETE` line.
 
 Library surface (used by the selftest and by the later ingest/gate/diverge steps):
 `read_pinned`, `parse_source`, `find_hits`, `RULINGS`, `build_units`, `render_header`,
@@ -30,10 +34,16 @@ Run the checks: `python3 claude/cobb/scripts/pwq_kb_selftest.py`.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
+import json
+import os
 import re
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -482,6 +492,355 @@ def verify_copy(copy_text: str, source_text: str, bound: int = LISTING_BOUND) ->
     return problems
 
 
+
+# --- S3a: target guard, REST client, fetcher, manifest (D4, D8, D9) ---------------------------------
+# The committed target table (D8). The REST client cannot ask a server which workspace it serves, so
+# the guard keys on the URL actually written to: the (ws, base-url) pair must be a row of this table.
+TARGETS = {"agent-team": "http://localhost:8200", "pwq-test": "http://localhost:8210"}
+PRODUCTION_WS = "agent-team"
+DEFAULT_COPY = REPO_ROOT / "claude" / "knowledge" / "python-web-quirks.md"
+DEFAULT_MANIFEST = Path(__file__).resolve().parent / "pwq-kb-manifest.json"
+PRODUCED_BY = "cobb"
+GATE_TIMEOUT = 600  # seconds (D9: default 10 min)
+GATE_POLL = 5
+FAILED = "failed"  # Document.status of a document whose background processing failed
+
+
+class TargetRefused(KBError):
+    """The guard (or a production-delete refusal) stopped the run before any request was made."""
+
+
+@dataclass
+class Target:
+    ws: str
+    base_url: str
+    production: bool
+
+
+def check_target(ws: str, base_url: str, targets: dict = TARGETS, confirm_production: bool = False) -> Target:
+    if ws not in targets:
+        raise TargetRefused(f"unknown workspace {ws!r}; the target table has {sorted(targets)}")
+    url = base_url.rstrip("/")
+    if url != targets[ws]:
+        raise TargetRefused(f"--base-url {base_url!r} does not match the target table entry for --ws {ws} ({targets[ws]})")
+    production = ws == PRODUCTION_WS
+    if production and not confirm_production:
+        raise TargetRefused("production ingest needs --confirm-production")
+    return Target(ws, url, production)
+
+
+def curl_delete_line(target: Target, document_id: str) -> str:
+    return f"curl -X DELETE {target.base_url}/documents/{document_id}"
+
+
+def urllib_transport(method: str, url: str, body: dict | None = None) -> tuple[int, object]:
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method=method, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            status, raw = resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        status, raw = e.code, e.read()
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise KBError(f"{method} {url} failed: {e}") from e
+    try:
+        return status, json.loads(raw.decode("utf-8")) if raw else {}
+    except ValueError:
+        return status, {"raw": raw.decode("utf-8", "replace")}
+
+
+class RestClient:
+    """Writes to exactly one validated target. A production client has no delete at all."""
+
+    def __init__(self, target: Target, transport=urllib_transport):
+        self.target, self._transport = target, transport
+
+    def post_document(self, body: dict) -> dict:
+        status, resp = self._transport("POST", f"{self.target.base_url}/documents", body)
+        if status != 201:
+            raise KBError(f"POST /documents failed: HTTP {status} {resp}")
+        return resp
+
+    def delete_document(self, document_id: str) -> None:
+        if self.target.production:
+            raise TargetRefused(
+                "refusing to delete in production; the stakeholder runs: " + curl_delete_line(self.target, document_id)
+            )
+        status, resp = self._transport("DELETE", f"{self.target.base_url}/documents/{document_id}", None)
+        if status != 200:
+            raise KBError(f"DELETE /documents/{document_id} failed: HTTP {status} {resp}")
+
+
+# Reads over falkordb (cypher-mcp/.venv), like check_content_loss.py. stdin = one JSON request.
+FETCH_SNIPPET = r"""
+import json, os, sys
+from falkordb import FalkorDB
+
+req = json.loads(sys.stdin.read())
+db = FalkorDB(host=os.environ.get("FALKORDB_HOST", "127.0.0.1"), port=int(os.environ.get("FALKORDB_PORT", "6379")))
+g = db.select_graph("ws:" + req["ws"])
+if req["op"] == "docs":
+    res = g.ro_query(
+        "MATCH (d:Document {currentVersion: true}) WHERE d.title IN $titles OR d.documentId IN $ids "
+        "RETURN d.documentId, d.title, d.text, d.status",
+        params={"titles": req["titles"], "ids": req["ids"]},
+    )
+    out = [{"documentId": r[0], "title": r[1], "text": r[2], "status": r[3]} for r in res.result_set]
+else:
+    out = {}
+    for i in req["ids"]:
+        rows = g.ro_query(
+            "MATCH (d:Document {documentId: $id})-[:HAS_CHUNK]->(c:Chunk) "
+            "RETURN count(c), count(c.embedding), d.status", params={"id": i},
+        ).result_set
+        if rows and rows[0][0]:
+            out[i] = {"chunks": rows[0][0], "embedded": rows[0][1], "status": rows[0][2]}
+            continue
+        st = g.ro_query("MATCH (d:Document {documentId: $id}) RETURN d.status", params={"id": i}).result_set
+        out[i] = {"chunks": 0, "embedded": 0, "status": st[0][0]} if st else None
+sys.stdout.write(json.dumps(out))
+"""
+
+
+class CypherFetcher:
+    """Real fetcher: read-only queries through the cypher-mcp venv's `falkordb` client."""
+
+    def _run(self, request: dict):
+        py = os.environ.get("CYPHER_MCP_VENV_PYTHON") or str(REPO_ROOT / "cypher-mcp" / ".venv" / "bin" / "python3")
+        if not Path(py).is_file():
+            raise KBError(f"fetcher needs {py} (run cypher-mcp/setup.sh)")
+        proc = subprocess.run([py, "-c", FETCH_SNIPPET], input=json.dumps(request).encode(), capture_output=True)
+        if proc.returncode != 0:
+            raise KBError(f"fetch failed: {proc.stderr.decode(errors='replace').strip()[-300:]}")
+        return json.loads(proc.stdout.decode())
+
+    def current_docs(self, ws: str, titles: list[str], ids: list[str]) -> list[dict]:
+        return self._run({"op": "docs", "ws": ws, "titles": titles, "ids": ids})
+
+    def embedding_counts(self, ws: str, ids: list[str]) -> dict:
+        return self._run({"op": "counts", "ws": ws, "ids": ids})
+
+
+def load_manifest(path: Path) -> dict:
+    path = Path(path)
+    if not path.is_file():
+        raise KBError(f"manifest {path} not found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_manifest(path: Path, manifest: dict) -> None:
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class CopyEntry:
+    id: str
+    title: str
+    text: str
+    headings: list[str]
+
+
+def copy_entries(copy_text: str) -> list[CopyEntry]:
+    out = []
+    for cu in parse_copy(copy_text).units:
+        first = cu.text.split("\n", 1)[0]
+        title = first[len("Gotcha: "):] if first.startswith("Gotcha: ") else first
+        out.append(CopyEntry(cu.id, title, cu.text, [h for h, _ in cu.parts]))
+    return out
+
+
+def copy_note_fields(copy_text: str) -> tuple[str, str]:
+    """(pin, migratedOn) from the preamble-note's `Migrated:` line."""
+    m = re.search(r"^Migrated: (\d{4}-\d{2}-\d{2}) from \S+ at (\S+)\s*$", parse_copy(copy_text).note, re.M)
+    if not m:
+        raise KBError("the copy's preamble-note has no 'Migrated: <date> from <path> at <pin>' line")
+    return m.group(2), m.group(1)
+
+
+def _manifest_path(target: Target, path) -> Path:
+    if path is None:
+        if not target.production:
+            raise TargetRefused("a non-production run needs an explicit --manifest (never the production one)")
+        return DEFAULT_MANIFEST
+    return Path(path)
+
+
+@dataclass
+class UnitResult:
+    id: str
+    action: str  # skip | adopt | ingest | refuse
+    documentId: str = ""
+    note: str = ""
+
+
+def _entry_dict(e: CopyEntry, document_id: str) -> dict:
+    return {"id": e.id, "title": e.title, "headings": e.headings, "documentId": document_id, "sha256": sha256_text(e.text)}
+
+
+def _post_body(e: CopyEntry) -> dict:
+    return {"text": e.text, "title": e.title, "sourceFormat": "markdown",
+            "sourceLabel": f"python-web-quirks {e.id}", "producedBy": PRODUCED_BY}
+
+
+def ingest(copy_text: str, *, ws: str, base_url: str, manifest_path, transport=urllib_transport, fetcher=None,
+           confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned) -> list[UnitResult]:
+    """Idempotent ingest of every copy unit (D8). Never posts over a different-text current document."""
+    target = check_target(ws, base_url, targets, confirm_production)
+    mpath = _manifest_path(target, manifest_path)
+    fetcher = fetcher or CypherFetcher()
+    client = RestClient(target, transport)
+    pin, migrated_on = copy_note_fields(copy_text)
+    waived = split_preamble(parse_source(read_source(pin)).preamble)[1]
+    old = {u["id"]: u for u in (load_manifest(mpath)["units"] if mpath.is_file() else [])}
+    entries = copy_entries(copy_text)
+    results: list[UnitResult] = []
+    new_entries: dict[str, dict] = {}
+    for e in entries:
+        reg = old.get(e.id)
+        docs = fetcher.current_docs(ws, [e.title], [reg["documentId"]] if reg else [])
+        docs = list({d["documentId"]: d for d in docs}.values())
+        differing = [d for d in docs if d["text"] != e.text]
+        identical = [d for d in docs if d["text"] == e.text]
+        good = [d for d in identical if d["status"] != FAILED]
+        bad = [d for d in identical if d["status"] == FAILED]
+        if differing:
+            note = "current document(s) with different text; the stakeholder deletes first: " + "; ".join(
+                curl_delete_line(target, d["documentId"]) for d in differing)
+            results.append(UnitResult(e.id, "refuse", note=note))
+            if reg:
+                new_entries[e.id] = reg
+            continue
+        by_reg = [d for d in good if reg and d["documentId"] == reg["documentId"]]
+        if by_reg:
+            results.append(UnitResult(e.id, "skip", by_reg[0]["documentId"]))
+            new_entries[e.id] = _entry_dict(e, by_reg[0]["documentId"])
+        elif good:
+            results.append(UnitResult(e.id, "adopt", good[0]["documentId"]))
+            new_entries[e.id] = _entry_dict(e, good[0]["documentId"])
+        elif bad and target.production:
+            note = "identical current document has status failed; the stakeholder deletes it: " + "; ".join(
+                curl_delete_line(target, d["documentId"]) for d in bad)
+            results.append(UnitResult(e.id, "refuse", note=note))
+            if reg:
+                new_entries[e.id] = reg
+        else:
+            receipt = client.post_document(_post_body(e))
+            results.append(UnitResult(e.id, "ingest", receipt["documentId"]))
+            new_entries[e.id] = _entry_dict(e, receipt["documentId"])
+    in_copy = {e.id for e in entries}
+    units = [new_entries[e.id] for e in entries if e.id in new_entries]
+    units += [u for i, u in old.items() if i not in in_copy]  # keep orphans registered until retired
+    save_manifest(mpath, {"pin": pin, "migratedOn": migrated_on, "units": units, "waivedSpans": [waived] if waived else []})
+    return results
+
+
+def _test_only_unit(copy_text: str, unit: str, ws: str, base_url: str, manifest_path, targets: dict):
+    target = check_target(ws, base_url, targets, confirm_production=True)  # identification only; never a licence
+    mpath = _manifest_path(target, manifest_path)
+    manifest = load_manifest(mpath)
+    reg = next((u for u in manifest["units"] if u["id"] == unit), None)
+    if target.production:
+        hint = curl_delete_line(target, reg["documentId"]) if reg else f"(unit {unit} has no manifest entry)"
+        raise TargetRefused(f"replace/retire never act on production; the stakeholder runs: {hint}")
+    if reg is None:
+        raise KBError(f"unit {unit} has no manifest entry in {mpath}")
+    return target, mpath, manifest, reg
+
+
+def retire(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path, transport=urllib_transport, fetcher=None,
+           confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned) -> None:
+    target, mpath, manifest, reg = _test_only_unit(copy_text, unit, ws, base_url, manifest_path, targets)
+    RestClient(target, transport).delete_document(reg["documentId"])
+    manifest["units"] = [u for u in manifest["units"] if u["id"] != unit]
+    save_manifest(mpath, manifest)
+
+
+def replace(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path, transport=urllib_transport, fetcher=None,
+            confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned) -> None:
+    target, mpath, manifest, reg = _test_only_unit(copy_text, unit, ws, base_url, manifest_path, targets)
+    entry = next((e for e in copy_entries(copy_text) if e.id == unit), None)
+    if entry is None:
+        raise KBError(f"unit {unit} is not in the copy")
+    client = RestClient(target, transport)
+    client.delete_document(reg["documentId"])
+    receipt = client.post_document(_post_body(entry))
+    manifest["units"] = [_entry_dict(entry, receipt["documentId"]) if u["id"] == unit else u for u in manifest["units"]]
+    save_manifest(mpath, manifest)
+
+
+# --- gate (K-102 embedding hard gate) ----------------------------------------------------------
+def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT, poll: float = GATE_POLL,
+             sleep=time.sleep, monotonic=time.monotonic) -> tuple[bool, str]:
+    ids = [u["documentId"] for u in manifest["units"]]
+    deadline = monotonic() + timeout
+    while True:
+        counts = fetcher.embedding_counts(ws, ids)
+        rows, pending = [], False
+        for u in manifest["units"]:
+            c = counts.get(u["documentId"])
+            if c is None:
+                rows.append((u["id"], "-", "-", "MISSING", False))
+            elif c["status"] == FAILED:
+                rows.append((u["id"], c["chunks"], c["embedded"], "FAILED", False))
+            elif c["chunks"] == 0:
+                rows.append((u["id"], 0, 0, "NO CHUNKS", False))
+            elif c["embedded"] < c["chunks"]:
+                rows.append((u["id"], c["chunks"], c["embedded"], f"UNEMBEDDED {c['chunks'] - c['embedded']}/{c['chunks']}", True))
+                pending = True
+            else:
+                rows.append((u["id"], c["chunks"], c["embedded"], "ok", False))
+        if not pending or monotonic() >= deadline:
+            break
+        sleep(poll)
+    table = "unit chunks embedded status\n" + "".join(f"{a} {b} {c} {d}\n" for a, b, c, d, _ in rows)
+    return all(r[3] == "ok" for r in rows), table
+
+
+# --- diverge -----------------------------------------------------------------------------------
+def diverge(copy_text: str, *, ws: str, manifest: dict, fetcher) -> list[tuple[str, str, str]]:
+    """(kind, unit id, title) for every way the KB differs from the copy; empty = faithful."""
+    entries = copy_entries(copy_text)
+    reg = {u["id"]: u for u in manifest["units"]}
+    docs = fetcher.current_docs(ws, [e.title for e in entries] + [u["title"] for u in manifest["units"]],
+                                [u["documentId"] for u in manifest["units"]])
+    by_id = {d["documentId"]: d for d in docs}
+    out: list[tuple[str, str, str]] = []
+    for e in entries:
+        mine = by_id.get(reg[e.id]["documentId"]) if e.id in reg else None
+        titled = [d for d in docs if d["title"] == e.title]
+        if mine is None and not titled:
+            out.append(("MISSING", e.id, e.title))
+            continue
+        if mine is not None:
+            if sha256_text(mine["text"]) != sha256_text(e.text):
+                out.append(("STALE", e.id, e.title))
+            if mine["title"] != e.title:
+                out.append(("TITLE-DRIFT", e.id, e.title))
+        elif not any(d["text"] == e.text for d in titled):
+            out.append(("STALE", e.id, e.title))
+        if len(titled) > 1:
+            out.append(("DUPLICATE", e.id, e.title))
+    in_copy = {e.id for e in entries}
+    for u in manifest["units"]:
+        if u["id"] not in in_copy and u["documentId"] in by_id:
+            out.append(("ORPHAN", u["id"], u["title"]))
+    # a unit the listing cannot show (no fence, or a `###` heading) still has its `Gotcha:` header line
+    listed = [e.title for e in entries]
+    for m in re.finditer(r"^Gotcha: (.*)$", copy_text, re.M):
+        if m.group(1) in listed:
+            listed.remove(m.group(1))
+        else:
+            out.append(("UNLISTED", "-", m.group(1)))
+    return out
+
+
 # --- units subcommand --------------------------------------------------------------------------
 def _load_chunker():
     path = REPO_ROOT / "falkor-chat" / "server" / "falkorchat" / "chunking.py"
@@ -526,13 +885,53 @@ def units_report(source: Source, chunks: bool = False, migrated_on: str = MIGRAT
 
 
 # --- CLI ---------------------------------------------------------------------------------------
-def main(argv: list[str] | None = None) -> int:
+def _kb_main(args, transport, fetcher, targets) -> int:
+    copy_path = Path(args.copy)
+    if args.cmd in ("ingest", "replace", "retire"):
+        text = copy_path.read_text(encoding="utf-8")
+        kw = dict(ws=args.ws, base_url=args.base_url, manifest_path=args.manifest, transport=transport, fetcher=fetcher,
+                  confirm_production=args.confirm_production, targets=targets)
+        if args.cmd == "ingest":
+            results = ingest(text, **kw)
+            for r in results:
+                print(f"{r.id} {r.action} {r.documentId} {r.note}".rstrip())
+            return 1 if any(r.action == "refuse" for r in results) else 0
+        (replace if args.cmd == "replace" else retire)(text, unit=args.unit, **kw)
+        print(f"{args.cmd} {args.unit}: done")
+        return 0
+    target = check_target(args.ws, args.base_url or targets.get(args.ws, ""), targets, confirm_production=True)
+    mpath = _manifest_path(target, args.manifest)
+    fetcher = fetcher or CypherFetcher()
+    manifest = load_manifest(mpath)
+    if args.cmd == "gate":
+        ok, table = run_gate(fetcher, args.ws, manifest, timeout=args.timeout, poll=args.poll)
+        print(table, end="")
+        print("gate: " + ("clean" if ok else "FAILED"))
+        return 0 if ok else 1
+    found = diverge(copy_path.read_text(encoding="utf-8"), ws=args.ws, manifest=manifest, fetcher=fetcher)
+    for kind, uid, title in found:
+        print(f"{kind} {uid} {title}")
+    print("diverge: " + ("clean" if not found else f"{len(found)} finding(s)"))
+    return 1 if found else 0
+
+
+def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets: dict | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p):
         p.add_argument("--pin", required=True, help="explicit commit sha of the source (never a ref)")
         p.add_argument("--repo", default=str(REPO_ROOT), help="git repository holding the pin")
+
+    def kbside(p, base_required, unit=False, flag=False):
+        p.add_argument("--copy", default=str(DEFAULT_COPY), help="the copy of record")
+        p.add_argument("--ws", required=True, help="workspace name; with --base-url must be a row of the target table")
+        p.add_argument("--base-url", required=base_required)
+        p.add_argument("--manifest", help="manifest path (default only for production)")
+        if unit:
+            p.add_argument("--unit", required=True)
+        if flag:
+            p.add_argument("--confirm-production", action="store_true")
 
     p = sub.add_parser("units", help="print hits, rulings, units, header sizes")
     common(p)
@@ -544,9 +943,20 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("verify-copy", help="recompute headers, compare bodies with the pin")
     common(p)
     p.add_argument("--copy", required=True, help="path of the copy to verify")
+    kbside(sub.add_parser("ingest", help="idempotent ingest of every copy unit"), True, flag=True)
+    kbside(sub.add_parser("replace", help="TEST target only: delete then re-post one unit"), True, unit=True, flag=True)
+    kbside(sub.add_parser("retire", help="TEST target only: delete one unit's document"), True, unit=True, flag=True)
+    p = sub.add_parser("gate", help="K-102 embedding gate over the manifest's documents")
+    kbside(p, False)
+    p.add_argument("--timeout", type=float, default=GATE_TIMEOUT)
+    p.add_argument("--poll", type=float, default=GATE_POLL)
+    kbside(sub.add_parser("diverge", help="compare the KB with the copy (read-only)"), False)
     args = ap.parse_args(argv)
+    targets = TARGETS if targets is None else targets
 
     try:
+        if args.cmd in ("ingest", "replace", "retire", "gate", "diverge"):
+            return _kb_main(args, transport or urllib_transport, fetcher, targets)
         text = read_pinned(args.pin, repo=Path(args.repo))
         source = parse_source(text)
         if args.cmd == "units":
@@ -565,6 +975,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: {pr}")
         print("verify-copy: " + ("clean" if not problems else f"{len(problems)} problem(s)"))
         return 1 if problems else 0
+    except TargetRefused as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 3
     except KBError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
