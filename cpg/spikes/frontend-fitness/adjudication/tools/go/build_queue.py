@@ -1,6 +1,8 @@
 import json,hashlib,collections,os,re
-ROOT='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/go/src'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+ROOT=(_CPG+'/spikes/frontend-fitness')
+SRC=(_CPG+'/.ccg-work/corpora/go/src')
 LANG='go'
 I=[json.loads(l) for l in open(f'{ROOT}/adjudication/go.input.jsonl')]
 R={json.loads(l)['siteId']:json.loads(l) for l in open(f'{ROOT}/truth/go.ref.jsonl')}

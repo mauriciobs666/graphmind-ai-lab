@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Run only after csharp-flow-relabel.jsonl exists. Writes F1 queue and F2 diff."""
 import json
-B="/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+B=(_CPG+"/spikes/frontend-fitness/")
 inp=json.load(open(B+"adjudication/csharp-flow-audit.input.json"))
 gold={}; 
 for l in open(B+"labels/csharp-flow.jsonl"):

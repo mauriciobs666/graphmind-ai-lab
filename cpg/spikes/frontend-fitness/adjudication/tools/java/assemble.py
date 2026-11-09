@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json, math, collections, re
-FF = '/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+'/spikes/frontend-fitness')
 AD = f'{FF}/adjudication'
 rd = lambda p: [json.loads(l) for l in open(p) if l.strip()]
 inp = rd(f'{AD}/java.input.jsonl')

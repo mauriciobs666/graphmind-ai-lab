@@ -2,7 +2,9 @@
 """Part F draw for csharp. Reads labels/csharp-flow.jsonl for STRUCTURE ONLY
 (ordinal, number of pairs, confidence per pair). Prints/writes no pair content."""
 import hashlib, json, sys
-BASE = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+BASE = (_CPG+"/spikes/frontend-fitness/")
 LANG = "csharp"; PFX = "ccg-p0a-v1-flowaud|%s|" % LANG
 h = lambda s: hashlib.sha256(s.encode()).hexdigest()
 meths, pairs = [], []

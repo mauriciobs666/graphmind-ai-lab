@@ -1,7 +1,10 @@
 import json,math,collections as C,re
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
 A=R+'adjudication/'
-S='/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/'
+import os, pathlib as _pl, tempfile as _tf; _SCRATCH = os.environ.get('CCG_SCRATCH') or _tf.gettempdir()
+S=(_SCRATCH+'/')
 def rj(p): return [json.loads(l) for l in open(p)]
 inp=rj(A+'python.input.jsonl'); q=rj(A+'python.queue.jsonl'); dec=rj(A+'python.decisions.jsonl'); ext=rj(S+'s57_python_ds/python.census-ext.jsonl')
 smp={o['siteId']:o for o in rj(R+'sample/python.jsonl')}

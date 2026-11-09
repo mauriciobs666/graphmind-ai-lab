@@ -1,6 +1,8 @@
 import json,math,collections,sys,re
 sys.path.insert(0,'/tmp')
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
 AD=R+'adjudication/'
 J=lambda p:[json.loads(l) for l in open(p)]
 dec=J(AD+'cpp.decisions.jsonl'); inp={r['ordinal']:r for r in J(AD+'cpp.input.jsonl')}

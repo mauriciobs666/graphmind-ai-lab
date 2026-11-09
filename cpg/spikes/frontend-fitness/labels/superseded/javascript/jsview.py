@@ -1,7 +1,8 @@
 import json,sys
-S='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/javascript/src/'
+import os, pathlib as _pl, tempfile as _tf; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+S=(_CPG+'/.ccg-work/corpora/javascript/src/')
 a,b=int(sys.argv[1]),int(sys.argv[2])
-for l in open('/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/sample/javascript.jsonl'):
+for l in open((_CPG+'/spikes/frontend-fitness/sample/javascript.jsonl')):
     d=json.loads(l)
     if a<=d['ordinal']<=b:
         L=open(S+d['path']).read().split('\n')

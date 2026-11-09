@@ -1,6 +1,8 @@
 """Go S57 canonicalisation under ML v1.12 (reads tools/go/orig/*.v1.11 + go.decisions.jsonl + go.input.jsonl; writes truth/go.final.jsonl and adjudication/go.noise.json). Idempotent."""
 import json,math,collections,re
-A='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+A=(_CPG+'/spikes/frontend-fitness/')
 rd=lambda p:[json.loads(l) for l in open(A+p) if l.strip()]
 old=rd('adjudication/tools/go/orig/go.final.v1.11.jsonl'); onoise=json.load(open(A+'adjudication/tools/go/orig/go.noise.v1.11.json'))
 I={i['siteId']:i for i in rd('adjudication/go.input.jsonl')}
@@ -74,7 +76,7 @@ for r in fin:
         if '<anon>' in t['qname'] or re.search(r'\.<anon>|#\d+$',t['qname']):
             anon[(t['path'],t['defLine'])]=t['qname']
 def line(p,l):
-    return open('/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/go/src/'+p,encoding='utf-8',errors='replace').read().split('\n')[l-1]
+    return open((_CPG+'/.ccg-work/corpora/go/src/')+p,encoding='utf-8',errors='replace').read().split('\n')[l-1]
 classline=[(p,l,line(p,l).strip()[:60]) for (p,l) in sorted(cset) if re.match(r'\s*type\s',line(p,l))]
 exts=sorted({e for r in fin for e in r['external']})
 nonstd=[e for e in exts if not e.startswith('stdlib') and e!='builtin']

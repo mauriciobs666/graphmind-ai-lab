@@ -1,5 +1,7 @@
 from strata import *
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/kotlin/src/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+SRC=(_CPG+'/.ccg-work/corpora/kotlin/src/')
 Q=R+'adjudication/kotlin.queue.jsonl'
 open(Q,'w').close()
 cache={}

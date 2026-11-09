@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Run only after java-flow-relabel.jsonl exists. Writes the F2 diff and the F1 queue."""
 import json
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
 def key(p):
     return json.dumps([p["kind"], p["source"], p["sink"]], sort_keys=True)
 inp = json.load(open(f"{FF}/adjudication/java-flow-audit.input.json"))

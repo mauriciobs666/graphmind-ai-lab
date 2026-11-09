@@ -1,6 +1,9 @@
 import json,pickle,os
-S=pickle.load(open('/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/S.pkl','rb'))
-OUT='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labels/kotlin.jsonl'
+import os, pathlib as _pl, tempfile as _tf; _SCRATCH = os.environ.get('CCG_SCRATCH') or _tf.gettempdir()
+S=pickle.load(open((_SCRATCH+'/S.pkl'),'rb'))
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[4])
+OUT=(_CPG+'/spikes/frontend-fitness/labels/kotlin.jsonl')
 KP='KtorAdminLibrary/src/main/kotlin/ir/amirroid/ktoradmin/'
 TP='KtorAdminLibrary/src/test/kotlin/ir/amirroid/ktoradmin/'
 SP='sample/src/main/kotlin/ir/amirreza/'
@@ -24,7 +27,7 @@ def L(o,callees,ev,conf='sure',notACall=False,dynamic=False):
     s=S[o-1]
     rec={"ordinal":o,"siteId":s['siteId'],"callees":callees,"notACall":notACall,"dynamic":dynamic,"confidence":conf,"evidence":ev[:300]}
     with open(OUT,'a') as f: f.write(json.dumps(rec)+'\n')
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/kotlin/src/'
+SRC=(_CPG+'/.ccg-work/corpora/kotlin/src/')
 import re
 def _ln(path,pat):
     out=[]

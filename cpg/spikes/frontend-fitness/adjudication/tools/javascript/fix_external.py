@@ -1,6 +1,8 @@
 """Analyst Pass 4 N2: `external` = the labeller's package from input.jsonl; the DS prose moves into `evidence`."""
 import json
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness/')
 F=[json.loads(l) for l in open(FF+'truth/javascript.final.jsonl')]
 IN={}
 for l in open(FF+'adjudication/javascript.input.jsonl'):

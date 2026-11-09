@@ -1,6 +1,8 @@
 import json,sys
 a,b=int(sys.argv[1]),int(sys.argv[2])
-for l in open('/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/sample/cpp.jsonl'):
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[4])
+for l in open((_CPG+'/spikes/frontend-fitness/sample/cpp.jsonl')):
     d=json.loads(l)
     if a<=d['ordinal']<=b:
         ex=[x for x in d['excerpt'].split('\n') if x.startswith(str(d['line'])+'|')]

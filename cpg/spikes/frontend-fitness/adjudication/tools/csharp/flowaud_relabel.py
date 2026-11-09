@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Blind relabel (from sample + flow brief only) of the 6 F2 methods; hand-written pairs."""
 import json
-OUT="/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/adjudication/csharp-flow-relabel.jsonl"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+OUT=(_CPG+"/spikes/frontend-fitness/adjudication/csharp-flow-relabel.jsonl")
 P=lambda i,n:{"point":"param","index":i,"name":n}
 C=lambda n,o,l:{"point":"call","calleeName":n,"ordinal":o,"line":l}
 R=lambda o,l:{"point":"ret","ordinal":o,"line":l}

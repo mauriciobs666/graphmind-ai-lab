@@ -1,7 +1,9 @@
 import json, hashlib, re, collections
 from pathlib import Path
-FF = Path("/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness")
-SRC = Path("/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/csharp/src")
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = Path((_CPG+"/spikes/frontend-fitness"))
+SRC = Path((_CPG+"/.ccg-work/corpora/csharp/src"))
 ADJ = FF / "adjudication"
 def rj(p): return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
 inp = rj(ADJ / "csharp.input.jsonl")

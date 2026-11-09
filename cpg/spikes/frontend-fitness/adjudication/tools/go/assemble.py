@@ -1,5 +1,7 @@
 import json,collections,re,math,sys
-A='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+A=(_CPG+'/spikes/frontend-fitness/')
 rd=lambda p:[json.loads(l) for l in open(A+p) if l.strip()]
 I=rd('adjudication/go.input.jsonl'); Q=rd('adjudication/go.queue.jsonl'); D=rd('adjudication/go.decisions.jsonl')
 byid={i['siteId']:i for i in I}

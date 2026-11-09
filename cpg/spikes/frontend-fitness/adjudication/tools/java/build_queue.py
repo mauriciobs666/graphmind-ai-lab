@@ -2,9 +2,12 @@
 """S57 java FC: strata, audit draws, census, decision queue. Reads only adjudication/java.input.jsonl
 (derived from labels+ref), truth/java.ref.jsonl, sample/java.jsonl (public), corpus src."""
 import json, hashlib, os, re, collections
-FF = '/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
-SRC = '/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/java/src'
-SC = '/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/s57_java'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+'/spikes/frontend-fitness')
+SRC = (_CPG+'/.ccg-work/corpora/java/src')
+import os, pathlib as _pl, tempfile as _tf; _SCRATCH = os.environ.get('CCG_SCRATCH') or _tf.gettempdir()
+SC = (_SCRATCH+'/s57_java')
 rd = lambda p: [json.loads(l) for l in open(p) if l.strip()]
 inp = rd(f'{FF}/adjudication/java.input.jsonl')
 ref = {r['ordinal']: r for r in rd(f'{FF}/truth/java.ref.jsonl')}

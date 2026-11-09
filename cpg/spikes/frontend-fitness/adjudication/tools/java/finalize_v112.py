@@ -2,7 +2,9 @@
 """java S57 FC, v1.12 canonical shape. Reads the v1.11 files kept under tools/java/v111/, the audit/decision files and the
 public sample; writes truth/java.final.jsonl and adjudication/java.noise.json (canonical, validate_final.py)."""
 import json, math, re, collections
-FF = '/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+'/spikes/frontend-fitness')
 AD = FF + '/adjudication'; V = AD + '/tools/java/v111'
 rd = lambda p: [json.loads(l) for l in open(p) if l.strip()]
 old = rd(V + '/java.final.v111.jsonl'); oldn = json.load(open(V + '/java.noise.v111.json'))

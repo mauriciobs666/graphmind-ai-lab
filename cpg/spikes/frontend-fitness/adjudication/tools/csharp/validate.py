@@ -1,6 +1,8 @@
 import json, re, collections
 from pathlib import Path
-FF = Path("/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"); A = FF/"adjudication"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = Path((_CPG+"/spikes/frontend-fitness")); A = FF/"adjudication"
 rj = lambda p: [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
 fin = rj(FF/"truth/csharp.final.jsonl"); dec = rj(A/"csharp.decisions.jsonl"); q = rj(A/"csharp.queue.jsonl")
 inp = rj(A/"csharp.input.jsonl"); lab = {r["ordinal"]: r for r in rj(FF/"labels/csharp.jsonl")}

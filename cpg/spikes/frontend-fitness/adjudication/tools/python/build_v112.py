@@ -5,7 +5,9 @@ Outputs: adjudication/python.census.jsonl (195 rows), adjudication/python.noise.
 import json,math,re,collections as C
 from pathlib import Path
 ROOT=Path('.'); A=ROOT/'adjudication'; T=A/'tools'/'python'
-SRC=Path('/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/python/src')
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+SRC=Path((_CPG+'/.ccg-work/corpora/python/src'))
 rj=lambda p:[json.loads(l) for l in open(p)]
 fin=rj(ROOT/'truth/python.final.jsonl'); inp=rj(A/'python.input.jsonl'); q=rj(A/'python.queue.jsonl'); dec=rj(A/'python.decisions.jsonl'); ext=rj(T/'python.census-ext.jsonl')
 orig=json.load(open(T/'python.noise.v1.11-original.json'))

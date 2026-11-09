@@ -1,5 +1,7 @@
 import json,re
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness/')
 rd=lambda p:[json.loads(l) for l in open(FF+p)]
 Q=rd('adjudication/javascript.queue.jsonl'); D=rd('adjudication/javascript.decisions.jsonl')
 F=rd('truth/javascript.final.jsonl'); A=rd('adjudication/javascript.audit.jsonl'); J=rd('adjudication/javascript.jsonl')

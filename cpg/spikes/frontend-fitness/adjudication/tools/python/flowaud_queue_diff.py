@@ -1,6 +1,8 @@
 """After the relabel is on disk: build F1 queue and F2 diff. Run from adjudication/."""
 import json, re
-SRC = "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/python/src/"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+SRC = (_CPG+"/.ccg-work/corpora/python/src/")
 gold = {}
 for l in open("../labels/python-flow.jsonl"):
     m = json.loads(l); gold[m["ordinal"]] = m

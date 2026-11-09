@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Blind relabel of the F2 methods, written from sample/java-flow.jsonl + brief only."""
 import json
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
 def P(i, n): return {"point": "param", "index": i, "name": n}
 def C(n, o, l): return {"point": "call", "calleeName": n, "ordinal": o, "line": l}
 def R(o, l): return {"point": "ret", "ordinal": o, "line": l}

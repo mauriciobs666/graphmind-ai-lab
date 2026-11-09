@@ -1,6 +1,8 @@
 import json,os
-S='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/sample/cpp.jsonl'
-O='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labels/cpp.jsonl'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[4])
+S=(_CPG+'/spikes/frontend-fitness/sample/cpp.jsonl')
+O=(_CPG+'/spikes/frontend-fitness/labels/cpp.jsonl')
 sites={}
 for l in open(S):
     d=json.loads(l); sites[d['ordinal']]=d

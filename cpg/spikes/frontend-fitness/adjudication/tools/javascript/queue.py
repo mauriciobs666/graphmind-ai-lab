@@ -1,5 +1,7 @@
 import json
-SRC="/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/javascript/src/"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+SRC=(_CPG+"/.ccg-work/corpora/javascript/src/")
 inp=json.load(open("adjudication/javascript-flow-audit.input.json"))
 G={}
 for l in open("labels/javascript-flow.jsonl"):

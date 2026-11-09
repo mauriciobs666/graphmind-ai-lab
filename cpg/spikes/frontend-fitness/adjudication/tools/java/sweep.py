@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """usage: sweep.py <ordinal> -> up to 10 sibling sites (same cell or same callText last identifier), first 10 by the stratum hash."""
 import sys,json,hashlib,re
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness')
 inp=[json.loads(l) for l in open(f'{FF}/adjudication/java.input.jsonl')]
 samp={json.loads(l)['ordinal']:json.loads(l) for l in open(f'{FF}/sample/java.jsonl')}
 def cell(r):

@@ -1,7 +1,8 @@
 import json,re,sys,os
-S='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/javascript/src/'
-OUT='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labels/javascript.jsonl'
-SAMPLE=[json.loads(l) for l in open('/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/sample/javascript.jsonl')]
+import os, pathlib as _pl, tempfile as _tf; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+S=(_CPG+'/.ccg-work/corpora/javascript/src/')
+OUT=(_CPG+'/spikes/frontend-fitness/labels/javascript.jsonl')
+SAMPLE=[json.loads(l) for l in open((_CPG+'/spikes/frontend-fitness/sample/javascript.jsonl'))]
 src_cache={}
 def lines(p):
     if p not in src_cache: src_cache[p]=open(S+p).read().split('\n')

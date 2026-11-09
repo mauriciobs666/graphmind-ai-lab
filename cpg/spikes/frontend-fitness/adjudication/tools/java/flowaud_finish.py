@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Annotate the diff (cosmetic cond-code mismatches) and add source lines to the F1 queue."""
 import json
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
-SRC = "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/java/src/"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
+SRC = (_CPG+"/.ccg-work/corpora/java/src/")
 adj = f"{FF}/adjudication/"
 rows = [json.loads(l) for l in open(adj + "java-flow-audit.diff.jsonl")]
 for r in rows:

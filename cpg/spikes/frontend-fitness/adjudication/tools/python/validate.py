@@ -1,6 +1,8 @@
 import json,re,collections as C
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'; A=R+'adjudication/'
-S='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/adjudication/tools/python/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/'); A=R+'adjudication/'
+S=(_CPG+'/spikes/frontend-fitness/adjudication/tools/python/')
 rj=lambda p:[json.loads(l) for l in open(p)]
 fin=rj(R+'truth/python.final.jsonl'); inp=rj(A+'python.input.jsonl'); q=rj(A+'python.queue.jsonl'); dec=rj(A+'python.decisions.jsonl')
 adj=rj(A+'python.jsonl'); aud=rj(A+'python.audit.jsonl'); ext=rj(S+'python.census-ext.jsonl'); noise=json.load(open(A+'python.noise.json'))

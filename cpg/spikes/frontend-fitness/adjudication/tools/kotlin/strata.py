@@ -1,5 +1,7 @@
 import json,hashlib,re,collections
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
 rows=[json.loads(l) for l in open(R+'adjudication/kotlin.input.jsonl')]
 ref={json.loads(l)['ordinal']:json.loads(l) for l in open(R+'truth/kotlin.ref.jsonl')}
 def h(stratum,sid): return hashlib.sha256(f'ccg-p0a-v1-aud|kotlin|{stratum}|{sid}'.encode()).hexdigest()

@@ -2,7 +2,9 @@
 """Part F draw for cpp. Phase 'draw': reads labels/cpp-flow.jsonl STRUCTURE ONLY (ordinal, pair index,
 confidence) and writes cpp-flow-audit.input.json. Prints only counts + the six method ordinals."""
 import hashlib, json, sys
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
 def h(s): return hashlib.sha256(s.encode()).hexdigest()
 def main():
     methods = []; pairs = []

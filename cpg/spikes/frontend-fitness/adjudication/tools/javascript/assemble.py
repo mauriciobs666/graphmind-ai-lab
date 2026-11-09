@@ -1,5 +1,7 @@
 import json,math,collections
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness/')
 rd=lambda p:[json.loads(l) for l in open(FF+p)]
 IN={r['siteId']:r for r in rd('adjudication/javascript.input.jsonl')}
 REF={r['siteId']:r for r in rd('truth/javascript.ref.jsonl')}

@@ -1,6 +1,8 @@
 import json,hashlib,collections,sys
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/python/src/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
+SRC=(_CPG+'/.ccg-work/corpora/python/src/')
 OUT=R+'adjudication/python.queue.jsonl'
 inp=[json.loads(l) for l in open(R+'adjudication/python.input.jsonl')]
 smp={}

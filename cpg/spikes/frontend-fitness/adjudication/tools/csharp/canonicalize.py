@@ -2,8 +2,11 @@
 Reads only adjudication/csharp.{input,audit,decisions,noise}.json*, truth/csharp.{final,ref}.jsonl, labels/csharp.jsonl and the corpus tree."""
 import json, math, re, collections, sys
 from pathlib import Path
-FF = Path("/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"); A = FF/"adjudication"
-NORM = Path("/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/s57_norm")
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = Path((_CPG+"/spikes/frontend-fitness")); A = FF/"adjudication"
+import os, pathlib as _pl, tempfile as _tf; _SCRATCH = os.environ.get('CCG_SCRATCH') or _tf.gettempdir()
+NORM = Path((_SCRATCH+"/s57_norm"))
 rj = lambda p: [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
 def wil(k, n, z=1.959964):
     p = k/n; den = 1+z*z/n; c = (p+z*z/(2*n))/den; h = z*math.sqrt(p*(1-p)/n+z*z/(4*n*n))/den

@@ -1,6 +1,8 @@
 import json,re,hashlib,collections,sys
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/cpp/src/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
+SRC=(_CPG+'/.ccg-work/corpora/cpp/src/')
 OUT=R+'adjudication/cpp.queue.jsonl'
 rows=[json.loads(l) for l in open(R+'adjudication/cpp.input.jsonl')]
 refs={json.loads(l)['ordinal']:json.loads(l) for l in open(R+'truth/cpp.ref.jsonl')}
@@ -68,7 +70,8 @@ for s,lst in strata.items():
         for i,r in enumerate(L,1):
             o=base('audit',r); o.update(stratum=s,draw=draw,drawRank=i,cell=cell(r),excerpt=exc(r['site']['path'],r['site']['line']),targetExcerpts=defex(r))
             emit(o)
-json.dump(auditmeta,open('/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/s57_cpp/auditmeta.json','w'))
+import os, pathlib as _pl, tempfile as _tf; _SCRATCH = os.environ.get('CCG_SCRATCH') or _tf.gettempdir()
+json.dump(auditmeta,open((_SCRATCH+'/s57_cpp/auditmeta.json'),'w'))
 # 3 census
 def form(p,dl):
     L=lines(p)

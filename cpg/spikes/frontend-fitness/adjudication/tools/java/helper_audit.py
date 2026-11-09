@@ -1,5 +1,7 @@
 import sys,re,json,collections
-sys.path.insert(0,'/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labeller-scripts/java')
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+sys.path.insert(0,(_CPG+'/spikes/frontend-fitness/labeller-scripts/java'))
 sys.dont_write_bytecode=True
 import lab
 SRC=lab.R

@@ -63,7 +63,7 @@ _INIT = _read(CAP_STREAM)[0]
 CAP_ROOT = _INIT["cwd"]
 ROLES_DIR = CAP_ROOT.rsplit("/", 1)[0]
 SESSION = _INIT["session_id"]
-REPO_AGENTS = "/home/mauricio/prg/graphmind-ai-lab/AGENTS.md"
+REPO_AGENTS = str(Path(__file__).resolve().parents[2] / "AGENTS.md")
 KEEP_TYPES = {"agent-setting", "queue-operation", "user", "assistant", "last-prompt", "tools-used", "cost-state"}
 
 
@@ -447,7 +447,7 @@ def test_audit_init_other_fields(env):
                            ("plugins", [{"name": "p", "path": "/home/x", "source": "s"}], "init-plugins"),
                            ("claude_code_version", "2.1.314", "init-version"),
                            ("model", "claude-opus-5-5", "init-model"),
-                           ("cwd", "/home/mauricio", "init-cwd"),
+                           ("cwd", str(Path.home()), "init-cwd"),
                            ("session_id", "other", "init-session")]:
         st = copy.deepcopy(base)
         st[0][field] = val

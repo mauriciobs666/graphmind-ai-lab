@@ -1,5 +1,7 @@
 import re,os,json
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/java/src'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[4])
+R=(_CPG+'/.ccg-work/corpora/java/src')
 types={}
 meths=[]
 KW=r'^(if|for|while|switch|return|new|else|catch|throw|try|assert|synchronized)\b'

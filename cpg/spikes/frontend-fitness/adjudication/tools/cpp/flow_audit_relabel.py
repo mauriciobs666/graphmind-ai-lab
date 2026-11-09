@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """F2 blind relabel of the six drawn cpp methods (12,14,19,23,27,29), written from sample/cpp-flow.jsonl source only."""
 import json
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
 meta = {}
 for l in open(f"{FF}/sample/cpp-flow.jsonl"):
     m = json.loads(l); meta[m["ordinal"]] = m

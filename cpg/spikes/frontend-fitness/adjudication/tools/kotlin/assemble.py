@@ -1,5 +1,7 @@
 import json,math,collections,re,hashlib
-R='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+R=(_CPG+'/spikes/frontend-fitness/')
 A=R+'adjudication/'
 def jl(p): return [json.loads(l) for l in open(p)]
 dec=jl(A+'kotlin.decisions.jsonl'); inp=jl(A+'kotlin.input.jsonl'); labels={o['ordinal']:o for o in jl(R+'labels/kotlin.jsonl')}

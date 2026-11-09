@@ -1,8 +1,10 @@
 import json,os
 from lab import *
-OUT='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/labels/java.jsonl'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[4])
+OUT=(_CPG+'/spikes/frontend-fitness/labels/java.jsonl')
 S={}
-for l in open('/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/sample/java.jsonl'):
+for l in open((_CPG+'/spikes/frontend-fitness/sample/java.jsonl')):
   d=json.loads(l); S[d['ordinal']]=d
 D={}
 def rec(o,callees,ev,conf='sure',nac=False,dyn=False):

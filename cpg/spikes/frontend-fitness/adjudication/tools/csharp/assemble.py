@@ -1,6 +1,8 @@
 import json, collections, math
 from pathlib import Path
-FF = Path("/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"); A = FF/"adjudication"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = Path((_CPG+"/spikes/frontend-fitness")); A = FF/"adjudication"
 rj = lambda p: [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
 def wil(k, n, z=1.959964):
     if n == 0: return [None, None]

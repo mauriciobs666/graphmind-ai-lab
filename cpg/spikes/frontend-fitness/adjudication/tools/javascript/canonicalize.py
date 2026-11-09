@@ -1,6 +1,8 @@
 """v1.12 canonicalisation for javascript: final.jsonl (from the normalised copy) and noise.json."""
 import json,math,re,collections,sys
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness/'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness/')
 NORM=sys.argv[1]  # dir holding the normalised javascript.final.jsonl / noise.json
 rd=lambda p:[json.loads(l) for l in open(p)]
 old=rd(FF+'truth/javascript.final.jsonl'); new=rd(NORM+'javascript.final.jsonl')

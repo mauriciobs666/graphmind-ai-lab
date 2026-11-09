@@ -4,7 +4,9 @@
 Key = prefix + str(ordinal) + str(pairIndex) (plain concatenation, as the
 S27 draw U does with siteId); ties by (ordinal, index)."""
 import hashlib, json
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
 PFX = "ccg-p0a-v1-flowaud|java|"
 h = lambda s: hashlib.sha256(s.encode()).hexdigest()
 pairs, methods = [], []

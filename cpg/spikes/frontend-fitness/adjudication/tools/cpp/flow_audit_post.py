@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """After the relabel is on disk: F2 diff (golden vs relabel, six drawn methods) and F1 queue; plus ordinal-5 population check."""
 import json, linecache
-FF = "/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness"
-SRC = "/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/cpp/src"
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF = (_CPG+"/spikes/frontend-fitness")
+SRC = (_CPG+"/.ccg-work/corpora/cpp/src")
 def ep(e):
     p = e["point"]
     return (p, e["index"]) if p == "param" else (p, e["calleeName"], e["ordinal"]) if p == "call" else (p, e["ordinal"]) if p == "ret" else (p, e["line"], e["code"])

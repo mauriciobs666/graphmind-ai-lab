@@ -1,6 +1,8 @@
 import json,hashlib,collections,os
-FF='/home/mauricio/prg/graphmind-ai-lab/cpg/spikes/frontend-fitness'
-SRC='/home/mauricio/prg/graphmind-ai-lab/cpg/.ccg-work/corpora/javascript/src'
+
+import pathlib as _pl; _CPG = str(_pl.Path(__file__).resolve().parents[5])
+FF=(_CPG+'/spikes/frontend-fitness')
+SRC=(_CPG+'/.ccg-work/corpora/javascript/src')
 R=[json.loads(l) for l in open(FF+'/adjudication/javascript.input.jsonl')]
 def h(st,sid): return hashlib.sha256(f'ccg-p0a-v1-aud|javascript|{st}|{sid}'.encode()).hexdigest()
 def rk(r): return (r['reference'].get('static') or {}).get('kind')
