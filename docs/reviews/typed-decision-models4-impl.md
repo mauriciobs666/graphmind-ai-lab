@@ -373,7 +373,7 @@ and was discarded.
 The differential script ran with `python -I`, against `decisionmodels.render`, model-bench's
 `classification`, and falkor-chat's `_render_judge_user`/`_recent_turns`. The falkor-chat functions
 were extracted from source by AST, so no falkor-chat import ran. Scratch script:
-`/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p2/diff/differential.py`.
+`/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p2/diff/differential.py`.
 
 **Generated inputs:**
 - turn counts of 0–40;
@@ -1594,7 +1594,7 @@ No existing line is now enforced elsewhere, so no prune is proposed.
 
 ### Appendix I — Pass 10 mutants and probes
 
-The runner, mutant list and probes are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p10/`: `mutate.py`, `mutants.json`, `probes/`. Baseline: 756 passed + 5 skipped, 2 xfailed. Every mutant ran the full suite, and every file was restored and checked with `cmp`, which reported equal.
+The runner, mutant list and probes are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p10/`: `mutate.py`, `mutants.json`, `probes/`. Baseline: 756 passed + 5 skipped, 2 xfailed. Every mutant ran the full suite, and every file was restored and checked with `cmp`, which reported equal.
 
 | ID | Mutation (`campaign.py`) | Red |
 |---|---|---|
@@ -1679,7 +1679,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded.
 
 ### Appendix J — Pass 11 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p11/`: `all-mutants.json`, `re-mutants.json`, `coder-sample.json`, `mutants-run.txt`, `probes/probe_p11.py`.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p11/`: `all-mutants.json`, `re-mutants.json`, `coder-sample.json`, `mutants-run.txt`, `probes/probe_p11.py`.
 
 | ID | Mutation | Red |
 |---|---|---|
@@ -1986,7 +1986,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix L — Pass 13 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p13/`: `mutants.py`, `mutate.py`, `probes/test_p13_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 859 passed + 5 skipped, 2 xfailed (865 with the probe file). Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p13/`: `mutants.py`, `mutate.py`, `probes/test_p13_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 859 passed + 5 skipped, 2 xfailed (865 with the probe file). Each mutant ran the full suite; each file was restored and `cmp` reported equal.
 
 | ID | Mutation (`runner.py` unless noted) | Red |
 |---|---|---|
@@ -2089,7 +2089,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix M — Pass 14 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p14/`: `mutants.py`, `mutate.py`, `probes/test_p14_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 889 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p14/`: `mutants.py`, `mutate.py`, `probes/test_p14_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 889 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
 
 | ID | Mutation | Red |
 |---|---|---|
@@ -2221,7 +2221,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the n
 
 ### Appendix N — Pass 15 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p15/`: `mutants.py`, `mutate.py`, `probes/test_p15_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1080 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p15/`: `mutants.py`, `mutate.py`, `probes/test_p15_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1080 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
 
 | ID | Mutation (`install.py` I, `guard_hook.py` G) | Red |
 |---|---|---|
@@ -2329,7 +2329,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix O — Pass 16 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p16/`: `mutants.py`, `mutate.py`, `probes/test_p16_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1133 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p16/`: `mutants.py`, `mutate.py`, `probes/test_p16_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1133 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
 
 | ID | Mutation | Red |
 |---|---|---|
@@ -2421,7 +2421,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix P — Pass 17 mutants and probes
 
-Files are in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p17/`: `mutants.py`, `mutate.py`, `probes/test_p17_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1141 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
+Files are in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p17/`: `mutants.py`, `mutate.py`, `probes/test_p17_probes.py`, `logs/mutants-run.txt`, `logs/probes.txt`. Baseline in the copy: 1141 passed + 5 skipped, 2 xfailed. Each mutant ran the full suite; each file was restored and `cmp` reported equal.
 
 | ID | Mutation | Red |
 |---|---|---|
@@ -2528,7 +2528,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix Q — Pass 18 mutants and probes
 
-Files: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p18/` (`mutants.py`, `mutants-run.txt`, `mutants-run2.txt`, `mutants-run3.txt`, `repo2/tests/test_p18_probes.py`, `repo2/probe1.py`). Mutants ran `tests/test_screen.py` and `tests/test_generation.py` (60 s timeout); the first five (M1 to M5) ran with `-x` plus `tests/test_campaign.py`. Each file was restored and `cmp`-equal. Baseline 77 passed.
+Files: `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p18/` (`mutants.py`, `mutants-run.txt`, `mutants-run2.txt`, `mutants-run3.txt`, `repo2/tests/test_p18_probes.py`, `repo2/probe1.py`). Mutants ran `tests/test_screen.py` and `tests/test_generation.py` (60 s timeout); the first five (M1 to M5) ran with `-x` plus `tests/test_campaign.py`. Each file was restored and `cmp`-equal. Baseline 77 passed.
 
 | ID | Mutation | Result |
 |---|---|---|
@@ -2635,7 +2635,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix R — Pass 19 mutants, probes, simulation
 
-Files under `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p19/`: `mut.py`, `mut-run.txt`, `cmp_screen.py`, `repo/tests/test_p19_probes.py`. Baseline in the copy 138 passed (the three new test files). Mutants (all red unless stated): M9, X1, X2, X3, M34, M35; P1 audit reads the latest event, P2 hash from the latest event, P3 `drawn_in` `<=`, P4/P5 balanced cut off by one, P6 floor 1, P7 pool counts hit seeds, P8 pool takes regeneration, P9 pool halts not recorded, P10 pool without the hash, P11-P14 restart keeps items / halts / pool / batches, P15 retired outcome applied, P16/P17 `extend` checks, P18/P19 unbatched requeue, P20 pooled halt's round, P21 stale staged hit; B2-B5 bracket parser. **Green:** P22 (P19-m4), B1 (equivalent).
+Files under `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p19/`: `mut.py`, `mut-run.txt`, `cmp_screen.py`, `repo/tests/test_p19_probes.py`. Baseline in the copy 138 passed (the three new test files). Mutants (all red unless stated): M9, X1, X2, X3, M34, M35; P1 audit reads the latest event, P2 hash from the latest event, P3 `drawn_in` `<=`, P4/P5 balanced cut off by one, P6 floor 1, P7 pool counts hit seeds, P8 pool takes regeneration, P9 pool halts not recorded, P10 pool without the hash, P11-P14 restart keeps items / halts / pool / batches, P15 retired outcome applied, P16/P17 `extend` checks, P18/P19 unbatched requeue, P20 pooled halt's round, P21 stale staged hit; B2-B5 bracket parser. **Green:** P22 (P19-m4), B1 (equivalent).
 
 **Simulation** (independent hits, 4,000 rounds per rate, sizes 16×25 + 20×24, test after each run as `_over_threshold`): pooled fires 0.0% at 0%, 3.8% at 1%, 16.1% at 2%, 33.6% at 3%, 62.4% at 4%, 87.7% at 5%, 100% at 8%; the end-of-round test at 880 seeds (45 hits) fires 0.0% at 3% and 45.9% at 5%.
 
@@ -2713,7 +2713,7 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the c
 
 ### Appendix S — Pass 20 mutants and probes
 
-Files in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p20/`: `mut.py`, `mut-run.txt`, `rule_a.py`, `repo2/tests/test_p20_probes.py`. Mutants (31: 26 red, 5 green) ran the three generation test files with `-x` and a 90 s timeout. **Pass 19's survivors:** M9, X1, X2, X3, M34, M35, P22 all red. **Red:** Q1 (literal 10 seeds), Q2 (hits assigned), Q3 (wrong reason key), Q5 (min 0), Q6 (pool below 26), Q7, Q8 (any state counts as ingested), Q10 (hash from latest), Q12 (5%), Q13 to Q16, Q18, Q19, S1 to S4. **Green:** Q4, Q17, S5 (P20-m3); Q9 and Q11 (equivalent).
+Files in `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/p20/`: `mut.py`, `mut-run.txt`, `rule_a.py`, `repo2/tests/test_p20_probes.py`. Mutants (31: 26 red, 5 green) ran the three generation test files with `-x` and a 90 s timeout. **Pass 19's survivors:** M9, X1, X2, X3, M34, M35, P22 all red. **Red:** Q1 (literal 10 seeds), Q2 (hits assigned), Q3 (wrong reason key), Q5 (min 0), Q6 (pool below 26), Q7, Q8 (any state counts as ingested), Q10 (hash from latest), Q12 (5%), Q13 to Q16, Q18, Q19, S1 to S4. **Green:** Q4, Q17, S5 (P20-m3); Q9 and Q11 (equivalent).
 
 My own plumbing mutant on the pool's denominator, Q4, survived: all the test rounds are 10 seeds, the uniform-stub trap.
 

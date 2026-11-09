@@ -349,7 +349,7 @@ ledger:
   hand all four replays the S01 brief, with base commits taken from the file's start.
 - U22's `graph-dba` gate is marked "resumed".
 - U26, U28 and U30 have no gate id in `docs/plans/connected-code-graph-coordination.md`.
-- Original briefs name the main tree's absolute root ("repo root `/home/mauricio/prg/…`"). A
+- Original briefs name the main tree's absolute root ("repo root `$HOME/prg/…`"). A
   replay run in a worktree would read today's files, which defeats AC-2's as-of fidelity.
 - Docs-only deliverables, and other documents the gate read, were uncommitted at gate time
   (docs-only batching), so "newest commit before the start" is not what the gate saw. Builders

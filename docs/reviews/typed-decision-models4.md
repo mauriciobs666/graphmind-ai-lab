@@ -318,7 +318,7 @@ premise that held in the plan's reading but failed against a transcript or a liv
 | frontmatter `effort`; env override | verified, plus the `Agent`-parameter override | docs (F8) |
 | `omitClaudeMd` drops CLAUDE.md | verified (docs, v2.1.271+) · git-status effect unstated | U5.7 smoke |
 | hooks skipped in an untrusted folder | verified (docs, project-level agents) | U5.7: a planted untrusted run halts |
-| no repo CLAUDE.md/MEMORY.md/gitStatus outside the repo | MEMORY.md verified (docs). Others **unverified**: no outside-repo transcript exists on this machine (`~/.claude/projects/-home-mauricio/` holds only `memory/`) | U5.7 smoke (F4) |
+| no repo CLAUDE.md/MEMORY.md/gitStatus outside the repo | MEMORY.md verified (docs). Others **unverified**: no outside-repo transcript exists on this machine (`~/.claude/projects/-home-<user>/` holds only `memory/`) | U5.7 smoke (F4) |
 | transcript fields (`agentType`, `instructions`, `session_context`, `effort`, `thinking`) | verified | 214 transcripts |
 | `usage` repeated per `message.id` | **false** in 120/8,558 | F5 |
 | `<synthetic>` = usage stop | **too broad** | F10 |

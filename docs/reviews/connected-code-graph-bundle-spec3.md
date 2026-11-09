@@ -12,7 +12,7 @@ CPG: considered, not relevant — a document consolidation; the code facts were 
 
 ### How I checked
 
-Everything below was run unless marked *inferred*. Scratch: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/`.
+Everything below was run unless marked *inferred*. Scratch: `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/13504717-4242-422a-b7d8-a910a6cc9348/scratchpad/`.
 
 | Check | Result |
 |---|---|

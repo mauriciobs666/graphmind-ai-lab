@@ -1339,7 +1339,7 @@ I read the whole diff, §Q1, §Q4.3, §Q6, §Q7 and the handed list. I checked t
 requirements FR-5/FR-6/FR-8, AC-4 and the decision log, and the stakeholder decisions against the
 coordination ledger. I checked §Q6's wording against plan2 §3.6 and `decision_stats.py:304`. I ran
 `fr10.py` and re-derived its figures by hand. I read this repo's subagent transcripts
-(`~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/*/subagents/`, 210 `.jsonl` + `.meta.json`)
+(`~/.claude/projects/-home-<user>-prg-graphmind-ai-lab/*/subagents/`, 210 `.jsonl` + `.meta.json`)
 to test the transcript-audit, model-id and token claims. The stakeholder decisions (opus generates,
 sonnet labels; full sizes, pilot first, guard → message type → join-in) are stated correctly
 (ledger 2026-10-31 entries) and are not reopened.
