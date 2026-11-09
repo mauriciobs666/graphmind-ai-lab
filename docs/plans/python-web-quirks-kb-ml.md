@@ -1,0 +1,320 @@
+# python-web-quirks on the knowledge base — golden set, targets, floor and chunking
+
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (OQ-1 of `docs/requirements/python-web-quirks-kb.md`; FR-12, AC-3)
+
+## 1. Question and recommendation
+
+**Decision served:** the stakeholder approves a golden set and minimum targets so the requirement
+leaves `Interviewing` (OQ-1, FR-12, AC-3). Method only; nothing here is run against `ws:agent-team`
+beyond a few read-only probes.
+
+**Recommendation (for approval):**
+
+1. **Two sets, one tuning, one sealed.** Set A (dev, 42 positive + 14 negative, below) is the only
+   set anyone may inspect failures on. Set B (sealed, 84 positive + 30 negative, authored by someone
+   else, §5) is scored once, at acceptance.
+2. **Gate on Set B**, floor-applied, top-5 (chunks, as `search_documents` returns them):
+   - positive recall **≥ 0.90** (≥ 76 of 84) **and** every one of the 42 sections hit by at least one
+     of its two queries;
+   - negative rejection **≥ 0.90** (≥ 27 of 30; false accept counted against the 42 gotcha
+     documents), split: **15/15 off-domain** and **≥ 12/15 near-domain**.
+3. **Keep the 0.43 floor for now; it is unproven for this content** (§6). A measurement, not an
+   argument, decides it, and any change goes into `skills/agent-kb-retrieval/SKILL.md` for all users (FR-7).
+4. **No K-100 blocker.** With the shipped chunker no section is embedded head-only (§7). The
+   chunking risks that do exist are tail chunks carrying no title, and one document filling several
+   of the five slots.
+
+## 2. Findings from the real system (all observed this run)
+
+- `skills/python-web-quirks/SKILL.md`: 76,291 bytes; 42 `##` sections (split on `^## `); the section
+  text totals 74,228 characters (the rest is front matter). Section size in characters: min 668,
+  median 1,416.5, max 6,150 (section 26, line 681). Over 2,000: 10; over 3,000: 5; over 5,700: 1.
+- Chunker `falkor-chat/server/falkorchat/chunking.py` default `size=1000, overlap=150`. Applied to
+  each section as its own document it yields **108 chunks**: 10 sections of 1 chunk, 15 of 2, 10 of 3,
+  1 of 4, 5 of 5, 1 of 9; longest chunk 1,118 characters. The live workspace's longest chunk is
+  1,139 characters, so ingestion in practice uses that chunker.
+- `search_documents` ranks **chunks**, no document dedupe, `score` = cosine distance
+  (`falkor-chat/server/falkorchat/repository.py` `search_chunks`). Top-5 means five chunks.
+- `ws:agent-team` today: 476 documents, 767 chunks, 16 with no embedding (K-102 still live).
+  **4 documents already mention `python-web-quirks`**; one of them
+  (`38cd49cddb004207a5c7abd10181a4eb`) states the content of section 34 (BackgroundTasks serial
+  execution). After migration it competes with the migrated section for the same query.
+- Probe (read-only, prefixed per `skills/agent-kb-retrieval/SKILL.md`): a near-domain pytest query
+  with no applicable gotcha ("session-scoped fixture ... xdist ...") returned hits at **0.4136 and
+  0.4272, inside the 0.43 floor**, from unrelated team documents about shared-store test noise.
+  Three other near-domain probes (asyncio.gather cancel, FastAPI dependency overrides, async
+  SQLAlchemy session) had closest scores 0.562, 0.469, 0.463. Four probes only; they show the
+  floor passes near-domain wrong hits, they do not size the rate.
+- Prior art (`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, Stage 8 / DEF-1): 45 pairs,
+  4 misses, all in prose-only tags (15/19); code/identifier-heavy tags 11/11. Its 6 negatives were
+  off-domain; closest false match 0.446, so the floor margin there was 0.016. Python/pytest content
+  did not exist in that corpus, so none of those negatives was python-adjacent.
+
+## 3. Golden set (Set A, dev)
+
+Scoring unit: the expected `documentId` of the migrated gotcha appears among the 5 returned chunks
+(any chunk of it) with `score <= 0.43`. Section numbers below are the 1-based order of the `##`
+headings (line = heading line). "Confusable" neighbours, used to diagnose a miss, not to excuse one:
+{2,34} {5,6} {7,8} {11,35} {15,19,20} {21,22,23,24,25} {26,27} {29,39} {30,40} {32,33} {36,38,42}.
+
+### 3.1 Positives (42, one per section)
+
+Written as the situation an agent is in, not the title. Identifiers an agent would really type
+(`input()`, `TestClient`, `HEAD`) are allowed; title wording is not.
+
+| id | section (line) | gotcha | situation query |
+|---|---|---|---|
+| A01 | 1 (L33) | asyncio.create_task fire-and-forget: GC risk is real per the d… | A service starts background work with asyncio and never keeps the object that comes back; a reviewer says the work may vanish mid-run. Should I call that a confirmed bug? |
+| A02 | 2 (L55) | Starlette/FastAPI BackgroundTasks (sync callable) is bounded; … | Our API handler kicks off a synchronous job per request. Someone proposes a raw thread per call for throughput. Is the built-in route already capped, and how would I raise the cap? |
+| A03 | 3 (L103) | FastAPI response_model_exclude_unset=True drops defaulted fiel… | An endpoint returns nested Pydantic models with exclude-unset switched on, and a client reports that inner keys which have defaults are missing from the JSON. |
+| A04 | 4 (L133) | Asserting over a FastAPI app's route table: four built-in doc … | A test counts the routes on a freshly built FastAPI app to prove only my endpoints exist, but the count is higher than expected, and the routes of a sub-router I mounted seem absent from the table. |
+| A05 | 5 (L177) | FastAPI's APIRoute does not add HEAD to a GET route — Starlett… | A HEAD request to my FastAPI GET endpoint gets a 405 when another route matches the same path, while the identical setup on plain Starlette answers it. |
+| A06 | 6 (L206) | Starlette's StaticFiles.get_response returns its 404.html by d… | My single-page-app static mount overrides error handling to return index.html on a missing file, but a missing path still gets the built-in 404 page when the directory ships one. |
+| A07 | 7 (L224) | FastAPI's responses={...} is keyed by status code only — two e… | I listed two different 422 payloads for one route in the OpenAPI responses mapping, but only one of them appears in the generated schema. |
+| A08 | 8 (L250) | FastAPI/Starlette's exception-handler registry: MRO lookup, a … | I registered handlers for a base exception and for its subclass; my error-body test passes although the custom handler never ran, and a later registration silently replaced an earlier one. |
+| A09 | 9 (L293) | uvicorn rewrites scope["client"] from X-Forwarded-For by defau… | A middleware allows admin endpoints only when the caller address is loopback; behind a reverse proxy any client can look local. Why does that check not hold? |
+| A10 | 10 (L328) | pydantic Field(min_length=1) does not reject whitespace-only s… | My request model requires a name of minimum length one, yet a name made only of spaces was accepted and stored. |
+| A11 | 11 (L340) | urllib failure taxonomy: HTTPError ⊂ URLError, but a read time… | I wrapped a urlopen call with a timeout in an except for the URL error class and a slow server still crashed my code with an uncaught error. |
+| A12 | 12 (L384) | json.loads parses bare NaN/Infinity/-Infinity by default — a n… | A numeric validator parses user JSON and my finiteness check never fires: a bare NaN token got through and broke later comparisons. |
+| A13 | 13 (L396) | An OpenAI-compatible local server can answer a missing /v1 pre… | My client pointed at the local model server without the version path segment received a success status, but the body was an error message, and my retry logic counted it as good. |
+| A14 | 14 (L414) | An LLM-judge JSON parser that's a bare json.loads(text) is fen… | Code that parses a model's JSON answer began failing on every reply after switching model families; the replies look valid when printed but are wrapped in triple-backtick blocks. |
+| A15 | 15 (L433) | Setting an env var *after* import is a no-op for a module-leve… | My test sets an environment variable with monkeypatch to change a config constant, but the code still sees the old value, and only when the whole suite runs, not when the file runs alone. |
+| A16 | 16 (L459) | A pytest.raises(SomeError) with no match= can pass on an unrel… | A test expecting a validation error with a given exception type passes, yet when I break the very check it targets the test still passes. |
+| A17 | 17 (L478) | A test that is only valid when its whole module ran must gate … | A completeness test over results recorded by sibling tests breaks on a subset run; I skipped it on the keyword filter but a run selecting by node id still fails it. |
+| A18 | 18 (L512) | Deleting a parametrized test's def body leaves its @pytest.mar… | After a scripted edit removed a test function, a neighbouring test suddenly runs with odd parameters and fails with argument errors. |
+| A19 | 19 (L529) | A function-LOCAL from .module import name re-resolves fresh on… | Patching a name in another module with monkeypatch works for one function that imports it inside its body but has no effect on another function where the same name is a default argument value. |
+| A20 | 20 (L546) | A one-way circular import fails in *every* load order, not jus… | Adding an import of module B's name into module A, where B already imports from A, fails in both import orders even though the names are unrelated; moving it to class level did not help. |
+| A21 | 21 (L568) | starlette.testclient.TestClient's teardown cancels every still… | My lifespan starts a polling task and never cancels it at shutdown, yet a test using the test client says the task was cancelled once the context-manager block closes, hiding the missing cancellation. |
+| A22 | 22 (L585) | TestClient re-raises an unhandled server exception into the ca… | To check what an actual HTTP caller would get on an unhandled server error I asserted a 500 status, but the test itself dies with the original exception. |
+| A23 | 23 (L624) | Version rot ahead of the two sections above: starlette depreca… | Importing the Starlette test client prints a deprecation warning telling me to install a different HTTP package, and our CI treats warnings as errors. |
+| A24 | 24 (L641) | Anything the lifespan puts on app.state does not exist until t… | I patch an object stored on the application state in a fixture before any request and get an AttributeError saying the state has no such attribute. |
+| A25 | 25 (L662) | To force a TestClient response to surface an uncaught exceptio… | A test already holds an entered test client with patches applied through it and I need the 500 behaviour for one assertion; building a second client wrapping the same application object lost my patches. |
+| A26 | 26 (L681) | Holding an application lock across ThreadPoolExecutor.submit()… | A worker pool's submit is called while holding our own lock and I worry the interpreter hangs forever at exit; how long does exit actually block? |
+| A27 | 27 (L759) | A flag cleared right *after* ThreadPoolExecutor.submit() retur… | A per-caller busy flag is reset right after handing work to a thread pool, and intermittently the end state is wrong because the worker already finished. |
+| A28 | 28 (L775) | Bounding a call whose deadline the code under test computes: a… | I want to prove a function finishes inside a deadline it computes itself; my test timed the call and asserted afterwards, but when the function hangs CI just kills the job naming no test. |
+| A29 | 29 (L803) | A same-second edit that keeps the file's byte length is invisi… | I changed a one-character constant in a module and re-ran immediately; Python still prints the old value although the file clearly changed, and the don't-write-bytecode variable did not fix it. |
+| A30 | 30 (L835) | Under pytest's default capture, an in-test input() call raises… | Code under test calls input() to ask for confirmation; in the test run it throws an OSError about reading from stdin instead of waiting. |
+| A31 | 31 (L850) | A typing.Protocol's own declared methods are derivable from va… | I want a test asserting that my fake implements every method a Protocol declares, without keeping a separate hard-coded list of names. |
+| A32 | 32 (L865) | ruff check <path> force-parses the given file as Python regard… | I ran the Python linter over a list of changed files that included a markdown changelog and got a flood of syntax errors on ordinary sentences. |
+| A33 | 33 (L877) | ruff format <path> reformats the WHOLE file, not just the line… | I ran the code formatter on one file to clear two long-line warnings and my diff now touches hundreds of unrelated lines. |
+| A34 | 34 (L889) | Starlette BackgroundTasks runs one request's tasks sequentiall… | Several slow callbacks queued after one response are delayed by the first slow one, even though the thread pool has idle workers. |
+| A35 | 35 (L901) | http.client.InvalidURL is an HTTPException, not a ValueError —… | My except ladder for ValueError around a call that opens a URL with a bad port did not catch the failure; it surfaced as an unclassified exception type. |
+| A36 | 36 (L910) | pytest --deselect with an absolute path matches nothing, silen… | I told pytest to skip one specific test by passing its absolute path to the deselect option, and it still ran, with no warning. |
+| A37 | 37 (L922) | FastMCP validates tool arguments with pydantic — a bound viola… | An MCP tool parameter has a maximum length; a client sending too long a value gets a tool result flagged as an error, not a protocol error, and I cannot find the bound in the advertised schema. |
+| A38 | 38 (L940) | pytest -q -q prints no "N failed, M passed" line on a failing … | My script reads the pass and fail counts from the last line of the doubly-quiet pytest output, and a failing run reports zero failures. |
+| A39 | 39 (L949) | PYTHONPYCACHEPREFIX=<fresh empty dir> is a stale-.pyc remedy t… | To avoid stale compiled files I pointed the bytecode cache location at an empty temp folder and it worked, but later ordinary runs still show stale code. What did that fix leave behind? |
+| A40 | 40 (L966) | Under pytest's default capture, fd 0 is /dev/null, so an in-pr… | A test spawns a subprocess with no stdin argument and prints where its standard input points; it shows the null device, not the pipe my shell gave me, so my stdin-inheritance test proves nothing. |
+| A41 | 41 (L977) | Popen.wait() after os.killpg(pgid, SIGTERM) leaves a TERM-igno… | After sending a termination signal to a process group and waiting on the leader, a child that ignores the signal survives and my file lock stays held, blocking the next acquirer. |
+| A42 | 42 (L990) | A private copy for mutation testing: pytest imports the editab… | My mutation-testing copy of the repo is ignored when tests are executed via the bare pytest command, which imports the original tree, though python -m pytest picks up the copy. |
+
+Caveat on Set A: I wrote it from each section's opening paragraph, so it is **head-biased**. That is
+why Set B must carry the tail probes (§5). Set A is a dev set, not an estimate of recall.
+
+### 3.2 Negatives (14): no gotcha applies
+
+Near-domain (python/web/test topics the 42 sections do not cover; I checked all 42 titles):
+
+| id | situation |
+|---|---|
+| NA01 | One coroutine in an asyncio.gather call raised, but its siblings keep running in the background. How do I make them cancel when the first one fails? (probed: closest 0.562) |
+| NA02 | In tests I need to replace the authentication dependency of a FastAPI route with a fake user, and the override seems ignored for a sub-dependency. (probed: closest 0.469) |
+| NA03 | An async SQLAlchemy session is not closed on an error path and under load the connection pool runs dry with timeouts. (probed: closest 0.463) |
+| NA04 | A session-scoped pytest fixture seems to run once per worker under xdist, and my shared temporary database is populated several times. (probed: **0.4136**, inside the floor) |
+| NA05 | uvicorn --reload does not pick up edits when the source is a bind-mounted Docker volume. |
+| NA06 | A pydantic v2 model should accept one field name on input but emit another on output; which setting does that? |
+| NA07 | mypy reports an Optional as still possibly None after I narrowed it inside a walrus condition. |
+
+Off-domain (carry-over from Stage 8 plus new; plausible team-agent questions that no KB document answers):
+
+| id | situation |
+|---|---|
+| NA08 | How should I structure a React Server Components data-fetching boundary to avoid request waterfalls in a Next.js app? (Stage 8 N4, closest then 0.446) |
+| NA09 | How do I configure a Kubernetes readiness probe for a FastAPI container whose startup depends on a slow database connection? (Stage 8 N6, closest then 0.463) |
+| NA10 | How can I make a multi-stage Dockerfile reuse the dependency layer when only application code changed? |
+| NA11 | A git rebase stops with conflicts in a lockfile; what is the safe way to resolve it and continue? |
+| NA12 | A CSS grid layout overflows its container on narrow phones even though the columns use fr units. |
+| NA13 | A pandas groupby-apply over a few million rows is slow; what is the idiomatic faster form? |
+| NA14 | A Postgres table's index keeps growing after heavy updates; how do I reclaim the space without downtime? |
+
+NA01-NA04 were probed live; the other ten were not, so their closest score is unknown until the run.
+
+## 4. Targets and sizing
+
+### 4.1 Positives
+
+Set B has 84 positive queries (2 per section, independent phrasings). The 84 are clustered in 42
+sections, so they are not 84 independent draws: the per-query Wilson interval below is optimistic,
+and the section-coverage rule (every section hit by at least one of its two queries; 42/42 has Wilson
+lower bound 0.916) is the conservative companion criterion. Wilson 95% intervals, computed this run:
+
+| observed on 84 | recall | Wilson 95% |
+|---|---|---|
+| 84 | 1.000 | 0.956 - 1.000 |
+| 80 | 0.952 | 0.884 - 0.981 |
+| 78 | 0.929 | 0.853 - 0.967 |
+| 76 (gate) | 0.905 | 0.823 - 0.951 |
+| 72 | 0.857 | 0.767 - 0.916 |
+
+Probability of passing the gate (>= 76/84) by true recall, exact binomial, computed this run:
+0.97 -> 0.999; 0.95 -> 0.975; 0.92 -> 0.772; 0.90 -> 0.534; 0.85 -> 0.100; 0.80 -> 0.008.
+So the gate separates a system near 0.95 (passes) from one near 0.85 (fails) and does **not**
+separate 0.90 from 0.92; that is the resolution 84 queries buy, and I would not pay for 150 queries
+to sharpen a threshold that is itself a judgment.
+
+**Why 0.90.** The pooled prior-art result is 41 of 45 (4 misses; 0.911 by my arithmetic), with
+code/identifier-heavy rows 11/11. This content is code-dense (the rows resembling the 11/11 stratum)
+but has dense intra-domain neighbourhoods (5 `TestClient`/lifespan sections, 2 stdin-capture and
+2 `.pyc` sections, thread-pool and `BackgroundTasks` pairs). Expected true recall is therefore
+>= 0.95 (a prior, not a measurement); 0.90 is the floor below which the migration is worse than the
+team's already accepted KB retrieval, and below which the stated user story ("get the one applicable
+gotcha") is not credibly met. A miss is not silent: FR-11 title listing and FR-9 section reads are
+the fallback, which is why I do not ask for 0.95 as a gate.
+
+### 4.2 Negatives
+
+Set B has 30 negatives (15 off-domain, 15 near-domain). 0/30 false accepts has Wilson upper bound
+0.114 (2/30 is 0.018-0.213). P(<= 3 false accepts of 30) by true
+false-accept rate, computed this run: 0.02 -> 0.997; 0.05 -> 0.939; 0.10 -> 0.647; 0.20 -> 0.123;
+0.30 -> 0.009. Gate: **off-domain 15/15** (the prior art's 6/6 plus a real margin; a wrong gotcha for
+an unrelated question is the failure mode FR-9 warns about), **near-domain >= 12/15**. Near-domain is
+deliberately softer: its false accepts cost one wrong ~1.4 KB section (median section) read, the
+xdist probe (0.4136) shows the floor cannot be expected to reject them all, and the floor is shared.
+
+**Scoring definition (decision for the stakeholder, my default stated):** AC-3 says negatives
+"return nothing above the score floor". Workspace-wide that is not a property of this feature: the
+xdist probe returned unrelated team documents under the floor. I score a false accept as **a hit
+under the floor whose `documentId` is one of the 42 gotchas**, and report workspace-wide hits as
+information. Needs the stakeholder to confirm, or to reword AC-3.
+
+### 4.3 Before and after (FR-12)
+
+- **Before** is not "whole skill loaded" (trivially 100% recall at ~76 KB). It is (i) the same sets
+  run **before ingestion**: expected near-zero hits on gotcha documents, and any query whose answer
+  already comes back from another ws document is a duplicate-coverage finding (the 4 raw captures);
+  and (ii) a **lexical baseline** (BM25 or ripgrep scoring over the 42 sections, offline) on Set B.
+  If semantic retrieval does not beat the lexical baseline on recall at equal top-5, the GraphRAG
+  layer is not earning its cost for this content; report it either way.
+- **After**: Set B once, plus the two checks on Set A below.
+- Report both **raw top-5 recall** (no floor) and **floor-applied recall**; the gap is the floor's
+  cost on positives. Also report MRR and rank of first expected-chunk (informational, no gate).
+
+## 5. Authoring without leakage, and hold-out
+
+**Roles.** Set A: `data-scientist` (this note). Set B: **`qa-engineer`** (decided by me as a routine
+matter; any author who is neither the migration implementer, nor `cobb`, nor me works). The author of B
+works from the section text but writes only the situation an agent would be in.
+
+**Authoring rules (apply to A and B):**
+
+1. Write the situation: the symptom, the surprising observation, or the decision being made, as an
+   agent would phrase it without knowing the gotcha exists. Never write the claim, the cause, or the
+   title.
+2. Public identifiers (library, function, flag names) may appear; the title's non-identifier wording
+   and the section's conclusion may not.
+3. **Mechanical leak check before freezing**: lowercase word tokens; no 4-gram shared between a
+   query and its own section (title or body). Observed on Set A: after rewording 6 queries that
+   shared a 4-gram, **0 of 42** share a 4-gram and 0 share a 5-gram with their own section
+   (script run this run; the first draft had 5 of 42 sharing a 4-gram).
+4. Set B only: each section gets two queries from different framings (one symptom/error, one
+   design-time "should I"), and for the 7 sections with >= 4 chunks (2, 4, 8, 11, 22, 26, 29) **one
+   of the two must target a fact that sits only in the section's last chunk** (the tail probe).
+5. Negatives in B: 15 off-domain and 15 near-domain, near-domain ones written to *sound* like a
+   section (same library, adjacent behavior) while no section answers them; the author checks that
+   against the title list (FR-11), not the bodies.
+6. Freeze: B is stored (path to be set by `teco`, not in this repo's docs tree, since the note and
+   brief are read by implementers) and its sha256 recorded before the migration implementer starts
+   chunk/title decisions. A is committed with this note.
+
+**Hold-out discipline.** A may be run repeatedly and failures inspected; it is the only set used
+for any tuning (chunk-header decisions, document title format, any floor sweep). B is run **once**
+for the acceptance verdict. If B fails and a fix is made, B is burnt as evidence: write B2 (ordinal
+slug) from a different author and gate on it; never re-run B after looking at its misses.
+The prefix and top-K stay the repo's literals (FR-7); they are not tunable here. The Stage 8
+45-pair set is a regression guard only if a floor or top-K change is proposed (its misses would hit
+other KBs).
+
+**Contamination channels to close:** (i) the 4 existing raw captures that mention the skill (§2),
+including one duplicating section 34, decided by `cobb` under the FR-10 path (retire or keep) before
+the B run, otherwise a correct answer from a duplicate scores as a miss; (ii) no B query or result
+is pasted into any gotcha text, the title listing or the stub skill's description; (iii) the stub
+skill description (FR-6) is routing text and must not carry situation phrases lifted from A.
+
+## 6. Is the 0.43 floor adequate? (d)
+
+**Not established for this content.** The floor was calibrated on a corpus with no Python/pytest
+content; its closest negative was 0.446, 0.016 above the floor, and the worst accepted true
+positive 0.414 (`skills/agent-kb-retrieval/SKILL.md`). Adding 42 dense, same-register, near-domain
+documents moves nearby negatives closer (one near-domain probe is already under 0.43 today, §2) and
+can move true positives either way. The floor is a corpus-level property, so I will not guess.
+
+**Measurement (run on Set A only; B is not used for choosing):** in a test workspace holding the
+full current corpus plus the 42 migrated documents, record per query the best score of the expected
+document (positives) and the best score of any gotcha document (negatives), then:
+
+1. Sweep the floor from 0.38 to 0.50 in 0.01 steps; per step: floor-applied recall, near-domain false
+   accepts, off-domain false accepts.
+2. **Adequate (keep 0.43)** iff, on A: floor-applied recall is within 0.03 of raw top-5 recall,
+   AND no off-domain negative has a gotcha hit <= 0.43, AND near-domain false accepts <= 2 of 7, AND
+   the worst found-positive score is >= 0.025 below 0.43 (the team's own floor-instability margin rule;
+   a row inside it needs multi-session reproduction before it is trusted).
+3. Otherwise report the sweep, name the value that satisfies the same criteria, and route a change
+   to `agent-kb-retrieval` (FR-7). A change moves every user, so the Stage 8 45-pair set must be
+   re-run first and must not regress; a floor that works only for this content is **not**
+   adopted privately here. If no value satisfies both, the finding is "score alone cannot separate
+   these", and the fallback is a stricter rule scoped to this feature's stub (not a floor edit).
+4. Then confirm on B once; B's verdict uses whichever floor step 2/3 set.
+
+A is small for a sweep (42 + 14): treat the sweep as locating a plausible band, not estimating a
+rate; the B result carries the evidence.
+
+## 7. Chunking guidance (e)
+
+**Sizes versus window.** The embedder window is about 2,048 tokens (K-100/K-099 in
+`falkor-chat/docs/BACKLOG.md`: about 9.7k characters of prose, about 5.7k of URL-dense text).
+Ingesting each gotcha as one document, with the shipped chunker, gives 108 chunks of at most 1,118
+characters, far inside the window. **No section is embedded head-only** and K-100, which is about
+messages, is not a dependency. The "check chunk behaviour on the largest sections first" decision
+(requirements decision log) reduces to a count check plus a tail probe, not a truncation fix.
+
+**Where head-only would bite, if someone embedded whole sections** (chunking disabled or a large
+size): only section 26 (6,150 characters, 9 chunks by default) exceeds the 5.7k figure; sections 2, 4,
+8, 11 (3.4-3.6k) and 22, 29 (about 2.6-3.0k) are under it by characters. Token counts were not
+measured (no tokenizer run); identifier-dense text tokenizes worse than prose, so before approving any
+whole-section embedding, measure tokens for those 7.
+
+**Risks that do exist, in order of expected effect:**
+
+1. **Tail chunks carry no identity.** 32 of 42 sections span >= 2 chunks; only chunk 0 holds the title
+   (the 150-character overlap is the only bridge). A tail hit is a body fragment without title or
+   version pin, so FR-3 ("usable without a second lookup") and FR-5 fail for it; the agent needs
+   `get_document`. Measure: Set B tail-probe recall versus head-probe recall; if tail < head by
+   more than 0.15, the fix is a design decision for `architect` (a per-chunk title/version header
+   line), not a chunker change here (out of scope per the requirements).
+2. **Slot crowding.** `search_documents` has no document dedupe; sections with 4-9 chunks can fill
+   several of the five slots, leaving fewer than five distinct gotchas. Score recall at the
+   `documentId` level over the five chunks, and report the mean count of distinct documents per
+   query.
+3. **Per-section dilution.** The prior-art DEF-1 mechanism (a dense identifier-heavy worked example
+   diluting the embedding) applies most to the 9-chunk section 26 and the 5-chunk ones; any recall
+   miss there is read against that.
+4. **K-102.** 16 chunks in `ws:agent-team` have no embedding today (observed). The per-gotcha
+   "every chunk embedded" check (AC-2) is a hard gate before any scoring run; otherwise a
+   non-embedded chunk reads as a retrieval miss.
+
+## 8. Risks and open questions for the stakeholder
+
+- **Approval needed:** targets in §1 (recall >= 0.90 + 42/42 coverage; negatives off-domain 15/15,
+  near-domain >= 12/15), and Set A. Confidence in them is stated in §4: they discriminate ~0.95 from
+  ~0.85 true recall, not finer.
+- **AC-3 wording:** confirm that negatives are scored against the 42 gotcha documents only (§4.2),
+  or accept that workspace-wide rejection is not measurable by this feature.
+- **Raw-capture duplicates (§5):** retire the 4 captures that mention the skill, or accept that the
+  duplicate of section 34 can outrank its own migrated section.
+- **Set B author and storage:** `qa-engineer`, stored outside the implementers' reading path; `teco`
+  sets the location.
+- **Estimates, not measurements:** the expected true recall (>= 0.95) is a prior; token counts per
+  section (§7) are unmeasured; none of Set A's positives has been run against an ingested corpus.
+- **Dedicated limitation:** the leak check is lexical (n-grams); it does not detect a query that
+  paraphrases the title closely in meaning. The before-ingestion run (§4.3) is the semantic check:
+  a query whose answer already surfaces from another document, or whose rank-1 score is
+  implausibly low (< 0.25) against a title-only probe, is re-written.
