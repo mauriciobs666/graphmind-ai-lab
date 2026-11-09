@@ -1,0 +1,9 @@
+{
+  "pin": "synthetic",
+  "migratedOn": "2026-11-09",
+  "units": [
+    {"id": "u1", "title": "Alpha title", "headings": ["Alpha heading", "Gamma heading"], "documentId": "d-u1", "sha256": ""},
+    {"id": "u2", "title": "Beta title", "headings": ["Beta heading"], "documentId": "d-u2", "sha256": ""}
+  ],
+  "waivedSpans": ["> Waived: this blockquote is not carried into the copy."]
+}

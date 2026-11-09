@@ -1,0 +1,12 @@
+{
+ "d-u1": {
+  "title": "x",
+  "text": "Gotcha: Alpha title\nMembers:\nAlpha title\nGamma title\nVersions[1]: synthetic 1.0\nVerified[1]: unverified, migrated 2026-11-09\nVersions[2]: none stated\nVerified[2]: unverified, migrated 2026-11-09\n<!-- body -->\n## Alpha heading\n\nAlpha body line one, with `code` and a unicode α ≤ β.\nAlpha body line two.\n\n## Gamma heading\n\nGamma body text, merged with alpha in one unit.\n",
+  "status": "active"
+ },
+ "d-u2": {
+  "title": "x",
+  "text": "Gotcha: Beta title\nVersions: synthetic 1.0\nVerified: 2026-01-02\n<!-- body -->\n## Beta heading\n\nBeta body text, separate from alpha. Verified 2026-01-02 on synthetic 1.0.\n",
+  "status": "active"
+ }
+}

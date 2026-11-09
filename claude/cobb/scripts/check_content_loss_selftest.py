@@ -576,6 +576,197 @@ def check_documents_and_flat_key_are_mutually_exclusive() -> None:
             )
 
 
+# --------------------------------------------------------------------------------------------
+# S2 of docs/plans/python-web-quirks-kb.md (D4): the pwq stored-format mode, T10-T15
+# --------------------------------------------------------------------------------------------
+
+FIX_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def _fx(name: str) -> str:
+    return (FIX_DIR / name).read_text(encoding="utf-8")
+
+
+def _pwq_run(
+    *,
+    source: str | None = None,
+    copy: str | None = None,
+    manifest: str | None = None,
+    dump: str | None = None,
+    source_format: str | None = None,
+    extra: list[str] | None = None,
+) -> tuple[int, str]:
+    """Drive `ccl.main` in `--stored-format pwq` mode against the fixtures (any of them replaced
+    by mutated text), return (exit code, stdout+stderr)."""
+    import contextlib
+    import io
+
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        (t / "source.md").write_text(source if source is not None else _fx("pwq_source_test.md"), encoding="utf-8")
+        (t / "copy.md").write_text(copy if copy is not None else _fx("pwq_copy_test.md"), encoding="utf-8")
+        (t / "manifest.json").write_text(manifest if manifest is not None else _fx("pwq_manifest_test.json"), encoding="utf-8")
+        (t / "dump.json").write_text(dump if dump is not None else _fx("pwq_dump_test.json"), encoding="utf-8")
+        argv = [
+            str(t / "source.md"), "--stored-format", "pwq", "--copy", str(t / "copy.md"),
+            "--manifest", str(t / "manifest.json"), "--dump", str(t / "dump.json"),
+        ]
+        if source_format:
+            argv += ["--source-format", source_format]
+        argv += extra or []
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            try:
+                rc = ccl.main(argv)
+            except SystemExit as exc:
+                rc = exc.code if isinstance(exc.code, int) else 2
+                buf.write(str(exc))
+        return rc, buf.getvalue()
+
+
+def check_pwq_t10_header_stripped_body_located() -> None:
+    rc, out = _pwq_run()
+    assert rc == 0, f"baseline pwq run should be clean, got rc={rc}:\n{out}"
+    for h in ("Alpha heading", "Beta heading", "Gamma heading"):
+        assert f"== {h} ==\nclean:" in out, f"{h!r} not reported clean:\n{out}"
+    # mutant: header without the exact delimiter line -> an error naming the document
+    dump = json.loads(_fx("pwq_dump_test.json"))
+    dump["d-u2"]["text"] = dump["d-u2"]["text"].replace("<!-- body -->\n", "")
+    rc, out = _pwq_run(dump=json.dumps(dump))
+    assert rc == 1 and "[BAD_HEADER] d-u2" in out, f"expected BAD_HEADER for d-u2, rc={rc}:\n{out}"
+
+
+def check_pwq_t11_merged_unit_non_adjacent_members() -> None:
+    # u1 holds Alpha and Gamma with Beta between them in the source; baseline (T10) is clean.
+    dump = json.loads(_fx("pwq_dump_test.json"))
+    dump["d-u1"]["text"] = dump["d-u1"]["text"].replace("## Gamma heading", "## Beta heading")
+    rc, out = _pwq_run(dump=json.dumps(dump))
+    assert rc == 1, f"a swapped member heading must fail, rc={rc}:\n{out}"
+    assert "[NOT_FOUND]" in out, f"expected NOT_FOUND for the swapped part:\n{out}"
+    assert "[UNACCOUNTED]" in out, f"Gamma's body must surface as a gap:\n{out}"
+    # a part whose heading is in no source section is reported as such, not relocated
+    dump["d-u1"]["text"] = json.loads(_fx("pwq_dump_test.json"))["d-u1"]["text"].replace(
+        "## Gamma heading", "## Nonexistent heading")
+    rc, out = _pwq_run(dump=json.dumps(dump))
+    assert rc == 1 and "part heading is not a source heading" in out, f"unknown part heading unreported:\n{out}"
+
+
+def check_pwq_t12_preamble_block_and_waived_span() -> None:
+    src = _fx("pwq_source_test.md")
+    rc, out = _pwq_run()
+    assert rc == 0 and "== (preamble) ==\nclean:" in out, f"unchanged preamble must pass:\n{out}"
+    # widen the source blockquote -> no longer equals the waived span exactly
+    rc, out = _pwq_run(source=src.replace("copy.\n", "copy. And more.\n", 1))
+    assert rc == 1 and "== (preamble) ==" in out and "[UNACCOUNTED]" in out and "And more." in out, (
+        f"a widened source blockquote must be a reported gap, rc={rc}:\n{out}"
+    )
+    # alter one preamble word in the copy block
+    rc, out = _pwq_run(copy=_fx("pwq_copy_test.md").replace("Scope paragraph", "Scope paragrapH", 1))
+    assert rc == 1 and "[NOT_FOUND]" in out, f"an altered preamble word must be NOT_FOUND:\n{out}"
+    # the note block is not compared with the source: altering it stays clean
+    rc, out = _pwq_run(copy=_fx("pwq_copy_test.md").replace("Corrected statement", "Different statement"))
+    assert rc == 0, f"the preamble-note is free text, not compared:\n{out}"
+    # the waived span is taken from the manifest: a wrong entry leaves the blockquote unaccounted
+    m = json.loads(_fx("pwq_manifest_test.json"))
+    m["waivedSpans"] = ["> Some other blockquote."]
+    rc, out = _pwq_run(manifest=json.dumps(m))
+    assert rc == 1 and "[UNACCOUNTED]" in out and "Waived:" in out, f"wrong waivedSpans must fail:\n{out}"
+    # no copy preamble fence at all -> usage error, not a silent skip
+    rc, out = _pwq_run(copy=_fx("pwq_copy_test.md").replace("<!-- preamble -->\n", "", 1))
+    assert rc == 2, f"a copy without a preamble fence must be an error, rc={rc}:\n{out}"
+
+
+def check_pwq_t13_extra_source_heading_fails_by_name() -> None:
+    src = _fx("pwq_source_test.md") + "\n## Extra heading\n\nAn unlisted section.\n"
+    rc, out = _pwq_run(source=src)
+    assert rc == 1, f"an extra source heading must fail, rc={rc}:\n{out}"
+    assert "[UNLISTED_HEADING]" in out and "Extra heading" in out, f"extra heading not named:\n{out}"
+    # the inverse: a manifest heading the source does not have
+    m = json.loads(_fx("pwq_manifest_test.json"))
+    m["units"][1]["headings"].append("Ghost heading")
+    rc, out = _pwq_run(manifest=json.dumps(m))
+    assert rc == 1 and "[UNKNOWN_HEADING]" in out and "Ghost heading" in out, (
+        f"a manifest-only heading must fail by name:\n{out}"
+    )
+
+
+def check_pwq_t14_source_format_copy() -> None:
+    rc, out = _pwq_run(source_format="copy")
+    assert rc == 0, f"the copy checked against its own stored units must be clean:\n{out}"
+    # corrupt one body char in the copy only; the positional source still holds the good text,
+    # so a mode that ignored --source-format copy would stay clean.
+    bad = _fx("pwq_copy_test.md").replace("separate from alpha", "separate from alphA")
+    rc, out = _pwq_run(source_format="copy", copy=bad)
+    assert rc == 1 and "[NOT_FOUND]" in out, f"a corrupted copy body must fail:\n{out}"
+
+
+FAKE_FALKORDB = """
+import json, os
+class _R:
+    def __init__(self, rows): self.result_set = rows
+class _G:
+    def __init__(self, name): self.name = name
+    def ro_query(self, q, params=None):
+        if self.name != os.environ["FAKE_EXPECT_GRAPH"]:
+            return _R([])
+        d = json.load(open(os.environ["FAKE_DUMP"])).get(params["id"])
+        return _R([(d["title"], d["text"], d["status"])] if d else [])
+class FalkorDB:
+    def __init__(self, host=None, port=None): pass
+    def select_graph(self, name): return _G(name)
+"""
+
+
+def _live_run(extra: list[str], expect_graph: str, documents_mode: bool = False) -> tuple[int, str]:
+    """Run the real LIVE_FETCH_SNIPPET in a subprocess against a fake `falkordb` module that
+    only knows graph `expect_graph`. No network."""
+    import contextlib
+    import io
+    import os
+
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        (t / "falkordb").mkdir()
+        (t / "falkordb" / "__init__.py").write_text(FAKE_FALKORDB, encoding="utf-8")
+        saved = {k: os.environ.get(k) for k in ("PYTHONPATH", "FAKE_DUMP", "FAKE_EXPECT_GRAPH")}
+        saved_py = ccl.CYPHER_MCP_VENV_PYTHON
+        os.environ.update(PYTHONPATH=str(t), FAKE_DUMP=str(FIX_DIR / "pwq_dump_test.json"), FAKE_EXPECT_GRAPH=expect_graph)
+        ccl.CYPHER_MCP_VENV_PYTHON = Path(sys.executable)
+        (t / "manifest.json").write_text(_fx("pwq_manifest_test.json"), encoding="utf-8")
+        argv = [
+            str(FIX_DIR / "pwq_source_test.md"), "--stored-format", "pwq",
+            "--copy", str(FIX_DIR / "pwq_copy_test.md"), "--manifest", str(t / "manifest.json"), "--live",
+        ] + extra
+        if documents_mode:  # the pre-existing whole-file mode, same fake server
+            argv = [str(FIX_DIR / "pwq_source_test.md"), "--documents", "d-u1", "d-u2", "--live"] + extra
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                rc = ccl.main(argv)
+        finally:
+            ccl.CYPHER_MCP_VENV_PYTHON = saved_py
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        return rc, buf.getvalue()
+
+
+def check_pwq_t15_ws_option_selects_workspace() -> None:
+    rc, out = _live_run(["--ws", "pwq-test"], expect_graph="ws:pwq-test")
+    assert rc == 0, f"--ws pwq-test must read ws:pwq-test, rc={rc}:\n{out}"
+    # old invocations unchanged: no --ws reads ws:agent-team
+    rc, out = _live_run([], expect_graph="ws:agent-team")
+    assert rc == 0, f"the default workspace must stay agent-team, rc={rc}:\n{out}"
+    # the pre-existing --documents --live path honours --ws too
+    rc, out = _live_run(["--ws", "pwq-test"], expect_graph="ws:pwq-test", documents_mode=True)
+    assert "[MISSING_DOCUMENT]" not in out, f"--documents --live ignored --ws:\n{out}"
+    # a non-matching workspace sees nothing -> missing documents, loud
+    rc, out = _live_run(["--ws", "other"], expect_graph="ws:pwq-test")
+    assert rc == 1 and "[MISSING_DOCUMENT]" in out, f"a wrong workspace must report missing docs:\n{out}"
+
+
 CHECKS = [
     ("baseline (uncorrupted fixture) reports clean on all three heading shapes", check_baseline_clean),
     ("mutation (a): dropped bullet -> UNACCOUNTED gap", check_mutation_dropped_bullet),
@@ -593,6 +784,12 @@ CHECKS = [
     ("[review Major 3] CLI: missing_document via --dump -> exit 1", check_cli_missing_document_via_dump),
     ("[review Major 3] CLI: --live with missing venv fails loud", check_cli_live_missing_venv_errors_cleanly),
     ("[review nit] --documents + --manifest-flat-key rejected by argparse", check_documents_and_flat_key_are_mutually_exclusive),
+    ("[pwq T10] header stripped at the delimiter, body located; no delimiter -> BAD_HEADER", check_pwq_t10_header_stripped_body_located),
+    ("[pwq T11] merged unit: non-adjacent members located; swapped heading -> NOT_FOUND", check_pwq_t11_merged_unit_non_adjacent_members),
+    ("[pwq T12] preamble block substring + waived span; widened/altered -> reported", check_pwq_t12_preamble_block_and_waived_span),
+    ("[pwq T13] extra source heading (and manifest-only heading) fails by name", check_pwq_t13_extra_source_heading_fails_by_name),
+    ("[pwq T14] --source-format copy clean; corrupted copy body fails", check_pwq_t14_source_format_copy),
+    ("[pwq T15] --ws selects the workspace; default agent-team unchanged", check_pwq_t15_ws_option_selects_workspace),
 ]
 
 

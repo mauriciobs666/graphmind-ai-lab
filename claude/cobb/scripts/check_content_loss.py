@@ -109,6 +109,18 @@ a subprocess -- no running MCP session required, but `cypher-mcp/setup.sh` must 
 testable path, and the natural choice from inside a session that already has `get_document`
 (fetch, write the dict to a file, run this script). Exactly one of `--live`/`--dump` is required.
 
+    # python-web-quirks copy (docs/plans/python-web-quirks-kb.md D3/D4; manifest
+    # pwq-kb-manifest.json, {pin, migratedOn, units:[{id,title,headings,documentId,sha256}],
+    # waivedSpans}). Stored texts carry a header up to a `<!-- body -->` line, then one or more
+    # `## ` parts (merged units span non-adjacent sections). Checks: each part is located in the
+    # source section of the same heading; the copy's `<!-- preamble -->` block is a substring of
+    # the source preamble and every other non-blank span of it equals a waivedSpans entry; the
+    # manifest's heading set equals the source's (an extra source heading fails by name).
+    python3 check_content_loss.py skills/python-web-quirks/SKILL.md --stored-format pwq \\
+        --copy claude/knowledge/python-web-quirks.md --live --ws pwq-test
+    # AC-5: the same check with the copy as the source side (--source-format copy).
+    # --ws NAME picks the workspace graph `ws:NAME` for any --live run (default agent-team).
+
 Exit 0 and a clean report on a fully-accounted, non-overlapping partition; exit 1 and an itemized
 finding list otherwise (dropped/truncated content, altered claim text, duplicated claim,
 unresolvable heading/documentId) -- same exit-code contract as `falkor-chat/scripts/
@@ -157,13 +169,18 @@ import flag_split_candidates as fsc  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "kb-claim-manifest.json"
+DEFAULT_PWQ_MANIFEST = Path(__file__).resolve().parent / "pwq-kb-manifest.json"
+DEFAULT_WS = "agent-team"
+PREAMBLE_HEADING = "(preamble)"
+BODY_DELIMITER = "<!-- body -->"
 CYPHER_MCP_VENV_PYTHON = REPO_ROOT / "cypher-mcp" / ".venv" / "bin" / "python3"
 
 MARKER_RE = re.compile(r"^\s*(?:[-*]\s+|\d{1,3}\.\s+)$")
 
-# Runs against `ws:agent-team` over `cypher-mcp/.venv`'s `falkordb` client, mirroring
+# Runs against `ws:<--ws>` (default `agent-team`) over `cypher-mcp/.venv`'s `falkordb` client, mirroring
 # `cypher-mcp/server.py`'s own connection convention exactly (same env vars, same default host/
-# port, a plain read query). stdin carries a JSON list of documentIds; stdout carries a JSON
+# port, a plain read query). stdin carries a JSON object {"ws": <workspace name>, "ids":
+# [documentId, ...]}; stdout carries a JSON
 # object mapping each id to {"title","text","status"} or null if not found. No f-string/format
 # templating of host/port into the snippet -- they're read from the environment inside it, so
 # there is nothing here to shell-inject.
@@ -174,8 +191,9 @@ from falkordb import FalkorDB
 host = os.environ.get("FALKORDB_HOST", "127.0.0.1")
 port = int(os.environ.get("FALKORDB_PORT", "6379"))
 db = FalkorDB(host=host, port=port)
-graph = db.select_graph("ws:agent-team")
-ids = json.loads(sys.stdin.read())
+request = json.loads(sys.stdin.read())
+graph = db.select_graph("ws:" + request["ws"])
+ids = request["ids"]
 out = {}
 for doc_id in ids:
     res = graph.ro_query(
@@ -469,7 +487,7 @@ def make_dump_fetcher(dump_path: Path):
     return fetch
 
 
-def make_live_fetcher(all_ids: list[str]):
+def make_live_fetcher(all_ids: list[str], ws: str = DEFAULT_WS):
     if not CYPHER_MCP_VENV_PYTHON.is_file():
         raise SystemExit(
             f"error: --live needs {CYPHER_MCP_VENV_PYTHON} to exist -- run `cypher-mcp/setup.sh` "
@@ -478,7 +496,7 @@ def make_live_fetcher(all_ids: list[str]):
         )
     proc = subprocess.run(
         [str(CYPHER_MCP_VENV_PYTHON), "-c", LIVE_FETCH_SNIPPET],
-        input=json.dumps(sorted(set(all_ids))),
+        input=json.dumps({"ws": ws, "ids": sorted(set(all_ids))}),
         capture_output=True,
         text=True,
         env=os.environ.copy(),
@@ -491,6 +509,191 @@ def make_live_fetcher(all_ids: list[str]):
         return data.get(document_id)
 
     return fetch
+
+
+# --------------------------------------------------------------------------------------------
+# `--stored-format pwq` (docs/plans/python-web-quirks-kb.md D3/D4): the python-web-quirks copy
+# --------------------------------------------------------------------------------------------
+
+PREAMBLE_FENCE = "<!-- preamble -->"
+NOTE_FENCE = "<!-- preamble-note -->"
+UNIT_FENCE_RE = re.compile(r"^<!-- unit (\S+) -->$")
+
+
+def strip_pwq_header(text: str) -> str:
+    """Return the stored text after the first line equal to `<!-- body -->` (D3). Raises
+    ValueError if no such line exists -- a header without its delimiter is a defect."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.strip() == BODY_DELIMITER:
+            return "\n".join(lines[i + 1 :])
+    raise ValueError(f"no {BODY_DELIMITER!r} delimiter line")
+
+
+def split_parts(body: str) -> list[tuple[str, str]]:
+    """Split a stripped body at its `## ` lines into (heading, text) parts; the heading line is
+    excluded from the text, exactly as `parse_sections` does for the source."""
+    return fsc.parse_sections(body)
+
+
+def strip_front_matter(text: str) -> str:
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 3)
+        if end != -1:
+            return text[end + 5 :]
+    return text
+
+
+def source_preamble(text: str) -> str:
+    """Source text between the front matter and the first `## ` heading."""
+    body = strip_front_matter(text)
+    m = fsc.HEADING_RE.search(body)
+    return body[: m.start()] if m else body
+
+
+def parse_copy(copy_text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Return (preamble block text, [(unit id, unit text)]) per the D3 preamble grammar. The
+    unit text is what was ingested (everything after the fence line). ValueError when the
+    `<!-- preamble -->` fence is absent."""
+    block: str | None = None
+    units: list[tuple[str, str]] = []
+    current: list[str] | None = None
+    unit_id = ""
+    kind = ""
+
+    def close() -> None:
+        nonlocal block
+        if current is None:
+            return
+        text = "\n".join(current).strip("\n")
+        if kind == "preamble":
+            block = text
+        elif kind == "unit":
+            units.append((unit_id, text + "\n"))
+
+    for line in copy_text.split("\n"):
+        m = UNIT_FENCE_RE.match(line)
+        if line == PREAMBLE_FENCE or line == NOTE_FENCE or m:
+            close()
+            current = []
+            kind = "preamble" if line == PREAMBLE_FENCE else "note" if line == NOTE_FENCE else "unit"
+            unit_id = m.group(1) if m else ""
+        elif current is not None:
+            current.append(line)
+    close()
+    if block is None:
+        raise ValueError(f"the copy has no {PREAMBLE_FENCE!r} fence")
+    return block, units
+
+
+def _issue(report: Report, ident: str, title: str, status: str, diagnostic: str) -> None:
+    report.outcomes.append(
+        ClaimOutcome(claim=Claim(document_id=ident, title=title), status=status, diagnostic=diagnostic)
+    )
+
+
+def check_pwq(
+    source_text: str,
+    copy_text: str,
+    manifest: dict,
+    fetch,
+    source_format: str = "source",
+) -> list[tuple[str, Report]]:
+    """Run the D4 checks; one (label, Report) per scope: the preamble, the heading-set
+    completeness, each source heading, and any unit that could not be read. `fetch(documentId)`
+    returns {"text": ...} or None."""
+    block, copy_units = parse_copy(copy_text)
+    if source_format == "copy":
+        sections = {}
+        for _, unit_text in copy_units:
+            for heading, text in split_parts(strip_pwq_header(unit_text)):
+                sections[heading] = text
+        pre_source = block
+    else:
+        sections = dict(fsc.parse_sections(source_text))
+        pre_source = source_preamble(source_text)
+    reports: list[tuple[str, Report]] = []
+
+    # 3. preamble: the copy block is a substring; the rest must equal a waived span exactly
+    waived = {w.strip() for w in manifest.get("waivedSpans", [])}
+    pre = check_partition(
+        pre_source, [Claim(document_id="(copy preamble block)", title=PREAMBLE_HEADING)],
+        lambda _id: {"text": block},
+    )
+    pre.gaps = [g for g in pre.gaps if g[2].strip() not in waived]
+    reports.append((PREAMBLE_HEADING, pre))
+
+    # 4. completeness: manifest heading set == source heading set (+ the preamble, checked above)
+    listed: set[str] = set()
+    for unit in manifest.get("units", []):
+        listed.update(unit.get("headings", []))
+    complete = Report()
+    for heading in sections:
+        if heading not in listed:
+            _issue(complete, "(manifest)", heading, "unlisted_heading",
+                   "source heading is in no manifest unit")
+    for heading in sorted(listed - set(sections)):
+        _issue(complete, "(manifest)", heading, "unknown_heading",
+               "manifest lists a heading the source does not have")
+    reports.append(("heading set", complete))
+
+    # 1+2. each unit: strip the header, split into parts, one claim per part
+    stored: dict[str, str] = {}
+    claims_by_heading: dict[str, list[Claim]] = {h: [] for h in sections}
+    unit_problems = Report()
+    for unit in manifest.get("units", []):
+        doc_id, title = unit["documentId"], unit.get("title", unit.get("id", ""))
+        doc = fetch(doc_id)
+        if doc is None:
+            unit_problems.outcomes.append(ClaimOutcome(
+                claim=Claim(document_id=doc_id, title=title), status="missing_document",
+                diagnostic="get_document/live fetch returned nothing for this id"))
+            continue
+        try:
+            parts = split_parts(strip_pwq_header(doc["text"]))
+        except ValueError as exc:
+            _issue(unit_problems, doc_id, title, "bad_header", str(exc))
+            continue
+        if {h for h, _ in parts} != set(unit.get("headings", [])):
+            _issue(unit_problems, doc_id, title, "heading_mismatch",
+                   f"stored parts {[h for h, _ in parts]} != manifest headings {unit.get('headings')}")
+        for heading, text in parts:
+            part_id = f"{doc_id}#{heading}"
+            if heading not in sections:
+                _issue(unit_problems, part_id, heading, "not_found",
+                       "part heading is not a source heading")
+                continue
+            stored[part_id] = text
+            claims_by_heading[heading].append(Claim(document_id=part_id, title=heading))
+    if unit_problems.outcomes:
+        reports.append(("units", unit_problems))
+    for heading, body in sections.items():
+        reports.append((heading, check_partition(body, claims_by_heading[heading],
+                                                 lambda cid: {"text": stored[cid]})))
+    return reports
+
+
+def _main_pwq(args) -> int:
+    if args.copy is None:
+        print("error: --stored-format pwq needs --copy <path>", file=sys.stderr)
+        return 2
+    manifest_path = args.manifest or DEFAULT_PWQ_MANIFEST
+    try:
+        manifest = load_manifest(manifest_path)
+        copy_text = args.copy.read_text(encoding="utf-8")
+        source_text = args.source.read_text(encoding="utf-8")
+        ids = [u["documentId"] for u in manifest.get("units", [])]
+        fetch = make_dump_fetcher(args.dump) if args.dump else make_live_fetcher(ids, args.ws)
+        reports = check_pwq(source_text, copy_text, manifest, fetch, args.source_format)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    dirty = 0
+    for label, report in reports:
+        print(render_report(label, report))
+        dirty += 0 if report.clean else 1
+    print(f"\n{len(reports)} scope(s) checked, {dirty} with findings.", file=sys.stderr)
+    return 1 if dirty else 0
 
 
 # --------------------------------------------------------------------------------------------
@@ -542,7 +745,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("source", type=Path, help="Source KB markdown file.")
     parser.add_argument(
-        "--manifest", type=Path, default=DEFAULT_MANIFEST, help="kb-claim-manifest.json path."
+        "--manifest", type=Path, default=None,
+        help="Manifest path (default: kb-claim-manifest.json; with --stored-format pwq: "
+        "pwq-kb-manifest.json).",
+    )
+    parser.add_argument(
+        "--stored-format", choices=["default", "pwq"], default="default",
+        help="`pwq`: stored texts are python-web-quirks units (header up to `<!-- body -->`, one "
+        "or more `## ` parts); checks parts per section, the preamble (needs --copy) and that "
+        "the manifest's heading set equals the source's.",
+    )
+    parser.add_argument(
+        "--copy", type=Path,
+        help="pwq mode: the copy of record; its `<!-- preamble -->` block is checked against "
+        "the source preamble (manifest waivedSpans cover the rest).",
+    )
+    parser.add_argument(
+        "--source-format", choices=["source", "copy"], default="source",
+        help="pwq mode: `copy` builds the source side from --copy's unit bodies (AC-5) instead "
+        "of the source file.",
+    )
+    parser.add_argument(
+        "--ws", default=DEFAULT_WS,
+        help="--live: the workspace to read, graph key `ws:<name>` (default: agent-team).",
     )
     # Mutually exclusive: if both were accepted, one would silently win with no warning (analyst
     # review, Nit 1) -- argparse itself is the cheapest place to refuse the ambiguous combination.
@@ -578,6 +803,13 @@ def main(argv: list[str] | None = None) -> int:
     if not args.source.is_file():
         print(f"error: not a file: {args.source}", file=sys.stderr)
         return 2
+
+    if args.stored_format == "pwq":
+        return _main_pwq(args)
+    if args.copy is not None or args.source_format != "source":
+        print("error: --copy/--source-format apply only with --stored-format pwq", file=sys.stderr)
+        return 2
+    args.manifest = args.manifest or DEFAULT_MANIFEST
 
     sections = load_sections(args.source)
     if not sections:
@@ -642,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dump:
         fetch = make_dump_fetcher(args.dump)
     else:
-        fetch = make_live_fetcher(all_ids)
+        fetch = make_live_fetcher(all_ids, args.ws)
 
     any_dirty = False
     for label, body, claims in pending:
