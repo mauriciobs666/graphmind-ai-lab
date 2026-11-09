@@ -7,7 +7,7 @@
 **Verdict: approve with suggestions** (no blockers).
 
 ## Evidence run
-- Old literals taken via `git show <sha>:<path>` for all 51 script files (every language dir: cpp, csharp, go, java, javascript, kotlin, python, labeller-scripts, labels/superseded). The `parents[N]` depth was checked against each directory layout: N=5 for `tools/<lang>/` and `labels/superseded/<lang>/`, N=4 for `labeller-scripts/<lang>/`, and 2 for `tests/`. All resolve to the `cpg` dir (or repo root for the test), so the new path equals the old one modulo the home prefix. `git grep` for `/home/mauricio` or `/tmp/claude` in the touched files now returns nothing.
+- Old literals taken via `git show <sha>:<path>` for all 51 script files (every language dir: cpp, csharp, go, java, javascript, kotlin, python, labeller-scripts, labels/superseded). The `parents[N]` depth was checked against each directory layout: N=5 for `tools/<lang>/` and `labels/superseded/<lang>/`, N=4 for `labeller-scripts/<lang>/`, and 2 for `tests/`. All resolve to the `cpg` dir (or repo root for the test), so the new path equals the old one modulo the home prefix. `git grep` for `$HOME` or `/tmp/claude` in the touched files now returns nothing.
 - `python3 -m py_compile` on all 52 files: clean. I imported or ran no script, because they write into data dirs.
 - `.venv/bin/python -m pytest tests/test_eval_tools.py tests/test_contact.py`: 453 passed, 1 failed (see 4).
 
@@ -22,7 +22,7 @@
 **Nit — test hygiene.** `REPO_AGENTS` is now `parents[2]/AGENTS.md`. That is correct, and `test_eval_tools.py` passes.
 
 ## Check 3 — cwd mutation
-`CAP_ROOT = _INIT["cwd"]` comes from the captured stream, so it is a fixed data value, not derived from Home. `str(Path.home())` replaces `/home/mauricio` only as the *mutated* value. `ROLES_DIR` is `CAP_ROOT.rsplit("/",1)[0]`, so the mutated value is distinct from CAP_ROOT unless CAP_ROOT's cwd equals `$HOME`. I did not print the actual CAP_ROOT value. The test passed here (HOME is `/home/mauricio`). Inference only: in a checkout where the captured cwd equals the runner's home, `cwd` would not mutate and `init-cwd` would go undetected. Low risk; pin to a literal such as `"/nonexistent-home"` for determinism (optional).
+`CAP_ROOT = _INIT["cwd"]` comes from the captured stream, so it is a fixed data value, not derived from Home. `str(Path.home())` replaces `$HOME` only as the *mutated* value. `ROLES_DIR` is `CAP_ROOT.rsplit("/",1)[0]`, so the mutated value is distinct from CAP_ROOT unless CAP_ROOT's cwd equals `$HOME`. I did not print the actual CAP_ROOT value. The test passed here (HOME is `$HOME`). Inference only: in a checkout where the captured cwd equals the runner's home, `cwd` would not mutate and `init-cwd` would go undetected. Low risk; pin to a literal such as `"/nonexistent-home"` for determinism (optional).
 
 ## Check 4 — test_contact
 Failure message: `derivedFrom ebe66607… is not an ancestor of HEAD` (`make_contact.py:345`). `make_contact.check` reads only git blobs of `derivedFrom`, never the working tree, and the touched files are not in contact.json's inputs, which are falkor-chat and salesperson paths. This change neither causes nor masks it; it is a git-history precondition, failing independently of this change (confirmed by the message; I did not check it out at HEAD).
