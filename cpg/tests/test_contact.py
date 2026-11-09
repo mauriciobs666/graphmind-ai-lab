@@ -60,7 +60,7 @@ def test_contact_json_matches_rederivation_at_its_derivedfrom_tree():
 
 def test_contact_json_shape_and_flow_anchors_kept_apart():
     d = json.load(open(CONTACT_JSON))
-    assert re.fullmatch(r"[0-9a-f]{40}", d["derivedFrom"])
+    assert re.fullmatch(r"[0-9a-f]{40}", d["derivedFromTree"]) and "derivedFrom" not in d
     assert set(d["flowAnchors"]) == {"python", "javascript"}
     for lang, paths in d["flowAnchors"].items():
         assert paths == sorted(set(paths)) and paths
@@ -77,7 +77,7 @@ def test_contact_json_evidence_is_rederivable_from_head():
             assert len({e["artifact"] for e in x["evidence"]}) == len(x["evidence"])
             for e in x["evidence"]:
                 assert not e["artifact"].startswith("cpg/spikes/frontend-fitness/")
-                body = subprocess.run(["git", "show", d["derivedFrom"] + ":" + e["artifact"]], capture_output=True, text=True, cwd=FF).stdout
+                body = subprocess.run(["git", "show", d["derivedFromTree"] + ":" + e["artifact"]], capture_output=True, text=True, cwd=FF).stdout
                 assert e["match"] in body, (f, e)
 
 
@@ -274,12 +274,12 @@ def _repo(tmp_path):
     return r
 
 
-def test_derived_from_pins_the_tree_read(tmp_path):
+def test_derived_from_tree_pins_the_tree_read(tmp_path):
     r = _repo(tmp_path)
-    sha1 = _git(r, "rev-parse", "HEAD")
+    tree1 = _git(r, "rev-parse", "HEAD^{tree}")
     out = tmp_path / "contact.json"
     out.write_text(mc.render(mc.derive(repo=str(r))))
-    assert json.loads(out.read_text())["derivedFrom"] == sha1
+    assert json.loads(out.read_text())["derivedFromTree"] == tree1
     assert mc.check(str(out), str(r)) == (True, "ok")
     # a later commit that adds a source naming another file, and edits an excluded document, cannot drift the check
     (r / "cpg/tests/t2.py").write_text("falkor-chat/server/falkorchat/beta.py\n")
@@ -292,22 +292,23 @@ def test_derived_from_pins_the_tree_read(tmp_path):
 def test_cli_from_and_check(tmp_path):
     r = _repo(tmp_path)
     sha1 = _git(r, "rev-parse", "HEAD")
+    tree1 = _git(r, "rev-parse", "HEAD^{tree}")
     (r / "cpg/tests/t2.py").write_text("falkor-chat/server/falkorchat/beta.py\n"); _git(r, "add", "-A"); _git(r, "commit", "-qm", "c2")
     env = dict(os.environ, CONTACT_REPO=str(r))
     out = tmp_path / "c.json"
     run = lambda *a: subprocess.run([sys.executable, MC_PATH, *a], env=env, capture_output=True, text=True)
     assert run("--out", str(out), "--from", sha1).returncode == 0
     d = json.loads(out.read_text())
-    assert d["derivedFrom"] == sha1 and set(d["corpora"]["python"]["files"]) == {"falkorchat/alpha.py"}
+    assert d["derivedFromTree"] == tree1 and set(d["corpora"]["python"]["files"]) == {"falkorchat/alpha.py"}
     assert run("--out", str(out), "--check").returncode == 0
     assert run("--out", str(out)).returncode == 0                      # default: HEAD
     d2 = json.loads(out.read_text())
-    assert d2["derivedFrom"] == _git(r, "rev-parse", "HEAD") and set(d2["corpora"]["python"]["files"]) == {"falkorchat/alpha.py", "falkorchat/beta.py"}
+    assert d2["derivedFromTree"] == _git(r, "rev-parse", "HEAD^{tree}") and set(d2["corpora"]["python"]["files"]) == {"falkorchat/alpha.py", "falkorchat/beta.py"}
     out.write_text(out.read_text().replace('"artifacts": 1', '"artifacts": 9'))
     assert run("--out", str(out), "--check").returncode == 1
 
 
-def test_check_fails_on_difference_unreachable_missing_or_foreign_sha(tmp_path):
+def test_check_fails_on_difference_unresolved_missing_or_non_tree_hash(tmp_path):
     r = _repo(tmp_path)
     out = tmp_path / "contact.json"
     good = json.loads(mc.render(mc.derive(repo=str(r))))
@@ -319,18 +320,36 @@ def test_check_fails_on_difference_unreachable_missing_or_foreign_sha(tmp_path):
     assert put(bad)[0] is False
     bad = json.loads(json.dumps(good)); bad["flowAnchors"]["python"].append("falkorchat/beta.py")
     assert put(bad)[0] is False
-    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = "0" * 40
-    assert "unreachable" in put(bad)[1]
-    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = None
+    bad = json.loads(json.dumps(good)); bad["derivedFromTree"] = "0" * 40
+    assert "does not resolve" in put(bad)[1]
+    bad = json.loads(json.dumps(good)); bad["derivedFromTree"] = None
     assert put(bad)[0] is False
-    # a commit that is not an ancestor of HEAD
-    _git(r, "checkout", "-q", "-b", "side"); (r / "x.txt").write_text("x"); _git(r, "add", "-A"); _git(r, "commit", "-qm", "side")
-    side = _git(r, "rev-parse", "HEAD"); _git(r, "checkout", "-q", "-"); 
-    bad = json.loads(json.dumps(good)); bad["derivedFrom"] = side
-    ok, msg = put(bad)
-    assert ok is False and "ancestor" in msg
+    bad = json.loads(json.dumps(good)); bad["derivedFromTree"] = _git(r, "rev-parse", "HEAD")      # a commit sha is not a tree hash
+    assert "does not resolve" in put(bad)[1]
+    # a changed input: the pinned tree is an older one than the content was derived from
+    old_tree = _git(r, "rev-parse", "HEAD^{tree}")
+    (r / "cpg/tests/t3.py").write_text("falkor-chat/server/falkorchat/beta.py\n"); _git(r, "add", "-A"); _git(r, "commit", "-qm", "c3")
+    new = json.loads(mc.render(mc.derive(repo=str(r))))
+    assert new["derivedFromTree"] != old_tree and new["corpora"] != good["corpora"]
+    new["derivedFromTree"] = old_tree
+    ok, msg = put(new)
+    assert ok is False and "differs" in msg
     out.unlink()
     assert mc.check(str(out), str(r))[0] is False
+
+
+def test_check_survives_a_history_rewrite_that_keeps_the_tree(tmp_path):
+    r = _repo(tmp_path)
+    out = tmp_path / "contact.json"
+    out.write_text(mc.render(mc.derive(repo=str(r))))
+    assert mc.check(str(out), str(r)) == (True, "ok")
+    # "rebase": the same tree under a different, parentless commit; the original commit becomes unreachable
+    old = _git(r, "rev-parse", "HEAD")
+    new = _git(r, "commit-tree", "HEAD^{tree}", "-m", "rewritten")
+    _git(r, "reset", "-q", "--hard", new)
+    assert _git(r, "rev-parse", "HEAD") != old
+    assert subprocess.run(["git", "-C", str(r), "merge-base", "--is-ancestor", old, "HEAD"]).returncode != 0
+    assert mc.check(str(out), str(r)) == (True, "ok")
 
 
 def test_deterministic(tmp_path):

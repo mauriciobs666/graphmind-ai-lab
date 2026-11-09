@@ -5,6 +5,21 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-11-09 — C-1002: the contact-map pin survives a rebase ✅
+
+`cpg/spikes/frontend-fitness/contact.json` now pins `derivedFromTree`, the git **tree** hash the derivation
+read, in place of the commit-sha `derivedFrom`; `make_contact.check()` (`cpg/spikes/frontend-fitness/make_contact.py`)
+re-derives from that tree and no longer has an ancestry guard. The whole tree is the right input set, since
+`derive()` reads every committed artifact, the corpus universe and `sample/*-flow.jsonl`; a tree hash is
+content-addressed, so a rebase that keeps the content leaves it valid, and a later commit still cannot move the
+list. `check()` fails if the hash does not resolve to a tree object (a commit sha is refused) or if the file
+differs from its re-derivation. A tree no commit references can still be garbage-collected, and the check then fails
+loudly. Root cause and the rebase that triggered it: `docs/reviews/cpg-contact-derivedfrom-rca.md`.
+`cpg/tests/test_contact.py` gained a same-tree-different-commit ("rebased") test and a changed-input test; five
+deliberate breaks of `check()` (ignore the pin, skip the object check, accept commits, skip the comparison, restore the
+ancestry guard) each turn a test red. `contact.json` was regenerated with the generator from the tree of `edb6adf1`;
+the diff is the one pin line.
+
 ## 2026-11-06 — C-1001 P0 (9/9) close: contracts frozen, evidence gathered, P1 next (S50, S51) ✅
 
 Phase P0 of the connected code graph (`docs/plans/connected-code-graph-p0-2.md`, coordinated in

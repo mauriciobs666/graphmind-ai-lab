@@ -13,9 +13,12 @@ symbol's qualified name (`<path>::name` is a path match; `api.py::build_router.h
 by its corpus-unique basename; the Python dotted form `falkorchat.storefront_api.f` or `falkorchat.app:app` is
 resolved to the module file by longest-prefix).
 
-`derivedFrom` is the commit SHA whose tree was read (HEAD at generation); --check re-derives from exactly that tree, so a later
-commit to any file cannot move the list, and fails if that commit is unreachable (not an ancestor of HEAD) or the derivation differs.
-Generating in the commit that adds contact.json is therefore safe: it records the parent (HEAD before that commit).
+`derivedFromTree` is the git TREE hash of the tree that was read (HEAD's tree at generation), not a commit sha: the derivation
+reads the whole tree (every committed artifact, the corpus universe, sample/*-flow.jsonl), so the root tree is exactly its input
+set, and a tree hash is content-addressed, so it survives a rebase or any history rewrite that keeps the content. --check
+re-derives from exactly that tree, so a later commit to any file cannot move the list, and fails if the hash does not resolve to a
+tree object here or the derivation differs. There is no ancestry guard. Generating in the commit that adds contact.json is safe:
+it records the tree of HEAD before that commit.
 `flowAnchors` reads the committed `sample/<lang>-flow.jsonl` -- the one file of sample/ that is read -- and is NOT part of `files`.
 
 Usage: make_contact.py [--check] [--summary] [--out PATH] [--tree-root DIR] [--from SHA]  (--summary: counts against the local frame/, not committed)   (--tree-root: read files from a directory copy
@@ -173,9 +176,15 @@ def resolve_dotted(tail, mods):
     return None
 
 
-def resolve_sha(treeish="HEAD", repo=None):
-    r = subprocess.run(["git", "-C", repo or REPO, "rev-parse", "--verify", "--quiet", treeish + "^{commit}"], capture_output=True, text=True)
+def resolve_tree(treeish="HEAD", repo=None):
+    """-> the 40-hex hash of the tree `treeish` names (a commit peels to its tree), or None."""
+    r = subprocess.run(["git", "-C", repo or REPO, "rev-parse", "--verify", "--quiet", treeish + "^{tree}"], capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else None
+
+
+def is_tree_object(h, repo=None):
+    r = subprocess.run(["git", "-C", repo or REPO, "cat-file", "-t", h], capture_output=True, text=True)
+    return r.returncode == 0 and r.stdout.strip() == "tree"
 
 
 def norm_flow_path(p, root):
@@ -262,7 +271,7 @@ def derive(tree_root=None, treeish="HEAD", repo=None):
                 hits.setdefault(p, {}).setdefault(art, set()).add((PY_PKG + dm.group(1), "qname"))
 
     order = {s: i for i, s in enumerate(SOURCES)}
-    out = {"version": VERSION, "derivedFrom": None if tree_root else resolve_sha(treeish, repo),
+    out = {"version": VERSION, "derivedFromTree": None if tree_root else resolve_tree(treeish, repo),
            "flowAnchors": flow_anchors(rd, None),
            "rule": "file listed iff a committed artifact outside cpg/spikes/frontend-fitness/ names it by path or by a defined symbol's qname",
            "searchSources": {s: nsearched[s] for s in SOURCES},
@@ -332,19 +341,17 @@ def summary(obj):
 
 
 def check(path, repo=None):
-    """-> (ok, message). Re-derives from the tree named by the file's own `derivedFrom`."""
+    """-> (ok, message). Re-derives from the tree named by the file's own `derivedFromTree`."""
     if not os.path.exists(path):
         return False, "contact.json missing"
     text = open(path).read()
-    sha = json.loads(text).get("derivedFrom")
-    if not sha or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        return False, "derivedFrom missing or not a full sha"
-    if resolve_sha(sha, repo) != sha:
-        return False, "derivedFrom %s is unreachable (not a commit here)" % sha
-    if subprocess.run(["git", "-C", repo or REPO, "merge-base", "--is-ancestor", sha, "HEAD"]).returncode != 0:
-        return False, "derivedFrom %s is not an ancestor of HEAD" % sha
-    if render(derive(treeish=sha, repo=repo)) != text:
-        return False, "contact.json differs from its derivation at %s" % sha
+    tree = json.loads(text).get("derivedFromTree")
+    if not tree or not re.fullmatch(r"[0-9a-f]{40}", tree):
+        return False, "derivedFromTree missing or not a full hash"
+    if not is_tree_object(tree, repo):
+        return False, "derivedFromTree %s does not resolve to a tree object here" % tree
+    if render(derive(treeish=tree, repo=repo)) != text:
+        return False, "contact.json differs from its derivation at tree %s" % tree
     return True, "ok"
 
 
