@@ -206,7 +206,28 @@ leakfail() {                                       # $1 label, $2 hits (path:lin
 }
 # grep over the scan set (caller picks -F or -E); empty output means no hits whether the
 # file list was empty (xargs -r) or grep found nothing (exit 1).
-pii_grep() { scan_files | (cd "$ROOT" && xargs -0 -r grep -I -H -n "$@" -- 2>/dev/null); }
+# Exempt from check 7 (2026-11-09 stakeholder decision, docs/reviews/audit-team-leaks-triage.md):
+#  (1) frozen documents — header block `> **Status:** archived|superseded` (first token, within the
+#      first 12 lines; keyed on the header, never on path), because a frozen document is not amended;
+#  (2) LEAK_EXEMPT_PATHS — recorded evidence (captured transcripts/stream JSONL, recorded run
+#      results, sampled briefs), replayed by tests: editing it would falsify what was captured.
+#      Data only — scripts with hardcoded paths (adjudication/tools/, labeller-scripts/,
+#      labels/superseded/*.py) are code and stay scanned. Space-separated path prefixes from the root.
+LEAK_EXEMPT_PATHS="cpg/tests/fixtures/headless/ cpg/spikes/frontend-fitness/results/ cpg/spikes/frontend-fitness/sample/"
+scan_set() {                                       # NUL-separated scan list minus the exemptions above
+  scan_files | awk -v RS='\0' -v ORS='\0' -v ex="$LEAK_EXEMPT_PATHS" -v root="$ROOT" '
+    BEGIN { n = split(ex, P, " ") }
+    { for (i = 1; i <= n; i++) if (index($0, P[i]) == 1) next
+      f = root "/" $0; frozen = 0
+      RS = "\n"                                    # header read is line-wise; the name list is NUL-wise
+      for (k = 1; k <= 12 && (getline line < f) > 0; k++)
+        if (line ~ /^> \*\*Status:\*\*/) {         # only the FIRST Status line counts
+          if (line ~ /^> \*\*Status:\*\* *(archived|superseded)([^A-Za-z]|$)/) frozen = 1
+          break }
+      close(f); RS = "\0"
+      if (!frozen) print }'
+}
+pii_grep() { scan_set | (cd "$ROOT" && xargs -0 -r grep -I -H -n "$@" -- 2>/dev/null); }
 leaked=0
 hn="$(hostname 2>/dev/null || true)"
 # Home-path patterns are EREs over regex-escaped literals, bounded at the END
@@ -244,7 +265,11 @@ done
 hits=""
 [ "${#hpats[@]}" -gt 0 ] && hits="$(pii_grep -i -E "${hpats[@]}")"
 leakfail "home path" "$hits"
-[ -n "$hn" ] && leakfail "hostname" "$(pii_grep -i -w -F -e "$hn")"
+# A hostname under 4 chars is whole-word noise (it collides with finding IDs and other short tokens), so a
+# short one is scanned only in prompt/login context: `@<host>` (user@host:~$). Longer ones: whole word.
+# Bound: for a hostname under 4 chars ONLY the `@<host>` form is caught; a bare mention is not.
+if [ "${#hn}" -ge 4 ]; then leakfail "hostname" "$(pii_grep -i -w -F -e "$hn")"
+elif [ -n "$hn" ]; then leakfail "hostname (short; @host form)" "$(pii_grep -i -E -e "@$(ere_lit "$hn")([^[:alnum:]_]|$)")"; fi
 # bare username, git user.name/user.email: deliberately not scanned — a username equal to the
 # maintainer's name can't be told apart from a genuine name mention (2026-10-30 policy); a NOTE
 # would fire on every author credit and teach readers to ignore it.
