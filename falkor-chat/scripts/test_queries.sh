@@ -61,6 +61,14 @@ assert_index_scan() {
   assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
 }
 
+assert_edge_index_scan() {
+  # Relationship-index twin of assert_index_scan: an indexed edge lookup plans as
+  # "Edge By Index Scan | [r:TYPE]", never "Node By Index Scan" (QUERIES.md §14.8).
+  local label="$1" profile="$2"
+  assert_contains "$label" "Edge By Index Scan" "$profile"
+  assert_not_contains "$label (no label scan)" "Node By Label Scan" "$profile"
+}
+
 assert_no_data_row() {
   # redis-cli always appends a "Cached execution: N / Query internal execution
   # time: X milliseconds" footer after a blank line; X is a float whose digits
@@ -1692,7 +1700,7 @@ out=$(gq "$WS" "CYPHER newDocumentId='sd1' candidateDocumentId='sd2' matchId='sm
 assert_contains "§14.8 create_or_reopen_supersede_suggestion creates a pending edge" "true" "$out"
 
 prof=$(gp "$WS" "MATCH (a)-[r:SUPERSEDES {matchId: 'sm1'}]->(b) RETURN r.status")
-assert_index_scan "§14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan" "$prof"
+assert_edge_index_scan "§14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan" "$prof"
 
 # list_pending_document_updates' shape
 out=$(rq "$WS" "MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b) RETURN r.matchId, a.documentId, b.documentId ORDER BY r.createdAt")

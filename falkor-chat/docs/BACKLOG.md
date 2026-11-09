@@ -878,26 +878,6 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
   term) should not flood the shortlist — both belong in `test_repository.py` plus a
   `test_queries.sh` addition per the plan's own "every new Cypher shape raises the baseline" rule.
 
-### K-092 — `test_queries.sh`'s §14.8 `SUPERSEDES.matchId` plan assertion can never pass, so the suite is red (🔵 proposed — `docs/reviews/live-specs.md` Pass 10 M1, 2026-10-31)
-
-> **Why it exists.** `scripts/test_queries.sh:1694-1695` profiles
-> `MATCH (a)-[r:SUPERSEDES {matchId: 'sm1'}]->(b) RETURN r.status` and checks it with
-> `assert_index_scan` (`:52-62`), which requires the substring `Node By Index Scan`. A
-> relationship-index lookup plans as `Edge By Index Scan | [r:SUPERSEDES]`, and QUERIES §14.8 says
-> exactly that, so the assertion fails on every run: the suite is 460/461 (Pass 10). The query is
-> right; the check is wrong. A suite that is known red gates nothing, and `falkor-chat/AGENTS.md`
-> requires it green before any schema or query change.
-- **Owner:** `tdd-engineer` (or `coder`); no `graph-dba` gate, since no query changes.
-- **Scope:** add a relationship-index helper (`assert_contains "Edge By Index Scan"` plus the
-  existing `assert_not_contains "Node By Label Scan"`) and use it at `:1695`. Check whether any other
-  relationship-indexed plan assertion uses `assert_index_scan`.
-- **Done-condition:** the suite passes in full; with `(a:Document)` labelled in the probed query
-  (the mutant), the new helper fails.
-- **Risks/RAM:** none. `test_queries.sh` deletes the `reference` graph at teardown, so re-seed
-  afterwards (`falkor-chat/AGENTS.md`, Key scripts).
-- **Test strategy:** run the suite before (461 cases, 1 failure) and after (461 passing), then the
-  labelled-endpoint mutant.
-
 ### K-093 — `(:Message)-[:MENTIONS]->(:Entity)` has a reader and no writer (🔵 proposed — `docs/reviews/live-specs.md` Pass 8 claim 2, 2026-10-31)
 
 > **Why it exists.** `repository.hybrid_search` (`repository.py:891`) expands every ANN seed through

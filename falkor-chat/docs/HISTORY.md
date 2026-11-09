@@ -5,6 +5,17 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-11-09 — K-092 closed: `test_queries.sh` is green again (461/461)
+
+- **What.** The §14.8 `SUPERSEDES.matchId` probe was asserted with `assert_index_scan`, which needs
+  `Node By Index Scan`; a relationship-index lookup plans as `Edge By Index Scan`. A new
+  `assert_edge_index_scan` helper (`Edge By Index Scan` present, `Node By Label Scan` absent) now
+  checks it; the query is unchanged. No other relationship-indexed plan assertion was affected.
+- **Verified.** Suite 460/461 before, 461/461 after (re-run by the coordinator). Mutants: a labelled
+  endpoint fails the helper's no-label-scan half; a probe on a non-indexed edge property fails the
+  `Edge By Index Scan` half. No live-spec change (`docs/QUERIES.md` §14.8 already said `Edge By Index Scan`).
+  Gate skipped: test-harness-only, nine added lines.
+
 ## 2026-11-01 — `deprecated/` removed from the repo
 
 - **What.** The whole `deprecated/` tree (57 tracked files: the retired Streamlit `salesperson`
