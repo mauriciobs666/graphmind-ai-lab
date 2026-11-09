@@ -13,7 +13,6 @@
 | K-009 | 2026-09-07 | low | 🔵 | Document `DatasetSchema`'s second, non-obvious construction site in `falkor-chat/docs/SERVER.md` §1.7 |
 | K-010 | 2026-09-07 | med | 🔵 | Document that `trace=True` alone traces nothing without `tracer=GraphTracer(repo)` — `falkor-chat/docs/SERVER.md` §1.7 |
 | K-011 | 2026-09-07 | low | 🔵 | Record in `model-bench/AGENTS.md` that the shared `select = ["E","F","W","I"]` ruff config cannot detect dead code |
-| K-012 | 2026-09-16 | med | 🔵 | Fix `test_queries.sh`'s `assert_index_scan` — blind to an edge-anchored "Edge By Index Scan" |
 | K-013 | 2026-09-16 | med | 🔵 | Re-investigate the claimed 1-2-event ANN recall drop for identical embeddings — not reproduced under a minimal probe |
 
 > K-007…K-011 are project-doc writes (K-007…K-010 in `falkor-chat`, K-011 in `model-bench`),
@@ -113,27 +112,6 @@
   `test`-prefix conventions — the `select` line is deliberately small and buys no dead-code
   detection. Optionally mirrored in `mcp-monitor/AGENTS.md`. Not a lint-config change: widening
   `select` is a separate proposal with its own cost, not this item.
-
-### K-012 — `test_queries.sh`'s `assert_index_scan` is blind to an edge-anchored "Edge By Index Scan"
-- **Status:** 🔵 proposed · **Priority:** medium
-- **Source:** `kaizen_team` entry `b3f0b6a2-…` (2026-09-13), kept open at the 2026-09-16 distillation.
-- **Fact (re-verified 2026-09-16):** `assert_index_scan` (`falkor-chat/scripts/test_queries.sh:52-62`)
-  asserts `"Node By Index Scan"` is present and `"Node By Label Scan"` is absent — nothing else. A
-  relationship/edge-indexed lookup (`MATCH (a)-[r:SUPERSEDES {matchId:$id}]->(b) ...`) profiles as
-  `Edge By Index Scan | [r:SUPERSEDES]` on this build, live-reconfirmed against a disposable graph,
-  so the helper's first assertion fails for every edge-index-anchored call site. §14.8's
-  "SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan"
-  assertion (`:1695`) is the one live-affected case — a known, currently-accepted failing assertion
-  in the suite (438/439 or 458/459 passing, one stable failure).
-- **Why it matters:** the underlying engine mechanism (a relationship-property predicate profiles as
-  `Edge By Index Scan`, never `Node By Index Scan`) is already documented in
-  `claude/graph-dba/falkordb-quirks.md` ("Indexing, constraints & DDL") — nothing to add there. The
-  residual is the test helper's own correctness: a passing call site that happens to be node-anchored
-  masks the fact the helper can't validate an edge-anchored one at all.
-- **Proposed change:** widen `assert_index_scan` to accept either `"Node By Index Scan"` or
-  `"Edge By Index Scan"` (or split into two explicit helpers, one per kind, so a call site states
-  which it expects), then drop §14.8's now-redundant standing failure. A code change to
-  `falkor-chat/scripts/test_queries.sh` — outside `cobb`'s write remit.
 
 ### K-013 — ANN recall drop at 1-2 churn events for identical-embedding pairs: not reproduced under a minimal probe
 - **Status:** 🔵 proposed · **Priority:** medium

@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-09 — plan.md refreshed (review-only pass)
+
+- **What:** dropped K-005 from the active table (closed 2026-09-01, already logged); rewrote K-015 — its `kaizen_team` premise is void since the graph was deleted, so it now asks for the manual's §2/FAQ/header to move to `ws:agent-team`; prompt-weight note updated to 6,092 w; `Last reviewed` bumped. `tico.md` untouched.
+- **Why:** maintainer reported the plan looked out of date.
+- **Plan items:** K-005 removed; K-015 rewritten.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `316050e8` (laya `/v1/decisions` schema: doc'd in `docs/plans/typed-decision-models.md` §2.3 and `decisions.py`), `8d9008f4` (promoted: KB claim `fd27e4a9`, `lm-studio-model-notes.md`, GPU placement is logged only in the Windows `main.log`).

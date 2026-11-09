@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-11-09 — plan.md: K-004 narrowed (review-only)
+
+- **What:** K-004 said the frontmatter hook uses an absolute repo path. It has used `$HOME/.claude/agents/devops/hooks/guard-destructive-ops.sh` since the 2026-07-10 team-wide change. Rewritten to the two points that remain (jq/python3 fallback, fixed pattern list).
+- **Why:** maintainer asked for an out-of-date check across all agents' plans.
+- **Plan items:** K-004 rewritten. Other rows not re-reviewed.
+
 ## 2026-11-07 — Distillation 6: raw entries dispositioned
 
 - **What:** `2f9e2cc6` (a PreToolUse deny or `onFailure: block` failure persists no hook attachment) merged into the `claude-code.md` hook-records bullet; re-read on the cited probe transcript (2.1.316), not re-run on 2.1.319. All swept entries are dispositioned, not deleted.

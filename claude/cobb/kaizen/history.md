@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-09 — plan.md staleness sweep (review-only)
+
+- **What:** removed K-015 (the `analyst/kaizen/inbox.md` it asks to distil no longer exists; `inbox.md` files were deleted 2026-08-21), K-030 and K-054 (both ✅, already logged), and K-061 (the stale claim `ddfbb4bb…` is already gone from `ws:agent-team`; `get_document` returns null, and the manifest id list no longer carries it). Rewrote K-056: U1–U3 delivered, `audit-team.sh` PASS, and `opencode/agents/tank/opencode.json` carries no absolute path. The KB-vs-manifest drift-check idea from K-061 is not carried; K-058 covers it.
+- **Why:** maintainer asked for an out-of-date check across all agents' plans.
+- **Plan items:** K-015/K-030/K-054/K-061 removed; K-056 rewritten. Not re-reviewed: the other open rows and `Last reviewed` (unchanged).
+
 ## 2026-11-09 — K-062 closed: mermaid-cli via Windows `npx` check verified (tico's observation)
 
 - **What:** Raw entry `d88545b5` (qa-engineer: Mermaid parse check via Windows `npx @mermaid-js/mermaid-cli@11.4.2`, through `cmd.exe` + UNC paths) was kept open since 2026-11-06 because the live check was blocked by the harness classifier (downloads external code). `tico` ran it: a valid `.mmd` file gave rc=0, a broken one rc=1 with "Parse error on line 5". The coordinator's own re-run was classifier-denied, so this is tico's observation, not independently re-run. Recorded in `claude/qa-engineer/qa-testing-techniques.md`; no native Linux `node` on this WSL. Closed in commit `9e64eaab`.

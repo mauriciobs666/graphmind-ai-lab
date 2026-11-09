@@ -10,20 +10,7 @@
 |-------|------------|----------|--------|---------|
 | K-002 | 2026-07-02 | low | 🔵 | Add a WebFetch allowlist for infra doc domains (docker.com, docs.docker.com, docs.github.com) |
 | K-003 | 2026-07-02 | low | 🔵 | Revisit persona vs. role framing once the agent has run a few real tasks |
-| K-004 | 2026-07-02 | low | 🔵 | Guard hook is single-machine (absolute path + machine deps) — make it relocatable / tunable |
-
-### K-004 — Make the guard hook relocatable
-- **Status:** 🔵 proposed
-- **Priority:** low
-- **Rationale:** The frontmatter hook uses an **absolute path** to the script in this repo, and the
-  script prefers `jq`→`python3`. On a new machine/clone-path both the deploy symlink *and* this path
-  need re-pointing, and a box with neither jq nor python3 would fail-open (patterns still run on the
-  raw payload via grep, so it mostly holds, but extraction is degraded).
-- **Proposed change:** Consider a portable indirection (e.g. resolve the script relative to a stable
-  env var, or a tiny installer that rewrites the path on deploy) and/or make the blocked-pattern list
-  configurable. Only worth it if this agent gets deployed across machines.
-- **Notes:** Same machine-specificity as the `~/.claude/agents/devops` symlink — document both in the
-  "re-add on a new machine" checklist.
+| K-004 | 2026-07-02 | low | 🔵 | Guard hook script prefers `jq`→`python3` and degrades to grep extraction without either; make the blocked-pattern list tunable (only if deployed across machines) |
 
 ### K-002 — Infra-docs WebFetch allowlist
 - **Status:** 🔵 proposed
@@ -41,6 +28,12 @@
 - **Rationale:** User chose the plain role name `devops` over a persona. If the repo's persona
   culture (teco/saul/severino) proves to matter for how this agent is invoked/relatable, a persona
   alias could be layered on. Low stakes.
+
+### K-004 — Guard hook: degraded extraction and fixed pattern list
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Rationale:** the hook path is already machine-independent (`$HOME/.claude/agents/devops/hooks/…` via the deploy symlink). What remains: the script prefers `jq`→`python3`, and a box with neither falls back to grep on the raw payload; the blocked-pattern list is not configurable.
+- **Proposed change:** only if the agent is deployed across machines — make the pattern list configurable.
 
 ## Parking lot / ideas
 - **(this repo)** Extend Compose coverage to `salesperson`. Partially delivered: `falkor-chat/compose.yaml`

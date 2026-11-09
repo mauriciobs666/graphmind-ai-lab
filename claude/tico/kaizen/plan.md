@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-07
+> Last reviewed: 2026-11-09
 
 ## Active
 
@@ -11,14 +11,13 @@
 | K-001 | 2026-07-09 | high | 🔵 | Live e2e spin: a real `claude --agent tico` interview on a genuine feature request |
 | K-003 | 2026-07-09 | low | 🔵 | Requirements→plan traceability (architect plan cites FR-ids) |
 | K-004 | 2026-07-29 | high | 🔵 | Live e2e spin of Modes 2 & 3 (explanation + first real user manual) |
-| K-005 | 2026-07-29 | low | ✅ | Formal update to `docs/plans/doc-reference-convention.md` for the new `manuals/` kind, now also carrying a collision-rule-5 gloss (architect-owned doc) |
 | K-006 | 2026-07-31 | high | 🔵 | Live e2e spin of the demo-environment offer → `devops` delegation → confirmed-teardown loop |
 | K-010 | 2026-08-29 | high | 🔵 | Live e2e spin of a proactive review-shaped consult (announce-then-proceed, no acceptance wait), including one non-qa/analyst roster member returning its own artifact |
 | K-011 | 2026-08-29 | high | 🔵 | Live e2e spin of a fast-tracked direct Q&A + multi-turn follow-up via `SendMessage` |
 | K-012 | 2026-08-29 | medium | 🔵 | Live check of the code/docs coordination boundary — tico still declines `coder`/`tdd-engineer`/`frontend-engineer` and any chain known to need one |
 | K-013 | 2026-09-01 | high | 🔵 | Live e2e spin of a docs-only coordination (ledger open, multi-unit sequencing, review gates, commit case (d)) |
 | K-014 | 2026-09-01 | high | 🔵 | Live check of a mid-chain handoff to `teco` when a code-shaped need surfaces — coordination doc becomes teco's state of record |
-| K-015 | 2026-09-07 | high | 🔵 | `docs/manuals/graph-ontology.md` §2 + FAQ still document `kaizen_team` as the flat, pre-M8 shape |
+| K-015 | 2026-09-07 | high | 🔵 | `docs/manuals/graph-ontology.md` documents the deleted `kaizen_team` graph as live; `ws:agent-team` is undocumented there |
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
@@ -131,25 +130,12 @@
 - **Notes:** the highest-risk item of the three new ones — a silent re-spend of already-delivered
   work would be a correctness failure, not a crash.
 
-### K-015 — `docs/manuals/graph-ontology.md` §2 is stale on `kaizen_team`
+### K-015 — `docs/manuals/graph-ontology.md` documents a graph that no longer exists
 - **Status:** 🔵 proposed
 - **Priority:** high
-- **Rationale:** the manual is the reference anyone points a Cypher query at these graphs by, and
-  four of its passages about `kaizen_team` are now false. Re-derived live 2026-09-07:
-  `CALL db.labels()` → `KaizenEntry`, `Agent`; `CALL db.relationshipTypes()` → `PRODUCED`,
-  `MENTIONS`; and `MATCH (k:KaizenEntry) RETURN count(k), count(k.author)` → `188, 0`. The
-  `author` property the manual calls "the *only* attribution mechanism today" exists on **zero**
-  nodes, so §2's sample query `MATCH (n:KaizenEntry {author: 'graph-dba'})` returns nothing.
-- **Proposed change:** update §2's property table (drop `author`, add the `:Agent` node and the
-  `PRODUCED`/`MENTIONS` edges with their properties), replace its "**Relationships:** none" line
-  and its Mermaid diagram, refresh both sample queries to the edge shape, and rewrite the FAQ
-  entry "`kaizen_team` came back with zero relationship types — is the graph broken?" plus the
-  "not yet built" pointer to `docs/requirements/kaizen-agent-ontology.md` (that doc is `archived`;
-  the upgrade shipped as M8). Re-verify live before writing — this file has now been wrong twice.
-- **Notes:** raised by `cobb`'s 2026-09-07 distillation from kaizen entry `e3b4c1a7…`, which
-  surfaced during salesperson-ui U11 and was deliberately left for its own unit. Not fixable by
-  `cobb`: `docs/manuals/*` is `tico`'s doc kind. `Last updated:` on the manual reads 2026-09-02 —
-  a same-day pass touched it without correcting this.
+- **Rationale:** the manual is the reference anyone points a Cypher query at these graphs by. `kaizen_team` was drained and deleted (`claude/docs/plans/kaizen-team-retirement-coordination.md`); the live graph list (2026-11-09) has `ws:agent-team` instead. Still stale in the manual: the H1 and Who-for table row (l.1, l.41, l.70), all of §2 (the flat "no edges" shape and the `author` property, which sat on zero nodes even before deletion), the FAQ "zero relationship types" entry, and the "not yet built" pointer to `docs/requirements/kaizen-agent-ontology.md` (now `archived`). `Last updated:` reads 2026-09-08 and was not corrected by that pass.
+- **Proposed change:** replace §2 with `ws:agent-team` (a falkor-chat `ws:*` workspace holding `Document`/`Chunk`, raw entries starting `Fact:`, KB claims otherwise — shape per `falkor-chat/docs/DESIGN.md`), fix the header/rows/diagram, delete the `kaizen_team` FAQ and pointer. Re-verify live with `mcp__cypher__query` before writing.
+- **Notes:** not fixable by `cobb` — `docs/manuals/*` is `tico`'s kind. Last raised by `cobb`'s distillation (`e3b4c1a7…`, 2026-09-07); premise rewritten 2026-11-09.
 
 ## Parking lot / ideas
 - **Growth-stops pointer: confirm on first live use (2026-10-29).** The U2 pointer (`docs/plans/document-size-discipline.md`) is judgment-enforced (plan D6). On the first in-scope revision/gate after delivery, check this agent actually followed it; if not, sharpen the clause rather than restating the root bullet.
@@ -170,7 +156,7 @@
   Not wrong (tico's Guardrails already cite `claude/AGENTS.md` as the authority) and not worth words
   in a prompt already past the advisory weight line — fold the idiom in during the compression pass
   contemplated above, not before.
-- **Prompt weight crossed the audit's advisory threshold (2026-09-01): 4,344 → 5,397 w.** The
+- **Prompt weight crossed the audit's advisory threshold (2026-09-01: 4,344 → 5,397 w; 6,092 w on 2026-11-09).** The
   docs-only coordination feature is the whole delta — a real new capability, not duplication, so
   no immediate compression is warranted. But this file was explicitly floored at "~3,450–3,500 w
   with every rule intact" by the 2026-08-24 C2 pass before the consult feature (K-010/K-011/K-012)
