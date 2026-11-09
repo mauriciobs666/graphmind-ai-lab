@@ -3,6 +3,13 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-09 — K-062 closed: mermaid-cli via Windows `npx` check verified (tico's observation)
+
+- **What:** Raw entry `d88545b5` (qa-engineer: Mermaid parse check via Windows `npx @mermaid-js/mermaid-cli@11.4.2`, through `cmd.exe` + UNC paths) was kept open since 2026-11-06 because the live check was blocked by the harness classifier (downloads external code). `tico` ran it: a valid `.mmd` file gave rc=0, a broken one rc=1 with "Parse error on line 5". The coordinator's own re-run was classifier-denied, so this is tico's observation, not independently re-run. Recorded in `claude/qa-engineer/qa-testing-techniques.md`; no native Linux `node` on this WSL. Closed in commit `9e64eaab`.
+- **Why:** the plan row was marked done but still carried detail; a delivered item does not stay in the plan, so its record moved here and the K-062 row was removed from `kaizen/plan.md`.
+- **Plan items:** K-062 removed (delivered); K-063's pointer to it reworded.
+
+
 ## 2026-11-07 — Follow-ups: two KB claims re-ingested; failed raw-document embeddings left (no re-embed path)
 
 - **What:** Re-ingested KB claims `fd27e4a9` (-> `d9efef15`, `claude/data-scientist/lm-studio-model-notes.md`: the "one file" count corrected to 2 of 138 observed) and `9bdc41de` (-> `424a70a2`, `claude/graph-dba/falkordb-quirks.md`: integer-MB clause), both `ready`; manifest key `_cobb_followups_2026_11_07`. Old ids await the user's delete. Raw-document re-embed (item A) not done: falkor-chat has no per-document re-embed path; options in `docs/reviews/team-learnings-followups-sweep.md`.
