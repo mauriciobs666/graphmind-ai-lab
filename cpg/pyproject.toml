@@ -1,13 +1,14 @@
 [project]
 name = "ccg"
 version = "0.0.1"
-description = "Connected code graph (C-1001) — P0 contract code: ids, bundle, schemas"
+description = "Connected code graph (C-1001) — contract code (ids, bundle, schemas), extractors and clients"
 requires-python = ">=3.12"
-# No base dependencies, by P0 plan §5.2's extras rule: every P0 dependency is declared
-# up front in the extras below so no later step edits this file. Runtime imports of
-# `ccg.bundle` and the pack loaders (`jsonschema`, `pyyaml`) live in `dev`: install
-# `.[dev]`. A step that finds a dependency missing stops and asks `teco`. Versions are exact pins,
-# each verified installable on 2026-10-29 (Python 3.12.3).
+# No base dependencies. Each phase's dependencies are declared up front, in the extras below, by
+# that phase's one intake step: P0's by P0 plan §5.2 (`dev`, `live`, `spike`; pins verified
+# installable 2026-10-29), P1's by step P1-01 (`docs/plans/connected-code-graph-p1.md` D8;
+# `extract`, `engine`, `broker`; verified 2026-11-09), both on Python 3.12.3. No other step edits
+# this file: a step that finds a dependency missing stops and asks `teco`. Versions are exact pins.
+# Runtime imports of `ccg.bundle` and the pack loaders (`jsonschema`, `pyyaml`) live in `dev`.
 dependencies = []
 
 [project.optional-dependencies]
@@ -38,13 +39,25 @@ spike = [
     "tree-sitter-c==0.24.2",
     "tree-sitter-cpp==0.23.4",
 ]
+# Shell extractor (P1-10): py-tree-sitter (same pin as `spike`) and the bash grammar.
+extract = [
+    "tree-sitter==0.25.2",
+    "tree-sitter-bash==0.25.1",
+]
+# Engine MCP surface: the `mcp` SDK at the version cypher-mcp/ runs (requirements.txt bound
+# mcp>=1.28,<1.29; 1.28.1 is what its venv resolves).
+engine = [
+    "mcp==1.28.1",
+]
+# Broker: stdlib only unless P1-28 decides otherwise.
+broker = []
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["ccg*"]
+include = ["ccg*", "extractors*", "clients*"]
 
 # Non-package data dirs a normal (non-editable) install would otherwise drop (S10, S17, …).
 [tool.setuptools.package-data]
@@ -57,4 +70,5 @@ testpaths = ["tests"]
 addopts = '-ra -m "not live"'
 markers = [
     "live: needs Docker, the ccg-falkordb instance (port 6390) or Joern; deselected by default, run with `pytest -m live`",
+    "slice: an equivalence/vertical-slice gate whose oracle artifact (gitignored cpg/.ccg-work/) may be absent; a skip is reported unrun, never green (P1 index D9)",
 ]

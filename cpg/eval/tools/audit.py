@@ -18,13 +18,16 @@ end of an attempt's log is "stream-truncated": the call is checked from the tran
 a missing transcript or attempt log; index <-> logs.
 
 Output (stdout, JSON): counts and violation TYPES only, no paths and no tool inputs (§13.3).
-``--details FILE`` additionally writes (session, attempt, tool, tool_use id, type, refused) lines
+``--details FILE`` additionally writes (session, attempt, tool, tool_use id, type, refused, reason) lines
 for GC's own investigation. Exit: 0 every session clean · 1 any session void · 2 usage.
 
-Assumptions not yet observed (S54 confirms): a call is "refused" only on positive evidence: a
+A call is "refused" only on positive evidence, with a ``reason``: ``denied``, a
 ``permission_decision``/``permissionDecision`` whose decision is not accept/allow, or ``is_error``
 with a result text that STARTS with a denial message (``guard-paths:``, ``ccg path guard:``, ...;
-never a word elsewhere in it). Anything else about a violating call counts as successful (voids).
+never a word elsewhere in it); or ``absent-tool`` (S54 O3), ``is_error`` with no permission decision
+and a result text that is exactly ``<tool_use_error>Error: No such tool available: <name></tool_use_error>``,
+``<name>`` being the called tool and outside ``--tools`` (nothing executed). Anything else about a
+violating call counts as successful (voids); ``reason`` is null on a ``--details`` line that is not refused.
 Plugins: every one must have ``path == "builtin"``; with ``--accepted-plugins FILE`` the names must
 equal that list and each source end ``@builtin``; without it the report says ``unpinned`` (as for
 agents, checked only with ``--accepted-agents``).
@@ -55,6 +58,9 @@ PATH_KEYS = ("file_path", "notebook_path", "path")
 # messages start "guard-paths:"; settings.json's fail-closed hook text starts "ccg path guard:".
 DENIAL_RE = re.compile(r"\s*(guard-paths:|ccg path guard:|Permission to use \S+ has been denied|"
                        r"PreToolUse:\S+ hook (blocking error|denied))", re.IGNORECASE)
+# The harness's answer to a call of a tool the session does not have (real shape, S54 breach2): the whole
+# result text, nothing before or after it; the name must be the called one (O3).
+ABSENT_TOOL_RE = re.compile(r"<tool_use_error>Error: No such tool available: (\S+)</tool_use_error>")
 MSG_ID_RE = re.compile(r'"id"\s*:\s*"(msg_[A-Za-z0-9]+)"')
 ASSISTANT_HEAD_RE = re.compile(r'^\s*\{\s*"type"\s*:\s*"assistant"')
 MAX_PATTERN_VARIANTS = 512
@@ -254,18 +260,29 @@ def classify_call(name: str, inp, root: str, allowed: set[str]) -> list[str]:
 
 # ----------------------------------------------------------------------------- call extraction
 
-def _is_refused(decision, is_error, content) -> bool:
-    if isinstance(decision, dict):
-        d = decision.get("decision")
-        if d is not None and d not in ("accept", "allow"):
-            return True
-    if is_error:
-        return isinstance(content, str) and bool(DENIAL_RE.match(content))
-    return False
+def _refusal(evidence, name, allowed) -> str | None:
+    """Why the call ``name`` did not run: ``denied`` (a denying decision, or an error result that starts
+    with a denial message), ``absent-tool`` (O3: the tool is not in the session), or None (it ran).
+    ``evidence`` is a result's (decision, is_error, content), or None when no result was logged."""
+    if evidence is None:
+        return None
+    decision, is_error, content = evidence
+    d = decision.get("decision") if isinstance(decision, dict) else None
+    if d is not None and d not in ("accept", "allow"):
+        return "denied"
+    if not is_error or not isinstance(content, str):
+        return None
+    if DENIAL_RE.match(content):
+        return "denied"
+    m = ABSENT_TOOL_RE.fullmatch(content)
+    if m and d is None and isinstance(name, str) and m.group(1) == name and name not in allowed:
+        return "absent-tool"
+    return None
 
 
 def extract_stream(recs):
-    """calls {id: (name, input)}, results {id: refused_bool}, inits [init events], mids {assistant message ids}."""
+    """calls {id: (name, input)}, results {id: (decision, is_error, content)}, inits [init events],
+    mids {assistant message ids}."""
     calls, results, inits, mids = {}, {}, [], set()
     for r in recs:
         t = r.get("type")
@@ -282,12 +299,13 @@ def extract_stream(recs):
             for b in (r.get("message") or {}).get("content") or []:
                 if isinstance(b, dict) and b.get("type") == "tool_result":
                     i = b.get("tool_use_id")
-                    results[i] = _is_refused(meta.get(i), b.get("is_error"), b.get("content"))
+                    results[i] = (meta.get(i), b.get("is_error"), b.get("content"))
     return calls, results, inits, mids
 
 
 def extract_transcript(recs):
-    """calls, results, msgs {assistant message id: [tool_use ids]} in order of first appearance."""
+    """calls, results {id: (decision, is_error, content)}, msgs {assistant message id: [tool_use ids]}
+    in order of first appearance."""
     calls, results, msgs = {}, {}, {}
     for r in recs:
         t = r.get("type")
@@ -301,8 +319,8 @@ def extract_transcript(recs):
             c = r["message"].get("content")
             for b in c if isinstance(c, list) else []:
                 if isinstance(b, dict) and b.get("type") == "tool_result":
-                    results[b.get("tool_use_id")] = _is_refused(r.get("permissionDecision"),
-                                                                b.get("is_error"), b.get("content"))
+                    results[b.get("tool_use_id")] = (r.get("permissionDecision"), b.get("is_error"),
+                                                     b.get("content"))
     return calls, results, msgs
 
 
@@ -358,7 +376,8 @@ def audit_session(session: str, starts: list[dict], *, eval_dir: Path, projects_
 
     def violate(t, attempt=None, tool=None, tid=None):
         _bump(void, t)
-        details.append({"session": session, "attempt": attempt, "type": t, "tool": tool, "id": tid, "refused": False})
+        details.append({"session": session, "attempt": attempt, "type": t, "tool": tool, "id": tid, "refused": False,
+                        "reason": None})
 
     # index consistency across attempts
     for key in ("cli_version", "bin_sha256", "settings_sha256", "agents_sha256", "model"):
@@ -460,13 +479,14 @@ def audit_session(session: str, starts: list[dict], *, eval_dir: Path, projects_
             types = sorted(set(types) | set(classify_call(name, alt, root, allowed)))
         if not types:
             continue
-        ref = s_results[i] if i in s_results else t_results.get(i, False)
+        reason = _refusal(s_results[i] if i in s_results else t_results.get(i), name, allowed)
         for t in types:
-            if ref:
+            if reason:
                 _bump(refused, t)
             else:
                 _bump(void, t)
-            details.append({"session": session, "attempt": n, "type": t, "tool": name, "id": i, "refused": ref})
+            details.append({"session": session, "attempt": n, "type": t, "tool": name, "id": i,
+                            "refused": reason is not None, "reason": reason})
 
     return {"session": session, "attempts": len(starts), "attemptsTruncated": n_trunc,
             "toolCalls": len(final_calls), "streamTruncatedCalls": truncated_calls,

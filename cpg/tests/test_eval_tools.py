@@ -114,6 +114,11 @@ def with_call(name, inp, tid, refused=False):
     return st, tr
 
 
+def _is_result_of(r, tid):
+    c = r["message"]["content"] if r["type"] == "user" else None
+    return isinstance(c, list) and c[0].get("tool_use_id") == tid
+
+
 def p(rel):                       # a path inside the capture's role root
     return f"{CAP_ROOT}/{rel}"
 
@@ -136,6 +141,33 @@ VIOLATIONS = {
 def build_violation(kind):
     name, inp, refused = VIOLATIONS[kind]
     return with_call(name, inp, "toolu_PLANTED" + re.sub("[^A-Za-z0-9]", "", kind) + "0001", refused)
+
+
+def absent_tool_text(name):
+    """The result S54's breach2 session got for a call of a tool absent from the session (real shape,
+    run cf7b2042cce7 session bf8e71bc: is_error, no permission decision on either side)."""
+    return f"<tool_use_error>Error: No such tool available: {name}</tool_use_error>"
+
+
+ABSENT_TOOL_ID = "toolu_PLANTEDabsenttool0001"
+
+
+def build_absent_tool(called="mcp__cypher__query", named=None):
+    """The `mcp-call` stream, but the planted call is answered as S54 answered it: the tool does not
+    exist in the session, nothing executed (O3). ``named`` is the tool the error message names."""
+    st, tr = with_call(called, {"graph": "g", "cypher": "RETURN 1"}, ABSENT_TOOL_ID)
+    text = absent_tool_text(named or called)
+    for r in st:
+        if _is_result_of(r, ABSENT_TOOL_ID):
+            r["message"]["content"][0].update(content=text, is_error=True)
+            r.pop("tool_result_meta", None)
+            r["tool_use_result"] = text[len("<tool_use_error>"):-len("</tool_use_error>")]
+    for r in tr:
+        if _is_result_of(r, ABSENT_TOOL_ID):
+            r["message"]["content"][0].update(content=text, is_error=True)
+            r.pop("permissionDecision", None)
+            r["toolUseResult"] = text[len("<tool_use_error>"):-len("</tool_use_error>")]
+    return st, tr
 
 
 def build_init_extra_tool():
@@ -238,6 +270,9 @@ def all_derived():
         st, tr = build_violation(k)
         out[f"derived.{k}.stream.jsonl"] = _dump(st)
         out[f"derived.{k}.transcript.jsonl"] = _dump(tr)
+    st, tr = build_absent_tool()
+    out["derived.absent-tool.stream.jsonl"] = _dump(st)
+    out["derived.absent-tool.transcript.jsonl"] = _dump(tr)
     st, tr = build_init_extra_tool()
     out["derived.init-extra-tool.stream.jsonl"] = _dump(st)
     out["derived.init-extra-tool.transcript.jsonl"] = _dump(tr)
@@ -360,12 +395,80 @@ def test_audit_refused_attempt_counted_not_voiding(env):
     derived(env, "refused-abs-read")
     s, _, d = env.session()
     assert s["verdict"] == "clean" and s["void"] == {} and s["refused"] == {"path-outside-root": 1}
-    assert d[0]["refused"] is True
+    assert d[0]["refused"] is True and d[0]["reason"] == "denied"
 
 
-def _is_result_of(r, tid):
-    c = r["message"]["content"] if r["type"] == "user" else None
-    return isinstance(c, list) and c[0].get("tool_use_id") == tid
+# --- O3 (S54; P1-01): a call of a tool absent from the session executed nothing ---------------------
+
+def test_audit_absent_tool_is_refused_and_does_not_void(env):
+    derived(env, "absent-tool")
+    s, rep, d = env.session()
+    assert s["verdict"] == "clean" and s["void"] == {} and s["refused"] == {"mcp-call": 1}
+    assert rep["verdict"] == "clean" and rep["totals"]["refused"] == {"mcp-call": 1}
+    assert [(x["type"], x["refused"], x["reason"]) for x in d] == [("mcp-call", True, "absent-tool")]
+
+
+def test_audit_absent_tool_cli_exit_is_clean(env):
+    derived(env, "absent-tool")
+    cmd = [PY, str(TOOLS / "audit.py"), "--eval-dir", str(env.eval_dir), "--projects-dir", str(env.projects)]
+    assert subprocess.run(cmd, capture_output=True).returncode == 0
+
+
+@pytest.mark.parametrize("why,mutate", [
+    # the message names a different tool than the one called: no evidence THIS call did not run
+    ("other tool named", lambda: build_absent_tool(named="mcp__other__tool")),
+    # an allowed (present) tool cannot be absent: the text is not evidence for it
+    ("present tool", lambda: build_absent_tool(called="Read", named="Read")),
+])
+def test_audit_absent_tool_needs_positive_evidence(env, why, mutate):
+    st, tr = mutate()
+    if why == "present tool":                     # make the present tool's call a violation to judge
+        for r in st + tr:
+            if r["type"] == "assistant" and r["message"]["content"][0].get("id") == ABSENT_TOOL_ID:
+                r["message"]["content"][0]["input"] = {"file_path": REPO_AGENTS}
+    env.single(_dump(st), _dump(tr))
+    s, _, d = env.session()
+    assert s["verdict"] == "void" and s["refused"] == {}, why
+    assert all(x["refused"] is False and x["reason"] is None for x in d), why
+
+
+@pytest.mark.parametrize("is_error,content", [
+    (False, absent_tool_text("mcp__cypher__query")),                         # not an error result
+    (True, "ok " + absent_tool_text("mcp__cypher__query")),                  # not anchored at the start
+    (True, absent_tool_text("mcp__cypher__query") + " and then it ran"),     # trailing text
+    (True, "No such tool available: mcp__cypher__query"),                    # not the tool_use_error envelope
+])
+def test_audit_absent_tool_text_is_matched_exactly(env, is_error, content):
+    st, tr = build_absent_tool()
+    for r in st + tr:
+        if _is_result_of(r, ABSENT_TOOL_ID):
+            blk = r["message"]["content"][0]
+            blk["content"] = content
+            blk.pop("is_error", None)
+            if is_error:
+                blk["is_error"] = True
+    env.single(_dump(st), _dump(tr))
+    s, _, d = env.session()
+    assert s["verdict"] == "void" and s["void"] == {"mcp-call": 1} and s["refused"] == {}
+
+
+def test_audit_absent_tool_with_an_accepting_decision_is_not_absent(env):
+    # S54's absent-tool results carry no decision; one that was accepted is not that shape
+    st, tr = build_absent_tool()
+    _retag(st, tr, ABSENT_TOOL_ID, decision="accept", is_error=True, content=absent_tool_text("mcp__cypher__query"))
+    env.single(_dump(st), _dump(tr))
+    s, _, _ = env.session()
+    assert s["void"] == {"mcp-call": 1} and s["refused"] == {}
+
+
+def test_audit_absent_tool_in_the_transcript_only_still_counts(env):
+    # a stream line cut off by `timeout` leaves only the transcript's result: judged from it
+    st, tr = build_absent_tool()
+    st = [r for r in st if not _is_result_of(r, ABSENT_TOOL_ID)]
+    env.single(_dump(st), _dump(tr))
+    s, _, d = env.session()
+    assert s["refused"] == {"mcp-call": 1} and d[0]["reason"] == "absent-tool"
+
 
 
 def _retag(stream_recs, transcript_recs, tid, *, decision, is_error, content):
@@ -923,7 +1026,7 @@ def test_audit_report_has_counts_and_types_only(env):
     text = json.dumps(rep)
     assert REPO_AGENTS not in text and "/home/" not in text and str(env.root) not in text
     assert "file_path" not in text
-    assert all(set(x) == {"session", "attempt", "type", "tool", "id", "refused"} for x in details)
+    assert all(set(x) == {"session", "attempt", "type", "tool", "id", "refused", "reason"} for x in details)
     assert REPO_AGENTS not in json.dumps(details)
 
 

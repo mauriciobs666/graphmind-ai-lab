@@ -18,16 +18,21 @@ python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'          # default suite
 .venv/bin/pip install -e '.[dev,live]'     # + falkordb-py, for live tests and store spikes
 .venv/bin/pip install -e '.[dev,spike]'    # + py-tree-sitter and ten grammars, frontend-fitness spike
+.venv/bin/pip install -e '.[dev,live,spike,extract,engine]'   # + P1 extractors and engine (broker: stdlib)
 ```
 
-Every P0 dependency is declared once in `pyproject.toml`'s extras, at exact pins. **No other
-step edits that file.** A step that finds a dependency missing stops and asks `teco` (plan §5.2).
+Every dependency is declared once in `pyproject.toml`'s extras, at exact pins, by each phase's one
+intake step (P0 plan §5.2; P1-01, `docs/plans/connected-code-graph-p1.md` D8). **No other step edits
+that file.** A step that finds a dependency missing stops and asks `teco`.
 
 | Extra | Contents | Used by |
 |---|---|---|
 | `dev` | `pytest`, `jsonschema`, `pyyaml` | the default suite, and bundle, pack and manifest validation |
 | `live` | `falkordb` 1.6.x (V17), `redis` | `live` tests; store spikes S13, S17, S20–S22 |
 | `spike` | `tree-sitter` + grammars `python`, `typescript`/`tsx`, `javascript`, `java`, `kotlin`, `c_sharp`, `go`, `c`, `cpp` | S25–S27 frontend fitness (`docs/plans/connected-code-graph-p0-ml.md` §5.2, §11 N6) |
+| `extract` | `tree-sitter` + `tree-sitter-bash` | P1 shell extractor (`docs/plans/connected-code-graph-p1-extraction.md` P1-10) |
+| `engine` | `mcp` 1.28.1 (the SDK `cypher-mcp/` runs) | P1 engine MCP surface |
+| `broker` | none (stdlib only, unless P1-28 decides otherwise) | P1 broker |
 
 ## Tests
 
