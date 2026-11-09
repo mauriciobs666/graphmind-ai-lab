@@ -6,7 +6,7 @@
 
 This record keeps the evidence from the 2026-11-01 harness probe, which `docs/plans/typed-decision-models6.md` §2 (facts F1–F7) cites. The probe asked how an **interactive** `claude --agent` session launches, ends and loses subagents. It ran on Claude Code 2.1.316 in a trusted scratch folder outside the repo, driven through tmux on a real TTY. The kit is reproduced in the appendices so the probe can be rerun. §9 holds U6.2's headless (`claude -p`) rerun, with its own verdicts (§9.1) and kit (Appendix J).
 
-Every path in this document that begins with `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/` is the **original session scratchpad** where the probe ran. That folder is ephemeral. The kit's files hard-code these paths, so a rerun from a different folder must rewrite them (Appendix I).
+Every path in this document that begins with `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/` is the **original session scratchpad** where the probe ran. That folder is ephemeral. The kit's files hard-code these paths, so a rerun from a different folder must rewrite them (Appendix I).
 
 | Fact (plan6 §2) | Where it is shown here |
 |---|---|
@@ -20,11 +20,11 @@ Every path in this document that begins with `/tmp/claude-1000/-home-mauricio-pr
 
 ## 2. Method
 
-- **Host and CLI.** WSL2 Linux, `/home/mauricio/.local/bin/claude` version `2.1.316 (Claude Code)`, logged in on a Claude Pro account.
+- **Host and CLI.** WSL2 Linux, `/home/<user>/.local/bin/claude` version `2.1.316 (Claude Code)`, logged in on a Claude Pro account.
 - **Kit.** `cobb` built it (Appendices A–H). The driver `probe-driver` runs as the main session via `claude --agent probe-driver` and is allowed only `Agent(probe-sub)`. The subagent `probe-sub` mirrors `dm-labeler`: `Read, Write`, `model: claude-sonnet-5-5`, `omitClaudeMd`, `acceptEdits`. Allow-all, log-only `PreToolUse` hooks are wired three ways, each tagged in `hook-log.jsonl` by `src`: project settings (`settings`, which also wires `Stop` and `SubagentStop`), the driver's frontmatter (`fm-driver`) and the subagent's frontmatter (`fm-sub`).
 - **Launch flags.** Every launch used `FLAGS="--strict-mcp-config --mcp-config ./empty-mcp.json --permission-mode acceptEdits"`, the `dm-driver` line from plan4 §3.5.
 - **Terminal.** Each launch ran inside a tmux session on a private socket, at 200×50: `tmux -L probe new-session -d -s probe -x 200 -y 50`. Keystrokes went in with `send-keys`, and the pane was captured with `capture-pane -p` every 3 s into `panes/`.
-- **Clean environment (deviation from `RUN.md`).** The tmux server was started under `env -i` with only `HOME`, `USER`, `LOGNAME`, `SHELL=/bin/bash`, `PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin`, `LANG` and `TERM=xterm-256color`. The coordinating session's own `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_AGENT`, messaging-socket and similar variables would otherwise have been inherited, making the probe sessions nested child sessions. The pane confirmed `env | grep -c '^CLAUDE'` = `0`.
+- **Clean environment (deviation from `RUN.md`).** The tmux server was started under `env -i` with only `HOME`, `USER`, `LOGNAME`, `SHELL=/bin/bash`, `PATH=/home/<user>/.local/bin:/usr/local/bin:/usr/bin:/bin`, `LANG` and `TERM=xterm-256color`. The coordinating session's own `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_AGENT`, messaging-socket and similar variables would otherwise have been inherited, making the probe sessions nested child sessions. The pane confirmed `env | grep -c '^CLAUDE'` = `0`.
 - **Launches.** Step 0 trusted the folder. In the trust prompt the cursor starts on "No, exit"; `Down` then `Enter` selected "Yes, I trust this folder". After that came launch A (S1, S2), launch B (S3, `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`), launch B2 (S3b, `CLAUDE_CODE_FORK_SUBAGENT=0`), launch C (S4, SIGKILLed mid-run) and the restart (`claude -c --agent probe-driver $FLAGS "PHASE R"`). Each launch ended with `/exit` except C.
 - **Two attempts.** Attempt 1 left the driver on the session default model (Opus 5.5). It stopped at an unanticipated Model-switch dialog (§3). The coordinator then added `model: claude-sonnet-5-5` to `probe-driver.md`. Attempt 2 ran from a clean slate: `hook-log.jsonl` and `ans/*` deleted, the project dir moved aside to `…-scratchpad-dm-probe-attempt1`, and attempt 1's panes moved to `panes/attempt1/`. Every launch in attempt 2 showed `Sonnet 5.5 · Claude Pro` in the banner.
 
@@ -64,7 +64,7 @@ From `A-14` onward, the line `✻ Waiting for API response · will retry in 2m 4
 Attempt 1's partial `read_results.py` output (`panes/attempt1/A-partial-results.txt`), verbatim:
 
 ````text
-project dir: /home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
+project dir: $HOME/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
 spawn  rib-key  toolUseResult.status  requestShape  launchedWithDefaults  finished  notification(kind/status)               terminal  hook-log HB
 -----  -------  --------------------  ------------  --------------------  --------  --------------------------------------  --------  -----------
 S1     -        async_launched        background    True                  True      queue-operation:enqueue/completed;api-  END_TURN  no         
@@ -155,7 +155,7 @@ C-after-kill  ● probe-sub(probe S4)
               ● waiting for S4
               ✻ Waiting for 1 background agent to finish
               ❯ KilledR
-              mauricio@g15:…/scratchpad/dm-probe$
+              <user>@<host>:…/scratchpad/dm-probe$
 ```
 
 The watch loop polled `grep -c '/long/f' hook-log.jsonl` every second. The count read 0, 0, 0, 3, 6, 9, 12, 18, 21, 24, then 30 at t = 33 s. At 30 it resolved the PID: the process whose `/proc/<pid>/comm` was `claude` and whose command line was `claude --agent probe-driver --strict-mcp-config --mcp-config ./empty-mcp.json --permission-mode acceptEdits PHASE C` (PID 3391456). It ran `kill -KILL` on it, then ran `read_results.py` at once. Three hooks fire per Read, so 30 lines = 10 chain files read. The count stayed at 30 afterwards (rechecked after 5 s), so the subagent died with the driver. No `ans/s4.txt` was written. Its transcript holds 12 tool uses: 2 Reads of `req/s4.txt` and `long/f001`–`f010`.
@@ -186,7 +186,7 @@ Both files are `read_results.py` output (Appendix F), copied byte for byte. Noth
 ### 5.1 `results-after-kill.txt` — written immediately after the SIGKILL, before any restart
 
 ````text
-project dir: /home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
+project dir: $HOME/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
 spawn  rib-key  toolUseResult.status  requestShape  launchedWithDefaults  finished  notification(kind/status)               terminal                   hook-log HB
 -----  -------  --------------------  ------------  --------------------  --------  --------------------------------------  -------------------------  -----------
 S1     -        async_launched        background    True                  True      queue-operation:enqueue/completed;api-  END_TURN                   no         
@@ -243,7 +243,7 @@ hook-log counts (src, event, agent_type, tool_name):
 ### 5.2 `results-after-restart.txt` — written after the restart session exited
 
 ````text
-project dir: /home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
+project dir: $HOME/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
 spawn  rib-key  toolUseResult.status  requestShape  launchedWithDefaults  finished  notification(kind/status)               terminal                   hook-log HB
 -----  -------  --------------------  ------------  --------------------  --------  --------------------------------------  -------------------------  -----------
 S1     -        async_launched        background    True                  True      queue-operation:enqueue/completed;api-  END_TURN                   no         
@@ -372,7 +372,7 @@ Every driver `Stop` (8 of 8, the restart's included) is followed 1.1–6.4 s lat
 
 ## 7. Key-and-shape excerpts from the transcripts
 
-The excerpts below come from a stdlib extractor run over both project dirs: attempt 1 at `…-scratchpad-dm-probe-attempt1` and attempt 2 at `…-scratchpad-dm-probe`, both under `/home/mauricio/.claude/projects/`. The extractor prints only:
+The excerpts below come from a stdlib extractor run over both project dirs: attempt 1 at `…-scratchpad-dm-probe-attempt1` and attempt 2 at `…-scratchpad-dm-probe`, both under `/home/<user>/.claude/projects/`. The extractor prints only:
 - entry and attachment **type names** with counts;
 - `Agent` `tool_use` input **keys**, plus the `description` and `run_in_background` values;
 - `toolUseResult` **keys** with `status`, `isAsync` and `agentId`;
@@ -386,7 +386,7 @@ It prints no message text, tool input or output, hook `content`/`stdout`, or att
 Two notes on reading it. Each `Agent` `tool_use` is printed twice because the transcript writes it in two assistant entries with the same id; `tool_uses=` counts distinct ids. The `hook_success` counts on the session line are the **driver's** own (the `fm-driver` and `settings` `PreToolUse` on each `Agent` call); the per-subagent lines count the subagent transcript's.
 
 ````text
-## project dir -tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-attempt1
+## project dir -tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-attempt1
 
 ### session c5ce5291-c849-4d90-9c83-995bcbf162a5
 entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'file-history-snapshot', 'last-prompt', 'mode', 'permission-mode', 'queue-operation', 'system', 'tools-used', 'user']
@@ -407,7 +407,7 @@ attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date
    tool_uses=3 hook_success attachments=9 (distinct toolUseIDs 3) hookEvents=[('PreToolUse', True)]
    hook_success attachment keys: ['command', 'content', 'durationMs', 'exitCode', 'hookEvent', 'hookName', 'stderr', 'stdout', 'toolUseID', 'type']
    last2: user:tool_result | assistant[stop_reason=end_turn]:text
-## project dir -tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
+## project dir -tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe
 
 ### session 16d9c155-59af-485c-8882-273ad53ff62c
 entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'file-history-snapshot', 'last-prompt', 'mode', 'permission-mode', 'system', 'tools-used', 'user']
@@ -492,7 +492,7 @@ attachment types (counts): {'agent_listing_delta': 1, 'credential_org': 1, 'date
 
 U6.2 reruns the kit under `claude -p`, the way plan6 §3.2's runner launches a batch (`docs/plans/typed-decision-models6.md` §4, U6.2 row). `devops` ran it on 2026-11-01, 14:55–14:59 UTC, on the same host and CLI as §2 (`claude` 2.1.316, Claude Pro login).
 
-- **Kit.** A fresh folder, `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/`, the original session scratchpad again (Appendix J). It differs from Appendices A–H as plan6 requires:
+- **Kit.** A fresh folder, `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/`, the original session scratchpad again (Appendix J). It differs from Appendices A–H as plan6 requires:
   - the driver mirrors §3.3's `dm-driver`: `model: claude-sonnet-5-5`, `tools: Agent(probe-sub)`, `maxTurns: 3`, no `initialPrompt`, and the `-p` message as its only instruction;
   - **neither agent definition carries `hooks`**; `hook.py` (byte-identical to Appendix E, still allow-all) is wired only in project `settings.json`, for `PreToolUse` (matcher `*`), `Stop` and `SubagentStop`;
   - `run_case.sh` launches one case.
@@ -503,11 +503,11 @@ U6.2 reruns the kit under `claude -p`, the way plan6 §3.2's runner launches a b
 case=h1
 session=e8c91fd8-2aff-49fc-a519-e49221a734be
 start=2026-11-01T14:55:26.566Z
-env: PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/mauricio USER=mauricio LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
-argv: /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id e8c91fd8-2aff-49fc-a519-e49221a734be --strict-mcp-config --mcp-config /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
+env: PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=$HOME USER=<user> LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+argv: $HOME/.local/bin/claude -p --agent probe-driver --session-id e8c91fd8-2aff-49fc-a519-e49221a734be --strict-mcp-config --mcp-config /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
 ````
 
-- **Environment (M3).** `setsid env -i <allowlist> [case variables] claude …`. The allowlist is §3.2's, with each variable passed only if set in the launching shell: `PATH`, `HOME`, `USER` and `LANG` were set; `LC_ALL`, `TZ` and `TMPDIR` were unset, so they were omitted. `PATH` was fixed to `/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin`. No `CLAUDE*` or `ANTHROPIC_*` variable reached any child except the case's own `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+- **Environment (M3).** `setsid env -i <allowlist> [case variables] claude …`. The allowlist is §3.2's, with each variable passed only if set in the launching shell: `PATH`, `HOME`, `USER` and `LANG` were set; `LC_ALL`, `TZ` and `TMPDIR` were unset, so they were omitted. `PATH` was fixed to `/home/<user>/.local/bin:/usr/local/bin:/usr/bin:/bin`. No `CLAUDE*` or `ANTHROPIC_*` variable reached any child except the case's own `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
 - **Process group.** `setsid` makes the child its own process-group leader (pid = pgid), as §3.2's runner does.
 - **Spend.** Five Sonnet driver sessions, each with one subagent: H1, H2, H4 and H6 short (3–4 subagent tool uses each), and H3a killed after 11 subagent tool uses. H3b was not run (§9.4).
 
@@ -544,7 +544,7 @@ These are `devops`' readings of the evidence below. Under plan6 §4, `teco` read
 The `hook-log HB` column is `no` throughout: no `SubagentHandback` occurred in any run.
 
 ````text
-project dir: /home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
+project dir: $HOME/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
 spawn  rib-key  toolUseResult.status  requestShape  launchedWithDefaults  finished  notification(kind/status)               terminal                   hook-log HB  guard/tu  err-results
 -----  -------  --------------------  ------------  --------------------  --------  --------------------------------------  -------------------------  -----------  --------  -----------
 H1     -        completed             foreground    absent                True      none                                    END_TURN                   no           3tu:1     0          
@@ -638,7 +638,7 @@ The process exited at 14:56:38.589 with code 0. So `-p` does not end the session
 
 ````text
     PID    PGID    PPID STAT COMMAND         COMMAND
-3416011 3416011 3416009 Ssl  claude          /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id 43b56
+3416011 3416011 3416009 Ssl  claude          $HOME/.local/bin/claude -p --agent probe-driver --session-id 43b56
 ````
 
 ````text
@@ -667,7 +667,7 @@ The process exited at 14:56:38.589 with code 0. So `-p` does not end the session
 - What H4 does establish: authentication does not depend on loading user settings.
 - What it cannot establish: whether user-level hooks stop firing. That needs a planted user-level hook, which is a `~/.claude/settings.json` edit, so the stakeholder or `cobb` must decide on it.
 
-**H6: planted out-of-bounds `Write`.** The request told the subagent to write `ok` first to `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt`, outside the working directory and so outside `acceptEdits`' edit bounds, then to its answer path.
+**H6: planted out-of-bounds `Write`.** The request told the subagent to write `ok` first to `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt`, outside the working directory and so outside `acceptEdits`' edit bounds, then to its answer path.
 - Both `Write`s succeeded. The outside file exists (2 bytes), and neither `tool_result` is an error.
 - The JSON result has `permission_denials: []`.
 - The subagent transcript shows why. Each tool use is followed by the guard's `hook_success`, then a `user` `tool_result` entry with a top-level `permissionDecision` of `{"decision": "accept", "source": "hook", "reasonType": "hook"}`.
@@ -678,7 +678,7 @@ The process exited at 14:56:38.589 with code 0. So `-p` does not end the session
 
 ### 9.5 Transcript paths (H5)
 
-Every file under the headless project dir `/home/mauricio/.claude/projects/-tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless/` after all runs (`runs/transcript-paths.txt`). Each driver transcript is named for the UUID passed in `--session-id` (§9.3 `start=` lines and §9.2 `driver session` lines). The slug is the working directory's path with every non-alphanumeric character replaced by `-`.
+Every file under the headless project dir `/home/<user>/.claude/projects/-tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless/` after all runs (`runs/transcript-paths.txt`). Each driver transcript is named for the UUID passed in `--session-id` (§9.3 `start=` lines and §9.2 `driver session` lines). The slug is the working directory's path with every non-alphanumeric character replaced by `-`.
 
 ````text
 ./190af10c-564c-42fd-899b-70c94074a8b3.jsonl
@@ -705,7 +705,7 @@ These use the same extractor and the same exclusions as §7: types, keys, enum v
 **Per session and subagent** (extractor output, verbatim):
 
 ````text
-## project dir -tmp-claude-1000--home-mauricio-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
+## project dir -tmp-claude-1000--home-<user>-prg-graphmind-ai-lab-c6eed315-dc2c-4b2c-99e2-eece159b76c4-scratchpad-dm-probe-headless
 
 ### session 190af10c-564c-42fd-899b-70c94074a8b3
 entry types: ['agent-setting', 'api-request', 'api-request-blob', 'api-request-shape', 'assistant', 'atis-latch', 'attachment', 'cost-state', 'last-prompt', 'queue-operation', 'system', 'tools-used', 'user']
@@ -831,8 +831,8 @@ U6.7 plants three `Write`s against a guard wired with `"onFailure": "block"` (`d
   case=u67
   session=b0bbcc3d-ae67-4b4b-94a1-7906110bb8b0
   start=2026-11-01T16:18:20.348Z
-  env: PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=/home/mauricio USER=mauricio LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
-  argv: /home/mauricio/.local/bin/claude -p --agent probe-driver --session-id b0bbcc3d-ae67-4b4b-94a1-7906110bb8b0 --strict-mcp-config --mcp-config /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
+  env: PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin HOME=$HOME USER=<user> LANG=C.UTF-8 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  argv: $HOME/.local/bin/claude -p --agent probe-driver --session-id b0bbcc3d-ae67-4b4b-94a1-7906110bb8b0 --strict-mcp-config --mcp-config /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/empty-mcp.json --permission-mode acceptEdits --permission-prompts none --output-format json <driver message>
   ````
 
 - **Raw extracts on disk**, all under the kit's `runs/` folder: `u67-extract.txt` (the per-tool-use extractor `u67_extract.py`'s output), `u67-d-results-raw.jsonl` (the three D `tool_result` entries, unredacted), `u67-hook-timeline.txt` and `u67-summary.txt` (the result JSON without `result`, `usage` and `modelUsage`).
@@ -915,7 +915,7 @@ Every hook-log `tool_use_id` matches a transcript `tool_use` one to one. The hoo
 
 ## Appendices — the probe kit
 
-These are the kit's own files, copied byte for byte from `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/` (the original session scratchpad), as they stood after attempt 2. Paths inside them are unchanged and point at that scratchpad. Appendix I says how to rerun from elsewhere. Run outputs (`hook-log.jsonl`, `ans/`, `panes/`, the results files) are not kit files; their evidence is quoted in §3–§7.
+These are the kit's own files, copied byte for byte from `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/` (the original session scratchpad), as they stood after attempt 2. Paths inside them are unchanged and point at that scratchpad. Appendix I says how to rerun from elsewhere. Run outputs (`hook-log.jsonl`, `ans/`, `panes/`, the results files) are not kit files; their evidence is quoted in §3–§7.
 
 ## Appendix A — `RUN.md`
 
@@ -945,7 +945,7 @@ as in any session; the probe's own log ignores them.
 All commands below run from this folder:
 
 ```bash
-P=/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe
+P=/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe
 cd "$P"
 FLAGS="--strict-mcp-config --mcp-config ./empty-mcp.json --permission-mode acceptEdits"
 ```
@@ -1127,7 +1127,7 @@ hooks:
     - matcher: "*"
       hooks:
         - type: command
-          command: "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py fm-driver"
+          command: "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py fm-driver"
 initialPrompt: "Carry out exactly the phase named in this message, as your instructions define it."
 ---
 
@@ -1160,7 +1160,7 @@ the run's output, continue at once.
   - prompt (everything between the fences, verbatim):
 
     ```text
-    Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s1.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
+    Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s1.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
     ```
 
 - S2: `run_in_background: false` (the boolean false).
@@ -1168,7 +1168,7 @@ the run's output, continue at once.
   - prompt (everything between the fences, verbatim):
 
     ```text
-    Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s2.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
+    Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s2.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
     ```
 
 
@@ -1178,7 +1178,7 @@ the run's output, continue at once.
   - prompt (everything between the fences, verbatim):
 
     ```text
-    Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s3.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
+    Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s3.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
     ```
 
 
@@ -1188,7 +1188,7 @@ the run's output, continue at once.
   - prompt (everything between the fences, verbatim):
 
     ```text
-    Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s3b.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
+    Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s3b.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
     ```
 
 
@@ -1199,7 +1199,7 @@ that is expected. If S4 completes anyway, reply `PHASE C done`.
   - prompt (everything between the fences, verbatim):
 
     ```text
-    Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s4.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
+    Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/req/s4.txt with offset 1, limit 1. Its `pages` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply `done`.
     ```
 
 
@@ -1225,7 +1225,7 @@ hooks:
     - matcher: "*"
       hooks:
         - type: command
-          command: "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py fm-sub"
+          command: "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py fm-sub"
 ---
 
 You carry out one request file. Line 1 of the request file is a JSON header;
@@ -1245,7 +1245,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
           }
         ]
       }
@@ -1255,7 +1255,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
           }
         ]
       }
@@ -1265,7 +1265,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/hook.py settings"
           }
         ]
       }
@@ -1564,36 +1564,36 @@ Each file is shown verbatim. Each request file is two lines: a JSON header on li
 `req/s1.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s1.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s1.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/s2.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s2.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s2.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/s3.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s3.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s3.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/s3b.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s3b.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s3b.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/s4.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s4.txt"}
-Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/ans/s4.txt"}
+Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
 ````
 
 ## Appendix H — `long/f001.txt` … `long/f090.txt`
@@ -1602,7 +1602,7 @@ The 90 chain files follow one exact pattern. It was checked byte for byte agains
 
 ````text
 File N of a chain.
-Next: /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/long/f(N+1, zero-padded).txt
+Next: /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe/long/f(N+1, zero-padded).txt
 ````
 
 `long/f090.txt` is:
@@ -1616,7 +1616,7 @@ For example, `f001.txt` is `File 1 of a chain.` followed by `Next: …/dm-probe/
 
 ## Appendix I — Rerunning the kit
 
-- **Location.** Every kit file hard-codes `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe`: the hook commands in Appendices B, C and D, the prompts in B, the answer paths in G and the `Next:` lines in H. To rerun elsewhere, recreate the tree (`.claude/agents/`, `.claude/settings.json`, `hook.py`, `read_results.py`, `empty-mcp.json`, `req/`, `long/`, an empty `ans/`) and replace that path in every file. `read_results.py` and `hook.py` locate their files relative to themselves.
+- **Location.** Every kit file hard-codes `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe`: the hook commands in Appendices B, C and D, the prompts in B, the answer paths in G and the `Next:` lines in H. To rerun elsewhere, recreate the tree (`.claude/agents/`, `.claude/settings.json`, `hook.py`, `read_results.py`, `empty-mcp.json`, `req/`, `long/`, an empty `ans/`) and replace that path in every file. `read_results.py` and `hook.py` locate their files relative to themselves.
 - **Trust.** The new folder must be trusted first (`RUN.md` step 0). Otherwise frontmatter hooks are skipped.
 - **Environment.** Launch from a clean environment (§2) if the launching shell is itself inside a Claude Code session.
 - **Kill threshold.** Count **3** hook lines per chain Read (§8, item 2) when choosing the kill threshold.
@@ -1624,7 +1624,7 @@ For example, `f001.txt` is `File 1 of a chain.` followed by `Next: …/dm-probe/
 
 ## Appendix J — the headless kit (U6.2)
 
-The kit used for §9, copied byte for byte from `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/` (the original session scratchpad). Paths inside the files point there, and Appendix I's path-rewrite rule applies.
+The kit used for §9, copied byte for byte from `/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/` (the original session scratchpad). Paths inside the files point there, and Appendix I's path-rewrite rule applies.
 
 Unchanged from the U6.1 kit, and checked with `cmp`:
 - `hook.py` is identical to Appendix E;
@@ -1667,9 +1667,9 @@ extra_env=(); while [ $# -gt 0 ] && [ "$1" != "--" ]; do extra_env+=("$1"); shif
 uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
 spawn="Read $K/req/$case_.txt with offset 1, limit 1. Its \`pages\` field lists [offset, limit] pairs: read each remaining page with exactly that offset and limit. Follow the instructions on line 2, write the answer where the header says, then reply \`done\`."
 msg=$(python3 -c 'import sys; t=open(sys.argv[1]).read(); print(t.replace("{agent_type}","probe-sub").replace("{spawn_prompt}",sys.argv[2]), end="")' "$K/driver-message.txt" "$spawn")
-allow=("PATH=/home/mauricio/.local/bin:/usr/local/bin:/usr/bin:/bin" "HOME=$HOME" "USER=$USER")
+allow=("PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" "HOME=$HOME" "USER=$USER")
 for v in LANG LC_ALL TZ TMPDIR; do [ -n "${!v:-}" ] && allow+=("$v=${!v}"); done
-cmd=(/home/mauricio/.local/bin/claude -p --agent probe-driver --session-id "$uuid" --strict-mcp-config
+cmd=($HOME/.local/bin/claude -p --agent probe-driver --session-id "$uuid" --strict-mcp-config
      --mcp-config "$K/empty-mcp.json" --permission-mode acceptEdits --permission-prompts none
      --output-format json "$@" "$msg")
 { printf 'case=%s\nsession=%s\nstart=%s\nenv:' "$case_" "$uuid" "$(date -u +%FT%T.%3NZ)"
@@ -1745,7 +1745,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
           }
         ]
       }
@@ -1755,7 +1755,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
           }
         ]
       }
@@ -1765,7 +1765,7 @@ paths they name. Then reply `done`.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
+            "command": "python3 /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/hook.py settings"
           }
         ]
       }
@@ -1777,43 +1777,43 @@ paths they name. Then reply `done`.
 `req/h1.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h1.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h1.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/h2.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h2.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h2.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/h3a.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3a.txt"}
-Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3a.txt"}
+Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
 ````
 
 `req/h3b.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3b.txt"}
-Read /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h3b.txt"}
+Read /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/long/f001.txt. Each file names the next file to read. Read them one at a time, in order, one Read call per file, until a file says END. Then write the number of files you read to the answer path.
 ````
 
 `req/h4.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h4.txt"}
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h4.txt"}
 Write the single word ok to the answer path. Do nothing else.
 ````
 
 `req/h6.txt`:
 
 ````text
-{"pages": [], "answer": "/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h6.txt"}
-First write the single word ok to /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt. Then, whatever that Write returned, write the single word ok to the answer path. Do nothing else.
+{"pages": [], "answer": "/tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless/ans/h6.txt"}
+First write the single word ok to /tmp/claude-1000/-home-<user>-prg-graphmind-ai-lab/c6eed315-dc2c-4b2c-99e2-eece159b76c4/scratchpad/dm-probe-headless-outside/h6-outside.txt. Then, whatever that Write returned, write the single word ok to the answer path. Do nothing else.
 ````
 
 `long/f001.txt` … `long/f090.txt` follow Appendix H's pattern exactly, with `dm-probe-headless` in place of `dm-probe` in the `Next:` paths. This was checked byte for byte against all 90 files.
