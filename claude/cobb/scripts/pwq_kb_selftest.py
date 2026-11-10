@@ -12,6 +12,8 @@ Mutation runs: point `PWQ_KB_PATH` at a mutated copy of `pwq_kb.py`.
 from __future__ import annotations
 
 import contextlib
+import functools
+import hashlib
 import importlib.util
 import io
 import os
@@ -1194,10 +1196,33 @@ def t28_set_b_path_comes_only_from_the_argument_or_the_env_var():
     assert "outside the repo" in str(e)
 
 
+def small_set_a(fn):
+    """For tests of scoring arithmetic that use a 1-2 query Set A: the shape check is switched off for the
+    call (it is pinned by the t97 tests and the full-shape fixtures), nothing else changes."""
+    @functools.wraps(fn)
+    def run():
+        real = kb.validate_set_a
+        kb.validate_set_a = lambda data: None
+        try:
+            return fn()
+        finally:
+            kb.validate_set_a = real
+    return run
+
+
 def write_set(path, positives, negatives):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps({"positives": positives, "negatives": negatives}))
     return Path(path)
+
+
+def sha_of(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def sealed(bp, *extra):
+    """The sealed-once argument list, with the sha256 the file has right now (the freeze-time value)."""
+    return ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--expect-sha256", sha_of(bp), *extra]
 
 
 def eval_env():
@@ -1226,6 +1251,11 @@ def run_eval(extra, search, world, m, ws="pwq-test", fetcher=None):
     return code, out.getvalue(), err.getvalue()
 
 
+# the 12 units with >= 4 chunks at the pin: ML section 5 rule 4, re-derived from `units --chunks` (u02 7, u04 6, u08 5, u09 4,
+# u11 5, u15 4, u21 9, u24 6, u26 10, u28 4, u29 7, u30 4 chunks) -- never from the code under test
+TAIL_UNIT_SECTIONS = [{2, 34}, {4}, {8}, {9}, {11}, {15}, {21, 22, 23}, {24, 25}, {26}, {28}, {29, 39}, {30, 40}]
+
+
 def b_parts(doc_of):
     """A well-shaped Set B (84 positives, 2 per section 1-42; 30 negatives, 15 near / 15 off) plus the
     scripted search results. B01/B02/B03/BN1/BN2 are the named probes the tests tweak; the rest is filler."""
@@ -1245,6 +1275,8 @@ def b_parts(doc_of):
         for kind in ("off", "near"):
             neg.append(dict(id=f"BN{kind[0]}{j:02d}", kind=kind, query=f"neg {kind} {j}"))
             script[f"neg {kind} {j}"] = [ck("TEAM", 0.3)]
+    for secs in TAIL_UNIT_SECTIONS:  # ML section 5 rule 4: a tail-flagged positive in each of the 12 units
+        next(p for p in pos if p["section"] in secs).update(tail=True)
     return pos, neg, script
 
 
@@ -1286,7 +1318,7 @@ def t28_sealed_once_scores_writes_the_sentinel_and_a_second_run_refuses():
     tmpd = tempfile.mkdtemp()
     bp, script = b_set(tmpd, doc_of)
     srch = FakeSearch(script, w)
-    args = ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"]
+    args = sealed(bp)
     code, out, err = run_eval(args, srch, w, m)
     assert code == 0, (code, err, out)
     sentinel = Path(str(bp) + ".scored")
@@ -1297,7 +1329,7 @@ def t28_sealed_once_scores_writes_the_sentinel_and_a_second_run_refuses():
     assert code == 5 and "already scored" in err2 and len(srch.calls) == n and "recall" not in out2
     # the sentinel belongs to this Set B file: another file is not blocked
     bp2, script2 = b_set(tempfile.mkdtemp(), doc_of)
-    assert run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp2), "--floor", "0.43"], FakeSearch(script2, w), w, m)[0] == 0
+    assert run_eval(sealed(bp2), FakeSearch(script2, w), w, m)[0] == 0
     assert Path(str(bp2) + ".scored").is_file()
 
 
@@ -1305,7 +1337,7 @@ def t28_sealed_report_has_aggregates_only_no_per_query_failures():
     w, m, doc_of = eval_env()
     bp, script = b_set(tempfile.mkdtemp(), doc_of)
     script["sit one"] = [ck("TEAM", 0.3)]  # a miss
-    code, out, _ = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"], FakeSearch(script, w), w, m)
+    code, out, _ = run_eval(sealed(bp), FakeSearch(script, w), w, m)
     assert code == 0 and "B01" not in out and "sit one" not in out and "BN2" not in out
     assert "floor_hits=83" in out and "n_pos=84" in out
 
@@ -1315,7 +1347,7 @@ def t28_a_failing_gate_refuses_before_the_sentinel_is_burnt():
     bp, script = b_set(tempfile.mkdtemp(), doc_of)
     w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0
     srch = FakeSearch(script, w)
-    code, out, err = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--timeout", "0"], srch, w, m)
+    code, out, err = run_eval(sealed(bp, "--timeout", "0"), srch, w, m)
     assert code == 4 and "gate" in err and srch.calls == []
     assert not Path(str(bp) + ".scored").exists()
 
@@ -1351,6 +1383,7 @@ def t29_exclusion_takes_a_fixed_50_chunk_window_then_drops_then_truncates():
         "X", "X", "X", "G0", "G1"]
 
 
+@small_set_a
 def t29_report_states_the_limit_is_exceeded_lists_excluded_ids_and_gives_unfiltered_numbers():
     w, m, doc_of = eval_env()
     tmpd = tempfile.mkdtemp()
@@ -1392,6 +1425,7 @@ def t30_bm25_ties_are_broken_by_key_independent_of_hash_seed():
     assert outs == {"aa:0,bb:0,cc:0,mm:0,qq:0,zz:0"}, outs
 
 
+@small_set_a
 def t30_bm25_baseline_cli_scores_a_set_over_the_copys_chunks_after_the_gate():
     w, m, doc_of = eval_env()
     tmpd = tempfile.mkdtemp()
@@ -1412,8 +1446,7 @@ def t21_scoring_modes_refuse_on_a_failing_gate_and_search_nothing_exempt_modes_r
     w, m, doc_of = eval_env()
     tmpd = tempfile.mkdtemp()
     cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
-    pos = [dict(id=f"A{n:02d}", section=n, query=f"sit {n}") for n in range(1, 43)]
-    a = write_set(Path(tmpd, "a.json"), pos, [dict(id="NA1", kind="off", query="neg")])
+    a = write_set(Path(tmpd, "a.json"), *a_parts())
     bp, script = b_set(tmpd, doc_of)
     w.srv("pwq-test").docs[doc_of(3)]["embedded"] = 0
     srch = FakeSearch({}, w)
@@ -1422,7 +1455,7 @@ def t21_scoring_modes_refuse_on_a_failing_gate_and_search_nothing_exempt_modes_r
         "ac2": ["--ac2", "--set-a-path", str(a), "--copy", str(cp), "--floor", "0.43"],
         "sweep": ["--sweep", "--set", "A", "--set-a-path", str(a), "--floor", "0.43"],
         "setA": ["--set", "A", "--set-a-path", str(a), "--floor", "0.43"],
-        "setB-sealed": ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"],
+        "setB-sealed": sealed(bp),
         "bm25": ["--baseline", "bm25", "--set", "A", "--set-a-path", str(a), "--copy", str(cp)],
     }
     for name, args in refused.items():
@@ -1441,6 +1474,7 @@ def t21_scoring_modes_refuse_on_a_failing_gate_and_search_nothing_exempt_modes_r
     assert code == 0, err.getvalue()
 
 
+@small_set_a
 def t24_set_a_scoring_cli_reports_recall_and_names_the_best_document_for_misses():
     w, m, doc_of = eval_env()
     tmpd = tempfile.mkdtemp()
@@ -1499,6 +1533,7 @@ def t24_sweep_covers_0_38_to_0_50_and_judges_adequacy_by_the_ml_criteria():
     assert next(x for x in r if x["floor"] == 0.43)["adequate"] is False
 
 
+@small_set_a
 def t24_sweep_cli_prints_one_row_per_floor():
     w, m, doc_of = eval_env()
     a = write_set(Path(tempfile.mkdtemp(), "a.json"), [dict(id="A01", section=1, query="s1")], [dict(id="NA1", kind="off", query="n1")])
@@ -1515,7 +1550,7 @@ def t31_ac2_checks_title_situation_and_last_paragraph_per_unit_and_the_title_via
     tmpd = tempfile.mkdtemp()
     cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
     pos = [dict(id=f"A{n:02d}", section=n, query=f"sit {n}") for n in range(1, 43)]
-    a = write_set(Path(tmpd, "a.json"), pos, [])
+    a = write_set(Path(tmpd, "a.json"), pos, a_parts()[1])  # ac2 reads the positives; the shape check wants the negatives too
     ents = kb.copy_entries(copy_text())
     sec_unit = {s.index: u.id for u in units() for s in u.members}
     doc_by_unit = {e.id: doc_of(next(n for n, u in sec_unit.items() if u == e.id)) for e in ents}
@@ -1748,7 +1783,7 @@ def t92_f7_eval_scoring_refuses_on_a_partial_manifest():
     m.write_text(json.dumps(mf))
     bp, script = b_set(tempfile.mkdtemp(), doc_of)
     srch = FakeSearch(script, w)
-    code, out, err = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--timeout", "0"], srch, w, m)
+    code, out, err = run_eval(sealed(bp, "--timeout", "0"), srch, w, m)
     assert code == 4 and gone["id"] in err and "ABSENT" in err and srch.calls == [], (code, err)
     assert not Path(str(bp) + ".scored").exists()
 
@@ -1824,6 +1859,8 @@ def t94_f2_a_malformed_set_b_refuses_in_probe_sealed_and_baseline_before_any_sea
             mutate(pos, neg)
             bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b.json"), pos, neg)
             srch = FakeSearch(script, w)
+            if "--sealed-once" in mode:
+                mode = mode + ["--expect-sha256", sha_of(bp)]
             code, out, err = run_eval(["--set", "B", "--set-b-path", str(bp)] + mode, srch, w, m)
             assert code == 2 and why in err, (why, mode, code, err)
             assert srch.calls == [] and not Path(str(bp) + ".scored").exists(), (why, mode)
@@ -1835,10 +1872,9 @@ def t94_f2_a_refused_set_b_leaves_the_seal_for_the_corrected_set():
     pos, neg, script = b_parts(doc_of)
     bp = Path(tempfile.mkdtemp(), "sealed", "b.json")
     write_set(bp, pos[:-1], neg)
-    args = ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"]
-    assert run_eval(args, FakeSearch(script, w), w, m)[0] == 2
+    assert run_eval(sealed(bp), FakeSearch(script, w), w, m)[0] == 2
     write_set(bp, pos, neg)  # the corrected file at the same path scores: nothing was burnt
-    assert run_eval(args, FakeSearch(script, w), w, m)[0] == 0
+    assert run_eval(sealed(bp), FakeSearch(script, w), w, m)[0] == 0
     assert Path(str(bp) + ".scored").is_file()
 
 
@@ -1851,6 +1887,7 @@ def t95_f8_distinct_docs_mean_is_over_positive_queries_only():
     assert evaluate([], neg, unit_doc=SEC_DOC)["distinct_docs_mean"] == 0.0
 
 
+@small_set_a
 def t95_f8_bm25_is_fed_the_raw_situation_never_the_prefixed_query():
     w, m, doc_of = eval_env()
     tmpd = tempfile.mkdtemp()
@@ -1903,6 +1940,156 @@ def t96_f4_diverge_reports_a_registry_built_from_another_copy_pin_or_date():
         assert len(found) == 1 and found[0][0] == "REGISTRY-STALE" and found[0][1] == "-" and key in found[0][2], (key, found)
         run_ingest(w, copy, manifest=m)  # re-registering repairs it
         assert run_diverge(w, m, copy) == []
+
+# ----------------------------------------------------------------------------- S7b: Set A shape, sealed sha, tail flags
+def a_parts():
+    """A well-shaped Set A: 42 positives (one per section 1-42), 14 negatives (7 near, 7 off), unique ids."""
+    pos = [dict(id=f"A{n:02d}", section=n, query=f"a sit {n}") for n in range(1, 43)]
+    neg = [dict(id=f"AN{kind[0]}{j}", kind=kind, query=f"a neg {kind} {j}") for kind in ("near", "off") for j in range(7)]
+    return pos, neg
+
+
+def _a_malformed_cases():
+    """(why-substring, mutate(pos, neg)): each breaks exactly one clause of the ML section 3 shape."""
+    return [
+        ("positives", lambda pos, neg: pos.pop()),  # 41
+        ("positives", lambda pos, neg: pos.append(dict(id="AX", section=1, query="x"))),  # 43
+        ("section", lambda pos, neg: pos.__setitem__(-1, dict(pos[-1], section=1))),  # 42, section 1 twice, 42 missing
+        ("section", lambda pos, neg: pos.__setitem__(-1, dict(pos[-1], section=43))),  # 42, outside 1-42
+        ("negatives", lambda pos, neg: neg.pop()),  # 13
+        ("negatives", lambda pos, neg: neg.append(dict(id="ANX", kind="near", query="x"))),  # 15
+        ("split", lambda pos, neg: next(n for n in neg if n["kind"] == "near").update(kind="off")),  # 6 near / 8 off
+        ("split", lambda pos, neg: next(n for n in neg if n["kind"] == "off").update(kind="near")),  # 8 near / 6 off
+        ("duplicate", lambda pos, neg: pos.__setitem__(0, dict(pos[0], id=pos[1]["id"]))),
+        ("duplicate", lambda pos, neg: neg.__setitem__(0, dict(neg[0], id=pos[0]["id"]))),  # across the two lists
+    ]
+
+
+def t97_validate_set_a_accepts_the_spec_shape_and_names_each_violated_clause():
+    pos, neg = a_parts()
+    kb.validate_set_a({"positives": pos, "negatives": neg})
+    assert (kb.SET_A_SECTIONS, kb.SET_A_NEAR, kb.SET_A_OFF) == (42, 7, 7)
+    for why, mutate in _a_malformed_cases():
+        pos, neg = a_parts()
+        mutate(pos, neg)
+        e = raises(kb.KBError, kb.validate_set_a, {"positives": pos, "negatives": neg})
+        assert why in str(e) and "Set A shape" in str(e), (why, str(e))
+
+
+def t97_a_malformed_set_a_refuses_in_every_scoring_mode_before_any_search_but_not_in_before():
+    w, m, doc_of = eval_env()
+    cp = Path(tempfile.mkdtemp(), "copy.md"); cp.write_text(copy_text())
+    modes = {"score": ["--set", "A"], "sweep": ["--sweep", "--set", "A"], "ac2": ["--ac2"],
+             "bm25": ["--baseline", "bm25", "--set", "A"]}
+    for why, mutate in _a_malformed_cases():
+        for name, mode in modes.items():
+            pos, neg = a_parts()
+            mutate(pos, neg)
+            a = write_set(Path(tempfile.mkdtemp(), "a.json"), pos, neg)
+            srch = FakeSearch({}, w)
+            code, out, err = run_eval(mode + ["--set-a-path", str(a), "--copy", str(cp), "--floor", "0.43"], srch, w, m)
+            assert code == 2 and why in err and "Set A shape" in err, (why, name, code, err)
+            assert srch.calls == [] and out == "", (why, name, out)
+    pos, neg = a_parts()
+    pos.pop()
+    a = write_set(Path(tempfile.mkdtemp(), "a.json"), pos, neg)
+    code, out, err = run_eval(["--set", "A", "--before", "--set-a-path", str(a), "--floor", "0.43"], FakeSearch({}, w), w, m)
+    assert code == 0 and "mode=before" in out, (code, err)  # --before is deliberately exempt
+
+def t98_sealed_once_requires_the_frozen_sha256_and_refuses_before_sentinel_gate_and_search():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    good = sha_of(bp)
+    base = ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--timeout", "0"]
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0  # a failing gate would exit 4: the sha check comes first
+    Path(str(bp) + ".scored").write_text("{}")  # so would a burnt seal (5)
+    wrong = {"missing": [], "flipped": ["--expect-sha256", ("0" if good[0] != "0" else "1") + good[1:]],
+             "upper-case": ["--expect-sha256", good.upper()], "prefix": ["--expect-sha256", good[:40]],
+             "padded": ["--expect-sha256", good + "0"], "empty": ["--expect-sha256", ""]}
+    for name, extra in wrong.items():
+        srch = FakeSearch(script, w)
+        code, out, err = run_eval(base + extra, srch, w, m)
+        assert code == 2 and "expect-sha256" in err and srch.calls == [] and out == "", (name, code, err)
+    assert Path(str(bp) + ".scored").read_text() == "{}"  # no sentinel touched
+    Path(str(bp) + ".scored").unlink()
+    for name, extra in wrong.items():
+        assert run_eval(base + extra, FakeSearch(script, w), w, m)[0] == 2 and not Path(str(bp) + ".scored").exists(), name
+    # the right hash passes the check and reaches the next one (here the failing gate)
+    code, out, err = run_eval(base + ["--expect-sha256", good], FakeSearch(script, w), w, m)
+    assert code == 4, (code, err)
+    # a Set B edited after freezing scores nothing
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 2
+    frozen = ["--expect-sha256", good]
+    bp.write_text(bp.read_text() + " ")
+    srch = FakeSearch(script, w)
+    assert run_eval(base + frozen, srch, w, m)[0] == 2 and srch.calls == [] and not Path(str(bp) + ".scored").exists()
+
+
+def t98_the_sha256_belongs_to_sealed_once_alone_probe_and_baseline_do_not_take_it():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    for mode in (["--probe"], ["--baseline", "bm25", "--floor", "0.43"]):
+        srch = FakeSearch(script, w)
+        code, out, err = run_eval(["--set", "B", "--set-b-path", str(bp)] + mode + ["--expect-sha256", sha_of(bp)], srch, w, m)
+        assert code == 2 and "expect-sha256" in err and srch.calls == [], (mode, code, err)
+    assert run_eval(["--set", "B", "--probe", "--set-b-path", str(bp)], FakeSearch(script, w), w, m)[0] == 0
+
+def t99_tail_unit_sections_are_the_units_with_four_or_more_chunks_at_the_pin():
+    got = kb.tail_unit_sections(source(), kb._load_chunker(), "2026-11-09")
+    assert [set(secs) for _, secs in got] == TAIL_UNIT_SECTIONS, got
+    assert [uid for uid, _ in got] == ["u02", "u04", "u08", "u09", "u11", "u15", "u21", "u24", "u26", "u28", "u29", "u30"]
+    # the threshold is the unit's own chunk count: a splitter that yields 3 chunks everywhere finds none, 4 finds all 36
+    assert kb.tail_unit_sections(source(), lambda text: ["c"] * 3, "2026-11-09") == []
+    assert len(kb.tail_unit_sections(source(), lambda text: ["c"] * 4, "2026-11-09")) == 36
+
+
+def t99_validate_set_b_wants_a_tail_flagged_positive_in_each_tail_unit():
+    w, m, doc_of = eval_env()
+    tails = [(f"u{i}", sorted(secs)) for i, secs in enumerate(TAIL_UNIT_SECTIONS)]
+    pos, neg, _ = b_parts(doc_of)
+    kb.validate_set_b({"positives": pos, "negatives": neg}, tail_units=tails)
+    kb.validate_set_b({"positives": pos, "negatives": neg})  # without a unit list the check is off
+    for i, secs in enumerate(TAIL_UNIT_SECTIONS):
+        pos, neg, _ = b_parts(doc_of)
+        for p in pos:
+            if p["section"] in secs:
+                p["tail"] = False
+        e = raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": neg}, tail_units=tails)
+        assert "tail" in str(e) and f"u{i}" in str(e), (i, str(e))
+        # a flag on one positive of the unit's other section still counts; a flag on another unit's section does not
+        pos, neg, _ = b_parts(doc_of)
+        for p in pos:
+            if p["section"] in secs:
+                p["tail"] = False
+        last = max(secs)
+        next(p for p in pos if p["section"] == last).update(tail=True)
+        kb.validate_set_b({"positives": pos, "negatives": neg}, tail_units=tails)
+        pos, neg, _ = b_parts(doc_of)
+        for p in pos:
+            p["tail"] = p["section"] not in secs and p["section"] in set().union(*TAIL_UNIT_SECTIONS)
+        raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": neg}, tail_units=tails)
+    pos, neg, _ = b_parts(doc_of)
+    for p in pos:
+        p["tail"] = False
+    raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": neg}, tail_units=[("u9", [1])])  # one unit, no flag
+
+
+def t99_sealed_once_refuses_a_set_b_missing_a_tail_probe_before_sentinel_gate_and_search_but_probe_and_baseline_run():
+    w, m, doc_of = eval_env()
+    pos, neg, script = b_parts(doc_of)
+    for p in pos:
+        if p["section"] in (26,):
+            p["tail"] = False  # u26 loses its tail probe
+    bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b.json"), pos, neg)
+    srch = FakeSearch(script, w)
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0
+    code, out, err = run_eval(sealed(bp, "--timeout", "0"), srch, w, m)
+    assert code == 2 and "tail" in err and "u26" in err and srch.calls == [] and not Path(str(bp) + ".scored").exists(), (code, err)
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 2
+    assert run_eval(["--set", "B", "--probe", "--set-b-path", str(bp)], FakeSearch(script, w), w, m)[0] == 0
+    # the full set (every tail unit flagged) scores
+    bp2, script2 = b_set(tempfile.mkdtemp(), doc_of)
+    assert run_eval(sealed(bp2), FakeSearch(script2, w), w, m)[0] == 0
 
 
 def main() -> int:

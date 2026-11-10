@@ -995,13 +995,24 @@ SET_B_SECTIONS = 42  # a constant of the spec (ML §1), never derived from the s
 SET_B_PER_SECTION = 2
 SET_B_NEAR = 15
 SET_B_OFF = 15
+TAIL_MIN_CHUNKS = 4  # ML section 5 rule 4: a unit with this many chunks or more needs a tail probe
 
 
-def validate_set_b(data: dict) -> None:
+def tail_unit_sections(source: Source, split, migrated_on: str = MIGRATED_ON) -> list[tuple[str, list[int]]]:
+    """(unit id, member section numbers) of every unit that renders to >= TAIL_MIN_CHUNKS chunks: the units
+    ML section 5 rule 4 wants a tail probe for. `split` is the chunker (`_load_chunker()`), the same count
+    `units --chunks` prints."""
+    return [(u.id, [m.index for m in u.members]) for u in build_units(source)
+            if len(split(render_unit(u, migrated_on))) >= TAIL_MIN_CHUNKS]
+
+
+def validate_set_b(data: dict, tail_units: list[tuple[str, list[int]]] | None = None) -> None:
     """ML §1's sealed-set shape: 42 sections x 2 positives = 84, and 15 near + 15 off negatives.
 
     Run before anything burns the one-shot seal: the coverage clause of AC-3 divides by
-    SET_B_SECTIONS, not by however many sections the loaded set happens to mention."""
+    SET_B_SECTIONS, not by however many sections the loaded set happens to mention.
+    `tail_units` (from `tail_unit_sections`, when the caller can derive it at the pin) adds ML section 5
+    rule 4: each such unit needs a `tail`-flagged positive on one of its sections."""
     pos, neg = data["positives"], data["negatives"]
     want_pos = SET_B_SECTIONS * SET_B_PER_SECTION
     if len(pos) != want_pos:
@@ -1024,6 +1035,40 @@ def validate_set_b(data: dict) -> None:
     ids = [i["id"] for i in pos + neg]
     if len(set(ids)) != len(ids):
         raise KBError("Set B shape: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
+    flagged = {p["section"] for p in pos if p.get("tail")}
+    bare = [f"{uid} (sections {','.join(map(str, secs))})" for uid, secs in tail_units or [] if not flagged & set(secs)]
+    if bare:
+        raise KBError(f"Set B shape: no tail-flagged positive for unit {'; '.join(bare)} "
+                      f"(each unit of >= {TAIL_MIN_CHUNKS} chunks needs one)")
+
+
+SET_A_SECTIONS = 42  # a constant of the spec (ML section 3), never derived from the set under test
+SET_A_NEAR = 7
+SET_A_OFF = 7
+
+
+def validate_set_a(data: dict) -> None:
+    """ML section 3's Set A shape: one positive per section 1-42, and 7 near + 7 off negatives, unique ids.
+
+    Run before every Set A scoring mode (not `--before`): coverage divides by SET_A_SECTIONS and the floor
+    (ML section 6) rests on the false-accept counts, so a partial set must not report "ok"."""
+    pos, neg = data["positives"], data["negatives"]
+    if len(pos) != SET_A_SECTIONS:
+        raise KBError(f"Set A shape: {len(pos)} positives, need {SET_A_SECTIONS} (one per section)")
+    secs = sorted(p["section"] for p in pos)
+    if secs != list(range(1, SET_A_SECTIONS + 1)):
+        dup = sorted({n for n in secs if secs.count(n) > 1})
+        missing = sorted(set(range(1, SET_A_SECTIONS + 1)) - set(secs))
+        raise KBError(f"Set A shape: every section 1-{SET_A_SECTIONS} needs exactly one positive "
+                      f"(repeated or out of range {dup or sorted(set(secs) - set(range(1, SET_A_SECTIONS + 1)))}, missing {missing})")
+    if len(neg) != SET_A_NEAR + SET_A_OFF:
+        raise KBError(f"Set A shape: {len(neg)} negatives, need {SET_A_NEAR + SET_A_OFF}")
+    near = sum(1 for n in neg if n["kind"] == "near")
+    if (near, len(neg) - near) != (SET_A_NEAR, SET_A_OFF):
+        raise KBError(f"Set A shape: negative split near/off is {near}/{len(neg) - near}, need {SET_A_NEAR}/{SET_A_OFF}")
+    ids = [i["id"] for i in pos + neg]
+    if len(set(ids)) != len(ids):
+        raise KBError("Set A shape: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
 
 
 def resolve_set_b_path(arg, env=os.environ) -> Path:
@@ -1037,6 +1082,22 @@ def resolve_set_b_path(arg, env=os.environ) -> Path:
     except ValueError:
         return path
     raise KBError(f"Set B must live outside the repo, got {path}")
+
+
+def check_expected_sha256(expected, path: Path) -> None:
+    """The sealed scoring's freeze check (ML section 5 rule 6): `expected` is the lower-case 64-hex sha256 recorded when
+    Set B was frozen, compared exactly (no case folding, no prefix) with the file's own."""
+    if expected is None:
+        raise KBError("--sealed-once requires --expect-sha256 <sha256 of Set B recorded at freeze>")
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise KBError("--expect-sha256 must be 64 lower-case hex characters")
+    try:
+        actual = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError as e:
+        raise KBError(f"cannot read Set B {path}: {e}") from e
+    if actual != expected:
+        raise KBError(f"--expect-sha256 mismatch: Set B {path} hashes to {actual}, expected {expected}; "
+                      "it was edited after freezing")
 
 
 class RestSearcher:
@@ -1234,6 +1295,10 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     chosen = [bool(args.probe), bool(args.sealed_once), bool(args.before), bool(args.ac2), bool(args.sweep), bool(args.baseline)]
     if sum(chosen) > 1 or (not any(chosen) and args.set is None):
         raise KBError("choose one mode: --set A [--before] | --set B --probe|--sealed-once | --ac2 | --sweep | --baseline bm25")
+    if args.sealed_once:  # before the sentinel pre-check, the gate and any search: a B edited after freezing must not score
+        check_expected_sha256(args.expect_sha256, resolve_set_b_path(args.set_b_path, env))
+    elif args.expect_sha256 is not None:
+        raise KBError("--expect-sha256 belongs to --sealed-once only")
     if not args.probe and not args.baseline and args.floor is None:
         raise KBError("--floor is required (it is recorded in every report)")
 
@@ -1241,7 +1306,13 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
         return load_set(resolve_set_b_path(args.set_b_path, env) if which == "B" else Path(args.set_a_path))
 
     if which == "B":  # shape first: nothing below may spend the seal on a malformed set
-        validate_set_b(load_which())
+        tails = None
+        if args.sealed_once:  # the manifest's pin gives the units; probe and baseline run before/without that tie
+            pinned = load_manifest(mpath)
+            tails = tail_unit_sections(parse_source(read_pinned(pinned["pin"])), _load_chunker(), pinned["migratedOn"])
+        validate_set_b(load_which(), tails)
+    elif not args.before:  # every Set A scoring mode; --before only lists coverage and tallies nothing
+        validate_set_a(load_which())
 
     def fetch_all(items):
         return [searcher.search(ws, build_query(template, it["query"]), EVAL_WINDOW) for it in items]
@@ -1503,6 +1574,7 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     p.add_argument("--before", action="store_true", help="Set A before ingestion (gate-exempt)")
     p.add_argument("--probe", action="store_true", help="Set B: rank-1 source and score only (gate-exempt, no sentinel)")
     p.add_argument("--sealed-once", action="store_true", help="Set B: the one scoring; writes the sentinel")
+    p.add_argument("--expect-sha256", help="--sealed-once only (required there): the sha256 of Set B recorded at freeze")
     p.add_argument("--ac2", action="store_true")
     p.add_argument("--sweep", action="store_true")
     p.add_argument("--baseline", choices=["bm25"])
