@@ -33,7 +33,8 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U23 | `cobb` | `af7b500621a0b776c` | accepted | S10: 36 units in `ws:pwq-test` (:8210), gate clean (after 18 test-only `replace`, one round); teco re-ran `gate`: clean; scratch manifest at scratchpad `scratch-manifest.json` | `qa-engineer` S11 → — | 171k tok / 48 tools (cumulative) |
 | U24 | `analyst` | `afa0d070a916aa429` | accepted | RCA `docs/reviews/python-web-quirks-kb-rca.md`: why documents end `failed`/`processing`, S13 pacing implications | — | — |
 | U25 | `tdd-engineer` | `a3bcf906217806472` (resumed) | accepted | S10 RCA fix: `ingest`/`replace` paced per document (poll to terminal), `gate` polls to terminal state per document; gate stays strict (T21). Open scope question (not decided): is `failed`-with-embeddings a gate failure or a warning (entity extraction not needed for search; `search_chunks` filters on `documentCurrent` only) | — | — |
-| U26 | `qa-engineer` | `a7ce625b804693c97` | in-flight | S11: AC-2/5/7/8/12 in `ws:pwq-test` (T31-T38), report `docs/test-reports/python-web-quirks-kb-report.md`; restores the 36-unit clean state at the end; S12 waits (shared test-graph state) | `analyst` (G3 at the end) → — | — |
+| U26 | `qa-engineer` | `a7ce625b804693c97` | accepted | S11: AC-2/5/7/8/12 in `ws:pwq-test` (T31-T38), report `docs/test-reports/python-web-quirks-kb-report.md`; restores the 36-unit clean state at the end; S12 waits (shared test-graph state) | `analyst` (G3 at the end) → — | — |
+| U27 | `tdd-engineer` | `a3bcf906217806472` (resumed) | in-flight | S11 defect D-1 (medium): `eval --ac2`/`gate`/`diverge` cannot see a deleted tail chunk (document-level match). Fix: `gate` compares each unit's stored chunk count with the expected count derived from the copy (`units --chunks`); S12 waits | — | — |
 
 
 
