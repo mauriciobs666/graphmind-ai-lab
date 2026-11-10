@@ -1,0 +1,1156 @@
+<!-- preamble -->
+# Python web/async-framework quirks
+
+Facts confirmed by hands-on testing (source inspection, `inspect.getsource`, or a stress-test
+script run to completion) against the versions cited per entry — not just the docs' prose. Treat
+them as **verified for that version range**; re-check on a major upgrade of the framework in
+question.
+<!-- preamble-note -->
+This file is the source of record for the python-web-quirks gotchas. The `ws:agent-team`
+knowledge base holds a rebuildable index of it (one document per unit); new gotchas enter
+by raw capture and then `cobb` promotes them here. Lineage: distilled 2026-08-09 from the
+`analyst` agent's learnings inbox (`claude/analyst/kaizen/inbox.md`) via the
+`agent-maintenance` skill §5.
+Migrated: 2026-11-10 from skills/python-web-quirks/SKILL.md at 3fcb171cf03065f99aca800d9ea30ff6a2a7ba95
+<!-- unit u01 -->
+Gotcha: `asyncio.create_task` fire-and-forget: GC risk is real per the docs, but didn't reproduce under stress
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `asyncio.create_task` fire-and-forget: GC risk is real per the docs, but didn't reproduce under stress
+
+**The docs' warning:** `asyncio.create_task(coro)` with the returned `Task` never stored anywhere
+is called out by the official asyncio reference docs as a way to lose the task to garbage
+collection mid-execution: *"save a reference... a task that isn't referenced elsewhere may get
+garbage collected at any time."*
+
+**What was actually observed** (stress test, current CPython at time of testing): a 200-task
+fire-and-forget script — `asyncio.create_task(worker(i))` per iteration, return value never
+stored, `gc.collect()` forced every 10 creations — completed all 200 tasks with none lost. Root
+cause of why it survived: `Task.__init__` schedules `self.__step` via `loop.call_soon`, a
+bound-method closure that strongly references the `Task` from creation; once the task awaits, it
+also registers as a callback on the awaited future, extending the reference chain for the task's
+whole lifetime.
+
+**Consequence for review:** the docs' warned failure mode is real per the contract (nothing
+guarantees the closure-chain behavior across implementations or versions) and the anti-pattern
+(`asyncio.create_task(...)` with no held reference, e.g. a fire-and-forget dispatch of a launch
+or notification) is still worth flagging — but don't auto-escalate it to a confirmed correctness
+blocker without reproducing on the actual runtime in question. It's a real latent-risk/idiom
+finding, not a demonstrated live bug, unless you've seen it actually drop a task.
+<!-- unit u02 -->
+Gotcha: Starlette/FastAPI `BackgroundTasks` (sync callable) is bounded; a raw `threading.Thread` per call is not
+Members:
+- Starlette/FastAPI `BackgroundTasks` (sync callable) is bounded; a raw `threading.Thread` per call is not
+- Starlette `BackgroundTasks` runs one request's tasks sequentially — a slow task delays every later task of the same request
+Versions[1]: Starlette 1.3.1; FastAPI 0.139.0; anyio 4.14.1; anyio 4.14.2; starlette 1.6.0; uvicorn 0.52.x
+Verified[1]: 2026-09-08
+Versions[2]: none stated
+Verified[2]: 2026-11-06
+<!-- body -->
+## Starlette/FastAPI `BackgroundTasks` (sync callable) is bounded; a raw `threading.Thread` per call is not
+
+Verified by reading source: `starlette.background.BackgroundTask.__call__` (Starlette 1.3.1,
+installed alongside FastAPI 0.139.0) routes a **sync** callable through
+`starlette.concurrency.run_in_threadpool` → `anyio.to_thread.run_sync` (anyio 4.14.1). That
+function accepts an optional `limiter: CapacityLimiter | None = None` and, when omitted, falls
+back to anyio's **default limiter** — a bounded pool of exactly **40** worker threads
+(`anyio.to_thread.current_default_thread_limiter().total_tokens == 40`, measured 2026-09-08 in
+`falkor-chat/server/.venv`, anyio 4.14.1 — **name the venv when you re-check**: this repo carries
+five, and `cypher-mcp/.venv` and `mcp-monitor/.venv` hold a newer set, anyio 4.14.2 /
+starlette 1.6.0 / uvicorn 0.52.x, with no FastAPI at all).
+So FastAPI/Starlette's `BackgroundTasks` **throttles** concurrent sync background work out of the
+box.
+
+**Raising that ceiling only works from inside a running event loop.** `total_tokens` is settable
+(`limiter.total_tokens = 100` takes effect), but `current_default_thread_limiter()` is
+**event-loop-scoped**: called with no loop running it raises `anyio.NoEventLoopError` (*"Not
+currently running on any asynchronous event loop"*), so a bump written at module import, in a
+plain `if __name__ == "__main__"` preamble, or anywhere else before the server starts, dies rather
+than applying. Put it inside the async lifespan (or any async startup hook). A plan that says
+"raise the limiter at startup" has not yet said *which* startup, and that ambiguity is the whole
+defect.
+
+**And the setter validates the type but not the *useful* range: `0` is accepted, and deadlocks.**
+Measured 2026-09-08 (`falkor-chat/server/.venv`, anyio 4.14.1, inside `anyio.run`):
+`total_tokens = -1` → `ValueError` *"total_tokens must be >= 0"*; `total_tokens = 0.5` →
+`TypeError` *"total_tokens must be an int or math.inf"*; **`total_tokens = 0` raises nothing** — and
+the next `to_thread.run_sync(...)` then never returns (a 2 s `move_on_after` around one had to
+cancel it). Every sync endpoint FastAPI offloads, and every sync `BackgroundTask`, hangs with no
+traceback anywhere. The shape that reaches this is an unvalidated env read assigned straight to the
+property: `falkor-chat`'s `config.THREAD_LIMIT` is a bare
+`int(os.environ.get("FALKORCHAT_THREAD_LIMIT", "100"))` (`config.py:243`), assigned to the limiter
+in the lifespan at `app.py:369` — so `FALKORCHAT_THREAD_LIMIT=0` is a one-character silent outage.
+**Review rule:** where a config value lands on a capacity limiter, the guard belongs on the config,
+not on the setter — the setter's own refusal covers the wrong half of the domain.
+
+A bare `threading.Thread(target=fn, ...).start()` has no such bound — every call spawns a new OS
+thread unconditionally, with no ceiling.
+
+**Consequence for review:** these two are *not* equivalent under load. "Runs the callable
+off-thread, same as `BackgroundTasks`" is true of a hand-rolled `threading.Thread` dispatcher, but
+"and therefore behaves like `BackgroundTasks`" is not — the off-thread property is easy to verify
+by reading; whether it's *bounded* needs one level deeper (does the substitute have an explicit or
+implicit cap on concurrent threads, or none?). Check this whenever a change compares a hand-rolled
+`threading.Thread` fire-and-forget dispatcher against a framework's `BackgroundTasks` behavior —
+e.g. an MCP tool handler that can't use FastAPI's per-request `BackgroundTasks` object and
+substitutes a daemon thread per call.
+
+## Starlette `BackgroundTasks` runs one request's tasks sequentially — a slow task delays every later task of the same request
+
+The bounded-pool entry above is about *total* parallelism; this is the per-request half.
+`BackgroundTasks.__call__` is `for task in self.tasks: await task()` (verified 2026-11-06,
+starlette in `falkor-chat/server/.venv`, `inspect.getsource`), so tasks added to **one** response run
+one after another; each sync task additionally goes through `run_in_threadpool`. Consequences: a
+sleep, retry or slow provider call inside one task delays every later task of that same request
+(not other requests, not the event loop). A hand-rolled `threading.Thread`-per-job dispatcher
+(falkor-chat's MCP path) has the opposite shape: every job starts at once, so a provider hiccup hits
+all of a document's jobs together and recovers as a thundering herd. Design retry/backoff for the
+path's actual scheduler, not for "background work" in general.
+<!-- unit u03 -->
+Gotcha: FastAPI `response_model_exclude_unset=True` drops defaulted fields on **nested** models silently
+Versions: pydantic 2.13.4; FastAPI 0.139.0
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## FastAPI `response_model_exclude_unset=True` drops defaulted fields on **nested** models silently
+
+Verified against pydantic 2.13.4 (installed alongside FastAPI 0.139.0, which serializes responses
+through the same `exclude_unset` path):
+
+```python
+class Inner(BaseModel):
+    a: str
+    b: str = "default"
+
+class Outer(BaseModel):
+    x: str
+    inner: list[Inner]
+
+Outer.model_validate({"x": "1", "inner": [{"a": "q"}]}).model_dump(exclude_unset=True)
+# => {"x": "1", "inner": [{"a": "q"}]}   -- `b` is gone, not defaulted in
+```
+
+`exclude_unset` is a legitimate way to make "field absent" and "field explicitly null"
+distinguishable on the **top-level** model (e.g. omitting an optional key entirely rather than
+serializing it as `null`, without `exclude_none` swallowing a field that's legitimately `None`).
+But it silently turns **every nested defaulted field** into an optional one too — any field on a
+nested model that the caller didn't explicitly set drops out of the response, whether or not that
+was the intent.
+
+**Consequence for review:** whenever a response model uses `response_model_exclude_unset=True`
+(or the equivalent `model_dump(exclude_unset=True)` call), check every **nested** model in the
+response shape, not just the envelope — the guard against silent field loss there is an
+exact-key-set contract assertion on the nested object, not just on the top-level one.
+<!-- unit u04 -->
+Gotcha: Asserting over a FastAPI app's route table: four built-in doc routes you didn't register, and the included router whose routes aren't there
+Versions: FastAPI 0.139.0; FastAPI 0.139; starlette 1.3.1
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## Asserting over a FastAPI app's route table: four built-in doc routes you didn't register, and the included router whose routes aren't there
+
+Verified against FastAPI 0.139.0: a bare `FastAPI()` already carries four routes — `/openapi.json`,
+`/docs`, `/docs/oauth2-redirect` and `/redoc`. `/docs/oauth2-redirect` is the one routinely omitted
+from a hand-written list of three. They are **defaults, not unconditional**, and the suppression
+switches are not one-per-route: `FastAPI(openapi_url=None)` registers *none* of the four (the schema
+route gates the other three), `docs_url=None` drops `/docs` **and** `/docs/oauth2-redirect`
+together, `redoc_url=None` drops `/redoc`, and `swagger_ui_oauth2_redirect_url=None` drops the
+redirect alone. So the count is a property of how the app was constructed, not of the framework — an
+absolute claim about it needs the constructor's kwargs in hand.
+
+**Consequence for a route-table assertion:** don't enumerate the exemption, derive it —
+`frozenset(r.path for r in FastAPI().routes)` computed from a bare app at import time stays correct
+across a framework upgrade that adds a fifth doc route, where a hardcoded list of four silently
+red-fails an assertion about *your* app. The trade runs the other way too: a derived exemption means
+a future framework default is exempted silently, so an app whose own surface is the thing under test
+should assert its registered set by equality, not by count.
+
+**On FastAPI 0.139 `app.routes` does not contain the included router's routes at all.**
+`include_router()` stores the router as one opaque `fastapi.routing._IncludedRouter` entry rather
+than splicing its `APIRoute`s in, so `[r.path for r in app.routes]` reports the whole REST surface
+as **zero paths** — the same answer whether the router is mounted or not, which makes an
+absent-route assertion written that way unfalsifiable rather than merely wrong. Flatten via
+`route.original_router.routes`, or read `app.openapi()["paths"]` at the cost of missing
+`include_in_schema=False` routes. Two traps inside the flatten itself:
+
+- **The prefix lives on the wrapper, not on the path.** `include_router(prefix="/shop")` is stored
+  as `route.include_context.prefix`; the inner `APIRoute.path` stays `"/join"`. A walk that
+  recurses into `original_router.routes` and appends the raw `.path` therefore reports the same
+  list for a router mounted at `/shop/api`, at `/` or at `/admin`. Thread the prefix through the
+  walk and accumulate it — nested includes compose (`/shop` + `/api` + `/join`). Contrast
+  `APIRouter(prefix=…)` declared at *construction*, which **is** baked into `.path` at include
+  time; only the `include_router(prefix=…)` form is affected.
+- **Not every entry is a router or a route.** `Mount` appears directly (a `"/"` static catch-all
+  normalises to the empty string `""`), and `starlette.routing.Host` has neither
+  `original_router` nor `.path` — so the unclassified branch should raise, not skip, or the
+  surface silently shrinks.
+
+**Write a positive control for the flatten before trusting it**: in the same test, assert it sees a
+route you know exists, then use it to assert one doesn't. Every failure above is a *false green* —
+the assertion still passes while proving nothing. Verified against fastapi 0.139.0 /
+starlette 1.3.1; `create_app(mount_mcp=True)` yields 4 starlette `Route` (docs) + 1
+`_IncludedRouter` (35 inner routes) + 2 `Mount`.
+<!-- unit u05 -->
+Gotcha: FastAPI's `APIRoute` does not add `HEAD` to a `GET` route — Starlette's `Route` does, and the difference is only visible when something else matches the path
+Versions: fastapi 0.139.0; starlette 1.3.1
+Verified: 2026-09-08
+<!-- body -->
+## FastAPI's `APIRoute` does not add `HEAD` to a `GET` route — Starlette's `Route` does, and the difference is only visible when something else matches the path
+
+Verified 2026-09-08 against fastapi 0.139.0 / starlette 1.3.1 (`falkor-chat/server/.venv`).
+`starlette.routing.Route('/x', h, methods=['GET'])` reports `methods == {'GET', 'HEAD'}`; the
+`APIRoute` FastAPI builds for `@app.get('/x')` reports `{'GET'}`. So a `HEAD` request is only ever a
+**partial** match on a FastAPI `GET` endpoint — it never reaches the handler.
+
+**`HEAD` is not special; the *symptom* is.** On a bare app the partial match answers `405`, exactly
+like `DELETE` or `PUT`. But a partial match loses to any later route or mount that matches the path
+in full, and `starlette.routing.Mount` matches on path alone, ignoring the method — so on an app
+whose API routes live under a prefix that also carries a `StaticFiles` mount, *every* non-`GET`
+method falls through into the mount. Confirmed by replacing the mount with a permissive ASGI app,
+which answered `MOUNT:OPTIONS` / `MOUNT:DELETE` / `MOUNT:PUT` while `GET` still reached the route.
+`StaticFiles` then splits the outcomes and hides that: it *serves* `GET`/`HEAD`, so `HEAD` becomes a
+**404** for a file that does not exist, while every other method gets `StaticFiles`' own **405** —
+byte-identical to the `405` a real partial match produces.
+
+```
+FastAPI(); include_router(api, prefix="/shop/api"); mount("/shop", StaticFiles(...))
+GET /shop/api/state -> 200 (the route)   HEAD -> 404 (the mount)   OPTIONS/DELETE/PUT -> 405 (the mount)
+```
+
+**Consequence for review.** A `405` on such an app is *not* evidence that the request reached the
+route and was rejected on method — it may never have touched the route at all. And any handler
+keyed on `(request.method, request.url.path)` against a `GET`-only route table cannot `KeyError` on
+a `HEAD`, for a stronger reason than "HEAD is unhandled": the request is not routed there in the
+first place. To restore `HEAD`, declare it (`methods=["GET", "HEAD"]`), or mount the static app on a
+path that does not shadow the API prefix.
+<!-- unit u06 -->
+Gotcha: Starlette's `StaticFiles.get_response` returns its `404.html` by direct return, not by raising — a subclass override that only catches a raised exception is silently bypassed
+Versions: starlette 1.3.1
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## Starlette's `StaticFiles.get_response` returns its `404.html` by direct return, not by raising — a subclass override that only catches a raised exception is silently bypassed
+
+`StaticFiles(html=True).get_response` serves a directory's `404.html` (when one exists) as a
+`FileResponse` **returned directly**, not by raising `StarletteHTTPException(404)` first. An
+SPA-fallback subclass pattern that overrides error handling by catching the raised exception (e.g.
+`except StarletteHTTPException: return index_response`) never runs on this path whenever the served
+directory happens to contain a `404.html` — the fallback is silently bypassed, not because the
+override is wrong, but because there was no exception to catch.
+
+Verified against starlette 1.3.1 (`staticfiles.py:147-152`, `falkor-chat/server/.venv`). Check
+whether the served directory's build output could ever include a `404.html` before trusting an
+SPA-fallback override that only intercepts a raised exception — a bundler default (or a
+copied-in static asset) can introduce one without anyone intending an SPA-fallback bypass.
+
+Origin: `falkor-chat` `_SPAStaticFiles` (DEF-1 fix, salesperson-ui) review — no `404.html` exists in
+the current salesperson build, so the gap is latent, not live, but the override shape itself does
+not close it.
+<!-- unit u07 -->
+Gotcha: FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
+Versions: FastAPI 0.139.0
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
+
+Verified against FastAPI 0.139.0: the parameter is typed `dict[int | str, dict[str, Any]]`, and the
+string form is a wildcard *range* (`"4XX"`) — coarser than a status, never finer. There is no
+declaration-side key for anything inside the body: not an error token, not the offending `field`.
+Two documented 422s on one route that differ only by which field failed therefore reach
+`route.responses` as a single `422` entry, and the collapse is correct as built, not a defect.
+
+**Consequence for a contract gate:** a check that reads declarations back off `app.routes` compares
+at **status** granularity and structurally cannot see a finer axis. A response table specified per
+`(status, field)` has to say which half each side proves — the status half by the declaration, the
+finer half only by executing the route. Left unsaid, the table and the gate read as contradicting
+each other.
+
+**The escape hatch, if you need the finer axis declared anyway:** the *key* set is closed, but the
+per-status *value* is not validated — FastAPI stores the `responses` dict verbatim on
+`route.responses` and passes unrecognised keys straight through into the generated OpenAPI
+operation. So an `x-`-prefixed extension inside a status entry (`responses={409: {"description":
+…, "x-storefront-error": ["ALREADY_JOINED", "THREAD_CLOSED"]}}`) survives **both** reads: off the
+route object and out of `app.openapi()`, on a router route reached through `include_router` as
+well. That turns a per-route declaration carrying a discriminator finer than the status code into
+something a gate can assert against, instead of only executing the route. Verified against FastAPI
+0.139.0; the string range form (`"4XX"`) carries extensions the same way. Two caveats: it is an
+extension, so nothing validates it — a typo in the key is silently just another passthrough — and
+a value that is not JSON-serialisable fails only at `app.openapi()` time, not at import.
+<!-- unit u08 -->
+Gotcha: FastAPI/Starlette's exception-handler registry: MRO lookup, a class identity trap, and silent replacement
+Versions: FastAPI 0.139.0; Starlette 1.3.1; redis-py 8.0.1
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## FastAPI/Starlette's exception-handler registry: MRO lookup, a class identity trap, and silent replacement
+
+Verified against FastAPI 0.139.0 / Starlette 1.3.1. Four facts that decide whether an
+error-envelope map does what its author thinks — the middle two are the ones that produce a green
+test proving nothing.
+
+- **Resolution walks the raised exception's MRO and takes the first *registered* class**
+  (`starlette._exception_handler._lookup_exception_handler`: `for cls in type(exc).__mro__: if cls
+  in exc_handlers`). Registration order is irrelevant; specificity is decided entirely by the
+  exception hierarchy. The useful consequence: **subclassing** an exception claims its own envelope
+  without changing what the base class does elsewhere on the same app — a `StorefrontHTTPError
+  (HTTPException)` with its own handler returns a flat `{error, detail}` body while a plain
+  `HTTPException` raised on the next route still gets FastAPI's `{detail}`.
+- **FastAPI's built-in handler is registered on `starlette.exceptions.HTTPException`, which is not
+  the same class object as `fastapi.HTTPException`.** On a bare `FastAPI()`,
+  `fastapi.HTTPException in app.exception_handlers` is **`False`** and the Starlette one is `True`
+  (`fastapi.HTTPException is starlette.exceptions.HTTPException` → `False`; `issubclass(...)` →
+  `True`, which is why raising the FastAPI one still resolves). Two consequences: a test that
+  *enumerates or classifies* `app.exception_handlers` must key on the Starlette class or it
+  silently classifies nothing; and `add_exception_handler(fastapi.HTTPException, …)` **adds a
+  fourth key rather than replacing the default** — your handler then wins for `fastapi.HTTPException`
+  and its subclasses, while the bare `starlette` `HTTPException` that Starlette itself raises for
+  routing 404s/405s keeps the untouched `{detail}` shape. The three keys a bare app starts with are
+  `starlette.exceptions.HTTPException`, `fastapi.exceptions.RequestValidationError` and
+  `fastapi.exceptions.WebSocketRequestValidationError`.
+- **`add_exception_handler` on an already-registered type replaces the previous handler silently**
+  — it is a dict assignment, not a chain; no warning, no second entry. The incumbent is still
+  readable from `app.exception_handlers[Exc]` **immediately before** you overwrite it, which is the
+  whole idiom for scoping an app-wide handler to one path prefix with no import cycle: capture the
+  inherited handler, register a wrapper that re-shapes on its own prefix and awaits the captured one
+  everywhere else. Assert the incumbent is present at wiring time rather than assuming it — an
+  absent one otherwise surfaces as a `TypeError` *inside* an exception handler, on the first error a
+  user provokes.
+- **A handler map claimed "total by exception type" has to be checked against real MROs, because
+  library exception classes that read as a hierarchy are often siblings.** `redis.exceptions.
+  TimeoutError` and `redis.exceptions.ConnectionError` are **siblings** under `RedisError` (neither
+  is a subclass of the other, and neither is the builtin `ConnectionError`) — so `except
+  redis.exceptions.ConnectionError` catches no timeout, and catches nothing that subclasses the
+  *builtin* `ConnectionError` either. Verified on redis-py 8.0.1; older redis-py majors did nest
+  them, so a reader's memory of the hierarchy is exactly the wrong thing to trust. Each such class
+  needs its own `add_exception_handler` registration, or the uncovered one escapes as a bare 500
+  through the framework's catch-all.
+<!-- unit u09 -->
+Gotcha: uvicorn rewrites `scope["client"]` from `X-Forwarded-For` by default — so "is this request from localhost?" is not an authorization check
+Versions: uvicorn 0.49.0; starlette 1.3.1; uvicorn 0.52.4; starlette 1.6.0
+Verified: 2026-09-08
+<!-- body -->
+## uvicorn rewrites `scope["client"]` from `X-Forwarded-For` by default — so "is this request from localhost?" is not an authorization check
+
+Verified 2026-09-08 in `falkor-chat/server/.venv` (uvicorn 0.49.0 / starlette 1.3.1; the newer
+`cypher-mcp/.venv` carries uvicorn 0.52.4 / starlette 1.6.0 and was not exercised here).
+`uvicorn.config.Config` defaults
+**`proxy_headers=True`**, and `forwarded_allow_ips` defaults to `None` in the signature but
+resolves in `__init__` to `os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1")`. So a stock uvicorn
+runs `ProxyHeadersMiddleware` trusting exactly one peer, `127.0.0.1` — **`::1` is not in it**
+(`"::1" in _TrustedHosts("127.0.0.1")` → `False`).
+
+Driving the middleware directly with a stub app (`trusted_hosts="127.0.0.1"`):
+
+| peer | `X-Forwarded-For` | what the app sees as `scope["client"]` |
+|---|---|---|
+| `("127.0.0.1", 1234)` | *(none)* | `("127.0.0.1", 1234)` |
+| `("127.0.0.1", 1234)` | `203.0.113.9` | **`("203.0.113.9", 0)`** |
+| `("203.0.113.9", 1234)` | `127.0.0.1` | `("203.0.113.9", 1234)` |
+| `("::1", 1234)` | `203.0.113.9` | `("::1", 1234)` |
+
+**The unconditional half — a genuine loopback client is rewritten *away* from loopback the moment
+it sends the header** (row 2), with no proxy in the picture at all. A route gated on
+`scope["client"][0] == "127.0.0.1"` therefore denies a legitimate local caller that happens to
+carry an `X-Forwarded-For`, and the check is a peer-address heuristic rather than an authorization
+boundary. Note the rewritten port is `0`, so a gate keyed on the port breaks too.
+
+**What does *not* follow, and is worth stating because it is the intuitive fear:** a remote client
+cannot simply claim `X-Forwarded-For: 127.0.0.1` and be believed (row 3) — the peer must already
+be trusted. `_TrustedHosts.get_trusted_client_address` walks the header **right-to-left and
+returns the first untrusted host**, so a proxy that *appends* the real peer keeps an
+attacker-supplied left-hand entry from winning. The spoof direction needs a real
+misconfiguration — `forwarded_allow_ips="*"`, or a proxy that passes client-supplied
+`X-Forwarded-For` through instead of appending to it — at which point every entry is trusted and
+the function falls back to `x_forwarded_for_hosts[0]`, the attacker's value. Design against the
+first row of this paragraph, but don't claim the second without checking the deployment.
+<!-- unit u10 -->
+Gotcha: pydantic `Field(min_length=1)` does not reject whitespace-only strings
+Versions: pydantic 2.x
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## pydantic `Field(min_length=1)` does not reject whitespace-only strings
+
+`" "` has `len` 1, so `Field(min_length=1)` accepts it — a common false-safety assumption when a
+docstring or comment claims "the service validates non-empty input upstream" but the actual check
+is only a REST-boundary `min_length`. Two consequences worth checking together: (1) any MCP or
+other non-HTTP caller that bypasses the pydantic schema layer entirely is completely unguarded,
+not just under-guarded; (2) even the REST path itself lets whitespace-only text through, since
+`min_length` counts characters, not meaningful content. Verified against pydantic 2.x: `Field(
+min_length=1)` on a `str` field accepts `"   \n\t  "` without validation error. If empty-vs-
+whitespace-only matters, add an explicit `str.strip()` check at the service boundary (not just the
+schema boundary) — the two guards are not redundant, they cover different callers.
+<!-- unit u11 -->
+Gotcha: `urllib` failure taxonomy: `HTTPError ⊂ URLError`, but a read timeout is a bare `TimeoutError`, not a `URLError`
+Versions: CPython 3.12; Python 3.10
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `urllib` failure taxonomy: `HTTPError ⊂ URLError`, but a read timeout is a bare `TimeoutError`, not a `URLError`
+
+Verified against CPython 3.12: `issubclass(urllib.error.HTTPError, urllib.error.URLError)` →
+`True`; `socket.timeout is TimeoutError` → `True`; `issubclass(TimeoutError,
+urllib.error.URLError)` → **`False`**. A real `urllib.request.urlopen(req, timeout=0.5)` against a
+slow server raised `TimeoutError` with MRO `(TimeoutError, OSError, Exception, BaseException)` —
+no `URLError` anywhere in it. A schemeless URL (`"host:1234/x"`) raises `ValueError: unknown url
+type`, in neither branch.
+
+**Consequence for review:** (a) an `except URLError` clause placed before `except HTTPError` makes
+the HTTP-status branch dead code and discards the response body — `HTTPError` must be caught
+first; (b) a client that catches only `URLError`/`HTTPError` lets every read timeout escape
+unclassified — a stdlib-only HTTP client's failure-mode enumeration must list `TimeoutError` and
+`ValueError` (bad URL) as their own cases, not assume they land under `URLError`.
+
+**A second gap, one phase later, on the body read rather than the connect.**
+`http.client.IncompleteRead` is **not** an `OSError` subclass — its MRO is `(IncompleteRead,
+HTTPException, Exception, BaseException)` — so an `except OSError` catch-all around a read does not
+catch a body cut short mid-read; it needs its own `except http.client.HTTPException` rung (or a
+named `IncompleteRead` one) alongside `OSError`. And *where* the read sits matters as much as what
+it's caught by: wrapping only `urlopen()` in `try/except` and leaving `resp.read()` outside that
+block lets any read-phase exception (`IncompleteRead`, `ConnectionResetError`, a read-phase
+`TimeoutError`) escape completely untyped — no test catches this unless the fake response object's
+`.read()` can raise, not just return bytes. `urllib.error.HTTPError` compounds it on the error path:
+it is itself a response object (`.status` + `.read()`), so `exc.read()` inside `except HTTPError`
+can fail **independently** of the connect-phase try/except — a fix that moves the success-path
+`resp.read()` inside the guard still leaves the error-path `exc.read()` unguarded unless it gets its
+own try/except. Verified against CPython 3.12: `issubclass(http.client.IncompleteRead, OSError)` →
+**`False`**; a real `urllib.error.HTTPError(url, code, msg, hdrs, fp)` built with a `fp.read()` that
+raises `ConnectionResetError`/`IncompleteRead`/`TimeoutError` propagates that exception untyped out
+of `exc.read()`, uncaught by any guard placed around `urlopen()` alone. (`socket.timeout` has been
+an alias for the builtin `TimeoutError` since Python 3.10, so one `except TimeoutError` rung
+correctly covers both connect- and read-phase timeouts once the read call is actually inside the
+guarded block.)
+
+**A stubbed `HTTPError` is single-use as a test double.** Code under test that calls `exc.close()`
+on a caught `HTTPError` closes its wrapped `fp`; raising the same prebuilt instance a second time
+(e.g. from a module-level fixture reused across two test functions) fails inside whatever reads it
+next with `ValueError: I/O operation on closed file` — a failure that reads as a bug in the second
+call site, not in the fixture. Verified: `HTTPError(url, code, msg, {}, io.BytesIO(body))`, read and
+closed once, raises exactly that `ValueError` on a second `.read()`/`.close()`. A stub registry for
+`HTTPError` (or any exception wrapping a stateful stream) must hold zero-arg **factories**, not
+built instances, the same way a fixture factory is preferred over a shared fixture value.
+<!-- unit u12 -->
+Gotcha: `json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly
+Versions: CPython 3.12
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly
+
+`json.loads` is not strict JSON: as a Python extension it accepts the bare tokens `NaN`,
+`Infinity` and `-Infinity` with no error, and `json.dumps` round-trips a non-finite float back out
+the same way. Verified on CPython 3.12: `json.loads("NaN")` → `nan`, `json.loads("Infinity")` →
+`inf`, `json.loads("-Infinity")` → `-inf`, and `json.dumps({"x": float("nan")})` →
+`'{"x": NaN}'` — no malformed transport needed to produce one; a server or upstream client that
+serializes a `nan`/`inf` float (e.g. from a division, a stats computation, or a degenerate model
+score) hands it straight through. So any boundary that coerces parsed JSON into a numeric/typed
+field must reject non-finite values explicitly — `math.isfinite(x)` — rather than relying on
+`json.loads` to raise; it won't.
+<!-- unit u13 -->
+Gotcha: An OpenAI-compatible local server can answer a missing `/v1` prefix with HTTP 200 + an error envelope, not a 404 or 400
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## An OpenAI-compatible local server can answer a missing `/v1` prefix with HTTP 200 + an error envelope, not a 404 or 400
+
+Verified against LM Studio (`localhost:1234`): `POST /chat/completions` (no `/v1`) → **`200`**
+`{"error":"Unexpected endpoint or method. (POST /chat/completions)"}`; `POST /v1/chat/completions`
+→ `400` with a proper OpenAI error object. Same shape on `/embeddings` vs. `/v1/embeddings`. `GET
+/models` and `GET /v1/models` **both** return `200` with the real model list, so probing `/models`
+cannot discriminate the prefix. The `error` value's JSON shape also **differs by path** — a
+**string** on the wrong-prefix response, an **object** on the correct one — so a classifier
+written as `body["error"]["message"]` raises `TypeError` in exactly the case it exists to diagnose.
+
+**Consequence for review:** any OpenAI-shaped client that omits `/v1` fails as a bare `KeyError:
+'choices'`/`'data'` with no mention of the URL, not as a request error — a base-URL normalization
+step (validate → strip trailing `/` → append `/v1` only when the resulting path is empty) belongs
+ahead of the request, not a post-hoc status-code check. Related trap in the same code path:
+`urllib.parse.urlparse("192.168.0.69:1234").path == "192.168.0.69:1234"` — **non-empty** — so an
+"if the URL path is empty, append `/v1`" heuristic silently accepts a schemeless base URL instead
+of rejecting it.
+<!-- unit u14 -->
+Gotcha: An LLM-judge JSON parser that's a bare `json.loads(text)` is fence-fragile, and the failure mode is silent, not an exception you'd notice
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## An LLM-judge JSON parser that's a bare `json.loads(text)` is fence-fragile, and the failure mode is silent, not an exception you'd notice
+
+A free-text LLM completion parsed with a bare `json.loads(text)` — no markdown-fence or
+surrounding-prose stripping — breaks completely the moment a model wraps its answer in a ` ```json
+...``` ` fence (common on the Mistral/Gemma model families): every response becomes
+`json.JSONDecodeError`, caught and mapped to a generic "unparseable judge output," which a
+deliberately bias-to-suspend judge design (see the asymmetric-judge note in this lab's method
+notes) then resolves to `decision=False` — so the judge looks like it's working (no crash, a
+plausible-looking verdict) while actually never parsing a single real answer. One capability probe
+saw a model's advance-recall go from an apparent 0/10 to a real, still-mediocre 0.364 purely by
+adding fence-tolerant parsing — the fence artifact had been masking (and looked identical to) a
+genuine over-suspend weakness.
+
+**Consequence for review:** any LLM-output JSON parser should strip a leading/trailing code fence
+(or use the provider's structured-output / `response_format` mode) before `json.loads`, and a
+judge/classifier's "unparseable" bucket is worth instrumenting separately from its substantive
+verdicts — a spike in "unparseable" that silently resolves to one default verdict is a parser bug
+wearing the shape of a model-quality problem.
+<!-- unit u15 -->
+Gotcha: Setting an env var *after* import is a no-op for a module-level constant computed from `os.environ.get(...)` at import time — in a pytest fixture and in a plain script alike
+Versions: none stated
+Verified: 2026-08-30
+<!-- body -->
+## Setting an env var *after* import is a no-op for a module-level constant computed from `os.environ.get(...)` at import time — in a pytest fixture and in a plain script alike
+
+A config module that resolves constants once at import (`WS_ID = os.environ.get("WS_ID", ...)` at
+module scope, "read once, no reload path" by design) freezes those values before any per-test
+`autouse` fixture runs, if the module was already imported by another test file at collection
+time. `monkeypatch.setenv("WS_ID", ...)` inside the fixture never reaches code reading the frozen
+module attribute — it was computed long before the fixture ran. The fix used elsewhere in the same
+codebase (`monkeypatch.setattr(config_mod, "WS_ID", value)`) targets the **module attribute**
+directly instead of the environment.
+
+**Consequence for review:** an `autouse` fixture that repoints a config-driven test double via
+`monkeypatch.setenv` alone is silently a no-op against any constant a module froze at import time.
+The safe fixture sets **both** — the env var (for anything reading `os.environ` fresh, or a
+subprocess) **and** `monkeypatch.setattr(module, "ATTR", value)` (for the frozen-at-import
+constant).
+
+**The same freeze bites a plain script with no pytest anywhere in sight** (verified 2026-08-30, a
+`falkor-chat` eval harness): a top-of-file `from pkg import a, b` runs the config module's
+import-time `os.environ.get(...)` immediately, so `os.environ["X"] = ...` inside `main()` — which
+looks early enough, and is early relative to the call that consumes it — sets the variable *after*
+the constant it feeds was already computed, and the consumer fails as if the variable were never
+set. Here the fix is placement, not `setattr`: set the environment **above the package imports**,
+at the very top of the file (`os.environ.setdefault(...)` before `from pkg import ...`). A
+constant frozen at import can only be beaten before that import or at the module attribute — never
+in between.
+<!-- unit u16 -->
+Gotcha: A `pytest.raises(SomeError)` with no `match=` can pass on an unrelated raise from an earlier check in the same function
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+Other-dates: 2026-08-26
+<!-- body -->
+## A `pytest.raises(SomeError)` with no `match=` can pass on an unrelated raise from an earlier check in the same function
+
+A validator that checks several fields in a fixed order and raises **one** exception type for all
+of them will short-circuit on the first violation. If a test's fixture value plays two roles at
+once — the field under test *and* some earlier-checked field, or a value that also trips a
+pre-existing structural check — the bare `pytest.raises(SomeError)` is satisfied by whichever
+check fires first, and the assertion never touches the behavior it claims to pin. The failure mode
+is silent and one-directional: the test is green before the guard exists, green after, and green
+when the guard is deleted.
+
+**Consequence:** for any exception assertion where more than one code path can raise that type,
+pin `match=` to the *specific* raiser's own wording (`r"^step key would be \d+ characters, over
+the"`, not a bare `"key"` that a dangling-reference error also contains), and keep the fixture
+value out of every role but the one under test. The check that this was done correctly is a
+mutation, not a review: disable the guard's call sites and confirm **every** parametrized case
+goes red — a case that stays green was passing for the wrong reason all along. (Observed
+graphmind-ai-lab 2026-08-26, `falkor-chat` K-049; the surviving test comments in
+`server/tests/test_services.py` around `OVERSIZED_ISOLATED_STEP` record the concrete instance.)
+<!-- unit u17 -->
+Gotcha: A test that is only valid when its whole module ran must gate on what pytest **collected**, not on how the run was **selected**
+Versions: pytest 9.1.1
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A test that is only valid when its whole module ran must gate on what pytest **collected**, not on how the run was **selected**
+
+A test whose assertion depends on side effects its module-mates recorded (a "every declared row was
+provoked by some test in this file" completeness check, an accumulator asserted at the end) has to
+skip itself on a partial run. Gating on the *selector* — `request.config.option.keyword`, i.e. what
+`-k` was given — covers exactly one of the four ways a run can be partial. Verified on pytest 9.1.1:
+
+| how the subset was chosen | `config.option.keyword` | `request.session.items` |
+|---|---|---|
+| `-k probe` | `'probe'` | just the matches |
+| `pytest file.py::test_probe` (a node id) | `''` | just that test |
+| `--lf` after a failure | `''` | just the failures |
+| `--deselect file.py::test_a` | `''` | everything else |
+
+So the `-k` guard is a no-op for the three cases a developer hits *most* — including `--lf`, which
+is what you reach for right after this test fails, at which point it runs against a nearly empty
+accumulator and reports every row as unproducible. Gate on collection instead:
+
+```python
+module = sys.modules[__name__]
+defined   = {n for n in dir(module) if n.startswith("test_")}
+collected = {getattr(i, "originalname", None) or i.name.split("[")[0]
+             for i in request.session.items if getattr(i, "module", None) is module}
+if defined - collected:
+    pytest.skip("this module was only partly collected")
+```
+
+`originalname` is what collapses a parametrized `test_b[1]`/`test_b[2]` back to `test_b`; without
+it every parametrized test in the module reads as uncollected and the guard skips always. **Subtract
+marker-deselected tests from `defined` yourself** if the project's `addopts` carries a marker filter
+(`-m "not live"`): the first `@pytest.mark.live` test added to the module would otherwise deselect
+itself on every default run and switch the check off permanently — visible in the skip reason, but
+off.
+<!-- unit u18 -->
+Gotcha: Deleting a parametrized test's `def` body leaves its `@pytest.mark.parametrize` decorator attached to the NEXT function in the file
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## Deleting a parametrized test's `def` body leaves its `@pytest.mark.parametrize` decorator attached to the NEXT function in the file
+
+`@pytest.mark.parametrize` sits immediately above the `def` line it decorates. Deleting only the
+function body (removing the `def ...:` line and everything under it while leaving the decorator
+line behind — an easy slip in a manual or scripted edit) leaves the decorator attached to
+whichever function now follows it in the file. Because that next function almost certainly doesn't
+declare the fixture argument the parametrize supplies, it silently breaks — collection either
+errors or the test fails with an unexpected-argument message that doesn't mention the deletion at
+all, unless the next test already fails loudly for an unrelated reason and masks it further.
+Always delete a parametrized test's decorator line together with its `def`, and re-run collection
+(`pytest --collect-only`) after any test deletion to catch a decorator left orphaned this way.
+
+Origin: `falkor-chat/server/tests/test_storefront.py` — deleting
+`test_a_reset_that_times_out_evicts_the_cached_record` (decorated with
+`@pytest.mark.parametrize("reread", [...])`) left the decorator attached to the next function,
+`test_the_two_reset_failures_are_different_exceptions`, which does not accept a `reread` parameter.
+<!-- unit u19 -->
+Gotcha: A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not
+
+A deferred import placed as the first statement *inside* a function body (not module-level —
+often done deliberately to break a circular import) performs a fresh `getattr(module, name)` every
+call, so `monkeypatch.setattr("pkg.module.name", fake)` transparently intercepts every future call
+through it — no changes needed to the caller's public API to inject a test double. Contrast: a
+function whose **default argument** is bound to the same name (`def f(..., opener=urllib.request.
+urlopen): ...`) binds it once at *definition* time (Python evaluates defaults once), so
+monkeypatching the original name afterward does **not** reach it — that seam needs an explicit
+`opener=` kwarg at the call site instead.
+
+**Consequence for review:** when a module defers an import inside a function to break a cycle, that
+import is a live monkeypatch seam by construction — reach for `monkeypatch.setattr` on the
+*deferred import's source module* rather than restructuring the code to accept a new parameter.
+When the same value instead reaches the function as a **default argument**, the seam is closed at
+definition time and needs an explicit parameter to inject a test double.
+<!-- unit u20 -->
+Gotcha: A one-way circular import fails in *every* load order, not just the "wrong" one — and a class-body import doesn't fix it, only a function-body one does
+Versions: CPython 3.12
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A one-way circular import fails in *every* load order, not just the "wrong" one — and a class-body import doesn't fix it, only a function-body one does
+
+Two modules where one already imports a name from the other (`b.py: from .a import X`) cannot
+gain the reverse direction (`a.py: from .b import Y`) even when `X`/`Y` are unrelated names and
+neither module is otherwise self-referential — verified with `python3 -c "import pkg.a"` and
+`import pkg.b"` on CPython 3.12: **both** orders raise `ImportError: cannot import name '...' from
+partially initialized module`, not just the one you'd guess. Whichever module starts loading first
+pauses mid-execution at its own top-level `from .other import NAME` before the other module has
+reached the point where `NAME` is defined. Moving the reverse import into a **class body**
+(`class Foo:\n    from .other import Y`) doesn't help — a class body executes immediately at
+module-load time, so it fails identically (verified, same error). Only an import placed **inside a
+function body**, executed on first *call* rather than at module-load time, avoids the cycle
+(verified — succeeds once both modules have finished loading).
+
+**Consequence for review:** the fix for a genuine one-way circular-import need is not "move the
+import somewhere that looks deferred" — a class body doesn't count. Either (a) keep the shared name
+in whichever module is already the "source" side of the existing one-way import (mirror the
+existing direction, never invent the reverse), or (b) push the import inside a function/method body
+if it's truly only needed at call time. Surfaced in falkor-chat: `services.py` already imported
+constants from `schemas.py`; a plan that added new constants to `services.py` and had `schemas.py`
+import them back failed in this exact shape (K-028 U3b, `coder`).
+<!-- unit u21 -->
+Gotcha: `starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran
+Members:
+- `starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran
+- `TestClient` re-raises an unhandled server exception into the calling test by default — so a test written on the default can never observe the 500 a real client receives
+- Version rot ahead of the two sections above: starlette deprecates `httpx` under `testclient` in favour of `httpx2`
+Versions[1]: starlette 1.3.1; fastapi 0.139.0; anyio 4.14.1
+Verified[1]: unverified, migrated 2026-11-10
+Versions[2]: starlette 1.6.0; httpx 0.28.1; uvicorn 0.52.1; CPython 3.12.3; fastapi 0.141.1
+Verified[2]: unverified, migrated 2026-11-10
+Versions[3]: CPython 3.12.3; starlette 1.3.1; starlette 1.6.0; httpx 0.28.1
+Verified[3]: 2026-09-09
+<!-- body -->
+## `starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran
+
+Verified against starlette 1.3.1 / fastapi 0.139.0 / anyio 4.14.1: a lifespan that starts a
+background `asyncio.Task` and **deliberately never cancels it on shutdown** still shows
+`task.done() == True, task.cancelled() == True` immediately after the `with TestClient(app):`
+block exits — reproduced with a minimal FastAPI app whose lifespan has no cancellation code at all.
+`TestClient`'s anyio blocking portal tears down its event loop by cancelling every task still
+running on it, independent of the app-under-test's own shutdown logic.
+
+**Consequence for review:** a background-task-cancelled-at-shutdown test that only asserts
+`task.cancelled()`/`task.done()` **after** the `with`-block exits passes even if the app's own
+cancellation code is deleted entirely — the portal's teardown masks the bug. To actually pin
+app-level shutdown-cancellation code, assert on something only the app code itself would produce
+(e.g. that it stored the task reference on `app.state` at all — an `AttributeError` if that line
+is dropped), not the task's final `cancelled()` state. Surfaced writing the lifespan smoke test for
+falkor-chat's periodic sweep task (K-028 U3b, `coder`).
+
+## `TestClient` re-raises an unhandled server exception into the calling test by default — so a test written on the default can never observe the 500 a real client receives
+
+Second face of the class the section above belongs to: `TestClient` is not a real HTTP client, and
+each convenience it adds is separately opt-outable. Verified against starlette 1.6.0 / httpx 0.28.1 /
+uvicorn 0.52.1 / CPython 3.12.3; `fastapi.testclient.TestClient` is this same class re-exported
+verbatim (`fastapi/testclient.py` is the single line `from starlette.testclient import TestClient`,
+read out of the fastapi 0.141.1 wheel), so everything here applies identically under either import.
+
+One Starlette app, one route raising an unhandled `RuntimeError`, driven three ways — a `/ok` route
+returning 200 as a control in each arm:
+
+| driver | what the caller gets |
+|---|---|
+| `TestClient(app)` — default `raise_server_exceptions=True` | `RuntimeError` raised **into the calling test**; no response object at all |
+| `TestClient(app, raise_server_exceptions=False)` | `500`, `text/plain; charset=utf-8`, body `Internal Server Error` |
+| real uvicorn server + real `httpx.Client` | `500`, `text/plain; charset=utf-8`, body `Internal Server Error` |
+
+Mechanism (`starlette/testclient.py:348-363`): the portal call sits inside an
+`except BaseException:` that re-raises when the flag is set. The flag does **not** construct the
+500 — `ServerErrorMiddleware` has already sent that response before re-raising, so `response_started`
+is true and the default simply *discards* the captured response in favour of the exception.
+
+**The client-parity is the middleware's, not the flag's.** Against a bare ASGI callable with no
+`ServerErrorMiddleware`, nothing ever sent a response, so `raise_server_exceptions=False` falls
+through to the transport's synthesized fallback — `status_code` 500 with **no headers and an empty
+body** — while a real client over the wire still gets uvicorn's own `text/plain; charset=utf-8` /
+`Internal Server Error`. Verified with the same probe against a bare ASGI app: `content-type` `None`
+and body `''` under `TestClient`, against `text/plain; charset=utf-8` / `Internal Server Error` from
+the live server.
+
+**Consequence for testing:** when the question is *what does a client receive?* rather than *did it
+raise?*, construct the client with `raise_server_exceptions=False`. On the default, an acceptance
+assertion about the status or body of an unhandled server failure is not merely failing — it is
+unwritable, because the call never returns a response to assert on. Assert on the **body** only for a
+real `Starlette`/`FastAPI` app, whose `ServerErrorMiddleware` is what makes the test's 500 and the
+wire's 500 the same bytes; for anything outside that middleware's reach, assert the status alone.
+Surfaced deciding which HTTP status a plan contract was actually violated by, in falkor-chat's S9
+storefront concurrency acceptance pass (`qa-engineer`).
+
+## Version rot ahead of the two sections above: starlette deprecates `httpx` under `testclient` in favour of `httpx2`
+
+`from starlette.testclient import TestClient` emits a `StarletteDeprecationWarning` **at the import
+line** whenever `httpx` is installed and `httpx2` is not: *"Using `httpx` with
+`starlette.testclient` is deprecated; install `httpx2` instead."* Measured 2026-09-09, CPython
+3.12.3, across this repo's venvs — starlette **1.3.1** (`falkor-chat/server/.venv`) and **1.6.0**
+(`cypher-mcp/.venv`, `mcp-monitor/.venv`), both on httpx 0.28.1, with no `httpx2` installed
+anywhere: identical warning, every run, both versions.
+
+The warning itself is trivial to silence. What matters is that the two sections above are pinned to
+exactly those versions, so neither is one release *ahead* of the migration — both already describe
+the deprecated transport. And the behaviour those sections turn on is transport-side: the
+headerless, empty-bodied 500 under `raise_server_exceptions=False` is `TestClient`'s own synthesis
+rather than the app's, and response synthesis plus constructor surface are precisely what an
+httpx→httpx2 swap can move. So re-derive both sections against the starlette actually installed
+before citing them; do not read their version pins as "current".
+<!-- unit u24 -->
+Gotcha: Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*
+Members:
+- Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*
+- To force a `TestClient` response to surface an uncaught exception instead of re-raising it, flip the flag on the live client — don't build a second `TestClient`
+Versions[1]: starlette 1.3.1; fastapi 0.139.0
+Verified[1]: 2026-09-09
+Versions[2]: none stated
+Verified[2]: unverified, migrated 2026-11-10
+<!-- body -->
+## Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*
+
+`create_app()`-style factories routinely build a collaborator and hand it to the app, but assign it
+to `app.state` **inside the lifespan**, not in the factory body — it is the only place that can do
+work needing a running event loop. The consequence for a test is not a stale value but an
+`AttributeError`: `starlette.datastructures.State.__getattr__` raises
+`'State' object has no attribute '<name>'` (`starlette/datastructures.py:686`), and it raises on the
+*attribute lookup*, so `monkeypatch.setattr(app.state.shop._services, "post_message", fake)` written
+above the `with` fails before `setattr` is ever reached. Verified 2026-09-09, starlette 1.3.1 /
+fastapi 0.139.0, on a minimal app whose lifespan does `app.state.thing = obj`: `app.state.thing`
+before the block → `AttributeError`; inside the block → the identical object.
+
+**Whether the patch then reaches the route is a separate question, decided by the router's closure
+shape.** A router built as `def build_router(shop): services = shop._services; ...` closes over the
+**object** and resolves `services.post_message` per call, so patching an attribute *on* that object
+is seen by every subsequent request. Patching the owning attribute instead (`shop._services = fake`)
+is not — the closure still holds the original. Same trap in reverse for a router that binds the
+bound method at build time (`post = shop._services.post_message`): nothing patched later is visible.
+Read which of the three the router does before choosing where to patch; reproduced end to end in the
+probe above (`app.state.thing.hit = …` inside the block changed the response body).
+
+## To force a `TestClient` response to surface an uncaught exception instead of re-raising it, flip the flag on the live client — don't build a second `TestClient`
+
+Once a test already has a working `TestClient(app)` with the lifespan entered (and, often, an
+object-level monkeypatch already applied through it), the tempting fix for "I need
+`raise_server_exceptions=False` for just this one assertion" is
+`TestClient(app, raise_server_exceptions=False)` over the same `app` object. That constructs a
+**second** client, which re-enters the ASGI lifespan and rebuilds `app.state` from scratch —
+silently discarding any object-level monkeypatch applied after the *first* client entered (e.g. a
+patched `_executor.submit`), for the same reason the `app.state` section above describes. Instead,
+mutate the flag on the already-entered client: `client._transport.raise_server_exceptions = False`
+(and restore it afterward) gets the uncaught-exception-as-500 behavior without touching the
+lifespan or `app.state` at all.
+
+Origin: `falkor-chat/server` — building a second `TestClient` around `client.app` to get
+`raise_server_exceptions=False` lost a monkeypatched `Storefront._executor.submit` because the
+lifespan reran and rebuilt `app.state.storefront`; setting `client._transport.raise_server_exceptions
+= False` on the existing client (restored after) preserved the patch and produced the same
+unmapped-5xx observation the test needed.
+<!-- unit u26 -->
+Gotcha: Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
+Versions: CPython 3.12.3
+Verified: 2026-09-08, 2026-09-09
+<!-- body -->
+## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
+
+Verified against CPython 3.12.3. `_python_exit` (`concurrent/futures/thread.py:23-31`) takes
+`_global_shutdown_lock` **only** to set `_shutdown = True`; both the `q.put(None)` loop and the
+`t.join()` loop sit *outside* that `with` block. `ThreadPoolExecutor.shutdown()` has the same shape
+— `self._shutdown_lock` is released before its own join loop (`thread.py:220-238`). `submit()` does
+take `self._shutdown_lock` and `_global_shutdown_lock` together (`thread.py:165`), but nothing ever
+holds either lock *across* a join, so no cycle can form between an application lock and the
+executor's shutdown machinery.
+
+Staged the exact arrangement that a deadlock claim requires — an application lock acquired, then
+`executor.submit(fn)` called while holding it, the submitted worker blocking on that same lock, and
+the main thread falling off the end without releasing it. `submit()` returned in **0.2 ms** (it
+never blocked), and the process exited cleanly (rc 0) after **exactly** the lock hold time: 0.52 s
+wall for a 0.5 s hold, 3.03 s for a 3.0 s hold. With the lock never released the process does not
+exit at all (killed at 30 s) — the same mechanism at its limit, not a deadlock.
+
+**Consequence for review:** "holding a lock across `submit()` risks a shutdown deadlock" is false
+and must not gate a design. The real cost is a **non-daemon worker that cannot finish**:
+`_python_exit` joins every worker *unlocked*, so interpreter exit is bounded below by however long
+the application lock stays held — a latency cost that becomes unbounded only if the lock is never
+released. Surfaced as a retraction: a `salesperson-ui` S9 plan amendment asserted the deadlock,
+`analyst` Pass 18 disproved it from source and by staging it (`architect`, 2026-09-08).
+
+**A second ordering fact inside the same `submit()`, with a live consequence for error handling.**
+`submit()` puts the work item on the queue **before** it tries to grow the pool —
+`self._work_queue.put(w)` at `thread.py:178`, `self._adjust_thread_count()` at `:179`. So when the
+pool cannot start a worker, `submit()` raises `RuntimeError("can't start new thread")` *with the
+job already enqueued*, and any worker already running picks it up. Reproduced 2026-09-08 on CPython
+3.12.3 by patching `threading.Thread.start` to raise while one worker was busy: `submit` raised, and
+the "refused" job still ran. The trap is that the **other** `RuntimeError` `submit()` raises —
+`cannot schedule new futures after shutdown`, from the checks at `:169-173`, which run *before* the
+`put` — is a clean refusal and the same exception type. Those are two of the **three** raises ahead
+of the `put`; the third is `BrokenThreadPool` at `:167`, which subclasses `RuntimeError`
+(`BrokenThreadPool → BrokenExecutor → RuntimeError`, checked 3.12.3) and so is caught by the same
+`except` while remaining separable *by type* — the shutdown pair is not. **So a compensating action in the caller's
+`except RuntimeError:` — releasing a reservation, decrementing an in-flight counter, marking a turn
+free — is right for one shape and corrupts state for the other**, orphaning a job that is about to
+run. Discriminate on the message, or make the compensation idempotent against a job that runs anyway.
+
+**The same ordering makes `_work_queue.qsize()` useless as a "nothing was submitted" assertion.**
+`:179` starts a worker inside the same `submit()` call that queued the item, and that worker drains
+the queue — so `qsize()` reads `0` whether or not a submit happened, which is exactly the assertion
+a test reaches for to prove a pre-submit guard refused. Use `len(executor._threads)`. Measured
+2026-09-09, CPython 3.12.3, `max_workers` 2–4:
+
+| arm | `qsize()` | `len(_threads)` |
+|---|---|---|
+| fresh executor, no submit | 0 | **0** |
+| immediately after one `submit` | 0 | **1** |
+| after that job finished | 0 | **1** |
+| after `shutdown(wait=True)` | **1** | 1 |
+
+Two bounds on the replacement. `_threads` grows only when `_adjust_thread_count` cannot reuse an
+**idle** worker (`_idle_semaphore.acquire(timeout=0)`, `thread.py:185`): two *sequential* submits
+leave it at 1, two *overlapping* ones take it to 2. So it answers *"has this executor ever run
+work?"*, not *"did this call submit?"* — sound for a guard test on a fresh executor, unsound as a
+per-call counter. And `qsize()` is not stably `0` either: `shutdown()` puts a `None` wake-up
+sentinel on the queue, so a post-shutdown `qsize()==0` assertion fails for a reason that has
+nothing to do with submits.
+
+**And `wait=True` is not a drain — on a pool that never started a thread it waits for nothing.**
+`shutdown()`'s wait is `for t in self._threads: t.join()` (`thread.py:236-238`), and `_threads` is
+still **empty** if every `submit` so far raised inside `_adjust_thread_count`. The table above
+measures a pool that *did* start a worker; the cold pool is a different mechanism with the same
+reading. So the item `submit()` queued at `:178` before raising is not merely delayed — it is
+abandoned. Measured 2026-09-09, CPython 3.12.3, `threading.Thread.start` patched to raise on a fresh
+`max_workers=2` pool: `submit` raised `RuntimeError("can't start new thread")`, `qsize()` **1** /
+`len(_threads)` **0**, and `shutdown(wait=True)` **returned in 0.0000 s** with the job still unrun
+after a settle. **The tell is queue depth, and it is one unit apart from the warm case:** a
+post-shutdown `qsize()` of **1** is the `None` sentinel alone (the table's last row), **2** is the
+sentinel *plus* real undone work. Nothing recovers it once the executor is shut down; *before*
+shutdown, the next **successful** `submit` starts a worker that drains the abandoned item — verified,
+and it ran ahead of the item that revived the pool. The consequence for the compensation rule above:
+"any worker already running picks it up" holds only where a worker exists, so the identical refusal
+is a delayed execution on a warm pool and a silent drop on a cold one, and the exception discriminates
+neither.
+<!-- unit u27 -->
+Gotcha: A flag cleared right *after* `ThreadPoolExecutor.submit()` returns races the task it just submitted
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A flag cleared right *after* `ThreadPoolExecutor.submit()` returns races the task it just submitted
+
+A per-caller boolean or flag that the calling code clears immediately after `submit()` returns is
+racing the very task it just submitted, not sequencing before it: the worker thread can dequeue and
+run to completion — including setting that same flag itself — before the caller resumes execution
+past the `submit()` call. A set-then-clear ordering that looks safe in the source (the clear reads
+as "after the enqueue, so before the work") can invert at runtime. The fix is to place the clear
+**strictly before** the `submit()` call, not merely earlier in the same calling method: nothing on
+the worker side can touch the flag until `submit()` has even been entered, which a placement merely
+"earlier in the method" does not guarantee if anything else happens between the clear and the call.
+
+Origin: `falkor-chat/server` — a dead-turn latch cleared on the request thread right after
+`Storefront.enqueue_turn`'s `ThreadPoolExecutor.submit()` returned raced the worker marking the
+same latch, producing a wrongly-cleared latch in roughly 8 of 200 runs; moving the clear to
+immediately before the `submit()` call removed the race.
+<!-- unit u28 -->
+Gotcha: Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
+Versions: none stated
+Verified: 2026-09-08
+<!-- body -->
+## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
+
+Where a venv has no `pytest-timeout` (confirmed absent from `falkor-chat/server/.venv`, 2026-09-08),
+the reflex fix for "prove this call returns within its own deadline" is to time it and assert
+afterwards. **That assertion is unreachable on the failure it exists to catch**: if the call hangs,
+control never returns to the assert, and the test dies on the runner's own kill instead — an
+observed exit 143 at 30 s, with no test name attributed. Run the call on a `daemon=True` thread,
+`join(timeout=…)`, and assert `not worker.is_alive()`. Measured 2026-09-08: `join(timeout=1.0)`
+around a 30 s sleep returns after **1.00 s** with `is_alive()` `True`, so the bound is the
+assertion, and a failure names the test. The daemon flag is what stops the abandoned worker from
+holding interpreter exit open.
+
+**The trap inside the fix.** If the test also asserts an *ordering* (`started_at < finished_at`), a
+start instant stamped on the calling thread — before `Thread.start()` — silently absorbs every
+scheduling gap and any setup between the stamp and the call, so the assertion is satisfied by the
+gap rather than by the work. With a realistic ms-resolution timestamp, a stubbed no-op call and a
+300 ms gap injected before the start:
+
+```
+stamp OUTSIDE, before Thread.start()   started=…903964 finished=…904264  started<finished -> PASS
+stamp INSIDE the thread body           started=…904565 finished=…904565  started<finished -> FAIL
+```
+
+The outside-stamped form passes on a call that did nothing. Re-stamp as the **first line of the
+thread body** and the ordering assertion measures the call again. (A `perf_counter`-resolution clock
+hides this — the delta comes back at ~1 µs and still passes; it is the coarse timestamp the code
+under test actually records that makes the difference visible.)
+<!-- unit u29 -->
+Gotcha: A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists
+Members:
+- A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists
+- `PYTHONPYCACHEPREFIX=<fresh empty dir>` is a stale-`.pyc` remedy that leaves the source tree's `__pycache__` alone
+Versions[1]: Python 3.12.3
+Verified[1]: 2026-09-10
+Versions[2]: CPython 3.12.3
+Verified[2]: 2026-11-07
+<!-- body -->
+## A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists
+
+CPython's default *timestamp* invalidation mode validates a cached `__pycache__/*.pyc` against two
+fields only: the source's **mtime in whole seconds** and its **size in bytes**. So an edit that
+lands within the same second as the previous one *and* leaves the byte length unchanged — flipping
+a constant `"AAAA"` to `"BBBB"`, a `<` to `>`, a `0` to `1` — matches a stale cache on both fields
+and the old bytecode is imported. Verified on Python 3.12.3, 2026-09-10: a module rewritten in
+place and re-imported in a fresh interpreter printed the **pre-edit** value; a control edit that
+changed the byte length (same second, different length) invalidated correctly and printed the new
+one. This is the shape that bites a rapid edit–run loop and a scripted mutation test, both of which
+generate size-preserving edits faster than the clock's resolution — and it presents as *the fix
+didn't take*, so the reflex is to re-edit, which regenerates the same collision.
+
+**The remedy that looks right and is not.** `PYTHONDONTWRITEBYTECODE=1` (and `python -B`) suppress
+**writing** a `.pyc`; neither suppresses **reading** one. Setting it after noticing the confusing
+result is therefore a no-op — the stale cache is already on disk and still wins. Measured, three
+legs: with a pre-existing cache, the env var set, the post-edit run still printed the stale value;
+from a genuinely clean slate with the var set for both runs, both values were correct (no cache was
+ever written to go stale); deleting `__pycache__` between mutations was correct in every case.
+
+**And the pytest flag that looks adjacent is a different cache entirely.** `pytest -p
+no:cacheprovider` disables pytest's own `.pytest_cache` (last-failed, node-id caches); it has no
+effect on CPython's bytecode cache, so it neither causes nor prevents this. Reaching for it here
+buys nothing and reads, afterwards, like the cache was ruled out.
+
+So the working rule is **delete, then optionally suppress**: `find . -name __pycache__ -prune -exec
+rm -rf {} +` before the run that must be trusted, with `PYTHONDONTWRITEBYTECODE=1` exported for the
+*whole* loop if you want to keep it clean thereafter. Anywhere a harness generates edits
+programmatically, put the cache removal in the harness rather than in the operator's habits. And
+when a mutation "has no effect", check the cache before concluding the code path is dead — an
+unkilled mutant and an unloaded edit are indistinguishable from the output.
+
+## `PYTHONPYCACHEPREFIX=<fresh empty dir>` is a stale-`.pyc` remedy that leaves the source tree's `__pycache__` alone
+
+Complements the same-second section above. Verified 2026-11-07 (CPython 3.12.3, a one-module scratch
+project): `V = "AAAA"` imported, then rewritten to `V = "BBBB"` with its mtime reset to the cached
+`.pyc`'s second, still printed `AAAA` under the default cache, and printed `BBBB` with
+`PYTHONPYCACHEPREFIX=<a new empty dir>` (the interpreter reads and writes bytecode under the prefix,
+so a stale entry in the tree is never consulted). Use a fresh prefix per mutant run when deleting the
+tree's `__pycache__` is undesirable. Not observed: the pytest assertion-rewrite cache specifically.
+
+**`python -I` ignores the variable** (it implies `-E`). Same CPython 3.12.3, a scratch package put on
+`sys.path` by the script and imported with `PYTHONPYCACHEPREFIX=<dir>` set: under `-I` the prefix
+directory was never created and `pkg/__pycache__` appeared in the source tree; under `-P`, `-s` and
+no flag the prefix directory was created and the tree stayed clean. So a read-only probe of a live
+package run with `-I` writes bytecode into that package. To avoid the bytecode write, drop `-I` (`-P` and `-s` honoured the prefix in the run above; neither flag ignores `PYTHON*` variables).
+Setting `sys.dont_write_bytecode = True` at the top of the script also kept the tree clean under `-I`;
+`sys.pycache_prefix` inside the script was not tried.
+<!-- unit u30 -->
+Gotcha: Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read
+Members:
+- Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read
+- Under pytest's default capture, fd 0 is `/dev/null`, so an in-process test cannot see a child's `stdin=DEVNULL`
+Versions[1]: pytest 9.1.1
+Verified[1]: unverified, migrated 2026-11-10
+Versions[2]: pytest 9.1.1; CPython 3.12.3
+Verified[2]: unverified, migrated 2026-11-10
+<!-- body -->
+## Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read
+
+pytest's default output capture replaces `sys.stdin` with `_pytest.capture.DontReadFromInput`,
+whose `.read()` raises `OSError: pytest: reading from stdin while output is captured!` rather than
+blocking or returning real input. So any code path that reaches a bare `input()` call under a
+normal (non-`-s`) pytest run fails with that `OSError`, not a hang and not whatever the caller
+would naturally do with real stdin. Verified by execution (pytest 9.1.1): a test invoking a
+function whose only body is `input("prompt: ")` fails with exactly that `OSError`, traceback rooted
+in `_pytest/capture.py`'s `DontReadFromInput.read`. Worth recognizing specifically during mutation
+testing: a mutation that disables a validation guard whose fallback path calls `input()` (e.g. a
+CLI arg-validation guard, deleted so an unrecognized flag falls through to an interactive prompt)
+still kills the test — for the right reason — but the traceback is this `OSError`, not the
+`AssertionError` a coverage probe would expect; don't read the unexpected exception type as a
+harness malfunction or a false kill.
+
+## Under pytest's default capture, fd 0 is `/dev/null`, so an in-process test cannot see a child's `stdin=DEVNULL`
+
+Verified (pytest 9.1.1, CPython 3.12.3, Linux, the test run with a pipe on stdin): a test printing
+`os.readlink("/proc/self/fd/0")` and a child's `/proc/self/fd/0` (a `subprocess.run` with no `stdin=`)
+saw `/dev/null` for both under default fd capture, and the same `pipe:[...]` the shell gave pytest
+with `-s` or `--capture=sys`. A child launched in-process therefore inherits `/dev/null` whether or
+not the code passes `stdin=subprocess.DEVNULL`, and a mutant that drops that argument survives. Run
+the code under test as a separate process started with `stdin=subprocess.PIPE` and let a fake child
+record `readlink("/proc/self/fd/0")`. This is separate from the `input()` section above, which is
+about `sys.stdin`, not the descriptor.
+<!-- unit u31 -->
+Gotcha: A `typing.Protocol`'s own declared methods are derivable from `vars(cls)` — no hand-written list needed for a coverage-equals-declared-set test
+Versions: CPython 3.12.3
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A `typing.Protocol`'s own declared methods are derivable from `vars(cls)` — no hand-written list needed for a coverage-equals-declared-set test
+
+A `typing.Protocol` class — `@runtime_checkable` or not — exposes each method it declares as a
+plain callable directly in `vars(cls)`, alongside the usual dunders and ABC machinery
+(`_is_protocol`, `_abc_impl`, `__protocol_attrs__`, …). So `{n for n in vars(cls) if not
+n.startswith("_") and callable(getattr(cls, n, None))}` recovers exactly the Protocol's own
+declared method set, with no hand-maintained list to drift. Verified on CPython 3.12.3: a
+two-method Protocol (plain and `@runtime_checkable`) both yield `{'foo', 'bar'}` from this
+expression, filtering out every dunder/ABC name `vars(cls)` also carries. Useful for a
+coverage-equals-declared-set test — assert an implementation class's public surface matches this
+derived set rather than a copied-out method list, the same "derive from the runtime, not a
+written-down list" shape as the `ast`-subclass enumeration technique elsewhere in this repo
+(`claude/tdd-engineer/guard-testing-techniques.md`) — here applied to a `Protocol` instead of an
+AST grammar.
+<!-- unit u32 -->
+Gotcha: `ruff check <path>` force-parses the given file as Python regardless of extension
+Versions: ruff 0.14.14
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `ruff check <path>` force-parses the given file as Python regardless of extension
+
+`ruff check` does not skip or cleanly error on a non-Python path passed alongside real source
+files — it parses it as Python and reports a wall of `invalid-syntax` findings against ordinary
+prose. Verified (ruff 0.14.14): `ruff check some_module.py some_test.py docs/HISTORY.md` in one
+invocation reports invalid-syntax errors pointing at `HISTORY.md`'s prose lines; dropping the
+`.md` path from the same command leaves a clean `All checks passed!`. A final-verification `ruff
+check` invocation assembled from "every file this pass touched" must filter to source paths (or
+be run per-directory with ruff's own file-discovery) rather than listing every edited path
+verbatim — a doc file edited in the same pass silently turns a clean lint gate into a false
+failure that looks like a real syntax defect.
+<!-- unit u33 -->
+Gotcha: `ruff format <path>` reformats the WHOLE file, not just the lines you touched
+Versions: ruff 0.14.14
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `ruff format <path>` reformats the WHOLE file, not just the lines you touched
+
+Running `ruff format` on a file to clear a couple of new `E501`/style findings rewrites every
+pre-existing line's spacing and blank-line placement in the same pass — there is no "format only
+the lines near my edit" mode. Verified (ruff 0.14.14): a 5-line file with inconsistent spacing
+(`y    =     2`, `def f(a,b):`, `z = [1,2,3]`) reformatted to normalize every line's whitespace and
+insert the two blank lines PEP 8 wants around the `def`, none of which was the line under fix. On a
+large pre-existing file this turns a small intended change into a diff spanning the whole file,
+burying the actual change and making review of "what changed" far harder than the fix itself.
+Prefer a targeted fix (rewrap the flagged line(s) by hand, or use `ruff format --diff` to preview
+before applying) over running the formatter over an entire pre-existing file for a small fix.
+<!-- unit u35 -->
+Gotcha: `http.client.InvalidURL` is an `HTTPException`, not a `ValueError` — `urlopen` raises it at call time
+Versions: CPython 3.12
+Verified: 2026-11-06
+<!-- body -->
+## `http.client.InvalidURL` is an `HTTPException`, not a `ValueError` — `urlopen` raises it at call time
+
+`InvalidURL`'s MRO is `InvalidURL -> HTTPException -> Exception`; `issubclass(InvalidURL, ValueError)`
+is `False` (verified 2026-11-06, CPython 3.12). `urllib.request.urlopen('http://localhost:abc/x')`
+raises it at call time (`nonnumeric port: 'abc'`) for a URL that `urlparse` accepted. An except-ladder
+that classifies `http.client.HTTPException` as "network/transient" **before** a `ValueError`
+"malformed URL" rung therefore files a permanent misconfiguration as transient and retries it.
+Catch `InvalidURL` first (falkor-chat `transport.py` rung 3a does).
+<!-- unit u36 -->
+Gotcha: pytest `--deselect` with an absolute path matches nothing, silently — even when cwd is the rootdir
+Versions: pytest 9.1.1
+Verified: 2026-11-06
+<!-- body -->
+## pytest `--deselect` with an absolute path matches nothing, silently — even when cwd is the rootdir
+
+`--deselect` compares against rootdir-relative node ids. Verified 2026-11-06 (pytest 9.1.1, a
+two-test scratch project): `pytest --deselect <abs>/tests/test_x.py::test_b_live tests/test_x.py`
+run **from the rootdir** → `2 passed` (no "deselected" count, no error), while the same flag with
+`tests/test_x.py::test_b_live` → `1 passed, 1 deselected`, and `-k "not _live"` from a cwd outside
+the rootdir → `1 passed, 1 deselected`. The earlier-reported "only from outside the rootdir"
+condition did not reproduce: absolute ids never match. A mutation or scratch-copy run that relies on
+`--deselect` to skip DB-touching tests therefore runs them (origin: falkor-chat `*_live` tests
+wiping `ws:test`). Use relative ids from the rootdir or `-k`, and read the summary for a
+"deselected" count.
+<!-- unit u37 -->
+Gotcha: FastMCP validates tool arguments with pydantic — a bound violation is an `isError` result, and the bound's position in the published schema varies
+Versions: mcp 1.28.1; pydantic 2.13.4
+Verified: 2026-11-07
+<!-- body -->
+## FastMCP validates tool arguments with pydantic — a bound violation is an `isError` result, and the bound's position in the published schema varies
+
+Verified 2026-11-07 (mcp 1.28.1, pydantic 2.13.4, a scratch `FastMCP` server driven through
+`mcp.shared.memory.create_connected_server_and_client_session`): a `@mcp.tool()` signature becomes a
+pydantic argument model, so `Annotated[T, Field(max_length=, le=, max_length= on a list)]` bounds are
+enforced **before the body runs** and a violation reaches the client as `CallToolResult(isError=True)`
+with one text block, `Error executing tool <tool>: 1 validation error for <tool>Arguments`, then the
+field name and pydantic's own message (`String should have at most 8 characters`, `Input should be
+less than or equal to 10`, `List should have at most 2 items after validation, not 3`). A claim that
+"MCP has no schema layer" is therefore false for a FastMCP tool whose signature carries types or
+`Field` bounds. The bounds are published in `inputSchema`, but not always on the property node: an
+`Optional[...]` argument's bound sits inside the non-null `anyOf` branch, a list-element bound under
+`items`, a dict-key bound under `propertyNames`, and an Enum-class argument is a `$ref` (a `Literal`
+is an inline `enum`). A coverage or parity walker that reads constraint keys only on `properties`
+nodes misses the nested positions (observed on the same scratch server; FastAPI's OpenAPI put the
+list-element bound under `items` in the same way). A FastAPI Enum-class *query* parameter is a plain `$ref`
+when required or defaulted, and an `anyOf` of the `$ref` and `null` only when it is `Optional`.
+<!-- unit u38 -->
+Gotcha: `pytest -q -q` prints no "N failed, M passed" line on a failing run — a script that parses it reads zero failures
+Versions: pytest 9.1.1
+Verified: 2026-11-07
+<!-- body -->
+## `pytest -q -q` prints no "N failed, M passed" line on a failing run — a script that parses it reads zero failures
+
+Verified 2026-11-07 (pytest 9.1.1, a two-test scratch file, one failing): `pytest -q` ends with
+`1 failed, 1 passed in 0.01s`; `pytest -q -q` prints the failure traceback and the `short test summary
+info` block (`FAILED test_x.py::test_a - assert 0`) but **no** final counts line, with or without
+`-ra`. A mutation runner that greps the counts line therefore sees "no summary" or zero failures for a
+mutant that breaks hundreds of tests. Count lines starting with `FAILED ` / `ERROR ` instead, or use a
+single `-q` (origin: model-bench's U4.1 mutation runner).
+<!-- unit u41 -->
+Gotcha: `Popen.wait()` after `os.killpg(pgid, SIGTERM)` leaves a TERM-ignoring descendant alive, and it keeps any `pass_fds` flock
+Versions: CPython 3.12.3
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## `Popen.wait()` after `os.killpg(pgid, SIGTERM)` leaves a TERM-ignoring descendant alive, and it keeps any `pass_fds` flock
+
+Verified (CPython 3.12.3, Linux, a scratch script): the parent took `flock(LOCK_EX)` on a file and
+passed the descriptor with `pass_fds` to a `start_new_session` `sh` leader whose child ignored
+SIGTERM, then closed its own copy. Kill form A, SIGTERM the group, `wait()` on the leader, SIGKILL
+the group only if the leader is still alive: the leader exited, the group was still alive and a new
+`flock(LOCK_NB)` on the file failed (lock held). Kill form B, SIGTERM then poll `os.killpg(pgid, 0)`
+with `p.poll()` in the loop until the grace ends, then SIGKILL the group: the group was gone and the
+lock was free. `killpg(pgid, 0)` still reports the group alive for an unreaped zombie leader (alive
+`True` after the leader's SIGKILL, `False` after `wait()`), so reap the leader inside the loop. A
+test child that dies on SIGTERM (`sleep`) cannot tell A from B (the source entry's mutants; not re-run). The shipped form is
+`decision-models/decisionmodels/runner.py` `_kill_group` (lines 376-388).
+<!-- unit u42 -->
+Gotcha: A private copy for mutation testing: `pytest` imports the editable install's live tree unless `PYTHONPATH` points at the copy, and the copy needs the data directories tests read
+Versions: none stated
+Verified: unverified, migrated 2026-11-10
+<!-- body -->
+## A private copy for mutation testing: `pytest` imports the editable install's live tree unless `PYTHONPATH` points at the copy, and the copy needs the data directories tests read
+
+Verified on `model-bench` (editable install via a setuptools `__editable__` finder; copy made with
+`rsync` excluding `.venv`): `import modelbench` from the copy's directory resolved into the copy under
+`python -c` and `python -m pytest` (the cwd is on `sys.path`), but a test run through the `pytest`
+launcher resolved into the live tree unless `PYTHONPATH=<copy>` was set, so a mutant edited in the
+copy would never run. Without the copy's `results/` directory, two tests that read stored run records
+failed (`test_every_stored_run_record_still_validates_unchanged`,
+`test_a_legacy_record_without_request_timeout_loads_it_as_none`) and passed with it. The full-suite
+figure in the source entry (3426 passed, 3 skipped) was not re-run. Check which tree ran:
+`print(modelbench.__file__)` in a throwaway test.

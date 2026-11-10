@@ -79,19 +79,9 @@
 #                                     a small, EXPLICITLY MAINTAINED list:
 #                                     extend it, don't broaden the globs
 #                                     above, when a new such doc surfaces.
-#   skills/python-web-quirks/*, */skills/python-web-quirks/*
-#                                     a repeated legitimate write target,
-#                                     same shape as cypher-mcp/README.md
-#                                     above: not cobb's own skill package
-#                                     (skills/agent-maintenance,
-#                                     skills/agent-standards) but a shared
-#                                     on-demand knowledge base cobb routes
-#                                     analyst/coder kaizen promotions into
-#                                     (kaizen-team-distillation-u1.md review
-#                                     finding 3, 2026-09-16 — at least 4 prior
-#                                     distillation commits had already written
-#                                     here, each escalating to an ask prompt
-#                                     until this line closed the gap).
+#   (skills/python-web-quirks/* retired: the gotcha KB is now the ws:agent-team
+#   knowledge base, its copy of record claude/knowledge/python-web-quirks.md is
+#   already covered by claude/*/*.md above — docs/plans/python-web-quirks-kb.md D1.)
 #
 # Deliberately NOT allowed (still escalates — AC-4, counter-example C2): a
 # general project doc with no agent/skill/MCP relevance, e.g. docs/BACKLOG.md.
@@ -102,5 +92,5 @@
 # (resolved through this file's real path, so it also works via the
 # ~/.claude/agents/ symlink).
 exec "$(dirname "$(readlink -f "$0")")/../../scripts/guard-doc-writes.sh" \
-  'claude/*/*.md|*/claude/*/*.md|claude/*/kaizen/history.md|*/claude/*/kaizen/history.md|claude/*/kaizen/plan.md|*/claude/*/kaizen/plan.md|claude/README.md|*/claude/README.md|claude/AGENTS.md|*/claude/AGENTS.md|claude/CLAUDE.md|*/claude/CLAUDE.md|skills/agent-maintenance/*|*/skills/agent-maintenance/*|skills/agent-standards/*|*/skills/agent-standards/*|skills/README.md|*/skills/README.md|cypher-mcp/README.md|*/cypher-mcp/README.md|skills/python-web-quirks/*|*/skills/python-web-quirks/*' \
+  'claude/*/*.md|*/claude/*/*.md|claude/*/kaizen/history.md|*/claude/*/kaizen/history.md|claude/*/kaizen/plan.md|*/claude/*/kaizen/plan.md|claude/README.md|*/claude/README.md|claude/AGENTS.md|*/claude/AGENTS.md|claude/CLAUDE.md|*/claude/CLAUDE.md|skills/agent-maintenance/*|*/skills/agent-maintenance/*|skills/agent-standards/*|*/skills/agent-standards/*|skills/README.md|*/skills/README.md|cypher-mcp/README.md|*/cypher-mcp/README.md' \
   "cobb guardrail: Write/Edit targets '__PATH__', which is outside cobb's agentic-development topic-remit (any agent's own definition file, kaizen curation for the team, MCP/agent-standards documentation) or the /tmp scratchpad. Approve only if this is genuinely agent/skill/MCP-standards work; otherwise it belongs to whichever agent actually owns that doc kind (e.g. a general project backlog item is not cobb's job — see counter-example C2)."
