@@ -17,7 +17,10 @@ thread or trace) is made a test here, not a promise (`docs/plans/typed-decision-
   items; only `scripts/import_side_check_shingles.py` does, outside this scan), and the integer
   6379, the FalkorDB/Redis port a stdlib `socket` would need.
 
-The scan covers `decisionmodels/` only (plan2 §3.5). It is a static tripwire over source text,
+The scan covers `decisionmodels/` (plan2 §3.5), and, with the same rules, `scripts/*.py` and
+`agents/*.py` under a per-file exemption map (`EXEMPT_FRAGMENTS`): the one entry lets
+`scripts/import_side_check_shingles.py` name the side-check pack, the only reach it exists for, and
+nothing else (ledger, U5.1 Pass 1 F4). It is a static tripwire over source text,
 not a proof. It does **not** see: an import function reached through `getattr`, `vars()` or any
 other indirection; `exec`/`eval`, `runpy` or `importlib.util` loading by path; a forbidden name or
 port assembled at run time (`"red" + "is"`, `6000 + 379`, a port given as a string, another
@@ -34,7 +37,15 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE_DIR = Path(__file__).resolve().parents[1] / "decisionmodels"
+COMPONENT_DIR = Path(__file__).resolve().parents[1]
+PACKAGE_DIR = COMPONENT_DIR / "decisionmodels"
+
+#: The other first-party Python the scan covers, relative to the component root, and each file's
+#: exempt forbidden-fragment names (the import allowlist and the port rule have no exemption).
+EXTRA_GLOBS = ("scripts/*.py", "agents/*.py")
+EXEMPT_FRAGMENTS: dict[str, frozenset[str]] = {
+    "scripts/import_side_check_shingles.py": frozenset({"guard-judge-understanding"}),
+}
 
 ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(sys.stdlib_module_names) | {"decisionmodels"}
 
@@ -89,12 +100,13 @@ def _import_call_names(tree: ast.Module) -> frozenset[str]:
     return frozenset(names)
 
 
-def _literal_reaches(text: str, kind: str, where: str) -> list[str]:
+def _literal_reaches(text: str, kind: str, where: str,
+                     exempt: frozenset[str] = frozenset()) -> list[str]:
     lowered = text.lower()
     return [
         f"{where}: {kind} literal reaches {name!r}"
         for name, pattern in FORBIDDEN_FRAGMENTS.items()
-        if pattern.search(lowered)
+        if name not in exempt and pattern.search(lowered)
     ]
 
 
@@ -106,8 +118,10 @@ def _call_name(func: ast.expr) -> str | None:
     return None
 
 
-def violations_in_source(source: str, filename: str) -> list[str]:
-    """Every FR-8 violation in one module's source, each as a `file:line: reason` string."""
+def violations_in_source(source: str, filename: str,
+                         exempt: frozenset[str] = frozenset()) -> list[str]:
+    """Every FR-8 violation in one module's source, each as a `file:line: reason` string. `exempt`
+    names forbidden fragments this file may carry in a literal (`EXEMPT_FRAGMENTS`)."""
     tree = ast.parse(source, filename=filename)
     docstrings = _docstring_nodes(tree)
     import_calls = _import_call_names(tree)
@@ -129,9 +143,9 @@ def violations_in_source(source: str, filename: str) -> list[str]:
         elif isinstance(node, ast.Constant) and id(node) not in docstrings:
             value = node.value
             if isinstance(value, str):
-                found += _literal_reaches(value, "string", where)
+                found += _literal_reaches(value, "string", where, exempt)
             elif isinstance(value, bytes):
-                found += _literal_reaches(value.decode("latin-1"), "bytes", where)
+                found += _literal_reaches(value.decode("latin-1"), "bytes", where, exempt)
             elif isinstance(value, int) and not isinstance(value, bool):
                 if value in FORBIDDEN_INTS:
                     found.append(f"{where}: integer literal {value} (FalkorDB/Redis port)")
@@ -142,6 +156,21 @@ def violations_in_tree(root: Path) -> list[str]:
     found: list[str] = []
     for path in sorted(root.rglob("*.py")):
         found += violations_in_source(path.read_text(encoding="utf-8"), str(path))
+    return found
+
+
+def extra_files(root: Path = COMPONENT_DIR) -> list[Path]:
+    return sorted(path for pattern in EXTRA_GLOBS for path in root.glob(pattern))
+
+
+def violations_in_extra(root: Path = COMPONENT_DIR,
+                        exemptions: dict[str, frozenset[str]] = EXEMPT_FRAGMENTS) -> list[str]:
+    """`violations_in_source` over `scripts/*.py` and `agents/*.py`, each file under its own
+    exemption (`exemptions`, keyed by the path relative to `root`)."""
+    found: list[str] = []
+    for path in extra_files(root):
+        exempt = exemptions.get(path.relative_to(root).as_posix(), frozenset())
+        found += violations_in_source(path.read_text(encoding="utf-8"), str(path), exempt)
     return found
 
 
@@ -258,3 +287,70 @@ def test_what_fr8_allows_is_not_refused(tmp_path: Path) -> None:
     package.mkdir()
     (package / "clean.py").write_text(source, encoding="utf-8")
     assert violations_in_tree(package) == []
+
+
+# --- scripts/ and agents/*.py, under the per-file exemption map -----------------------------------
+
+
+def test_the_extra_scan_sees_the_real_scripts_and_agents() -> None:
+    names = [p.relative_to(COMPONENT_DIR).as_posix() for p in extra_files()]
+    assert "scripts/import_side_check_shingles.py" in names
+    assert "agents/guard_hook.py" in names
+
+
+def test_scripts_and_agents_reach_only_stdlib_and_the_package() -> None:
+    assert violations_in_extra() == []
+
+
+def test_the_exemption_map_names_only_the_side_check_script_and_only_its_one_fragment() -> None:
+    assert EXEMPT_FRAGMENTS == {
+        "scripts/import_side_check_shingles.py": frozenset({"guard-judge-understanding"})}
+    assert (COMPONENT_DIR / "scripts/import_side_check_shingles.py").is_file()
+
+
+def _extra_tree(tmp_path: Path, files: dict[str, str]) -> Path:
+    for name, source in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    return tmp_path
+
+
+SIDE_CHECK_PATH = "P = 'model-bench/packs/guard-judge-understanding/items.jsonl'\n"
+EXEMPT_ONE = {"scripts/side.py": frozenset({"guard-judge-understanding"})}
+
+
+def test_the_exempt_file_may_name_the_side_check_pack(tmp_path: Path) -> None:
+    root = _extra_tree(tmp_path, {"scripts/side.py": SIDE_CHECK_PATH})
+    assert violations_in_extra(root, EXEMPT_ONE) == []
+
+
+def test_the_same_literal_in_a_file_with_no_exemption_is_refused(tmp_path: Path) -> None:
+    root = _extra_tree(tmp_path, {"scripts/side.py": SIDE_CHECK_PATH,
+                                  "scripts/other.py": SIDE_CHECK_PATH,
+                                  "agents/hook.py": SIDE_CHECK_PATH})
+    found = violations_in_extra(root, EXEMPT_ONE)
+    assert sorted({Path(v.split(":")[0]).name for v in found}) == ["hook.py", "other.py"]
+    assert all("guard-judge-understanding" in v for v in found)
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("import redis\n", "'redis'"),
+    ("import modelbench\n", "'modelbench'"),
+    ("X = '../falkor-chat/server'\n", "'falkor-chat'"),
+    ("PORT = 6379\n", "6379"),
+    ("import requests\n", "'requests'"),
+])
+def test_the_exempt_file_is_refused_for_every_other_reach(
+        tmp_path: Path, source: str, expected: str) -> None:
+    root = _extra_tree(tmp_path, {"scripts/side.py": SIDE_CHECK_PATH + source})
+    found = violations_in_extra(root, EXEMPT_ONE)
+    assert any(expected in v for v in found), found
+
+
+def test_the_exemption_is_by_fragment_name_not_by_file(tmp_path: Path) -> None:
+    """A mutant that skipped the literal scan for an exempt file reddens here."""
+    root = _extra_tree(tmp_path, {"scripts/side.py": "X = 'redis://h'\n" + SIDE_CHECK_PATH})
+    found = violations_in_extra(root, EXEMPT_ONE)
+    assert [v for v in found if "reaches 'redis'" in v]
+    assert not [v for v in found if "guard-judge-understanding" in v]

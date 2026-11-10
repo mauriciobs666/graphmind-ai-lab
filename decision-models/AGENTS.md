@@ -17,9 +17,11 @@ reconciliation, halts, generation runs, votes, tranche, top-up), `diagnostics.py
 obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
 screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
-`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
+`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`), plus `shingles.py` and `split.py`
+(pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6; `scripts/import_side_check_shingles.py`
+writes `data/guard-judge/side-check-shingles.txt`, hashes only). `agents/` holds the three agent
 definitions, spawn templates, `guard_hook.py` and `settings.json`. `finalize` and everything after
-it (plan4 §4.1 U5.10 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+it (plan4 §4.1 U5.10b onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -29,9 +31,10 @@ it (plan4 §4.1 U5.10 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke
   paths/packages, FalkorDB/Redis, the `guard-judge-understanding` side-check items, port 6379).
   Never widen either to make a unit green; a new reach is a plan change. It is a static tripwire
   (its docstring lists what it cannot see). The
-  scan covers `decisionmodels/` only — `scripts/import_side_check_shingles.py` (plan2 §3.5) is the
-  one sanctioned reader of the side-check items (`model-bench/packs/guard-judge-understanding/`),
-  and it writes hashes only.
+  scan covers `decisionmodels/`, plus `scripts/*.py` and `agents/*.py` under a per-file exemption
+  map (`EXEMPT_FRAGMENTS`): `scripts/import_side_check_shingles.py` (plan2 §3.5) is the one
+  sanctioned reader of the side-check items (`model-bench/packs/guard-judge-understanding/`), and
+  it writes hashes only. A new exemption is a plan change.
 - **Contract copies are byte-copies, never regenerated or edited here.**
   `tests/fixtures/decision-contract/*.jsonl` are copies of model-bench's canonical vectors (v1.3
   §3.2.2; six files, the renderer and `normalize-turns.jsonl` ones included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
@@ -61,6 +64,13 @@ it (plan4 §4.1 U5.10 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke
   unbiased systematic rounding — never swap in largest remainder (note §Q1.1). Ids are in the
   non-word form `seeds.ID_PATTERN`. `tests/test_seeds.py` pins a digest per point; a design,
   algorithm or interpreter change re-pins it deliberately.
+- **`install` hashes two things differently** (plan5 §3.3, plan6 §3.8). `agentDefinition`,
+  `spawnTemplate`, `guardHook` hash installed bytes and must match the first install's;
+  `requestTemplate` and `rubric` (`campaign.rubric_hash`) hash `points/` files and are recorded fresh
+  on every install, so a `generator.md`/`rubric.md` edit appends a second `expectations` event.
+- **Splits** (`split.make_splits`) run in a fixed order: side-check drop, random subsample per
+  cell (surplus counted), split by seed (eval first), eval-vs-calibration/train shingle drop last,
+  never refilled. Shingles cover evidence text only; a hash cannot be turned back into text.
 - **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
   one schema check; the writer runs it before any request leaves it. No `*Id` key
   reaches a generation request, whatever `points/` declares.

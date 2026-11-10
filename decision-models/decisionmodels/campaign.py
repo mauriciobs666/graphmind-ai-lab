@@ -1474,9 +1474,10 @@ class Campaign:
         `driverTemplate` (plan6 §3.3's message, `{agent_type}` and `{spawn_prompt}` slots) and
         `userSettingsDigests` (`runner.user_settings_digests`, plan6 §3.2), and refuses without
         them. `install` also records `promptSha256` (plan4 §3.7's `agentDefinition`,
-        `spawnTemplate` and `guardHook` hashes) and `settingsSha256`. The latest event wins, except
-        that only the first sets the per-role model pins and declared `instructions` (`fold`): a
-        later `install` must not undo a `resolve --repin-model/--repin-instructions`."""
+        `spawnTemplate`, `guardHook`, `requestTemplate` and `rubric` hashes) and
+        `settingsSha256`. The latest event wins, except that only the first sets the per-role
+        model pins and declared `instructions` (`fold`): a later `install`
+        must not undo a `resolve --repin-model/--repin-instructions`."""
         if set(roles) != set(ROLE_OF_KIND.values()):
             raise CampaignRefused("expectations need exactly the generator and labeler roles")
         event: dict[str, Any] = {"event": "expectations", "guardCommand": guard_command,

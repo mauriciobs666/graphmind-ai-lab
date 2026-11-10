@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.10a — install hashes, shingles, splits, FR-8 scope
+
+**What:** the first half of U5.10 (plan4 §3.6 "Cells, then splits", §4.1 row; plan2 §3.5; note
+§Q1.3/§Q1.4; plan5 §3.3; plan6 §3.8 "U5.10 hand-offs" and §5 U5.10 row's install part). `finalize`,
+`generation.json` and `items.jsonl`, the tranche re-check and the §3.7 vector comparison are
+U5.10b's; plan, note and live specs untouched.
+
+- `install.py`: `promptSha256` gains `requestTemplate.generator` (sha256 of
+  `Point.generator_instructions`), `requestTemplate.labeler` (`Point.label_answer_section`) and
+  `rubric` (`campaign.rubric_hash`), for the campaign's own point. The immutability compare narrows
+  from the whole dict to `agentDefinition`, `spawnTemplate`, `guardHook` (P28-M1), so a
+  `generator.md` or `rubric.md` edit between installs appends a second `expectations` event.
+- `shingles.py` (tokens, 8-token shingles, `evidence_text` per point, `shingle_hash`,
+  `load_side_check_hashes`) and `split.py` (`subsample_cells`, `assign_splits`, `make_splits`: the
+  side-check drop first, random subsample with surplus counted, split by seed within a cell with
+  eval filled first, the eval-against-calibration/train drop last and never refilled).
+- `scripts/import_side_check_shingles.py` and its output `data/guard-judge/side-check-shingles.txt`
+  (1,674 hashes, source sha256 in the header; a test fails when the pack changes).
+- `tests/test_fr8_isolation.py` also scans `scripts/*.py` and `agents/*.py`, with the per-file
+  exemption map `EXEMPT_FRAGMENTS` (ledger, U5.1 Pass 1 F4): only the importer may name the
+  side-check pack.
+- Choices: cells are subsampled to eval + calibration + train per cell and `train` is 0 for these
+  points (note §Q1.3's train column is U8's), so `splits.json`'s `train` is empty; the evidence
+  text of a guard's `understanding` is its string values in sorted key order, joined to the turns by a
+  newline, not its JSON. The committed hashes therefore differ from `tests/test_points.py`'s
+  JSON-based check in key names, `\u` escapes and field order; 1,108 of the 1,674 hashes straddle a
+  field boundary (566 lie within one field; recomputed from the real pack). The tokenizer and shingle
+  rule are otherwise equal (Pass 30: 20,000 random strings, no difference).
+- Pass 30 fixes: the committed file is compared whole with the script's output on the real pack;
+  the eval drop is tested across cells; `make_splits` is tested under shuffled candidate order over
+  several cells; one real-file install test edits a copied `points/`.
+
 ## 2026-11-10 — typed-decision-models U5.9 fix round — reopen, unboundedCell, probe, spend projection
 
 **What:** `docs/plans/typed-decision-models6.md` §3.8's decline/reopen, P̂ = 0, probe and

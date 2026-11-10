@@ -32,8 +32,15 @@ and every refusal comes before any file is written or any event appended:
    role the pins read from the installed definition's frontmatter (`model`, `effort`) with its
    agent type, spawn template and the empty declared `instructions` set, the `driverTemplate`,
    `userSettingsDigests`, `settingsSha256` and
-   `promptSha256 {agentDefinition, spawnTemplate, guardHook}` (plan4 §3.7's keys, the driver's
-   template included; `rubric` and `requestTemplate` are not install's).
+   `promptSha256 {agentDefinition, spawnTemplate, guardHook, requestTemplate, rubric}` (plan4
+   §3.7's keys, the driver's template included). The first three hash the installed bytes and are
+   immutable across installs (an earlier event that disagrees refuses). `requestTemplate` (the
+   generator's composed instructions, the labeler's answer-file section) and `rubric`
+   (`campaign.rubric_hash`) hash `points/` files outside `LAYOUT`, so each install records them
+   fresh: a `generator.md` or `rubric.md` edit between two installs appends a second event with a
+   different hash, which is how a template halt's second hash arises (plan6 §3.8; plan5 §3.3). The
+`points/` files are read once per process (`points.load_point` is `functools.cache`d), which is
+enough because each `driver install` is its own process; a test that edits one clears the cache.
 
 It prints the recorded user-settings key names, never a value.
 """
@@ -47,7 +54,8 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from . import runner
-from .campaign import Campaign, CampaignRefused, _write_atomic, root_refusal
+from .campaign import Campaign, CampaignRefused, _write_atomic, root_refusal, rubric_hash
+from .points import load_point
 
 AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 DEFINITIONS = {"driver": "dm-driver.md", "generator": "dm-generator.md",
@@ -198,10 +206,22 @@ def _check_installed(claude: Path, sources: Mapping[str, bytes]) -> None:
                               "remove it")
 
 
-def _prompt_hashes(sources: Mapping[str, bytes]) -> dict[str, dict[str, str] | str]:
+#: The `promptSha256` keys that hash installed bytes, which a later install must reproduce.
+IMMUTABLE_HASH_KEYS = ("agentDefinition", "spawnTemplate", "guardHook")
+
+
+def _prompt_hashes(sources: Mapping[str, bytes], point_role: str
+                   ) -> dict[str, dict[str, str] | str]:
+    """plan4 §3.7's `promptSha256`, with plan5 §3.3's rulings for the two keys that come from
+    `points/` (each hashes one `Point` attribute, never a composed line 2 twice)."""
+    point = load_point(point_role)
     return {"agentDefinition": {role: sha256(sources[name]) for role, name in
                                 DEFINITIONS.items()},
             "spawnTemplate": {role: sha256(sources[name]) for role, name in TEMPLATES.items()},
+            "requestTemplate": {
+                "generator": sha256(point.generator_instructions.encode("utf-8")),
+                "labeler": sha256(point.label_answer_section.encode("utf-8"))},
+            "rubric": rubric_hash(point_role),
             "guardHook": sha256(sources[GUARD])}
 
 
@@ -226,9 +246,10 @@ def install(root: Path, *, agents_dir: Path = AGENTS_DIR, settings_path: Path | 
         sources = _read_sources(agents_dir)
         claude = camp.exchange_dir / ".claude"
         _check_installed(claude, sources)
-        hashes = _prompt_hashes(sources)
-        earlier = camp.state().expectations
-        if earlier is not None and earlier.get("promptSha256", hashes) != hashes:
+        state = camp.state()
+        hashes = _prompt_hashes(sources, state.init["point"])
+        earlier = (state.expectations or {}).get("promptSha256", hashes)
+        if any(earlier.get(key, hashes[key]) != hashes[key] for key in IMMUTABLE_HASH_KEYS):
             raise CampaignRefused("the sources no longer hash to what this campaign recorded "
                                   "at its first install; start a new campaign")
         for name, dest in LAYOUT.items():

@@ -22,7 +22,7 @@ from test_audit import EXPECTED, attachment, audit_of, clean_run, found, insert_
 from test_campaign import ROLES, Clock, write_fixture
 from test_runner import Bench
 
-from decisionmodels import audit, driver, install, render, runner, smoke
+from decisionmodels import audit, campaign, driver, install, points, render, runner, smoke
 from decisionmodels.campaign import Campaign, CampaignRefused
 
 pytestmark = pytest.mark.usefixtures("fake_claude")
@@ -34,6 +34,9 @@ INSTALLED = ("agents/dm-driver.md", "agents/dm-generator.md", "agents/dm-labeler
              "spawn-generator.txt", "spawn-labeler.txt", "guard_hook.py", "settings.json")
 SOURCE_OF = {"agents/dm-driver.md": "dm-driver.md", "agents/dm-generator.md": "dm-generator.md",
              "agents/dm-labeler.md": "dm-labeler.md"}
+
+
+POINT = points.load_point("guard-judge")
 
 
 def digest(data: bytes) -> str:
@@ -217,6 +220,10 @@ def test_install_byte_copies_the_sources_and_the_hashes_equal_the_sources(tmp_pa
             "driver": digest((AGENTS / "spawn-driver.txt").read_bytes()),
             "generator": digest((AGENTS / "spawn-generator.txt").read_bytes()),
             "labeler": digest((AGENTS / "spawn-labeler.txt").read_bytes())},
+        "requestTemplate": {
+            "generator": digest(POINT.generator_instructions.encode("utf-8")),
+            "labeler": digest(POINT.label_answer_section.encode("utf-8"))},
+        "rubric": digest(POINT.rubric_body.encode("utf-8")),
         "guardHook": digest((AGENTS / "guard_hook.py").read_bytes())}
     assert event["settingsSha256"] == digest((AGENTS / "settings.json").read_bytes())
 
@@ -843,3 +850,126 @@ def test_smoke_fixture_refuses_an_existing_file_and_a_bad_count(
     assert out.read_text("utf-8") == "keep"
     assert driver.main(["smoke-fixture", "--out", str(tmp_path / "n.jsonl"), "--count", "0"]) == 1
     assert "refused" in capsys.readouterr().err
+
+
+# --- requestTemplate and rubric, recorded fresh on each install (plan5 §3.3; plan6 §3.8) --------
+
+
+def edited_point(monkeypatch: pytest.MonkeyPatch, **fields: str) -> points.Point:
+    """`load_point` as `install` and `campaign.rubric_hash` see it, with `Point` fields edited:
+    the same effect as editing the file under `points/` between two installs."""
+    edited = replace(POINT, **fields)
+    monkeypatch.setattr(install, "load_point", lambda role: edited)
+    monkeypatch.setattr(campaign, "load_point", lambda role: edited)
+    return edited
+
+
+def test_install_records_the_request_template_and_rubric_hashes_of_the_campaigns_point(
+        tmp_path: Path) -> None:
+    (event,) = installed(tmp_path).expectations()
+    prompts = event["promptSha256"]
+    assert prompts["rubric"] == campaign.rubric_hash("guard-judge")
+    assert set(prompts["requestTemplate"]) == {"generator", "labeler"}
+    other = points.load_point("message-type-classifier")
+    assert prompts["rubric"] != digest(other.rubric_body.encode("utf-8"))
+    assert prompts["requestTemplate"]["generator"] != digest(
+        other.generator_instructions.encode("utf-8"))
+
+
+def test_a_generator_edit_between_installs_appends_a_second_event_with_only_that_hash_moved(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    made = installed(tmp_path)
+    edited_point(monkeypatch, generator_body=POINT.generator_body + "\nAn added sentence.\n")
+    made.install()
+    first, second = made.expectations()
+    assert second["promptSha256"]["requestTemplate"]["generator"] != (
+        first["promptSha256"]["requestTemplate"]["generator"])
+    for key in ("agentDefinition", "spawnTemplate", "guardHook", "rubric"):
+        assert second["promptSha256"][key] == first["promptSha256"][key]
+    assert second["promptSha256"]["requestTemplate"]["labeler"] == (
+        first["promptSha256"]["requestTemplate"]["labeler"])
+    assert campaign.generator_template_hash(first) != campaign.generator_template_hash(second)
+
+
+def test_a_rubric_edit_moves_only_the_rubric_hash(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    made = installed(tmp_path)
+    edited_point(monkeypatch, rubric_body=POINT.rubric_body + "\nA sentence.\n")
+    made.install()
+    first, second = made.expectations()
+    moved = {key for key in first["promptSha256"]
+             if first["promptSha256"][key] != second["promptSha256"][key]}
+    assert moved == {"rubric"}
+
+
+def test_a_label_answer_edit_moves_only_the_labeler_request_template(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    made = installed(tmp_path)
+    edited_point(monkeypatch, label_answer_section=POINT.label_answer_section + " x")
+    made.install()
+    first, second = made.expectations()
+    before, after = first["promptSha256"], second["promptSha256"]
+    assert after["requestTemplate"]["labeler"] != before["requestTemplate"]["labeler"]
+    assert after["requestTemplate"]["generator"] == before["requestTemplate"]["generator"]
+    assert after["rubric"] == before["rubric"]
+    assert after["agentDefinition"] == before["agentDefinition"]
+
+
+def test_an_edited_definition_or_spawn_template_still_refuses_after_a_first_install(
+        tmp_path: Path) -> None:
+    made = installed(tmp_path)
+    shutil.rmtree(made.claude)           # so the installed-copy check cannot answer first
+    edits = {"dm-generator.md": lambda t: t.replace("maxTurns: 6", "maxTurns: 7"),
+             "spawn-labeler.txt": lambda t: t + " ",
+             "guard_hook.py": lambda t: t + "\n# edited\n"}
+    for name, edit in edits.items():
+        copy = agents_copy(tmp_path / name, **{name: edit})
+        refuses(made, "no longer hash to what this campaign recorded", agents_dir=copy)
+    assert len(made.expectations()) == 1
+
+
+def test_install_hashes_the_campaigns_own_point_not_a_fixed_one(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "settings.json").write_text(json.dumps(SETTINGS), "utf-8")
+    fixture = tmp_path / "fixture.jsonl"
+    fixture.write_text(json.dumps({"text": "Where is my order?", "priorTurn": None}) + "\n",
+                       "utf-8")
+    camp = Campaign(tmp_path / "camp", claude_dir=home / ".claude", clock=Clock())
+    camp.init(point="message-type-classifier", phase="smoke", fixture=fixture)
+    made = Installed(camp, home, [])
+    made.install()
+    (event,) = made.expectations()
+    other = points.load_point("message-type-classifier")
+    assert event["promptSha256"]["rubric"] == digest(other.rubric_body.encode("utf-8"))
+    assert event["promptSha256"]["rubric"] != digest(POINT.rubric_body.encode("utf-8"))
+    assert event["promptSha256"]["requestTemplate"] == {
+        "generator": digest(other.generator_instructions.encode("utf-8")),
+        "labeler": digest(other.label_answer_section.encode("utf-8"))}
+
+
+def test_a_real_edit_of_a_points_file_between_installs_gives_a_second_event(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No monkeypatched `load_point`: a copy of `points/` is edited on disk. `load_point` is
+    `functools.cache`d (one `driver install` is one process), so the test clears it, here and on
+    exit."""
+    copy = tmp_path / "points-copy"
+    shutil.copytree(points.POINTS_DIR, copy)
+    monkeypatch.setattr(points, "POINTS_DIR", copy)
+    points.load_point.cache_clear()
+    try:
+        made = installed(tmp_path)
+        generator = copy / "guard-judge" / "generator.md"
+        generator.write_text(generator.read_text("utf-8") + "\nAn added sentence.\n", "utf-8")
+        points.load_point.cache_clear()
+        made.install()
+        rubric = copy / "guard-judge" / "rubric.md"
+        rubric.write_text(rubric.read_text("utf-8") + "\nA rubric sentence.\n", "utf-8")
+        points.load_point.cache_clear()
+        made.install()
+        first, second, third = (e["promptSha256"] for e in made.expectations())
+        assert second["requestTemplate"]["generator"] != first["requestTemplate"]["generator"]
+        assert {k for k in second if second[k] != first[k]} == {"requestTemplate"}
+        assert {k for k in third if third[k] != second[k]} == {"rubric"}
+    finally:
+        points.load_point.cache_clear()

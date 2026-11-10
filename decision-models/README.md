@@ -22,7 +22,9 @@ Method: `docs/plans/typed-decision-models-ml.md`.
 - **Synthetic inputs only (FR-8).** `decisionmodels/` imports only the standard library and
   itself, and its source names no falkor-chat path, no FalkorDB/Redis reach and no side-check
   item file. `tests/test_fr8_isolation.py` is a static tripwire for that, with a planted-red case
-  per reach; its docstring lists what a source scan cannot see.
+  per reach; its docstring lists what a source scan cannot see. It also scans `scripts/` and
+  `agents/*.py`, under a per-file exemption map that lets only
+  `scripts/import_side_check_shingles.py` name the side-check pack.
 - **One-way to model-bench.** model-bench's importer copies an eval split and a candidate in;
   this component never imports model-bench.
 
@@ -96,7 +98,24 @@ or `AGENTS.md`. Run these from `decision-models/`:
   a `--skip-batch` drop closed a round or pool, the halt that raised. A `spend` halt (below) is
   let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
   once the rubric has changed; an `unboundedCell` halt refuses a plain `resolve` (below).
-- `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
+- `finalize` (U5.10b) is not built yet; the pure parts it will call exist (U5.10a, below). `run` refuses a campaign that has no `install` record.
+
+### Cells, splits and the side-check hashes (U5.10a)
+
+`finalize` will call three pure parts, built and tested ahead of it. `decisionmodels/shingles.py`
+tokenizes (NFKC, lowercase, non-letter/digit to space) and cuts 8-token shingles over an item's
+evidence text only (a guard's `condition` and the agent's name are not evidence).
+`decisionmodels/split.py` `make_splits` drops, first, every generated item whose evidence shares a
+shingle with a side-check item; cuts each cell (design stratum × label) at random to its target,
+counting the surplus; assigns eval, then calibration, then train within each cell by seed; and drops
+last, and counts, any eval item that shares a shingle with a calibration or train item. Nothing is
+refilled, so the printed n shows the loss.
+
+The side-check items are never read by `decisionmodels/`. A human runs
+`.venv/bin/python scripts/import_side_check_shingles.py` once; it reads
+`model-bench/packs/guard-judge-understanding/items.jsonl` and writes only sha256 hashes of its
+shingles, with the source file's sha256 in a header line, to
+`data/guard-judge/side-check-shingles.txt` (committed; a test fails when the source changes).
 
 ### Rounds, top-up and the message-type tranche
 
@@ -200,10 +219,15 @@ campaign lock (it refuses while a `run` holds it) and, before writing anything:
 - byte-copies the sources into `exchange/.claude/` and compares every installed file's sha256 with
   its source: a one-byte edit of an installed file, a stray file in `.claude/agents/`, a
   `settings.local.json`, or sources that no longer hash to what the campaign's first install
-  recorded refuses (remove the copy, or start a new campaign);
+  recorded refuses (remove the copy, or start a new campaign). Only the installed bytes
+  (`agentDefinition`, `spawnTemplate`, `guardHook`) are compared: `requestTemplate` and `rubric` hash
+  `points/` files, so each install records them fresh, and a `generator.md` or `rubric.md` edit
+  between two installs appends a second `expectations` event (plan5 §3.3: a `label-answer.md` edit
+  moves only `requestTemplate.labeler`, a `rubric.md` edit only `rubric`);
 - appends an `expectations` event: the guard's exact command, per role its pins read from the
   installed definition (model, effort), its spawn template and an empty `instructions` set, the
-  driver template, the user-settings digests and `promptSha256`. It is fresh on every run, which is
+  driver template, the user-settings digests and `promptSha256` (with `requestTemplate` and
+  `rubric`). It is fresh on every run, which is
   how a refused user-settings edit is accepted: edit, `install` again, and the next `run`
   launches. Only the first event sets the model pins and declared `instructions`, so a re-run
   keeps a `resolve --repin-model/--repin-instructions` decision. The project `settings.json` pins `autoContinueAtUsageLimit: false` and wires the guard
