@@ -33,10 +33,16 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | G2 diff gate steps 1–5 | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 7 | approve with suggestions (F1 resolve FR/AC parent defect, F2 silent-corruption test gap, F3 links shape decision) | — |
 | B5b fixes F1/F2/minors | `tdd-engineer` | `a798c99c101250269` | accepted (committed 28ce49c5; ~132k tok) | `skills/work-items/…` | re-confirm by `analyst` after step 7 | — |
 | U1b plan sync + F3 decision | `architect` | `a7af14139c4b90236` | delivered (F3: concerns functional; fixed-by/relates multi-valued via link op; step 6 split into 6 + 6b) | `docs/plans/work-item-numbering.md` | — | — |
-| B6 (step 6 links/attrs) | `tdd-engineer` | `acbba0473b46da2aa` | in-flight | `skills/work-items/…` | — | — |
-| B6b (step 6b headers/options) | `tdd-engineer` | — | queued | — | — | — |
+| B6 (step 6 links/attrs) | `tdd-engineer` | `acbba0473b46da2aa` | accepted (committed; ~86k tok) | `skills/work-items/…` | — | — |
+| B6b (step 6b headers/options) | `tdd-engineer` | `a0b298174a600c561` | in-flight at usage-limit pause (uncommitted files under `skills/work-items/` may exist; verify before commit) | — | — | — |
 | B7 (step 7 rebuild/check; sequential, same package) | `tdd-engineer` | — | queued | `skills/work-items/…` | — | — |
 | B8 (step 8) | `tdd-engineer` | — | queued | keys | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
 | B12–B13 (steps 12–13) | `coder` / `teco` | — | queued | — | — |
+
+## Checkpoint 2 (usage limit reached)
+
+- Committed: steps 1–6 + Pass 7 fixes (latest code commit `5e8076e9`, 360 tests). G2 (analyst Pass 7 steps 1–5) approve with suggestions; F1/F2 fixed, F3 decided.
+- In flight: B6b `tdd-engineer` `a0b298174a600c561`. On resume: `git status --short skills/work-items`, run the suite (`cd skills/work-items && /home/mauricio/prg/graphmind-ai-lab/model-bench/.venv/bin/python -m pytest tests -q`), mutate one argument, commit by explicit path. Cold fallback: fresh `tdd-engineer`, brief = plan step 6b row.
+- Queued: B7 (step 7 rebuild/check), B8 (step 8 keys), analyst diff gate for steps 6–8 (also re-confirm F1/F2; step-4 mutants were not re-run), B9–B10 `cobb` (shared files: three-way diff check), B11 root AGENTS.md header fields, B12 bootstrap `GAL`, B13 follow-ups (tico AC-1 amendment; cross-initiative `needs` parser question).
