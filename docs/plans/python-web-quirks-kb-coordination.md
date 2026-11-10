@@ -30,6 +30,7 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U20 | `data-scientist` | `ae055d0d6689a023a` | accepted | G2 F11/F12 in `docs/plans/python-web-quirks-kb-ml.md` (relabel, post-H1 claim, stale counts, deflation ruling) | — | — |
 | U21 | `qa-engineer` | `aae2f63dfd7df43df` | accepted | G2 F13 in `docs/test-plans/python-web-quirks-kb.md` (TP-012, S15c scope, S14 pre-check order) | — | — |
 | U22 | `data-scientist` | `a261a24ca032a9b8c` | accepted | S9: Set A baseline in `ws:pwq-test` (:8210), unfiltered and `--exclude` S7; ML note | — | — |
+| U23 | `cobb` | `af7b500621a0b776c` | in-flight | S10: `ingest` + `gate` of 36 units into `ws:pwq-test` (:8210), scratch manifest; live check of the post-receipt id-visibility check | `qa-engineer` S11 → — | — |
 
 
 
