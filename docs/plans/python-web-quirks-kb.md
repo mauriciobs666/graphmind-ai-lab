@@ -54,7 +54,7 @@ is never stopped. CPG: considered, not relevant — docs, config, a stdlib scrip
   `search_chunks` as the MCP tool. FalkorDB docs: `GRAPH.COPY` clones "nodes, relationships, properties,
   indexes, and constraints" and errors if the destination exists; vector indexes and embeddings are not named.
 - Chunking is the default (`falkorchat/chunking.py`, 1000/150). Over the §D2 units with a 250-400 char header
-  I computed **127-134 chunks** (not 108); 11-12 units span ≥ 4 chunks.
+  I computed **129 chunks** (not 108); 12 units span ≥ 4 chunks (ML §2).
 - Consumer agent files: `coder`, `tdd-engineer`, `qa-engineer`, `frontend-engineer` have no `tools:` line;
   `architect`, `analyst` list the retrieval tools; `tico`, `security-expert` enumerate tools without them. The
   retrieval quote line exists in `tdd-engineer:48`, `architect:52`, `analyst:55`, `qa-engineer:30`,
@@ -255,7 +255,7 @@ documents (`--ac2`, `--sweep`, `--set A` without `--before`, `--set B --sealed-o
 the gate query first and refuse when it fails; `--set B --probe` and `--set A --before` run before any ingest
 (S8, S9) and are exempt. In `ws:pwq-test` a failed unit is replaced by the script;
 in production the run stops, the stakeholder deletes the failed document by `curl`, and the idempotent `ingest`
-completes it.
+completes it. `--sealed-once` takes a mandatory `--expect-sha256`, set by the S14 brief from the sha256 that S8 recorded in the ledger. `gate` and the scoring modes take the expected unit ids from `--copy` and exit 2 without a readable copy; `diverge` reads the manifest's `sha256`, `pin` and `migratedOn`.
 
 ### D10. The AC-9 sweep: scope and per-hit ruling
 
@@ -286,8 +286,7 @@ from the table (derived, not transcribed).
 hits iff the document of the unit containing s is among the five chunks under the floor (a hit on a merged unit
 counts for each member). Coverage: each of the 42 sections has a hit among its two queries. A negative is a false
 accept iff any of the 36 unit documents is under the floor. Replaced ML figures:
-documents 42 → 36; chunks 108 → 127-134 (exact: `units`); ≥ 4-chunk units 7 → 11-12 (u-bt, §4, §8, §9, §11,
-§15, u-tc, u-st, §26, §28, u-pyc, ± §7 — this is Set B's tail-probe list, taken from `units`; both ranges are what the real chunker printed this run for header sizes 250 and 400, with no preamble document); confusable sets:
+documents 42 → 36; chunks 108 → 129; ≥ 4-chunk units 7 → 12 (listed in ML §5 rule 4: Set B's tail-probe list; `units --chunks` prints the counts); confusable sets:
 {§21-§25} becomes u-tc/u-st, {§2,§34}, {§29,§39}, {§30,§40} become intra-unit; the rest unchanged. `data-scientist`
 rewrites the affected ML §2/§3/§7 numbers in place (S12).
 
@@ -300,9 +299,11 @@ reading that path. Protection is the timeline (no implementer runs between B's f
 the tool source, and the `--sealed-once` sentinel against a second scoring. Only S8 and S14 briefs name the path.
 
 **Method rulings before B exists (S7b, `data-scientist`).** (i) The probe may rewrite a B query only when its rank-1
-score is < 0.25 (a leak sign); a query that already surfaces from another document is **kept and recorded** as a
-duplicate-coverage finding, because removing it inflates recall (default until ruled). (ii) Scoring with captures
-that restate a gotcha: see below.
+score is < 0.25 (a leak sign); one that already surfaces from another document is **kept and recorded** as a
+duplicate-coverage finding (ML §5). (ii) Captures that restate a gotcha are removed from the scored state by
+deletion at H1 and by `--exclude` for later ones; the headline is the excluded run, the unfiltered numbers print
+beside it, and S12 sweeps with the S7 list excluded (ML §4.2). S12 and S14 pass the S7 capture ids (from
+`docs/plans/python-web-quirks-kb-captures.md`) as `--exclude`.
 
 **Test workspace.** `ws:pwq-test` on a second `start_agent_team.sh` process (`FALKORCHAT_WS_ID=pwq-test
 AGENT_TEAM_PORT=8210`) holding a copy of the current corpus plus the units. **Order (S6a, S6b):** a tiny throwaway
@@ -355,24 +356,24 @@ S1-S3b are test-first (`tdd-engineer`).
 | S6b | `graph-dba` | create `ws:pwq-test` (D11 order), start `:8210` detached, record unembedded chunks | known-answer search works; counts recorded | reads only |
 | S7 | `cobb` | derive the raw-capture list + coverage + gap ruling → ledger; write the promotion item for `38cd49cd…` into `claude/cobb/kaizen/plan.md` | list with ids; ruling | reads only |
 | S7b | `data-scientist` | rulings (i), (ii) of D11 | in ML note | no |
-| S8 | `qa-engineer` | author B (sealed path), `pwq_leakcheck.py`, `--probe` in `ws:pwq-test`, freeze, sha256 to ledger; `docs/test-plans/python-web-quirks-kb.md` | 84+30 rows, tail probes for every ≥ 4-chunk unit | no |
+| S8 | `qa-engineer` | author B (sealed path), `pwq_leakcheck.py`, `--probe` in `ws:pwq-test`, freeze, sha256 to ledger; `docs/test-plans/python-web-quirks-kb.md` | 84+30 rows, a `tail`-flagged positive for each of the 12 units with ≥ 4 chunks (S8's brief carries it; `validate_set_b` does not read the flags) | no |
 | G2 | `analyst` | review S4-S8: copy vs pin sample, `Versions`/`Verified` sample, guard run, B outside repo | Pass 2 | no |
 | S9 | `data-scientist` | before-ingestion baseline of A in `ws:pwq-test` | recorded in ML note | test ws |
 | S10 | `cobb` | `ingest` + `gate` into `ws:pwq-test`. | gate table clean | test ws |
 | S11 | `qa-engineer` | AC-2, AC-5, AC-7, AC-8, AC-12 in `ws:pwq-test` (T31-T38); report `docs/test-reports/python-web-quirks-kb-report.md` | all pass; planted divergence and 43rd title shown | test ws |
-| S12 | `data-scientist` | floor sweep 0.38-0.50 + BM25 on A (ML §6); rewrite ML counts in place; floor change ⇒ Stage 8 regression first | decision in ML note | test ws |
+| S12 | `data-scientist` | floor sweep 0.38-0.50 with S7 ids `--exclude`d + BM25 on A (ML §6); rewrite ML counts in place; floor change ⇒ Stage 8 regression first | decision in ML note | test ws |
 | S13 | `cobb` | **production ingest**: `ingest --ws agent-team --base-url http://localhost:8200 --confirm-production`, `gate`, AC-1 check at the pin, manifest | gate clean; AC-1 clean; extra-section mutant red | **yes** |
 | S15a | `cobb` | D6 section, front-matter consumer list, floor value if S12 changed it; `audit-team.sh` | AC-14 | no |
 | S13b | `cobb` | re-derive the capture list; hand to the stakeholder | list in ledger | reads only |
 | H1 | stakeholder | `curl -X DELETE` the listed captures  | ids in ledger | stakeholder |
-| S14 | `qa-engineer` | re-derive exclusions, score B once (`--sealed-once`), BM25 on B, tail-vs-head; report | AC-3 verdict | reads only |
+| S14 | `qa-engineer` | re-derive exclusions (S7 ids as `--exclude`), score B once (`--sealed-once`), BM25 on B, tail-vs-head; report | AC-3 verdict | reads only |
 | S15b1 | `cobb` | pointer + tool grants in the eight agents (D7) | `grep -F` finds the literal in 8 | no |
 | S15b2 | `cobb` | `audit-team.sh` check 12 + scratch-copy mutant | green; mutant red | no |
 | S15c | `qa-engineer` | AC-6 (T39), AC-10, AC-13 black-box | pass | no |
 | S16a | `coder` | D10 rows marked S16a | `py_compile` + offline suite subset green | no |
 | S16b | `cobb` | D10 rows marked S16b; one-line `claude/knowledge/` exception to the layout claim in `claude/AGENTS.md:5` and root `AGENTS.md:44` (root file via `coder` in S16a if `cobb`'s guard asks) | rows done | no |
 | S16c | `coder` | kit re-export check (D10) | files array equal, or reported blocked | no |
-| S16d | `cobb` | remove `skills/python-web-quirks/` with filesystem `rm -r` | AC-4 | no |
+| S16d | `cobb` | first add a `--pin-from-git` source mode to the checker (via `coder`), so AC-1 re-runs once the source is gone; then remove `skills/python-web-quirks/` with filesystem `rm -r` | AC-4 | no |
 | G3 | `analyst` | impl review Pass 2: unfiltered AC-9 sweep vs D10, AC-1/5 evidence, live-spec check (no component live-spec contract changes; SERVER.md:638 is a citation) | not "needs changes" | no |
 | S17 | `graph-dba` | stop `:8210`, `GRAPH.DELETE ws:pwq-test` (asks; expected) | key gone | test ws |
 
@@ -424,7 +425,7 @@ fixtures, never from the code under test.
 | T33 | listing (the D6 regex) shows every pin heading, one fence per unit and both preamble fences, ≤ 10,000 bytes (expected: pin count, not plan count) | the regex without `preamble` → the two preamble fences missing from the count → red |
 | T34 | 43rd unit: shown in the listing, and `diverge` fails until ingested | as T23 |
 | T35 | AC-5: remove the units from the test workspace, rebuild from the copy, regenerate the manifest, checker `--source-format copy --ws pwq-test` clean, T31 again | corrupt the copy → red |
-| T36 | AC-7: add one, edit one, retire one (test ws); T31 for added/edited; retired not returned; `diverge` clean | skip the ingest of the edit → `diverge` stale |
+| T36 | AC-7: add one, edit one, retire one (test ws; retire also removes the unit from the copy, else the next `gate` fails `ABSENT`); T31 for added/edited; retired not returned; `diverge` clean | skip the ingest of the edit → `diverge` stale |
 | T37 | planted divergence → `diverge` exit 1 naming the unit | none planted → exit 0 (control) |
 | T38 | AC-12 guard: `claude/knowledge/python-web-quirks.md` allow; `skills/python-web-quirks/SKILL.md`, `docs/BACKLOG.md` ask | re-add the entry → old path allowed |
 | T39 | AC-6 (after S15b1): a tool-denied session of a consuming agent, and a throwaway MCP config pointing at a dead port (never stop `:8200`): reply starts "knowledge base unreachable", reads one unit with `Read` offset/limit, no whole-file read | remove D6 item 4 → the session reads the whole file or does not report |
