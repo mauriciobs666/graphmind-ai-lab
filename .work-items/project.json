@@ -1,0 +1,43 @@
+{
+  "key": "GAL",
+  "components": [
+    "falkor-chat",
+    "salesperson",
+    "opencode",
+    "cpg",
+    "cypher-mcp",
+    "claude",
+    "kiro",
+    "mcp-monitor",
+    "model-bench",
+    "decision-models",
+    "skills",
+    "repo"
+  ],
+  "legacy_namespaces": {
+    "K-": [
+      "analyst",
+      "architect",
+      "cobb",
+      "coder",
+      "data-scientist",
+      "devops",
+      "frontend-engineer",
+      "graph-dba",
+      "qa-engineer",
+      "security-expert",
+      "tdd-engineer",
+      "teco",
+      "tico",
+      "falkor-chat"
+    ],
+    "C-": [
+      "cpg"
+    ]
+  },
+  "legacy_paths": {
+    "claude/*/kaizen/plan.md": "$1",
+    "*/docs/BACKLOG.md": "$1",
+    "docs/BACKLOG.md": "cpg"
+  }
+}

@@ -1,6 +1,6 @@
 # Review — work-item-numbering requirements
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/requirements/work-item-numbering.md`, `docs/plans/work-item-numbering.md` (Pass 4)
+> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/requirements/work-item-numbering.md`, `docs/plans/work-item-numbering.md` (Pass 4) · **Item:** `GAL-F0001`
 
 ## Pass 1
 

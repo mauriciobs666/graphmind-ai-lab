@@ -1,6 +1,6 @@
 # Work-item numbering and terminology — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** —
+> **Status:** active · **Owner:** `teco` · **Tracks:** — · **Item:** `GAL-F0001`
 
 Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; analyst review `docs/reviews/work-item-numbering.md`, 3 passes). Chain so far is docs-only (design → review); verified deliverables are held uncommitted and land in one commit at the chain's terminal state. Build units (allocator/lookup/check tooling, skill) are drawn after the plan gate.
 

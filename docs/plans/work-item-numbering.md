@@ -1,6 +1,6 @@
 # Work-item numbering and terminology — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/requirements/work-item-numbering.md` · **Reviews:** `docs/reviews/work-item-numbering.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/requirements/work-item-numbering.md` · **Reviews:** `docs/reviews/work-item-numbering.md` · **Item:** `GAL-F0001`
 
 ## 1. Goal & scope
 
