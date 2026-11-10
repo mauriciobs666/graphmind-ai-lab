@@ -221,3 +221,60 @@ Matching is document-level throughout (any chunk of the unit counts; S11 defect 
 - Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; captures created after S13b (not enumerated); which chunk (head or tail) was returned (D-1, document-level).
 - The raw-vs-floor gap (77 to 73) and the 7 displacement queries are separate loss mechanisms; a B2 and a decision on whether a Set-A-derived diagnosis (not Set B) can inform either is the owner's (`data-scientist`) call.
 - Tool note: `eval --sealed-once` requires `--set-b-path` (or `PWQ_SET_B`) even though the brief names the path; the S14 brief template should list it. Raw output kept outside the repo in the session scratchpad only.
+
+## S14b — sealed Set B2 scored once (2026-11-10, production `ws:agent-team` on `:8200`, read-only)
+
+Replaces the failed S14 Set B result as the AC-3 instrument (`docs/plans/python-web-quirks-kb-b2-ml.md` section 4). Aggregates only: no Set B2 query, target or per-query result appears here or anywhere in the repo. Set B2 sha256 `cd14d4e2d949f277934090f5682b390ab382082c0e83a592fc95a0321d5b5f00`. CPG: not applicable — documentation/retrieval-evaluation task with no code-level component under test.
+
+### Pre-checks (observed this run)
+
+- Set B2 file: `sha256sum` equals the expected value, mode `-r--r--r--`, outside the repo; no `pwq-set-b2.json.scored` before the run.
+- Frozen configuration, sha256 prefixes (all equal the brief's): manifest `claude/cobb/scripts/pwq-kb-manifest.json` `c48fbecf9ead08e8`; `skills/agent-kb-retrieval/SKILL.md` `a8c1192359b7ddbe`; `claude/knowledge/python-web-quirks.md` `7d0fc38c054beb25`; `git log -1 --format=%h -- claude/cobb/scripts/pwq_kb.py` = `d1c81826`. Floor 0.43, limit 5 (default).
+- `GET /documents/<id>` returned 404 for two of the 17 deleted capture ids (`14745ca4…`, `1bfe7423…`); `458d329e2ba44e45a5fd82301a47504a` returned 200 and was not excluded. No `--exclude` passed.
+- `pwq_kb.py gate` (same ws/manifest/copy flags): every unit's stored chunk count equals its embedded count, last line `gate: clean`, exit 0.
+- Seal accounting: one scoring invocation (exit 0); it wrote `pwq-set-b2.json.scored` (`floor 0.43`, sha256 as above, `scoredAt 2026-11-10T16:27:56`). No second scoring, no `--probe`.
+
+### Command (single scoring)
+
+`pwq_kb.py eval --ws agent-team --base-url http://localhost:8200 --manifest claude/cobb/scripts/pwq-kb-manifest.json --copy claude/knowledge/python-web-quirks.md --set B2 --sealed-once --set-b2-path <sealed path> --expect-sha256 cd14d4e2…5f00 --floor 0.43`. Tool header: `set=B2 floor=0.43 window=50 topk=5`.
+
+### Results
+
+| Measure | Observed | Decision rule | Result |
+|---|---|---|---|
+| Positive recall at floor 0.43 (top-5, document-level) | 110 of 126 = 0.8730 | ≥ 116/126 | FAIL (6 short) |
+| Positive recall raw top-5 (no floor) | 119 of 126 = 0.9444 | informational | — |
+| Per-section coverage, floor-applied | 42 of 42 | all 42 | PASS |
+| Per-section coverage, raw | 42 of 42 | informational | — |
+| Near-domain false accepts | 9 of 30 | ≤ 6/30 | FAIL (3 over) |
+| Off-domain false accepts | 0 of 30 | 0/30 | PASS |
+| Overall false accepts (9 + 0) | 9 of 60 | ≤ 6/60 | FAIL |
+| MRR / mean distinct documents in top five | 0.8861 / 3.03 | informational | — |
+| Unit document inside the 50-chunk window | 126 of 126 | informational | — |
+
+Tool line: `b2: recall=False coverage=True near_domain=False off_domain=True overall=False pass=False`.
+
+### Displacement (aggregate only)
+
+Queries where a non-unit chunk outranks the unit's best chunk: **17 of 126** (unit in the 50-chunk window for all 126). The tool prints the non-unit document ids involved; not reproduced. Raw top-5 recall is 119/126 (7 misses with no floor); the 0.43 floor removes 9 more (119 to 110). Per-query data is not printed, so I did not verify overlap between displacement queries and misses. Reported only, no threshold, no retuning.
+
+### Tail versus head (document-level matching, D-1)
+
+Matching is document-level (any chunk of the unit counts; S11 defect D-1 still applies, so recall does not show which chunk was returned). Tool figures: head-probe recall 0.8661, tail-probe recall 0.9286. Tail is higher than head by 0.0625, so tail does not trail head (the 0.15 trigger is not met). Counts were not printed and are not derived here.
+
+### BM25 comparison (informational)
+
+`--set B2 --baseline bm25 --floor 0.43` (read-only): recall 125 of 126 = 0.9921 (raw equals floor, floor-independent), coverage 42/42, MRR 0.9487, mean distinct documents 3.26, head recall 0.9911, tail recall 1.0000. BM25 exceeds the semantic arm on recall (125/126 against 110/126 at the floor, 119/126 raw) and MRR (0.9487 against 0.8861). Handicap: BM25 ranks over the 129 unit chunks only, with no non-unit competitors and no floor, so it is favoured by design; the semantic arm competes against the whole workspace plus the floor. Direction matches S14 (BM25 84/84 there).
+
+### Pooled with Set B (informational, not part of the verdict)
+
+Printed line: `pooled with Set B (informational, not part of the verdict): (73+110)/210 = 0.8714`. The decision rule's pooled-0.90 equivalence (189/210) is not met, consistent with the B2-alone failure; the pooled figure is clustered by section and the tool printed no interval.
+
+### Verdict (AC-3, S14b)
+
+**FAIL, as printed by the tool.** Of the rule's clauses: floor-applied recall 110/126 (< 116) FAIL; every section hit 42/42 PASS; near-domain 9/30 (> 6) FAIL; off-domain 0/30 PASS; overall 9/60 (> 6) FAIL. Per the B2 protocol a failed B2 is final: the seal is spent, no re-run, no retuning. The finding the protocol names for this outcome is that score-only retrieval at the unchanged configuration does not reach the target on this content; the path (deviation, weak tier, FR-9/FR-11 fallback) is the stakeholder's call. `skills/python-web-quirks/` must not be deleted on this result.
+
+### Coverage, gaps
+
+- Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; which chunk was returned (D-1); captures created after the S13b derivation (not enumerated; none named).
+- Raw tool output kept only in the session scratchpad.
