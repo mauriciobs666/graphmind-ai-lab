@@ -18,12 +18,13 @@ python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'          # default suite
 .venv/bin/pip install -e '.[dev,live]'     # + falkordb-py, for live tests and store spikes
 .venv/bin/pip install -e '.[dev,spike]'    # + py-tree-sitter and ten grammars, frontend-fitness spike
-.venv/bin/pip install -e '.[dev,live,spike,extract,engine]'   # + P1 extractors and engine (broker: stdlib)
+.venv/bin/pip install -e '.[dev,live,spike,extract,engine]'   # + P1 extractors and engine
+.venv/bin/pip install -e '.[dev,broker]'        # the egress broker needs only the `dev` pins
 ```
 
 Every dependency is declared once in `pyproject.toml`'s extras, at exact pins, by each phase's one
-intake step (P0 plan §5.2; P1-01, `docs/plans/connected-code-graph-p1.md` D8). **No other step edits
-that file.** A step that finds a dependency missing stops and asks `teco`.
+intake step (P0 plan §5.2; P1-01, `docs/plans/connected-code-graph-p1.md` D8); P1-03 and P1-29 each edit it
+once more (D8). A step that finds a dependency missing stops and asks `teco`.
 
 | Extra | Contents | Used by |
 |---|---|---|
@@ -32,7 +33,7 @@ that file.** A step that finds a dependency missing stops and asks `teco`.
 | `spike` | `tree-sitter` + grammars `python`, `typescript`/`tsx`, `javascript`, `java`, `kotlin`, `c_sharp`, `go`, `c`, `cpp` | S25–S27 frontend fitness (`docs/plans/connected-code-graph-p0-ml.md` §5.2, §11 N6) |
 | `extract` | `tree-sitter` + `tree-sitter-bash` | P1 shell extractor (`docs/plans/connected-code-graph-p1-extraction.md` P1-10) |
 | `engine` | `mcp` 1.28.1 (the SDK `cypher-mcp/` runs) | P1 engine MCP surface |
-| `broker` | none (stdlib only, unless P1-28 decides otherwise) | P1 broker |
+| `broker` | `jsonschema`, `pyyaml` (the `dev` pins verbatim) | P1 egress broker (`ccg/broker/`): manifests load through `load_manifest`, records validate against `egress-audit-v1.schema.json` |
 
 ## Tests
 
@@ -55,6 +56,8 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 | `ccg/ids.py` | canonical tuple → 32-hex id: the one place hashing is defined (bundle spec §3.1–§3.2) |
 | `ccg/bundle.py` | bundle JSONL read, validate and write with deterministic order; the reference validator, and the one implementation of the BS2 gates (bundle spec §2, §5, §8 as amended by BS2) |
 | `ccg/schemas/bundle-v1.schema.json` | per-record shapes (JSON Schema 2020-12), one `$defs` entry per record type: necessary, not sufficient |
+| `ccg/broker/` | the egress broker (P1-29, `docs/plans/connected-code-graph-egress-spec3.md` §2–§5): `policy.py` rule table and mode resolution, `runs.py` tokens, `audit.py` the single writer of `egress.jsonl`, `addr.py` address validation and S6, `structured.py` the upstream exchange, `framing.py`, `server.py` the process, `client.py` `BrokerClient` (the only module another component imports) |
+| `ccg/schemas/egress-audit-v1.schema.json` | the broker's `policy`, `decision` and `close` records, closed enums, P1 values only |
 | `tests/` | durable-code tests |
 | `infra/` | `ccg-falkordb.sh`, the dedicated FalkorDB instance (`infra/README.md`), and `toolchain/` |
 | `.ccg-work/` | scratch for corpora, bundles and exports (gitignored) |
@@ -116,3 +119,20 @@ reason registry and §8.3 order from the spec, the replaced tables (`import` §1
 §1.6) from BS2, and every AV-1–AV-68 and BV-1–BV-28 row from BS2 mechanically; none is retyped.
 §1.6.3's probe runs verbatim: the 17,280-cell grid and the 6,480-cell separator axis (0 values in
 clear) and the 675-cell BS-M1 transplant (only BV-11's bare positional in clear).
+
+## Egress broker
+
+One host process per user; a component reaches it only through `ccg.broker.client.BrokerClient`, and a missing or
+latched broker fails the call (there is no direct-connection fallback).
+
+```bash
+cd cpg
+.venv/bin/python -m ccg.broker.server --system ccg/system.yaml      # socket ~/.local/state/ccg/broker/broker.sock
+CCG_AUDIT_DIR=/path .venv/bin/python -m ccg.broker.server --system m.yaml --socket /path/b/broker.sock
+```
+
+It re-executes itself isolated (`-I`) under a closed environment, so run it as above rather than through a wrapper
+that depends on `PYTHONPATH`. Exit 64: usage or configuration (manifest, S1–S6); exit 69: a start precondition (lock
+held, live socket, directory or audit-file check). Records go to `cpg/.audit/egress.jsonl` (gitignored) unless
+`CCG_AUDIT_DIR` is set. The broker's tests start private instances under a temporary directory and never touch the
+real socket directory.

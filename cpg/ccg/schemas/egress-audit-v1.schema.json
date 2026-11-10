@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ccg:egress-audit-v1",
+  "title": "ccg egress broker audit records, v1 (P1 values only; docs/plans/connected-code-graph-egress-spec3.md section 5.2)",
+  "oneOf": [
+    {"$ref": "#/$defs/policy"},
+    {"$ref": "#/$defs/decision"},
+    {"$ref": "#/$defs/close"}
+  ],
+  "$defs": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "ts": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "repoId": {"type": "string", "pattern": "^[a-z0-9._-]{1,256}$"},
+    "mode": {"enum": ["local-only", "hosted"]},
+    "component": {"enum": ["build.git", "build.frontend", "build.indexer", "build.pkgmgr", "answer.interpret", "answer.summarize", "answer.pr-adapter", "access.idp", "access.check", "vulndb.refresh"]},
+    "purpose": {"enum": ["git-fetch", "dependency-download", "model-call", "idp", "access-check", "pr-addon", "vulndb-refresh", "import-name-lookup"]},
+    "payloadClass": {"enum": ["none", "repo-names-and-identity", "repo-derived", "vuln-feed-request"]},
+    "method": {"enum": ["GET", "POST"]},
+    "ruleId": {"enum": ["R0-INVALID", "R2-GIT-OWN-REMOTE", "R8-CONTROLLED-REGISTRY", "R9-IMPORT-NAME-SERVICE", "R1-LOCAL-ENDPOINT", "R3-VULNDB", "R4-NAMED-SERVICE", "R5-SYSTEM-LOCAL-MODEL", "R6-STICKY-LOCAL", "R7-HOSTED-SERVICE", "R99-DEFAULT-DENY"]},
+    "denyReason": {"enum": ["token-invalid", "enum-invalid", "component-not-in-run-kind", "component-purpose-mismatch", "codebases-empty", "codebases-in-vulndb", "codebases-not-subset", "endpoint-not-canonical", "path-not-allowed", "method-body-mismatch", "body-too-large", "resolve-failed", "forbidden-address", "address-check-unavailable", "not-in-p1:git-fetch", "not-in-p1:controlled-download", "not-in-p1:import-name-service", "payload-shape", "system-local-only-model", "sticky-local-only", "no-rule-matched"]},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "auditId", "ts", "runId", "runKind", "systemId", "codebases", "override", "modes", "overrideRefused", "systemLocalOnly", "allowListDigest", "auditDir"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "policy"},
+        "auditId": {"$ref": "#/$defs/uuid"},
+        "ts": {"$ref": "#/$defs/ts"},
+        "runId": {"$ref": "#/$defs/uuid"},
+        "runKind": {"enum": ["refresh", "answer", "vulndb"]},
+        "systemId": {"type": "string", "minLength": 1, "maxLength": 64},
+        "codebases": {"type": "array", "items": {"$ref": "#/$defs/repoId"}, "uniqueItems": true},
+        "override": {"enum": ["local", "hosted", null]},
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repoId", "default", "effective", "rule"],
+            "properties": {
+              "repoId": {"$ref": "#/$defs/repoId"},
+              "default": {"$ref": "#/$defs/mode"},
+              "effective": {"$ref": "#/$defs/mode"},
+              "rule": {"enum": ["P1-DEFAULT", "P2-OVERRIDE-REFUSED", "P3-OVERRIDE-LOCAL"]}
+            }
+          }
+        },
+        "overrideRefused": {"type": "boolean"},
+        "systemLocalOnly": {"type": "boolean"},
+        "allowListDigest": {"$ref": "#/$defs/sha256"},
+        "auditDir": {"type": "string", "pattern": "^/"}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "auditId", "ts", "runId", "component", "purpose", "payloadClass", "target", "endpoint", "codebases", "rejected", "resolvedAddr", "privateAddress", "requestMode", "decision", "rule", "reason", "transport", "payloadFields", "bytes", "bodySha256"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "decision"},
+        "auditId": {"$ref": "#/$defs/uuid"},
+        "ts": {"$ref": "#/$defs/ts"},
+        "runId": {"oneOf": [{"$ref": "#/$defs/uuid"}, {"type": "null"}]},
+        "component": {"oneOf": [{"$ref": "#/$defs/component"}, {"type": "null"}]},
+        "purpose": {"oneOf": [{"$ref": "#/$defs/purpose"}, {"type": "null"}]},
+        "payloadClass": {"oneOf": [{"$ref": "#/$defs/payloadClass"}, {"type": "null"}]},
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "path"],
+          "properties": {
+            "method": {"oneOf": [{"$ref": "#/$defs/method"}, {"type": "null"}]},
+            "path": {"type": ["string", "null"], "maxLength": 256}
+          }
+        },
+        "endpoint": {"type": ["string", "null"], "maxLength": 300},
+        "codebases": {"oneOf": [{"type": "array", "items": {"$ref": "#/$defs/repoId"}}, {"type": "null"}]},
+        "rejected": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sha256"}},
+        "resolvedAddr": {"type": ["string", "null"], "maxLength": 64},
+        "privateAddress": {"type": "boolean"},
+        "requestMode": {"oneOf": [{"$ref": "#/$defs/mode"}, {"type": "null"}]},
+        "decision": {"enum": ["allow", "deny"]},
+        "rule": {"$ref": "#/$defs/ruleId"},
+        "reason": {"oneOf": [{"$ref": "#/$defs/denyReason"}, {"type": "null"}]},
+        "transport": {"const": "structured"},
+        "payloadFields": {"oneOf": [{"type": "array", "items": {"type": "string", "maxLength": 64}}, {"type": "null"}]},
+        "bytes": {"type": "integer", "minimum": 0},
+        "bodySha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+      },
+      "allOf": [
+        {"if": {"properties": {"decision": {"const": "allow"}}}, "then": {"properties": {"reason": {"type": "null"}}}, "else": {"properties": {"reason": {"type": "string"}}}}
+      ]
+    },
+    "close": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "recordType", "auditId", "ts", "decisionAuditId", "runId", "bytesOut", "bytesIn", "httpStatus", "durationMs", "closeReason"],
+      "properties": {
+        "schemaVersion": {"const": 1},
+        "recordType": {"const": "close"},
+        "auditId": {"$ref": "#/$defs/uuid"},
+        "ts": {"$ref": "#/$defs/ts"},
+        "decisionAuditId": {"$ref": "#/$defs/uuid"},
+        "runId": {"$ref": "#/$defs/uuid"},
+        "bytesOut": {"type": "integer", "minimum": 0},
+        "bytesIn": {"type": "integer", "minimum": 0},
+        "httpStatus": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+        "durationMs": {"type": "integer", "minimum": 0},
+        "closeReason": {"enum": ["completed", "upstream-error", "timeout", "response-too-large", "broker-shutdown"]}
+      }
+    }
+  }
+}

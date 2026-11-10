@@ -6,9 +6,10 @@ requires-python = ">=3.12"
 # No base dependencies. Each phase's dependencies are declared up front, in the extras below, by
 # that phase's one intake step: P0's by P0 plan §5.2 (`dev`, `live`, `spike`; pins verified
 # installable 2026-10-29), P1's by step P1-01 (`docs/plans/connected-code-graph-p1.md` D8;
-# `extract`, `engine`, `broker`; verified 2026-11-09), both on Python 3.12.3. No other step edits
-# its dependencies, and P1-03 edits it once more, the `package-data` entry for `ccg/system.yaml` (a data file under
-# `ccg/` needs a glob: `tests/test_rule_pack_schema.py`): a step that finds a dependency missing stops and asks `teco`. Versions are exact pins.
+# `extract`, `engine`, `broker`; verified 2026-11-09), both on Python 3.12.3. Two later steps edit it once each:
+# P1-03, the `package-data` entry for `ccg/system.yaml` (a data file under `ccg/` needs a glob:
+# `tests/test_rule_pack_schema.py`), and P1-29, the `broker` extra (D8). A step that finds a dependency missing
+# stops and asks `teco`. Versions are exact pins.
 # Runtime imports of `ccg.bundle` and the pack loaders (`jsonschema`, `pyyaml`) live in `dev`.
 dependencies = []
 
@@ -50,8 +51,12 @@ extract = [
 engine = [
     "mcp==1.28.1",
 ]
-# Broker: stdlib only unless P1-28 decides otherwise.
-broker = []
+# Broker (P1-29): manifests load through `ccg.manifest.load_manifest` (`pyyaml`) and audit records validate against
+# `egress-audit-v1.schema.json` (`jsonschema`); the `dev` pins verbatim, no new pin (`-egress-spec3.md` §10.2).
+broker = [
+    "jsonschema==4.26.0",
+    "pyyaml==6.0.3",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
