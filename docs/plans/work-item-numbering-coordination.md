@@ -36,7 +36,7 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B6 (step 6 links/attrs) | `tdd-engineer` | `acbba0473b46da2aa` | accepted (committed; ~86k tok) | `skills/work-items/…` | — | — |
 | B6b (step 6b headers/options) | `tdd-engineer` | `a0b298174a600c561` | accepted (committed; ~91k tok) | — | — | — |
 | B7 (step 7 rebuild/check) | `tdd-engineer` | `aa72975dda9e9acd9` | accepted (committed; ~126k tok). Carry-forward: step 12 must populate `project.json` `legacy_paths` (pattern→home, `$1` capture) — init doesn't write it; check.py uses private Store/headers members (follow-up: public `Store.read_events()`) | `skills/work-items/…` | — | — |
-| B8 (step 8) | `tdd-engineer` | — | queued | keys | — | — |
+| B8 (step 8) | `tdd-engineer` | `aaba6a1fbbdbf501f` | in-flight | keys | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
 | B12–B13 (steps 12–13) | `coder` / `teco` | — | queued | — | — |
