@@ -16,6 +16,7 @@ _REQ_RE = re.compile(r"(FR|AC)(\d+)([a-z]?)")
 
 WIDTH = {"I": 2, "S": 2, "T": 2, "F": 4, "D": 4, "K": 4, "FR": 1, "AC": 1}
 LETTER_SUFFIX_TYPES = frozenset({"FR", "AC"})
+LOCAL_TYPES_IDS = frozenset({"S", "T"})
 # I01 is the Defects initiative, I02 the Kaizen initiative (FR-14).
 DEFECTS_INITIATIVE = 1
 KAIZEN_INITIATIVE = 2
