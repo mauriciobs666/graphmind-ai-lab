@@ -57,3 +57,8 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 ## Close status (2026-11-10)
 
 Build complete: steps 1–12 committed, 500 tests green, `wi check` clean on the real repo. NOT yet closed. Open items for the stakeholder: (1) spec home — `skills/work-items` has no docs tree and no live spec; root AGENTS.md requires a whole-component spec checked by `analyst` before the first close (where, and who owns it?); (2) HISTORY entry home — `skills/` has no `docs/`, root `docs/HISTORY.md` is cpg's; (3) which review document is the close check (Passes 7–9 live in `docs/reviews/work-item-numbering.md`); (4) step 13 handoffs (tico AC-1 amendment; cross-initiative `needs` parser; skill symlink into `~/.claude/skills/`); (5) follow-ups P9-2, P9-4, N5; (6) archived-status flips after close.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| C1 symlink machine step | `devops` | `a0471854ac25bf516` | in-flight | `~/.claude/skills/work-items` (outside repo; may need human approval) | — | — |
+| C2 live spec + HISTORY draft (close step 2; stakeholder chose `skills/work-items/docs/`) | `coder` | `aa126193922242150` | in-flight | `skills/work-items/docs/SPEC.md`, `HISTORY.md` | `analyst` close check (step 3) → — ; HISTORY entry must be re-checked after it (step 5 is last) | — |
