@@ -43,7 +43,7 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B7b N1 rebuild-reissue guard | `tdd-engineer` | `aaeb2eea10f793eae` | accepted (committed; ~102k tok; my mutant reversing history-commit order survived — equivalent: union by evid + fold sorts by (ts,evid)) | `skills/work-items/…` | — | — |
 | B9 (step 9 SKILL.md/glossary/catalog/drift test) | `cobb` | `aaaccc46fa9e0361a` | accepted (committed; ~84k tok) |
 | B10 (step 10 prompts + claude/AGENTS.md) | `cobb` | `a6160aa3331ab4172` | in-flight — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
-| B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
+| B11 (step 11) | `teco` (trivial 2-line edit, done directly) | — | accepted (committed) | — | — |
 | B12–B13 (steps 12–13) | `coder` / `teco` | — | queued | — | — |
 
 ## Checkpoint 2 (usage limit reached)
