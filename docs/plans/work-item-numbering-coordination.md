@@ -66,6 +66,8 @@ Build complete: steps 1–12 committed, 500 tests green, `wi check` clean on the
 | C3 close check (step 3) | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 10 | needs changes (S-1 link/set miss legacy fallback; C-1 mint-legacy --home unvalidated; C-2 key suggest missing keys.json; spec gaps; no context file names SPEC.md). Analyst agent now ~256k tok: further gate passes → fresh analyst |
 | C4 fixes S-1/C-1/C-2 | `tdd-engineer` | `adf789a10751b7507` | accepted (committed 36b7c392; 505 tests; my mutant on mint --home check killed) | `skills/work-items/…` | — | — |
 | C5 plan 3.9/8b restated | `architect` | `a7af14139c4b90236` | accepted (2-line diff verified; committed) | `docs/plans/work-item-numbering.md` | — | — |
-| C6 spec edits + pointers + HISTORY (last) | `coder` | `aa126193922242150` | in-flight (same coder agent resumed) | `skills/work-items/docs/{SPEC,HISTORY}.md`, `skills/README.md` row, root `AGENTS.md` skills line | — | — |
+| C6 spec edits + pointers + HISTORY (last) | `coder` | `aa126193922242150` | delivered (uncommitted: SPEC.md, HISTORY.md, README row, root AGENTS.md bullet — diffs verified as only ours) | `skills/work-items/docs/{SPEC,HISTORY}.md`, `skills/README.md` row, root `AGENTS.md` skills line | — | — |
 
 Note: the real journal already holds a foreign event `GAL-I02-K0001` (python-web-quirks session, home `claude`) — first adoption by another session; NOT this coordination's to flush/commit.
+
+| C7 close re-check (fresh analyst) | `analyst` | `a2cb1cc0e27bf29d0` | in-flight | `docs/reviews/work-item-numbering.md` Pass 11 | — | — |
