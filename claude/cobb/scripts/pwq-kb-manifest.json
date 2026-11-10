@@ -1,0 +1,339 @@
+{
+  "pin": "3fcb171cf03065f99aca800d9ea30ff6a2a7ba95",
+  "migratedOn": "2026-11-10",
+  "units": [
+    {
+      "id": "u01",
+      "title": "`asyncio.create_task` fire-and-forget: GC risk is real per the docs, but didn't reproduce under stress",
+      "headings": [
+        "`asyncio.create_task` fire-and-forget: GC risk is real per the docs, but didn't reproduce under stress"
+      ],
+      "documentId": "0feae12a46804bb888594f819773b26b",
+      "sha256": "1508f1253cc8df8f51d2b2a9415efd322f5f3a506af8168f264cbaa77066314e"
+    },
+    {
+      "id": "u02",
+      "title": "Starlette/FastAPI `BackgroundTasks` (sync callable) is bounded; a raw `threading.Thread` per call is not",
+      "headings": [
+        "Starlette/FastAPI `BackgroundTasks` (sync callable) is bounded; a raw `threading.Thread` per call is not",
+        "Starlette `BackgroundTasks` runs one request's tasks sequentially — a slow task delays every later task of the same request"
+      ],
+      "documentId": "ed44bf102243433ab7aae2636f2a2265",
+      "sha256": "a565a8f4d07ac0e33e1e21d71e4119525bc8b540b7934c9b666aec482b6bc828"
+    },
+    {
+      "id": "u03",
+      "title": "FastAPI `response_model_exclude_unset=True` drops defaulted fields on **nested** models silently",
+      "headings": [
+        "FastAPI `response_model_exclude_unset=True` drops defaulted fields on **nested** models silently"
+      ],
+      "documentId": "91eba4f8582c4172a1de506566332f1b",
+      "sha256": "f84e04f38a270a69964e44ba5906859af8f7e20cd0efc8de82cfe08de2f10925"
+    },
+    {
+      "id": "u04",
+      "title": "Asserting over a FastAPI app's route table: four built-in doc routes you didn't register, and the included router whose routes aren't there",
+      "headings": [
+        "Asserting over a FastAPI app's route table: four built-in doc routes you didn't register, and the included router whose routes aren't there"
+      ],
+      "documentId": "3b1bb067e8c24289a2ea82efcad69080",
+      "sha256": "dc4f3f911dc66ae518bb87eb00c0155a2af86ced07f519c00e4eb53a37281a33"
+    },
+    {
+      "id": "u05",
+      "title": "FastAPI's `APIRoute` does not add `HEAD` to a `GET` route — Starlette's `Route` does, and the difference is only visible when something else matches the path",
+      "headings": [
+        "FastAPI's `APIRoute` does not add `HEAD` to a `GET` route — Starlette's `Route` does, and the difference is only visible when something else matches the path"
+      ],
+      "documentId": "b8f62280e58347678adfe1f5a5516eaa",
+      "sha256": "f767ec9c8075794561e8a1c6520fef05c11e5978c84241a67dbedfd75906a615"
+    },
+    {
+      "id": "u06",
+      "title": "Starlette's `StaticFiles.get_response` returns its `404.html` by direct return, not by raising — a subclass override that only catches a raised exception is silently bypassed",
+      "headings": [
+        "Starlette's `StaticFiles.get_response` returns its `404.html` by direct return, not by raising — a subclass override that only catches a raised exception is silently bypassed"
+      ],
+      "documentId": "07ec6cefa141494cb6d2501c4c136ef2",
+      "sha256": "8a6bd17da91426707b13b6c2189710dfe29414b6a5e85549fda06526e348d478"
+    },
+    {
+      "id": "u07",
+      "title": "FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration",
+      "headings": [
+        "FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration"
+      ],
+      "documentId": "a593bc40f9434594b96ac3805f60c3d0",
+      "sha256": "b5b96b89391dd862fe9ff0cecbddf2e0cc3498b4636c3d2b3559208eb4aa408b"
+    },
+    {
+      "id": "u08",
+      "title": "FastAPI/Starlette's exception-handler registry: MRO lookup, a class identity trap, and silent replacement",
+      "headings": [
+        "FastAPI/Starlette's exception-handler registry: MRO lookup, a class identity trap, and silent replacement"
+      ],
+      "documentId": "52a93ff5347d46eb8286d410f40f7dac",
+      "sha256": "98080bda59969ab14a3400ab00db290a9dcc1f51c6355d90c8e8527a11f6f4fd"
+    },
+    {
+      "id": "u09",
+      "title": "uvicorn rewrites `scope[\"client\"]` from `X-Forwarded-For` by default — so \"is this request from localhost?\" is not an authorization check",
+      "headings": [
+        "uvicorn rewrites `scope[\"client\"]` from `X-Forwarded-For` by default — so \"is this request from localhost?\" is not an authorization check"
+      ],
+      "documentId": "6cb91c1f31324986bd3c0528d1e638c9",
+      "sha256": "87b0472b72764541d682a933783ad8de8161f3fd07348d2b221e7e7ee355748a"
+    },
+    {
+      "id": "u10",
+      "title": "pydantic `Field(min_length=1)` does not reject whitespace-only strings",
+      "headings": [
+        "pydantic `Field(min_length=1)` does not reject whitespace-only strings"
+      ],
+      "documentId": "79d3b7d78c414dadb7b7f6b1dac8187d",
+      "sha256": "d7222c07cf2d34ed475d50cbab904cbe31698a804ff7fa7fc1891a201ce5117e"
+    },
+    {
+      "id": "u11",
+      "title": "`urllib` failure taxonomy: `HTTPError ⊂ URLError`, but a read timeout is a bare `TimeoutError`, not a `URLError`",
+      "headings": [
+        "`urllib` failure taxonomy: `HTTPError ⊂ URLError`, but a read timeout is a bare `TimeoutError`, not a `URLError`"
+      ],
+      "documentId": "c8cdac5ec82348b4959a53d43a9cb4cf",
+      "sha256": "66bcf0f8b8459ff754eb88d0e0decf2c6265006543cf907d4cabb1b33148bdbd"
+    },
+    {
+      "id": "u12",
+      "title": "`json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly",
+      "headings": [
+        "`json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly"
+      ],
+      "documentId": "aed8a20d8f224c8d86c85020f7fe6f4c",
+      "sha256": "3c3f98e96b9604c9621a4c2d467325a827dc0c13655e9b49bdb43fe7311818d3"
+    },
+    {
+      "id": "u13",
+      "title": "An OpenAI-compatible local server can answer a missing `/v1` prefix with HTTP 200 + an error envelope, not a 404 or 400",
+      "headings": [
+        "An OpenAI-compatible local server can answer a missing `/v1` prefix with HTTP 200 + an error envelope, not a 404 or 400"
+      ],
+      "documentId": "efda6f558cf4445e9f2d13fb604857aa",
+      "sha256": "6fc9d658c44bc828a78160406d9c95db3698d86a42e05d1849856fa31d49e2e8"
+    },
+    {
+      "id": "u14",
+      "title": "An LLM-judge JSON parser that's a bare `json.loads(text)` is fence-fragile, and the failure mode is silent, not an exception you'd notice",
+      "headings": [
+        "An LLM-judge JSON parser that's a bare `json.loads(text)` is fence-fragile, and the failure mode is silent, not an exception you'd notice"
+      ],
+      "documentId": "be5e6507c3a44107b2f55d70a4fc43ec",
+      "sha256": "b528b9c998a71d78d7d6c264032534cbb07dfd5f9f0d8bbb16e02e08db1132fe"
+    },
+    {
+      "id": "u15",
+      "title": "Setting an env var *after* import is a no-op for a module-level constant computed from `os.environ.get(...)` at import time — in a pytest fixture and in a plain script alike",
+      "headings": [
+        "Setting an env var *after* import is a no-op for a module-level constant computed from `os.environ.get(...)` at import time — in a pytest fixture and in a plain script alike"
+      ],
+      "documentId": "2b391a6735744468a9af02dc00d25d2e",
+      "sha256": "d3e19c0b71c0f919e087a905be9cc8e3faf3da73573fda4c0d0c5c4194fcb372"
+    },
+    {
+      "id": "u16",
+      "title": "A `pytest.raises(SomeError)` with no `match=` can pass on an unrelated raise from an earlier check in the same function",
+      "headings": [
+        "A `pytest.raises(SomeError)` with no `match=` can pass on an unrelated raise from an earlier check in the same function"
+      ],
+      "documentId": "1a737a1430a54449bda8b819a27be79e",
+      "sha256": "1d35a9d04ba31210e39aeb45ca2973f510620985a50197bdc5e746bb1b788822"
+    },
+    {
+      "id": "u17",
+      "title": "A test that is only valid when its whole module ran must gate on what pytest **collected**, not on how the run was **selected**",
+      "headings": [
+        "A test that is only valid when its whole module ran must gate on what pytest **collected**, not on how the run was **selected**"
+      ],
+      "documentId": "619f115ebdbd4654a275e1debc1980b1",
+      "sha256": "ebc4c20a6ff0a3da3c8ee394cbc9a35d6747f405df6f04450121124969542484"
+    },
+    {
+      "id": "u18",
+      "title": "Deleting a parametrized test's `def` body leaves its `@pytest.mark.parametrize` decorator attached to the NEXT function in the file",
+      "headings": [
+        "Deleting a parametrized test's `def` body leaves its `@pytest.mark.parametrize` decorator attached to the NEXT function in the file"
+      ],
+      "documentId": "395242a4934c45509ed53c540c5238d0",
+      "sha256": "da55d9a1dce03c683f51ed9a18add30402daaafc80456ef55f5a336f1a0581ac"
+    },
+    {
+      "id": "u19",
+      "title": "A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not",
+      "headings": [
+        "A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not"
+      ],
+      "documentId": "f3078702ab1e493f8f1df2e114ece4ef",
+      "sha256": "a4621fab4d65a444cc41f10d0b5062d6f494d5d965dd57b94bcc305c92811132"
+    },
+    {
+      "id": "u20",
+      "title": "A one-way circular import fails in *every* load order, not just the \"wrong\" one — and a class-body import doesn't fix it, only a function-body one does",
+      "headings": [
+        "A one-way circular import fails in *every* load order, not just the \"wrong\" one — and a class-body import doesn't fix it, only a function-body one does"
+      ],
+      "documentId": "3aace6ee0c694fa2878ed5ca4af174cc",
+      "sha256": "019079d13929eca99aaa56d150759b25c98a2f3c7870a4adb4ec07d41e69ab4c"
+    },
+    {
+      "id": "u21",
+      "title": "`starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran",
+      "headings": [
+        "`starlette.testclient.TestClient`'s teardown cancels every still-running task on its event loop — masking whether the app's own lifespan cancellation ever ran",
+        "`TestClient` re-raises an unhandled server exception into the calling test by default — so a test written on the default can never observe the 500 a real client receives",
+        "Version rot ahead of the two sections above: starlette deprecates `httpx` under `testclient` in favour of `httpx2`"
+      ],
+      "documentId": "69adb00a8c04467d919efa40c9155350",
+      "sha256": "c3cd93fc7bf80d22b102257aeb4faf66034c5144b2906d4f5a2338f24b1d8e2a"
+    },
+    {
+      "id": "u24",
+      "title": "Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*",
+      "headings": [
+        "Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*",
+        "To force a `TestClient` response to surface an uncaught exception instead of re-raising it, flip the flag on the live client — don't build a second `TestClient`"
+      ],
+      "documentId": "e2796413730343e3b6edf5f89a331f28",
+      "sha256": "4f0607014bad6a57ba02071e25035b55b8d42e202d9afe8c2a8e877c65906845"
+    },
+    {
+      "id": "u26",
+      "title": "Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held",
+      "headings": [
+        "Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held"
+      ],
+      "documentId": "5eaa316a95de4d9da61fd5d3a6ee2c81",
+      "sha256": "d97a45a43ccaf66cd217a4927a7c5abc3965599c4fc5f409ae33dd1c23102bcf"
+    },
+    {
+      "id": "u27",
+      "title": "A flag cleared right *after* `ThreadPoolExecutor.submit()` returns races the task it just submitted",
+      "headings": [
+        "A flag cleared right *after* `ThreadPoolExecutor.submit()` returns races the task it just submitted"
+      ],
+      "documentId": "a2203a40d65045a4a97a86b23cebda51",
+      "sha256": "7b1052c3c9b01ce14efca0ef04f93f07d9a6e7fcbbe3ec78828bf2dec95e20f0"
+    },
+    {
+      "id": "u28",
+      "title": "Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body",
+      "headings": [
+        "Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body"
+      ],
+      "documentId": "85a2aad36c58413989606462d80c44b1",
+      "sha256": "1cf0f3dbdf5408e1235cb20e2c2cb6bbd4cc86417b546d30250872233ca5e564"
+    },
+    {
+      "id": "u29",
+      "title": "A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists",
+      "headings": [
+        "A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists",
+        "`PYTHONPYCACHEPREFIX=<fresh empty dir>` is a stale-`.pyc` remedy that leaves the source tree's `__pycache__` alone"
+      ],
+      "documentId": "1ea9ca1c1af04ae9aef93f37863dc058",
+      "sha256": "fcb811aa1e6aa0f7fad7d3d60881ad4c47e8a27cc1348188107bcd7c3b1bd9db"
+    },
+    {
+      "id": "u30",
+      "title": "Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read",
+      "headings": [
+        "Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read",
+        "Under pytest's default capture, fd 0 is `/dev/null`, so an in-process test cannot see a child's `stdin=DEVNULL`"
+      ],
+      "documentId": "f55892b16b564dcdbb504d2eee6997b1",
+      "sha256": "4c414687d7d0fe58759235e65a144eac3982a2d5ee5fbbcb349a8c5370bed550"
+    },
+    {
+      "id": "u31",
+      "title": "A `typing.Protocol`'s own declared methods are derivable from `vars(cls)` — no hand-written list needed for a coverage-equals-declared-set test",
+      "headings": [
+        "A `typing.Protocol`'s own declared methods are derivable from `vars(cls)` — no hand-written list needed for a coverage-equals-declared-set test"
+      ],
+      "documentId": "9fac330b9c444fb3a9936ae5c35fcdb3",
+      "sha256": "11845980e6186266177ed2fe10cb3170f4e3934ea68b6e67ea998eaf7ada8549"
+    },
+    {
+      "id": "u32",
+      "title": "`ruff check <path>` force-parses the given file as Python regardless of extension",
+      "headings": [
+        "`ruff check <path>` force-parses the given file as Python regardless of extension"
+      ],
+      "documentId": "d410b7a50ae14e1fa70f3cd8f0a8200a",
+      "sha256": "b700018f12c8980ef50fffce1427451a3c7aaa9fa80f3360518f143b6131da54"
+    },
+    {
+      "id": "u33",
+      "title": "`ruff format <path>` reformats the WHOLE file, not just the lines you touched",
+      "headings": [
+        "`ruff format <path>` reformats the WHOLE file, not just the lines you touched"
+      ],
+      "documentId": "9d596dacf78142c9b499be44238a6223",
+      "sha256": "a2a5c49da4f3ec02f6d7d4e2fc826daaedabeb4829f7b62ae2990358460b452f"
+    },
+    {
+      "id": "u35",
+      "title": "`http.client.InvalidURL` is an `HTTPException`, not a `ValueError` — `urlopen` raises it at call time",
+      "headings": [
+        "`http.client.InvalidURL` is an `HTTPException`, not a `ValueError` — `urlopen` raises it at call time"
+      ],
+      "documentId": "ccabb4863f364370a75e72688db2a5d4",
+      "sha256": "a44c08da71f76423692e07355231e23b47aa682f36ba47ce603a2f80493075e4"
+    },
+    {
+      "id": "u36",
+      "title": "pytest `--deselect` with an absolute path matches nothing, silently — even when cwd is the rootdir",
+      "headings": [
+        "pytest `--deselect` with an absolute path matches nothing, silently — even when cwd is the rootdir"
+      ],
+      "documentId": "1d05e5faffa44de8a0e4e51b34935a2f",
+      "sha256": "607fdbb75c55ebaf57e36ef78f53d7b60b2924edf8e474169e1d73df4993fb9a"
+    },
+    {
+      "id": "u37",
+      "title": "FastMCP validates tool arguments with pydantic — a bound violation is an `isError` result, and the bound's position in the published schema varies",
+      "headings": [
+        "FastMCP validates tool arguments with pydantic — a bound violation is an `isError` result, and the bound's position in the published schema varies"
+      ],
+      "documentId": "6b948f0e570246dbaf0ffb7343f01d3e",
+      "sha256": "892b3005523f332cdb9b8081f59a84791ad09bb3336fca80d352d79f5a478773"
+    },
+    {
+      "id": "u38",
+      "title": "`pytest -q -q` prints no \"N failed, M passed\" line on a failing run — a script that parses it reads zero failures",
+      "headings": [
+        "`pytest -q -q` prints no \"N failed, M passed\" line on a failing run — a script that parses it reads zero failures"
+      ],
+      "documentId": "a6ef28b0922543b0afee4a65fe5f7fe1",
+      "sha256": "3138214acada5f4e21145c00aab8f2aaff7eafc221f7d40a5fe5c5adc1c3bccb"
+    },
+    {
+      "id": "u41",
+      "title": "`Popen.wait()` after `os.killpg(pgid, SIGTERM)` leaves a TERM-ignoring descendant alive, and it keeps any `pass_fds` flock",
+      "headings": [
+        "`Popen.wait()` after `os.killpg(pgid, SIGTERM)` leaves a TERM-ignoring descendant alive, and it keeps any `pass_fds` flock"
+      ],
+      "documentId": "30905fe94fd643fd8b4e98206ef40783",
+      "sha256": "3a0132bbf202de9b8cf529ee116a7174ba813d291f1aad12691942520ce9da4e"
+    },
+    {
+      "id": "u42",
+      "title": "A private copy for mutation testing: `pytest` imports the editable install's live tree unless `PYTHONPATH` points at the copy, and the copy needs the data directories tests read",
+      "headings": [
+        "A private copy for mutation testing: `pytest` imports the editable install's live tree unless `PYTHONPATH` points at the copy, and the copy needs the data directories tests read"
+      ],
+      "documentId": "fad91506561a4953b575492925e138a7",
+      "sha256": "c783cf409226ac34b28b6862485d914c8e2e24a21d8257d4179079934b018e11"
+    }
+  ],
+  "waivedSpans": [
+    "> **This is a cache, not the source of truth.** Origin: distilled 2026-08-09 from the `analyst`\n> agent's learnings inbox (`claude/analyst/kaizen/inbox.md`) via `agent-maintenance` skill §5 —\n> these are general Python/web-framework facts, not specific to any one project in this repo, so\n> they live here rather than duplicated into each project's own docs. When a project-specific\n> corollary shows up (e.g. \"and here's how it bit falkor-chat's `mcp.py`\"), keep that in the\n> project's own docs and point back to the general fact here, mirroring how\n> `claude/graph-dba/falkordb-quirks.md` and project `AGENTS.md` files cross-reference."
+  ]
+}
