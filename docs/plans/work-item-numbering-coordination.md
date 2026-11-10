@@ -40,7 +40,7 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | G3 diff gate steps 6–8 (+ re-confirm Pass 7 F1/F2) | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 8 | approve with suggestions (N1 major: rebuild can reissue numbers with `check` clean; N2–N5 minor) | — |
 | U1c N1 decision + 7 stale plan statements | `architect` | `a7af14139c4b90236` | delivered (N1: git-history recovery + --floor + --accept-reissue guard + `rebuilt` marker = step 7b; N2/N3 = step 8b, already with B8b) | `docs/plans/work-item-numbering.md` | — | — |
 | B8b N2/N3/N4 fixes | `tdd-engineer` | `a798c99c101250269` | accepted (committed c321abea; ~162k tok). One of my mutants (own-uid exemption in `check_slug_free`) survived — likely equivalent since `set_attr` short-circuits an unchanged value; unverified. Plan §3.9 to reconcile: init refuses reserved/malformed keys only (cannot tell a key claimed for this repo from another's); retired items keep slugs; `.resolve()` in `keys_path()` is load-bearing | `skills/work-items/…` | — | — |
-| B7b N1 rebuild-reissue guard | `tdd-engineer` | `aaeb2eea10f793eae` | in-flight | `skills/work-items/…` | — | — |
+| B7b N1 rebuild-reissue guard | `tdd-engineer` | `aaeb2eea10f793eae` | accepted (committed; ~102k tok; my mutant reversing history-commit order survived — equivalent: union by evid + fold sorts by (ts,evid)) | `skills/work-items/…` | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
 | B12–B13 (steps 12–13) | `coder` / `teco` | — | queued | — | — |
