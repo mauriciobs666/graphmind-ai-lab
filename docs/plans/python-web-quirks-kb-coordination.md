@@ -61,3 +61,5 @@ Next: S9 (ingest units into `ws:pwq-test`, scratch `--manifest`), S10-S12; S13 b
 
 
 **2026-11-10 — S14 result:** Set B FAILED the positive arm (report section "S14" in `docs/test-reports/python-web-quirks-kb-report.md`; I checked the file, the figures and the `.scored` sentinel, not the sealed queries). `skills/python-web-quirks/` must NOT be deleted (S16d held) until the stakeholder decides the path. Held: S15c, S16a-d, G3, S17 pending that decision.
+
+**2026-11-10 — stakeholder decision after S14:** hold the skill, diagnose. U33 `data-scientist` (`aada2ee0f69d0253f`) in flight: diagnosis + remedies + B2 protocol (different author) in `docs/plans/python-web-quirks-kb-b2-ml.md`, no Set B access. Cold-start fallback: re-dispatch `data-scientist` with that brief if the note is missing.
