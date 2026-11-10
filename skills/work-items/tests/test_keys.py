@@ -1,6 +1,7 @@
 """AC-10: shared project keys (plan 3.9): suggest/claim refusals, concurrency, init seeds."""
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -187,8 +188,14 @@ def test_keys_path_defaults_to_the_skill_copy_through_a_symlink(tmp_path):
     assert Path(r.stdout.strip()) == SKILL / "keys.json"
 
 
-def test_shipped_keys_json_is_an_empty_list():
-    assert json.loads((SKILL / "keys.json").read_text(encoding="utf-8")) == []
+def test_shipped_keys_json_is_a_valid_key_list():
+    entries = json.loads((SKILL / "keys.json").read_text(encoding="utf-8"))
+    assert isinstance(entries, list)
+    keys = [e["key"] for e in entries]
+    assert len(keys) == len(set(keys))                       # a key is claimed once
+    for e in entries:
+        assert set(e) == {"key", "repo", "claimed", "feeds_pool"}
+        assert re.fullmatch(r"[A-Z]{2,6}", e["key"]) and e["key"] not in {"FR", "AC", "TP", "R"}
 
 
 def test_init_seeds_defects_and_kaizen_and_does_not_touch_the_key_list(repo, keys_file):

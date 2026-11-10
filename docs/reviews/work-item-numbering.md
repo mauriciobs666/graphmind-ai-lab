@@ -331,3 +331,58 @@ N1's remedy (history-first recovery vs floor flag) needs the architect before st
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 9 (impl, steps 7b–12; close check)
+
+**Scope.** `skills/work-items/` and the real registry at HEAD (c321abea, 20db8176, e5fa1fe1, d70103b2, 9da81acb, 2cc4c4ee), against the plan as the architect revised it after Pass 8. Executed: the suite, `wi.py` in three scratch clones of this repo (`…/scratchpad/p9a.sh`–`p9d.sh`, `c1`–`c5`; the real tree was only read, `check` and `resolve`), header rules against a scratch copy, 5 drift-test mutants. Root `REVIEW.md` applied.
+
+**Verdict: approve with suggestions — but the suite is red at HEAD (P9-1); fix that before close.** No design blocker. Pass 8's major (N1) is fixed for the cases the plan scopes. CPG: considered, not relevant — script package and prompts, no graph.
+
+### Pass 8 dispositions
+- **N1 fixed in scope.** In a scratch clone with the registry deleted from the tip and the journal gone: `rebuild --write` restored 12 events from 2 committed versions; next F/K came back above the committed maxima (`F0006`, `K0003`), `mint-legacy architect:K-004` and `cpg:C-310` returned the original IDs (`K0002`, `F0005`), the promoted alias resolved, `check` rc 0 with `info rebuilt`. IDs allocated after the last commit of the registry (flushed or journal-only) were reissued (`F0006`–`F0008`, `S03`, `K0003`), which is the plan's stated residual (3.7 "What this guarantees"); `--floor` covers it. No history (registry never committed): `--write` refuses with the reissue warning; with `--accept-reissue --floor F=3` the next F was `F0004` and `check` reports `rebuilt`. A `--depth 1` clone of the real repo keeps the tip's registry (1 version, `check` rc 0), so the guard cannot fire there. One gap: P9-2.
+- **N2 fixed** (refusal of a registered slug is in c321abea; not re-run beyond the green tests `test_alloc`). **N3 fixed** (`init --key FR` and a claimed key refused per plan 3.9/8b; tests green). **N4 fixed** (header-kind and promotion-type tests added; suite green except P9-1). **N5** follow-up not taken; still a follow-up, no consumer copied the pattern (step 7b added `check._rebuilt_findings` only).
+- **Stale statements:** 1 (--sync stub) fixed, 2 (`init`/keys text) fixed, 3 (`op`, `--home`) fixed, 4 (`legacy_paths`, finding kinds, `--set` shapes) fixed, 5 (rebuild description, residual) fixed, 6 (`ALLOWED_PARENT`) fixed in 3.3, 7 (retired items stay usable parents) fixed in 3.4.
+
+### New findings
+**P9-1 (major, verified) — the committed suite fails.** `cd skills/work-items && …python -m pytest tests -q` → **1 failed, 499 passed**: `tests/test_keys.py:190 test_shipped_keys_json_is_an_empty_list` asserts `keys.json == []`, and step 12 (2cc4c4ee) legitimately claimed `GAL` there. The step's message reports `wi check` clean, not the suite. Replace the pin with what it was guarding (the shipped file parses and each entry has `key/repo/claimed/feeds_pool`; no fixture key such as `ZZZ` leaked into it); do not delete it, and do not re-empty the real file.
+
+**P9-2 (minor, verified) — the rebuild guard looks at the post-reseed state, so history is unreachable when any ref tip carries an older registry.** In a clone where the registry was removed at the tip but `origin/main` still held the 3-event step-12 copy, `rebuild --write` answered "the registry is not lost (3 items present)": opening the transaction had already reseeded from the stale tip, so the committed versions in history were never applied, and allocation continued from the stale counters (`new F` → `F0002` while history had up to `F0005`). The 3.7 sentence "reseed covers the rest" is only true when a tip holds the newest copy. Fix: judge "lost" from the on-disk journal and tracked file (both absent/empty), and apply history ∪ tips; test: the stale-origin clone above, asserting next F is above the committed maximum.
+
+**P9-3 (minor, verified) — the skill is not reachable yet.** `~/.claude/skills/work-items` does not exist and no `wi` is on `PATH`; the prompts say `wi …` while `SKILL.md` says to alias `python <skill-dir>/scripts/wi.py`. This is the plan's machine step; list it as an open close item and have the prompts' first mention carry the invocation form or a pointer to `SKILL.md`'s.
+
+**P9-4 (nit) — bare `K-004` lists all 14 declared homes**, 8 of which do not define it (6 do: independent `grep` of definers). Bare `K-` names therefore can never resolve (by the plan's declared-homes design); FR-12's "unambiguous bare name resolves" only ever applies to `C-`. Say so in `SKILL.md`, and consider listing defining homes first.
+
+### Executed checks
+1. **N1/shallow:** above. 2. **Real tree:** `wi.py check` rc 0, `flush` leaves `git status` clean for `.work-items`. Header rules on a scratch clone of HEAD with `second-feature.md`: no `Item:` → `no-id`; `new F --slug … --sync` → clean; wrong `Item: GAL-F0009` → `dangling` + `family-mismatch`; `Tracks: GAL-F2, GAL-F0002-FR7` → `malformed` + `absent`; same `Item:` on two slugs → `duplicate`; the real plan/review headers (`Item: GAL-F0001`, four documents) resolve through `resolve work-item-numbering`. 4. **Step-12 data:** independent grep finds 14 `K-` definer files (13 agent plans + `falkor-chat/docs/BACKLOG.md`) and 1 `C-` (`docs/BACKLOG.md`), equal to `project.json` (14 and `["cpg"]`); real tree: bare `K-004` exit 3, `C-310` exit 5, `cpg:C-310` exit 5.
+
+### Prompt-side ACs (diff of d70103b2; verified by reading, no test exists)
+- **AC-10 agreement:** `tico.md` — propose with `wi key suggest`, run `wi key claim` then `wi init` "only after the stakeholder agrees — ask, never claim on your own". Carried, by wording only.
+- **AC-6 "opened" trigger:** `tico.md` and `teco.md` — mint "on its first cite or when work on it is first opened … never edit the old document". Carried, by wording only. `architect.md`: cite by full ID, `wi new K`; `claude/AGENTS.md`: flush with the allocating unit and not mid-merge, binding every committing role.
+- Root `AGENTS.md` (9da81acb): the two optional header fields added in the existing bullet; no line over 700 chars. The file is 3186 words (smell ~2,500, already exceeded before; this adds ~25); `claude/AGENTS.md` 3476. Not a finding for this feature.
+
+### AC coverage
+| AC | Passing test (suite) | Other |
+|---|---|---|
+| 1, 13, 16 | `test_alloc`, `test_rules` (literal matrix), `test_fold` | CLI Pass 7 |
+| 2 | `test_concurrency`, `test_store` (8 processes, worktrees, differing-order merge) | executed Pass 7/8 |
+| 3, 17 | `test_move`, `test_resolve` | executed Pass 7 |
+| 4 | `test_alloc` | — |
+| 5 | recorders in `test_alloc`, `test_legacy`, `test_store`, `test_headers` | — |
+| 6 | `test_legacy` (idempotent, ambiguity, concurrent, merge only B) | **"opened" trigger: prompt wording only** |
+| 7 | `test_check` | real-tree and header runs above |
+| 8, 11 | `test_links` | executed Pass 8 |
+| 9 | `test_move` | — |
+| 10 | `test_keys`, `test_init` | **agreement: prompt wording only**; `test_shipped_keys…` red (P9-1) |
+| 12 | `test_rebuild` | executed above |
+| 14 | `test_headers`, `test_check` | executed Pass 8 |
+| 15 | `test_skill_drift` (5 mutants killed: epic, alias, name, two matrix rows) | — |
+No AC is without a test except the two prompt-side halves (AC-6 "opened", AC-10 agreement), verified on paper by wording; the plan assigns them to `cobb`'s review.
+
+### Close readiness (list only, per root `AGENTS.md`)
+1. Fix P9-1; re-run the suite (expect 500 passed). Decide on P9-2/P9-3.
+2. **Spec:** `skills/work-items/` has no `AGENTS.md`/`docs/`; root rule says a spec-less component gets a whole-component spec, checked against the shipped diff by `analyst` (`reviews/<slug>-impl.md`) before its first close. Decide the spec's home (a `skills/work-items/` spec or the skill's `SKILL.md`, which today is a 713-word agent guide, not a contract) and its owner.
+3. **Naming:** Passes 7–9 sit in `reviews/work-item-numbering.md` (the plan review); the `-impl` role suffix would have put them in `reviews/work-item-numbering-impl.md`. `teco` to say which is the close-check document.
+4. **Documentation impact** in plan §6 still open: root `AGENTS.md` filename-grammar/collision rule 2 and the "`K-` numbered" line, the Structure `skills/` bullet, a `.work-items/` note; `claude/README.md`, `claude/docs/manuals/agent-team.md`; kaizen history for agents beyond the four touched in d70103b2; component backlogs' numbering sentences; root `REVIEW.md` optional `Item:` lint; step 13 (team-engagement AC-1 amendment; cross-initiative `needs` decision); the machine symlink.
+5. **`REVIEW.md` additions:** none proposed in Passes 7–9; nothing to apply.
+6. **HISTORY entry:** last, citing the updated sections and the check; the root `docs/HISTORY.md` is `cpg`'s, `skills/` has no docs tree, so its home needs a decision. `Tracks: —` (no backlog item).
+7. Milestone close flips `Status:` of requirements, plan, coordination ledger and reviews to `archived` (`teco`, mechanical).
