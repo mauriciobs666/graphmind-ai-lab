@@ -595,6 +595,7 @@ def _pwq_run(
     dump: str | None = None,
     source_format: str | None = None,
     extra: list[str] | None = None,
+    pin_check: bool = False,
 ) -> tuple[int, str]:
     """Drive `ccl.main` in `--stored-format pwq` mode against the fixtures (any of them replaced
     by mutated text), return (exit code, stdout+stderr)."""
@@ -613,6 +614,8 @@ def _pwq_run(
         ]
         if source_format:
             argv += ["--source-format", source_format]
+        if not pin_check:  # the fixtures live in a temp dir, not in a git repo with a pin
+            argv += ["--allow-unpinned"]
         argv += extra or []
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
@@ -710,6 +713,8 @@ class _G:
         if self.name != os.environ["FAKE_EXPECT_GRAPH"]:
             return _R([])
         d = json.load(open(os.environ["FAKE_DUMP"])).get(params["id"])
+        if "currentVersion" in q and params["id"] in os.environ.get("FAKE_SUPERSEDED", "").split(","):
+            return _R([])  # a superseded document does not match a currentVersion filter
         return _R([(d["title"], d["text"], d["status"])] if d else [])
 class FalkorDB:
     def __init__(self, host=None, port=None): pass
@@ -717,7 +722,7 @@ class FalkorDB:
 """
 
 
-def _live_run(extra: list[str], expect_graph: str, documents_mode: bool = False) -> tuple[int, str]:
+def _live_run(extra: list[str], expect_graph: str, documents_mode: bool = False, superseded: str = "") -> tuple[int, str]:
     """Run the real LIVE_FETCH_SNIPPET in a subprocess against a fake `falkordb` module that
     only knows graph `expect_graph`. No network."""
     import contextlib
@@ -728,14 +733,15 @@ def _live_run(extra: list[str], expect_graph: str, documents_mode: bool = False)
         t = Path(tmp)
         (t / "falkordb").mkdir()
         (t / "falkordb" / "__init__.py").write_text(FAKE_FALKORDB, encoding="utf-8")
-        saved = {k: os.environ.get(k) for k in ("PYTHONPATH", "FAKE_DUMP", "FAKE_EXPECT_GRAPH")}
+        saved = {k: os.environ.get(k) for k in ("PYTHONPATH", "FAKE_DUMP", "FAKE_EXPECT_GRAPH", "FAKE_SUPERSEDED")}
         saved_py = ccl.CYPHER_MCP_VENV_PYTHON
-        os.environ.update(PYTHONPATH=str(t), FAKE_DUMP=str(FIX_DIR / "pwq_dump_test.json"), FAKE_EXPECT_GRAPH=expect_graph)
+        os.environ.update(PYTHONPATH=str(t), FAKE_DUMP=str(FIX_DIR / "pwq_dump_test.json"), FAKE_EXPECT_GRAPH=expect_graph, FAKE_SUPERSEDED=superseded)
         ccl.CYPHER_MCP_VENV_PYTHON = Path(sys.executable)
         (t / "manifest.json").write_text(_fx("pwq_manifest_test.json"), encoding="utf-8")
         argv = [
             str(FIX_DIR / "pwq_source_test.md"), "--stored-format", "pwq",
             "--copy", str(FIX_DIR / "pwq_copy_test.md"), "--manifest", str(t / "manifest.json"), "--live",
+            "--allow-unpinned",
         ] + extra
         if documents_mode:  # the pre-existing whole-file mode, same fake server
             argv = [str(FIX_DIR / "pwq_source_test.md"), "--documents", "d-u1", "d-u2", "--live"] + extra
@@ -767,6 +773,78 @@ def check_pwq_t15_ws_option_selects_workspace() -> None:
     assert rc == 1 and "[MISSING_DOCUMENT]" in out, f"a wrong workspace must report missing docs:\n{out}"
 
 
+def check_pwq_f4_live_fetch_counts_only_the_current_version() -> None:
+    rc, out = _live_run(["--ws", "pwq-test"], expect_graph="ws:pwq-test")
+    assert rc == 0, f"control: both documents current:\n{out}"
+    rc, out = _live_run(["--ws", "pwq-test"], expect_graph="ws:pwq-test", superseded="d-u2")
+    assert rc == 1 and "[MISSING_DOCUMENT]" in out and "d-u2" in out, f"a superseded document must not satisfy AC-1:\n{out}"
+    # the pre-existing whole-file mode keeps its old query: the filter is pwq-only
+    rc, out = _live_run(["--ws", "pwq-test"], expect_graph="ws:pwq-test", documents_mode=True, superseded="d-u2")
+    assert "[MISSING_DOCUMENT]" not in out, f"--documents --live must be unchanged:\n{out}"
+
+
+def _git(repo: Path, *a: str) -> str:
+    import subprocess
+
+    return subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+def _pinned_repo(tmp: Path) -> tuple[Path, str]:
+    """A throwaway repo holding the fixture source at skills/x/SKILL.md; returns (repo, commit sha)."""
+    _git(tmp, "init", "-q")
+    src = tmp / "skills" / "x" / "SKILL.md"
+    src.parent.mkdir(parents=True)
+    src.write_text(_fx("pwq_source_test.md"), encoding="utf-8")
+    _git(tmp, "add", ".")
+    _git(tmp, "commit", "-q", "-m", "pin")
+    return tmp, _git(tmp, "rev-parse", "HEAD")
+
+
+def _pinned_run(repo: Path, pin: str, *, extra: list[str] | None = None, source_format: str | None = None) -> tuple[int, str]:
+    import contextlib
+    import io
+
+    manifest = json.loads(_fx("pwq_manifest_test.json"))
+    manifest["pin"] = pin
+    (repo / "m.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (repo / "copy.md").write_text(_fx("pwq_copy_test.md"), encoding="utf-8")
+    (repo / "dump.json").write_text(_fx("pwq_dump_test.json"), encoding="utf-8")
+    argv = [str(repo / "skills" / "x" / "SKILL.md"), "--stored-format", "pwq", "--copy", str(repo / "copy.md"),
+            "--manifest", str(repo / "m.json"), "--dump", str(repo / "dump.json"), "--repo", str(repo)]
+    if source_format:
+        argv += ["--source-format", source_format]
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        rc = ccl.main(argv + (extra or []))
+    return rc, buf.getvalue()
+
+
+def check_pwq_f4_source_must_match_the_manifest_pin() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, pin = _pinned_repo(Path(tmp))
+        rc, out = _pinned_run(repo, pin)
+        assert rc == 0, f"a source identical to the pinned blob must pass:\n{out}"
+        rc, out = _pinned_run(repo, pin[:10])  # an abbreviated pin resolves the same
+        assert rc == 0, out
+        src = repo / "skills" / "x" / "SKILL.md"
+        src.write_text(src.read_text(encoding="utf-8").replace("separate from alpha", "separate from alphA"), encoding="utf-8")
+        rc, out = _pinned_run(repo, pin)
+        assert rc == 2 and "pin" in out and pin[:8] in out, f"a one-character drift from the pin must refuse:\n{out}"
+        assert "scope(s) checked" not in out, "the refusal must come before any check"
+        rc, out = _pinned_run(repo, pin, extra=["--allow-unpinned"])
+        assert rc == 1 and "[NOT_FOUND]" in out, f"--allow-unpinned must skip the tie and run the checks:\n{out}"
+        rc, out = _pinned_run(repo, "0" * 40)  # a pin that is not a commit of the repo
+        assert rc == 2 and "pin" in out, out
+        rc, out = _pinned_run(repo, "--output=/tmp/x")  # never handed to git as an option
+        assert rc == 2 and "not a commit sha" in out, out
+
+
+def check_pwq_f4_pin_tie_does_not_apply_to_the_copy_as_source() -> None:
+    rc, out = _pwq_run(source_format="copy", pin_check=True)
+    assert rc == 0, f"--source-format copy has no pinned source file to tie:\n{out}"
+
+
 CHECKS = [
     ("baseline (uncorrupted fixture) reports clean on all three heading shapes", check_baseline_clean),
     ("mutation (a): dropped bullet -> UNACCOUNTED gap", check_mutation_dropped_bullet),
@@ -790,6 +868,9 @@ CHECKS = [
     ("[pwq T13] extra source heading (and manifest-only heading) fails by name", check_pwq_t13_extra_source_heading_fails_by_name),
     ("[pwq T14] --source-format copy clean; corrupted copy body fails", check_pwq_t14_source_format_copy),
     ("[pwq T15] --ws selects the workspace; default agent-team unchanged", check_pwq_t15_ws_option_selects_workspace),
+    ("[pwq F4] live fetch counts only the current version (pwq mode); old mode unchanged", check_pwq_f4_live_fetch_counts_only_the_current_version),
+    ("[pwq F4] a source differing from manifest.pin refuses; --allow-unpinned skips; bad pin refuses", check_pwq_f4_source_must_match_the_manifest_pin),
+    ("[pwq F4] --source-format copy has no pin tie", check_pwq_f4_pin_tie_does_not_apply_to_the_copy_as_source),
 ]
 
 

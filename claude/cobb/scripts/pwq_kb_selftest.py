@@ -428,7 +428,7 @@ def t9_listing_matches_real_grep_and_is_within_bound():
 
 def t9_twenty_five_extra_200_char_titles_break_the_bound():
     text = copy_text()
-    extra = "".join(f"<!-- unit u9{i:02d} -->\nGotcha: x\n<!-- body -->\n## {'T' * 200}\n\nb\n" for i in range(25))
+    extra = "".join(f"<!-- unit u9{i:02d} -->\nGotcha: x{i}\n<!-- body -->\n## {'T' * 200}\n\nb\n" for i in range(25))
     big = text + extra
     # measured against the real grep, independent of listing()
     with tempfile.NamedTemporaryFile("w", suffix=".md") as f:
@@ -857,11 +857,14 @@ def t21_gate_with_zero_chunks_fails_and_defaults_are_ten_minutes():
 def t21_gate_cli_exit_codes():
     w, m = FakeWorld(), tmpm()
     run_ingest(w, mini_copy(), manifest=m)
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(mini_copy())
     mf = kb.load_manifest(m)
+    argv = ["gate", "--ws", "pwq-test", "--manifest", str(m), "--copy", str(cp)]
     with contextlib.redirect_stdout(io.StringIO()):
-        assert kb.main(["gate", "--ws", "pwq-test", "--manifest", str(m)], fetcher=w, targets=FAKE_TARGETS) == 0
+        assert kb.main(argv, fetcher=w, targets=FAKE_TARGETS) == 0
         w.srv("pwq-test").docs[mf["units"][0]["documentId"]]["status"] = "failed"
-        assert kb.main(["gate", "--ws", "pwq-test", "--manifest", str(m)], fetcher=w, targets=FAKE_TARGETS) == 1
+        assert kb.main(argv, fetcher=w, targets=FAKE_TARGETS) == 1
 
 
 def diverge_world():
@@ -933,7 +936,8 @@ def t23_a_unit_hidden_from_the_listing_is_caught_by_diverge():
     # a fence whose heading was demoted but still fenced is a stale body, found as such
     demoted = block.replace("## Beta title", "### Beta title")
     found = run_diverge(w, m, copy.replace(block, demoted))
-    assert [k for k, u, _ in found if u == "u02"] == ["STALE"], found
+    # the edited copy also no longer matches the registered sha256 (F4): reported on top of the STALE body
+    assert sorted(k for k, u, _ in found if u == "u02") == ["REGISTRY-STALE", "STALE"], found
     assert run_diverge(w, m, copy) == []  # control
 
 
@@ -1205,20 +1209,47 @@ def eval_env():
     return w, m, (lambda n: docs[sec_unit[n]])
 
 
+def default_copy_path() -> str:
+    if "copy_path" not in _cache:
+        _cache["copy_path"] = str(Path(tempfile.mkdtemp(), "copy.md"))
+        Path(_cache["copy_path"]).write_text(copy_text())
+    return _cache["copy_path"]
+
+
 def run_eval(extra, search, world, m, ws="pwq-test", fetcher=None):
     out, err = io.StringIO(), io.StringIO()
+    if "--copy" not in extra:  # the gate compares the manifest with the copy's unit ids (F7)
+        extra = extra + ["--copy", default_copy_path()]
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         code = kb.main(["eval", "--ws", ws, "--base-url", FAKE_TARGETS[ws], "--manifest", str(m)] + extra,
                        searcher=search, fetcher=fetcher or world, targets=FAKE_TARGETS)
     return code, out.getvalue(), err.getvalue()
 
 
-def b_set(tmpdir, doc_of):
+def b_parts(doc_of):
+    """A well-shaped Set B (84 positives, 2 per section 1-42; 30 negatives, 15 near / 15 off) plus the
+    scripted search results. B01/B02/B03/BN1/BN2 are the named probes the tests tweak; the rest is filler."""
     pos = [dict(id="B01", section=1, query="sit one"), dict(id="B02", section=2, query="sit two", tail=True),
            dict(id="B03", section=22, query="sit twentytwo")]
     neg = [dict(id="BN1", kind="off", query="neg off"), dict(id="BN2", kind="near", query="neg near")]
     script = {"sit one": [ck(doc_of(1), 0.30), ck("TEAM", 0.4)], "sit two": [ck("TEAM", 0.3), ck(doc_of(2), 0.41)],
               "sit twentytwo": [ck(doc_of(22), 0.2)], "neg off": [ck("TEAM", 0.3)], "neg near": [ck(doc_of(5), 0.40)]}
+    have = {1: 1, 2: 1, 22: 1}
+    k = 0
+    for n in range(1, 43):
+        for _ in range(2 - have.get(n, 0)):
+            k += 1
+            pos.append(dict(id=f"BF{k:02d}", section=n, query=f"fill {k}"))
+            script[f"fill {k}"] = [ck(doc_of(n), 0.2)]
+    for j in range(14):
+        for kind in ("off", "near"):
+            neg.append(dict(id=f"BN{kind[0]}{j:02d}", kind=kind, query=f"neg {kind} {j}"))
+            script[f"neg {kind} {j}"] = [ck("TEAM", 0.3)]
+    return pos, neg, script
+
+
+def b_set(tmpdir, doc_of):
+    pos, neg, script = b_parts(doc_of)
     return write_set(Path(tmpdir, "sealed", "b.json"), pos, neg), script
 
 
@@ -1235,7 +1266,7 @@ def t28_probe_prints_rank1_source_and_score_only_writes_no_sentinel_and_needs_no
     assert "B03 " in out and "BN1 " in out
     assert "recall" not in out.lower() and "mrr" not in out.lower() and "false" not in out.lower(), out
     assert not Path(str(bp) + ".scored").exists() and list(Path(tmpd, "sealed").iterdir()) == [bp]
-    assert len(srch.calls) == 5 and all(c[0] == "pwq-test" for c in srch.calls)
+    assert len(srch.calls) == 114 and all(c[0] == "pwq-test" for c in srch.calls)
 
 
 def t28_probe_flags_a_suspiciously_close_rank1_as_a_leak_sign():
@@ -1276,7 +1307,7 @@ def t28_sealed_report_has_aggregates_only_no_per_query_failures():
     script["sit one"] = [ck("TEAM", 0.3)]  # a miss
     code, out, _ = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"], FakeSearch(script, w), w, m)
     assert code == 0 and "B01" not in out and "sit one" not in out and "BN2" not in out
-    assert "floor_hits=2" in out and "n_pos=3" in out
+    assert "floor_hits=83" in out and "n_pos=84" in out
 
 
 def t28_a_failing_gate_refuses_before_the_sentinel_is_burnt():
@@ -1574,6 +1605,304 @@ def t24_sweep_adequacy_boundaries_each_isolated():
     assert _adequate(lost(4), [], floor=0.50) is True  # at 0.50 nothing is lost and the worst found (0.44) is 0.06 below
 
 
+
+
+# ======================================================================== G1 round (review F1-F8)
+# ----------------------------------------------------------------------------- F1: version headers
+def _hdr_block(uid="u21"):
+    return unit_block(copy_text(), uid)
+
+
+def t90_f1_extractor_follows_a_bold_list_continuation_after_one_lib():
+    got = kb.extract_versions("starlette **1.3.1** (`a/.venv`) and **1.6.0** (`b/.venv`, `c/.venv`), both on httpx 0.28.1")
+    assert got == [("starlette", "1.3.1"), ("starlette", "1.6.0"), ("httpx", "0.28.1")], got
+    got = kb.extract_versions("starlette 1.3.1, 1.4.0 and 1.6.0 differ")
+    assert got == [("starlette", "1.3.1"), ("starlette", "1.4.0"), ("starlette", "1.6.0")], got
+
+
+def t90_f1_continuation_needs_a_dotted_token_and_never_reads_a_measurement():
+    assert kb.extract_versions("starlette 1.3.1 and 2 retries") == [("starlette", "1.3.1")]
+    assert kb.extract_versions("starlette 1.3.1 and 0.5 s later") == [("starlette", "1.3.1")]
+    assert kb.extract_versions("starlette 1.3.1, then 1.6.0") == [("starlette", "1.3.1")]  # no separator word
+    assert kb.extract_versions("took starlette-free 0.2 ms") == []
+
+
+def t90_f1_extractor_crosses_one_hard_line_wrap_but_not_a_paragraph_break():
+    assert kb.extract_versions("Measured on CPython\n3.12.3 across") == [("CPython", "3.12.3")]
+    assert kb.extract_versions("Measured on **CPython**\n3.12.3") == [("CPython", "3.12.3")]
+    assert kb.extract_versions("uses pytest\n\n9.1 is next") == []
+
+
+def t90_f1_the_pin_header_for_u21_member_3_names_both_starlette_pins_and_cpython():
+    block = _hdr_block("u21")
+    line = next(ln for ln in block.split("\n") if ln.startswith("Versions[3]:"))
+    pairs = set(line.split(": ", 1)[1].split("; "))
+    assert {"starlette 1.3.1", "starlette 1.6.0", "httpx 0.28.1", "CPython 3.12.3"} <= pairs, line
+
+
+def _with_versions_line(uid, label, new_value):
+    text = copy_text()
+    block = unit_block(text, uid)
+    old = next(ln for ln in block.split("\n") if ln.startswith(label + ":"))
+    return text.replace(block, block.replace(old, f"{label}: {new_value}", 1)), old
+
+
+def t90_f1_verify_copy_accepts_a_header_that_adds_a_valid_hand_pair():
+    # python 3.12.3 is not extracted for u26 (the body says CPython) but passes version_pair_ok
+    text, old = _with_versions_line("u26", "Versions", "CPython 3.12.3; python 3.12.3")
+    assert old == "Versions: CPython 3.12.3", old
+    assert verify(text) == []
+
+
+def t90_f1_verify_copy_rejects_an_invented_hand_pair_and_names_it():
+    text, _ = _with_versions_line("u26", "Versions", "CPython 3.12.3; flask 3.12.3")
+    probs = verify(text)
+    assert any(p.startswith("u26:") and "invented version flask" in p for p in probs), probs
+    text, _ = _with_versions_line("u26", "Versions", "CPython 3.12.3; python 3.99")
+    assert any("invented version python '3.99'" in p for p in verify(text)), verify(text)
+
+
+def t90_f1_verify_copy_rejects_a_header_that_omits_an_extracted_pair():
+    text, _ = _with_versions_line("u21", "Versions[3]", "starlette 1.3.1; httpx 0.28.1; CPython 3.12.3")
+    probs = verify(text)
+    assert any(p.startswith("u21:") and "omits" in p and "starlette" in p and "1.6.0" in p for p in probs), probs
+    text, _ = _with_versions_line("u26", "Versions", "none stated")
+    assert any(p.startswith("u26:") and "omits" in p for p in verify(text)), verify(text)
+
+
+def t90_f1_a_hand_pair_is_judged_against_its_own_member_body_not_a_sibling():
+    # u21 member 1 body never says 'httpx 0.28.1'... but member 2 does: member 1 may not borrow it
+    text, old = _with_versions_line("u21", "Versions[1]", "starlette 1.3.1; fastapi 0.139.0; anyio 4.14.1; httpx 0.28.1")
+    assert any(p.startswith("u21:") and "invented version httpx" in p for p in verify(text)), verify(text)
+
+
+def t90_f1_other_header_lines_are_still_compared_exactly():
+    text, _ = _with_versions_line("u21", "Verified[3]", "2020-01-01")
+    assert any(p.startswith("u21: header mismatch") for p in verify(text)), verify(text)
+    text, _ = _with_versions_line("u26", "Versions", "CPython 3.12.3; python 3.12.3")
+    assert verify(text) == []
+    text = text.replace("Versions: CPython 3.12.3; python 3.12.3\n", "Versions: CPython 3.12.3; python 3.12.3\nVersions: x 1.0\n", 1)
+    assert any(p.startswith("u26: header mismatch") for p in verify(text)), verify(text)
+
+
+# ----------------------------------------------------------------------------- F5: copy uniqueness
+def t91_f5_parse_copy_rejects_a_duplicate_unit_id():
+    text = copy_text()
+    dup = text + unit_block(text, "u01")
+    e = raises(kb.KBError, kb.parse_copy, dup)
+    assert "duplicate unit id" in str(e) and "u01" in str(e), e
+    assert raises(kb.KBError, kb.copy_entries, dup) is not None
+    assert any("duplicate unit id" in p for p in verify(dup))
+
+
+def t91_f5_parse_copy_rejects_a_duplicate_title_under_another_id():
+    text = copy_text()
+    twin = unit_block(text, "u01").replace("<!-- unit u01 -->", "<!-- unit u99 -->", 1)
+    e = raises(kb.KBError, kb.parse_copy, text + twin)
+    assert "duplicate title" in str(e) and "u99" in str(e) and "u01" in str(e), e
+
+
+def t91_f5_distinct_ids_and_titles_still_parse():
+    assert len(kb.parse_copy(copy_text()).units) == 36
+
+
+# ----------------------------------------------------------------------------- F7: gate on a partial manifest
+def t92_f7_run_gate_fails_on_a_unit_the_copy_expects_but_the_manifest_lacks():
+    w, mf = gate_setup()
+    ids = [u["id"] for u in mf["units"]]
+    (ok, table), _ = run_gate(w, mf, expected_ids=ids)
+    assert ok and "ABSENT" not in table
+    (ok, table), clock = run_gate(w, mf, expected_ids=ids + ["u99"])
+    assert not ok and clock.sleeps == 0, (ok, clock.sleeps)
+    assert "ABSENT" in table.split("u99")[1].split("\n")[0], table
+    # the check is by id, not by count: one unit swapped for another is still absent
+    (ok, table), _ = run_gate(w, mf, expected_ids=ids[1:] + ["u99"])
+    assert not ok and "u99" in table
+
+
+def t92_f7_gate_cli_fails_when_the_manifest_is_partial_and_needs_the_copy():
+    w, m = FakeWorld(), tmpm()
+    copy = mini_copy()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy)
+    run_ingest(w, copy, manifest=m)
+    base = ["gate", "--ws", "pwq-test", "--manifest", str(m), "--copy", str(cp)]
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        assert kb.main(base, fetcher=w, targets=FAKE_TARGETS) == 0
+    mf = kb.load_manifest(m)
+    dropped = mf["units"].pop(1)
+    m.write_text(json.dumps(mf))
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        assert kb.main(base, fetcher=w, targets=FAKE_TARGETS) == 1
+    assert "ABSENT" in out.getvalue() and dropped["id"] in out.getvalue() and "FAILED" in out.getvalue(), out.getvalue()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+        code = kb.main(base[:-1] + [str(cp) + ".missing"], fetcher=w, targets=FAKE_TARGETS)
+    assert code == 2 and "copy" in err.getvalue(), err.getvalue()
+
+
+def t92_f7_eval_scoring_refuses_on_a_partial_manifest():
+    w, m, doc_of = eval_env()
+    mf = kb.load_manifest(m)
+    gone = mf["units"].pop(3)
+    m.write_text(json.dumps(mf))
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--timeout", "0"], srch, w, m)
+    assert code == 4 and gone["id"] in err and "ABSENT" in err and srch.calls == [], (code, err)
+    assert not Path(str(bp) + ".scored").exists()
+
+
+# ----------------------------------------------------------------------------- F3: coverage is any-of-two
+def t93_f3_a_section_is_covered_when_either_of_its_two_queries_hits_in_either_order():
+    hit, miss = [ck("D1", 0.30)], [ck("X", 0.30)]
+    for first, second in ((hit, miss), (miss, hit)):
+        m = evaluate([P("a", 1, first), P("b", 1, second)], [], unit_doc=SEC_DOC)
+        assert (m["n_sections"], m["covered_sections"], m["covered_sections_raw"]) == (1, 1, 1), (first, m)
+    m = evaluate([P("a", 1, miss), P("b", 1, miss)], [], unit_doc=SEC_DOC)
+    assert (m["n_sections"], m["covered_sections"], m["covered_sections_raw"]) == (1, 0, 0), m
+    # several sections at once, mixed orders: 1 hit/miss, 2 miss/hit, 3 miss/miss, 4 hit/hit
+    pos = [P("a1", 1, hit), P("b1", 1, miss), P("a2", 2, [ck("X", 0.3)]), P("b2", 2, [ck("D2", 0.3)]),
+           P("a3", 3, miss), P("b3", 3, miss), P("a4", 4, [ck("D4", 0.3)]), P("b4", 4, [ck("D4", 0.3)])]
+    m = evaluate(pos, [], unit_doc=SEC_DOC)
+    assert (m["n_sections"], m["covered_sections"], m["covered_sections_raw"]) == (4, 3, 3), m
+
+
+def t93_f3_floor_coverage_and_raw_coverage_are_accumulated_separately():
+    over = [ck("D1", 0.90)]  # the expected document is returned, but past the floor
+    for first, second in ((over, [ck("X", 0.3)]), ([ck("X", 0.3)], over)):
+        m = evaluate([P("a", 1, first), P("b", 1, second)], [], unit_doc=SEC_DOC)
+        assert (m["covered_sections"], m["covered_sections_raw"]) == (0, 1), m
+    m = evaluate([P("a", 1, over), P("b", 1, [ck("D1", 0.3)])], [], unit_doc=SEC_DOC)
+    assert (m["covered_sections"], m["covered_sections_raw"]) == (1, 1), m
+
+
+# ----------------------------------------------------------------------------- F2: Set B shape before the seal
+def _malformed_cases(doc_of):
+    """(why-substring, mutate(pos, neg)) pairs: each breaks exactly one clause of the ML §1 shape."""
+    def drop_last_section(pos, neg):  # 84 positives over 41 sections: section 42's pair moves to 41
+        for p in pos:
+            if p["section"] == 42:
+                p["section"] = 41
+
+    def outside_range(pos, neg):  # 84 positives, 2 per section, but one section is 43 instead of 42
+        for p in pos:
+            if p["section"] == 42:
+                p["section"] = 43
+
+    return [
+        ("positives", lambda pos, neg: pos.pop()),  # 83
+        ("positives", lambda pos, neg: pos.append(dict(id="BX", section=1, query="x"))),  # 85
+        ("section", drop_last_section),
+        ("section", outside_range),
+        ("section", lambda pos, neg: pos.__setitem__(-1, dict(pos[-1], section=1))),  # 84, but section 1 holds 3, 42 holds 1
+        ("split", lambda pos, neg: next(n for n in neg if n["kind"] == "near").update(kind="off")),  # 16 off / 14 near
+        ("split", lambda pos, neg: next(n for n in neg if n["kind"] == "off").update(kind="near")),  # 14 off / 16 near
+        ("negatives", lambda pos, neg: neg.pop()),  # 29
+        ("negatives", lambda pos, neg: neg.append(dict(id="BNX", kind="near", query="x"))),  # 31
+        ("duplicate", lambda pos, neg: pos.__setitem__(0, dict(pos[0], id=pos[1]["id"]))),
+    ]
+
+
+def t94_f2_validate_set_b_accepts_the_spec_shape_and_names_each_violated_clause():
+    w, m, doc_of = eval_env()
+    pos, neg, _ = b_parts(doc_of)
+    kb.validate_set_b({"positives": pos, "negatives": neg})
+    assert (kb.SET_B_SECTIONS, kb.SET_B_PER_SECTION, kb.SET_B_NEAR, kb.SET_B_OFF) == (42, 2, 15, 15)
+    for why, mutate in _malformed_cases(doc_of):
+        pos, neg, _ = b_parts(doc_of)
+        mutate(pos, neg)
+        e = raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": neg})
+        assert why in str(e), (why, str(e))
+
+
+def t94_f2_a_malformed_set_b_refuses_in_probe_sealed_and_baseline_before_any_search_or_sentinel():
+    w, m, doc_of = eval_env()
+    for why, mutate in _malformed_cases(doc_of):
+        for mode in (["--probe"], ["--sealed-once", "--floor", "0.43"], ["--baseline", "bm25", "--floor", "0.43"]):
+            pos, neg, script = b_parts(doc_of)
+            mutate(pos, neg)
+            bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b.json"), pos, neg)
+            srch = FakeSearch(script, w)
+            code, out, err = run_eval(["--set", "B", "--set-b-path", str(bp)] + mode, srch, w, m)
+            assert code == 2 and why in err, (why, mode, code, err)
+            assert srch.calls == [] and not Path(str(bp) + ".scored").exists(), (why, mode)
+            assert "recall" not in out and "B01" not in out, (why, mode, out)
+
+
+def t94_f2_a_refused_set_b_leaves_the_seal_for_the_corrected_set():
+    w, m, doc_of = eval_env()
+    pos, neg, script = b_parts(doc_of)
+    bp = Path(tempfile.mkdtemp(), "sealed", "b.json")
+    write_set(bp, pos[:-1], neg)
+    args = ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"]
+    assert run_eval(args, FakeSearch(script, w), w, m)[0] == 2
+    write_set(bp, pos, neg)  # the corrected file at the same path scores: nothing was burnt
+    assert run_eval(args, FakeSearch(script, w), w, m)[0] == 0
+    assert Path(str(bp) + ".scored").is_file()
+
+
+# ----------------------------------------------------------------------------- F8: cheap harness items
+def t95_f8_distinct_docs_mean_is_over_positive_queries_only():
+    pos = [P("p1", 1, [ck("D1", 0.3), ck("X", 0.3)]), P("p2", 2, [ck("D2", 0.3)])]  # 2 and 1 distinct
+    neg = [N("n1", "off", [ck(f"Z{i}", 0.5) for i in range(5)]), N("n2", "near", [ck("Y", 0.5)])]  # 5 and 1
+    m = evaluate(pos, neg, unit_doc=SEC_DOC)
+    assert m["distinct_docs_mean"] == 1.5, m["distinct_docs_mean"]
+    assert evaluate([], neg, unit_doc=SEC_DOC)["distinct_docs_mean"] == 0.0
+
+
+def t95_f8_bm25_is_fed_the_raw_situation_never_the_prefixed_query():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
+    a = write_set(Path(tmpd, "a.json"), [dict(id="A10", section=10, query="whitespace-only strings pydantic")],
+                  [dict(id="NA", kind="off", query="kubernetes readiness probe")])
+    seen = []
+    real = kb.bm25_top
+    kb.bm25_top = lambda corpus, query, *a, **k: (seen.append(query), real(corpus, query, *a, **k))[1]
+    try:
+        code, out, err = run_eval(["--baseline", "bm25", "--set", "A", "--set-a-path", str(a), "--copy", str(cp)], FakeSearch({}, w), w, m)
+    finally:
+        kb.bm25_top = real
+    assert code == 0, err
+    assert seen == ["whitespace-only strings pydantic", "kubernetes readiness probe"], seen
+    assert all("Instruct:" not in q and "Query:" not in q for q in seen)
+
+
+def t95_f8_the_probe_requests_the_full_window_so_exclusions_cannot_empty_it():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    script["sit one"] = [ck("CAPTURE", 0.10 + i * 0.001, i) for i in range(40)] + [ck(doc_of(1), 0.31)]
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B", "--probe", "--set-b-path", str(bp), "--exclude", "CAPTURE"], srch, w, m)
+    assert code == 0, err
+    assert next(ln for ln in out.split("\n") if ln.startswith("B01 ")).split()[1] == doc_of(1), out
+    assert srch.calls and all(c[2] == 50 for c in srch.calls), {c[2] for c in srch.calls}
+
+
+# ----------------------------------------------------------------------------- F4: the manifest's write-only fields get a reader
+def t96_f4_diverge_reports_a_registry_whose_sha256_is_not_the_copys_unit_hash():
+    w, m, copy = diverge_world()
+    mf = kb.load_manifest(m)
+    assert run_diverge(w, m, copy) == []
+    mf["units"][1]["sha256"] = "0" * 64
+    m.write_text(json.dumps(mf))
+    assert run_diverge(w, m, copy) == [("REGISTRY-STALE", "u02", "Beta title")]
+    del mf["units"][1]["sha256"]  # an absent hash is not a free pass
+    m.write_text(json.dumps(mf))
+    assert run_diverge(w, m, copy) == [("REGISTRY-STALE", "u02", "Beta title")]
+
+
+def t96_f4_diverge_reports_a_registry_built_from_another_copy_pin_or_date():
+    w, m, copy = diverge_world()
+    for key, val in (("migratedOn", "2020-01-01"), ("pin", "deadbee")):
+        mf = kb.load_manifest(m)
+        mf[key] = val
+        m.write_text(json.dumps(mf))
+        found = run_diverge(w, m, copy)
+        assert len(found) == 1 and found[0][0] == "REGISTRY-STALE" and found[0][1] == "-" and key in found[0][2], (key, found)
+        run_ingest(w, copy, manifest=m)  # re-registering repairs it
+        assert run_diverge(w, m, copy) == []
 
 
 def main() -> int:

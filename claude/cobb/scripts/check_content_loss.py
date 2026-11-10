@@ -116,6 +116,10 @@ testable path, and the natural choice from inside a session that already has `ge
     # source section of the same heading; the copy's `<!-- preamble -->` block is a substring of
     # the source preamble and every other non-blank span of it equals a waivedSpans entry; the
     # manifest's heading set equals the source's (an extra source heading fails by name).
+    # The source file must be the blob `manifest.pin` holds (`git hash-object` vs `git rev-parse
+    # <pin>:<path>`, --repo; exit 2 on drift, --allow-unpinned skips); `--live` reads only
+    # currentVersion documents, so a superseded one reads as absent. `manifest.sha256`/`migratedOn`
+    # are not read here: `pwq_kb.py diverge` cross-checks them against the copy.
     python3 check_content_loss.py skills/python-web-quirks/SKILL.md --stored-format pwq \\
         --copy claude/knowledge/python-web-quirks.md --live --ws pwq-test
     # AC-5: the same check with the copy as the source side (--source-format copy).
@@ -195,9 +199,11 @@ request = json.loads(sys.stdin.read())
 graph = db.select_graph("ws:" + request["ws"])
 ids = request["ids"]
 out = {}
+# `currentOnly` (pwq mode): a superseded document must not satisfy the check, so it reads as absent.
+where = " WHERE d.currentVersion = true" if request.get("currentOnly") else ""
 for doc_id in ids:
     res = graph.ro_query(
-        "MATCH (d:Document {documentId: $id}) RETURN d.title AS title, d.text AS text, "
+        "MATCH (d:Document {documentId: $id})" + where + " RETURN d.title AS title, d.text AS text, "
         "d.status AS status",
         params={"id": doc_id},
     )
@@ -487,7 +493,7 @@ def make_dump_fetcher(dump_path: Path):
     return fetch
 
 
-def make_live_fetcher(all_ids: list[str], ws: str = DEFAULT_WS):
+def make_live_fetcher(all_ids: list[str], ws: str = DEFAULT_WS, current_only: bool = False):
     if not CYPHER_MCP_VENV_PYTHON.is_file():
         raise SystemExit(
             f"error: --live needs {CYPHER_MCP_VENV_PYTHON} to exist -- run `cypher-mcp/setup.sh` "
@@ -496,7 +502,7 @@ def make_live_fetcher(all_ids: list[str], ws: str = DEFAULT_WS):
         )
     proc = subprocess.run(
         [str(CYPHER_MCP_VENV_PYTHON), "-c", LIVE_FETCH_SNIPPET],
-        input=json.dumps({"ws": ws, "ids": sorted(set(all_ids))}),
+        input=json.dumps({"ws": ws, "ids": sorted(set(all_ids)), "currentOnly": current_only}),
         capture_output=True,
         text=True,
         env=os.environ.copy(),
@@ -647,7 +653,8 @@ def check_pwq(
         if doc is None:
             unit_problems.outcomes.append(ClaimOutcome(
                 claim=Claim(document_id=doc_id, title=title), status="missing_document",
-                diagnostic="get_document/live fetch returned nothing for this id"))
+                diagnostic="get_document/live fetch returned nothing for this id "
+                "(pwq mode: a superseded, non-currentVersion document counts as absent)"))
             continue
         try:
             parts = split_parts(strip_pwq_header(doc["text"]))
@@ -673,6 +680,31 @@ def check_pwq(
     return reports
 
 
+def pin_problem(source: Path, pin: str, repo: Path) -> str | None:
+    """None when the source file's content is the blob `<pin>:<path>` of `repo`; else why not.
+    The skill stays editable after the migration pin, so AC-1 "clean at the pin" needs this tie."""
+
+    def git(*a: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True)
+
+    if not re.fullmatch(r"[0-9a-fA-F]{4,40}", pin):
+        return f"manifest pin {pin!r} is not a commit sha"
+    try:
+        rel = source.resolve().relative_to(repo.resolve())
+    except ValueError:
+        return f"{source} is not under the repo {repo}, so it cannot be tied to pin {pin}"
+    want = git("rev-parse", "--verify", "--quiet", f"{pin}^{{commit}}:{rel.as_posix()}")
+    if want.returncode != 0:
+        return f"pin {pin} does not hold {rel.as_posix()} in {repo} ({want.stderr.strip() or 'unknown revision or path'})"
+    have = git("hash-object", "--no-filters", str(source.resolve()))
+    if have.returncode != 0:
+        return f"cannot hash {source}: {have.stderr.strip()}"
+    if have.stdout.strip() != want.stdout.strip():
+        return (f"{source} differs from the manifest pin {pin[:8]} (blob {have.stdout.strip()[:10]} vs pinned "
+                f"{want.stdout.strip()[:10]}); check out the pinned text or pass --allow-unpinned")
+    return None
+
+
 def _main_pwq(args) -> int:
     if args.copy is None:
         print("error: --stored-format pwq needs --copy <path>", file=sys.stderr)
@@ -680,10 +712,15 @@ def _main_pwq(args) -> int:
     manifest_path = args.manifest or DEFAULT_PWQ_MANIFEST
     try:
         manifest = load_manifest(manifest_path)
+        if args.source_format == "source" and not args.allow_unpinned:
+            why = pin_problem(args.source, str(manifest.get("pin", "")), args.repo)
+            if why:
+                print(f"error: {why}", file=sys.stderr)
+                return 2
         copy_text = args.copy.read_text(encoding="utf-8")
         source_text = args.source.read_text(encoding="utf-8")
         ids = [u["documentId"] for u in manifest.get("units", [])]
-        fetch = make_dump_fetcher(args.dump) if args.dump else make_live_fetcher(ids, args.ws)
+        fetch = make_dump_fetcher(args.dump) if args.dump else make_live_fetcher(ids, args.ws, current_only=True)
         reports = check_pwq(source_text, copy_text, manifest, fetch, args.source_format)
     except (OSError, ValueError, KeyError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -764,6 +801,15 @@ def main(argv: list[str] | None = None) -> int:
         "--source-format", choices=["source", "copy"], default="source",
         help="pwq mode: `copy` builds the source side from --copy's unit bodies (AC-5) instead "
         "of the source file.",
+    )
+    parser.add_argument(
+        "--repo", type=Path, default=REPO_ROOT,
+        help="pwq mode: the git repository holding manifest.pin (default: this repo).",
+    )
+    parser.add_argument(
+        "--allow-unpinned", action="store_true",
+        help="pwq mode: skip the check that the source file is the blob manifest.pin holds "
+        "(default: a source that differs from the pin is refused, exit 2).",
     )
     parser.add_argument(
         "--ws", default=DEFAULT_WS,

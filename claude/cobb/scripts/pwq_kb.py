@@ -267,24 +267,45 @@ VERSION_WINDOW = 40
 VERSION_LIBS = (
     "starlette|fastapi|anyio|uvicorn|pydantic|httpx2?|redis-py|redis|pytest|ruff|mcp|cpython|python"
 )
+_VTOK = r"\d+\.\d+(?:\.\d+)?(?:\.x)?"
+# `<lib> [**]<tok>`: the lib and its token may be separated by spaces, bold marks and ONE hard line wrap
+# (never a paragraph break).
 VERSION_RE = re.compile(
-    rf"\b(?P<lib>{VERSION_LIBS})\b[ \t]*(?:\*\*)?[ \t]*(?P<tok>\d+\.\d+(?:\.\d+)?(?:\.x)?)", re.I
+    rf"\b(?P<lib>{VERSION_LIBS})\b[ \t]*(?:\*\*)?[ \t]*\n?[ \t]*(?:\*\*)?[ \t]*(?P<tok>{_VTOK})", re.I
+)
+# `<lib> 1.3.1 (...) and **1.6.0**` / `<lib> 1.3.1, 1.4.0`: further tokens of the same lib after a
+# separator word. A measurement ("and 0.5 s") is not a version.
+_CONT_RE = re.compile(
+    rf"(?:\*\*)?(?:\s*\([^()]{{0,120}}\))?\s*(?:,|\band\b|\bor\b)\s*(?:\*\*)?(?P<tok>{_VTOK})(?![\d.]*\d)"
+    r"(?!(?:\*\*)?[ \t]*(?:ms|s|sec|seconds?|MB|KB|%)\b)",
+    re.I,
 )
 
 
 def extract_versions(body: str) -> list[tuple[str, str]]:
     seen: set[tuple[str, str]] = set()
     out: list[tuple[str, str]] = []
-    for m in VERSION_RE.finditer(body):
-        key = (m.group("lib").lower(), m.group("tok"))
+
+    def add(lib: str, tok: str) -> None:
+        key = (lib.lower(), tok)
         if key not in seen:
             seen.add(key)
-            out.append((m.group("lib"), m.group("tok")))
+            out.append((lib, tok))
+
+    for m in VERSION_RE.finditer(body):
+        add(m.group("lib"), m.group("tok"))
+        pos = m.end()
+        while (c := _CONT_RE.match(body, pos)):
+            add(m.group("lib"), c.group("tok"))
+            pos = c.end()
     return out
 
 
 def version_pair_ok(lib: str, tok: str, body: str, window: int = VERSION_WINDOW) -> bool:
-    """T6: the token is a body substring with the lib name within `window` chars before it."""
+    """T6: the token is a body substring with the lib name within `window` chars before it, or the
+    extractor itself reads the pair from the body (a list continuation can sit past the window)."""
+    if (lib.lower(), tok) in {(l.lower(), t) for l, t in extract_versions(body)}:
+        return True
     pos = body.find(tok)
     while pos != -1:
         if lib.lower() in body[max(0, pos - window - len(lib)) : pos].lower():
@@ -410,8 +431,18 @@ def parse_copy(text: str) -> Copy:
     if kinds[:2] != ["preamble", "note"] or kinds.count("preamble") != 1 or kinds.count("note") != 1:
         raise KBError("copy must have exactly one preamble block followed by one preamble-note block")
     units: list[CopyUnit] = []
+    seen_id: set[str] = set()
+    title_owner: dict[str, str] = {}
     for uid, body_lines in blocks[2:]:
         stored = "\n".join(body_lines).rstrip() + "\n"
+        if uid in seen_id:
+            raise KBError(f"duplicate unit id {uid}")
+        seen_id.add(uid)
+        first = stored.split("\n", 1)[0]
+        title = first[len("Gotcha: "):] if first.startswith("Gotcha: ") else first
+        if title in title_owner:
+            raise KBError(f"duplicate title in {uid} and {title_owner[title]}: {title[:60]!r}")
+        title_owner[title] = uid
         cu = CopyUnit(uid, stored)
         ls = stored.split("\n")
         cu.delim_count = sum(1 for ln in ls if ln == BODY_DELIM)
@@ -435,6 +466,40 @@ def listing(copy_text: str) -> str:
 
 def listing_bytes(copy_text: str) -> int:
     return len(listing(copy_text).encode("utf-8"))
+
+
+_VERSIONS_LINE_RE = re.compile(r"^Versions(?:\[(\d+)\])?: (.*)$")
+
+
+def _header_problems(exp: Unit, header: str, migrated_on: str) -> list[str]:
+    """Header vs the recomputed one. Every line must match exactly except a `Versions` line, which
+    must be a SUPERSET of the extracted pairs: cobb may add a pair he confirmed by hand (it must pass
+    `version_pair_ok` against that member's own body) but may never drop an extracted one."""
+    want = render_header(exp, migrated_on).split("\n")
+    got = header.split("\n")
+    if len(got) != len(want):
+        return [f"{exp.id}: header mismatch: line count differs"]
+    problems: list[str] = []
+    for a, b in zip(got, want):
+        ma, mb = _VERSIONS_LINE_RE.match(a), _VERSIONS_LINE_RE.match(b)
+        if not (ma and mb and ma.group(1) == mb.group(1)):
+            if a != b:
+                problems.append(f"{exp.id}: header mismatch: copy {a!r} vs recomputed {b!r}")
+            continue
+        body = exp.members[int(ma.group(1) or 1) - 1].body
+        parse = lambda v: [] if v == "none stated" else [tuple(p.rsplit(" ", 1)) if " " in p else (p, "") for p in v.split("; ")]
+        have, need = parse(ma.group(2)), parse(mb.group(2))
+        have_keys = {(lib.lower(), tok) for lib, tok in have}
+        for lib, tok in need:
+            if (lib.lower(), tok) not in have_keys:
+                problems.append(f"{exp.id}: header omits extracted version {lib} {tok!r} ({mb.group(0).split(':')[0]})")
+        need_keys = {(lib.lower(), tok) for lib, tok in need}
+        for lib, tok in have:
+            if (lib.lower(), tok) not in need_keys and not version_pair_ok(lib, tok, body):
+                problems.append(
+                    f"{exp.id}: invented version {lib} {tok!r}: not in this member's body with the lib within {VERSION_WINDOW} chars"
+                )
+    return problems
 
 
 def verify_copy(copy_text: str, source_text: str, bound: int = LISTING_BOUND) -> list[str]:
@@ -471,16 +536,7 @@ def verify_copy(copy_text: str, source_text: str, bound: int = LISTING_BOUND) ->
         if cu.delim_count != 1:
             problems.append(f"{exp.id}: body delimiter appears {cu.delim_count} times, need exactly 1")
             continue
-        for lib, tok in header_version_pairs(cu.header):
-            if not any(version_pair_ok(lib, tok, m.body) for m in exp.members):
-                problems.append(f"{exp.id}: invented version {lib} {tok!r}: not in a body with the lib within {VERSION_WINDOW} chars")
-        want = render_header(exp, migrated_on)
-        if cu.header != want:
-            diff = next(
-                (f"copy {a!r} vs recomputed {b!r}" for a, b in zip(cu.header.split("\n"), want.split("\n")) if a != b),
-                "line count differs",
-            )
-            problems.append(f"{exp.id}: header mismatch: {diff}")
+        problems += _header_problems(exp, cu.header, migrated_on)
         got_heads = [h for h, _ in cu.parts]
         want_heads = [s.heading for s in exp.members]
         if got_heads != want_heads:
@@ -779,9 +835,21 @@ def replace(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path,
 
 
 # --- gate (K-102 embedding hard gate) ----------------------------------------------------------
+def expected_unit_ids(copy_path) -> list[str]:
+    """The unit ids the copy of record holds: what a complete manifest must register."""
+    p = Path(copy_path)
+    if not p.is_file():
+        raise KBError(f"copy {p} not found: the gate cannot tell a partial manifest without it")
+    return [e.id for e in copy_entries(p.read_text(encoding="utf-8"))]
+
+
 def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT, poll: float = GATE_POLL,
-             sleep=time.sleep, monotonic=time.monotonic) -> tuple[bool, str]:
+             sleep=time.sleep, monotonic=time.monotonic, expected_ids=None) -> tuple[bool, str]:
+    """`expected_ids` (the copy's unit ids): one the manifest does not register is an ABSENT row, so a
+    unit that `ingest` refused cannot leave the gate clean on a partial manifest."""
     ids = [u["documentId"] for u in manifest["units"]]
+    registered = {u["id"] for u in manifest["units"]}
+    absent = [i for i in (expected_ids or []) if i not in registered]
     deadline = monotonic() + timeout
     while True:
         counts = fetcher.embedding_counts(ws, ids)
@@ -802,6 +870,7 @@ def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT,
         if not pending or monotonic() >= deadline:
             break
         sleep(poll)
+    rows += [(i, "-", "-", "ABSENT", False) for i in absent]
     table = "unit chunks embedded status\n" + "".join(f"{a} {b} {c} {d}\n" for a, b, c, d, _ in rows)
     return all(r[3] == "ok" for r in rows), table
 
@@ -815,7 +884,18 @@ def diverge(copy_text: str, *, ws: str, manifest: dict, fetcher) -> list[tuple[s
                                 [u["documentId"] for u in manifest["units"]])
     by_id = {d["documentId"]: d for d in docs}
     out: list[tuple[str, str, str]] = []
+    # the manifest's pin/migratedOn/sha256 are written by ingest and read only here: a registry built
+    # from another copy (or an older text of this one) is stale even when the KB matches the copy
+    try:
+        pin, migrated_on = copy_note_fields(copy_text)
+        for key, want in (("pin", pin), ("migratedOn", migrated_on)):
+            if manifest.get(key) != want:
+                out.append(("REGISTRY-STALE", "-", f"manifest {key} {manifest.get(key)!r} != the copy note's {want!r}"))
+    except KBError as e:
+        out.append(("REGISTRY-STALE", "-", f"the copy's note cannot be read: {e}"))
     for e in entries:
+        if e.id in reg and reg[e.id].get("sha256") != sha256_text(e.text):
+            out.append(("REGISTRY-STALE", e.id, e.title))
         mine = by_id.get(reg[e.id]["documentId"]) if e.id in reg else None
         titled = [d for d in docs if d["title"] == e.title]
         if mine is None and not titled:
@@ -911,6 +991,41 @@ def load_set(path: Path) -> dict:
     return {"positives": pos, "negatives": neg}
 
 
+SET_B_SECTIONS = 42  # a constant of the spec (ML §1), never derived from the set under test
+SET_B_PER_SECTION = 2
+SET_B_NEAR = 15
+SET_B_OFF = 15
+
+
+def validate_set_b(data: dict) -> None:
+    """ML §1's sealed-set shape: 42 sections x 2 positives = 84, and 15 near + 15 off negatives.
+
+    Run before anything burns the one-shot seal: the coverage clause of AC-3 divides by
+    SET_B_SECTIONS, not by however many sections the loaded set happens to mention."""
+    pos, neg = data["positives"], data["negatives"]
+    want_pos = SET_B_SECTIONS * SET_B_PER_SECTION
+    if len(pos) != want_pos:
+        raise KBError(f"Set B shape: {len(pos)} positives, need {want_pos} ({SET_B_PER_SECTION} per section)")
+    per: dict[int, int] = {}
+    for p in pos:
+        per[p["section"]] = per.get(p["section"], 0) + 1
+    if set(per) != set(range(1, SET_B_SECTIONS + 1)) or any(n != SET_B_PER_SECTION for n in per.values()):
+        bad = sorted(f"{s}:{n}" for s, n in per.items() if s not in range(1, SET_B_SECTIONS + 1) or n != SET_B_PER_SECTION)
+        missing = sorted(set(range(1, SET_B_SECTIONS + 1)) - set(per))
+        raise KBError(f"Set B shape: every section 1-{SET_B_SECTIONS} needs exactly {SET_B_PER_SECTION} positives "
+                      f"(section:count off {bad}, missing {missing})")
+    kinds = {"near": 0, "off": 0}
+    for n in neg:
+        kinds[n["kind"]] += 1
+    if len(neg) != SET_B_NEAR + SET_B_OFF:
+        raise KBError(f"Set B shape: {len(neg)} negatives, need {SET_B_NEAR + SET_B_OFF}")
+    if (kinds["near"], kinds["off"]) != (SET_B_NEAR, SET_B_OFF):
+        raise KBError(f"Set B shape: negative split near/off is {kinds['near']}/{kinds['off']}, need {SET_B_NEAR}/{SET_B_OFF}")
+    ids = [i["id"] for i in pos + neg]
+    if len(set(ids)) != len(ids):
+        raise KBError("Set B shape: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
+
+
 def resolve_set_b_path(arg, env=os.environ) -> Path:
     """Set B's path comes only from --set-b-path or PWQ_SET_B, and must be outside the repo (D11)."""
     chosen = arg or env.get("PWQ_SET_B")
@@ -973,7 +1088,7 @@ def evaluate(pos: list[dict], neg: list[dict], *, floor, unit_doc: dict, feature
     by_section_raw: dict[int, bool] = {}
     head = [0, 0]
     tail = [0, 0]
-    distinct = []
+    distinct = []  # positive queries only: ML §7 risk 2 is slot crowding where a gotcha is wanted
     for p in pos:
         want = unit_doc.get(p["section"])
         ranks = [i for i, c in enumerate(p["chunks"], 1) if c["documentId"] == want]
@@ -993,7 +1108,6 @@ def evaluate(pos: list[dict], neg: list[dict], *, floor, unit_doc: dict, feature
     for n in neg:
         n_neg[n["kind"]] += 1
         accepts[n["kind"]] += any(c["documentId"] in feature_docs and under(c) for c in n["chunks"])
-        distinct.append(len({c["documentId"] for c in n["chunks"]}))
     n = len(pos)
     return {
         "n_pos": n, "raw_hits": raw, "floor_hits": fl,
@@ -1097,8 +1211,8 @@ def _section_maps(manifest: dict, read_source=read_pinned) -> tuple[dict, dict, 
     return {n: doc_of_unit.get(uid) for n, uid in sec_unit.items()}, sec_unit, set(doc_of_unit.values())
 
 
-def eval_gate(fetcher, ws: str, manifest: dict, timeout: float, poll: float) -> None:
-    ok, table = run_gate(fetcher, ws, manifest, timeout=timeout, poll=poll)
+def eval_gate(fetcher, ws: str, manifest: dict, timeout: float, poll: float, expected_ids=None) -> None:
+    ok, table = run_gate(fetcher, ws, manifest, timeout=timeout, poll=poll, expected_ids=expected_ids)
     if not ok:
         raise GateRefused("embedding gate failed; refusing to score:\n" + table)
 
@@ -1125,6 +1239,9 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
 
     def load_which() -> dict:
         return load_set(resolve_set_b_path(args.set_b_path, env) if which == "B" else Path(args.set_a_path))
+
+    if which == "B":  # shape first: nothing below may spend the seal on a malformed set
+        validate_set_b(load_which())
 
     def fetch_all(items):
         return [searcher.search(ws, build_query(template, it["query"]), EVAL_WINDOW) for it in items]
@@ -1166,7 +1283,7 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
         if sentinel.exists():
             raise SealedRefused(f"Set B already scored ({sentinel}); a second scoring is refused (write B2 instead)")
     manifest = load_manifest(mpath)
-    eval_gate(fetcher, ws, manifest, args.timeout, args.poll)
+    eval_gate(fetcher, ws, manifest, args.timeout, args.poll, expected_unit_ids(args.copy))
     unit_doc, sec_unit, feature_docs = _section_maps(manifest)
     header = f"set={which} floor={args.floor if args.floor is None else format(args.floor, 'g')} window={EVAL_WINDOW} topk={EVAL_TOPK}"
 
@@ -1332,7 +1449,8 @@ def _kb_main(args, transport, fetcher, targets, searcher=None) -> int:
         return run_eval(args, searcher=searcher, fetcher=fetcher, target=target, mpath=mpath)
     manifest = load_manifest(mpath)
     if args.cmd == "gate":
-        ok, table = run_gate(fetcher, args.ws, manifest, timeout=args.timeout, poll=args.poll)
+        ok, table = run_gate(fetcher, args.ws, manifest, timeout=args.timeout, poll=args.poll,
+                             expected_ids=expected_unit_ids(copy_path))
         print(table, end="")
         print("gate: " + ("clean" if ok else "FAILED"))
         return 0 if ok else 1
