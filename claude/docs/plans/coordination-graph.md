@@ -1,6 +1,6 @@
 # In-flight work, backlogs and reference lookup in the graph — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 2
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 2 · **Extended by:** `claude/docs/plans/coordination-graph2.md`
 
 Revised 2026-10-21 (v2): analyst Pass 1 (`claude/docs/reviews/coordination-graph.md`) and the
 2026-10-21 decision-log answers folded in; Pass 2 findings and the 2026-10-22 decisions (insertion
