@@ -31,9 +31,11 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B4 (step 4 + CLI `flush`/`init` gap from step 3) | `tdd-engineer` | `a798c99c101250269` | accepted (committed) |
 | B5 (step 5) | `tdd-engineer` | `adca059df71547b9f` | accepted (committed) | `skills/work-items/…` | — | ~91k tok, 12 tool uses |
 | G2 diff gate steps 1–5 | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 7 | approve with suggestions (F1 resolve FR/AC parent defect, F2 silent-corruption test gap, F3 links shape decision) | — |
-| B5b fixes F1/F2/minors | `tdd-engineer` | `a798c99c101250269` | in-flight | `skills/work-items/…` | re-confirm by `analyst` after step 7 | — |
+| B5b fixes F1/F2/minors | `tdd-engineer` | `a798c99c101250269` | accepted (committed 28ce49c5; ~132k tok) | `skills/work-items/…` | re-confirm by `analyst` after step 7 | — |
 | U1b plan sync + F3 decision | `architect` | `a7af14139c4b90236` | delivered (F3: concerns functional; fixed-by/relates multi-valued via link op; step 6 split into 6 + 6b) | `docs/plans/work-item-numbering.md` | — | — |
-| B6–B7 (steps 6–7; held until G2 returns — same package, avoids concurrent cli.py churn) | `tdd-engineer` | — | queued | `skills/work-items/…` | — | — |
+| B6 (step 6 links/attrs) | `tdd-engineer` | `acbba0473b46da2aa` | in-flight | `skills/work-items/…` | — | — |
+| B6b (step 6b headers/options) | `tdd-engineer` | — | queued | — | — | — |
+| B7 (step 7 rebuild/check; sequential, same package) | `tdd-engineer` | — | queued | `skills/work-items/…` | — | — |
 | B8 (step 8) | `tdd-engineer` | — | queued | keys | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
