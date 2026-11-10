@@ -3,3 +3,9 @@ services:
     image: fx-web:latest
     environment:
       VITE_REPORTS_BASE: http://reports.example.internal
+  svc:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      FX_PEER_BASE: http://peer.example.internal:8000

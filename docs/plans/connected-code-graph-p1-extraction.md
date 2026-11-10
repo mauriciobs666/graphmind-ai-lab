@@ -171,7 +171,7 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
   `ccg.atrest.write_bundle`: the file is `0600` and its directory `0700` under `bundles/<system>/`, under umask 0 as well.
 - **Done:** `build_bundle(unit, raw_facts, repo, commit) -> path`. **Gate:** `analyst`. Python has no
   primary-constructor owned region, so 5b's `ownedRegions` test uses a synthetic region lying outside the
-  symbol's span; the first real case is the P1-41 fixture (0 of the slice's 4,943 symbols carry one).
+  symbol's span, and no fixture row exercises it (0 of the slice's 4,943 symbols carry one).
 
 ## P1-06 · `Cond.code` literal masking (F-9) — `graph-dba`
 

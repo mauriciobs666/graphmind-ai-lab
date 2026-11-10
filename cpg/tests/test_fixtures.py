@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': '91dfb929b5b2250a5ee7b25c4349b04ea2f23869', 'H1': '855ff39970c3f0fdf2dffbca2934dce89cf59bed', 'H2': 'df4585e1d5cce724213ca61cefbf5fb60c0f7680', 'H3': 'fb8cc776d19e708bbeb64ba14095f51f059e0c9b', 'H4': 'c00c24a2d18c4a95ea6d520a2513e27dce7620c5'},
-        "branches": {'ov-svc': 'e7fac573149dee3302045f5a74230d3429156f08', 'tf-mid': '0e183cf938c0856b699f3580067eb621e6ecd153', 'tf-sink': 'b9768660cdf8acdaa682c7577ab91fdd58e7eaab', 'tf-src': '8e6fc65dd40da376b7ef86272d97c7e4ef805c66'},
+        "commits": {'H0': '84b84c39ec47f4eed7de143d2a3ef24fc22c96ef', 'H1': 'd0d3507943073d8e9ba0241b3e13de2adafdbd1a', 'H2': 'b781625cca8461b3e12343d59893d3ce9fb472d3', 'H3': '5be852a0c27e46d8e917393069d425aa0c9de292', 'H4': 'b84ee092c9ebd378fa6b261a86498084670d6126'},
+        "branches": {'ov-svc': 'cade3bd0a6fde99a8fbc05054cb3cff36559fea2', 'tf-mid': '1ebdb0db1089549b2ed58f0d50c85465637178ce', 'tf-sink': 'ebdaeaac8d1334190126cadd07fdefb772fcfcd3', 'tf-src': 'ade6ee2ccba4ab7b578359275d7d13b2af7271ec'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
@@ -913,10 +913,13 @@ def census(manifests):
             fig["cells"].add((kind, status))
         if base == "AC6":
             grp = rid.rsplit("-", 1)[0]
-            g = fig["ac6"].setdefault(grp, {"n": 0, "shapes": set(), "confirmed": 0})
+            g = fig["ac6"].setdefault(grp, {"n": 0, "shapes": set(), "confirmed": 0, "by_gate": {}})
             g["n"] += 1
             g["shapes"].add(merged_attr(h, "item") or merged_attr(h, "shape_syntax"))
             g["confirmed"] += status == "confirmed"
+            bg = g["by_gate"].setdefault(gate, {"n": 0, "shapes": set()})      # the floor reads the group's OWN gate
+            bg["n"] += 1
+            bg["shapes"].add(merged_attr(h, "item") or merged_attr(h, "shape_syntax"))
     fig["positives"] = len([r for r in held if r not in NEGATIVES])
     fig["df"] = sorted(merged_attr(held[r], "dist") or merged_attr(held[r], "distance") for r in held if r.split("-")[0] == "DF")
     return fig
@@ -931,13 +934,16 @@ def plan_figures():
             if m and cells[i + 1].isdigit():
                 key = "B1" if m.group(1).startswith("B1") else "DFCD" if m.group(1) in ("DF", "CD") else m.group(1)
                 prefix[key] = int(cells[i + 1])
-    gates = {g: int(n) for g, n in re.findall(r"(P[1-5]) (\d+)", re.search(r"By earliest gate: ([^\n]*?)\(= 132\)", PLAN_TEXT).group(1))}
+    gates = {g: int(n) for g, n in re.findall(r"(P[1-5]) (\d+)", re.search(r"By earliest gate: ([^\n]*?)\(= 133\)", PLAN_TEXT).group(1))}
     shapes = {}
     for line in PLAN_TEXT.split("**Difficulty shapes, instances by earliest gate**")[1].split("Skew is below 3")[0].splitlines():
         m = re.match(r"\|\s*([A-Za-z][A-Za-z \-]*?)(?: \(cross-repository\))?\s*\|\s*(\*{0,2}\d\*{0,2})\s*\|\s*(\d)\s*\|\s*(\d)\s*\|", line)
         if m:
             shapes[m.group(1).strip()] = tuple(int(x.strip("*")) for x in m.groups()[1:])
     return {"prefix": prefix, "gate": gates, "shapes": shapes}
+
+
+AC6_GROUP_GATE = {"AC6-URL": "P1", "AC6-DYN": "P1", "AC6-EX": "P1", "AC6-PM": "P1", "AC6-TOP": "P2", "AC6-QL": "P3"}
 
 
 def census_violations(manifests):
@@ -948,14 +954,14 @@ def census_violations(manifests):
             vals = {r[attr] for r in h.values() if r.get(attr) is not None}
             if len(vals) > 1:
                 bad.append(f"{rid}: holders disagree on {attr}: {sorted(vals)}")
-    if fig["rows"] != 132:
-        bad.append(f"rows {fig['rows']} != 132")
+    if fig["rows"] != 133:
+        bad.append(f"rows {fig['rows']} != 133")
     if fig["prefix"] != plan["prefix"]:
         bad.append(f"prefix counts {fig['prefix']} != plan {plan['prefix']}")
     if fig["gate"] != plan["gate"]:
         bad.append(f"gate counts {fig['gate']} != plan {plan['gate']}")
-    if fig["positives"] != 120:
-        bad.append(f"positives {fig['positives']} != 120")
+    if fig["positives"] != 121:
+        bad.append(f"positives {fig['positives']} != 121")
     for shape, (p1, p2, p3) in plan["shapes"].items():
         key = shape if shape in fig["shape"] else next((k for k in fig["shape"] if k == shape), None)
         got = fig["shape"].get(shape, [])
@@ -968,10 +974,11 @@ def census_violations(manifests):
         elif have[0] < 3:
             bad.append(f"shape {shape}: floor 3 at P1 not met ({have[0]})")
         del key
-    for grp in ("AC6-URL", "AC6-DYN", "AC6-EX", "AC6-PM", "AC6-TOP", "AC6-QL"):
+    for grp, gate in AC6_GROUP_GATE.items():     # per gate, not per prefix: a row of the group at a later gate does not count
         g = fig["ac6"].get(grp)
-        if not g or g["n"] < 3 or len(g["shapes"]) < 3:
-            bad.append(f"{grp}: floor 3 instances / 3 shapes not met: {g and (g['n'], len(g['shapes']))}")
+        bg = (g or {}).get("by_gate", {}).get(gate, {"n": 0, "shapes": set()})
+        if bg["n"] < 3 or len(bg["shapes"]) < 3:
+            bad.append(f"{grp}: floor 3 instances / 3 shapes at {gate} not met: {(bg['n'], len(bg['shapes']))}")
         elif g["confirmed"]:
             bad.append(f"{grp}: an AC-6 row is confirmed")
     cells = {(k, s) for k in TEN_KINDS for s in ("confirmed", "possible")}
@@ -984,8 +991,22 @@ def census_violations(manifests):
 
 def test_tp004_census_equals_section_6_and_meets_every_floor(manifests):
     plan = plan_figures()
-    assert sum(plan["prefix"].values()) == 132 and len(plan["shapes"]) == 10 and sum(plan["gate"].values()) == 132
+    assert sum(plan["prefix"].values()) == 133 and len(plan["shapes"]) == 10 and sum(plan["gate"].values()) == 133
     assert census_violations(manifests) == []
+
+
+def test_tp004_ac6_floor_is_read_per_gate_not_per_prefix(manifests):
+    """AC6-EX-3 is gated P3, so the P1 example-config floor needs its own third row (AC6-EX-4). Planted failing inputs:
+    the third P1 row deleted (the group still holds EX-1..3 by prefix), and a P1 row moved to P3."""
+    assert census_violations(manifests) == []
+    bad = copy.deepcopy(manifests)
+    bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "AC6-EX-4"]
+    v = census_violations(bad)
+    assert any(x.startswith("AC6-EX: floor 3 instances / 3 shapes at P1 not met: (2,") for x in v), v
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "AC6-EX-2")["gate"] = "P3"
+    row_by_id(bad["fx-web"], "AC6-EX-2")["gate"] = "P3"
+    assert any(x.startswith("AC6-EX: floor 3") for x in census_violations(bad))
 
 
 def test_tp004_planted_failing_inputs(manifests):
@@ -993,7 +1014,7 @@ def test_tp004_planted_failing_inputs(manifests):
     bad = copy.deepcopy(manifests)
     bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "AC6-PM-2"]
     v = census_violations(bad)
-    assert any("AC6-PM" in x or "rows 131" in x for x in v), v
+    assert any("AC6-PM" in x or "rows 132" in x for x in v), v
     bad = copy.deepcopy(manifests)
     row = next(r for r in bad["fx-svc"]["rows"] if r.get("shape") == "client wrapper")
     row["shape"] = "template literal"
@@ -1016,7 +1037,7 @@ def test_tp004_planted_failing_inputs(manifests):
     bad["fx-svc"]["rows"] = [r for r in bad["fx-svc"]["rows"] if r["id"] != "LNK-26"]
     bad["fx-job"]["rows"] = [r for r in bad["fx-job"]["rows"] if r["id"] != "LNK-26"]
     bad["fx-lib"]["rows"] = [r for r in bad["fx-lib"]["rows"] if r["id"] != "LNK-26"]
-    assert any("rows 131" in x for x in census_violations(bad))
+    assert any("rows 132" in x for x in census_violations(bad))
 
 
 # ======================================================================================== plan <-> manifest row tie (F-3)
@@ -1152,7 +1173,7 @@ def plan_tie_probe(manifests):
 
 def test_f3_every_manifest_row_equals_its_plan_row_on_status_reason_gate_and_key(manifests):
     plan = plan_row_table()
-    assert len(plan) == 132 and set(plan) == set(M.holders(manifests))
+    assert len(plan) == 133 and set(plan) == set(M.holders(manifests))
     assert plan_row_violations(manifests, plan) == []
     assert plan["AC6-PM-2"]["gate"] == "P1" and plan["SQC-PY"]["gate"] == "P4" and plan["KN-4"]["keyNorm"] == "GET /api/files/a%2Fb"
 
@@ -1191,7 +1212,7 @@ def test_tp013_every_row_is_fixture_dev_and_in_no_held_out_split(manifests):
             if re.search(r"\bfx-(svc|web|lib|job)\b", t):
                 hits.append(str(p.relative_to(CPG)))
     assert hits == []
-    assert len(ids) == 132
+    assert len(ids) == 133
 
 
 def test_tp013_planted_failing_inputs(manifests):
@@ -2222,3 +2243,109 @@ def test_tp006_planted_failing_inputs_a_comments_only_unit_and_a_unit_with_no_so
     r, v, c, _, _ = content_check([aid, ids["good"]], cpgs, audit, good)
     assert v == {aid: "EMPTY", ids["good"]: "ok"} and c[aid] == 0
     assert r.returncode != 0, "the check exits non-zero when any CPG is EMPTY"
+
+# ======================================================================================== P1 form of the flow-dependent rows (plan 5.5)
+# The manifests hold the flag-true form in `status`/`reason`/`dependencies`; `p1Form` is the form P1-41 asserts while
+# the flow flag is false. The expected values are read from the plan's "P1 form" table, not from a constant here.
+
+
+def p1_form_plan_rows():
+    text = PLAN_TEXT.split("**P1 form (flow flag false")[1].split("Consequence for A25-3")[0]
+    out = {}
+    for ln in text.splitlines():
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if ln.startswith("|") and re.match(r"^(DF|CD|RV)-\d", cells[0]):
+            for rid in re.findall(r"(?:DF|CD|RV)-\d", cells[0]):
+                out[rid] = cells[1]
+    return out
+
+
+def _qn(loc):
+    """The plan's `short:qname` spelling of a locator: a dict (full dialect) or an already-prefixed string (compact)."""
+    if isinstance(loc, dict):
+        return f"{loc['repoId'].removeprefix('fx-')}:{loc['qname']}"
+    return loc
+
+
+def _leaf_forms(form):
+    """[(status, reason, locator, distance)] a `p1Form` states (full and compact dialects)."""
+    out = []
+    if "status" in form or "st" in form:
+        out.append((form.get("status") or form["st"], form["reason"], _qn(form.get("locator") or form["loc"]),
+                    form.get("distance", form.get("dist"))))
+    for d in form.get("dependencies", []) + form.get("deps", []):
+        out.append((d.get("status") or d["st"], d["reason"], _qn(d.get("locator") or d["loc"]), d.get("distance", d.get("dist"))))
+    if "caller" in form:
+        c = form["caller"]
+        out.append((c["status"], c["reason"], _qn(c["locator"]), c["distance"]))
+    return out
+
+
+def p1_form_violations(manifests):
+    plan, bad, seen = p1_form_plan_rows(), [], {}
+    for repo in REPOS:
+        for r in manifests[repo]["rows"]:
+            if "p1Form" in r:
+                seen.setdefault(r["id"], []).append(r["p1Form"])
+    for rid, forms in seen.items():
+        if any(sorted(_leaf_forms(f)) != sorted(_leaf_forms(forms[0])) for f in forms):   # fx-web writes the compact dialect
+            bad.append(f"{rid}: holders disagree on p1Form")
+        cell = plan.get(rid)
+        if cell is None:
+            bad.append(f"{rid}: p1Form with no row in the plan's P1-form table")
+            continue
+        f = forms[0]
+        if f.get("asserted") is False and "not asserted" not in cell:
+            bad.append(f"{rid}: manifest says not asserted, plan says {cell!r}")
+        for st, reason, loc, dist in _leaf_forms(f):
+            if f"`{st}` / `{reason}`" not in cell:
+                bad.append(f"{rid}: p1Form {st}/{reason} not in plan cell {cell!r}")
+            if f"`{loc}`" not in cell:
+                bad.append(f"{rid}: p1Form locator {loc} not in plan cell {cell!r}")
+            if f"`{loc}` (d{dist})" not in cell:
+                bad.append(f"{rid}: p1Form distance {dist} for {loc} not in plan cell {cell!r}")
+    for rid in set(plan) - set(seen) - {"DF-4", "CD-4"}:
+        bad.append(f"{rid}: in the plan's P1-form table, no p1Form in any manifest")
+    return bad
+
+
+def test_p1_form_equals_the_plan_table_and_covers_every_flow_dependent_row(manifests):
+    assert set(p1_form_plan_rows()) >= {"DF-1", "DF-2", "DF-3", "CD-1", "CD-2", "CD-3", "RV-1", "RV-2", "RV-3"}
+    assert p1_form_violations(manifests) == []
+    held = M.holders(manifests)
+    for rid in ("DF-1", "DF-2", "CD-1", "CD-2", "CD-3"):             # the flag-true form stays in place for the re-run
+        assert next(iter(held[rid].values()))["status"] == "confirmed"
+        assert next(iter(held[rid].values()))["reason"] == "intra-flow"
+
+
+def test_p1_form_planted_failing_inputs(manifests):
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "DF-2")["p1Form"]["status"] = "confirmed"            # the form index 5 forbids under a false flag
+    assert any(x.startswith("DF-2") for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-web"], "RV-3")["p1Form"]["deps"][0]["st"] = "confirmed"     # one holder of RV-3 only
+    v = p1_form_violations(bad)
+    assert any("RV-3" in x and "disagree" in x for x in v), v
+    bad = copy.deepcopy(manifests)
+    del row_by_id(bad["fx-svc"], "RV-1")["p1Form"]
+    assert any(x.startswith("RV-1") for x in p1_form_violations(bad))
+    # DF-3 is no longer exempt: its P1 form is possible/flow-unavailable:python (spec2 5, B-flow item C)
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-web"], "DF-3")["p1Form"]["st"] = "confirmed"
+    assert any(x.startswith("DF-3") for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    del row_by_id(bad["fx-web"], "DF-3")["p1Form"]
+    assert any(x.startswith("DF-3") and "no p1Form" in x for x in p1_form_violations(bad))
+    # N3: the locator and the distance are compared, not only status and reason
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-web"], "DF-3")["p1Form"]["loc"] = "web:app/src/ui/Reports.tsx::Reports"
+    assert any(x.startswith("DF-3") and "locator" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "DF-2")["p1Form"]["locator"]["qname"] = "api/orders.py::accept_quote"
+    assert any(x.startswith("DF-2") and "locator" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "RV-1")["p1Form"]["dependencies"][0]["distance"] = 3
+    assert any(x.startswith("RV-1") and "distance" in x for x in p1_form_violations(bad))
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "CD-2")["p1Form"]["caller"]["distance"] = 2
+    assert any(x.startswith("CD-2") and "distance" in x for x in p1_form_violations(bad))

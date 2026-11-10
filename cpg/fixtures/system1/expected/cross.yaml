@@ -684,10 +684,10 @@ rows:
   - fx-web
   why: multi-manifest
   refs:
+  - fx-svc:core/flow.py::base_price
   - fx-web:app/src/ui/OrderTotal.tsx::OrderTotal
   - fx-svc:api/orders.py::create_order
   - fx-svc:core/flow.py::apply_discount
-  - fx-svc:core/flow.py::base_price
 - id: AB-1
   kind: scenario
   gate: P1

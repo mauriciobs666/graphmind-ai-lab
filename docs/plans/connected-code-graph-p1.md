@@ -45,7 +45,7 @@ CPG: considered, not relevant — no graph is loaded for `cpg/` (the loaded grap
   `salesperson/` until then (steps P1-02, P1-06; sequencing in the sub-plans).
 - **The compute host is small** (6 GB; `-p0-ml.md` §7). Python extract + normalize cost 4.1–4.2× the Joern
   run in the slice (`docs/test-reports/connected-code-graph-p0-slice-report.md` §7 Q2). P1-20 measures a full refresh.
-- **Fixture rows gated at P1:** 91 of 132 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
+- **Fixture rows gated at P1:** 92 of 133 (`docs/test-plans/connected-code-graph-fixtures.md` §6, "By earliest
   gate"), read from that document; P1-41 asserts them.
 - **System scope equals census scope.** The proving system's manifest (P1-03) excludes `cpg/`, `deprecated/`,
   `docs/**/connected-code-graph*`, `docs/BACKLOG.md` and the content-check files that
@@ -156,7 +156,8 @@ P1", "Owed to P1 by the P0 results", "Measurements deferred"), `-bundle-spec3.md
 | O-12 whether consumers are anchors in contact set C | P1-32 checks the contact set against the ruling the ground-truth custodian made; if none, escalate in P1-37's brief |
 | O-13 conformance differences from the slice recognizers; the 24 leaves exercised only at P1 | P1-16, P1-17, P1-46 (done when the leaf-harness set in `cpg/tests/test_rule_pack_leaf_mutation.py` is empty and `test_each_leaf_behaves_as_classified` passes) |
 | O-15 pattern keys and keyless `CONSUMES` for topics | Reported not closed: topic packs are P2/P3; P1 builds no topic pack |
-| `MOUNTED_BY` (assembler emits mount ids), `SkippedFile`, `PROVIDES` props, multi-candidate links, multi-batch at P1 scale, `ownedRegions` fixture, `arg(i)`/`Ret` rows | P1-18, P1-19 (graph side), P1-22 (rows), P1-41 (`ownedRegions` and multi-candidate fixtures) |
+| `MOUNTED_BY` (assembler emits mount ids), `SkippedFile`, `PROVIDES` props, multi-candidate links, multi-batch at P1 scale, `arg(i)`/`Ret` rows | P1-18, P1-19 (graph side), P1-22 (rows), P1-41 (multi-candidate fixtures) |
+| `ownedRegions` | P1-05's synthetic test only: no fixture row names it and Python has no owned region (TP-014) |
 | Contract walk from a provider-less CP lists its consumers (`CONSUMES <-`/`ON`) | P1-22, asserted in P1-41 |
 | `TIMEOUT_MAX` 10,000 ms and lock ttl 2,000 ms: P1 re-derives | P1-19 |
 | `ConfigEntry.entryId` index before the load; the four per-system ACL users `ccg_<role>_<s>` | P1-19; their lines are `-p1-graph.md` §7 (the graph note `-graph.md` is `Extended by:` `-p0-graph.md` and executed against, so it is not edited); the name module `ccg.sysname` is P1-03's |
@@ -268,6 +269,18 @@ every walk only the flow-dependent hops are `possible` (`-answer-spec2.md` §5).
   (the guarded-code item is asserted in the true form by P1-34's re-run, if ever entered). AC-25 with FR-8 decides
   the reading (`-p1-ml.md` §3.5): if the walk P1-39 ships lists the guarded point `possible` (V-flow or V-union), the
   control half closes on P1-42's fixture; otherwise it is reported not closed.
+  **The fixture rows' P1 form (flags false; the manifests hold the flag-true form).** P1-41 asserts these, a flag-true
+  re-run the manifest form: DF-1 `confirmed`/`resolved-call` (a direct caller of the anchor symbol, entered by `HAS_CALL ←` into `function`);
+  DF-2 and DF-3 `possible`/`flow-unavailable:python` (spec2 §5's `B-flow` items B and C: the labelled `CALLS ←` and
+  `TO ←` rows leave the `function`-state `apply_discount` and `create_order`); DF-4 unchanged (`CALLS_NAME`, own
+  `name-match`); CD-1, CD-2, CD-3 not asserted, the control half reported not closed,
+  or `possible`/`flow-unavailable:python` if P1-39's walk lists them; and the caller of the function holding the
+  changed condition, `core/flow.py::finalize` at distance 1, `possible`/`flow-unavailable:python` (carried by CD-2's
+  P1 form, no new row). RV-1: `connect` (d2) and RV-2: `load_rate` (d2) `possible`/`flow-unavailable:python`, every
+  other dependency as the manifest; RV-3: `base_price` (d3) `possible`/`flow-unavailable:python`, the other two
+  `confirmed`. The forward A25-3 pairs (DF-2/DF-4) are `possible` beside `possible` at P1, so the RV pairs carry the
+  confirmed-before-possible check. CD-4 follows CD-1..3 if the walk does not reach it. The RV and CD-2 forms are derived from `-answer-spec2.md` §5's closed row table; a divergence at the
+  first P1-41 run returns to `architect`, not to the manifest.
 - **Data and control as separate flags** are not introduced: java's control pairs read 164/169 = 0.970 against
   0.507 for data, but the flag is per language by rule and python's control reads 0.661.
 
@@ -354,7 +367,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-40 | AC-8 part 1 run: full refresh plus queries of a mixed fixture system | `devops` | gat | 31, 20, 25, 26 | `analyst` |
 | P1-32 | Eval tooling verbs, then the AC-5 gate harness (two dispatches) | `qa-engineer` | gat | 25, 20 (harness half) | `analyst`; `data-scientist` |
 | P1-33 | P1 test plan `docs/test-plans/connected-code-graph-p1.md` | `qa-engineer` | gat | 00 | `analyst` |
-| P1-41 | Fixture gate, part 1: the 91 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14 | `analyst` |
+| P1-41 | Fixture gate, part 1: the 92 P1 rows and scenarios | `qa-engineer` | gat | 33, 20, 25, 06, 02, 08, 10, 12, 14 | `analyst` |
 | P1-42 | Fixture gate, part 2: AC-level assertions (AC-6, 9, 16, 17, 18, 21, 25) | `qa-engineer` | gat | 41, 26 | `analyst` |
 | P1-34 | Flow re-measurement (§5): re-point `s28_run.py`, entry check, fresh draw only if entered, decision record | `data-scientist` + `qa-engineer` | gat | 09, `-ml` | `analyst` |
 | P1-35 | AC-24 smoke harness and run | `qa-engineer` | gat | 26, 29, `-ml` | `data-scientist` |
@@ -394,7 +407,7 @@ The method is the proposal's §5 and the ML notes'; this section records only wh
 - **Altitudes** (proposal §5.1). Unit: each extractor ships fixture sources plus the expected bundle (golden per
   frontend, where a Joern upgrade is caught); each pack is table-driven; the projection has golden `DATA` and
   `CONTROLLED_BY` sets for small methods. Contract: bundle, graph and canonical-answer schemas validate in CI; the
-  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 91 P1 rows (P1-41) and
+  engine's output passes `ccg.answer` validation (V1–V16). Integration: the fixture system's 92 P1 rows (P1-41) and
   the proving repo's own anchors on `cpg/eval/dev/`.
 - **Equivalence before improvement.** A ported module (P1-04, P1-05, P1-16–P1-18, P1-21, P1-22) first reproduces
   the slice's output on the slice corpus, then changes behaviour in a separate, later dispatch. The stored slice

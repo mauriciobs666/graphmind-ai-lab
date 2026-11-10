@@ -123,27 +123,33 @@ needs from `match_keys.py` is **imported**, never reimplemented.
 
 ## P1-33 · P1 test plan — `qa-engineer`
 
-`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 91 of 132; no `fx-lib`
+`docs/test-plans/connected-code-graph-p1.md`: risk-based, from the fixtures plan's rows (P1 92 of 133; no `fx-lib`
 row; TP-014) and the ACs of the P1 row, listing for each row the build it needs and the step that supplies it.
 **Gate:** `analyst`. **Needs:** 00.
 
 ## P1-41 · fixture gate, part 1: the P1 rows — `qa-engineer`
 
-Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **91 rows
+Execute, on the materialized fixture system (`cpg/fixtures/materialize.py`) built through P1-20: the **92 rows
 whose earliest gate is P1** (`docs/test-plans/connected-code-graph-fixtures.md` §6) — every link kind and status P1
-builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (`LNK-15`, `OV-2`,
-`-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
-AC-1 lifting chain (field path, two levels), `ownedRegions` and multi-candidate links (first real cases),
+builds, including LNK-19/LNK-20 (P1-46's pack), the cross-repo Compose context → unit case (`LNK-15`; the
+`JobPanel` binding is asserted through it, `OV-2` is P3; `-p0-compose-binding.md`), the 8000/8200 URL binding with the example config `possible`, mount composition, the
+AC-1 lifting chain (field path, two levels) and multi-candidate links (first real cases),
 stale-kept and not-mapped (AB-*); **B1's four assertions**, those the fixtures plan gates at P1 (writer W's change
 lists reader R; W does not list another writer W2; the RCA assertion cannot run before P5). **Prerequisites checked
 first:** P1-02 and P1-06 (F-1, F-9) done; the build ran with `header.history` available. Live on its own throwaway
-instance. Rows asserted but red are defects, reported by id. **Output:** the report section. **Gate:** `analyst`.
+instance. Rows asserted but red are defects, reported by id. **Closed world:** a link is *unplanted* only if it
+matches no row of any manifest, whatever the row's gate; a link of a row gated P2 or later is reported "planted, not
+asserted at P1", never red. **Statuses** are asserted in the P1 form of index §5 (the flow-dependent rows). **Entry
+criterion:** the source amendments have landed, in this order: this ruling (`architect`); then the manifests, the
+fixtures plan (the P1-form status, the third P1 example-config row `AC6-EX-4`, a per-gate AC-6 census in
+`test_fixtures.py`, the 92/133 counts, the `OV-2` sentence) and the test plan (`qa-engineer`); then the `analyst`
+re-gate of the test plan. **Output:** the report section. **Gate:** `analyst`.
 
 ## P1-42 · fixture gate, part 2: AC-level assertions — `qa-engineer`
 
-**Proving-repo asks on dev anchors** (`cpg/eval/dev/ac5-*.jsonl`, never held-out): AC-1 (changing a `falkor-chat` server endpoint lists its storefront callers with chains), AC-2 (changing a `falkor-chat` MCP tool lists its callers, prompts and wiring, the wiring entries as `config` items per `-answer-spec2.md` §3.3), AC-4 (changing a `cypher-mcp` tool lists the agent and skill scripts and the launch chain, the chain as the `Link`'s `bound[]`, spec2 §3.2), each with its chain; the held-out strata of P1-37 are the AC-5 evidence. AC-6's P1 kinds (runtime-built URL, dynamic import, example config, prompt mention; ≥ 3 planted instances per kind
+**Proving-repo asks on dev anchors** (`cpg/eval/dev/ac5-*.jsonl`, never held-out): AC-1 (changing a `falkor-chat` server endpoint lists its storefront callers with chains), AC-2 (changing a `falkor-chat` MCP tool lists its callers, prompts and wiring, the wiring entries as `config` items per `-answer-spec2.md` §3.3), AC-4 (changing a `cypher-mcp` tool lists the agent and skill scripts and the launch chain, the chain as the `Link`'s `bound[]`, spec2 §3.2), each with its chain; a dev gold item that is wrong is reported and, once confirmed, excluded as `key-error` (the P1-37 class), so a mislabelled dev item never blocks the gate; the held-out strata of P1-37 are the AC-5 evidence. AC-6's P1 kinds (runtime-built URL, dynamic import, example config, prompt mention; ≥ 3 planted instances per kind
 in different syntactic shapes, none `confirmed`, the planted consumer's own item carrying the kind's edge-level reason, not `flow-unavailable` (`-answer-spec2.md` §5), TP-009); AC-25's planted fixtures **in the form index §5 states** (the data-flow effect as a caller chain, `possible`; for the control-dependency effect, the callers of the function holding the changed condition and, if P1-39's shipped walk lists it, the guarded point `possible`, otherwise the guarded-code item reported not closed); the reverse question; AC-9 stamp; AC-16 pin-and-replay across MCP, CLI,
-structured echo and raw recipe; AC-17 for code location and contract point; AC-18 for impact answers (every item
+structured echo and raw recipe; AC-17 for code location and contract point; AC-11 (grouped text and Markdown report, P1-38); AC-18 for impact answers (every item
 with its chain, file and line); AC-21 (a write through `raw_query`, and a direct `GRAPH.QUERY`/`GRAPH.PROFILE` with
 the `ccg_raw_<s>` credential: refused, stamp unchanged). **Gate:** `analyst`. **Needs:** 41, 26.
 

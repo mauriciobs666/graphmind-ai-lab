@@ -1140,6 +1140,33 @@ rows:
   - repoId: fx-svc
     path: api/reports.py
     qname: api/reports.py::report_view
+- id: AC6-EX-4
+  kind: http
+  item: FX_PEER_BASE set only in deploy/compose.example.yaml (service svc); consumer of GET /api/health in a Python function of fx-svc
+  provider:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
+  consumer:
+  - repoId: fx-svc
+    path: clients/peer.py
+    qname: clients/peer.py::peer_health
+  aux:
+  - repoId: fx-svc
+    path: deploy/compose.example.yaml
+    keyPath: services.svc.environment.FX_PEER_BASE
+  keyNorm: GET /api/health
+  status: possible
+  reason: example-config
+  gate: P1
+  serves:
+  - AC-6
+  stratum: fixture-dev
+  whyUnprovable: 'the only binding of os.environ["FX_PEER_BASE"] is an example config. True: svc:api/health.py::health'
+  trueTarget:
+  - repoId: fx-svc
+    path: api/health.py
+    qname: api/health.py::health
 - id: AC6-EX-3
   kind: env_var
   item: FX_DB_URL set only in svc:.env.example, read in db/orders.py::connect
@@ -1424,6 +1451,14 @@ rows:
   status: confirmed
   reason: intra-flow
   gate: P1
+  p1Form:
+    status: confirmed
+    reason: resolved-call
+    locator:
+      repoId: fx-svc
+      path: core/flow.py
+      qname: core/flow.py::apply_discount
+    distance: 1
   serves:
   - A25-1..3
   - A25-4 via RV-1
@@ -1445,6 +1480,14 @@ rows:
   status: confirmed
   reason: intra-flow
   gate: P1
+  p1Form:
+    status: possible
+    reason: flow-unavailable:python
+    locator:
+      repoId: fx-svc
+      path: api/orders.py
+      qname: api/orders.py::create_order
+    distance: 2
   serves:
   - A25-1..3
   distance: 2
@@ -1486,6 +1529,8 @@ rows:
   status: confirmed
   reason: intra-flow
   gate: P1
+  p1Form:
+    asserted: false
   serves:
   - A25-1..3
   - A25-4 via RV-2
@@ -1507,6 +1552,17 @@ rows:
   status: confirmed
   reason: intra-flow
   gate: P1
+  p1Form:
+    asserted: false
+    caller:
+      locator:
+        repoId: fx-svc
+        path: core/flow.py
+        qname: core/flow.py::finalize
+      distance: 1
+      group: fx-svc / core / 1
+      status: possible
+      reason: flow-unavailable:python
   serves:
   - A25-1..3
   distance: 1
@@ -1527,6 +1583,8 @@ rows:
   status: confirmed
   reason: intra-flow
   gate: P1
+  p1Form:
+    asserted: false
   serves:
   - A25-1..3
   distance: 2
@@ -1566,6 +1624,16 @@ rows:
   kind: impact-reverse
   item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
   gate: P1
+  p1Form:
+    dependencies:
+    - locator:
+        repoId: fx-svc
+        path: db/orders.py
+        qname: db/orders.py::connect
+      distance: 2
+      group: fx-svc / db / 2
+      status: possible
+      reason: flow-unavailable:python
   serves:
   - A25-4
   - A25-1..3 on each of the 4
@@ -1608,6 +1676,16 @@ rows:
   kind: impact-reverse
   item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
   gate: P1
+  p1Form:
+    dependencies:
+    - locator:
+        repoId: fx-svc
+        path: db/orders.py
+        qname: db/orders.py::load_rate
+      distance: 2
+      group: fx-svc / db / 2
+      status: possible
+      reason: flow-unavailable:python
   serves:
   - A25-4
   - A25-1..3 on each of the 4
@@ -1650,6 +1728,16 @@ rows:
   kind: impact-reverse
   item: reverse question for the subject; the list is known and complete, no other dependency may be confirmed
   gate: P1
+  p1Form:
+    dependencies:
+    - locator:
+        repoId: fx-svc
+        path: core/flow.py
+        qname: core/flow.py::base_price
+      distance: 3
+      group: fx-svc / core / 3
+      status: possible
+      reason: flow-unavailable:python
   serves:
   - A25-4
   - A25-1..3 on each of the 3

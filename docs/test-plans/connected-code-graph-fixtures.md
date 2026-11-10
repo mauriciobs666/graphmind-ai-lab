@@ -1,8 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
 
-*2026-11-04 (v1.3): fixtures-gate fixes F-1 (LNK-44 `order_report`, census 132 rows), F-2 (B1S-R query), F-3 (LNK-14 origin), F-7 (reverse model), F-9/F-11 (AC6-TOP-3 target, same-unit calls, origin-only bases).*
+*2026-11-10 (v1.4): the AC-6 example-config floor is met at P1 by a third row (AC6-EX-4, `http`, a Python `os.environ[...]` consumer; census 133 rows, P1 92); the P1 form of the flow-dependent rows (DF-1 to DF-3, CD, RV) is added with locator and distance (§5.5); the `OV-2` sentence of §5.1 corrected.*
 
 ## 1. Scope and objective
 S35 fixes, as numbered tables, every item planted in the four-repository fixture system
@@ -179,7 +179,7 @@ answer must contain.
 | LNK-43 | http | `GET /tools/run` fetched by `run_tool`; `svc-tools` is never built | P `svc:tools/app.py::run` · C `svc:api/orders.py::run_tool` | p | target-not-mapped | P1 | | LNK |
 | LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
 
-A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15, OV-2) is a P1 check owed to the S30 owner.
+A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15) is a P1 check owed to the S30 owner; `OV-2` plants the same binding as a P3 overlay assertion and is not a P1 row.
 
 Reasons for the skew rows (LNK-33..35, 41), LNK-32 and LNK-31 are this plan's decisions (OI-3): bundle spec3 §7.2
 has no skew code, and `versionSkew` is a property on the link (graph note `Link.versionSkew`). The skew shape is
@@ -225,6 +225,7 @@ are given so the extractor's side is checkable too.
 | AC6-EX-1 | launch | `.mcp.example.json` server entry for `fx-svc` (`File.role = example`) | the file is an example, not the deployed config. True: unit `svc` | C `svc:.mcp.example.json @mcpServers.fx-svc` | p | example-config | P1 | | AC-6 |
 | AC6-EX-2 | http | `VITE_REPORTS_BASE` set **only** in `deploy/compose.example.yaml`; consumer of `GET /api/reports/{}` | the only binding is an example config. True: `svc:api/reports.py::report_view` | P `svc:api/reports.py::report_view` · C `web:app/src/ui/Reports.tsx::Reports` | p | example-config | P1 | | AC-6 |
 | AC6-EX-3 | env_var | `FX_DB_URL` set **only** in `svc:.env.example`, read in `db/orders.py::connect` | the only writer is an example file. **Gate P3**: `env_var` is a P3 kind | C `svc:db/orders.py::connect` | p | example-config | P3 | | AC-6 |
+| AC6-EX-4 | http | `FX_PEER_BASE` set **only** in `svc` of `deploy/compose.example.yaml` (`build.context: ..`, unit `svc`); `clients/peer.py::peer_health` does `requests.get(os.environ["FX_PEER_BASE"] + "/api/health")` | the only binding of the Python consumer is an example config. True: `svc:api/health.py::health` | P `svc:api/health.py::health` · C `svc:clients/peer.py::peer_health` | p | example-config | P1 | | AC-6 |
 | AC6-PM-1 | mcp_tool | Markdown **prose**: "call the `get_item` tool" in `prompts/agent.md` | a prompt names a tool; it does not call it. True: `get_item` | C `svc:prompts/agent.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-2 | mcp_tool | Markdown **table cell**: `| reindex | rebuilds the index |` in `prompts/tools.md` | same | C `svc:prompts/tools.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-3 | mcp_tool | Python triple-quoted `SYSTEM_PROMPT` naming `list_orders` | same | C `svc:prompts/system.py::<module>` | p | prompt-mention | P1 | prompt mention | AC-6 |
@@ -304,6 +305,26 @@ The list is known and complete; no other dependency may be listed as `confirmed`
 
 Inside a group of `confirmed` items the order is by name. The two `find_hook` rows are the same function listed in
 two answers (one planted function, two dependency entries).
+
+**P1 form (flow flag false for both languages; index `docs/plans/connected-code-graph-p1.md` §5).** The tables above are the
+flag-true form. Each manifest row below also carries a `p1Form` field; the P1 gate (P1-41) asserts it, and a flag-true
+re-run asserts the form above. A row not listed here has one form. Under a false flag only the flow-dependent hops are
+`possible`/`flow-unavailable:python`; a resolved direct call stays `confirmed` (`-answer-spec2.md` §5).
+
+| Row | P1 form (status / reason) | Note |
+|---|---|---|
+| DF-1 | `svc:core/flow.py::apply_discount` (d1) `confirmed` / `resolved-call` | a direct caller of the changed symbol, no labelled hop |
+| DF-2 | `svc:api/orders.py::create_order` (d2) `possible` / `flow-unavailable:python` | two calls away through a flow-dependent hop (`-answer-spec2.md` §5 `B-flow` item B) |
+| DF-3 | `web:app/src/ui/OrderTotal.tsx::OrderTotal` (d3) `possible` / `flow-unavailable:python` | the `TO ←` row into LNK-36 leaves the `function`-state `create_order` (`B-flow` item C) |
+| CD-1, CD-3 | not asserted | the control half is "reported not closed" unless P1-39's walk lists the guarded point |
+| CD-2 | not asserted; carries the caller `svc:core/flow.py::finalize` (d1) `possible` / `flow-unavailable:python` (group fx-svc / core / 1) | the caller of the function holding the changed condition |
+| RV-1 | `svc:db/orders.py::connect` (d2) `possible` / `flow-unavailable:python`; others as above | |
+| RV-2 | `svc:db/orders.py::load_rate` (d2) `possible` / `flow-unavailable:python`; others as above | |
+| RV-3 | `svc:core/flow.py::base_price` (d3) `possible` / `flow-unavailable:python`; others as above | |
+| DF-4, CD-4 | unchanged | `possible`/`name-match` (a `CALLS_NAME ←` row keeps its own reason and may not carry `flow-unavailable`) |
+
+Consequence for A25-3: in a P1 run no forward group holds both statuses (api/2 `[DF-2, DF-4]` both `possible`; core/1 `[DF-1]`; ui/3 `[DF-3]` now `possible`; bus/2 `[CD-3, CD-4]`; core/1 `[CD-1, CD-2]`), so every forward pair is vacuous; the reverse list carries the check: RV-1's group fx-svc / core / 1 holds `is_member` `confirmed` and `find_hook` `possible`/`name-match` (RV-2: `tier_of` and `find_hook`). The CD-4/CD-3 pair is
+not asserted.
 
 ### 5.6 Mis-resolved call (`MR-*`, P3-1)
 
@@ -440,11 +461,11 @@ TP-004 recomputes every figure from the manifests.
 |---|---|---|---|---|
 | AC-6, runtime-built URL (P1) | 3 inst., 3 shapes | 3 | floor | AC6-URL-1..3 |
 | AC-6, dynamic import (P1) | 3 / 3 | 3 | floor | AC6-DYN-1..3 |
-| AC-6, example config (P1) | 3 / 3 | 3 | floor | AC6-EX-1..3 |
+| AC-6, example config (P1) | 3 / 3 | 3 | floor, read per gate: AC6-EX-3 is `env_var`, gate P3, so the third P1 instance is an `http` row. AC6-EX-2 (Vite variable) and AC6-EX-4 (Python `os.environ[...]`) are two instances of **one linker rule**, `-p1-linking.md` P1-17 rules (5) and (7) over the same example file: a defect there turns both red, and `TP-004`, which counts distinct `item` strings per group, cannot tell the mechanism apart (accepted) | AC6-EX-1, 2, 4 (EX-3 at P3) |
 | AC-6, prompt mention (P1) | 3 / 3 | 3 | floor | AC6-PM-1..3 (prose, table cell, Python string) |
 | AC-6, topic from config (P2) | 3 / 3 | 3 | floor | AC6-TOP-1..3 |
 | AC-6, query/label built at runtime (P3; decision 2) | >= 3 shapes | 3 | floor | AC6-QL-1..3 |
-| AC-25 data-flow effects | >= 3, one at d1, one at d2 | 4 | 3 for the floor, at distances 1, 2, 3 (§4.7); +1 `possible` companion (DF-4) so that A25-3 has a group holding both statuses | DF-1..4 |
+| AC-25 data-flow effects | >= 3, one at d1, one at d2 | 4 | 3 for the floor, at distances 1, 2, 3 (§4.7); +1 `possible` companion (DF-4), which gives A25-3 a group holding both statuses only in the flag-true form; at P1 the RV groups carry that check (§5.5) | DF-1..4 |
 | AC-25 control-dependency effects | >= 3, one guarding a call in another function | 4 | 3 for the floor (CD-2, CD-3 guard calls in other functions); +1 companion (CD-4), same reason | CD-1..4 |
 | AC-25 reverse | >= 3 planted functions with a known list | 3 | floor | RV-1..3 |
 | Difficulty shapes (10) | >= 3 each | see below | floor | LNK, AC6 |
@@ -477,14 +498,14 @@ the 12 negatives, twins and controls (NC-1..7, TW-1..3, OV-3, FT-2).
 |---|---|---|---|
 | Link rows (`LNK`) | 44 | Mis-resolved call (`MR`) | 2 |
 | Key normalization (`KN`) | 5 | Partial failure (`AB`) | 4 |
-| AC-6 unprovable (`AC6`) | 18 | Overlay (`OV`) | 5 |
+| AC-6 unprovable (`AC6`) | 19 | Overlay (`OV`) | 5 |
 | Look-alike twins (`TW`) | 3 | Signature change (`SQC`) | 2 |
 | B1 four assertions (`B1F`, `B1S`) | 8 | Taint edits (`TF`) | 3 |
 | AC-25 forward (`DF`, `CD`) | 8 | Omitted files (`SK`) | 18 |
 | AC-25 reverse (`RV`) | 3 | Field depth (`FT`) | 2 |
-| Negative controls (`NC`) | 7 | **Rows** | **132** |
+| Negative controls (`NC`) | 7 | **Rows** | **133** |
 
-Positive items: **120** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 91 · P2 16 · P3 21 · P4 1 · P5 3 (= 132). `fx-lib` rows are all P2
+Positive items: **121** (LNK-41, KN-3 and KN-4 are controls by purpose but are asserted links, so they count). By earliest gate: P1 92 · P2 16 · P3 21 · P4 1 · P5 3 (= 133). `fx-lib` rows are all P2
 (LNK-23, 24, 25, 31, AC6-TOP-3, SQC-JAVA); no P3 row needs Java.
 
 The AC-25 set is **60 distinct assertions** (§3). DF-3 (via LNK-36) and OV-2 plant a UI consumer
@@ -498,7 +519,7 @@ Every kind x status cell has at least one row; every `possible` row carries its 
 
 | Kind | confirmed | possible |
 |---|---|---|
-| http | LNK-01, 04, 07, 08, 10, 11, 13, 14, 15, 18, 36, 37, 38; KN-1..4; TW-2 | LNK-16 (port-shared), 17 (partial-key), 42, 43 (target-not-mapped); KN-5; AC6-URL-1..3; AC6-EX-2 |
+| http | LNK-01, 04, 07, 08, 10, 11, 13, 14, 15, 18, 36, 37, 38; KN-1..4; TW-2 | LNK-16 (port-shared), 17 (partial-key), 42, 43 (target-not-mapped); KN-5; AC6-URL-1..3; AC6-EX-2, 4 |
 | mcp_tool | LNK-02, 06, 12 | AC6-PM-1..3 (prompt-mention) |
 | script -> tool | LNK-19 | LNK-20 (shell-dynamic) |
 | launch chain | LNK-21, 22 | AC6-EX-1 (example-config) |
