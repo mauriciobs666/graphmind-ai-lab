@@ -1053,6 +1053,16 @@ SET_B_SECTIONS = 42  # a constant of the spec (ML §1), never derived from the s
 SET_B_PER_SECTION = 2
 SET_B_NEAR = 15
 SET_B_OFF = 15
+# Set B2 (docs/plans/python-web-quirks-kb-b2-ml.md section 4): spec constants, never derived from the set under test
+SET_B2_PER_SECTION = 3
+SET_B2_NEAR = 30
+SET_B2_OFF = 30
+B2_MIN_RECALL = 116  # of 126 floor-applied positives
+B2_MAX_NEAR_FA = 6  # of 30
+B2_MAX_OFF_FA = 0  # of 30
+B2_MAX_OVERALL_FA = 6  # of 60
+SET_B_RECORDED = (73, 84)  # Set B's failed score (hits, positives): pooled with B2 as informational text only
+SET_PROFILES = {"B": (SET_B_PER_SECTION, SET_B_NEAR, SET_B_OFF), "B2": (SET_B2_PER_SECTION, SET_B2_NEAR, SET_B2_OFF)}
 TAIL_MIN_CHUNKS = 4  # ML section 5 rule 4: a unit with this many chunks or more needs a tail probe
 
 
@@ -1064,39 +1074,42 @@ def tail_unit_sections(source: Source, split, migrated_on: str = MIGRATED_ON) ->
             if len(split(render_unit(u, migrated_on))) >= TAIL_MIN_CHUNKS]
 
 
-def validate_set_b(data: dict, tail_units: list[tuple[str, list[int]]] | None = None) -> None:
-    """ML §1's sealed-set shape: 42 sections x 2 positives = 84, and 15 near + 15 off negatives.
+def validate_set_b(data: dict, tail_units: list[tuple[str, list[int]]] | None = None, profile: str = "B") -> None:
+    """ML §1's sealed-set shape: 42 sections x 2 positives = 84, and 15 near + 15 off negatives (profile "B");
+    profile "B2": 3 x 42 = 126 positives, 30 near + 30 off.
 
     Run before anything burns the one-shot seal: the coverage clause of AC-3 divides by
     SET_B_SECTIONS, not by however many sections the loaded set happens to mention.
     `tail_units` (from `tail_unit_sections`, when the caller can derive it at the pin) adds ML section 5
     rule 4: each such unit needs a `tail`-flagged positive on one of its sections."""
     pos, neg = data["positives"], data["negatives"]
-    want_pos = SET_B_SECTIONS * SET_B_PER_SECTION
+    per_section, want_near, want_off = SET_PROFILES[profile]
+    label = f"Set {profile} shape"
+    want_pos = SET_B_SECTIONS * per_section
     if len(pos) != want_pos:
-        raise KBError(f"Set B shape: {len(pos)} positives, need {want_pos} ({SET_B_PER_SECTION} per section)")
+        raise KBError(f"{label}: {len(pos)} positives, need {want_pos} ({per_section} per section)")
     per: dict[int, int] = {}
     for p in pos:
         per[p["section"]] = per.get(p["section"], 0) + 1
-    if set(per) != set(range(1, SET_B_SECTIONS + 1)) or any(n != SET_B_PER_SECTION for n in per.values()):
-        bad = sorted(f"{s}:{n}" for s, n in per.items() if s not in range(1, SET_B_SECTIONS + 1) or n != SET_B_PER_SECTION)
+    if set(per) != set(range(1, SET_B_SECTIONS + 1)) or any(n != per_section for n in per.values()):
+        bad = sorted(f"{s}:{n}" for s, n in per.items() if s not in range(1, SET_B_SECTIONS + 1) or n != per_section)
         missing = sorted(set(range(1, SET_B_SECTIONS + 1)) - set(per))
-        raise KBError(f"Set B shape: every section 1-{SET_B_SECTIONS} needs exactly {SET_B_PER_SECTION} positives "
+        raise KBError(f"{label}: every section 1-{SET_B_SECTIONS} needs exactly {per_section} positives "
                       f"(section:count off {bad}, missing {missing})")
     kinds = {"near": 0, "off": 0}
     for n in neg:
         kinds[n["kind"]] += 1
-    if len(neg) != SET_B_NEAR + SET_B_OFF:
-        raise KBError(f"Set B shape: {len(neg)} negatives, need {SET_B_NEAR + SET_B_OFF}")
-    if (kinds["near"], kinds["off"]) != (SET_B_NEAR, SET_B_OFF):
-        raise KBError(f"Set B shape: negative split near/off is {kinds['near']}/{kinds['off']}, need {SET_B_NEAR}/{SET_B_OFF}")
+    if len(neg) != want_near + want_off:
+        raise KBError(f"{label}: {len(neg)} negatives, need {want_near + want_off}")
+    if (kinds["near"], kinds["off"]) != (want_near, want_off):
+        raise KBError(f"{label}: negative split near/off is {kinds['near']}/{kinds['off']}, need {want_near}/{want_off}")
     ids = [i["id"] for i in pos + neg]
     if len(set(ids)) != len(ids):
-        raise KBError("Set B shape: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
+        raise KBError(f"{label}: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
     flagged = {p["section"] for p in pos if p.get("tail")}
     bare = [f"{uid} (sections {','.join(map(str, secs))})" for uid, secs in tail_units or [] if not flagged & set(secs)]
     if bare:
-        raise KBError(f"Set B shape: no tail-flagged positive for unit {'; '.join(bare)} "
+        raise KBError(f"{label}: no tail-flagged positive for unit {'; '.join(bare)} "
                       f"(each unit of >= {TAIL_MIN_CHUNKS} chunks needs one)")
 
 
@@ -1129,17 +1142,19 @@ def validate_set_a(data: dict) -> None:
         raise KBError("Set A shape: duplicate ids " + ", ".join(sorted({i for i in ids if ids.count(i) > 1})))
 
 
-def resolve_set_b_path(arg, env=os.environ) -> Path:
-    """Set B's path comes only from --set-b-path or PWQ_SET_B, and must be outside the repo (D11)."""
-    chosen = arg or env.get("PWQ_SET_B")
+def resolve_set_b_path(arg, env=os.environ, kind: str = "B") -> Path:
+    """Set B's path comes only from --set-b-path or PWQ_SET_B, and must be outside the repo (D11). Set B2 has its own
+    pair, --set-b2-path and PWQ_SET_B2: B's variable never stands in for it."""
+    flag, var = ("--set-b-path", "PWQ_SET_B") if kind == "B" else ("--set-b2-path", "PWQ_SET_B2")
+    chosen = arg or env.get(var)
     if not chosen:
-        raise KBError("Set B path: pass --set-b-path or set PWQ_SET_B (never read from the source)")
+        raise KBError(f"Set {kind} path: pass {flag} or set {var} (never read from the source)")
     path = Path(chosen)
     try:
         path.resolve().relative_to(REPO_ROOT.resolve())
     except ValueError:
         return path
-    raise KBError(f"Set B must live outside the repo, got {path}")
+    raise KBError(f"Set {kind} must live outside the repo, got {path}")
 
 
 def check_expected_sha256(expected, path: Path) -> None:
@@ -1269,6 +1284,21 @@ def ac3_verdict(m: dict) -> dict:
     return {**parts, "pass": all(parts.values())}
 
 
+def b2_verdict(m: dict) -> dict:
+    """The Set B2 decision rule (docs/plans/python-web-quirks-kb-b2-ml.md section 4), integer arithmetic against the spec's
+    constants: floor-applied recall >= 116/126, every one of the 42 sections hit, near false accepts <= 6/30, off 0/30,
+    overall <= 6/60. Binary: no indeterminate band."""
+    fa = m["false_accepts"]
+    parts = {
+        "recall": m["floor_hits"] >= B2_MIN_RECALL,
+        "coverage": m["covered_sections"] == SET_B_SECTIONS,
+        "near_domain": fa["near"] <= B2_MAX_NEAR_FA,
+        "off_domain": fa["off"] <= B2_MAX_OFF_FA,
+        "overall": fa["near"] + fa["off"] <= B2_MAX_OVERALL_FA,
+    }
+    return {**parts, "pass": all(parts.values())}
+
+
 def sweep(pos: list[dict], neg: list[dict], *, unit_doc: dict, feature_docs: set, keep: float) -> list[dict]:
     """One row per floor 0.38-0.50, with ML §6 step 2's adequacy criteria evaluated at that floor."""
     best = []  # best score of each positive's expected document (None when it is not among the chunks)
@@ -1355,12 +1385,16 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     skill = Path(args.skill).read_text(encoding="utf-8")
     template = extract_prefix(skill)
     excluded = frozenset(args.exclude or [])
-    which = "B" if args.set == "B" else "A"
-    if args.set == "B" and not (args.probe or args.sealed_once or args.baseline):
-        raise KBError("--set B needs --probe or --sealed-once")
-    if args.probe and args.set != "B":
+    which = args.set if args.set in ("B", "B2") else "A"
+    sealed_set = which != "A"
+
+    def set_path() -> Path:
+        return resolve_set_b_path(args.set_b2_path if which == "B2" else args.set_b_path, env, kind=which)
+    if sealed_set and not (args.probe or args.sealed_once or args.baseline):
+        raise KBError(f"--set {which} needs --probe or --sealed-once")
+    if args.probe and not sealed_set:
         raise KBError("--probe is a Set B mode")
-    if args.sealed_once and args.set != "B":
+    if args.sealed_once and not sealed_set:
         raise KBError("--sealed-once is a Set B mode")
     if args.before and args.set != "A":
         raise KBError("--before is a Set A mode")
@@ -1368,21 +1402,21 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     if sum(chosen) > 1 or (not any(chosen) and args.set is None):
         raise KBError("choose one mode: --set A [--before] | --set B --probe|--sealed-once | --ac2 | --sweep | --baseline bm25")
     if args.sealed_once:  # before the sentinel pre-check, the gate and any search: a B edited after freezing must not score
-        check_expected_sha256(args.expect_sha256, resolve_set_b_path(args.set_b_path, env))
+        check_expected_sha256(args.expect_sha256, set_path())
     elif args.expect_sha256 is not None:
         raise KBError("--expect-sha256 belongs to --sealed-once only")
     if not args.probe and not args.baseline and args.floor is None:
         raise KBError("--floor is required (it is recorded in every report)")
 
     def load_which() -> dict:
-        return load_set(resolve_set_b_path(args.set_b_path, env) if which == "B" else Path(args.set_a_path))
+        return load_set(set_path() if sealed_set else Path(args.set_a_path))
 
-    if which == "B":  # shape first: nothing below may spend the seal on a malformed set
+    if sealed_set:  # shape first: nothing below may spend the seal on a malformed set
         tails = None
         if args.sealed_once:  # the manifest's pin gives the units; probe and baseline run before/without that tie
             pinned = load_manifest(mpath)
             tails = tail_unit_sections(parse_source(read_pinned(pinned["pin"])), _load_chunker(), pinned["migratedOn"])
-        validate_set_b(load_which(), tails)
+        validate_set_b(load_which(), tails, which)
     elif not args.before:  # every Set A scoring mode; --before only lists coverage and tallies nothing
         validate_set_a(load_which())
 
@@ -1391,9 +1425,9 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
 
     # ---- gate-exempt modes
     if args.probe:
-        bp = resolve_set_b_path(args.set_b_path, env)
+        bp = set_path()
         data = load_set(bp)
-        out(f"set=B mode=probe window={EVAL_WINDOW}")
+        out(f"set={which} mode=probe window={EVAL_WINDOW}")
         for it in data["positives"] + data["negatives"]:
             five = scored_chunks(searcher.search(ws, build_query(template, it["query"]), EVAL_WINDOW), excluded)
             named = name_hit(searcher, ws, five)
@@ -1422,7 +1456,7 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     # ---- scoring modes: sentinel check, then the gate, then the queries
     sentinel = None
     if args.sealed_once:
-        sentinel = Path(str(resolve_set_b_path(args.set_b_path, env)) + ".scored")
+        sentinel = Path(str(set_path()) + ".scored")
         if sentinel.exists():
             raise SealedRefused(f"Set B already scored ({sentinel}); a second scoring is refused (write B2 instead)")
     manifest = load_manifest(mpath)
@@ -1478,7 +1512,7 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
         except FileExistsError as e:
             raise SealedRefused(f"Set B already scored ({sentinel})") from e
         with os.fdopen(fd, "w") as fh:
-            json.dump({"floor": args.floor, "setSha256": hashlib.sha256(resolve_set_b_path(args.set_b_path, env).read_bytes()).hexdigest(),
+            json.dump({"floor": args.floor, "setSha256": hashlib.sha256(set_path().read_bytes()).hexdigest(),
                        "scoredAt": time.strftime("%Y-%m-%dT%H:%M:%S")}, fh)
     out(header)
     if excluded:
@@ -1490,7 +1524,13 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
         out("unfiltered: " + fmt_metrics(evaluate(ur, un, floor=args.floor, unit_doc=unit_doc, feature_docs=feature_docs)))
     else:
         out("metrics: " + fmt_metrics(m))
-    out("ac3: " + " ".join(f"{k}={v}" for k, v in ac3_verdict(m).items()))
+    if which == "B2":  # B2's own rule replaces B's ac3 gate; the pooled figure is informational only
+        out("b2: " + " ".join(f"{k}={v}" for k, v in b2_verdict(m).items()))
+        hits, n = SET_B_RECORDED
+        out(f"pooled with Set B (informational, not part of the verdict): ({hits}+{m['floor_hits']})/{n + m['n_pos']} = "
+            f"{(hits + m['floor_hits']) / (n + m['n_pos']):.4f}")
+    else:
+        out("ac3: " + " ".join(f"{k}={v}" for k, v in ac3_verdict(m).items()))
     diag = displacement(pos, [scored_chunks(f, excluded, k=len(f)) for f in fetched_pos], unit_doc=unit_doc, feature_docs=feature_docs)
     out(f"displacement: positives={diag['n']} unit_in_window={diag['unit_in_window']} "
         f"non_unit_outranks_unit={diag['outranked']} documents={','.join(diag['documents']) or '-'}")
@@ -1663,7 +1703,7 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     kbside(sub.add_parser("diverge", help="compare the KB with the copy (read-only)"), False)
     p = sub.add_parser("eval", help="evaluation harness (D9/D11)")
     kbside(p, True)
-    p.add_argument("--set", choices=["A", "B"])
+    p.add_argument("--set", choices=["A", "B", "B2"])
     p.add_argument("--before", action="store_true", help="Set A before ingestion (gate-exempt)")
     p.add_argument("--probe", action="store_true", help="Set B: rank-1 source and score only (gate-exempt, no sentinel)")
     p.add_argument("--sealed-once", action="store_true", help="Set B: the one scoring; writes the sentinel")
@@ -1675,6 +1715,7 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     p.add_argument("--exclude", action="append", help="documentId whose chunks are dropped from the window")
     p.add_argument("--set-a-path", default=str(DEFAULT_SET_A))
     p.add_argument("--set-b-path", help="Set B file (or PWQ_SET_B); must be outside the repo")
+    p.add_argument("--set-b2-path", help="Set B2 file (or PWQ_SET_B2); must be outside the repo")
     p.add_argument("--skill", default=str(DEFAULT_SKILL), help="retrieval skill holding the fenced prefix literal")
     p.add_argument("--timeout", type=float, default=GATE_TIMEOUT)
     p.add_argument("--poll", type=float, default=GATE_POLL)

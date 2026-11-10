@@ -1096,6 +1096,191 @@ def t34_a_copy_whose_chunk_derivation_cannot_be_computed_fails_loudly_not_skippe
     assert code == 2 and "chunker unavailable" in err.getvalue(), (code, err.getvalue())
 
 
+# ======================================================================== U34: Set B2 profile (3 x 42 positives, 30 near + 30 off)
+def b2_parts(doc_of, miss_sections=(), miss_each=(), near_fa=0, off_fa=0, near_kind_swap=False):
+    """A well-shaped Set B2 over synthetic queries: 126 positives (3 per section), 60 negatives (30 near / 30 off).
+    Every positive hits its unit at 0.2 except those of `miss_sections` (all three) and the first positive of each section in
+    `miss_each`. The first `near_fa` near (and `off_fa` off) negatives return a unit chunk under the floor: a false accept."""
+    pos, neg, script = [], [], {}
+    for n in range(1, 43):
+        for j in range(3):
+            q = f"b2 sit {n} {j}"
+            pos.append(dict(id=f"X{n:02d}{j}", section=n, query=q))
+            miss = n in miss_sections or (j == 0 and n in miss_each)
+            script[q] = [ck("TEAM", 0.3)] if miss else [ck(doc_of(n), 0.2)]
+    for kind, fa in (("near", near_fa), ("off", off_fa)):
+        for j in range(30):
+            q = f"b2 neg {kind} {j}"
+            neg.append(dict(id=f"XN{kind[0]}{j:02d}", kind=kind, query=q))
+            script[q] = [ck(doc_of(5), 0.40)] if j < fa else [ck("TEAM", 0.3)]
+    if near_kind_swap:  # data-plumbing check: the kinds are read from the file, not guessed
+        for n in neg:
+            n["kind"] = "off" if n["kind"] == "near" else "near"
+    for secs in TAIL_UNIT_SECTIONS:
+        next(p for p in pos if p["section"] in secs).update(tail=True)
+    return pos, neg, script
+
+
+def b2_set(tmpdir, doc_of, name="b2.json", **kw):
+    pos, neg, script = b2_parts(doc_of, **kw)
+    return write_set(Path(tmpdir, "sealed", name), pos, neg), script
+
+
+def sealed2(bp, *extra):
+    return ["--set", "B2", "--sealed-once", "--set-b2-path", str(bp), "--floor", "0.43", "--expect-sha256", sha_of(bp), *extra]
+
+
+def b2_line(out):
+    return next(ln for ln in out.split("\n") if ln.startswith("b2: "))
+
+
+def t34b_b2_path_comes_from_its_own_argument_or_env_var_never_set_bs():
+    assert kb.resolve_set_b_path("/tmp/x/b2.json", {}, kind="B2") == Path("/tmp/x/b2.json")
+    assert kb.resolve_set_b_path(None, {"PWQ_SET_B2": "/tmp/y/b2.json"}, kind="B2") == Path("/tmp/y/b2.json")
+    e = raises(kb.KBError, kb.resolve_set_b_path, None, {"PWQ_SET_B": "/tmp/y/b.json"}, kind="B2")  # B's variable is not B2's
+    assert "B2" in str(e) and "PWQ_SET_B2" in str(e)
+    e = raises(kb.KBError, kb.resolve_set_b_path, str(REPO / "claude/cobb/scripts/fixtures/b2.json"), {}, kind="B2")
+    assert "outside the repo" in str(e)
+
+
+def t34b_b2_shape_pins_126_positives_3_per_section_and_30_near_30_off():
+    w, m, doc_of = eval_env()
+    ok_pos, ok_neg, _ = b2_parts(doc_of)
+    kb.validate_set_b({"positives": ok_pos, "negatives": ok_neg}, profile="B2")
+    bad = []
+    bad.append((ok_pos[:-1], ok_neg))  # 125 positives
+    bad.append((ok_pos + [dict(id="XX", section=1, query="q")], ok_neg))  # 127
+    two = [p for p in ok_pos if not (p["section"] == 7 and p["id"].endswith("2"))]
+    bad.append((two + [dict(id="XY", section=8, query="q")], ok_neg))  # 126 in all, section 7 has 2 and 8 has 4
+    bad.append((ok_pos, ok_neg[:-1]))  # 59 negatives
+    swapped = [dict(n) for n in ok_neg]
+    swapped[0]["kind"] = "off"  # 29 near / 31 off
+    bad.append((ok_pos, swapped))
+    for pos, neg in bad:
+        raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": neg}, profile="B2")
+    e = raises(kb.KBError, kb.validate_set_b, {"positives": ok_pos[:-1], "negatives": ok_neg}, profile="B2")
+    assert "Set B2 shape" in str(e) and "126" in str(e)
+    # B's profile is unchanged: its own spec, its own message, and a B2-shaped file is not a Set B
+    e = raises(kb.KBError, kb.validate_set_b, {"positives": ok_pos, "negatives": ok_neg})
+    assert "Set B shape" in str(e) and "need 84" in str(e)
+
+
+def t34b_b2_decision_rule_boundaries_are_exact():
+    base = dict(n_pos=126, floor_hits=116, n_sections=42, covered_sections=42,
+                false_accepts={"near": 6, "off": 0}, n_neg={"near": 30, "off": 30})
+
+    def v(**over):
+        m = {**base, **{k: val for k, val in over.items() if k != "fa"}}
+        if "fa" in over:
+            m["false_accepts"] = {**base["false_accepts"], **over["fa"]}
+        return kb.b2_verdict(m)
+    assert v()["pass"] and all(v().values())
+    r = v(floor_hits=115)
+    assert not r["pass"] and not r["recall"] and r["coverage"] and r["near_domain"]
+    assert v(floor_hits=126)["pass"]
+    r = v(fa={"near": 7})
+    assert not r["pass"] and not r["near_domain"] and r["recall"]
+    assert v(fa={"near": 0})["pass"]
+    r = v(fa={"off": 1, "near": 0})
+    assert not r["pass"] and not r["off_domain"] and r["near_domain"]
+    assert not v(fa={"near": 6, "off": 1})["overall"]  # overall false accepts: 7 of 60
+    assert v(fa={"near": 6, "off": 0})["overall"]
+    r = v(covered_sections=41)
+    assert not r["pass"] and not r["coverage"] and r["recall"]
+    # the thresholds are the spec's constants, not derived from the loaded set
+    assert not v(n_pos=100, floor_hits=100, n_sections=40, covered_sections=40)["pass"]
+    r = v(floor_hits=126, n_sections=40, covered_sections=40)  # all of a 40-section set covered is still not 42
+    assert not r["coverage"] and not r["pass"] and r["recall"]
+
+
+def run_b2(kw_set, tmp=None, extra=()):
+    w, m, doc_of = eval_env()
+    bp, script = b2_set(tmp or tempfile.mkdtemp(), doc_of, **kw_set)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(sealed2(bp, *extra), srch, w, m)
+    return code, out, err, bp, srch
+
+
+def t34b_b2_scoring_applies_the_rule_end_to_end_at_each_boundary():
+    cases = [
+        (dict(), True),
+        (dict(miss_each=range(1, 11)), True),       # 116/126 hits, every section still covered
+        (dict(miss_each=range(1, 12)), False),      # 115/126
+        (dict(near_fa=6), True), (dict(near_fa=7), False),
+        (dict(off_fa=1), False),
+        (dict(miss_sections=(7,)), False),          # 123/126 but section 7 has no hit
+    ]
+    for kw_set, want in cases:
+        code, out, err, bp, _ = run_b2(kw_set)
+        assert code == 0, (kw_set, err)
+        assert b2_line(out).endswith(f"pass={want}"), (kw_set, b2_line(out))
+        assert "ac3:" not in out  # B's gate is not B2's rule
+    code, out, *_ = run_b2(dict(miss_each=range(1, 11)))
+    assert "floor_hits=116" in out and "n_pos=126" in out and "false_accepts near=0/30 off=0/30" in out
+    assert "pooled with Set B (informational, not part of the verdict): (73+116)/210 = 0.9000" in out, out
+    # near and off are read from the file's kinds, not swapped: 6 near false accepts is a pass only as `near`
+    code, out, *_ = run_b2(dict(off_fa=1, near_kind_swap=True))  # the swap turns that off accept into a near one: 1/30 near
+    assert b2_line(out).endswith("pass=True") and "near=1/30 off=0/30" in out, out
+
+
+def t34b_b2_report_is_aggregate_only_and_has_its_own_sentinel_and_one_scoring():
+    code, out, err, bp, srch = run_b2(dict(miss_each=(3,)))
+    assert code == 0, err
+    assert "X030" not in out and "b2 sit" not in out and "XN" not in out and "RANK " not in out and "MISS " not in out
+    assert "set=B2 " in out and "displacement: positives=126" in out
+    sentinel = Path(str(bp) + ".scored")
+    assert sentinel.is_file() and json.loads(sentinel.read_text())["setSha256"] == sha_of(bp)
+    n = len(srch.calls)
+    w, m, doc_of = eval_env()
+    code, out2, err2 = run_eval(sealed2(bp), srch, w, m)
+    assert code == 5 and "already scored" in err2 and len(srch.calls) == n and "recall" not in out2
+    # a B2 sentinel does not block Set B's own file, and needs its own freeze sha
+    code, out3, err3 = run_eval(["--set", "B2", "--sealed-once", "--set-b2-path", str(bp), "--floor", "0.43"], srch, w, m)
+    assert code == 2 and "--expect-sha256" in err3
+    bp2, script2 = b_set(tempfile.mkdtemp(), doc_of)
+    assert run_eval(sealed(bp2), FakeSearch(script2, w), w, m)[0] == 0
+
+
+def t34b_b2_refuses_a_malformed_or_untailed_set_and_a_stale_sha_before_any_search():
+    w, m, doc_of = eval_env()
+    pos, neg, script = b2_parts(doc_of)
+    bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b2.json"), pos[:-1], neg)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(sealed2(bp), srch, w, m)
+    assert code == 2 and "Set B2 shape" in err and srch.calls == [] and not Path(str(bp) + ".scored").exists()
+    for p in pos:
+        if p["section"] == 26:
+            p["tail"] = False
+    bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b2.json"), pos, neg)
+    code, out, err = run_eval(sealed2(bp), srch, w, m)
+    assert code == 2 and "tail" in err and "u26" in err and srch.calls == []
+    bp, _ = b2_set(tempfile.mkdtemp(), doc_of)
+    args = sealed2(bp)
+    bp.write_text(bp.read_text() + " ")  # edited after the freeze
+    code, out, err = run_eval(args, srch, w, m)
+    assert code == 2 and "mismatch" in err and srch.calls == []
+    # a Set B file under --set B2 (and the reverse) is a shape error, nothing scored
+    bb, bscript = b_set(tempfile.mkdtemp(), doc_of)
+    code, out, err = run_eval(["--set", "B2", "--probe", "--set-b2-path", str(bb)], srch, w, m)
+    assert code == 2 and "Set B2 shape" in err and srch.calls == []
+    pos2, neg2, script2 = b2_parts(doc_of)
+    b2file = write_set(Path(tempfile.mkdtemp(), "sealed", "b2x.json"), pos2, neg2)
+    code, out, err = run_eval(["--set", "B", "--probe", "--set-b-path", str(b2file)], srch, w, m)  # B2 file under --set B
+    assert code == 2 and "Set B shape" in err and "need 84" in err and srch.calls == []
+
+
+def t34b_probe_and_bm25_baseline_work_for_b2():
+    w, m, doc_of = eval_env()
+    bp, script = b2_set(tempfile.mkdtemp(), doc_of)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B2", "--probe", "--set-b2-path", str(bp)], srch, w, m)
+    assert code == 0, err
+    assert len(srch.calls) == 186 and "X010 " in out and not Path(str(bp) + ".scored").exists()
+    code, out, err = run_eval(["--set", "B2", "--baseline", "bm25", "--set-b2-path", str(bp)], FakeSearch({}, w), w, m)
+    assert code == 0, err
+    assert "baseline=bm25 set=B2" in out and "n_pos=126" in out, out
+
+
 def t21_gate_cli_exit_codes():
     w, m = FakeWorld(), tmpm()
     run_ingest(w, mini_copy(), manifest=m)
