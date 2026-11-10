@@ -1,6 +1,6 @@
 # Team engagement in other repos — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-03
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-10
 
 ## Intent
 Let the agent team (and the tooling built in this repo) engage a **green-field** (new) project that lives in a different repo. Legacy (existing-code) projects need a different engagement strategy and are deferred (see Out of scope).
@@ -17,7 +17,7 @@ The agents are installed user-level (`~/.claude/agents` symlinks to this repo's 
 
 ## Functional requirements
 - FR-1: Starting a green-field project begins with a requirements interview; no scaffolding precedes it.
-- FR-2: After the interview, the new repo is given a **minimal** convention set ("lighter by default"): at kickoff, a project rules file (`AGENTS.md`: what the project is, how to run and test it) and the docs layout with status headers.
+- FR-2: After the interview, the new repo is given a **minimal** convention set ("lighter by default"): at kickoff, a project rules file (`AGENTS.md`: what the project is, how to run and test it), the docs layout with status headers, and the work-item registry (`.work-items/` plus its `.gitattributes` line).
 - FR-2a: A test setup is established at the project's first build, before the first feature.
 - FR-2b: A review checklist (`REVIEW.md`) and graph tooling (cypher MCP, code graph) are added on demand, not at kickoff.
 - FR-3: The convention set can grow later as the project needs more, without re-scaffolding.
@@ -33,7 +33,7 @@ The agents are installed user-level (`~/.claude/agents` symlinks to this repo's 
 - **Legacy / existing-code projects** — a distinct engagement strategy, deferred by the stakeholder; revisit as its own requirements doc.
 
 ## Acceptance criteria
-- AC-1 (FR-1, FR-2): Given an empty repo, when I run `claude --agent tico` and describe the project, then no `AGENTS.md` or `docs/` content exists until the interview has concluded, and the session ends with exactly: a requirements document under `docs/requirements/` carrying the status header; and an `AGENTS.md` giving what the project is and how to run it, with a test section stating that the test setup is created at first build. Other `docs/` folders are created when first used. No `REVIEW.md`, test runner or graph tooling exists yet.
+- AC-1 (FR-1, FR-2): Given an empty repo, when I run `claude --agent tico` and describe the project, then no `AGENTS.md` or `docs/` content exists until the interview has concluded, other than the work-item setup (`git init`, `.work-items/`, `.gitattributes`) made once the project key is agreed, and the session ends with exactly: that setup; a requirements document under `docs/requirements/` carrying the status header; and an `AGENTS.md` giving what the project is and how to run it, with a test section stating that the test setup is created at first build. Other `docs/` folders are created when first used. No `REVIEW.md`, test runner or graph tooling exists yet.
 - AC-2 (FR-2a, FR-4): Given that repo and the requirements doc, when I run `teco`, then it plans, builds, reviews and documents the project through the usual specialists, establishing the test setup before the first feature, pausing only for a decision the requirements doc does not settle.
 - AC-3 (FR-5, FR-5a): Given a learning captured during AC-2, then it appears in the shared pool attributable to the new project, with no hand-wiring of the pool for that project.
 - AC-5 (FR-2b, FR-3): Given a project after kickoff, then it has no `REVIEW.md` or graph tooling until I (or `teco`) request one; when requested, it is added without redoing or overwriting the kickoff files.
@@ -61,3 +61,4 @@ None.
 2026-11-03 — Kickoff docs layout: full skeleton or as needed? → Only as needed, as today (AC-1).
 2026-11-03 — Readback confirmed by stakeholder; analyst verdict approve with suggestions, folded in → Status flipped to Ready for design.
 2026-11-03 — Should the new project carry its own copy of the shared machinery? → No: it uses the pool, skills and MCP tools from the team repo (FR-7, AC-7).
+2026-11-10 — Kickoff set: still exactly two files? → No: kickoff set includes `.work-items/` and `.gitattributes` — from the shipped work-item standard, GAL-F0001 (FR-2, AC-1).
