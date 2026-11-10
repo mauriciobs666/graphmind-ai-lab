@@ -36,7 +36,7 @@ and "touched areas" as files, graph keys or facts (FR-13, FR-14).
 - **FR-3** — On a plausible overlap the finder stops and raises it to the stakeholder; it never
   decides to merge, sequence or run independently.
 - **FR-4** — A ledger unit carries, as recorded facts, the units it **needs** and the **areas it
-  touches**, in the same sense as `coordination-graph.md` FR-14. A unit whose facts are missing or
+  touches**, in the same sense as `coordination-graph.md` FR-14. A need is recorded as the needed unit's task ID or feature ID when it has one (`GAL-F0042-T03`, `GAL-F0042`), otherwise `<ledger-slug>:<unit>`; within one ledger, its unit id. Needs are compared by resolved identity, never by raw text. A unit whose facts are missing or
   unparseable stays visible in the in-flight view, is excluded from FR-5, and is listed with what
   is missing; it is never silently dropped. An explicit "none" is a recorded fact, not a missing
   one.
@@ -172,3 +172,4 @@ entries: entries now come from the file sync, and leave when the ledger is `arch
 the record. A need that cannot be found is listed as unresolvable. FR-5.
 2026-11-02 — Does a `paused` unit hold its areas? → Yes. FR-5.
 2026-11-03 — Readback of v4 delivered; confirm and flip to Ready for design? → Confirmed by the stakeholder. Status flipped to Ready for design (latest `analyst` verdict: approve with suggestions, Pass 2). The last edit round after Pass 2 was not re-reviewed. FR-1 to FR-7.
+2026-11-10 — How does a `needs` entry cite a unit (open item from `docs/plans/work-item-numbering.md` §3.9; wording from `docs/plans/cross-initiative-coordination-ids.md` (d))? → Task or feature scheme ID when it has one, else `<ledger-slug>:<unit>`, local unit id within one ledger; compared by resolved identity. FR-4.
