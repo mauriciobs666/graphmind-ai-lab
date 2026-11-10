@@ -12,13 +12,14 @@ the design.
 `decisionmodels/` holds `render.py` (all three roles' renderers; `exchange.RENDERERS` maps each), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
-reconciliation, halts, generation runs, votes), `screen.py` (the generated-text screen and form
+reconciliation, halts, generation runs, votes, tranche, top-up), `diagnostics.py`
+(`diagnostics.json`), `screen.py` (the generated-text screen and form
 obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
 screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
-definitions, spawn templates, `guard_hook.py` and `settings.json`. The message-type tranche, top-up
-and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+definitions, spawn templates, `guard_hook.py` and `settings.json`. `finalize` and everything after
+it (plan4 §4.1 U5.10 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -81,11 +82,12 @@ and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's
   probe report's recorded key sets, never copies of real transcript content.
 - **Join-in renders only the last 6 prior turns** (`normalize_turns`) though its `maxItems` is 8, so
   `points/join-in-judge/generator.md` tells the generator to keep the agent's job and what the new
-  message depends on inside the last six; `tests/test_render_layout.py` pins both and that each
-  point's rendering matches its rubric's "What an item looks like" block. `data-scientist` confirmed the rule
-  (plan5 §3.4).
+  message depends on inside the last six; `tests/test_render_layout.py` pins the rule (not a phrase),
+  the item wrappers by value, the unstripped `agentName`, and that each point's rendering matches
+  its rubric's "What an item looks like" block (the first indented block only). `data-scientist`
+  confirmed the rule (plan5 §3.4).
 - **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
-  `round-start` (one `genRound` may have several; only U5.9's planner passes `extend=True`, for a
+  `round-start` (one `genRound` may have several; only `queue_topup` passes `extend=True`, for a
   new named stratum of a started round, refused once a run of it has issued); `Campaign.ingest` appends a run's `generated` and
   `screen-hit`/`binding-mismatch`/`form-mismatch` events *before* its `outcome`, and `fold` applies
   them only at that ingested `outcome`. An item's `genRound` is its **seed's** round (a regeneration
@@ -115,6 +117,20 @@ and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's
   clears both. A label batch with no `vote` records nothing. A main pilot block's fourth vote
 (`labels.SCREEN_VOTE`, batches of `SCREEN_BATCH_CAP`) is a vote like the others but **never one of
 the three** that `three_votes`, `label_votes` and `vote_ties` read.
+- **Top-up and the tranche are ledger-folded too** (plan4 §3.6; `campaign.py`). In a `full`
+  campaign, when nothing is pending, `next` calls `queue_topup`: once every round is labelled and a
+  cell (design stratum × label) is below `cell_target` (eval + calibration), `topup_counts` (pure)
+  gives the seeds per short stratum, `max ⌈shortfall / P̂(ℓ | s)⌉`; it names no label or intent, the
+  draw is the design restricted to the stratum, and `P̂ = 0` refuses. `project_topup` (pure; this
+  ledger's round 1, four token classes) halts with `spend` when twice the projection exceeds round
+  1's tokens (exactly half passes); a plain `resolve` lets that round through,
+  `resolve --decline-topup` (`topup-declined`) ends top-ups. Every stratum is drawn (`topup-plan`
+  first, `_resume_topup` after a crash) before any run issues, then cut as one pool, interleaved.
+  Message type's round 1 votes a 250-item **tranche** first (`tranche-start`; its `vote-start`s and
+  batches carry `tranche`): `tranche_failed` (`100·drops > 3·size`, `voteTie` drops) halts with
+  `rubric`, and `resolve` then needs a changed `rubric_hash` and relabels it (`tranche-restart`);
+  the rest votes only once it passes. A generator restart resets all of it. `diagnostics.py` is
+  pure over a folded `State`; its `HANDOFF_EXAMPLES` are verbatim from model-bench's hand-off prompts.
 - **The pilot is ledger-folded too** (plan4 §3.8, plan5 §3.6; `pilot.py`). A `round-start` carries
   `pilotBlock` (`main`: votes 1-3 and the screen vote; `recheck`: votes 1-3), which decides
   `State.round_votes`; only `pilot.py start`/`recheck` pass it, and the driver (`queue_pilot_block`,

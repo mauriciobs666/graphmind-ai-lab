@@ -3050,3 +3050,79 @@ New scope only: a new unit and its findings; no prior findings to dispose of exc
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 27 — U5.9 gate: rounds, top-up, spend halt, tranche, diagnostics (2026-11-10)
+
+**Verdict: approve with suggestions.** The code conforms to plan4 §3.6, plan5 §3.2/§3.5/§3.6 and plan6 §3.8 on every spec row I could execute, the suite is green as claimed, and 47 of my 55 scratch mutants redden a test. No blocker. One major, and it is a plan gap the coder could not close (the decline path has no way back); the rest are test-coverage minors and nits.
+
+### Scope
+
+- **Reviewed:** the uncommitted `decision-models/` diff: `campaign.py` (+520), `driver.py`, new `diagnostics.py`, new `tests/test_topup.py`, `tests/test_diagnostics.py`, diffs of `test_votes.py`, `test_render_layout.py`, `AGENTS.md`, `README.md`, `docs/HISTORY.md`. Against plan4 §3.6 and its U5.9 row, plan5 §3.2/§3.3/§3.5/§3.6 and its U5.9 row, plan6 §3.8 and its test row, the method note (`typed-decision-models-ml.md` §Q1.2/§Q1.3), and the ledger's carried items. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Executed (live tree, unchanged; sha of `decisionmodels/*.py` + `tests/*.py` identical before and after):** `.venv/bin/pytest -q` from `decision-models/`: **1588 passed** (307 s), `ruff check .` clean. `AGENTS.md` 1,821 words, no line over 700 characters.
+- **Scratch (`scratchpad/`):** `mut.py`/`mut2.py` (55 mutants, each on a fresh copy; targeted files only, so a "survived" is against `test_topup`, `test_diagnostics`, `test_votes`, `test_generation_rounds`, not the whole suite), `scen1-3.py` (three scenarios on the live code with the tests' own builders, in temp dirs).
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff was read in full.
+
+### Answers to the asks
+
+**(a) Conformance (executed).**
+- *No intent conditioning:* `begin_round`/`draw_seeds` take no label or intent; the short-`understanding` top-up draws 24 seeds, 12 `true`, 16 `clear`, all in the stratum. Mutants: the draw dropping its `design_stratum` (M32), `topup_items` as `len(need)` (M01), runs as 1 (M02), the stratum count as shortfall only (M27), cell target as eval only (M35), the stratum of every labelled item as `None` (M19): all red.
+- *Spend halt:* `2·projection > round-1 total`; exactly half passes, one token over halts (M04 `>=` red). Projection is this ledger's `State.spend(1)`, four classes (M03 wrong round, M06, M07, M41, M42 red). Scenario 1 (300 seeds, tranche plus rest): `spend(1)` counts the rest's labelling (3,600 label tokens over 36 batches; M40, tranche-only, red).
+- *Tranche:* 8 of 250 halts, 7 pass, `>=` red (M08), a drawn set that is not random red (M09), the rest voting before the tranche passes red (M20), no retire or no vote reset on relabel red (M13, M14), an unchanged-rubric resolve red (M12).
+- *Decline:* no run issues after `--decline-topup`; CLI and mutual exclusion tested.
+- *Crash between strata:* `_resume_topup` removed (M25) and `extend` computed once (M24) both red; the test kills the second `begin_round`. A crash after `topup-plan` and before the first draw is not constructed, but `_draw_topup` handles it by the same loop.
+- *`extend=True` only from the planner:* grep of `decisionmodels/`: one site, `_draw_topup`; `pilot.py` passes none.
+
+**(b) The coder's eight open calls.**
+1. *Short cell with P̂ = 0 refuses:* **accept the refusal, flag the dead end** (P27-M1).
+2. *Tranche rubric key = `sha256(Point.rubric_body)`:* **accept.** `install` records no `promptSha256.rubric` (`install.py:35`, `campaign.py:1407`), plan5 §3.3 defines the value as exactly this, and U5.10 must reuse `campaign.rubric_hash`, not a second formula. The plan5 U5.9 row's "keys on `promptSha256.rubric`" is loose wording; no plan change. Test gap: P27-m1.
+3. *Second tranche failure re-halts:* **accept.** The stakeholder-ref rule is U5.10's `finalize` recheck (plan4 U5.10 row), a different check; each re-halt needs a changed rubric hash (M12 red), so it cannot loop.
+4. *Spend projection definitions:* **accept**, two edges in P27-m3.
+5. *Sticky decline:* **rule: plan gap, not a coder fault** (P27-M1).
+6. *Hand-off examples over accepted items, full sentences only:* **accept.** Each example is verbatim in model-bench's prompts (`test_every_listed_example_is_verbatim...`: 3 passed, not skipped), "Yes"/"thanks" are rightly excluded, and `finalize` is to pass the eval items (U5.10).
+7. *`test_votes` `message_bench` switches the tranche and planner off:* **accept.** Six items are all tranche and every cell short; `test_topup.py` owns that path (scenario 1 and the 39 tests exercise it with the real `queue_votes`/`next`).
+8. *Mid-tranche rubric edit undetected:* **accept for U5.9, hand to U5.10.** The tranche records the hash at draw; later votes run under whatever `rubric.md` holds, as does the rest of the round. Only `generation.json`'s single `promptSha256.rubric` (U5.10) can say which; nothing for U5.9 to add.
+
+**(c) Tests are not tautological (executed).** 55 mutants: M01-M32/M35/M40-M42 (36, campaign), D01-D12 (diagnostics), R1-R7 (render wrappers, generator paragraph). **47 red, 8 survived** (M10, M11, M22, M23, M26, M29, D06, D10: findings P27-m1/m2/n1). Silent-argument mutants on the spend plumbing (items, runs, round, tranche-only labelling, items as `len(self.items)`) are all red, as are the diagnostics plumbing ones (decile, `other` vote, cue-check rounds, token class, per-hash items, cell `>= 1`, `3 *` pairs, `>=` turn cut, example list, join-in message source). Expected values in the new tests are hand-worked in comments, not read from the functions checked, except `rubric_hash` (P27-m1). Fixed-RNG dependence: every count the tests assert is deterministic under apportionment (12/12 and 16/8 of 24), not seed-dependent.
+
+**(e) Ledger events against `fold`/resume (executed and read).**
+- `tranche-start`, `topup-plan`, `spend-halt` fold into `State`; `tranche-restart` and `topup-declined` are in `_CLEARING_EVENTS`, so they clear the halt and take `_fold_resolution`. A plain `resolved` on a `spend` halt adds the next `genRound` to `spend_approved`; `--repin-instructions`/`--skip-batch` on it refuse (no run, not `safeguardStop`) and `--repin-model` restarts and clears the approval. `_restart_generation` clears tranche, starts, plans, approvals and the decline (test); `_restart_labelling` keeps the tranche's items and resets its check.
+- `run_hash` now covers regeneration runs; `_pool_round`/`_close_rounds` select by `first_pass_runs`, so no pool can take a regeneration hash (M31 red: `test_template_halts_and_the_hash_of_each_run...`).
+- `unbatched_seeds` interleaves strata of one `genRound` only; a single-draw round gives the old order, so round 1 and the pilot blocks are unchanged (suite green; M15 red).
+- `fold` has no unknown-event raise, so an older ledger replays unchanged.
+
+### Findings
+
+**P27-M1 — major — plan gap (owner `architect`; not a coder defect): after a decline there is no way back, and a P̂ = 0 cell has no recorded exit.** *Verified: executed (scenario 2).* After `resolve --decline-topup`, `topup_declined` is cleared only by a generator restart (`_restart_generation`), and a restart needs an open halt, so `resolve` answers "the campaign is not halted" to every action; `queue_topup` returns `[]` for good. Plan4 §3.6 says `finalize --short` refuses "leaving the store intact for a later round"; no later round can be run. The P̂ = 0 refusal is a `CampaignRefused` raised from `next`, so every `driver run` writes `store/refusal`; `--decline-topup` is for a `spend` halt only, so there is no recorded stakeholder route for that either. The coder followed the text. *Fix, `architect`* (plan4 §3.6/U5.10 row, plan6 §3.8): rule (i) whether a decline is reversible (e.g. a `finalize --short` refusal, or a `resolve`-less `driver` subcommand, lifts it) and (ii) whether P̂ = 0 is a `spend`-class halt with the same yes/no, or whether `finalize --short` may be run without a decline. Then a `coder` row with a planted case each. U5.10 cannot be specified without (i).
+
+**P27-m1 — minor — `rubric_hash`'s definition is a check that cannot fail.** *Verified: executed (M11).* `rubric_hash` hashing `label_answer_section` instead of `rubric_body` leaves all 143 targeted tests green: `test_the_tranche_is_a_recorded_random_draw...` compares the event with `campaign.rubric_hash(...)`, and the resolve tests monkeypatch it. Effect if wrong: a `rubric.md` fix is refused as "unchanged", or a `label-answer.md` edit relabels. *Fix, `coder`:* one assertion `rubric_hash(role) == hashlib.sha256(load_point(role).rubric_body.encode()).hexdigest()` written out in the test, plus one that a `label_answer_section` edit leaves it unchanged. U5.10 reuses this function for `promptSha256.rubric`.
+
+**P27-m2 — minor — four tranche/planner guards no test can reach (M10, M22, M23, M26, M29 survive).** *Verified: executed (survivors); reachability inferred from reading.* (1) `after.get("voidClass") in ("template","rubric")` in `ingest`'s stop (`campaign.py:1817`): no test asserts `ingest(...).stop == "halted"` for the batch that trips the tranche rule; the runner would still stop at the next `next()`, so the effect is the returned `Stop` and its message only. (2) `tranche_due`'s `round_settled` conjunct, (3) `_check_tranche`'s "wait while another halt is open", (4) its re-check at the end of `_fold_resolution`, (5) `_draw_topup`'s "a run has issued" guard (`begin_round(extend)` refuses it anyway). (2) to (5) look unreachable through `next` (a tranche batch completes alone, and runs queue only after every stratum is drawn). *Fix, `coder`:* a test for (1) through `ingest` on the tripping batch, and for (2) a direct `queue_votes` on a round with a hit awaiting regeneration (the tranche would otherwise be drawn without the regenerated items, which then fall into "the rest"); for (3) to (5) either construct the case or delete the guard and say so in the docstring.
+
+**P27-m3 — minor — spend projection edges (executed, scenario 3).** (a) `State.spend` skips `retired` batches, so after one tranche relabel `spend(1)` shows 3,300 label tokens where 6,300 were spent; round 1's total, hence the halt threshold, is understated by the retired spend (a labeler re-pin does the same). The direction is conservative (earlier halt), but the note says "round 1's measured tokens". (b) `topup_items` is the seeds to draw, over round 1's accepted items; seeds that drop on screen are labelled nowhere, so it overstates labelling, again conservatively. *Fix, `coder`/`data-scientist`:* count retired attempts in the round-1 denominator only (not in the per-item rate), and state (b) in `project_topup`'s docstring. Accepting both as is would also be defensible; a `data-scientist` call.
+
+**P27-m4 — minor — plan6 §3.8 does not know `begin_round(queue_runs=False)` (owner `architect`).** *Verified: read.* The plan has `begin_round` queue each stratum's runs and `next` queue stranded seeds; note §Q1.3 says "a top-up run pools all of the point's short strata", which per-stratum queuing cannot do. The coder's `queue_runs=False` plus one `_queue_unbatched` cut is the improvement, and the test shows both strata in each run. It adds a public parameter beside "only the planner passes `extend`". *Fix:* one clause in plan6 §3.8 (and the live spec at close); no code change.
+
+**P27-n1 — nit — diagnostics `screenHits` has two untested distinctions (D06, D10 survive).** `hits` vs `hitSeeds` differ only for a seed with two hits, and `byPattern` counts a hit's first reason only (`hit["reasons"][0]`) though its docstring says every hit is counted and plan5 counts a two-reason item under both. No test has either shape. *Fix, `coder`:* one seed with two hits and one `["screen","form"]` hit, and either count all reasons or say "primary reason" in the docstring.
+
+**P27-n2 — nit — doc precision.** `AGENTS.md` and `HISTORY.md` say `queue_topup` passes `extend=True`; it is `_draw_topup` (also reached from `_resume_topup`). `turnCut` for guard counts only the six-turn cut, not `render_guard_input`'s `MAX_CHARS` drop of earliest turns; fine unless `understanding` is large.
+
+### Carried items
+
+- **P26-m1, P26-m2, P26-n1, P26-n2:** fixed. The generator paragraph test now pins the rule (R6, R7 red); wrappers pinned by value (R1 slice-first, R3, R4, R5 red); `agentName` unstripped (R2 red); `layout_lines` takes the first block only (its own test). **P26-m3:** fixed (no "(open)" or "still open" left in `AGENTS.md`/`HISTORY.md`).
+- **ML P3-n2, P4-n2:** delivered (`turnCut`, `promptExamples`; mutants D09, D11, D12 red). **P3-F1:** top-up draws go through `fresh_rng_seed` + `record_draw`; disjoint ids and a refused reused seed are tested.
+- **Generator-hash re-pin check:** confirmed. `generator_template_hash` reads `requestTemplate.generator`, which `install` does not record, so a `generator.md` edit moves no recorded hash yet; HISTORY says so correctly. U5.10 owns the first real `requestTemplate` hash.
+
+### What's solid
+
+- The tranche and planner are ledger-folded with the same commit-at-outcome discipline as the rest; every new event replays, and a restart resets all of it.
+- The spend and tranche mutants are killed by hand-computed fixtures, not by values read back from the code; the planner's arithmetic is integer-only (`Fraction`, ceiling by negated floor).
+- `AGENTS.md` was edited in place (one new bullet for new scope, two lines rewritten), under budget.
+
+### Growth-stops check
+
+New scope only: a new unit. Pass 27 is appended; Passes 1 to 26 are unchanged (`scratchpad/pre27.md` is a prefix of the live file). Carried findings get one disposition line each above.
+
+### Proposed REVIEW.md lines
+
+None.

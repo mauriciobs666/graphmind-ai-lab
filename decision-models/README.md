@@ -52,7 +52,8 @@ live smoke ran, `docs/test-reports/live-smoke-report.md`), and generation runs w
 generated-text screen, form obedience, the template halts and the generator restart (U5.8a:
 `Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), the
 votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`), and the guard
-pilot (U5.8c: `decisionmodels/pilot.py`, below; the message-type tranche and top-up are later).
+pilot (U5.8c: `decisionmodels/pilot.py`, below), and rounds and top-up (U5.9: the message-type
+tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`, below).
 Labelling requests render all three points' items (U5.2b-render: the join-in and message-type
 renderers, pinned by byte-copies of model-bench's render vectors and `normalize-turns.jsonl`).
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
@@ -71,7 +72,7 @@ or `AGENTS.md`. Run these from `decision-models/`:
 .venv/bin/python -m decisionmodels.driver status --root ~/dm-campaigns/pilot
 .venv/bin/python -m decisionmodels.driver resolve --root ~/dm-campaigns/pilot \
     --decision "why the halt is cleared"   # or --skip-batch, --repin-instructions,
-                                           # --repin-model generator|labeler <id>
+                                           # --decline-topup, --repin-model generator|labeler <id>
 ```
 
 - **`init`** refuses, writing nothing, a root that is not empty or sits in a git work tree or
@@ -91,8 +92,39 @@ or `AGENTS.md`. Run these from `decision-models/`:
   `--skip-batch` (a safeguards stop only) drops it and counts it as `safeguardSkipped`; a
   re-pin records the new model (a generation or labelling restart; a labelling restart retires every
   label batch, the smoke fixture's too) or instructions set. It prints the halt it cleared and, if
-  a `--skip-batch` drop closed a round or pool, the halt that raised.
+  a `--skip-batch` drop closed a round or pool, the halt that raised. A `spend` halt (below) is
+  let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
+  once the rubric has changed.
 - `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
+
+### Rounds, top-up and the message-type tranche
+
+In a `full` campaign `driver run` keeps going after round 1 is labelled:
+
+- **Top-up.** A cell is a label within a design stratum (guard's evidence kind; none for the other
+  two points) and its target is eval plus calibration (200, 120 and 200). While a cell is short,
+  the driver draws the next `genRound`: per short stratum, the most any short cell needs,
+  `⌈shortfall / P̂(label | stratum)⌉`, from the **same design restricted to that stratum**, never
+  to an intent. All strata are drawn before a run issues, and their seeds are cut into runs
+  together. Rounds repeat until every cell is full; a cell with no labelled item at all cannot be
+  planned and refuses, naming it.
+- **Spend halt.** Before a top-up round issues, its projected tokens (this point's round 1:
+  top-up items over round-1 items times its labelling tokens, plus top-up runs times its mean
+  tokens per generation run; four token classes each) are compared with round 1's measured
+  tokens. Over half halts the driver (`spend`): take the projection (`status`) to the
+  stakeholder. "Yes" is a plain `resolve --decision ...`; "no" is `resolve --decision ...
+  --decline-topup`, after which no top-up run is issued and the store stays as it is.
+- **Message-type tranche.** Round 1 of message type labels 250 items, drawn at random, with all
+  three votes before the rest. More than 3% `voteTie` drops halts it (`rubric`): edit
+  `points/message-type-classifier/rubric.md`, then `resolve`, which relabels the tranche under the
+  changed rubric hash (and refuses while the hash is unchanged).
+- **`diagnostics.json`** (`decisionmodels/diagnostics.py`, written beside `generation.json` by
+  `finalize` once U5.10 exists; `python -m decisionmodels.diagnostics --root <campaign> --out
+  <dir>` writes it now): pair and intent-label agreement per class, position and balance effects,
+  round 1 against top-up per cell, screen hits by intent, difficulty and pattern, intent-label
+  agreement split by turn cut, a count of items that repeat a hand-off prompt example, guard's
+  round-1 cue check (without its verdict), and per-round, per-template and retired-run totals.
+  It is exploratory and gates nothing.
 
 ### The guard pilot
 

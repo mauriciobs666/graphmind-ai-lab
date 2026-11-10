@@ -346,7 +346,11 @@ def test_a_label_batch_that_overflows_the_pages_continues_in_the_same_vote(
 
 def message_bench(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Campaign, list[str]]:
     """A full message-type campaign (label batch cap 25 from its pilot report) with six accepted
-    items; returns it and their seed ids."""
+    items; returns it and their seed ids. These tests are about the vote path alone: the tranche
+    and the top-up planner (`test_topup.py`) are switched off, since six items are all tranche and
+    every cell short."""
+    monkeypatch.setattr(campaign, "TRANCHE_POINT", None)
+    monkeypatch.setattr(Campaign, "queue_topup", lambda self: [])
     data = tmp_path / "data"
     pilot_report(data, stakeholderDecision=PROCEED, missingCueCheck={"state": "passed"},
                  rngSeeds=[11, 12])

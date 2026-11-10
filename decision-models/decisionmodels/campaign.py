@@ -105,6 +105,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import itertools
 import json
 import os
 import random
@@ -115,6 +116,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +150,16 @@ POOL_MIN_SEEDS = 300
 HIT_EVENTS = {screen.SCREEN: "screen-hit", screen.BINDING_MISMATCH: "binding-mismatch",
               screen.FORM_MISMATCH: "form-mismatch"}
 _HIT_EVENT_KINDS = frozenset(HIT_EVENTS.values())
+#: plan4 §3.6 "Message-type tranche": round 1's labelling starts with `TRANCHE_ITEMS` items drawn at
+#: random; all three votes finish on them before the rest, and the campaign halts (`rubric`) when
+#: more than `TRANCHE_DROP_PERCENT` of them are `voteTie` drops. Message type's, in `full`.
+TRANCHE_POINT = "message-type-classifier"
+TRANCHE_ITEMS = 250
+TRANCHE_DROP_PERCENT = 3
+#: plan4 §3.6 "Top-up planner": a top-up round is a `genRound` after the last, its first draw
+#: plain and each further stratum an `extend`.
+#: plan4 §3.6 "Spend halt": the projection halts when it exceeds half of round 1's tokens.
+SPEND_HALT_DENOMINATOR = 2
 #: plan4 §3.5: `full` needs the previous point's campaign finalized.
 FULL_ORDER = ("guard-judge", "message-type-classifier", "join-in-judge")
 #: plan5 §3.6's spend gate states.
@@ -160,7 +172,8 @@ RECHECK_BLOCK = "recheck"
 PILOT_BLOCKS = (MAIN_BLOCK, RECHECK_BLOCK)
 
 ROLE_OF_KIND = {"generate": "generator", "label": "labeler"}
-_CLEARING_EVENTS = ("resolved", "generation-restart", "labelling-restart")
+_CLEARING_EVENTS = ("resolved", "generation-restart", "labelling-restart", "tranche-restart",
+                    "topup-declined")
 _NOT_PRODUCED = frozenset({"launchFailed", "launchFailing", "neverSpawned"})
 _NO_ATTEMPT = frozenset({"neverSpawned", "incomplete"})
 _EXIT_CODE = re.compile(r"-?[0-9]+")
@@ -252,8 +265,10 @@ class State:
     pool: dict[str, dict[str, Any]] = field(default_factory=dict)
     pooled_rounds: set[int] = field(default_factory=set)
     pool_halts: set[tuple[str, str]] = field(default_factory=set)
-    #: A first-pass run's generator-template hash at its issue, set when it ingests.
+    #: A generation run's generator-template hash at its issue, set when it ingests (only a
+    #: first-pass run feeds a pool), and the template halts raised, in order (diagnostics).
     run_hash: dict[str, str] = field(default_factory=dict)
+    template_log: list[dict[str, Any]] = field(default_factory=list)
     #: Votes (plan4 §3.6, plan6 §3.8): each item's answers by vote number, and each (`genRound`,
     #: vote)'s recorded `vote-start` (its reshuffle RNG seed and item order), in start order.
     votes: dict[str, dict[int, Any]] = field(default_factory=dict)
@@ -266,6 +281,16 @@ class State:
     #: plan6 §3.8's halt epoch for the pilot's added blocks: the number of main blocks when the
     #: last `pilot-block-halt` was recorded (0 before any), so the blocks since are the epoch's.
     block_halt_base: int = 0
+    #: plan4 §3.6's message-type tranche: its `genRound`, drawn items, the rubric hash it is
+    #: labelled under, whether its rule was checked and passed, and its relabellings; its votes'
+    #: starts by vote number (the round's own `vote_starts` hold the rest of the round).
+    tranche: dict[str, Any] | None = None
+    tranche_starts: dict[int, dict[str, Any]] = field(default_factory=dict)
+    #: plan4 §3.6's top-up: the `topup-plan` events (each names its `genRound` and strata), the
+    #: rounds a stakeholder let through a spend halt, and whether a `--decline-topup` was recorded.
+    topup_plans: list[dict[str, Any]] = field(default_factory=list)
+    spend_approved: set[int] = field(default_factory=set)
+    topup_declined: bool = False
 
     def generation_drops(self) -> dict[str, Any]:
         """plan5 §3.5's `dropped` keys for seeds dropped on a third hit, counted under the third
@@ -325,11 +350,67 @@ class State:
             seed in self.items or seed in self.dropped_seeds or seed in given_up
             for seed in wanted)
 
-    def vote_batches(self, gen_round: int, vote: int) -> list[Batch]:
-        """The live label batches of (`gen_round`, `vote`), cut overflow included."""
+    def vote_batches(self, gen_round: int, vote: int, *, tranche: bool = False) -> list[Batch]:
+        """The live label batches of (`gen_round`, `vote`), cut overflow included; `tranche`
+        selects the message-type tranche's batches (`queue_votes` marks them) or the rest's."""
         return [batch for batch in self.batches.values()
                 if batch.kind == "label" and batch.state != "retired"
-                and batch.extra.get("genRound") == gen_round and batch.extra.get("vote") == vote]
+                and batch.extra.get("genRound") == gen_round and batch.extra.get("vote") == vote
+                and bool(batch.extra.get("tranche")) is tranche]
+
+    def tranche_applies(self, gen_round: int) -> bool:
+        """plan4 §3.6: message type's round 1, in a `full` campaign, labels a tranche first."""
+        return (self.init is not None and gen_round == 1 and self.init["phase"] == "full"
+                and self.init["point"] == TRANCHE_POINT)
+
+    def tranche_due(self, gen_round: int) -> bool:
+        """The round is settled and its tranche is not yet drawn."""
+        return (self.tranche_applies(gen_round) and self.tranche is None
+                and self.round_settled(gen_round)
+                and any(rec["genRound"] == gen_round for rec in self.items.values()))
+
+    def tranche_items(self) -> list[str]:
+        return list(self.tranche["items"]) if self.tranche else []
+
+    def tranche_drops(self) -> list[str]:
+        """The tranche's `voteTie` drops: its items with three votes and no majority."""
+        ties = set(self.vote_ties())
+        return [seed for seed in self.tranche_items() if seed in ties]
+
+    def tranche_complete(self) -> bool:
+        """All three votes of the tranche have run to their end (`_stage_done`)."""
+        return self.tranche is not None and self._stage_done(
+            self.tranche["genRound"], self.tranche_items(), tranche=True)
+
+    def tranche_passed(self) -> bool:
+        return bool(self.tranche and self.tranche["passed"])
+
+    def _stage_items(self, gen_round: int, *, tranche: bool) -> list[str]:
+        """The items a stage votes: the tranche's, or the round's accepted items less the
+        tranche's (all of them for a round with no tranche), in id order."""
+        held = set(self.tranche_items()) if self.tranche_applies(gen_round) else set()
+        accepted = sorted(seed for seed, rec in self.items.items() if rec["genRound"] == gen_round)
+        return sorted(held) if tranche else [seed for seed in accepted if seed not in held]
+
+    def _stage_done(self, gen_round: int, items: Sequence[str], *, tranche: bool) -> bool:
+        """Every vote of the stage (the three, for the tranche) is recorded, its batches all
+        ingested or dropped, and every item it names (less a dropped batch's) in one. A stage
+        with no item has no vote to take."""
+        if not items:
+            return True
+        out = self._dropped_voters()
+        votes = (tuple(range(1, labels.VOTES_PER_ITEM + 1)) if tranche
+                 else self.round_votes(gen_round))
+        for vote in votes:
+            start = (self.tranche_starts if tranche else self.vote_starts).get(
+                vote if tranche else (gen_round, vote))
+            batches = self.vote_batches(gen_round, vote, tranche=tranche)
+            if start is None or any(b.state not in ("ingested", "dropped") for b in batches):
+                return False
+            held = {seed for batch in batches for seed in batch.entries}
+            if any(seed not in out and seed not in held for seed in start["items"]):
+                return False
+        return True
 
     def round_votes(self, gen_round: int) -> tuple[int, ...]:
         """The votes `gen_round` takes: the three, and the screen vote after them for a main
@@ -347,43 +428,59 @@ class State:
     def round_voted(self, gen_round: int) -> bool:
         """Every vote `gen_round` takes has run to its end: recorded, its batches all ingested or
         dropped, and every item it names (less a dropped batch's) in one. A settled round with no
-        accepted item has no vote to take."""
+        accepted item has no vote to take. A round with a tranche is voted only once the tranche
+        has passed its rule, then its rest."""
         if not self.round_settled(gen_round):
             return False
         if not any(rec["genRound"] == gen_round for rec in self.items.values()):
             return True
-        out = self._dropped_voters()
-        for vote in self.round_votes(gen_round):
-            start = self.vote_starts.get((gen_round, vote))
-            batches = self.vote_batches(gen_round, vote)
-            if start is None or any(b.state not in ("ingested", "dropped") for b in batches):
-                return False
-            held = {seed for batch in batches for seed in batch.entries}
-            if any(seed not in out and seed not in held for seed in start["items"]):
-                return False
-        return True
+        if self.tranche_applies(gen_round) and not (self.tranche_complete()
+                                                    and self.tranche_passed()):
+            return False
+        return self._stage_done(gen_round, self._stage_items(gen_round, tranche=False),
+                                tranche=False)
 
     def next_vote(self, gen_round: int) -> tuple[int, list[str], bool] | None:
+        """`vote_step` less its tranche flag (the public shape of a round with no tranche)."""
+        step = self.vote_step(gen_round)
+        return None if step is None else step[:3]
+
+    def vote_step(self, gen_round: int) -> tuple[int, list[str], bool, bool] | None:
         """The vote `gen_round` starts or finishes queuing next, as (vote, the items still to be
-        queued into it, whether its `vote-start` is already recorded), or `None` when the round
-        is not settled, a vote is still running, or all three are done. A recorded vote is
-        incomplete until its live batches hold every item its `vote-start` names (a crash between
-        its `queued` events leaves a tail). An item whose label batch dropped is out."""
+        queued into it, whether its `vote-start` is already recorded, whether it is the
+        tranche's), or `None` when the round is not settled, a vote is still running, or all are
+        done. A recorded vote is incomplete until its live batches hold every item its
+        `vote-start` names (a crash between its `queued` events leaves a tail). An item whose
+        label batch dropped is out. A round with a tranche votes it first, and its rest only once
+        the tranche has been checked and passed."""
         if not self.round_settled(gen_round):
             return None
+        if self.tranche_applies(gen_round):
+            if self.tranche is None:
+                return None
+            step = self._vote_step(gen_round, tranche=True)
+            if step is not None or not self.tranche_passed():
+                return step
+        return self._vote_step(gen_round, tranche=False)
+
+    def _vote_step(self, gen_round: int, *, tranche: bool
+                   ) -> tuple[int, list[str], bool, bool] | None:
         out = self._dropped_voters()
-        for vote in self.round_votes(gen_round):
-            batches = self.vote_batches(gen_round, vote)
+        votes = (tuple(range(1, labels.VOTES_PER_ITEM + 1)) if tranche
+                 else self.round_votes(gen_round))
+        for vote in votes:
+            batches = self.vote_batches(gen_round, vote, tranche=tranche)
             if any(batch.state not in ("ingested", "dropped") for batch in batches):
                 return None
-            recorded = (gen_round, vote) in self.vote_starts
-            items = (self.vote_starts[(gen_round, vote)]["items"] if recorded else
-                     sorted(seed for seed, rec in self.items.items()
-                            if rec["genRound"] == gen_round))
+            key = vote if tranche else (gen_round, vote)
+            starts = self.tranche_starts if tranche else self.vote_starts
+            recorded = key in starts
+            items = (starts[key]["items"] if recorded
+                     else self._stage_items(gen_round, tranche=tranche))
             held = {seed for batch in batches for seed in batch.entries}
             todo = [seed for seed in items if seed not in out and seed not in held]
             if todo or not batches:
-                return vote, todo, recorded
+                return vote, todo, recorded, tranche
         return None
 
     def label_votes(self, seed_id: str) -> dict[str, int] | None:
@@ -415,14 +512,67 @@ class State:
 
     def reshuffle_seeds(self) -> list[int]:
         """The RNG seeds of the votes' reshuffles, in start order (the pilot report lists them)."""
-        return [start["rngSeed"] for start in self.vote_starts.values()]
+        return [start["rngSeed"] for start in
+                (*self.tranche_starts.values(), *self.vote_starts.values())]
 
     def unbatched_seeds(self) -> list[str]:
         """The `round-start` seeds no live generation batch holds (a crash between the round and
-        its `queued` events), in round order."""
+        its `queued` events), in round order. A top-up round that drew several strata
+        (plan6 §3.8) interleaves them, so that its balanced cut pools them: each run holds seeds
+        of every stratum while any is left."""
         held = {seed for batch in self.batches.values() if batch.kind == "generate"
                 for seed in batch.entries}
-        return [seed for r in self.rounds for seed in r["seeds"] if seed not in held]
+        draws: dict[int, list[list[str]]] = {}
+        for r in self.rounds:
+            draws.setdefault(r["genRound"], []).append(
+                [seed for seed in r["seeds"] if seed not in held])
+        return [seed for lists in draws.values()
+                for group in itertools.zip_longest(*lists) for seed in group if seed is not None]
+
+    def labelled_cells(self) -> list[tuple[str | None, str]]:
+        """plan4 §3.6 "Top-up planner": each labelled item's cell, as (design stratum, label):
+        an accepted item with three votes and a majority. The stratum is its seed's, `None` for a
+        point with none."""
+        expected = load_point(self.init["point"]).expected
+        out = []
+        for seed_id in self.items:
+            votes = self.three_votes(seed_id)
+            majority = labels.majority(expected, votes) if votes is not None else None
+            if majority is not None:
+                out.append((self.seeds[seed_id].design_stratum, labels.vote_key(majority)))
+        return out
+
+    def spend(self, gen_round: int) -> dict[str, Any]:
+        """The tokens spent on `gen_round` and what they bought, from every non-retired attempt
+        that recorded a run (void ones spent them too): `items` its accepted items,
+        `generationRuns` and `generationTokens` its generation batches (a regeneration batch
+        counts under its first seed's round), and `labelTokens` its label batches. Four classes
+        each (`pilot.TOKEN_CLASSES`)."""
+        classes = pilot.TOKEN_CLASSES
+        gen = dict.fromkeys(classes, 0)
+        lab = dict.fromkeys(classes, 0)
+        runs = 0
+        for batch in self.batches.values():
+            if batch.state == "retired":
+                continue
+            if batch.kind == "generate":
+                if self.seed_round.get(batch.entries[0] if batch.entries else "") != gen_round:
+                    continue
+                target = gen
+            elif batch.extra.get("genRound") == gen_round:
+                target = lab
+            else:
+                continue
+            for attempt in batch.attempts:
+                tokens = ((attempt.outcome or {}).get("run") or {}).get("tokens")
+                if tokens is None:
+                    continue
+                runs += batch.kind == "generate"
+                for cls in classes:
+                    target[cls] += tokens.get(cls, 0)
+        items = sum(1 for rec in self.items.values() if rec["genRound"] == gen_round)
+        return {"items": items, "generationRuns": runs, "generationTokens": gen,
+                "labelTokens": lab}
 
     def dropped(self) -> dict[str, dict[str, int]]:
         """plan4 §3.7's `retryCapExceeded` and plan6 §3.5's `safeguardSkipped` counts."""
@@ -472,8 +622,22 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                                  "pilotBlock": event.get("pilotBlock")})
         elif kind == "vote-start":
             state.held_rng_seeds.add(event["rngSeed"])
-            state.vote_starts[(event["genRound"], event["vote"])] = {
-                "rngSeed": event["rngSeed"], "items": list(event["items"])}
+            start = {"rngSeed": event["rngSeed"], "items": list(event["items"])}
+            if event.get("tranche"):
+                state.tranche_starts[event["vote"]] = start
+            else:
+                state.vote_starts[(event["genRound"], event["vote"])] = start
+        elif kind == "tranche-start":
+            state.held_rng_seeds.add(event["rngSeed"])
+            state.tranche = {"genRound": event["genRound"], "rngSeed": event["rngSeed"],
+                             "items": list(event["items"]), "rubric": event["rubric"],
+                             "checked": False, "passed": False, "relabels": 0}
+        elif kind == "topup-plan":
+            state.topup_plans.append(dict(event))
+        elif kind == "spend-halt":
+            state.halt = {"event": kind, "batch": None, "reason": "spend",
+                          "voidClass": "spend", "genRound": event["genRound"],
+                          "projection": event["projection"]}
         elif kind == "votes":
             # Fresh, as for `generated`: a crashed ingest re-run replaces its earlier record.
             state.staged[event["opaque"]] = {"votes": dict(event["answers"]),
@@ -629,6 +793,7 @@ def _raise_template_halt(state: State, batch: Batch, digest: str,
         state.halt["pools"] = pools
     state.halt["reason"] = round_reasons[0] if rounds else pools[0]["reasons"][0]
     state.halt["templateHash"] = pools[0]["templateHash"] if pools else digest
+    state.template_log.append(dict(state.halt))
 
 
 def _apply_generation(state: State, attempt: Attempt, batch: Batch,
@@ -655,7 +820,7 @@ def _apply_generation(state: State, attempt: Attempt, batch: Batch,
               if (g, reason) not in state.template_halts
               and _over_threshold(state.round_hits.get((g, reason), 0), state.drawn_in(g))]
     digest = generator_template_hash(attempt.expectations)
-    if batch.extra.get("generation") == "first":
+    if batch.extra.get("generation") is not None:
         state.run_hash[batch.batch_id] = digest
     closed, pooled = _close_rounds(state, batch)
     _raise_template_halt(state, batch, digest, rounds, closed, pooled)
@@ -675,11 +840,17 @@ def _restart_generation(state: State) -> None:
     state.pool_halts.clear()
     state.pooled_rounds.clear()
     state.run_hash.clear()
+    state.template_log.clear()
     state.block_halt_base = 0
     state.cue_halts = 0
     state.cue_halt_resolved = False
     state.votes.clear()
     state.vote_starts.clear()
+    state.tranche = None
+    state.tranche_starts.clear()
+    state.topup_plans.clear()
+    state.spend_approved.clear()
+    state.topup_declined = False
     state.rounds.clear()
     state.seed_round.clear()
     state.staged.clear()
@@ -689,9 +860,35 @@ def _restart_generation(state: State) -> None:
 
 def _settle_drop(state: State, batch: Batch) -> None:
     """A dropped first-pass run may close its round (plan6 §3.8): the round pools what its
-    ingested runs added, and the pool is tested."""
+    ingested runs added, and the pool is tested. A dropped tranche batch may complete the
+    tranche."""
     closed, pooled = _close_rounds(state, batch)
     _raise_template_halt(state, batch, "", [], closed, pooled)
+    _check_tranche(state, batch)
+
+
+def _check_tranche(state: State, batch: Batch | None) -> None:
+    """plan4 §3.6: once the tranche's three votes have run to their end, apply its rule once:
+    `100 · drops > TRANCHE_DROP_PERCENT · size` halts (`rubric`, naming the drops and the rubric
+    hash the tranche was labelled under), anything else passes it. Waits while another halt is
+    open (`_fold_resolution` tries again when it clears); a relabelled tranche is new."""
+    tranche = state.tranche
+    if (tranche is None or tranche["checked"] or state.halt is not None
+            or not state.tranche_complete()):
+        return
+    tranche["checked"] = True
+    drops, size = len(state.tranche_drops()), len(tranche["items"])
+    if tranche_failed(drops, size):
+        state.halt = {"event": "tranche-halt", "batch": batch.batch_id if batch else None,
+                      "reason": "tranche", "voidClass": "rubric", "drops": drops, "items": size,
+                      "rubric": tranche["rubric"]}
+    else:
+        tranche["passed"] = True
+
+
+def tranche_failed(drops: int, size: int) -> bool:
+    """plan4 §3.6: the tranche's rule, `100 · drops > 3 · size` (3 · 250 for a full tranche)."""
+    return 100 * drops > TRANCHE_DROP_PERCENT * size
 
 
 def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
@@ -723,6 +920,8 @@ def _fold_outcome(state: State, event: Mapping[str, Any]) -> None:
         state.halt = dict(event)
     else:
         raise ValueError(f"unknown outcome {outcome!r} in the ledger")
+    if batch.extra.get("tranche"):
+        _check_tranche(state, batch)
 
 
 def _restart_labelling(state: State) -> None:
@@ -732,6 +931,9 @@ def _restart_labelling(state: State) -> None:
     vote 1 on fresh seeds."""
     state.votes.clear()
     state.vote_starts.clear()
+    state.tranche_starts.clear()
+    if state.tranche is not None:
+        state.tranche.update(checked=False, passed=False)
     for batch in state.batches.values():
         if batch.kind == "label":
             batch.state, batch.dropped = "retired", None
@@ -757,6 +959,29 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
         state.pins[event["role"]] = event["model"]
     if event.get("action") == "repin-instructions":
         state.instructions[event["role"]] = [list(pair) for pair in event["instructions"]]
+    if event["event"] == "tranche-restart":
+        _restart_tranche(state, event["rubric"])
+    if event["event"] == "topup-declined":
+        state.topup_declined = True
+    elif (event["event"] == "resolved" and halted is not None
+          and halted.get("voidClass") == "spend"):
+        state.spend_approved.add(halted["genRound"])
+    _check_tranche(state, batch)
+
+
+def _restart_tranche(state: State, rubric: str) -> None:
+    """plan4 §3.6: a tranche whose rule failed is relabelled under the fixed rubric: its items'
+    votes go, its label batches are `retired`, and it is checked afresh. The items stay."""
+    tranche = state.tranche
+    if tranche is None:
+        return
+    for seed_id in tranche["items"]:
+        state.votes.pop(seed_id, None)
+    state.tranche_starts.clear()
+    for batch in state.batches.values():
+        if batch.kind == "label" and batch.extra.get("tranche"):
+            batch.state, batch.dropped = "retired", None
+    tranche.update(rubric=rubric, checked=False, passed=False, relabels=tranche["relabels"] + 1)
 
 
 # --- results -------------------------------------------------------------------------------------
@@ -904,6 +1129,91 @@ def balanced_runs(seed_ids: Sequence[str]) -> list[list[str]]:
         cuts.append(list(seed_ids[start:start + size]))
         start += size
     return cuts
+
+
+def rubric_hash(role: str) -> str:
+    """plan5 §3.3: sha256 over the UTF-8 `Point.rubric_body`, the value `promptSha256.rubric`
+    holds: the key a message-type tranche is labelled under (plan4 §3.6)."""
+    return hashlib.sha256(load_point(role).rubric_body.encode("utf-8")).hexdigest()
+
+
+def design_strata(role: str) -> list[str | None]:
+    """A point's design strata, in design order: the values of its design stratum axis (guard's
+    evidence kinds), `[None]` for a point with none (note §Q1.3)."""
+    design = load_point(role).design
+    axis_name = design["designStratumAxis"]
+    if axis_name is None:
+        return [None]
+    axis = next(a for a in design["stratified"] if a["axis"] == axis_name)
+    return [entry["value"] for entry in axis["values"]]
+
+
+def cell_target(role: str) -> int:
+    """A cell's target: eval plus calibration, which equals eval (note §Q1.3's table)."""
+    return 2 * load_point(role).definition["cells"]["evalPerCell"]
+
+
+def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]]) -> dict[str | None, int]:
+    """plan4 §3.6 "Top-up planner", pure: the seeds to draw per short design stratum, from the
+    labelled items' cells (design stratum, label). A cell is short below `cell_target`. Per short
+    stratum `s` it is `max over its short cells ℓ of ⌈shortfall_ℓ / P̂(ℓ | s)⌉`, with `P̂(ℓ | s)`
+    the share of `s`'s labelled items that carry ℓ (integer arithmetic). Nothing here names an
+    intent: the draw is the design's own, restricted to `s`. A short cell with no labelled item
+    has `P̂ = 0` and no draw count: refused, for a method decision."""
+    counts = dict.fromkeys(itertools.product(design_strata(role), (
+        labels.vote_key(v) for v in load_point(role).expected)), 0)
+    for cell in labelled:
+        counts[cell] += 1
+    target = cell_target(role)
+    out: dict[str | None, int] = {}
+    for stratum in design_strata(role):
+        size = sum(n for (s, _), n in counts.items() if s == stratum)
+        draw = 0
+        for (cell_stratum, label), n in counts.items():
+            if cell_stratum != stratum or n >= target:
+                continue
+            if n == 0:
+                raise CampaignRefused(
+                    f"cell ({label}, {stratum or 'no stratum'}) holds no labelled item, so "
+                    "P(label | stratum) is 0 and its top-up draw is unbounded: a method decision")
+            draw = max(draw, -(-(target - n) * size // n))
+        if draw:
+            out[stratum] = draw
+    return out
+
+
+@dataclass(frozen=True)
+class TopUpProjection:
+    """`project_topup`'s result: the projected tokens of a top-up round, round 1's measured
+    total, and whether the projection exceeds half of it."""
+
+    projected: Fraction
+    round_one: int
+
+    @property
+    def halts(self) -> bool:
+        return SPEND_HALT_DENOMINATOR * self.projected > self.round_one
+
+    def as_record(self) -> dict[str, Any]:
+        return {"projectedTokens": float(self.projected), "roundOneTokens": self.round_one,
+                "halts": self.halts}
+
+
+def project_topup(*, round_one: Mapping[str, Any], topup_items: int,
+                  topup_runs: int) -> TopUpProjection:
+    """plan4 §3.6 "Spend halt" (note §Q1.3), pure: `(top-up items / round-1 items) × round 1's
+    labelling tokens + top-up generation runs × round 1's mean tokens per generation run`,
+    against round 1's own measured tokens (generation plus labelling), each side the sum of the
+    four token classes. `round_one` is `State.spend(1)`. The round halts when the projection
+    exceeds half of round 1's total: exactly half does not."""
+    classes = pilot.TOKEN_CLASSES
+    label = sum(round_one["labelTokens"].get(c, 0) for c in classes)
+    generation = sum(round_one["generationTokens"].get(c, 0) for c in classes)
+    items, runs = round_one["items"], round_one["generationRuns"]
+    if items < 1 or runs < 1:
+        raise CampaignRefused("round 1 has no accepted item or generation run to project from")
+    projected = (Fraction(topup_items * label, items) + Fraction(topup_runs * generation, runs))
+    return TopUpProjection(projected, label + generation)
 
 
 # --- the campaign --------------------------------------------------------------------------------
@@ -1143,7 +1453,7 @@ class Campaign:
 
     def begin_round(self, gen_round: int, count: int | None = None, *,
                     design_stratum: str | None = None, extend: bool = False,
-                    pilot_block: str | None = None) -> list[str]:
+                    pilot_block: str | None = None, queue_runs: bool = True) -> list[str]:
         """plan4 §3.6 "Generation runs", plan6 §3.8: draw `count` seeds on a fresh RNG seed
         (plan5 §3.2: `record_draw` refuses a held one), record the round (`round-start`: its
         `genRound` and drawn seeds, which add to the halt denominator of that `genRound`), shuffle
@@ -1158,7 +1468,8 @@ class Campaign:
         duplicate (`next` queues the stranded seeds), and after the draw alone the stratum has no
         `round-start`, so it draws afresh. `pilot_block` (`MAIN_BLOCK` or `RECHECK_BLOCK`, a pilot
         campaign's only; `pilot.py` passes it) is recorded on the `round-start`: it decides which
-        votes the round takes (`State.round_votes`).
+        votes the round takes (`State.round_votes`). `queue_runs=False` records the draw and
+        queues nothing, for a top-up round's strata that `queue_topup` cuts as one pool.
         Returns the queued batch ids."""
         if isinstance(gen_round, bool) or not isinstance(gen_round, int) or gen_round < 1:
             raise CampaignRefused(f"genRound must be a positive integer, not {gen_round!r}")
@@ -1194,7 +1505,7 @@ class Campaign:
         self._append({"event": "round-start", "genRound": gen_round, "rngSeed": rng_seed,
                       "designStratum": design_stratum, "seeds": ordered,
                       **({"pilotBlock": pilot_block} if pilot_block else {})})
-        return self._queue_runs(ordered, "first")
+        return self._queue_runs(ordered, "first") if queue_runs else []
 
     def queue_regeneration(self) -> list[str]:
         """Note §Q1.2 "On a hit": the seeds a hit queued, pooled across rounds and design strata,
@@ -1208,28 +1519,45 @@ class Campaign:
         when none can start, or a vote is still running). The items are reshuffled on a fresh RNG
         seed that `vote-start` records (it joins the held set, plan5 §3.2), then queued in
         batches of at most `labelBatchCap`. A vote a crash left half-queued gets its missing items
-        queued into it, in the recorded order (the generation half's `unbatched_seeds`)."""
+        queued into it, in the recorded order (the generation half's `unbatched_seeds`). Message
+        type's round 1 draws its tranche first (`tranche-start`) and votes it before the rest
+        (plan4 §3.6): its batches and `vote-start`s carry `tranche`."""
         state = self.state()
         if any(batch.kind == "label" and batch.extra.get("vote") is not None
                and batch.state not in ("ingested", "dropped", "retired")
                for batch in state.batches.values()):
             return []
         for gen_round in sorted({r["genRound"] for r in state.rounds}):
-            step = state.next_vote(gen_round)
+            if state.tranche_due(gen_round):
+                self._draw_tranche(state, gen_round)
+                state = self.state()
+            step = state.vote_step(gen_round)
             if step is None or not step[1]:
                 continue
-            vote, order, recorded = step
+            vote, order, recorded, tranche = step
             if not recorded:
                 rng_seed = self.fresh_rng_seed()
                 random.Random(f"label-votes|{rng_seed}").shuffle(order)
                 self._append({"event": "vote-start", "genRound": gen_round, "vote": vote,
-                              "rngSeed": rng_seed, "items": order})
+                              "rngSeed": rng_seed, "items": order,
+                              **({"tranche": True} if tranche else {})})
             cap = (labels.SCREEN_BATCH_CAP if vote == labels.SCREEN_VOTE
                    else state.init["labelBatchCap"])
-            return [self.queue_batch("label", order[start:start + cap],
-                                     genRound=gen_round, vote=vote)
+            return [self.queue_batch("label", order[start:start + cap], genRound=gen_round,
+                                     vote=vote, **({"tranche": True} if tranche else {}))
                     for start in range(0, len(order), cap)]
         return []
+
+    def _draw_tranche(self, state: State, gen_round: int) -> None:
+        """plan4 §3.6: `TRANCHE_ITEMS` of round `gen_round`'s accepted items, drawn at random on
+        a fresh RNG seed (held, plan5 §3.2), with the rubric hash the tranche is labelled under.
+        A round with fewer items is all tranche."""
+        items = sorted(seed for seed, rec in state.items.items() if rec["genRound"] == gen_round)
+        rng_seed = self.fresh_rng_seed()
+        random.Random(f"tranche|{rng_seed}").shuffle(items)
+        self._append({"event": "tranche-start", "genRound": gen_round, "rngSeed": rng_seed,
+                      "items": sorted(items[:TRANCHE_ITEMS]),
+                      "rubric": rubric_hash(state.init["point"])})
 
     def queue_pilot_block(self) -> list[str]:
         """Note §Q1.3 "Pilot" "Screen" (plan4 §3.8): in a pilot campaign whose main blocks have
@@ -1248,6 +1576,60 @@ class Campaign:
             return []
         return self.begin_round(max(r["genRound"] for r in state.rounds) + 1,
                                 pilot.ADDED_BLOCK_SEEDS, pilot_block=MAIN_BLOCK)
+
+    def queue_topup(self) -> list[str]:
+        """plan4 §3.6 "Top-up planner" (phase `full`; plan6 §3.8): when every round is labelled
+        and a cell is short, plan the next `genRound`. Before it is issued the spend projection is
+        compared (`project_topup`); over half of round 1's tokens it records the `spend-halt`
+        (`resolve` lets it through, `--decline-topup` ends top-ups) and queues nothing. Otherwise
+        it records the `topup-plan` and draws every stratum before any run issues, the first with
+        `begin_round` and each further one with `extend=True`, then cuts the pooled seeds into
+        runs (`_queue_unbatched`). `[]` when nothing is short, a round is unlabelled, a halt is
+        open or top-ups were declined."""
+        state = self.state()
+        if (state.init["phase"] != "full" or state.topup_declined or state.halt is not None
+                or not state.rounds
+                or not all(state.round_voted(g) for g in {r["genRound"] for r in state.rounds})):
+            return []
+        gen_round = max(r["genRound"] for r in state.rounds) + 1
+        need = topup_counts(state.init["point"], state.labelled_cells())
+        if not need:
+            return []
+        runs = len(balanced_runs(["seed"] * sum(need.values())))
+        projection = project_topup(round_one=state.spend(1), topup_items=sum(need.values()),
+                                   topup_runs=runs)
+        if projection.halts and gen_round not in state.spend_approved:
+            self._append({"event": "spend-halt", "genRound": gen_round,
+                          "strata": [[s, n] for s, n in need.items()],
+                          "projection": projection.as_record()})
+            return []
+        self._append({"event": "topup-plan", "genRound": gen_round,
+                      "strata": [[s, n] for s, n in need.items()],
+                      "projection": projection.as_record()})
+        return self._draw_topup()
+
+    def _resume_topup(self) -> list[str]:
+        """The strata of the last `topup-plan` that no `round-start` of its `genRound` holds yet
+        (a crash between the plan and its draws), drawn before any run issues; `[]` when none
+        remains."""
+        state = self.state()
+        if not state.topup_plans or state.halt is not None:
+            return []
+        return self._draw_topup()
+
+    def _draw_topup(self) -> list[str]:
+        state = self.state()
+        plan = state.topup_plans[-1]
+        gen_round = plan["genRound"]
+        drawn = {r["designStratum"] for r in state.rounds if r["genRound"] == gen_round}
+        todo = [(s, n) for s, n in plan["strata"] if s not in drawn]
+        if not todo or any(batch.attempts for batch in state.first_pass_runs(gen_round)):
+            return []
+        for stratum, count in todo:
+            self.begin_round(gen_round, count, design_stratum=stratum,
+                             extend=any(r["genRound"] == gen_round for r in self.state().rounds),
+                             queue_runs=False)
+        return self._queue_unbatched()
 
     def _queue_unbatched(self) -> list[str]:
         """plan6 §3.8 "A half-written round": queue the `round-start` seeds no batch holds, in
@@ -1310,6 +1692,7 @@ class Campaign:
             raise CampaignRefused(f"exchange/ holds files no attempt accounts for: {stray}")
         if self.usage_stop is not None:
             return self.usage_stop
+        self._resume_topup()
         state = self.state()
         if state.unbatched_seeds() and self._queue_unbatched():
             state = self.state()
@@ -1320,6 +1703,11 @@ class Campaign:
         if not pending and self.queue_votes():
             state = self.state()
             pending = [b for b in state.batches.values() if b.state == "pending"]
+        if not pending and self.queue_topup():
+            state = self.state()
+            pending = [b for b in state.batches.values() if b.state == "pending"]
+        if not pending and self.state().halt is not None:        # the spend halt (`spend`)
+            return Stop("halted", _halt_text(self.state().halt))
         if not pending:
             queued = self.queue_pilot_block()
             state = self.state()
@@ -1426,7 +1814,8 @@ class Campaign:
             stop = None
         after = (self.state().halt if event["outcome"] in ("ingested", "void")
                  and batch.state != "retired" else None)
-        if after is not None and after.get("voidClass") == "template" and state.halt is None:
+        if (after is not None and after.get("voidClass") in ("template", "rubric")
+                and state.halt is None):
             stop = "halted"
         if stop == "usage-stop":
             self.usage_stop = Stop(stop, event.get("reason", ""))
@@ -1630,18 +2019,22 @@ class Campaign:
     # -- resolve ----------------------------------------------------------------------------------
 
     def resolve(self, *, decision: str, skip_batch: bool = False,
-                repin_instructions: bool = False,
+                repin_instructions: bool = False, decline_topup: bool = False,
                 repin_model: tuple[str, str] | None = None) -> list[str]:
         """`driver resolve` (plan4 §3.3 "Halt", plan6 §3.5): clear the halt with one recorded
         decision. Retry re-issues the halted batch under a new name; `--skip-batch` drops it
-        into `safeguardSkipped`; a re-pin records its new model or instructions set. Returns the
+        into `safeguardSkipped`; a re-pin records its new model or instructions set. A `rubric`
+        halt (the tranche's rule failed) is cleared by `tranche-restart` and needs the rubric
+        hash to have changed since the tranche was labelled, so the relabelling means something;
+        a `spend` halt is let through by a plain resolve (the stakeholder's "yes") or ended by
+        `--decline-topup` (the "no", plan4 §3.6): no top-up round is issued after it. Returns the
         lines it prints (plan6 §3.8): the halt it cleared and, when the drop closed a round or
         pool, the halt that raised, else the line that `driver run` resumes."""
         if not decision.strip():
             raise CampaignRefused("--decision needs a text")
-        if skip_batch + repin_instructions + (repin_model is not None) > 1:
-            raise CampaignRefused("give at most one of --skip-batch, --repin-instructions and "
-                                  "--repin-model")
+        if skip_batch + repin_instructions + decline_topup + (repin_model is not None) > 1:
+            raise CampaignRefused("give at most one of --skip-batch, --repin-instructions, "
+                                  "--decline-topup and --repin-model")
         with self.locked():
             state = self.state()
             halt = state.halt
@@ -1649,7 +2042,11 @@ class Campaign:
                 raise CampaignRefused("the campaign is not halted")
             event: dict[str, Any] = {"event": "resolved", "decision": decision,
                                      "batch": halt["batch"], "reason": halt.get("reason")}
-            if skip_batch:
+            if decline_topup:
+                if halt.get("voidClass") != "spend":
+                    raise CampaignRefused("--decline-topup is for a spend halt (plan4 §3.6)")
+                event["event"], event["action"] = "topup-declined", "decline-topup"
+            elif skip_batch:
                 if halt.get("reason") != "safeguardStop":
                     raise CampaignRefused("--skip-batch is for a safeguardStop halt (plan6 §3.5)")
                 event["action"] = "skip-batch"
@@ -1663,12 +2060,20 @@ class Campaign:
                     [entry["path"], entry["sha256"]] for entry in run["instructions"]])
             elif repin_model is not None:
                 event.update(self._repin_model(state, *repin_model))
+            elif halt.get("voidClass") == "rubric":
+                now = rubric_hash(state.init["point"])
+                if now == state.tranche["rubric"]:
+                    raise CampaignRefused(
+                        "the rubric is unchanged since the tranche was labelled "
+                        f"({now[:12]}): fix it first, then resolve")
+                event.update(event="tranche-restart", action="relabel-tranche", rubric=now)
             else:
                 event["action"] = "retry"
             self._append(event)
             raised = self.state().halt
         return [f"cleared: {_halt_text(halt)}",
                 f"HALTED: {_halt_text(raised)}; clear with `driver resolve`" if raised
+                else "top-up declined; no top-up round will be issued" if decline_topup
                 else "resolved; the next `driver run` resumes"]
 
     @staticmethod
@@ -1714,6 +2119,13 @@ class Campaign:
             lines.append(f"dropped: {json.dumps(dropped, sort_keys=True)}")
         if state.vote_ties():
             lines.append(f"voteTie (three different labels): {len(state.vote_ties())} items")
+        if state.tranche is not None:
+            lines.append(f"tranche: {len(state.tranche['items'])} items, "
+                         f"{len(state.tranche_drops())} voteTie drops, "
+                         f"{'passed' if state.tranche_passed() else 'not passed'} "
+                         f"(rubric {state.tranche['rubric'][:12]})")
+        if state.topup_declined:
+            lines.append("top-up declined: no top-up round will be issued")
         if state.dropped_seeds:
             lines.append("seeds dropped on a third hit: "
                          + json.dumps(state.generation_drops(), sort_keys=True))
@@ -1726,6 +2138,14 @@ def _halt_text(halt: Mapping[str, Any]) -> str:
     if halt.get("batch") is not None:
         text += f" on {halt['batch']}"
     parts = []
+    if halt.get("voidClass") == "rubric":
+        parts.append(f"{halt['drops']} voteTie drops in {halt['items']} tranche items under "
+                     f"rubric {halt['rubric'][:12]}")
+    if halt.get("voidClass") == "spend":
+        projection = halt["projection"]
+        parts.append(f"round {halt['genRound']} top-up projected "
+                     f"{projection['projectedTokens']:.0f} tokens against round 1's "
+                     f"{projection['roundOneTokens']}")
     if "round" in halt:
         parts.append(f"round {halt['round']['genRound']}: " + ", ".join(halt["round"]["reasons"]))
     for pool in halt.get("pools", ()):

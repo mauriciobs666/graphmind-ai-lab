@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.9 — rounds, top-up, spend halt, tranche, diagnostics
+
+**What:** `docs/plans/typed-decision-models4.md` §3.6 and its §5 row U5.9; plan5 §3.2, §3.6 and its
+U5.9 row; plan6 §3.8 and its U5.8a/U5.9 row; carried ML P3-n2 and P4-n2 and impl Pass 26's open
+minors. Plan docs and live specs untouched.
+
+- `campaign.py`: `topup_counts` (pure planner), `project_topup` (pure spend projection),
+  `Campaign.queue_topup`/`_resume_topup` (called from `next`; every stratum drawn, the first with
+  `begin_round`, the rest `extend=True`, before a run issues, then cut as one interleaved pool;
+  `begin_round(queue_runs=False)`), the `spend-halt`, `topup-plan` and `topup-declined` events,
+  and `resolve --decline-topup` (also `driver.py`). Message type's round 1 votes a 250-item
+  tranche first (`tranche-start`; `tranche` on its `vote-start`s and batches): `tranche_failed`
+  halts with `rubric`, and `resolve` relabels it (`tranche-restart`) only under a changed
+  `rubric_hash`. A generator restart resets all of it. `State` also keeps `template_log`.
+- `diagnostics.py`: `diagnostics.json` per plan4 §3.6, plus the round-1 `CueCheck` reprint
+  (`failed` omitted), P3-n2's turn-cut split and P4-n2's hand-off-example count (nothing dropped).
+- Pass 26 minors: the join-in generator test pins the rule, the item wrappers are pinned by
+  value (a slice before the filter now reddens), `agentName` is pinned unstripped, and
+  `layout_block` reads only the first indented block (fixed, with a test).
+- `tests/test_votes.py`'s message-type bench switches the tranche and the planner off: six items
+  are all tranche and every cell short, and those tests are about the vote path.
+- No recorded generator-template hash predates the `generator.md` edit: no campaign ledger
+  exists outside pytest's temp directories. `install` does not yet record `requestTemplate` or
+  `rubric` (U5.10, plan5 §3.3), so the template hash does not cover `generator.md` at all yet.
+
+**Verified:** `pytest -q` from `decision-models/` 1588 passed, no skip or xfail (1527 before:
++39 in `test_topup.py`, +19 in `test_diagnostics.py`, +3 net in `test_render_layout.py`);
+`ruff check .` clean. 35 scratch-copy mutants (the intent-filtering sampler, halting at exactly
+half, three token classes, the tranche rule at `>=` and 4%, the rest voting before the tranche
+passes, a relabel under an unchanged rubric, an unrecorded decline, floor for ceiling, min for
+max, one stratum's size for all, unpooled strata, no interleave, `extend` never or always,
+spend approval ignored, a reused RNG seed, an unrecorded tranche seed, and the diagnostics and
+Pass 26 ones) each redden a test; one (`tranche_drops` counting every tie) first survived, as
+the rest's ties come after the check, and a test now holds the rest's ties out of the count.
+
 ## 2026-11-10 — typed-decision-models U5.2b-render — new-ability renderers, render vectors, 6-turn rule
 
 **What:** `docs/plans/typed-decision-models5.md` §3.4 and its §4 U5.2b-render row (over plan6 v1.22).

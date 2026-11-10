@@ -11,7 +11,7 @@ no session.
 - `init --point <role> --phase smoke|pilot|full --root <dir> [--fixture <items.jsonl>]
   [--batch-timeout 45m] [--launch-fail-bound 6h]`
 - `resolve --root <dir> --decision <text> [--skip-batch | --repin-instructions |
-  --repin-model generator|labeler <id>]`
+  --decline-topup | --repin-model generator|labeler <id>]`
 - `install --root <dir> [--agents-dir <dir>]`
 - `smoke-fixture --out <items.jsonl> [--count 50]`
 - `run --root <dir>`: exits 0 when it stops (done, halt, usage stop, pause, a held lock, a
@@ -63,6 +63,8 @@ def _parser() -> argparse.ArgumentParser:
     action = resolve.add_mutually_exclusive_group()
     action.add_argument("--skip-batch", action="store_true")
     action.add_argument("--repin-instructions", action="store_true")
+    action.add_argument("--decline-topup", action="store_true",
+                        help="a spend halt: the stakeholder declines the top-up round")
     action.add_argument("--repin-model", nargs=2, metavar=("ROLE", "MODEL"))
 
     inst = commands.add_parser("install", help="install the agent definitions and guard; record "
@@ -125,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "resolve":
             print("\n".join(camp.resolve(
                 decision=args.decision, skip_batch=args.skip_batch,
-                repin_instructions=args.repin_instructions,
+                repin_instructions=args.repin_instructions, decline_topup=args.decline_topup,
                 repin_model=tuple(args.repin_model) if args.repin_model else None)))
         else:
             print("\n".join(camp.status()))

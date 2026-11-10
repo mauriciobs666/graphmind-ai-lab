@@ -39,12 +39,27 @@ MESSAGE_TYPE_ITEM = {
 MESSAGE_TYPE_VALUES = ["Florist Assistant", "We have it in red and blue.", "Yes, the blue one"]
 
 
-def layout_block(role: str) -> list[str]:
-    """The rubric's layout block: its indented lines (blanks between them kept), dedented."""
-    section = load_point(role).rubric_body.split(_HEADING, 1)[1].split("\n## ", 1)[0]
+def layout_lines(section: str) -> list[str]:
+    """The first indented block of a rubric section, dedented: from its first indented line to the
+    last indented line before the next unindented, non-blank one. Blank lines between its lines
+    are kept; a later indented sample in the prose is not part of it (P26-n2)."""
     raw = section.splitlines()
-    indented = [n for n, line in enumerate(raw) if line.startswith("    ")]
-    lines = [line[4:] for line in raw[indented[0] : indented[-1] + 1]] if indented else []
+    start = next((n for n, line in enumerate(raw) if line.startswith("    ")), None)
+    if start is None:
+        return []
+    end = start
+    for n in range(start, len(raw)):
+        if raw[n].startswith("    "):
+            end = n
+        elif raw[n].strip():
+            break
+    return [line[4:] for line in raw[start : end + 1]]
+
+
+def layout_block(role: str) -> list[str]:
+    """The rubric's layout block (`layout_lines` over its "What an item looks like" section)."""
+    section = load_point(role).rubric_body.split(_HEADING, 1)[1].split("\n## ", 1)[0]
+    lines = layout_lines(section)
     assert lines, f"{role}'s rubric has no indented layout block"
     return lines
 
@@ -109,11 +124,53 @@ def test_join_in_renders_only_the_last_six_of_the_eight_prior_turns_it_allows() 
     assert [f"P{n}: turn {n}" in rendered for n in range(1, 9)] == [False] * 2 + [True] * 6
 
 
+_NUMBER_WORDS = {6: "six"}
+
+
 def test_the_join_in_generator_keeps_the_agents_job_inside_the_last_six_turns() -> None:
     """Plan5 §3.4: the renderer drops all but the last six prior turns while `maxItems` is 8, so
-    the generator's instructions must say where the judge can see the agent's job."""
+    the generator's instructions must say where the judge can see the agent's job. Pinned as the
+    rule, not a phrase: the paragraph names the renderer's own number, says the judge never sees
+    the earlier turns, and puts the agent's job and what the message depends on inside the six."""
     body = load_point("join-in-judge").generator_body
-    assert "last six" in body
+    kept = _NUMBER_WORDS[render.RECENT_TURNS_KEPT]
+    paragraph = next(p for p in body.split("\n\n") if f"last {kept}" in p)
+    flat = " ".join(paragraph.split())
+    assert f"reads only the last {kept} of `priorTurns`" in flat
+    assert "never sees the earliest" in flat
+    assert f"must therefore sit inside the last {kept} `priorTurns`" in flat
+    assert "shows the agent's job" in flat and "the new message depends on" in flat
+
+
+def test_a_later_indented_sample_is_not_part_of_the_layout_block() -> None:
+    section = "\nintro\n\n    A: <x>\n\n    B: <y>\n\nprose after the block\n\n    sample: later\n"
+    assert layout_lines(section) == ["A: <x>", "", "B: <y>"]
+    assert layout_lines("no block here\n") == []
+
+
+def test_the_item_wrappers_filter_before_they_slice_and_cut_to_the_contract_lengths() -> None:
+    """The wrappers are pinned by value, not by wiring (P26-m2): a slice before the filter would
+    let a malformed tail row shrink the window, and `render_*_input` is what the vectors cover."""
+    turns = [{"role": "user", "displayName": f"P{n}", "text": f"turn {n}"} for n in range(1, 7)]
+    turns.append({"role": "user", "displayName": "P7", "text": ""})
+    item = {**JOIN_IN_ITEM, "priorTurns": turns}
+    rendered = render.render_join_in_item(item)
+    assert rendered == render.render_join_in_input("Pastel", turns, item["newMessage"])
+    assert [f"P{n}: turn {n}" in rendered for n in range(1, 8)] == [True] * 6 + [False]
+    long_prior = {"speaker": "Shop Assistant", "text": "p" * 401}
+    message = render.render_message_type_item({"text": "t" * 2001, "priorTurn": long_prior})
+    assert message == ("PREVIOUS MESSAGE:\nShop Assistant: " + "p" * 400
+                       + "\n\nMESSAGE:\n" + "t" * 2000)
+    assert render.render_message_type_item({"text": "hi", "priorTurn": None}) == "MESSAGE:\nhi"
+
+
+def test_the_join_in_agent_name_is_rendered_verbatim_never_stripped() -> None:
+    """The contract's function does not strip, and no vector has padding (P26-n1)."""
+    message = {"role": "user", "displayName": "Bo", "text": "hi"}
+    assert render.render_join_in_input("  Pastel ", [], message) == (
+        "AGENT:   Pastel \n\nNEW MESSAGE:\nBo: hi")
+    item = {**JOIN_IN_ITEM, "agentName": " Pastel", "priorTurns": []}
+    assert render.render_join_in_item(item).startswith("AGENT:  Pastel\n\n")
 
 
 def test_the_join_in_new_message_speaker_is_the_display_name_before_the_author_id() -> None:
