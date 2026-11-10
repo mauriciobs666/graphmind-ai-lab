@@ -65,8 +65,13 @@ def build_parser():
     st = sub.add_parser("set", help="set an attribute: milestone, home, touched, slug, where")
     st.add_argument("id")
     st.add_argument("assignment", help="attr=value (touched takes a comma-separated list)")
-    rb = sub.add_parser("rebuild", help="recover the registry from Item:/Aliases: headers")
-    rb.add_argument("--from-headers", nargs="+", metavar="ROOT", required=True)
+    rb = sub.add_parser("rebuild", help="recover the registry: git history first, then headers")
+    rb.add_argument("--from-headers", nargs="+", metavar="ROOT", default=[],
+                    help="fallback for items absent from history")
+    rb.add_argument("--floor", action="append", default=[], metavar="SPEC",
+                    help="TYPE=N or TYPE:<parent>=N: counters start above N (repeatable)")
+    rb.add_argument("--accept-reissue", action="store_true",
+                    help="allow --write with no registry history (IDs may be reissued)")
     rb.add_argument("--write", action="store_true", help="apply (default: dry run)")
     ck = sub.add_parser("check", help="report registry and header problems (FR-9)")
     ck.add_argument("--set", dest="set_file", help="JSON file: a list of {id: ...} entries")
@@ -137,7 +142,8 @@ def main(argv=None, cwd=None):
                 raise links.LinkError(f"expected attr=value, got {args.assignment!r}")
             links.set_attr(root, args.id, attr, value)
         elif args.cmd == "rebuild":
-            print("\n".join(rebuild.rebuild(root, args.from_headers, write=args.write)))
+            print("\n".join(rebuild.rebuild(root, args.from_headers, write=args.write,
+                                           floors=args.floor, accept_reissue=args.accept_reissue)))
         elif args.cmd == "check":
             found = check.check(root, set_file=args.set_file, paths=args.paths)
             for f in found:

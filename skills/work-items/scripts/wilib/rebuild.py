@@ -1,16 +1,18 @@
-"""``wi rebuild --from-headers``: recover the alias table from ``Item:``/``Aliases:`` headers.
+"""``wi rebuild``: recover a registry that no ref tip carries (plan 3.7, AC-12).
 
-For the case where BOTH registry copies (journal and tracked file) are lost (plan 3.7,
-AC-12).  One ``new`` per distinct ``Item:`` ID, then one ``move`` per ``Aliases:`` entry,
-so every header-recorded ID resolves as before and the counters follow from the fold.
-Not recoverable from headers: stories, tasks, titles, links, attributes, retirements and
-any item with no document; the git history of the registry is the backup.
+Sources, in order: (1) the git history of ``.work-items/registry.jsonl`` on any ref,
+unioned by ``evid`` -- everything ever committed comes back whole; (2) ``Item:`` /
+``Aliases:`` headers for items absent from history (one ``new`` per birth ID, one
+``move`` per alias step); (3) ``--floor`` retired sentinels so a counter starts above
+a number.  Without history only the header fallback is possible, and ``--write`` then
+needs ``--accept-reissue``: an ID that reached no commit, header or floor can be reissued.
 """
+import json
 import re
 from pathlib import Path
 
-from . import alloc, headers, rules
-from .store import Store
+from . import alloc, events, headers, rules
+from .store import REGISTRY_REL, Store, _git
 
 ROLES = ("coordination", "ml", "graph", "rca", "impl", "report")
 NOT_RECOVERABLE = ("not recoverable from headers: stories, tasks, titles, links, attributes, "
@@ -21,8 +23,39 @@ _TICKS = re.compile(r"`([^`]+)`")
 _SEEDS = ((1, "Defects"), (2, "Kaizen"))
 
 
+REISSUE_RISK = ("no registry history was found in git: a header-only rebuild can REISSUE an ID "
+                "that reached no commit, header or floor (undocumented or promoted features, "
+                "story/task counters, kaizen numbers, legacy mappings, so a later mint-legacy "
+                "would mint a second ID); pass --accept-reissue to proceed, and --floor to "
+                "start counters above the numbers you know were used")
+_FLOOR = re.compile(r"([A-Z]+)(?::([^=]+))?=(\d+)\Z")
+
+
 class RebuildError(alloc.AllocError):
-    """Rebuild refused (registry is not lost)."""
+    """Rebuild refused (registry is not lost, no history, bad floor)."""
+
+
+def history_events(root):
+    """``(events, versions, unreadable)``: every committed version of the tracked registry
+    on any ref, oldest first, unioned by ``evid`` (first occurrence kept)."""
+    rel = f"./{REGISTRY_REL.as_posix()}"
+    log = _git(root, "log", "--all", "--full-history", "--format=%H", "--", rel) or ""
+    union, seen, versions, unreadable = [], set(), 0, 0
+    for commit in reversed(log.split()):
+        text = _git(root, "show", f"{commit}:{rel}")
+        if text is None:            # a commit that deleted the file
+            continue
+        try:
+            evs = events.read_events(text)
+        except events.EventError:
+            unreadable += 1         # reported, never silent
+            continue
+        versions += 1
+        for ev in evs:
+            if ev["evid"] not in seen:
+                seen.add(ev["evid"])
+                union.append(ev)
+    return union, versions, unreadable
 
 
 def iter_docs(root):
@@ -104,8 +137,10 @@ def collect(roots):
     return items, notes
 
 
-def build_events(items, key):
-    """Event dicts (no evid/ts): ``new`` for each birth ID, ``move`` per alias step."""
+def build_events(items, key, known=None):
+    """Event dicts (no evid/ts): ``new`` for each birth ID, ``move`` per alias step.
+    ``known`` is the state already recovered from history: its seeds are not repeated and
+    its items are valid parents."""
     birth_of = {}
     for it in items:
         chain = it["aliases"] + [it["id"]]
@@ -117,12 +152,12 @@ def build_events(items, key):
         if len(segs) < 2:
             return None
         pid = rules.format_id(key, segs[:-1])
-        return birth_of.get(pid, pid)
+        return birth_of.get(pid) or (known.by_id.get(pid) if known else None) or pid
 
     out = []
     for num, title in _SEEDS:
         sid = rules.format_id(key, [rules.Segment("I", num)])
-        if sid not in birth_of:
+        if sid not in birth_of and not (known and sid in known.by_id):
             out.append({"ev": "new", "id": sid, "type": "I", "parent": None,
                         "home": alloc.DEFAULT_HOME, "title": title})
     for it in items:
@@ -142,15 +177,76 @@ def build_events(items, key):
     return out
 
 
-def rebuild(root, roots, write=False, store=None):
+def _stamped(evs, base=0):
+    return [{"evid": f"tmp{base + n}", "ts": base + n + 1, **e} for n, e in enumerate(evs)]
+
+
+def parse_floor(spec):
+    m = _FLOOR.match(spec)
+    if not m or int(m.group(3)) < 1:
+        raise RebuildError(f"bad --floor {spec!r}: expected TYPE=N or TYPE:<parent>=N with N >= 1")
+    type_, parent, num = m.group(1), m.group(2), int(m.group(3))
+    if type_ in events.LOCAL_TYPES and not parent:
+        raise RebuildError(f"--floor {spec}: {type_} is counted per parent: give a parent "
+                           f"({type_}:<parent>=N)")
+    if type_ in events.GLOBAL_TYPES and parent:
+        raise RebuildError(f"--floor {spec}: {type_} is counted per project: no parent allowed")
+    if type_ not in events.GLOBAL_TYPES + events.LOCAL_TYPES:
+        raise RebuildError(f"bad --floor {spec!r}: {type_} has no counter")
+    return type_, parent, num
+
+
+def floor_events(floors, st, key):
+    """Retired sentinel ``new`` + ``retire`` per floor, so the counter starts above it."""
+    out = []
+    for spec in floors:
+        type_, parent, num = parse_floor(spec)
+        if parent:
+            uid = st.resolve_uid(parent)
+            if uid is None:
+                raise RebuildError(f"--floor {spec}: unknown parent {parent!r}")
+            parent_item = st.items[uid]
+        else:
+            implicit = alloc._implicit_parent(key, type_)
+            parent_item = st.items[st.resolve_uid(implicit)] if implicit else None
+        segs = list(rules.parse(parent_item.id).segments) if parent_item else []
+        id_ = rules.format_id(key, segs + [rules.Segment(type_, num)])
+        try:
+            rules.validate_path(rules.parse(id_))
+        except rules.IllegalParent as exc:
+            raise RebuildError(f"--floor {spec}: {exc}") from None
+        if st.resolve_uid(id_) or any(e.get("id") == id_ for e in out):
+            continue                    # that number is already taken
+        out.append({"ev": "new", "id": id_, "type": type_,
+                    "parent": parent_item.uid if parent_item else None,
+                    "home": alloc.DEFAULT_HOME, "title": "floor sentinel (rebuild)"})
+        out.append({"ev": "retire", "uid": id_})
+    return out
+
+
+def _known(item, st):
+    return any(c in st.by_id for c in item["aliases"] + [item["id"]])
+
+
+def rebuild(root, roots=(), write=False, floors=(), accept_reissue=False, store=None):
     """Plan (and with ``write`` apply) the rebuild; return report lines."""
     root = Path(root)
     key = alloc.load_key(root)
+    hist, versions, unreadable = history_events(root)
+    hist_state = events.fold(hist)
     items, notes = collect([root / r for r in roots])
-    evs = build_events(items, key)
-    lines = [f"item {i['id']} slug={i['slug']} aliases={','.join(i['aliases']) or '-'}"
-             for i in items]
-    lines += [f"note: {n}" for n in notes] + [NOT_RECOVERABLE]
+    items = [i for i in items if not _known(i, hist_state)]
+    evs = build_events(items, key, hist_state)
+    evs += floor_events(floors, events.fold(hist + _stamped(evs)), key)
+    lines = [f"history: {len(hist)} events from {versions} committed version(s)"]
+    if unreadable:
+        lines.append(f"note: {unreadable} committed version(s) were unreadable and skipped")
+    lines += [f"item {i['id']} slug={i['slug']} aliases={','.join(i['aliases']) or '-'}"
+              for i in items]
+    lines += [f"note: {n}" for n in notes]
+    if not hist:
+        lines.append(f"warning: {REISSUE_RISK}")
+    lines.append(NOT_RECOVERABLE)
     if not write:
         return ["dry run: nothing written (use --write)"] + lines
     store = store or Store(root, key)
@@ -159,7 +255,20 @@ def rebuild(root, roots, write=False, store=None):
             raise RebuildError(
                 f"the registry is not lost ({len(tx.state.items)} items present): refusing to "
                 "rebuild over it; delete both copies first if that is really intended")
+        if not hist and not accept_reissue:
+            raise RebuildError(REISSUE_RISK)
+        for ev in hist:
+            tx.append(ev)               # keeps its evid and ts
         for ev in evs:
             tx.append(ev)
     store.flush()
-    return [f"wrote {len(evs)} events"] + lines
+    _record_marker(root, {"history_events": len(hist), "header_items": len(items),
+                          "floors": list(floors), "reissue_accepted": bool(accept_reissue)})
+    return [f"wrote {len(hist) + len(evs)} events"] + lines
+
+
+def _record_marker(root, marker):
+    path = Path(root) / ".work-items" / "project.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["rebuilt"] = marker
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

@@ -222,6 +222,18 @@ def _namespace_findings(root, paths):
     return out
 
 
+# ------------------------------------------------------------------ rebuilt
+def _rebuilt_findings(root):
+    cfg = json.loads((root / ".work-items" / "project.json").read_text(encoding="utf-8"))
+    marker = cfg.get("rebuilt")
+    if not marker:
+        return []
+    return [Finding("rebuilt", ".work-items/project.json",
+                    f"the registry was rebuilt ({json.dumps(marker, sort_keys=True)}); IDs that "
+                    "reached no commit, header or floor may have been reissued; remove the "
+                    "'rebuilt' key once reviewed", True)]
+
+
 # ------------------------------------------------------------------ entry
 def check(root, set_file=None, paths=None, store=None):
     """Run every rule; return findings (informational ones have ``informational=True``)."""
@@ -239,4 +251,5 @@ def check(root, set_file=None, paths=None, store=None):
     if set_file:
         out += _set_findings(set_file, root, st, slugs, key)
     out += _namespace_findings(root, paths)
+    out += _rebuilt_findings(root)
     return out

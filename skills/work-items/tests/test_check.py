@@ -306,3 +306,31 @@ def test_check_after_two_moves_is_clean_once_synced(proj):
     Store(proj, "GAL").flush()
     headers.sync(proj)
     assert check.check(proj) == []
+
+
+def _lost_then_rebuilt(proj):
+    store = Store(proj, "GAL")
+    store.journal_path.unlink()
+    store.registry_path.unlink()
+    r = wi(proj, "rebuild", "--write", "--accept-reissue")
+    assert r.returncode == 0, r.stderr
+
+
+def test_check_reports_rebuilt_informationally_until_the_marker_is_removed(proj):
+    _lost_then_rebuilt(proj)
+    first = wi(proj, "check")
+    assert first.returncode == 0
+    assert first.stdout.startswith("info rebuilt: ") and "project.json" in first.stdout
+    assert wi(proj, "check").stdout == first.stdout              # every run, not once
+    found = check.check(proj)
+    assert [(f.kind, f.informational) for f in found] == [("rebuilt", True)]
+    cfg = proj / ".work-items" / "project.json"
+    data = json.loads(cfg.read_text())
+    del data["rebuilt"]
+    cfg.write_text(json.dumps(data))
+    after = wi(proj, "check")
+    assert (after.returncode, after.stdout) == (0, "")
+
+
+def test_check_without_a_rebuild_has_no_rebuilt_finding(proj):
+    assert check.check(proj) == []
