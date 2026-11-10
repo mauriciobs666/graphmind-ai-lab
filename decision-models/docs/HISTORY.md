@@ -2,6 +2,63 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.8c fix round — bounded added blocks, report fields
+
+**What:** impl review Pass 24 (P24-M1, M2, m1, m2, n1 to n3), plan6 v1.22 §3.8 "The pilot's added
+blocks are bounded" and the §5 U5.8c row. Plan docs and live specs untouched.
+
+- `campaign.py`: `queue_pilot_block` draws at most `pilot.PILOT_ADDED_BLOCK_LIMIT` (3) added main
+  blocks per halt epoch, then `record_pilot_block_halt` appends the batchless `pilot-block-halt`
+  (`mainRounds`; reason and `voidClass` `pilotBlocks`; its own event, not `cue-check-halt`). `fold`
+  keeps `State.block_halt_base` (the main-block count at the last such halt), so a `resolve` opens
+  a new epoch; `next` returns `Stop("halted")` at once. `_restart_generation` resets the epoch and
+  the cue-halt count and resolved flag (P24-n2: fixed, not documented). `record_cue_check_halt` and
+  `record_pilot_block_halt` refuse while any halt is open (P24-n1).
+- `pilot.py`: the `report` refusal for `n < 80` names an open `pilotBlocks` halt; the report gains
+  `planFactor` and `assumes` and the docstring says what the factor is (P24-m1); `dropped` leaves
+  out dropped screen-vote batches, which are `droppedScreenVote` (P24-n3: fixed; their items keep
+  votes 1 to 3).
+- The reviewer's suggested fixes all held when executed; none was wrong.
+- Tests (`tests/test_pilot.py`, 81 → 94): the bound (blocks 1 to 3 then `pilot-block-halt` with
+  `n` = 0, `resolve` then exactly three more and a second halt), 79 against 80 items after block
+  3, the epoch and cue bookkeeping reset by a generator re-pin, both recorders refusing with a halt
+  open, a crash after 3 of 10 screen batches, `--cap 25` read back (and through `init --phase
+  full`), the recheck report keeping the pilot's `n`/`Δ`/cap, two voids counted as two, `planFactor`
+  and `assumes`. Suite 1467 → 1480 passed, 2 xfailed. Twenty-one scratch-copy mutants red (limit
+  3→2 and 3→4, `>=`→`>`, epoch never re-armed or counting all blocks, no `max(.,1)`, restart keeping
+  the epoch or the cue bookkeeping, `next` ignoring the halt, the halt's reason or event reused
+  from the cue halt, either recorder without its guard, the refusal text, dropped screen items,
+  `planFactor`, `assumes`, Pass 24's M13, M21, M28 and M51).
+
+## 2026-11-09 — typed-decision-models U5.8c — the guard pilot: screen, cue check, report, recheck, decision
+
+**What:** plan4 §3.8 and its §5 row U5.8 (Pilot part), plan5 §3.6 (cue check, report, recheck,
+spend gate), plan6 §3.8 (blocks are rounds). Not built: the message-type tranche and top-up (U5.9),
+`finalize` (U5.10). Plan docs and live specs untouched.
+
+- `pilot.py` (new; `python -m decisionmodels.pilot start|screen|report|recheck|record-decision`).
+  Pure: `screen` (`n`, `Δ`, cap: `10·Δ ≥ n` gives 25, else 50; `n < 80` needs a block),
+  `cue_check` (exact stratified conditional test over difficulty × intended answer, `Fraction`
+  arithmetic, fails at `p ≤ 1/20`), `fit_line` (labeller `F`, `c` per token class, two batch sizes
+  required). Campaign-aware: `start` (the first main block, 100 seeds), `build_report`/`report`
+  (the one evaluator; derives `missingCueCheck.state` from the ledger; counts only; refuses a partly
+  voted block and a decided report), `recheck` (the recheck block of 100), `record_decision`
+  (single-write; a `proceed` goes through `campaign.spend_gate_refusal`, the one predicate).
+- `labels.py`: `SCREEN_VOTE` (4) and `SCREEN_BATCH_CAP` (10). `campaign.py`: `begin_round(...,
+  pilot_block=)` records `pilotBlock` on `round-start`; `State.round_votes` gives a main block the
+  fourth vote and the recheck block three; `State.three_votes` keeps the screen vote out of
+  `label_votes`/`vote_ties`; `round_voted`, `screen_votes`; `queue_pilot_block` (called by `next`)
+  draws each added main block of 50 while `n < 80`; the `cue-check-halt` event
+  (`record_cue_check_halt`) is a batch-less halt that `resolve` clears (`cue_halt_resolved`).
+- Choices the plans leave open (the coder's, for the gate): `start` is a `pilot.py` subcommand
+  (round 1 is not drawn by `init`, which would change every pilot-phase fixture); the reprojection
+  uses 1.3 × target items per point (the note's 2,340 labelled for 1,800 kept), runs of 25 and
+  three votes at the pilot's cap; the generator's mean is over first-pass runs; the labeller's fit
+  is over every ingested label run, recheck included; `report` is refused once a decision is
+  recorded; an added block has no upper bound beyond `n ≥ 80`.
+- Tests: `tests/test_pilot.py` (new; 81 tests). Suite 1386 → 1467 passed, 2 xfailed. Scratch-copy
+  mutants: 73 run, 71 red; two survive and are argued equivalent in the gate report.
+
 ## 2026-11-05 — typed-decision-models U5.8b fix round — half-queued votes, label request, restart, resolve
 
 **What:** impl review Pass 22 (P22-M1, M2, m1 to m3), plan6 v1.21 §3.7 and §3.8 "Votes".

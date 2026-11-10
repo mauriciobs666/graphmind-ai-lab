@@ -73,8 +73,13 @@ item's answer. A batch dropped (`retryCapExceeded` or `--skip-batch`) takes its 
 round's later votes. `State.label_votes` is an item's `labelVotes` once it has three votes, and
 `State.vote_ties` the choice items with three distinct labels (`voteTie`). A `labelling-restart`
 clears the votes and retires every label batch; the items stay. A batch queued without `vote`
-(the smoke fixture's) records no votes. A vote a crash left half-queued is incomplete until its
-live batches hold every `vote-start` item; `queue_votes` queues the rest into it.
+(the smoke fixture's) records no votes. **The pilot** (`pilot.py`; plan4 §3.8, plan5 §3.6): a
+`round-start`'s `pilotBlock` (`MAIN_BLOCK`, `RECHECK_BLOCK`) adds the screen vote (vote 4, batches
+of `labels.SCREEN_BATCH_CAP`) to a main block's votes, which is never one of the three that give
+`labelVotes`; `next` calls `queue_pilot_block` for each added main block; `pilot.py report` records
+the `cue-check-halt` event (`record_cue_check_halt`), a halt with no batch that `resolve` clears.
+A vote a crash left half-queued is incomplete until its live batches hold every `vote-start`
+item; `queue_votes` queues the rest into it.
 
 **Counting.** `earlier_no_attempt` is the batch's earlier `neverSpawned`/`incomplete` outcomes,
 leaving out attempts an `interrupted {batch}` event names (plan6 §3.2; the audit's own flag exempts
@@ -113,7 +118,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import audit, exchange, labels, screen
+from . import audit, exchange, labels, pilot, screen
 from .ingest import AlreadyIngested, AnswerRefused, Ingested, ingest_answer_files
 from .points import ROLES, input_field_errors, load_point
 from .seeds import Seed, SeedDraw, draw_seeds, round_one_count
@@ -147,6 +152,12 @@ _HIT_EVENT_KINDS = frozenset(HIT_EVENTS.values())
 FULL_ORDER = ("guard-judge", "message-type-classifier", "join-in-judge")
 #: plan5 §3.6's spend gate states.
 PASSING_CUE_STATES = ("passed", "recheck-passed")
+#: The pilot's two kinds of block (a `round-start`'s `pilotBlock`): a main block takes votes 1 to 3
+#: and the screen vote (note §Q1.3 "Pilot" "Screen"); the recheck block (plan5 §3.6) takes
+#: votes 1 to 3 only. `pilot.py` owns the numbers of each block.
+MAIN_BLOCK = "main"
+RECHECK_BLOCK = "recheck"
+PILOT_BLOCKS = (MAIN_BLOCK, RECHECK_BLOCK)
 
 ROLE_OF_KIND = {"generate": "generator", "label": "labeler"}
 _CLEARING_EVENTS = ("resolved", "generation-restart", "labelling-restart")
@@ -248,6 +259,13 @@ class State:
     votes: dict[str, dict[int, Any]] = field(default_factory=dict)
     vote_starts: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     staged: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: The pilot's `cue-check` halt (plan5 §3.6): raised by `pilot.py report`, and whether a
+    #: `resolve` has cleared it (the precondition of `pilot.py recheck`).
+    cue_halts: int = 0
+    cue_halt_resolved: bool = False
+    #: plan6 §3.8's halt epoch for the pilot's added blocks: the number of main blocks when the
+    #: last `pilot-block-halt` was recorded (0 before any), so the blocks since are the epoch's.
+    block_halt_base: int = 0
 
     def generation_drops(self) -> dict[str, Any]:
         """plan5 §3.5's `dropped` keys for seeds dropped on a third hit, counted under the third
@@ -313,6 +331,38 @@ class State:
                 if batch.kind == "label" and batch.state != "retired"
                 and batch.extra.get("genRound") == gen_round and batch.extra.get("vote") == vote]
 
+    def round_votes(self, gen_round: int) -> tuple[int, ...]:
+        """The votes `gen_round` takes: the three, and the screen vote after them for a main
+        pilot block (`MAIN_BLOCK`)."""
+        votes = tuple(range(1, labels.VOTES_PER_ITEM + 1))
+        screened = any(r["genRound"] == gen_round and r["pilotBlock"] == MAIN_BLOCK
+                       for r in self.rounds)
+        return votes + (labels.SCREEN_VOTE,) if screened else votes
+
+    def _dropped_voters(self) -> set[str]:
+        """The items of a dropped label batch: out of the later votes of their round."""
+        return {seed for batch in self.batches.values()
+                if batch.kind == "label" and batch.state == "dropped" for seed in batch.entries}
+
+    def round_voted(self, gen_round: int) -> bool:
+        """Every vote `gen_round` takes has run to its end: recorded, its batches all ingested or
+        dropped, and every item it names (less a dropped batch's) in one. A settled round with no
+        accepted item has no vote to take."""
+        if not self.round_settled(gen_round):
+            return False
+        if not any(rec["genRound"] == gen_round for rec in self.items.values()):
+            return True
+        out = self._dropped_voters()
+        for vote in self.round_votes(gen_round):
+            start = self.vote_starts.get((gen_round, vote))
+            batches = self.vote_batches(gen_round, vote)
+            if start is None or any(b.state not in ("ingested", "dropped") for b in batches):
+                return False
+            held = {seed for batch in batches for seed in batch.entries}
+            if any(seed not in out and seed not in held for seed in start["items"]):
+                return False
+        return True
+
     def next_vote(self, gen_round: int) -> tuple[int, list[str], bool] | None:
         """The vote `gen_round` starts or finishes queuing next, as (vote, the items still to be
         queued into it, whether its `vote-start` is already recorded), or `None` when the round
@@ -321,9 +371,8 @@ class State:
         its `queued` events leaves a tail). An item whose label batch dropped is out."""
         if not self.round_settled(gen_round):
             return None
-        out = {seed for batch in self.batches.values()
-               if batch.kind == "label" and batch.state == "dropped" for seed in batch.entries}
-        for vote in range(1, labels.VOTES_PER_ITEM + 1):
+        out = self._dropped_voters()
+        for vote in self.round_votes(gen_round):
             batches = self.vote_batches(gen_round, vote)
             if any(batch.state not in ("ingested", "dropped") for batch in batches):
                 return None
@@ -339,19 +388,30 @@ class State:
 
     def label_votes(self, seed_id: str) -> dict[str, int] | None:
         """`labelVotes` of an item with all three votes in, else `None`."""
-        answers = self.votes.get(seed_id, {})
-        if len(answers) < labels.VOTES_PER_ITEM:
+        answers = self.three_votes(seed_id)
+        if answers is None:
             return None
-        return labels.label_votes(load_point(self.init["point"]).expected,
-                                  [answers[v] for v in sorted(answers)])
+        return labels.label_votes(load_point(self.init["point"]).expected, answers)
+
+    def screen_votes(self, rounds: Sequence[int]) -> dict[str, dict[int, Any]]:
+        """The votes of the accepted items of `rounds`, by seed id (`pilot.screen`'s input)."""
+        return {seed: self.votes.get(seed, {}) for seed, rec in self.items.items()
+                if rec["genRound"] in set(rounds)}
+
+    def three_votes(self, seed_id: str) -> list[Any] | None:
+        """An item's votes 1 to 3 in vote order, or `None` while one is missing: the screen vote
+        is never one of them."""
+        answers = self.votes.get(seed_id, {})
+        wanted = range(1, labels.VOTES_PER_ITEM + 1)
+        return [answers[v] for v in wanted] if all(v in answers for v in wanted) else None
 
     def vote_ties(self) -> list[str]:
         """The items with three votes and no majority (`voteTie`): a choice item with three
         distinct labels."""
         expected = load_point(self.init["point"]).expected
-        return [seed for seed, answers in self.votes.items()
-                if len(answers) >= labels.VOTES_PER_ITEM
-                and labels.majority(expected, [answers[v] for v in sorted(answers)]) is None]
+        return [seed for seed in self.votes
+                if (three := self.three_votes(seed)) is not None
+                and labels.majority(expected, three) is None]
 
     def reshuffle_seeds(self) -> list[int]:
         """The RNG seeds of the votes' reshuffles, in start order (the pilot report lists them)."""
@@ -408,7 +468,8 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
             for seed_id in event["seeds"]:
                 state.seed_round[seed_id] = event["genRound"]
             state.rounds.append({"genRound": event["genRound"], "seeds": list(event["seeds"]),
-                                 "designStratum": event.get("designStratum")})
+                                 "designStratum": event.get("designStratum"),
+                                 "pilotBlock": event.get("pilotBlock")})
         elif kind == "vote-start":
             state.held_rng_seeds.add(event["rngSeed"])
             state.vote_starts[(event["genRound"], event["vote"])] = {
@@ -456,6 +517,15 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                 attempt.interrupted = True
         elif kind == "outcome":
             _fold_outcome(state, event)
+        elif kind == "cue-check-halt":
+            state.cue_halts += 1
+            state.cue_halt_resolved = False
+            state.halt = {"event": kind, "batch": None, "reason": "cueCheck",
+                          "voidClass": "cueCheck"}
+        elif kind == "pilot-block-halt":
+            state.block_halt_base = event["mainRounds"]
+            state.halt = {"event": kind, "batch": None, "reason": "pilotBlocks",
+                          "voidClass": "pilotBlocks"}
         elif kind in _CLEARING_EVENTS:
             _fold_resolution(state, event)
     return state
@@ -605,6 +675,9 @@ def _restart_generation(state: State) -> None:
     state.pool_halts.clear()
     state.pooled_rounds.clear()
     state.run_hash.clear()
+    state.block_halt_base = 0
+    state.cue_halts = 0
+    state.cue_halt_resolved = False
     state.votes.clear()
     state.vote_starts.clear()
     state.rounds.clear()
@@ -668,6 +741,8 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
     halted = state.halt
     state.halt = None
     state.epoch += 1
+    if halted is not None and halted["event"] == "cue-check-halt":
+        state.cue_halt_resolved = True
     batch = state.batches.get(halted["batch"]) if halted else None
     if event.get("action") == "skip-batch" and batch is not None:
         batch.state, batch.dropped = "dropped", "safeguardSkipped"
@@ -1067,7 +1142,8 @@ class Campaign:
         return batch_id
 
     def begin_round(self, gen_round: int, count: int | None = None, *,
-                    design_stratum: str | None = None, extend: bool = False) -> list[str]:
+                    design_stratum: str | None = None, extend: bool = False,
+                    pilot_block: str | None = None) -> list[str]:
         """plan4 §3.6 "Generation runs", plan6 §3.8: draw `count` seeds on a fresh RNG seed
         (plan5 §3.2: `record_draw` refuses a held one), record the round (`round-start`: its
         `genRound` and drawn seeds, which add to the halt denominator of that `genRound`), shuffle
@@ -1080,11 +1156,17 @@ class Campaign:
         `design_stratum` is given, and that stratum has no `round-start` in that `genRound` yet. A
         retry after a crash needs no `extend`: after `round-start` a repeat is refused as a
         duplicate (`next` queues the stranded seeds), and after the draw alone the stratum has no
-        `round-start`, so it draws afresh.
+        `round-start`, so it draws afresh. `pilot_block` (`MAIN_BLOCK` or `RECHECK_BLOCK`, a pilot
+        campaign's only; `pilot.py` passes it) is recorded on the `round-start`: it decides which
+        votes the round takes (`State.round_votes`).
         Returns the queued batch ids."""
         if isinstance(gen_round, bool) or not isinstance(gen_round, int) or gen_round < 1:
             raise CampaignRefused(f"genRound must be a positive integer, not {gen_round!r}")
         state = self.state()
+        if pilot_block is not None and (pilot_block not in PILOT_BLOCKS
+                                        or state.init["phase"] != "pilot"):
+            raise CampaignRefused(f"pilot block {pilot_block!r} needs a pilot campaign and "
+                                  f"{' or '.join(PILOT_BLOCKS)}")
         started = any(r["genRound"] == gen_round for r in state.rounds)
         if started and not extend:
             raise CampaignRefused(f"genRound {gen_round} is already started (extend adds a draw)")
@@ -1110,7 +1192,8 @@ class Campaign:
         ordered = [seed.seed_id for seed in draw.seeds]
         random.Random(f"generation-runs|{rng_seed}").shuffle(ordered)
         self._append({"event": "round-start", "genRound": gen_round, "rngSeed": rng_seed,
-                      "designStratum": design_stratum, "seeds": ordered})
+                      "designStratum": design_stratum, "seeds": ordered,
+                      **({"pilotBlock": pilot_block} if pilot_block else {})})
         return self._queue_runs(ordered, "first")
 
     def queue_regeneration(self) -> list[str]:
@@ -1141,11 +1224,30 @@ class Campaign:
                 random.Random(f"label-votes|{rng_seed}").shuffle(order)
                 self._append({"event": "vote-start", "genRound": gen_round, "vote": vote,
                               "rngSeed": rng_seed, "items": order})
-            cap = state.init["labelBatchCap"]
+            cap = (labels.SCREEN_BATCH_CAP if vote == labels.SCREEN_VOTE
+                   else state.init["labelBatchCap"])
             return [self.queue_batch("label", order[start:start + cap],
                                      genRound=gen_round, vote=vote)
                     for start in range(0, len(order), cap)]
         return []
+
+    def queue_pilot_block(self) -> list[str]:
+        """Note §Q1.3 "Pilot" "Screen" (plan4 §3.8): in a pilot campaign whose main blocks have
+        all been voted, `n < 80` draws one more main block of `pilot.ADDED_BLOCK_SEEDS` seeds,
+        numbered after the last round; `[]` otherwise. The first block is `pilot.py start`'s.
+        Once `pilot.PILOT_ADDED_BLOCK_LIMIT` added blocks have been drawn in the halt epoch
+        (plan6 §3.8) it draws nothing and records the `pilot-block-halt` instead."""
+        state = self.state()
+        mains = [r["genRound"] for r in state.rounds if r["pilotBlock"] == MAIN_BLOCK]
+        if (state.init["phase"] != "pilot" or not mains
+                or not all(state.round_voted(g) for g in mains)
+                or not pilot.screen(state.screen_votes(mains)).more_needed):
+            return []
+        if len(mains) - max(state.block_halt_base, 1) >= pilot.PILOT_ADDED_BLOCK_LIMIT:
+            self.record_pilot_block_halt()
+            return []
+        return self.begin_round(max(r["genRound"] for r in state.rounds) + 1,
+                                pilot.ADDED_BLOCK_SEEDS, pilot_block=MAIN_BLOCK)
 
     def _queue_unbatched(self) -> list[str]:
         """plan6 §3.8 "A half-written round": queue the `round-start` seeds no batch holds, in
@@ -1155,6 +1257,26 @@ class Campaign:
     def _queue_runs(self, seed_ids: Sequence[str], generation: str) -> list[str]:
         return [self.queue_batch("generate", run, generation=generation)
                 for run in balanced_runs(seed_ids)]
+
+    def record_cue_check_halt(self) -> None:
+        """plan5 §3.6: `pilot.py report` halts the pilot when the `missing` cue check fails;
+        `resolve` clears it. Refused while any halt is open, and when one is already recorded."""
+        state = self.state()
+        if state.halt is not None:
+            raise CampaignRefused(f"a halt is open ({_halt_text(state.halt)})")
+        if state.cue_halts:
+            raise CampaignRefused("the cue-check halt is already recorded")
+        self._append({"event": "cue-check-halt"})
+
+    def record_pilot_block_halt(self) -> None:
+        """plan6 §3.8: the pilot's added blocks reached `pilot.PILOT_ADDED_BLOCK_LIMIT` with
+        `n < 80`; the event records the main-block count, which starts the next epoch. Refused
+        while any halt is open."""
+        state = self.state()
+        if state.halt is not None:
+            raise CampaignRefused(f"a halt is open ({_halt_text(state.halt)})")
+        mains = sum(1 for r in state.rounds if r["pilotBlock"] == MAIN_BLOCK)
+        self._append({"event": "pilot-block-halt", "mainRounds": mains})
 
     def record_interrupted(self, batch: str) -> None:
         """plan6 §3.2: `pause --now` names the batch it stopped (the runner holds the lock)."""
@@ -1198,6 +1320,13 @@ class Campaign:
         if not pending and self.queue_votes():
             state = self.state()
             pending = [b for b in state.batches.values() if b.state == "pending"]
+        if not pending:
+            queued = self.queue_pilot_block()
+            state = self.state()
+            if state.halt is not None:           # the bound halted it (`pilot-block-halt`)
+                return Stop("halted", _halt_text(state.halt))
+            if queued:
+                pending = [b for b in state.batches.values() if b.state == "pending"]
         if not pending:
             return Stop("done", "nothing is pending")
         return self.prepare(pending[0].batch_id)
@@ -1520,7 +1649,6 @@ class Campaign:
                 raise CampaignRefused("the campaign is not halted")
             event: dict[str, Any] = {"event": "resolved", "decision": decision,
                                      "batch": halt["batch"], "reason": halt.get("reason")}
-            role = ROLE_OF_KIND[state.batches[halt["batch"]].kind]
             if skip_batch:
                 if halt.get("reason") != "safeguardStop":
                     raise CampaignRefused("--skip-batch is for a safeguardStop halt (plan6 §3.5)")
@@ -1529,7 +1657,9 @@ class Campaign:
                 run = halt.get("run")
                 if not run:
                     raise CampaignRefused("the halted run has no transcript to re-pin from")
-                event.update(action="repin-instructions", role=role, instructions=[
+                event.update(action="repin-instructions",
+                             role=ROLE_OF_KIND[state.batches[halt["batch"]].kind],
+                             instructions=[
                     [entry["path"], entry["sha256"]] for entry in run["instructions"]])
             elif repin_model is not None:
                 event.update(self._repin_model(state, *repin_model))
@@ -1592,7 +1722,9 @@ class Campaign:
 
 def _halt_text(halt: Mapping[str, Any]) -> str:
     """One line; a template halt lists its round part and every pool that crossed (plan6 §3.8)."""
-    text = f"{halt.get('reason')} ({halt.get('voidClass')}) on {halt['batch']}"
+    text = f"{halt.get('reason')} ({halt.get('voidClass')})"
+    if halt.get("batch") is not None:
+        text += f" on {halt['batch']}"
     parts = []
     if "round" in halt:
         parts.append(f"round {halt['round']['genRound']}: " + ", ".join(halt["round"]["reasons"]))

@@ -22,6 +22,12 @@ from typing import Any
 #: Votes per item (note §Q1.2): the majority of three.
 VOTES_PER_ITEM = 3
 
+#: The guard pilot's screen vote (note §Q1.3 "Pilot"; plan4 §3.8): a fourth vote on a main pilot
+#: block's items, batched at `SCREEN_BATCH_CAP` (the labeller's batch size is what it compares
+#: across). It is never one of the three that give `labelVotes` and the majority.
+SCREEN_VOTE = VOTES_PER_ITEM + 1
+SCREEN_BATCH_CAP = 10
+
 
 def vote_key(answer: Any) -> str:
     """`answer` as a `labelVotes` key (module docstring)."""

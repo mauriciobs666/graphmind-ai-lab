@@ -13,11 +13,12 @@ the design.
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
 reconciliation, halts, generation runs, votes), `screen.py` (the generated-text screen and form
-obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
+obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
+screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
 `resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`). `agents/` holds the three agent
-definitions, spawn templates, `guard_hook.py` and `settings.json`. The pilot and cap/screen vote,
-the message-type tranche, top-up and `finalize` (plan4 §4.1 U5.8c onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+definitions, spawn templates, `guard_hook.py` and `settings.json`. The message-type tranche, top-up
+and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -108,7 +109,23 @@ the message-type tranche, top-up and `finalize` (plan4 §4.1 U5.8c onward) are u
   until its live batches hold every `vote-start` item (a crash between its `queued` events);
   `queue_votes` queues the missing ones into it. A `labelling-restart` clears the votes and
   retires **every** label batch (the smoke fixture's too), keeping the items; a generator restart
-  clears both. A label batch with no `vote` records nothing.
+  clears both. A label batch with no `vote` records nothing. A main pilot block's fourth vote
+(`labels.SCREEN_VOTE`, batches of `SCREEN_BATCH_CAP`) is a vote like the others but **never one of
+the three** that `three_votes`, `label_votes` and `vote_ties` read.
+- **The pilot is ledger-folded too** (plan4 §3.8, plan5 §3.6; `pilot.py`). A `round-start` carries
+  `pilotBlock` (`main`: votes 1-3 and the screen vote; `recheck`: votes 1-3), which decides
+  `State.round_votes`; only `pilot.py start`/`recheck` pass it, and the driver (`queue_pilot_block`,
+  from `next`) draws each added main block while `pilot.screen(...).more_needed` (`n < 80`), at most
+  `PILOT_ADDED_BLOCK_LIMIT` (3) per halt epoch: then it records the batchless `pilot-block-halt`
+  (`record_pilot_block_halt`; reason `pilotBlocks`, its `mainRounds` starts the next epoch, which
+  `resolve` opens; a generator restart resets it, and the cue-halt bookkeeping, with the rounds).
+  Both `record_*_halt` refuse while any halt is open. `n`, `Δ` and the cap count main blocks only. `pilot.py report` is the one evaluator: it derives
+  `missingCueCheck.state` from the ledger each run, appends the `cue-check-halt` event once (through
+  `Campaign.record_cue_check_halt`, never `_append`), and refuses a partly voted block, and a
+  report that holds a `stakeholderDecision`; its `dropped` leaves out dropped screen batches
+  (`droppedScreenVote`). `record-decision` reuses `campaign.spend_gate_refusal`,
+  the predicate `init --phase full` applies: never copy it. `pilot.py` and `campaign.py` import each
+  other (call-time use only); the cue check's p-value is exact (`Fraction`).
 - **Zero runtime dependencies** (`pyproject.toml`, pinned by `tests/test_package.py`).
 
 ## Conventions

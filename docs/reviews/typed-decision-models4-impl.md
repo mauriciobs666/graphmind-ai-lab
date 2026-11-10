@@ -2894,3 +2894,112 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the d
 ### Growth-stops check
 
 Pass 23 adds one nit; each Pass 22 finding has one disposition line. Passes 1 to 22 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical.
+
+## Pass 24 — U5.8c gate: the guard pilot (2026-11-09)
+
+**Verdict: approve with suggestions.** The pilot matches plan4 §3.8, plan5 §3.6, plan6 §3.8 and note §Q1.3 on every point I executed: the screen and cap rule, block sizes, the cue test, the report, the recheck and the spend gate. No blocker. Two majors: one silent-argument mutant on `record-decision --cap` survives, and the added-block loop has no bound.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree: `pilot.py` and `tests/test_pilot.py` (new), `campaign.py`, `labels.py`, `README.md`, `AGENTS.md`, `docs/HISTORY.md`. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`. The coder's report was not used.
+- **Suite (live tree):** **1467 passed, 2 xfailed** in 135 s; `ruff check .` clean; `pilot.py`, `campaign.py` and `test_pilot.py` sha256 unchanged after the pass. `AGENTS.md` 1,503 words, no line over 700 characters. The scratch copy ran `test_pilot.py` 81 passed.
+- **Execution** (scratch copy `scratchpad/p24/`; probes in `scratchpad/probes/`; `mut.py`, `mut.out`): 37 mutants of my own, 30 red, 7 green (below); a 300-case brute-force comparison of `cue_check` against enumerated placements (0 mismatches); crash-injection into `queue_pilot_block` after each of 3 appends and into the screen vote's queue after 3 of 10 batches; labeler and generator re-pins on a cue halt; a run whose screen batches all drop; `python -m decisionmodels.pilot` and both import orders. I did not run the coder's 73 mutants, so "71/73" is not confirmed.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff was read in full.
+
+### Answers to the questions
+
+1. **Screen, cap, blocks, cue test: match.**
+   - `10·Δ ≥ n` gives 25 and is pinned at its equality (`> ` mutant M5 red), `n < 80` adds a block (`<=` M8 red), the first block is 100 seeds in 4 runs of 25 and each added block 50 in 2 (M7 red), screen batches are 10 and votes 1 to 3 are 50 (M4 red). `n = 79` issues exactly one block (the shipped test and my crash probes).
+   - `cue_check` equals the note's rule: the convolution of per-stratum hypergeometrics given `x + y`, one-sided, `p ≤ 1/20` compared as `Fraction`. My enumeration of all placements agreed on 300 random 1 to 4-stratum inputs, including empty strata. `<` (M40), strict tail (M41), pooled-answer stratum (M38) and a two-form counter-cue set (M37) are red. The counter-cue forms match the generator's rules and the four strata match `point.json`'s `missingForm` cases.
+   - Reachable by a faithful implementer: the plans give every number; the only open item is the loop's end (P24-M2).
+2. **Open calls.**
+   - **No upper bound on added blocks:** accepted as built, but needs a plan decision (P24-M2).
+   - **`pilotBlock` not required in a pilot-phase round: accept.** Requiring it would break the U5.8b tests that draw pilot-phase rounds by hand, and `driver` exposes no `begin_round`. Such a round takes votes 1 to 3 and sits outside `n`, the cue check and the report.
+   - **The 1.3 factor: grounded, under-reported** (P24-m1).
+   - **First-pass-only generator mean: accept.** Every first-pass run is 25 seeds, so the mean needs no `F`/`c` split, and a regeneration run has fewer seeds. Regeneration spend is left out of the projection (P24-m1).
+   - **`report` refused after a decision: right.** `build_report` omits `stakeholderDecision` and `_write_report` replaces the file, so a rewrite would erase it. Plan5 is silent; README and `AGENTS.md` state it.
+   - **Report keys:** `rngSeeds`, `stakeholderDecision.{outcome, cap, stakeholderRef}` and `missingCueCheck.state` are the keys the spend gate and `init --phase full` already read at `HEAD` (`git show HEAD:…/campaign.py` lines 93 to 95, 779 to 802), so `pilot.py` conforms and invents none. The other keys (`labeller`, `generatorMeanPerRun`, `labelRates`, `reprojectedTokens`, …) are read by nothing; the stakeholder reads them.
+3. **Same-revision interactions (executed).**
+   - **`three_votes` vs `label_votes`/`vote_ties`:** votes {1, 2, 4} give no `labelVotes`; the screen vote is never counted (M22 red).
+   - **Batchless `cue-check-halt`:** `status`, `next` and `_halt_text` print `cueCheck (cueCheck)`; a plain resolve clears it. A labeler re-pin clears the votes, retires label batches and `next` serves vote 1 again. `--repin-instructions` and `--skip-batch` refuse. Nothing else reads `halt["batch"]` unguarded (`grep` over `decisionmodels/`).
+   - **`queue_pilot_block` and crashes:** a kill after `seed-draw` leaves an orphan draw and the next call redraws; a kill after `round-start` with 0 or 1 of 2 runs queued is completed by `next`'s `unbatched_seeds`. Each run ended with all blocks voted and no duplicate batch. A screen vote killed after 3 of 10 batches queues the other 7 into it in the recorded order (10 batches of 10, each of the 100 items once).
+
+### Findings
+
+**P24-M1 — major — a recorded cap of 25 can be written as 50 and no test notices.** *Owner: `tdd-engineer`/`coder`. Verified: mutant M13 (`"cap": DEFAULT_CAP`) left 108 tests green.* Every test that records or reads back a cap uses 50 (`test_pilot.py:718-720`, `:806`, `:830-833`), which equals `DEFAULT_CAP`; the `cap=25` calls are refusals or never read back. `stakeholderDecision.cap` becomes `labelBatchCap` of the full campaign (`campaign.py` `init`), which sets the batch size of about 7,000 item-votes. Suggested: one test records `cap=25` and asserts `read(...)["stakeholderDecision"]["cap"] == 25` and, through `init --phase full`, `labelBatchCap == 25` with a literal, not `pilot.SCREEN_CAP`.
+
+**P24-M2 — major — the added-block loop has no bound and no halt.** *Owner: `architect` decides, `coder` builds. Verified: probe A.* `queue_pilot_block` draws the next block whenever `n < 80`, unattended inside `driver run`. With every screen batch answered invalidly (so each drops as `retryCapExceeded`), the probe drew blocks 1 to 4 with `n = 0` and 125 items dropped, and no halt. Each block is 2 generation runs and 8 label runs of the note's 1.7M–6.9M pilot budget. The plans say "until `n ≥ 80`" and nothing else. Suggested: the plan states a bound (for example, a batchless halt once an added block would be the third) and a test that reaches it; then `resolve` clears it as it does `cue-check-halt`.
+
+**P24-m1 — minor — the projection's factor and omissions are not in the report.** *Owner: `coder`. Verified: read, `point.json`, note §Q1.3.* 1.3 is grounded: the three points' targets are 800 + 400 + 600 = 1,800 and the note says about 2,340 labelled. But `pilot.py`'s docstring calls it "round 1's volume" when round 1 is 1.1× and 1.3 is the whole labelled volume, and `reprojectedTokens` records neither the factor, the runs-of-25 nor the omission of regeneration runs, so the decision package cannot show what the figure assumes. Suggested: add `planFactor` (13/10) and a one-line `assumes` to the report, and fix the docstring.
+
+**P24-m2 — minor — three non-equivalent mutants survive.** *Owner: `tdd-engineer`. Verified: run.* (a) M21: `build_report` taking `n`/`Δ`/cap from `rechecks or mains` gives `n = 0` and cap 25 in a recheck report, and nothing asserts the recheck states keep the pilot's `n`, `delta`, `cap` and projection. (b) M28: dropping `round_voted`'s `held` clause lets a vote whose tail is not yet queued read as voted; my probe E (3 of 10 screen batches ingested, tail unqueued; `round_voted` must be `False`) kills it and passes on the shipped code. (c) M51: the void count is set to 1 instead of accumulated. Add the three assertions; probe E is the shape for (b).
+
+**P24-n1 — nit — `record_cue_check_halt` has no open-halt guard.** *Inferred.* The template-halt path refuses to overwrite an open halt (`campaign.py` `_raise_template_halt`); `fold` for `cue-check-halt` assigns `state.halt` unconditionally. `report` needs every batch voted, so I could not construct a case; one line makes the invariant local.
+
+**P24-n2 — nit — a second pilot after a generator re-pin starts with the halt spent.** *Verified in part (probe B2, fold read).* `resolve --repin-model generator` on a cue halt clears the rounds (and `start` redraws), but `cue_halts` and `cue_halt_resolved` survive, so a later `failed` writes no halt and `recheck` is allowed on the old resolve. The spend gate still refuses `failed`; the only effect is the missing halt. Either document it or reset both in `_restart_generation`.
+
+**P24-n3 — nit — a dropped screen batch counts as a dropped item.** *Verified: probe A.* Its items have votes 1 to 3 and stay in the cue check, yet they add to the report's `dropped.retryCapExceeded.items` (125 in the probe). The report's reader sees items lost that were not.
+
+### What's solid
+
+- The ledger gains one optional field (`pilotBlock`) and one event; an old ledger folds as before.
+- `report` derives the state from the ledger on every run and appends the halt before writing, so a crash between them is recoverable (a rerun writes); the single-write decision and the shared `spend_gate_refusal` are pinned by tests.
+- Of the 37 mutants, 30 are red, among them every block size, the screen cap, `rngSeeds`, `recheckProjection`, the cue-state gates and the halt itself; the survivors are M13, M21, M28, M51 (above) and M31, M32, M33, which I judge equivalent or redundant: M31 because a recheck item never carries vote 4, M32 because a later vote's start already leaves out a dropped batch's items, M33 because `next` calls the method only with nothing pending (read, not proven for a direct call).
+- Docs: README, `AGENTS.md` and `HISTORY.md` describe what shipped, state the coder's open calls, and `AGENTS.md` stays under its size smells.
+
+### Growth-stops check
+
+Pass 24 adds new scope (a new unit) and seven findings, each new; there are no prior findings to dispose of in this pass. Passes 1 to 23 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical (checked below).
+
+### Proposed REVIEW.md lines
+
+None. M13's class (an expected value equal to the default the mutant substitutes) is already covered by root `REVIEW.md`'s "name the mutant … expected values never read from the constant".
+
+## Pass 25 — U5.8c fix round re-gate (2026-11-10)
+
+**Verdict: approve with suggestions.** Every Pass 24 finding is fixed and each fix is pinned by a test that reddens its mutant. The new `pilot-block-halt` composes with the cue halt, `resolve` and both re-pins without swallowing either halt. One minor (two pins on the new `droppedScreenVote` are missing), two nits.
+
+### Scope
+
+- **Reviewed:** the uncommitted tree against the Pass 24 scratch copy (`diff` of `campaign.py`, `pilot.py`), `tests/test_pilot.py`, the docs, and plan6 v1.22 §3.8 and the §5 U5.8c row. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Suite (live tree):** **1480 passed, 2 xfailed** in 224 s; `ruff check .` clean; sha256 of `decisionmodels/*.py` and `tests/test_pilot.py` unchanged after the pass. `AGENTS.md` 1,556 words, no line over 700 characters.
+- **Execution** (scratch copy `scratchpad/p25/`; `mut25.py`, `mut25.out`, `probes/test_probe25.py`): 23 mutants of my own on the epoch arithmetic, the halt and `droppedScreenVote`; my Pass 24 mutants M13, M21, M28, M51 re-run (`mutb.py`); two interaction probes; the plan's survival arithmetic recomputed.
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff was read in full.
+
+### Disposition of Pass 24
+
+- **P24-M1 (cap): fixed.** M13 (`"cap": DEFAULT_CAP`) now red.
+- **P24-M2 (unbounded blocks): fixed.** `queue_pilot_block` halts after 3 added blocks per epoch; limit 3 to 4 (E13) and 3 to 2 (E14) red; the halt fires only after the voted check (E23 red).
+- **P24-m1 (factor in the report): fixed.** `planFactor` and `assumes` written, docstring corrected; `planFactor` mutant (E21) red.
+- **P24-m2 (three survivors): fixed.** M21, M28 and M51 each red.
+- **P24-n1 (recorder guard): fixed.** Both recorders refuse with a halt open; each guard removed (E11, E12) red.
+- **P24-n2 (cue bookkeeping after re-pin): fixed in code.** `_restart_generation` resets `block_halt_base`, `cue_halts` and `cue_halt_resolved`; E8 and E9 red. The plan states only the epoch reset (P25-n2).
+- **P24-n3 (dropped screen batch): fixed, with a gap** (P25-m1).
+
+### Answers to the asks
+
+1. **Same-revision fixes against each other (executed).**
+   - **Epoch arithmetic:** `len(mains) - max(base, 1) >= 3` halts at 4 main rounds (first plus 3 added) and, after a resolve, at 7 (`mainRounds` [4, 7] in the shipped test). Floor 0, floor 2, no floor, `>`, an unmoved base, a `mainRounds` off by one either way and a restart that keeps the base are all red (E1 to E8).
+   - **Neither halt swallows the other.** A cue failure needs `n ≥ 80` and the block halt needs `n < 80`, so they cannot be due together, and `report` refuses while a `pilotBlocks` halt is open with a message that names it. Probe I1: block halt, then a labeler re-pin, then a cue-following labeller over the 250 items: `report` gave `failed`, the `cue-check-halt` was recorded with no halt open, `resolve` and `recheck` followed. Probe I3: cue halt, labeler re-pin, every screen batch dropping: three added blocks, then `pilotBlocks` (`cue_halts` 1, resolved kept); a resolve and a faithful labeller reached `n = 100` through blocks 5 and 6 and `report` gave `passed`. The one rule that can silence a later cue failure is the earlier `cue_halts` count (the Pass 24 behaviour, which only a generator restart resets); it is by design, not new.
+   - **`next` returning `Stop` in the same call:** the `halted` stop carries the `pilotBlocks` text, a second `next` appends no second event, and `next` ignoring the halt (E10) is red.
+2. **The bound's arithmetic is right.** `80 / (100 + 50k)` is 0.8, 0.533, 0.4, 0.32 and 0.267 for k = 0 to 4: `s ≥ 0.4` needs at most 2 added blocks and `s ≥ 0.32` at most 3. A first block is 20 runs (4 + 6 + 10) and an added block 10, so a fourth block is half of it. One caveat (P25-n1).
+3. **My mutants.** 23 on the new code: 20 red, 3 green. E22 (the epoch counting recheck rounds as well) is equivalent: a recheck block exists only after `n ≥ 80`, which ends the added blocks (inferred from `cue_state`, not run). E17 and E18 are P25-m1.
+
+### Findings
+
+**P25-m1 — minor — `droppedScreenVote` is pinned only for the one case the test builds.** *Owner: `tdd-engineer`. Verified: E17 and E18 left 94 tests green.* E17 counts every dropped vote batch as a screen-vote drop (`vote is not None`); E18 reduces `retryCapExceeded` whatever the batch's reason. `test_a_dropped_screen_batch_is_reported_apart_from_the_dropped_items` drops only screen batches and only as `retryCapExceeded`, so a dropped vote-1 batch, or a screen batch skipped under `safeguardSkipped`, would be misattributed without a test noticing. Add one test per case: a vote-1 batch dropped stays in `dropped.retryCapExceeded.items` and out of `droppedScreenVote`, and a skipped screen batch is subtracted from `safeguardSkipped`.
+
+**P25-n1 — nit — plan §3.8 reads the survival rate as the true rate.** *Verified: computed.* "`s ≥ 0.32` reaches `n ≥ 80` in 3 added blocks" holds for the realized rate. With 250 seeds and independent items, a true `s` of 0.33 leaves `n < 80` with probability 0.346, 0.36 gives 0.082 and 0.40 gives 0.004, so near one third the halt is partly sampling noise, not "a pipeline fault, not sampling noise". The halt is cheap to resolve; say "about 0.4 or better passes in 3 blocks nearly always".
+
+**P25-n2 — nit — plan §3.8 and §5 do not state the cue-bookkeeping reset.** *Verified: read.* A generator re-pin resetting `cue_halts` and `cue_halt_resolved` (P24-n2) is in `campaign.py`, the tests and `AGENTS.md` but only the epoch reset is in the plan. One clause at the next plan revision, for the live-spec close.
+
+### What's solid
+
+- The bound is one derived integer (`block_halt_base`) and one event; an old ledger folds as before, and the halt reuses the batchless-halt path `cue-check-halt` already proved.
+- Each Pass 24 finding has a test that fails on its mutant, including the survivors M21, M28 and M51.
+
+### Growth-stops check
+
+Plan6 v1.22 replaces the v1.21 revision line with one dated line, and its §3.8 adds one bullet for the new scope (the bound) and one sentence for the vote half; no finding→resolution table. Passes 1 to 24 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical (checked below).

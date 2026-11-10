@@ -50,9 +50,9 @@ campaign ledger with its driver CLI (U5.6: `decisionmodels/campaign.py`,
 definitions, the guard and `driver install` (U5.7: `agents/`, `decisionmodels/install.py`; its
 live smoke ran, `docs/test-reports/live-smoke-report.md`), and generation runs with the
 generated-text screen, form obedience, the template halts and the generator restart (U5.8a:
-`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), and
-the votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`; the pilot
-tooling, the message-type tranche and top-up are later).
+`Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), the
+votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`), and the guard
+pilot (U5.8c: `decisionmodels/pilot.py`, below; the message-type tranche and top-up are later).
 Labelling requests render guard items only until U5.2b-render.
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
@@ -92,6 +92,44 @@ or `AGENTS.md`. Run these from `decision-models/`:
   label batch, the smoke fixture's too) or instructions set. It prints the halt it cleared and, if
   a `--skip-batch` drop closed a round or pool, the halt that raised.
 - `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
+
+### The guard pilot
+
+The pilot is a guard campaign (`init --point guard-judge --phase pilot`, then `install`) run before
+guard's full spend. `pilot.py` takes the same `--root`; `report`, `recheck` and `record-decision`
+read and write `data/guard-judge/pilot/pilot-report.json` (`--data-dir` for another copy).
+
+```bash
+.venv/bin/python -m decisionmodels.pilot start --root ~/dm-campaigns/pilot   # draw 100 seeds
+.venv/bin/python -m decisionmodels.driver run --root ~/dm-campaigns/pilot    # per window, by hand
+.venv/bin/python -m decisionmodels.pilot screen --root ~/dm-campaigns/pilot  # n, delta, the cap
+.venv/bin/python -m decisionmodels.pilot report --root ~/dm-campaigns/pilot
+.venv/bin/python -m decisionmodels.pilot record-decision --outcome proceed --cap 25 \
+    --decided-on 2026-11-09 --ref "<ledger line>" [--stakeholder-ref "<who and when>"]
+```
+
+- **The blocks.** `start` draws the first block: 100 seeds in 4 generation runs. Its items take
+  votes 1 to 3 at 50 per batch, then a screen vote at 10 per batch; the screen vote is never one
+  of the three that give `labelVotes`. While fewer than 80 items carry votes 1, 2 and the screen
+  vote, `driver run` draws another block of 50 seeds by itself.
+- **`screen`** prints `n`, `Δ` (vote 1 against the screen vote differs, less vote 1 against vote
+  2) and the cap: `10·Δ ≥ n` gives 25, else 50.
+- **`report`** evaluates the pilot and writes the report: labeller `F` and `c` per token class,
+  the generator's mean tokens per run, `P̂(label | evidence kind)`, `n`, `Δ`, the cap, voids,
+  reruns and screen hits, reprojected tokens per point, the RNG seeds the pilot held, and
+  `missingCueCheck`. Counts only: no item or seed text. It refuses a block still being voted.
+- **The `missing` cue check** reads the `understanding` items by difficulty × intended answer:
+  `passed`, or `failed`, which halts the pilot (`status` shows it). `driver resolve --decision
+  "<the fix>"` clears it (the fix itself is an edit under `points/` or `agents/`, then `install`),
+  and `recheck` draws a fresh block of 100 seeds (votes 1 to 3, no screen vote); `driver run`
+  labels it and `report` then gives `recheck-passed` or `recheck-failed`. `recheck-pending` is the
+  state while it runs.
+- **`record-decision`** writes `stakeholderDecision` once. A `proceed` is refused unless the check
+  `passed` or `recheck-passed`, or it is `recheck-failed` and `--stakeholder-ref` is given; a
+  `stop` is always recordable, and is final. After a decision `report` and `recheck` refuse.
+  Commit the report, then delete the pilot's store by hand: the pilot's items and seeds are
+  discarded, and `init --phase full` holds the report's RNG seeds so the full campaign never
+  reuses one.
 
 ### `install`, the agent definitions and the guard
 
