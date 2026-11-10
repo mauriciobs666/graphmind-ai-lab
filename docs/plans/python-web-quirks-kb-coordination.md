@@ -19,10 +19,10 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U10 | `cobb` | `a96d7ce4c9212fc96` | accepted | S4: `claude/knowledge/python-web-quirks.md` (36 units), guard entry retired; teco re-ran `verify-copy` (clean) and the AC-12 guard test (allow/allow/ask/ask/ask); one header edit u10 `pydantic 2.x` (extractor misses `2.x`); `AGENTS.md` exceptions left to S16b | G2 → — | 76k tok / 11 tools |
 | U11 | `coder` | `adfb53a65ed145447` | accepted | S5: Set A JSON (42+14, parsed from ML §3), `pwq_leakcheck.py` + selftest 11/11, 11 mutants killed; teco re-ran selftests, leakcheck (0 shared 4-grams), `load_set` (42/14, sections 1–42, 7 near) | G2 → — | 73k tok / 12 tools |
 | U12 | `graph-dba` | `a4bdba2c8d4354150` | in-flight | S6a+S6b: `docs/plans/python-web-quirks-kb-graph.md`, `ws:pwq-test` on :8210 (prod read-only) | G2 → — | — |
-| U13 | `cobb` | `a4aef3d506d34278f` | in-flight | S7: `docs/plans/python-web-quirks-kb-captures.md`, `claude/cobb/kaizen/plan.md` (promotion item, K-063 fix) | G2 → — | — |
+| U13 | `cobb` | `a4aef3d506d34278f` | accepted | S7: `docs/plans/python-web-quirks-kb-captures.md` (17 H1 captures + 4 keep; 11 of 42 sections have a restating capture), `GAL-I02-K0001` promotion item, K-063 item 3 fixed; teco verified diff scope and 21 ids, flushed registry | G2 → — | 104k tok / 35 tools |
 | U14 | `data-scientist` | `aadca675a5b51c7bd` | accepted | S7b rulings + S12 count rewrite in `docs/plans/python-web-quirks-kb-ml.md`; teco re-derived 129 chunks / 12 units ≥4 chunks and 42 sections / 73,825 chars (matches); code asks → U15 | G2 → — | 102k tok / 23 tools |
 | U15 | `tdd-engineer` | `a5b4d60449cc8f09e` | in-flight | `validate_set_a`, mandatory `--expect-sha256` on `--sealed-once`, tail-flag check (uncommitted) | G2 → — | — |
-| U16 | `architect` | `a4a56299792bbf4fe` | in-flight | `docs/plans/python-web-quirks-kb.md` small in-place amendments (D11 figures, rulings, S12/S14 `--exclude`, D9, T36, S8, S16 pin-from-git) | G2 → — | — |
+| U16 | `architect` | `a4a56299792bbf4fe` | accepted | plan amendments (+115 words net by `wc -w`); `--pin-from-git` owned by S16d via `coder` (architect's call, accepted) | G2 → — | 50k tok / 10 tools |
 
 
 Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
