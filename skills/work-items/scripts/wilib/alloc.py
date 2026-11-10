@@ -7,7 +7,7 @@ phase (``--sync``, step 6).
 import json
 from pathlib import Path
 
-from . import rules
+from . import project, rules
 from .store import Store
 
 DEFAULT_HOME = "repo"
@@ -78,6 +78,8 @@ def allocate(tx, key, type_, parent=None, slug=None, title=None, home=None, lega
 def new(root, type_, parent=None, slug=None, title=None, home=None, store=None):
     """Allocate and record one item; return its ID.  Raises IllegalParent."""
     key = load_key(root)
+    if home is not None and home != DEFAULT_HOME and home not in project.load_components(root):
+        raise AllocError(f"unknown home {home!r}: not a declared component of this project")
     store = store or Store(root, key)
     with store.transaction() as tx:
         return allocate(tx, key, type_, parent, slug, title, home)

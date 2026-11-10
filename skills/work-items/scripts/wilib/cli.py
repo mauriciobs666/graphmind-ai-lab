@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import alloc, legacy, links, move, project, resolve, rules
+from . import alloc, headers, legacy, links, move, project, resolve, rules
 from .store import Store
 
 
@@ -16,9 +16,10 @@ def find_root(start):
     raise alloc.AllocError("no .work-items/project.json found in this directory or above")
 
 
-def sync_headers(root, id_):
-    """Header phase (step 6) -- deliberately a stub: writes nothing yet."""
-    raise NotImplementedError("--sync: header writing arrives in plan step 6")
+def sync_headers(root, id_=None):
+    """Header phase: runs after the allocation lock is released; reports on stderr."""
+    for path in headers.sync(root, id_):
+        print(f"wi: header updated: {path.relative_to(root)}", file=sys.stderr)
 
 
 def build_parser():
@@ -30,7 +31,7 @@ def build_parser():
     n.add_argument("--slug")
     n.add_argument("--title")
     n.add_argument("--home")
-    n.add_argument("--sync", action="store_true", help="then write family headers (step 6)")
+    n.add_argument("--sync", action="store_true", help="then write family headers")
     r = sub.add_parser("retire", help="abandon an item; its ID still resolves")
     r.add_argument("id")
     rs = sub.add_parser("resolve", help="map any name (ID, alias, slug, FR/AC citation) to the item")
@@ -39,10 +40,15 @@ def build_parser():
     mv = sub.add_parser("move", help="rename an item and its subtree under a new parent")
     mv.add_argument("id")
     mv.add_argument("newparent", help="parent ID, or 'none' for the project")
+    mv.add_argument("--sync", action="store_true", help="then write family headers")
     pr = sub.add_parser("promote", help="turn a kaizen item into a feature")
     pr.add_argument("id")
     pr.add_argument("--to", required=True, choices=["F"])
     pr.add_argument("--parent", help="initiative to place the feature under (default: none)")
+    pr.add_argument("--sync", action="store_true", help="then write family headers")
+    hd = sub.add_parser("headers", help="family-document headers")
+    hd.add_argument("action", choices=["sync"])
+    hd.add_argument("id", nargs="?", help="item (default: every item with a slug)")
     ml = sub.add_parser("mint-legacy", help="give an old <home>:<name> item a scheme ID (idempotent)")
     ml.add_argument("spec", help="<home>:<name>, e.g. architect:K-004")
     ml.add_argument("--type", required=True, choices=["K", "F", "D"])
@@ -69,8 +75,6 @@ def build_parser():
 def main(argv=None, cwd=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.cmd == "new" and args.sync:     # refuse before allocating: a retry must not burn an ID
-        parser.error("--sync: header writing arrives in plan step 6")
     try:
         if args.cmd == "init":
             comps = [c for part in args.components for c in part.split(",") if c]
@@ -94,8 +98,15 @@ def main(argv=None, cwd=None):
             print(json.dumps(rec, indent=2) if args.json else resolve.describe(rec))
         elif args.cmd == "move":
             print(move.move(root, args.id, args.newparent))
+            if args.sync:
+                sync_headers(root, args.id)
         elif args.cmd == "promote":
-            print(move.promote(root, args.id, args.to, parent=args.parent))
+            new_id = move.promote(root, args.id, args.to, parent=args.parent)
+            print(new_id)
+            if args.sync:
+                sync_headers(root, new_id)
+        elif args.cmd == "headers":
+            sync_headers(root, args.id)
         elif args.cmd == "link":
             links.link(root, args.id, args.rel, args.target,
                        op="remove" if args.remove else None, clear=args.clear)
