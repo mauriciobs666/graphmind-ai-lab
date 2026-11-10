@@ -60,5 +60,5 @@ Build complete: steps 1–12 committed, 500 tests green, `wi check` clean on the
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| C1 symlink machine step | `devops` | `a0471854ac25bf516` | in-flight | `~/.claude/skills/work-items` (outside repo; may need human approval) | — | — |
+| C1 symlink machine step | `devops` | `a0471854ac25bf516` | accepted (I verified the link exists; // ~/.claude/skills/work-items -> repo skill) | `~/.claude/skills/work-items` (outside repo; may need human approval) | — | — |
 | C2 live spec + HISTORY draft (close step 2; stakeholder chose `skills/work-items/docs/`) | `coder` | `aa126193922242150` | in-flight | `skills/work-items/docs/SPEC.md`, `HISTORY.md` | `analyst` close check (step 3) → — ; HISTORY entry must be re-checked after it (step 5 is last) | — |
