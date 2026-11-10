@@ -14,8 +14,8 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U6 | `tdd-engineer` | `ab0ffeef9adecbf39` | accepted | S2: `check_content_loss.py` changes (T10–T15); selftest 22/22 (baseline 16), 17 mutants killed after 3 tightenings; teco re-ran selftest and an own `--ws` argument mutant (killed); committed | `analyst` G1 → — | 100k tok / 17 tools |
 | U7 | `tdd-engineer` | `ad3949d7f4bc0a326` (same agent as U5) | accepted | S3a: target guard, `ingest`, `gate`, `diverge`, test-only `replace`/`retire` in `pwq_kb.py`; selftest 65/65, 75 of 76 mutants killed (one equivalent: two redundant production guards); teco re-ran selftest + own guard mutant (killed); committed | `analyst` G1 (after S3b) → — | 222k tok cumulative / 63 tools |
 | U8 | `tdd-engineer` | `ad3949d7f4bc0a326` (same agent as U5/U7) | accepted (S3b committed; selftest 98/98, 66 S3b mutants killed, teco re-ran selftest) | S3b: `eval` modes in `pwq_kb.py` (T24–T30; D9, D11): implemented, selftest 95/95 (teco re-ran); **mutation pass NOT run**; uncommitted; Set JSON schema and open items in the `S3b-STATUS` comment above the eval section | `analyst` G1 → — | — |
-
 | G1 | `analyst` | `a3f52f17b5eefc3c9` | in-flight | `docs/reviews/python-web-quirks-kb-impl.md` Pass 1 (S1–S3b, committed `92a46502`) | — | — |
+
 
 Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
 
