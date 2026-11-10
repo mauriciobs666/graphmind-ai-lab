@@ -1,6 +1,6 @@
 # Connected code graph: graph model v1 (S17)
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** P0-14 (S17) · **Extends:** `docs/plans/connected-code-graph-graph.md`
+> **Status:** active · **Owner:** `graph-dba` · **Tracks:** P0-14 (S17) · **Extends:** `docs/plans/connected-code-graph-graph.md` · **Extended by:** `docs/plans/connected-code-graph-p1-graph.md`
 
 Graph model v1 frozen with schema v1 (`docs/plans/connected-code-graph-bundle-spec3.md` +
 `docs/plans/connected-code-graph-bundle-spec4.md`, freeze commit `88eb134d`). This note states **only the

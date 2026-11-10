@@ -1,6 +1,6 @@
 # Connected code graph — egress and sandbox spec, S08-gate amendments
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-egress-spec.md` · **Version:** 1.2 · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
+> **Status:** superseded · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-egress-spec.md` · **Version:** 1.2 · **Superseded by:** `docs/plans/connected-code-graph-egress-spec3.md` · **Reviews:** `docs/reviews/connected-code-graph-p0-impl.md`
 
 *2026-10-29 (v1.0): S08 gate errata (M1, M2, M3, m2, m4, m6, n1, n2, deviations 1–10) and S04 Pass 3 (P3-m1, P3-n1).*
 *2026-10-30 (v1.1): analyst re-gate ES-m1–m5 and ES-n1. The `\r` split is confirmed by probe; the H15 row is named as replaced; the runner-environment rule is closed again; the lock moves outside the `upperdir`; the plan fold-in is completed. Nothing is declined. Dispositions are in §4.*

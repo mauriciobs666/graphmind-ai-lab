@@ -5,17 +5,17 @@
 Part of `docs/plans/connected-code-graph-p1.md` (the index: decisions D1–D11, the flow gate §5, the obligation
 walk §4, the step index §7). Citations "index D<n>" and "index §<n>" point there. Contracts: bundle
 `docs/plans/connected-code-graph-bundle-spec3.md` + `-bundle-spec4.md`, rule packs `-rule-pack-spec.md`,
-sandbox `-egress-spec.md` + `-egress-spec2.md`. Layout is proposal §3.13: extractors under `cpg/extractors/<name>/`,
+egress and sandbox `-egress-spec3.md`. Layout is proposal §3.13: extractors under `cpg/extractors/<name>/`,
 shared code under `cpg/ccg/`. Every step's briefing line: builders use `cpg/eval/dev/` and the fixtures, never held-out
 items (index §2); live tests run on a throwaway instance (`infra/ccg-falkordb.sh --throwaway`), or on `ccg-falkordb` (6390) only where a step says so.
 
-Every extractor writes bundles through `ccg.bundle.write_bundle`, which validates; no extractor imports another's
+Every extractor writes bundles through `ccg.atrest.write_bundle` (P1-02), which validates through `ccg.bundle.dumps` and creates a `0600` file under `bundles/<system>/`; no extractor imports another's
 internals. Frontend quirks live in the extractor's normalizer and nowhere downstream (proposal §3.2).
 
 ## P1-01 · layout and Python dependency intake — `devops`
 
 - **Files:** `cpg/pyproject.toml` (extras `extract`: `tree-sitter-bash`, pinned and verified installable like P0's;
-  `engine`: the `mcp` SDK pin used by `cypher-mcp/`; `broker`: none beyond stdlib unless P1-28 decides otherwise;
+  `engine`: the `mcp` SDK pin used by `cypher-mcp/`; `broker`: left empty here and filled by P1-29 (index D8);
   `packages.find` widened to `include = ["ccg*", "extractors*", "clients*"]`, index D8; the `slice` marker registered,
   D9), `cpg/extractors/__init__.py` and `cpg/clients/__init__.py` (empty package stubs), `cpg/eval/tools/audit.py`
   (O3), a derived `absent-tool` stream under `cpg/tests/fixtures/headless/`, `cpg/README.md` (extras rows).
@@ -33,17 +33,35 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   Node 24 and the pinned `scip-python`/`scip-typescript` from the `truth-npm` lockfile; the default `toolchain` image
   the sandbox runs stays free of Node and indexers, so the AC-8 "no dependency download" surface does not widen for
   builds that need no indexer; the `truth` target is not reused because it also carries the truth corpora's tools and
-  smoke projects), `cpg/infra/ccg-falkordb.sh`, `cpg/infra/tests/test-ccg-falkordb.sh`, `cpg/infra/README.md`.
-  `offline-run.sh` reads only `CCG_TOOLCHAIN_IMAGE`, so the indexer runner (P1-15) sets that variable to the indexer
-  image per call; there is no second variable.
+  smoke projects), `cpg/infra/ccg-falkordb.sh`, `cpg/infra/tests/test-ccg-falkordb.sh`, `cpg/infra/README.md`. `offline-run.sh` reads only
+  `CCG_TOOLCHAIN_IMAGE`, so the indexer runner (P1-15) sets that variable to the indexer image per call; there is no
+  second variable. The runner's indexer entries are P1-48b's.
 - **Behaviours:** (1) `ccg-falkordb.sh up` reports `TIMEOUT_MAX` 10000 and `MAX_INFO_QUERIES` 0 from
   `GRAPH.CONFIG GET` (`-p0-graph.md` §6 rows 5, 12); (2) **`status` and its test change:** a nonzero `TIMEOUT_MAX` and
-  the four `ccg_*` ACL users are the P1 steady state, a user outside that set is still drift; the script header and the
+  the per-system `ccg_<role>_<s>` ACL users are the P1 steady state, a user outside that set is still drift;
+  `status`'s allowed-user check is `default` or `ACL_USER_RE` (`^ccg_(build|verdict|engine|raw)_[a-z0-9]+([-_][a-z0-9]+)*$`)
+  plus a separate 1–48-character check on the system part, and a test
+  asserts it gives the same verdict as `ccg.sysname.acl_user_re()` over every role × valid name, malformed names, `default` and 48- and 49-character system names (neither regex holds the length; `-p1-graph.md` §7; the test is P1-03's, `cpg/tests/test_sysname.py`, which reads the
+  script); the script header and the
   P0-scoped `reset-p0` verb text are updated; the README states the instance has no persistence (`save ""`, no volume),
   so the first query after a restart is a rebuild; (3) **`--throwaway`** starts a disposable instance on a free port,
   labels its container `ccg-falkordb=1`, and **refuses ports 6379 and 6390** and any port already published; (4) the
-  `indexer` image runs `scip-typescript --version` under `offline-run.sh --mode offline`.
+  `indexer` image builds, carries the label `ccg-toolchain-indexer=1`, and `ccg-versions` names both indexers offline
+  (`cpg/infra/toolchain/tests/test_toolchain.sh`, section 5).
 - **Gate:** `analyst`.
+
+## P1-48b · the runner's indexer entries — `devops`
+
+`-egress-spec3.md` §7.4–§7.6, §7.8, §10.1 tests (21)–(26), §10.2. **Needs:** P1-28, P1-48. **Blocks:** P1-15.
+- **Files:** `cpg/sandbox/offline-run.sh` (`SBX_FRONTENDS` gains `scip-typescript` and `scip-python`, their fixed
+  absolute executables, the `index` argv grammar, the `ccg-toolchain-indexer=1` image-label check, `PYTHONSAFEPATH=1`
+  in the indexer pass-list, `--output /out/<auditId>.scip`, the §7.5 (4) and `usage` extensions),
+  `cpg/sandbox/allowed-flags.txt`, `cpg/sandbox/forbidden-flags.txt`, `cpg/sandbox/tests/test_sandbox.sh`
+  (`tests/mutants.sh` and `cpg/sandbox/README.md` as the spec's tests and citations need); `cpg/infra/README.md` and
+  `cpg/infra/toolchain/README.md` stop saying the runner has no indexer entry.
+- **Behaviours:** the spec's tests (21)–(26) pass, the sandbox suite and its mutants re-run in full (a `--frontend
+  joern` script that runs `scip-typescript` proves only that the image works and is not a check of this step).
+- **Gate:** `analyst`; `security-expert` advisory on the sandbox boundary.
 
 ## P1-02 · bundle-at-rest and HMAC-key custody (F-1) — `devops`
 
@@ -56,13 +74,22 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   name something outside `root`) and planted `Read(cpg/**)` and `Read(cpg/.ccg-work/**)` as positive controls (both
   flagged; any other pattern outside the root fails closed); the
   residual for an unrestricted-`Read` interactive agent is stated, not closed; (d) the per-system HMAC key (for `valueHash`,
-  `bindParts`, §1.7.5) in `cpg/.ccg-work/keys/<system>.hmac`, `0600`, generated once, never logged, never in a
-  bundle, an answer or the broker audit; rotation = a full rebuild (it changes every `valueHash`); (e) the four ACL users' passwords that P1-19's `create_users` mints live in `cpg/.ccg-work/keys/<system>.acl` (`0600`, one line per user), read by the clients through `CCG_CREDENTIALS_DIR` and never placed in a committed file: the repo-root `.mcp.json` entry P1-27 proposes carries no credential.
-- **Files:** `cpg/infra/README.md` (section "Bundle-at-rest"), `cpg/ccg/atrest.py` (`bundle_dir(system)`,
-  `key_path(system)`, `ensure_private(path)`, which refuses a path outside the work area and sets modes),
+  `bindParts`, §1.7.5) in `~/.config/ccg/keys/<system>.hmac` (outside the repository: `atrest` refuses a key area
+  inside it), `0600`, generated once, never logged, never in a bundle, an answer or the broker audit, read only
+  through `ccg.atrest.hmac_key`, which refuses the two published test keys of `-bundle-spec5.md` §9; rotation = a
+  full rebuild (it changes every `valueHash`); (e) the four `ccg_<role>_<system>` credentials that P1-19's
+  `create_users` mints live in `~/.config/ccg/keys/<system>.acl` (`0600`, one line per user, written and read
+  through `ccg.atrest.write_acl`/`read_acl`), read by the clients through `CCG_CREDENTIALS_DIR` (also refused inside
+  the repository) and never placed in a committed file: the repo-root `.mcp.json` entry P1-27 proposes carries no
+  credential.
+- **Files:** `cpg/infra/README.md` (section "Bundle-at-rest"), `cpg/ccg/atrest.py` (bundle area: `bundle_dir`,
+  `write_bundle`, `read_bundle`, `prune_unit`; key area: `key_path`, `hmac_key`, `bind_key_check`, `acl_path`,
+  `write_acl`, `read_acl`, `credentials_dir`; `ensure_private(path, area)`, which refuses a path outside its area,
+  a symlink component and an exposed file, and creates with `0700`/`0600`),
   `cpg/tests/test_atrest.py`, `cpg/.gitignore`.
 - **Behaviours:** a created bundle dir/key has the modes above; `ensure_private` on a world-readable existing
-  file raises; a path outside `cpg/.ccg-work/` is refused; the guard test fails if a tool allow-list names the
+  file raises; a path outside its area (the work area for bundles, `~/.config/ccg/keys/` for keys and credentials)
+  is refused; the guard test fails if a tool allow-list names the
   bundle dir. **Done:** the default stated in `-bundle-spec3.md` §13 F-1 ("P0 bundles live only in the gitignored
   work area") is replaced by this decision, cited from `cpg/README.md`. **Gate:** `analyst`; `security-expert`
   advisory. **Blocks:** P1-07, P1-19, P1-20, P1-41.
@@ -70,11 +97,15 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
 ## P1-03 · system manifest and unit discovery — `tdd-engineer`
 
 - **Files:** `cpg/ccg/manifest.py`, `cpg/ccg/units.py`, `cpg/ccg/schemas/system-manifest-v1.schema.json`,
-  `cpg/tests/test_manifest.py`, `cpg/tests/test_units.py`.
+  `cpg/ccg/schemas/egress-v1.schema.json` (verbatim from `-egress-spec3.md` §4.2),
+  `cpg/ccg/sysname.py` (the one module for system-name, key and ACL-user construction, specified in `-p1-graph.md` §7;
+  P1-18, P1-19, P1-21 and P1-25 import it) and the format-sweep and regex-equality test
+  `cpg/tests/test_sysname.py` of `-p1-graph.md` §7, `cpg/tests/test_manifest.py`, `cpg/tests/test_units.py`.
 - **Interface:** `load_manifest(path) -> Manifest` (repos with `repoId`, path, exclusions; a `remote` key is rejected, below;
-  `groupings` rejected until P2 with a clear error; policy: `localOnly`, `rcaWindow`, `secretsWindow`,
-  `previewCap`; `endpointAllowList`; the `egress` section is egress spec §4's, validated by the schema P1-28
-  adds, so this step embeds it opaque and passes it through); `discover_units(repo_root, manifest) -> list[Unit]`
+  `groupings` rejected until P2 with a clear error; policy: `egress` (`local-only` | `hosted`, mandatory per
+  repository, `-egress-spec3.md` §4.4), `rcaWindow`, `secretsWindow`, `previewCap`; the `egress` section is the
+  system's only allow-list, validated against `egress-v1.schema.json` with checks S1–S5 and `canonical_endpoint`
+  of `-egress-spec3.md` §4.3); `discover_units(repo_root, manifest) -> list[Unit]`
   where `Unit = (unitId, repoId, rootPath, language)` from `pyproject.toml`/`package.json`/`tsconfig.json`
   manifests, a directory-per-language fallback, and per-file shell/config/Markdown units handled by the non-Joern
   extractors (proposal §3.2). `unitId` and `repoId` come only from `ccg.ids`. `cpg/ccg/system.yaml` is this repo's
@@ -84,12 +115,14 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   `exclusions.contentCheck.files`); a test asserts the two lists are equal, so a drift fails loudly. The fixture
   system has its own manifest (`cpg/fixtures/system1`, four repos) and is built as a separate system. A `remote`
   key on a repository is **rejected** with "git fetch is not enabled in P1" (index §6).
-- **Behaviours (red→green):** (1) a manifest with an unknown key, an absent `repoId`, or a system name outside the
-  charset whitelist (none of `*?[]\:`, no `__`; proposal §3.5) is rejected; (2) a repo with one `pyproject.toml`
+- **Behaviours (red→green):** (1) a manifest with an unknown key, an absent `repoId`, or a system name that fails
+  `ccg.sysname.check_system_name` (`-p1-graph.md` §7) is rejected; (2) a repo with one `pyproject.toml`
   gives one python unit with the right `rootPath`; (3) `salesperson/` gives a javascript unit; (4) a directory
   with `.py` files and no manifest falls back to a directory unit; (5) nested manifests give two units, not one;
   (6) exclusions remove units, and no unit under `cpg/` is discovered for the proving system; (6b) a manifest naming a `remote` is rejected; (7) unit ids are stable across runs; (8) the real repo yields exactly the units
-  the slice used (`falkor-chat/server`, `salesperson`) among its list.
+  the slice used (`falkor-chat/server`, `salesperson`) among its list; (9) (`-egress-spec3.md` §10.1) S1–S5 each
+  refuse a planted manifest, `policy.egress` is mandatory on every repository (`cpg/ccg/system.yaml` and the fixture
+  manifest carry it), and its enum equals `$defs/egressMode`.
 - **Done:** `discover_units` on the monorepo is committed as a golden list. **Gate:** `analyst`.
 
 ## P1-04 · Joern extractor port — `graph-dba`
@@ -107,7 +140,8 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   `slice`-marked test comparing canonical JSON, with the artifact sha256 and `0 skipped` recorded, index D9); (4) the D15 content check (a parse is
   certified by content, `cpg/sandbox/scripts/cpg-content-check.sc`) refuses an empty CPG (risk R11).
 - **Done:** one command builds raw facts for a unit; behaviour is unchanged from the slice (the improvement
-  happens in P1-09). **Gate:** `analyst`. **Risk:** the 6 GB host; run units one at a time.
+  happens in P1-09). This step writes no bundle: bundle writing, and its `0600` mode test, belong to P1-05 (5b) for
+  the Joern extractors and to P1-44 for the others. **Gate:** `analyst`. **Risk:** the 6 GB host; run units one at a time.
 
 ## P1-05 · normalizer port (Python and TS/JS) — `tdd-engineer`
 
@@ -118,7 +152,7 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
 - **5b files:** `.../normalize/javascript.py` (`js_resolve`, `js_imports`, `js_type_spans`, astgen walk),
   `.../normalize/blame.py` (`blame`, `last_changed`, the `git archive`-staged-tree rule of BF12: computed
   **outside** the sandbox from the source repo), `.../normalize/assemble_bundle.py` (the old `assemble()` that
-  turns raw facts into bundle records and calls `write_bundle`), `cpg/tests/test_normalize_javascript.py`,
+  turns raw facts into bundle records and calls `ccg.atrest.write_bundle`), `cpg/tests/test_normalize_javascript.py`,
   `cpg/tests/slice/test_normalize_equivalence.py`.
 - **Behaviours:** (1) per-frontend goldens (small Python and TS files with expected records, one per rule of
   `-bundle-spec3.md` §4–§5: qname grammar, `<anon>#k`, decorators, `fieldAccess`, `Ret` synthesis for
@@ -129,7 +163,8 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
   rule and the span-plus-`ownedRegions` fallback of spec4 §2 (the slice code tested the span only; this step
   tests both); (4) the normalizer runs under CPython 3.12 (spec4 §3 host-Python note), asserted at start; (5) a
   shallow clone is a build error (index D1); (5b) **G-4:** a `controlledBy` record with `point == cond` (a CDG
-  self-edge) is dropped in `assemble_bundle.py` while a `data` self-edge (`use == def`) is kept, each with a test; (6) every emitted bundle passes `ccg.bundle.validate`.
+  self-edge) is dropped in `assemble_bundle.py` while a `data` self-edge (`use == def`) is kept, each with a test; (6) every emitted bundle passes `ccg.bundle.validate`; (7) the bundle is written only through
+  `ccg.atrest.write_bundle`: the file is `0600` and its directory `0700` under `bundles/<system>/`, under umask 0 as well.
 - **Done:** `build_bundle(unit, raw_facts, repo, commit) -> path`. **Gate:** `analyst`. Python has no
   primary-constructor owned region, so 5b's `ownedRegions` test uses a synthetic region lying outside the
   symbol's span; the first real case is the P1-41 fixture (0 of the slice's 4,943 symbols carry one).
@@ -148,7 +183,9 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
 ## P1-07 · writer done-condition (F-10) — `tdd-engineer`
 
 `-bundle-spec3.md` §1.6.1, §1.7.4 (W2–W4), §1.7.5.
-- **Files:** `cpg/extractors/common/writer_rules.py` (shared by P1-10, P1-11, P1-12), `cpg/ccg/valuehash.py`
+- **Files:** `cpg/ccg/bundle.py` (defence in depth: `write_bundle` creates its temp file with `O_EXCL`, mode `0600` and
+  `fchmod`, so a stray caller cannot widen a bundle; a test under umask 0), `cpg/extractors/common/writer_rules.py`
+  (shared by P1-10, P1-11, P1-12), `cpg/ccg/valuehash.py`
   (`entry_hmac(key: bytes, domain: str, value: str) -> str`, per-entry domain separation of §1.7.5),
   `cpg/tests/test_writer_rules.py`, `cpg/tests/test_valuehash.py`. The launch and config writers themselves are
   P1-11's; this step supplies the rules they call.
@@ -156,8 +193,14 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
   `launchFact.default` is emitted only for a declared service/binding role, with `default` only when it passes
   the grammar; (W3) alias and interpolation (`$`, `${…}`) values are never bound; (W4) the third writer rule of
   §1.7.4 as written there; (SA-1 writer side) `launchFact` `command` and `args` are produced only through
-  `ccg.bundle.gate_argv` — a test fails if any writer module builds an argv field without it; (§1.7.5) `valueHash = entry_hmac(key, "valueHash", v)`
-  differs across `keyPath`s for the same value, and the key is read only through `ccg.atrest.key_path` (P1-02).
+  `ccg.bundle.gate_argv` — a test fails if any writer module builds an argv field without it; (§1.7.5)
+  `valueHash = entry_hmac(key, r["id"], text)`, where `r["id"]` is the `configEntry` record's own 32-hex id
+  (`ids.config_entry_id(repoId, path, keyPath)`) and `text` is the value as the format's unescaping yields it;
+  `launchFact.defaultHash = entry_hmac(key, <the launchFact's id>, <default text>)`. The same value under two
+  `keyPath`s gives two hashes. `entry_hmac` reproduces `-bundle-spec5.md` §9.1, EH-31 for the id-domain form, with
+  expected hex read from the spec text. The key is read only through `ccg.atrest.hmac_key` (P1-02), which refuses
+  both of spec5 §9's test keys; tests pass a test key to `entry_hmac` directly.
+- **Needs:** P1-13 (`-bundle-spec5.md` fixes `entry_hmac`'s bytes and EH-31).
 - **Done:** a `writer_rules` import is the only way an extractor decides these rules. **Gate:** `analyst`;
   `security-expert` advisory (HMAC, SA-1).
 
@@ -194,13 +237,19 @@ not a P1 language).
   python misses); this is a design line of its own because the report's R3 was a scoring relaxation designed after
   reading the misses, so the golden states the rule and a negative case; (4) the 27 unverified projection-side causes
   (comprehension/generator scopes 12, a call that is itself a CDG source 10, dict/array/spread literals 4, a
-  bound-method alias 1) each get a golden and a fix or a recorded "not fixed, because"; (5) **no connected pair is
-  lost**: on the slice's stored raw facts the shipped projection's `data`/`controlledBy` records are a subset of the
-  fixed projection's; (6) the spurious rate does not rise on the 30 dev-contact methods (`cpg/spikes/frontend-
+  bound-method alias 1) each get a golden and a fix or a recorded "not fixed, because"; (4b) **synthetic-cond transparency** as `-p1-ml.md` §3.4 states it (recognizers, nearest-real-cond redirect, ungoverned
+  edge dropped; scoring stays direct-edge): goldens for the 8 `definition` pairs (no projected edge in those methods ends
+  at a synthetic cond), the joint golden on `services.py::_normalize_opaque`, nested and ungoverned cases, and the
+  negatives (the `test_repository.py:4703→4706` pair stays unconnected; a point under a real intermediate cond keeps
+  its direct edge); **mutant:** with transparency off all 8 positives fail; (5) **no connected pair is lost**:
+  on the slice's stored raw facts the shipped projection's `data` records are a subset of the fixed projection's and
+  its `controlledBy` records are a subset **modulo the rewritten synthetic-cond edges**, each listed with its
+  replacement set (one edge, several, or none), and no golden pair the shipped projection connects is unconnected by
+  the fixed one (`slice/test_projection_not_regressed.py` carries the same carve-out); (6) the spurious rate does not rise on the 30 dev-contact methods (`cpg/spikes/frontend-
   fitness/truth`, `s28_metrics.py` reused, not copied); (7) `header.flowProjected` stays true and `fieldDepthCap` 3.
-- **Done:** a report line with the dev recall reached and the count of the 151 fixable python misses still open.
-  The plan's own ceiling arithmetic (index §5) says 149 of 151 would be needed on these 30 methods to reach 0.95,
-  so **the expected outcome is a flag that stays false**; this step still ships because R1 loses no pair and every fix
+- **Done:** a report line with the dev recall reached (with its cluster interval) and the list of fixable python
+  misses still open. P1-34's entry value is 465/481 against a dev ceiling of 467 (`-p1-ml.md` §3.1), so at most 2 of
+  the 159 fixable misses may stay open, and **the expected outcome is a flag that stays false** (P1-34 "not run"); this step still ships because R1 loses no pair and every fix
   helps the call-level-versus-flow question. **Gate:** `analyst`; `data-scientist` reads the report line.
   **Risk:** Java-heap blowups in the "follow every source" variant (§a2.2.1) — do not adopt it.
 
@@ -267,8 +316,19 @@ identity tuple) and the graph note. **Gate:** `analyst`; `security-expert`.
 ## P1-14 · encode `bindParts` — `tdd-engineer`
 
 - **Files:** `cpg/ccg/schemas/bundle-v1.schema.json` (optional field, no required change), `cpg/ccg/bundle.py`
-  (validator checks per spec5), `cpg/extractors/config/formats.py` and `launch.py` (emit), `cpg/tests/test_bundle.py`
-  (rows parsed from spec5's text as P0 did: "tests read the contract's text"), `cpg/tests/test_bindparts.py`.
+  (validator checks per spec5), `cpg/ccg/valuehash.py` (the three tags, `bind_parts`,
+  `bind_parts_usable`, `mount_prefix_hmac`; spec5 §8; the key and `bind_key_check` have one home, `ccg.atrest.hmac_key`
+  and `ccg.atrest.bind_key_check`, P1-02), `cpg/extractors/common/writer_rules.py` (`bind_parts_allowed`),
+  `cpg/extractors/config/formats.py` and `launch.py` (emit), `cpg/tests/test_bundle.py`
+  (rows parsed from spec5's text as P0 did: "tests read the contract's text"), `cpg/tests/test_bindparts.py` (including the one-definition test: an `ast` scan of `cpg/ccg/` and
+  `cpg/extractors/` finds `def hmac_key` and `def bind_key_check` only in `ccg/atrest.py`, and `valuehash.py`
+  defines no key-reading function), `cpg/tests/test_answer.py`, and the P1-11 tests whose expectations change: W6 withholds `bindValue` for `ip` and
+  `external` URL hosts, and W7 plus spec5 §1 give every P1-11 URL entry `bindParts`, so those bundles become `"1.1"`
+  with `bindKeyCheck` (spec5 §6.1, §6.2).
+- **Key epoch (spec5 §5.4):** this step supplies `bind_parts_usable` and its test (a bundle planted under spec5's
+  second test key is loaded but its `bindParts` are not usable; the same bundle under the first key is the positive
+  control); BR-1–BR-3's `usable` column. P1-17 (`bind.py`) owns the binding outcomes and the `bind-key-mismatch`
+  line; P1-17 already needs 14.
 - **Behaviours:** a bundle without the field validates unchanged (positive control: the stored slice bundles);
   every vector of spec5 passes; a capability URL (`https://ntfy.sh/x7k2-q9w4-m1p8-z3v6`) yields `bindParts` with
   no `bindValue`; a multi-segment base (`http://localhost:8000/api/v1`) binds by `pathHmacs`; failing vectors
@@ -278,17 +338,30 @@ identity tuple) and the graph note. **Gate:** `analyst`; `security-expert`.
 
 Blocked on the `-p1-ml.md` note's question 1 (method, offline protocol, adopt criterion). The step carries
 its output to the bundle as a **resolution source**, never as a new schema element.
-- **Files:** `cpg/extractors/indexers/scip.py` (parse a SCIP index to `(file, line, col) → target qname`),
-  `cpg/extractors/indexers/run.py` (runs the indexer through `offline-run.sh --mode offline`, setting `CCG_TOOLCHAIN_IMAGE` to the P1-48 `indexer` image for that call, with the
-  pre-provisioned `node_modules`/venv mounted read-only), `cpg/extractors/joern/normalize/merge_scip.py` (merge
+- **Files:** `cpg/extractors/indexers/scip.py` (parse a SCIP index to `(file, line, col) → target qname`; the `.scip` file is hostile input, since the process that wrote it may have executed staged code: a size cap, and no path read from it is used for a write),
+  `cpg/extractors/indexers/run.py` (runs the indexer through `offline-run.sh --mode offline --frontend
+  scip-typescript|scip-python`, setting `CCG_TOOLCHAIN_IMAGE` to the P1-48 `indexer` image for that call; `toolArgv` is
+  the §7.4 grammar: `index --cwd /src` for `scip-typescript`, and `index --cwd /src --environment /src/<env.json>
+  --project-name <n>` for `scip-python`; the `node_modules`, venv and `env.json` the **operator** provisioned outside the system (no `cpg/` module runs `npm ci`, `pip` or `uv`; `-egress-spec3.md` §7.4) are placed in this
+  run's **own staged directory**, never the one a Joern parse reads, and arrive read-only through `/src`; the
+  stager rejects symlinks that point outside the directory, hardlinks and device or FIFO files, and provisioning
+  installs dependencies only, per `-egress-spec3.md` §7.4; `run.py` runs one indexer at a time under a wall-clock
+  timeout that sends TERM to the runner (R-E10); the runner and its `indexer` entries are P1-48b's, not this step's), `cpg/extractors/joern/normalize/merge_scip.py` (merge
   rule from the note: a SCIP-resolved target upgrades a name-match site to `confirmed`/`resolved-call`; a
   disagreement with Joern keeps both and marks the site `possible`/`resolution-unverified`; candidates are
   never dropped), `cpg/tests/test_scip_merge.py`, `cpg/tests/test_scip_parse.py`.
 - **Behaviours:** parser golden on a stored tiny SCIP index; merge cases (agree, upgrade, disagree, SCIP-only);
-  the offline run asserts no network and no `npm`/`pip` invocation (argv check); a local-only build without
-  pre-provisioned dependencies runs Joern alone and records `reason: headers-unavailable`-class degradation
+  the run's argv is the §7.4 grammar and the runner's own refusals enforce it (a test replays a non-grammar argv through
+  the runner and sees the refusal); no run goes through `--frontend joern`; a build runs an indexer only if the
+  operator already provisioned the dependencies, and otherwise runs Joern alone and records `reason: headers-unavailable`-class degradation
   under the existing registry code (no new code) — decided in the note.
-- **Done:** the offline recall/precision figure per language on the P0 call-site truth is reported
-  (`cpg/spikes/frontend-fitness/truth`, `s27_metrics.py` reused). **Adopt only if the note's criterion holds on
-  the offline figure**; otherwise the step ends with "not adopted, because" and the Joern call graph with
-  `possible` name-match items is the P1 baseline (R-2). **Gate:** `analyst`; `data-scientist`.
+- **Done:** per language, on the P0 call-site truth (`cpg/spikes/frontend-fitness/truth`, `s27_metrics.py` reused), the
+  measures of `-p1-ml.md` §2.1: M1 (offline/online agreement k/n with Wilson, every differing site adjudicated), M2
+  (merged recall and precision with n_P, Joern-alone figures, confirmed share, fan-out p90) and M0 (bare, informational),
+  with wall time and peak memory; the merge rule of §2.2 and the adopt criteria of §2.3; the `ccg-p1-indexer-v1`
+  record (§8) committed before the offline run. **The step ends in one of four outcomes:** adopted (the criterion
+  holds on the offline figure); "not adopted, because" (it does not); "not run: runner" (P1-48b's indexer entries are
+  absent, or the first run cannot place the staged dependencies, `-egress-spec3.md` R-E9); or "not run: dependencies
+  not provisioned" (the operator has not provisioned them; `teco` is told and asks the operator, and no `cpg/` module
+  provisions). In the last three the Joern call graph with `possible` name-match items is the P1 baseline (R-2).
+  **Gate:** `analyst`; `data-scientist`.

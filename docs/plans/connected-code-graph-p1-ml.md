@@ -10,7 +10,7 @@ standing contracts:
 - `docs/plans/connected-code-graph-eval-protocol2-ml.md` (EP2);
 - the archived `docs/plans/connected-code-graph-p0-ml.md` (P0-ML).
 
-Revised 2026-11-10 in place after review Pass 4.
+Revised 2026-11-10 in place (Pass 5, provisioning decision).
 
 A rule changed here applies from P1 on. The note holds method only. It writes no labels and names
 no held-out content. Figures are **re-derived** from the P0 artifacts (appendix scripts) unless
@@ -116,17 +116,13 @@ reported and M1 is re-baselined.
 `truth/<lang>.final2.jsonl`, scored by `s27_metrics.py` (imported) on P0's decision stratum, with
 pooled beside it.
 
-**Provisioning**, outside the build, at the corpus commit:
-- TS: `npm ci --ignore-scripts`; record the lockfile sha256.
-- Python: a venv from `uv pip install -e ".[dev]"`, plus **`env.json` generated from that venv** in
-  scip-python's `--environment` format (a JSON list of `{name, version, files}`); record its
-  sha256.
-  - Without `--environment`, scip-python calls `pip` to discover packages (its README), so the
-    offline run passes `--environment env.json`.
-  - P0's online run used pip discovery. That is a named confound for M1.
-
-Everything provisioned is mounted read-only. The run is `--mode offline`. The argv check asserts no
-`npm`, `pip` or `uv` invocation.
+**Provisioning is an operator step, outside the system** (stakeholder, 2026-11-10).
+- The operator installs the dependencies at the corpus commit, hardened per
+  `docs/plans/connected-code-graph-egress-spec3.md` §7.4.
+- The operator writes `env.json` in scip-python's `--environment` format, which avoids its pip
+  discovery. P0's online run used that discovery, a named confound for M1.
+- The run records the lockfile and `env.json` sha256s, mounts both read-only, and runs
+  `--mode offline`. The argv check asserts no `npm`, `pip` or `uv` invocation.
 
 **What the sandbox runner must provide** (`cpg/sandbox/offline-run.sh`).
 - Its closed frontend set (`SBX_FRONTENDS`) has no indexer entry today. That set, with its
@@ -231,8 +227,7 @@ It belongs with the TS/JS remedy backlog item (index §11).
   fixed before labelling.
 - A ruling made after results is disclosed, and the decision is reported under both readings.
 
-**Configurations.** Both run. Python's `on` equals `off` by construction, so a discordant pair is a
-defect to investigate first.
+**Configurations.** Both run. They are identical by construction, so any discordant pair is a defect.
 
 **Decision**, by P0-ML §8.4: pooled ≥ 0.95 over ≥ 120 pairs in both configurations, with projection
 success ≥ 0.95. Reported beside it:
@@ -308,9 +303,8 @@ scorer is needed.
   - and **no golden pair the shipped projection connects is unconnected by the fixed one**.
 
   `slice/test_projection_not_regressed.py` carries the same carve-out.
-- **Spread.** The ceiling is 467 with both recognizers. It is 466 if the generator recognizer is
-  dropped (`try` only), carried from the review's independent rebuild. The rule can connect none of
-  the 14 residual misses.
+- **Spread:** 467 with both recognizers, 466 with `try` only (carried from the review). No residual
+  miss is reachable by the rule.
 
 **Disclosure.** Like R3, this rule was designed after the misses were read. It is fixed here, before
 any fresh draw.
@@ -617,6 +611,8 @@ builders query only dev anchors and fixtures on the proving repo. The gate repor
 ### 6.4 Custody of held-out-derived artifacts
 
 **Rule.** Every artifact derived from held-out items lives under `~/.local/share/ccg-eval/<E12>/`.
+`<E12>` is the first 12 hex of `EVAL_COMMIT` (now `cf7b2042cce7`, as S47 wrote it). It is unrelated
+to EP decision E12.
 That covers:
 - gate answers for held-out anchors;
 - the miss and triage lists;
@@ -740,7 +736,7 @@ Gate records go to `cpg/eval/preregistration.jsonl`. Decision records go to
 | `ccg-prereg-v1` / `ac5-gate-1` | P1-37 | the gate build (freeze) | EP §12.1, plus §6.1 |
 | `ccg-noise-ratify-v1` | the next gate's noise bars | that gate's record | §5.3 |
 
-The P1-34 entry value (§3.1) is fixed in this note, which precedes P1-09's report.
+The P1-34 entry value is fixed in §3.1.
 
 ## 9. Stakeholder decisions and label custody
 
@@ -757,12 +753,14 @@ No stakeholder question remains open.
       applies as written.
     - A held-out or reserve change means the custodian re-records and commits the held-out manifest
       (`split_manifest.py manifest`, then `verify`) **before** the `ac5-gate-1` record.
-    - **Shortfall.** If a removal takes a stratum below its floor of 8 (`wiring` is at 8 now), a
-      reserve cluster of that stratum moves to held-out (EP §9.1 step 6: reserve items are held-out,
-      never exposed), and the manifest is re-recorded.
-      - Dev clusters cannot top up after P1 builders have used dev.
-      - With no reserve cluster of that stratum, the stratum is marked below floor and reported, not
-        gated, as for a marked stratum under EP §9.1 step 4.
+    - **Shortfall.** If a removal takes a stratum below its floor of 8 (`wiring` is at 8), a reserve
+      cluster of that stratum moves to held-out, and the manifest is re-recorded. Reserve items are
+      held-out and never exposed (EP §9.1 step 6).
+      - **Cost:** each counting item moved leaves the reserve. That shrinks fill source 1 for
+        P1-43's ≥ 35 fresh items (EP §12.1), so the re-gate leans more on the census top-up.
+      - Dev cannot top up, because builders have used it.
+      - With no reserve cluster in that stratum, the stratum is reported below floor, not gated (as
+        EP §9.1 step 4 treats a marked stratum).
     - Counts by stratum and class go into the gate report.
 - **Noise thresholds (decided 2026-11-10):** §5.3.
 - **Flow-fallback labelling (decided 2026-11-09):** §6.6.
@@ -771,24 +769,24 @@ No stakeholder question remains open.
 
 ## 10. Risks and step-text amendments
 
-**Risks:**
-- **Dev optimism is unestimated** (§3.1). A passed entry check can still be followed by a failed draw.
-- **F4 is a prediction from hop signatures.** The 4 dev clusters make every figure a screen.
-- **The indexer truth is half reference**, and both of its biases favour adoption (§2.1).
-- **The model is a perishable prior** (§4.1).
+**Risks** are stated where they bite: §2.1, §3.1, F4 and §4.1.
 
 **Step-text amendments, for `architect` and `teco`** (one line each):
 - **P1-09:** the synthetic-cond transparency rule, its recognizers, goldens and mutant; behaviour (5)
   and `slice/test_projection_not_regressed.py` restated as subset modulo rewritten edges, plus the
   pair-level guard (§3.4); report the dev figure and the open fixable misses.
-- **P1-15:** M0, M1 and M2; `env.json` with `--environment`; offline provisioning; the runner
+- **P1-15:** M0, M1 and M2; `env.json` with `--environment`; operator provisioning; the runner
   dependency (§2.1).
 - **P1-28 / `-egress-spec3.md` §7.4 and P1-48's file list** (`architect`): the indexer entries,
   read-only mounts and flag lines, and their `offline-run.sh` implementation and sandbox tests (§2.1).
 - **P1-22/P1-23:** the fallback walk and the labelled-row list (§3.5, §6.6).
 - **P1-26:** the span-group draft, the resolver join rule and the named resolver tests (§4.2).
-- **P1-32a:** write the oracle candidates in the key-item schema, passed by `--heldout`, since
-  `--heldout-dir` globs `ac5-*.jsonl` only (§6.4).
+- **P1-32a:**
+  - write the oracle candidates in the key-item schema, passed by `--heldout`, since `--heldout-dir`
+    globs `ac5-*.jsonl` only (§6.4);
+  - **own the §6.2 freeze-time check** as a verb: the path set, the P1-commit test, per-file
+    `check-report`, exit 2/4 as failure, and the private reverse map. The custodian runs it before
+    the record.
 - **P1-32b:** the harness pin (§6.1); scope from `eval-manifest.yaml`, with an out-of-scope held-out
   item as `key-error` (§6.3); outputs under the custodian root (§6.4).
 - **P1-34:** the seed prefix (F6), the frame exclusions and the entry value (§3.1, §3.3).
@@ -819,12 +817,13 @@ No stakeholder question remains open.
     - The entry **overturns S8** ("provisional until phase 1 measures it") and AC-5's clause
       "provisional; ratified or adjusted once the first phase has measured the real ratio".
     - `tico` rewords AC-5's parenthetical to match.
+  - 2026-11-10: who provisions indexer dependencies → an operator step, outside the system (affects
+    AC-8 and egress Q1 = C; §2.1).
 
 ## Appendix. Scripts behind F1–F2 (Python 3.12 stdlib, `python3 -I`)
 
 `flow.py <frontend-fitness dir> <out.json>` reproduces F1's rows, the intra-method correlations and
-the residual misses. `oc.py <out.json>` reproduces F2. The suggested home, if wanted as files, is
-`cpg/eval/scripts/`.
+the residual misses. `oc.py <out.json>` reproduces F2.
 
 ```python
 # flow.py — F1: python flow scenarios, cluster interval (P0-ML §7.3), ANOVA ICC

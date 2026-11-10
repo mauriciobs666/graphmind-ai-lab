@@ -70,7 +70,8 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 
 - **Files:** `cpg/ccg/linker/__init__.py`, `matchers.py` (`exact`, `path-template`, `glob`/`prefix`, `regex`),
   `bind.py` (URL, env/Compose and launch bindings), `link.py` (`link(facts, bundles) -> Links`),
-  `cpg/tests/test_linker_*.py`, `cpg/tests/slice/test_linker_conformance.py`. Two dispatches (matchers+link first).
+  `cpg/ccg/registry/reasons.yaml` (the `binding-confirmed` row's `on` list gains `VIA`), `cpg/tests/test_linker_*.py`,
+  `cpg/tests/slice/test_linker_conformance.py`. Two dispatches (matchers+link first).
 - **Interface:** `Link = (linkId, kind, keyNorm, provider anchor, consumer anchor, status, reason, paramMap,
   evidence: ordered BOUND_BY and LIFTED_VIA entries)`; ids from `ccg.ids.link_id` (one `Link` per consumer
   **symbol**, `-bundle-spec3.md` BF6); `status` is the weakest hop.
@@ -85,13 +86,20 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   may lie outside its own repo (`../../fx-job`): the unit index is system-wide** and the case is the first real
   test of `-p0-compose-binding.md`'s inferred rule; if it fails the fallback is a bundle-spec image-name rule,
   which is escalated to `teco`, not patched in a fixture; (6) launch binding: `.mcp.json` server → command → script
-  → container → unit (the AC-4 `cypher` chain); (7) `File.role = 'example'` makes every link through it
+  → container → unit (the AC-4 `cypher` chain), written, like every binding, as `BOUND_BY` edges in chain order
+  with `ord` 0 the entry nearest the consumer; `ord` counts per (link, site) and every `BOUND_BY` edge carries its
+  `siteId` (`-p1-graph.md` §1–§2; `-answer-spec2.md` §3.2); (7) `File.role = 'example'` makes every link through it
   `possible`/`example-config`; a prompt mention is `possible`/`prompt-mention`; documentation snippets are not
-  callers; (8) a link into a unit never built is `possible`/`target-not-mapped`; (9) O-9: the reason on an
-  `mcp_tool` Link when a binding selects the unit follows the `-p1-graph.md` ruling (the default in the spec is
-  `key-match`); a framework-default port is evidence from the pack, represented as the ruling says; (10) MCP path
+  callers; (8) a link into a unit never built is `possible`/`target-not-mapped`; (9) O-9, the `-p1-graph.md` §2 rule for every link kind: a
+  `VIA`'s reason is `binding-confirmed` iff the `VIA` is `confirmed` and the link has a `BOUND_BY` edge with that site's
+  `siteId` (a confirmed unbound site keeps `key-match`; a `possible` site keeps its own reason), and `Link.reason` is
+  `binding-confirmed` iff some confirmed site is; mutants: dropping the `siteId` condition, deriving the `Link` reason
+  from "any `BOUND_BY`"; a framework-default port is evidence from the pack, represented as the ruling says; (10) MCP path
   matching is prefix-only (O-5); (11) a `Link` count at proving-repo scale is reported (the deferred "Link counts
-  under runtime-built URLs at scale"); (12) **F-13:** every `http` key goes through `ccg.keynorm` and the RFC 3986 order (percent-decode before dot-segment resolution): a test asserts `GET /a/%2E%2E/b` becomes `GET /b` in `matchers.py`, never the old order.
+  under runtime-built URLs at scale"); (12) **F-13:** every `http` key goes through `ccg.keynorm` and the RFC 3986 order (percent-decode before dot-segment resolution): a test asserts `GET /a/%2E%2E/b` becomes `GET /b` in `matchers.py`, never the old order; (13) **`bindParts` key
+  epoch (`-bundle-spec5.md` §5.4, BR-1–BR-3):** `bind_parts_usable` gates every bundle's parts, an unusable bundle's
+  URL entries bind by parts derived from `bindValue`, and `link()` returns the `bind-key-mismatch <unitId>` lines
+  beside its links for P1-20's refresh report.
 - **Done / Gate:** conformance with the slice's 11 links and chains; the fixture rows LNK-* of the test plan that
   gate at P1 pass in P1-41. `analyst`; mutation check on status weakening and port-sharing.
 
@@ -99,7 +107,9 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 
 - **Files:** `cpg/ccg/assemble/__init__.py`, `rows.py` (bundles + links → `GraphRows`, ported from
   `spikes/vertical-slice/load.py:build_rows`), `snapshot.py` (`:Snapshot` content), `cpg/ccg/registry/
-  flow-availability.yaml` (index D2), `cpg/tests/test_assemble_rows.py`, `cpg/tests/slice/
+  flow-availability.yaml` (index D2), `cpg/ccg/sandbox_audit.py` and `cpg/ccg/schemas/sandbox-record-v1.schema.json`
+  (`-egress-spec3.md` §5.3–§5.4), `cpg/ccg/staleness.py` (created here with the closed constant `FAIL_REASONS`, the
+  eight codes of `-p1-graph.md` §1 G4; P1-20 adds `unit_staleness` to the same file), `cpg/tests/test_assemble_rows.py`, `cpg/tests/slice/
   test_assemble_equivalence.py`.
 - **Behaviours:** (1) equivalence first: on the slice bundles the node and edge sets equal the slice's
   (38,121 nodes, 90,867 edges recorded in `-p0-graph.md` §1.1) plus only the deltas below; (2) D8's rule: `DATA`
@@ -109,20 +119,25 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   one row per language (python false, javascript false, others false, kotlin absent = unmeasured), each row citing
   the fitness report section; **no other code reads a flag from anywhere else**; (6) the **assembler imports
   `ccg.keynorm.mask_http_segments` and a test fails if step 8a is defined anywhere else**
-  (`-eval-protocol2-ml.md` §3); (7) a bundle whose header names a `sandboxAuditIds` entry with no `sandbox` record
-  in the audit store is refused at assembly (egress §5.3 loader check; the record store is P1-29's — until it
-  exists the check reads `cpg/.audit/` records the sandbox already writes); (8) the pack set's identity (ids,
+  (`-eval-protocol2-ml.md` §3); (7) a bundle is refused at assembly unless
+  `ccg.sandbox_audit.check_sandbox_ids` passes every `sandboxAuditIds` entry (`-egress-spec3.md` §5.4: exactly one
+  schema-valid, non-refused, exit-0, `offline` record each, read from the runner's `sandbox.jsonl`; P1-19 calls the
+  same function; no broker dependency); (8) the pack set's identity (ids,
   versions, content hash) is written where the `-p1-graph.md` ruling (O-10) says; (9) `candidateCount` is **not**
-  stored (`-p0-graph.md` D6); (10) the system name is checked against the charset whitelist again here.
+  stored (`-p0-graph.md` D6); (10) the system name is checked again here by `ccg.sysname.check_system_name`, and every key is formed by its
+  constructors; (11) a `Unit.failReason` outside `FAIL_REASONS` is refused, and a failing bundle that carries a planted
+  `bindValue` and an exception message yields a `failReason` containing neither (`-p1-graph.md` §8 P1-18 (i)).
 - **Done / Gate:** `analyst`; `graph-dba`'s own note is the contract. Two builds of the same bundles give identical
   rows (a determinism test).
 
 ## P1-19 · store loader, ACL, swap, stamp — `graph-dba`
 
 - **Files:** `cpg/ccg/store/loader.py` (`load(store, rows, system, report)`; the slice's `LiveStore`, `zero_retry`,
-  `batches`, `poll_constraints` ported), `cpg/ccg/store/acl.py` (`create_users(admin, system)`; the key patterns),
-  `cpg/ccg/store/swap.py` (`swap(admin, system, build_id)`, the verdict-lock acquire/release with an **empty
-  verdict log** and a no-op replay hook `replay_verdicts(...) -> 0` that P4 fills), `cpg/ccg/store/ddl_v1.cypher`
+  `batches`, `poll_constraints` ported), `cpg/ccg/store/acl.py` (`create_users(admin, system)`; the four `ccg_<role>_<s>` users of `-p1-graph.md` §7, named
+  through `ccg.sysname.acl_user`), `cpg/ccg/store/swap.py` (`swap(build_conn, verdict_conn, system, build_id)`: the
+  lock, the pre-`RENAME` replay onto the build key and the `RENAME build live` run as `ccg_build_<s>`, the post-`RENAME` remainder check and replay as
+  `ccg_verdict_<s>`, never as admin; the verdict-lock acquire/release with an **empty verdict log** and a no-op
+  replay hook `replay_verdicts(...) -> 0` that P4 fills), `cpg/ccg/store/ddl_v1.cypher`
   (adds the `ConfigEntry.entryId` index of EP §5.2.1 HA-1 and any index `-p1-graph.md` adds, index-before-constraint
   order unchanged), `cpg/tests/test_loader_*.py`, `cpg/tests/test_acl_live.py`, `cpg/tests/test_fuzz_idhash_live.py`.
   Two dispatches (loader+swap; ACL+fuzz+measurements).
@@ -130,16 +145,14 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   `UNWIND` batches of at most `BATCH_MAX = 20,000` (never near the measured 100,000 ceiling), one connection,
   retries zero, a per-query `timeout` ≤ `TIMEOUT_MAX` whenever it is nonzero, a created-count check per edge batch;
   constraints after the load, polled to `OPERATIONAL`, a `FAILED` fails the build; `:Snapshot` last; then the lock,
-  `RENAME build live` (a guarded `EVAL` only where a kept `prev` is wanted; **zero** old snapshots kept); (2)
-  **ACL test on a throwaway instance** (`infra/ccg-falkordb.sh --throwaway`, P1-48; the test mutates ACL users, which `ccg-falkordb.sh status` treats as drift outside the four `ccg_*` users): `ccg_build` holds `~ccg_<s> ~ccg_<s>__*` plus the lock selector, and the test
-  plants `shop` beside `shop2` and `shop` beside `shop__x`, asserting `ccg_shop` and `ccg_shop__build_1` are
-  granted and `ccg_shop2` is denied, with the old flat `~ccg_shop*` pattern as the negative control (it grants
-  `ccg_shop2`); a system named `shop__x` is **refused by the name whitelist** before any key exists, and the test
-  shows the ACL pattern alone would grant `ccg_shop__x` (it matches `ccg_shop__*`), which is why the whitelist is
-  required and not optional; `ccg_shop:verdict_lock` is reachable only through the key-scoped lock selector; the lock grants
-  (`+set +del +eval`, `+get` on the single key; `ccg_build` also `+exists`; all four users `+info`); the
-  `ccg_raw_<s>` user has `-@all +graph.ro_query +graph.explain +info ~ccg_<s> ~ccg_<s>__ov_*` and no `GRAPH.LIST`;
-  (3) system names are validated against the whitelist before any key is formed; (4) **id-hash fuzz** (long,
+  plain `RENAME build live` only (`-p1-graph.md` §7); **zero** old snapshots
+  kept; (2) **ACL test on a throwaway instance** (`infra/ccg-falkordb.sh --throwaway`, P1-48): it creates the four
+  `ccg_<role>_<s>` users of `-p1-graph.md` §7 through `ccg.sysname.acl_user`, plants `shop` beside `shop2`, `shop`
+  beside `shop__x` and `shop` beside `shop_`, and asserts the grants of `-p1-graph.md` §8 P1-19 (c), with the old flat
+  `~ccg_shop*` pattern as the negative control (it grants `ccg_shop2`); the names `shop__x` and `shop_` are
+  **refused by `check_system_name`** before any key exists, and the test shows the pattern alone would grant their
+  keys, which is why the whitelist is required and not optional;
+  (3) system names are validated by `ccg.sysname.check_system_name` before any key is formed; (4) **id-hash fuzz** (long,
   whitespace-edged and odd-character keys; a `nameKey` over 4,096 bytes must not reach a constraint unhashed)
   against a **throwaway instance only**; (5) a mid-load kill leaves the live key intact and the build key
   removable; (6) the loader refuses to run with a `shop`-prefixed key it does not own.
@@ -148,12 +161,11 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   in the 1-2-5 series; P0's 10,000 ms is a default, not a design constant); the lock ttl re-derived as 3× the
   worst (replay + `RENAME` + remainder check); the memory per file and the **~18 GB peak re-estimate**
   (`GRAPH.MEMORY USAGE` and `used_memory` delta, as the slice report did); `Link` counts at scale.
-- **Corrected ACL line:** `-graph.md`'s `ccg_build` line (`~ccg_<system>*`) is superseded by the two-key pattern of
-  proposal §3.5; the corrected line is written in `-p1-graph.md` (the graph note is not edited: it is `Extended by:`
-  `-p0-graph.md` and executed against). `create_users` writes the four users' passwords to
-  `cpg/.ccg-work/keys/<system>.acl` through `ccg.atrest` (P1-02), never to stdout or a committed file.
-  **Gate:** `analyst` (the gate runs the planted ACL test itself, on
-  `ccg-falkordb`); mutation check on the lock release and the ACL pattern.
+- **ACL grants:** the four users' lines are `-p1-graph.md` §7, which supersedes `-graph.md`'s `~ccg_<system>*` line
+  (the graph note is not edited: it is `Extended by:` `-p0-graph.md` and executed against). `create_users` writes each
+  system's passwords to `~/.config/ccg/keys/<system>.acl` through `ccg.atrest.write_acl` (P1-02), never to stdout or
+  a committed file. **Gate:** `analyst` (the gate runs the planted ACL test itself, on a throwaway instance); mutation
+  check on the lock release and the ACL pattern.
 
 ## P1-44 · build dispatch by unit kind — `coder`
 
@@ -162,7 +174,7 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Behaviours:** (1) the unit's kind selects the extractor: python and javascript units → P1-04 run + P1-05
   normalizer (+ P1-15 SCIP merge when adopted); shell files → P1-10; JSON/YAML/TOML/Compose/`.mcp.json`/Kiro/
   Dockerfile → P1-11; Markdown → P1-12; each non-Joern extractor writes **one bundle per unit** through
-  `write_bundle`, so a per-file extractor is run over the unit's files and merged into the unit's bundle; (2) an
+  `ccg.atrest.write_bundle`, so a per-file extractor is run over the unit's files and merged into the unit's bundle; (2) an
   unknown kind is a typed error, never a silent skip; (3) a failure in one extractor fails **that unit's bundle**
   and nothing else; (4) bundles and keys are created through `ccg.atrest` only; (5) a test per kind asserts the
   extractor is actually invoked (a stub extractor that records calls), so no extractor is reachable only from its
@@ -172,10 +184,14 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 ## P1-20 · refresh — `coder`
 
 - **Files:** `cpg/ccg/refresh.py` (`refresh(system, scope=None) -> RefreshReport`), `cpg/ccg/staleness.py`
-  (`unit_staleness(unit, head)`; the **one** staleness module, which `engine/` imports in P1-39), `cpg/tests/test_refresh.py`,
+  (adds `unit_staleness(unit, head)` to the file P1-18 created with `FAIL_REASONS`; the **one** staleness module,
+  which `engine/` imports in P1-39); `refresh` also takes
+  `override=None`, and only when one is given opens a broker `refresh` run, fails if the broker is absent, and names
+  the `policy` record in its report (`-egress-spec3.md` §2.1, §2.5); `cpg/tests/test_refresh.py`,
   `cpg/tests/test_refresh_live.py`.
 - **Behaviours:** (1) per unit: `build_unit` (P1-44) inside its own try; a failure keeps the unit's last good
-  bundle marked `stale-kept {built commit, failed at, reason}`; a never-built unit is `not-mapped`, and every link
+  bundle marked `stale-kept {built commit, failed at, reason}`, the reason one code of `FAIL_REASONS` (value-free:
+  never exception text); a never-built unit is `not-mapped`, and every link
   into it is `possible`/`target-not-mapped` (AC-9b); (2) units are built **one at a time** (6 GB host); (3) after
   all units: assemble (P1-18) → load and swap (P1-19) → a report (units fresh / stale-kept / not-mapped, wall time
   and peak memory per stage); (4) the staleness check compares a unit's built commit with the **local** head by

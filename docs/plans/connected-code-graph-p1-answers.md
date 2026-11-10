@@ -29,25 +29,29 @@ the earlier gains `Extended by:`. It states **only** the changes:
 
 ## P1-45 · answer validator and schema edits — `tdd-engineer`
 
-- **Files:** `cpg/ccg/answer.py`, `cpg/ccg/schemas/answer-v1.schema.json`, `cpg/ccg/registry/reasons.yaml` (only if
-  P1-00 adds a code), `cpg/tests/test_answer.py`, `cpg/tests/golden/answer-ac1.json` (only if a golden changes).
-- **Behaviours, failing validator tests first (as P0 did; the pin and the field are not authored in one step):**
-  (1) `Provenance` accepts `cacheBypass` (bool) and still rejects every other unknown key
-  (`additionalProperties: false`); (2) the hop kinds P1-00 adds validate and the ones it forbids are rejected;
-  (3) the validator accepts the new `algorithm.version` value P1-00 names (the test that a row added without a bump
-  fails is P1-22's); (4) `ENGINE_REASON_CODES` is unchanged until P1-22 removes
+- **Files:** `cpg/ccg/answer.py`, `cpg/ccg/schemas/answer-v1.schema.json`, `cpg/tests/test_answer.py`, `cpg/tests/golden/answer-ac1.json` (only if a golden changes).
+- **Behaviours, failing validator tests first (as P0 did; the pin and the field are not authored in one step),
+  in the order and with the bases of `-answer-spec2.md` §8:** (1) schema 1.1 (`"1.0"` still accepted) and
+  `Provenance.cacheBypass` (`const: true`, requiring `cacheHit: false`), every other unknown key still rejected;
+  (2) `Bound` with exactly one of `keyPath`/`launch`, the port evidence (`port`, `portOrigin`, `packId`; no `siteId`, `bound[]` is per site by the read, spec2 §3.2); the `Unit` hop kind, `TO_UNIT` and `UnitSubject` (spec2 §3.5); V5's wiring, depends-on, per-site and
+  `Unit` clauses, V9's `not-mapped` check, and the 1.1 `facts_bytes` projection (spec2 §3.2, §3.3, §3.5, §4.3);
+  V17 (version labels, the 1.1 bound), V18 (spec2 §5's closed row list, entries and exits) and V19 (`DEFINED_BY`,
+  `LAUNCHES`, `DEPENDS_ON`, `FROM_DEP` on no 1.1 hop); the expected-value tables named in spec2 §8 (`REQUIRED`,
+  the `$defs` set, `ENUMS`) are the only existing tests that change; (3) the validator accepts `algorithm.version` `"1.1"` (a characterization pin; the test that a row added
+  without a bump fails is P1-22's); (4) `ENGINE_REASON_CODES` is unchanged until P1-22 removes
   `function-level-continuation` (one-line edit and its test belong to P1-22); (5) the stored golden still
-  validates. **Needs:** 00. **Blocks:** P1-21, P1-22, P1-24, P1-26. **Gate:** `analyst`.
+  validates and is unchanged; `reasons.yaml` is not edited. **Needs:** 00. **Blocks:** P1-21, P1-22, P1-24, P1-26. **Gate:** `analyst`.
 
 ## P1-21 · reader layer and anchors — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/__init__.py`, `config.py` (`DEFAULT_DEPTH_BOUND = 2`, `LEVEL_GUARD = 64`,
   `CHUNK = 1000`, `RESULTSET_SIZE = 10000`), `reader.py` (`Reader` protocol, `CypherReader` bound to the
-  `ccg_engine` credential, recording every query text for the recipe), `anchors.py`, `cpg/tests/test_engine_reader.py`,
+  `ccg_engine_<s>` credential (`ccg.sysname.acl_user('engine', s)`), recording every query text for the recipe), `anchors.py`, `cpg/tests/test_engine_reader.py`,
   `cpg/tests/test_engine_anchors.py`.
 - **Behaviours:** (1) the reader returns for `Param`/`Ret`/`Cond` their `path`, `repo` and `unit` (the slice's
-  reads returned only `pointId`, `line`: C3), for a `LIFTED_VIA` expansion its `unit`, `repo` and `siteId`, and for
-  an edge its `reason`; each query is parameterized, read-only and named by the recipe pattern
+  reads returned only `pointId`, `line`: C3), for a `LIFTED_VIA` expansion its `unit`, `repo` and `siteId`, for
+  an edge its `reason`, and, per link, `bound_of_link` (`-p1-graph.md` §5, `graph-dba`'s addition: each
+  `configEntry`-origin `BOUND_BY` target's `siteId`, `ord` and port evidence, ordered for a first-row pick); each query is parameterized, read-only and named by the recipe pattern
   `^[a-z_]+(:[A-Za-z]+)?$`; ids chunk at ≤ 1,000 and a full reply halves the chunk; a reply reaching
   `RESULTSET_SIZE` raises, never truncates; (2) **code-location anchor:** `resolve_location(reader, repo, path,
   line=None, symbol=None)` runs the three repo-scoped reads in order — `File` → mapped; else `SkippedFile` → "not
@@ -64,7 +68,7 @@ the earlier gains `Extended by:`. It states **only** the changes:
 ## P1-22 · BFS rows, guards, depth bound — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/bfs.py` (the walk), `cpg/ccg/answer.py` (remove the `function-level-continuation` entry of `ENGINE_REASON_CODES` and its test in `cpg/tests/test_answer.py`), `cpg/ccg/engine/state.py` (`value`, `path(P)`, `contract`,
-  `key`, `end`, and the retired `function` state's removal), `cpg/tests/test_engine_bfs.py`,
+  `key`, `end`, and `function`, kept for `-answer-spec2.md` §5's flag-false rows), `cpg/tests/test_engine_bfs.py`,
   `cpg/tests/test_engine_bfs_guards.py`, `cpg/tests/slice/test_engine_equivalence.py`.
 - **Behaviours (ordered):** (1) equivalence first: the slice walks (anchor `p0`, `p0.path`, `p0.method`, `p0.query`,
   `p0.nothing`, value walk from `buildUrl`) reproduce the slice's item sets under the slice's recipe; (2) the
@@ -77,27 +81,49 @@ the earlier gains `Extended by:`. It states **only** the changes:
   (C1, F-12; a mutant replacing `<` by `<=` is killed), a two-point `DATA` cycle and a `DATA` self-edge
   terminate, a chain deeper than 64 levels raises; (4) the **`arg(i)`/`Ret` rows** (`CALLS ->` into a callee,
   index-matched `HAS_PARAM ->`, a `Ret`-reached callee summary onto the call site's `r`; receiver as index `-1`,
-  `kw.<n>` by `Param.name`): items are then precise, the `function` state is removed and a caller of a function
-  whose return the change does not reach is no longer listed through it; the slice's 21-item function-level sets
-  (`-p0-graph.md` §3.3) shrink toward the V2-gated counts that note records (19, 5, 5, 3, 2, 4 across the six
-  walks; a prior carried from the S17-L2 gate, not recomputed here), each pinned by a test, and `apiFetch` stays
-  `confirmed`; (5) **depth bound:** `DEFAULT_DEPTH_BOUND = 2` applies when the
-  request names none; items at distance ≤ bound; every edge the bound cuts from the frontier is counted into
+  `kw.<n>` by `Param.name`): in a flag-true unit items are then precise, no hop enters the `function` state, and a
+  caller of a function whose return the change does not reach is no longer listed through it; the slice's 21-item
+  function-level sets (`-p0-graph.md` §3.3) shrink toward the V2-gated counts that note records (19, 5, 5, 3, 2, 4
+  across the six walks; a prior carried from the S17-L2 gate, not recomputed here), each pinned by a test, and
+  `apiFetch` stays `confirmed` (a resolved `CALLS ←` from the anchor `Symbol` is not a labelled row,
+  `-answer-spec2.md` §5). **Every fixture sets `Unit.flowAvailable` explicitly** (`true` for these rows), so
+  P1-23's flag gate changes no pin here; the `function` state and its labelled rows in flag-false units are
+  P1-23's; (5) **depth bound:** `DEFAULT_DEPTH_BOUND = 2` always applies (the
+  1.1 request has no bound field, `-answer-spec2.md` §4.1); items at distance ≤ bound; every edge the bound cuts from the frontier is counted into
   `depthBound.unexplored` (a cut edge is counted once per edge, not per path) and `unexplored > 0` implies `bound`;
   a distance-2 `flow`-shaped item is reached by default (the reason the bound is 2); (6) `Name` is one compound
   hop carrying the `DISMISSED` anti-join (no verdict log in P1: the join returns empty) and never a BFS node;
-  (7) best predecessor: fewest `possible` hops, then distance, then length, then stable id; (8) `algorithm.version`
-  is set per P1-00 and a test fails if a row is added without changing it.
+  (7) best predecessor: fewest `possible` hops, then distance, then length, then fewer hops whose own edge is
+  `possible`, then stable id (`-answer-spec2.md` §1.2, §5); (8) `algorithm.version`
+  per `-answer-spec2.md` §1.2: the walk executes its row table as a data record (so P1-23's candidate walks are table variants, and only the shipped
+  one is pinned), `ALGORITHM_VERSIONS` maps
+  `"1.1"` to the record's pinned fingerprint (P1-23 re-pins it before P1-39 publishes it), and a test fails if a
+  row is added without changing it.
 - **Done / Gate:** `analyst`; mutation check on the visited-set comparison, the bound and the `unexplored` count.
 
 ## P1-23 · flow fallback, distance and grouping, reverse question — `tdd-engineer`
 
 - **Files:** `cpg/ccg/engine/flow.py`, `cpg/ccg/engine/group.py`, `cpg/tests/test_engine_flow.py`,
   `cpg/tests/test_engine_group.py`.
-- **Behaviours:** (1) **flow fallback (index §5):** from `Unit.flowAvailable` (assembler, D2): inside a unit with
-  the flag true `DATA` and `CONTROLLED_BY` rows are followed `confirmed`; through a unit with the flag false the
-  walk follows call-level reach only and every item is `possible`, `reason: flow-unavailable:<lang>`, the reason
-  carried by the first hop that crosses into that unit (answer spec §4.1); (2) distance counts inter-function hops
+- **Behaviours:** (1) **flow fallback (index §5), as `-answer-spec2.md` §5 defines it:** from `Unit.flowAvailable`
+  (assembler, D2): inside a unit with the flag true `DATA` and `CONTROLLED_BY` rows are followed `confirmed`;
+  inside a unit with the flag false `DATA`, `CONTROLLED_BY` and the `arg(i)`/`Ret` rows are not followed, and only
+  the closed list of labelled rows (continuations leaving the `function` state) is `possible`, with
+  `flow-unavailable:<lang>` when the hop's own edge is confirmed; resolved edges with no labelled row on the chain
+  stay `confirmed`; **the labelled set is the closed row table of `-answer-spec2.md` §5**: the rows continuing from a
+  `function`-state hop, in both columns (a direct resolved caller of an anchor `Symbol` is not labelled), plus the
+  added-row hops of a candidate walk (`-p1-ml.md` §6.6); **candidate walks:** besides the as-built table, P1-23
+  builds V-flow, V-both and V-union (`-p1-ml.md` §3.5) as row-table variants chosen by an engine-internal parameter
+  (never a request field), each added hop `possible`/`flow-unavailable:<lang>`, one test per table; P1-39's rule picks
+  the shipped table, and a shipped table other than `-answer-spec2.md` §5's is a walk-definition change (its §1.2
+  bump, and §5 revised by its owner before it ships); a test plants one caller reached through a resolved and a name-matched site, **the name-matched
+  site sorting first by stable key**, and expects the resolved chain (the mutant it kills: the own-possible
+  tie-break dropped); **wiring items** (spec2 §3.3): at a `Link` reached by `TO ←`, each `configEntry`-origin
+  `BOUND_BY` target is a `config` item (`BOUND_BY ->`, distance +1, the link's status) listed once, its single `Bound`
+  taken from the entry's lowest-`(siteId, ord)` edge as `bound_of_link` returns it (spec2 §3.3); the **depends-on rules**:
+  a walk row ending on a `launchFact`-origin entry yields no item, and from a `Link` with no `TO` the
+  `TO_UNIT ->` row reaches a `Unit` hop, listed as a `unit` item, `possible`/`target-not-mapped`, with the unit
+  `not-mapped` in `staleness.units` (spec2 §3.5; AC-9b's crossing case); (2) distance counts inter-function hops
   only (call, link, shared state, config); steps inside a function count 0; direct = distance 1; (3) items are
   grouped repository → component → distance, `confirmed` before `possible`, deterministic order, folded groups
   enumerate every member with its own chain; resolved calls' other candidates stay as `possible`/
@@ -113,10 +139,12 @@ the earlier gains `Extended by:`. It states **only** the changes:
 - **Behaviours:** (1) staleness: each unit on any chain with its built commit and time, and whether it is stale-kept
   or not mapped with the reason (FR-7, FR-7a; AC-9 code-snapshot stamp from `:Snapshot`); (2) the stamp carries
   `verdictLogOffset` 0 and the empty-log hash until P4; (3) `facts_bytes` is byte-identical for the same request run
-  twice and across rebuilds from the same commits; (4) the **superset measurement, on development flow items only**
-  (`cpg/eval/dev/ac5-flow.jsonl`): the share of those items that call-level reach alone lists, by language, with the
-  items' ids; it is the evidence index §5 sends to the method owner, **not** a gate here; it runs on a throwaway
-  instance (index §8).
+  twice and across rebuilds from the same commits; (4) the **flow-fallback measurement, on development flow items only**
+  (`cpg/eval/dev/ac5-flow.jsonl`), on the snapshot built at `EVAL_COMMIT` (where the dev items' locators were
+  validated): the share of those items that each of the four walks of `-p1-ml.md` §3.5
+  (as-built, V-flow, V-both, V-union) lists, by language and signature, with the unlisted items' ids and the burden
+  per anchor; the rule there picks the shipped walk, which P1-23 implements with its `algorithm.version` bump
+  (`-answer-spec2.md` §1.2); the `ccg-p1-flow-fallback-v1` record is committed before it runs; it runs on a throwaway instance (index §8).
 - **Gate:** `analyst`; `data-scientist` reads the measurement. **Needs:** 23.
 
 ## P1-24 · renderers — `coder`
@@ -138,11 +166,13 @@ the earlier gains `Extended by:`. It states **only** the changes:
 
 - **Files:** `cpg/clients/mcp/server.py` (the `mcp` SDK, stdio, FastMCP style; tools `ask`, `resolve`, `refresh`,
   `raw_query`; index D6), `cpg/clients/cli/main.py` (`ccg ask|resolve|refresh|raw` emitting canonical JSON,
-  optional `--fail-on possible|any` exit codes), `cpg/clients/common.py` (system resolution, identity),
+  optional `--fail-on possible|any` exit codes), `cpg/clients/common.py` (system resolution, identity, the `ccg_raw_<s>` connection),
   `cpg/tests/test_clients.py`, `cpg/tests/test_pin_replay.py`, `cpg/tests/test_no_network.py`; a repo-root `.mcp.json` entry is a **proposal** in
   the step's report (the wiring file is `teco`'s/`cobb`'s to change, P1-27).
 - **Behaviours:** (1) `ask(request)` takes the structured request (use case `impact` or `depends-on`, anchor,
-  scope, depth bound) and returns the canonical answer; **other use cases return a typed "not built in this
+  scope; no depth bound, `-answer-spec2.md` §4.1) or a plain-language question, plus the boolean `cacheBypass`
+  (default `false`; the CLI flag `--cache-bypass`; no effect on a structured request; `-answer-spec2.md` §2), and
+  returns the canonical answer; **other use cases return a typed "not built in this
   phase" error**, never an empty answer; (2) `resolve(anchor)` returns candidates with ids (code location,
   contract point); (3) `refresh(system, scope)` calls P1-20; (4) `raw_query(cypher)` runs `GRAPH.RO_QUERY` with
   the `ccg_raw_<system>` credential only; a write, `GRAPH.QUERY` and `GRAPH.PROFILE` are refused by the database
@@ -151,17 +181,20 @@ the earlier gains `Extended by:`. It states **only** the changes:
   (6) **AC-16 pin-and-replay** (`-eval-protocol-ml.md` §10.6): the structured request submitted through MCP, the
   CLI and the engine gives identical `facts_bytes`; a raw-recipe re-run of `recipe.queries` reproduces the item set
   (subject ids with `status` and chain `(kind, id)`), reported as the weaker leg by decision; (7) **no client holds a network credential or opens a socket except to FalkorDB**: `cpg/tests/test_no_network.py`
-  parses every module under `ccg/engine`, `ccg/render`, `ccg/refresh.py`, `ccg/build.py`, `clients/` and (P1-26) `ccg/front`
+  parses every module under `cpg/ccg/` except `cpg/ccg/broker/`, plus `cpg/extractors/` and `clients/`
+  (`-egress-spec3.md` §10.1, I2's one import-boundary test)
   with `ast` and fails on any import or call that can reach the network outside a per-module allow-list
-  (`falkordb`/`redis` for the store modules only), including `import urllib.request as u` inside a function,
+  (`falkordb`/`redis` for exactly `cpg/ccg/store/`, `cpg/ccg/engine/reader.py` and `cpg/clients/common.py`, the one
+  client module that opens `raw_query`'s `ccg_raw_<s>` connection; `-egress-spec3.md` §10.1), including `import urllib.request as u` inside a function,
   `__import__("socket")`, `importlib.import_module`, `subprocess` of `curl`/`wget`, and an import of `ccg.broker`
-  outside `ccg/front/interpret.py`'s one broker client; each is a named mutant the test must kill;
+  outside `ccg/refresh.py`, `ccg/front/interpret.py` and `ccg/front/summary.py` (`ccg.broker.client` only; the
+  clients themselves open no broker run); each is a named mutant the test must kill;
 - **Gate:** `analyst`; AC-16, AC-21 evidence is P1-42's.
 
 ## P1-26 · plain-language front — `coder`
 
 Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke protocol, `CAP`), on the broker core
-(P1-29) and on P1-45 (`cacheBypass` in provenance). Two dispatches (parsers+resolver first, interpreter+cache+summary second).
+(P1-29), on P1-25 (the `ccg/front` modules sit under its import-boundary test) and on P1-45 (`cacheBypass` in provenance). Two dispatches (parsers+resolver first, interpreter+cache+summary second).
 - **Files:** `cpg/ccg/front/parsers.py` (deterministic: stack traces are P5, so P1 parses routes, `file:line`,
   `path::symbol`, qnames, and diffs only as far as "not built"), `resolve.py` (deterministic resolver over
   `engine/anchors.py`), `interpret.py` (one-shot schema-constrained extraction of the use case and anchor spans),
@@ -172,11 +205,16 @@ Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke proto
   free prose, one model call through the broker's structured path (`component: answer.interpret`,
   `purpose: model-call`) with a grammar-constrained JSON reply validated against the canonical `Request` schema;
   (3) ambiguity is answered with the possible readings as `options` with `rank`, never a guess, and never more
-  than the pre-registered cap; (4) the interpretation provenance (`endpoint`, model fingerprint, quantization for
+  than the pre-registered cap; (3b) **draft and resolver** as `-p1-ml.md` §4.2 fixes them (span-group `InterpretDraft`, `direction: null` expanded into both
+  directions as `options`, the verbatim-substring guard, the per-group join rule), with its **named resolver tests** on dev
+  questions: QW-30, QW-27, QW-13, QW-7, QW-47, and negatives QW-3 and QW-11; (4) the interpretation provenance (`endpoint`, model fingerprint, quantization for
   local, prompt/grammar/sampling hashes, `cacheHit`) is in the answer; a cache entry lives exactly as long as its
-  snapshot, and the engine's `cacheBypass` input forces a fresh call (EP §10.4); (5) the optional summary is
-  aggregate-only and **dropped on any added entity**; (6) `cpg/tests/test_no_network.py` (P1-25) is extended to `ccg/front` with the same named mutants: only `interpret.py`
-  and `summary.py` may import the broker's client, and nothing may reach the network any other way; (7) a
+  snapshot, and the `cacheBypass` input (`-answer-spec2.md` §2) makes the ask neither read nor write the cache, calls the
+  interpreter, and records `cacheBypass: true` with `cacheHit: false` (EP §10.4); (5) the optional summary is
+  aggregate-only and **dropped on any added entity**; (6) the broker consequences of `-egress-spec3.md` §2.1 and §10.2: one `answer` run per question, opened at the first
+  model call from `interpret.py` or `summary.py` and reused for later calls, none for a question the parsers resolve;
+  the `local` entry's `paths` fixed; a test that a missing or latched broker fails the call with no direct connection
+  attempted; and P1-25's `cpg/tests/test_no_network.py` passes unchanged with `ccg/front` present; (7) a
   question about a use case P1 does not build is understood and answered "not built in this phase" with the
   request echoed; (8) no file under `cpg/ccg/front/` is `.md` (D5).
 - **Gate:** `analyst`; `data-scientist` for the method. The AC-24 smoke run is P1-35.

@@ -1,6 +1,6 @@
 # Connected code graph: canonical answer spec, schema v1 (S33)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P0) · **Version:** 1.3 · **Reviews:** `docs/reviews/connected-code-graph-answer-spec.md`, `docs/reviews/connected-code-graph-answer-spec-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P0) · **Version:** 1.3 · **Extended by:** `docs/plans/connected-code-graph-answer-spec2.md` · **Reviews:** `docs/reviews/connected-code-graph-answer-spec.md`, `docs/reviews/connected-code-graph-answer-spec-ml.md`
 
 *2026-11-04 (v1.3): rulings on gate findings F5, F6, F9, AC-16 raw leg: identity strip names `rootPath`, `urlPath`, `scope.paths[]` (§6); V16 span rule (§8); V15 extension case-sensitive; AC-16 raw leg compares item sets (§3, §4.1, C3).*
 

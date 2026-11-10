@@ -187,7 +187,7 @@ item in it is now a decision.
 | n2 requirements hygiene | Closed in the requirements (2026-10-26 housekeeping entry) | — |
 | **P2-1** AC-8 closed before its egress paths exist | AC-8 gated per part and re-run (full sandboxed refresh + queries, logging proxy) at the exit of P1, P3, P4, P5 and P2; closed at P2 exit (the last phase to add an outbound path) | §4, §5.3 |
 | **P2-2** four ACs out of line with FRs | (a) AC-8 now tests every FR-9 rule (SQ-A) → §5.3; (b) AC-24 binds the model actually used (SQ-B) → §3.12, §5.2; (c) signature change keeps the note where sameness is provable (SQ-C) → §3.8; (d) FR-14 aligned by `tico` → §3.7 already matches | §3.8, §3.12, §5.2, §5.3 |
-| **P2-3** lock not grantable; PX expiry reopens B6 | Lock grants on the one key for `ccg_verdict` and `ccg_build`; PX sized above worst replay + swap; post-`RENAME` offset check and remainder replay; B6 test with mid-swap expiry | §3.5, §3.8, §5.1 |
+| **P2-3** lock not grantable; PX expiry reopens B6 | Lock grants on the one key for the `verdict` and `build` users; PX sized above worst replay + swap; post-`RENAME` offset check and remainder replay; B6 test with mid-swap expiry | §3.5, §3.8, §5.1 |
 | **P2-4** AC-18 and AC-9 closed too early | AC-9 closed at P4 (verdicts exist), AC-18 at P5 (every answer kind exists) | §4 |
 | **P2-5** one measurement, two consequences | Both stated in §3.7 with the single 0.95 threshold | §3.2, §3.7 |
 | **P2-6** late decisions not reflected | All V3-Q references rewritten as decided; §2.5 replaced | throughout |
@@ -329,7 +329,7 @@ flowchart LR
     E --> C1[ccg MCP tools]
     E --> C2[CLI / CI]
     E --> C3[plain language<br/>LLM via egress broker]
-    G --> C4[raw_query as ACL user ccg_raw]
+    G --> C4[raw_query as the raw-role ACL user]
   end
   SM --> D
   EB{{egress broker:<br/>every outbound connection}} -.-> Build
@@ -386,8 +386,9 @@ Source: `docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md` �
 **Census metrics (ML §7.2; parse success, method coverage, line fidelity, value-set recovery, decorator shares).** Every figure is in `cpg/spikes/frontend-fitness/results/<lang>.census.json` (per language, off and on; off equals on except Java value-set recovery), with the operating rules in the report §a1.6. Files the frontend skips stay in the denominator. Headlines: Python's exact line fidelity fails on the end line only (Joern's `lineNumberEnd` is two lines past the definition's end in 3,332 methods; the start line is exact); C++ method coverage is 0.523, or 0.271 with macro-generated definitions in the denominator (report §a1.6); Kotlin is frontend-only, so its value-set recovery is unmeasured; Go and C++ expose no decorator node, so their decorator shares are unmeasured. The census frame differs from the call-site frame, so denominators differ from the recall rows.
 
 **Flow availability (FR-11, Q-R9).** `Unit.flowAvailable` is **false for Python, TS/JS, Go, Java, C# and C++ in both configurations; Kotlin is unmeasured** (report §a2.2.6, ML §8.4's threshold 0.95). The best pooled headline is Java's 0.675, and the best pooled figure under any stratum is C#'s 0.730 with all unresolved endpoints excluded. C# also fails the precondition as shipped: `extract.sc` emits 0 of 5,897 methods. Part of the low recall is projection-side: the shipped walk discards the reaching-definition chain from an earlier use of the same name (a counterfactual that follows it connects 287 of 1,000 misses and loses none; report §a2.2.1); the rest is mostly frontend (§a2.2.2). It is also false for shell, for structured config and for any frontend P0 rates too weak.
-Through such a unit, impact falls back to call-level reach, and every item is shown as *possible*,
-`reason: flow-unavailable:<language>`. **Consequence for P1:** until the projection is fixed and re-measured on a fresh flow draw (`docs/plans/connected-code-graph-p0-2.md` §15), P1's Python and TS impact is call-level.
+Through such a unit, impact falls back to call-level reach, and only the flow-dependent hops are *possible*,
+`reason: flow-unavailable:<language>` (stakeholder decision 2026-11-09; the closed row list is
+`docs/plans/connected-code-graph-answer-spec2.md` §5). **Consequence for P1:** until the projection is fixed and re-measured on a fresh flow draw (`docs/plans/connected-code-graph-p0-2.md` §15), P1's Python and TS impact is call-level.
 
 **Arduino sketches (FR-1, AC-26).** A sketch is **one C++ unit** (`lang` = C++): its several
 `.ino` files are one program, and any `.cpp`/`.h` beside them are ordinary C++ files of the same
@@ -608,8 +609,8 @@ dependency findings are materialized the same way (§3.7).
   under the verdict lock: replay verdicts past the stamped offset, `RENAME` over the live key
   (atomic, and safe for readers already running, V2), and replay any remainder before releasing
   (§3.8). P0 measured the swap (`docs/plans/connected-code-graph-p0-graph.md` §6, row 11): `MULTI` does not
-  roll back, so the form is a plain `RENAME build live` (0.4 ms with a 12 s reader in flight), and
-  a guarded `EVAL` only where a kept `prev` is wanted. Loading follows graph note §3.5 with
+  roll back, so the form is a plain `RENAME build live` (0.4 ms with a 12 s reader in flight); the
+  swap is the plain `RENAME` only (`docs/plans/connected-code-graph-p1-graph.md` §7). Loading follows graph note §3.5 with
   p0-graph §4: batches of at most 20,000 rows (the measured hard ceiling is 100,000, never a
   target) and an explicit query `timeout` on every load query whenever `TIMEOUT_MAX` is nonzero.
   - **Zero** old snapshots are kept; rollback means re-assembling the last-good bundles.
@@ -617,26 +618,8 @@ dependency findings are materialized the same way (§3.7).
     `RENAME`/`EXPIRE` (G7), because neither is visible to the lab's destructive-ops guard.
 - **`:Snapshot`** carries `snapshotId`, versions, `verdictLogOffset` and `verdictLogHash`.
   Together they are the **code-snapshot + decision-state stamp** on every answer (FR-19, AC-9, S4).
-- **ACL users** (graph note §6.4, V5/V16–V18):
-  - `ccg_build` (write, `RENAME`, `EXPIRE` on `~ccg_<system> ~ccg_<system>__*`, plus the lock
-    selector below, since the pattern does not cover `ccg_<system>:verdict_lock`). A bare
-    `~ccg_<system>*` also matches every system whose name begins with it and the lock key. The
-    two-key form was seen in an earlier planted run to grant `ccg_s` and `ccg_s__build_1` and deny
-    `ccg_s2`, `ccg_sa__b` and `ccg_s:verdict_lock` (review `docs/reviews/connected-code-graph-p0-impl.md`
-    Pass 9). The pattern is interpolated, so **system names are a charset whitelist**: none of
-    `*`, `?`, `[`, `]`, `\`, `:`, and no `__`. The acceptance check is P1's ACL test on `ccg-falkordb`, planting `shop` with `shop2` and `shop`
-    with `shop__x` and pinning the lock selector;
-  - `ccg_verdict` (`GRAPH.QUERY` on the live key only);
-  - **lock grants (P2-3):** both `ccg_verdict` and `ccg_build` also get `+set +del +eval` (for a
-    compare-and-delete release) and `+get` on the single key `ccg_<system>:verdict_lock` as a
-    key-scoped selector (a flat `+del` would let either user delete the live graph), and nothing
-    else beyond their lists above; `ccg_build` also needs
-    `+exists`, and all four users `+info` (p0-graph §6, row 10: 4 users × 19 cells, 0 differences
-    from the proposal otherwise);
-  - `ccg_engine` (read);
-  - `ccg_raw_<system>`: `-@all +graph.ro_query +graph.explain +info ~ccg_<system>
-    ~ccg_<system>__ov_*`. **No `GRAPH.LIST`**, which leaks every key name (V16). `+info` is needed
-    by the client constructor (V17).
+- **ACL users:** User names are `ccg_<role>_<system>`, role ∈ {build, verdict, engine, raw}; grants and the
+  system-name rule are `docs/plans/connected-code-graph-p1-graph.md` §7.
 
   An **instance-wide `TIMEOUT_MAX`** (V18) is FR-21's one exception, the **configurable time limit
   for raw queries** (SQ-F). Because it binds every read, the engine's per-level BFS queries are
@@ -709,7 +692,7 @@ dependency findings are materialized the same way (§3.7).
   - `ask` (structured), one per use case, plus the reverse "depends on";
   - `resolve`;
   - `refresh`;
-  - `verdict` (separately authorized, `ccg_verdict` user);
+  - `verdict` (separately authorized, `ccg_verdict_<system>` user);
   - `raw_query` (as `ccg_raw_<system>`).
 - **Automation/CI:** the CLI emitting the canonical JSON, with optional exit codes. The asker's
   access is the launching person's, or a configured service identity's (S26).
@@ -738,8 +721,8 @@ per-language code.
     callers, data flow (`DATA`, path-matched), control dependencies (`CONTROLLED_BY`: a changed
     condition reaches the guarded points), links, shared state (writer → contract point → readers;
     never writer → other writers, B1) and config bindings.
-  - *Through a unit with `flowAvailable = false`:* call-level reach only, every item *possible*
-    with the reason (Q-R9).
+  - *Through a unit with `flowAvailable = false`:* call-level reach only; only the flow-dependent hops are
+    *possible*, with the reason (Q-R9; `docs/plans/connected-code-graph-answer-spec2.md` §5).
   - *Resolved calls (P2-5, graph note §6.1 item 6).* A resolved call site is confirmed toward its
     resolved target. Its other same-name candidates are **never dropped**, in any language. They
     stay in the facts as *possible*, `resolution-unverified`, so a wrong resolution is never a
