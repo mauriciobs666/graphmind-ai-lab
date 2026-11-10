@@ -94,6 +94,9 @@ Each item comes from one **seed**, drawn by stratified sampling.
   - **cue_05.** Its text is small talk to the room or to another person, never to the agent. The
     rubric's rule for small talk addressed to the agent by name (`points/join-in-judge/rubric.md`,
     "Small talk") gets its `true` side through cue_01.
+  - **Turn cut.** The renderer keeps the last six `priorTurns`, so the generator keeps the agent's
+    job and the new message's dependencies inside them (plan5 §3.4,
+    `docs/plans/typed-decision-models5.md`).
 - **Near-miss** seeds hold back one material fact, or state it ambiguously. They are a third of
   every point's seeds and the synthetic counterpart of the side check's `boundary` tier. Without
   them, the eval set is easy and hides differences.
