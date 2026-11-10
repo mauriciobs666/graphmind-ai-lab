@@ -21,6 +21,8 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U12 | `graph-dba` | `a4bdba2c8d4354150` | in-flight | S6a+S6b: `docs/plans/python-web-quirks-kb-graph.md`, `ws:pwq-test` on :8210 (prod read-only) | G2 → — | — |
 | U13 | `cobb` | `a4aef3d506d34278f` | in-flight | S7: `docs/plans/python-web-quirks-kb-captures.md`, `claude/cobb/kaizen/plan.md` (promotion item, K-063 fix) | G2 → — | — |
 | U14 | `data-scientist` | `aadca675a5b51c7bd` | accepted | S7b rulings + S12 count rewrite in `docs/plans/python-web-quirks-kb-ml.md`; teco re-derived 129 chunks / 12 units ≥4 chunks and 42 sections / 73,825 chars (matches); code asks → U15 | G2 → — | 102k tok / 23 tools |
+| U15 | `tdd-engineer` | `a5b4d60449cc8f09e` | in-flight | `validate_set_a`, mandatory `--expect-sha256` on `--sealed-once`, tail-flag check (uncommitted) | G2 → — | — |
+| U16 | `architect` | `a4a56299792bbf4fe` | in-flight | `docs/plans/python-web-quirks-kb.md` small in-place amendments (D11 figures, rulings, S12/S14 `--exclude`, D9, T36, S8, S16 pin-from-git) | G2 → — | — |
 
 
 Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
