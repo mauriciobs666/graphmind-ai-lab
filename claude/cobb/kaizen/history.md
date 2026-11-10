@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-10 — work-items: agent-maintenance, claude/AGENTS.md, tico/teco/architect
+
+- **What:** `agent-maintenance` SKILL.md gains one kaizen-citation line (§1, after the plan template); `claude/AGENTS.md` gains the flush rule beside the git-commit race paragraph, binding every committing role; tico/teco/architect prompts each gain one work-items bullet (see their histories).
+- **Why:** work-item numbering plan step 10 (`docs/plans/work-item-numbering.md`): prompts must drive the `wi` CLI at the moments only prompts can trigger (AC-6 opened, AC-10 agreement).
+- **Plan items:** none.
+
 ## 2026-11-09 — plan.md staleness sweep (review-only)
 
 - **What:** removed K-015 (the `analyst/kaizen/inbox.md` it asks to distil no longer exists; `inbox.md` files were deleted 2026-08-21), K-030 and K-054 (both ✅, already logged), and K-061 (the stale claim `ddfbb4bb…` is already gone from `ws:agent-team`; `get_document` returns null, and the manifest id list no longer carries it). Rewrote K-056: U1–U3 delivered, `audit-team.sh` PASS, and `opencode/agents/tank/opencode.json` carries no absolute path. The KB-vs-manifest drift-check idea from K-061 is not carried; K-058 covers it.

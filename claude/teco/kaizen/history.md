@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-11-10 — work-items bullet (commit discipline)
+
+- **What:** added one step-5 bullet: legacy mint on first cite/open; `wi flush` + `.work-items/registry.jsonl` in the allocating unit's explicit-path commit; ledger units not forced into the scheme.
+- **Why:** work-item numbering plan step 10 (`docs/plans/work-item-numbering.md`): prompts must drive the `wi` CLI at the moments only prompts can trigger (AC-6 opened, AC-10 agreement).
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 5: raw entries dispositioned
 
 - **What:** Entries swept (all dispositioned, not deleted): `3bc8105b` (doc'd in `coordination-techniques.md`), `480ef825`, `a1d388f4`, `a93905a6` (doc'd in model-bench; these three raw ids are cited by repo docs and fixtures, so they stay), `cadd1d19` (duplicate of `f5d536b3`), `00b19226` (unreproducible without the blocked action), `def9b95a` (promoted: KB claim `ab95ba9f`, `coordination-techniques.md`), `e758c282` (doc'd in `claude-code.md`).

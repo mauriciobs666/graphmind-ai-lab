@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-11-10 — work-items citation line (step 5)
+
+- **What:** plans cite items by full ID; new kaizen via `wi new K`; legacy first-cite mint.
+- **Why:** work-item numbering plan step 10 (`docs/plans/work-item-numbering.md`): prompts must drive the `wi` CLI at the moments only prompts can trigger (AC-6 opened, AC-10 agreement).
+- **Plan items:** none.
+
 ## 2026-11-07 — Distillation 6: raw entries dispositioned
 
 - **What:** `b50e21d6` (hook allow is the permission decision under `-p`, counterfactual not run), `b169cd4e` (resumed subagent appends; summed usage is a processed total) promoted into `claude-code.md` bullets; `5b5f0ab6` (user settings can disable a project hook guard) promoted as a third bullet, re-checked against the settings reference fetched today. All swept entries are dispositioned, not deleted.

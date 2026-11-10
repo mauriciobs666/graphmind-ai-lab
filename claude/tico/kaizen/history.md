@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-10 — work-items bullet (Mode 1)
+
+- **What:** added one Mode 1 bullet: propose key via `wi key suggest`, claim only after stakeholder agreement, `wi new F --slug S --sync` at requirements creation, mint legacy on first cite/open.
+- **Why:** work-item numbering plan step 10 (`docs/plans/work-item-numbering.md`): prompts must drive the `wi` CLI at the moments only prompts can trigger (AC-6 opened, AC-10 agreement).
+- **Plan items:** none.
+
 ## 2026-11-09 — plan.md refreshed (review-only pass)
 
 - **What:** dropped K-005 from the active table (closed 2026-09-01, already logged); rewrote K-015 — its `kaizen_team` premise is void since the graph was deleted, so it now asks for the manual's §2/FAQ/header to move to `ws:agent-team`; prompt-weight note updated to 6,092 w; `Last reviewed` bumped. `tico.md` untouched.

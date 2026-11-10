@@ -298,6 +298,8 @@ The same concurrency makes any `git status` snapshot stale mid-session: a file t
 as its having vanished from your untracked list. Confirm with `ls` plus `git ls-files` and
 `git log --all -- <path>` before treating an apparent disappearance as data loss.
 
+**Work-item registry: every committing role flushes with the unit that allocated an ID.** After any `wi new`/`mint-legacy`/`move` etc. in a unit, run `wi flush` and add `.work-items/registry.jsonl` to that commit's explicit path list. Run `wi flush` only after a merge has completed, never mid-merge (`skills/work-items/SKILL.md`, Flush rule).
+
 ## Maintenance rules
 
 - **A stakeholder proposal for a new team member is a `tico` requirements interview, not a

@@ -99,6 +99,8 @@ update. Keep entries concise.
 - {half-formed ideas not yet prioritized}
 ```
 
+In a project with the work-items registry, cite a kaizen entry by its full scheme ID (`skills/work-items/SKILL.md`); allocate a new one with `wi new K`, never by hand-numbering the next `K-00N`.
+
 ### `history.md` template
 
 ```markdown
