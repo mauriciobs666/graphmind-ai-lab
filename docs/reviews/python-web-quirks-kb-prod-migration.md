@@ -82,3 +82,34 @@ Suggest: replace the §1 phrasing with this; add to §7.1 "knowing there is no p
 ### Proposed REVIEW.md lines
 
 None.
+
+## Pass 2 (plan revised in place; re-read in full)
+
+**Verdict: approve with suggestions.** Every Pass 1 finding is fixed in the text. The new lock wrapper is correct in principle, but the fixes interact badly in three places (N1-N3); fix those before execution. None changes the design or what the stakeholder approves, except N5's one-line contradiction in §8.3.
+
+### Dispositions of Pass 1
+
+- M1 hook race: **fixed in substance** (lock held through the outage, default 2560 as a permanent part of step 2(b), no teco start during steps 3-5). Interaction defects N1-N3 below.
+- M2 45-pair set: **fixed** (W7a fixture/runner, W7b pre-registered paired rule, sequenced 0a -> 0b -> 0c in the text; no ledger rows for W7a/W7b exist yet in `docs/plans/python-web-quirks-kb-coordination.md`, which is `teco`'s to add).
+- M3 reconnect: **fixed** (§2, §5(6), §8.2 cite `claude/teco/coordination-techniques.md`).
+- M4 claim narrowing: **fixed** (§1, §8.1, §8.8; B4 optional, not a gate).
+- m1 backup order: **fixed** (copy and export after the stop; retry rule), but see N1. m2 premises: **fixed**. m3: **fixed** (default 2560 is now the stated protection). m4 time-box: **fixed with a gap** (N5). m5 K-102 ids and retention: **fixed**. m6 timeout threshold: **fixed** (step 1.2). Both nits: **fixed**.
+
+### Re-verified in this pass (the lines the architect said it verified itself)
+
+- Lock held for the server's life: `/proc/1268/fd/3` -> `~/.local/state/graphmind-ai-lab/agent-team-8200.lock`; pid 1261 is `flock -n <that lock> env -i ... start_agent_team.sh` with ppid of 1268 = 1261; `/proc/locks` shows a `FLOCK ADVISORY WRITE` held by pid 1261 on inode 1860, and `stat -c %i` of the lock file is 1860. `flock -n -E 75 <lock> true` returned 75 (step 1.5's first half works). The server's cwd is `.../falkor-chat`.
+- `start_agent_team.sh:136` still has the 1024 default (the edit is not yet made; expected, it is step 2).
+
+### New findings
+
+**N1. Step 3 starts the migration before the backups are taken (major, traced from the text).** Step 3 says take the lock with `flock -w 10 ... <wrapper> (the wrapper of step 4)`, "then" `GRAPH.COPY` and the export. Step 4's wrapper runs the migration immediately, so it would re-embed concurrently with the copy and export, and `ws:agent-team-pre4b` would not be the pre-4b state (R2's whole basis). Also step 4's wrapper itself does `flock -w 10`, so a separate step-3 lock holder would block it, and handing the lock over reopens the gap. Fix: one wrapper from the stop onward holding the lock: stage 1 a go-file wait (or the copy/export as its own first stage with a count check), stage 2 migrate, stage 3 `exec` server. Also have `devops` confirm the lock is held (`flock -n -E 75 <lock> true` returns 75) before any copy: `flock -w 10` runs detached, so a timeout (uvicorn's graceful shutdown outlasting 10 s) is silent in a log and leaves nothing holding the lock.
+
+**N2. Step 1.5's live-fire test can cause the failure it guards against (major).** "after step 3's lock is taken, run `ensure-environment.sh </dev/null` ... must print 'already being started'". If the lock is not held, that script launches `start_agent_team.sh` itself (`ensure-environment.sh:158-166`) on a free `:8200` mid-outage, against a pre-migration or half-migrated graph. Use only the non-launching `flock -n -E 75` check at that point; run the hook live only if a launch there is harmless (it is not).
+
+**N3. R1/R2 vs the lock and the default (major).** (a) After a failed migrate the wrapper sleeps holding the lock (`exec sleep infinity`), but R1 and R2 say "take the lock" without saying the sleeper must be killed first, which frees the lock and reopens the gap; and the natural recovery (re-run the resumable migrate under the held lock, or R2's `RENAME`s, which need no running server) is not stated. (b) R1 reverts the script default "in the same change" but does not order it: the default must be reverted **before** R1's migrate starts, otherwise a lost lock during R1 lets the hook relaunch at 2560 over a graph being rebuilt at 1024. (c) R2 says "restart at 1024" but not how: with the default now 2560 it must pass `EMBEDDING_DIM=1024` (or revert first), under the lock. (d) The wrapper's `<hook's kept env>` is a placeholder; copy the hook's `KEEP_ENV` set exactly (`ensure-environment.sh:109-117`), and `cd falkor-chat` before the `exec` (the hook's launch and the current server run from there; the wrapper as written execs from the repo root).
+
+**N4. Gap between stopping pid 1268 and the lock: closed enough, one residue.** `kill 1268` then a blocking `flock -w 10` waits in the lock queue and takes the lock when pid 1261 exits; uvicorn closes the listener before the process exits, so the hook sees "health refused" while the lock is still held and launches nothing (reasoned from `lock_held`, `ensure-environment.sh:123-125`; not exercised). The residue is the 10 s timeout in N1; §9's suggestion to disable the hook is not needed if N1 is fixed.
+
+**N5. Step 6 time-box vs floor ownership (minor, plus a contradiction).** (a) Step 7 is `cobb`'s, gated on 6.1-6.2 only, but §8.3 tells the stakeholder the floor change is "conditional on step 0c and 6.1-6.3", and 6.3 (the only check on non-pwq content on production) runs after step 7. Pick one and say it in both places; if 6.3 can fail after the edit, §5's triggers must include a skill revert (R1 covers it; say so in step 6). (b) A 30-minute box needs `teco` to dispatch `cobb` inside it, and the duration of 6.1 plus 6.2 (Set A with perturbed forms and the sweep) is not stated anywhere; give a measured or estimated figure or define what happens when the box expires with checks incomplete (currently undefined; suggest R1 as the default).
+
+**Nit.** §2 "Host" quotes "a later read by the reviewer"; that is review narration in a plan; drop it.
