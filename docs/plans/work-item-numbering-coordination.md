@@ -34,8 +34,8 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B5b fixes F1/F2/minors | `tdd-engineer` | `a798c99c101250269` | accepted (committed 28ce49c5; ~132k tok) | `skills/work-items/…` | re-confirm by `analyst` after step 7 | — |
 | U1b plan sync + F3 decision | `architect` | `a7af14139c4b90236` | delivered (F3: concerns functional; fixed-by/relates multi-valued via link op; step 6 split into 6 + 6b) | `docs/plans/work-item-numbering.md` | — | — |
 | B6 (step 6 links/attrs) | `tdd-engineer` | `acbba0473b46da2aa` | accepted (committed; ~86k tok) | `skills/work-items/…` | — | — |
-| B6b (step 6b headers/options) | `tdd-engineer` | `a0b298174a600c561` | in-flight at usage-limit pause (uncommitted files under `skills/work-items/` may exist; verify before commit) | — | — | — |
-| B7 (step 7 rebuild/check; sequential, same package) | `tdd-engineer` | — | queued | `skills/work-items/…` | — | — |
+| B6b (step 6b headers/options) | `tdd-engineer` | `a0b298174a600c561` | accepted (committed; ~91k tok) | — | — | — |
+| B7 (step 7 rebuild/check) | `tdd-engineer` | `aa72975dda9e9acd9` | in-flight | `skills/work-items/…` | — | — |
 | B8 (step 8) | `tdd-engineer` | — | queued | keys | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` | — | queued — root `AGENTS.md` shared file | — | — |
