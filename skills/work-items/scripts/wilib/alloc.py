@@ -37,37 +37,44 @@ def _segments(item_id):
     return list(rules.parse(item_id).segments)
 
 
+def allocate(tx, key, type_, parent=None, slug=None, title=None, home=None, legacy=None):
+    """Allocate and record one item inside an open transaction; return its ID."""
+    if type_ not in rules.WIDTH or type_ in ("FR", "AC"):
+        raise AllocError(f"cannot allocate type {type_!r}")
+    parent = parent or _implicit_parent(key, type_)
+    st = tx.state
+    if parent is None:
+        parent_item, parent_segs = None, []
+        rules.validate_parent(type_)
+    else:
+        uid = st.resolve_uid(parent)
+        if uid is None:
+            raise AllocError(f"unknown parent {parent!r}")
+        parent_item = st.items[uid]
+        parent_segs = _segments(parent_item.id)
+        last = parent_segs[-1]
+        rules.validate_parent(type_, last.type, last.num)
+    number = st.next_number(type_, parent_item.uid if parent_item else None)
+    id_ = rules.format_id(key, parent_segs + [rules.Segment(type_, number)])
+    ev = {"ev": "new", "id": id_, "type": type_,
+          "parent": parent_item.uid if parent_item else None,
+          "home": home or DEFAULT_HOME}
+    if slug:
+        ev["slug"] = slug
+    if title:
+        ev["title"] = title
+    if legacy:
+        ev["legacy"] = legacy
+    tx.append(ev)
+    return id_
+
+
 def new(root, type_, parent=None, slug=None, title=None, home=None, store=None):
     """Allocate and record one item; return its ID.  Raises IllegalParent."""
     key = load_key(root)
     store = store or Store(root, key)
-    if type_ not in rules.WIDTH or type_ in ("FR", "AC"):
-        raise AllocError(f"cannot allocate type {type_!r}")
-    parent = parent or _implicit_parent(key, type_)
     with store.transaction() as tx:
-        st = tx.state
-        if parent is None:
-            parent_item, parent_segs = None, []
-            rules.validate_parent(type_)
-        else:
-            uid = st.resolve_uid(parent)
-            if uid is None:
-                raise AllocError(f"unknown parent {parent!r}")
-            parent_item = st.items[uid]
-            parent_segs = _segments(parent_item.id)
-            last = parent_segs[-1]
-            rules.validate_parent(type_, last.type, last.num)
-        number = st.next_number(type_, parent_item.uid if parent_item else None)
-        id_ = rules.format_id(key, parent_segs + [rules.Segment(type_, number)])
-        ev = {"ev": "new", "id": id_, "type": type_,
-              "parent": parent_item.uid if parent_item else None,
-              "home": home or DEFAULT_HOME}
-        if slug:
-            ev["slug"] = slug
-        if title:
-            ev["title"] = title
-        tx.append(ev)
-    return id_
+        return allocate(tx, key, type_, parent, slug, title, home)
 
 
 def retire(root, id_, store=None):

@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import alloc, move, project, resolve, rules
+from . import alloc, legacy, move, project, resolve, rules
 from .store import Store
 
 
@@ -43,6 +43,11 @@ def build_parser():
     pr.add_argument("id")
     pr.add_argument("--to", required=True, choices=["F"])
     pr.add_argument("--parent", help="initiative to place the feature under (default: none)")
+    ml = sub.add_parser("mint-legacy", help="give an old <home>:<name> item a scheme ID (idempotent)")
+    ml.add_argument("spec", help="<home>:<name>, e.g. architect:K-004")
+    ml.add_argument("--type", required=True, choices=["K", "F", "D"])
+    ml.add_argument("--parent")
+    ml.add_argument("--title")
     sub.add_parser("flush", help="copy journal events into the tracked registry")
     i = sub.add_parser("init", help="create .work-items/ in the current directory")
     i.add_argument("--key", required=True)
@@ -66,7 +71,10 @@ def main(argv=None, cwd=None):
                 sync_headers(root, id_)
         elif args.cmd == "retire":
             print(alloc.retire(root, args.id))
+        elif args.cmd == "mint-legacy":
+            print(legacy.mint(root, args.spec, args.type, parent=args.parent, title=args.title))
         elif args.cmd == "resolve":
+            legacy.install(project.load_namespaces(root))
             rec = resolve.resolve(Store(root, alloc.load_key(root)).read_state(), args.name)
             print(json.dumps(rec, indent=2) if args.json else resolve.describe(rec))
         elif args.cmd == "move":

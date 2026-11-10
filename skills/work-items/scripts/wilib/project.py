@@ -54,3 +54,10 @@ def init(root, key, components):
                 tx.append({"ev": "new", "id": id_, "type": "I", "parent": None,
                            "home": "repo", "title": title})
     store.flush()
+
+
+def load_namespaces(root):
+    """Declared legacy namespaces: ``{"K-": [home, ...], "C-": [...]}`` (plan 3.6)."""
+    path = Path(root) / ".work-items" / "project.json"
+    data = json.loads(path.read_text(encoding="utf-8")).get("legacy_namespaces") or {}
+    return {prefix: list(homes) for prefix, homes in data.items()}
