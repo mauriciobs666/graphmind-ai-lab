@@ -27,7 +27,7 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | G2 | `analyst` | `a23b879bd96fbcd50` | gated | `docs/reviews/python-web-quirks-kb-impl.md` Pass 3 (S4–S8; Set B path withheld from the reviewer by design) | → approve with suggestions; no blocker, F11 major ("duplicate coverage" label wrong for most of the 36; S12 reports first-unit-chunk rank + non-unit chunks below it; S14 `--exclude` only ledger-recorded deleted ids; `--sweep` prints no unfiltered numbers), F12 stale sentences (plan, ML note), F13 test-plan gaps (TP-012, S15c plan, S14 pre-check order), F14 F6 post-receipt check, F15 nits. Fixes owed: U18–U20 | 211k tok / 69 tools |
 | U18 | `tdd-engineer` | `a3bcf906217806472` | in-flight | G2 F11/F14 code: `--sweep` unfiltered print, S12/S14 first-unit-chunk-rank + non-unit aggregate (aggregate-only on sealed), `ingest` post-receipt visibility check; `pwq_kb.py` + selftest | G2 re-check → — | — |
 | U19 | `architect` | `a263273e0c70d71c3` | in-flight | G2 F11/F12/F14 plan stale sentences, relabel "pre-existing hit under floor" in `docs/plans/python-web-quirks-kb.md` | — | — |
-| U20 | `data-scientist` | `ae055d0d6689a023a` | in-flight | G2 F11/F12 in `docs/plans/python-web-quirks-kb-ml.md` (relabel, post-H1 claim, stale counts, deflation ruling) | — | — |
+| U20 | `data-scientist` | `ae055d0d6689a023a` | accepted | G2 F11/F12 in `docs/plans/python-web-quirks-kb-ml.md` (relabel, post-H1 claim, stale counts, deflation ruling) | — | — |
 | U21 | `qa-engineer` | `aae2f63dfd7df43df` | accepted | G2 F13 in `docs/test-plans/python-web-quirks-kb.md` (TP-012, S15c scope, S14 pre-check order) | — | — |
 
 

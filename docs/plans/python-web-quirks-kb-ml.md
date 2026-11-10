@@ -39,20 +39,18 @@ beyond a few read-only probes.
   live workspace's longest chunk is 1,139 characters, so ingestion in practice uses that chunker.
 - `search_documents` ranks **chunks**, no document dedupe, `score` = cosine distance
   (`falkor-chat/server/falkorchat/repository.py` `search_chunks`). Top-5 means five chunks.
-- `ws:agent-team` today: 476 documents, 767 chunks, 16 with no embedding (K-102 still live).
-  **4 documents already mention `python-web-quirks`**; one of them
+- `ws:agent-team` (read this run): 483 documents, 775 chunks, 759 embedded (K-102 still live; `ws:pwq-test`
+  482/773/757). **4 documents already mention `python-web-quirks`**; one of them
   (`38cd49cddb004207a5c7abd10181a4eb`) states the content of section 34 (BackgroundTasks serial
   execution). After migration it competes with the migrated section for the same query.
 - Probe (read-only, prefixed per `skills/agent-kb-retrieval/SKILL.md`): a near-domain pytest query
   with no applicable gotcha ("session-scoped fixture ... xdist ...") returned hits at **0.4136 and
   0.4272, inside the 0.43 floor**, from unrelated team documents about shared-store test noise.
   Three other near-domain probes (asyncio.gather cancel, FastAPI dependency overrides, async
-  SQLAlchemy session) had closest scores 0.562, 0.469, 0.463. Four probes only; they show the
-  floor passes near-domain wrong hits, they do not size the rate.
+  SQLAlchemy session) had closest scores 0.562, 0.469, 0.463. Four probes: wrong hits pass the floor; the rate is unsized.
 - Prior art (`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, Stage 8 / DEF-1): 45 pairs,
   4 misses, all in prose-only tags (15/19); code/identifier-heavy tags 11/11. Its 6 negatives were
-  off-domain; closest false match 0.446, so the floor margin there was 0.016. Python/pytest content
-  did not exist in that corpus, so none of those negatives was python-adjacent.
+  off-domain (closest false match 0.446, margin 0.016); that corpus had no Python/pytest content.
 
 ## 3. Golden set (Set A, dev)
 
@@ -67,8 +65,7 @@ anyway): {2,34} {21,22,23} {24,25} {29,39} {30,40}. Across units: {5,6} {7,8} {1
 **Set A shape (checked by the tool, not by hand):** 42 positives, exactly one per section 1-42, and
 14 negatives, 7 `near` and 7 `off`, unique ids. Every scoring mode of Set A (not `--before`) refuses a
 set of another shape, because Set A's coverage and false-accept counts decide the floor (§6) and a
-partial set would report coverage "ok" (`validate_set_b` is the model). Today the tool has no such
-check for A (code change owed, §8); the fixture itself has 42 sections, 7 near, 7 off.
+partial set would report coverage "ok" (`validate_set_b` is the model). The tool checks this (U15).
 
 ### 3.1 Positives (42, one per section)
 
@@ -171,17 +168,16 @@ lower bound 0.916) is the conservative companion criterion. Wilson 95% intervals
 Probability of passing the gate (>= 76/84) by true recall, exact binomial, computed this run:
 0.97 -> 0.999; 0.95 -> 0.975; 0.92 -> 0.772; 0.90 -> 0.534; 0.85 -> 0.100; 0.80 -> 0.008.
 So the gate separates a system near 0.95 (passes) from one near 0.85 (fails) and does **not**
-separate 0.90 from 0.92; that is the resolution 84 queries buy, and I would not pay for 150 queries
-to sharpen a threshold that is itself a judgment.
+separate 0.90 from 0.92; that is the resolution 84 queries buy, and 150 queries would not
+sharpen a threshold that is itself a judgment.
 
 **Why 0.90.** The pooled prior-art result is 41 of 45 (4 misses; 0.911 by my arithmetic), with
 code/identifier-heavy rows 11/11. This content is code-dense (the rows resembling the 11/11 stratum)
 but has dense intra-domain neighbourhoods (5 `TestClient`/lifespan sections, 2 stdin-capture and
 2 `.pyc` sections, thread-pool and `BackgroundTasks` pairs). Expected true recall is therefore
->= 0.95 (a prior, not a measurement); 0.90 is the floor below which the migration is worse than the
-team's already accepted KB retrieval, and below which the stated user story ("get the one applicable
-gotcha") is not credibly met. A miss is not silent: FR-11 title listing and FR-9 section reads are
-the fallback, which is why I do not ask for 0.95 as a gate.
+>= 0.95 (a prior); 0.90 is the floor below which the migration is worse than the
+team's accepted KB retrieval and the user story ("get the one applicable gotcha") is not credibly met.
+A miss is not silent (FR-11 title listing and FR-9 section reads are the fallback), so no 0.95 gate.
 
 ### 4.2 Negatives
 
@@ -190,8 +186,8 @@ Set B has 30 negatives (15 off-domain, 15 near-domain). 0/30 false accepts has W
 false-accept rate, computed this run: 0.02 -> 0.997; 0.05 -> 0.939; 0.10 -> 0.647; 0.20 -> 0.123;
 0.30 -> 0.009. Gate: **off-domain 15/15** (the prior art's 6/6 plus a real margin; a wrong gotcha for
 an unrelated question is the failure mode FR-9 warns about), **near-domain >= 12/15**. Near-domain is
-deliberately softer: its false accepts cost one wrong ~1.4 KB section (median section) read, the
-xdist probe (0.4136) shows the floor cannot be expected to reject them all, and the floor is shared.
+softer: a false accept costs one wrong ~1.4 KB section read, and the xdist probe (0.4136) shows the
+shared floor cannot reject them all.
 
 **Scoring definition (decision for the stakeholder, my default stated):** AC-3 says negatives
 "return nothing above the score floor". Workspace-wide that is not a property of this feature: the
@@ -206,18 +202,26 @@ a capture can do is displace a unit's chunks from the five slots, which is a mea
 captures are removed from the scored state: by deletion at H1 for the captures listed at S13b, and by
 id exclusion (`--exclude`, a 50-chunk window, drop the excluded documents' chunks, truncate to five)
 for any capture that appeared after that listing. The headline is the excluded run; the unfiltered
-numbers are printed beside it, and the gap is the duplicate-coverage finding. In `ws:pwq-test`,
-where the raw captures still exist before H1, the S12 sweep runs with the S7 list excluded, so it
-measures the post-H1 state. The existing rule (`scored_chunks`, `evaluate`, the T29 filtered/unfiltered
+numbers are printed beside it (`--sweep` must print them too, an implementation requirement), and the
+gap is the pre-existing-hit finding. In `ws:pwq-test` the S12 sweep runs with the S7 list excluded; that
+equals the post-H1 state only for ids actually deleted at H1, so S14 passes `--exclude` only ids the
+ledger records as deleted at H1 or created after S13b. Most pre-existing hits are not captures: G2
+measured 26 of 42 Set A positives with a pre-ingestion hit under the floor, only 9 on the S7 list; the
+17 other documents are unlisted team documents H1 never touches. They cannot inflate recall (only the
+unit's own document counts); the risk is deflation, a non-unit chunk displacing a unit chunk from the
+five. S12 reports, per Set A positive, the rank of the first unit chunk and whether any non-unit chunk
+scores better, aggregated with documents named; S14 reports the aggregate only (B stays sealed).
+Ruling: reporting, no threshold; the effect is one-sided (conservative), the documents cannot be
+removed, and a threshold would be tuned on the sealed set. The existing rule (`scored_chunks`, `evaluate`, the T29 filtered/unfiltered
 printout) already matches this ruling in every clause; no code change. Limit: the exclusion window
 is 50 chunks, so it fails only if over 45 of a query's nearest chunks belong to excluded documents,
-which the 4 known captures cannot do.
+which the 17 known documents (23 chunks, `docs/plans/python-web-quirks-kb-captures.md`) cannot do.
 
 ### 4.3 Before and after (FR-12)
 
 - **Before** is not "whole skill loaded" (trivially 100% recall at ~76 KB). It is (i) the same sets
   run **before ingestion**: expected near-zero hits on gotcha documents, and any query whose answer
-  already comes back from another ws document is a duplicate-coverage finding (the raw captures);
+  already comes back from another ws document is a pre-existing-hit finding (captures are a subset);
   and (ii) a **lexical baseline** (BM25 or ripgrep scoring over the 42 sections, offline) on Set B.
   If semantic retrieval does not beat the lexical baseline on recall at equal top-5, the GraphRAG
   layer is not earning its cost for this content; report it either way.
@@ -269,16 +273,13 @@ other KBs).
 rank-1 document is never a unit; it detects a query that is already near-verbatim in an existing
 document. Rewrite a B query **only** if its rank-1 score is **< 0.25** (`LEAK_SCORE`), once, by B's
 author, then re-run the 4-gram check and freeze. A query that already surfaces from another document
-(rank-1 under the 0.43 floor, e.g. a raw capture) is **kept** and recorded as a duplicate-coverage
-finding: selecting queries by how the corpus answers them is tuning on B, and dropping the
-duplicate-covered queries would inflate recall by removing the cases the migration shares with
-captures (those are neutralized by deletion/exclusion, §4.2, not by editing B). `LEAK_SCORE = 0.25`
-is defensible as a tripwire, not as a calibrated threshold: read-only probes this run of six Set A
-queries (prefixed, `ws:agent-team`, before ingestion) had rank-1 scores 0.3657, 0.4107, 0.4169,
-0.4618, 0.5066, 0.5309, so 0.25 sits 0.115 below the lowest observed, and it fires only on a
-near-copy; erring toward not rewriting is the safe direction for hold-out. It does not detect a
-paraphrase of a unit's title (no unit exists yet); that is the 4-gram check's job (rule 3) and the
-residual limitation in §8. Do not move it on six points.
+(rank-1 under the 0.43 floor, e.g. a raw capture) is **kept** and recorded as a pre-existing-hit
+finding: selecting queries by how the corpus answers them is tuning on B, and dropping those
+queries would inflate recall (captures are neutralized by deletion/exclusion, §4.2, not by editing B). `LEAK_SCORE = 0.25`
+is a tripwire, not a calibrated threshold: six Set A probes before ingestion had rank-1 scores
+0.3657 to 0.5309, so it sits 0.115 below the lowest and fires only on a near-copy; erring toward not
+rewriting is the safe direction for hold-out. It does not detect a title paraphrase (the 4-gram check's
+job, rule 3; residual limitation in §8). Do not move it on six points.
 
 **Contamination channels to close:** (i) the existing raw captures that mention the skill (§2),
 including one duplicating section 34 (probed this run: three of its chunks returned at 0.4606,
@@ -313,8 +314,7 @@ document (positives) and the best score of any gotcha document (negatives), then
    these", and the fallback is a stricter rule scoped to this feature's stub (not a floor edit).
 4. Then confirm on B once; B's verdict uses whichever floor step 2/3 set.
 
-A is small for a sweep (42 + 14): treat the sweep as locating a plausible band, not estimating a
-rate; the B result carries the evidence.
+A is small for a sweep (42 + 14): it locates a plausible band; the B result carries the evidence.
 
 ## 7. Chunking guidance (e)
 
@@ -325,11 +325,9 @@ Ingesting each of the 36 units as one document, with the shipped chunker, gives 
 messages, is not a dependency. The "check chunk behaviour on the largest sections first" decision
 (requirements decision log) reduces to a count check plus a tail probe, not a truncation fix.
 
-**Where head-only would bite, if someone embedded whole units** (chunking disabled or a large
-size): only u21 (6,554 characters, 9 chunks) and u26 (6,393, 10 chunks) exceed the 5.7k figure; seven
-more (u02, u04, u08, u09, u11, u24, u29) sit between 2.6k and 5.1k by characters. Token counts were not
-measured (no tokenizer run); identifier-dense text tokenizes worse than prose, so before approving any
-whole-unit embedding, measure tokens for those 9.
+**Where head-only would bite, if someone embedded whole units:** only u21 (6,554 characters) and u26
+(6,393) exceed the 5.7k figure; seven more (u02, u04, u08, u09, u11, u24, u29) sit between 2.6k and 5.1k.
+Tokens were not measured; before approving any whole-unit embedding, measure them for those 9.
 
 **Risks that do exist, in order of expected effect:**
 
@@ -357,17 +355,15 @@ whole-unit embedding, measure tokens for those 9.
   ~0.85 true recall, not finer.
 - **AC-3 wording:** confirm that negatives are scored against the 36 unit documents only (§4.2),
   or accept that workspace-wide rejection is not measurable by this feature.
-- **Raw-capture duplicates (§4.2, §5):** retire the captures that mention the skill, or accept that the
-  duplicate of section 34 can outrank its own migrated section (the scoring rule excludes it either way).
+- **Raw captures (§4.2, §5):** retire the captures that mention the skill, or accept that the
+  restatement of section 34 can outrank its own migrated section (the scoring rule excludes it either way).
 - **Set B author and storage:** `qa-engineer`, stored outside the implementers' reading path; `teco`
   sets the location.
 - **Estimates, not measurements:** the expected true recall (>= 0.95) is a prior; token counts per
   section (§7) are unmeasured; none of Set A's positives has been run against an ingested corpus.
 - **Dedicated limitation:** the leak check is lexical (n-grams); it does not detect a query that
   paraphrases the title closely in meaning. The before-ingestion run (§4.3) is the semantic check:
-  a query whose answer already surfaces from another document is kept and recorded; only one whose
+  a query whose answer already surfaces from another document is kept and recorded (pre-existing hit); only one whose
   rank-1 score is < 0.25 is re-written (§5 ruling). A title paraphrase is caught only by the post-ingestion
   Set A run, never on B.
-- **Code owed (not mine to edit):** `validate_set_a` for the Set A scoring modes (§3); a required
-  `--expect-sha256` on `--sealed-once` (§5); a Set B check that every one of the 12 tail units has a
-  `tail`-flagged positive (the validator does not read the flags today).
+- **Code state:** the Set A validator, the required `--expect-sha256` on `--sealed-once` and the Set B tail-flag check are delivered (U15); `--sweep` unfiltered printing is owed (§4.2).
