@@ -4,8 +4,7 @@
 
 Output of S7 of `docs/plans/python-web-quirks-kb.md` (D11, "Raw captures and duplicates"); cited by
 the coordination ledger. Derived **2026-11-10** by read-only queries on `ws:agent-team` (482 `Document`
-nodes at derivation; nothing written or deleted). S13b re-derives it before H1 and again at S14's start;
-any capture newer than that re-derivation is excluded by id at S14.
+nodes at derivation; nothing written or deleted). S13b re-derived it (§4); S14 re-derives again at its start and excludes any newer capture by id.
 
 **Method and limit.** (1) `CONTAINS 'python-web-quirks'` over every document's title and text. (2) Keyword
 sweeps over the text for each of the skill's 42 gotchas (API names, flags, error shapes), read against
@@ -80,21 +79,58 @@ section through the FR-10 path (raw capture, then `cobb`), not duplicates.
 shrinkage, not §512), `572eea93…` and `fd243705…` (extract-and-execute), `12eb7b6c…` (flaky suite),
 `681f7f73…` (falkor-chat logging config) and the LM Studio probe documents.
 
-## 4. H1 delete list (ids; the stakeholder deletes by `curl`, no agent deletes)
+## 4. H1 delete list (S13b re-derivation, 2026-11-10; the stakeholder deletes by `curl`, no agent deletes)
 
-The 17 captures of §1 and §2, by full id:
+**Re-derived read-only** from the live `ws:agent-team` graph: 519 `Document` nodes = the 36 ingested unit
+documents (all `cobb`, created 13:24-13:41 UTC) + 483 others, against 482 at S7. **All 17 S7 ids are still
+present** (statuses seen: 13 `ready`, 3 `failed` (`a792f59a…`, `7fde1fc1…`, `35b0029b…`), 1 `processing`
+(`c590ed3a…`); the producers and the §1/§2 sets are unchanged). A fresh `CONTAINS 'python-web-quirks'`
+sweep returns the four of §1 plus one new document. **One capture appeared after S7** (created 11:31:13
+UTC, S7 committed 11:30:50 UTC): `458d329e2ba44e45a5fd82301a47504a`, producer `graph-dba`, "GRAPH.COPY
+carries vector index+embeddings on falkordb v4.18.11 but can fail…". It matches only the text `pwq`
+(the `ws:pwq-test` workspace) and restates no section, so it is **not** on either group and stays.
+Nothing else changed: the 17-id list stands. Each is named in a distillation sweep and
+`claude/cobb/scripts/kb-claim-manifest.json` (git grep, 2026-11-10).
+
+**Recommendation.** Delete Group 1 and Group 2: the scored S14 state is post-H1 (ML note §4.2 (ii)), and
+every Group 2 gotcha is carried by a section of the skill. Keep `458d329e…` and the four uncovered
+captures of §3.
+
+Group 1, the 4 captures that mention the skill:
 
 ```
-38cd49cddb004207a5c7abd10181a4eb  d0b47b2ccc874f1ebdda87b977d9dd1e  9a5e835d82e14bb1b3705b6ee22cb33e
-14745ca484644f8db040438b6f3932bb  1bfe74233c1a438dafafb2ed57f12cc8  a792f59aa1cc43a389266c01471ae49a
-3cab6295c3994cdab3b2eb4cd06befed  3ab71d8271e04dd093ecc270a800ff13  2d0168efb3db4552bff3952f28c543d3
-c590ed3adacc41f8a10366bb8d568e14  95ab714455f146fbab7ffb137c158762  23d09f2bd0f34d3eb925fb2b65bf2326
-7fde1fc1f1924749b89dbad8ccf147bc  60aba8dbe7bb48b28bda2a4c8cdb419c  6ce4a2321bcb44989d382e2c762edd0f
-629325c220234d9b94cea8109f032bde  35b0029bb9404f3e9e27fa2b95a01340
+curl -X DELETE http://localhost:8200/documents/38cd49cddb004207a5c7abd10181a4eb
+curl -X DELETE http://localhost:8200/documents/d0b47b2ccc874f1ebdda87b977d9dd1e
+curl -X DELETE http://localhost:8200/documents/9a5e835d82e14bb1b3705b6ee22cb33e
+curl -X DELETE http://localhost:8200/documents/14745ca484644f8db040438b6f3932bb
 ```
 
-Each is named in a distillation sweep and `claude/cobb/scripts/kb-claim-manifest.json` (git grep, 2026-11-10),
-so its disposition is recorded. Requirements decision log entry "The four raw captures mentioning the
-skill?" names only the four of §1; the §2 thirteen are the plan's "restates a gotcha" half of D11 and
-are listed for the stakeholder's call. If the stakeholder wants only the four, delete §1.
-Re-derive at S13b before H1: a capture ingested since is not on this list.
+Group 2, the 12 restating captures (the 13th, `6ce4a232…`, is flagged below):
+
+```
+curl -X DELETE http://localhost:8200/documents/1bfe74233c1a438dafafb2ed57f12cc8
+curl -X DELETE http://localhost:8200/documents/a792f59aa1cc43a389266c01471ae49a
+curl -X DELETE http://localhost:8200/documents/3cab6295c3994cdab3b2eb4cd06befed
+curl -X DELETE http://localhost:8200/documents/3ab71d8271e04dd093ecc270a800ff13
+curl -X DELETE http://localhost:8200/documents/2d0168efb3db4552bff3952f28c543d3
+curl -X DELETE http://localhost:8200/documents/c590ed3adacc41f8a10366bb8d568e14
+curl -X DELETE http://localhost:8200/documents/95ab714455f146fbab7ffb137c158762
+curl -X DELETE http://localhost:8200/documents/23d09f2bd0f34d3eb925fb2b65bf2326
+curl -X DELETE http://localhost:8200/documents/7fde1fc1f1924749b89dbad8ccf147bc
+curl -X DELETE http://localhost:8200/documents/60aba8dbe7bb48b28bda2a4c8cdb419c
+curl -X DELETE http://localhost:8200/documents/629325c220234d9b94cea8109f032bde
+curl -X DELETE http://localhost:8200/documents/35b0029bb9404f3e9e27fa2b95a01340
+```
+
+**Flagged separately.**
+- `6ce4a2321bcb44989d382e2c762edd0f`: producer `u1`, no `INGESTED_BY` edge (an unattributed ingest). It
+  restates the same section as `629325c2…` and supplies the cwd condition (§2 note), so it belongs with
+  Group 2 by content; delete it only on the stakeholder's call:
+  `curl -X DELETE http://localhost:8200/documents/6ce4a2321bcb44989d382e2c762edd0f`
+- `38cd49cddb004207a5c7abd10181a4eb` (in Group 1): its promotion text is already item `GAL-I02-K0001`
+  (§3 gap ruling), so deleting it loses nothing. Drop it from the Group 1 command if the item is not yet
+  confirmed.
+
+Workspace `agent-team` is the `:8200` server (`falkor-chat/docs/SERVER.md` §14.7, `DELETE /documents/{id}`;
+the line is `curl_delete_line` in `pwq_kb.py`). S14 re-derives again at its start; a capture newer than
+this derivation is excluded by id.
