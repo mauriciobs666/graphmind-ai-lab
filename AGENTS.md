@@ -250,7 +250,8 @@ engineering** (Claude Code and OpenCode artifacts).
     `Status:`**; free text is preserved *after* the token, never before it. Optional fields
     take the same bolded form and follow the three: `Version:`, `Supersedes:` /
     `Superseded by:` / `Extends:` / `Extended by:`, `Last updated:` (`tico` keeps it; nobody
-    else needs it), `Reviews:`.
+    else needs it), `Reviews:`, `Item:` / `Aliases:` (the work-item ID and its former IDs; written
+    by `wi headers sync`, `skills/work-items/SKILL.md`).
   - **The closed `Status:` set — five values, and who flips each:** `Interviewing` and
     `Ready for design` (`requirements/` only — `tico` owns both, the second only on explicit
     stakeholder confirmation, after an `analyst` review of the document that includes the
