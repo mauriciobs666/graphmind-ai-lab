@@ -24,10 +24,11 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U15 | `tdd-engineer` | `a5b4d60449cc8f09e` | accepted | `validate_set_a`, mandatory `--expect-sha256` on `--sealed-once` (strict 64 lower-case hex), Set B tail-unit check (derived from manifest pin; sealed runs only); selftest 130/130, 27 of 28 mutants killed (1 equivalent); teco re-ran all four selftests (130, 11, 25) and checked hashes. Note: `--sealed-once` now loads the manifest earlier | G2 → — | 136k tok / 34 tools |
 | U16 | `architect` | `a4a56299792bbf4fe` | accepted | plan amendments (+115 words net by `wc -w`); `--pin-from-git` owned by S16d via `coder` (architect's call, accepted) | G2 → — | 50k tok / 10 tools |
 | U17 | `qa-engineer` | `ab42c5f094343303c` | accepted | S8: Set B frozen outside repo (84+30, 15/15, 12 tail units flagged, leakcheck 0 shared 4-grams, probe on :8210 only, 2 positives still under 0.25 kept per ruling (i), 36 duplicate-coverage queries recorded); **Set B sha256 `163efb061834345d3d34c72501c96dd11e8c20fdd48bcbd433ba4c617d5fd15c`** (teco re-hashed: match; mode 444; no sentinel); `docs/test-plans/python-web-quirks-kb.md` (TP-001..011; a stray `TP-012` mention for G2) | G2 → — | 167k tok / 32 tools |
-| G2 | `analyst` | `a23b879bd96fbcd50` | in-flight | `docs/reviews/python-web-quirks-kb-impl.md` Pass 3 (S4–S8; Set B path withheld from the reviewer by design) | — | — |
+| G2 | `analyst` | `a23b879bd96fbcd50` | gated | `docs/reviews/python-web-quirks-kb-impl.md` Pass 3 (S4–S8; Set B path withheld from the reviewer by design) | → approve with suggestions; no blocker, F11 major ("duplicate coverage" label wrong for most of the 36; S12 reports first-unit-chunk rank + non-unit chunks below it; S14 `--exclude` only ledger-recorded deleted ids; `--sweep` prints no unfiltered numbers), F12 stale sentences (plan, ML note), F13 test-plan gaps (TP-012, S15c plan, S14 pre-check order), F14 F6 post-receipt check, F15 nits. Fixes owed: U18–U20 | 211k tok / 69 tools |
 
 
-Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
+
+Next: fix G2 findings (U18 code, U19 plan/ML/test-plan wording), then S9–S12. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
 
 - 2026-11-09: stakeholder answers recorded in the requirements' decision log. New obligations from them: `cobb` edits `tico` and `security-expert` tool grants; `cobb` lists the 4 raw captures that mention the skill and the stakeholder deletes them; Set B author `qa-engineer`, storage outside implementers' reading path (teco decides at plan time).
 
