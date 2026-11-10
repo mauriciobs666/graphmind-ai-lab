@@ -3003,3 +3003,50 @@ CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the d
 ### Growth-stops check
 
 Plan6 v1.22 replaces the v1.21 revision line with one dated line, and its §3.8 adds one bullet for the new scope (the bound) and one sentence for the vote half; no finding→resolution table. Passes 1 to 24 are unchanged: the pre-pass copy and the head of the live file are `cmp`-identical (checked below).
+
+
+## Pass 26 — U5.2b-render (2026-11-10)
+
+**Verdict: approve with suggestions.** The renderers reproduce model-bench's byte-for-byte on 40,000 random inputs beyond the vectors, the registry and the three vector copies are right, and the layout test can both fail and pass. No blocker or major. Three minors and two nits, all test or doc hygiene.
+
+### Scope
+
+- **Reviewed:** the uncommitted `decision-models/` tree: `render.py`, `exchange.py`, `points/join-in-judge/generator.md`, the new `tests/test_render_layout.py`, the diffs of `test_decision_contract.py`, `test_exchange.py` and `test_pilot.py`, and the three new vector copies and docs. Against plan5 §3.4 and its §4 U5.2b-render row, plan6 v1.22, and `model-bench/modelbench/scoring/agreement.py`. Root `REVIEW.md` applied; no `decision-models/REVIEW.md`.
+- **Executed (live tree, unchanged):** `.venv/bin/pytest -q` from `decision-models/`: **1527 passed**, 267 s; `ruff check .`: all checks passed. `cmp` of all six `tests/fixtures/decision-contract/*.jsonl` against model-bench's: identical. sha256 of `decisionmodels/*.py`, `tests/*.py` and `points/*/*.md` unchanged after the pass. `AGENTS.md` 1,610 words, no line over 700 characters.
+- **Scratch (`scratchpad/p26/`):** `diff.py` (differential), `mut.py` (21 mutants on a copy, restore asserted per mutant), `tree2/` (4 rubric/renderer layout mutants, restore `cmp`-checked).
+
+CPG: considered, not relevant — no `cpg_decisionmodels` graph is loaded; the diff was read in full.
+
+### Answers to the asks
+
+1. **Differential run (executed).** `render_join_in_input` and `render_message_type_input` against model-bench's, 20,000 random rows each: names empty, `None`, int or unicode; `text` missing, `None`, int, list, empty, and lengths 0 to 3,000 around each cut (399 to 401, 1999 to 2001); 0 to 12 prior turns; `priorTurn` `None` or a dict; unicode and newlines. **0 divergences in 40,000 calls**; 962 calls raised, and the same exception type on both sides. The item wrappers read the same keys model-bench's `decision_input` does (`agentName`/`priorTurns`/`newMessage`; `text`/`priorTurn`).
+2. **The `generator.md` edit is in scope.** Plan5 §3.4 (lines 91-92) itself says `generator.md` "keeps the agent's job inside the last 6 turns, and `data-scientist` confirms it". The coordination ledger records the confirmation (**keep**), which I read but did not verify. **Keep.** Hash effects: nothing in code derives a hash from `generator.md`. `generator_instructions` feeds a generation request's line 2 (`exchange.py:301`), so a request's `bodySha256` changes. `requestTemplate` and the `dataset-shape.jsonl` hashes are supplied or synthetic, not computed from the file (grep; the live suite is green). The only consumer is a future one: a generator `requestTemplate` hash recorded before the edit would need re-pinning, which the ledger already carries to U5.9/U5.10 (no campaign run exists).
+3. **The layout test is not tautological (executed).** It reads the block from `rubric.md` and builds the pattern from it, but the fixture and the expected captures are written in the test, and the renderer is independent. Four mutants in a copy, each red: rubric `NEW MESSAGE:` renamed; renderer `RECENT TURNS (context only):` shortened; a rubric blank line dropped; a rubric `<speaker>: <text>` separator changed. A faithful implementer reaches the "after" state: renderer and rubric edited to agree, and the byte-copied vectors pin the renderer independently of the rubric. What it does not cover is in P26-m2.
+4. **Own mutants: 21 on `render.py`, `exchange.py` and `pilot.py`; 19 red, 2 green.** Red: all three cuts (401, 399, 2001), speaker order swapped, `authorId` dropped, fallback word changed, un-normalized prior turns, header always emitted, new-message cut removed, both `priorTurn` cuts, a missing blank line in two places, `RECENT_TURNS_KEPT` 7, and both registry cross-wirings. Silent-argument path: `displayName`/`authorId` on the new message is caught only by the added speaker-rule test and the vector rows, as the HISTORY note says. Greens: P26-m2, P26-n1.
+5. **P25-m1 tests kill their mutants (executed).** `vote is not None` for the screen-vote check: red in `test_a_dropped_vote_1_batch_stays_in_retry_cap_exceeded_and_is_no_screen_vote_drop`. The subtraction replaced by `pass`: red in `test_a_dropped_screen_batch_is_reported_apart_from_the_dropped_items`. The subtraction hard-wired to `retryCapExceeded`: red in `test_a_screen_batch_skipped_under_safeguard_skipped_is_subtracted_there_only`. P25-m1: **fixed.**
+
+### Findings
+
+**P26-m1 — minor — the `generator.md` test checks a phrase, not the rule.** *Verified: read; a rewording was not run.* `test_the_join_in_generator_keeps_the_agents_job_inside_the_last_six_turns` asserts `"last six" in body`. Deleting the paragraph turns it red, but any sentence containing "last six" passes, including one that says the opposite or one left stale when `RECENT_TURNS_KEPT` changes (the cut itself is pinned by the render test). *Fix, `coder`:* derive the number from `render.RECENT_TURNS_KEPT` in the assertion only if the paragraph is parameterized, otherwise accept the phrase check and say in the docstring that wording belongs to `data-scientist`. Low stakes; the ledger's optional rewording (a silent cut, `cue_04`) can take it at the same time.
+
+**P26-m2 — minor — the item wrappers are pinned only by wiring, not by value.** *Verified: executed.* Mutant `render_join_in_item` passing `priorTurns[-6:]` (slice before the filter) stays green: the vectors and the differential call `render_join_in_input`, and `test_the_exchange_renders...` compares `RENDERERS[role]` with the same functions it is built from. It matters only for malformed prior turns: slicing first lets a bad tail row shrink the window. A schema-valid item never has one (`text` `minLength` 1), so the live reach is nil today. *Fix, `tdd-engineer`/`coder`:* one wrapper test comparing `render_join_in_item(item)` with `render_join_in_input(...)` on a 7-turn item whose last turn has empty text, expecting the six filtered turns.
+
+**P26-m3 — minor — context files state a gate as open that the ledger records as closed.** *Verified: read.* `AGENTS.md` ("`data-scientist` confirm the rule (open)") and the HISTORY entry ("confirmation ... is still open") say the confirmation is open; the ledger records "keep". If `teco` lands the ruling at close, both read false in an always-loaded file. *Fix, `teco`:* at close, replace the AGENTS.md clause with the settled rule (drop "(open)") and let the HISTORY entry cite the ruling; do not append.
+
+**P26-n1 — nit — `agent_name.strip()` is invisible to every check.** *Verified: executed (green).* No vector has leading or trailing whitespace on `agentName`; `minLength` 1 permits it. Add one vector row in model-bench (its U4.1 owns the file; re-copy) or leave.
+
+**P26-n2 — nit — layout test scope.** *Verified: read.* `layout_block` takes the first to last indented line of the section, so a later indented code sample in the rubric prose would be read as part of the layout and redden the test spuriously. It also never renders the absent-block shapes (no prior turns, `priorTurn` `None`); the vectors cover both. No action unless the rubric gains such a sample.
+
+### What's solid
+
+- The renderers are a faithful transcription (differential above); `render_join_in_input` goes through `normalize_turns`, which the new `normalize-turns.jsonl` copy now pins (it had hand-derived tests only).
+- The registry test wires each point to its own renderer and refuses cross-wiring (both registry mutants red); the no-renderer refusal is now tested with a role that is genuinely unknown, and the retired xfail was deleted as its own message required.
+- All six vector copies are `cmp`-equal to model-bench's, with a byte-identity test per file.
+
+### Growth-stops check
+
+New scope only: a new unit and its findings; no prior findings to dispose of except P25-m1 (item 5). Passes 1 to 25 are unchanged: the pre-pass copy (`scratchpad/p26/pre26.md`) is a prefix of the live file (checked below).
+
+### Proposed REVIEW.md lines
+
+None.

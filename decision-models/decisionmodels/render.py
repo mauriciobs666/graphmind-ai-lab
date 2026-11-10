@@ -1,5 +1,6 @@
-"""The guard decision point's input rendering (`docs/plans/typed-decision-models.md` v1.3 §3.2,
-held equal across components by §3.2.2's golden vectors).
+"""The decision points' input renderings (`docs/plans/typed-decision-models.md` v1.3 §3.2,
+held equal across components by §3.2.2's golden vectors): the guard's, and the join-in and
+message-type points' (U5.2b-render, `docs/plans/typed-decision-models5.md` §3.4).
 
 v1.3 §3.2's contract table: the guard's decision-model input is the judge user message "exactly
 as today" — falkor-chat's `_render_judge_user(condition, understanding, normalized_turns)`. This
@@ -20,9 +21,16 @@ The whole message is capped at `MAX_CHARS`. Turns are dropped oldest first until
 so the newest turn survives whenever it can fit; when not even the newest turn fits, the message
 is the first two blocks alone, hard-truncated to `MAX_CHARS`.
 
-The turns the renderer receives are already normalized (`normalize_turns`, falkor-chat's
-`guards._recent_turns` rule). That rule is not covered by a cross-component vector file; its
-tests here are derived by hand from the rule as v1.3 §3.2.1 and model-bench state it.
+The join-in and message-type renderers (`render_join_in_input`, `render_message_type_input`) are
+transcribed from model-bench's `modelbench/scoring/agreement.py` (v1.3 §3.2.1; plan2 §3.1) and
+pinned by byte-copies of `render-join-in.jsonl` and `render-message-type.jsonl`; their layouts are
+the rubrics' "What an item looks like" blocks. Join-in normalizes its prior turns through
+`normalize_turns`, so it too keeps only the last `RECENT_TURNS_KEPT`.
+
+The turns the guard renderer receives are already normalized (`normalize_turns`, falkor-chat's
+`guards._recent_turns` rule). That rule is pinned by a byte-copy of model-bench's
+`normalize-turns.jsonl`, whose expected turns were produced by falkor-chat's real
+`guards._recent_turns`.
 """
 
 from __future__ import annotations
@@ -41,6 +49,12 @@ TURN_TEXT_MAX_CHARS = 400
 _BLOCK_SEPARATOR = "\n\n"
 _TURNS_HEADER = "RECENT TURNS (context only):\n"
 _DEFAULT_SPEAKER = "member"
+
+#: Join-in's new-message cut, and message-type's `priorTurn` and `text` cuts (v1.3 §3.2.1; plan2
+#: §3.1).
+NEW_MESSAGE_MAX_CHARS = 400
+PRIOR_TURN_MAX_CHARS = 400
+MESSAGE_TEXT_MAX_CHARS = 2000
 
 
 def normalize_turns(raw_turns: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
@@ -87,3 +101,46 @@ def render_guard_item(item: Mapping[str, Any]) -> str:
     `normalized_turns`)."""
     turns = normalize_turns(item.get("turns") or [])
     return render_guard_input(item["condition"], item.get("understanding") or {}, turns)
+
+
+def _speaker(row: Mapping[str, Any]) -> str:
+    return str(row.get("displayName") or row.get("authorId") or _DEFAULT_SPEAKER)
+
+
+def render_join_in_input(
+    agent_name: str, prior_turns: Sequence[Mapping[str, Any]], new_message: Mapping[str, Any]
+) -> str:
+    """The join-in judge's user message: `AGENT: {agent_name}`, then (only when a prior turn
+    survives `normalize_turns`) `RECENT TURNS (context only):` with one `{speaker}: {text}` line
+    per turn, then `NEW MESSAGE:` with the new message's `{speaker}: {text}` (text cut to
+    `NEW_MESSAGE_MAX_CHARS`), blocks joined by a blank line. The new message is not filtered: a
+    missing or non-string `text` raises."""
+    blocks = [f"AGENT: {agent_name}"]
+    turns = normalize_turns(prior_turns)
+    if turns:
+        lines = "\n".join(f"{turn['speaker']}: {turn['text']}" for turn in turns)
+        blocks.append(f"{_TURNS_HEADER}{lines}")
+    text = new_message["text"][:NEW_MESSAGE_MAX_CHARS]
+    blocks.append(f"NEW MESSAGE:\n{_speaker(new_message)}: {text}")
+    return _BLOCK_SEPARATOR.join(blocks)
+
+
+def render_message_type_input(text: str, prior_turn: Mapping[str, Any] | None) -> str:
+    """The message-type classifier's user message: `PREVIOUS MESSAGE:` and `{speaker}: {text}`
+    (text cut to `PRIOR_TURN_MAX_CHARS`; the block is omitted when `prior_turn` is `None`), a blank
+    line, then `MESSAGE:` and the text (cut to `MESSAGE_TEXT_MAX_CHARS`)."""
+    message = f"MESSAGE:\n{text[:MESSAGE_TEXT_MAX_CHARS]}"
+    if prior_turn is None:
+        return message
+    previous = f"{prior_turn['speaker']}: {prior_turn['text'][:PRIOR_TURN_MAX_CHARS]}"
+    return f"PREVIOUS MESSAGE:\n{previous}{_BLOCK_SEPARATOR}{message}"
+
+
+def render_join_in_item(item: Mapping[str, Any]) -> str:
+    """A join-in item's decision-model input (`agentName`, `priorTurns`, `newMessage`)."""
+    return render_join_in_input(item["agentName"], item["priorTurns"], item["newMessage"])
+
+
+def render_message_type_item(item: Mapping[str, Any]) -> str:
+    """A message-type item's decision-model input (`text`, `priorTurn`)."""
+    return render_message_type_input(item["text"], item["priorTurn"])

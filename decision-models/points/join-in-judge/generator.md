@@ -33,6 +33,10 @@ tone, length and phrasing across items. The new message never contains `@` follo
 name; it may contain the agent's name as plain text. The thread must show what the agent does, so a
 careful reader can tell what is its job.
 
+The judge reads only the last six of `priorTurns`; when you write seven or eight, it never sees
+the earliest one or two. Whatever shows the agent's job, and whatever the new message depends on,
+must therefore sit inside the last six `priorTurns`; the earliest ones may be background only.
+
 ## Never reveal the seed
 
 The item must read like a real chat thread. It contains no commentary of any kind:

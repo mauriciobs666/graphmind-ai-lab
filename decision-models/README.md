@@ -53,7 +53,8 @@ generated-text screen, form obedience, the template halts and the generator rest
 `Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), the
 votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`), and the guard
 pilot (U5.8c: `decisionmodels/pilot.py`, below; the message-type tranche and top-up are later).
-Labelling requests render guard items only until U5.2b-render.
+Labelling requests render all three points' items (U5.2b-render: the join-in and message-type
+renderers, pinned by byte-copies of model-bench's render vectors and `normalize-turns.jsonl`).
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
 `docs/HISTORY.md`.
 

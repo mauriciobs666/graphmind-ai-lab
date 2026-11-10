@@ -9,7 +9,7 @@ the design.
 
 ## Current state
 
-`decisionmodels/` holds `render.py` (guard only), `hashing.py` (all three roles), `points.py` (loads
+`decisionmodels/` holds `render.py` (all three roles' renderers; `exchange.RENDERERS` maps each), `hashing.py` (all three roles), `points.py` (loads
 `points/<role>/`), `seeds.py` (seed draws), `exchange.py` (request writer, closed schemas),
 `ingest.py` (answer checks, idempotence), `audit.py` (transcript audit), `campaign.py` (ledger,
 reconciliation, halts, generation runs, votes), `screen.py` (the generated-text screen and form
@@ -33,7 +33,7 @@ and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's
   and it writes hashes only.
 - **Contract copies are byte-copies, never regenerated or edited here.**
   `tests/fixtures/decision-contract/*.jsonl` are copies of model-bench's canonical vectors (v1.3
-  §3.2.2); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
+  §3.2.2; six files, the renderer and `normalize-turns.jsonl` ones included); `tests/test_decision_contract.py` asserts each byte-identical (skips only when
   `model-bench/` is absent). A red equality test means re-copy from
   `model-bench/tests/fixtures/decision-contract/` in the unit adding the matching code. Reading
   model-bench from `tests/` is allowed (FR-8 scope).
@@ -79,8 +79,11 @@ and `finalize` (plan4 §4.1 U5.9 onward) are unbuilt (`docs/HISTORY.md`). U5.7's
   (`guardRejected`, `hookMissing`). Its bounds code never imports `guard_hook.py`. `maxTurns` is the
   smoke-recorded cut-short shape (`tests/test_audit.py`'s `max_turns_run`). Fixtures (`tests/fixtures/transcripts/`) are hand-built in the
   probe report's recorded key sets, never copies of real transcript content.
-- **Guard-only renderers until U5.2b-render.** `exchange.RENDERERS` lacks the join-in and
-  message-type renderers; strict xfails in `tests/test_exchange.py` then XPASS: delete them.
+- **Join-in renders only the last 6 prior turns** (`normalize_turns`) though its `maxItems` is 8, so
+  `points/join-in-judge/generator.md` tells the generator to keep the agent's job and what the new
+  message depends on inside the last six; `tests/test_render_layout.py` pins both and that each
+  point's rendering matches its rubric's "What an item looks like" block. `data-scientist` confirmed the rule
+  (plan5 §3.4).
 - **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
   `round-start` (one `genRound` may have several; only U5.9's planner passes `extend=True`, for a
   new named stratum of a started round, refused once a run of it has issued); `Campaign.ingest` appends a run's `generated` and

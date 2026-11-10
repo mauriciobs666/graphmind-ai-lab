@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.2b-render — new-ability renderers, render vectors, 6-turn rule
+
+**What:** `docs/plans/typed-decision-models5.md` §3.4 and its §4 U5.2b-render row (over plan6 v1.22).
+Plan docs and live specs untouched.
+
+- `render.py`: `render_join_in_input`/`render_join_in_item` and `render_message_type_input`/
+  `render_message_type_item`, transcribed from model-bench's `modelbench/scoring/agreement.py`
+  (U4.1); join-in normalizes its prior turns through `normalize_turns`. `exchange.RENDERERS` maps
+  all three roles; the "no renderer yet" refusal now fires only for an unknown role.
+- Vectors, byte-copied and `cmp`-equal to model-bench's: `render-join-in.jsonl`,
+  `render-message-type.jsonl`, `normalize-turns.jsonl` (the last pins `normalize_turns`, which had
+  hand-derived tests only). `tests/test_decision_contract.py` guards each copy and runs each row.
+- `tests/test_render_layout.py`: a fixture per new-ability point rendered through `render.py` must
+  match the rubric's "What an item looks like" block read from `rubric.md`; the registry; the
+  join-in 6-turn cut; the new message's speaker rule (no vector line has both name fields).
+- Join-in 6-turn rule: `points/join-in-judge/generator.md` now says the judge sees only the last
+  six `priorTurns`, so the agent's job sits inside them. `data-scientist` confirmed it (plan5
+  §3.4, 2026-11-10).
+- The strict xfail `test_every_point_has_a_label_renderer[...]` is deleted (it XPASSed as planned);
+  the no-renderer refusal test uses an unknown role.
+- Carried, test-only (`tests/test_pilot.py`): a dropped vote-1 batch stays in
+  `dropped.retryCapExceeded.items`, and a screen batch dropped as `safeguardSkipped` is subtracted
+  from that count only.
+
+**Verified:** `pytest -q` from `decision-models/` 1527 passed, no xfail (the entry before this one
+recorded 1480 passed, 2 xfailed); `ruff check .` clean. Scratch-copy mutants (renderer separator, 6-turn cut, new-message cut,
+speaker rule, message-type cuts, item-level argument, registry mapping, generator wording, each
+vector copy, and the two `_runs_report` mutants) each redden a test. The speaker-rule mutant first
+survived (no vector line carries both name fields on the new message), so a test was added.
+
 ## 2026-11-10 — typed-decision-models U5.8c fix round — bounded added blocks, report fields
 
 **What:** impl review Pass 24 (P24-M1, M2, m1, m2, n1 to n3), plan6 v1.22 §3.8 "The pilot's added

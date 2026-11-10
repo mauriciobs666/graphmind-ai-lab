@@ -220,16 +220,11 @@ def test_the_body_hash_is_unchanged_by_the_file_layout(tmp_path: Path) -> None:
 def test_a_label_request_for_a_role_without_a_renderer_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="renderer"):
         exchange.build_label_request(
-            load_point("join-in-judge"), [("it_1", {})], exchange_dir=tmp_path, cap=50,
-            held_keys=set(),
+            dataclasses.replace(load_point("join-in-judge"), role="no-such-role"),
+            [("it_1", {})], exchange_dir=tmp_path, cap=50, held_keys=set(),
         )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="render.py has only the guard renderer until U5.2b-render copies U4.1's (plan5 §3.4); "
-    "the XPASS then forces this xfail to be deleted",
-)
 @pytest.mark.parametrize("role", ["join-in-judge", "message-type-classifier"])
 def test_every_point_has_a_label_renderer(role: str) -> None:
     assert role in exchange.RENDERERS

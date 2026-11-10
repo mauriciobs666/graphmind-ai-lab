@@ -69,10 +69,13 @@ OPAQUE_LENGTH = 16
 KEY_PATTERN = re.compile(f"[{KEY_ALPHABET}]{{{KEY_LENGTH}}}")
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
-#: The label renderer per point. Guard only: the join-in and message-type renderers arrive with
-#: U5.2b-render (plan5 §3.4).
+#: The label renderer per point.
 RENDERERS: Mapping[str, Callable[[Mapping[str, Any]], str]] = MappingProxyType(
-    {"guard-judge": render.render_guard_item}
+    {
+        "guard-judge": render.render_guard_item,
+        "join-in-judge": render.render_join_in_item,
+        "message-type-classifier": render.render_message_type_item,
+    }
 )
 
 HEADER_KEYS = ("schema", "role", "point", "answerPath", "bodySha256", "pages")
@@ -277,7 +280,7 @@ def build_label_request(
     _check_cap(cap)
     renderer = RENDERERS.get(point.role)
     if renderer is None:
-        raise ValueError(f"no label renderer for {point.role!r} yet (U5.2b-render)")
+        raise ValueError(f"no label renderer for {point.role!r}")
     capped = [((ref, item), ref, {"text": renderer(item)}) for ref, item in items[:cap]]
     return _build("label", point, point.rubric, capped, items[cap:], exchange_dir, held_keys)
 

@@ -1,15 +1,19 @@
-"""The decision contract copies (typed-decision-models U5.2, U5.2b-hash; plans
+"""The decision contract copies (typed-decision-models U5.2, U5.2b-hash, U5.2b-render; plans
 `docs/plans/typed-decision-models4.md` §4.1 and `docs/plans/typed-decision-models5.md` §3.4 over
 v1.3 §3.2, §3.2.2, §3.5).
 
 model-bench owns the canonical golden vectors (`model-bench/tests/fixtures/decision-contract/`).
 This suite asserts `decisionmodels.render` and `decisionmodels.hashing` against **byte-copies** of
-two of them under `tests/fixtures/decision-contract/`:
+five of them under `tests/fixtures/decision-contract/`:
 
 * `render-guard.jsonl` — `render_guard_input(condition, understanding, recentTurns)`; expected
   strings produced by falkor-chat's real `_render_judge_user`;
 * `input-hash.jsonl` — `input_hash(item, role)` for all three roles; digests computed by hand
   from v1.3 §3.5;
+* `render-join-in.jsonl` and `render-message-type.jsonl` — the new-ability renderers, expected
+  strings written by hand from the plans' canonical text (falkor-chat has no such renderer);
+* `normalize-turns.jsonl` — `normalize_turns(thread)`, expected turns produced by falkor-chat's
+  real `guards._recent_turns`;
 * `dataset-shape.jsonl` — plan6 §3.7's dataset contract vector (`generation.json`, items and
   `splits.json`, one line per role; `docs/plans/typed-decision-models6.md`, U6.6), which
   `finalize`'s output is checked against (U5.10). Here only its items are checked against this
@@ -38,7 +42,14 @@ from decisionmodels.points import input_field_errors, load_point
 _COPIES = Path(__file__).resolve().parent / "fixtures" / "decision-contract"
 _MODEL_BENCH = Path(__file__).resolve().parents[2] / "model-bench"
 _CANONICAL = _MODEL_BENCH / "tests" / "fixtures" / "decision-contract"
-_VECTOR_FILES = ("render-guard.jsonl", "input-hash.jsonl", "dataset-shape.jsonl")
+_VECTOR_FILES = (
+    "render-guard.jsonl",
+    "render-join-in.jsonl",
+    "render-message-type.jsonl",
+    "normalize-turns.jsonl",
+    "input-hash.jsonl",
+    "dataset-shape.jsonl",
+)
 
 
 def _rows(name: str) -> list[dict[str, Any]]:
@@ -47,6 +58,9 @@ def _rows(name: str) -> list[dict[str, Any]]:
 
 
 _RENDER_ROWS = _rows("render-guard.jsonl")
+_JOIN_IN_ROWS = _rows("render-join-in.jsonl")
+_MESSAGE_TYPE_ROWS = _rows("render-message-type.jsonl")
+_NORMALIZE_ROWS = _rows("normalize-turns.jsonl")
 _HASH_ROWS = _rows("input-hash.jsonl")
 _SHAPE_ROWS = _rows("dataset-shape.jsonl")
 
@@ -62,6 +76,9 @@ def test_the_vector_copy_is_byte_identical_to_model_benchs(name: str) -> None:
     ("name", "rows"),
     [
         ("render-guard.jsonl", _RENDER_ROWS),
+        ("render-join-in.jsonl", _JOIN_IN_ROWS),
+        ("render-message-type.jsonl", _MESSAGE_TYPE_ROWS),
+        ("normalize-turns.jsonl", _NORMALIZE_ROWS),
         ("input-hash.jsonl", _HASH_ROWS),
         ("dataset-shape.jsonl", _SHAPE_ROWS),
     ],
@@ -76,6 +93,24 @@ def test_every_vector_line_is_a_parametrized_row(name: str, rows: list[dict[str,
 def test_render_guard_input_matches_render_guard_jsonl(row: dict[str, Any]) -> None:
     rendered = render.render_guard_input(row["condition"], row["understanding"], row["recentTurns"])
     assert rendered == row["expected"]
+
+
+@pytest.mark.parametrize("row", _JOIN_IN_ROWS, ids=[r["case"] for r in _JOIN_IN_ROWS])
+def test_render_join_in_input_matches_render_join_in_jsonl(row: dict[str, Any]) -> None:
+    rendered = render.render_join_in_input(row["agentName"], row["priorTurns"], row["newMessage"])
+    assert rendered == row["expected"]
+
+
+@pytest.mark.parametrize(
+    "row", _MESSAGE_TYPE_ROWS, ids=[r["case"] for r in _MESSAGE_TYPE_ROWS]
+)
+def test_render_message_type_input_matches_render_message_type_jsonl(row: dict[str, Any]) -> None:
+    assert render.render_message_type_input(row["text"], row["priorTurn"]) == row["expected"]
+
+
+@pytest.mark.parametrize("row", _NORMALIZE_ROWS, ids=[r["case"] for r in _NORMALIZE_ROWS])
+def test_normalize_turns_matches_normalize_turns_jsonl(row: dict[str, Any]) -> None:
+    assert render.normalize_turns(row["thread"]) == row["expected"]
 
 
 @pytest.mark.parametrize("row", _HASH_ROWS, ids=[r["case"] for r in _HASH_ROWS])

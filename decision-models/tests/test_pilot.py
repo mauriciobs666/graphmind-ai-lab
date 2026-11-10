@@ -957,6 +957,36 @@ def test_a_dropped_screen_batch_is_reported_apart_from_the_dropped_items(
     assert got["dropped"]["safeguardSkipped"] == {"seeds": 0, "items": 0}
 
 
+def dropped_label_batch(batch_id: str, vote: int, reason: str, n: int) -> campaign.Batch:
+    return campaign.Batch(
+        batch_id=batch_id, kind="label", point="guard-judge",
+        entries=[f"{batch_id}_{i}" for i in range(n)], extra={"vote": vote},
+        state="dropped", dropped=reason,
+    )
+
+
+def test_a_dropped_vote_1_batch_stays_in_retry_cap_exceeded_and_is_no_screen_vote_drop() -> None:
+    state = campaign.State(init={"point": "guard-judge"})
+    for batch in (dropped_label_batch("bat_1", 1, "retryCapExceeded", 50),
+                  dropped_label_batch("bat_2", labels.SCREEN_VOTE, "retryCapExceeded", 10)):
+        state.batches[batch.batch_id] = batch
+    got = pilot._runs_report(state)
+    assert got["dropped"]["retryCapExceeded"] == {"seeds": 0, "items": 50}
+    assert got["droppedScreenVote"] == {"items": 10}
+
+
+def test_a_screen_batch_skipped_under_safeguard_skipped_is_subtracted_there_only() -> None:
+    state = campaign.State(init={"point": "guard-judge"})
+    for batch in (dropped_label_batch("bat_1", 2, "retryCapExceeded", 50),
+                  dropped_label_batch("bat_2", labels.SCREEN_VOTE, "safeguardSkipped", 10),
+                  dropped_label_batch("bat_3", 3, "safeguardSkipped", 50)):
+        state.batches[batch.batch_id] = batch
+    got = pilot._runs_report(state)
+    assert got["dropped"]["safeguardSkipped"] == {"seeds": 0, "items": 50}
+    assert got["dropped"]["retryCapExceeded"] == {"seeds": 0, "items": 50}
+    assert got["droppedScreenVote"] == {"items": 10}
+
+
 def test_a_crash_after_3_of_10_screen_batches_queues_the_other_7_into_the_same_vote(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     camp = start_bench(tmp_path, monkeypatch)
