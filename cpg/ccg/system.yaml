@@ -1,0 +1,45 @@
+# System manifest of the proving system (C-1001 P1-03). Schema: ccg/schemas/system-manifest-v1.schema.json;
+# the egress section: ccg/schemas/egress-v1.schema.json (docs/plans/connected-code-graph-egress-spec3.md section 4).
+# `path` is resolved against the repo_root the caller gives `discover_units`. The exclusions are the census scope the
+# held-out keys were written under (cpg/eval/eval-manifest.yaml, `exclusions`); a test asserts the two are equal.
+schemaVersion: 1
+system: graphmind-ai-lab
+egress:
+  schemaVersion: 1
+  local:
+    - id: lmstudio
+      kind: model
+      endpoint: http://127.0.0.1:1234
+      paths: [/v1/chat/completions]
+      note: LM Studio on the Windows host, through WSL mirrored networking
+  outbound: []
+  hosted: []
+repos:
+  - repoId: graphmind-ai-lab
+    path: .
+    policy:
+      egress: local-only
+    exclusions:
+      paths:
+        - "cpg/"
+        - "deprecated/"
+        - "docs/**/connected-code-graph*"
+        - "docs/BACKLOG.md"
+      contentCheck:
+        files:
+          - "claude/cobb/kaizen/plan.md"
+          - "claude/docs/plans/identifier-leak-cleanup-coordination.md"
+          - "claude/docs/reviews/identifier-leak-cleanup.md"
+          - "claude/graph-dba/falkordb-quirks.md"
+          - "decision-models/docs/test-reports/live-smoke-report.md"
+          - "docs/plans/agent-reading-cost.md"
+          - "docs/plans/live-specs-coordination.md"
+          - "docs/requirements/agent-reading-cost.md"
+          - "docs/requirements/cross-initiative-coordination.md"
+          - "docs/requirements/document-size-discipline.md"
+          - "docs/reviews/agent-reading-cost.md"
+          - "docs/reviews/cross-initiative-coordination.md"
+          - "docs/reviews/document-size-discipline-impl.md"
+          - "docs/reviews/document-size-discipline.md"
+          - "docs/test-reports/standard-local-model-report.md"
+          - "falkor-chat/docs/reviews/embedder-context.md"

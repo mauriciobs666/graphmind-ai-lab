@@ -7,7 +7,8 @@ requires-python = ">=3.12"
 # that phase's one intake step: P0's by P0 plan §5.2 (`dev`, `live`, `spike`; pins verified
 # installable 2026-10-29), P1's by step P1-01 (`docs/plans/connected-code-graph-p1.md` D8;
 # `extract`, `engine`, `broker`; verified 2026-11-09), both on Python 3.12.3. No other step edits
-# this file: a step that finds a dependency missing stops and asks `teco`. Versions are exact pins.
+# its dependencies, and P1-03 edits it once more, the `package-data` entry for `ccg/system.yaml` (a data file under
+# `ccg/` needs a glob: `tests/test_rule_pack_schema.py`): a step that finds a dependency missing stops and asks `teco`. Versions are exact pins.
 # Runtime imports of `ccg.bundle` and the pack loaders (`jsonschema`, `pyyaml`) live in `dev`.
 dependencies = []
 
@@ -61,7 +62,7 @@ include = ["ccg*", "extractors*", "clients*"]
 
 # Non-package data dirs a normal (non-editable) install would otherwise drop (S10, S17, …).
 [tool.setuptools.package-data]
-ccg = ["schemas/*.json", "registry/*.yaml", "store/*.cypher"]
+ccg = ["schemas/*.json", "registry/*.yaml", "store/*.cypher", "system.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

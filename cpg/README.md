@@ -59,6 +59,8 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 | `infra/` | `ccg-falkordb.sh`, the dedicated FalkorDB instance (`infra/README.md`), and `toolchain/` |
 | `.ccg-work/` | scratch for corpora, bundles and exports (gitignored) |
 | `ccg/atrest.py` | bundle-at-rest and key custody (P1-02): `infra/README.md` § "Bundle-at-rest", which replaces `docs/plans/connected-code-graph-bundle-spec3.md` §13 F-1's default |
+| `ccg/sysname.py` | the one module that forms system names, store keys and per-system ACL users (`docs/plans/connected-code-graph-p1-graph.md` §7); `tests/test_sysname.py` |
+| `ccg/manifest.py`, `ccg/units.py` | system manifest loader (egress section checks S1-S5, `canonical_endpoint`) and unit discovery (P1-03); `ccg/system.yaml` is this repository's manifest (exclusions = the census scope of `eval/eval-manifest.yaml`), `fixtures/system1/system.yaml` the fixture system's; schemas `ccg/schemas/system-manifest-v1.schema.json` and `egress-v1.schema.json` (`docs/plans/connected-code-graph-egress-spec3.md` §4.2); the unit golden `tests/golden/system-units.json` is regenerated with `.venv/bin/python -m ccg.units --golden` |
 | `.cpg-artifacts/` | CPG reload artifacts (gitignored) |
 
 The rest of plan §2 D2's tree (`sandbox/`, `packs/`,

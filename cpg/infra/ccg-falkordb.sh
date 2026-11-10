@@ -118,7 +118,8 @@ MAX_INFO_QUERIES_UP=0
 # The P1 steady-state ACL user set (P1-19's create_users): default plus, per system <s>, the four
 # users ccg_<role>_<s> with role build|verdict|engine|raw; any other user is drift. <s> follows the
 # system-name whitelist of docs/plans/connected-code-graph-p1-graph.md §7 (^[a-z0-9]+(?:[-_][a-z0-9]+)*$,
-# length 1-48). Kept local until ccg.sysname (its home) exists.
+# length 1-48). Kept local on purpose: cpg/tests/test_sysname.py asserts this check gives the same verdict as
+# ccg.sysname.acl_user_re() plus the 48-character bound.
 ACL_USER_RE='^ccg_(build|verdict|engine|raw)_([a-z0-9]+([-_][a-z0-9]+)*)$'
 acl_user_ok() { # <user>
   [ "$1" = default ] && return 0

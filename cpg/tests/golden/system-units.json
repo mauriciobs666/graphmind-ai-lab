@@ -1,0 +1,77 @@
+{
+ "system": "graphmind-ai-lab",
+ "units": [
+  {
+   "unitId": "0a440ef84fb20e4c58f9b47a3cf75aa4",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "claude",
+   "language": "python"
+  },
+  {
+   "unitId": "553675a7b9ad7a0252794dd7004e53ec",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "cypher-mcp",
+   "language": "python"
+  },
+  {
+   "unitId": "ea820cc0544a4a41667e670a78a36443",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "decision-models",
+   "language": "python"
+  },
+  {
+   "unitId": "b92980fa656aa5be4140ddff38f4b6c0",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "docs",
+   "language": "python"
+  },
+  {
+   "unitId": "717cbfbcca83cbbb67b358c2db04ee2f",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "falkor-chat",
+   "language": "javascript"
+  },
+  {
+   "unitId": "7abafb34c937b0a744228dd8c24b792a",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "falkor-chat/scripts",
+   "language": "python"
+  },
+  {
+   "unitId": "0fb899742d4d3687495c30357ca16253",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "falkor-chat/server",
+   "language": "python"
+  },
+  {
+   "unitId": "1ce41491f7c4b3368aa0f920abbda227",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "mcp-monitor",
+   "language": "python"
+  },
+  {
+   "unitId": "3a2c063f797bd5bfa5e11734fc534d00",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "model-bench",
+   "language": "python"
+  },
+  {
+   "unitId": "c2341bca0404a6a3eadab1d72ba5f4db",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "salesperson",
+   "language": "javascript"
+  },
+  {
+   "unitId": "24c05a9e6db73e31ef98234eeee212b0",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "salesperson",
+   "language": "python"
+  },
+  {
+   "unitId": "dddfda2e6752ada3867ab296c356fa7e",
+   "repoId": "graphmind-ai-lab",
+   "rootPath": "skills",
+   "language": "python"
+  }
+ ]
+}

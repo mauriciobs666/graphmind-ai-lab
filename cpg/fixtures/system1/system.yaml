@@ -1,0 +1,14 @@
+# System manifest of the fixture system (C-1001 P1-03): four repositories, built as a separate system from the
+# proving one. `path` is resolved against the repo_root the caller gives `discover_units` (this directory).
+schemaVersion: 1
+system: fixture-system1
+egress:
+  schemaVersion: 1
+  local: []
+  outbound: []
+  hosted: []
+repos:
+  - {repoId: fx-svc, path: fx-svc, policy: {egress: local-only}}
+  - {repoId: fx-web, path: fx-web, policy: {egress: local-only}}
+  - {repoId: fx-lib, path: fx-lib, policy: {egress: local-only}}
+  - {repoId: fx-job, path: fx-job, policy: {egress: local-only}}
