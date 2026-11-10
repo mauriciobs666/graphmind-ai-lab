@@ -130,7 +130,7 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
 ## P1-04 · Joern extractor port — `graph-dba`
 
 - **Files:** `cpg/extractors/joern/extract.sc` (from `spikes/vertical-slice/extract.sc`), `.../astgen.sc`,
-  `cpg/extractors/joern/run.py` (replaces `run_extract.sh`: stage via `git archive`, parse, content check,
+  `cpg/extractors/joern/run.py` (replaces `run_extract.sh`: stage the commit's own tree (`git ls-tree` plus `git cat-file --batch` into a private tar, extracted under the `data` filter, gitlinks skipped, so repository attributes such as `export-ignore` and `export-subst` cannot change it), parse, content check,
   astgen for javascript, extract, all through `cpg/sandbox/offline-run.sh --mode offline`; returns the
   `sandboxAuditIds`), `cpg/extractors/joern/__init__.py`, `cpg/tests/test_joern_run.py`,
   `cpg/tests/slice/test_extract_equivalence.py`.
@@ -154,7 +154,7 @@ Two dispatches (the slice's `normalize.py` is 1,244 lines).
   `name_norm`, `quote_field`, `path_from`, `Resolver`), `python.py` (`py_resolve`, `py_imports`, `py_spans`,
   `build_scopes` for Python), `cpg/tests/test_normalize_core.py`, `cpg/tests/test_normalize_python.py`.
 - **5b files:** `.../normalize/javascript.py` (`js_resolve`, `js_imports`, `js_type_spans`, astgen walk),
-  `.../normalize/blame.py` (`blame`, `last_changed`, the `git archive`-staged-tree rule of BF12: computed
+  `.../normalize/blame.py` (`blame`, `last_changed`, the rule of BF12 for a staged tree that has no `.git`: computed
   **outside** the sandbox from the source repo), `.../normalize/assemble_bundle.py` (the old `assemble()` that
   turns raw facts into bundle records and calls `ccg.atrest.write_bundle`), `cpg/tests/test_normalize_javascript.py`,
   `cpg/tests/slice/test_normalize_equivalence.py`.
