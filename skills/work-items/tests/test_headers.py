@@ -82,6 +82,16 @@ def test_header_updated_after_move_lists_old_id_as_alias_and_back(proj):
     assert header_line(d) == HEADER + " · **Item:** `GAL-F0001` · **Aliases:** `GAL-I03-F0001`"
 
 
+def test_aliases_header_lists_both_old_ids_after_two_moves(proj):
+    alloc.new(proj, "I")                               # GAL-I03
+    alloc.new(proj, "I")                               # GAL-I04
+    alloc.new(proj, "F", slug="feat")                  # GAL-F0001
+    d = doc(proj, "docs/plans/feat.md")
+    assert wi(proj, "move", "GAL-F0001", "GAL-I03").returncode == 0
+    assert wi(proj, "move", "GAL-I03-F0001", "GAL-I04", "--sync").returncode == 0
+    assert header_line(d) == HEADER + " · **Item:** `GAL-I04-F0001` · **Aliases:** `GAL-F0001`, `GAL-I03-F0001`"
+
+
 def test_promote_sync_writes_headers_for_the_promoted_item(proj):
     alloc.new(proj, "K", slug="idea")                  # GAL-I02-K0001
     d = doc(proj, "docs/requirements/idea.md")

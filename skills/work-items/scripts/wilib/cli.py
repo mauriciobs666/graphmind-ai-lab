@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import alloc, headers, legacy, links, move, project, resolve, rules
+from . import alloc, check, events, headers, legacy, links, move, project, rebuild, resolve, rules
 from .store import Store
 
 
@@ -65,6 +65,12 @@ def build_parser():
     st = sub.add_parser("set", help="set an attribute: milestone, home, touched, slug, where")
     st.add_argument("id")
     st.add_argument("assignment", help="attr=value (touched takes a comma-separated list)")
+    rb = sub.add_parser("rebuild", help="recover the registry from Item:/Aliases: headers")
+    rb.add_argument("--from-headers", nargs="+", metavar="ROOT", required=True)
+    rb.add_argument("--write", action="store_true", help="apply (default: dry run)")
+    ck = sub.add_parser("check", help="report registry and header problems (FR-9)")
+    ck.add_argument("--set", dest="set_file", help="JSON file: a list of {id: ...} entries")
+    ck.add_argument("paths", nargs="*", help="limit the document scan to these paths")
     sub.add_parser("flush", help="copy journal events into the tracked registry")
     i = sub.add_parser("init", help="create .work-items/ in the current directory")
     i.add_argument("--key", required=True)
@@ -115,12 +121,20 @@ def main(argv=None, cwd=None):
             if not eq:
                 raise links.LinkError(f"expected attr=value, got {args.assignment!r}")
             links.set_attr(root, args.id, attr, value)
+        elif args.cmd == "rebuild":
+            print("\n".join(rebuild.rebuild(root, args.from_headers, write=args.write)))
+        elif args.cmd == "check":
+            found = check.check(root, set_file=args.set_file, paths=args.paths)
+            for f in found:
+                print(check.format_finding(f))
+            return 1 if any(not f.informational for f in found) else 0
         elif args.cmd == "flush":
             Store(root, alloc.load_key(root)).flush()
     except resolve.ResolveError as exc:
         print(f"wi: {exc}", file=sys.stderr)
         return exc.code
-    except (rules.IllegalParent, rules.MalformedId, alloc.AllocError, project.InitError) as exc:
+    except (rules.IllegalParent, rules.MalformedId, alloc.AllocError, project.InitError,
+            events.EventError, check.CheckError) as exc:
         print(f"wi: {exc}", file=sys.stderr)
         return 1
     return 0
