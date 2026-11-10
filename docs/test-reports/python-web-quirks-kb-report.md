@@ -333,3 +333,63 @@ Five distinct situation queries (skill prefix, `limit=50`) to `GET :8210/documen
 ### Result
 
 W3 gate met: gate clean, Set A through :8210 reproduces the offline 4b figures (raw exact; floor-applied exact or +1 depending on the unspecified half-rounding), near FA 0/7, off 0/7. Open items for the caller: (a) `--exclude` the 17 S7 ids at B3; (b) the tool does not reject a pre-prefixed stored query (item 3); (c) staging document-list sha256 not recorded here. Floor stays 0.42; nothing was tuned.
+
+
+## W5 — sealed Set B3 scored once (2026-11-10, staging :8210, 4b)
+
+Unit W5 of `docs/plans/python-web-quirks-kb-path-ml.md` (§5 protocol, rule R1). **This is a STAGING result: `ws:pwq-test` on `http://localhost:8210`, `text-embedding-qwen3-embedding-4b` (2560 dims). Production `:8200` was not used; production is still the 0.6b and nothing was promoted.** Aggregates only: no Set B3 query, target or per-query result appears here. Set B3 sha256 `e455c292db188dada3a0f3d05f3bf49c29eb6297ff25fefabfb0e96d5917cab9`. No git commands, no workspace writes, no server process touched. Raw output (aggregates plus the tool's own printed lines) in the session scratchpad: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w5-gate.txt`, `w5-b3-scored.txt`, `w5-b3-bm25.txt`.
+
+CPG: not applicable — retrieval-evaluation task with no code-level component under test.
+
+### Pre-checks (observed this run)
+
+- Set B3 file: `sha256sum` equals the expected value; mode `-r--r--r--`; no `.scored` sentinel before the run.
+- Frozen-configuration hashes (first 16 hex, all equal to the brief): `skills/agent-kb-retrieval/SKILL.md` `a8c1192359b7ddbe`; `claude/knowledge/python-web-quirks.md` `7d0fc38c054beb25`; `falkor-chat/config/models.pwq-staging.json` `b7bb9a881b49b37b`; `git log -1 --format=%h -- claude/cobb/scripts/pwq_kb.py` = `f4ae8d07`; production manifest `claude/cobb/scripts/pwq-kb-manifest.json` `c48fbecf9ead08e8` (reference only). Scoring manifest: the staging `m-work.json` (W3 sha256 `a405a93c…6a61`, not recomputed). Floor 0.42 explicit, limit 5 (default).
+- `GET :8210/health` = 200. Read-only Cypher on `ws:pwq-test`: 902 chunks, 902 embedded, all with `embeddingModel = lmstudio/text-embedding-qwen3-embedding-4b`.
+- `pwq_kb.py gate` (staging, m-work.json, copy): exit 0, `gate: clean`.
+- Exclusions: 17 `--exclude` flags, one per id of `h1del.txt` (17 lines). They exist in staging, production deleted them (W3 §4).
+- Seal accounting: one scoring invocation (exit 0); it wrote `pwq-set-b3.json.scored` (`floor 0.42`, sha256 as above, `scoredAt 2026-11-10T17:53:22`). No second scoring, no `--probe`.
+
+### Command (single scoring)
+
+`pwq_kb.py eval --ws pwq-test --base-url http://localhost:8210 --manifest <m-work.json> --copy claude/knowledge/python-web-quirks.md --set B3 --sealed-once --set-b3-path <sealed path> --expect-sha256 e455c292…cab9 --floor 0.42 --exclude <17 ids>`. Tool header: `set=B3 floor=0.42 window=50 topk=5`.
+
+### Results (headline = filtered run; unfiltered identical on every figure except MRR and distinct-documents mean)
+
+| Measure | Observed | R1 clause | Result |
+|---|---|---|---|
+| Positive recall at floor 0.42 (top-5, document-level) | 115 of 126 = 0.9127 | >= 114/126 | PASS (1 above the bar) |
+| Positive recall raw top-5 (no floor) | 123 of 126 = 0.9762 | informational | — |
+| Per-section coverage, floor-applied | 42 of 42 | every section | PASS |
+| Per-section coverage, raw | 42 of 42 | informational | — |
+| Near-domain false accepts | 4 of 30 | <= 6/30 | PASS |
+| Off-domain false accepts | 0 of 30 | 0/30 | PASS |
+| Overall false accepts (4 + 0) | 4 of 60 | <= 6/60 | PASS |
+| MRR / mean distinct documents in top five | 0.9524 / 2.89 (unfiltered 0.9028 / 3.02) | informational | — |
+| Unit document inside the 50-chunk window | 125 of 126 | informational | — |
+| B2 bar (116/126), printed as non-verdict figure | `b2_bar_116: False` | not part of the verdict | 115 < 116 |
+
+Tool line: `b3: recall=True coverage=True near_domain=True off_domain=True overall=True pass=True`.
+
+### Displacement (aggregate only)
+
+Queries where a non-unit chunk outranks the unit's best chunk: **6 of 126** (unit in the 50-chunk window for 125 of 126). The tool prints the non-unit document ids involved; not reproduced. Raw 123/126 means 3 misses with no floor; the 0.42 floor removes 8 more (123 to 115). The tool prints no per-query data, so overlap between displacement queries and misses is not verified. Reported only.
+
+### Tail versus head (document-level matching, D-1)
+
+Matching is document-level (any chunk of the unit counts; S11 defect D-1 still applies, so recall does not show which chunk was returned). Tool figures: head-probe recall 0.9018, tail-probe recall 1.0000. Tail is higher than head by 0.0982; tail does not trail head (the 0.15 trigger is not met). Counts were not printed and are not derived here.
+
+### BM25 comparison (informational)
+
+`--set B3 --baseline bm25 --floor 0.42 --set-b3-path <sealed path>` (read-only; no sentinel involved): recall 123 of 126 = 0.9762 (raw equals floor), coverage 42/42, MRR 0.9474, mean distinct documents 3.08, head recall 0.9732, tail recall 1.0000. The semantic arm at the floor (115/126, 0.9127) is below BM25 (123/126); semantic raw (123/126) equals BM25 on recall; semantic MRR 0.9524 (filtered) is slightly above BM25's 0.9474. Handicap: BM25 ranks over the 129 unit chunks only, with no non-unit competitors and no floor, so it is favoured by design; the semantic arm competes against the whole staging workspace plus the floor. The tool prints no false-accept figures for BM25.
+
+### Verdict (R1, as printed by the tool)
+
+**PASS.** Floor-applied recall 115/126 (>= 114) PASS; every section hit 42/42 PASS; near-domain 4/30 (<= 6) PASS; off-domain 0/30 PASS; overall 4/60 (<= 6) PASS. The margin on recall is one query. No retuning, no second scoring, no reinterpretation; the seal is spent. R2 was not registered and is not applicable.
+
+**Scope of the claim: staging only.** The pass is for the 4b configuration in `ws:pwq-test` (staging, with the 17 deleted capture ids excluded to match production's competitor set). Production `ws:agent-team` on `:8200` is still embedded by the 0.6b and was not touched; nothing was promoted, and no production floor, embedder or manifest change follows from this report alone. Promotion is a separate stakeholder-gated step (path note §6).
+
+### Coverage, gaps
+
+- Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; which chunk was returned (D-1); captures created in production after W3 (not enumerated; staging does not hold the 4 production-only captures per W3 §4); whether Set B3's author stored queries without a leading `Instruct:` (W3 §3 gap, not checked here because the sealed file is not to be inspected beyond scoring; the aggregates, with raw recall 0.9762, show no sign of a double-prefix collapse).
+- Recall clears the bar by one query, so the result is sensitive to one query's outcome; the path note's own estimate (§4) and its multiplicity caveat (§7: the 4b is the best of many Set A looks) still apply to any claim beyond "B3's R1 is met".
