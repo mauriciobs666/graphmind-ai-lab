@@ -313,7 +313,7 @@ sequential sub-steps; a step the sub-plan splits into two dispatches says so. `-
 | P1-00 | Answer-spec successor `-answer-spec2.md` (`Extends:`): stale text, `cacheBypass`, hop kinds for `DEFINED_BY`/`LAUNCHES`/`DEPENDS_ON`/`FROM_DEP`, version-bump rule (C6), depth bound D3, §5's fallback wording | `architect` | ans | — | `analyst` |
 | P1-01 | Layout and Python dependency intake (D8): extras, package stubs, `slice` marker, `audit.py` O3 | `devops` | ext | — | `analyst` |
 | P1-48 | Instance and image: `indexer` image target, `ccg-falkordb` flags and `status` hygiene, `--throwaway` mode | `devops` | ext | — | `analyst` |
-| P1-48b | The runner's indexer entries: `offline-run.sh` frontends, argv grammar, image-label check, `PYTHONSAFEPATH`, sandbox tests (`-egress-spec3.md` §7.4, §10.1 (21)–(26)) | `devops` | ext | 28, 48 | `analyst`; `security-expert` advisory |
+| P1-48b | The runner's indexer entries: `offline-run.sh` frontends, argv grammar, image-label check, `PYTHONSAFEPATH`, sandbox tests (`-egress-spec3.md` §7.4, §10.1 (21)–(26)); follow-up: indexer wall-clock watchdog (`-egress-spec4.md` §1) | `devops` | ext | 28, 48 | `analyst`; `security-expert` advisory |
 | P1-02 | Bundle-at-rest, HMAC-key and ACL-credential custody (F-1) | `devops` | ext | — | `analyst`; `security-expert` advisory |
 | P1-13 | Bundle spec successor `-bundle-spec5.md` (`bindParts`, F-7) | `architect` | ext | — | `analyst`; `security-expert` |
 | P1-28 | Egress spec successor `-egress-spec3.md` (`Supersedes:` `-egress-spec.md`, `-egress-spec2.md`), option C | `architect` | gat | — | `analyst`; `security-expert` advisory |

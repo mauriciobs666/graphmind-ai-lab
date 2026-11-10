@@ -224,3 +224,163 @@ the S4-M1 hole. The current `sbx_idx_walk` follows spliced targets and **refuses
 of the spec here.
 *Fix:* define the walked path as every link traversed, spliced targets included (the walker's behavior), and drop
 `realpath -e` as the mechanism. Add `lnk2 -> deep/abs` (relative to an absolute link) to the refused list.
+
+## Pass 3 (2026-11-10)
+
+**Scope:** `docs/plans/connected-code-graph-egress-spec4.md` as revised after `317baccc` (1,600 words; Pass 2 saw
+1,263), against spec3, the uncommitted `cpg/sandbox/offline-run.sh` and `tests/`, the plan rows
+(`docs/plans/connected-code-graph-p1.md:316`, `-p1-extraction.md:64,353`) and root `REVIEW.md` (no `cpg/REVIEW.md`).
+**The P1-48b fix round lags on the watchdog:** the tree has no `SBX_INDEXER_WALL_S` and no exit-124 path (grep), so
+every watchdog claim below is design-level. The regular-file rule is already in the runner. No FalkorDB write, no
+tree-mutating git command.
+
+**Verdict: needs changes** (one major, S4-M2: a listed mutant cannot fail). The watchdog design is implementable and
+the new text contradicts nothing in spec3 or earlier spec4 rules; the remainder is minor.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; claims were checked by running probes and reading the code directly.
+
+### Pass 2 dispositions
+
+- **S4-N1: fixed.** §1 now defines the walk as "following every link it traversed, including links reached through
+  the target of a relative link", drops `realpath -e`, and lists `lnk2 -> deep/abs`. The runner's `sbx_idx_walk`
+  (`offline-run.sh:271-295`) does exactly this.
+- **Wording nit (containment "after the grammar passes"): fixed;** it now reads "after the grammar check and before
+  the `usage` refusal".
+
+### Checks
+
+- **Watchdog implementable: yes, with two spec-wording gaps.** Run: a background timer `( sleep 2; kill -USR1 $$ ) &`
+  plus a trap on `USR1` interrupts `wait` on a child that ignores TERM; the handler KILLed `jobs -p` and exited 124
+  (scratch script). Read: `sbx_on_signal` (`:752-766`) does the kill/`sbx_remove_own`/`sbx_cleanup` steps but
+  `exit`s `128+n` and writes no record, so the watchdog is a variant, not a reuse; `sbx_write_record` (`:646`) reads
+  only variables set before the launch (`SBX_LAUNCHER`, `SBX_MOUNTS`, `SBX_IMAGE_ID`) and is idempotent through
+  `SBX_RECORD_WRITTEN`, so it can run after the kill and after cleanup. Main guard: `:987`. `lib_launch`
+  (`test_sandbox.sh:163-177`) sources the runner and calls `sbx_launch` directly with `SBX_INDEXER=1` from
+  `LIB_INDEXER`, so a reassignment after `. "$RUNNER"` reaches it, but `lib_launch` has no such hook today.
+- **Production cannot take another cap: confirmed, but by `env -i`, not only by the constant.** I copied the runner,
+  printed `${SBX_INDEXER_WALL_S:-unset}` after `sbx_clean_env`, ran with `SBX_INDEXER_WALL_S=3`: it printed
+  `unset`. The closed allow-list (`sbx_clean_env`, `:~835-850`) drops it before any code that could read it.
+- **Regular-file rule is meetable and its cases can fail.** `sbx_idx_contained` (`:300-307`) uses `[ -f ]` after a
+  stat-only walk (no open). Run on a planted tree: regular file hits=0; directory, FIFO, symlink to a FIFO and
+  relative link to a directory hits=2. A runner that tests `-e` or `! -d` accepts the FIFO, one that reads the file
+  hangs, and the spec's per-test timeout catches it; the regular-file positive control exists. Tests at
+  `test_sandbox.sh:1143-1147` already assert it.
+- **124 fails `check_sandbox_ids`:** spec3 §5.3 condition 3 requires `exitCode: 0` (line 709), so yes by the text.
+  `cpg/ccg/sandbox_audit.py` is not built yet (P1-18), so not executed.
+- **Narrowing:** the §7.4 last sentence and R-E10 (spec3 lines 883, 1272-1275) are narrowed precisely: R-E10's
+  "TERM to the runner, whose handler removes the container" stays true as the outer path. Gaps are S4-m6 and S4-m7.
+- **Same-revision interaction: holds.** Containment, precedence and the regular-file rule are all grammar-time and
+  precede any launch; the watchdog exists only after launch. A 124 record carries the same `launcherArgv` image ID as
+  any launch. `sbx_remove_own` matches on the auditId label, independent of image naming.
+- **§6:** carries only the IPv6/metadata range question, which is still unanswered; the wall-clock question is gone.
+- **Growth-stops:** +337 words. New scope: the regular-file rule and its test (~90), the watchdog bullet and test
+  (~210), §7 (~70). No finding table, disposition list or restated history. Restated fact: §7's owner, files and
+  gates also sit in the two plan rows and `-p1-extraction.md:353` (S4-m8). The "Refused/Accepted" list is one long
+  unwrapped line (nit).
+
+### Findings
+
+**S4-M2 (major, verified). The "constant read from the environment" mutant cannot fail.** §2 asserts that a test sets
+the variable in the environment of a normal invocation and the run is not shortened. A normal invocation re-execs
+under `env -i` and drops any key outside the closed set (run above: `unset`), so a runner that reads
+`${SBX_INDEXER_WALL_S:-1800}` is also not shortened and survives, and the check cannot go red (root `REVIEW.md`,
+every-check rule). *Fix:* kill it in library mode, where nothing scrubs the environment: export
+`SBX_INDEXER_WALL_S=3`, source the runner, assert the constant still equals `1800` (the literal from the spec, not
+read from the runner). Keep the normal-invocation run only as a note that `env -i` is a second guard.
+*Where it goes:* the assertion in the test round, with the mutant row in `mutants.sh`; not in the watchdog step.
+
+**S4-m6 (minor, verified). The watchdog's record contradicts two spec3 sentences it does not name.** Spec3 §5.3
+(line 663) and §7.8 Signals (line 987) say a signalled invocation writes no record. The watchdog uses the signal
+path and writes one. §5.3's `exitCode` row (line 686) also reads "the tool's exit code", and 124 is the runner's.
+*Fix:* add one clause: the watchdog is not a caller signal and records; INT/TERM/HUP still write none; `exitCode`
+may be 124. Also say "the same steps as `sbx_on_signal`", since the handler itself exits `128+n` without a record.
+
+**S4-m7 (minor, inferred). Outer bound has no value or ordering.** "P1-15's own timeout stays as the outer bound",
+but neither plan gives it a value (`-p1-extraction.md:353` says only "a wall-clock timeout"). At or below 1800 s
+plus the up-to-~10 s `sbx_remove_own` loop the inner watchdog never fires and exit 124 and its record are dead
+code; and a TERM-ing outer path yields exit 143 with no record. *Fix:* state that the outer timeout exceeds
+`SBX_INDEXER_WALL_S` plus 60 s, and that P1-15 treats runner exit 124 as a timeout failure; a P1-15 test asserts the
+ordering. Also require the timer to be cancelled on normal exit (a stale timer signals a runner past its trap).
+
+**S4-m8 (minor, verified). Ownership has several homes and they differ.** §7 restates owner, files and gate, which
+the plan rows already carry (`-p1.md:316`, `-p1-extraction.md:64`). §7 says `analyst` and `security-expert`
+re-gate; `-p1.md:316` says "`analyst`; `security-expert` advisory". *Fix:* delete §7 and keep the plan rows as the
+single home, or keep §7 and cut the rows to a pointer; align the security role either way.
+
+**Nits.** (a) Spec4 says "Section numbers are spec3's" yet cites its own §1 ("§1's no-artifact rule", "watchdog
+(§1)") beside spec3's §5.3/§5.4; write "spec4 §1". (b) §1 names a "device" refusal but §2 tests only directory and
+FIFO; a device node needs root to plant, so say a device is covered by the same `-f` predicate or add a
+fixture-injected case. (c) The TERM-instead-of-KILL mutant is killed only by a hang under the suite's timeout (the
+client proxies TERM and `wait` blocks); assert elapsed time under the cap plus a margin so it fails by assertion.
+
+### What's solid
+
+The mechanism (internal timer, trap, KILL client, label-based removal, record, 124) is sound and was exercised in
+miniature. The regular-file rule is stat-only, already implemented, and its tests have a real positive control and
+a timeout. The no-environment-override claim holds for production. Precedence and image-ID rules compose with the
+new items without conflict.
+
+## Pass 4 (2026-11-10)
+
+**Scope:** spec4 as revised for Pass 3 (1,790 words; Pass 3 saw 1,600) and the P1-15 line at
+`docs/plans/connected-code-graph-p1-extraction.md:353`. The runner still has no watchdog (grep), so the checks
+below run against scratch copies, with the constant added by `sed`. No FalkorDB write, no tree-mutating git command.
+
+**Verdict: approve with suggestions.** All four Pass 3 findings are fixed; no major remains. Two new minors (S4-m9,
+S4-m10), each a one-line fold.
+
+CPG: considered, not relevant — no `cpg_*` graph covers `cpg/`; claims were checked by running probes and reading the code directly.
+
+### Pass 3 dispositions
+
+- **S4-M2: fixed, and the test can fail.** §2 now has a library-mode test that exports `SBX_INDEXER_WALL_S=3`,
+  sources the runner and asserts the literal `1800`, with its own mutant row. Run on copies: constant assigned
+  literally, `rc=0`; mutant `SBX_INDEXER_WALL_S=${SBX_INDEXER_WALL_S:-1800}`, `rc=1`. The spec also says the
+  normal-invocation run cannot kill it (`env -i`), which matches my Pass 3 probe.
+- **S4-m6: fixed.** The "Exception to spec3 §5.3 and §7.8" sub-bullet names both sentences, admits 124 in the
+  `exitCode` row, and says the watchdog is a variant of `sbx_on_signal`. It leaves a race, S4-m9.
+- **S4-m7: fixed.** The outer bound is stated (cap plus 60 s; runner exit 124 is a timeout failure; timer
+  cancelled on normal exit), and the P1-15 line at `-p1-extraction.md:353` carries it. The margin is sound for any
+  responsive daemon, see below.
+- **S4-m8: fixed.** Old §7 is gone (headings end at §6); the ownership bullet points at the plan rows, and
+  `-p1.md:316` and the P1-48b follow-up say "`analyst`; `security-expert` advisory", matching. One stale citation
+  remains, S4-m10.
+- **Nits (a)-(c):** the device case is now declared untested (needs root); the TERM-mutant is stated as killed by
+  the hang under the suite's timeout, which I accept as stated (not by assertion, as I suggested). Nit (a), "spec4
+  §1" wording, is not changed; harmless.
+
+### Checks
+
+- **60 s margin.** `sbx_remove_own` (`offline-run.sh:770-790`) runs at most 50 passes; each pass is two `docker`
+  calls (measured 0.28 s together here), a 0.2 s sleep, and up to two `docker rm` calls when something is found. The
+  worst case, a daemon that keeps re-creating a labelled container for all 50 passes, is about 25 s without the
+  removals and perhaps 40 s with them, so the spec's "about 10 s of sleeping ... several times that" understates
+  it. Realistic cost is about 1.5 s (three quiet passes). 60 s is sound for any responsive daemon. None of the
+  `docker` calls has a timeout, so a hung daemon blocks past any margin; that is outside the codebase's control.
+- **m6 exception against "INT, TERM, HUP write none".** Run: a bash handler for INT (`sleep 2`) was preempted by a
+  `USR1` handler arriving mid-run, which then exited 124 (the INT handler never finished). So a caller's signal
+  followed by the timer firing inside the cleanup window yields exit 124 *with a record* on a signalled run,
+  contradicting the sentence the exception was written to keep.
+
+### New findings
+
+**S4-m9 (minor, verified). First-wins is unstated between the watchdog and a caller signal.** Per the run above, the
+handlers nest. *Fix:* one sentence: each handler first disarms the other (the INT/TERM/HUP handler cancels the
+timer and ignores the watchdog signal; the watchdog `trap -`s INT/TERM/HUP), so a signalled invocation never
+records and an expired one never exits `128+n`. A test would need a timed signal; the runner's gate can carry it.
+
+**S4-m10 (minor, verified). Dangling citation.** `docs/plans/connected-code-graph-p1-extraction.md:64` still reads
+"egress-spec4 §1, §7"; §7 no longer exists. *Fix:* cite "egress-spec4 §1".
+
+### Growth-stops
+
++190 words. New scope: the §5.3/§7.8 exception (~50), the margin and timer sentence (~110), the S4-M2 test (~50),
+the ownership pointer (~35); minus the deleted §7 (~70). The margin reasoning is design rationale for a number, not
+history. No finding table, disposition list or restated spec3 content; the ownership bullet is a pointer.
+
+**Stopping condition (falsifiable).** Spec4 needs no Pass 5 once a pass yields no major and no finding that
+changes what the runner must do (a contract change, as opposed to wording or a citation). Pass 3 failed it (S4-M2,
+and m6/m7 were contract text); Pass 4 yields only S4-m9, one sentence of contract, and a citation. Folding S4-m9 and
+S4-m10 meets it. **Expected value of a Pass 5 on the spec is low:** the spec's remaining risk is in how the runner
+implements the timer, handler ordering and cleanup, which the P1-48b follow-up's own `analyst` and `security-expert`
+gate covers against the code. Reopen the spec only if that gate finds the spec contradicting the shipped runner.

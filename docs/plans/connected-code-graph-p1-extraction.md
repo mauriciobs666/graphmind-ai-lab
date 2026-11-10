@@ -61,6 +61,8 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   `cpg/infra/toolchain/README.md` stop saying the runner has no indexer entry.
 - **Behaviours:** the spec's tests (21)–(26) pass, the sandbox suite and its mutants re-run in full (a `--frontend
   joern` script that runs `scip-typescript` proves only that the image works and is not a check of this step).
+- **Follow-up (egress-spec4 §1):** the indexer wall-clock watchdog, `SBX_INDEXER_WALL_S`, a runner constant
+  (KILL, `sbx_remove_own`, record, exit 124), with its test and mutants; `devops`; gate `analyst`, `security-expert` advisory.
 - **Gate:** `analyst`; `security-expert` advisory on the sandbox boundary.
 
 ## P1-02 · bundle-at-rest and HMAC-key custody (F-1) — `devops`
@@ -348,7 +350,7 @@ its output to the bundle as a **resolution source**, never as a new schema eleme
   run's **own staged directory**, never the one a Joern parse reads, and arrive read-only through `/src`; the
   stager rejects symlinks that point outside the directory, hardlinks and device or FIFO files, and provisioning
   installs dependencies only, per `-egress-spec3.md` §7.4; `run.py` runs one indexer at a time under a wall-clock
-  timeout that sends TERM to the runner (R-E10); the runner and its `indexer` entries are P1-48b's, not this step's), `cpg/extractors/joern/normalize/merge_scip.py` (merge
+  timeout that sends TERM to the runner, the outer bound, which must exceed the runner's `SBX_INDEXER_WALL_S` by the margin `-egress-spec4.md` §1 states, treating runner exit 124 as a timeout failure and cancelling its timer on normal exit; the runner and its `indexer` entries are P1-48b's, not this step's), `cpg/extractors/joern/normalize/merge_scip.py` (merge
   rule from the note: a SCIP-resolved target upgrades a name-match site to `confirmed`/`resolved-call`; a
   disagreement with Joern keeps both and marks the site `possible`/`resolution-unverified`; candidates are
   never dropped), `cpg/tests/test_scip_merge.py`, `cpg/tests/test_scip_parse.py`.

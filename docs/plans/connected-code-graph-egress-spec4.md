@@ -36,13 +36,35 @@ Other §7.4 changes:
     not the tree;
   - the walk leaves the staged tree (`..` past its root);
   - the value cannot be resolved (a dangling link; a missing `env.json`, which is therefore `forbidden-flag`,
-    not `usage`), or `--cwd` is not a directory.
+    not `usage`), or `--cwd` is not a directory;
+  - `--environment` does not resolve to a regular file (a directory, a FIFO, a device): a non-regular file is
+    `forbidden-flag`, the same class and precedence as the rest of this bullet. The test is made without
+    opening the path, so a FIFO cannot hang the runner.
 
   Refused: `lnk -> /`, `lnk -> ../..`, `lnk -> /src/sub`, an absolute link carrying the host path of the
   staged tree, `lnk2 -> deep/abs` where `deep/abs` is an absolute link, a dangling link, a missing
-  `env.json`. Accepted: a plain subdirectory and a relative link that stays inside. The stager's own symlink
+  `env.json`, an `--environment` that is a directory or a FIFO (a device is not tested: it needs root). Accepted: a regular-file `--environment`, a plain subdirectory and a relative link that stays inside. The stager's own symlink
   rejection stays; this is defence in depth. Mutation of the tree after the check is the stager's and
   operator's concern.
+- **Indexer wall-clock watchdog (narrows spec3 §7.4's last sentence and R-E10: wall-clock time is now limited
+  for indexer entries; memory and CPU are not).** The runner holds a constant, `SBX_INDEXER_WALL_S=1800` (30
+  minutes), not read from the environment, applied to indexer entries only (Joern frontends are unchanged).
+  On expiry the runner takes the same steps as `sbx_on_signal`: KILL the Docker client, `sbx_remove_own` until
+  none remain, `sbx_cleanup`. It is a variant, not a reuse, because that handler exits `128+n` without a
+  record. The watchdog then writes the one sandbox record of the invocation, unrefused, and exits 124.
+  - **Exception to spec3 §5.3 and §7.8.** A signalled invocation writes no record; the watchdog expiry is not
+    a caller signal and is the one exception. INT, TERM and HUP still write none. §5.3's `exitCode` row admits
+    124 for it. **First wins:** each handler (the watchdog's and the INT, TERM and HUP one) disarms the other
+    on entry, so a signalled run never also writes a watchdog record.
+  - A bare `timeout` is not the mechanism: a hung node may ignore the TERM that `docker run` proxies.
+  - Exit 124 is a non-zero indexer exit, so the no-artifact rule below applies, and a 124 record fails
+    `check_sandbox_ids` (spec3 §5.4 requires `exitCode: 0`).
+  - **Outer bound.** P1-15's own timeout must exceed `SBX_INDEXER_WALL_S` plus 60 s, and P1-15 treats runner
+    exit 124 as a timeout failure. The margin covers `sbx_remove_own`, whose measured worst case is about 25 s without removals and about
+    40 s with them, with headroom; a hung Docker daemon is out of scope. At or below the sum the inner watchdog never fires and a TERM-ing outer path yields 143 with no
+    record. The timer is cancelled on normal exit, so a stale timer never signals a runner past its trap.
+  - **Owner and gates:** a follow-up to P1-48b, as the plan rows say (`docs/plans/connected-code-graph-p1.md`,
+    P1-48b row; `docs/plans/connected-code-graph-p1-extraction.md`, P1-48b and P1-15 sections).
 - **Image by ID, every container launch.** The runner launches the image by the `sha256:` ID it inspected and
   recorded (`sandbox.toolchain.imageId`), not by name, so the checked image is the one that runs; this covers
   every container launch and narrows §7.1's "on `ccg-toolchain:<hash>`". `launcherArgv` carries the ID. The
@@ -63,8 +85,24 @@ Other §7.4 changes:
   together with a missing mandatory one (forbidden wins); path components with a newline, `*` or a space.
 - New: every refused and accepted symlink case of §1's symlink-containment bullet, as `forbidden-flag` and
   launch respectively; an escaping `--cwd` together with a missing `--project-version` is `forbidden-flag`,
-  not `usage`; a launched record's `launcherArgv` image element equals `toolchain.imageId`, killed by a
+  not `usage`; `--environment` naming a directory, and naming a FIFO (the refusal returns promptly, the test
+  carries a timeout), each `forbidden-flag`, with a regular-file `--environment` as the positive control that
+  launches; a launched record's `launcherArgv` image element equals `toolchain.imageId`, killed by a
   mutant that launches by name.
+- New: the watchdog. The runner is sourced as a library (its `BASH_SOURCE == $0` main guard) and the test
+  reassigns `SBX_INDEXER_WALL_S` to a few seconds after sourcing; the hook is that reassignment, because a
+  script run as `offline-run.sh` assigns the constant unconditionally and reads no environment variable, so
+  production has no override. A planted indexer that sleeps and ignores TERM is KILLed, no container labelled
+  with the `auditId` remains, the record has `exitCode: 124` and `refused: false`, and the runner exits 124.
+  Mutants: the cap applied to a Joern frontend; the watchdog sending TERM instead of KILL (killed by the
+  hang under the suite's timeout); the removal skipped.
+- New: first-wins. With the watchdog armed, an INT is delivered and the watchdog fires while the INT
+  handler is still removing containers: exit 130, no record; mutant: a handler that does not disarm the watchdog (it exits 124 and
+  writes a record).
+- New, in the test round (not the watchdog step): the environment cannot set the cap. In library mode the
+  test exports `SBX_INDEXER_WALL_S=3`, sources the runner, and asserts the constant is still the literal
+  `1800`; its own mutant row in `mutants.sh` reads `${SBX_INDEXER_WALL_S:-1800}`. A normal invocation cannot
+  kill this mutant, because `env -i` drops the variable first; that is a second guard, not the test.
 - `scip-python`'s launch is asserted (not 126/127, exit 0, non-empty `.scip`) now that the flag admits success.
 
 ## 3. §2.2: reply frame size
@@ -103,12 +141,9 @@ Also: **one request and one reply per connection** (§2.2 said only "the connect
 - **§5.2 `payloadFields`:** for `repo-names-and-identity` (R4) the list holds `identity.subject` and
   `identity.issuer` in place of `identity`; an allow with no body records `[]`, a deny `null`.
 
-## 6. Open questions (not decided here)
+## 6. Open question (not decided here)
 
-1. **Extra forbidden ranges (§3.4).** Add `fec0::/10` and `100::/64` to the always-forbidden IPv6 list, and
+**Extra forbidden ranges (§3.4).** Add `fec0::/10` and `100::/64` to the always-forbidden IPv6 list, and
    the cloud-metadata addresses `fd00:ec2::254` and `100.100.100.200`, which `privateAddress: true`
    currently admits (they fall in `fc00::/7` and `100.64.0.0/10`)? Security advisory recommends yes to all
    four (never opt-in-able); the owner's call.
-2. **Runner-side wall-clock cap for indexers (§7.4, R-E10).** Today only P1-15's timeout bounds an indexer
-   container. Is a `timeout` wrapper with the existing signal cleanup worth building now, or left to the
-   measured-need rule? Owner's call; `devops` input.
