@@ -393,3 +393,40 @@ Matching is document-level (any chunk of the unit counts; S11 defect D-1 still a
 
 - Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; which chunk was returned (D-1); captures created in production after W3 (not enumerated; staging does not hold the 4 production-only captures per W3 §4); whether Set B3's author stored queries without a leading `Instruct:` (W3 §3 gap, not checked here because the sealed file is not to be inspected beyond scoring; the aggregates, with raw recall 0.9762, show no sign of a double-prefix collapse).
 - Recall clears the bar by one query, so the result is sensitive to one query's outcome; the path note's own estimate (§4) and its multiplicity caveat (§7: the 4b is the best of many Set A looks) still apply to any claim beyond "B3's R1 is met".
+
+## Step 0c — paired pre-gate (W7d, 2026-11-10)
+
+Rule: `docs/plans/python-web-quirks-kb-prod-migration-ml.md`, sha256 verified before anything else = `308677fcbac108f277b728910455ac5678a51a661326e622ae94b5f3cea4c74e` (match). Runner `claude/cobb/scripts/kb_golden_runner.py`, fixture `claude/cobb/scripts/fixtures/kb-golden-45.json`. One scored run per configuration, no retries, no floor changes; both runs exit 0 with empty stderr. Raw JSON: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w7d-baseline.json` (A: `:8200` `ws:agent-team`, 0.6b, floor 0.43) and `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w7d-candidate.json` (B: `:8210` `ws:pwq-test`, 4b, floor 0.42). Independent recomputation (throwaway `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w7d-verify.py`, from the raw docs lists plus fixture expected ids, not the runner's aggregates): **no difference** from the runner's aggregates (singles hit 28 / 29, siblings 12 / 13, negatives admitted 1 / 0, closest negative 0.4100 / 0.5114).
+
+CPG: not applicable — a retrieval-metric run over a fixture with no code-level component.
+
+**Fixture validity:** 32 single / 7 family / 6 negative (the rule's counts hold; all 32 singles `applies`). **Readiness limit (declared):** the runner does not check document status, and I stayed within the brief's "GET /documents/search only", so I did not call `GET /documents/{id}`. From the search results alone, of the 46 expected ids, 42 appeared in A's results and 44 in B's. Not seen in A: R3 sibling `ccefd08d`, C1 `9870c48f`, P1 `08a422ae`, G2 `f29bddad`; not seen in B: R6 sibling `5b1b477f`, G2 `f29bddad`. Every one of those ids was seen in at least one of the two runs except **G2 `f29bddad` and C1 `9870c48f`, never seen in either top five**; those two are the expected-id `ready` check I could not complete. If either is not `ready` in its workspace the rule calls the run invalid. Closing it takes a read-only `GET /documents/{id}` on both, which I did not make.
+
+### Paired table (32 singles; hit = expected id in top-5 AND best score <= floor)
+
+| | B hit | B miss |
+|---|---|---|
+| **A hit** | 28 | **b = 0** |
+| **A miss** | **c = 1** (P1) | 3 (C1, X1, G2) |
+
+A hits 28/32, B hits 29/32, net loss b - c = **-1** (a net gain of one). Raw top-5 table (floor-free): A 28, B 29, raw b 0, raw c 1; floor-applied equals raw on both. Exact one-sided sign p on the discordant pair (b=0, c=1; n=1): 1.0, descriptive. Wilson 95%: A 28/32 = 0.875 [0.719, 0.950]; B 29/32 = 0.906 [0.758, 0.968].
+
+### Negatives (hard guard)
+A (0.6b, 0.43) top-1 scores: N1 0.6474, N2 0.5542, **N3 0.4100 (admitted)**, N4 0.4466, N5 0.5930, N6 0.4968: **1 admitted**. B (4b, 0.42): N1 0.6101, N2 0.5508, N3 0.5114, N4 0.5266, N5 0.7019, N6 0.5742: **0 admitted**. B admits no more than A: guard **passes**. Closest negative: A 0.4100 (margin to its floor 0.0200, inside it, admitted); B 0.5114 (margin 0.0914). Note: the rule expected 0 admitted at baseline and a closest pooled negative of 0.446; today's 0.6b baseline admits N3 at 0.4100, a corpus-drift or fixture-vs-corpus observation to report, not a stop condition.
+
+### STOP conditions
+1. net loss >= 4: b - c = -1, **not met**. 2. B admits more negatives than A: 0 vs 1, **not met**. 3. Fixture counts or readiness: counts hold; readiness partly unverified (above).
+
+### Reported, not judged
+- **Lost pairs (b):** none. No raw rank/score to list. Pairs in (0.42, 0.43] for the 4b: none (no single's best 4b score lies in that band).
+- **Missed at both (concordant):** C1, X1, G2 (expected id not in the document-level top-5 at either configuration); P1 missed at A, found at B rank 1, score 0.3991.
+- **Borderline (within 0.02 of the floor):** A: R6 second sibling `5b1b477f` rank 5, 0.4393 (0.0093 above 0.43, not found); C4 rank 1, 0.4128 (hit); R1 second sibling rank 2, 0.4115 (found). B: S1 rank 1, 0.4118 (hit, 0.0082 under 0.42); R6 second sibling not in the 4b top-5 at all (score none; it was found by A only at rank 5 above the floor). P1 at B 0.3991 and negative N3 at A 0.4100 sit just outside / inside the band (0.0209 / 0.0200).
+- **R6:** first sibling `af9ffb19` rank 1 on both (A 0.2813, B 0.2150); second sibling A 0.4393 rank 5 (over floor), B not in top-5. R6 recall 1/2 on both.
+- **Family set-recall (sibling count under the floor):** A 12/14 (R1 2/2, R2 2/2, R3 1/2, R4 2/2, R5 2/2, R6 1/2, Q1 2/2); B 13/14 (R1 2/2, R2 2/2, R3 2/2, R4 2/2, R5 2/2, R6 1/2, Q1 2/2). R3's second sibling: A not in top-5, B 0.2693.
+- **Baseline drift:** A single hits 28 against the recorded 28/32 (floor-applied equals raw): drift 0, under the 3 threshold.
+
+### Lock rehearsal witness
+`bash falkor-chat/scripts/rehearse_agent_team_wrapper.sh --root /tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w7d-rehearsal` (one run, not repeated): **SUMMARY pass=23 fail=13 mutant=none**. Failing items (log `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w7d-rehearsal/tree/run/results.log`): a2.3, a2.5, a4.1, a6.1-a6.7, a3.5, a3.6, a5.2. Two anomalies in the log that look like harness/state faults rather than a locking verdict: a2.5 and a4.1 show an EXEC timestamp of about -1.79e12 ms (an unset/epoch-relative value), and a6.2 shows the dummy's cwd under an earlier `.../scratchpad/teco-rehearsal2/tree/falkor-chat` rather than this run's tree (a stale listener or state from a previous rehearsal seems to have answered on the scratch port, though a8.1 reports no 8298/8299 listener at the end). Not diagnosed. The load average was about 3.7 on 8 cores. I did not rerun (no retries). a8.3/a8.4 pass: real :8200/:8210 listeners, the real lock and `falkor-chat/` were untouched. This witness does **not** reproduce W7c's rehearsal result and is not a PASS; it does not enter the 0c verdict (the rule is retrieval-only) but the caller should look at it before the outage step.
+
+### Verdict: **GREEN** on the frozen paired rule (net -1, negatives 0 vs 1), conditional on the one open validity item
+Green supports only: no gross floor-applied top-5 retrieval regression on these 32 author-chosen Stage 8 pairs (a loss of up to 3 net pairs would also have passed; 4 of the rows were the 0.43 floor's pilot, the 4b floor was never calibrated on them). It says nothing about production quality, queries unlike these 32, or the smoke list (§7 non-pwq, step 0c's other half), which I was not asked to run here. Open before relying on it: `ready` status for G2 and C1 expected ids (not seen in any top-5), and the failed rehearsal witness above.

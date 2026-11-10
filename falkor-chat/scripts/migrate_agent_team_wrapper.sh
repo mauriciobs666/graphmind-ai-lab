@@ -10,10 +10,11 @@
 # as the *queued* next holder, so the lock never becomes free from the stop until the
 # new server is serving (or forever, on a failure: see HOLD).
 #
-# INVOCATION (same shell command as the stop, so the waiter is queued before the old
-# holder exits; -w 60 waits for the old server's graceful shutdown):
-#   kill <old-server-pid> ; ( setsid nohup flock -w 60 <LOCK> bash <this-script> \
-#       >>"$XDG_STATE_HOME/graphmind-ai-lab/agent-team-8200.log" 2>&1 </dev/null & )
+# INVOCATION (queue the waiter FIRST, then end the old holder, in the same shell command,
+# so the lock is never free; -w 60 waits for the old server's graceful shutdown):
+#   ( setsid nohup flock -w 60 <LOCK> bash <this-script> \
+#       >>"$XDG_STATE_HOME/graphmind-ai-lab/agent-team-8200.log" 2>&1 </dev/null & ) ; \
+#   kill <old-server-pid>
 # flock(1) stays as this script's parent for its whole life and holds the lock itself;
 # every descendant (stage commands, the exec'd server, `sleep infinity`) also inherits the
 # fd. So the lock frees only when the wrapper/server/sleeper exits (the parent flock then
@@ -28,8 +29,8 @@
 #      AGENT_TEAM_PORT [WRAP_EXTRA_ENV] <WRAP_SERVER_CMD>   from WRAP_FC_DIR.
 #      exec keeps the lock fd on the server for its life, exactly as today.
 # HOLD: any failure or timeout in any stage runs `exec sleep infinity` (lock kept, hook
-#   stays blocked) and logs "HOLD". Recovery is plan §5: kill the sleeper only as the
-#   first act of the next lock-holding command (killing frees the lock).
+#   stays blocked) and logs "HOLD". Recovery is plan §5: queue the next `flock -w 60`
+#   waiter first, then kill the sleeper (the handoff keeps the lock held throughout).
 #
 # VERIFY THAT THE WRAPPER (not merely somebody) HOLDS THE LOCK, before any copy:
 #   WRAP_LOCK=... WRAP_STATE_DIR=... migrate_agent_team_wrapper.sh --check-held
