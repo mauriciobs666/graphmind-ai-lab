@@ -167,3 +167,57 @@ Covered: AC-2, AC-5, AC-7, AC-8, AC-12 per the plan's T31-T38, with the mutants 
 ### Verdict (S11)
 
 **PASS with one defect (D-1)** on the oracle's sensitivity: all of AC-2 (as the tool measures it), AC-5, AC-7, AC-8 and AC-12 hold; the plan's exit criterion "TP-001 to TP-008 pass with their mutants red, or each failure a reported defect" is met, with the T31 mutant reported as D-1 rather than waived. Planted divergence (u31, exit 1) and the 43rd title (u43, listing + `diverge` exit 1) are shown. `ws:pwq-test` restored to the clean 36-unit state (final gate above).
+
+## S14 — sealed Set B scored once (2026-11-10, production `ws:agent-team` on `:8200`, read-only)
+
+Executes TP-010 / TP-011 (plan S14, ML §1 gate). Aggregates only: no Set B query, answer or per-query line appears here or anywhere in the repo. Set B sha256 `163efb061834345d3d34c72501c96dd11e8c20fdd48bcbd433ba4c617d5fd15c`. CPG: not applicable — documentation/retrieval-evaluation task with no code-level component under test.
+
+### Pre-checks (all observed this run)
+
+- Set B file: `sha256sum` equals the ledger value, mode `-r--r--r--`, outside the repo, `git ls-files | grep -i set-b` empty; no `.scored` sentinel before the run.
+- `gate --copy claude/knowledge/python-web-quirks.md --ws agent-team --base-url http://localhost:8200 --manifest claude/cobb/scripts/pwq-kb-manifest.json`: 36 units, every unit's stored chunk count equal to its embedded count, `gate: clean`, exit 0.
+- Exclusions: the 17 ids are the 17 `curl -X DELETE` lines of `docs/plans/python-web-quirks-kb-captures.md` §4 (17 distinct); `GET /documents/<id>` returned 404 for each of the 17; `458d329e2ba44e45a5fd82301a47504a` returned 200 and was not excluded. The exclusions are therefore a no-op on the stored state (deleted at H1); they are passed as the plan specifies, and the filtered and unfiltered runs are identical. I did not enumerate the workspace for captures created after S13b; none was named in the brief, so none is excluded.
+- `--floor 0.43` equals the value in `skills/agent-kb-retrieval/SKILL.md` (`reject any returned hit with score > 0.43`).
+- Seal accounting: the first invocation omitted `--set-b-path` and exited 2 (`Set B path: pass --set-b-path or set PWQ_SET_B`) before reading Set B; it burned nothing. The second invocation scored (exit 0) and wrote `pwq-set-b.json.scored` (`floor 0.43`, sha256 as above, `scoredAt 2026-11-10T15:56:03`). No second scoring was run.
+
+### Command (single scoring)
+
+`pwq_kb.py eval --copy claude/knowledge/python-web-quirks.md --ws agent-team --base-url http://localhost:8200 --manifest claude/cobb/scripts/pwq-kb-manifest.json --set B --set-b-path <sealed path> --sealed-once --expect-sha256 163efb06…fd15c --floor 0.43 --exclude <17 ids>`. Tool header: `floor=0.43 window=50 topk=5`; note printed: `limit=5 deliberately exceeded for this measurement` (50-chunk window, excluded documents' chunks dropped, first five scored).
+
+### Results (headline = filtered run; unfiltered identical on every figure)
+
+| Measure | Observed | Plan threshold (ML §1 item 2 / AC-3) | Result |
+|---|---|---|---|
+| Positive recall at floor 0.43 (top-5, document-level) | 73 of 84 = 0.8690 | ≥ 0.90 (≥ 76 of 84) | FAIL (3 short) |
+| Positive recall raw top-5 (no floor) | 77 of 84 = 0.9167 | informational | — |
+| Per-section coverage, floor-applied | 41 of 42 | all 42 | FAIL (one section missed by both its queries) |
+| Per-section coverage, raw | 42 of 42 | informational | — |
+| Near-domain false accepts (unit documents only) | 3 of 15 (rejection 12/15) | ≥ 12/15 | PASS, at the limit |
+| Off-domain false accepts | 0 of 15 | 15/15 | PASS |
+| Negative rejection overall | 27 of 30 | ≥ 27 of 30 | PASS, at the limit |
+| MRR / mean distinct documents in top five | 0.9087 / 2.93 | informational | — |
+| Unit document inside the 50-chunk window | 84 of 84 | informational | — |
+
+`ac3` line from the tool: `recall=False coverage=False off_domain=True near_domain=True pass=False`.
+
+### Displacement (aggregate only)
+
+Queries where a non-unit chunk outranks the unit's best chunk: **7 of 84**. The unit was in the 50-chunk window for all 84. The tool prints the ids of non-unit documents involved (not Set B content); I do not reproduce that list. Reading the figures together: raw top-5 recall is 77/84 (7 positives miss the top five even with no floor, equal in count to the 7 displacement queries; I did not verify they are the same queries because the tool prints no per-query data), and the 0.43 floor removes 4 more (77 to 73). Per the ML §4.2 ruling this is reported, with no threshold applied and no retuning.
+
+### Tail versus head (document-level matching)
+
+Matching is document-level throughout (any chunk of the unit counts; S11 defect D-1 still applies: recall does not check which chunk was returned). Tool figures: head-probe recall 0.8451, tail-probe recall 1.0000. Tail does not trail head (the plan's 0.15 trigger for an `architect` decision is not met; the gap is in the opposite direction, tail higher by 0.1549). Derived counts (not printed by the tool): 0.8451 = 60/71 and 1.0000 = 13/13, consistent with 84 positives. The ML §7 risk 1 (tail chunks carrying no title) is not borne out for retrieval; head probes are the weaker class. Because of D-1 this says nothing about whether a tail chunk itself was the one returned.
+
+### BM25 on B (lexical baseline over the 129 unit chunks, no non-unit competitors)
+
+`--baseline bm25 --set B --floor 0.43` (read-only; sentinel not involved): 84 of 84 hits (recall 1.0000, floor-independent), coverage 42/42, MRR 0.9821, mean distinct documents 3.10, head recall 1.0000, tail recall 1.0000. **BM25 beats the semantic arm on B** on recall (84/84 against 73/84 at the floor, 77/84 raw), coverage and MRR (0.9821 against 0.9087). The comparison is unfavourable to the semantic arm in design (BM25 competes only against the unit chunks, the semantic arm against the whole workspace plus a floor), but ML §4.3's stated condition (semantic must beat lexical on recall at equal top-5, else GraphRAG's value is in question) is **not met on B**. This reverses the Set A observation (semantic 42/42 vs BM25 41/42) and Set A could not resolve it.
+
+### Verdict (AC-3, S14)
+
+**FAIL on the positive arm; negative arm passes at its limits.** Floor-applied recall 0.8690 (< 0.90) and coverage 41/42 (< 42/42) miss the plan's gate; off-domain 15/15 and near-domain 12/15 pass. Per plan §3 and ML §5, a failed B is final: no re-run and no retuning (floor, chunking, queries) on this set; the next step is a B2 by a different author, and the stakeholder decides on the floor (4 of 77 raw hits lost to it), the BM25 result and the displacement finding. The seal is spent.
+
+### Coverage, gaps, recommendations
+
+- Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; captures created after S13b (not enumerated); which chunk (head or tail) was returned (D-1, document-level).
+- The raw-vs-floor gap (77 to 73) and the 7 displacement queries are separate loss mechanisms; a B2 and a decision on whether a Set-A-derived diagnosis (not Set B) can inform either is the owner's (`data-scientist`) call.
+- Tool note: `eval --sealed-once` requires `--set-b-path` (or `PWQ_SET_B`) even though the brief names the path; the S14 brief template should list it. Raw output kept outside the repo in the session scratchpad only.
