@@ -16,7 +16,7 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U8 | `tdd-engineer` | `ad3949d7f4bc0a326` (same agent as U5/U7) | accepted (S3b committed; selftest 98/98, 66 S3b mutants killed, teco re-ran selftest) | S3b: `eval` modes in `pwq_kb.py` (T24–T30; D9, D11): implemented, selftest 95/95 (teco re-ran); **mutation pass NOT run**; uncommitted; Set JSON schema and open items in the `S3b-STATUS` comment above the eval section | `analyst` G1 → — | — |
 | G1 | `analyst` | `a3f52f17b5eefc3c9` | gated | `docs/reviews/python-web-quirks-kb-impl.md` Pass 1 (S1–S3b, `92a46502`; 208k tok / 44 tools) | → approve with suggestions (F1, F2 major; F3–F10); fixes in U9 | — |
 | U9 | `tdd-engineer` | `aff89604bf96772ce` | accepted | G1 fixes F1–F5, F7, F8: `e0b84854`; selftests 123/123 and 25/25, 40 mutants killed; teco re-ran both + own constant mutant (killed) | G1 Pass 2 (`a3f52f17b5eefc3c9`) → approve with suggestions; F1/F2 closed | 199k tok / 56 tools |
-| U10 | `cobb` | `a96d7ce4c9212fc96` | in-flight | `claude/knowledge/python-web-quirks.md`, guard entry retired, AC-12 test | — | — |
+| U10 | `cobb` | `a96d7ce4c9212fc96` | accepted | S4: `claude/knowledge/python-web-quirks.md` (36 units), guard entry retired; teco re-ran `verify-copy` (clean) and the AC-12 guard test (allow/allow/ask/ask/ask); one header edit u10 `pydantic 2.x` (extractor misses `2.x`); `AGENTS.md` exceptions left to S16b | G2 → — | 76k tok / 11 tools |
 
 
 Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
