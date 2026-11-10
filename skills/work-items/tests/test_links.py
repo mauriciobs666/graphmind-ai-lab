@@ -219,3 +219,11 @@ def test_fold_defaults_missing_op_to_set_for_concerns():
     base = {"ev": "link", "rel": "concerns", "from": "d"}
     evs = [{**base, "evid": "e1", "ts": 1, "to": "a"}, {**base, "evid": "e2", "ts": 2, "to": "b"}]
     assert events.fold(evs).links[("concerns", "d")] == ["b"]
+
+
+def test_set_slug_already_held_by_another_item_is_refused(proj):
+    held = alloc.new(proj, "F", slug="taken")
+    other = alloc.new(proj, "F")
+    with pytest.raises(links.LinkError, match=f"slug 'taken' is already held by {held}"):
+        links.set_attr(proj, other, "slug", "taken")
+    links.set_attr(proj, held, "slug", "taken")        # re-setting one's own slug is fine

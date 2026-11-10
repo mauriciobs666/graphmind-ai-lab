@@ -275,3 +275,13 @@ def test_new_home_must_be_a_declared_component_or_repo_and_refusal_burns_no_id(p
 
 def test_init_writes_work_items_gitignore_for_lock_and_tmp(proj):
     assert (proj / ".work-items" / ".gitignore").read_text() == ".lock\n*.tmp\n"
+
+
+@pytest.mark.parametrize("kind,name", [
+    ("requirements", "feat.md"), ("plans", "feat.md"), ("reviews", "feat.md"),
+    ("test-plans", "feat.md"), ("test-reports", "feat-report.md"), ("manuals", "feat.md")])
+def test_every_family_kind_directory_is_stamped(proj, kind, name):
+    alloc.new(proj, "F", slug="feat")
+    p = doc(proj, f"docs/{kind}/{name}")
+    headers.sync(proj)
+    assert "**Item:** `GAL-F0001`" in header_line(p)

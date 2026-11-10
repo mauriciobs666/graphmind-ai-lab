@@ -212,3 +212,25 @@ def test_illegal_parent_message_uses_padded_ids(proj):
     alloc.new(proj, "I")
     with pytest.raises(rules.IllegalParent, match=r"T may not have I03 as parent"):
         alloc.new(proj, "T", parent="GAL-I03")
+
+
+def test_duplicate_slug_refused_at_allocation_names_holder_and_burns_no_id(proj):
+    assert alloc.new(proj, "F", slug="same") == "GAL-F0001"
+    with pytest.raises(alloc.AllocError, match=r"slug 'same' is already held by GAL-F0001"):
+        alloc.new(proj, "F", slug="same")
+    assert alloc.new(proj, "F", slug="other") == "GAL-F0002"          # F0002 was not burned
+    r = wi(proj, "new", "F", "--slug", "same")
+    assert r.returncode == 1 and "already held" in r.stderr and r.stdout == ""
+
+
+def test_retired_items_keep_their_slug_so_it_is_still_refused(proj):
+    alloc.new(proj, "F", slug="gone")
+    alloc.retire(proj, "GAL-F0001")
+    with pytest.raises(alloc.AllocError, match="already held"):
+        alloc.new(proj, "F", slug="gone")
+
+
+def test_distinct_and_absent_slugs_are_unaffected(proj):
+    assert alloc.new(proj, "F") == "GAL-F0001"
+    assert alloc.new(proj, "F") == "GAL-F0002"              # no slug, no clash
+    assert alloc.new(proj, "F", slug="a") == "GAL-F0003"

@@ -7,6 +7,7 @@ import pytest
 
 from conftest import SCRIPTS
 from wilib import events
+from wilib.store import Store
 
 WI = SCRIPTS / "wi.py"
 KEYS = {"id", "uid", "type", "parent", "aliases", "slug", "home", "touched",
@@ -74,7 +75,10 @@ def test_resolve_json_is_exactly_the_contract(proj):
 def test_resolve_unknown_exit_4_and_ambiguous_exit_3(proj):
     r = wi(proj, "resolve", "GAL-F0999")
     assert r.returncode == 4 and "unknown" in r.stderr
-    wi(proj, "new", "F", "--slug", "feat")
+    # a duplicate slug can only arrive through a merge now: append the event directly
+    with Store(proj, "GAL").transaction() as tx:
+        tx.append({"ev": "new", "id": "GAL-F0002", "type": "F", "parent": None,
+                   "home": "repo", "slug": "feat"})
     assert wi(proj, "resolve", "feat").returncode == 3
 
 

@@ -14,7 +14,6 @@ from pathlib import Path
 from . import rules
 
 RESERVED = frozenset({"FR", "AC", "TP", "R"})
-LEGACY_PREFIXES = frozenset({"K", "C"})     # the declared legacy namespaces
 ENV_PATH = "WI_KEYS_FILE"                   # test / override hook
 
 
@@ -30,14 +29,20 @@ def keys_path():
     return Path(__file__).resolve().parents[2] / "keys.json"
 
 
-def _load(text):
-    return json.loads(text) if text.strip() else []
+def _load(text, path):
+    try:
+        entries = json.loads(text) if text.strip() else []
+    except json.JSONDecodeError as exc:
+        raise KeyRefused(f"{path} is not valid JSON ({exc}); fix the key list") from None
+    if not isinstance(entries, list):
+        raise KeyRefused(f"{path} must hold a JSON list of key entries")
+    return entries
 
 
 def check_key(key, entries):
     """Raise KeyRefused unless ``key`` may be claimed given the current ``entries``."""
-    if key in RESERVED or key in LEGACY_PREFIXES:
-        raise KeyRefused(f"{key} is reserved (FR/AC/TP/R and legacy prefixes K/C)")
+    if key in RESERVED:
+        raise KeyRefused(f"{key} is reserved (FR/AC/TP/R)")
     if not rules.PROJECT_RE.fullmatch(key):
         raise KeyRefused(f"malformed key {key!r}: must match [A-Z]{{2,6}}")
     if any(e.get("key") == key for e in entries):
@@ -65,7 +70,7 @@ def _candidates(name):
 def suggest(name, path=None):
     """Propose the first acceptable key derived from ``name``; never writes."""
     path = Path(path) if path else keys_path()
-    entries = _load(path.read_text(encoding="utf-8")) if path.exists() else []
+    entries = _load(path.read_text(encoding="utf-8"), path) if path.exists() else []
     for cand in _candidates(name):
         try:
             check_key(cand, entries)
@@ -82,10 +87,13 @@ def _after_read():
 def claim(key, repo, path=None, feeds_pool=True):
     """Append the key under an exclusive flock on the list itself; refuses a duplicate."""
     path = Path(path) if path else keys_path()
-    fd = os.open(path, os.O_RDWR)       # the list must exist: the skill ships it as []
+    try:
+        fd = os.open(path, os.O_RDWR)   # the list must exist: the skill ships it as []
+    except FileNotFoundError:
+        raise KeyRefused(f"key list {path} not found: the skill ships keys.json as []") from None
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        entries = _load(os.pread(fd, 1 << 24, 0).decode("utf-8"))
+        entries = _load(os.pread(fd, 1 << 24, 0).decode("utf-8"), path)
         check_key(key, entries)
         _after_read()
         entries.append({"key": key, "repo": repo, "claimed": time.strftime("%Y-%m-%d"),

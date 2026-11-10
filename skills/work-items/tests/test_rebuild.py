@@ -118,3 +118,34 @@ def test_rebuild_with_no_documents_recovers_nothing_and_says_so(proj):
     lose_both_copies(proj)
     out = wi(proj, "rebuild", "--from-headers", ".")
     assert "not recoverable" in out.stdout and "item " not in out.stdout
+
+
+def _rebuilt_state(root):
+    lose_both_copies(root)
+    assert wi(root, "rebuild", "--from-headers", ".", "--write").returncode == 0
+    return Store(root, "GAL").read_state()
+
+
+def test_rebuild_keeps_the_promoted_item_a_feature_not_a_kaizen(proj):
+    alloc.new(proj, "K", slug="kz")                           # GAL-I02-K0001
+    doc(proj, "docs/plans/kz.md")
+    move.promote(proj, "GAL-I02-K0001", "F")                  # -> GAL-F0001, retype F
+    headers.sync(proj)
+    s = _rebuilt_state(proj)
+    item = s.items["GAL-I02-K0001"]
+    assert (item.id, item.type, item.aliases) == ("GAL-F0001", "F", ["GAL-I02-K0001"])
+    assert alloc.new(proj, "F") == "GAL-F0002"
+
+
+def test_rebuild_parent_uid_of_a_child_born_after_its_parents_move_is_the_parents_birth_id(proj):
+    alloc.new(proj, "I")                                      # GAL-I03
+    alloc.new(proj, "F", slug="feat")                         # GAL-F0001
+    move.move(proj, "GAL-F0001", "GAL-I03")                   # GAL-I03-F0001
+    alloc.new(proj, "T", parent="GAL-I03-F0001")              # born under the moved parent
+    from wilib import links
+    links.set_attr(proj, "GAL-I03-F0001-T01", "slug", "chore")
+    doc(proj, "docs/plans/feat.md")
+    doc(proj, "docs/plans/chore.md")
+    headers.sync(proj)
+    s = _rebuilt_state(proj)
+    assert s.items["GAL-I03-F0001-T01"].parent == "GAL-F0001"   # the uid, not the current ID

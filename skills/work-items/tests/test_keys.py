@@ -54,11 +54,45 @@ def test_claim_refuses_a_listed_key_and_leaves_file_unchanged(keys_file):
     assert keys_file.read_text() == before
 
 
-@pytest.mark.parametrize("key", ["FR", "AC", "TP", "R", "K", "C"])
-def test_claim_refuses_reserved_and_legacy_prefixes(keys_file, key):
+@pytest.mark.parametrize("key", ["FR", "AC", "TP", "R"])
+def test_claim_refuses_reserved_keys(keys_file, key):
     r = wi(keys_file, "key", "claim", key, "--repo", "r")
     assert r.returncode == 1 and "reserved" in r.stderr
     assert listing(keys_file) == []
+
+
+@pytest.mark.parametrize("key", ["K", "C"])     # the legacy prefixes are one letter: malformed
+def test_claim_refuses_one_letter_legacy_prefixes_as_malformed(keys_file, key):
+    r = wi(keys_file, "key", "claim", key, "--repo", "r")
+    assert r.returncode == 1 and "malformed" in r.stderr
+    assert listing(keys_file) == []
+
+
+@pytest.mark.parametrize("content", [None, "{not json", '{"key": "GAL"}'])
+def test_missing_corrupt_or_non_list_keys_file_is_a_clean_error_not_a_traceback(tmp_path, content):
+    p = tmp_path / "keys.json"
+    if content is not None:
+        p.write_text(content)
+    for args in (("key", "claim", "GAL", "--repo", "a"), ("key", "suggest", "gal market")):
+        r = wi(p, *args)
+        assert r.returncode == (0 if content is None and args[1] == "suggest" else 1), (args, r.stderr)
+        assert "Traceback" not in r.stderr
+        if r.returncode:
+            assert r.stderr.startswith("wi: ") and "keys.json" in r.stderr
+    assert (not p.exists()) if content is None else p.read_text() == content
+
+
+@pytest.mark.parametrize("key", ["FR", "AC", "TP", "gal", "G", "TOOLONGX"])
+def test_init_refuses_reserved_and_malformed_keys_and_creates_nothing(repo, keys_file, key):
+    r = wi(keys_file, "init", "--key", key, cwd=repo)
+    assert r.returncode == 1 and r.stderr.startswith("wi: ")
+    assert not (repo / ".work-items").exists()
+
+
+def test_init_accepts_a_key_listed_for_this_repo_without_claiming(repo, keys_file):
+    # the tico flow is suggest -> claim -> init, so a listed key must not be refused by init
+    assert wi(keys_file, "key", "claim", "GAL", "--repo", "r").returncode == 0
+    assert wi(keys_file, "init", "--key", "GAL", cwd=repo).returncode == 0
 
 
 @pytest.mark.parametrize("key", ["gal", "G", "GALAXYS", "GA1", "G-L", "GAL ", ""])

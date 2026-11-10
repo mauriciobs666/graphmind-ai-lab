@@ -64,5 +64,7 @@ def set_attr(root, name, attr, value, store=None):
     store = store or Store(root, alloc.load_key(root))
     with store.transaction() as tx:
         uid = _uid(tx.state, name)
+        if attr == "slug" and value:
+            alloc.check_slug_free(tx.state, value, uid, LinkError)
         tx.append({"ev": "set", "uid": uid, "attr": attr, "value": value})
     return uid

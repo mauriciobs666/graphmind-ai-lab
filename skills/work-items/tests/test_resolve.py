@@ -51,7 +51,10 @@ def test_unknown_raises_code_4(proj):
 
 
 def test_duplicate_slug_is_ambiguous_code_3(proj):
-    alloc.new(proj, "F", slug="feat")
+    # a duplicate slug can only arrive through a merge now: append the event directly
+    with Store(proj, "GAL").transaction() as tx:
+        tx.append({"ev": "new", "id": "GAL-F0002", "type": "F", "parent": None,
+                   "home": "repo", "slug": "feat"})
     with pytest.raises(resolve.ResolveError) as e:
         resolve.resolve(st(proj), "feat")
     assert e.value.code == 3

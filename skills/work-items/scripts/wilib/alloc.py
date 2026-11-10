@@ -39,6 +39,14 @@ def unknown_item(name, error=None):
     return (error or AllocError)(f"unknown item {name!r}{hint}")
 
 
+def check_slug_free(st, slug, uid=None, error=None):
+    """FR-8/AC-14: a slug names one item.  Retired items keep theirs (their documents
+    remain on disk and the family glob would still attribute them)."""
+    for item in st.items.values():
+        if item.slug == slug and item.uid != uid:
+            raise (error or AllocError)(f"slug {slug!r} is already held by {item.id}")
+
+
 def _segments(item_id):
     return list(rules.parse(item_id).segments)
 
@@ -49,6 +57,8 @@ def allocate(tx, key, type_, parent=None, slug=None, title=None, home=None, lega
         raise AllocError(f"cannot allocate type {type_!r}")
     parent = parent or _implicit_parent(key, type_)
     st = tx.state
+    if slug:
+        check_slug_free(st, slug)
     if parent is None:
         parent_item, parent_segs = None, []
         rules.validate_parent(type_)

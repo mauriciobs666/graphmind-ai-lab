@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from . import rules
+from . import keys, rules
 from .store import Store
 
 GITATTR_LINE = ".work-items/registry.jsonl merge=union"
@@ -36,6 +36,8 @@ def _ensure_gitattributes(root):
 def init(root, key, components):
     """Create ``.work-items/`` for ``key``; idempotent for the same key."""
     root = Path(root)
+    if key in keys.RESERVED:
+        raise rules.MalformedId(f"{key} is reserved (FR/AC/TP/R): choose another key")
     rules.format_id(key, [])            # validates the key (raises MalformedId)
     wi = root / ".work-items"
     pj_path = wi / "project.json"
