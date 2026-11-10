@@ -1281,6 +1281,163 @@ def t34b_probe_and_bm25_baseline_work_for_b2():
     assert "baseline=bm25 set=B2" in out and "n_pos=126" in out, out
 
 
+# ======================================================================== W2: Set B3 profile (R1: 114/126, own path/sentinel, no pooling)
+def sealed3(bp, *extra, floor="0.42"):
+    return ["--set", "B3", "--sealed-once", "--set-b3-path", str(bp), "--floor", floor, "--expect-sha256", sha_of(bp), *extra]
+
+
+def b3_line(out):
+    return next(ln for ln in out.split("\n") if ln.startswith("b3: "))
+
+
+def run_b3(kw_set, extra=()):
+    w, m, doc_of = eval_env()
+    bp, script = b2_set(tempfile.mkdtemp(), doc_of, name="b3.json", **kw_set)  # the same shape as B2's, by spec
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(sealed3(bp, *extra), srch, w, m)
+    return code, out, err, bp, srch
+
+
+def t35_b3_path_comes_from_its_own_argument_or_env_var_never_bs_or_b2s():
+    assert kb.resolve_set_b_path("/tmp/x/b3.json", {}, kind="B3") == Path("/tmp/x/b3.json")
+    assert kb.resolve_set_b_path(None, {"PWQ_SET_B3": "/tmp/y/b3.json"}, kind="B3") == Path("/tmp/y/b3.json")
+    for other in ("PWQ_SET_B", "PWQ_SET_B2"):
+        e = raises(kb.KBError, kb.resolve_set_b_path, None, {other: "/tmp/y/o.json"}, kind="B3")
+        assert "B3" in str(e) and "PWQ_SET_B3" in str(e) and "--set-b3-path" in str(e)
+    e = raises(kb.KBError, kb.resolve_set_b_path, str(REPO / "claude/cobb/scripts/fixtures/b3.json"), {}, kind="B3")
+    assert "outside the repo" in str(e)
+    raises(kb.KBError, kb.resolve_set_b_path, None, {"PWQ_SET_B3": "/tmp/z/b3.json"}, kind="B")  # B3's variable is not B's
+    raises(kb.KBError, kb.resolve_set_b_path, None, {"PWQ_SET_B3": "/tmp/z/b3.json"}, kind="B2")
+
+
+def t35_b3_shape_is_126_30_30_and_refuses_the_other_profiles_files_and_the_reverse():
+    w, m, doc_of = eval_env()
+    pos, neg, _ = b2_parts(doc_of)
+    kb.validate_set_b({"positives": pos, "negatives": neg}, profile="B3")
+    for bad_pos, bad_neg in ((pos[:-1], neg), (pos + [dict(id="XX", section=1, query="q")], neg), (pos, neg[:-1])):
+        e = raises(kb.KBError, kb.validate_set_b, {"positives": bad_pos, "negatives": bad_neg}, profile="B3")
+        assert "Set B3 shape" in str(e)
+    sw = [dict(n) for n in neg]
+    sw[0]["kind"] = "off"
+    raises(kb.KBError, kb.validate_set_b, {"positives": pos, "negatives": sw}, profile="B3")
+    # a B-shaped (84/30) file is not a B3 set, through the CLI as well
+    bb, bscript = b_set(tempfile.mkdtemp(), doc_of)
+    srch = FakeSearch(bscript, w)
+    code, out, err = run_eval(["--set", "B3", "--probe", "--set-b3-path", str(bb)], srch, w, m)
+    assert code == 2 and "Set B3 shape" in err and srch.calls == []
+    # and a B3-shaped (126/60) file under --set B or --set B2: B2 shares the shape, B does not
+    b3file = write_set(Path(tempfile.mkdtemp(), "sealed", "b3.json"), pos, neg)
+    code, out, err = run_eval(["--set", "B", "--probe", "--set-b-path", str(b3file)], srch, w, m)
+    assert code == 2 and "Set B shape" in err and srch.calls == []
+
+
+def t35_b3_decision_rule_r1_boundaries_are_exact_and_the_b2_bar_is_reported_not_judged():
+    base = dict(n_pos=126, floor_hits=114, n_sections=42, covered_sections=42,
+                false_accepts={"near": 6, "off": 0}, n_neg={"near": 30, "off": 30})
+
+    def v(**over):
+        m = {**base, **{k: val for k, val in over.items() if k != "fa"}}
+        if "fa" in over:
+            m["false_accepts"] = {**base["false_accepts"], **over["fa"]}
+        return kb.b3_verdict(m)
+    assert v()["pass"] and all(v().values())
+    r = v(floor_hits=113)
+    assert not r["pass"] and not r["recall"] and r["coverage"] and r["near_domain"]
+    assert v(floor_hits=115)["pass"] and v(floor_hits=116)["pass"]  # 116 (B2's bar) is not required
+    r = v(fa={"near": 7})
+    assert not r["pass"] and not r["near_domain"] and r["recall"]
+    r = v(fa={"off": 1, "near": 0})
+    assert not r["pass"] and not r["off_domain"]
+    assert not v(fa={"near": 6, "off": 1})["overall"] and v(fa={"near": 6, "off": 0})["overall"]
+    r = v(floor_hits=126, n_sections=40, covered_sections=40)
+    assert not r["coverage"] and not r["pass"]
+    assert not v(covered_sections=41)["pass"]
+
+
+def t35_b3_scoring_applies_r1_end_to_end_prints_the_b2_bar_and_no_pooling():
+    cases = [(dict(), True), (dict(miss_each=range(1, 13)), True),   # 114/126
+             (dict(miss_each=range(1, 14)), False),                 # 113/126
+             (dict(near_fa=6), True), (dict(near_fa=7), False), (dict(off_fa=1), False),
+             (dict(miss_sections=(7,)), False)]
+    for kw_set, want in cases:
+        code, out, err, bp, _ = run_b3(kw_set)
+        assert code == 0, (kw_set, err)
+        assert b3_line(out).endswith(f"pass={want}"), (kw_set, b3_line(out))
+        assert "ac3:" not in out and "b2:" not in out and "pooled" not in out and "(73+" not in out and "/210" not in out, out
+        assert "floor=0.42" in out
+    code, out, *_ = run_b3(dict(miss_each=range(1, 13)))  # 114 hits: R1 pass, B2's 116 bar not met
+    assert "b2_bar_116: False (reported, not part of the verdict)" in out and b3_line(out).endswith("pass=True"), out
+    code, out, *_ = run_b3(dict(miss_each=range(1, 11)))  # 116 hits
+    assert "b2_bar_116: True (reported, not part of the verdict)" in out, out
+    code, out, *_ = run_b3(dict(off_fa=1, near_kind_swap=True))  # the file's kinds are honoured: it is a near accept now
+    assert b3_line(out).endswith("pass=True") and "near=1/30 off=0/30" in out, out
+
+
+def t35_b3_is_aggregate_only_has_its_own_sentinel_and_scores_once_and_b_b2_are_untouched():
+    code, out, err, bp, srch = run_b3(dict(miss_each=(3,)))
+    assert code == 0, err
+    assert "X030" not in out and "b2 sit" not in out and "XN" not in out and "RANK " not in out and "MISS " not in out
+    assert "set=B3 " in out
+    sentinel = Path(str(bp) + ".scored")
+    assert sentinel.is_file() and json.loads(sentinel.read_text())["setSha256"] == sha_of(bp)
+    w, m, doc_of = eval_env()
+    n = len(srch.calls)
+    code, out2, err2 = run_eval(sealed3(bp), srch, w, m)
+    assert code == 5 and "already scored" in err2 and len(srch.calls) == n
+    code, out3, err3 = run_eval(["--set", "B3", "--sealed-once", "--set-b3-path", str(bp), "--floor", "0.42"], srch, w, m)
+    assert code == 2 and "--expect-sha256" in err3
+    # B2 over the same bytes at another path still scores once on its own sentinel; B keeps ac3
+    b2p, script2 = b2_set(tempfile.mkdtemp(), doc_of)
+    code, out4, _ = run_eval(sealed2(b2p), FakeSearch(script2, w), w, m)
+    assert code == 0 and b2_line(out4).endswith("pass=True") and "pooled with Set B" in out4 and "b3:" not in out4
+    bb, bscript = b_set(tempfile.mkdtemp(), doc_of)
+    code, out5, _ = run_eval(sealed(bb), FakeSearch(bscript, w), w, m)
+    assert code == 0 and "ac3:" in out5 and "b3:" not in out5
+
+
+def t35_b3_refuses_untailed_set_stale_sha_and_a_missing_floor_before_any_search():
+    w, m, doc_of = eval_env()
+    pos, neg, script = b2_parts(doc_of)
+    for p in pos:
+        if p["section"] == 26:
+            p["tail"] = False
+    bp = write_set(Path(tempfile.mkdtemp(), "sealed", "b3.json"), pos, neg)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(sealed3(bp), srch, w, m)
+    assert code == 2 and "u26" in err and srch.calls == []
+    bp, _ = b2_set(tempfile.mkdtemp(), doc_of, name="b3.json")
+    args = sealed3(bp)
+    no_floor = [a for i, a in enumerate(args) if a != "--floor" and args[i - 1] != "--floor"]  # no hidden default floor
+    code, out, err = run_eval(no_floor, srch, w, m)
+    assert code == 2 and "--floor is required" in err and srch.calls == []
+    bp.write_text(bp.read_text() + " ")
+    code, out, err = run_eval(args, srch, w, m)
+    assert code == 2 and "mismatch" in err and srch.calls == []
+
+
+def t35_probe_and_bm25_baseline_work_for_b3():
+    w, m, doc_of = eval_env()
+    bp, script = b2_set(tempfile.mkdtemp(), doc_of, name="b3.json")
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B3", "--probe", "--set-b3-path", str(bp)], srch, w, m)
+    assert code == 0, err
+    assert len(srch.calls) == 186 and "set=B3 mode=probe" in out and not Path(str(bp) + ".scored").exists()
+    code, out, err = run_eval(["--set", "B3", "--baseline", "bm25", "--set-b3-path", str(bp)], FakeSearch({}, w), w, m)
+    assert code == 0, err
+    assert "baseline=bm25 set=B3" in out and "n_pos=126" in out
+
+
+def t35_nothing_in_the_tool_assumes_an_embedding_dimension():
+    src = Path(kb.__file__).read_text()
+    assert not re.search(r"\b(1024|2560|768|1536)\b", src) and not re.search(r"\bdim(ension)?s?\b", src, re.I), "a vector dimension is assumed"
+    # search results from a 2560-dim workspace carry the same fields; extra vector payloads are ignored by scoring
+    w, m, doc_of = eval_env()
+    bp, script = b2_set(tempfile.mkdtemp(), doc_of, name="b3.json")
+    wide = {q: [{**c, "embedding": [0.0] * 2560} for c in chunks] for q, chunks in script.items()}
+    code, out, err = run_eval(sealed3(bp), FakeSearch(wide, w), w, m)
+    assert code == 0 and b3_line(out).endswith("pass=True"), err
+
+
 def t21_gate_cli_exit_codes():
     w, m = FakeWorld(), tmpm()
     run_ingest(w, mini_copy(), manifest=m)

@@ -1062,7 +1062,14 @@ B2_MAX_NEAR_FA = 6  # of 30
 B2_MAX_OFF_FA = 0  # of 30
 B2_MAX_OVERALL_FA = 6  # of 60
 SET_B_RECORDED = (73, 84)  # Set B's failed score (hits, positives): pooled with B2 as informational text only
-SET_PROFILES = {"B": (SET_B_PER_SECTION, SET_B_NEAR, SET_B_OFF), "B2": (SET_B2_PER_SECTION, SET_B2_NEAR, SET_B2_OFF)}
+# Set B3 (docs/plans/python-web-quirks-kb-path-ml.md section 5, rule R1): the same shape as B2, its own bar; stands alone
+B3_MIN_RECALL = 114  # of 126 floor-applied positives
+B3_MAX_NEAR_FA = 6  # of 30
+B3_MAX_OFF_FA = 0  # of 30
+B3_MAX_OVERALL_FA = 6  # of 60
+SET_PROFILES = {"B": (SET_B_PER_SECTION, SET_B_NEAR, SET_B_OFF), "B2": (SET_B2_PER_SECTION, SET_B2_NEAR, SET_B2_OFF),
+                "B3": (SET_B2_PER_SECTION, SET_B2_NEAR, SET_B2_OFF)}
+SET_PATH_SOURCES = {"B": ("--set-b-path", "PWQ_SET_B"), "B2": ("--set-b2-path", "PWQ_SET_B2"), "B3": ("--set-b3-path", "PWQ_SET_B3")}
 TAIL_MIN_CHUNKS = 4  # ML section 5 rule 4: a unit with this many chunks or more needs a tail probe
 
 
@@ -1145,7 +1152,7 @@ def validate_set_a(data: dict) -> None:
 def resolve_set_b_path(arg, env=os.environ, kind: str = "B") -> Path:
     """Set B's path comes only from --set-b-path or PWQ_SET_B, and must be outside the repo (D11). Set B2 has its own
     pair, --set-b2-path and PWQ_SET_B2: B's variable never stands in for it."""
-    flag, var = ("--set-b-path", "PWQ_SET_B") if kind == "B" else ("--set-b2-path", "PWQ_SET_B2")
+    flag, var = SET_PATH_SOURCES[kind]
     chosen = arg or env.get(var)
     if not chosen:
         raise KBError(f"Set {kind} path: pass {flag} or set {var} (never read from the source)")
@@ -1299,6 +1306,21 @@ def b2_verdict(m: dict) -> dict:
     return {**parts, "pass": all(parts.values())}
 
 
+def b3_verdict(m: dict) -> dict:
+    """Set B3's decision rule R1 (docs/plans/python-web-quirks-kb-path-ml.md section 5), integer arithmetic against the spec's
+    constants: floor-applied recall >= 114/126, every one of the 42 sections hit, near false accepts <= 6/30, off 0/30,
+    overall <= 6/60. Binary; B3 stands alone (no pooling with any other set)."""
+    fa = m["false_accepts"]
+    parts = {
+        "recall": m["floor_hits"] >= B3_MIN_RECALL,
+        "coverage": m["covered_sections"] == SET_B_SECTIONS,
+        "near_domain": fa["near"] <= B3_MAX_NEAR_FA,
+        "off_domain": fa["off"] <= B3_MAX_OFF_FA,
+        "overall": fa["near"] + fa["off"] <= B3_MAX_OVERALL_FA,
+    }
+    return {**parts, "pass": all(parts.values())}
+
+
 def sweep(pos: list[dict], neg: list[dict], *, unit_doc: dict, feature_docs: set, keep: float) -> list[dict]:
     """One row per floor 0.38-0.50, with ML §6 step 2's adequacy criteria evaluated at that floor."""
     best = []  # best score of each positive's expected document (None when it is not among the chunks)
@@ -1385,11 +1407,12 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     skill = Path(args.skill).read_text(encoding="utf-8")
     template = extract_prefix(skill)
     excluded = frozenset(args.exclude or [])
-    which = args.set if args.set in ("B", "B2") else "A"
+    which = args.set if args.set in SET_PROFILES else "A"
     sealed_set = which != "A"
 
     def set_path() -> Path:
-        return resolve_set_b_path(args.set_b2_path if which == "B2" else args.set_b_path, env, kind=which)
+        arg = {"B": args.set_b_path, "B2": args.set_b2_path, "B3": getattr(args, "set_b3_path", None)}[which]
+        return resolve_set_b_path(arg, env, kind=which)
     if sealed_set and not (args.probe or args.sealed_once or args.baseline):
         raise KBError(f"--set {which} needs --probe or --sealed-once")
     if args.probe and not sealed_set:
@@ -1529,6 +1552,9 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
         hits, n = SET_B_RECORDED
         out(f"pooled with Set B (informational, not part of the verdict): ({hits}+{m['floor_hits']})/{n + m['n_pos']} = "
             f"{(hits + m['floor_hits']) / (n + m['n_pos']):.4f}")
+    elif which == "B3":  # R1 is B3's whole verdict; the B2 bar is a reported figure and nothing is pooled
+        out("b3: " + " ".join(f"{k}={v}" for k, v in b3_verdict(m).items()))
+        out(f"b2_bar_{B2_MIN_RECALL}: {m['floor_hits'] >= B2_MIN_RECALL} (reported, not part of the verdict)")
     else:
         out("ac3: " + " ".join(f"{k}={v}" for k, v in ac3_verdict(m).items()))
     diag = displacement(pos, [scored_chunks(f, excluded, k=len(f)) for f in fetched_pos], unit_doc=unit_doc, feature_docs=feature_docs)
@@ -1703,7 +1729,7 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     kbside(sub.add_parser("diverge", help="compare the KB with the copy (read-only)"), False)
     p = sub.add_parser("eval", help="evaluation harness (D9/D11)")
     kbside(p, True)
-    p.add_argument("--set", choices=["A", "B", "B2"])
+    p.add_argument("--set", choices=["A", "B", "B2", "B3"])
     p.add_argument("--before", action="store_true", help="Set A before ingestion (gate-exempt)")
     p.add_argument("--probe", action="store_true", help="Set B: rank-1 source and score only (gate-exempt, no sentinel)")
     p.add_argument("--sealed-once", action="store_true", help="Set B: the one scoring; writes the sentinel")
@@ -1716,6 +1742,7 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     p.add_argument("--set-a-path", default=str(DEFAULT_SET_A))
     p.add_argument("--set-b-path", help="Set B file (or PWQ_SET_B); must be outside the repo")
     p.add_argument("--set-b2-path", help="Set B2 file (or PWQ_SET_B2); must be outside the repo")
+    p.add_argument("--set-b3-path", help="Set B3 file (or PWQ_SET_B3); must be outside the repo")
     p.add_argument("--skill", default=str(DEFAULT_SKILL), help="retrieval skill holding the fenced prefix literal")
     p.add_argument("--timeout", type=float, default=GATE_TIMEOUT)
     p.add_argument("--poll", type=float, default=GATE_POLL)
