@@ -38,7 +38,7 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B7 (step 7 rebuild/check) | `tdd-engineer` | `aa72975dda9e9acd9` | accepted (committed; ~126k tok). Carry-forward: step 12 must populate `project.json` `legacy_paths` (pattern→home, `$1` capture) — init doesn't write it; check.py uses private Store/headers members (follow-up: public `Store.read_events()`) | `skills/work-items/…` | — | — |
 | B8 (step 8) | `tdd-engineer` | `aaba6a1fbbdbf501f` | accepted (committed; ~75k tok) | keys | — | — |
 | G3 diff gate steps 6–8 (+ re-confirm Pass 7 F1/F2) | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 8 | approve with suggestions (N1 major: rebuild can reissue numbers with `check` clean; N2–N5 minor) | — |
-| U1c N1 decision + 7 stale plan statements | `architect` | `a7af14139c4b90236` | in-flight | `docs/plans/work-item-numbering.md` | — | — |
+| U1c N1 decision + 7 stale plan statements | `architect` | `a7af14139c4b90236` | delivered (N1: git-history recovery + --floor + --accept-reissue guard + `rebuilt` marker = step 7b; N2/N3 = step 8b, already with B8b) | `docs/plans/work-item-numbering.md` | — | — |
 | B8b N2/N3/N4 fixes | `tdd-engineer` | `a798c99c101250269` | in-flight | `skills/work-items/…` | — | — |
 | B7b N1 rebuild-reissue guard | `tdd-engineer` | — | queued behind U1c decision | `skills/work-items/…` | — | — |
 | B9–B10 (steps 9–10) | `cobb` | — | queued — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
