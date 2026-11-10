@@ -50,6 +50,8 @@ def mint(root, spec, type_, parent=None, title=None, home=None, store=None):
         uid = tx.state.legacy.get((legacy_home, name))
         if uid is not None:
             return tx.state.items[uid].id
+        if home is not None and home != alloc.DEFAULT_HOME and home not in project.load_components(root):
+            raise alloc.AllocError(f"unknown home {home!r}: not a declared component of this project")
         return alloc.allocate(tx, key, type_, parent=parent, title=title, home=home,
                               legacy={"home": legacy_home, "name": name})
 

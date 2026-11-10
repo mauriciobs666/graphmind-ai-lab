@@ -134,9 +134,11 @@ def main(argv=None, cwd=None):
         elif args.cmd == "headers":
             sync_headers(root, args.id)
         elif args.cmd == "link":
+            legacy.install(project.load_namespaces(root))
             links.link(root, args.id, args.rel, args.target,
                        op="remove" if args.remove else None, clear=args.clear)
         elif args.cmd == "set":
+            legacy.install(project.load_namespaces(root))
             attr, eq, value = args.assignment.partition("=")
             if not eq:
                 raise links.LinkError(f"expected attr=value, got {args.assignment!r}")

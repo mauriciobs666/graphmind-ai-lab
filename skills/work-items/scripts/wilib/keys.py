@@ -70,7 +70,11 @@ def _candidates(name):
 def suggest(name, path=None):
     """Propose the first acceptable key derived from ``name``; never writes."""
     path = Path(path) if path else keys_path()
-    entries = _load(path.read_text(encoding="utf-8"), path) if path.exists() else []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise KeyRefused(f"key list {path} not found: the skill ships keys.json as []") from None
+    entries = _load(text, path)
     for cand in _candidates(name):
         try:
             check_key(cand, entries)

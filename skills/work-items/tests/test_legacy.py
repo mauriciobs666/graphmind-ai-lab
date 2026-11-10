@@ -238,3 +238,60 @@ def test_minted_id_reaches_main_with_its_new_event_when_only_b_is_merged(proj, t
     assert "GAL-I02-K0002" in ids                      # the merged branch's citation has its `new`
     again = wi(proj, "mint-legacy", "devops:K-004", "--type", "K")
     assert again.stdout == "GAL-I02-K0002\n"
+
+
+# ---- close-check Pass 10: link/set resolve legacy names like `resolve` (S-1) ----
+def _rel_target(proj, item):
+    st = Store(proj, "GAL").read_state()
+    return [e for e in events.read_events(Store(proj, "GAL").journal_path.read_text())
+            if e["ev"] == "link"], st.items[item]
+
+
+def test_link_resolves_qualified_and_bare_legacy_targets_and_legacy_source(proj):
+    wi(proj, "mint-legacy", "architect:K-004", "--type", "K")      # GAL-I02-K0001
+    wi(proj, "mint-legacy", "cpg:C-310", "--type", "F")            # GAL-F0001
+    new = wi(proj, "new", "F").stdout.strip()                      # GAL-F0002
+    assert new == "GAL-F0002"
+    assert wi(proj, "link", new, "relates", "architect:K-004").returncode == 0
+    assert wi(proj, "link", new, "relates", "C-310").returncode == 0
+    assert wi(proj, "link", "C-310", "relates", "architect:K-004").returncode == 0
+    links, _ = _rel_target(proj, new)
+    assert [(e["from"], e["to"]) for e in links] == [
+        (new, "GAL-I02-K0001"), (new, "GAL-F0001"), ("GAL-F0001", "GAL-I02-K0001")]
+
+
+def test_link_target_bare_ambiguous_exits_3_and_declared_unminted_exits_5(proj):
+    new = wi(proj, "new", "F").stdout.strip()
+    r = wi(proj, "link", new, "relates", "K-004")
+    assert r.returncode == 3 and "ambiguous" in r.stderr
+    r = wi(proj, "link", new, "relates", "devops:K-009")
+    assert r.returncode == 5 and "not minted" in r.stderr
+    r = wi(proj, "link", "devops:K-009", "relates", new)            # source side too
+    assert r.returncode == 5
+    assert wi(proj, "link", new, "relates", "Z-9").returncode == 4
+
+
+def test_set_resolves_legacy_names_and_exit_codes(proj):
+    wi(proj, "mint-legacy", "cpg:C-310", "--type", "F")
+    wi(proj, "mint-legacy", "architect:K-004", "--type", "K")
+    assert wi(proj, "set", "C-310", "milestone=m1").returncode == 0
+    assert wi(proj, "set", "architect:K-004", "milestone=m2").returncode == 0
+    st = Store(proj, "GAL").read_state()
+    assert (st.items["GAL-F0001"].milestone, st.items["GAL-I02-K0001"].milestone) == ("m1", "m2")
+    assert wi(proj, "set", "K-004", "milestone=m").returncode == 3
+    assert wi(proj, "set", "devops:K-009", "milestone=m").returncode == 5
+
+
+def test_mint_refuses_undeclared_home_burns_no_id_and_stores_nothing(proj):
+    r = wi(proj, "mint-legacy", "architect:K-004", "--type", "K", "--home", "nope")
+    assert r.returncode == 1 and r.stderr.startswith("wi: ") and "nope" in r.stderr
+    assert wi(proj, "resolve", "architect:K-004").returncode == 5          # nothing minted
+    ok = wi(proj, "mint-legacy", "architect:K-004", "--type", "K", "--home", "a")
+    assert (ok.stdout, ok.returncode) == ("GAL-I02-K0001\n", 0)            # no number burned
+    assert json.loads(wi(proj, "resolve", "architect:K-004", "--json").stdout)["home"] == "a"
+
+
+def test_mint_accepts_repo_home_and_remint_ignores_home(proj):
+    assert wi(proj, "mint-legacy", "cpg:C-310", "--type", "F", "--home", "repo").stdout == "GAL-F0001\n"
+    again = wi(proj, "mint-legacy", "cpg:C-310", "--type", "F", "--home", "nope")
+    assert (again.returncode, again.stdout) == (0, "GAL-F0001\n")

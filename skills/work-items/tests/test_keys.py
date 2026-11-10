@@ -76,10 +76,10 @@ def test_missing_corrupt_or_non_list_keys_file_is_a_clean_error_not_a_traceback(
         p.write_text(content)
     for args in (("key", "claim", "GAL", "--repo", "a"), ("key", "suggest", "gal market")):
         r = wi(p, *args)
-        assert r.returncode == (0 if content is None and args[1] == "suggest" else 1), (args, r.stderr)
+        assert r.returncode == 1, (args, r.stderr)
         assert "Traceback" not in r.stderr
-        if r.returncode:
-            assert r.stderr.startswith("wi: ") and "keys.json" in r.stderr
+        assert r.stderr.startswith("wi: ") and "keys.json" in r.stderr
+        assert r.stdout == ""
     assert (not p.exists()) if content is None else p.read_text() == content
 
 
