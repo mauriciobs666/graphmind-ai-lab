@@ -23,6 +23,7 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U14 | `data-scientist` | `aadca675a5b51c7bd` | accepted | S7b rulings + S12 count rewrite in `docs/plans/python-web-quirks-kb-ml.md`; teco re-derived 129 chunks / 12 units ≥4 chunks and 42 sections / 73,825 chars (matches); code asks → U15 | G2 → — | 102k tok / 23 tools |
 | U15 | `tdd-engineer` | `a5b4d60449cc8f09e` | accepted | `validate_set_a`, mandatory `--expect-sha256` on `--sealed-once` (strict 64 lower-case hex), Set B tail-unit check (derived from manifest pin; sealed runs only); selftest 130/130, 27 of 28 mutants killed (1 equivalent); teco re-ran all four selftests (130, 11, 25) and checked hashes. Note: `--sealed-once` now loads the manifest earlier | G2 → — | 136k tok / 34 tools |
 | U16 | `architect` | `a4a56299792bbf4fe` | accepted | plan amendments (+115 words net by `wc -w`); `--pin-from-git` owned by S16d via `coder` (architect's call, accepted) | G2 → — | 50k tok / 10 tools |
+| U17 | `qa-engineer` | `ab42c5f094343303c` | in-flight | S8: sealed Set B outside repo (sha256 only to ledger), leakcheck, `--probe` on :8210, `docs/test-plans/python-web-quirks-kb.md`; seal: only S8/S14 briefs name the path | G2 → — | — |
 
 
 Next: S3b delivers; verify (selftest, own mutants), commit; then `analyst` G1 (plan §4); then S4 etc. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
