@@ -228,3 +228,53 @@ None blocking.
 - Dedup is a mid-file rewrite: mention that `wi flush` must run after the merge commit is complete (verified order: merge, flush, commit), otherwise an in-progress union merge is rewritten; one line in the SKILL.md rule suffices.
 
 **Open questions.** None.
+
+## Pass 7 (impl, steps 1–5)
+
+**Scope.** `skills/work-items/scripts/wi.py` + `wilib/{rules,events,store,project,alloc,resolve,move,legacy,cli}.py` and `tests/` at 2e8635fd (steps 1–5, commits 2353ab33, 5ca9ccc8, 59a1911c, c28471f4, 2e8635fd), against `docs/plans/work-item-numbering.md` and `docs/requirements/work-item-numbering.md` (AC-1, 2, 3, 4, 5, 6, 9, 13, 16, 17), root `REVIEW.md` (no component `REVIEW.md` applies). Ran: suite (`cd skills/work-items && …/model-bench/.venv/bin/python -m pytest tests -q`: **310 passed**), real `scripts/wi.py` scenarios in temp git repos, 10 mutants on a copy under scratchpad. Scripts: `…/scratchpad/s1.sh`–`s4.sh`, `r4`, `ng` (same dir as `env.sh`).
+
+**Verdict: approve with suggestions.** No blocker: every owned AC held end to end through the CLI (below). Two majors are test/contract gaps with a verified defect or a verified silent-corruption window; neither needs redesign. CPG: considered, not relevant — a new standalone script package, no existing code changed and no loaded graph for it.
+
+### Executed AC evidence (all via `wi.py`)
+- **AC-1/13/16** `I03`→`F0001`→`S01`→`T01`; no-initiative feature `GAL-F0001`; matrix in `tests/test_rules.py:74-130` is a literal table matching FR-25 (read against the requirement text; `rules.validate_parent` matches it, no grammar drift; `F` under `I01/I02`, `S/T` with no parent, story under `D/K` refused via CLI, exit 1).
+- **AC-2** Two linked worktrees interleaving `new S`, `promote`, `mint-legacy` (same item from both sides, and the second home), `new T` under the *promoted* kaizen's old ID, `move`, `new F`; flush+commit on each, merge both into main: no conflict, 0 duplicate lines, 14 distinct `new` ids, a post-merge `flush` leaves 15 lines, next `new` is unique.
+- **AC-3/17/9** Story moved out (`F2-S01`), new story under old parent = `S03` (no reuse), moved back via its *old alias* = `S04`; task keeps its alias chain through 2 moves; feature `I03→none→I03` and aliases resolve; story created *after* a feature move continues numbering and follows a second move; kaizen+task promoted: `K` and `K-T01` resolve as aliases of `F0003`/`F0003-T01`. `FR2a` citation resolves after move.
+- **AC-4** retire → number not reissued (`test_cli.py` `test_cli_retire_and_no_reissue`: retired `S01`, next is `S02`; the ID still resolves). Not re-run by me beyond the suite.
+- **AC-5** Read `alloc.py`, `move.py`, `legacy.py`, `store.py`: none opens a document (only `init` globs `requirements/` for the baseline, as planned). The recorder tests cover `new` and `mint` only (see F2).
+- **AC-6** architect/devops `K-004` → two IDs, re-mint returns the first (also from the other worktree), `K-004` exit 3 listing both with minted IDs, `C-310` exit 5 before and 0 after mint, qualified name text says "alias of …". Ambiguity is driven by declared homes, so minting later cannot change it.
+- **Journal loss** Deleted `.git/work-items` after an unflushed `new` on a branch ref: reseed folded the other branch's flushed events (no reissue of `F0003/F0004`) and reissued only `F0005`, which lived solely in the lost journal. This is exactly the plan's stated residual (3.1), not a defect.
+
+### Findings
+
+**F1 (major, verified) — `resolve` accepts FR/AC citations under any parent.** `resolve.py:_requirement` splits the suffix and resolves the prefix as an item without checking it is a feature. `wi resolve GAL-I04-FR1` → rc 0 `GAL-I04-FR1`; `wi resolve GAL-F0001-S02-AC3` → rc 0 (alias of the story-path form). FR-25 says FR/AC have a feature; "any other parent is refused" (AC-16). Step 7's "FR/AC cited but absent" check will inherit a resolver that blesses illegal paths. Fix: require `feature["type"] == "F"` (else unknown, exit 4); the test should parametrize the `FR`/`AC` rows of `test_rules.REFUSED` (every parent type) through `resolve`, not one example.
+
+**F2 (major, verified by mutation) — tests that cannot fail on silent corruption.** Planted on a copy; each survived all 310 tests:
+- `alloc.py` writes `"parent": parent_item.id` instead of `.uid`. Identical until a parent has moved; then a child created under a moved feature restarts at `S01`: ran it, `new S` twice under a moved feature printed `GAL-I04-F0001-S02` **twice** (FR-5/FR-6 break) and the child is not renamed by a later subtree move. Missing tests: a `new` under an already-moved parent continues numbering, and a *second* move renames that post-move child (CLI or `alloc`+`move`; assert old-ID alias too).
+- `legacy.mint` dropping `parent=` or `title=` (and `cli.py` dropping `parent=args.parent` for `mint-legacy`): no test mints with `--parent`/`--title` and reads the event back. Add one CLI test with `--type F --parent <I03>` and `--title`.
+- Plan test 11's "`git status` clean afterwards" and test 12 (mint on A, mint on B, flush B, merge only B: the `new` reaches main) are not in the suite (only `test_init`/`test_store` assert clean status). Behaviour is right (my run above), the pins are missing; put test 12 in `test_legacy`/`test_concurrency` and require the clean status after `mint`.
+Killed (so the suite does catch): journal ref scan for remotes, flush not copying journal events, `flush` CLI no-op, promote `--parent` dropped, `_see_local` on move, mint `--type` dropped.
+
+**F3 (major, design decision before step 6) — link model is single-valued; the JSON contract pins that shape.** `events._apply_link` keys `(rel, from)` last-wins and `resolve._record` emits `links: {rel: id}`. `concerns` (a defect concerns one thing) fits. `relates` (FR-15 "every other relation") and `fixed-by` (a defect may have several fix tasks) hold one target. Step 6 will either live with that or change the pinned `links` shape. Decide now, in plan 3.5: either state "links are functional (one target per relation, last wins)" and drop `relates` multiplicity, or fold to `rel → [ids]` with `to:null` clearing all (and an add/remove op if single removal is needed) before `test_resolve`'s key/shape pins grow. The event schema is otherwise compatible (links reference uids, survive moves; unknown `from`/`to` are silently kept, so step 7's dangling check must read events, not `State.orphans`).
+
+**Rulings on the soft spots**
+- **(a) `move`/`promote`/`retire` take IDs and aliases only — not a defect.** Plan 3.4 types `<id>`; old IDs work (verified, incl. moving back by alias). FR-12/FR-20 are met by `resolve`. But the failure is a trap: `wi move architect:K-004 …` on a minted item prints `unknown item 'architect:K-004'` (exit 1, not 4). **Minor**: either add a shared qualified-name lookup (not bare: refusing a mutation on an ambiguous name is correct) or make the error say "resolve it first / use its ID". 
+- **(b) Minted items get `home="repo"` — minor, FR-19.** Verified (`resolve C-310 --json` → `"home": "repo"`). Legacy homes are namespace homes (`architect`) that are not always components, so copying blindly is wrong, but `cpg`/`falkor-chat` are. Add `--home` to `mint-legacy`, defaulting to the legacy home only when it is a declared component. Also `wi new F --home nonexist` is accepted today; plan 3.5/step 6 owns the component validation, so this is expected until then, but the step 6 row should say it applies to `new --home` and `mint-legacy --home`.
+- **(c)** see F3.
+- **(d) `--sync` stub — fails safe, minor sharpening.** Only `cli.py` calls it; repo-wide grep finds no caller outside the plan docs and the skill is not yet symlinked or referenced by any agent (steps 9–10 pending). It writes nothing. But it raises *after* allocating and printing: `new F --slug x --sync` prints `GAL-F0006`, then a traceback, rc 1, and a retry burns `F0007`. Reject `--sync` before allocation (argparse error) until step 6; `test_sync_is_a_stub_that_writes_nothing` pins `NotImplementedError` and must flip with step 6. `move`/`promote` have no `--sync` flag at all.
+- **(e) Plan text to match the code** (plan edits not made): 3.4 and step 4: `wi move <id> --to <parent|none>` is actually `wi move <id> <newparent|none>` (positional); `wi promote <K-id> --slug S [--initiative I03]` is `wi promote <K-id> --to F [--parent I03]`, and there is no `--slug` (a promoted feature keeps the kaizen's slug, usually none, so FR-23's header phase needs `wi set slug` or a `--slug` option); 3.7: `--sync` on `move`/`promote` does not exist yet. Plan gap: 3.5 names `set` attributes (milestone/home/touched/slug/where) but step 6 lists no `wi set`/`wi link` CLI owner; assign it.
+- **(f) alloc refactor — no lock regression.** `allocate(tx, …)` takes no lock; `new`, `retire`, `mint`, `move`, `promote` each open exactly one `transaction()`; `init` calls `flush()` after leaving its transaction; `project.load_namespaces`/`load_key` read before locking; no nested `_locked()` path (read `alloc.py`, `legacy.py`, `move.py`, `project.py`, `store.py`; 8-process and 8-process-mint tests pass).
+
+### Minor / nit
+- **m1** Non-git mode creates `.work-items/.lock` (verified); after a later `git init`, `git add .work-items` commits a lock file. Ignore it or keep the lock outside the tracked dir.
+- **m2** Retired items stay fully usable: `new S --parent <retired F>` and `move <retired>` succeed (verified). FR-6 only needs the ID to resolve; say in the plan whether that is intended.
+- **m3** `IllegalParent` text prints `I3` (`parent_num` unpadded), e.g. `T may not have I3 as parent`; use `format_segment`.
+- **m4** `flush` leaves a `registry.jsonl.tmp` after a crash between write and `os.replace`; harmless, `check` could ignore it.
+
+### What's solid
+Fold/ordering design: counters never reduced by a move, local counters keyed by parent uid, `new`-first ordering; journal-shared worktree allocation and union-merge dedup behave as the plan states in executed multi-branch scenarios; legacy ambiguity from declared homes; `resolve --json` key set pinned; mutation-killed coverage of flush, reseed and promote paths is real.
+
+### Open questions
+None blocking. F3 needs the architect's call before step 6 starts.
+
+### Proposed REVIEW.md lines
+None (F2 is project-specific test gaps; F1 is a grammar-drift instance already covered by "check can both fail and pass").
