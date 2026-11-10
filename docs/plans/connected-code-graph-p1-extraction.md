@@ -138,7 +138,9 @@ internals. Frontend quirks live in the extractor's normalizer and nowhere downst
   forbidden flag (`cpg/sandbox/forbidden-flags.txt`) is present and `--mode offline` is set (live tests are
   marked `live`); (3) the ported `extract.sc` run on the slice corpus yields raw facts equal to the slice's (a
   `slice`-marked test comparing canonical JSON, with the artifact sha256 and `0 skipped` recorded, index D9); (4) the D15 content check (a parse is
-  certified by content, `cpg/sandbox/scripts/cpg-content-check.sc`) refuses an empty CPG (risk R11).
+  certified by content, `cpg/sandbox/scripts/cpg-content-check.sc`) refuses an empty CPG (risk R11); (5) staging excludes from a
+  unit's file set every path under a descendant unit root of the **same language** (`ccg.units` overlaps: a fallback unit over a
+  manifest unit when forced, and a fallback over a fallback), so no file is staged in two bundles; a test pins both overlaps.
 - **Done:** one command builds raw facts for a unit; behaviour is unchanged from the slice (the improvement
   happens in P1-09). This step writes no bundle: bundle writing, and its `0600` mode test, belong to P1-05 (5b) for
   the Joern extractors and to P1-44 for the others. **Gate:** `analyst`. **Risk:** the 6 GB host; run units one at a time.

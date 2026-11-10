@@ -199,6 +199,8 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   loader rejects a `remote` key, and the report says "head is the local clone's"; (5) a full rebuild is the default
   (bundle caching by tree id is not built; the lever if the budget fails); (6) `refresh` is the one entry point;
   only the on-demand trigger exists in P1 (schedule, threshold and CI are P3, AC-9a); (7) a shallow clone is a build
-  error (D1).
+  error (D1); (8) units are discovered from the **commit** being built, as P1-04 stages with `git archive` of that commit: `discover_units`
+  gains an optional `commit` argument that lists `git ls-tree -r -z --name-only <commit>` instead of the index (`git ls-files`, the
+  default for the golden), so a staged-uncommitted or work-tree-deleted path never makes a unit.
 - **Done:** a full refresh of the proving system on the dev host with **wall time and peak RSS recorded** (R-4); an
   unbuildable-unit fixture and a never-built unit behave as in (1). **Gate:** `analyst`.
