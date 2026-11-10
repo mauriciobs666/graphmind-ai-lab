@@ -13,6 +13,8 @@ from HEAD or the working tree):
   render-copy            render the copy of record (`claude/knowledge/python-web-quirks.md`)
                          to stdout, or to --out
   verify-copy --copy F   recompute every header and compare every body with the pinned source
+  eval                   S3b: the evaluation harness (D9/D11): --set A [--before], --set B --probe |
+                         --sealed-once, --ac2, --sweep, --baseline bm25; scoring modes re-run the gate
   ingest / gate / diverge / replace / retire
                          S3a: the KB side. Every command names `--ws` and (for writes) `--base-url`;
                          the pair must match the committed TARGETS table. `replace`/`retire` refuse
@@ -43,6 +45,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -841,6 +844,428 @@ def diverge(copy_text: str, *, ws: str, manifest: dict, fetcher) -> list[tuple[s
     return out
 
 
+
+# --- S3b: eval (D9, D11) -----------------------------------------------------------------------
+EVAL_WINDOW = 50  # chunks requested per query; the convention's limit=5 is deliberately exceeded (D11)
+EVAL_TOPK = 5
+SWEEP_FLOORS = [round(0.38 + 0.01 * i, 2) for i in range(13)]  # 0.38 .. 0.50 (ML §6)
+LEAK_SCORE = 0.25  # a Set B probe whose rank-1 score is below this is a leak sign (D11 ruling i)
+BM25_K1, BM25_B = 1.5, 0.75
+DEFAULT_SKILL = REPO_ROOT / "skills" / "agent-kb-retrieval" / "SKILL.md"
+DEFAULT_SET_A = Path(__file__).resolve().parent / "fixtures" / "pwq-golden-set-a.json"
+
+
+class GateRefused(KBError):
+    pass
+
+
+class SealedRefused(KBError):
+    pass
+
+
+def extract_prefix(skill_text: str) -> str:
+    """The query template (with `{situation}`) from the retrieval skill's fenced literal.
+
+    Pure string extraction, never eval/exec: the literal is `f"...\\n...{situation}"`; only the `\\n`
+    escape is understood and anything else aborts.
+    """
+    lines = skill_text.split("\n")
+    head = next((i for i, ln in enumerate(lines) if ln.startswith("#") and "query-instruction prefix" in ln), None)
+    if head is None:
+        raise KBError("retrieval skill: no 'query-instruction prefix' heading")
+    fence = [i for i in range(head + 1, len(lines)) if lines[i].startswith("```")]
+    if len(fence) < 2:
+        raise KBError("retrieval skill: the prefix fence is missing")
+    body = [ln for ln in lines[fence[0] + 1 : fence[1]] if ln.strip()]
+    if len(body) != 1:
+        raise KBError("retrieval skill: the prefix fence must hold exactly one line")
+    lit = body[0].strip()
+    if not (lit.startswith('f"') and lit.endswith('"')):
+        raise KBError("retrieval skill: the prefix literal is not an f-string literal")
+    inner = lit[2:-1].replace("\\n", "\n")
+    if "\\" in inner or '"' in inner:
+        raise KBError("retrieval skill: the prefix literal uses an escape other than \\n")
+    if inner.count("{situation}") != 1 or "\n" not in inner:
+        raise KBError("retrieval skill: the prefix literal needs one {situation} placeholder and a newline")
+    return inner
+
+
+def build_query(template: str, situation: str) -> str:
+    return template.replace("{situation}", situation, 1)
+
+
+def load_set(path: Path) -> dict:
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise KBError(f"cannot read set {path}: {e}") from e
+    pos, neg = [], []
+    for p in raw.get("positives", []):
+        if not (isinstance(p.get("section"), int) and isinstance(p.get("query"), str) and p["query"].strip() and p.get("id")):
+            raise KBError(f"bad positive {p.get('id')!r}: needs id, integer section, non-empty query")
+        pos.append({"id": p["id"], "section": p["section"], "query": p["query"], "tail": bool(p.get("tail", False))})
+    for n in raw.get("negatives", []):
+        if not (n.get("kind") in ("near", "off") and isinstance(n.get("query"), str) and n["query"].strip() and n.get("id")):
+            raise KBError(f"bad negative {n.get('id')!r}: needs id, kind near|off, non-empty query")
+        neg.append({"id": n["id"], "kind": n["kind"], "query": n["query"]})
+    return {"positives": pos, "negatives": neg}
+
+
+def resolve_set_b_path(arg, env=os.environ) -> Path:
+    """Set B's path comes only from --set-b-path or PWQ_SET_B, and must be outside the repo (D11)."""
+    chosen = arg or env.get("PWQ_SET_B")
+    if not chosen:
+        raise KBError("Set B path: pass --set-b-path or set PWQ_SET_B (never read from the source)")
+    path = Path(chosen)
+    try:
+        path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        return path
+    raise KBError(f"Set B must live outside the repo, got {path}")
+
+
+class RestSearcher:
+    """`search_documents` / `get_document` over the validated target's REST routes."""
+
+    def __init__(self, target: Target, transport=urllib_transport):
+        self.target, self._transport = target, transport
+
+    def search(self, ws: str, query: str, limit: int) -> list[dict]:
+        qs = urllib.parse.urlencode({"q": query, "limit": limit})
+        status, body = self._transport("GET", f"{self.target.base_url}/documents/search?{qs}", None)
+        if status != 200 or not isinstance(body, list):
+            raise KBError(f"search failed: HTTP {status} {str(body)[:200]}")
+        return body
+
+    def get_document(self, ws: str, document_id: str) -> dict | None:
+        status, body = self._transport("GET", f"{self.target.base_url}/documents/{document_id}", None)
+        if status == 404:
+            return None
+        if status != 200:
+            raise KBError(f"get_document failed: HTTP {status}")
+        return body
+
+
+def window_chunks(searcher, ws: str, query: str, excluded=frozenset(), window: int = EVAL_WINDOW, k: int = EVAL_TOPK):
+    return scored_chunks(searcher.search(ws, query, window), excluded, k)
+
+
+def scored_chunks(fetched: list[dict], excluded=frozenset(), k: int = EVAL_TOPK) -> list[dict]:
+    """Drop excluded documents' chunks from the fetched window, then keep the first `k`."""
+    return [c for c in fetched if c["documentId"] not in excluded][:k]
+
+
+def name_hit(searcher, ws: str, chunks: list[dict]):
+    """(documentId, title, score) of the best-scoring distinct document among `chunks`, titled via get_document."""
+    if not chunks:
+        return None
+    best = min(chunks, key=lambda c: c["score"])
+    doc = searcher.get_document(ws, best["documentId"])
+    return best["documentId"], (doc or {}).get("title"), best["score"]
+
+
+def evaluate(pos: list[dict], neg: list[dict], *, floor, unit_doc: dict, feature_docs: set) -> dict:
+    """Metrics over already-fetched, already-truncated chunks. `floor=None`: no floor (BM25)."""
+    under = (lambda c: True) if floor is None else (lambda c: c["score"] <= floor)
+    raw = fl = 0
+    rr_sum = 0.0
+    by_section: dict[int, bool] = {}
+    by_section_raw: dict[int, bool] = {}
+    head = [0, 0]
+    tail = [0, 0]
+    distinct = []
+    for p in pos:
+        want = unit_doc.get(p["section"])
+        ranks = [i for i, c in enumerate(p["chunks"], 1) if c["documentId"] == want]
+        hit_raw = bool(ranks)
+        hit_fl = any(c["documentId"] == want and under(c) for c in p["chunks"])
+        raw += hit_raw
+        fl += hit_fl
+        rr_sum += 1 / ranks[0] if ranks else 0.0
+        by_section[p["section"]] = by_section.get(p["section"], False) or hit_fl
+        by_section_raw[p["section"]] = by_section_raw.get(p["section"], False) or hit_raw
+        bucket = tail if p.get("tail") else head
+        bucket[0] += 1
+        bucket[1] += hit_fl
+        distinct.append(len({c["documentId"] for c in p["chunks"]}))
+    n_neg = {"off": 0, "near": 0}
+    accepts = {"off": 0, "near": 0}
+    for n in neg:
+        n_neg[n["kind"]] += 1
+        accepts[n["kind"]] += any(c["documentId"] in feature_docs and under(c) for c in n["chunks"])
+        distinct.append(len({c["documentId"] for c in n["chunks"]}))
+    n = len(pos)
+    return {
+        "n_pos": n, "raw_hits": raw, "floor_hits": fl,
+        "recall_raw": raw / n if n else 0.0, "recall_floor": fl / n if n else 0.0,
+        "mrr": rr_sum / n if n else 0.0,
+        "distinct_docs_mean": sum(distinct) / len(distinct) if distinct else 0.0,
+        "n_sections": len(by_section), "covered_sections": sum(by_section.values()),
+        "covered_sections_raw": sum(by_section_raw.values()),
+        "n_head": head[0], "n_tail": tail[0],
+        "head_recall": head[1] / head[0] if head[0] else None, "tail_recall": tail[1] / tail[0] if tail[0] else None,
+        "false_accepts": None if floor is None else accepts, "n_neg": n_neg,
+    }
+
+
+def ac3_verdict(m: dict) -> dict:
+    """ML §1 gate, integer arithmetic so the boundaries are exact: recall >= 0.90, every section
+    covered, off-domain rejected 100%, near-domain rejected >= 80% (12/15)."""
+    near_n, off_n = m["n_neg"]["near"], m["n_neg"]["off"]
+    near_rej, off_rej = near_n - m["false_accepts"]["near"], off_n - m["false_accepts"]["off"]
+    parts = {
+        "recall": m["floor_hits"] * 10 >= m["n_pos"] * 9,
+        "coverage": m["covered_sections"] == m["n_sections"],
+        "off_domain": off_rej == off_n,
+        "near_domain": near_rej * 5 >= near_n * 4,
+    }
+    return {**parts, "pass": all(parts.values())}
+
+
+def sweep(pos: list[dict], neg: list[dict], *, unit_doc: dict, feature_docs: set, keep: float) -> list[dict]:
+    """One row per floor 0.38-0.50, with ML §6 step 2's adequacy criteria evaluated at that floor."""
+    best = []  # best score of each positive's expected document (None when it is not among the chunks)
+    for p in pos:
+        scores = [c["score"] for c in p["chunks"] if c["documentId"] == unit_doc.get(p["section"])]
+        best.append(min(scores) if scores else None)
+    rows = []
+    for f in SWEEP_FLOORS:
+        found = [b for b in best if b is not None and b <= f]  # found at this floor
+        worst = max(found) if found else None
+        m = evaluate(pos, neg, floor=f, unit_doc=unit_doc, feature_docs=feature_docs)
+        fa = m["false_accepts"]
+        ok = (
+            (m["raw_hits"] - m["floor_hits"]) * 100 <= 3 * m["n_pos"]
+            and fa["off"] == 0
+            and fa["near"] * 7 <= 2 * m["n_neg"]["near"]
+            and (worst is None or round(f - worst, 6) >= 0.025)
+        )
+        rows.append({"floor": f, "recall_floor": m["recall_floor"], "recall_raw": m["recall_raw"], "near_fa": fa["near"],
+                     "off_fa": fa["off"], "adequate": ok, "current": f == keep})
+    return rows
+
+
+# BM25 over the copy's chunks: the offline lexical baseline (ML §4.3).
+def bm25_rank(corpus: list[tuple[str, str]], query: str, k1: float = BM25_K1, b: float = BM25_B) -> list[tuple[str, float]]:
+    import math
+
+    tok = lambda t: re.findall(r"[a-z0-9_]+", t.lower())
+    docs = {k: tok(t) for k, t in corpus}
+    n = len(docs)
+    avg = sum(len(d) for d in docs.values()) / n if n else 0.0
+    df: dict[str, int] = {}
+    for d in docs.values():
+        for term in set(d):
+            df[term] = df.get(term, 0) + 1
+    scores: dict[str, float] = {}
+    for key, d in docs.items():
+        s = 0.0
+        for term in sorted(set(tok(query))):
+            tf = d.count(term)
+            if tf:
+                idf = math.log(1 + (n - df[term] + 0.5) / (df[term] + 0.5))
+                s += idf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * len(d) / avg))
+        scores[key] = s
+    return sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def bm25_top(corpus: list[tuple[str, str]], query: str, k: int = EVAL_TOPK) -> list[dict]:
+    """The first `k` chunks with a positive BM25 score, shaped like search results (`key` = `<unit>:<seq>`)."""
+    ranked = [(key, sc) for key, sc in bm25_rank(corpus, query) if sc > 0][:k]
+    return [{"chunkId": key, "documentId": key.split(":")[0], "seq": 0, "score": sc, "text": ""} for key, sc in ranked]
+
+
+def fmt_metrics(m: dict) -> str:
+    f = lambda x: "n/a" if x is None else f"{x:.4f}"
+    fa = m["false_accepts"]
+    parts = [f"n_pos={m['n_pos']}", f"raw_hits={m['raw_hits']}", f"floor_hits={m['floor_hits']}",
+             f"recall_raw={f(m['recall_raw'])}", f"recall_floor={f(m['recall_floor'])}", f"mrr={f(m['mrr'])}",
+             f"distinct_docs_mean={m['distinct_docs_mean']:.2f}",
+             f"covered_sections={m['covered_sections']}/{m['n_sections']}",
+             f"covered_sections_raw={m['covered_sections_raw']}/{m['n_sections']}",
+             f"head_recall={f(m['head_recall'])} tail_recall={f(m['tail_recall'])}"]
+    if fa is not None:
+        parts.append(f"false_accepts near={fa['near']}/{m['n_neg']['near']} off={fa['off']}/{m['n_neg']['off']}")
+    return " ".join(parts)
+
+
+def _section_maps(manifest: dict, read_source=read_pinned) -> tuple[dict, dict, set]:
+    """(section -> documentId, section -> unit id, feature document ids), from the manifest's pin."""
+    units_ = build_units(parse_source(read_source(manifest["pin"])))
+    doc_of_unit = {u["id"]: u["documentId"] for u in manifest["units"]}
+    sec_unit = {s.index: u.id for u in units_ for s in u.members}
+    return {n: doc_of_unit.get(uid) for n, uid in sec_unit.items()}, sec_unit, set(doc_of_unit.values())
+
+
+def eval_gate(fetcher, ws: str, manifest: dict, timeout: float, poll: float) -> None:
+    ok, table = run_gate(fetcher, ws, manifest, timeout=timeout, poll=poll)
+    if not ok:
+        raise GateRefused("embedding gate failed; refusing to score:\n" + table)
+
+
+def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.environ, out=print) -> int:
+    ws = args.ws
+    skill = Path(args.skill).read_text(encoding="utf-8")
+    template = extract_prefix(skill)
+    excluded = frozenset(args.exclude or [])
+    which = "B" if args.set == "B" else "A"
+    if args.set == "B" and not (args.probe or args.sealed_once or args.baseline):
+        raise KBError("--set B needs --probe or --sealed-once")
+    if args.probe and args.set != "B":
+        raise KBError("--probe is a Set B mode")
+    if args.sealed_once and args.set != "B":
+        raise KBError("--sealed-once is a Set B mode")
+    if args.before and args.set != "A":
+        raise KBError("--before is a Set A mode")
+    chosen = [bool(args.probe), bool(args.sealed_once), bool(args.before), bool(args.ac2), bool(args.sweep), bool(args.baseline)]
+    if sum(chosen) > 1 or (not any(chosen) and args.set is None):
+        raise KBError("choose one mode: --set A [--before] | --set B --probe|--sealed-once | --ac2 | --sweep | --baseline bm25")
+    if not args.probe and not args.baseline and args.floor is None:
+        raise KBError("--floor is required (it is recorded in every report)")
+
+    def load_which() -> dict:
+        return load_set(resolve_set_b_path(args.set_b_path, env) if which == "B" else Path(args.set_a_path))
+
+    def fetch_all(items):
+        return [searcher.search(ws, build_query(template, it["query"]), EVAL_WINDOW) for it in items]
+
+    # ---- gate-exempt modes
+    if args.probe:
+        bp = resolve_set_b_path(args.set_b_path, env)
+        data = load_set(bp)
+        out(f"set=B mode=probe window={EVAL_WINDOW}")
+        for it in data["positives"] + data["negatives"]:
+            five = scored_chunks(searcher.search(ws, build_query(template, it["query"]), EVAL_WINDOW), excluded)
+            named = name_hit(searcher, ws, five)
+            if named is None:
+                out(f"{it['id']} (no chunks)")
+                continue
+            did, title, score = named
+            out(f"{it['id']} {did} {title or '?'} {score:.4f}" + (" LEAK?" if score < LEAK_SCORE else ""))
+        return 0
+    if args.before:
+        data = load_which()
+        out(f"set=A mode=before floor={args.floor:g} window={EVAL_WINDOW}")
+        items = data["positives"] + data["negatives"]
+        n_hit = 0
+        for it, fetched in zip(items, fetch_all(items)):
+            five = scored_chunks(fetched, excluded)
+            under = [c for c in five if c["score"] <= args.floor]
+            if under:
+                n_hit += 1
+                best = min(under, key=lambda c: c["score"])
+                if it in data["positives"]:
+                    out(f"DUPLICATE-COVERAGE {it['id']} {best['documentId']} {best['score']:.4f}")
+        out(f"queries_with_a_hit_under_floor={n_hit}/{len(items)}")
+        return 0
+
+    # ---- scoring modes: sentinel check, then the gate, then the queries
+    sentinel = None
+    if args.sealed_once:
+        sentinel = Path(str(resolve_set_b_path(args.set_b_path, env)) + ".scored")
+        if sentinel.exists():
+            raise SealedRefused(f"Set B already scored ({sentinel}); a second scoring is refused (write B2 instead)")
+    manifest = load_manifest(mpath)
+    eval_gate(fetcher, ws, manifest, args.timeout, args.poll)
+    unit_doc, sec_unit, feature_docs = _section_maps(manifest)
+    header = f"set={which} floor={args.floor if args.floor is None else format(args.floor, 'g')} window={EVAL_WINDOW} topk={EVAL_TOPK}"
+
+    if args.ac2:
+        return _ac2(args, searcher, ws, template, excluded, manifest, unit_doc, sec_unit, out, header)
+    data = load_which()
+    pos, neg = data["positives"], data["negatives"]
+
+    if args.baseline:
+        if args.baseline != "bm25":
+            raise KBError("--baseline supports only bm25")
+        ents = copy_entries(Path(args.copy).read_text(encoding="utf-8"))
+        split = _load_chunker()
+        corpus = [(f"{e.id}:{i:03d}", c) for e in ents for i, c in enumerate(split(e.text))]
+        by_unit = {n: uid for n, uid in sec_unit.items()}
+
+        pr = [{**p, "chunks": bm25_top(corpus, p["query"])} for p in pos]
+        nr = [{**n_, "chunks": bm25_top(corpus, n_["query"])} for n_ in neg]
+        m = evaluate(pr, nr, floor=None, unit_doc=by_unit, feature_docs=set(by_unit.values()))
+        out(f"baseline=bm25 set={which} chunks={len(corpus)} topk={EVAL_TOPK}")
+        out("metrics: " + fmt_metrics(m))
+        return 0
+
+    fetched_pos, fetched_neg = fetch_all(pos), fetch_all(neg)
+
+    def build(exclude):
+        return ([{**p, "chunks": scored_chunks(f, exclude)} for p, f in zip(pos, fetched_pos)],
+                [{**n_, "chunks": scored_chunks(f, exclude)} for n_, f in zip(neg, fetched_neg)])
+
+    pr, nr = build(excluded)
+    if args.sweep:
+        out(header)
+        rows = sweep(pr, nr, unit_doc=unit_doc, feature_docs=feature_docs, keep=args.floor)
+        for r in rows:
+            out(f"floor {r['floor']:g} recall_floor={r['recall_floor']:g} recall_raw={r['recall_raw']:g} "
+                f"near_fa={r['near_fa']} off_fa={r['off_fa']} adequate={r['adequate']}"
+                + (" <- current" if r["current"] else ""))
+        return 0
+    m = evaluate(pr, nr, floor=args.floor, unit_doc=unit_doc, feature_docs=feature_docs)
+    if sentinel is not None:  # burnt only now: results exist, and nothing has been shown yet
+        try:
+            fd = os.open(sentinel, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError as e:
+            raise SealedRefused(f"Set B already scored ({sentinel})") from e
+        with os.fdopen(fd, "w") as fh:
+            json.dump({"floor": args.floor, "setSha256": hashlib.sha256(resolve_set_b_path(args.set_b_path, env).read_bytes()).hexdigest(),
+                       "scoredAt": time.strftime("%Y-%m-%dT%H:%M:%S")}, fh)
+    out(header)
+    if excluded:
+        out("excluded: " + " ".join(sorted(excluded)))
+        out(f"note: limit=5 deliberately exceeded for this measurement (window={EVAL_WINDOW} chunks requested, "
+            "excluded documents' chunks dropped, the first five scored)")
+        ur, un = build(frozenset())
+        out("filtered: " + fmt_metrics(m))
+        out("unfiltered: " + fmt_metrics(evaluate(ur, un, floor=args.floor, unit_doc=unit_doc, feature_docs=feature_docs)))
+    else:
+        out("metrics: " + fmt_metrics(m))
+    out("ac3: " + " ".join(f"{k}={v}" for k, v in ac3_verdict(m).items()))
+    if which == "A":  # Set A is the only set whose failures may be inspected
+        for p in pr:
+            if not any(c["documentId"] == unit_doc.get(p["section"]) and c["score"] <= args.floor for c in p["chunks"]):
+                named = name_hit(searcher, ws, p["chunks"])
+                out(f"MISS {p['id']} " + ("(no chunks)" if named is None else f"{named[0]} {named[1] or '?'} {named[2]:.4f}"))
+        for n_ in nr:
+            bad = [c for c in n_["chunks"] if c["documentId"] in feature_docs and c["score"] <= args.floor]
+            if bad:
+                out(f"FALSE-ACCEPT {n_['id']} ({n_['kind']}) {bad[0]['documentId']} {bad[0]['score']:.4f}")
+    return 0
+
+
+def _ac2(args, searcher, ws, template, excluded, manifest, unit_doc, sec_unit, out, header) -> int:
+    ents = copy_entries(Path(args.copy).read_text(encoding="utf-8"))
+    doc_of_unit = {u["id"]: u["documentId"] for u in manifest["units"]}
+    a_pos = load_set(Path(args.set_a_path))["positives"]
+    out(header)
+
+    def returns(query, doc):
+        five = window_chunks(searcher, ws, build_query(template, query), excluded)
+        return any(c["documentId"] == doc and c["score"] <= args.floor for c in five)
+
+    passed = 0
+    for e in ents:
+        doc = doc_of_unit.get(e.id)
+        sit = [p["query"] for p in a_pos if sec_unit.get(p["section"]) == e.id]
+        res = {
+            "title": returns(e.title, doc),
+            "situation": bool(sit) and all(returns(q, doc) for q in sit),
+            "tail": returns(e.text.rstrip().split("\n\n")[-1], doc),
+        }
+        got = searcher.get_document(ws, doc)
+        res["name"] = bool(got) and got.get("title") == e.title
+        ok = all(res.values())
+        passed += ok
+        out(f"{e.id} title={'ok' if res['title'] else 'MISS'} situation={'ok' if res['situation'] else 'MISS'} "
+            f"tail={'ok' if res['tail'] else 'MISS'} name={'ok' if res['name'] else 'WRONG'}")
+    out(f"ac2: {passed}/{len(ents)} units pass")
+    return 0 if passed == len(ents) else 1
+
+
 # --- units subcommand --------------------------------------------------------------------------
 def _load_chunker():
     path = REPO_ROOT / "falkor-chat" / "server" / "falkorchat" / "chunking.py"
@@ -885,7 +1310,7 @@ def units_report(source: Source, chunks: bool = False, migrated_on: str = MIGRAT
 
 
 # --- CLI ---------------------------------------------------------------------------------------
-def _kb_main(args, transport, fetcher, targets) -> int:
+def _kb_main(args, transport, fetcher, targets, searcher=None) -> int:
     copy_path = Path(args.copy)
     if args.cmd in ("ingest", "replace", "retire"):
         text = copy_path.read_text(encoding="utf-8")
@@ -902,6 +1327,9 @@ def _kb_main(args, transport, fetcher, targets) -> int:
     target = check_target(args.ws, args.base_url or targets.get(args.ws, ""), targets, confirm_production=True)
     mpath = _manifest_path(target, args.manifest)
     fetcher = fetcher or CypherFetcher()
+    if args.cmd == "eval":
+        searcher = searcher or RestSearcher(target, transport)
+        return run_eval(args, searcher=searcher, fetcher=fetcher, target=target, mpath=mpath)
     manifest = load_manifest(mpath)
     if args.cmd == "gate":
         ok, table = run_gate(fetcher, args.ws, manifest, timeout=args.timeout, poll=args.poll)
@@ -915,7 +1343,7 @@ def _kb_main(args, transport, fetcher, targets) -> int:
     return 1 if found else 0
 
 
-def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets: dict | None = None) -> int:
+def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets: dict | None = None, searcher=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -951,12 +1379,28 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     p.add_argument("--timeout", type=float, default=GATE_TIMEOUT)
     p.add_argument("--poll", type=float, default=GATE_POLL)
     kbside(sub.add_parser("diverge", help="compare the KB with the copy (read-only)"), False)
+    p = sub.add_parser("eval", help="evaluation harness (D9/D11)")
+    kbside(p, True)
+    p.add_argument("--set", choices=["A", "B"])
+    p.add_argument("--before", action="store_true", help="Set A before ingestion (gate-exempt)")
+    p.add_argument("--probe", action="store_true", help="Set B: rank-1 source and score only (gate-exempt, no sentinel)")
+    p.add_argument("--sealed-once", action="store_true", help="Set B: the one scoring; writes the sentinel")
+    p.add_argument("--ac2", action="store_true")
+    p.add_argument("--sweep", action="store_true")
+    p.add_argument("--baseline", choices=["bm25"])
+    p.add_argument("--floor", type=float, help="score floor, recorded in every report (required except --probe)")
+    p.add_argument("--exclude", action="append", help="documentId whose chunks are dropped from the window")
+    p.add_argument("--set-a-path", default=str(DEFAULT_SET_A))
+    p.add_argument("--set-b-path", help="Set B file (or PWQ_SET_B); must be outside the repo")
+    p.add_argument("--skill", default=str(DEFAULT_SKILL), help="retrieval skill holding the fenced prefix literal")
+    p.add_argument("--timeout", type=float, default=GATE_TIMEOUT)
+    p.add_argument("--poll", type=float, default=GATE_POLL)
     args = ap.parse_args(argv)
     targets = TARGETS if targets is None else targets
 
     try:
-        if args.cmd in ("ingest", "replace", "retire", "gate", "diverge"):
-            return _kb_main(args, transport or urllib_transport, fetcher, targets)
+        if args.cmd in ("ingest", "replace", "retire", "gate", "diverge", "eval"):
+            return _kb_main(args, transport or urllib_transport, fetcher, targets, searcher)
         text = read_pinned(args.pin, repo=Path(args.repo))
         source = parse_source(text)
         if args.cmd == "units":
@@ -978,6 +1422,12 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     except TargetRefused as e:
         print(f"refused: {e}", file=sys.stderr)
         return 3
+    except GateRefused as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 4
+    except SealedRefused as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 5
     except KBError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

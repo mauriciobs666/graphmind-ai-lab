@@ -1047,6 +1047,535 @@ def t22_a_manifest_unit_missing_from_the_copy_whose_document_is_gone_is_not_an_o
     assert run_diverge(w, m, gone) == []
 
 
+# ======================================================================== S3b: T24-T30 (+ T21 eval gate clauses)
+SKILL_PATH = REPO / "skills/agent-kb-retrieval/SKILL.md"
+EXPECTED_PREFIX = ("Instruct: Given a coding agent's description of its current situation, retrieve the distilled "
+                   "technique or rule that applies to it.\nQuery: ")
+
+
+def ck(doc, score, seq=0):
+    return dict(chunkId=f"{doc}-{seq}-{score}", text="t", documentId=doc, seq=seq, score=score)
+
+
+class FakeSearch:
+    """Scripted `search_documents` + `get_document`. `script` is a dict situation->chunks or a function."""
+
+    def __init__(self, script=None, world=None, ws="pwq-test"):
+        self.script, self.world, self.ws, self.calls, self.titles = script or {}, world, ws, [], {}
+
+    def search(self, ws, query, limit):
+        self.calls.append((ws, query, limit))
+        sit = query.split("Query: ", 1)[1] if "Query: " in query else query
+        got = self.script(sit) if callable(self.script) else self.script.get(sit, [])
+        return list(got)[:limit]  # the server honours `limit`
+
+    def get_document(self, ws, did):
+        if did in self.titles:
+            return {"documentId": did, "title": self.titles[did]}
+        d = self.world.srv(ws).docs.get(did) if self.world else None
+        return {"documentId": did, "title": d["title"]} if d else None
+
+
+def evaluate(pos, neg, **kw):
+    kw.setdefault("floor", 0.43)
+    kw.setdefault("feature_docs", {"D1", "D2", "D3", "D4", "U21"})
+    return kb.evaluate(pos, neg, **kw)
+
+
+def P(id_, section, chunks, tail=False):
+    return dict(id=id_, section=section, tail=tail, chunks=chunks)
+
+
+def N(id_, kind, chunks):
+    return dict(id=id_, kind=kind, chunks=chunks)
+
+
+SEC_DOC = {1: "D1", 2: "D2", 3: "D3", 4: "D4"}
+
+
+def t24_recall_floor_recall_mrr_and_distinct_documents():
+    pos = [
+        P("p1", 1, [ck("D1", 0.30), ck("X", 0.35)]),
+        P("p2", 2, [ck("X", 0.20), ck("D2", 0.43)]),  # exactly at the floor: kept (reject only score > floor)
+        P("p3", 3, [ck("X", 0.20), ck("Y", 0.30), ck("D3", 0.44)]),  # raw hit, floor miss
+        P("p4", 4, [ck("X", 0.20), ck("X", 0.25, 1)]),  # miss
+    ]
+    m = evaluate(pos, [], unit_doc=SEC_DOC)
+    assert (m["raw_hits"], m["floor_hits"], m["n_pos"]) == (3, 2, 4), m
+    assert m["recall_raw"] == 0.75 and m["recall_floor"] == 0.5
+    assert abs(m["mrr"] - (1 + 0.5 + 1 / 3 + 0) / 4) < 1e-12, m["mrr"]
+    assert m["distinct_docs_mean"] == (2 + 2 + 3 + 1) / 4  # distinct documents among the scored chunks, per query
+
+
+def t24_floor_value_and_direction_matter():
+    pos = [P("p", 1, [ck("D1", 0.44)])]
+    assert evaluate(pos, [], unit_doc=SEC_DOC, floor=0.43)["floor_hits"] == 0
+    assert evaluate(pos, [], unit_doc=SEC_DOC, floor=0.44)["floor_hits"] == 1  # inclusive
+    assert evaluate(pos, [], unit_doc=SEC_DOC, floor=0.50)["floor_hits"] == 1
+    assert evaluate([P("p", 1, [ck("D1", 0.10)])], [], unit_doc=SEC_DOC, floor=0.05)["floor_hits"] == 0
+    assert evaluate(pos, [], unit_doc=SEC_DOC, floor=0.43)["raw_hits"] == 1
+
+
+def t24_head_and_tail_probe_recall_are_reported_separately():
+    pos = [P("h1", 1, [ck("D1", 0.3)]), P("h2", 2, [ck("X", 0.3)]),
+           P("t1", 3, [ck("D3", 0.3)], tail=True), P("t2", 4, [ck("D4", 0.3)], tail=True)]
+    m = evaluate(pos, [], unit_doc=SEC_DOC)
+    assert m["head_recall"] == 0.5 and m["tail_recall"] == 1.0 and (m["n_head"], m["n_tail"]) == (2, 2)
+
+
+def t25_merged_unit_hit_counts_for_each_member_section():
+    unit_doc = {21: "U21", 22: "U21", 23: "U21", 3: "D3"}
+    pos = [P("a", 21, [ck("U21", 0.3)]), P("b", 22, [ck("U21", 0.3)]), P("c", 23, [ck("U21", 0.3)]),
+           P("d1", 3, [ck("X", 0.3)]), P("d2", 3, [ck("D3", 0.3)])]
+    m = evaluate(pos, [], unit_doc=unit_doc)
+    assert m["covered_sections"] == 4 and m["n_sections"] == 4 and m["floor_hits"] == 4
+    pos = [P("a", 21, [ck("U21", 0.3)]), P("b", 22, [ck("U21", 0.3)]), P("c", 23, [ck("X", 0.3)]),
+           P("d1", 3, [ck("X", 0.3)]), P("d2", 3, [ck("Y", 0.3)])]
+    m = evaluate(pos, [], unit_doc=unit_doc)
+    assert (m["covered_sections"], m["n_sections"]) == (2, 4)  # 23 and 3 are uncovered
+
+
+def t26_false_accept_counts_only_feature_documents_under_the_floor():
+    neg = [N("n1", "off", [ck("TEAM", 0.30)]),            # not a feature document
+           N("n2", "near", [ck("D1", 0.42)]),             # feature document under the floor: accept
+           N("n3", "near", [ck("D1", 0.44)]),             # over the floor: rejected
+           N("n4", "off", [ck("X", 0.2), ck("D2", 0.43)]),  # exactly at the floor: accept
+           N("n5", "near", [])]
+    m = evaluate([], neg, unit_doc=SEC_DOC)
+    assert m["false_accepts"] == {"off": 1, "near": 1}, m["false_accepts"]
+    assert m["n_neg"] == {"off": 2, "near": 3}
+
+
+def t24_gate_verdict_thresholds_are_inclusive():
+    base = dict(recall_floor=0.9, n_pos=10, floor_hits=9, covered_sections=3, n_sections=3,
+                false_accepts={"off": 0, "near": 3}, n_neg={"off": 15, "near": 15})
+    assert kb.ac3_verdict(base)["pass"] is True  # 9/10 and 12/15 rejected: both exactly at the targets
+    assert kb.ac3_verdict(dict(base, floor_hits=8))["pass"] is False
+    assert kb.ac3_verdict(dict(base, false_accepts={"off": 0, "near": 4}))["pass"] is False
+    assert kb.ac3_verdict(dict(base, false_accepts={"off": 1, "near": 0}))["pass"] is False
+    assert kb.ac3_verdict(dict(base, covered_sections=2))["pass"] is False
+
+
+def t27_prefix_is_read_from_the_fenced_literal_by_string_extraction():
+    tmpl = kb.extract_prefix(SKILL_PATH.read_text())
+    assert tmpl == EXPECTED_PREFIX + "{situation}", repr(tmpl)
+    assert kb.build_query(tmpl, "my situation") == EXPECTED_PREFIX + "my situation"
+    assert kb.build_query(tmpl, "a {situation} b") == EXPECTED_PREFIX + "a {situation} b"  # no re-substitution
+
+
+def t27_an_altered_literal_is_followed_and_a_malformed_one_aborts():
+    text = SKILL_PATH.read_text()
+    altered = text.replace("retrieve the distilled technique", "retrieve the OTHER technique")
+    assert "OTHER technique" in kb.extract_prefix(altered)  # read from the file, not a constant
+    for bad in (text.replace("\\nQuery: {situation}", " Query: {situation}"),           # no newline escape
+                text.replace("{situation}\"\n```", "\"\n```", 1),                       # no placeholder
+                text.replace('f"Instruct:', '"Instruct:', 1),                         # not an f-string literal
+                text.replace("The query-instruction prefix", "A different heading"),  # fence not found
+                text.replace("\\nQuery: {situation}", "\\tQuery: {situation}"),       # unknown escape
+                text.replace("retrieve the distilled", "retrieve\\tthe distilled")):    # extra escape beside a good \\n
+        raises(kb.KBError, kb.extract_prefix, bad)
+
+
+def t27_extraction_never_evaluates_code():
+    text = SKILL_PATH.read_text().replace("{situation}\"\n```", "{situation}{__import__('os').getpid()}\"\n```", 1)
+    assert "getpid" in kb.extract_prefix(text)  # kept as inert text
+
+
+def t28_set_b_path_comes_only_from_the_argument_or_the_env_var():
+    raises(kb.KBError, kb.resolve_set_b_path, None, {})
+    assert kb.resolve_set_b_path("/tmp/x/b.json", {}) == Path("/tmp/x/b.json")
+    assert kb.resolve_set_b_path(None, {"PWQ_SET_B": "/tmp/y/b.json"}) == Path("/tmp/y/b.json")
+    assert kb.resolve_set_b_path("/tmp/x/b.json", {"PWQ_SET_B": "/tmp/y/b.json"}) == Path("/tmp/x/b.json")  # arg wins
+    e = raises(kb.KBError, kb.resolve_set_b_path, str(REPO / "claude/cobb/scripts/fixtures/b.json"), {})
+    assert "outside the repo" in str(e)
+
+
+def write_set(path, positives, negatives):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({"positives": positives, "negatives": negatives}))
+    return Path(path)
+
+
+def eval_env():
+    w, m = FakeWorld(), tmpm()
+    kb.ingest(copy_text(), ws="pwq-test", base_url=TEST_URL, manifest_path=m, transport=w.transport, fetcher=w,
+              targets=FAKE_TARGETS, read_source=lambda p: pin_text())
+    docs = {u["id"]: u["documentId"] for u in kb.load_manifest(m)["units"]}
+    sec_unit = {s.index: u.id for u in units() for s in u.members}
+    return w, m, (lambda n: docs[sec_unit[n]])
+
+
+def run_eval(extra, search, world, m, ws="pwq-test", fetcher=None):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = kb.main(["eval", "--ws", ws, "--base-url", FAKE_TARGETS[ws], "--manifest", str(m)] + extra,
+                       searcher=search, fetcher=fetcher or world, targets=FAKE_TARGETS)
+    return code, out.getvalue(), err.getvalue()
+
+
+def b_set(tmpdir, doc_of):
+    pos = [dict(id="B01", section=1, query="sit one"), dict(id="B02", section=2, query="sit two", tail=True),
+           dict(id="B03", section=22, query="sit twentytwo")]
+    neg = [dict(id="BN1", kind="off", query="neg off"), dict(id="BN2", kind="near", query="neg near")]
+    script = {"sit one": [ck(doc_of(1), 0.30), ck("TEAM", 0.4)], "sit two": [ck("TEAM", 0.3), ck(doc_of(2), 0.41)],
+              "sit twentytwo": [ck(doc_of(22), 0.2)], "neg off": [ck("TEAM", 0.3)], "neg near": [ck(doc_of(5), 0.40)]}
+    return write_set(Path(tmpdir, "sealed", "b.json"), pos, neg), script
+
+
+def t28_probe_prints_rank1_source_and_score_only_writes_no_sentinel_and_needs_no_gate():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    bp, script = b_set(tmpd, doc_of)
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0  # the gate would fail: probe is exempt
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B", "--probe", "--set-b-path", str(bp), "--timeout", "0"], srch, w, m)
+    assert code == 0, (code, err)
+    t1 = w.srv("pwq-test").docs[doc_of(1)]["title"]
+    assert any(ln.startswith("B01 ") and doc_of(1) in ln and t1 in ln and "0.3" in ln for ln in out.split("\n")), out
+    assert "B03 " in out and "BN1 " in out
+    assert "recall" not in out.lower() and "mrr" not in out.lower() and "false" not in out.lower(), out
+    assert not Path(str(bp) + ".scored").exists() and list(Path(tmpd, "sealed").iterdir()) == [bp]
+    assert len(srch.calls) == 5 and all(c[0] == "pwq-test" for c in srch.calls)
+
+
+def t28_probe_flags_a_suspiciously_close_rank1_as_a_leak_sign():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    script["sit one"] = [ck(doc_of(1), 0.24)]
+    code, out, _ = run_eval(["--set", "B", "--probe", "--set-b-path", str(bp)], FakeSearch(script, w), w, m)
+    line = next(ln for ln in out.split("\n") if ln.startswith("B01 "))
+    assert "LEAK?" in line and not any("LEAK?" in ln for ln in out.split("\n") if ln.startswith("B02 "))
+    script["sit one"] = [ck(doc_of(1), 0.25)]
+    out = run_eval(["--set", "B", "--probe", "--set-b-path", str(bp)], FakeSearch(script, w), w, m)[1]
+    assert "LEAK?" not in next(ln for ln in out.split("\n") if ln.startswith("B01 "))  # threshold is < 0.25
+
+
+def t28_sealed_once_scores_writes_the_sentinel_and_a_second_run_refuses():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    bp, script = b_set(tmpd, doc_of)
+    srch = FakeSearch(script, w)
+    args = ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"]
+    code, out, err = run_eval(args, srch, w, m)
+    assert code == 0, (code, err, out)
+    sentinel = Path(str(bp) + ".scored")
+    assert sentinel.is_file() and json.loads(sentinel.read_text())["floor"] == 0.43
+    assert "floor=0.43" in out and "recall_floor" in out and "recall_raw" in out
+    n = len(srch.calls)
+    code, out2, err2 = run_eval(args, srch, w, m)
+    assert code == 5 and "already scored" in err2 and len(srch.calls) == n and "recall" not in out2
+    # the sentinel belongs to this Set B file: another file is not blocked
+    bp2, script2 = b_set(tempfile.mkdtemp(), doc_of)
+    assert run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp2), "--floor", "0.43"], FakeSearch(script2, w), w, m)[0] == 0
+    assert Path(str(bp2) + ".scored").is_file()
+
+
+def t28_sealed_report_has_aggregates_only_no_per_query_failures():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    script["sit one"] = [ck("TEAM", 0.3)]  # a miss
+    code, out, _ = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"], FakeSearch(script, w), w, m)
+    assert code == 0 and "B01" not in out and "sit one" not in out and "BN2" not in out
+    assert "floor_hits=2" in out and "n_pos=3" in out
+
+
+def t28_a_failing_gate_refuses_before_the_sentinel_is_burnt():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43", "--timeout", "0"], srch, w, m)
+    assert code == 4 and "gate" in err and srch.calls == []
+    assert not Path(str(bp) + ".scored").exists()
+
+
+def t28_set_b_needs_a_mode_and_a_path():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(["--set", "B", "--set-b-path", str(bp), "--floor", "0.43"], srch, w, m)
+    assert code == 2 and "--probe or --sealed-once" in err and srch.calls == []
+    env = dict(os.environ)
+    os.environ.pop("PWQ_SET_B", None)
+    try:
+        code, out, err = run_eval(["--set", "B", "--probe"], srch, w, m)
+    finally:
+        os.environ.clear(); os.environ.update(env)
+    assert code == 2 and "Set B path" in err
+
+
+def t29_exclusion_takes_a_fixed_50_chunk_window_then_drops_then_truncates():
+    assert kb.EVAL_WINDOW == 50 and kb.EVAL_TOPK == 5
+    chunks = [ck("X", 0.10 + i * 0.001, i) for i in range(3)] + [ck(f"G{i}", 0.2 + i * 0.01, 0) for i in range(8)]
+    srch = FakeSearch({"q": chunks})
+    got = kb.window_chunks(srch, "pwq-test", "q", excluded={"X"})
+    assert [c["documentId"] for c in got] == ["G0", "G1", "G2", "G3", "G4"], got  # five scored, X's three dropped first
+    assert srch.calls == [("pwq-test", "q", 50)]
+    # one excluded document holding far more than 5 + |excluded| of the top chunks (silent window arg)
+    many = [ck("X", 0.1 + i * 0.001, i) for i in range(40)] + [ck(f"G{i}", 0.3 + i * 0.01) for i in range(10)]
+    got = kb.window_chunks(FakeSearch({"q": many}), "pwq-test", "q", excluded={"X"})
+    assert [c["documentId"] for c in got] == ["G0", "G1", "G2", "G3", "G4"]
+    # no exclusions: the first five, in the server's order
+    assert [c["documentId"] for c in kb.window_chunks(FakeSearch({"q": chunks}), "pwq-test", "q", excluded=set())] == [
+        "X", "X", "X", "G0", "G1"]
+
+
+def t29_report_states_the_limit_is_exceeded_lists_excluded_ids_and_gives_unfiltered_numbers():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    a = write_set(Path(tmpd, "a.json"), [dict(id="A01", section=1, query="s1")], [dict(id="NA1", kind="off", query="n1")])
+    script = {"s1": [ck("CAPTURE", 0.10), ck("CAPTURE", 0.11, 1), ck(doc_of(1), 0.3)], "n1": [ck("CAPTURE", 0.2)]}
+    args = ["--set", "A", "--set-a-path", str(a), "--floor", "0.43", "--exclude", "CAPTURE"]
+    srch = FakeSearch(script, w)
+    code, out, err = run_eval(args, srch, w, m)
+    assert code == 0, err
+    assert srch.calls and all(c[2] == 50 for c in srch.calls), srch.calls  # the fixed window, whatever |excluded|
+    assert "limit=5 deliberately exceeded" in out and "window=50" in out and "excluded: CAPTURE" in out
+    assert "filtered: " in out and "unfiltered: " in out
+    f = next(ln for ln in out.split("\n") if ln.startswith("filtered: "))
+    u = next(ln for ln in out.split("\n") if ln.startswith("unfiltered: "))
+    assert "floor_hits=1" in f and "mrr=1" in f and "floor_hits=1" in u and "mrr=0.3333" in u  # rank 3 unfiltered
+
+
+def t30_bm25_scores_match_the_formula_and_ranking_is_deterministic():
+    corpus = [("a:0", "cat sat mat"), ("b:0", "cat cat dog"), ("c:0", "dog bird")]
+    got = dict(kb.bm25_rank(corpus, "cat"))
+    import math
+    n, df, avg = 3, 2, (3 + 3 + 2) / 3
+    idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
+    want = lambda tf, ln: idf * tf * 2.5 / (tf + 1.5 * (1 - 0.75 + 0.75 * ln / avg))
+    assert abs(got["a:0"] - want(1, 3)) < 1e-12 and abs(got["b:0"] - want(2, 3)) < 1e-12 and got["c:0"] == 0
+    assert kb.BM25_K1 == 1.5 and kb.BM25_B == 0.75
+
+
+def t30_bm25_ties_are_broken_by_key_independent_of_hash_seed():
+    code = (
+        "import importlib.util,sys\n"
+        f"spec=importlib.util.spec_from_file_location('k', {str(Path(kb.__file__))!r}); m=importlib.util.module_from_spec(spec)\n"
+        "sys.modules['k']=m; spec.loader.exec_module(m)\n"
+        "corpus=[(k,'same words here') for k in ('zz:0','aa:0','mm:0','bb:0','qq:0','cc:0')]\n"
+        "print(','.join(k for k,_ in m.bm25_rank(corpus,'words')))\n"
+    )
+    outs = {subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=dict(os.environ, PYTHONHASHSEED=str(sd))
+                           ).stdout.strip() for sd in (0, 1, 2, 3, 4, 5, 6)}
+    assert outs == {"aa:0,bb:0,cc:0,mm:0,qq:0,zz:0"}, outs
+
+
+def t30_bm25_baseline_cli_scores_a_set_over_the_copys_chunks_after_the_gate():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
+    cu = {u.id: u for u in kb.parse_copy(copy_text()).units}
+    # a query made of words only unit u10's body has
+    a = write_set(Path(tmpd, "a.json"), [dict(id="A10", section=10, query="whitespace-only strings pydantic min_length")],
+                  [dict(id="NA", kind="off", query="kubernetes readiness probe")])
+    srch = FakeSearch({}, w)
+    code, out, err = run_eval(["--baseline", "bm25", "--set", "A", "--set-a-path", str(a), "--copy", str(cp)], srch, w, m)
+    assert code == 0, err
+    assert "baseline=bm25" in out and "recall_raw=1.0" in out and srch.calls == []  # offline
+    w.srv("pwq-test").docs[doc_of(1)]["embedded"] = 0
+    assert run_eval(["--baseline", "bm25", "--set", "A", "--set-a-path", str(a), "--copy", str(cp), "--timeout", "0"], srch, w, m)[0] == 4
+
+
+def t21_scoring_modes_refuse_on_a_failing_gate_and_search_nothing_exempt_modes_run():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
+    pos = [dict(id=f"A{n:02d}", section=n, query=f"sit {n}") for n in range(1, 43)]
+    a = write_set(Path(tmpd, "a.json"), pos, [dict(id="NA1", kind="off", query="neg")])
+    bp, script = b_set(tmpd, doc_of)
+    w.srv("pwq-test").docs[doc_of(3)]["embedded"] = 0
+    srch = FakeSearch({}, w)
+    common = ["--timeout", "0"]
+    refused = {
+        "ac2": ["--ac2", "--set-a-path", str(a), "--copy", str(cp), "--floor", "0.43"],
+        "sweep": ["--sweep", "--set", "A", "--set-a-path", str(a), "--floor", "0.43"],
+        "setA": ["--set", "A", "--set-a-path", str(a), "--floor", "0.43"],
+        "setB-sealed": ["--set", "B", "--sealed-once", "--set-b-path", str(bp), "--floor", "0.43"],
+        "bm25": ["--baseline", "bm25", "--set", "A", "--set-a-path", str(a), "--copy", str(cp)],
+    }
+    for name, args in refused.items():
+        code, out, err = run_eval(args + common, srch, w, m)
+        assert code == 4 and "gate" in err and "u03" in err, (name, code, err)
+        assert srch.calls == [], name
+    for name, args in {"B-probe": ["--set", "B", "--probe", "--set-b-path", str(bp)],
+                       "A-before": ["--set", "A", "--before", "--set-a-path", str(a), "--floor", "0.43"]}.items():
+        code, out, err = run_eval(args + common, FakeSearch(script, w), w, m)
+        assert code == 0, (name, code, err)
+    # and with no manifest at all (before any ingest) the exempt modes still run
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = kb.main(["eval", "--ws", "pwq-test", "--base-url", TEST_URL, "--manifest", str(Path(tmpd, "none.json")),
+                        "--set", "B", "--probe", "--set-b-path", str(bp)], searcher=FakeSearch(script, w), fetcher=w, targets=FAKE_TARGETS)
+    assert code == 0, err.getvalue()
+
+
+def t24_set_a_scoring_cli_reports_recall_and_names_the_best_document_for_misses():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    pos = [dict(id="A01", section=1, query="s1"), dict(id="A02", section=2, query="s2")]
+    a = write_set(Path(tmpd, "a.json"), pos, [dict(id="NA1", kind="near", query="n1")])
+    script = {"s1": [ck(doc_of(1), 0.3)], "s2": [ck(doc_of(5), 0.31), ck(doc_of(2), 0.5)], "n1": [ck(doc_of(7), 0.42)]}
+    code, out, err = run_eval(["--set", "A", "--set-a-path", str(a), "--floor", "0.43"], FakeSearch(script, w), w, m)
+    assert code == 0, err
+    assert "floor=0.43" in out and "floor_hits=1" in out and "raw_hits=2" in out and "n_pos=2" in out
+    assert "false_accepts near=1/1 off=0/0" in out
+    t5 = w.srv("pwq-test").docs[doc_of(5)]["title"]
+    miss = next(ln for ln in out.split("\n") if ln.startswith("MISS A02"))
+    assert doc_of(5) in miss and t5 in miss  # best distinct document, named via get_document
+    assert not any(ln.startswith("MISS A01") for ln in out.split("\n"))
+
+
+def t24_name_hit_takes_the_best_scoring_distinct_document():
+    s = FakeSearch({}, None)
+    s.titles = {"D2": "Two", "D9": "Nine"}
+    chunks = [ck("D9", 0.31), ck("D2", 0.2), ck("D9", 0.1, 1)]
+    assert kb.name_hit(s, "pwq-test", chunks) == ("D9", "Nine", 0.1)  # lowest score wins, not first position
+    assert kb.name_hit(s, "pwq-test", []) is None
+
+
+def t24_before_mode_lists_what_already_answers_the_queries():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    a = write_set(Path(tmpd, "a.json"), [dict(id="A01", section=1, query="s1"), dict(id="A02", section=2, query="s2")],
+                  [dict(id="NA1", kind="off", query="n1")])
+    script = {"s1": [ck("CAPTURE1", 0.30), ck("OTHER", 0.5)], "s2": [ck("OTHER", 0.5)], "n1": [ck("OTHER", 0.5)]}
+    code, out, err = run_eval(["--set", "A", "--before", "--set-a-path", str(a), "--floor", "0.43"], FakeSearch(script, w), w, m)
+    assert code == 0, err
+    assert "DUPLICATE-COVERAGE A01 CAPTURE1 0.3" in out and "DUPLICATE-COVERAGE A02" not in out and "NA1" not in out
+    assert "queries_with_a_hit_under_floor=1/3" in out and "recall" not in out.lower()
+
+
+def t24_sweep_covers_0_38_to_0_50_and_judges_adequacy_by_the_ml_criteria():
+    assert kb.SWEEP_FLOORS == [0.38, 0.39, 0.40, 0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50]
+    pos = [P("p1", 1, [ck("D1", 0.40)]), P("p2", 2, [ck("D2", 0.30)])]
+    neg = [N("n1", "near", [ck("D1", 0.45)]), N("n2", "off", [ck("D3", 0.47)]), N("n3", "near", [ck("X", 0.3)])]
+    rows = {r["floor"]: r for r in kb.sweep(pos, neg, unit_doc=SEC_DOC, feature_docs={"D1", "D2", "D3", "D4"}, keep=0.43)}
+    assert rows[0.38]["recall_floor"] == 0.5 and rows[0.40]["recall_floor"] == 1.0 and rows[0.50]["recall_floor"] == 1.0
+    assert rows[0.44]["near_fa"] == 0 and rows[0.45]["near_fa"] == 1 and rows[0.46]["off_fa"] == 0 and rows[0.47]["off_fa"] == 1
+    assert rows[0.43]["adequate"] is True      # recall within 0.03 of raw, no off FA, near FA 0, worst positive 0.40 <= 0.405
+    assert rows[0.40]["adequate"] is False     # worst positive 0.40 is not 0.025 below 0.40
+    assert rows[0.47]["adequate"] is False     # an off-domain false accept
+    pos2 = [P("p1", 1, [ck("D1", 0.41)])]
+    r = kb.sweep(pos2, [], unit_doc=SEC_DOC, feature_docs={"D1"}, keep=0.43)
+    assert next(x for x in r if x["floor"] == 0.43)["adequate"] is False  # 0.43 - 0.41 = 0.02 < 0.025
+    pos3 = [P("p1", 1, [ck("D1", 0.405)])]
+    r = kb.sweep(pos3, [], unit_doc=SEC_DOC, feature_docs={"D1"}, keep=0.43)
+    assert next(x for x in r if x["floor"] == 0.43)["adequate"] is True    # exactly 0.025: allowed
+    # the recall criterion: a miss at the floor that raw top-5 would have found by more than 0.03
+    pos4 = [P(f"p{i}", 1, [ck("D1", 0.44 if i == 0 else 0.3)]) for i in range(10)]
+    r = kb.sweep(pos4, [], unit_doc=SEC_DOC, feature_docs={"D1"}, keep=0.43)
+    assert next(x for x in r if x["floor"] == 0.43)["adequate"] is False
+
+
+def t24_sweep_cli_prints_one_row_per_floor():
+    w, m, doc_of = eval_env()
+    a = write_set(Path(tempfile.mkdtemp(), "a.json"), [dict(id="A01", section=1, query="s1")], [dict(id="NA1", kind="off", query="n1")])
+    script = {"s1": [ck(doc_of(1), 0.40)], "n1": [ck("TEAM", 0.3)]}
+    code, out, err = run_eval(["--sweep", "--set", "A", "--set-a-path", str(a), "--floor", "0.43"], FakeSearch(script, w), w, m)
+    assert code == 0, err
+    rows = [ln for ln in out.split("\n") if ln.startswith("floor ")]
+    assert len(rows) == 13 and rows[0].startswith("floor 0.38 ") and rows[-1].startswith("floor 0.5 ")
+    assert "recall_floor=0 " in rows[0] + " " and "recall_floor=1 " in rows[3] + " "
+
+
+def t31_ac2_checks_title_situation_and_last_paragraph_per_unit_and_the_title_via_get_document():
+    w, m, doc_of = eval_env()
+    tmpd = tempfile.mkdtemp()
+    cp = Path(tmpd, "copy.md"); cp.write_text(copy_text())
+    pos = [dict(id=f"A{n:02d}", section=n, query=f"sit {n}") for n in range(1, 43)]
+    a = write_set(Path(tmpd, "a.json"), pos, [])
+    ents = kb.copy_entries(copy_text())
+    sec_unit = {s.index: u.id for u in units() for s in u.members}
+    doc_by_unit = {e.id: doc_of(next(n for n, u in sec_unit.items() if u == e.id)) for e in ents}
+    script = {}
+    for e in ents:
+        script[e.title] = [ck(doc_by_unit[e.id], 0.3)]
+        script[e.text.rstrip().split("\n\n")[-1]] = [ck(doc_by_unit[e.id], 0.3, 2)]
+    for n in range(1, 43):
+        script[f"sit {n}"] = [ck(doc_by_unit[sec_unit[n]], 0.3)]
+    args = ["--ac2", "--set-a-path", str(a), "--copy", str(cp), "--floor", "0.43"]
+    code, out, err = run_eval(args, FakeSearch(script, w), w, m)
+    assert code == 0, (err, out[-600:])
+    assert "ac2: 36/36 units pass" in out and "u21 title=ok situation=ok tail=ok name=ok" in out
+    # tail query returns another document -> that unit fails on tail only
+    e5 = next(e for e in ents if e.id == "u05")
+    bad = dict(script); bad[e5.text.rstrip().split("\n\n")[-1]] = [ck(doc_by_unit["u02"], 0.3)]
+    code, out, err = run_eval(args, FakeSearch(bad, w), w, m)
+    assert code == 1 and "u05 title=ok situation=ok tail=MISS name=ok" in out and "ac2: 35/36" in out
+    # over the floor is a miss too
+    bad = dict(script); bad["sit 5"] = [ck(doc_by_unit["u05"], 0.44)]
+    assert "u05 title=ok situation=MISS" in run_eval(args, FakeSearch(bad, w), w, m)[1]
+    bad = dict(script); bad["sit 22"] = [ck("OTHER", 0.3)]  # one of u21's three Set A queries misses
+    assert "u21 title=ok situation=MISS" in run_eval(args, FakeSearch(bad, w), w, m)[1]
+    # the unit's stored title is what get_document must return
+    w.srv("pwq-test").docs[doc_by_unit["u07"]]["title"] = "something else"
+    code, out, err = run_eval(args, FakeSearch(script, w), w, m)
+    assert code == 1 and "u07 title=ok situation=ok tail=ok name=WRONG" in out
+
+
+def t24_set_files_are_validated_and_sections_must_exist():
+    d = tempfile.mkdtemp()
+    ok = write_set(Path(d, "ok.json"), [dict(id="p", section=1, query="q")], [dict(id="n", kind="near", query="q")])
+    s = kb.load_set(ok)
+    assert s["positives"][0]["tail"] is False and s["negatives"][0]["kind"] == "near"
+    for pos, neg in (([dict(id="p", section=1)], []), ([], [dict(id="n", kind="weird", query="q")]),
+                     ([dict(id="p", section="x", query="q")], []), ([dict(id="p", section=1, query="")], [])):
+        raises(kb.KBError, kb.load_set, write_set(Path(d, "bad.json"), pos, neg))
+    Path(d, "junk.json").write_text("not json")
+    raises(kb.KBError, kb.load_set, Path(d, "junk.json"))
+
+
+def t24_rest_searcher_speaks_the_search_and_get_routes_of_the_validated_target():
+    seen = []
+
+    def tr(method, url, body=None):
+        seen.append((method, url))
+        return (200, [ck("D1", 0.2)]) if "/search" in url else (200, {"documentId": "D1", "title": "T"})
+
+    s = kb.RestSearcher(kb.check_target("pwq-test", TEST_URL, FAKE_TARGETS), tr)
+    assert s.search("pwq-test", "a b&c\nQuery: x", 50)[0]["documentId"] == "D1"
+    assert seen[0] == ("GET", TEST_URL + "/documents/search?q=a+b%26c%0AQuery%3A+x&limit=50")
+    assert s.get_document("pwq-test", "D1")["title"] == "T" and seen[1] == ("GET", TEST_URL + "/documents/D1")
+    raises(kb.KBError, kb.RestSearcher(kb.check_target("pwq-test", TEST_URL, FAKE_TARGETS), lambda *a: (503, {})).search, "pwq-test", "q", 5)
+
+
+def t24_mrr_uses_the_first_expected_chunk_rank():
+    pos = [P("p", 1, [ck("X", 0.1), ck("D1", 0.2), ck("D1", 0.3, 1), ck("X", 0.4)])]
+    assert evaluate(pos, [], unit_doc=SEC_DOC)["mrr"] == 0.5
+
+
+def t30_bm25_top_returns_at_most_five_positive_scoring_chunks_best_first():
+    corpus = [(f"u{i:02d}:000", "alpha " * (i + 1) + "filler words") for i in range(8)] + [("z:000", "nothing relevant")]
+    top = kb.bm25_top(corpus, "alpha")
+    assert len(top) == 5 and all(c["score"] > 0 for c in top) and "z" not in {c["documentId"] for c in top}
+    assert [c["score"] for c in top] == sorted((c["score"] for c in top), reverse=True)
+    few = kb.bm25_top([("a:000", "alpha"), ("b:000", "beta"), ("c:000", "gamma")], "alpha")
+    assert [c["documentId"] for c in few] == ["a"]  # zero-score chunks are never returned
+    assert kb.bm25_top(corpus, "alpha", k=2) == top[:2] and kb.EVAL_TOPK == 5
+
+
+def _adequate(pos, neg, floor=0.43, feature=("D1", "D2")):
+    rows = kb.sweep(pos, neg, unit_doc=SEC_DOC, feature_docs=set(feature), keep=0.43)
+    return next(r for r in rows if r["floor"] == floor)["adequate"]
+
+
+def t24_sweep_adequacy_boundaries_each_isolated():
+    ok_pos = [P(f"p{i}", 1, [ck("D1", 0.30)]) for i in range(100)]
+    # near-domain false accepts: 2 of 7 allowed, 3 of 7 not
+    near = lambda k: [N(f"n{i}", "near", [ck("D1", 0.40)] if i < k else [ck("X", 0.3)]) for i in range(7)]
+    assert _adequate(ok_pos, near(2)) is True and _adequate(ok_pos, near(3)) is False
+    # an off-domain false accept is never allowed
+    assert _adequate(ok_pos, [N("o", "off", [ck("D1", 0.40)])]) is False
+    assert _adequate(ok_pos, [N("o", "off", [ck("D1", 0.44)])]) is True
+    # recall within 0.03 of raw: 3 of 100 lost to the floor is allowed, 4 is not
+    lost = lambda k: [P(f"p{i}", 1, [ck("D1", 0.44 if i < k else 0.30)]) for i in range(100)]
+    assert _adequate(lost(3), []) is True and _adequate(lost(4), []) is False
+    assert _adequate(lost(4), [], floor=0.50) is True  # at 0.50 nothing is lost and the worst found (0.44) is 0.06 below
+
+
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items()) if re.match(r"t\d", n) and callable(f)]
     tests.sort(key=lambda nf: nf[0])
