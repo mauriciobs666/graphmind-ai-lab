@@ -34,12 +34,11 @@ is never stopped. CPG: considered, not relevant — docs, config, a stdlib scrip
 - `search_documents` returns only `chunkId, text, documentId, seq, score` (`falkor-chat/server/falkorchat/
   repository.py` `search_chunks`): **no title**. `get_document` returns title and full text.
 - Re-ingesting byte-identical text **auto-supersedes** the older current document
-  (`create_document_with_auto_supersede`, SERVER.md §14.9 row); an edited text lands as a *pending* suggestion
-  (`claude/docs/plans/agent-knowledge-base-strategy.md` §4.5).
+  (`create_document_with_auto_supersede`, SERVER.md §14.9 row); an edited re-POST lands as a second current document, with no
+  `SUPERSEDES` edge (S6b; D8's refusal rests on this).
 - `list_documents` is oldest-first, limit ≤ 200, no filter: it cannot list the gotcha titles in a 476+ document workspace.
 - The write guard `claude/cobb/hooks/guard-cobb-topic-writes.sh` allows `claude/*/*.md` (a bare `*` crosses
-  `/`), so any `.md` under `claude/<dir>/` is writable by `cobb`; the one stale entry is `skills/python-web-quirks/*`
-  (header comment lines 82-93, glob list line 105). `claude/scripts/audit-team.sh` check 1 enumerates only
+  `/`), so any `.md` under `claude/<dir>/` is writable by `cobb`; its `skills/python-web-quirks/*` entry was retired at S4. `claude/scripts/audit-team.sh` check 1 enumerates only
   directories holding `<name>/<name>.md` (`claude/docs` and `claude/scripts` already exist as non-agent dirs).
   Implementers' deny-lists (`claude/*/*.md`, `*/docs/plans/*`) do not match `.py`/`.json` under
   `claude/cobb/scripts/`, but will prompt on `.md` edits there and on `docs/plans/` files.
@@ -53,7 +52,7 @@ is never stopped. CPG: considered, not relevant — docs, config, a stdlib scrip
   does not report it. REST `POST /documents` takes `producedBy`; `GET /documents/search` is the same
   `search_chunks` as the MCP tool. FalkorDB docs: `GRAPH.COPY` clones "nodes, relationships, properties,
   indexes, and constraints" and errors if the destination exists; vector indexes and embeddings are not named.
-- Chunking is the default (`falkorchat/chunking.py`, 1000/150). Over the §D2 units with a 250-400 char header
+- Chunking is the default (`falkorchat/chunking.py`, 1000/150). Over the §D2 units with a header (157-982 chars)
   I computed **129 chunks** (not 108); 12 units span ≥ 4 chunks (ML §2).
 - Consumer agent files: `coder`, `tdd-engineer`, `qa-engineer`, `frontend-engineer` have no `tools:` line;
   `architect`, `analyst` list the retrieval tools; `tico`, `security-expert` enumerate tools without them. The
@@ -67,15 +66,12 @@ is never stopped. CPG: considered, not relevant — docs, config, a stdlib scrip
 ### D1. The copy of record: one file, `claude/knowledge/python-web-quirks.md`
 
 One Markdown file in a non-agent directory; every source section keeps its `## ` heading and verbatim body;
-units are fenced by marker lines (D3). Rejected: a directory of ~36 files (the listing and by-section read then
-need an index that is a second thing to keep in step; a git diff of one file is already per-section); `skills/`
+units are fenced by marker lines (D3). Rejected: a directory of ~36 files (it needs an index to keep in step; a one-file git diff is already per-section); `skills/`
 (auto-loaded, FR-8); `claude/cobb/` (it would hold a KB read by eight consumers, unlike the precedents, which are
-read by their own folder's agent). The directory is `claude/knowledge/`, beside the existing non-agent
-`claude/docs` and `claude/scripts`. Checked this run: the real guard `guard-cobb-topic-writes.sh` returns `allow`
-for `claude/knowledge/python-web-quirks.md` in relative, `/abs/x/claude/…` and the repo-absolute forms (glob
-`claude/*/*.md`), so AC-12 needs no new allow entry: the change is retiring the `skills/python-web-quirks/*` entry
-in the same change that creates the copy (S4). The only `audit-team.sh` loop over `claude/*/` is line 107, which
-keeps only directories holding `<name>/<name>.md`, so a `knowledge/` directory is not enumerated as an agent. The
+read by their own folder's agent). The directory is `claude/knowledge/`, beside the non-agent `claude/docs` and `claude/scripts`. The guard `guard-cobb-topic-writes.sh` allows
+`claude/knowledge/python-web-quirks.md` (glob `claude/*/*.md`) in relative and absolute forms, so AC-12 needs no
+new allow entry; the change is retiring the `skills/python-web-quirks/*` entry with the copy (S4). The only `audit-team.sh` loop over `claude/*/` is line 107, which
+keeps only directories holding `<name>/<name>.md`, so `knowledge/` is not an agent. The
 layout claim "one folder per agent" appears in `claude/AGENTS.md:5` and root `AGENTS.md:44`; S16b (`cobb`) adds a
 one-line exception to each (`claude/knowledge/` holds shared KB copies of record; not an agent), gated at G3
 (`claude/README.md` carries no such claim).
@@ -91,18 +87,18 @@ preceding|next|following|elsewhere`) within 40 characters, with its enclosing se
 occurs in four sections) assigns each printed hit
 `referent:<heading prefix>` | `intra` | `external`. **The build fails when any printed hit has no ruling**
 (a new reference cannot pass unseen). Each referring section and its referent form one unit. The vocabulary is
-a bound, not a proof: `analyst` repeats an independent broader sweep at G1 (F1's lesson).
+a bound, not a proof: `analyst` repeats a broader sweep at G1 (F1).
 
 | Unit | Members | Hits |
 |---|---|---|
-| u-bt | §2 bounded `BackgroundTasks` · §34 sequential per request | 891 |
-| u-tc | §21 `TestClient` teardown · §22 re-raises · §23 version rot | 587, 624, 633 |
-| u-st | §24 `app.state` · §25 flip the flag on the live client | 670 |
-| u-pyc | §29 same-second `.pyc` · §39 `PYTHONPYCACHEPREFIX` | 951 |
-| u-in | §30 `input()` `OSError` · §40 fd 0 is `/dev/null` | 974 |
+| u02 | §2 bounded `BackgroundTasks` · §34 sequential per request | 891 |
+| u21 | §21 `TestClient` teardown · §22 re-raises · §23 version rot | 587, 624, 633 |
+| u24 | §24 `app.state` · §25 flip the flag on the live client | 670 |
+| u29 | §29 same-second `.pyc` · §39 `PYTHONPYCACHEPREFIX` | 951 |
+| u30 | §30 `input()` `OSError` · §40 fd 0 is `/dev/null` | 974 |
 
 Result: 42 sections → **36 gotcha units** (5 merged of 11 sections, 31 singletons) = **36 documents**. In the copy
-a merged unit's members are adjacent (the copy's `##` order is not the source's).
+a merged unit's members are adjacent.
 
 **Preamble disposition (FR-2 "explicitly dispositioned"): copy only, not ingested.** The copy opens with a
 `<!-- preamble -->` block holding the verbatim H1, scope paragraph and version caveat, then a
@@ -111,8 +107,7 @@ rebuildable index, new gotchas enter by raw capture then `cobb`; the analyst-inb
 "This is a cache, not the source of truth" blockquote is a **waived span**, pinned verbatim in the manifest, so
 the waiver fails if the source blockquote ever held more than was waived. The YAML front matter is retired with
 the skill (routing metadata; its trigger vocabulary is replaced by the FR-14 pointer). The preamble is read, not
-retrieved: it is the first screen of the copy (lines up to the first `<!-- unit` fence), and the D6 listing
-includes both preamble fences, so an agent or `cobb` reading the scope or provenance does `Read` on the copy's head. Testable
+retrieved: the copy's head (up to the first `<!-- unit` fence), located via the D6 listing's preamble fences. Testable
 under AC-1 by the checker's preamble mode (D4 change 3): the verbatim part of the preamble block is located in the
 source preamble, and the rest of the source preamble must equal the waived span exactly.
 
@@ -151,9 +146,9 @@ Other-dates: <remaining ISO dates as written>        <- only when present
 
 ### D4. `check_content_loss.py` needs six changes; `tdd-engineer` makes them, `cobb` gates
 
-Needed because the stored text is no longer a contiguous substring of one section (header; merged units span
-non-adjacent sections), unlisted sections are never looked at, and the workspace is hard-wired. All behind new
-flags, existing behaviour byte-unchanged (the existing selftest stays green):
+Needed because stored text is no longer one section's contiguous substring (header; merged units), unlisted
+sections are never looked at, and the workspace is hard-wired. All behind new flags; existing behaviour
+byte-unchanged (the selftest stays green):
 
 1. `--stored-format pwq`: strip the header at the delimiter (error if absent).
 2. Split the stripped body at `^## ` lines into parts; each part is a claim located in the source section whose
@@ -178,8 +173,7 @@ identity. A **tail chunk carries no title**; the fix is procedural: the conventi
 tells every consumer to take the distinct `documentId`s of the five chunks and `get_document` the best, which
 returns title, versions, date and the whole unit. "A hit names its title" is therefore two calls, and AC-2 is
 scored that way (`get_document(documentId).title` equals the unit's `Gotcha:`). Rejected: a per-chunk title line
-(alters the verbatim body or the chunker). ML §7 risk 1 is measured by Set B's tail probes; a tail recall below
-head recall by more than 0.15 goes back to the stakeholder, it is not patched ad hoc.
+(alters the verbatim body or the chunker). ML §7 risk 1 is measured by Set B's tail probes (threshold: Risk 2).
 
 ### D6. Retrieval procedure and degraded mode (FR-9, FR-11, FR-7)
 
@@ -194,13 +188,11 @@ passes; `git diff` shows no change inside the fence). Its front-matter consumer 
    listing before concluding there is none (an empty result is never the only signal);
 3. **the title listing (FR-11), one call, identical in both modes, no KB involved:**
    `grep -n -E '^(<!-- (unit |preamble)|## )' claude/knowledge/python-web-quirks.md` — 42 heading lines + one fence per unit (36) + the two preamble fences, about 6.5 KB; **bound
-   ≤ 10,000 bytes** (`| wc -c`), roughly 25 more titles of headroom. The listing's source is the copy itself, so it
-   stays in step by construction, and `diverge` (D8) also compares the KB's titles with it;
+   ≤ 10,000 bytes** (`| wc -c`), roughly 25 more titles of headroom. The listing reads the copy, so it
+   stays in step by construction;
 4. degraded mode: if `search_documents`/`get_document` errors, times out or is unavailable, **say so on the reply's
    first line** ("knowledge base unreachable: <error>"), find the unit with the listing, and read it with `Read`
    (`offset` = its fence line, `limit` = next fence line minus that line); never the whole file (~80 KB).
-
-The guidance is file-backed and is one read from the pointer (the agent's retrieval line names this file).
 
 ### D7. Discovery pointer and tool grants (FR-13, FR-14, AC-13)
 
@@ -214,8 +206,7 @@ Eight consumers: `coder` (new line), `tdd-engineer`, `architect`, `analyst`, `qa
 (extend the existing line), `tico`, `security-expert` (new line **and** `mcp__falkor-chat-agent-team__search_documents`,
 `mcp__falkor-chat-agent-team__get_document` added to `tools:`). Edits are `cobb`'s (S15b1). Check 12 in `audit-team.sh`
 (S15b2) greps the literal in the eight `claude/<a>/<a>.md` and the two tool names on the two enumerated `tools:`
-lines; its mutant runs in a scratch copy of `claude/` + `skills/agent-kb-retrieval/` (the copy runs its own script
-copy, so `ROOT` follows) with the literal removed from one agent and must turn red.
+lines; its mutant runs in a scratch copy of `claude/` + `skills/agent-kb-retrieval/` with the literal removed from one agent and must turn red.
 
 ### D8. Tool target guard; no agent-reachable production delete; add / edit / retire path (FR-10, AC-7)
 
@@ -255,7 +246,7 @@ documents (`--ac2`, `--sweep`, `--set A` without `--before`, `--set B --sealed-o
 the gate query first and refuse when it fails; `--set B --probe` and `--set A --before` run before any ingest
 (S8, S9) and are exempt. In `ws:pwq-test` a failed unit is replaced by the script;
 in production the run stops, the stakeholder deletes the failed document by `curl`, and the idempotent `ingest`
-completes it. `--sealed-once` takes a mandatory `--expect-sha256`, set by the S14 brief from the sha256 that S8 recorded in the ledger. `gate` and the scoring modes take the expected unit ids from `--copy` and exit 2 without a readable copy; `diverge` reads the manifest's `sha256`, `pin` and `migratedOn`.
+completes it. `--sealed-once` takes a mandatory `--expect-sha256`, set by the S14 brief from the sha256 that S8 recorded in the ledger. `gate` and the scoring modes take the expected unit ids from `--copy` and exit 2 without a readable copy; every Set A scoring mode runs `validate_set_a`, and Set B's shape validator (`validate_set_b`, tail flags on `--sealed-once`) runs before the sentinel, so a malformed set cannot spend the seal. **`--sealed-once` pre-check order (S14):** sha256 (mismatch is exit 2 and burns nothing), Set B shape and tail flags (production manifest and `--copy` readable, else exit 2), sentinel (exit 5), gate (exit 4); `diverge` reads the manifest's `sha256`, `pin` and `migratedOn`.
 
 ### D10. The AC-9 sweep: scope and per-hit ruling
 
@@ -273,7 +264,7 @@ from the table (derived, not transcribed).
 | `claude/README.md` (rows at lines 9, 10, 13, 15, 16) | re-point each to the D7 pointer wording | S16b |
 | `skills/README.md:24` | catalog row removed (AC-4) | S16b |
 | `skills/agent-standards/claude-code.md:165` | cites the file as an example cobb-remit write: re-point to `claude/knowledge/python-web-quirks.md` | S16b |
-| `claude/cobb/kaizen/plan.md` K-026 (lines 25, 298-314) | the item's own trigger ("a third `TestClient` section needs a parent") already fired (`grep -c '^## .*TestClient'` returns 4 on the pin); close it with a pointer to this migration (unit `u-tc`) instead of rewriting. K-029 (`:324-336`, open item about the skill's listing budget): rewrite to say the skill no longer exists, or close | S16b |
+| `claude/cobb/kaizen/plan.md` K-026 (lines 25, 298-314) | the item's own trigger ("a third `TestClient` section needs a parent") already fired (`grep -c '^## .*TestClient'` returns 4 on the pin); close it with a pointer to this migration (unit `u21`) instead of rewriting. K-029 (`:324-336`, open item about the skill's listing budget): rewrite to say the skill no longer exists, or close | S16b |
 | `claude/cobb/hooks/guard-cobb-topic-writes.sh` | entry retired (D1) | S4 |
 | `cpg/eval/kit-manifest.json` | **no change** (FR-15). Check: `export_kit.py --repo . --eval-commit cf7b2042cce7bad5d0ab7876940bcea00343d914 --out-dir <scratch> --manifest <scratch>/kit-manifest.json` (never the committed path: the tool writes it); the scratch manifest's `files` array must equal the committed one (`git archive` reads the commit, not the tree). Not yet run by anyone; blocked ≠ waived | S16c |
 | `docs/requirements/cpg-agent-adoption.md:37` (archived), `docs/plans/cpg-agent-adoption.md`, `docs/plans/connected-code-graph-p0*.md`, `cpg/spikes/frontend-fitness/results/*.jsonl`, `claude/cobb/scripts/kb-claim-manifest.json` | no change: historical text or another migration's ledger; one line recorded | G3 |
@@ -287,7 +278,7 @@ hits iff the document of the unit containing s is among the five chunks under th
 counts for each member). Coverage: each of the 42 sections has a hit among its two queries. A negative is a false
 accept iff any of the 36 unit documents is under the floor. Replaced ML figures:
 documents 42 → 36; chunks 108 → 129; ≥ 4-chunk units 7 → 12 (listed in ML §5 rule 4: Set B's tail-probe list; `units --chunks` prints the counts); confusable sets:
-{§21-§25} becomes u-tc/u-st, {§2,§34}, {§29,§39}, {§30,§40} become intra-unit; the rest unchanged. `data-scientist`
+{§21-§25} becomes u21/u24, {§2,§34}, {§29,§39}, {§30,§40} become intra-unit; the rest unchanged. `data-scientist`
 rewrites the affected ML §2/§3/§7 numbers in place (S12).
 
 **Authors and storage.** Set A: `data-scientist` (ML §3), committed as `claude/cobb/scripts/fixtures/
@@ -300,10 +291,9 @@ the tool source, and the `--sealed-once` sentinel against a second scoring. Only
 
 **Method rulings before B exists (S7b, `data-scientist`).** (i) The probe may rewrite a B query only when its rank-1
 score is < 0.25 (a leak sign); one that already surfaces from another document is **kept and recorded** as a
-duplicate-coverage finding (ML §5). (ii) Captures that restate a gotcha are removed from the scored state by
-deletion at H1 and by `--exclude` for later ones; the headline is the excluded run, the unfiltered numbers print
-beside it, and S12 sweeps with the S7 list excluded (ML §4.2). S12 and S14 pass the S7 capture ids (from
-`docs/plans/python-web-quirks-kb-captures.md`) as `--exclude`.
+pre-existing-hit-under-floor finding (ML §5). (ii) The scored state is the post-H1 state: restating captures are deleted at H1, and
+`--exclude` takes only ids the ledger records as deleted at H1 or created after S13b; the headline is the excluded run, the unfiltered numbers print
+beside it, and S12 sweeps with the S7 list excluded (ML §4.2). S12 passes the S7 capture ids (`docs/plans/python-web-quirks-kb-captures.md`) as `--exclude`; S14's rule is in S14.
 
 **Test workspace.** `ws:pwq-test` on a second `start_agent_team.sh` process (`FALKORCHAT_WS_ID=pwq-test
 AGENT_TEAM_PORT=8210`) holding a copy of the current corpus plus the units. **Order (S6a, S6b):** a tiny throwaway
@@ -311,8 +301,7 @@ probe first decides whether `GRAPH.COPY` carries the `Chunk.embedding` vector in
 `GRAPH.COPY ws:agent-team ws:pwq-test` **before** starting the server (the script creates the workspace, and `COPY`
 errors on an existing destination; its bootstrap/seed steps are idempotent), else re-ingest the corpus's documents
 by REST (the primary path in that case). Verify with `CALL db.indexes()` and a known-answer search against `:8210`.
-The copy inherits production's unembedded chunks (16 at plan time, K-102): S6b records them and `eval` reports
-recall with and without them. Lifecycle: `graph-dba` starts the process detached with its log under
+The copy inherits production's unembedded chunks (16 at plan time, K-102): S6b records them; scores count unit documents only, so they never enter one. Lifecycle: `graph-dba` starts the process detached with its log under
 `~/.local/state/graphmind-ai-lab/`, `teco` keeps it alive (restart if down) from S6b to S17 (`teco`'s
 `ensure-environment.sh` covers only `:8200`); S17's `GRAPH.DELETE` will ask, expected.
 
@@ -356,17 +345,17 @@ S1-S3b are test-first (`tdd-engineer`).
 | S6b | `graph-dba` | create `ws:pwq-test` (D11 order), start `:8210` detached, record unembedded chunks | known-answer search works; counts recorded | reads only |
 | S7 | `cobb` | derive the raw-capture list + coverage + gap ruling → ledger; write the promotion item for `38cd49cd…` into `claude/cobb/kaizen/plan.md` | list with ids; ruling | reads only |
 | S7b | `data-scientist` | rulings (i), (ii) of D11 | in ML note | no |
-| S8 | `qa-engineer` | author B (sealed path), `pwq_leakcheck.py`, `--probe` in `ws:pwq-test`, freeze, sha256 to ledger; `docs/test-plans/python-web-quirks-kb.md` | 84+30 rows, a `tail`-flagged positive for each of the 12 units with ≥ 4 chunks (S8's brief carries it; `validate_set_b` does not read the flags) | no |
-| G2 | `analyst` | review S4-S8: copy vs pin sample, `Versions`/`Verified` sample, guard run, B outside repo | Pass 2 | no |
+| S8 | `qa-engineer` | author B (sealed path), `pwq_leakcheck.py`, `--probe` in `ws:pwq-test`, freeze, sha256 to ledger; `docs/test-plans/python-web-quirks-kb.md` | 84+30 rows, a `tail`-flagged positive for each of the 12 units with ≥ 4 chunks (S8's brief carries it; `validate_set_b` checks them on `--sealed-once` only, since U15; `--probe`/`--baseline` do not) | no |
+| G2 | `analyst` | review S4-S8: copy vs pin sample, `Versions`/`Verified` sample, guard run, B outside repo | Pass 3 | no |
 | S9 | `data-scientist` | before-ingestion baseline of A in `ws:pwq-test` | recorded in ML note | test ws |
 | S10 | `cobb` | `ingest` + `gate` into `ws:pwq-test`. | gate table clean | test ws |
 | S11 | `qa-engineer` | AC-2, AC-5, AC-7, AC-8, AC-12 in `ws:pwq-test` (T31-T38); report `docs/test-reports/python-web-quirks-kb-report.md` | all pass; planted divergence and 43rd title shown | test ws |
-| S12 | `data-scientist` | floor sweep 0.38-0.50 with S7 ids `--exclude`d + BM25 on A (ML §6); rewrite ML counts in place; floor change ⇒ Stage 8 regression first | decision in ML note | test ws |
-| S13 | `cobb` | **production ingest**: `ingest --ws agent-team --base-url http://localhost:8200 --confirm-production`, `gate`, AC-1 check at the pin, manifest | gate clean; AC-1 clean; extra-section mutant red | **yes** |
+| S12 | `data-scientist` | floor sweep 0.38-0.50 with S7 ids `--exclude`d + BM25 on A (ML §6); **report**, per Set A positive, the rank of the first unit chunk and whether any non-unit chunk scores better, aggregated with those documents named (none outranking ⇒ the pre-existing hits are inert, recorded so); rewrite ML counts in place; floor change ⇒ Stage 8 regression first | decision in ML note | test ws |
+| S13 | `cobb` | **production ingest**: `ingest --ws agent-team --base-url http://localhost:8200 --confirm-production`, then verify the POSTed id is visible in `ws:agent-team` and nowhere else (`check_target` compares strings only: F6/F14), `gate`, AC-1 check at the pin, manifest | gate clean; AC-1 clean; extra-section mutant red | **yes** |
 | S15a | `cobb` | D6 section, front-matter consumer list, floor value if S12 changed it; `audit-team.sh` | AC-14 | no |
 | S13b | `cobb` | re-derive the capture list; hand to the stakeholder | list in ledger | reads only |
 | H1 | stakeholder | `curl -X DELETE` the listed captures  | ids in ledger | stakeholder |
-| S14 | `qa-engineer` | re-derive exclusions (S7 ids as `--exclude`), score B once (`--sealed-once`), BM25 on B, tail-vs-head; report | AC-3 verdict | reads only |
+| S14 | `qa-engineer` | re-derive exclusions (`--exclude` only ids the ledger records as deleted at H1 or created after S13b; aggregate-only non-unit-outranks-unit count, no per-query lines), score B once (`--sealed-once`), BM25 on B, tail-vs-head; report | AC-3 verdict | reads only |
 | S15b1 | `cobb` | pointer + tool grants in the eight agents (D7) | `grep -F` finds the literal in 8 | no |
 | S15b2 | `cobb` | `audit-team.sh` check 12 + scratch-copy mutant | green; mutant red | no |
 | S15c | `qa-engineer` | AC-6 (T39), AC-10, AC-13 black-box | pass | no |
@@ -392,7 +381,7 @@ fixtures, never from the code under test.
 |---|---|---|
 | T1 | pin parses: 42 headings (`grep -c '^## '` on the pin), preamble | drop one heading → count mismatch |
 | T2 | every printed hit has a ruling | a scratch section "the bounded-pool entry above" with no ruling fails the build; the real pin passes |
-| T3 | units equal D2's table (5 units, 11 members) | remove the ruling for 891 → u-bt disappears and T2 fails |
+| T3 | units equal D2's table (5 units, 11 members) | remove the ruling for 891 → u02 disappears and T2 fails |
 | T4 | header grammar: single and merged; preamble block + note fences end at the next fence | reorder members → `verify-copy` fails |
 | T5 | `Verified`/`Other-dates` rule: phrase-qualified dates only; `verify-copy` recomputes headers | put §16's provenance date under `Verified` → fails |
 | T6 | each `Versions` token is a body substring with lib within 40 chars | invent a token → fails |
@@ -467,7 +456,6 @@ literal and check 12 (S15b1/b2); `docs/test-plans/python-web-quirks-kb.md` and t
 7. Write guards: `cobb` gets `ask` for `skills/agent-kb-retrieval/SKILL.md`, `claude/scripts/audit-team.sh`, the guard script and the `.json` manifest;
    `coder` editing `falkor-chat/docs/plans/workflow-timers.md` gets `ask`; `teco` expects these.
 8. The kit re-export (S16c) has not been run; blocked is reported, not waived.
-9. Learning-capture writes by agents continue throughout and can create new restating documents between S13b and S14 (rule: re-derive at S14's start).
 
 ## Ready to implement
 
