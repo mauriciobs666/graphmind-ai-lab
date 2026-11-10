@@ -1,8 +1,8 @@
 # ccg-toolchain image
 
-> **Status:** active · **Owner:** `devops` · **Tracks:** C-1001 (P0, S02, S24)
+> **Status:** active · **Owner:** `devops` · **Tracks:** C-1001 (P0, S02, S24; P1-48)
 
-Two images from one `Dockerfile`, one content hash:
+Three images from one `Dockerfile`, one content hash:
 
 - **`ccg-toolchain:<hash>`** (target `toolchain`): Joern v4.0.579 plus every FR-1 frontend's
   toolchain, for P0's sandboxed `--network none` builds (S08, S11). Specified by
@@ -12,20 +12,24 @@ Two images from one `Dockerfile`, one content hash:
   `docs/plans/connected-code-graph-p0-ml.md` §5.2/§9 and the smoke projects (S24). For S25's
   reference-truth runs, **with network and outside the sandbox**, never in a fetch-off
   run's workspace.
+- **`ccg-toolchain-indexer:<hash>`** (target `indexer`, `FROM toolchain`; P1-48): `toolchain` plus
+  Node and the two npm SCIP indexers, for P1's offline indexer runs (P1-15). See "The `indexer`
+  image" below.
 
 ## Build
 
 ```bash
 cpg/infra/toolchain/build.sh                       # builds ccg-toolchain:<hash>; no-op if it exists
 cpg/infra/toolchain/build.sh --truth               # builds ccg-toolchain-truth:<hash> (and the toolchain it is FROM)
-cpg/infra/toolchain/build.sh [--truth] --print-tag # just the tag, no build
-cpg/infra/toolchain/build.sh [--truth] --no-cache  # cold rebuild of the same tag
+cpg/infra/toolchain/build.sh --indexer             # builds ccg-toolchain-indexer:<hash> (and the toolchain it is FROM)
+cpg/infra/toolchain/build.sh [--truth|--indexer] --print-tag # just the tag, no build
+cpg/infra/toolchain/build.sh [--truth|--indexer] --no-cache  # cold rebuild of the same tag
 ```
 
 The tag is `sha256(build context)[:12]`. The context is a deterministic tar (sorted names, mtime 0,
 uid 0, normalized modes) of exactly `Dockerfile`, `smoke/` and `truth-npm/`, piped to
 `docker build` on stdin with no host directory behind it. A change to any pin, smoke file or
-lockfile moves the tag, and an existing tag is never rebuilt. Both images carry the same hash, so
+lockfile moves the tag, and an existing tag is never rebuilt. All three images carry the same hash, so
 an edit to a truth tool also moves the `toolchain` tag even though that image's layers are
 unchanged and come from cache. Same convention as `cypher-mcp/build.sh`. A build needs network.
 A fetch-off run (S08, S11, S25 off) needs none. A fetch-on run (S25 on) needs the controlled
@@ -59,7 +63,7 @@ snapshot sources, so an `apt-get` at run time would also resolve against the sna
 | gcc / g++ / make / git | 13.3.0 / 13.3.0 / 4.3 / 2.43.0 | apt snapshot |
 
 The `toolchain` image has **no Node.js**: `jssrc2cpg` bundles astgen. Node lives only in the
-`truth` image. Nothing the `truth` stage installs overlaps with S02's list.
+`truth` and `indexer` images. Nothing the `truth` stage installs overlaps with S02's list.
 
 `toolchain` is **4.39 GiB** (4,718,150,444 bytes; 4.72 GB), and about 2.6 GiB of that is the
 Joern distribution. The full Joern release is kept to match the host. The frontends outside FR-1
@@ -107,6 +111,32 @@ dependency; ML note §11 N6, S09's), and any corpus dependency (fetched by S25 a
 `kotlinc` it dies with `NoClassDefFoundError .../FlyweightCapableTreeStructure` (observed). The
 `truth` image therefore also ships the embeddable compiler (same 2.4.21) and the wrapper
 `kotlinc-scip`, which is what Gradle-driven `scip-java index` does as well.
+
+### The `indexer` image (P1-48)
+
+Target `indexer`, `FROM toolchain`. It adds, under `/opt/indexer`:
+- Node.js 24.22.2;
+- `scip-python` 0.6.8 and `scip-typescript` 0.6.0. These are the same bytes as `truth`'s: both copy
+  them from stage `npm-fetch`, which installs `truth-npm/<tool>/package-lock.json` with
+  `npm ci --ignore-scripts`;
+- `python3` with `venv` and `pip` (apt snapshot). `scip-python` needs an interpreter for its
+  environment discovery, and a pre-provisioned venv's `bin/python` resolves to it.
+
+It carries no other truth tool, no smoke project and no `/opt/truth`. `ccg-versions` runs the
+`50-indexer.sh` drop-in (node, npm, both indexers, python3). The image is 5,067,839,258 bytes
+(4833 MiB), 349,688,814 bytes more than `toolchain`'s 4,718,150,444.
+
+- **Splitting `npm-fetch` out of `truth-fetch` changed no layer.** Across the split
+  (`a82faf5219b3` before, `73b9fb76bd2a` after), `toolchain` keeps image ID
+  `sha256:a24714d06174…` and `truth` keeps `sha256:ed6be6cf59f9…`. Section (5) of
+  `tests/test_toolchain.sh` checks the indexer image.
+- **The image still ships `npm`, `npx`, `pip` and `pip3`.** Under `--network none` they cannot
+  fetch, but a run that is allowed to call them could. Keeping them out of an indexer run's argv is
+  the runner's job, not the image's. `offline-run.sh` has no indexer frontend yet (the
+  `-egress-spec3.md` §7.4 revision), so an indexer run is not yet a supported runner path; see
+  `cpg/infra/README.md` "Indexer image".
+- **The `toolchain` image the sandbox runs carries neither Node nor `/opt/indexer`.** Test
+  section (3) checks this.
 
 ## Run
 
@@ -160,7 +190,8 @@ every `/usr/local/lib/ccg-versions.d/*.sh` in name order, **each in its own subs
 reports its own failure count through an `EXIT` trap, so a drop-in's `exit 0` or `set -e` abort
 cannot hide a failure (S02 review Pass 2, p2-m1). Each drop-in calls
 `v <label> <cmd...>` or `jarv <label> <libdir> <artifact>`. A drop-in that fails `bash -n`
-counts as a failure. The `truth` image registers `50-truth.sh`.
+counts as a failure. The `truth` image registers `50-truth.sh`; the `indexer` image registers
+`50-indexer.sh`.
 
 ## Extending
 

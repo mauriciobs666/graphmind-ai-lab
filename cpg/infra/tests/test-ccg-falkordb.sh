@@ -13,9 +13,13 @@ set -euo pipefail
 #   label     x {present, absent}
 # no `docker stop`/`docker rm` reaches an unlabelled container, and no Redis write reaches an
 # instance whose container is unlabelled (so never falkordb-dev). The stubs record violations
-# themselves, at the moment they happen.
+# themselves, at the moment they happen. The probe also runs `--throwaway up` / `--throwaway down`.
 # Plus positive controls (the guards must not refuse everything), the down-guard-probes-the-
-# right-instance case, status drift checks (m1/m2) and reset-p0's post-flush check (m3).
+# right-instance case, status drift checks (m1/m2), reset-p0's post-flush check (m3), and P1-48:
+# `up` sets and reports TIMEOUT_MAX 10000 / MAX_INFO_QUERIES 0, `status` accepts the P1 steady
+# state (nonzero TIMEOUT_MAX, the four ccg_* ACL users) and flags anything else, and
+# `--throwaway` refuses 6379/6390 before any docker call, refuses published/listening ports,
+# picks a free one, survives a lost port race, and never acts on a container without its label.
 #
 # Usage: cpg/infra/tests/test-ccg-falkordb.sh [path/to/ccg-falkordb.sh]
 
@@ -33,6 +37,7 @@ cat >"$STUB/docker" <<'EOF'
 W="$STUB_WORLD"; echo "docker $*" >>"$W/log"
 viol() { echo "$*" >>"$W/violations"; }
 lbl() { cat "$W/c/$1/label" 2>/dev/null; }
+twl() { cat "$W/c/$1/twlabel" 2>/dev/null; }
 cmd="$1"; shift
 case "$cmd" in
   info) exit 0 ;;
@@ -45,6 +50,7 @@ case "$cmd" in
     if [ ! -d "$d" ]; then echo; echo "Error: No such object: $name" >&2; exit 1; fi
     case "$fmt" in
       *State.Status*)        cat "$d/state" ;;
+      *Labels*throwaway*)    echo "$(twl "$name")" ;;
       *Labels*)              echo "$(lbl "$name")" ;;
       *Config.Image*)        cat "$d/image" ;;
       *HostConfig.MemorySwap*) cat "$d/memswap" ;;
@@ -56,6 +62,15 @@ case "$cmd" in
     [ -d "$d" ] || { echo "Error: No such container: $name" >&2; exit 1; }
     [ "$(cat "$d/state")" = running ] || exit 0
     if [ -n "${2:-}" ]; then sed 's/^6379\/tcp -> //' "$d/ports"; else cat "$d/ports"; fi ;;
+  ps)
+    all=0; filt=""
+    while [ $# -gt 0 ]; do case "$1" in -a) all=1 ;; --filter) filt="$2"; shift ;; esac; shift; done
+    for d in "$W"/c/*; do
+      [ -d "$d" ] || continue; n="${d##*/}"
+      [ "$all" = 1 ] || [ "$(cat "$d/state")" = running ] || continue
+      case "$filt" in *throwaway*) [ "$(twl "$n")" = 1 ] || continue; echo "$n	$(cat "$d/state")	" ; continue ;; esac
+      sed 's/^6379\/tcp -> \(.*\)$/\1->6379\/tcp/' "$d/ports" | paste -sd, -
+    done ;;
   stop)
     name="$1"; d="$W/c/$name"
     [ -d "$d" ] || { echo "Error: No such container: $name" >&2; exit 1; }
@@ -69,13 +84,13 @@ case "$cmd" in
     for p in "$W"/p/*; do [ -e "$p" ] && [ "$(cat "$p")" = "$name" ] && rm -f "$p"; done
     rm -rf "$d" ;;
   run)
-    name=""; label=""; hp=""; image=""; mem=0; memswap=0
+    name=""; label=""; twlabel=""; hp=""; image=""; mem=0; memswap=0
     tobytes() { case "$1" in *g) echo $(( ${1%g} * 1073741824 ));; *m) echo $(( ${1%m} * 1048576 ));; *) echo "$1";; esac; }
     while [ $# -gt 0 ]; do
       case "$1" in
         --name) name="$2"; shift ;;
         --name=*) name="${1#--name=}" ;;
-        --label) label="$2"; shift ;;
+        --label) case "$2" in ccg-falkordb.throwaway=1) twlabel=1 ;; *) label="$2" ;; esac; shift ;;
         -p) hp="$2"; shift ;;
         -e|-v) shift ;;
         --memory) mem="$(tobytes "$2")"; shift ;;
@@ -91,11 +106,17 @@ case "$cmd" in
     d="$W/c/$name"; mkdir -p "$d"
     echo running >"$d/state"
     [ "$label" = "ccg-falkordb=1" ] && echo 1 >"$d/label" || : >"$d/label"
+    echo "$twlabel" >"$d/twlabel"
     ip="${hp%%:*}"; rest="${hp#*:}"; port="${rest%%:*}"
+    # A port taken between the script's check and the run (W/race/<port>): like real docker,
+    # the container is created but cannot start.
+    if [ -e "$W/race/$port" ]; then echo created >"$d/state"; echo "Error: bind: address already in use" >&2; exit 125; fi
+    # A container that starts but never answers PING (W/noping) or refuses GRAPH.CONFIG SET (W/nocfg).
+    [ -e "$W/noping" ] && touch "$d/noping"; [ -e "$W/nocfg" ] && touch "$d/nocfg"
     echo "6379/tcp -> $ip:$port" >"$d/ports"
     echo "$port" >"$d/hostport"; echo "$name" >"$W/p/$port"
     echo 0 >"$d/keys"; echo 1 >"$d/auth"; echo "$image" >"$d/image"
-    echo 41811 >"$d/modver"; echo 0 >"$d/tmax"; echo default >"$d/acl"
+    echo 41811 >"$d/modver"; echo 0 >"$d/tmax"; echo 1000 >"$d/miq"; echo default >"$d/acl"
     echo "$mem" >"$d/mem"; echo "$memswap" >"$d/memswap"
     echo deadbeef ;;
   *) echo "stub docker: unsupported command $cmd" >&2; exit 3 ;;
@@ -117,13 +138,18 @@ if [ -z "$name" ] || [ "$(cat "$d/state" 2>/dev/null)" != running ]; then
 fi
 cmd="$(echo "$1" | tr a-z A-Z)"
 case "$cmd" in
-  FLUSHALL|FLUSHDB|SET|DEL|GRAPH.DELETE|GRAPH.QUERY|CONFIG\ SET)
+  FLUSHALL|FLUSHDB|SET|DEL|GRAPH.DELETE|GRAPH.QUERY)
     [ "$(cat "$d/label")" = 1 ] || echo "redis write $cmd to $name:$port (unlabelled)" >>"$W/violations" ;;
+  CONFIG|GRAPH.CONFIG|ACL)
+    case "$(echo "${2:-}" | tr a-z A-Z)" in SET|SETUSER|DELUSER|RESETSTAT|REWRITE)
+      [ "$(cat "$d/label")" = 1 ] || echo "redis write $cmd $2 to $name:$port (unlabelled)" >>"$W/violations" ;;
+    esac ;;
 esac
 if [ "$(cat "$d/auth")" = 1 ] && [ "${REDISCLI_AUTH:-}" != "$(cat "$W/pw")" ]; then
   echo "NOAUTH Authentication required."; exit 0
 fi
 k="$(cat "$d/keys")"
+[ -e "$d/noping" ] && { echo "LOADING Redis is loading the dataset in memory"; exit 0; }
 case "$cmd" in
   PING) echo PONG ;;
   DBSIZE) echo "$k" ;;
@@ -142,7 +168,13 @@ case "$cmd" in
       appendonly) printf 'appendonly\nno\n' ;;
     esac ;;
   MODULE) printf 'name\ngraph\nver\n%s\npath\n/var/lib/falkordb/bin/falkordb.so\nargs\nMAX_QUEUED_QUERIES\n25\n' "$(cat "$d/modver")" ;;
-  GRAPH.CONFIG) printf 'TIMEOUT_MAX\n%s\n' "$(cat "$d/tmax")" ;;
+  GRAPH.CONFIG)
+    f=""; case "${3:-}" in TIMEOUT_MAX) f=tmax ;; MAX_INFO_QUERIES) f=miq ;; esac
+    if [ -z "$f" ]; then echo "ERR unknown config ${3:-}"; exit 0; fi
+    case "$(echo "$2" | tr a-z A-Z)" in
+      GET) printf '%s\n%s\n' "$3" "$(cat "$d/$f")" ;;
+      SET) if [ -e "$d/nocfg" ]; then echo "ERR config refused"; else echo "$4" >"$d/$f"; echo OK; fi ;;
+    esac ;;
   ACL) cat "$d/acl" ;;
   *) echo "ERR unknown command '$1'" ;;
 esac
@@ -153,7 +185,7 @@ cat >"$STUB/ss" <<'EOF'
 #!/usr/bin/env bash
 # ss -ltnH "sport = :PORT" -> a line if some world container publishes PORT
 p="$(echo "$*" | sed -n 's/.*sport = :\([0-9]*\).*/\1/p')"
-[ -n "$p" ] && [ -e "$STUB_WORLD/p/$p" ] && echo "LISTEN 0 4096 127.0.0.1:$p 0.0.0.0:*"
+[ -n "$p" ] && { [ -e "$STUB_WORLD/p/$p" ] || [ -e "$STUB_WORLD/listen/$p" ]; } && echo "LISTEN 0 4096 127.0.0.1:$p 0.0.0.0:*"
 exit 0
 EOF
 
@@ -177,11 +209,11 @@ mkc() { # name state label hostport keys [ports-file-content]
   echo "$4" >"$d/hostport"; echo "$1" >"$W/p/$4"
   if [ -n "${6:-}" ]; then printf '%s\n' "$6" >"$d/ports"; else echo "6379/tcp -> 127.0.0.1:$4" >"$d/ports"; fi
   echo 1 >"$d/auth"; echo falkordb/falkordb:v4.18.11 >"$d/image"; echo 41811 >"$d/modver"
-  echo 0 >"$d/tmax"; echo default >"$d/acl"
+  echo 10000 >"$d/tmax"; echo 0 >"$d/miq"; echo default >"$d/acl"; : >"$d/twlabel"
   echo 2147483648 >"$d/mem"; echo 2147483648 >"$d/memswap"
 }
 new_world() {
-  W="$(mktemp -d "$TMP/w.XXXX")"; mkdir -p "$W/c" "$W/p" "$W/home/.config/ccg" "$W/alt"
+  W="$(mktemp -d "$TMP/w.XXXX")"; mkdir -p "$W/c" "$W/p" "$W/listen" "$W/race" "$W/home/.config/ccg" "$W/alt"
   echo testpw >"$W/pw"
   echo testpw >"$W/home/.config/ccg/falkordb-admin.pass"; chmod 600 "$W/home/.config/ccg/falkordb-admin.pass"
   echo otherpw >"$W/alt/falkordb-admin.pass"
@@ -208,7 +240,7 @@ bad()  { FAIL=$((FAIL+1)); FAILS+=("$1"); }
 check() { if eval "$2"; then ok; else bad "$1 :: rc=$RC :: $(echo "$OUT" | tail -2 | tr '\n' ' ')"; fi; }
 
 # ------------------------------------------------------------------ M1 coverage probe
-VERBS=("up" "down" "down --force" "reset-p0 --yes")
+VERBS=("up" "down" "down --force" "reset-p0 --yes" "--throwaway up" "--throwaway down")
 OVERRIDES=(
   "none"
   "CCG_FALKORDB_NAME=falkordb-dev"
@@ -297,8 +329,18 @@ st_case "wrong image"        'echo falkordb/falkordb:latest >"$W/c/ccg-falkordb/
 st_case "wrong module ver"   'echo 41900 >"$W/c/ccg-falkordb/modver"'
 st_case "two binding lines"  'printf "6379/tcp -> 127.0.0.1:6390\n6379/tcp -> [::1]:6390\n" >"$W/c/ccg-falkordb/ports"'
 st_case "no binding"         ': >"$W/c/ccg-falkordb/ports"'
-st_case "TIMEOUT_MAX left"   'echo 5000 >"$W/c/ccg-falkordb/tmax"'
+st_case "TIMEOUT_MAX 0 (restarted behind up's back)" 'echo 0 >"$W/c/ccg-falkordb/tmax"'
+st_case "MAX_INFO_QUERIES default 1000" 'echo 1000 >"$W/c/ccg-falkordb/miq"'
 st_case "ACL probe user left" 'printf "default\nprobe\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL user beside the P1 set" 'printf "default\nccg_build\nccg_buildx\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL ccg_raw_ with no system" 'printf "default\nccg_raw_\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL bare ccg_build (pre-§7 shared name)" 'printf "default\nccg_build\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL system with a trailing separator (shop_)" 'printf "default\nccg_build_shop_\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL system with a double separator" 'printf "default\nccg_build_a__b\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL system with a leading separator" 'printf "default\nccg_raw_-x\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL system in upper case" 'printf "default\nccg_raw_Shop\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL unknown role" 'printf "default\nccg_admin_shop\n" >"$W/c/ccg-falkordb/acl"'
+st_case "ACL 49-character system name" 'printf "default\nccg_raw_%s\n" "$(printf "a%.0s" $(seq 1 49))" >"$W/c/ccg-falkordb/acl"'
 st_case "no memory cap"      'echo 0 >"$W/c/ccg-falkordb/mem"'
 
 # ------------------------------------------------------------------ reset-p0 post-check (m3)
@@ -306,6 +348,88 @@ new_world; mkc ccg-falkordb running 1 6390 3; touch "$W/c/ccg-falkordb/flushfail
 check "R1 reset-p0 fails when keys remain after FLUSHALL" '[ $RC != 0 ]'
 new_world; mkc ccg-falkordb running 1 6390 3; run_s CCG_CONFIG_DIR="$W/alt" -- reset-p0 --yes
 check "R2 reset-p0 fails on a wrong password (NOAUTH is not 'done')" '[ $RC != 0 ]'
+
+# ------------------------------------------------------------------ P1 instance flags (P1-48 (1), (2))
+new_world; run_s -- up
+check "U1 up sets TIMEOUT_MAX 10000 and MAX_INFO_QUERIES 0" '[ $RC = 0 ] && [ "$(cat "$W/c/ccg-falkordb/tmax")" = 10000 ] && [ "$(cat "$W/c/ccg-falkordb/miq")" = 0 ]'
+check "U1b up reports both from GRAPH.CONFIG GET" 'echo "$OUT" | grep -q "GRAPH.CONFIG GET: TIMEOUT_MAX 10000, MAX_INFO_QUERIES 0" && grep -q "redis-cli -p 6390 GRAPH.CONFIG GET MAX_INFO_QUERIES" "$W/log"'
+: >"$W/log"; run_s -- up
+check "U2 up on a running instance sets nothing, still reports" '[ $RC = 0 ] && ! grep -q "GRAPH.CONFIG SET" "$W/log" && echo "$OUT" | grep -q "TIMEOUT_MAX 10000"'
+# ACL users are per system, ccg_<role>_<system> (docs/plans/connected-code-graph-p1-graph.md §7).
+new_world; mkc ccg-falkordb running 1 6390 0; printf 'default\nccg_build_shop\nccg_verdict_shop\nccg_engine_shop\nccg_raw_shop\nccg_build_fx-job\nccg_raw_1sys\nccg_engine_a_b-c\n' >"$W/c/ccg-falkordb/acl"; echo 20000 >"$W/c/ccg-falkordb/tmax"; run_s -- status
+check "S-P1 status passes on the P1 steady state (per-system users of shop, fx-job, 1sys, a_b-c; re-derived nonzero TIMEOUT_MAX)" '[ $RC = 0 ]'
+n48="$(printf 'a%.0s' $(seq 1 48))"
+new_world; mkc ccg-falkordb running 1 6390 0; printf 'default\nccg_raw_%s\n' "$n48" >"$W/c/ccg-falkordb/acl"; run_s -- status
+check "S-P1b a 48-character system name is accepted" '[ $RC = 0 ]'
+
+# ------------------------------------------------------------------ --throwaway (P1-48 (3))
+# every spelling: plain, and zero-padded to every length from 5 to 12 characters (P2-1)
+PADDED=(); for n in 6379 6390; do for len in 5 6 7 8 9 10 11 12; do PADDED+=("$(printf "%0${len}d" "$n")"); done; done
+for bad in 6379 6390 "${PADDED[@]}"; do
+  for v in up status down; do
+    new_world; run_s CCG_FALKORDB_PORT=$bad -- --throwaway $v
+    check "T1 --throwaway $v refuses port $bad before any docker call" '[ $RC != 0 ] && ! grep -q "^docker" "$W/log" && echo "$OUT" | grep -q "refuses port $((10#$bad))"'
+  done
+done
+for bad in 1023 65536 99999 123456 016390000 0000 0 6390x x6390 " 16395" 1e4; do
+  new_world; run_s CCG_FALKORDB_PORT="$bad" -- --throwaway up
+  check "T1c --throwaway refuses port value '$bad' before any docker call" '[ $RC != 0 ] && ! grep -q "^docker" "$W/log"'
+done
+new_world; run_s CCG_FALKORDB_PORT=0016395 -- --throwaway up
+check "T1d a zero-padded free port is normalized and used (00016395 -> 16395)" '[ $RC = 0 ] && echo "$OUT" | grep -qx "CCG_FALKORDB_PORT=16395"'
+new_world; run_s CCG_FALKORDB_PORT=16395 -- --throwaway reset-p0 --yes
+check "T1b --throwaway reset-p0 is refused" '[ $RC != 0 ] && ! grep -q "FLUSHALL" "$W/log"'
+
+new_world; mkc published-x running "" 16391 0; run_s CCG_FALKORDB_PORT=16391 -- --throwaway up
+check "T2 explicit port already published is refused" '[ $RC != 0 ] && ! grep -q "^docker run" "$W/log"'
+new_world; mkc published-x running "" 16391 0; rm -f "$W/p/16391"; run_s CCG_FALKORDB_PORT=16391 -- --throwaway up
+check "T2a port published but not seen by ss (userland proxy off) is refused" '[ $RC != 0 ] && ! grep -q "^docker run" "$W/log"'
+new_world; touch "$W/listen/16392"; run_s CCG_FALKORDB_PORT=16392 -- --throwaway up
+check "T2b explicit port already listening (no container) is refused" '[ $RC != 0 ] && ! grep -q "^docker run" "$W/log"'
+new_world; mkc ccg-falkordb-tw-16393 exited 1 16393 0; echo 1 >"$W/c/ccg-falkordb-tw-16393/twlabel"; rm -f "$W/p/16393"; run_s CCG_FALKORDB_PORT=16393 -- --throwaway up
+check "T2c explicit port whose throwaway name already exists is refused" '[ $RC != 0 ] && ! grep -q "^docker run" "$W/log"'
+
+new_world; touch "$W/listen/16390"; mkc published-x running "" 16391 0; run_s -- --throwaway up
+check "T3 auto pick skips listening and published ports" '[ $RC = 0 ] && echo "$OUT" | grep -qx "CCG_FALKORDB_PORT=16392" && echo "$OUT" | grep -qx "CCG_FALKORDB_NAME=ccg-falkordb-tw-16392"'
+check "T3b throwaway carries both labels, binds 127.0.0.1, gets the P1 module config" '[ "$(cat "$W/c/ccg-falkordb-tw-16392/label")" = 1 ] && [ "$(cat "$W/c/ccg-falkordb-tw-16392/twlabel")" = 1 ] && [ "$(cat "$W/c/ccg-falkordb-tw-16392/ports")" = "6379/tcp -> 127.0.0.1:16392" ] && [ "$(cat "$W/c/ccg-falkordb-tw-16392/tmax")" = 10000 ] && [ "$(cat "$W/c/ccg-falkordb-tw-16392/miq")" = 0 ]'
+check "T3c stdout carries only the two variable lines" '[ "$(env HOME="$W/home" STUB_WORLD="$W" PATH="$PATH" bash "$SCRIPT" --throwaway up 2>/dev/null | grep -vc "^CCG_FALKORDB_\(NAME\|PORT\)=")" = 0 ]'
+run_s CCG_FALKORDB_PORT=16392 -- --throwaway status
+check "T4 --throwaway status passes on a fresh throwaway" '[ $RC = 0 ]'
+echo 3 >"$W/c/ccg-falkordb-tw-16392/keys"; run_s CCG_FALKORDB_PORT=16392 -- --throwaway down
+check "T5 --throwaway down removes it without --force (keys are the caller's) and its conf file" '[ $RC = 0 ] && [ ! -d "$W/c/ccg-falkordb-tw-16392" ] && [ ! -e "$W/home/.config/ccg/ccg-falkordb-tw-16392.redis.conf" ]'
+
+new_world; touch "$W/race/16390"; run_s -- --throwaway up
+check "T6 a lost port race leaves no created container and moves to the next port" '[ $RC = 0 ] && [ ! -d "$W/c/ccg-falkordb-tw-16390" ] && echo "$OUT" | grep -qx "CCG_FALKORDB_PORT=16391"'
+new_world; touch "$W/race/16394"; run_s CCG_FALKORDB_PORT=16394 -- --throwaway up
+check "T6b explicit port lost to a race fails and leaves nothing" '[ $RC != 0 ] && [ ! -d "$W/c/ccg-falkordb-tw-16394" ]'
+
+new_world; mkc ccg-falkordb-tw-16400 running 1 16400 0; run_s CCG_FALKORDB_PORT=16400 -- --throwaway down
+check "T7 --throwaway down refuses a container without the throwaway label" '[ $RC != 0 ] && [ -d "$W/c/ccg-falkordb-tw-16400" ]'
+run_s CCG_FALKORDB_PORT=16400 -- --throwaway status
+check "T7b --throwaway status flags a missing throwaway label" '[ $RC != 0 ]'
+new_world; mkc ccg-falkordb running 1 6390 0; run_s CCG_FALKORDB_NAME=ccg-falkordb CCG_FALKORDB_PORT=16400 -- --throwaway down
+check "T8 --throwaway with a NAME that is not tw-<port> is refused; ccg-falkordb untouched" '[ $RC != 0 ] && [ "$(cat "$W/c/ccg-falkordb/state")" = running ] && ! grep -q "^docker stop" "$W/log"'
+new_world; mkc ccg-falkordb running 1 6390 0; run_s CCG_FALKORDB_NAME=ccg-falkordb -- --throwaway up
+check "T8b --throwaway up with NAME but no PORT is refused" '[ $RC != 0 ] && ! grep -q "^docker run" "$W/log"'
+new_world; run_s -- --throwaway down
+check "T8c --throwaway down without a port is refused" '[ $RC != 0 ] && ! grep -q "^docker" "$W/log"'
+
+new_world; run_s -- --throwaway up; run_s -- --throwaway list
+check "T9 --throwaway list names the throwaway only" '[ $RC = 0 ] && echo "$OUT" | grep -q "^ccg-falkordb-tw-16390" && ! echo "$OUT" | grep -q "falkordb-dev"'
+
+# ------------------------------------------------------------------ m3: lost module config, failed starts
+new_world; mkc ccg-falkordb running 1 6390 0; echo 0 >"$W/c/ccg-falkordb/tmax"; run_s -- up
+check "U3 up on a running instance whose module config was lost fails and names the remedy" '[ $RC != 0 ] && echo "$OUT" | grep -q "down --force" && [ "$(cat "$W/c/ccg-falkordb/state")" = running ]'
+new_world; mkc ccg-falkordb running 1 6390 0; echo 1000 >"$W/c/ccg-falkordb/miq"; run_s -- up
+check "U3b up fails on MAX_INFO_QUERIES lost too" '[ $RC != 0 ]'
+new_world; touch "$W/noping"; run_s -- --throwaway up
+check "T10 a throwaway that never answers PING is removed, no name printed" '[ $RC != 0 ] && [ -z "$(ls "$W/c" | grep tw)" ] && ! echo "$OUT" | grep -q "^CCG_FALKORDB_PORT="'
+new_world; touch "$W/nocfg"; run_s -- --throwaway up
+check "T10b a throwaway whose GRAPH.CONFIG SET fails is removed" '[ $RC != 0 ] && [ -z "$(ls "$W/c" | grep tw)" ]'
+new_world; touch "$W/nocfg"; run_s -- up
+check "T10c the shared instance is left in place on a failed config (status shows it)" '[ $RC != 0 ] && [ -d "$W/c/ccg-falkordb" ]'
+new_world; run_s CCG_FALKORDB_PORT=16400 -- --throwaway status
+check "N1 --throwaway status of an absent throwaway names the throwaway verb" '[ $RC != 0 ] && echo "$OUT" | grep -q -- "--throwaway up"'
 
 # ------------------------------------------------------------------ report
 echo "coverage probe runs: $N_PROBE"

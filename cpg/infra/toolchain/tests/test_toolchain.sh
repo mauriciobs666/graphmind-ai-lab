@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# test_toolchain.sh — regression checks for the ccg-toolchain / ccg-toolchain-truth images
-# (C-1001 P0, S24). Needs Docker and both images already built (build.sh, build.sh --truth).
-# Runs everything with `--network none`, in throwaway `docker run --rm` containers of the two
+# test_toolchain.sh — regression checks for the ccg-toolchain / ccg-toolchain-truth /
+# ccg-toolchain-indexer images (C-1001 P0 S24; P1-48 for `indexer`). Needs Docker and all three
+# images already built (build.sh, build.sh --truth, build.sh --indexer).
+# Runs everything with `--network none`, in throwaway `docker run --rm` containers of the three
 # images only. Exit status = number of failed checks.
 #
 #   cpg/infra/toolchain/tests/test_toolchain.sh
@@ -14,12 +15,14 @@
 # the control that exited 0; (3) the sandbox image carries no truth tool; (4) ccg-truth-smoke
 # passes on the real smoke projects and FAILS on a mutant of each assertion (override edge
 # removed; call through the interface removed), per language, plus a header-resolution mutant
-# for C/C++ (the compiler's own system headers hidden).
+# for C/C++ (the compiler's own system headers hidden); (5) the indexer image: same hash, ccg-versions
+# passes offline, scip-typescript/scip-python/node present, no truth tool and no /opt/truth, and the
+# sandbox image carries no /opt/indexer.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TC_DIR="$(cd "$HERE/.." && pwd)"
 BUILD="$TC_DIR/build.sh"
-TC="$("$BUILD" --print-tag)"; TR="$("$BUILD" --truth --print-tag)"
+TC="$("$BUILD" --print-tag)"; TR="$("$BUILD" --truth --print-tag)"; TI="$("$BUILD" --indexer --print-tag)"
 CONTROL="${CCG_CONTROL_IMAGE:-ccg-toolchain:d3184effb566}"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/ccg-toolchain-test.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
@@ -35,7 +38,7 @@ expect() {  # expect <description> <want: 0|nonzero> <cmd...>
 }
 run() { local img="$1"; shift; docker run --rm --network none --hostname localhost "$@"; }
 
-for img in "$TC" "$TR"; do docker image inspect "$img" >/dev/null 2>&1 || { echo "missing image $img: run build.sh [--truth]" >&2; exit 2; }; done
+for img in "$TC" "$TR" "$TI"; do docker image inspect "$img" >/dev/null 2>&1 || { echo "missing image $img: run build.sh [--truth|--indexer]" >&2; exit 2; }; done
 
 echo "== (1) tag determinism"
 copy="$SCRATCH/tree"; cp -a "$TC_DIR" "$copy"; rm -rf "$copy/tests"
@@ -45,6 +48,8 @@ find "$copy" -exec touch -d '2001-01-01' {} +
 [ "$("$copy/build.sh" --print-tag)" = "$t0" ] && ok "mtimes changed: same tag" || bad "mtimes changed: tag differs"
 [ "$(env -i PATH=/usr/bin:/bin "$BUILD" --print-tag)" = "$t0" ] && ok "env -i (the sandbox runner's call shape): same tag" || bad "env -i: tag differs"
 [ "$("$BUILD" --truth --print-tag | cut -d: -f2)" = "${t0#*:}" ] && ok "toolchain and truth share one hash" || bad "toolchain and truth hashes differ"
+[ "$("$BUILD" --indexer --print-tag | cut -d: -f2)" = "${t0#*:}" ] && ok "toolchain and indexer share one hash" || bad "toolchain and indexer hashes differ"
+expect "--truth --indexer together is refused" nonzero "$BUILD" --truth --indexer --print-tag
 echo x >> "$copy/smoke/java/Main.java"
 [ "$("$copy/build.sh" --print-tag)" != "$t0" ] && ok "smoke file edited: tag moves" || bad "smoke file edited: tag did not move"
 cp "$TC_DIR/smoke/java/Main.java" "$copy/smoke/java/Main.java"; chmod +x "$copy/smoke/go/main.go"
@@ -67,7 +72,18 @@ else echo "skip control image $CONTROL (not present)"; fi
 
 echo "== (3) the sandbox image carries no truth tool"
 expect "toolchain: none of node npm scip scip-python scip-java callgraph uv kotlinc-scip on PATH" 0 \
-  run "$TC" "$TC" sh -c 'for c in node npm scip scip-python scip-typescript scip-java scip-clang callgraph uv kotlinc-scip; do command -v $c && exit 1; done; test ! -e /opt/truth'
+  run "$TC" "$TC" sh -c 'for c in node npm scip scip-python scip-typescript scip-java scip-clang callgraph uv kotlinc-scip; do command -v $c && exit 1; done; test ! -e /opt/truth && test ! -e /opt/indexer'
+
+echo "== (5) the indexer image (P1-48)"
+expect "$TI: ccg-versions passes offline" 0 run "$TI" "$TI" ccg-versions
+expect "$TI: scip-typescript 0.6.0, scip-python 0.6.8, node 24 on PATH" 0 \
+  run "$TI" "$TI" sh -c 'scip-typescript --version | grep -qx 0.6.0 && scip-python --version | grep -qx 0.6.8 && node --version | grep -q "^v24\."'
+expect "$TI: no truth tool and no /opt/truth" 0 \
+  run "$TI" "$TI" sh -c 'for c in scip scip-java scip-clang scip-go scip-dotnet callgraph uv kotlinc-scip ccg-truth-smoke; do command -v $c && exit 1; done; test ! -e /opt/truth'
+expect "$TI: runs as ccg (uid 1000), workdir /work empty" 0 \
+  run "$TI" "$TI" sh -c 'test "$(id -u)" = 1000 && test "$(pwd)" = /work && test -z "$(ls -A /work)"'
+expect "$TI: a failing drop-in still fails ccg-versions" nonzero \
+  run "$TI" -v "$D/20-bad.sh:/usr/local/lib/ccg-versions.d/20-bad.sh:ro" "$TI" ccg-versions
 
 echo "== (4) smoke"
 S="$TC_DIR/smoke"

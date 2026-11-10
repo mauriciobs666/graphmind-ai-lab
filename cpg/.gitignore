@@ -5,8 +5,13 @@
 # mcp/.venv (created by mcp/setup.sh) is untracked too — already covered by the
 # repo-root .gitignore's `.venv` rule, so no rule is repeated here.
 
-# C-1001 P0 scratch: corpora, bundles, exports (P0 plan §2 D2). Not source.
+# C-1001 work area: P0 scratch (corpora, exports; P0 plan §2 D2) and P1 bundles, bundles/<system>/
+# (P1-02, cpg/infra/README.md "Bundle-at-rest"). Not source, never committed.
 .ccg-work/
+# P1-02 keeps HMAC keys and ACL credentials outside the repo (~/.config/ccg/keys/); a misplaced copy
+# must still never be committed.
+*.hmac
+*.acl
 
 # C-1001 P0 sandbox audit records (egress spec §5.1; S08). Local only, never committed.
 .audit/

@@ -58,6 +58,7 @@ CCG_FALKORDB_PORT=6390 .venv/bin/python -m pytest -m live     # needs infra/ccg-
 | `tests/` | durable-code tests |
 | `infra/` | `ccg-falkordb.sh`, the dedicated FalkorDB instance (`infra/README.md`), and `toolchain/` |
 | `.ccg-work/` | scratch for corpora, bundles and exports (gitignored) |
+| `ccg/atrest.py` | bundle-at-rest and key custody (P1-02): `infra/README.md` § "Bundle-at-rest", which replaces `docs/plans/connected-code-graph-bundle-spec3.md` §13 F-1's default |
 | `.cpg-artifacts/` | CPG reload artifacts (gitignored) |
 
 The rest of plan §2 D2's tree (`sandbox/`, `packs/`,

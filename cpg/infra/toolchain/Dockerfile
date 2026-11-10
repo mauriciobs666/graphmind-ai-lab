@@ -20,17 +20,21 @@
 #
 # The build context is NOT the host tree: build.sh pipes a deterministic tar of exactly
 # this file plus smoke/ and truth-npm/ on stdin, so those three are the only build inputs
-# and the tag is the hash of that tar (build.sh). Only the `truth` target COPYs from it.
+# and the tag is the hash of that tar (build.sh). Only `npm-fetch` (truth-npm/) and the
+# `truth` target (smoke/) COPY from it.
 #
 # LAYOUT
 #   stage `apt-base`     base + snapshot-only apt sources + apt-snapshot-install
 #   stage `fetch`        S02 downloads (verified, unpacked)
-#   stage `truth-fetch`  S24 downloads: truth tools, checksummed / lockfile-pinned
+#   stage `npm-fetch`    S24 downloads, part 1: Node 24 + the lockfile-pinned npm indexers
+#   stage `truth-fetch`  S24 downloads, part 2 (FROM npm-fetch): the other truth tools
 #   stage `toolchain`    S02 runtime (the image the sandbox runs): apt, COPY --from=fetch,
 #                        ENV, ccg-versions, non-root user + workdir. NOT touched by S24's
 #                        tools: no Node, no indexers, no clang in it.
-#   stage `truth`        FROM toolchain, last: the truth tools + smoke projects, as root
+#   stage `truth`        FROM toolchain: the truth tools + smoke projects, as root
 #                        and back to ccg. Image ccg-toolchain-truth:<same hash>.
+#   stage `indexer`      FROM toolchain (P1-48): Node + scip-python/scip-typescript from
+#                        `npm-fetch`, plus python3. Image ccg-toolchain-indexer:<same hash>.
 # Any package/dependency cache a truth tool populates must NOT land under /home/ccg or
 # /work (the paths a sandboxed fetch-off run inherits) — see README "Caches".
 
@@ -146,8 +150,11 @@ RUN fetch-verify "https://builds.dotnet.microsoft.com/dotnet/Sdk/${DOTNET_SDK_VE
 #     `npm ci`, so every transitive package is pinned by its sha512 integrity;
 #   - Go modules by the module proxy + sumdb (go.sum is verified against sum.golang.org).
 # Everything lands under /opt/truth; no cache is copied forward.
+# The Node + npm-indexer part is its own stage, `npm-fetch` (P1-48), so the `indexer` target can
+# copy just that; `truth-fetch` continues FROM it with the remaining tools. The instructions and
+# their order are unchanged by the split, so an existing layer cache still hits.
 # =================================================================================
-FROM fetch AS truth-fetch
+FROM fetch AS npm-fetch
 RUN apt-snapshot-install xz-utils
 WORKDIR /dl
 
@@ -172,6 +179,7 @@ RUN export PATH=/opt/truth/node/bin:$PATH \
  && /opt/truth/npm/scip-typescript/node_modules/.bin/scip-typescript --version | grep -qF "${SCIP_TYPESCRIPT_VERSION}" \
  && rm -rf /root/.npm
 
+FROM npm-fetch AS truth-fetch
 # scip CLI v0.10.0 — GitHub release asset digest.
 ARG SCIP_VERSION=v0.10.0
 ARG SCIP_SHA256=eeb28ebbff443c01609fb1691809958f3f0c7a8651af689a5bc8560061cd8ab0
@@ -425,6 +433,49 @@ v uv            uv --version
 v python3       python3 --version
 EOT
 RUN chmod 0644 /usr/local/lib/ccg-versions.d/50-truth.sh
+
+USER ccg
+WORKDIR /work
+ENTRYPOINT []
+CMD ["ccg-versions"]
+
+# =================================================================================
+# stage indexer (P1-48) — image ccg-toolchain-indexer:<hash>. FROM toolchain, plus Node 24
+# and the lockfile-pinned scip-python / scip-typescript (copied from `npm-fetch`, the same
+# bytes the `truth` image carries), plus python3 (scip-python needs an interpreter for its
+# environment discovery and `pip list`; a pre-provisioned venv's bin/python resolves to it).
+# Nothing else: no truth tools, no smoke projects, no clang. The `toolchain` image the sandbox
+# runs stays free of Node and indexers, so AC-8's "no dependency download" surface widens
+# only for builds that run an indexer (P1-15 sets CCG_TOOLCHAIN_IMAGE to this image per call).
+# Tools live under /opt/indexer; no npm/pip cache is left under /home/ccg or /work.
+# =================================================================================
+FROM toolchain AS indexer
+USER root
+
+LABEL ccg-toolchain-indexer=1 \
+      org.opencontainers.image.title="ccg-toolchain-indexer" \
+      org.opencontainers.image.description="ccg-toolchain + Node 24 + scip-python / scip-typescript for C-1001 P1 offline indexer runs"
+
+RUN apt-snapshot-install python3 python3-venv python3-pip
+
+COPY --from=npm-fetch /opt/truth/node /opt/indexer/node
+COPY --from=npm-fetch /opt/truth/npm  /opt/indexer/npm
+RUN mkdir -p /opt/indexer/bin \
+ && ln -s /opt/indexer/npm/scip-python/node_modules/.bin/scip-python /opt/indexer/bin/scip-python \
+ && ln -s /opt/indexer/npm/scip-typescript/node_modules/.bin/scip-typescript /opt/indexer/bin/scip-typescript \
+ && rm -rf /root/.npm /root/.cache \
+ && find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+ENV PATH=/opt/indexer/bin:/opt/indexer/node/bin:${PATH}
+
+COPY <<'EOT' /usr/local/lib/ccg-versions.d/50-indexer.sh
+v node            node --version
+v npm             npm --version
+v scip-python     scip-python --version
+v scip-typescript scip-typescript --version
+v python3         python3 --version
+EOT
+RUN chmod 0644 /usr/local/lib/ccg-versions.d/50-indexer.sh
 
 USER ccg
 WORKDIR /work
