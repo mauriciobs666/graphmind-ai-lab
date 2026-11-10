@@ -1,6 +1,6 @@
 # python-web-quirks on the knowledge base — why Set B failed, remedies, and the Set B2 protocol
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (U33; extends the method note `docs/plans/python-web-quirks-kb-ml.md`, AC-3, plan S14)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (U33; extends the method note `docs/plans/python-web-quirks-kb-ml.md`, AC-3, plan S14) · **Extended by:** `docs/plans/python-web-quirks-kb-embedder-ml.md`
 
 ## 1. Question and recommendation
 
