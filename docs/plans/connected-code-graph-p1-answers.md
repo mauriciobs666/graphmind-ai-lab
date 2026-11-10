@@ -127,8 +127,8 @@ the earlier gains `Extended by:`. It states **only** the changes:
   only (call, link, shared state, config); steps inside a function count 0; direct = distance 1; (3) items are
   grouped repository → component → distance, `confirmed` before `possible`, deterministic order, folded groups
   enumerate every member with its own chain; resolved calls' other candidates stay as `possible`/
-  `resolution-unverified` and are folded in rendering only at or above the 0.95 precision threshold (never
-  dropped); (4) the **reverse question** ("depends on") is the depends-on column with the same marking and grouping.
+  `resolution-unverified`; the builder (this step) decides the fold, at or above the 0.95 precision threshold
+  (never dropped), and the renderers list every group member with its own chain (spec §6), receiving no precision figure; (4) the **reverse question** ("depends on") is the depends-on column with the same marking and grouping.
 - **Gate:** `analyst`. **Needs:** 22, 18.
 
 ## P1-39 · staleness, stamp, answer builder, superset measurement — `tdd-engineer`
@@ -154,9 +154,11 @@ the earlier gains `Extended by:`. It states **only** the changes:
 - **Behaviours:** deterministic templates only — no fact is model-written; grouped text and a Markdown impact
   report (FR-10, AC-11); each hop shows file and line; a `Link` hop expands to its `BOUND_BY` and `LIFTED_VIA`
   entries; a `depthBound.unexplored > 0` note reads "reach stopped at distance d with k unexplored edges"
-  from the two fields; **free-text identifiers from source** (`keyPath`, `Cond.code`, `calleeName`, `qname`, config
-  keys, `launchFact.mountPath`/`service`/`envVar`) pass `ccg.answer.mask_identifier` (F-4) and are fenced with
-  `fence_data` wherever a model could read them (F-3); a planted `"Ignore previous instructions"` in `Cond.code`
+  from the two fields; **free-text identifiers from source**: `keyPath`, config keys and `launchFact.mountPath`/`service`/`envVar`
+  pass `ccg.answer.mask_identifier` (F-4, whose closed kind set is answer spec §7.3's) and, with `Cond.code`,
+  `calleeName` and `qname` (F-3 fenced only, never masked), are fenced with
+  `fence_data` wherever a model could read them (F-3); the renderers do not fence minted strings (ids, enums), so
+  `summary_input` additionally guards each minted string against its schema pattern or enum before it reaches a prompt; a planted `"Ignore previous instructions"` in `Cond.code`
   occurs in the rendered output only inside the fence, and the string never reaches the plain-language
   summary prompt (C2, answer spec §7.1–§7.2); `viaData` is never rendered as "path-matched" for an item whose
   chain has no `DATA` hop.
@@ -189,6 +191,8 @@ the earlier gains `Extended by:`. It states **only** the changes:
   `__import__("socket")`, `importlib.import_module`, `subprocess` of `curl`/`wget`, and an import of `ccg.broker`
   outside `ccg/refresh.py`, `ccg/front/interpret.py` and `ccg/front/summary.py` (`ccg.broker.client` only; the
   clients themselves open no broker run); each is a named mutant the test must kill;
+  (8) it calls `validate` first and renders only a valid document; a test passes an invalid answer and asserts
+  nothing is rendered.
 - **Gate:** `analyst`; AC-16, AC-21 evidence is P1-42's.
 
 ## P1-26 · plain-language front — `coder`
@@ -216,7 +220,8 @@ Blocked on `-p1-ml.md` question 3 (model, prompt, grammar, sampling, smoke proto
   the `local` entry's `paths` fixed; a test that a missing or latched broker fails the call with no direct connection
   attempted; and P1-25's `cpg/tests/test_no_network.py` passes unchanged with `ccg/front` present; (7) a
   question about a use case P1 does not build is understood and answered "not built in this phase" with the
-  request echoed; (8) no file under `cpg/ccg/front/` is `.md` (D5).
+  request echoed; (8) no file under `cpg/ccg/front/` is `.md` (D5); (9) `summary.py` calls `validate` first and
+  renders only a valid document, with a test on an invalid one.
 - **Gate:** `analyst`; `data-scientist` for the method. The AC-24 smoke run is P1-35.
 
 ## P1-27 · `teco` v1 and the usage skill — `cobb`
