@@ -18,8 +18,10 @@ beyond a few read-only probes.
      of its two queries;
    - negative rejection **≥ 0.90** (≥ 27 of 30; false accept counted against the 36 unit
      documents, §4.2), split: **15/15 off-domain** and **≥ 12/15 near-domain**.
-3. **Keep the 0.43 floor for now; it is unproven for this content** (§6). A measurement, not an
-   argument, decides it, and any change goes into `skills/agent-kb-retrieval/SKILL.md` for all users (FR-7).
+3. **Keep the 0.43 floor** (§6, S12 sweep on A: 42/42 positives, near-domain false accepts 2/7, no off-domain
+   accept; it fails ML §6's margin criterion by 0.0125, and the one value that passes all four, 0.443-0.445,
+   is not adopted). Set B confirms it once; a change would go into `skills/agent-kb-retrieval/SKILL.md` for
+   all users (FR-7) after the Stage 8 regression.
 4. **No K-100 blocker.** With the shipped chunker no unit is embedded head-only (§7). The
    chunking risks that do exist are tail chunks carrying no title, and one document filling several
    of the five slots.
@@ -238,6 +240,20 @@ which the 17 known documents (23 chunks, `docs/plans/python-web-quirks-kb-captur
   `mcp__cypher__query` truncation; `a243a5e2` seed-placeholder; `abb4a255` coverage-probe silence;
   `eb6e3699` manual sweep resume. Not near-zero, so "before" is a pre-existing-hit finding (§5), not a
   clean zero. The tool lists no per-query negative id, so the negative's identity is not recorded.
+- **S12 (2026-11-10, `ws:pwq-test` :8210, 36 units / 129 chunks, S7 17 ids excluded; `eval --set A --floor 0.43`,
+  `--sweep`, `--baseline bm25`).** Filtered headline: 42/42 positives hit (raw 42/42), coverage 42/42, MRR 0.9286,
+  distinct documents per query 2.79, near-domain false accepts 2/7 (NA01 0.4238, NA06 0.3804), off-domain 0/7,
+  `ac3 pass=False` only through the near-domain clause (A has 7 near negatives, the gate's 12/15 is B's).
+  Unfiltered: also 42/42, MRR 0.8770, distinct 2.90. The S9 pre-ingestion baseline had 21 positives with a hit; the 17 non-S7 documents remain in the workspace. **Displacement:** unit chunk in the window for 42/42; a non-unit chunk
+  scores better for 3 (A13 rank 3, A16 rank 2, A18 rank 3); documents `1b0f179a`, `baec469d`, `c1cf2cce`,
+  `ef4c32cc` (all pre-existing, none S7). So the pre-existing hits are **not wholly inert**: they cost rank
+  (the MRR gap to 1.0) in 3 of 42, never a hit; no effect on the floor decision (rank-only, the unit stays in
+  the top five), nor on the chunk-header question. Tail probes: A has none (`tail_recall` n/a); tail checks and
+  recall are **document-level** (any chunk of the unit counts; S11 defect D-1; the gate now compares stored
+  with expected chunk counts, but recall does not check which chunk).
+  **BM25** over the 129 unit chunks (A, top 5, no non-unit competitors, so easier than the semantic arm): 41/42,
+  MRR 0.9246, distinct 3.12, coverage 41/42. Semantic leads by one query and 0.004 MRR, which A cannot resolve;
+  the lexical-versus-semantic call is B's (S14).
 - **After**: Set B once, plus the two checks on Set A below.
 - Report both **raw top-5 recall** (no floor) and **floor-applied recall**; the gap is the floor's
   cost on positives. Also report MRR and rank of first expected-chunk (informational, no gate).
@@ -329,6 +345,17 @@ document (positives) and the best score of any gotcha document (negatives), then
 
 A is small for a sweep (42 + 14): it locates a plausible band; the B result carries the evidence.
 
+**S12 result and decision: keep 0.43.** Sweep (filtered and unfiltered rows identical in every field),
+recall_floor / near FA (off-domain 0 throughout): 0.38 0.905 / 0; 0.39 0.905 / 1; 0.40 0.929 / 1; 0.41 0.976 / 1;
+0.42 1.0 / 1; 0.43 1.0 / 2; 0.44 1.0 / 2; 0.45 to 0.48 1.0 / 3; 0.49 1.0 / 4; 0.50 1.0 / 5; raw recall 1.0.
+Criteria at 0.43: recall within 0.03 of raw, off-domain 0, near 2/7 pass; the margin fails: extra floors showed the
+worst found positive scores in (0.417, 0.418], so 0.43 clears it by about 0.012, not 0.025 (`adequate=False` at
+every step; below 0.42 recall fails). Only 0.443-0.445 passes all four (margin about 0.026; near 2/7; NA02 enters
+at 0.4461, tested 0.449 = 3/7). I do not adopt it: it is a 0.0016-0.003 sliver tuned on A, trades the
+positive-side instability for a near-negative one (NA02), is set by a single positive, and would move every
+KB user (FR-7). A change therefore needs B evidence (a floor-raw gap or a near-domain pattern) and the Stage 8
+45-pair regression first, before S15a. No floor change now, so no regression is owed.
+
 ## 7. Chunking guidance (e)
 
 **Sizes versus window.** The embedder window is about 2,048 tokens (K-100/K-099 in
@@ -347,7 +374,7 @@ Tokens were not measured; before approving any whole-unit embedding, measure the
 1. **Tail chunks carry no identity.** 34 of 36 units span >= 2 chunks; only chunk 0 holds the title and
    header (the 150-character overlap is the only bridge). A tail hit is a body fragment without title or
    version pin, so FR-3 ("usable without a second lookup") and FR-5 fail for it; the agent needs
-   `get_document`. Measure: Set B tail-probe recall (the 12 units with >= 4 chunks, §5 rule 4) versus head-probe recall; if tail < head by
+   `get_document`. Measure (document-level, like all recall here): Set B tail-probe recall (the 12 units with >= 4 chunks, §5 rule 4) versus head-probe recall; if tail < head by
    more than 0.15, the fix is a design decision for `architect` (a per-chunk title/version header
    line), not a chunker change here (out of scope per the requirements).
 2. **Slot crowding.** `search_documents` has no document dedupe; units with 4-10 chunks can fill
