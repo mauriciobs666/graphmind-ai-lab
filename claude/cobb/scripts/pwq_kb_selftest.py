@@ -1026,9 +1026,80 @@ def t33_cli_replace_exits_non_zero_when_the_new_document_ends_failed():
         assert kb.main(["replace", "--unit", "u01"] + base, **kw) == 1
 
 
+def real_chunks(world, ws="pwq-test"):
+    """Give every fake document the chunk count the real chunker derives from its stored text (the fake server defaults to 2)."""
+    split = kb._load_chunker()
+    for d in world.srv(ws).docs.values():
+        d["chunks"] = d["embedded"] = len(split(d["text"]))
+
+
+def t34_gate_fails_a_unit_whose_stored_chunk_count_differs_from_the_expected_one():
+    w, mf = gate_setup()
+    ids = [u["id"] for u in mf["units"]]
+    (ok, table), clock = run_gate(w, mf, expected_chunks={i: 2 for i in ids})
+    assert ok and clock.sleeps == 0, table
+    (ok, table), _ = run_gate(w, mf, expected_chunks={ids[0]: 2, ids[1]: 3, ids[2]: 2})
+    assert not ok and "chunks 2 != expected 3" in table.split("u02")[1].split("\n")[0], table
+    assert "ok" in table.split("u01")[1].split("\n")[0] and "ok" in table.split("u03")[1].split("\n")[0]
+    # the other direction (more stored than expected) fails too
+    (ok, table), _ = run_gate(w, mf, expected_chunks={ids[0]: 1, ids[1]: 2, ids[2]: 2})
+    assert not ok and "chunks 2 != expected 1" in table.split("u01")[1].split("\n")[0], table
+    # a registered unit with no expected count is loud, not skipped
+    (ok, table), _ = run_gate(w, mf, expected_chunks={ids[0]: 2, ids[1]: 2})
+    assert not ok and "no expected chunk count" in table.split("u03")[1], table
+    # no expectation supplied: the old behaviour
+    assert run_gate(w, mf)[0][0]
+
+
+def t34_gate_cli_derives_the_expected_counts_from_the_copy_and_fails_on_a_deleted_chunk():
+    w, m = FakeWorld(), tmpm()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())
+    kw = dict(transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    base = ["--copy", str(cp), "--manifest", str(m), "--ws", "pwq-test", "--base-url", TEST_URL]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert kb.main(["ingest"] + base, **kw) == 0
+    real_chunks(w)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert kb.main(["gate"] + base, **kw) == 0, out.getvalue()
+    assert sum(kb.expected_chunk_counts(copy_text()).values()) == sum(d["chunks"] for d in w.srv("pwq-test").docs.values())
+    victim = next(iter(w.srv("pwq-test").docs.values()))
+    victim["chunks"] -= 1  # the last chunk deleted, the rest still embedded
+    victim["embedded"] -= 1
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert kb.main(["gate"] + base, **kw) == 1
+    assert f"chunks {victim['chunks']} != expected {victim['chunks'] + 1}" in out.getvalue(), out.getvalue()
+
+
+def t34_a_copy_whose_chunk_derivation_cannot_be_computed_fails_loudly_not_skipped():
+    w, m = FakeWorld(), tmpm()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())
+    kw = dict(transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    base = ["--copy", str(cp), "--manifest", str(m), "--ws", "pwq-test", "--base-url", TEST_URL]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert kb.main(["ingest"] + base, **kw) == 0
+    real_chunks(w)
+    real = kb._load_chunker
+
+    def broken():
+        raise kb.KBError("chunker unavailable")
+    kb._load_chunker = broken
+    try:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = kb.main(["gate"] + base, **kw)
+    finally:
+        kb._load_chunker = real
+    assert code == 2 and "chunker unavailable" in err.getvalue(), (code, err.getvalue())
+
+
 def t21_gate_cli_exit_codes():
     w, m = FakeWorld(), tmpm()
     run_ingest(w, mini_copy(), manifest=m)
+    real_chunks(w)  # the gate compares stored chunk counts with the copy's derived ones
     cp = Path(tempfile.mkdtemp(), "copy.md")
     cp.write_text(mini_copy())
     mf = kb.load_manifest(m)
@@ -1996,6 +2067,7 @@ def t92_f7_gate_cli_fails_when_the_manifest_is_partial_and_needs_the_copy():
     cp = Path(tempfile.mkdtemp(), "copy.md")
     cp.write_text(copy)
     run_ingest(w, copy, manifest=m)
+    real_chunks(w)
     base = ["gate", "--ws", "pwq-test", "--manifest", str(m), "--copy", str(cp)]
     with contextlib.redirect_stdout(io.StringIO()) as out:
         assert kb.main(base, fetcher=w, targets=FAKE_TARGETS) == 0

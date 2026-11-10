@@ -891,10 +891,19 @@ def expected_unit_ids(copy_path) -> list[str]:
     return [e.id for e in copy_entries(p.read_text(encoding="utf-8"))]
 
 
+def expected_chunk_counts(copy_text: str) -> dict[str, int]:
+    """unit id -> the chunk count the server's chunker derives from the unit's stored text (the copy entry), the same
+    derivation `units --chunks` prints. A chunker that cannot be loaded or run raises: the check is never skipped."""
+    split = _load_chunker()
+    return {e.id: len(split(e.text)) for e in copy_entries(copy_text)}
+
+
 def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT, poll: float = GATE_POLL,
-             sleep=time.sleep, monotonic=time.monotonic, expected_ids=None) -> tuple[bool, str]:
+             sleep=time.sleep, monotonic=time.monotonic, expected_ids=None, expected_chunks=None) -> tuple[bool, str]:
     """`expected_ids` (the copy's unit ids): one the manifest does not register is an ABSENT row, so a
-    unit that `ingest` refused cannot leave the gate clean on a partial manifest."""
+    unit that `ingest` refused cannot leave the gate clean on a partial manifest. `expected_chunks` (unit id -> count,
+    `expected_chunk_counts`): a unit whose stored chunk count differs, or that has no expected count, fails (a deleted
+    chunk leaves the rest embedded, so embedding alone cannot see it)."""
     ids = [u["documentId"] for u in manifest["units"]]
     registered = {u["id"] for u in manifest["units"]}
     absent = [i for i in (expected_ids or []) if i not in registered]
@@ -913,6 +922,10 @@ def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT,
             rows.append((u["id"], 0, 0, "NO CHUNKS", False))
         elif c["embedded"] < c["chunks"]:
             rows.append((u["id"], c["chunks"], c["embedded"], f"UNEMBEDDED {c['chunks'] - c['embedded']}/{c['chunks']}", True))
+        elif expected_chunks is not None and u["id"] not in expected_chunks:
+            rows.append((u["id"], c["chunks"], c["embedded"], "no expected chunk count (unit not in the copy)", False))
+        elif expected_chunks is not None and c["chunks"] != expected_chunks[u["id"]]:
+            rows.append((u["id"], c["chunks"], c["embedded"], f"chunks {c['chunks']} != expected {expected_chunks[u['id']]}", False))
         else:
             rows.append((u["id"], c["chunks"], c["embedded"], "ok", False))
     rows += [(i, "-", "-", "ABSENT", False) for i in absent]
@@ -1596,7 +1609,8 @@ def _kb_main(args, transport, fetcher, targets, searcher=None) -> int:
     manifest = load_manifest(mpath)
     if args.cmd == "gate":
         ok, table = run_gate(fetcher, args.ws, manifest, timeout=args.timeout, poll=args.poll,
-                             expected_ids=expected_unit_ids(copy_path))
+                             expected_ids=expected_unit_ids(copy_path),
+                             expected_chunks=expected_chunk_counts(copy_path.read_text(encoding="utf-8")))
         print(table, end="")
         print("gate: " + ("clean" if ok else "FAILED"))
         return 0 if ok else 1
