@@ -13,8 +13,8 @@ Where that spec and the P0 plan's §2 D6 disagree, the spec controls. The two re
 | File | What it is |
 |---|---|
 | `offline-run.sh` | The runner. Sourced, it only defines functions; the tests use those. |
-| `forbidden-flags.txt`, `allowed-flags.txt` | The §7.3.3 flag lists: 13 forbidden, 3 allowed, for Joern v4.0.579 |
-| `tests/test_sandbox.sh` | §10 tests 1–10 on both backends, plus tests 11–15 (below) |
+| `forbidden-flags.txt`, `allowed-flags.txt` | The §7.3.3 flag lists, normative: the Joern v4.0.579 entries, plus the `scip-typescript` entries the indexer sweep (test 24) classifies |
+| `tests/test_sandbox.sh` | §10 tests 1–10 on both backends, plus tests 11–15 (below) and the indexer tests 21–26 (egress-spec3 §10.1) |
 | `tests/probe.pl` | The escape-axis probe, axes A1–A7. It is Perl because the image has no Python. |
 | `tests/mutants.sh` | The mutation harness: each mutant must turn its test red |
 | `scripts/cpg-content-check.sc` | **The** CPG content check (plan `docs/plans/connected-code-graph-p0-2.md` §2 D15, P3-7). S11, S25, S28 and S39 run it through the runner; only S08 edits it (plan §5.2). |
@@ -28,6 +28,44 @@ cpg/sandbox/offline-run.sh --backend container --mode offline --frontend joern \
     --script-file extract.sc --source <dir> --output <cpg dir> \
     -- --script /scripts/extract.sc --param cpgFile=/out/<auditId>.cpg.bin
 ```
+
+**Indexer entries** (`docs/plans/connected-code-graph-egress-spec3.md` §7.4–§7.8, P1-48b):
+
+```bash
+CCG_TOOLCHAIN_IMAGE="$(cpg/infra/toolchain/build.sh --indexer --print-tag)" \
+cpg/sandbox/offline-run.sh --backend container --mode offline --frontend scip-python \
+    --source <staged dir> --output <out dir> -- index --cwd /src --environment /src/env.json
+```
+
+- `scip-typescript` and `scip-python` run from `/opt/indexer/bin/<name>` (a fixed path, not `PATH`),
+  `--mode offline`, container backend only. `controlled` is `unknown-frontend`; `--backend
+  namespace` is `backend-unavailable` (and `auto` means the container).
+- The image must carry the label `ccg-toolchain-indexer=1`; otherwise `backend-unavailable`, exit 69.
+- `toolArgv` is `index` then `--cwd <p>` (mandatory), `--environment <p>` (`scip-python`, mandatory),
+  `--project-version <v>` (`scip-python`, mandatory) and `--project-name <n>` (`scip-python`), each at
+  most once, in any order, option and value as two elements. `<v>` and `<n>` match
+  `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. `<p>` is `/src`, `/src/` or `/src/` plus components that are
+  non-empty, not `.` or `..`, and match `^[A-Za-z0-9._@+-]+$`. A forbidden element, including a missing
+  leading `index`, is `forbidden-flag`; a missing mandatory element alone is `usage`.
+- **Containment (`sbx_idx_walk`).** After the grammar passes, each `--cwd`/`--environment` value is
+  walked on the host component by component from the staged tree. Refused as `forbidden-flag`, and
+  ahead of any `usage` refusal: a symlink with an **absolute** target (inside the container it
+  resolves against the image, so even a host path that lies in the tree is refused), a `..` reached
+  through a relative link that leaves the tree, a component that does not exist (a dangling link, a
+  missing `env.json`), and a `--cwd` that is not a directory. A relative in-tree link is followed.
+  The stager's own symlink rejection (P1-15) stays; this is defence in depth, and a tree changed
+  after the check is the stager's and operator's concern.
+- **The image is launched by its `sha256:` ID**, for every container launch: the ID the runner
+  inspected and recorded in `toolchain.imageId` is the one that runs, so a retag between inspect and
+  launch changes nothing. The label `ccg-toolchain-indexer=1` guards against a wrong image only; it
+  is not an integrity control, since `CCG_TOOLCHAIN_IMAGE` is caller-chosen.
+- The runner appends `--output /out/<auditId>.scip` and refuses a caller `-o`/`--output`. A non-zero
+  indexer exit means there is no artifact: a partial `<auditId>.scip` may remain in `/out`, and the
+  consumer (P1-15) must not read it.
+- The pass-list gains `PYTHONSAFEPATH=1`: `scip-python` runs `python3 -c` with the staged
+  tree as its working directory, and this keeps it off `sys.path` (test 26).
+- `scip-python` 0.6.8 exits 1 with neither a git revision nor `--project-version`; the mandatory
+  `--project-version` is why no `.git` is staged. With the flag it runs no `git` child.
 
 **Exit codes.**
 - The tool's own exit code, when the tool ran.
@@ -233,7 +271,8 @@ the flags only when `ro` is present: moby re-mounts a bind only for `MS_RDONLY` 
 ## Tests
 
 ```bash
-bash cpg/sandbox/tests/test_sandbox.sh               # all tests (1-15), ~3 min
+bash cpg/sandbox/tests/test_sandbox.sh               # all tests (1-15, 21-26)
+cpg/sandbox/tests/test_sandbox.sh --only 21,22,23,24,26   # the indexer tests (need the indexer image)
 cpg/sandbox/tests/test_sandbox.sh --only 2,10        # a subset
 cpg/sandbox/tests/mutants.sh                         # all mutants, each must be killed
 ```
@@ -330,17 +369,57 @@ turn it red:
   directory bound back), so a leak lands in the suite's own `$T` and is attributable to that
   invocation alone.
 
+**Indexer tests 21–26** (egress-spec3 §10.1, P1-48b). They launch the `indexer` image
+(`build.sh --indexer`; `CCG_TEST_INDEXER_IMAGE` overrides the tag). A test that needs it and
+cannot find it prints `NOT RUN` (never `ok`) and the suite exits 3. No test runs `npm`, `pip` or
+`uv`; the fixtures are plain files written by the suite.
+- **21**: `SBX_FRONTENDS` equals the twelve names in order; the indexer names map to the fixed
+  `/opt/indexer/bin` paths; `scip-java` is `unknown-frontend`.
+- **22**: the grammar cases through the production runner, each an exact refusal (reason, exit, one
+  record, no container) or a launch checked against its record (container, indexer image, argv plus
+  the runner's `--output /out/<auditId>.scip`, `PYTHONSAFEPATH` last in `envKeys`); the
+  `--project-version` cases mirror `--project-name`'s; the component-class cases (newline, `*`,
+  space, `:`, `$`, `;`, non-ASCII, `=`); the symlink fixtures (`lnk -> /`, `../..`, `/src/sub`, a
+  sibling directory sharing the tree's name prefix, a link that is absolute but resolves into the
+  tree by its host path, a dangling link, a relative link to an absolute one, an absolute link
+  below the root), each refused, with in-tree links as positive controls that launch and exit 0;
+  the precedence cases (an escaping path outranks a missing `--project-version`); the image and
+  mode cases (default image, `controlled`, `namespace`, `auto`); and the image-by-ID check
+  (`launcherArgv`'s image element equals `toolchain.imageId`, for a parse and the indexer launches).
+  `scip-typescript` and `scip-python` must each exit 0 and leave a non-empty `.scip`, the tool must
+  not exit 126/127, and its output must carry `Indexing <cwd> with version`.
+- **23**: the §7.3 launcher clause on the launched indexer records, the production
+  `launcherArgv` equal to the probe launch's (modulo ids, paths and the tool tail), and probe A1–A7
+  with A6 on the indexer pass-list on the `indexer` image.
+- **24**: `index --help` of both tools through `lib-launch` (the grammar refuses `--help`); the
+  sweep regex gains `pnpm|yarn|npm|pip|workspace|infer` for the indexers. It finds the four
+  `scip-typescript` flags, which are in `forbidden-flags.txt`. Three doctored list copies make it
+  fail for a named reason (the output must name it), and a control shows that the unwidened regex
+  sees nothing, which is why the widening exists. It is an alarm; the grammar is the control.
+- **25**: not duplicated; `ccg-versions` on the indexer image is
+  `cpg/infra/toolchain/tests/test_toolchain.sh` section 5.
+- **26**: through `lib-launch` under the indexer pass-list, `python3 -c 'import json'` runs with
+  working directory `/src`, which holds a `json.py` that writes a marker into `/out`. The stdlib
+  `json` must be imported and the marker absent; the control launch with `PYTHONSAFEPATH` unset
+  inside the sandbox (`env -u`) must import `/src/json.py` and write the marker, so the absence
+  cannot be vacuous. Test 7 and A6 pin the variable in the pass-list.
+
+`run_r` bounds each production run with `timeout` (`RUN_TIMEOUT`, default 300 s): a hung run is a
+red test, and the runner's own signal trap removes its container.
+
 Test 5 also pins the labels the scoped check relies on: `--label ccg.sandbox.auditId=<auditId>`,
 `--name ccg-sbx-<auditId>`, and the label on each volume.
 
 ### Mutants
 
-`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. M42 breaks cleanup on purpose; its scratch lands in the suite's private `/tmp` under `$T`, which the suite removes. Each mutant's test run is bounded by `MUTANT_TIMEOUT` (default 900 s; the whole suite takes about 3 min). A run that hits it is reported as `killed (timeout)`: YC's runner re-execs forever, so it is killed that way. The harness never removes anything else: a new `/tmp/ccg-sbx.*` seen during a mutant is reported, not deleted, because it may be another session's. Last full run 2026-10-30: **57 of 57 killed**; YG and YH (added after it) were run with M42, M34 and the environment mutants. That covers:
+`tests/mutants.sh` runs each mutant on a copy of the runner, the lists and `scripts/`, never on the real files. Every edit must apply. M42 breaks cleanup on purpose; its scratch lands in the suite's private `/tmp` under `$T`, which the suite removes. Each mutant's test run is bounded by `MUTANT_TIMEOUT` (default 900 s; the whole suite takes about 3 min). A run that hits it is reported as `killed (timeout)`: YC's runner re-execs forever, so it is killed that way. The harness never removes anything else: a new `/tmp/ccg-sbx.*` seen during a mutant is reported, not deleted, because it may be another session's. Last full run 2026-11-10 (P1-48b): every mutant killed (M01–YH, I01–I41, J01–J17; the earlier ones that quote runner lines were re-anchored after the edits). That covers:
 - the first-round mutants M01–M21;
 - the S08-gate round: M22–M31, X1–X6, X8–X10 and M32–M35;
 - the ES2 v1.2 / Pass 2 follow-up: M37–M42 (`-p` dropped is M30, now also run against test 11);
 - P3-7's M43;
 - the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM;
+- P1-48b's indexer mutants I01–I41 (the grammar, output, image label, backend and mode rules, the pass-list's `PYTHONSAFEPATH`, the indexer flag lists; the "Tests run" column names the test that must turn each red). A path-check mutant that admits `--cwd /` makes `scip-python` index the whole image: the suite's per-run `timeout` turns that hang into a red test;
+- P1-48b's fix round J01–J17 (`--project-version`, the path component class, symlink containment, launch by image ID, containment-before-usage precedence);
 - the Pass 4 follow-up: YG (p4-m1, `sbx_cleanup` stops removing the scratch, test 2) and YH
   (closed-env values read from live shell variables, test 15). M38 and M39 were re-anchored to
   the values-from-block lines, with the same breaks.
@@ -408,3 +487,61 @@ Outside the harness, because it leaves residue by design: **M36**, which drops `
 | YF | p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up) | 12 | killed | runner still alive 10 s after SIGTERM |
 | YG | p4-m1: sbx_cleanup stops removing SBX_SCRATCH (every invocation leaks it) | 2 | killed | no /tmp/ccg-sbx.<auditId>.* scratch of this run left behind (121 new on the host; 121 ours) |
 | YH | p4: closed-env values read from live shell variables, not the exec'd block | 15 | killed | control: exactly the closed set -> no re-exec (REEXEC) |
+| I01 | (21) scip-python dropped from SBX_FRONTENDS | 21,22 | killed | (21) SBX_FRONTENDS == §7.4's twelve names in order (got: pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cp |
+| I02 | (21) the two indexer names swapped (order is the contract) | 21 | killed | (21) SBX_FRONTENDS == §7.4's twelve names in order (got: pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cp |
+| I03 | (22) --cwd is no longer mandatory | 22 | killed | 22 usage: scip-typescript without --cwd |
+| I04 | (22) --environment is no longer mandatory for scip-python | 22 | killed | 22 usage: scip-python without --environment |
+| I05 | (22) --environment accepted for scip-typescript | 22 | killed | 22 scip-typescript --environment |
+| I06 | (22) --project-name accepted for scip-typescript | 22 | killed | 22 scip-typescript --project-name |
+| I07 | (22) a repeated --cwd is accepted | 22 | killed | 22 scip-typescript repeated --cwd |
+| I08 | (22) a repeated --environment is accepted | 22 | killed | 22 scip-python repeated --environment |
+| I09 | (22) a repeated --project-name is accepted | 22 | killed | 22 scip-python repeated --project-name |
+| I10 | (22) path check: `..` components allowed | 22 | killed | 22 scip-typescript --cwd '/src/../x' |
+| I11 | (22) path check: `.` components allowed | 22 | killed | 22 scip-typescript --cwd '/src/./a' |
+| I12 | (22) path check: empty components allowed | 22 | killed | 22 scip-typescript --cwd '/src//a' |
+| I13 | (22) path check: any /src prefix (/srcfoo, /src2) allowed | 22 | killed | 22 scip-typescript --cwd '/' |
+| I14 | (22) --project-name pattern relaxed (a leading - or . allowed) | 22 | killed | 22 scip-python --project-name '-x' |
+| I15 | (22) --project-name length bound dropped | 22 | killed | 22 scip-python --project-name 'aaaaaaaaaaaa' |
+| I16 | (22) first element need not be `index` | 22 | killed | 22 scip-typescript first element 'npm' (the rest is a valid grammar) |
+| I17 | (22) an unknown element is ignored (abbreviations, --opt=value pass) | 22 | killed | 22 scip-typescript --cwd=/src form |
+| I18 | (22) a caller --output/-o is accepted into the grammar and the output refusal removed | 22 | killed | 22 scip-typescript caller --output |
+| I19 | (22) the runner appends the wrong output path | 22 | killed | 22 launch: scip-typescript index --cwd /src: record |
+| I20 | (22) the indexer output keeps the parse-frontend suffix | 22 | killed | 22 launch: scip-typescript index --cwd /src: record |
+| I21 | (22) a missing mandatory element outranks a forbidden one (usage before forbidden-flag) | 22 | killed | 22 scip-typescript bare --version |
+| I22 | (22) the ccg-toolchain-indexer=1 label check removed | 22 | killed | 22 indexer entry on the default toolchain image: backend-unavailable (69) |
+| I23 | (22) controlled mode no longer unknown-frontend for an indexer | 22 | killed | 22 controlled: scip-typescript is unknown-frontend |
+| I24 | (22) the namespace backend is tried for an indexer (precondition, not unavailable) | 22 | killed | 22 namespace backend: backend-unavailable (exit 69) |
+| I25 | (22) auto may fall back to namespace for an indexer | 22 | killed | 22 auto + toolchain image: still backend-unavailable (never the namespace precondition) |
+| I26 | (21)/(22) the indexer executable is resolved through PATH, not the fixed path | 21,22 | killed | (21) indexer names map to fixed absolute paths under /opt/indexer; c2cpg stays a $JOERN_HOME file |
+| I27 | (22) the indexer entries point at a directory that has no tool | 22 | killed |   scip-typescript exit 0 and /out/<auditId>.scip is non-empty (rc 127) |
+| I28 | (22) scip-python is not recognised as an indexer (parse path, no env, no label check) | 21,22 | killed | (21) indexer names map to fixed absolute paths under /opt/indexer; c2cpg stays a $JOERN_HOME file |
+| I29 | (22)/(23) an indexer launch carries a flag the probe template lacks | 22,23 | killed | (23) indexer production and probe launchers differ |
+| I30 | (23) an indexer launch without --cap-drop ALL (launcher clause) | 23 | killed | (23) launcher clause on indexer records |
+| I31 | (26) PYTHONSAFEPATH missing from the indexer pass-list | 7,22,23,26 | killed | indexer pass-list is the 13 offline keys plus PYTHONSAFEPATH |
+| I32 | (26) PYTHONSAFEPATH=0 on the indexer pass-list | 7,22,23,26 | killed | indexer PYTHONSAFEPATH has the value 1 |
+| I33 | (26) PYTHONSAFEPATH on every entry, not only the indexers | 7,1 | killed | offline pass-list (container) is the 13 §7.3.4 keys |
+| I34 | (26) a forbidden indexer name (PYTHONPATH) on the indexer pass-list | 7 | killed | indexer pass-list is the 13 offline keys plus PYTHONSAFEPATH |
+| I35 | (24) scip-typescript --pnpm-workspaces dropped from the forbidden list | 24 | killed | (24) indexer sweep |
+| I36 | (24) scip-typescript --infer-tsconfig entry made stale | 24 | killed | (24) indexer sweep |
+| I37 | (24) scip-typescript --yarn-workspaces listed in both files | 24 | killed | (24) indexer sweep |
+| I38 | (26) PYTHONSAFEPATH missing from the indexer pass-list (test 26 alone) | 26 | killed | (26) with PYTHONSAFEPATH the stdlib json is imported, not /src/json.py |
+| I39 | (23) PYTHONSAFEPATH missing from the indexer pass-list (test 23 alone) | 23 | killed | 23 launch: scip-typescript (a launched record for the clause and equivalence checks): record |
+| I40 | (23) NODE_OPTIONS on the indexer pass-list (A6) | 23 | killed | 23 launch: scip-typescript (a launched record for the clause and equivalence checks): record |
+| I41 | (26) the indexer pass-list is never applied to a lib launch (SBX_INDEXER reset after use) | 26 | killed | (26) with PYTHONSAFEPATH the stdlib json is imported, not /src/json.py |
+| J01 | --project-version is no longer mandatory for scip-python | 22 | killed | 22 usage: scip-python without --project-version |
+| J02 | --project-version accepted for scip-typescript | 22 | killed | 22 scip-typescript --project-version |
+| J03 | a repeated --project-version is accepted | 22 | killed | 22 scip-python repeated --project-version |
+| J04 | --project-version pattern relaxed (a leading - or . allowed) | 22 | killed | 22 scip-python --project-version '-x' |
+| J05 | path component class dropped (only non-empty, not . or ..) | 22 | killed | 22 scip-typescript --cwd component class: $'/src/a\nb' |
+| J06 | path component class admits a space | 22 | killed | 22 usage: scip-typescript without --cwd |
+| J07 | symlink containment check removed | 22 | killed | 22 symlink: scip-typescript --cwd /src/lnk_root is refused |
+| J08 | containment checks --cwd only, not --environment | 22 | killed | 22 symlink: scip-python --environment /src/lnk_root/etc/hostname is refused |
+| J09 | containment: a `..` reached through a relative link may leave the tree | 22 | killed | 22 symlink: scip-typescript --cwd /src/lnk_up is refused |
+| J10 | containment does not require --cwd to be a directory | 22 | killed | 22 symlink: scip-typescript --cwd /src/env.json is refused |
+| J11 | containment accepts a component that does not exist (dangling link, missing file) | 22 | killed | 22 containment: a link through a missing component and back by .. (--cwd /src/lnk_mid_dd) is refused |
+| J12 | the image is launched by name, not by the inspected ID | 22 | killed | 22 image by ID: parse launch |
+| J13 | scip-python alone resolves to a wrong path (rc 127; scip-typescript unaffected) | 22 | killed |   scip-python: the tool started (rc 127 is not 126/127) |
+| J14 | containment walks from the wrong base (the host root) | 22 | killed | 22 usage: scip-python without --cwd |
+| J15 | containment follows an absolute symlink by its host path (the realpath-only rule) | 22 | killed | 22 symlink: scip-typescript --cwd /src/lnk_hostabs is refused |
+| J16 | a containment refusal no longer outranks a missing mandatory element (usage first) | 22 | killed | 22 precedence: an escaping --cwd outranks a missing --project-version |
+| J17 | --environment no longer required to be a regular file (the -f check dropped: a directory or a FIFO passes) | 22 | killed | 22 --environment names a directory (/src/sub): refused |

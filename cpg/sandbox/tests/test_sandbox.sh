@@ -5,6 +5,12 @@
 # and per spec §11 R5 the namespace bwrap template is also run DIRECTLY (never through a runner
 # bypass) for axes A1–A3, A5, A6 and the --help sweep.
 #
+# Tests 21-26 (egress-spec3 §10.1, P1-48b) cover the indexer entries `scip-typescript` and
+# `scip-python`. They need the `indexer` image (cpg/infra/toolchain/build.sh --indexer); without it
+# the tests that launch one print `NOT RUN` (never `ok`) and the suite exits 3, not 0. No test here
+# runs npm, pip or uv: the fixtures are plain files, and a test that needs provisioned dependencies
+# prints "NOT RUN: dependencies not provisioned".
+#
 # Usage: cpg/sandbox/tests/test_sandbox.sh [--runner PATH] [--only 1,2,...]
 #   --runner  the runner under test (default ../offline-run.sh); used by tests/mutants.sh.
 #   --only    run a subset of tests (test 4 always checks the records the run produced).
@@ -85,9 +91,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-PASS=0; FAIL=0; FAILED=()
+PASS=0; FAIL=0; FAILED=(); NOTRUN=0; NOTRUN_LIST=()
 ok()  { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); FAILED+=("$1"); printf '  FAIL %s\n' "$1"; [ -n "${2:-}" ] && printf '       %s\n' "$2"; }
+notrun() { NOTRUN=$((NOTRUN + 1)); NOTRUN_LIST+=("$1"); printf '  NOT RUN %s\n' "$1"; }
 chk() { local name=$1; shift; if "$@"; then ok "$name"; else bad "$name"; fi; }
 section() { printf '\n== %s\n' "$1"; }
 
@@ -114,7 +121,9 @@ nrec() { [ -f "$CCG_AUDIT_DIR/sandbox.jsonl" ] && wc -l < "$CCG_AUDIT_DIR/sandbo
 run_r() {
   local before after
   before=$(nrec)
-  "$RUNNER" "$@" > "$T/out.txt" 2> "$T/err.txt"; RC=$?
+  # A hang is a red test, not a stuck suite (a mutant that admits `--cwd /` makes scip-python index the
+  # whole image). timeout sends TERM; the runner's own trap then removes its container and volumes.
+  timeout -k 15 "${RUN_TIMEOUT:-300}" "$RUNNER" "$@" > "$T/out.txt" 2> "$T/err.txt"; RC=$?
   OUT=$(cat "$T/out.txt"); ERR=$(cat "$T/err.txt")
   after=$(nrec)
   NREC_EXPECTED=$((NREC_EXPECTED + 1))
@@ -157,6 +166,7 @@ lib_launch() {
   ( export CCG_AUDIT_DIR="$PROBE_AUDIT"
     . "$RUNNER"
     sbx_init
+    [ -n "${LIB_INDEXER:-}" ] && SBX_INDEXER=1     # tests 23/24/26: the indexer pass-list and label check
     if [ "$be" = container ]; then sbx_resolve_backend container || { echo "LIB-REFUSED $SBX_REFUSAL_DETAIL"; sbx_cleanup; exit 99; }
     else SBX_BACKEND=namespace; SBX_HOST_JOERN=$(sbx_host_joern); SBX_HOST_JDK=$(sbx_host_jdk); fi
     SBX_RECORD_FRONTEND=lib-launch
@@ -247,6 +257,15 @@ if want 7; then
   vals=$( . "$RUNNER"; SBX_IMG_PATH=x SBX_IMG_JAVA_HOME=x; sbx_env_pairs container; printf '%s\n' "${SBX_ENV[@]}" | grep -vE '^(PATH|JAVA_HOME|GOROOT|DOTNET_ROOT)=' | sort | paste -sd' ' )
   chk "M3 (text): fixed §7.3.4 values (GOTOOLCHAIN=local, DOTNET_*=1, ...)" test "$vals" = "DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 GOTOOLCHAIN=local HOME=/home/ccg JAVA_OPTS=-Xmx2g LANG=C.UTF-8 LC_ALL=C.UTF-8 TMPDIR=/tmp"
   chk "ENABLE_DEPENDENCY_RESOLVER_V2 never on a pass-list" test -z "$(hits "$offline_keys $ctl_keys" ENABLE_DEPENDENCY_RESOLVER_V2)"
+  # §7.6 indexer entries (P1-48b): the text half of A6 (b) for the indexer pass-list.
+  idx_pairs=$( . "$RUNNER"; SBX_INDEXER=1; SBX_IMG_PATH=x; SBX_IMG_JAVA_HOME=x; sbx_env_pairs container; printf '%s\n' "${SBX_ENV[@]}" )
+  idx_keys=$(sed 's/=.*//' <<< "$idx_pairs")
+  forb_idx='NODE_OPTIONS NODE_PATH NODE_EXTRA_CA_CERTS NODE_PRESERVE_SYMLINKS npm_config_* NPM_CONFIG_* PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE PIP_* UV_* LD_PRELOAD BASH_ENV'
+  chk "indexer pass-list is the 13 offline keys plus PYTHONSAFEPATH" test "$(echo $idx_keys)" = "$(echo $offline_keys) PYTHONSAFEPATH"
+  chk "indexer PYTHONSAFEPATH has the value 1" grep -qx 'PYTHONSAFEPATH=1' <<< "$idx_pairs"
+  chk "indexer pass-list ∩ forbidden(offline + indexer) = ∅" test -z "$(hits "$idx_keys" "$forb_common *_PROXY NO_PROXY $forb_idx")"
+  chk "the indexer-only forbidden patterns bite (PIP_INDEX_URL, npm_config_registry)" test -n "$(hits "PIP_INDEX_URL npm_config_registry" "$forb_idx")"
+  chk "a non-indexer pass-list never carries PYTHONSAFEPATH" test -z "$(hits "$offline_keys $ns_keys" PYTHONSAFEPATH)"
 fi
 
 # ================================================================== test 2: forbidden flags refused before launch
@@ -499,6 +518,77 @@ SC
   chk "joern-parse record names the derived frontend ($jparse_rec)" test "$jparse_rec" = "gosrc2cpg False ['fixture-golang']"
 fi
 
+# Python checkers shared by tests 4, 5 and 23 (written once, up front).
+cat > "$T/clause.py" <<'PY'
+import json, sys
+recs = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+only = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None
+launched = [r for r in recs if not r["refused"] and r["backend"] == "container" and (only is None or r["frontend"] in only)]
+errs = []
+if not launched: errs.append("no launched container record to check")
+for r in launched:
+    a = r["launcherArgv"]; s = " ".join(a)
+    def has(*seq):
+        return any(a[i:i+len(seq)] == list(seq) for i in range(len(a)))
+    for seq in (["--hostname", "localhost"], ["--read-only"], ["--cap-drop", "ALL"], ["--security-opt", "no-new-privileges"],
+                ["--entrypoint", "/usr/bin/env"], ["--network", "none"], ["--tmpfs", "/tmp:rw,exec,nosuid,nodev"]):
+        if not has(*seq): errs.append(f"{r['auditId']}: missing {seq}")
+    ei = a.index("--entrypoint")
+    if a[ei + 3] != "-i": errs.append(f"{r['auditId']}: first image argument is {a[ei+3]!r}, not -i")
+    if a.count("--network") != 1: errs.append("more than one --network")
+    for bad in ("--privileged", "--cap-add", "--device", "-e", "--env", "--env-file", "--add-host", "--dns", "--publish", "-p", "-v", "--volume"):
+        if bad in a[:ei]: errs.append(f"{r['auditId']}: forbidden {bad}")
+    for i, x in enumerate(a[:ei]):
+        if x in ("--pid", "--ipc", "--uts", "--userns") and a[i+1] == "host": errs.append(f"{x}=host")
+        if x == "--security-opt" and (a[i+1].startswith("seccomp") or "apparmor=unconfined" in a[i+1]): errs.append(f"security-opt {a[i+1]}")
+        if x.startswith(("--privileged", "--cap-add", "--device", "--env", "--add-host", "--dns", "--publish", "--network=")): errs.append(f"joined form {x}")
+    mounts = [a[i+1] for i, x in enumerate(a[:ei]) if x == "--mount"]
+    dsts = sorted(m.split("dst=")[1].split(",")[0] for m in mounts)
+    want = ["/out", "/scripts", "/src"] if r["frontend"] == "joern" else ["/out", "/src"]
+    if dsts != want: errs.append(f"{r['auditId']} ({r['frontend']}): --mount targets {dsts}, want {want}")
+    if r["frontend"] == "joern" and not has("--workdir", "/tmp"): errs.append("joern without --workdir /tmp")
+    # p2-m1: the scoped hygiene check depends on these labels.
+    if not has("--label", "ccg.sandbox.auditId=" + r["auditId"]): errs.append(f"{r['auditId']}: no --label ccg.sandbox.auditId=<auditId>")
+    if not has("--name", "ccg-sbx-" + r["auditId"]): errs.append(f"{r['auditId']}: container not named ccg-sbx-<auditId>")
+    if any(("volume-label=ccg.sandbox.auditId=" + r["auditId"]) not in m for m in mounts): errs.append(f"{r['auditId']}: a volume lacks the auditId label")
+    keys = []
+    for x in a[ei + 4:]:
+        m = __import__("re").match(r"^([A-Za-z_][A-Za-z0-9_]*)=", x)
+        if not m: break
+        keys.append(m.group(1))
+    if keys != r["envKeys"]: errs.append(f"envKeys {r['envKeys']} != env -i keys {keys}")
+print(f"checked {len(launched)} launched records"); [print("  " + e) for e in errs]
+sys.exit(1 if errs else 0)
+PY
+cat > "$T/equiv.py" <<'PY'
+import json, re, sys
+recs = [json.loads(l) for l in open(sys.argv[1])]
+# argv[3] "indexer": compare the last launched indexer record; otherwise the last parse-frontend one.
+idx = ("scip-typescript", "scip-python")
+if len(sys.argv) > 3 and sys.argv[3] == "indexer":
+    prod = [r for r in recs if not r["refused"] and r["backend"] == "container" and r["frontend"] in idx][-1]
+else:
+    prod = [r for r in recs if not r["refused"] and r["backend"] == "container" and r["frontend"] != "joern" and r["frontend"] not in idx][-1]
+lib = open(sys.argv[2], "rb").read().decode().split("\0")[:-1]
+def norm(a):
+    out, i = [], 0
+    while i < len(a):
+        x = a[i]
+        if x == "--mount" and "dst=/scripts" in a[i+1]: i += 2; continue
+        if x == "--mount": x2 = re.sub(r"(device|upperdir|lowerdir|workdir)=[^,\"]*", r"\1=P", a[i+1]); out += [x, x2]; i += 2; continue
+        out.append(x); i += 1
+    s = json.dumps(out)
+    s = re.sub(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", "AID", s)
+    out = json.loads(s)
+    k = out.index("-i") + 1
+    while k < len(out) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", out[k]): k += 1
+    return out[:k]
+p, l = norm(prod["launcherArgv"]), norm(lib)
+if p != l:
+    import difflib; print("\n".join(difflib.unified_diff(p, l, lineterm="", n=0))); sys.exit(1)
+print(f"{len(p)} elements equal")
+PY
+
 # ================================================================== test 1 / 5: escape-axis probe
 host_targets() {
   HOSTNS=$(readlink /proc/self/ns/net)
@@ -528,21 +618,23 @@ check_probe() {
   local id
   for id in "${@:4}"; do grep -q "^CHECK $id PASS" "$f" && ok "$label $id" || bad "$label $id" "$(grep "^CHECK $id " "$f" | head -3)"; done
 }
-# check_env <label> <probe file> <envkeys file> <expected K=V file>: A6 (a)(b)(c)(d)(e) + values (M3).
+# check_env <label> <probe file> <envkeys file> <expected K=V file> [extra key]: A6 (a)(b)(c)(d)(e) + values (M3).
+# The optional extra key is the indexer pass-list's PYTHONSAFEPATH (§7.6), which A6 (b) and (b') then pin.
 check_env() {
-  local label=$1 f=$2 ek=$3 ev=$4
+  local label=$1 f=$2 ek=$3 ev=$4 xk=${5:-} nkeys=13
   local own; own=$(sed -n 's/^ENV //p' "$f" | sort | paste -sd' ')
   local rec_keys; rec_keys=$(sort "$ek" | paste -sd' ')
   local pass="DOTNET_CLI_TELEMETRY_OPTOUT DOTNET_NOLOGO DOTNET_ROOT DOTNET_SKIP_FIRST_TIME_EXPERIENCE GOROOT GOTOOLCHAIN HOME JAVA_HOME JAVA_OPTS LANG LC_ALL PATH TMPDIR"
   chk "$label A6a: probe's own environ keys == envKeys (from launcherArgv)" test -n "$own" -a "$own" = "$rec_keys"
-  chk "$label A6b: envKeys == offline pass-list" test "$rec_keys" = "$pass"
+  if [ -n "$xk" ]; then pass=$(printf '%s\n' $pass $xk | sort | paste -sd' '); nkeys=14; fi
+  chk "$label A6b: envKeys == offline pass-list${xk:+ + $xk}" test "$rec_keys" = "$pass"
   chk "$label A6c: JAVA_OPTS matches ^-Xmx[0-9]+[mg]( -Xss[0-9]+[km])?\$" grep -qE '^JAVA_OPTS -Xmx[0-9]+[mg]( -Xss[0-9]+[km])?$' "$f"
   local leak; leak=$(grep -E '^ENV (JOERN_HOME|MAVEN_HOME|GRADLE_HOME|JAVA_VERSION|LANGUAGE|HOSTNAME|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|WSL_INTEROP|WSLENV|ENABLE_DEPENDENCY_RESOLVER_V2|.*_PROXY)$' "$f" || true)
   chk "$label A6d: no image-only key, HOSTNAME or forbidden name reaches the tool" test -z "$leak"
   # M3: §7.3.4 fixes the values, not just the names. JAVA_OPTS is A6c's pattern; every other key
   # must equal its expected value exactly.
   local vbad; vbad=$(grep -v '^JAVA_OPTS=' "$ev" | while IFS= read -r kv; do grep -qxF "ENVV $kv" "$f" || echo "${kv%%=*}"; done)
-  chk "$label M3: every pass-list value equals §7.3.4 ($(grep -c . "$ev") keys)" test -z "$vbad" -a "$(grep -c '^ENVV ' "$f")" = 13
+  chk "$label M3: every pass-list value equals §7.3.4 ($(grep -c . "$ev") keys)" test -z "$vbad" -a "$(grep -c '^ENVV ' "$f")" = "$nkeys"
   [ -n "$vbad" ] && printf '       wrong: %s\n' $vbad
   local sh extra
   for sh in bash sh; do
@@ -611,61 +703,19 @@ if want 5; then
   o=$(mopt /tmp); chk "/tmp is nosuid,nodev without noexec ($o)" bash -c "grep -qw nosuid <<< '$o' && grep -qw nodev <<< '$o' && ! grep -qw noexec <<< '$o'"
   run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$OUTD" -- /src   # a launched record of its own
   chk "a plain parse launches (exit $RC)" test "$RC" = 0
-  cat > "$T/clause.py" <<'PY'
-import json, sys
-recs = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
-launched = [r for r in recs if not r["refused"] and r["backend"] == "container"]
-errs = []
-if not launched: errs.append("no launched container record to check")
-for r in launched:
-    a = r["launcherArgv"]; s = " ".join(a)
-    def has(*seq):
-        return any(a[i:i+len(seq)] == list(seq) for i in range(len(a)))
-    for seq in (["--hostname", "localhost"], ["--read-only"], ["--cap-drop", "ALL"], ["--security-opt", "no-new-privileges"],
-                ["--entrypoint", "/usr/bin/env"], ["--network", "none"], ["--tmpfs", "/tmp:rw,exec,nosuid,nodev"]):
-        if not has(*seq): errs.append(f"{r['auditId']}: missing {seq}")
-    ei = a.index("--entrypoint")
-    if a[ei + 3] != "-i": errs.append(f"{r['auditId']}: first image argument is {a[ei+3]!r}, not -i")
-    if a.count("--network") != 1: errs.append("more than one --network")
-    for bad in ("--privileged", "--cap-add", "--device", "-e", "--env", "--env-file", "--add-host", "--dns", "--publish", "-p", "-v", "--volume"):
-        if bad in a[:ei]: errs.append(f"{r['auditId']}: forbidden {bad}")
-    for i, x in enumerate(a[:ei]):
-        if x in ("--pid", "--ipc", "--uts", "--userns") and a[i+1] == "host": errs.append(f"{x}=host")
-        if x == "--security-opt" and (a[i+1].startswith("seccomp") or "apparmor=unconfined" in a[i+1]): errs.append(f"security-opt {a[i+1]}")
-        if x.startswith(("--privileged", "--cap-add", "--device", "--env", "--add-host", "--dns", "--publish", "--network=")): errs.append(f"joined form {x}")
-    mounts = [a[i+1] for i, x in enumerate(a[:ei]) if x == "--mount"]
-    dsts = sorted(m.split("dst=")[1].split(",")[0] for m in mounts)
-    want = ["/out", "/scripts", "/src"] if r["frontend"] == "joern" else ["/out", "/src"]
-    if dsts != want: errs.append(f"{r['auditId']} ({r['frontend']}): --mount targets {dsts}, want {want}")
-    if r["frontend"] == "joern" and not has("--workdir", "/tmp"): errs.append("joern without --workdir /tmp")
-    # p2-m1: the scoped hygiene check depends on these labels.
-    if not has("--label", "ccg.sandbox.auditId=" + r["auditId"]): errs.append(f"{r['auditId']}: no --label ccg.sandbox.auditId=<auditId>")
-    if not has("--name", "ccg-sbx-" + r["auditId"]): errs.append(f"{r['auditId']}: container not named ccg-sbx-<auditId>")
-    if any(("volume-label=ccg.sandbox.auditId=" + r["auditId"]) not in m for m in mounts): errs.append(f"{r['auditId']}: a volume lacks the auditId label")
-    keys = []
-    for x in a[ei + 4:]:
-        m = __import__("re").match(r"^([A-Za-z_][A-Za-z0-9_]*)=", x)
-        if not m: break
-        keys.append(m.group(1))
-    if keys != r["envKeys"]: errs.append(f"envKeys {r['envKeys']} != env -i keys {keys}")
-print(f"checked {len(launched)} launched records"); [print("  " + e) for e in errs]
-sys.exit(1 if errs else 0)
-PY
   if out=$(python3 -I "$T/clause.py" "$CCG_AUDIT_DIR/sandbox.jsonl" 2>&1); then ok "launcher clause holds on every launched record ($out)"; else bad "launcher clause" "$out"; fi
 fi
 
 # ================================================================== test 6: the --help sweep
-sweep() { # <label> <backend>
-  local label=$1 be=$2 fe d="$T/help-$2"; mkdir -p "$d" "$T/hsrc" "$T/hout-$be"
-  for fe in pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern; do
-    exe=$( . "$RUNNER"; sbx_frontend_exe "$fe" )
-    lib_launch "$be" "$T/hsrc" "$T/hout-$be" "" /tmp -- "/opt/joern/joern-cli/$exe" --help > "$d/$fe.txt" 2>&1
-    grep -qi '^Usage: ' "$d/$fe.txt" || bad "$label: $fe --help printed no Usage line" "$(head -3 "$d/$fe.txt")"
-  done
+write_sweep_py() {   # the classification checker, shared by test 6 and test 24
   cat > "$T/sweep.py" <<'PY'
 import os, re, sys
 d, fl, al = sys.argv[1:4]
-rx = re.compile(r"fetch|download|url|https?:|dependenc|resolver|gradle|maven|nuget|proxy|registry|remote|jar4", re.I)
+TEN = "pysrc2cpg,jssrc2cpg,javasrc2cpg,jimple2cpg,kotlin2cpg,csharpsrc2cpg,gosrc2cpg,c2cpg,joern-parse,joern"
+fes = (sys.argv[4] if len(sys.argv) > 4 else TEN).split(",")
+BASE = r"fetch|download|url|https?:|dependenc|resolver|gradle|maven|nuget|proxy|registry|remote|jar4"
+# test 24: for the indexers the regex also matches the spawn-shaped names (§10.1 (24)); an alarm only.
+rx = re.compile(BASE + (r"|" + sys.argv[5] if len(sys.argv) > 5 else ""), re.I)
 def entries(p, n):
     out = []
     for line in open(p, encoding="utf-8"):
@@ -674,7 +724,6 @@ def entries(p, n):
         out.append((f[0], f[1]))
     return out
 forb, allow = entries(fl, 4), entries(al, 3)
-fes = ["pysrc2cpg", "jssrc2cpg", "javasrc2cpg", "jimple2cpg", "kotlin2cpg", "csharpsrc2cpg", "gosrc2cpg", "c2cpg", "joern-parse", "joern"]
 errs, hits = [], []
 flags_of = {}
 for fe in fes:
@@ -694,7 +743,7 @@ for fe in fes:
             hits.append((fe, names, "forbidden" if listed_f else "allowed" if listed_a else "UNCLASSIFIED"))
             if not listed_f and not listed_a: errs.append(f"unclassified: {fe} {names}")
 for fe, f in forb + allow:
-    if fe != "*" and f not in flags_of.get(fe, set()): errs.append(f"stale entry: {fe} {f} not in --help")
+    if fe in fes and f not in flags_of.get(fe, set()): errs.append(f"stale entry: {fe} {f} not in --help")
 for e in set(forb) & set(allow): errs.append(f"in both files: {e}")
 nf = sum(1 for h in hits if h[2] == "forbidden"); na = sum(1 for h in hits if h[2] == "allowed")
 print(f"sweep hits={len(hits)} forbidden={nf} allowed={na} unclassified={len(hits)-nf-na}")
@@ -702,6 +751,15 @@ for h in hits: print(f"    {h[0]} {'/'.join(h[1])} -> {h[2]}")
 [print("  " + e) for e in errs]
 sys.exit(1 if errs else 0)
 PY
+}
+sweep() { # <label> <backend>
+  local label=$1 be=$2 fe d="$T/help-$2"; mkdir -p "$d" "$T/hsrc" "$T/hout-$be"
+  for fe in pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern; do
+    exe=$( . "$RUNNER"; sbx_frontend_exe "$fe" )
+    lib_launch "$be" "$T/hsrc" "$T/hout-$be" "" /tmp -- "/opt/joern/joern-cli/$exe" --help > "$d/$fe.txt" 2>&1
+    grep -qi '^Usage: ' "$d/$fe.txt" || bad "$label: $fe --help printed no Usage line" "$(head -3 "$d/$fe.txt")"
+  done
+  write_sweep_py
   local L; L=$(dirname "$RUNNER")
   if out=$(python3 -I "$T/sweep.py" "$d" "$L/forbidden-flags.txt" "$L/allowed-flags.txt" 2>&1); then ok "$label: $(head -1 <<< "$out")"; else bad "$label" "$out"; fi
   printf '%s\n' "$out" | tail -n +2 | head -20
@@ -913,6 +971,317 @@ if want 15; then
 fi
 
 # ================================================================== test 4: every invocation, one valid record
+
+# ================================================================== tests 21-26: the indexer entries (P1-48b)
+# egress-spec3 §7.4 / §10.1. Fixtures are plain files written here; nothing in this block runs npm, pip or uv.
+if want 21 || want 22 || want 23 || want 24 || want 26; then
+  IDX_TAG=$(env -i PATH=/usr/bin:/bin "$HERE/../../infra/toolchain/build.sh" --indexer --print-tag 2>/dev/null)
+  IDX_IMAGE="${CCG_TEST_INDEXER_IMAGE:-$IDX_TAG}"
+  IDX_OK=0
+  if [ -z "$IDX_IMAGE" ]; then bad "indexer tests: cannot resolve the indexer image tag (build.sh --indexer --print-tag printed nothing)"
+  elif docker image inspect "$IDX_IMAGE" >/dev/null 2>&1; then IDX_OK=1; fi
+  norun_idx() { notrun "$1: indexer image ${IDX_IMAGE:-?} not built (cpg/infra/toolchain/build.sh --indexer)"; }
+  ISRC="$T/idx-src"; IOUT="$T/idx-out"; mkdir -p "$ISRC" "$IOUT"
+  TSSRC="$T/idx-ts"; PYSRC="$T/idx-py"; mkdir -p "$TSSRC" "$PYSRC"
+  echo '{"compilerOptions":{"target":"es2020","strict":true},"include":["*.ts"]}' > "$TSSRC/tsconfig.json"
+  echo 'export function f(x: number): number { return x + 1; }' > "$TSSRC/a.ts"
+  printf 'def f(x):\n    return x + 1\n' > "$PYSRC/m.py"; echo '[]' > "$PYSRC/env.json"
+  echo 'x = 1' > "$ISRC/m.py"; echo '[]' > "$ISRC/env.json"
+  # Every odd path used by the grammar cases exists on the host, so only the grammar (never the containment
+  # walk's existence check) can be what refuses it.
+  mkdir -p "$ISRC/a" "$ISRC/x" "$ISRC/srcfoo"
+  for nm in 'a b' 'a:b' '$x' 'a;b' 'é' 'a=b' '*' $'a\nb'; do mkdir -p "$ISRC/$nm"; done
+  idx_ref() { # <name> <exit> <reason> <frontend> -- tool args...
+    local name=$1 code=$2 reason=$3 fe=$4; shift 5
+    CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "$name" "$code" "$reason" "${C[@]}" --frontend "$fe" --source "${IDX_SRC:-$ISRC}" --output "$IOUT" -- "$@"
+    case "$reason" in
+      forbidden-flag) chk "  forbiddenHits not empty" rec "len(r['flagCheck']['forbiddenHits'])>0" ;;
+      usage) chk "  no forbiddenHits (a usage refusal, not a forbidden element)" rec "r['flagCheck']['forbiddenHits']==[]" ;;
+    esac
+  }
+  # Symlink fixtures (§7.4 containment). Each link is created here and checked below, so a refusal cannot
+  # be the result of a link that was never made.
+  SYM="$T/idx-sym"; SYMX="$T/idx-sym-evil"   # SYMX shares SYM's name as a prefix (a sibling-prefix probe)
+  mkdir -p "$SYM/sub" "$SYMX"
+  cp "$TSSRC/tsconfig.json" "$TSSRC/a.ts" "$SYM/sub/"; cp "$PYSRC/m.py" "$PYSRC/env.json" "$SYM/sub/"; cp "$PYSRC/env.json" "$SYM/env.json"
+  ln -s / "$SYM/lnk_root"; ln -s ../.. "$SYM/lnk_up"; ln -s /src/sub "$SYM/lnk_abs"; ln -s ../idx-sym-evil "$SYM/lnk_sib"
+  ln -s sub "$SYM/lnk_in"; ln -s sub/env.json "$SYM/envlink.json"
+  ln -s "$SYM/sub" "$SYM/lnk_hostabs"          # absolute, and lies inside the tree by its HOST path
+  ln -s nowhere "$SYM/lnk_dangle"; ln -s lnk_hostabs "$SYM/lnk_chain"   # dangling; a relative link to an absolute one
+  ln -s /etc "$SYM/sub/inner_abs"
+  mkfifo "$SYM/fifo"
+  ln -s nope/../sub "$SYM/lnk_mid_dd"; ln -s nope/../env.json "$SYM/envlink_dd.json"   # a missing component, then `..` back to a real one
+  # py_launch_check <name>: after an idx_run of scip-python (F5). The tool must have started (not 126/127),
+  # printed the line it prints before it can fail, and now that --project-version is admitted, succeeded.
+  py_launch_check() {   # <name> [cwd the tool prints; default /src]
+    local cwd=${2:-/src} aid; aid=$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")
+    chk "  $1: the tool started (rc $RC is not 126/127)" test "$RC" != 126 -a "$RC" != 127
+    chk "  $1: stdout/stderr carries 'Indexing $cwd with version'" grep -q "Indexing $cwd with version" <<< "$OUT$ERR"
+    chk "  $1: exit 0 and a non-empty /out/<auditId>.scip" bash -c 'test "$1" = 0 && test -s "$2/$3.scip"' _ "$RC" "$IDX_OUTD" "$aid"
+  }
+  idx_run() { # <name> <frontend> <src> -- tool args...  -> sets RC, OUT; checks the record
+    local name=$1 fe=$2 src=$3; shift 4
+    mkdir -p "$T/idx-o-$NREC_EXPECTED"
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE run_r "${C[@]}" --frontend "$fe" --source "$src" --output "$T/idx-o-$NREC_EXPECTED" -- "$@"
+    IDX_OUTD="$T/idx-o-$((NREC_EXPECTED - 1))"
+    expect_argv -- "$@"
+    if [ "$NEW_RECORDS" = 1 ] && rec "r['refused'] is False and r['refusalReason'] is None and r['backend']=='container' and r['frontend']=='$fe' and r['job']=='parse' and r['launcherArgv']!=[] and r['toolchain']['image']=='$IDX_IMAGE' and r['toolArgv'][:-2]==open('$T/expect-argv').read().split(chr(0))[:-1] and r['toolArgv'][-2:]==['--output','/out/'+r['auditId']+'.scip'] and r['envKeys'][-1]=='PYTHONSAFEPATH' and r['flagCheck']['forbiddenHits']==[]" >/dev/null; then
+      ok "$name: launched (record: container, indexer image, argv + runner-owned --output /out/<auditId>.scip, PYTHONSAFEPATH last in envKeys)"
+    else bad "$name: record" "rc=$RC new=$NEW_RECORDS $(rec "False" 2>&1 | head -1)"; fi
+  }
+fi
+
+if want 21; then
+  section "test 21: SBX_FRONTENDS is the spec's twelve names, in order"
+  want21='pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern scip-typescript scip-python'
+  got21=$( . "$RUNNER"; echo "${SBX_FRONTENDS[*]}" )
+  chk "(21) SBX_FRONTENDS == §7.4's twelve names in order (got: ${got21:-nothing sourced})" test "$got21" = "$want21"
+  got=$( . "$RUNNER"; sbx_frontend_path scip-typescript; sbx_frontend_path scip-python; sbx_frontend_path c2cpg )
+  chk "(21) indexer names map to fixed absolute paths under /opt/indexer; c2cpg stays a \$JOERN_HOME file" test "$got" = "/opt/indexer/bin/scip-typescript
+/opt/indexer/bin/scip-python
+/opt/joern/joern-cli/c2cpg.sh"
+  CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "(21) a name outside the twelve (scip-java) is unknown-frontend" 64 unknown-frontend "${C[@]}" --frontend scip-java --source "$ISRC" --output "$IOUT" -- index --cwd /src
+fi
+
+if want 22; then
+  section "test 22: the indexer argv grammar (launches and refusals)"
+  ev_start
+  # usage: a missing mandatory element
+  idx_ref "22 usage: scip-typescript without --cwd" 64 usage scip-typescript -- index
+  idx_ref "22 usage: scip-python without --cwd" 64 usage scip-python -- index --environment /src/env.json
+  idx_ref "22 usage: scip-python without --environment" 64 usage scip-python -- index --cwd /src --project-version v1
+  idx_ref "22 usage: scip-python with only --project-name" 64 usage scip-python -- index --project-name p
+  # forbidden-flag: the first element must be `index`
+  for fe in scip-typescript scip-python; do
+    ENVA=(); [ "$fe" = scip-python ] && ENVA=(--environment /src/env.json --project-version v1)
+    # the rest of the argv is valid, so only the first element can be what is refused
+    for first in npm pip uv; do idx_ref "22 $fe first element '$first' (the rest is a valid grammar)" 64 forbidden-flag "$fe" -- "$first" --cwd /src "${ENVA[@]}"; done
+    idx_ref "22 $fe bare --version" 64 forbidden-flag "$fe" -- --version
+    idx_ref "22 $fe empty argv" 64 forbidden-flag "$fe" --
+    idx_ref "22 $fe elements before index" 64 forbidden-flag "$fe" -- --cwd /src index
+    idx_ref "22 $fe --cwd=/src form" 64 forbidden-flag "$fe" -- index --cwd=/src
+    idx_ref "22 $fe repeated --cwd" 64 forbidden-flag "$fe" -- index --cwd /src --cwd /src
+    idx_ref "22 $fe --cwd with no value" 64 forbidden-flag "$fe" -- index --cwd
+    idx_ref "22 $fe --pnpm-workspaces" 64 forbidden-flag "$fe" -- index --cwd /src --pnpm-workspaces
+    idx_ref "22 $fe caller --output" 64 forbidden-flag "$fe" -- index --cwd /src --output /out/x.scip
+    idx_ref "22 $fe caller -o" 64 forbidden-flag "$fe" -- index --cwd /src -o /out/x.scip
+    idx_ref "22 $fe caller --output= form" 64 forbidden-flag "$fe" -- index --cwd /src --output=/out/x.scip
+    idx_ref "22 $fe launcher option -J-Dx=1" 64 forbidden-flag "$fe" -- index --cwd /src -J-Dx=1
+  done
+  for v in /srcfoo /src//a /src/./a /src/a/../a /src/../x /src/a/ / src /srcx/.. '/src/a b/../c'; do
+    idx_ref "22 scip-typescript --cwd '$v'" 64 forbidden-flag scip-typescript -- index --cwd "$v"
+    idx_ref "22 scip-python --cwd '$v'" 64 forbidden-flag scip-python -- index --cwd "$v" --environment /src/env.json --project-version v1
+    idx_ref "22 scip-python --environment '$v'" 64 forbidden-flag scip-python -- index --cwd /src --environment "$v" --project-version v1
+  done
+  # options the tool does not take, and the scip-python-only ones
+  idx_ref "22 scip-typescript --project-name" 64 forbidden-flag scip-typescript -- index --cwd /src --project-name p
+  idx_ref "22 scip-typescript --environment" 64 forbidden-flag scip-typescript -- index --cwd /src --environment /src/env.json
+  idx_ref "22 scip-python repeated --environment" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --environment /src/env.json --project-version v1
+  idx_ref "22 scip-python repeated --project-name" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-name a --project-name b --project-version v1
+  idx_ref "22 scip-python --environment=… form" 64 forbidden-flag scip-python -- index --cwd /src --environment=/src/env.json --project-version v1
+  idx_ref "22 scip-python --project-name=x form" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-name=x --project-version v1
+  idx_ref "22 scip-python abbreviation --proj" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --proj p --project-version v1
+  idx_ref "22 scip-python abbreviation --env" 64 forbidden-flag scip-python -- index --cwd /src --env /src/env.json
+  idx_ref "22 scip-typescript --project-version" 64 forbidden-flag scip-typescript -- index --cwd /src --project-version v1
+  idx_ref "22 scip-python repeated --project-version" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-version a --project-version b
+  idx_ref "22 scip-python --project-version=x form" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-version=x
+  idx_ref "22 scip-python --project-version with no value" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-version
+  for v in -x --x -- .a _a '' "$(printf 'a%.0s' $(seq 1 65))"; do
+    idx_ref "22 scip-python --project-version '${v:0:12}'" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-version "$v"
+  done
+  idx_ref "22 usage: scip-python without --project-version" 64 usage scip-python -- index --cwd /src --environment /src/env.json
+  idx_ref "22 usage: scip-python with only --project-version" 64 usage scip-python -- index --project-version v1
+  # path components: a newline, a glob character, a space and other characters outside [A-Za-z0-9._@+-] are refused
+  for v in $'/src/a\nb' '/src/*' '/src/a b' '/src/a:b' '/src/$x' '/src/a;b' '/src/é' '/src/a=b'; do
+    idx_ref "22 scip-typescript --cwd component class: $(printf '%q' "$v")" 64 forbidden-flag scip-typescript -- index --cwd "$v"
+    idx_ref "22 scip-python --environment component class: $(printf '%q' "$v")" 64 forbidden-flag scip-python -- index --cwd /src --environment "$v" --project-version v1
+  done
+  idx_ref "22 scip-python --target-only (not in the grammar)" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --target-only /src/a --project-version v1
+  for v in -x --x -- .a _a '' "$(printf 'a%.0s' $(seq 1 65))"; do
+    idx_ref "22 scip-python --project-name '${v:0:12}'" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/env.json --project-name "$v" --project-version v1
+  done
+  ev_none "test 22 refusals"
+  # image and mode
+  CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "22 controlled: scip-typescript is unknown-frontend" 64 unknown-frontend --backend container --mode controlled --frontend scip-typescript --source "$ISRC" --output "$IOUT" -- index --cwd /src
+  CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "22 controlled: scip-python is unknown-frontend" 64 unknown-frontend --backend container --mode controlled --frontend scip-python --source "$ISRC" --output "$IOUT" -- index --cwd /src --environment /src/env.json
+  CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "22 namespace backend: backend-unavailable (exit 69)" 69 backend-unavailable --backend namespace --mode offline --frontend scip-typescript --source "$ISRC" --output "$IOUT" -- index --cwd /src
+  chk "  the namespace refusal names the container-only rule" grep -q 'container backend only' <<< "$ERR"
+  CCG_TOOLCHAIN_IMAGE=${IDX_IMAGE:-x} expect_refusal "22 a grammar refusal outranks the namespace refusal (64, not 69)" 64 forbidden-flag --backend namespace --mode offline --frontend scip-python --source "$ISRC" --output "$IOUT" -- npm install
+  # the default `toolchain` image has no label: a recorded refusal, not a tool error
+  CCG_TOOLCHAIN_IMAGE=$IMAGE expect_refusal "22 indexer entry on the default toolchain image: backend-unavailable (69)" 69 backend-unavailable "${C[@]}" --frontend scip-typescript --source "$ISRC" --output "$IOUT" -- index --cwd /src
+  chk "  the refusal names the missing label" grep -q 'ccg-toolchain-indexer=1' <<< "$ERR"
+  CCG_TOOLCHAIN_IMAGE=$IMAGE expect_refusal "22 auto + toolchain image: still backend-unavailable (never the namespace precondition)" 69 backend-unavailable --backend auto --mode offline --frontend scip-python --source "$ISRC" --output "$IOUT" -- index --cwd /src --environment /src/env.json --project-version v1
+  # launches
+  if [ "$IDX_OK" = 1 ]; then
+    idx_run "22 launch: scip-typescript index --cwd /src" scip-typescript "$TSSRC" -- index --cwd /src
+    chk "  scip-typescript exit 0 and /out/<auditId>.scip is non-empty (rc $RC)" bash -c 'test "$1" = 0 && test -s "$2/$3.scip"' _ "$RC" "$IDX_OUTD" "$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")"
+    idx_run "22 launch: scip-python index --cwd /src --environment /src/env.json --project-name p --project-version v1" scip-python "$PYSRC" -- index --cwd /src --environment /src/env.json --project-name p --project-version v1
+    py_launch_check "scip-python"
+    idx_run "22 launch: scip-python, the same elements in another order" scip-python "$PYSRC" -- index --project-version v1 --project-name p --environment /src/env.json --cwd /src
+    py_launch_check "scip-python reordered"
+    idx_run "22 launch: scip-python without the optional --project-name (--cwd /src/)" scip-python "$PYSRC" -- index --environment /src/env.json --project-version v1.2-3 --cwd /src/
+    py_launch_check "scip-python without --project-name" /src/
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE run_r --backend auto --mode offline --frontend scip-typescript --source "$TSSRC" --output "$T/idx-o-auto" -- index --cwd /src
+    chk "22 launch: --backend auto with the indexer image resolves to the container (rc $RC)" rec "r['backend']=='container' and r['refused'] is False and r['exitCode']==0"
+  else
+    norun_idx "22 launches (scip-typescript, scip-python, any order, auto)"
+  fi
+
+  # ---- symlink containment (§7.4): the host resolution of --cwd/--environment must stay inside the staged tree
+  chk "22 symlink fixtures: lnk_root reaches / and lnk_up leaves the tree (the links are real)" bash -c '[ "$(realpath "$1/lnk_root")" = / ] && case "$(realpath "$1/lnk_up")" in "$1"|"$1"/*) exit 1;; esac; [ ! -e /src ] && [ -L "$1/lnk_abs" ] && case "$(realpath "$1/lnk_sib")" in "$1"/*) exit 1;; "$1"*) exit 0;; *) exit 1;; esac' _ "$SYM"
+  chk "22 symlink fixtures: the in-tree links resolve inside the tree" bash -c 'case "$(realpath "$1/lnk_in")" in "$1"/sub) exit 0;; *) exit 1;; esac' _ "$SYM"
+  chk "22 symlink fixtures: lnk_hostabs and lnk_chain resolve INTO the tree on the host (so only the absolute-target rule can refuse them); lnk_dangle dangles" bash -c '[ "$(realpath "$1/lnk_hostabs")" = "$1/sub" ] && [ "$(realpath "$1/lnk_chain")" = "$1/sub" ] && [ -L "$1/lnk_dangle" ] && [ ! -e "$1/lnk_dangle" ]' _ "$SYM"
+  IDX_SRC=$SYM
+  for lnk in lnk_root lnk_up lnk_abs lnk_sib lnk_root/etc lnk_up/x nope env.json lnk_hostabs lnk_hostabs/sub lnk_dangle lnk_chain sub/inner_abs sub/../lnk_root; do
+    idx_ref "22 symlink: scip-typescript --cwd /src/$lnk is refused" 64 forbidden-flag scip-typescript -- index --cwd "/src/$lnk"
+    idx_ref "22 symlink: scip-python --cwd /src/$lnk is refused" 64 forbidden-flag scip-python -- index --cwd "/src/$lnk" --environment /src/env.json --project-version v1
+  done
+  for lnk in lnk_root/etc/hostname lnk_up/x lnk_abs/env.json lnk_sib nope lnk_hostabs/env.json lnk_dangle lnk_chain/env.json sub/inner_abs/hostname; do
+    idx_ref "22 symlink: scip-python --environment /src/$lnk is refused" 64 forbidden-flag scip-python -- index --cwd /src --environment "/src/$lnk" --project-version v1
+  done
+  chk "  the refusal names the containment rule" grep -q 'leaves the staged tree' <<< "$ERR"
+  # --environment must be a regular file: a directory and a FIFO (a read of it would block) are refused, never a timeout (rc 124)
+  chk "22 environment fixtures: /src/sub is a directory, /src/fifo a FIFO, /src/sub/env.json a regular file" bash -c '[ -d "$1/sub" ] && [ -p "$1/fifo" ] && [ -f "$1/sub/env.json" ]' _ "$SYM"
+  idx_ref "22 --environment names a directory (/src/sub): refused" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/sub --project-version v1
+  idx_ref "22 --environment names a FIFO (/src/fifo): refused" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/fifo --project-version v1
+  chk "  the FIFO refusal is not a timeout (rc $RC is not 124)" test "$RC" != 124
+  idx_ref "22 precedence: a FIFO --environment outranks a missing --project-version" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/fifo
+  idx_ref "22 containment: a link through a missing component and back by .. (--cwd /src/lnk_mid_dd) is refused" 64 forbidden-flag scip-typescript -- index --cwd /src/lnk_mid_dd
+  idx_ref "22 containment: a link through a missing component and back by .. (--environment /src/envlink_dd.json) is refused" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/envlink_dd.json --project-version v1
+  idx_ref "22 --environment control: a regular file in a subdirectory passes containment (usage, no --project-version)" 64 usage scip-python -- index --cwd /src --environment /src/sub/env.json
+  # precedence: a containment refusal is forbidden-class and outranks a missing mandatory element (usage)
+  idx_ref "22 precedence: an escaping --cwd outranks a missing --project-version" 64 forbidden-flag scip-python -- index --cwd /src/lnk_root --environment /src/env.json
+  idx_ref "22 precedence: an absolute-link --cwd outranks a missing --environment and --project-version" 64 forbidden-flag scip-python -- index --cwd /src/lnk_hostabs
+  idx_ref "22 precedence: a missing --environment file outranks a missing --project-version" 64 forbidden-flag scip-python -- index --cwd /src --environment /src/nope.json
+  idx_ref "22 precedence control: the same argv with in-tree values is usage" 64 usage scip-python -- index --cwd /src/lnk_in --environment /src/envlink.json
+  unset IDX_SRC
+  if [ "$IDX_OK" = 1 ]; then
+    # positive controls: in-tree paths, including an in-tree symlink, are launched
+    idx_run "22 symlink control: scip-typescript --cwd /src/sub (plain subdirectory)" scip-typescript "$SYM" -- index --cwd /src/sub
+    chk "  exit 0 and a non-empty .scip (rc $RC)" bash -c 'test "$1" = 0 && test -s "$2/$3.scip"' _ "$RC" "$IDX_OUTD" "$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")"
+    idx_run "22 symlink control: scip-typescript --cwd /src/lnk_in (an in-tree symlink)" scip-typescript "$SYM" -- index --cwd /src/lnk_in
+    chk "  exit 0 and a non-empty .scip (rc $RC)" bash -c 'test "$1" = 0 && test -s "$2/$3.scip"' _ "$RC" "$IDX_OUTD" "$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")"
+    idx_run "22 symlink control: scip-python --cwd /src/lnk_in --environment /src/envlink.json (in-tree symlinks)" scip-python "$SYM" -- index --cwd /src/lnk_in --environment /src/envlink.json --project-version v1
+    py_launch_check "scip-python through in-tree symlinks" /src/lnk_in
+  fi
+
+  # ---- launch by image ID (§7.4): every container launch names the sha256 ID it inspected and recorded
+  # (a name can be retagged between the inspect and the launch), for indexers and parse frontends alike.
+  cat > "$T/imgid.py" <<'EOPY'
+import json, sys
+recs = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+want = set(sys.argv[2].split(","))
+launched = [r for r in recs if not r["refused"] and r["backend"] == "container" and r["frontend"] in want]
+errs = []
+if not launched: errs.append("no launched record of " + ",".join(sorted(want)))
+for r in launched:
+    a = r["launcherArgv"]; ei = a.index("--entrypoint")
+    img = a[ei + 2]
+    if img != r["toolchain"]["imageId"]: errs.append(f"{r['auditId']}: launcher image {img!r} != toolchain.imageId {r['toolchain']['imageId']!r}")
+    if not img.startswith("sha256:"): errs.append(f"{r['auditId']}: launcher image {img!r} is not a sha256 ID")
+print(f"checked {len(launched)} launched records"); [print("  " + e) for e in errs]
+sys.exit(1 if errs else 0)
+EOPY
+  run_r "${C[@]}" --frontend pysrc2cpg --source "$SRC" --output "$T/imgid-parse-out" -- /src
+  if out=$(python3 -I "$T/imgid.py" "$CCG_AUDIT_DIR/sandbox.jsonl" pysrc2cpg 2>&1); then ok "22 image by ID: a parse launch's launcherArgv image element == toolchain.imageId ($out)"; else bad "22 image by ID: parse launch" "$out"; fi
+  if [ "$IDX_OK" = 1 ]; then
+    if out=$(python3 -I "$T/imgid.py" "$CCG_AUDIT_DIR/sandbox.jsonl" scip-typescript,scip-python 2>&1); then ok "22 image by ID: every indexer launch's launcherArgv image element == toolchain.imageId ($out)"; else bad "22 image by ID: indexer launches" "$out"; fi
+  fi
+fi
+
+if want 23; then
+  section "test 23: the indexer boundary is the same launcher (clause, equivalence, escape-axis probe on the indexer image)"
+  if [ "$IDX_OK" = 1 ]; then
+    host_targets
+    idx_run "23 launch: scip-typescript (a launched record for the clause and equivalence checks)" scip-typescript "$TSSRC" -- index --cwd /src
+    if out=$(python3 -I "$T/clause.py" "$CCG_AUDIT_DIR/sandbox.jsonl" scip-typescript,scip-python 2>&1); then ok "(23) the §7.3 launcher clause holds on every launched indexer record ($out)"; else bad "(23) launcher clause on indexer records" "$out"; fi
+    IPOUT="$T/probe-out-idx"; mkdir -p "$IPOUT"
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE LIB_INDEXER=1 lib_launch container "$PSRC" "$IPOUT" "$PSCR" "" -- /usr/bin/perl /src/probe.pl "${PROBE_ARGS[@]}" > "$T/probe-i.txt" 2>&1
+    cp "$T/last-launcher" "$T/launcher-idx"; cp "$T/last-envkeys" "$T/envkeys-idx"
+    check_probe "indexer-image probe" "$T/probe-i.txt" 60 A1a A1b A1c A2a A2b A3a A3b A3c A4a:/src A4a:/out A4a:/tmp A4a:/home/ccg A4a-memfd A4b A4c A5b A5c A5d A7
+    for id in A1d-tcp A1d-udp A1e-tcp A1e-udp; do
+      n=$(grep -c "^CHECK $id PASS" "$T/probe-i.txt"); chk "indexer-image probe $id ran $n targets, all pass" test "$n" -gt 0 -a -z "$(grep "^CHECK $id FAIL" "$T/probe-i.txt")"
+    done
+    img_env_i() { docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$IDX_IMAGE" | grep "^$1=" ; }
+    { img_env_i PATH; img_env_i JAVA_HOME; img_env_i GOROOT; img_env_i DOTNET_ROOT
+      printf '%s\n' HOME=/home/ccg TMPDIR=/tmp LANG=C.UTF-8 LC_ALL=C.UTF-8 GOTOOLCHAIN=local PYTHONSAFEPATH=1 \
+        DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 JAVA_OPTS=; } > "$T/expect-env-i"
+    check_env "indexer image" "$T/probe-i.txt" "$T/envkeys-idx" "$T/expect-env-i" PYTHONSAFEPATH
+    chk "indexer-image PATH carries /opt/indexer/bin (the image's PATH verbatim, A6 b')" grep -qx 'ENVV PATH=/opt/indexer/bin:.*' "$T/probe-i.txt"
+    mp_bad=$(sed -n 's/^MOUNT \([^ ]*\) .*/\1/p' "$T/probe-i.txt" | grep -vxE '/|/src|/out|/tmp|/home/ccg|/scripts|/proc(/.*)?|/dev(/.*)?|/sys(/.*)?|/etc/(hosts|hostname|resolv\.conf)' || true)
+    chk "(23) A5a: every mount point on the indexer image is in the allowed set" test -z "$mp_bad"
+    if out=$(python3 -I "$T/equiv.py" "$CCG_AUDIT_DIR/sandbox.jsonl" "$T/launcher-idx" indexer 2>&1); then ok "(23) a launched indexer record's launcherArgv == the probe launch's modulo ids/paths/tool tail ($out)"; else bad "(23) indexer production and probe launchers differ" "$out"; fi
+  else
+    norun_idx "23 (launcher clause, equivalence, A1-A7 probe on the indexer image)"
+  fi
+fi
+
+if want 24; then
+  section "test 24: the --help sweep over both indexers (drift alarm; the grammar is the control)"
+  if [ "$IDX_OK" = 1 ]; then
+    d="$T/help-idx"; mkdir -p "$d" "$T/hsrc-i" "$T/hout-i"
+    write_sweep_py
+    [ -s "$T/sweep.py" ] && ok "24: the sweep checker is in place" || bad "24: the sweep checker was not written"
+    for fe in scip-typescript scip-python; do
+      # The §7.4 grammar refuses --help, so the help runs through the test-only launch path (lib-launch).
+      CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE LIB_INDEXER=1 lib_launch container "$T/hsrc-i" "$T/hout-i" "" /tmp -- "$(. "$RUNNER"; sbx_frontend_path "$fe")" index --help > "$d/$fe.txt" 2>&1
+      grep -qi '^Usage: ' "$d/$fe.txt" && ok "24: $fe index --help printed its Usage line" || bad "24: $fe index --help printed no Usage line" "$(head -3 "$d/$fe.txt")"
+    done
+    L=$(dirname "$RUNNER"); mkdir -p "$T/lists-i"
+    IDX_RX='pnpm|yarn|npm|pip|workspace|infer'
+    if out=$(python3 -I "$T/sweep.py" "$d" "$L/forbidden-flags.txt" "$L/allowed-flags.txt" scip-typescript,scip-python "$IDX_RX" 2>&1); then ok "(24) indexer sweep: $(head -1 <<< "$out")"; else bad "(24) indexer sweep" "$out"; fi
+    printf '%s\n' "$out" | tail -n +2 | head -12
+    chk "(24) the widened regex finds the four spawn-shaped scip-typescript flags" test "$(grep -cE '^    scip-typescript .* -> (forbidden|allowed)$' <<< "$out")" -ge 4
+    # Doctored copies: the alarm can fail. Each is a copy of the lists, never the real ones.
+    grep -v 'scip-typescript	--pnpm-workspaces' "$L/forbidden-flags.txt" > "$T/lists-i/f-missing"
+    { cat "$L/forbidden-flags.txt"; printf 'scip-python\t--no-such-flag\toffline\tx\n'; } > "$T/lists-i/f-stale"
+    { cat "$L/allowed-flags.txt"; printf 'scip-typescript\t--infer-tsconfig\tx\n'; } > "$T/lists-i/a-double"
+    # Each doctored run must fail for the stated reason (the output names it), so a missing checker
+    # or a crash cannot pass as "the alarm fired".
+    alarm() { # <name> <expected text in the output> <forb> <allow> [rx]
+      local o rc=0
+      o=$(python3 -I "$T/sweep.py" "$d" "$3" "$4" scip-typescript,scip-python "${5-$IDX_RX}" 2>&1) || rc=$?
+      if [ "$rc" = 1 ] && grep -q "$2" <<< "$o"; then ok "$1"; else bad "$1" "rc=$rc; wanted '$2' in: ${o:0:300}"; fi
+    }
+    alarm "(24) the indexer sweep fails on an unclassified spawn-shaped flag" "unclassified: scip-typescript.*--pnpm-workspaces" "$T/lists-i/f-missing" "$L/allowed-flags.txt"
+    alarm "(24) the indexer sweep fails on a stale entry" "stale entry: scip-python --no-such-flag" "$T/lists-i/f-stale" "$L/allowed-flags.txt"
+    alarm "(24) the indexer sweep fails on a double entry" "in both files: .*--infer-tsconfig" "$L/forbidden-flags.txt" "$T/lists-i/a-double"
+    # Control for the widening itself: with the base regex alone the missing entry goes unseen.
+    o=$(python3 -I "$T/sweep.py" "$d" "$T/lists-i/f-missing" "$L/allowed-flags.txt" scip-typescript,scip-python 2>&1); rc=$?
+    if [ "$rc" = 0 ] && grep -q '^sweep hits=0 ' <<< "$o"; then ok "(24) control: the unwidened regex sees no hit at all in either help (why the widening exists)"; else bad "(24) control: the unwidened regex" "rc=$rc $o"; fi
+  else
+    norun_idx "24 (index --help sweep of both indexers)"
+  fi
+fi
+
+if want 25; then
+  section "test 25: ccg-versions on the indexer image"
+  printf '  info: asserted by cpg/infra/toolchain/tests/test_toolchain.sh section 5; not duplicated here (run it separately)\n'
+fi
+
+if want 26; then
+  section "test 26: planted json.py under the indexer pass-list (PYTHONSAFEPATH, advisory M1)"
+  if [ "$IDX_OK" = 1 ]; then
+    PLANT="$T/plant-src"; mkdir -p "$PLANT"
+    printf 'open("/out/json-planted-ran", "w").write("ran")\n' > "$PLANT/json.py"
+    O26A="$T/plant-out-a"; O26B="$T/plant-out-b"; mkdir -p "$O26A" "$O26B"
+    PYC='import json; print("JSON-FILE", json.__file__)'
+    # (a) as specified: working directory /src, which holds the planted json.py.
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE LIB_INDEXER=1 lib_launch container "$PLANT" "$O26A" "" /src -- python3 -c "$PYC" > "$T/plant-a.txt" 2>&1
+    chk "(26) the launch ran: python3 imported json and printed its file ($(grep JSON-FILE "$T/plant-a.txt" | head -1))" grep -q '^JSON-FILE ' "$T/plant-a.txt"
+    chk "(26) with PYTHONSAFEPATH the stdlib json is imported, not /src/json.py" grep -q '^JSON-FILE /usr/lib/python3' "$T/plant-a.txt"
+    chk "(26) with PYTHONSAFEPATH the planted json.py did not run (marker absent)" test ! -e "$O26A/json-planted-ran"
+    # (b) positive control, same launch path with the variable unset inside the sandbox: the plant is live.
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE LIB_INDEXER=1 lib_launch container "$PLANT" "$O26B" "" /src -- /usr/bin/env -u PYTHONSAFEPATH python3 -c "$PYC" > "$T/plant-b.txt" 2>&1
+    chk "(26) control: without PYTHONSAFEPATH the planted /src/json.py is the module imported" grep -q '^JSON-FILE /src/json.py' "$T/plant-b.txt"
+    chk "(26) control: without PYTHONSAFEPATH the planted json.py ran (marker present)" test -e "$O26B/json-planted-ran"
+    # (c) the launch's recorded envKeys carry the variable (A6 and test 7 pin it too).
+    chk "(26) the lib-launch envKeys carry PYTHONSAFEPATH" grep -qx PYTHONSAFEPATH "$T/last-envkeys"
+  else
+    norun_idx "26 (planted json.py)"
+  fi
+fi
+
 section "test 4: audit records (one per invocation, every §5.3 field, valid types)"
 run_r "${C[@]}" --frontend pysrc2cpg --codebase t4 --source "$SRC" --output "$OUTD" -- /src
 t4id=$(python3 -I -c 'import json,sys; print(json.loads(open(sys.argv[1]).readlines()[-1])["auditId"])' "$CCG_AUDIT_DIR/sandbox.jsonl")
@@ -967,6 +1336,9 @@ for n, l in enumerate(lines, 1):
     if lib:
         if r.get("frontend") != "lib-launch" or r.get("refused"): errs.append(f"line {n}: library record {r.get('frontend')} refused={r.get('refused')}")
         continue
+    if not r.get("refused") and r.get("frontend") in ("scip-typescript", "scip-python"):
+        if f"/out/{r['auditId']}.scip" not in r["toolArgv"]: errs.append(f"line {n}: indexer output stem is not the auditId")
+        continue
     if not r.get("refused") and r.get("frontend") not in ("joern",):
         if f"/out/{r['auditId']}.cpg.bin" not in r["toolArgv"]: errs.append(f"line {n}: tool output stem is not the auditId")
         elif r["exitCode"] == 0 and cpgdir and (r["auditId"] + ".cpg.bin") not in CPGS:
@@ -980,29 +1352,6 @@ if [ -f "$PROBE_AUDIT/sandbox.jsonl" ]; then   # m5: library-mode records are va
 fi
 # m5: the probe's launch template IS the production template (modulo ids, paths, /scripts, tool tail).
 if [ -f "$T/launcher-c" ]; then
-  cat > "$T/equiv.py" <<'PY'
-import json, re, sys
-recs = [json.loads(l) for l in open(sys.argv[1])]
-prod = [r for r in recs if not r["refused"] and r["backend"] == "container" and r["frontend"] != "joern"][-1]
-lib = open(sys.argv[2], "rb").read().decode().split("\0")[:-1]
-def norm(a):
-    out, i = [], 0
-    while i < len(a):
-        x = a[i]
-        if x == "--mount" and "dst=/scripts" in a[i+1]: i += 2; continue
-        if x == "--mount": x2 = re.sub(r"(device|upperdir|lowerdir|workdir)=[^,\"]*", r"\1=P", a[i+1]); out += [x, x2]; i += 2; continue
-        out.append(x); i += 1
-    s = json.dumps(out)
-    s = re.sub(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", "AID", s)
-    out = json.loads(s)
-    k = out.index("-i") + 1
-    while k < len(out) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", out[k]): k += 1
-    return out[:k]
-p, l = norm(prod["launcherArgv"]), norm(lib)
-if p != l:
-    import difflib; print("\n".join(difflib.unified_diff(p, l, lineterm="", n=0))); sys.exit(1)
-print(f"{len(p)} elements equal")
-PY
   if out=$(python3 -I "$T/equiv.py" "$CCG_AUDIT_DIR/sandbox.jsonl" "$T/launcher-c" 2>&1); then ok "m5: probe launcherArgv == production launcherArgv modulo ids/paths/tool ($out)"; else bad "m5: probe and production templates differ" "$out"; fi
 fi
 
@@ -1055,6 +1404,8 @@ chk "no /tmp/ccg-sbx.<auditId>.* scratch of this run left behind ($new_tmp new o
 left_o=$(find "$T" -maxdepth 2 -name '.ccg-ovl-*' 2>/dev/null)
 chk "no overlay scratch left beside an output dir" test -z "$left_o"
 
-printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
+printf '\n%d passed, %d failed, %d not run\n' "$PASS" "$FAIL" "$NOTRUN"
+((NOTRUN)) && printf 'NOT RUN: %s\n' "${NOTRUN_LIST[@]}"
 ((FAIL)) && { printf 'FAILED: %s\n' "${FAILED[@]}"; exit 1; }
+((NOTRUN)) && exit 3
 exit 0

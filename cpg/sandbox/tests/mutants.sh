@@ -15,6 +15,8 @@ set -uo pipefail
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SBX="$HERE/.."
+# A mutant that admits an escaping path makes scip-python index the whole image: bound each run (the suite default is 300 s).
+export RUN_TIMEOUT="${RUN_TIMEOUT:-45}"
 export CCG_TOOLCHAIN_IMAGE="${CCG_TOOLCHAIN_IMAGE:-$(env -i PATH=/usr/bin:/bin "$SBX/../infra/toolchain/build.sh" --print-tag)}"
 W=$(mktemp -d /tmp/ccg-s08-mutants.XXXXXX); trap 'rm -rf "$W"' EXIT
 
@@ -30,7 +32,7 @@ M = [
  # --- first round (S08 build) ---
  ("M01", "5", "drop --cap-drop ALL", [(R, "--read-only --cap-drop ALL", "--read-only")]),
  ("M02", "1,3,5", "mount /tmp noexec", [(R, 'SBX_TMP_OPTS="rw,exec,nosuid,nodev"', 'SBX_TMP_OPTS="rw,noexec,nosuid,nodev"')]),
- ("M03", "1,5", "remove env -i (container)", [(R, '--entrypoint /usr/bin/env "$SBX_IMAGE" -i "${SBX_ENV[@]}"', '--entrypoint /usr/bin/env "$SBX_IMAGE" "${SBX_ENV[@]}"')]),
+ ("M03", "1,5", "remove env -i (container)", [(R, '--entrypoint /usr/bin/env "$SBX_IMAGE_ID" -i "${SBX_ENV[@]}"', '--entrypoint /usr/bin/env "$SBX_IMAGE_ID" "${SBX_ENV[@]}"')]),
  ("M04", "10", "accept a \\v-led //> (whitespace set without \\v)", [(R, "tr '\\r\\f\\v' '\\n\\n\\n'", "tr '\\r\\f' '\\n\\n'"), (R, "grep -a -E '^[[:cntrl:] ]*//>'", "grep -a -E '^[ \\t\\r\\f]*//>'")]),
  ("M05", "2", "allow a forbidden flag in --flag=value form", [(R, 'if [[ $el == "$f" || $el == "$f="* || $el == *"$f"* ]]', 'if [[ $el == "$f" ]]')]),
  ("M06", "1,5", "drop --network none", [(R, "--network none --hostname localhost", "--hostname localhost")]),
@@ -51,7 +53,7 @@ M = [
  ("M21", "1,5", "add -e to docker run", [(R, "    --network none --hostname localhost", "    -e X=1 --network none --hostname localhost")]),
  # --- S08 gate fix round: one per finding, plus the reviewer's X mutants ---
  ("M22", "10", "M1: directive check strips only [[:space:]] (control bytes admitted)", [(R, "grep -a -E '^[[:cntrl:] ]*//>'", "grep -a -E '^[[:space:]]*//>'")]),
- ("M23", "2", "M2: SBX_BACKEND_REFUSAL not initialised (crash, no record)", [(R, '  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""\n', '  SBX_LAUNCH_SETUP_FAIL=""\n'), (R, '    *) [ -n "${SBX_DCFG_FAIL:-}" ] || sbx_try_container || true ;;', "    *) SBX_BACKEND=container ;;")]),
+ ("M23", "2", "M2: SBX_BACKEND_REFUSAL not initialised (crash, no record)", [(R, '  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""; SBX_INDEXER=0; SBX_IDX_MISSING=()\n', '  SBX_LAUNCH_SETUP_FAIL=""; SBX_INDEXER=0; SBX_IDX_MISSING=()\n'), (R, '    *) [ -n "${SBX_DCFG_FAIL:-}" ] || sbx_try_container || true ;;', "    *) SBX_BACKEND=container ;;")]),
  ("X1", "2,6", "M4: jimple2cpg --full-resolver moved allowed -> forbidden", move("jimple2cpg", "--full-resolver", "x1")),
  ("X2", "2,6", "M4: javasrc2cpg --delombok-mode moved allowed -> forbidden", move("javasrc2cpg", "--delombok-mode", "x2")),
  ("X3", "2,6", "M4: c2cpg --compilation-database moved allowed -> forbidden", move("c2cpg", "--compilation-database", "x3")),
@@ -98,6 +100,69 @@ M = [
  ("YE", "13", "p3-m1: client killed first, but one removal pass (no settle loop)", [(R, "  while ((quiet < 3 && n < 50)); do", "  while ((quiet < 1 && n < 1)); do")]),
  ("YG", "2", "p4-m1: sbx_cleanup stops removing SBX_SCRATCH (every invocation leaks it)", [(R, '    [ -n "$d" ] && [ -d "$d" ] || continue\n', '    [ -n "$d" ] && [ -d "$d" ] || continue\n    [ "$d" = "$SBX_SCRATCH" ] && continue\n')]),
  ("YF", "12", "p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up)", [(R, 'kill -KILL "$j"', 'kill -TERM "$j"')]),
+ # --- P1-48b: the indexer entries (egress-spec3 §7.4, §10.1 (21)-(26)) ---
+ ("I01", "21,22", "(21) scip-python dropped from SBX_FRONTENDS", [(R, "joern scip-typescript scip-python)", "joern scip-typescript)")]),
+ ("I02", "21", "(21) the two indexer names swapped (order is the contract)", [(R, "joern scip-typescript scip-python)", "joern scip-python scip-typescript)")]),
+ ("I03", "22", "(22) --cwd is no longer mandatory", [(R, "  ((seen_cwd)) || SBX_IDX_MISSING+=(--cwd)\n", "  :\n")]),
+ ("I04", "22", "(22) --environment is no longer mandatory for scip-python", [(R, '  if [ "$fe" = scip-python ] && ((!seen_env)); then SBX_IDX_MISSING+=(--environment); fi\n', "  :\n")]),
+ ("I05", "22", "(22) --environment accepted for scip-typescript", [(R, '        [ "$fe" = scip-python ] && ((!seen_env && i + 1 < n))', '        ((!seen_env && i + 1 < n))')]),
+ ("I06", "22", "(22) --project-name accepted for scip-typescript", [(R, '        [ "$fe" = scip-python ] && ((!seen_name && i + 1 < n))', '        ((!seen_name && i + 1 < n))')]),
+ ("I07", "22", "(22) a repeated --cwd is accepted", [(R, "((!seen_cwd && i + 1 < n))", "((i + 1 < n))")]),
+ ("I08", "22", "(22) a repeated --environment is accepted", [(R, "((!seen_env && i + 1 < n))", "((i + 1 < n))")]),
+ ("I09", "22", "(22) a repeated --project-name is accepted", [(R, "((!seen_name && i + 1 < n))", "((i + 1 < n))")]),
+ ("I10", "22", "(22) path check: `..` components allowed", [(R, "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . && $c != .. ]] || return 1", "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . ]] || return 1")]),
+ ("I11", "22", "(22) path check: `.` components allowed", [(R, "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . && $c != .. ]] || return 1", "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != .. ]] || return 1")]),
+ ("I12", "22", "(22) path check: empty components allowed", [(R, "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . && $c != .. ]] || return 1", "[[ $c =~ ^[A-Za-z0-9._@+-]*$ && $c != . && $c != .. ]] || return 1")]),
+ ("I13", "22", "(22) path check: any /src prefix (/srcfoo, /src2) allowed", [(R, "  [[ $v == /src/* ]] || return 1\n", "  [[ $v == /src* ]] || return 0\n")]),
+ ("I14", "22", "(22) --project-name pattern relaxed (a leading - or . allowed)", [(R, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "^[A-Za-z0-9._-]{0,64}$")]),
+ ("I15", "22", "(22) --project-name length bound dropped", [(R, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "^[A-Za-z0-9][A-Za-z0-9._-]*$")]),
+ ("I16", "22", "(22) first element need not be `index`", [(R, '  [ "${a[0]}" = index ] || SBX_HITS+=("${a[0]}")\n', "  :\n")]),
+ ("I17", "22", "(22) an unknown element is ignored (abbreviations, --opt=value pass)", [(R, '      *) SBX_HITS+=("$opt"); i=$((i + 1)); continue ;;', '      *) i=$((i + 1)); continue ;;')]),
+ ("I18", "22", "(22) a caller --output/-o is accepted into the grammar and the output refusal removed", [
+    (R, '      *) SBX_HITS+=("$opt"); i=$((i + 1)); continue ;;', '      --output|-o) ok=1 ;;\n      *) SBX_HITS+=("$opt"); i=$((i + 1)); continue ;;'),
+    (R, "if [[ $a == -o || $a == --output || $a == --output=* ]]; then SBX_HITS+=(\"$a\"); fi", "if false; then :; fi")]),
+ ("I19", "22", "(22) the runner appends the wrong output path", [(R, 'SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.scip")', 'SBX_TOOL_ARGV+=(--output "/out/index.scip")')]),
+ ("I20", "22", "(22) the indexer output keeps the parse-frontend suffix", [(R, 'SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.scip")', 'SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.cpg.bin")')]),
+ ("I21", "22", "(22) a missing mandatory element outranks a forbidden one (usage before forbidden-flag)", [
+    (R, '      if ((${#SBX_HITS[@]})); then sbx_refuse 64 forbidden-flag "indexer argv outside', '      if ((${#SBX_IDX_MISSING[@]})); then sbx_refuse 64 usage "mandatory element missing"; fi\n      if ((${#SBX_HITS[@]})); then sbx_refuse 64 forbidden-flag "indexer argv outside')]),
+ ("I22", "22", "(22) the ccg-toolchain-indexer=1 label check removed", [(R, '"$SBX_IMAGE_ID" 2>/dev/null)" != 1 ]; then', '"$SBX_IMAGE_ID" 2>/dev/null)" = nope ]; then')]),
+ ("I23", "22", "(22) controlled mode no longer unknown-frontend for an indexer", [(R, '  if ((SBX_INDEXER)) && [ "$mode" = controlled ]; then sbx_refuse 64 unknown-frontend "indexer entries are offline-only"; fi\n', "")]),
+ ("I24", "22", "(22) the namespace backend is tried for an indexer (precondition, not unavailable)", [(R, '    namespace) if ((SBX_INDEXER)) && [ -z "${SBX_DCFG_FAIL:-}" ]; then', '    namespace) if false; then')]),
+ ("I25", "22", "(22) auto may fall back to namespace for an indexer", [(R, '    auto) if ((SBX_INDEXER)); then sbx_resolve_backend container; else sbx_resolve_backend auto; fi ;;', '    auto) sbx_resolve_backend auto ;;')]),
+ ("I26", "21,22", "(21)/(22) the indexer executable is resolved through PATH, not the fixed path", [(R, '  if sbx_is_indexer "$1"; then echo "$SBX_INDEXER_IMG_BIN/$1";', '  if sbx_is_indexer "$1"; then echo "$1";')]),
+ ("I27", "22", "(22) the indexer entries point at a directory that has no tool", [(R, "SBX_INDEXER_IMG_BIN=/opt/indexer/bin", "SBX_INDEXER_IMG_BIN=/opt/indexer/nowhere")]),
+ ("I28", "21,22", "(22) scip-python is not recognised as an indexer (parse path, no env, no label check)", [(R, "[[ $1 == scip-typescript || $1 == scip-python ]]", "[[ $1 == scip-typescript ]]")]),
+ ("I29", "22,23", "(22)/(23) an indexer launch carries a flag the probe template lacks", [(R, '    sbx_container_argv "$src" "$out" "$sdir" "$wd" -- "$@"\n', '    sbx_container_argv "$src" "$out" "$sdir" "$wd" -- "$@"\n    [ "$SBX_RECORD_FRONTEND" != lib-launch ] && SBX_LAUNCHER=("${SBX_LAUNCHER[@]:0:3}" --memory 3g "${SBX_LAUNCHER[@]:3}")\n')]),
+ ("I30", "23", "(23) an indexer launch without --cap-drop ALL (launcher clause)", [(R, "--read-only --cap-drop ALL", "--read-only")]),
+ ("I31", "7,22,23,26", "(26) PYTHONSAFEPATH missing from the indexer pass-list", [(R, '  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi', "  :")]),
+ ("I32", "7,22,23,26", "(26) PYTHONSAFEPATH=0 on the indexer pass-list", [(R, 'SBX_ENV+=("PYTHONSAFEPATH=1")', 'SBX_ENV+=("PYTHONSAFEPATH=0")')]),
+ ("I33", "7,1", "(26) PYTHONSAFEPATH on every entry, not only the indexers", [(R, '  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi', '  SBX_ENV+=("PYTHONSAFEPATH=1")')]),
+ ("I34", "7", "(26) a forbidden indexer name (PYTHONPATH) on the indexer pass-list", [(R, 'SBX_ENV+=("PYTHONSAFEPATH=1")', 'SBX_ENV+=("PYTHONSAFEPATH=1" "PYTHONPATH=/src")')]),
+ ("I35", "24", "(24) scip-typescript --pnpm-workspaces dropped from the forbidden list", [(F, "scip-typescript\t--pnpm-workspaces\tall\t", "joern\t--dep\tall\t")]),
+ ("I36", "24", "(24) scip-typescript --infer-tsconfig entry made stale", [(F, "scip-typescript\t--infer-tsconfig\t", "scip-typescript\t--infer-tsconfigx\t")]),
+ ("I37", "24", "(24) scip-typescript --yarn-workspaces listed in both files", [(A, "c2cpg\t--compilation-database\t", "scip-typescript\t--yarn-workspaces\tx\nc2cpg\t--compilation-database\t")]),
+ ("I38", "26", "(26) PYTHONSAFEPATH missing from the indexer pass-list (test 26 alone)", [(R, '  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi', "  :")]),
+ ("I39", "23", "(23) PYTHONSAFEPATH missing from the indexer pass-list (test 23 alone)", [(R, '  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi', "  :")]),
+ ("I40", "23", "(23) NODE_OPTIONS on the indexer pass-list (A6)", [(R, 'SBX_ENV+=("PYTHONSAFEPATH=1")', 'SBX_ENV+=("PYTHONSAFEPATH=1" "NODE_OPTIONS=--require=/src/x.js")')]),
+ ("I41", "26", "(26) the indexer pass-list is never applied to a lib launch (SBX_INDEXER reset after use)", [(R, '  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi', '  if [ "${SBX_INDEXER:-0}" = 1 ] && [ "$SBX_RECORD_FRONTEND" != lib-launch ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi')]),
+ # --- P1-48b fixes: --project-version, component class, symlink containment, launch by image ID ---
+ ("J01", "22", "--project-version is no longer mandatory for scip-python", [(R, '  if [ "$fe" = scip-python ] && ((!seen_ver)); then SBX_IDX_MISSING+=(--project-version); fi\n', "")]),
+ ("J02", "22", "--project-version accepted for scip-typescript", [(R, '        [ "$fe" = scip-python ] && ((!seen_ver && i + 1 < n))', '        ((!seen_ver && i + 1 < n))')]),
+ ("J03", "22", "a repeated --project-version is accepted", [(R, "((!seen_ver && i + 1 < n)) && [[ $val", "((i + 1 < n)) && [[ $val")]),
+ ("J04", "22", "--project-version pattern relaxed (a leading - or . allowed)", [(R, "((!seen_ver && i + 1 < n)) && [[ $val =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]", "((!seen_ver && i + 1 < n)) && [[ $val =~ ^[A-Za-z0-9._-]{0,64}$ ]]")]),
+ ("J05", "22", "path component class dropped (only non-empty, not . or ..)", [(R, "[[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . && $c != .. ]] || return 1", "[[ -n $c && $c != . && $c != .. ]] || return 1")]),
+ ("J06", "22", "path component class admits a space", [(R, "^[A-Za-z0-9._@+-]+$ && $c", "^[A-Za-z0-9._@+ -]+$ && $c")]),
+ ("J07", "22", "symlink containment check removed", [(R, '      sbx_idx_contained "$src" -- "${SBX_TOOL_ARGV[@]}"\n', "")]),
+ ("J08", "22", "containment checks --cwd only, not --environment", [(R, "    case \"${a[i]}\" in --cwd|--environment) ;; *) continue ;; esac", "    case \"${a[i]}\" in --cwd) ;; *) continue ;; esac")]),
+ ("J09", "22", "containment: a `..` reached through a relative link may leave the tree", [(R, '      [[ $cur == "$src" || $cur == "$src"/* ]] || return 1\n', "")]),
+ ("J10", "22", "containment does not require --cwd to be a directory", [(R, '{ [ "${a[i]}" = --cwd ] && [ -d "$SBX_IDX_REAL" ]; }', '[ "${a[i]}" = --cwd ]')]),
+ ("J11", "22", "containment accepts a component that does not exist (dangling link, missing file)", [(R, '    [ -e "$next" ] || return 1\n', "")]),
+ ("J12", "22", "the image is launched by name, not by the inspected ID", [(R, '--entrypoint /usr/bin/env "$SBX_IMAGE_ID" -i', '--entrypoint /usr/bin/env "$SBX_IMAGE" -i')]),
+ ("J13", "22", "scip-python alone resolves to a wrong path (rc 127; scip-typescript unaffected)", [(R, 'echo "$SBX_INDEXER_IMG_BIN/$1";', 'echo "$SBX_INDEXER_IMG_BIN/${1/python/pythonx}";')]),
+ ("J14", "22", "containment walks from the wrong base (the host root)", [(R, "local src=$1 cur=$1 rest=${2#/src}", "local src=$1 cur=/ rest=${2#/src}")]),
+ ("J15", "22", "containment follows an absolute symlink by its host path (the realpath-only rule)", [(R, '      [[ $t == /* ]] && return 1\n', '      if [[ $t == /* ]]; then cur=$(realpath -e -- "$t") || return 1; [[ $cur == "$src" || $cur == "$src"/* ]] || return 1; continue; fi\n')]),
+ ("J16", "22", "a containment refusal no longer outranks a missing mandatory element (usage first)", [(R, '      # Containment is forbidden-class: it outranks a missing mandatory element (usage).\n', '      if ((${#SBX_IDX_MISSING[@]})); then sbx_refuse 64 usage "mandatory element missing"; fi\n')]),
+ ("J17", "22", "--environment no longer required to be a regular file (the -f check dropped: a directory or a FIFO passes)", [(R, '{ [ "${a[i]}" = --environment ] && [ -f "$SBX_IDX_REAL" ]; }', '[ "${a[i]}" = --environment ]')]),
 ]
 for mid, tests, desc, edits in M:
     if sel and mid not in sel: continue

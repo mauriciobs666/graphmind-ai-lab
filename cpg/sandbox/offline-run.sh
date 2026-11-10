@@ -19,8 +19,12 @@
 # Runner-owned argv conventions (README.md "Using the runner"):
 #   * The literal token @AUDIT_ID@ in any tool argument is replaced by this invocation's auditId,
 #     so a tool's own output files can carry the auditId stem (§5.3).
-#   * For a parse frontend (everything but `joern`) the runner appends
-#     `--output /out/<auditId>.cpg.bin` and refuses a caller-supplied -o/--output.
+#   * For a parse frontend (everything but `joern` and the indexers) the runner appends
+#     `--output /out/<auditId>.cpg.bin`; for an indexer (`scip-typescript`, `scip-python`)
+#     `--output /out/<auditId>.scip`. A caller-supplied -o/--output is refused for both.
+#   * Indexer entries (egress-spec3 §7.4): offline, container backend only, on an image labelled
+#     ccg-toolchain-indexer=1 (CCG_TOOLCHAIN_IMAGE); toolArgv must be `index` plus a closed
+#     --cwd/--environment/--project-name/--project-version grammar; the tool's pass-list gains PYTHONSAFEPATH=1.
 #
 # Closed environment (egress-spec2 §1.7): the shebang's -p makes bash ignore BASH_ENV, ENV,
 # SHELLOPTS and exported functions on a direct exec, and sbx_main re-execs itself under `env -i`
@@ -48,13 +52,18 @@ SBX_DCFG_REL=.local/state/ccg/docker-config      # under the passwd HOME (egress
 sbx_home() { getent passwd "$(id -u)" | cut -d: -f6; }
 
 # The closed frontend set (§7.3.1) and the name -> executable map.
-SBX_FRONTENDS=(pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern)
-sbx_frontend_exe() {
+SBX_FRONTENDS=(pysrc2cpg jssrc2cpg javasrc2cpg jimple2cpg kotlin2cpg csharpsrc2cpg gosrc2cpg c2cpg joern-parse joern scip-typescript scip-python)
+SBX_INDEXER_IMG_BIN=/opt/indexer/bin            # the `indexer` image's fixed install path (§7.4)
+sbx_is_indexer() { [[ $1 == scip-typescript || $1 == scip-python ]]; }
+sbx_frontend_exe() { # the file name under $JOERN_HOME (the ten Joern names; an indexer's basename)
   case "$1" in
     c2cpg) echo c2cpg.sh ;;
     jssrc2cpg) echo jssrc2cpg.sh ;;
     *) echo "$1" ;;
   esac
+}
+sbx_frontend_path() { # the absolute executable inside the image: never resolved through PATH
+  if sbx_is_indexer "$1"; then echo "$SBX_INDEXER_IMG_BIN/$1"; else echo "$SBX_JOERN_IMG_HOME/$(sbx_frontend_exe "$1")"; fi
 }
 # joern-parse --language value (lower-cased) -> frontend (§7.3.1 table). python/java: refused.
 sbx_language_frontend() {
@@ -234,6 +243,100 @@ sbx_joern_grammar() {
   ((ok))
 }
 
+# §7.4 indexer grammar. Args: <frontend> -- elements. Appends offenders to SBX_HITS and the names of
+# missing mandatory elements to SBX_IDX_MISSING. The elements must be `index` followed by
+# --cwd <p> (both tools, mandatory), --environment <p> (scip-python, mandatory), --project-name <n>
+# (scip-python), each at most once, in any order, each option and its value two separate elements.
+# <p> is /src, or /src/ followed by components none of which is empty, `.` or `..`, each matching
+# ^[A-Za-z0-9._@+-]+$. scip-python also needs --project-version <v> (same pattern as --project-name).
+sbx_idx_path_ok() {
+  local v=$1 rest c
+  [[ $v == /src || $v == /src/ ]] && return 0
+  [[ $v == /src/* ]] || return 1
+  rest=${v#/src/}
+  while :; do
+    c=${rest%%/*}
+    # each component: a plain name (§7.4 character class), never empty, `.` or `..`
+    [[ $c =~ ^[A-Za-z0-9._@+-]+$ && $c != . && $c != .. ]] || return 1
+    [[ $rest == */* ]] || return 0
+    rest=${rest#*/}
+  done
+}
+# §7.4 symlink containment. The grammar has passed; each --cwd/--environment value is walked on the host,
+# one component at a time, from the staged tree <src>. Refused (return 1): a symlink whose target is
+# absolute (inside the container it would resolve against the image, whatever the host path says, so even a
+# host path that lies in the tree is refused), a `..` that leaves the tree, a component that does not exist
+# (a dangling link, a missing file), and more than 40 link hops. A relative link is followed, its target
+# spliced into the remaining components. Sets SBX_IDX_REAL to the resolved path.
+sbx_idx_walk() { # <src> <value>
+  local src=$1 cur=$1 rest=${2#/src} c t next hops=0
+  rest=${rest#/}
+  while [ -n "$rest" ]; do
+    c=${rest%%/*}
+    if [[ $rest == */* ]]; then rest=${rest#*/}; else rest=""; fi
+    case "$c" in "" | .) continue ;; esac
+    if [ "$c" = .. ]; then
+      cur=${cur%/*}
+      [[ $cur == "$src" || $cur == "$src"/* ]] || return 1
+      continue
+    fi
+    next="$cur/$c"
+    if [ -L "$next" ]; then
+      ((++hops > 40)) && return 1
+      t=$(readlink -- "$next") || return 1
+      [[ $t == /* ]] && return 1
+      rest="$t${rest:+/$rest}"
+      continue
+    fi
+    [ -e "$next" ] || return 1
+    cur=$next
+  done
+  SBX_IDX_REAL=$cur
+}
+# Args: <resolved src> -- elements. Appends the option and value of each failing --cwd/--environment to SBX_HITS.
+sbx_idx_contained() {
+  local src=$1 i n v
+  shift 2
+  local a=("$@")
+  n=${#a[@]}
+  for ((i = 1; i + 1 < n; i++)); do
+    case "${a[i]}" in --cwd|--environment) ;; *) continue ;; esac
+    v=${a[i+1]}
+    # --cwd must be a directory; --environment a regular file (a JSON file: a directory or a FIFO is refused, a FIFO would hang the read)
+    sbx_idx_walk "$src" "$v" && { { [ "${a[i]}" = --environment ] && [ -f "$SBX_IDX_REAL" ]; } || { [ "${a[i]}" = --cwd ] && [ -d "$SBX_IDX_REAL" ]; }; } || SBX_HITS+=("${a[i]}" "$v")
+  done
+}
+sbx_indexer_grammar() {
+  local fe=$1 n i opt val ok
+  shift 2
+  local a=("$@") seen_cwd=0 seen_env=0 seen_name=0 seen_ver=0
+  n=${#a[@]}
+  SBX_IDX_MISSING=()
+  if ((n < 1)); then SBX_HITS+=("(missing index)"); return 1; fi
+  [ "${a[0]}" = index ] || SBX_HITS+=("${a[0]}")
+  i=1
+  while ((i < n)); do
+    opt=${a[i]}; val=${a[i+1]:-}; ok=0
+    case "$opt" in
+      --cwd)
+        ((!seen_cwd && i + 1 < n)) && sbx_idx_path_ok "$val" && { ok=1; seen_cwd=1; } ;;
+      --environment)
+        [ "$fe" = scip-python ] && ((!seen_env && i + 1 < n)) && sbx_idx_path_ok "$val" && { ok=1; seen_env=1; } ;;
+      --project-name)
+        [ "$fe" = scip-python ] && ((!seen_name && i + 1 < n)) && [[ $val =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] && { ok=1; seen_name=1; } ;;
+      --project-version)
+        [ "$fe" = scip-python ] && ((!seen_ver && i + 1 < n)) && [[ $val =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] && { ok=1; seen_ver=1; } ;;
+      *) SBX_HITS+=("$opt"); i=$((i + 1)); continue ;;   # an unknown element: one step, no value consumed
+    esac
+    if ((!ok)); then SBX_HITS+=("$opt"); ((i + 1 < n)) && SBX_HITS+=("$val"); fi
+    i=$((i + 2))
+  done
+  ((seen_cwd)) || SBX_IDX_MISSING+=(--cwd)
+  if [ "$fe" = scip-python ] && ((!seen_env)); then SBX_IDX_MISSING+=(--environment); fi
+  if [ "$fe" = scip-python ] && ((!seen_ver)); then SBX_IDX_MISSING+=(--project-version); fi
+  ((${#SBX_HITS[@]} == 0))
+}
+
 # §7.3.1 directive refusal (P3-m1, review S08 M1, egress-spec2 §1.1): replpp's UsingDirectives.scanFor is
 # `line.trim().startsWith("//> using")`, and Java's String.trim() strips EVERY char <= U+0020.
 # So a line is refused when //> follows only bytes 0x00-0x20, plus 0x7f (fail closed): in the C
@@ -260,6 +363,9 @@ sbx_env_pairs() {
   SBX_ENV+=("HOME=/home/ccg" "TMPDIR=/tmp" "LANG=C.UTF-8" "LC_ALL=C.UTF-8" "JAVA_OPTS=$SBX_JAVA_OPTS"
     "GOTOOLCHAIN=local" "GOROOT=${SBX_IMG_GOROOT:-/opt/go}" "DOTNET_ROOT=${SBX_IMG_DOTNET_ROOT:-/opt/dotnet}"
     "DOTNET_CLI_TELEMETRY_OPTOUT=1" "DOTNET_NOLOGO=1" "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1")
+  # §7.6: indexer entries only. scip-python runs `python3 -c` with the staged tree as its working
+  # directory; PYTHONSAFEPATH=1 keeps that directory off sys.path (security advisory M1).
+  if [ "${SBX_INDEXER:-0}" = 1 ]; then SBX_ENV+=("PYTHONSAFEPATH=1"); fi
 }
 sbx_read_image_env() { # <image>
   local kv
@@ -334,7 +440,7 @@ sbx_try_container() {
   fi
   SBX_IMAGE=${CCG_TOOLCHAIN_IMAGE:-$(sbx_default_image)}
   if [ -z "$SBX_IMAGE" ] || ! SBX_IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$SBX_IMAGE" 2>/dev/null) \
-     || ! sbx_read_image_env "$SBX_IMAGE"; then
+     || ! sbx_read_image_env "$SBX_IMAGE_ID"; then
     SBX_BACKEND_REFUSAL=backend-unavailable; SBX_REFUSAL_DETAIL="no image '${SBX_IMAGE:-?}'"; return 1
   fi
   if PRE_SECCOMP=$(sbx_c2_check "$secopts"); then PRE_VSOCK=blocked; else
@@ -342,6 +448,12 @@ sbx_try_container() {
   fi
   if ((PRE_PINNED)); then
     SBX_BACKEND_REFUSAL=backend-precondition; SBX_REFUSAL_DETAIL="C1: a PE binfmt entry has flag F"
+  fi
+  # §7.4: an indexer entry runs only on an image that carries the indexers, so a wrong image is a
+  # recorded refusal, not a tool error. Checked last: any other refusal above keeps its reason.
+  if [ -z "$SBX_BACKEND_REFUSAL" ] && [ "${SBX_INDEXER:-0}" = 1 ] \
+     && [ "$(docker image inspect --format '{{index .Config.Labels "ccg-toolchain-indexer"}}' "$SBX_IMAGE_ID" 2>/dev/null)" != 1 ]; then
+    SBX_BACKEND_REFUSAL=backend-unavailable; SBX_REFUSAL_DETAIL="image '$SBX_IMAGE' lacks the label ccg-toolchain-indexer=1"
   fi
   [ -z "$SBX_BACKEND_REFUSAL" ]
 }
@@ -418,7 +530,7 @@ sbx_container_argv() {
   fi
   [ -n "$wd" ] && SBX_LAUNCHER+=(--workdir "$wd")
   sbx_env_pairs container
-  SBX_LAUNCHER+=(--entrypoint /usr/bin/env "$SBX_IMAGE" -i "${SBX_ENV[@]}" "$@")
+  SBX_LAUNCHER+=(--entrypoint /usr/bin/env "$SBX_IMAGE_ID" -i "${SBX_ENV[@]}" "$@")
 }
 
 # sbx_bind_tree <dir>: read-only bind <dir>, or, when a host mount sits below it, its children
@@ -582,7 +694,7 @@ sbx_init() { # per-invocation state
   SBX_LAUNCHER=(); SBX_TOOL_ARGV=(); SBX_HITS=(); SBX_ALLOWED_HITS=(); SBX_ENV_KEYS=(); SBX_MOUNTS=()
   SBX_CALLER_ARGV=(); SBX_CODEBASES=(); SBX_CLEANUP=(); SBX_SCRIPT_PATH=""; SBX_SCRIPT_SHA=""; SBX_RECORD_FRONTEND=""
   SBX_BACKEND=""; SBX_MODE=offline; SBX_LIST_DIGEST=""
-  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""
+  SBX_BACKEND_REFUSAL=""; SBX_REFUSAL_DETAIL=""; SBX_LAUNCH_SETUP_FAIL=""; SBX_INDEXER=0; SBX_IDX_MISSING=()
   # Measured, read-only baseline, so even a usage refusal records real preconditions.
   sbx_interop_scan /proc/sys/fs/binfmt_misc "$(uname -r)"
   PRE_INTEROP=$SBX_INTEROP_STATE; PRE_PINNED=$SBX_PE_PINNED; PRE_SECCOMP=""; PRE_NETNS=false
@@ -752,11 +864,19 @@ sbx_main() {
   SBX_RECORD_FRONTEND=$frontend
   # egressMode takes the requested mode only once it is a valid one (review S08 m4).
   [[ $mode == offline || $mode == controlled ]] && SBX_MODE=$mode
+  sbx_is_indexer "$frontend" && SBX_INDEXER=1
 
   # Backend resolution first, read-only, so every record names a backend and its preconditions;
   # its refusal is applied only after the argv checks (64 takes precedence over 69).
   case "$backend" in
-    container|namespace|auto) sbx_resolve_backend "$backend" ;;
+    # An indexer entry has no namespace backend (§7.4): `auto` means the container, and an explicit
+    # `namespace` is a backend-unavailable refusal (applied after the argv checks, like any 69).
+    namespace) if ((SBX_INDEXER)) && [ -z "${SBX_DCFG_FAIL:-}" ]; then
+                 SBX_BACKEND=namespace; SBX_BACKEND_REFUSAL=backend-unavailable
+                 SBX_REFUSAL_DETAIL="indexer entries run on the container backend only"
+               else sbx_resolve_backend namespace; fi ;;
+    auto) if ((SBX_INDEXER)); then sbx_resolve_backend container; else sbx_resolve_backend auto; fi ;;
+    container) sbx_resolve_backend container ;;
     *) [ -n "${SBX_DCFG_FAIL:-}" ] || sbx_try_container || true ;;   # invalid/missing: refused below as usage
   esac
   local backend_refusal=$SBX_BACKEND_REFUSAL backend_detail=$SBX_REFUSAL_DETAIL
@@ -772,6 +892,7 @@ sbx_main() {
   for f in "${SBX_FRONTENDS[@]}"; do [ "$f" = "$frontend" ] && known=1; done
   ((known)) || sbx_refuse 64 unknown-frontend "frontend '$frontend' is not in the closed set"
   if [ "$frontend" = joern ] && [ "$mode" = controlled ]; then sbx_refuse 64 unknown-frontend "joern script mode is offline-only"; fi
+  if ((SBX_INDEXER)) && [ "$mode" = controlled ]; then sbx_refuse 64 unknown-frontend "indexer entries are offline-only"; fi
   [ "$mode" = offline ] || sbx_refuse 64 mode-not-implemented "controlled mode is P2"
   if [ -n "$script_file" ] && [ "$frontend" != joern ]; then sbx_refuse 64 usage "--script-file is only for --frontend joern"; fi
 
@@ -808,27 +929,40 @@ sbx_main() {
     fi
     ((directive)) && sbx_refuse 64 forbidden-directive "script carries a //> directive line"
   else
-    # Runner-owned output flag.
+    # Runner-owned output flag (parse frontends and indexers alike, §7.5 (4)).
     for a in "${SBX_TOOL_ARGV[@]}"; do
       if [[ $a == -o || $a == --output || $a == --output=* ]]; then SBX_HITS+=("$a"); fi
     done
-    ((${#SBX_HITS[@]})) && sbx_refuse 64 forbidden-flag "the runner owns --output (/out/<auditId>.cpg.bin)"
-    if [ "$frontend" = joern-parse ]; then
-      local i lang="" nlang=0 n=${#SBX_TOOL_ARGV[@]}
-      for ((i = 0; i < n; i++)); do
-        a=${SBX_TOOL_ARGV[i]}
-        if [ "$a" = --language ]; then nlang=$((nlang + 1)); lang=${SBX_TOOL_ARGV[i+1]:-}
-        elif [[ $a == --language=* ]]; then nlang=$((nlang + 1)); lang=${a#--language=}; fi
-      done
-      ((nlang == 1)) || sbx_refuse 64 unknown-frontend "joern-parse needs exactly one --language (got $nlang)"
-      local derived
-      derived=$(sbx_language_frontend "${lang,,}") || sbx_refuse 64 unknown-frontend "joern-parse --language '$lang' is not an FR-1 language"
-      fes=("$derived" joern-parse)
-      SBX_RECORD_FRONTEND=$derived
+    ((${#SBX_HITS[@]})) && sbx_refuse 64 forbidden-flag "the runner owns --output (/out/<auditId>.cpg.bin, or .scip for an indexer)"
+    if ((SBX_INDEXER)); then
+      # §7.4: the closed `index` grammar, then §7.5's element audit (launcher-level options, flag lists).
+      # A forbidden element outranks a missing mandatory one.
+      sbx_indexer_grammar "$frontend" -- "${SBX_TOOL_ARGV[@]}" || true
+      sbx_audit_elements "$mode" "$frontend" -- "${SBX_TOOL_ARGV[@]}"
+      if ((${#SBX_HITS[@]})); then sbx_refuse 64 forbidden-flag "indexer argv outside the 'index' grammar, or a forbidden element"; fi
+      # Containment is forbidden-class: it outranks a missing mandatory element (usage).
+      sbx_idx_contained "$src" -- "${SBX_TOOL_ARGV[@]}"
+      if ((${#SBX_HITS[@]})); then sbx_refuse 64 forbidden-flag "an indexer --cwd/--environment leaves the staged tree, follows an absolute symlink, or does not exist"; fi
+      if ((${#SBX_IDX_MISSING[@]})); then sbx_refuse 64 usage "indexer argv lacks the mandatory ${SBX_IDX_MISSING[*]}"; fi
+      SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.scip")
+    else
+      if [ "$frontend" = joern-parse ]; then
+        local i lang="" nlang=0 n=${#SBX_TOOL_ARGV[@]}
+        for ((i = 0; i < n; i++)); do
+          a=${SBX_TOOL_ARGV[i]}
+          if [ "$a" = --language ]; then nlang=$((nlang + 1)); lang=${SBX_TOOL_ARGV[i+1]:-}
+          elif [[ $a == --language=* ]]; then nlang=$((nlang + 1)); lang=${a#--language=}; fi
+        done
+        ((nlang == 1)) || sbx_refuse 64 unknown-frontend "joern-parse needs exactly one --language (got $nlang)"
+        local derived
+        derived=$(sbx_language_frontend "${lang,,}") || sbx_refuse 64 unknown-frontend "joern-parse --language '$lang' is not an FR-1 language"
+        fes=("$derived" joern-parse)
+        SBX_RECORD_FRONTEND=$derived
+      fi
+      SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.cpg.bin")
+      sbx_audit_elements "$mode" "${fes[*]}" -- "${SBX_TOOL_ARGV[@]}"
+      ((${#SBX_HITS[@]})) && sbx_refuse 64 forbidden-flag "forbidden flag or launcher-level option"
     fi
-    SBX_TOOL_ARGV+=(--output "/out/$SBX_AUDIT_ID.cpg.bin")
-    sbx_audit_elements "$mode" "${fes[*]}" -- "${SBX_TOOL_ARGV[@]}"
-    ((${#SBX_HITS[@]})) && sbx_refuse 64 forbidden-flag "forbidden flag or launcher-level option"
   fi
 
   [ -z "$backend_refusal" ] || { SBX_BACKEND_REFUSAL=$backend_refusal; sbx_refuse 69 "$backend_refusal" "$SBX_BACKEND backend: $backend_detail"; }
@@ -839,7 +973,7 @@ sbx_main() {
   flock -n "$SBX_LOCK_FD" || sbx_refuse 64 usage "--output '$out' is in use by another run"
 
   local rc=0
-  sbx_launch "$src" "$out" "$sdir" "$wd" -- "$SBX_JOERN_IMG_HOME/$(sbx_frontend_exe "$frontend")" "${SBX_TOOL_ARGV[@]}" || rc=$?
+  sbx_launch "$src" "$out" "$sdir" "$wd" -- "$(sbx_frontend_path "$frontend")" "${SBX_TOOL_ARGV[@]}" || rc=$?
   if [ -n "${SBX_LAUNCH_SETUP_FAIL:-}" ]; then
     SBX_LAUNCHER=(); SBX_ENV_KEYS=(); SBX_MOUNTS=()
     sbx_refuse 69 backend-unavailable "$SBX_LAUNCH_SETUP_FAIL"

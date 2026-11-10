@@ -105,11 +105,20 @@ run widens the surface. That run goes through `cpg/sandbox/offline-run.sh`, whic
 `CCG_TOOLCHAIN_IMAGE="$(cpg/infra/toolchain/build.sh --indexer --print-tag)"`. Contents, size and
 tests: `cpg/infra/toolchain/README.md`, "The `indexer` image".
 
-**There is no supported indexer path through the runner yet.** The runner's closed frontend set
-(`-egress-spec3.md` §7.4) has no indexer entry. The P1-48 smoke check runs
-`scip-typescript --version` from a `--frontend joern` script, inside `--mode offline`. That proves
-only that the image works offline. It is not a route for P1-15: a Joern script can exec any image
-binary (`npm`, `pip` included), so the runner cannot enforce an indexer run's argv on it.
+**The runner has two indexer entries** (`-egress-spec3.md` §7.4, P1-48b): `--frontend scip-typescript`
+and `--frontend scip-python`, `--mode offline`, container backend only, and only on an image
+labelled `ccg-toolchain-indexer=1`. On any other image (the default `toolchain` included) the
+runner refuses with `backend-unavailable`, exit 69, and records it. `toolArgv` must be `index` plus
+`--cwd /src[/…]`; `scip-python` also needs `--environment /src/…` and `--project-version <v>`, and may
+take `--project-name`. Each `--cwd`/`--environment` path is walked on the host and refused if it follows an
+absolute symlink, leaves the staged tree or does not exist; the image is launched by its `sha256:` ID.
+Any other element is `forbidden-flag`, a missing mandatory one is `usage`, and the runner appends
+`--output /out/<auditId>.scip` itself. An indexer is never launched through `--frontend joern`.
+`PYTHONSAFEPATH=1` is on the indexer pass-list, so `scip-python`'s `python3 -c` probe does not put
+the staged `/src` on `sys.path`. Provisioning dependencies into the staged directory (`node_modules`,
+a venv, `env.json`) is an operator step outside the system; the runner and `cpg/` modules run no
+`npm`, `pip` or `uv`. Indexer runs are for the lab's trusted, pinned sources, and a run has no
+memory, CPU or time limit. Tests: `cpg/sandbox/README.md`, "Indexer entries".
 
 ## Memory cap
 

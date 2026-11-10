@@ -132,9 +132,9 @@ It carries no other truth tool, no smoke project and no `/opt/truth`. `ccg-versi
   `tests/test_toolchain.sh` checks the indexer image.
 - **The image still ships `npm`, `npx`, `pip` and `pip3`.** Under `--network none` they cannot
   fetch, but a run that is allowed to call them could. Keeping them out of an indexer run's argv is
-  the runner's job, not the image's. `offline-run.sh` has no indexer frontend yet (the
-  `-egress-spec3.md` §7.4 revision), so an indexer run is not yet a supported runner path; see
-  `cpg/infra/README.md` "Indexer image".
+  the runner's job, not the image's: `offline-run.sh` has the `scip-typescript` and `scip-python`
+  entries (closed `index` grammar, `ccg-toolchain-indexer=1` label check, `PYTHONSAFEPATH=1`), and
+  launches nothing else from this image; see `cpg/infra/README.md` "Indexer image".
 - **The `toolchain` image the sandbox runs carries neither Node nor `/opt/indexer`.** Test
   section (3) checks this.
 

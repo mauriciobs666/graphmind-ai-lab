@@ -5,7 +5,7 @@
 # Matching (§7.4 step 2): case-insensitive; an argv element hits when it equals the flag, starts
 # with "<flag>=", or contains the flag as a substring. Launcher-level options (-D, -J, -XX, ...)
 # are fixed in offline-run.sh, not here (§7.3.5).
-# Sweep: tests/test_sandbox.sh test 6 fails on any network-shaped --help flag in neither file,
+# Sweep: tests/test_sandbox.sh test 6 (Joern) and test 24 (the two indexers, regex widened) fail on any network-shaped --help flag in neither file,
 # on a stale entry here, and on a flag present in both files. Initial set: Joern v4.0.579.
 javasrc2cpg	--fetch-dependencies	offline	fetches dependency jars
 kotlin2cpg	--download-dependencies	offline	downloads dependencies
@@ -20,3 +20,7 @@ gosrc2cpg	--include-indirect-dependencies	offline	F11; works together with --fet
 joern	--dep	all	resolves Maven artifacts and their transitive dependencies; short form -d is refused by the §7.3.1 script-mode grammar
 joern	--repo	all	adds a Maven repository to resolve from; short form -r is refused by the §7.3.1 grammar
 joern	--verbose	all	matched only on "resolved dependency jars" in its description; harmless, but the §7.3.1 grammar refuses it anyway, listed for the sweep
+scip-typescript	--pnpm-workspaces	all	spawns `pnpm ls` (child_process) to list workspaces; outside the §7.4 `index` grammar (indexer sweep, regex pnpm|workspace)
+scip-typescript	--yarn-workspaces	all	spawns `yarn` to list workspaces; outside the §7.4 `index` grammar
+scip-typescript	--yarn-berry-workspaces	all	(deprecated) the yarn-berry variant of --yarn-workspaces; same child_process path
+scip-typescript	--infer-tsconfig	all	writes/infers a tsconfig.json for a project that has none; no evidence it is inert, and outside the §7.4 grammar
