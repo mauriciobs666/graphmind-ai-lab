@@ -107,15 +107,17 @@ def scratch_root(parent: Path, name: str) -> Path:
 # references, the registry). Not run: the pack-file equality tests (a mutated block differs from the pack file by construction)
 # and the generated probes (slow, and about the schema's closure, which a one-leaf edit cannot change).
 GATE = ["tests/test_rule_pack_spec.py", "tests/test_rule_pack_schema.py", "tests/test_rule_pack_topic_facts.py",
-        "tests/test_rule_pack_signature_pins.py", "-k",
+        "tests/test_rule_pack_signature_pins.py", "tests/test_packrt_run.py", "tests/test_packrt_launch.py", "-k",
         "not pack_file and not planted and not scalar_leaf and not every_object and not differential"]
 
 
 def survives(root: Path, mutated: str) -> bool:
     """Write the mutated spec into the scratch repository and run the spec test there; True when it still passes."""
     (root / "docs/plans" / spec.SPEC.name).write_text(mutated)
+    # the runtime tests (P1-16) read the pack from the mutated spec block, not from `cpg/packs/` (`packrt_helpers.pack`)
     r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", *GATE],
-                       cwd=root / "cpg", capture_output=True, text=True, timeout=300)
+                       cwd=root / "cpg", capture_output=True, text=True, timeout=300,
+                       env={**os.environ, "CCG_PACKRT_PACKS_FROM_SPEC": "1"})
     assert r.returncode in (0, 1, 2), r.stdout[-400:] + r.stderr[-400:]
     return r.returncode == 0
 
@@ -137,14 +139,19 @@ def run_all(workers: int = 6) -> dict[str, bool]:
 
 
 # Classification from the slow run. Regenerate by running the slow test and moving leaves.
-# UNEXERCISED_UNTIL_P1: values only a runtime reading the pack can test. The spec 12.1 P1 pack-runtime conformance test covers
-# them: the fastapi: and fetch: ones by the fastapi/fetch rows over s14a against assemble.py (plus its named fixtures), the
-# fastmcp: ones (import gates, callee names, the tool-call key, launch defaults and flags, URL-source patterns) by the
-# `fastmcp` row, whose launch/config extractor is first exercised there. Each must flip a result when mutated.
-# S32: the P1 row covers only fastapi, fetch and fastmcp, so no kafka, paper-inhouse-bus, infra-signatures or severity-rules leaf is
-# classified here: every one is KILLED (topic facts: test_rule_pack_topic_facts.py; signature pins: test_rule_pack_signature_pins.py
-# and data/infra_probes.tsv; severity: the spec test's vectors and mutants).
+# UNEXERCISED_UNTIL_P1: values only a runtime reading the pack can test. P1-16's pack runtime killed 22 of the original 24
+# (the runtime tests `test_packrt_run.py` and `test_packrt_launch.py` run against the mutated spec block, `GATE` and
+# `packrt_helpers.pack`); the two left are the `fastmcp` `urlBindings` URL-source patterns, which only the linker (P1-17) reads, so
+# the set is emptied by P1-17 (and P1-46, per the plan's O-13 row), not by P1-16.
+# S32: no kafka, paper-inhouse-bus, infra-signatures or severity-rules leaf is classified here: every one is KILLED (topic
+# facts: test_rule_pack_topic_facts.py; signature pins: test_rule_pack_signature_pins.py and data/infra_probes.tsv; severity: the
+# spec test's vectors and mutants).
 UNEXERCISED_UNTIL_P1: set[str] = {
+    "fastmcp:urlBindings[0].urlSources[0].config.keyPath.regex",
+    "fastmcp:urlBindings[0].urlSources[1].callsite.callee",
+}
+
+KILLED: set[str] = {
     "fastapi:mounts[0].call.callee",
     "fastapi:mounts[0].prefix.arg",
     "fastapi:mounts[0].prefix.default",
@@ -164,14 +171,9 @@ UNEXERCISED_UNTIL_P1: set[str] = {
     "fastmcp:rules[1].emit[0].consumes.key",
     "fastmcp:rules[1].match.callsite.callee",
     "fastmcp:rules[1].scope.imports[0].module.prefix",
-    "fastmcp:urlBindings[0].urlSources[0].config.keyPath.regex",
-    "fastmcp:urlBindings[0].urlSources[1].callsite.callee",
     "fetch:liftings[0].companions[0].arg",
     "fetch:liftings[0].seeds[0].call.callee",
     "fetch:rules[0].emit[0].consumes.key",
-}
-
-KILLED: set[str] = {
     "fastapi:id",
     "fastapi:kind",
     "fastapi:link[0].kind",
