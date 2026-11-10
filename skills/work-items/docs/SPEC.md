@@ -102,7 +102,7 @@ under it. A qualified name `home:name` resolves only for a declared home. A bare
 (`matched_as` `bare`) when its prefix has exactly one home and the item is minted; with several
 homes it exits 3, listing every `home:name` and its minted ID; a declared but unminted name
 exits 5 with the `mint-legacy` command; a name with no declared prefix/home exits 4.
-Ambiguity comes from the declared list, never from what has been minted. A minted item records
+Ambiguity comes from the declared list, never from what has been minted, so a bare `K-NNN` (several declared homes) always exits 3 and is cited as `<home>:K-NNN`; only a prefix with a single declared home (`C-`) resolves bare. A minted item records
 `legacy: {home, name}`, listed in `Aliases:` as `home:name`. Plan 3.6.
 
 ## 7. Project files

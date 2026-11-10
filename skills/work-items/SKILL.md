@@ -59,7 +59,7 @@ A defect's feature, story or task is a link (`wi link`), not a parent.
   milestone|home|touched|slug|where=...`.
 - **Legacy `K-`/`C-` items:** on first cite by a scheme item, or when work on one is first
   opened, `wi mint-legacy <home>:<name> --type K|F|D` (idempotent; e.g. `architect:K-004`).
-  Bare `K-004` is ambiguous (exit 3), bare `C-310` resolves. Never edit the old document.
+  A bare `K-004` is always ambiguous (exit 3, lists the declared homes): write `<home>:K-004`. Only `C-310` (one declared home) resolves bare, exit 5 if unminted. Never edit the old document.
 - **Check:** `wi check [--set file.json] [paths]` before closing a feature, and after a merge
   or a rebuild; it reports missing, malformed, dangling, duplicate and mismatched IDs.
 - **Project key (new repo):** propose with `wi key suggest "<name>"`; run `wi key claim KEY
