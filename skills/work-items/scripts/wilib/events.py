@@ -7,7 +7,9 @@ The registry is an append-only JSONL log.  Each line is one event
              ``legacy: {home, name}``
 * ``move``   uid, parent (new parent uid or null), ``moves: [{uid, old, new}]``
              covering the item and its whole subtree; optional ``retype``
-* ``link``   rel (concerns | fixed-by | relates), from, to (uid, or null to clear)
+* ``link``   rel (concerns | fixed-by | relates), from, to (uid), ``op``:
+             ``set`` (default; functional ``concerns`` only, ``to: null`` clears) |
+             ``add`` | ``remove`` (multi-valued ``fixed-by``/``relates``)
 * ``set``    uid, attr (milestone | home | touched | slug | where | title), value
 * ``retire`` uid
 
@@ -23,6 +25,8 @@ from . import rules
 
 EV_KINDS = ("new", "move", "link", "set", "retire")
 RELATIONS = ("concerns", "fixed-by", "relates")
+FUNCTIONAL_RELATIONS = ("concerns",)
+LINK_OPS = ("set", "add", "remove")
 SET_ATTRS = ("milestone", "home", "touched", "slug", "where", "title")
 GLOBAL_TYPES = ("I", "F", "D", "K")     # counted per project
 LOCAL_TYPES = ("S", "T")                # counted per (parent uid, type)
@@ -97,6 +101,14 @@ def validate_event(ev):
         to = _need(ev, "to", kind)
         if to is not None and not isinstance(to, str):
             raise EventError("link.to must be a uid or null")
+        op = ev.get("op", "set")
+        if op not in LINK_OPS:
+            raise EventError(f"link.op must be one of {LINK_OPS}")
+        if (op == "set") != (ev["rel"] in FUNCTIONAL_RELATIONS):
+            want = "set" if ev["rel"] in FUNCTIONAL_RELATIONS else "add or remove"
+            raise EventError(f"link.op {op!r} is not valid for {ev['rel']!r}: use {want}")
+        if to is None and op != "set":
+            raise EventError("link.to may be null only with op set")
     elif kind == "set":
         _need_str(ev, "uid", kind)
         if _need(ev, "attr", kind) not in SET_ATTRS:
@@ -159,7 +171,7 @@ class State:
         self.items = {}         # uid -> Item
         self.by_id = {}         # any ID ever held (birth, old, current) -> uid
         self.legacy = {}        # (home, name) -> uid
-        self.links = {}         # (rel, from uid) -> to uid; cleared links are absent
+        self.links = {}         # (rel, from uid) -> ordered list of to uids; empty ones are absent
         self.orphans = []       # events naming a uid with no `new` (forgotten flush)
         self.last_ts = 0
         self._global = {}       # type -> max number seen (aliases included)
@@ -248,10 +260,17 @@ def _apply_move(st, ev):
 
 def _apply_link(st, ev):
     key = (ev["rel"], ev["from"])
-    if ev["to"] is None:
-        st.links.pop(key, None)
+    op, to = ev.get("op", "set"), ev["to"]
+    if op == "set":
+        targets = [] if to is None else [to]
     else:
-        st.links[key] = ev["to"]
+        targets = [t for t in st.links.get(key, []) if t != to]
+        if op == "add":
+            targets.append(to)
+    if targets:
+        st.links[key] = targets
+    else:
+        st.links.pop(key, None)
 
 
 def _apply_set(st, ev):

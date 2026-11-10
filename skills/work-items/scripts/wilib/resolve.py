@@ -23,6 +23,16 @@ class ResolveError(LookupError):
         self.code = code
 
 
+def _links(st, item):
+    """``{rel: [current IDs]}`` for the relations set on ``item``, targets by uid."""
+    out = {}
+    for (rel, frm), targets in sorted(st.links.items()):
+        ids = [st.items[t].id for t in targets if t in st.items]
+        if frm == item.uid and ids:
+            out[rel] = ids
+    return out
+
+
 def _record(st, item, input_, matched_as):
     parent = st.items.get(item.parent) if item.parent else None
     return {
@@ -31,8 +41,7 @@ def _record(st, item, input_, matched_as):
         "aliases": list(item.aliases), "slug": item.slug, "home": item.home,
         "touched": list(item.touched or []), "milestone": item.milestone,
         "where": item.where,
-        "links": {rel: st.items[to].id for (rel, frm), to in sorted(st.links.items())
-                  if frm == item.uid and to in st.items},
+        "links": _links(st, item),
         "retired": item.retired, "matched_as": matched_as, "input": input_,
     }
 

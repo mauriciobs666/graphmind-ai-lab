@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import alloc, legacy, move, project, resolve, rules
+from . import alloc, legacy, links, move, project, resolve, rules
 from .store import Store
 
 
@@ -49,6 +49,16 @@ def build_parser():
     ml.add_argument("--parent")
     ml.add_argument("--title")
     ml.add_argument("--home", help="component the item lives in (default: the legacy home if a component, else repo)")
+    lk = sub.add_parser("link", help="relate items: concerns (one), fixed-by / relates (many)")
+    lk.add_argument("id")
+    lk.add_argument("rel")
+    lk.add_argument("target", nargs="?")
+    grp = lk.add_mutually_exclusive_group()
+    grp.add_argument("--remove", action="store_true", help="remove the target from fixed-by/relates")
+    grp.add_argument("--clear", action="store_true", help="empty concerns")
+    st = sub.add_parser("set", help="set an attribute: milestone, home, touched, slug, where")
+    st.add_argument("id")
+    st.add_argument("assignment", help="attr=value (touched takes a comma-separated list)")
     sub.add_parser("flush", help="copy journal events into the tracked registry")
     i = sub.add_parser("init", help="create .work-items/ in the current directory")
     i.add_argument("--key", required=True)
@@ -86,6 +96,14 @@ def main(argv=None, cwd=None):
             print(move.move(root, args.id, args.newparent))
         elif args.cmd == "promote":
             print(move.promote(root, args.id, args.to, parent=args.parent))
+        elif args.cmd == "link":
+            links.link(root, args.id, args.rel, args.target,
+                       op="remove" if args.remove else None, clear=args.clear)
+        elif args.cmd == "set":
+            attr, eq, value = args.assignment.partition("=")
+            if not eq:
+                raise links.LinkError(f"expected attr=value, got {args.assignment!r}")
+            links.set_attr(root, args.id, attr, value)
         elif args.cmd == "flush":
             Store(root, alloc.load_key(root)).flush()
     except resolve.ResolveError as exc:

@@ -84,11 +84,11 @@ def test_record_key_set_is_exact_with_attributes(proj):
         tx.append({"ev": "set", "uid": "GAL-I03-F0001", "attr": "milestone", "value": "M3"})
         tx.append({"ev": "set", "uid": "GAL-I03-F0001", "attr": "touched", "value": ["a", "b"]})
         tx.append({"ev": "set", "uid": "GAL-I03-F0001", "attr": "where", "value": "docs/x.md"})
-        tx.append({"ev": "link", "rel": "relates", "from": "GAL-I03-F0001", "to": "GAL-I04"})
+        tx.append({"ev": "link", "rel": "relates", "from": "GAL-I03-F0001", "to": "GAL-I04", "op": "add"})
     r = resolve.resolve(st(proj), "GAL-I03-F0001")
     assert set(r) == KEYS
     assert (r["milestone"], r["touched"], r["where"], r["links"]) == (
-        "M3", ["a", "b"], "docs/x.md", {"relates": "GAL-I04"})
+        "M3", ["a", "b"], "docs/x.md", {"relates": ["GAL-I04"]})
     assert set(resolve.resolve(st(proj), "GAL-I03-F0001-AC1")) == KEYS
     assert set(resolve.JSON_KEYS) == KEYS
 

@@ -26,10 +26,11 @@ def move(uid, parent, moves, ts=None, **kw):
             "moves": [{"uid": u, "old": o, "new": nw} for u, o, nw in moves], **kw}
 
 
-def link(rel, frm, to, ts=None):
+def link(rel, frm, to, ts=None, op=None):
     n = next(_seq)
     return {"evid": f"e{n:04d}", "ts": ts if ts is not None else n, "ev": "link",
-            "rel": rel, "from": frm, "to": to}
+            "rel": rel, "from": frm, "to": to,
+            "op": op or ("set" if rel == "concerns" else "add")}
 
 
 def setattr_(uid, attr, value, ts=None):
@@ -160,14 +161,14 @@ def test_fold_applies_set_link_retire_and_legacy():
     st = events.fold(evs)
     it = st.items["GAL-F0001"]
     assert (it.milestone, it.touched, it.where, it.retired) == ("M3", ["cpg", "claude"], "docs/x.md", True)
-    assert st.links[("concerns", d["id"])] == "GAL-F0001"
+    assert st.links[("concerns", d["id"])] == ["GAL-F0001"]
     assert st.legacy[("architect", "K-004")] == "GAL-F0001"
 
 
 def test_link_changed_then_cleared():
     d = new("GAL-I01-D0001", "D")
     evs = [d, link("concerns", d["id"], "a"), link("concerns", d["id"], "b")]
-    assert events.fold(evs).links[("concerns", d["id"])] == "b"
+    assert events.fold(evs).links[("concerns", d["id"])] == ["b"]
     assert ("concerns", d["id"]) not in events.fold(evs + [link("concerns", d["id"], None)]).links
 
 
