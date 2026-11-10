@@ -44,7 +44,8 @@ Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; anal
 | B9 (step 9 SKILL.md/glossary/catalog/drift test) | `cobb` | `aaaccc46fa9e0361a` | accepted (committed; ~84k tok) |
 | B10 (step 10 prompts + claude/AGENTS.md) | `cobb` | `a6160aa3331ab4172` | in-flight — touches shared files (`claude/AGENTS.md`, agent prompts): do three-way diff check before commit | — | — |
 | B11 (step 11) | `teco` (trivial 2-line edit, done directly) | — | accepted (committed) | — | — |
-| B12–B13 (steps 12–13) | `coder` / `teco` | — | queued | — | — |
+| B12 (step 12 bootstrap GAL) | `coder` | `a6aa601306d99e78c` | in-flight |
+| B13 (step 13 follow-ups) | `teco` | — | queued | — | — |
 
 ## Checkpoint 2 (usage limit reached)
 
