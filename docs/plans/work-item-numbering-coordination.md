@@ -63,6 +63,9 @@ Build complete: steps 1–12 committed, 500 tests green, `wi check` clean on the
 | C1 symlink machine step | `devops` | `a0471854ac25bf516` | accepted (I verified the link exists; // ~/.claude/skills/work-items -> repo skill) | `~/.claude/skills/work-items` (outside repo; may need human approval) | — | — |
 | C2 live spec + HISTORY draft (close step 2; stakeholder chose `skills/work-items/docs/`) | `coder` | `aa126193922242150` | delivered (uncommitted until the close check; 6 plan/code divergences reported) | `skills/work-items/docs/SPEC.md`, `HISTORY.md` | `analyst` close check (step 3) → — ; HISTORY entry must be re-checked after it (step 5 is last) | — |
 
-| C3 close check (step 3) | `analyst` | `ad341f66ca9cc17cb` | in-flight | `docs/reviews/work-item-numbering.md` Pass 10 | — | — |
+| C3 close check (step 3) | `analyst` | `ad341f66ca9cc17cb` | delivered | `docs/reviews/work-item-numbering.md` Pass 10 | needs changes (S-1 link/set miss legacy fallback; C-1 mint-legacy --home unvalidated; C-2 key suggest missing keys.json; spec gaps; no context file names SPEC.md). Analyst agent now ~256k tok: further gate passes → fresh analyst |
+| C4 fixes S-1/C-1/C-2 | `tdd-engineer` | `adf789a10751b7507` | in-flight | `skills/work-items/…` | — | — |
+| C5 plan 3.9/8b restated | `architect` | `a7af14139c4b90236` | in-flight | `docs/plans/work-item-numbering.md` | — | — |
+| C6 spec edits + pointers + HISTORY (last) | `coder` | `aa126193922242150` | queued behind C4 | `skills/work-items/docs/{SPEC,HISTORY}.md`, `skills/README.md` row, root `AGENTS.md` skills line | — | — |
 
 Note: the real journal already holds a foreign event `GAL-I02-K0001` (python-web-quirks session, home `claude`) — first adoption by another session; NOT this coordination's to flush/commit.
