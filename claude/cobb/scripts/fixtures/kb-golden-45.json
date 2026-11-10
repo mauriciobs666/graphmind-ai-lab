@@ -1,0 +1,765 @@
+{
+ "schema": 1,
+ "description": "The 45 Stage 8 Phase 1 golden pairs (39 positive, 6 negative) for the agent-kb-retrieval convention. Source: claude/docs/plans/agent-knowledge-base-strategy-ml.md, 'Stage 8 Phase 1'. Read by claude/cobb/scripts/pwq_golden_runner.py.",
+ "r6_document": "5b1b477ff67e4e3b81c57f14899bbe48",
+ "pairs": [
+  {
+   "id": "R1",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "Reviewing a fix to falkor-chat's workflow-timer state machine (the K-028 v2-to-v3 change): the new version makes every wait step carry a mandatory default fallback transition so the state machine always makes forward progress. Two earlier review passes already signed off on the fix's own reasoning. What am I supposed to check beyond confirming the fix's internal logic holds together?",
+   "expected": [
+    "d41d743e5c344eccbf46715f54cbab44",
+    "5c2ef4055ff34ea6a1ba5f7eb329ae4c"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "R2",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "I'm doing a Pass-2 review of a fix to cypher-mcp's authorize_write() function, which checks an incoming Cypher write statement against a sequence of recognized authorized shapes before allowing it through. The fix author supplied two concrete attack reproductions that are now both blocked. What should I check beyond re-running those two named attacks?",
+   "expected": [
+    "0158a990da6d46b58b0eea3f32047669",
+    "ba1e9b45d83a443c8fde5f94dbe51daa"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "R3",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "A document under review says three flagged passages have each since had their own certifying sentence corrected on review. I don't want to just read the diffs between versions — how do I actually verify a document's claim about its own revision history, and does the same concern apply to a header's blanket promise about what every entry underneath it does?",
+   "expected": [
+    "5a6763497f2740e8aa21efac72b3a1c6",
+    "ccefd08d853247cd941de116946cda5b"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "R4",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "A plan claims a NULL-backfill decision surfaced during a specific earlier investigation, and separately a pasted grep result from a few days ago said a schema had zero RELATIONSHIP-type constraints. Are both of those still safe to cite as-is?",
+   "expected": [
+    "138ec31887af425ca7f0bd3eb87817c4",
+    "7fbe0fe06e824180a6bf4937bfe88542"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "R5",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "I'm trying to establish where some data materialized in a live graph actually came from — can git history settle that, and if two derived snapshots agree with each other, does that prove they're both correct?",
+   "expected": [
+    "f0a93c99dace45029538dd2bbb78a390",
+    "af28885869224aab85048555903c3c36"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "R6",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "A review's suggested fix told the implementer to capture `$?` right inside an `if ! VAR=\"$(cmd)\"` block to route a helper's tri-state return — and separately, a static guard has been closed three times against a fixed list of shapes and keeps getting beaten by a form nobody listed. Are both of those remedies actually sound?",
+   "expected": [
+    "af9ffb191cbd4659a77dbf3a1139c289",
+    "5b1b477ff67e4e3b81c57f14899bbe48"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "R7",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "d"
+   ],
+   "answer_class": "single",
+   "situation": "I grepped the codebase for a function name and got three hits, so I'm ready to call a 'does this helper already exist' finding confirmed. Is counting those grep hits actually strong enough evidence that the function is defined, not just referenced somewhere?",
+   "expected": [
+    "d3c4ef7117c343bfaf003d1ad7fc44b8"
+   ],
+   "distractors": [
+    "4fe63fb109bd4a04ba479389a29c8e08"
+   ],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "R8",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I'm reviewing a piece of code that clamps a computed value between a min and a max before using it downstream. Is there a known failure mode where that kind of clamp can quietly let a NaN through, or where swapping the order of the min/max calls changes the result?",
+   "expected": [
+    "297b3ed4acf44f07bfed46f7de76e49d"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "R9",
+   "kb": "claude/analyst/review-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A repo-wide lint/smell sweep flagged a violation in a file my current diff never touched. Should I treat that as something my change introduced, or could it have been sitting there before my diff even started?",
+   "expected": [
+    "6d88fecb435547dea1d93d67b8995356"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "F1",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "d"
+   ],
+   "answer_class": "single",
+   "situation": "I need to store a KaizenEntry.fact string that contains an apostrophe, like a contraction, as an inline Cypher literal. Is the SQL-style doubled single-quote trick for escaping an embedded apostrophe going to work here?",
+   "expected": [
+    "17731d3d4d9d4f04a15d139dd42e9bad"
+   ],
+   "distractors": [
+    "719fc4c69d1845ad9298b32c0adecdc6"
+   ],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "F2",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "A load test against FalkorDB is reporting a peak row count that never exceeds exactly 10000, no matter how large the matching set actually is, and a query with an explicit LIMIT 50000 is coming back short too. Is there a silent server-side cap I should know about, and how would a caller tell a capped reply apart from a genuinely complete one?",
+   "expected": [
+    "5f04f062d95b4ace82d3c5b5059dbc8c"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "F3",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I wrapped a redis-cli GRAPH.RO_QUERY call in a bash script with set -e and it just silently continued past what I'm pretty sure was a malformed query, no error caught. Does redis-cli's exit code actually reflect a rejected query, or do I need a different way to detect that?",
+   "expected": [
+    "f38c0ed774494b88afa6a5e93ad37010"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "F4",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I ran a targeted property update against one node and the reply said one property was set AND one was removed, but I didn't remove anything and every other property is still there. What's going on?",
+   "expected": [
+    "684e4ea5762c4f62abad5b8dfbbf9040"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "F5",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "A repository function projects a property that a UNIQUE constraint is supposed to guarantee is present, but one row came back with that key as null and nothing raised. Is a UNIQUE constraint here also a NOT NULL guarantee?",
+   "expected": [
+    "72a1e5e1cb4144bfa325f3a41713a6a3"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "F6",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I need to rename a graph key without doubling RAM or risking a window where the data doesn't exist under either name. Is COPY-then-DELETE the only way, or is there something more direct?",
+   "expected": [
+    "fae4b822cca4460a8c8bde6c0b8c35a0"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "F7",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A colleague says a destructive Redis op run from inside a wrapper script used to slip past our command-pattern guard because the literal command text never appeared in the outer shell invocation. Is that still an open gap?",
+   "expected": [
+    "801c1bb16d4d457abafe132db1419257"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "F8",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I want to non-destructively check whether a graph key already holds data before writing to it, without accidentally creating an empty graph as a side effect of the probe itself.",
+   "expected": [
+    "be7d7c5755b64419b9ed6394226299d2"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "F9",
+   "kb": "claude/graph-dba/falkordb-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "A query returns one scalar column alongside a collect(DISTINCT ...) aggregate from an OPTIONAL MATCH fan-out, and I assumed the scalar would be constant across every row of the result. Is that actually guaranteed?",
+   "expected": [
+    "74ce458645d247dda774d950c001ccd3"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "C1",
+   "kb": "claude/teco/coordination-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A delegated subagent reported finishing its file edits and handed back cleanly, no crash, no error — but when I went to verify, the edits weren't actually in the working tree, and there's no git history showing they were ever made and then reverted. How is that even possible, and how would I confirm this happened rather than assume I mis-read the diff?",
+   "expected": [
+    "9870c48f9840491d94e4f1d62ca7a3c5"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "C2",
+   "kb": "claude/teco/coordination-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "When mutation-testing a set of tests that are already green on arrival, is deleting the implementation the only mutant worth running, or should a rejected design alternative also count as one?",
+   "expected": [
+    "ef4c32cc11c44747994bb60e62bb5940"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "C3",
+   "kb": "claude/teco/coordination-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "Two concurrent sessions are both about to commit into the same working tree. If our changed files don't overlap, is a plain `git commit -a`-style commit still safe, or do I need to do something more careful?",
+   "expected": [
+    "1b0addf5b8354bacaeb0e938d09d7ab6"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "C4",
+   "kb": "claude/teco/coordination-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "I couldn't find evidence of something in one place I checked — is that enough to conclude it doesn't exist anywhere, or could it just be that I looked in the wrong place?",
+   "expected": [
+    "506f08975c4641508da50fe9b9c585a2"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "C5",
+   "kb": "claude/teco/coordination-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "Two independent-seeming checks in a gate both agree with each other. Does agreement between them mean the underlying claim is actually verified, or could my own checking instrument be the thing that's wrong for both?",
+   "expected": [
+    "1200232e42074349a6bd6c0cc45e290f"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "Q1",
+   "kb": "claude/qa-engineer/qa-testing-techniques.md",
+   "tags": [
+    "a",
+    "e"
+   ],
+   "answer_class": "family",
+   "situation": "model-bench's run command just refused to proceed with a stale-attestation error, even though I re-ran attest a minute ago non-interactively with --set for every field and none of the operator-attested values actually changed. What's causing the refusal, and what's the right way to re-attest from a script rather than an interactive shell in the first place?",
+   "expected": [
+    "781c055d0be5468f98dbe6143d5ac551",
+    "1034d23fe5b04503b90c53128e7cfb17"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "Q2",
+   "kb": "claude/qa-engineer/qa-testing-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A model shows up in the /v1/models listing, but I need to know whether it's actually loaded with enough context length for my prompt, not just that it's present at all.",
+   "expected": [
+    "93fcdd089eb94f1d8b29ce388622c982"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "O1",
+   "kb": "claude/devops/ops-quirks.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A bash script I'm reviewing shells out to jq to pull one specific key out of a JSON config file for an exact-match lookup. Is jq something I can assume is installed on every dev box here, or is there a more portable way to do that lookup?",
+   "expected": [
+    "2fdbec98873c4ce38a49d72f01c2a95a"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": true
+  },
+  {
+   "id": "O2",
+   "kb": "claude/devops/ops-quirks.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "I edited .mcp.json to add or reconfigure an MCP server. Is there a way to confirm the launch shape actually works from a plain shell, or do I have to restart the whole harness to find out?",
+   "expected": [
+    "91b9f5bb09e54db3a798f05f8a55bd40"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "P1",
+   "kb": "claude/architect/plan-authoring-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A plan states a completeness claim ('every X now does Y') but I only have the author's word for it. What would actually make that check able to fail, rather than just being transcribed as true?",
+   "expected": [
+    "08a422aeca974749a5a4cf1dab2164e5"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "P2",
+   "kb": "claude/architect/plan-authoring-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A permission or allow-list design I'm reviewing technically enforces its rule today, but I suspect a slightly different input shape would sail right past it. Is a tighter pattern the right fix, or does this need something more structural?",
+   "expected": [
+    "15c71ec82ff249a79a3b9045268e0c3f"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "S1",
+   "kb": "claude/data-scientist/statistical-method-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "Two groups' 95% confidence intervals don't overlap, and the sample is small and near a ceiling value. Is that non-overlap itself a valid difference test?",
+   "expected": [
+    "f12fb25f754e4d4ca58acc163c9c422a"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "E1",
+   "kb": "claude/frontend-engineer/frontend-quirks.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "A fresh Vite + TypeScript scaffold is failing to compile because it can't resolve a JSON import. Is that a tsconfig option I need to turn on myself?",
+   "expected": [
+    "6891424b924a404c9691203415b848ba"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "T1",
+   "kb": "claude/tdd-engineer/test-design-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A mutation-testing pass keeps deferring one mutant as 'needs a lucky random input to trigger.' Is there a way to force it without relying on Monte-Carlo luck?",
+   "expected": [
+    "aa72815433924cfea2760062daa22b40"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "X1",
+   "kb": "claude/tdd-engineer/estimator-test-fixtures.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A test fixture I'm using has zero variance on the dimension the rule under test actually cares about. Could that be silently hiding whether the rule works at all?",
+   "expected": [
+    "75c0e47a01244de5b4373a193887293c"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "G1",
+   "kb": "claude/tdd-engineer/guard-testing-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "A mutation-testing pass on a guard came back all green. Does that mean a plain coverage probe over the same guard would find nothing new?",
+   "expected": [
+    "2a467d9fef184191b5fadfee14b6839d"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "G2",
+   "kb": "claude/tdd-engineer/guard-testing-techniques.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "I hand-wrote a resolver that decides 'which object is this' from a set of clues. Testing it feels like it has two different independent things that could go wrong — is that right, and are both equally testable?",
+   "expected": [
+    "f29bddad2cf14479ba6bafd9bd0c4212"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "D1",
+   "kb": "claude/graph-dba/falkordb-reference.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "Is there a meaningful difference between GRAPH.QUERY and GRAPH.RO_QUERY beyond just read-vs-write, and should I always be parameterizing?",
+   "expected": [
+    "e69ff7c592a14a02b9f6eed78f716cf8"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "D2",
+   "kb": "claude/graph-dba/falkordb-reference.md",
+   "tags": [
+    "a",
+    "b-code"
+   ],
+   "answer_class": "single",
+   "situation": "I want to run a graph algorithm like betweenness or label propagation against FalkorDB. Do I need something like Neo4j's GDS library, or APOC?",
+   "expected": [
+    "1de0ff37ffa3494bbc832e5c9fd26cd6"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "L1",
+   "kb": "claude/data-scientist/lm-studio-model-notes.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "Between a small Mistral-family model and a Qwen3 model of similar size, which one is more likely to emit a real structured tool call rather than plain prose describing what it would call?",
+   "expected": [
+    "0181f4c0350d47458e3800e76a36d05a"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "L2",
+   "kb": "claude/data-scientist/lm-studio-model-notes.md",
+   "tags": [
+    "a",
+    "b-prose"
+   ],
+   "answer_class": "single",
+   "situation": "Qwen3-Embedding's own docs describe some kind of asymmetric convention between how queries and documents should be embedded. If I just embed both the same way, how bad is that really?",
+   "expected": [
+    "089f80e62c0f458992f086fae82ef557"
+   ],
+   "distractors": [],
+   "applies": true,
+   "na_reason": null,
+   "pilot": false
+  },
+  {
+   "id": "N1",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "I need to rotate the TLS server certificate on our production Postgres database without any client-facing downtime — what's the safe sequence for that?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": true
+  },
+  {
+   "id": "N2",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "I want to set up a canary deployment for a newly retrained ML model in production, with an automatic rollback if p99 latency regresses past a threshold — how should that pipeline be structured?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": true
+  },
+  {
+   "id": "N3",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "How do I configure GPU passthrough so LM Studio can use an NVIDIA card for inference on this Linux host?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": true
+  },
+  {
+   "id": "N4",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "How should I structure a React Server Components data-fetching boundary to avoid request waterfalls in a Next.js app?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": true
+  },
+  {
+   "id": "N5",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "What's the correct way to configure the OAuth2 Authorization Code flow with PKCE for a public single-page app that has no backend session store?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": false
+  },
+  {
+   "id": "N6",
+   "kb": null,
+   "tags": [
+    "c"
+   ],
+   "answer_class": "negative",
+   "situation": "How do I configure a Kubernetes readiness probe for a FastAPI container whose startup depends on a slow-starting database connection?",
+   "expected": [],
+   "distractors": [],
+   "applies": false,
+   "na_reason": "negative query: no expected document; scored only by its closest false-match score and floor false-accepts",
+   "pilot": false
+  }
+ ]
+}
