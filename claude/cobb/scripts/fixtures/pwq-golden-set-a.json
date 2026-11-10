@@ -1,0 +1,286 @@
+{
+ "positives": [
+  {
+   "id": "A01",
+   "section": 1,
+   "query": "A service starts background work with asyncio and never keeps the object that comes back; a reviewer says the work may vanish mid-run. Should I call that a confirmed bug?"
+  },
+  {
+   "id": "A02",
+   "section": 2,
+   "query": "Our API handler kicks off a synchronous job per request. Someone proposes a raw thread per call for throughput. Is the built-in route already capped, and how would I raise the cap?"
+  },
+  {
+   "id": "A03",
+   "section": 3,
+   "query": "An endpoint returns nested Pydantic models with exclude-unset switched on, and a client reports that inner keys which have defaults are missing from the JSON."
+  },
+  {
+   "id": "A04",
+   "section": 4,
+   "query": "A test counts the routes on a freshly built FastAPI app to prove only my endpoints exist, but the count is higher than expected, and the routes of a sub-router I mounted seem absent from the table."
+  },
+  {
+   "id": "A05",
+   "section": 5,
+   "query": "A HEAD request to my FastAPI GET endpoint gets a 405 when another route matches the same path, while the identical setup on plain Starlette answers it."
+  },
+  {
+   "id": "A06",
+   "section": 6,
+   "query": "My single-page-app static mount overrides error handling to return index.html on a missing file, but a missing path still gets the built-in 404 page when the directory ships one."
+  },
+  {
+   "id": "A07",
+   "section": 7,
+   "query": "I listed two different 422 payloads for one route in the OpenAPI responses mapping, but only one of them appears in the generated schema."
+  },
+  {
+   "id": "A08",
+   "section": 8,
+   "query": "I registered handlers for a base exception and for its subclass; my error-body test passes although the custom handler never ran, and a later registration silently replaced an earlier one."
+  },
+  {
+   "id": "A09",
+   "section": 9,
+   "query": "A middleware allows admin endpoints only when the caller address is loopback; behind a reverse proxy any client can look local. Why does that check not hold?"
+  },
+  {
+   "id": "A10",
+   "section": 10,
+   "query": "My request model requires a name of minimum length one, yet a name made only of spaces was accepted and stored."
+  },
+  {
+   "id": "A11",
+   "section": 11,
+   "query": "I wrapped a urlopen call with a timeout in an except for the URL error class and a slow server still crashed my code with an uncaught error."
+  },
+  {
+   "id": "A12",
+   "section": 12,
+   "query": "A numeric validator parses user JSON and my finiteness check never fires: a bare NaN token got through and broke later comparisons."
+  },
+  {
+   "id": "A13",
+   "section": 13,
+   "query": "My client pointed at the local model server without the version path segment received a success status, but the body was an error message, and my retry logic counted it as good."
+  },
+  {
+   "id": "A14",
+   "section": 14,
+   "query": "Code that parses a model's JSON answer began failing on every reply after switching model families; the replies look valid when printed but are wrapped in triple-backtick blocks."
+  },
+  {
+   "id": "A15",
+   "section": 15,
+   "query": "My test sets an environment variable with monkeypatch to change a config constant, but the code still sees the old value, and only when the whole suite runs, not when the file runs alone."
+  },
+  {
+   "id": "A16",
+   "section": 16,
+   "query": "A test expecting a validation error with a given exception type passes, yet when I break the very check it targets the test still passes."
+  },
+  {
+   "id": "A17",
+   "section": 17,
+   "query": "A completeness test over results recorded by sibling tests breaks on a subset run; I skipped it on the keyword filter but a run selecting by node id still fails it."
+  },
+  {
+   "id": "A18",
+   "section": 18,
+   "query": "After a scripted edit removed a test function, a neighbouring test suddenly runs with odd parameters and fails with argument errors."
+  },
+  {
+   "id": "A19",
+   "section": 19,
+   "query": "Patching a name in another module with monkeypatch works for one function that imports it inside its body but has no effect on another function where the same name is a default argument value."
+  },
+  {
+   "id": "A20",
+   "section": 20,
+   "query": "Adding an import of module B's name into module A, where B already imports from A, fails in both import orders even though the names are unrelated; moving it to class level did not help."
+  },
+  {
+   "id": "A21",
+   "section": 21,
+   "query": "My lifespan starts a polling task and never cancels it at shutdown, yet a test using the test client says the task was cancelled once the context-manager block closes, hiding the missing cancellation."
+  },
+  {
+   "id": "A22",
+   "section": 22,
+   "query": "To check what an actual HTTP caller would get on an unhandled server error I asserted a 500 status, but the test itself dies with the original exception."
+  },
+  {
+   "id": "A23",
+   "section": 23,
+   "query": "Importing the Starlette test client prints a deprecation warning telling me to install a different HTTP package, and our CI treats warnings as errors."
+  },
+  {
+   "id": "A24",
+   "section": 24,
+   "query": "I patch an object stored on the application state in a fixture before any request and get an AttributeError saying the state has no such attribute."
+  },
+  {
+   "id": "A25",
+   "section": 25,
+   "query": "A test already holds an entered test client with patches applied through it and I need the 500 behaviour for one assertion; building a second client wrapping the same application object lost my patches."
+  },
+  {
+   "id": "A26",
+   "section": 26,
+   "query": "A worker pool's submit is called while holding our own lock and I worry the interpreter hangs forever at exit; how long does exit actually block?"
+  },
+  {
+   "id": "A27",
+   "section": 27,
+   "query": "A per-caller busy flag is reset right after handing work to a thread pool, and intermittently the end state is wrong because the worker already finished."
+  },
+  {
+   "id": "A28",
+   "section": 28,
+   "query": "I want to prove a function finishes inside a deadline it computes itself; my test timed the call and asserted afterwards, but when the function hangs CI just kills the job naming no test."
+  },
+  {
+   "id": "A29",
+   "section": 29,
+   "query": "I changed a one-character constant in a module and re-ran immediately; Python still prints the old value although the file clearly changed, and the don't-write-bytecode variable did not fix it."
+  },
+  {
+   "id": "A30",
+   "section": 30,
+   "query": "Code under test calls input() to ask for confirmation; in the test run it throws an OSError about reading from stdin instead of waiting."
+  },
+  {
+   "id": "A31",
+   "section": 31,
+   "query": "I want a test asserting that my fake implements every method a Protocol declares, without keeping a separate hard-coded list of names."
+  },
+  {
+   "id": "A32",
+   "section": 32,
+   "query": "I ran the Python linter over a list of changed files that included a markdown changelog and got a flood of syntax errors on ordinary sentences."
+  },
+  {
+   "id": "A33",
+   "section": 33,
+   "query": "I ran the code formatter on one file to clear two long-line warnings and my diff now touches hundreds of unrelated lines."
+  },
+  {
+   "id": "A34",
+   "section": 34,
+   "query": "Several slow callbacks queued after one response are delayed by the first slow one, even though the thread pool has idle workers."
+  },
+  {
+   "id": "A35",
+   "section": 35,
+   "query": "My except ladder for ValueError around a call that opens a URL with a bad port did not catch the failure; it surfaced as an unclassified exception type."
+  },
+  {
+   "id": "A36",
+   "section": 36,
+   "query": "I told pytest to skip one specific test by passing its absolute path to the deselect option, and it still ran, with no warning."
+  },
+  {
+   "id": "A37",
+   "section": 37,
+   "query": "An MCP tool parameter has a maximum length; a client sending too long a value gets a tool result flagged as an error, not a protocol error, and I cannot find the bound in the advertised schema."
+  },
+  {
+   "id": "A38",
+   "section": 38,
+   "query": "My script reads the pass and fail counts from the last line of the doubly-quiet pytest output, and a failing run reports zero failures."
+  },
+  {
+   "id": "A39",
+   "section": 39,
+   "query": "To avoid stale compiled files I pointed the bytecode cache location at an empty temp folder and it worked, but later ordinary runs still show stale code. What did that fix leave behind?"
+  },
+  {
+   "id": "A40",
+   "section": 40,
+   "query": "A test spawns a subprocess with no stdin argument and prints where its standard input points; it shows the null device, not the pipe my shell gave me, so my stdin-inheritance test proves nothing."
+  },
+  {
+   "id": "A41",
+   "section": 41,
+   "query": "After sending a termination signal to a process group and waiting on the leader, a child that ignores the signal survives and my file lock stays held, blocking the next acquirer."
+  },
+  {
+   "id": "A42",
+   "section": 42,
+   "query": "My mutation-testing copy of the repo is ignored when tests are executed via the bare pytest command, which imports the original tree, though python -m pytest picks up the copy."
+  }
+ ],
+ "negatives": [
+  {
+   "id": "NA01",
+   "kind": "near",
+   "query": "One coroutine in an asyncio.gather call raised, but its siblings keep running in the background. How do I make them cancel when the first one fails?"
+  },
+  {
+   "id": "NA02",
+   "kind": "near",
+   "query": "In tests I need to replace the authentication dependency of a FastAPI route with a fake user, and the override seems ignored for a sub-dependency."
+  },
+  {
+   "id": "NA03",
+   "kind": "near",
+   "query": "An async SQLAlchemy session is not closed on an error path and under load the connection pool runs dry with timeouts."
+  },
+  {
+   "id": "NA04",
+   "kind": "near",
+   "query": "A session-scoped pytest fixture seems to run once per worker under xdist, and my shared temporary database is populated several times."
+  },
+  {
+   "id": "NA05",
+   "kind": "near",
+   "query": "uvicorn --reload does not pick up edits when the source is a bind-mounted Docker volume."
+  },
+  {
+   "id": "NA06",
+   "kind": "near",
+   "query": "A pydantic v2 model should accept one field name on input but emit another on output; which setting does that?"
+  },
+  {
+   "id": "NA07",
+   "kind": "near",
+   "query": "mypy reports an Optional as still possibly None after I narrowed it inside a walrus condition."
+  },
+  {
+   "id": "NA08",
+   "kind": "off",
+   "query": "How should I structure a React Server Components data-fetching boundary to avoid request waterfalls in a Next.js app?"
+  },
+  {
+   "id": "NA09",
+   "kind": "off",
+   "query": "How do I configure a Kubernetes readiness probe for a FastAPI container whose startup depends on a slow database connection?"
+  },
+  {
+   "id": "NA10",
+   "kind": "off",
+   "query": "How can I make a multi-stage Dockerfile reuse the dependency layer when only application code changed?"
+  },
+  {
+   "id": "NA11",
+   "kind": "off",
+   "query": "A git rebase stops with conflicts in a lockfile; what is the safe way to resolve it and continue?"
+  },
+  {
+   "id": "NA12",
+   "kind": "off",
+   "query": "A CSS grid layout overflows its container on narrow phones even though the columns use fr units."
+  },
+  {
+   "id": "NA13",
+   "kind": "off",
+   "query": "A pandas groupby-apply over a few million rows is slow; what is the idiomatic faster form?"
+  },
+  {
+   "id": "NA14",
+   "kind": "off",
+   "query": "A Postgres table's index keeps growing after heavy updates; how do I reclaim the space without downtime?"
+  }
+ ]
+}
