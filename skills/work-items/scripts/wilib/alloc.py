@@ -33,6 +33,12 @@ def _implicit_parent(key, type_):
     return rules.format_id(key, [rules.Segment("I", num)])
 
 
+def unknown_item(name, error=None):
+    """Error for an item name that is not an ID or alias, pointing legacy names at resolve."""
+    hint = f": resolve it first (wi resolve {name}) and use its ID" if ":" in name else ""
+    return (error or AllocError)(f"unknown item {name!r}{hint}")
+
+
 def _segments(item_id):
     return list(rules.parse(item_id).segments)
 
@@ -83,6 +89,6 @@ def retire(root, id_, store=None):
     with store.transaction() as tx:
         uid = tx.state.resolve_uid(id_)
         if uid is None:
-            raise AllocError(f"unknown item {id_!r}")
+            raise unknown_item(id_)
         tx.append({"ev": "retire", "uid": uid})
     return id_

@@ -203,7 +203,15 @@ def test_cli_retire_and_no_reissue(proj):
     assert wi(proj, "new", "S", "--parent", "GAL-F0001").stdout == "GAL-F0001-S02\n"
 
 
-def test_sync_is_a_stub_that_writes_nothing(proj):
-    with pytest.raises(NotImplementedError):
+def test_sync_is_rejected_before_allocation_so_no_id_is_burned(proj):
+    with pytest.raises(SystemExit) as e:
         cli.main(["new", "F", "--slug", "s", "--sync"], cwd=proj)
+    assert e.value.code == 2
     assert not list(proj.glob("docs"))
+    assert wi(proj, "new", "F").stdout == "GAL-F0001\n"
+
+
+def test_illegal_parent_message_uses_padded_ids(proj):
+    alloc.new(proj, "I")
+    with pytest.raises(rules.IllegalParent, match=r"T may not have I03 as parent"):
+        alloc.new(proj, "T", parent="GAL-I03")

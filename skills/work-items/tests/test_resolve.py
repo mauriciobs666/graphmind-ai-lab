@@ -100,3 +100,49 @@ def test_describe_text(proj):
     assert resolve.describe(resolve.resolve(s, "GAL-I04-F0001")) == "GAL-I04-F0001"
     assert "alias of GAL-I04-F0001" in resolve.describe(resolve.resolve(s, "GAL-I03-F0001"))
     assert json.dumps(resolve.resolve(s, "feat"))   # JSON-serialisable
+
+
+# ---- FR-25 / AC-16: FR and AC have a feature as parent and nothing else ----
+# Literal citations, one per refused FR/AC row of tests/test_rules.REFUSED
+# (parent kinds: initiative, story, task, defect, kaizen, FR, AC, project).
+REFUSED_CITATIONS = [
+    ("I", "GAL-I04-FR1"), ("I", "GAL-I04-AC1"),
+    ("S", "GAL-I03-F0001-S01-FR1"), ("S", "GAL-I03-F0001-S01-AC3"),
+    ("T", "GAL-I03-F0001-S01-T01-FR1"), ("T", "GAL-I03-F0001-S01-T01-AC3"),
+    ("D", "GAL-I01-D0001-FR1"), ("D", "GAL-I01-D0001-AC1"),
+    ("K", "GAL-I02-K0001-FR2"), ("K", "GAL-I02-K0001-AC2a"),
+    ("FR", "GAL-I03-F0001-FR1-FR1"), ("FR", "GAL-I03-F0001-FR1-AC1"),
+    ("AC", "GAL-I03-F0001-AC1-AC1"), ("AC", "GAL-I03-F0001-AC1-FR1"),
+    (None, "GAL-FR1"), (None, "GAL-AC2a"),
+]
+
+
+@pytest.fixture
+def full(proj):
+    alloc.new(proj, "S", parent="GAL-I03-F0001")
+    alloc.new(proj, "T", parent="GAL-I03-F0001-S01")
+    alloc.new(proj, "D")
+    alloc.new(proj, "K")
+    return proj
+
+
+def test_refused_citations_cover_every_non_feature_parent_of_the_matrix():
+    from test_rules import REFUSED
+    matrix = {p[0] if p else None for c, p in REFUSED if c in ("FR", "AC")}
+    assert {p for p, _ in REFUSED_CITATIONS} == matrix
+
+
+@pytest.mark.parametrize("parent,citation", REFUSED_CITATIONS)
+def test_requirement_under_a_non_feature_is_unknown(full, parent, citation):
+    with pytest.raises(resolve.ResolveError) as e:
+        resolve.resolve(st(full), citation)
+    assert e.value.code == 4
+
+
+def test_requirement_under_a_moved_story_alias_is_still_refused(full):
+    from wilib import move
+    alloc.new(full, "F", slug="other")
+    move.move(full, "GAL-I03-F0001-S01", "GAL-F0002")
+    for citation in ("GAL-I03-F0001-S01-AC3", "GAL-F0002-S01-AC3"):
+        with pytest.raises(resolve.ResolveError):
+            resolve.resolve(st(full), citation)

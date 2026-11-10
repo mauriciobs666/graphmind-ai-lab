@@ -55,7 +55,7 @@ def _requirement(st, name):
         return None
     tail = parsed.segments[-1]
     feature = _by_id(st, rules.format_id(parsed.project, parsed.segments[:-1]))
-    if feature is None:
+    if feature is None or feature["type"] != "F":    # FR-25: FR/AC have a feature, nothing else
         return None
     suffix = "-" + rules.format_segment(tail)
     rec = dict(feature)

@@ -102,7 +102,8 @@ def validate_parent(child_type, parent_type=None, parent_num=None):
     else:
         raise IllegalParent(f"unknown type {child_type!r}")
     if not ok:
-        where = "the project" if parent_type is None else f"{parent_type}{parent_num or ''}"
+        where = ("the project" if parent_type is None else
+                 format_segment(Segment(parent_type, parent_num)) if parent_num else parent_type)
         raise IllegalParent(f"{child_type} may not have {where} as parent")
 
 

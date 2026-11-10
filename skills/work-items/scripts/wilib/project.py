@@ -18,6 +18,11 @@ def _requirements_documents(root):
     return sorted(p.relative_to(root).as_posix() for p in found)
 
 
+def _ensure_work_items_gitignore(wi):
+    """Keep the non-git lock file and a crashed flush's temp file out of commits."""
+    (wi / ".gitignore").write_text(".lock\n*.tmp\n", encoding="utf-8")
+
+
 def _ensure_gitattributes(root):
     path = root / ".gitattributes"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -46,6 +51,7 @@ def init(root, key, components):
         (wi / "baseline.txt").write_text(
             "".join(p + "\n" for p in _requirements_documents(root)), encoding="utf-8")
     _ensure_gitattributes(root)
+    _ensure_work_items_gitignore(wi)
     store = Store(root, key)
     with store.transaction() as tx:
         for num, title in _SEEDS:
@@ -54,6 +60,11 @@ def init(root, key, components):
                 tx.append({"ev": "new", "id": id_, "type": "I", "parent": None,
                            "home": "repo", "title": title})
     store.flush()
+
+
+def load_components(root):
+    path = Path(root) / ".work-items" / "project.json"
+    return list(json.loads(path.read_text(encoding="utf-8")).get("components") or [])
 
 
 def load_namespaces(root):

@@ -27,7 +27,8 @@ def _subtree(st, root_uid):
 def _lookup(st, name, what):
     uid = st.resolve_uid(name)
     if uid is None:
-        raise MoveError(f"unknown {what} {name!r}")
+        raise (alloc.unknown_item(name, MoveError) if what == "item"
+               else MoveError(f"unknown {what} {name!r}"))
     return st.items[uid]
 
 

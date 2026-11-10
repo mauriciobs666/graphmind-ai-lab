@@ -168,3 +168,73 @@ def test_ac6_eight_concurrent_mints_of_one_legacy_item_yield_one_new_event(proj)
     evs = events.read_events(Store(proj, "GAL").journal_path.read_text())
     assert len([e for e in evs if e["ev"] == "new" and e.get("legacy")]) == 1
     assert len([e for e in evs if e["ev"] == "new" and e["type"] == "K"]) == 1
+
+
+# ---- args are honoured: assert on the resulting item ----------------------
+def test_cli_mint_honours_parent_and_title(proj):
+    wi(proj, "new", "I")                                           # GAL-I03
+    r = wi(proj, "mint-legacy", "cpg:C-310", "--type", "F", "--parent", "GAL-I03",
+           "--title", "the C-310 thing")
+    assert (r.returncode, r.stdout) == (0, "GAL-I03-F0001\n")
+    item = Store(proj, "GAL").read_state().items["GAL-I03-F0001"]
+    assert (item.title, item.parent) == ("the C-310 thing", "GAL-I03")
+
+
+def test_mint_api_honours_parent_and_title(proj):
+    from wilib import legacy
+    wi(proj, "new", "I")
+    assert legacy.mint(proj, "cpg:C-310", "F", parent="GAL-I03", title="t") == "GAL-I03-F0001"
+    item = Store(proj, "GAL").read_state().items["GAL-I03-F0001"]
+    assert (item.title, item.parent) == ("t", "GAL-I03")
+
+
+def test_mint_home_defaults_to_declared_component_else_repo_and_can_be_overridden(proj):
+    pj = proj / ".work-items" / "project.json"
+    data = json.loads(pj.read_text())
+    data["components"] = ["a", "cpg"]
+    pj.write_text(json.dumps(data))
+    wi(proj, "mint-legacy", "cpg:C-310", "--type", "F")
+    wi(proj, "mint-legacy", "architect:K-004", "--type", "K")
+    wi(proj, "mint-legacy", "devops:K-004", "--type", "K", "--home", "a")
+    items = Store(proj, "GAL").read_state().items
+    assert (items["GAL-F0001"].home, items["GAL-I02-K0001"].home, items["GAL-I02-K0002"].home) == (
+        "cpg", "repo", "a")
+
+
+def test_move_and_retire_of_a_legacy_name_say_to_resolve_first(proj):
+    wi(proj, "mint-legacy", "architect:K-004", "--type", "K")
+    for cmd in (("move", "architect:K-004", "none"), ("retire", "architect:K-004")):
+        r = wi(proj, *cmd)
+        assert r.returncode == 1 and "wi resolve architect:K-004" in r.stderr
+
+
+# ---- plan test 11: allocation / minting leave the working tree clean -------
+def test_mint_and_allocation_leave_git_status_clean(proj):
+    from conftest import git
+    git(proj, "add", "-A")
+    git(proj, "commit", "-qm", "init")
+    wi(proj, "mint-legacy", "architect:K-004", "--type", "K")
+    wi(proj, "new", "F", "--slug", "x")
+    wi(proj, "resolve", "K-004")
+    assert git(proj, "status", "--porcelain") == ""
+
+
+# ---- plan test 12: mint on A and on B, flush B, merge only B ---------------
+def test_minted_id_reaches_main_with_its_new_event_when_only_b_is_merged(proj, tmp_path):
+    from conftest import git
+    git(proj, "add", "-A")
+    git(proj, "commit", "-qm", "init")
+    wt = tmp_path / "wt"
+    git(proj, "worktree", "add", "-q", "-b", "B", str(wt))
+    a = wi(proj, "mint-legacy", "architect:K-004", "--type", "K")      # on A (main)
+    b = wi(wt, "mint-legacy", "devops:K-004", "--type", "K")           # on B
+    assert (a.stdout, b.stdout) == ("GAL-I02-K0001\n", "GAL-I02-K0002\n")
+    assert wi(wt, "flush").returncode == 0
+    git(wt, "add", "-A")
+    git(wt, "commit", "-qm", "B")
+    git(proj, "merge", "-q", "--no-edit", "B")
+    tracked = events.read_events((proj / ".work-items" / "registry.jsonl").read_text())
+    ids = [e["id"] for e in tracked if e["ev"] == "new"]
+    assert "GAL-I02-K0002" in ids                      # the merged branch's citation has its `new`
+    again = wi(proj, "mint-legacy", "devops:K-004", "--type", "K")
+    assert again.stdout == "GAL-I02-K0002\n"

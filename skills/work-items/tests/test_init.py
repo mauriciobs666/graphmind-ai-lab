@@ -100,3 +100,15 @@ def test_init_leaves_working_tree_commitable_and_allocation_after_init_is_i03(re
     with s.transaction() as tx:
         assert tx.state.next_number("I") == 3
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_init_ignores_the_lock_file_so_a_later_git_add_never_commits_it(tmp_path):
+    root = tmp_path / "plain"
+    root.mkdir()
+    project.init(root, "GAL", ["a"])
+    import subprocess
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    assert (root / ".work-items" / ".lock").exists()
+    out = subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=root,
+                         capture_output=True, text=True).stdout
+    assert ".lock" not in out and "project.json" in out

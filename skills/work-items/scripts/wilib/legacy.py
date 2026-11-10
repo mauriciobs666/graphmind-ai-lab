@@ -31,21 +31,27 @@ def _prefix(name):
     return m.group(0) if m else None
 
 
-def mint(root, spec, type_, parent=None, title=None, store=None):
-    """Return the scheme ID of legacy item ``spec``, minting it once (idempotent)."""
-    home, name = _split(spec)
-    if home not in project.load_namespaces(root).get(_prefix(name), []):
+def mint(root, spec, type_, parent=None, title=None, home=None, store=None):
+    """Return the scheme ID of legacy item ``spec``, minting it once (idempotent).
+
+    ``home`` is the component the new item lives in (FR-19); it defaults to the
+    legacy home when that is a declared component, else the allocator default.
+    """
+    legacy_home, name = _split(spec)
+    if legacy_home not in project.load_namespaces(root).get(_prefix(name), []):
         raise alloc.AllocError(
-            f"{home!r} is not a declared legacy home for {name!r}: add it to "
+            f"{legacy_home!r} is not a declared legacy home for {name!r}: add it to "
             "project.json legacy_namespaces (citing-only homes are not homes)")
     key = alloc.load_key(root)
+    if home is None and legacy_home in project.load_components(root):
+        home = legacy_home
     store = store or Store(root, key)
     with store.transaction() as tx:
-        uid = tx.state.legacy.get((home, name))
+        uid = tx.state.legacy.get((legacy_home, name))
         if uid is not None:
             return tx.state.items[uid].id
-        return alloc.allocate(tx, key, type_, parent=parent, title=title,
-                              legacy={"home": home, "name": name})
+        return alloc.allocate(tx, key, type_, parent=parent, title=title, home=home,
+                              legacy={"home": legacy_home, "name": name})
 
 
 def _minted(st, home, name):

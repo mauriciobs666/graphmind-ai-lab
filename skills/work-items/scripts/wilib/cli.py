@@ -48,6 +48,7 @@ def build_parser():
     ml.add_argument("--type", required=True, choices=["K", "F", "D"])
     ml.add_argument("--parent")
     ml.add_argument("--title")
+    ml.add_argument("--home", help="component the item lives in (default: the legacy home if a component, else repo)")
     sub.add_parser("flush", help="copy journal events into the tracked registry")
     i = sub.add_parser("init", help="create .work-items/ in the current directory")
     i.add_argument("--key", required=True)
@@ -56,7 +57,10 @@ def build_parser():
 
 
 def main(argv=None, cwd=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.cmd == "new" and args.sync:     # refuse before allocating: a retry must not burn an ID
+        parser.error("--sync: header writing arrives in plan step 6")
     try:
         if args.cmd == "init":
             comps = [c for part in args.components for c in part.split(",") if c]
@@ -72,7 +76,8 @@ def main(argv=None, cwd=None):
         elif args.cmd == "retire":
             print(alloc.retire(root, args.id))
         elif args.cmd == "mint-legacy":
-            print(legacy.mint(root, args.spec, args.type, parent=args.parent, title=args.title))
+            print(legacy.mint(root, args.spec, args.type, parent=args.parent, title=args.title,
+                              home=args.home))
         elif args.cmd == "resolve":
             legacy.install(project.load_namespaces(root))
             rec = resolve.resolve(Store(root, alloc.load_key(root)).read_state(), args.name)

@@ -213,3 +213,16 @@ def test_move_into_own_subtree_refused(proj):
     # a cycle is always an FR-25 violation, so it is caught by legality
     with pytest.raises(rules.IllegalParent):
         move.move(proj, "GAL-I03-F0001", "GAL-I03-F0001-S01")
+
+
+# ---- children created after a move are children of the uid, not of the old id
+def test_story_created_under_moved_feature_continues_numbering_and_follows_next_move(proj):
+    move.move(proj, "GAL-I03-F0001", "GAL-I04")
+    assert alloc.new(proj, "S", parent="GAL-I04-F0001") == "GAL-I04-F0001-S03"
+    assert alloc.new(proj, "S", parent="GAL-I03-F0001") == "GAL-I04-F0001-S04"   # via alias
+    assert r(proj, "GAL-I04-F0001-S03")["parent"] == "GAL-I04-F0001"
+    assert move.move(proj, "GAL-I04-F0001", "none") == "GAL-F0001"
+    for old in ("GAL-I04-F0001-S03", "GAL-I04-F0001-S04"):
+        assert r(proj, old)["id"] == old.replace("GAL-I04-F0001", "GAL-F0001")
+        assert r(proj, old)["matched_as"] == "alias"
+    assert alloc.new(proj, "S", parent="GAL-F0001") == "GAL-F0001-S05"
