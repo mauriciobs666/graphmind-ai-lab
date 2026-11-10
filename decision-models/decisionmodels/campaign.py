@@ -173,7 +173,15 @@ PILOT_BLOCKS = (MAIN_BLOCK, RECHECK_BLOCK)
 
 ROLE_OF_KIND = {"generate": "generator", "label": "labeler"}
 _CLEARING_EVENTS = ("resolved", "generation-restart", "labelling-restart", "tranche-restart",
-                    "topup-declined")
+                    "topup-declined", "probe-requested")
+#: A batch's `retired_by`: what retired it. Only a labelling or tranche relabel's retirements
+#: count in round 1's total spend (plan6 §3.8 "The spend projection"); a generation restart
+#: discards the round, so its retirements belong to no round.
+RETIRED_SPEND_CAUSES = ("labelling-restart", "tranche-restart")
+#: plan6 §3.8 "The probe": one generation run of the halted cell's design stratum, and the z of
+#: the Wilson bound it prints (95%).
+PROBE_SEEDS = 25
+WILSON_Z = 1.96
 _NOT_PRODUCED = frozenset({"launchFailed", "launchFailing", "neverSpawned"})
 _NO_ATTEMPT = frozenset({"neverSpawned", "incomplete"})
 _EXIT_CODE = re.compile(r"-?[0-9]+")
@@ -184,6 +192,17 @@ PILOT_REPORT = Path("guard-judge") / "pilot" / "pilot-report.json"
 
 class CampaignRefused(Exception):
     """A refused command or call; nothing was written."""
+
+
+class UnboundedCell(CampaignRefused):
+    """`topup_counts`' refusal for a short cell with no labelled item (P̂ = 0): the top-up draw is
+    unbounded. It carries the cell, so `queue_topup` can record the `unboundedCell` halt."""
+
+    def __init__(self, label: str, stratum: str | None) -> None:
+        self.label, self.stratum = label, stratum
+        super().__init__(
+            f"cell ({label}, {stratum or 'no stratum'}) holds no labelled item, so "
+            "P(label | stratum) is 0 and its top-up draw is unbounded: a method decision")
 
 
 # --- the folded state ----------------------------------------------------------------------------
@@ -221,6 +240,9 @@ class Batch:
     attempts: list[Attempt] = field(default_factory=list)
     counted: int = 0
     dropped: str | None = None
+    #: What retired it (`retired`'s cause): `generation-restart`, `labelling-restart` or
+    #: `tranche-restart`; `None` while live.
+    retired_by: str | None = None
 
     @property
     def open_attempt(self) -> Attempt | None:
@@ -291,6 +313,10 @@ class State:
     topup_plans: list[dict[str, Any]] = field(default_factory=list)
     spend_approved: set[int] = field(default_factory=set)
     topup_declined: bool = False
+    #: plan6 §3.8 "The probe": a `probe-requested` event's `designStratum`, kept (as
+    #: `{"designStratum": ...}`, since a point with no stratum has `None`) until a `topup-plan`,
+    #: a `topup-declined` or a generation restart.
+    probe: dict[str, Any] | None = None
 
     def generation_drops(self) -> dict[str, Any]:
         """plan5 §3.5's `dropped` keys for seeds dropped on a third hit, counted under the third
@@ -543,17 +569,22 @@ class State:
         return out
 
     def spend(self, gen_round: int) -> dict[str, Any]:
-        """The tokens spent on `gen_round` and what they bought, from every non-retired attempt
-        that recorded a run (void ones spent them too): `items` its accepted items,
-        `generationRuns` and `generationTokens` its generation batches (a regeneration batch
-        counts under its first seed's round), and `labelTokens` its label batches. Four classes
-        each (`pilot.TOKEN_CLASSES`)."""
+        """The tokens spent on `gen_round` and what they bought, from every attempt that recorded
+        a run (void ones spent them too): `items` its accepted items, `seeds` its drawn seeds,
+        `generationRuns` and `generationTokens` its live generation batches (a regeneration batch
+        counts under its first seed's round), and `labelTokens` its live label batches, four
+        classes each (`pilot.TOKEN_CLASSES`). `totalTokens` is plan6 §3.8's round total: the live
+        tokens plus those of label batches a `labelling-restart` or `tranche-restart` retired
+        (`RETIRED_SPEND_CAUSES`), since the halt bound compares a top-up with what round 1 cost; a
+        generation restart's retirements are no round's. The live figures price the top-up, as a
+        retired attempt does not recur."""
         classes = pilot.TOKEN_CLASSES
         gen = dict.fromkeys(classes, 0)
         lab = dict.fromkeys(classes, 0)
+        retired = 0
         runs = 0
         for batch in self.batches.values():
-            if batch.state == "retired":
+            if batch.state == "retired" and batch.retired_by not in RETIRED_SPEND_CAUSES:
                 continue
             if batch.kind == "generate":
                 if self.seed_round.get(batch.entries[0] if batch.entries else "") != gen_round:
@@ -567,12 +598,16 @@ class State:
                 tokens = ((attempt.outcome or {}).get("run") or {}).get("tokens")
                 if tokens is None:
                     continue
+                if batch.state == "retired":
+                    retired += sum(tokens.get(cls, 0) for cls in classes)
+                    continue
                 runs += batch.kind == "generate"
                 for cls in classes:
                     target[cls] += tokens.get(cls, 0)
         items = sum(1 for rec in self.items.values() if rec["genRound"] == gen_round)
-        return {"items": items, "generationRuns": runs, "generationTokens": gen,
-                "labelTokens": lab}
+        return {"items": items, "seeds": self.drawn_in(gen_round), "generationRuns": runs,
+                "generationTokens": gen, "labelTokens": lab,
+                "totalTokens": sum(gen.values()) + sum(lab.values()) + retired}
 
     def dropped(self) -> dict[str, dict[str, int]]:
         """plan4 §3.7's `retryCapExceeded` and plan6 §3.5's `safeguardSkipped` counts."""
@@ -634,10 +669,18 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                              "checked": False, "passed": False, "relabels": 0}
         elif kind == "topup-plan":
             state.topup_plans.append(dict(event))
+            state.probe = None
         elif kind == "spend-halt":
             state.halt = {"event": kind, "batch": None, "reason": "spend",
                           "voidClass": "spend", "genRound": event["genRound"],
-                          "projection": event["projection"]}
+                          "projection": event["projection"], "probe": bool(event.get("probe"))}
+        elif kind == "unbounded-halt":
+            state.halt = {"event": kind, "batch": None, "reason": "unboundedCell",
+                          "voidClass": "unboundedCell", "label": event["label"],
+                          "stratum": event["stratum"], "items": event["items"],
+                          "bound": event["bound"]}
+        elif kind == "topup-reopened":
+            state.topup_declined = False
         elif kind == "votes":
             # Fresh, as for `generated`: a crashed ingest re-run replaces its earlier record.
             state.staged[event["opaque"]] = {"votes": dict(event["answers"]),
@@ -851,11 +894,22 @@ def _restart_generation(state: State) -> None:
     state.topup_plans.clear()
     state.spend_approved.clear()
     state.topup_declined = False
+    state.probe = None
     state.rounds.clear()
     state.seed_round.clear()
     state.staged.clear()
     for batch in state.batches.values():
-        batch.state, batch.dropped = "retired", None
+        _retire(batch, "generation-restart", override=True)
+
+
+def _retire(batch: Batch, cause: str, *, override: bool = False) -> None:
+    """Retire `batch` for `cause` (`Batch.retired_by`). A batch already retired keeps its cause,
+    unless `override`: a generation restart discards the round, so a label batch an earlier
+    relabel retired is the discarded round's too, and a later relabel must not claim one a
+    generation restart retired."""
+    if batch.state != "retired" or override:
+        batch.retired_by = cause
+    batch.state, batch.dropped = "retired", None
 
 
 def _settle_drop(state: State, batch: Batch) -> None:
@@ -870,11 +924,16 @@ def _settle_drop(state: State, batch: Batch) -> None:
 def _check_tranche(state: State, batch: Batch | None) -> None:
     """plan4 §3.6: once the tranche's three votes have run to their end, apply its rule once:
     `100 · drops > TRANCHE_DROP_PERCENT · size` halts (`rubric`, naming the drops and the rubric
-    hash the tranche was labelled under), anything else passes it. Waits while another halt is
-    open (`_fold_resolution` tries again when it clears); a relabelled tranche is new."""
+    hash the tranche was labelled under), anything else passes it. A relabelled tranche is new.
+    It runs where a tranche batch ends (`_fold_outcome`, `_settle_drop`), the only places the
+    tranche can complete; it has no "wait while another halt is open" clause and `_fold_resolution`
+    no re-check. A halt can be open at that moment only if a recorder wrote it outside a batch
+    outcome (`record_cue_check_halt`, `record_pilot_block_halt`), and both are called only in a
+    pilot campaign, which has no tranche (`tranche_applies` needs message type and `full`). Called
+    by hand in a `full` campaign they would be overwritten by the tranche halt: not a shipped
+    flow, and not guarded (P27-m2, Pass 29 P29-m1)."""
     tranche = state.tranche
-    if (tranche is None or tranche["checked"] or state.halt is not None
-            or not state.tranche_complete()):
+    if tranche is None or tranche["checked"] or not state.tranche_complete():
         return
     tranche["checked"] = True
     drops, size = len(state.tranche_drops()), len(tranche["items"])
@@ -936,7 +995,7 @@ def _restart_labelling(state: State) -> None:
         state.tranche.update(checked=False, passed=False)
     for batch in state.batches.values():
         if batch.kind == "label":
-            batch.state, batch.dropped = "retired", None
+            _retire(batch, "labelling-restart")
 
 
 def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
@@ -963,10 +1022,12 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
         _restart_tranche(state, event["rubric"])
     if event["event"] == "topup-declined":
         state.topup_declined = True
+        state.probe = None
+    elif event["event"] == "probe-requested":
+        state.probe = {"designStratum": event["designStratum"]}
     elif (event["event"] == "resolved" and halted is not None
           and halted.get("voidClass") == "spend"):
         state.spend_approved.add(halted["genRound"])
-    _check_tranche(state, batch)
 
 
 def _restart_tranche(state: State, rubric: str) -> None:
@@ -980,7 +1041,7 @@ def _restart_tranche(state: State, rubric: str) -> None:
     state.tranche_starts.clear()
     for batch in state.batches.values():
         if batch.kind == "label" and batch.extra.get("tranche"):
-            batch.state, batch.dropped = "retired", None
+            _retire(batch, "tranche-restart")
     tranche.update(rubric=rubric, checked=False, passed=False, relabels=tranche["relabels"] + 1)
 
 
@@ -1159,7 +1220,8 @@ def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]]) -> dict[
     stratum `s` it is `max over its short cells ℓ of ⌈shortfall_ℓ / P̂(ℓ | s)⌉`, with `P̂(ℓ | s)`
     the share of `s`'s labelled items that carry ℓ (integer arithmetic). Nothing here names an
     intent: the draw is the design's own, restricted to `s`. A short cell with no labelled item
-    has `P̂ = 0` and no draw count: refused, for a method decision."""
+    has `P̂ = 0` and no draw count: `UnboundedCell` (a `CampaignRefused` carrying the cell; the
+    planner turns it into the `unboundedCell` halt)."""
     counts = dict.fromkeys(itertools.product(design_strata(role), (
         labels.vote_key(v) for v in load_point(role).expected)), 0)
     for cell in labelled:
@@ -1173,22 +1235,28 @@ def topup_counts(role: str, labelled: Iterable[tuple[str | None, str]]) -> dict[
             if cell_stratum != stratum or n >= target:
                 continue
             if n == 0:
-                raise CampaignRefused(
-                    f"cell ({label}, {stratum or 'no stratum'}) holds no labelled item, so "
-                    "P(label | stratum) is 0 and its top-up draw is unbounded: a method decision")
+                raise UnboundedCell(label, stratum)
             draw = max(draw, -(-(target - n) * size // n))
         if draw:
             out[stratum] = draw
     return out
 
 
+def wilson_upper_zero(items: int) -> float:
+    """The Wilson 95% upper bound on P(label | stratum) when none of the stratum's `items`
+    labelled items has the label: `z² / (n + z²)` (0.133 at 25 items, 0.071 at 50; note §Q1.3)."""
+    return WILSON_Z**2 / (items + WILSON_Z**2)
+
+
 @dataclass(frozen=True)
 class TopUpProjection:
-    """`project_topup`'s result: the projected tokens of a top-up round, round 1's measured
-    total, and whether the projection exceeds half of it."""
+    """`project_topup`'s result: the projected tokens of a top-up round, round 1's total tokens
+    (retired relabel attempts included, `State.spend`'s `totalTokens`), the live tokens the rate
+    came from, and whether the projection exceeds half the total."""
 
     projected: Fraction
     round_one: int
+    live: int
 
     @property
     def halts(self) -> bool:
@@ -1196,24 +1264,25 @@ class TopUpProjection:
 
     def as_record(self) -> dict[str, Any]:
         return {"projectedTokens": float(self.projected), "roundOneTokens": self.round_one,
-                "halts": self.halts}
+                "roundOneLiveTokens": self.live, "halts": self.halts}
 
 
-def project_topup(*, round_one: Mapping[str, Any], topup_items: int,
+def project_topup(*, round_one: Mapping[str, Any], topup_seeds: int,
                   topup_runs: int) -> TopUpProjection:
-    """plan4 §3.6 "Spend halt" (note §Q1.3), pure: `(top-up items / round-1 items) × round 1's
-    labelling tokens + top-up generation runs × round 1's mean tokens per generation run`,
-    against round 1's own measured tokens (generation plus labelling), each side the sum of the
-    four token classes. `round_one` is `State.spend(1)`. The round halts when the projection
-    exceeds half of round 1's total: exactly half does not."""
+    """plan4 §3.6 "Spend halt" (note §Q1.3, plan6 §3.8), pure: `(top-up seeds / round-1 seeds) ×
+    round 1's live labelling tokens + top-up generation runs × round 1's mean tokens per live
+    generation run`, each side the sum of the four token classes, against round 1's total
+    (`State.spend(1)`'s `totalTokens`, retired relabel attempts included). Seeds, not accepted
+    items, sit on both sides of the ratio, so drops before labelling are priced at round 1's own
+    rate. The round halts when the projection exceeds half of the total: exactly half does not."""
     classes = pilot.TOKEN_CLASSES
     label = sum(round_one["labelTokens"].get(c, 0) for c in classes)
     generation = sum(round_one["generationTokens"].get(c, 0) for c in classes)
-    items, runs = round_one["items"], round_one["generationRuns"]
-    if items < 1 or runs < 1:
-        raise CampaignRefused("round 1 has no accepted item or generation run to project from")
-    projected = (Fraction(topup_items * label, items) + Fraction(topup_runs * generation, runs))
-    return TopUpProjection(projected, label + generation)
+    seeds, runs = round_one["seeds"], round_one["generationRuns"]
+    if seeds < 1 or runs < 1:
+        raise CampaignRefused("round 1 has no drawn seed or generation run to project from")
+    projected = Fraction(topup_seeds * label, seeds) + Fraction(topup_runs * generation, runs)
+    return TopUpProjection(projected, round_one["totalTokens"], label + generation)
 
 
 # --- the campaign --------------------------------------------------------------------------------
@@ -1579,33 +1648,47 @@ class Campaign:
 
     def queue_topup(self) -> list[str]:
         """plan4 §3.6 "Top-up planner" (phase `full`; plan6 §3.8): when every round is labelled
-        and a cell is short, plan the next `genRound`. Before it is issued the spend projection is
-        compared (`project_topup`); over half of round 1's tokens it records the `spend-halt`
-        (`resolve` lets it through, `--decline-topup` ends top-ups) and queues nothing. Otherwise
-        it records the `topup-plan` and draws every stratum before any run issues, the first with
-        `begin_round` and each further one with `extend=True`, then cuts the pooled seeds into
-        runs (`_queue_unbatched`). `[]` when nothing is short, a round is unlabelled, a halt is
-        open or top-ups were declined."""
+        and a cell is short, plan the next `genRound`. A pending probe (`resolve --probe-topup`)
+        is planned first, before `topup_counts`: 25 seeds of its stratum alone. A short cell
+        with no labelled item raises `UnboundedCell`, which records the `unboundedCell` halt
+        (naming the cell, with the Wilson bound over the stratum's labelled items) and queues
+        nothing. Before it is issued the spend projection is compared (`project_topup`); over
+        half of round 1's tokens it records the `spend-halt` (`resolve` lets it through,
+        `--decline-topup` ends top-ups) and queues nothing. Otherwise it records the
+        `topup-plan` and draws every stratum before any run issues, the first with `begin_round`
+        and each further one with `extend=True`, then cuts the pooled seeds into runs
+        (`_queue_unbatched`). `[]` when nothing is short, a round is unlabelled, a halt is open
+        or top-ups were declined."""
         state = self.state()
         if (state.init["phase"] != "full" or state.topup_declined or state.halt is not None
                 or not state.rounds
                 or not all(state.round_voted(g) for g in {r["genRound"] for r in state.rounds})):
             return []
         gen_round = max(r["genRound"] for r in state.rounds) + 1
-        need = topup_counts(state.init["point"], state.labelled_cells())
+        probe = state.probe is not None
+        if probe:
+            need: dict[str | None, int] = {state.probe["designStratum"]: PROBE_SEEDS}
+        else:
+            try:
+                need = topup_counts(state.init["point"], state.labelled_cells())
+            except UnboundedCell as cell:
+                items = sum(1 for stratum, _ in state.labelled_cells()
+                            if stratum == cell.stratum)
+                self._append({"event": "unbounded-halt", "genRound": gen_round,
+                              "label": cell.label, "stratum": cell.stratum, "items": items,
+                              "bound": wilson_upper_zero(items)})
+                return []
         if not need:
             return []
         runs = len(balanced_runs(["seed"] * sum(need.values())))
-        projection = project_topup(round_one=state.spend(1), topup_items=sum(need.values()),
+        projection = project_topup(round_one=state.spend(1), topup_seeds=sum(need.values()),
                                    topup_runs=runs)
+        record = {"genRound": gen_round, "strata": [[s, n] for s, n in need.items()],
+                  "projection": projection.as_record(), **({"probe": True} if probe else {})}
         if projection.halts and gen_round not in state.spend_approved:
-            self._append({"event": "spend-halt", "genRound": gen_round,
-                          "strata": [[s, n] for s, n in need.items()],
-                          "projection": projection.as_record()})
+            self._append({"event": "spend-halt", **record})
             return []
-        self._append({"event": "topup-plan", "genRound": gen_round,
-                      "strata": [[s, n] for s, n in need.items()],
-                      "projection": projection.as_record()})
+        self._append({"event": "topup-plan", **record})
         return self._draw_topup()
 
     def _resume_topup(self) -> list[str]:
@@ -1618,12 +1701,15 @@ class Campaign:
         return self._draw_topup()
 
     def _draw_topup(self) -> list[str]:
+        """Draw the strata of the last `topup-plan` that no `round-start` holds, then cut the
+        pooled seeds into runs. The plan's run guard is gone: `todo` is empty once any run has
+        issued, since runs queue only after every stratum is drawn (Pass 27 P27-m2)."""
         state = self.state()
         plan = state.topup_plans[-1]
         gen_round = plan["genRound"]
         drawn = {r["designStratum"] for r in state.rounds if r["genRound"] == gen_round}
         todo = [(s, n) for s, n in plan["strata"] if s not in drawn]
-        if not todo or any(batch.attempts for batch in state.first_pass_runs(gen_round)):
+        if not todo:
             return []
         for stratum, count in todo:
             self.begin_round(gen_round, count, design_stratum=stratum,
@@ -2020,6 +2106,7 @@ class Campaign:
 
     def resolve(self, *, decision: str, skip_batch: bool = False,
                 repin_instructions: bool = False, decline_topup: bool = False,
+                reopen_topup: bool = False, probe_topup: bool = False,
                 repin_model: tuple[str, str] | None = None) -> list[str]:
         """`driver resolve` (plan4 §3.3 "Halt", plan6 §3.5): clear the halt with one recorded
         decision. Retry re-issues the halted batch under a new name; `--skip-batch` drops it
@@ -2027,25 +2114,46 @@ class Campaign:
         halt (the tranche's rule failed) is cleared by `tranche-restart` and needs the rubric
         hash to have changed since the tranche was labelled, so the relabelling means something;
         a `spend` halt is let through by a plain resolve (the stakeholder's "yes") or ended by
-        `--decline-topup` (the "no", plan4 §3.6): no top-up round is issued after it. Returns the
-        lines it prints (plan6 §3.8): the halt it cleared and, when the drop closed a round or
-        pool, the halt that raised, else the line that `driver run` resumes."""
+        `--decline-topup` (the "no", plan4 §3.6): no top-up round is issued after it. An
+        `unboundedCell` halt (a short cell with no labelled item) is refused a plain resolve,
+        since nothing changed and it would halt again: it takes `--probe-topup` (records
+        `probe-requested`: one run of 25 seeds of the cell's stratum), `--decline-topup` or
+        `--repin-model generator`. `--reopen-topup` is the one action valid with no halt open: it
+        needs a recorded decline and appends `topup-reopened`, so the next `driver run` plans
+        again. Returns the lines it prints (plan6 §3.8): the halt it cleared and, when the drop
+        closed a round or pool, the halt that raised, else the line that `driver run` resumes."""
         if not decision.strip():
             raise CampaignRefused("--decision needs a text")
-        if skip_batch + repin_instructions + decline_topup + (repin_model is not None) > 1:
+        if (skip_batch + repin_instructions + decline_topup + reopen_topup + probe_topup
+                + (repin_model is not None)) > 1:
             raise CampaignRefused("give at most one of --skip-batch, --repin-instructions, "
-                                  "--decline-topup and --repin-model")
+                                  "--decline-topup, --reopen-topup, --probe-topup and "
+                                  "--repin-model")
         with self.locked():
             state = self.state()
             halt = state.halt
+            if reopen_topup:
+                if halt is not None:
+                    raise CampaignRefused(f"a halt is open ({_halt_text(halt)}): clear it first")
+                if not state.topup_declined:
+                    raise CampaignRefused("no top-up decline is in force; nothing to reopen")
+                self._append({"event": "topup-reopened", "decision": decision,
+                              "action": "reopen-topup"})
+                return ["top-up reopened; the next `driver run` plans the top-up again"]
             if halt is None:
                 raise CampaignRefused("the campaign is not halted")
             event: dict[str, Any] = {"event": "resolved", "decision": decision,
                                      "batch": halt["batch"], "reason": halt.get("reason")}
             if decline_topup:
-                if halt.get("voidClass") != "spend":
-                    raise CampaignRefused("--decline-topup is for a spend halt (plan4 §3.6)")
+                if halt.get("voidClass") not in ("spend", "unboundedCell"):
+                    raise CampaignRefused(
+                        "--decline-topup is for a spend or unboundedCell halt (plan4 §3.6)")
                 event["event"], event["action"] = "topup-declined", "decline-topup"
+            elif probe_topup:
+                if halt.get("voidClass") != "unboundedCell":
+                    raise CampaignRefused("--probe-topup is for an unboundedCell halt (plan6 §3.8)")
+                event.update(event="probe-requested", action="probe-topup",
+                             designStratum=halt["stratum"])
             elif skip_batch:
                 if halt.get("reason") != "safeguardStop":
                     raise CampaignRefused("--skip-batch is for a safeguardStop halt (plan6 §3.5)")
@@ -2067,6 +2175,10 @@ class Campaign:
                         "the rubric is unchanged since the tranche was labelled "
                         f"({now[:12]}): fix it first, then resolve")
                 event.update(event="tranche-restart", action="relabel-tranche", rubric=now)
+            elif halt.get("voidClass") == "unboundedCell":
+                raise CampaignRefused(
+                    "a plain resolve changes nothing for an unboundedCell halt and it would halt "
+                    "again: give --probe-topup, --decline-topup or --repin-model generator")
             else:
                 event["action"] = "retry"
             self._append(event)
@@ -2074,6 +2186,8 @@ class Campaign:
         return [f"cleared: {_halt_text(halt)}",
                 f"HALTED: {_halt_text(raised)}; clear with `driver resolve`" if raised
                 else "top-up declined; no top-up round will be issued" if decline_topup
+                else f"probe requested: the next `driver run` draws {PROBE_SEEDS} seeds of "
+                     f"{halt['stratum'] or 'the point'}" if probe_topup
                 else "resolved; the next `driver run` resumes"]
 
     @staticmethod
@@ -2125,7 +2239,11 @@ class Campaign:
                          f"{'passed' if state.tranche_passed() else 'not passed'} "
                          f"(rubric {state.tranche['rubric'][:12]})")
         if state.topup_declined:
-            lines.append("top-up declined: no top-up round will be issued")
+            lines.append("top-up declined: no top-up round will be issued; "
+                         "`driver resolve --reopen-topup` reopens it")
+        if state.probe is not None:
+            lines.append(f"probe pending: {PROBE_SEEDS} seeds of "
+                         f"{state.probe['designStratum'] or 'the point'} at the next top-up")
         if state.dropped_seeds:
             lines.append("seeds dropped on a third hit: "
                          + json.dumps(state.generation_drops(), sort_keys=True))
@@ -2143,9 +2261,16 @@ def _halt_text(halt: Mapping[str, Any]) -> str:
                      f"rubric {halt['rubric'][:12]}")
     if halt.get("voidClass") == "spend":
         projection = halt["projection"]
-        parts.append(f"round {halt['genRound']} top-up projected "
-                     f"{projection['projectedTokens']:.0f} tokens against round 1's "
-                     f"{projection['roundOneTokens']}")
+        live = projection.get("roundOneLiveTokens")       # absent in a pre-fix-round ledger
+        parts.append(f"round {halt['genRound']} {'probe' if halt.get('probe') else 'top-up'} "
+                     f"projected {projection['projectedTokens']:.0f} tokens against round 1's "
+                     f"total {projection['roundOneTokens']}"
+                     + (f" (live {live}; the bound is half the total)" if live is not None
+                        else ""))
+    if halt.get("voidClass") == "unboundedCell":
+        parts.append(f"cell ({halt['label']}, {halt['stratum'] or 'no stratum'}) holds no "
+                     f"labelled item; Wilson 95% upper bound for P(label | stratum) "
+                     f"{halt['bound']:.3f} over {halt['items']} labelled items of the stratum")
     if "round" in halt:
         parts.append(f"round {halt['round']['genRound']}: " + ", ".join(halt["round"]["reasons"]))
     for pool in halt.get("pools", ()):

@@ -28,7 +28,9 @@ A **labelled item** is an accepted item with votes 1 to 3. Its **majority** is `
   counted, regeneration ones included.
 - **`turnCut`** (ML P3-n2): intent-label agreement for items whose rendering cut their earliest
   turns (more than `render.RECENT_TURNS_KEPT` turns with text) against the rest; guard and
-  join-in only.
+  join-in only. It counts the six-turn cut alone: `render_guard_input`'s `MAX_CHARS` drop of
+  the earliest turns is ignored (`turns_cut`), so a guard item with very long turns can be cut
+  and not counted.
 - **`promptExamples`** (ML P4-n2): items whose message contains, verbatim, an example sentence of
   the point's hand-off prompt (`HANDOFF_EXAMPLES`), per example and distinct; it drops nothing and
   is reported beside FR-10. `build` counts every accepted item: the eval split exists only at
@@ -229,10 +231,10 @@ def screen_hits(state: campaign.State) -> dict[str, Any]:
             row["hitSeeds"] += seed_id in state.hits
     for hits in state.hits.values():
         for hit in hits:
-            reason = hit["reasons"][0]
-            pattern = (f"screen:{hit['detail'].split(':', 1)[0]}" if reason == "screen"
-                       else reason)
-            out["byPattern"][pattern] = out["byPattern"].get(pattern, 0) + 1
+            for reason in hit["reasons"]:           # a hit showing two reasons counts under both
+                pattern = (f"screen:{hit['detail'].split(':', 1)[0]}" if reason == "screen"
+                           else reason)
+                out["byPattern"][pattern] = out["byPattern"].get(pattern, 0) + 1
     return out
 
 

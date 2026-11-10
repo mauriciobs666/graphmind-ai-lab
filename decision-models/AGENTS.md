@@ -87,7 +87,7 @@ it (plan4 §4.1 U5.10 onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke
   its rubric's "What an item looks like" block (the first indented block only). `data-scientist`
   confirmed the rule (plan5 §3.4).
 - **Generation is ledger-folded, and commits at the `outcome`** (plan6 §3.8). `begin_round` records
-  `round-start` (one `genRound` may have several; only `queue_topup` passes `extend=True`, for a
+  `round-start` (one `genRound` may have several; only `_draw_topup` (`queue_topup`'s and `_resume_topup`'s) passes `extend=True`, for a
   new named stratum of a started round, refused once a run of it has issued); `Campaign.ingest` appends a run's `generated` and
   `screen-hit`/`binding-mismatch`/`form-mismatch` events *before* its `outcome`, and `fold` applies
   them only at that ingested `outcome`. An item's `genRound` is its **seed's** round (a regeneration
@@ -121,11 +121,18 @@ the three** that `three_votes`, `label_votes` and `vote_ties` read.
   campaign, when nothing is pending, `next` calls `queue_topup`: once every round is labelled and a
   cell (design stratum × label) is below `cell_target` (eval + calibration), `topup_counts` (pure)
   gives the seeds per short stratum, `max ⌈shortfall / P̂(ℓ | s)⌉`; it names no label or intent, the
-  draw is the design restricted to the stratum, and `P̂ = 0` refuses. `project_topup` (pure; this
-  ledger's round 1, four token classes) halts with `spend` when twice the projection exceeds round
-  1's tokens (exactly half passes); a plain `resolve` lets that round through,
-  `resolve --decline-topup` (`topup-declined`) ends top-ups. Every stratum is drawn (`topup-plan`
-  first, `_resume_topup` after a crash) before any run issues, then cut as one pool, interleaved.
+  draw is the design restricted to the stratum, and `P̂ = 0` raises `UnboundedCell(label, stratum)`,
+  which `queue_topup` records as the `unbounded-halt` (`unboundedCell`, with the Wilson bound; no
+  `store/refusal`). `project_topup` (pure; seeds over round-1 `seeds`, live labelling rate, four
+  token classes) halts with `spend` when twice the projection exceeds round 1's total *including*
+  `labelling-restart`/`tranche-restart` retirements (`Batch.retired_by`; a generation restart's are
+  no round's); the reason prints both totals. A plain `resolve` lets a spend halt through and is
+  refused for `unboundedCell`; `--decline-topup` (`topup-declined`, either halt) ends top-ups and
+  `--reopen-topup` (`topup-reopened`, no halt open) undoes it; `--probe-topup` appends
+  `probe-requested`, which `fold` keeps until a `topup-plan`/decline/generator restart, and
+  `queue_topup` plans it (25 seeds of that stratum) before `topup_counts`. Every stratum is drawn
+  (`topup-plan` first, `_resume_topup` after a crash) before any run issues, then cut as one pool,
+  interleaved.
   Message type's round 1 votes a 250-item **tranche** first (`tranche-start`; its `vote-start`s and
   batches carry `tranche`): `tranche_failed` (`100·drops > 3·size`, `voteTie` drops) halts with
   `rubric`, and `resolve` then needs a changed `rubric_hash` and relabels it (`tranche-restart`);

@@ -182,49 +182,53 @@ def test_a_short_cell_with_no_labelled_item_is_refused_for_a_method_decision() -
 # --- the spend halt, pure ------------------------------------------------------------------------
 
 
-def round_one(*, label: int, generation: int, items: int, runs: int) -> dict[str, Any]:
-    """Round 1's totals with each side spread over distinct classes (the four sum to the figure)."""
+def round_one(*, label: int, generation: int, seeds: int, runs: int,
+              retired: int = 0) -> dict[str, Any]:
+    """Round 1's totals with each side spread over distinct classes (the four sum to the figure);
+    `retired` is the label tokens of relabel attempts, in the total and not in the live rate."""
     def spread(total: int) -> dict[str, int]:
         return {"input": total // 10, "cacheWrite": total // 5, "cacheRead": total * 3 // 10,
                 "output": total - total // 10 - total // 5 - total * 3 // 10}
-    return {"items": items, "generationRuns": runs, "generationTokens": spread(generation),
-            "labelTokens": spread(label)}
+    return {"items": seeds, "seeds": seeds, "generationRuns": runs,
+            "generationTokens": spread(generation), "labelTokens": spread(label),
+            "totalTokens": label + generation + retired}
 
 
 def test_project_topup_reproduces_a_hand_computed_value_over_the_four_classes() -> None:
-    # 100 items cost 30,000 label tokens, 4 generation runs 10,000 (2,500 each); a top-up of 40
-    # items in 2 runs projects 40/100 * 30,000 + 2 * 2,500 = 17,000 against round 1's 40,000.
+    # 100 seeds cost 30,000 label tokens, 4 generation runs 10,000 (2,500 each); a top-up of 40
+    # seeds in 2 runs projects 40/100 * 30,000 + 2 * 2,500 = 17,000 against round 1's 40,000.
     result = campaign.project_topup(
-        round_one=round_one(label=30000, generation=10000, items=100, runs=4),
-        topup_items=40, topup_runs=2)
+        round_one=round_one(label=30000, generation=10000, seeds=100, runs=4),
+        topup_seeds=40, topup_runs=2)
     assert result.projected == 17000 and result.round_one == 40000 and not result.halts
 
 
 def test_the_projection_sums_all_four_token_classes_not_a_subset() -> None:
     classes = {"input": 1000, "cacheWrite": 2000, "cacheRead": 27000, "output": 0}
-    spent = {"items": 100, "generationRuns": 1, "labelTokens": classes,
-             "generationTokens": {"input": 0, "cacheWrite": 0, "cacheRead": 0, "output": 0}}
-    result = campaign.project_topup(round_one=spent, topup_items=100, topup_runs=0)
+    spent = {"items": 100, "seeds": 100, "generationRuns": 1, "labelTokens": classes,
+             "generationTokens": {"input": 0, "cacheWrite": 0, "cacheRead": 0, "output": 0},
+             "totalTokens": 30000}
+    result = campaign.project_topup(round_one=spent, topup_seeds=100, topup_runs=0)
     assert result.projected == 30000 == result.round_one
 
 
 def test_exactly_half_of_round_one_does_not_halt_and_one_token_more_does() -> None:
-    # items 300 -> 100 top-up items (a third of the labelling, 10,000 of 30,000), 4 -> 4 runs
+    # seeds 300 -> 100 top-up seeds (a third of the labelling, 10,000 of 30,000), 4 -> 4 runs
     # (all of generation, 10,000): projected 20,000 = half of 40,000.
     even = campaign.project_topup(
-        round_one=round_one(label=30000, generation=10000, items=300, runs=4),
-        topup_items=100, topup_runs=4)
+        round_one=round_one(label=30000, generation=10000, seeds=300, runs=4),
+        topup_seeds=100, topup_runs=4)
     assert (even.projected, even.round_one, even.halts) == (20000, 40000, False)
     over = campaign.project_topup(
-        round_one=round_one(label=30000, generation=10001, items=300, runs=4),
-        topup_items=100, topup_runs=4)
+        round_one=round_one(label=30000, generation=10001, seeds=300, runs=4),
+        topup_seeds=100, topup_runs=4)
     assert (over.projected, over.round_one, over.halts) == (20001, 40001, True)
 
 
 def test_a_round_one_with_nothing_to_project_from_is_refused() -> None:
-    with pytest.raises(CampaignRefused, match="no accepted item or generation run"):
-        campaign.project_topup(round_one=round_one(label=0, generation=0, items=0, runs=0),
-                               topup_items=5, topup_runs=1)
+    with pytest.raises(CampaignRefused, match="no drawn seed or generation run"):
+        campaign.project_topup(round_one=round_one(label=0, generation=0, seeds=0, runs=0),
+                               topup_seeds=5, topup_runs=1)
 
 
 # --- a planted guard campaign: no intent conditioning, pooled strata, repeated rounds ------------
@@ -674,3 +678,544 @@ def test_status_prints_the_tranche_and_its_drops(
     vote_all_synth(camp, tied(set(camp.state().tranche_items()[:8])))
     assert any(line.startswith("tranche: 250 items, 8 voteTie drops, not passed")
                for line in camp.status())
+
+
+# --- reopen, the P-hat = 0 halt, the probe (U5.9 fix round; plan6 §3.8) --------------------------
+
+
+def spend_halted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Campaign:
+    camp = message_round_one(tmp_path, monkeypatch, target=25)
+    assert isinstance(camp.next(), Stop) and camp.state().halt["voidClass"] == "spend"
+    return camp
+
+
+def test_reopen_after_a_decline_plans_again_and_a_spend_halt_fires_again(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = spend_halted(tmp_path, monkeypatch)
+    camp.resolve(decision="no (ref 9)", decline_topup=True)
+    assert camp.next() == Stop("done", "nothing is pending")
+    lines = camp.resolve(decision="changed my mind (ref 10)", reopen_topup=True)
+    assert "reopened" in lines[0]
+    assert len(events_of(camp, "topup-reopened")) == 1 and not camp.state().topup_declined
+    stop = camp.next()                         # the projection is compared again: it halts again
+    assert isinstance(stop, Stop) and "spend" in stop.detail
+    assert len(events_of(camp, "spend-halt")) == 2 and events_of(camp, "topup-plan") == []
+    camp.resolve(decision="yes (ref 11)")      # a plain resolve lets the reopened round through
+    action = camp.next()
+    assert isinstance(action, Serve) and action.kind == "generate"
+    assert events_of(camp, "topup-plan")[0]["genRound"] == 2
+    assert [e["event"] for e in camp.events()].count("topup-declined") == 1  # the ledger keeps both
+
+
+def test_reopen_is_refused_with_no_decline_in_force_or_with_a_halt_open(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = spend_halted(tmp_path, monkeypatch)
+    before = camp.ledger_path.read_bytes()
+    with pytest.raises(CampaignRefused, match="a halt is open"):
+        camp.resolve(decision="x", reopen_topup=True)           # a halt and no decline
+    camp.resolve(decision="no (ref 9)", decline_topup=True)
+    camp.record_cue_check_halt()                                # a decline and an open halt
+    with pytest.raises(CampaignRefused, match="a halt is open"):
+        camp.resolve(decision="x", reopen_topup=True)
+    camp.resolve(decision="cue check reviewed")
+    camp.resolve(decision="reopen (ref 10)", reopen_topup=True)
+    with pytest.raises(CampaignRefused, match="no top-up decline is in force"):
+        camp.resolve(decision="again", reopen_topup=True)       # already reopened
+    assert camp.ledger_path.read_bytes().startswith(before)
+    with pytest.raises(CampaignRefused, match="at most one"):
+        camp.resolve(decision="x", reopen_topup=True, decline_topup=True)
+    with pytest.raises(CampaignRefused, match="at most one"):
+        camp.resolve(decision="x", probe_topup=True, reopen_topup=True)
+
+
+def test_the_driver_cli_takes_reopen_and_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                               capsys: pytest.CaptureFixture[str]) -> None:
+    camp = spend_halted(tmp_path, monkeypatch)
+    camp.resolve(decision="no (ref 9)", decline_topup=True)
+    code = driver.main(["resolve", "--root", str(camp.root), "--decision", "again (ref 10)",
+                        "--reopen-topup"])
+    assert code == 0 and "reopened" in capsys.readouterr().out and not camp.state().topup_declined
+    with pytest.raises(SystemExit):
+        driver.main(["resolve", "--root", str(camp.root), "--decision", "x", "--probe-topup",
+                     "--reopen-topup"])
+    capsys.readouterr()
+    assert isinstance(camp.next(), Stop) and camp.state().halt["voidClass"] == "spend"
+    assert driver.main(["resolve", "--root", str(camp.root), "--decision", "x",
+                        "--probe-topup"]) == 1                  # a spend halt is not a probe's
+    assert "unboundedCell" in capsys.readouterr().err
+
+
+def empty_cell_round_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, count: int = 60,
+                         target: int = 13, tokens: dict[str, int] = TOKENS) -> Campaign:
+    """Message type's round 1 of `count` seeds whose labeller never says `other`, so that cell
+    holds no labelled item (P-hat = 0) while the other four are short of `target`."""
+    monkeypatch.setattr(campaign, "cell_target", lambda role: target)
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    camp.begin_round(1, count)
+    generate_all(camp, message_item, tokens)
+    by_label = {seed: MESSAGE_TYPES[n % 4] for n, seed in enumerate(sorted(camp.state().items))}
+    vote_all_synth(camp, lambda st, ref, vote: by_label[ref], tokens)
+    assert camp.state().round_voted(1)
+    return camp
+
+
+def test_a_short_cell_with_no_labelled_item_is_a_typed_refusal_carrying_its_cell() -> None:
+    labelled = [(None, label) for label in MESSAGE_TYPES[1:] for _ in range(10)]
+    with pytest.raises(campaign.UnboundedCell) as caught:
+        campaign.topup_counts("message-type-classifier", labelled)
+    assert (caught.value.label, caught.value.stratum) == ("order", None)
+    assert isinstance(caught.value, CampaignRefused)
+
+
+def test_an_empty_short_cell_records_an_unboundedcell_halt_and_never_a_refusal(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = empty_cell_round_one(tmp_path, monkeypatch, count=25)
+    stops = [camp.next() for _ in range(3)]            # `driver run` calls `next`; a raise would
+    assert all(isinstance(s, Stop) and s.reason == "halted" for s in stops)   # write the refusal
+    assert not (camp.store / "refusal").exists()
+    (halt,) = events_of(camp, "unbounded-halt")        # recorded once, then `next` stops on it
+    assert (halt["label"], halt["stratum"], halt["items"]) == ("other", None, 25)
+    assert halt["bound"] == pytest.approx(1.96**2 / (25 + 1.96**2))
+    assert f"{halt['bound']:.3f}" == "0.133"
+    assert camp.state().halt["voidClass"] == "unboundedCell"
+    assert "(other, no stratum)" in stops[0].detail and "0.133" in stops[0].detail
+    assert any(line.startswith("HALTED: unboundedCell") for line in camp.status())
+    assert not any(r["genRound"] == 2 for r in camp.state().rounds)
+
+
+def test_a_plain_resolve_is_refused_for_an_unboundedcell_halt_and_writes_nothing(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = empty_cell_round_one(tmp_path, monkeypatch, count=25)
+    camp.next()
+    before = camp.ledger_path.read_bytes()
+    with pytest.raises(CampaignRefused, match="--probe-topup, --decline-topup or --repin-model"):
+        camp.resolve(decision="nothing changed")
+    assert camp.ledger_path.read_bytes() == before
+    with pytest.raises(CampaignRefused, match="safeguardStop"):
+        camp.resolve(decision="x", skip_batch=True)
+
+
+def test_a_decline_ends_an_unboundedcell_halt_and_a_reopen_with_the_cell_empty_halts_again(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = empty_cell_round_one(tmp_path, monkeypatch, count=25)
+    camp.next()
+    lines = camp.resolve(decision="no (ref 9)", decline_topup=True)
+    assert "declined" in lines[-1] and camp.state().topup_declined
+    assert camp.next() == Stop("done", "nothing is pending")
+    camp.resolve(decision="reopen (ref 10)", reopen_topup=True)
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "unboundedCell" in stop.detail
+    assert len(events_of(camp, "unbounded-halt")) == 2
+
+
+def test_decline_topup_is_still_refused_for_other_halts_by_its_message(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    camp.record_cue_check_halt()
+    with pytest.raises(CampaignRefused, match="spend or unboundedCell"):
+        camp.resolve(decision="no", decline_topup=True)
+    with pytest.raises(CampaignRefused, match="unboundedCell halt"):
+        camp.resolve(decision="probe", probe_topup=True)
+
+
+def test_a_probe_draws_25_seeds_of_the_halted_stratum_and_no_other(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # every `true` of `understanding` is called false, and `turns` is short too: a normal plan
+    # would draw both strata, the probe only the one that halted.
+    camp = full_campaign(tmp_path, monkeypatch, "guard-judge")
+    camp.begin_round(1)
+    generate_all(camp, guard_item)
+    wrong = flipped_seeds(camp.state(), {"understanding": 10**6, "turns": 25})
+    vote_all_synth(camp, lambda st, ref, vote: False if ref in wrong else intended(st, ref, vote))
+    assert isinstance(camp.next(), Stop)
+    (halt,) = events_of(camp, "unbounded-halt")
+    assert (halt["label"], halt["stratum"]) == ("true", "understanding")
+    # hand count: round 1 holds 220 seeds per cell, so `understanding` has 440 labelled items (all
+    # `false` now) and `turns` another 440: counting every stratum would give 880.
+    assert halt["items"] == 440 and halt["bound"] == pytest.approx(1.96**2 / (440 + 1.96**2))
+    assert f"{halt['bound']:.3f}" == "0.009"
+    lines = camp.resolve(decision="probe it (ref 9)", probe_topup=True)
+    assert "probe requested" in lines[-1] and "understanding" in lines[-1]
+    (request,) = events_of(camp, "probe-requested")
+    assert request["designStratum"] == "understanding"
+    assert camp.state().probe == {"designStratum": "understanding"} and camp.state().halt is None
+    assert any("probe pending" in line for line in camp.status())
+    action = camp.next()
+    assert isinstance(action, Serve) and action.kind == "generate"
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [["understanding", 25]] and plan["probe"] is True
+    state = camp.state()
+    assert camp.state().probe is None                    # a recorded plan consumes the request
+    starts = [r for r in state.rounds if r["genRound"] == 2]
+    assert [(r["designStratum"], len(r["seeds"])) for r in starts] == [("understanding", 25)]
+    assert {state.seeds[s].design_stratum for s in starts[0]["seeds"]} == {"understanding"}
+    assert state.drawn_in(2) == 25
+
+
+def probed_message_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, count: int = 25,
+                            tokens: dict[str, int] = TOKENS) -> Campaign:
+    camp = empty_cell_round_one(tmp_path, monkeypatch, count=count, tokens=tokens)
+    camp.next()
+    camp.resolve(decision="probe (ref 9)", probe_topup=True)
+    return camp
+
+
+def serve_probe(camp: Campaign) -> Serve:
+    """The probe's generation run: a 25-seed probe over a 25-seed round 1 projects all of round
+    1's cost, so a spend halt comes first and the stakeholder says yes."""
+    action = camp.next()
+    if isinstance(action, Stop):
+        assert action.reason == "halted" and "spend" in action.detail
+        camp.resolve(decision="yes (ref 10)")
+        action = camp.next()
+    assert isinstance(action, Serve) and action.kind == "generate"
+    return action
+
+
+def test_a_probe_hit_gives_the_normal_plan_on_the_next_run(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = probed_message_campaign(tmp_path, monkeypatch)
+    serve_probe(camp)
+    generate_all(camp, message_item)
+    vote_all_synth(camp, lambda st, ref, vote: "other" if st.seed_round[ref] == 2
+                   else MESSAGE_TYPES[sorted(st.items).index(ref) % 4])
+    # round 2 was let through; its approval is round-keyed, so round 3 spend-halts again. Round 1
+    # holds 25 seeds (300 live label tokens, one 100-token run); 50 items now: 7, 6, 6, 6 and 25
+    # `other`, target 13, so the short cells need ceil(7 * 50 / 6) = 59 seeds (3 runs): projected
+    # 59/25 * 300 + 3 * 100 = 1,008 (round 1's 25 seeds, not the 50 drawn so far), total 400.
+    stop = camp.next()
+    assert isinstance(stop, Stop) and camp.state().spend_approved == {2}
+    halt = camp.state().halt
+    assert halt["voidClass"] == "spend" and halt["genRound"] == 3 and halt["probe"] is False
+    (_, round_three) = events_of(camp, "spend-halt")
+    assert round_three["strata"] == [[None, 59]]
+    assert round_three["projection"]["projectedTokens"] == pytest.approx(1008)
+    camp.resolve(decision="yes again (ref 11)")
+    assert isinstance(camp.next(), Serve)
+    plans = events_of(camp, "topup-plan")
+    assert [p["genRound"] for p in plans] == [2, 3] and "probe" not in plans[1]
+    assert len(events_of(camp, "unbounded-halt")) == 1
+
+
+def test_a_probe_with_no_hit_halts_again_and_prints_the_bound_for_its_stratums_items(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = probed_message_campaign(tmp_path, monkeypatch)
+    serve_probe(camp)
+    generate_all(camp, message_item)
+    vote_all_synth(camp, lambda st, ref, vote: MESSAGE_TYPES[1 + sorted(st.items).index(ref) % 3])
+    stop = camp.next()                                  # 50 items, none with the label `order`
+    assert isinstance(stop, Stop) and "unboundedCell" in stop.detail
+    first, second = events_of(camp, "unbounded-halt")
+    assert (first["items"], second["items"]) == (25, 50) and f"{second['bound']:.3f}" == "0.071"
+    assert "0.071 over 50 labelled items" in stop.detail
+
+
+def void_run(camp: Campaign, batch_id: str) -> None:
+    """`batch_id` issued and ended void until it is dropped as `retryCapExceeded`."""
+    for _ in range(campaign.MAX_COUNTED_ATTEMPTS):
+        batch = camp.state().batches[batch_id]
+        opaque = f"op_{batch_id}_{len(batch.attempts) + 1}"
+        camp._append({"event": "issued", "batch": batch_id, "opaque": opaque,
+                      "sessionId": f"s_{opaque}", "attempt": len(batch.attempts) + 1,
+                      "requestSha256": "0" * 64,
+                      "keys": {f"k{n}": ref for n, ref in enumerate(batch.entries)}})
+        camp._append({"event": "outcome", "batch": batch_id, "opaque": opaque,
+                      "outcome": "void", "voidClass": "neverSpawned", "details": [],
+                      "parts": [], "produced": False})
+    assert camp.state().batches[batch_id].dropped == "retryCapExceeded"
+
+
+def test_a_probe_whose_run_drops_prints_the_bound_for_the_smaller_n_not_the_seeds_drawn(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = probed_message_campaign(tmp_path, monkeypatch)
+    serve_probe(camp)
+    (batch,) = pending(camp, "generate")
+    void_run(camp, batch.batch_id)                      # all 25 probe seeds drop with their run
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "unboundedCell" in stop.detail
+    second = events_of(camp, "unbounded-halt")[1]
+    assert second["items"] == 25 and f"{second['bound']:.3f}" == "0.133"     # not 50 / 0.071
+
+
+def test_the_bound_counts_labelled_items_and_leaves_out_a_vote_tie(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """40 accepted items, one of them a `voteTie` (three different labels: accepted, no
+    majority, so not labelled): n is 39. 40 items keep the tranche's 3% rule (1 drop of 40)."""
+    monkeypatch.setattr(campaign, "cell_target", lambda role: 13)
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    camp.begin_round(1, 40)
+    generate_all(camp, message_item)
+    order = sorted(camp.state().items)
+    by_label = {seed: MESSAGE_TYPES[n % 4] for n, seed in enumerate(order)}
+    vote_all_synth(camp, lambda st, ref, vote: MESSAGE_TYPES[vote - 1] if ref == order[0]
+                   else by_label[ref])                    # order[0]: order, question, complaint
+    assert camp.state().vote_ties() == [order[0]] and camp.state().halt is None
+    assert isinstance(camp.next(), Stop)
+    (halt,) = events_of(camp, "unbounded-halt")
+    assert halt["items"] == 39 and halt["bound"] == pytest.approx(1.96**2 / (39 + 1.96**2))
+
+
+def thin_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Campaign:
+    """A 30-seed round 1 whose 25-seed probe projects over half of round 1's tokens."""
+    camp = probed_message_campaign(tmp_path, monkeypatch, count=30)
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "probe projected" in stop.detail
+    (halt,) = events_of(camp, "spend-halt")
+    assert halt["strata"] == [[None, 25]] and halt["probe"] is True
+    assert camp.state().halt["probe"] is True
+    return camp
+
+
+def test_a_probe_that_spend_halts_plans_at_the_same_round_after_a_plain_resolve(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = thin_probe(tmp_path, monkeypatch)
+    assert camp.state().probe == {"designStratum": None}   # the request outlives the spend halt
+    camp.resolve(decision="yes, spend it (ref 10)")
+    assert isinstance(camp.next(), Serve)
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["genRound"] == 2 and plan["probe"] is True and plan["strata"] == [[None, 25]]
+    assert len(events_of(camp, "unbounded-halt")) == 1    # never re-raised on the empty cell
+    assert camp.state().probe is None
+
+
+def test_a_decline_during_a_probes_spend_halt_clears_it_and_a_reopen_does_not_resurrect_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = thin_probe(tmp_path, monkeypatch)
+    camp.resolve(decision="no (ref 10)", decline_topup=True)
+    assert camp.state().probe is None
+    camp.resolve(decision="reopen (ref 11)", reopen_topup=True)
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "unboundedCell" in stop.detail     # not a probe plan
+    assert events_of(camp, "topup-plan") == [] and len(events_of(camp, "unbounded-halt")) == 2
+
+
+def test_a_generator_restart_clears_a_pending_probe(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = probed_message_campaign(tmp_path, monkeypatch)
+    assert camp.state().probe is not None
+    camp._append({"event": "generation-restart", "action": "repin-model", "role": "generator",
+                  "model": "claude-opus-5-9", "batch": None, "reason": None, "decision": "x"})
+    assert camp.state().probe is None
+
+
+def test_the_probe_ignores_a_spend_halt_that_is_not_its_own(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The probe's plan is 25 seeds of its stratum, whatever the other cells need."""
+    camp = probed_message_campaign(tmp_path, monkeypatch, count=60)
+    assert isinstance(camp.next(), Serve)
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [[None, 25]]
+    assert plan["projection"]["projectedTokens"] == pytest.approx(25 / 60 * 900 + 100)
+
+
+# --- the spend projection: retired spend in the total, seeds in the ratio ------------------------
+
+
+def relabelled_tranche_campaign(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: int
+                                ) -> Campaign:
+    """Message type's round 1 of 260 seeds (11 generation runs, 1,100 tokens), the tranche's
+    first labelling failing (3,000 tokens, then retired by the relabel) and its second plus the
+    rest passing (3,300 live): total 7,400 including retired, 4,400 live. Items spread over the
+    five labels evenly (52 each), tied items excepted."""
+    camp = tranche_bench(tmp_path, monkeypatch)
+    camp.queue_votes()
+    items = camp.state().tranche_items()
+    ties = set(items[:8])
+    by_label = {s: MESSAGE_TYPES[n % 5] for n, s in enumerate(sorted(camp.state().items))}
+
+    def answer(first: bool) -> Callable[[campaign.State, str, int], Any]:
+        return lambda st, ref, vote: (MESSAGE_TYPES[vote - 1] if first and ref in ties
+                                      else by_label[ref])
+
+    vote_all_synth(camp, answer(True))
+    assert camp.state().halt["voidClass"] == "rubric"
+    monkeypatch.setattr(campaign, "rubric_hash", lambda role: "f" * 64)
+    camp.resolve(decision="rubric fix")
+    vote_all_synth(camp, answer(False))
+    monkeypatch.setattr(campaign, "cell_target", lambda role: target)
+    assert {b.retired_by for b in camp.state().batches.values() if b.state == "retired"} == {
+        "tranche-restart"}
+    spend = camp.state().spend(1)
+    assert spend["totalTokens"] == 7400 and spend["seeds"] == 260 and spend["items"] == 260
+    assert sum(spend["labelTokens"].values()) == 3300 and spend["generationRuns"] == 11
+    return camp
+
+
+def test_after_a_tranche_relabel_the_halt_compares_the_including_retired_total_at_the_live_rate(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # target 92: 40 short per label -> 200 seeds (8 runs); projected 200/260 * 3,300 (live)
+    # + 8 * 100 = 3,338.46. Against the live total 4,400 it would halt; against 7,400 it does not.
+    # A rate that counted the retired attempts (6,300) would project 5,646 and halt.
+    camp = relabelled_tranche_campaign(tmp_path, monkeypatch, 92)
+    assert isinstance(camp.next(), Serve)
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [[None, 200]]
+    assert plan["projection"]["projectedTokens"] == pytest.approx(200 / 260 * 3300 + 800)
+    assert plan["projection"]["roundOneTokens"] == 7400
+    assert plan["projection"]["roundOneLiveTokens"] == 4400
+    assert events_of(camp, "spend-halt") == []
+
+
+def test_the_spend_reason_prints_both_totals(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = relabelled_tranche_campaign(tmp_path, monkeypatch, 100)    # 240 seeds: 4,046 > 3,700
+    stop = camp.next()
+    assert isinstance(stop, Stop) and "total 7400 (live 4400" in stop.detail
+    assert events_of(camp, "spend-halt")[0]["projection"]["projectedTokens"] == pytest.approx(
+        240 / 260 * 3300 + 1000)
+
+
+def test_a_labeler_repin_counts_its_retired_attempts_and_a_generator_restart_discards_round_one(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(campaign, "cell_target", lambda role: 13)
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+
+    def restart(kind: str, role: str) -> None:
+        camp._append({"event": kind, "action": "repin-model", "role": role, "model": f"m-{kind}",
+                      "batch": None, "reason": None, "decision": "x"})
+
+    def round_one_labelled() -> None:
+        camp.begin_round(1, 20)                    # 1 generation run, 1 label batch per vote
+        generate_all(camp, message_item)
+        vote_all_synth(camp, lambda st, ref, vote: MESSAGE_TYPES[sorted(st.items).index(ref) % 5])
+
+    round_one_labelled()
+    assert camp.state().spend(1)["totalTokens"] == 100 + 300
+    restart("labelling-restart", "labeler")        # the first labelling (300) is retired spend
+    vote_all_synth(camp, lambda st, ref, vote: MESSAGE_TYPES[sorted(st.items).index(ref) % 5])
+    spend = camp.state().spend(1)
+    assert spend["totalTokens"] == 100 + 300 + 300
+    assert sum(spend["labelTokens"].values()) == 300 and sum(
+        spend["generationTokens"].values()) == 100
+    restart("generation-restart", "generator")     # round 1 is discarded: all of it is no round's
+    assert camp.state().spend(1)["totalTokens"] == 0
+    round_one_labelled()                           # a new round 1: 100 + 300
+    assert camp.state().spend(1)["totalTokens"] == 400
+    restart("labelling-restart", "labeler")        # must not claim the discarded round's batches
+    assert camp.state().spend(1)["totalTokens"] == 100 + 300
+    retired = [b for b in camp.state().batches.values() if b.state == "retired"]
+    assert {b.retired_by for b in retired} == {"generation-restart", "labelling-restart"}
+
+
+def test_the_seed_ratio_prices_a_pre_labelling_drop_at_round_ones_own_rate(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """60 seeds in 3 runs of 20; one run drops, so 40 items and 60 seeds. Labelling cost 600
+    (2 batches x 3 votes) and generation 200 (two runs). A 25-seed top-up (target 13: 5 short
+    per label of 8, ceil(5 * 40 / 8)) projects 25/60 * 600 + 100 = 350 against half of 800.
+    A ratio over accepted items would project 25/40 * 600 + 100 = 475 and halt."""
+    monkeypatch.setattr(campaign, "cell_target", lambda role: 13)
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    camp.begin_round(1, 60)
+    first, *_ = pending(camp, "generate")
+    void_run(camp, first.batch_id)
+    generate_all(camp, message_item)
+    state = camp.state()
+    assert len(state.items) == 40 and state.drawn_in(1) == 60
+    by_label = {s: MESSAGE_TYPES[n % 5] for n, s in enumerate(sorted(state.items))}
+    vote_all_synth(camp, lambda st, ref, vote: by_label[ref])
+    spend = camp.state().spend(1)
+    assert (spend["seeds"], spend["items"], spend["generationRuns"]) == (60, 40, 2)
+    assert isinstance(camp.next(), Serve)
+    (plan,) = events_of(camp, "topup-plan")
+    assert plan["strata"] == [[None, 25]]
+    assert plan["projection"]["projectedTokens"] == pytest.approx(25 / 60 * 600 + 100)
+
+
+def test_the_projection_divides_by_round_ones_seeds_not_its_items() -> None:
+    spent = round_one(label=6000, generation=1000, seeds=60, runs=4)
+    spent["items"] = 30
+    result = campaign.project_topup(round_one=spent, topup_seeds=30, topup_runs=2)
+    assert result.projected == 30 * 6000 / 60 + 2 * 250 == 3500
+
+
+# --- begin_round(queue_runs=False) ---------------------------------------------------------------
+
+
+def test_queue_runs_false_draws_and_queues_nothing_and_the_pooled_cut_holds_both_strata(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    camp = full_campaign(tmp_path, monkeypatch, "guard-judge")
+    assert camp.begin_round(1, 12, design_stratum="turns", queue_runs=False) == []
+    assert camp.begin_round(1, 12, design_stratum="understanding", extend=True,
+                            queue_runs=False) == []
+    state = camp.state()
+    assert [r["designStratum"] for r in state.rounds] == ["turns", "understanding"]
+    assert state.batches == {} and not events_of(camp, "queued")
+    assert len(state.unbatched_seeds()) == 24
+    (batch_id,) = camp._queue_unbatched()               # 24 seeds: one run, both strata in it
+    kinds = {state.seeds[s].design_stratum for s in camp.state().batches[batch_id].entries}
+    assert kinds == {"turns", "understanding"}
+    assert camp.begin_round(2, 5, queue_runs=True) != []  # the default still queues
+
+
+# --- Pass 27 minors -------------------------------------------------------------------------------
+
+
+def test_rubric_hash_is_the_sha256_of_the_rubric_file_and_ignores_the_label_answer_section(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    import dataclasses
+    import hashlib
+
+    from decisionmodels import points
+    for role in points.ROLES:
+        body = (points.POINTS_DIR / role / "rubric.md").read_text("utf-8")
+        assert campaign.rubric_hash(role) == hashlib.sha256(body.encode("utf-8")).hexdigest()
+    role = "message-type-classifier"
+    before = campaign.rubric_hash(role)
+    point = points.load_point(role)
+    edited = dataclasses.replace(point, label_answer_section=point.label_answer_section + " x")
+    assert edited.label_answer_section != point.label_answer_section
+    monkeypatch.setattr(campaign, "load_point", lambda r: edited)
+    assert campaign.rubric_hash(role) == before
+
+
+def test_a_tranche_batch_that_trips_the_rule_stops_its_own_ingest(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ingest`'s stop for the batch whose outcome raised the `rubric` halt: through a real label
+    run (P27-m2 guard 1). Six items are the whole tranche, and any drop fails the rule."""
+    from test_votes import message_bench, run_vote
+    camp, ids = message_bench(tmp_path, monkeypatch)
+    monkeypatch.setattr(campaign, "TRANCHE_POINT", "message-type-classifier")
+    monkeypatch.setattr(campaign, "TRANCHE_DROP_PERCENT", 0)
+    results = []
+    for _ in range(3):                                   # votes 1 to 3 of the one tranche batch
+        action = camp.next()
+        assert isinstance(action, Serve) and action.kind == "label"
+        results.append(run_vote(camp, action,
+                                lambda ref, vote: MESSAGE_TYPES[vote - 1] if ref == ids[0]
+                                else "order"))
+    assert [r.stop for r in results] == [None, None, "halted"]
+    assert camp.state().halt["voidClass"] == "rubric"
+
+
+def test_a_round_with_a_hit_awaiting_regeneration_draws_no_tranche(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`tranche_due` needs the round settled (P27-m2 guard 2): drawn early, the tranche would
+    leave the regenerated item in "the rest"."""
+    monkeypatch.setattr(campaign, "cell_target", lambda role: 13)
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    camp.begin_round(1, 30)
+    first, second = pending(camp, "generate")
+    state = camp.state()
+    hit_seed = second.entries[0]
+
+    def events(opaque: str) -> list[dict[str, Any]]:
+        return [{"event": "generated", "opaque": opaque, "batch": second.batch_id,
+                 "items": [{"seedId": s, "genRunId": second.gen_run_id, "genRound": 1,
+                            "item": message_item(state.seeds[s])} for s in second.entries[1:]]},
+                {"event": "screen-hit", "opaque": opaque, "batch": second.batch_id,
+                 "seedId": hit_seed, "genRunId": second.gen_run_id, "reasons": ["screen"],
+                 "detail": "token:x", "form": None, "firstPass": True}]
+
+    synth_run(camp, second.batch_id, events)
+    generate_all(camp, message_item)                     # `first` run, every seed accepted
+    state = camp.state()
+    assert state.awaiting_regeneration() == [hit_seed] and not state.round_settled(1)
+    assert state.items and not state.tranche_due(1)
+    assert camp.queue_votes() == [] and events_of(camp, "tranche-start") == []
+
+
+def test_a_spend_halt_written_before_the_live_total_existed_still_prints() -> None:
+    halt = {"reason": "spend", "voidClass": "spend", "genRound": 2, "batch": None,
+            "projection": {"projectedTokens": 10.0, "roundOneTokens": 20}}
+    text = campaign._halt_text(halt)
+    assert "projected 10 tokens against round 1's total 20" in text and "live" not in text

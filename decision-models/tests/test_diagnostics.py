@@ -184,6 +184,36 @@ def test_screen_hits_are_counted_by_intent_difficulty_and_pattern(report: dict[s
     assert hits["byPattern"] == {"screen:token": 1, "screen:meta": 1}
 
 
+def test_screen_hits_count_a_two_hit_seed_in_hits_not_in_hit_seeds_and_every_reason_of_a_hit(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """P27-n1: seed 0 is hit twice (first pass, then regeneration), so `hits` is 2 and `hitSeeds`
+    1; seed 1's one hit shows two reasons (`screen` and `formMismatch`) and counts under both."""
+    camp = full_campaign(tmp_path, monkeypatch, "message-type-classifier")
+    hand = [hand_seed(n, "order", "clear") for n in range(3)]
+    ids = start_round(camp, hand, 1)
+
+    def hit(opaque: str, batch_id: str, seed: str, detail: str, reasons: list[str],
+            first: bool) -> dict[str, Any]:
+        return {"event": "screen-hit", "opaque": opaque, "batch": batch_id, "seedId": seed,
+                "genRunId": "gen_x", "reasons": reasons, "detail": detail, "form": None,
+                "firstPass": first}
+
+    first = camp.queue_batch("generate", ids, generation="first")
+    synth_run(camp, first, lambda op: [
+        {"event": "generated", "opaque": op, "batch": first, "items": [
+            {"seedId": ids[2], "genRunId": "gen_x", "genRound": 1,
+             "item": {"text": "fine", "priorTurn": None}}]},
+        hit(op, first, ids[0], "token:x", ["screen"], True),
+        hit(op, first, ids[1], "meta:y", ["screen", "formMismatch"], True)])
+    regen = camp.queue_batch("generate", [ids[0]], generation="regen")
+    synth_run(camp, regen, lambda op: [
+        {"event": "generated", "opaque": op, "batch": regen, "items": []},
+        hit(op, regen, ids[0], "token:z", ["screen"], False)])
+    got = diagnostics.screen_hits(camp.state())
+    assert got["byIntent"]["order"] == {"seeds": 3, "hits": 3, "hitSeeds": 2}
+    assert got["byPattern"] == {"screen:token": 2, "screen:meta": 1, "formMismatch": 1}
+
+
 def test_prompt_examples_are_counted_verbatim_and_nothing_is_dropped(
         report: dict[str, Any]) -> None:
     got = report["promptExamples"]

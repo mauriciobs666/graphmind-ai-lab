@@ -72,7 +72,8 @@ or `AGENTS.md`. Run these from `decision-models/`:
 .venv/bin/python -m decisionmodels.driver status --root ~/dm-campaigns/pilot
 .venv/bin/python -m decisionmodels.driver resolve --root ~/dm-campaigns/pilot \
     --decision "why the halt is cleared"   # or --skip-batch, --repin-instructions,
-                                           # --decline-topup, --repin-model generator|labeler <id>
+                                           # --decline-topup, --reopen-topup, --probe-topup,
+                                           # --repin-model generator|labeler <id>
 ```
 
 - **`init`** refuses, writing nothing, a root that is not empty or sits in a git work tree or
@@ -94,7 +95,7 @@ or `AGENTS.md`. Run these from `decision-models/`:
   label batch, the smoke fixture's too) or instructions set. It prints the halt it cleared and, if
   a `--skip-batch` drop closed a round or pool, the halt that raised. A `spend` halt (below) is
   let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
-  once the rubric has changed.
+  once the rubric has changed; an `unboundedCell` halt refuses a plain `resolve` (below).
 - `finalize` (U5.10) is not built yet. `run` refuses a campaign that has no `install` record.
 
 ### Rounds, top-up and the message-type tranche
@@ -106,14 +107,23 @@ In a `full` campaign `driver run` keeps going after round 1 is labelled:
   the driver draws the next `genRound`: per short stratum, the most any short cell needs,
   `⌈shortfall / P̂(label | stratum)⌉`, from the **same design restricted to that stratum**, never
   to an intent. All strata are drawn before a run issues, and their seeds are cut into runs
-  together. Rounds repeat until every cell is full; a cell with no labelled item at all cannot be
-  planned and refuses, naming it.
+  together. Rounds repeat until every cell is full. A short cell with no labelled item cannot be
+  planned: the driver halts (`unboundedCell`), naming the cell and the Wilson 95% upper bound on
+  P(label | stratum) over the stratum's labelled items, and writes no `store/refusal`. A plain
+  `resolve` is refused. `resolve --probe-topup --decision ...` draws one run of 25 seeds of that
+  stratum (the probe; it is spend-checked like any top-up); a hit gives a normal plan, no hit halts
+  again with the new bound, and a second probe is the stakeholder's choice. `--decline-topup`
+  and `--repin-model generator|labeler` also clear it.
 - **Spend halt.** Before a top-up round issues, its projected tokens (this point's round 1:
-  top-up items over round-1 items times its labelling tokens, plus top-up runs times its mean
-  tokens per generation run; four token classes each) are compared with round 1's measured
-  tokens. Over half halts the driver (`spend`): take the projection (`status`) to the
-  stakeholder. "Yes" is a plain `resolve --decision ...`; "no" is `resolve --decision ...
-  --decline-topup`, after which no top-up run is issued and the store stays as it is.
+  top-up seeds over round-1 seeds times its live labelling tokens, plus top-up runs times its
+  mean tokens per generation run; four token classes each) are compared with round 1's total
+  tokens, which include a tranche relabel's or labeler re-pin's retired attempts (a generator
+  re-pin discards round 1, so its tokens do not count). Over half halts the driver (`spend`); the
+  reason prints both totals. Take the projection (`status`) to the stakeholder. "Yes" is a plain
+  `resolve --decision ...`; "no" is `resolve --decision ... --decline-topup`, after which no
+  top-up run is issued and the store stays as it is. A changed mind is `resolve --decision ...
+  --reopen-topup` (valid only with no halt open and a decline in force): the next `driver run`
+  plans again, and the spend halt can fire again.
 - **Message-type tranche.** Round 1 of message type labels 250 items, drawn at random, with all
   three votes before the rest. More than 3% `voteTie` drops halts it (`rubric`): edit
   `points/message-type-classifier/rubric.md`, then `resolve`, which relabels the tranche under the

@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.9 fix round — reopen, unboundedCell, probe, spend projection
+
+**What:** `docs/plans/typed-decision-models6.md` §3.8's decline/reopen, P̂ = 0, probe and
+spend-projection bullets and its §5 row "U5.9 fix round" (plan6 v1.25); note §Q1.3; impl Pass 27
+(P27-m1, m2, n1, n2) and Pass 28 (P28-M2). Plan, note and live specs untouched; `install.py` and
+`finalize` are U5.10's.
+
+- `campaign.py`: `resolve --reopen-topup` (`topup-reopened`; valid only with no halt open and a
+  decline in force). `topup_counts` raises the typed `UnboundedCell(CampaignRefused)` carrying
+  `(label, stratum)`; `queue_topup` records the `unbounded-halt` event (`voidClass`
+  `unboundedCell`; the label, stratum, the stratum's labelled-item count and the Wilson 95% bound
+  `z² / (n + z²)`), so `driver run` stops on a halt and writes no `store/refusal`. A plain
+  `resolve` is refused for it; `--decline-topup` is valid for `spend` or `unboundedCell`.
+  `resolve --probe-topup` appends `probe-requested {designStratum}`: `fold` keeps it in
+  `State.probe` until a `topup-plan`, `topup-declined` or `generation-restart`, and `queue_topup`
+  plans it (`topup-plan`/`spend-halt` with `probe: true`, 25 seeds of that stratum alone) before it
+  calls `topup_counts`, so a probe that spend-halts and is let through plans at the same
+  `genRound`. Zero hits re-halts, printing the bound for the stratum's labelled items.
+- Spend projection: `project_topup(topup_seeds=...)` divides by round 1's drawn `seeds`
+  (`State.spend(1)` gains `seeds` and `totalTokens`) at the live labelling rate; the threshold is
+  half of `totalTokens`, which include the retired attempts of a `labelling-restart` or
+  `tranche-restart` and not a `generation-restart`'s. New `Batch.retired_by` carries the cause
+  (a generation restart overrides an earlier cause; a later relabel never claims a retired
+  batch). The spend halt's reason prints both totals.
+- Pass 27 minors: m1 `rubric_hash` pinned by an independent sha256 per point and a
+  `label_answer_section` edit leaves it unchanged; m2 guard 1 (`ingest`'s stop on the batch that
+  trips the tranche rule) and guard 2 (`tranche_due`'s settled conjunct) have constructed cases,
+  guards 3 to 5 (`_check_tranche`'s wait on another halt, `_fold_resolution`'s re-check,
+  `_draw_topup`'s "a run has issued") are deleted: no shipped flow reaches them (the two halt
+  recorders that could be open then are pilot-only, a pilot has no tranche; `begin_round` refuses
+  loudly where guard 5 skipped silently), though called by hand in a `full` campaign a cue-check
+  halt is now overwritten by the tranche halt (Pass 29 P29-m1); n1
+  `screenHits.byPattern` counts every reason of a hit (a seed with two hits and a
+  `["screen", "formMismatch"]` hit are tested); n2 `AGENTS.md` and this file name `_draw_topup` as
+  the `extend=True` caller (the U5.9 entry below is corrected in place), and `turnCut`'s docstring says it ignores `render_guard_input`'s `MAX_CHARS`
+  drop. `begin_round(queue_runs=False)` has a direct test.
+- Choices: the events are `unbounded-halt` and `probe-requested`; the cause field is
+  `Batch.retired_by` (`generation-restart`, `labelling-restart`, `tranche-restart`).
+
+**Verified:** `pytest -q` from `decision-models/` 1614 passed, none skipped (1588 before: +25 in
+`test_topup.py`, +1 in `test_diagnostics.py`); `ruff check .` clean. 36 scratch-copy mutants, 34
+redden a test, among them seeds replaced by accepted items in the ratio, the probe stratum taken
+from the first or last design stratum or `None`, a live-only or live-rate-for-total threshold,
+retired attempts in the rate, a retirement cause that any restart or no restart overrides, a plain
+`resolve` clearing `unboundedCell`, an uncaught `UnboundedCell`, a reopen that keeps the decline,
+an unpinned or never-cleared probe, and the Wilson bound over seeds drawn. Two survived as
+equivalents (a no-op edit, and "first design stratum" when guard's first is the halted one).
+
 ## 2026-11-10 — typed-decision-models U5.9 — rounds, top-up, spend halt, tranche, diagnostics
 
 **What:** `docs/plans/typed-decision-models4.md` §3.6 and its §5 row U5.9; plan5 §3.2, §3.6 and its
@@ -9,8 +57,9 @@ U5.9 row; plan6 §3.8 and its U5.8a/U5.9 row; carried ML P3-n2 and P4-n2 and imp
 minors. Plan docs and live specs untouched.
 
 - `campaign.py`: `topup_counts` (pure planner), `project_topup` (pure spend projection),
-  `Campaign.queue_topup`/`_resume_topup` (called from `next`; every stratum drawn, the first with
-  `begin_round`, the rest `extend=True`, before a run issues, then cut as one interleaved pool;
+  `Campaign.queue_topup`/`_resume_topup` (called from `next`; `_draw_topup` draws every stratum,
+  the first with `begin_round`, the rest `extend=True`, before a run issues, then cuts one
+  interleaved pool;
   `begin_round(queue_runs=False)`), the `spend-halt`, `topup-plan` and `topup-declined` events,
   and `resolve --decline-topup` (also `driver.py`). Message type's round 1 votes a 250-item
   tranche first (`tranche-start`; `tranche` on its `vote-start`s and batches): `tranche_failed`
