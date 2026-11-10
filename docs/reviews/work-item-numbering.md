@@ -278,3 +278,56 @@ None blocking. F3 needs the architect's call before step 6 starts.
 
 ### Proposed REVIEW.md lines
 None (F2 is project-specific test gaps; F1 is a grammar-drift instance already covered by "check can both fail and pass").
+
+## Pass 8 (impl, steps 6–8)
+
+**Scope.** `skills/work-items/` at 0dd7fd0b (5e8076e9 links, 99345898 headers, 42e46051 rebuild/check, 0dd7fd0b keys, plus fix commit 28ce49c5 for Pass 7), against the current plan (re-read in full: 3.4–3.9 and steps 6, 6b, 7, 8 changed since Pass 6). Ran: suite (**446 passed**), real `wi.py` scenarios in temp git repos and worktrees (`…/scratchpad/p8a.sh`–`p8d.sh`, `q1`–`q6`, `kk`), `check` over a copy of this repo's docs, 26 mutants on a scratch copy (5 re-run from Pass 7, 21 new on steps 6–8). Root `REVIEW.md` applied; no component `REVIEW.md` for `skills/`.
+
+**Verdict: approve with suggestions.** No blocker. One major (N1: a rebuild leaves the registry able to reissue numbers, undetected, with the consequence unstated). Pass 7's three findings are fixed and re-verified. CPG: considered, not relevant — a standalone script package with no loaded graph.
+
+### Pass 7 dispositions (one line each, re-executed)
+- **F1 fixed.** `wi resolve GAL-I03-FR1` and `GAL-F0001-S01-AC3` now exit 4; `GAL-F0001-FR2a` and the old-path `GAL-I03-F0001-AC1` resolve (alias). Mutant `feature["type"] != "F"` → `False` is killed.
+- **F2 fixed.** Re-ran the Pass 7 mutants on the new tree: `parent: .id`, mint dropping `parent`/`title`, CLI dropping `--parent`: all killed (1 failed each). Plan tests 11 (`git status` clean) and 12 (mint on A and B, merge only B) now exist (`test_legacy.py:219,223`).
+- **F3 fixed as the plan now states.** `concerns` single-valued (replace, `--clear`), `fixed-by`/`relates` add/`--remove`, `resolve --json` `links` = `{rel: [ids]}`; refusals verified (`remove` on `concerns`, `--clear` on `fixed-by`, link to an FR citation); mutants dropping `remove`, add-dedup and CLI `--remove` killed.
+- **(a) fixed** (error now says "resolve it first"); **(b) fixed** (`mint-legacy --home a` → `"home": "a"`; `new --home zzz` refused); **(d) fixed** (`--sync` implemented on `new`/`move`/`promote`; `headers sync [id]`); **(e) partly**: 3.4/3.5/3.7 now match the CLI, the remaining stale text is listed below.
+- **m1 fixed** (`init` writes `.work-items/.gitignore` with `.lock` and `*.tmp`; after a later `git init`, `git add -A` does not stage the lock); **m3 fixed** (`T may not have I02`); **m4 fixed** (same `.gitignore`). **m2 unchanged**: `new S --parent <retired F>` still succeeds (verified); plan still silent, so decide and state it.
+
+### New findings
+
+**N1 (major, verified) — rebuild can reissue numbers, `check` cannot see it, and the plan states only part of the residual.** Plan 3.7 says "stories, tasks and undocumented deleted IDs are not recoverable"; the CLI note says the same. Executed (`p8c.sh`): features F1–F6 (F3/F4 undocumented, F4 retired, F6 a promoted kaizen item with no document), 3 stories, one minted legacy item; delete journal and tracked registry (registry never committed); `rebuild --from-headers . --write`; `check` → **clean, rc 0**; then `new F` → `GAL-F0006` (**reissued**: the promoted feature), `new S --parent GAL-F0001` → `GAL-F0001-S01` (**reissued**), `new K` → `GAL-I02-K0001` (reissued). The `architect:K-004` mapping is also lost, so a later `mint-legacy` would give a second ID (FR-12). The loss is therefore every undocumented live or retired F/D/K, every S/T counter, promotion aliases and legacy minting without a header — not just "deleted IDs" — and the consequence (FR-6/FR-5 violated, silently) is not stated. AC-12 itself (header aliases recoverable) holds. Fixes (architect's call; not run): (i) state the full consequence in 3.7 and in the `NOT_RECOVERABLE` text; (ii) prefer recovery from the registry's git history over headers (`_ref_events` reads only ref tips, so a rebuild is refused only while some tip carries the file — `p8c` first attempt hit that); (iii) let `rebuild --write` take a counter floor the operator knows (`--floor F=N,S:<parent>=N`) or refuse without an explicit `--accept-reissue`. Test: the `p8c` scenario asserting the new F number is above the pre-loss maximum when a floor is given, and refusal otherwise.
+
+**N2 (minor, verified) — `new F --slug S` accepts an already-registered slug.** Two worktrees each ran `new F --slug same --sync`: `GAL-F0001` and `GAL-F0002`, both stamped, merge conflicted add/add on `same.md`; `check` then reports `duplicate: slug 'same' is held by …` and `resolve same` exits 3. The journal is shared, so B can see A's slug at allocation: refuse (or require an explicit flag) there; it also saves the burned number.
+
+**N3 (minor, verified) — `wi init` ignores the key rules.** `wi init --key FR` succeeds, and `init --key GALM` in a second repo succeeds though `keys.json` lists `GALM` for another repo (FR-18/AC-10: never accepted). Only `key claim` checks. Plan 3.9 lists `init` under AC-10; either have `init` call `keys.check_key` (reserved always; claimed-by-other-repo refused) or say the `tico` flow `suggest → claim → init` is the only gate. Also: a missing or corrupt `keys.json` (or `WI_KEYS_FILE`) is an uncaught `FileNotFoundError`/`JSONDecodeError` traceback (verified); `LEGACY_PREFIXES={"K","C"}` is dead against `[A-Z]{2,6}` and ignores the declared prefixes the plan names.
+
+**N4 (minor) — survivors: tests that do not notice.** `headers.KINDS` without `test-reports` (446 pass) and `rebuild` dropping `retype` on a promoted K→F alias chain (446 pass; inferred effect: the rebuilt item keeps type `K` under an `F` ID, not traced further). Of the 21 new mutants, 17 were killed; a third survivor (`rebuild` parent uid via `birth_of`) looks equivalent for documented items, and one mutant I wrote hit a docstring and is discarded. Killed: incl. longest-slug owner, legacy aliases in `Aliases:`, baseline grandfathering, definer pattern, duplicate-Item, keys lock re-check and reserved set. Add: a header-sync case per kind, and a rebuild test asserting `type` after a promotion chain.
+
+**N5 (minor, ruling) — `check.py` using private members is a follow-up, not a defect.** Nine cross-module private references (`Store._locked`, `_reconcile`, `store._read`, `headers._family_files/_owner/_header_index`, `rebuild._tokens`); behaviour is correct and covered by the suite. Make `Store.read_union()` (lock + reconcile) and public `headers.family_files/owner/header_index`, `rebuild.tokens` before step 9+ consumers copy the pattern. Note `check`, documented read-only, appends missing tracked events to the journal via `_reconcile`, as `read_state` does; say so.
+
+### ACs end to end (real CLI)
+- **AC-14/AC-2** two worktrees each `new F --slug … --sync` (x/x2 and y/x3), flush, commit, merge both: no conflict, IDs distinct, headers merge, `check` clean, slug↔ID both ways. With `x` and `x2` both registered `x2.md` and `x2-coordination.md` carry `x2`'s ID only (a pre-registration `x` sync stamped `x2.md` and the later `x2` sync correctly replaced it). A document created after `new F` is reported (`family-no-item`) until synced.
+- **AC-7** `--set` with no-ID, malformed, duplicate, dangling, illegal-parent and a legacy id: all reported (legacy id informational); headers with `GAL-F12`, duplicated `Item:` across slugs, two `new` events for one ID, duplicate registry lines (informational) reported; prose `GAL-F0777`, `K-030`, `C-1001` silent.
+- **AC-8/11** link set/changed/cleared and home/touched/milestone changes leave the ID constant; unknown component refused for `home`, `touched`, `new --home`.
+- **AC-10** keys: suggest, claim, reserved/malformed/duplicate refusals; N3 for `init`. **AC-12** rebuild from headers restores `GAL-I03-F0001` as alias (N1 for what it cannot).
+
+### Dry run over a copy of this repo (`q4`)
+Copied `docs/`, `claude/*/kaizen/plan.md`, every component `docs/`, `init` with the step-12 components, `legacy_namespaces` K-: 13 agents + `falkor-chat`, C-: `cpg`, `legacy_paths` `docs/BACKLOG.md`→`cpg`, `claude/*/kaizen/plan.md`→`$1`, `*/docs/BACKLOG.md`→`$1`: **`wi check` clean, rc 0.** With `legacy_namespaces` emptied it reports exactly **15** `namespace` findings (13 agent plans, `falkor-chat`, root `docs/BACKLOG.md`), equal to an independent `grep -lE` count of 15. Caveat: no document there carries `Item:` yet, so the header rules are idle in this run; they were exercised only in the temp repos above.
+
+### Keys through the symlink (`kk`)
+Skill copied to `team/work-items`, symlinked at `home/skills/work-items`, `wi key claim GALM` run from a different empty git repo via the symlink: wrote `team/work-items/keys.json` (the team copy), dup claim refused. Note the reach is guaranteed by `wi.py`'s `Path(__file__).resolve()` (modules load from the real path); `keys_path()`'s own `.resolve()` is redundant. `WI_KEYS_FILE` silently redirects claims; keep it test-only.
+
+### Plan statements now stale against the code (for routing)
+1. 3.7: "committed code leaves `--sync` a stub that raises; step 6b implements it" — implemented.
+2. 3.9: `wi init` writes also `.work-items/.gitignore`; "refused if … equal to a declared legacy prefix" — the code hardcodes `K`/`C`, which the `[A-Z]{2,6}` rule already excludes (N3); `claim` has `--no-pool`; init does not call the key check.
+3. 3.2: `link` event lacks `op`; 3.6: `mint-legacy` lacks `--home`.
+4. 3.8/step 12: the path→home map is `project.json` `legacy_paths` with `*` captured as `$1`; the plan never names it. `check` exits 1 on any non-informational finding; `--set` accepts a list or `{items: […]}`; extra kinds `family-no-item`, `absent`, `item-slug`, `parent: parent is X, its path says Y`.
+5. 3.7 rebuild: builds one `new` at the oldest alias plus one `move` per alias step (not one `new` plus aliases), refuses `--write` over a non-empty registry, and its residual is wider than stated (N1). `headers sync` takes an optional ID (default: every slugged item).
+6. 3.3: `ALLOWED_PARENT` is not a table in `rules.py` (an if-chain in `validate_parent`); the literal matrix is in the tests.
+7. 3.4/m2: retired items remain usable as parents/moves — state it or forbid it.
+Plan growth (3615 → 3910 words) was not gated here; it tracks new scope (steps 6, 6b, 3.5 link model).
+
+### Open questions
+N1's remedy (history-first recovery vs floor flag) needs the architect before step 12 writes the real registry.
+
+### Proposed REVIEW.md lines
+None.
