@@ -211,3 +211,82 @@ Target: root `REVIEW.md`, "Always check". Source: F2 (and F3).
   strata, coverage denominator) before it burns the seal, and the denominator of a coverage clause is a constant of
   the spec, never derived from the data under test."
 No prune proposed: nothing in the file is enforced elsewhere.
+
+## Pass 2
+
+Scope: commit `e0b84854` (the only commit after `a482c2ac` touching `claude/cobb/scripts/`) against `92a46502`,
+in a fresh `git clone --local` under the scratchpad; repo untouched. Observed: `pwq_kb_selftest.py` 123/123,
+`check_content_loss_selftest.py` 25/25. My own mutants: 25 killed of 26 (list below); Pass 1's survivors
+re-run (coverage-last, BM25-prefix, probe-window) are now killed.
+
+**Verdict: approve with suggestions.** No blocker, no major remains. F1 and F2 are closed, so S4 and S8 may proceed.
+
+### Dispositions
+
+- **F1 fixed (ran).** `render-copy` now emits `Versions[3]: CPython 3.12.3; starlette 1.3.1; starlette 1.6.0; httpx 0.28.1`;
+  `verify-copy` clean. At the pin the new extractor adds exactly those two pairs and removes none (diffed old vs new over
+  all 42 sections). Dropping an extracted pair fails ("header omits extracted version"); an invented pair, and a pair valid
+  only in another member's body, fail. A hand-added pair that passes the member's own body is accepted.
+- **F2 fixed (ran, all three modes).** With a 82-positive, 85-positive, 16/14 or duplicate-id B, `--probe`,
+  `--sealed-once` and `--baseline` each exit 2 with 0 searches and no sentinel; a well-formed B proceeds to the next
+  check. Validation runs before the sentinel pre-check and before the gate; the constants are spec constants.
+  Residual: it does not check the `tail` flags, so S8's "tail probe for every ≥ 4-chunk unit" stays on the S8 brief.
+- **F3 fixed** (not in the implementer's list): last-query-wins mutants on `by_section` and `by_section_raw` are killed.
+- **F4 fixed, one limit.** The pin tie works (matching file `None`; one-character edit, non-sha pin, and a file outside
+  the repo each refused with a reason). The `currentVersion` filter is valid on the live graph (read-only run: a known
+  document returns both ways); no superseded document exists to show the negative live, so that rests on the fake.
+  `diverge` now reads `pin`, `migratedOn` and `sha256` (planted stale pin and sha: two `REGISTRY-STALE` rows). Limit: the
+  tie needs the source *inside* the repo; after S16d deletes the skill, re-running AC-1 needs `--allow-unpinned`, which
+  switches the tie off. Minor: add a `--pin-from-git` source mode.
+- **F5 fixed (ran).** Duplicate ids and titles raise; the 36 real rendered titles are unique, and `verify-copy` reports the
+  error instead of crashing. Pass 1's other F5 points (id grammar `^u\d{2,}$`; `verify-copy` valid only at the pin's unit
+  set, so it fails after the first legitimate add) are not addressed: still minor.
+- **F6 not addressed** (not claimed): URL↔workspace proof stays with S6b. **F9, F10 not addressed:** take-or-leave.
+- **F7 fixed (ran).** A 35-unit manifest against the 36-unit copy gives `u42 - - ABSENT`, `gate: FAILED`, rc 1; an
+  unreadable `--copy` gives rc 2. Scoring modes pass the copy too.
+- **F8 (a)(b)(c)(e) fixed or pinned** (distinct-docs mutant, BM25-prefix and probe-window mutants killed). **(d) ruled below.**
+
+### Same-revision interactions
+
+1. **`version_pair_ok` extension + superset rule — latent, minor.** An extractor false positive can never be omitted
+   (omission fails) or corrected. None exists at the pin, but the extractor reads `pytest 3.5` from "pytest 8.2, 3.5 times
+   slower" and `fastapi 12.50` from "fastapi 0.1.2, 12.50 percent" (synthetic probes); the unit blocklist is only
+   `ms|s|sec|seconds|MB|KB|%`. It bites only on a unit that is re-rendered by the extractor from a source (a later pin),
+   not on hand-added units. Suggest an exclusion table keyed like `RULINGS`, applied by both render and verify. The
+   extension itself is a no-op on the superset path (extras are never extractor reads); one mutant (member-specific body →
+   member 1) survived. Nit.
+2. **F7 contract change vs S9/S13 — consistent, document it.** `--set A --before` (S9) and `--probe` return before the
+   gate and never read the copy, so S9 and S8 are unaffected. S10, S12, S13 and S14 all run after S4, when the default
+   copy path exists. The plan (D9, T21) says nothing about the copy, so add one sentence to D9: "`gate` and every scoring
+   mode read the copy's unit ids and fail on an unregistered unit". The T36 retire step must remove the unit from the copy
+   too, or the next gate correctly fails `ABSENT`.
+3. **`diverge` registry check vs step order — consistent.** `ingest` rewrites the manifest (`pin`, `migratedOn`, per-unit
+   `sha256`) on every run, including all-skip runs, so S10/S13/T35 produce a fresh registry, and `replace` rewrites its
+   unit's `sha256`. In the D8 edit flow (copy edited, then `diverge`, then stakeholder `curl`, then `ingest`) the stale unit
+   shows twice (`STALE` and `REGISTRY-STALE`) until `ingest`: noisy, correct.
+4. **F5 duplicate titles vs real titles — consistent.** 36 of 36 unique, and the title is the first member's heading.
+
+### Rulings
+
+- **F8d (sentinel keyed on path plus content hash): skip accepted.** The sentinel already stores `setSha256` of the scored
+  file, and any agent with Bash can delete any sentinel, so a better key adds no mechanical protection (D11: the seal is
+  procedural). The real gap is different and cheap: `--sealed-once` records the file's hash but never compares it with the
+  hash frozen at S8, so a B edited after freezing is scored silently. Suggest `--expect-sha256 <ledger value>`, checked
+  before the sentinel; S14's brief passes it. Minor.
+- **Set A shape validator: not needed for the seal, but add a light one.** A has no seal and is meant to be re-run. But
+  `n_sections` is derived from the set for A too, so a partial A reports coverage "ok", and A's numbers decide the floor at
+  S12. A `validate_set_a` (42 positives, one per section; 14 negatives, 7 near / 7 off) in the same style as B, applied to
+  the scoring modes (not `--before`), closes it. Minor; S5's "42+14 rows" done-condition covers only the file, not the tool.
+
+### Mutants run this pass (scratch clone)
+
+`pwq_kb.py`: omit-rule off, invented-rule off, member-body → member 1 (**survived**), per-section count, section set,
+negative count, duplicate ids, validation skipped for probe / baseline, ABSENT rows off, eval gate without copy ids,
+CLI gate without copy ids, `diverge` sha off, pin off, migratedOn off, duplicate id / title off, distinct includes
+negatives, continuation off, line-wrap off, continuation accepts units. `check_content_loss.py`: pin check off,
+`currentOnly` false, `WHERE` dropped, hash comparison ignored. All others killed.
+
+### Growth-stops check
+
+Compact pass: one disposition line per Pass 1 finding; the Pass 1 text is unchanged. New material is the four interaction
+checks and two rulings (new scope). No restated facts.
