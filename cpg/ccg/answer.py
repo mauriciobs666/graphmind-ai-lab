@@ -1,13 +1,16 @@
 """Canonical answer document, schema v1: read, validate, canonicalize and write.
 
 Spec: ``docs/plans/connected-code-graph-answer-spec.md`` (v1.2, S33) -- the document (§2-§5), ordering and
-canonical bytes (§6), the F-3/F-4/F-12/G-1 obligations (§7), the validator rules V1-V16 (§8). The shapes live in
+canonical bytes (§6), the F-3/F-4/F-12/G-1 obligations (§7), the validator rules V1-V16 (§8) -- and its P1 extension
+``docs/plans/connected-code-graph-answer-spec2.md`` (schema 1.1, §7.2: V5's wiring/depends-on/``Unit`` clauses, V9's
+``not-mapped`` check, V17-V19, the 1.1 ``facts_bytes`` projection). The shapes live in
 ``ccg/schemas/answer-v1.schema.json``; the schema is necessary, not sufficient, and this module adds what JSON
 Schema cannot say (derivations, anchor chaining, staleness set equality, id recomputation, the F-4 token screen).
 
-Public API: ``loads``/``validate`` (V1-V16), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
+Public API: ``loads``/``validate`` (V1-V13, V15-V19), ``canonicalize``/``dumps`` (sort every array per §6, then validate and
 serialize), ``is_canonical``, ``facts_bytes`` (§6's boundary), ``fence_data`` (§7.2), ``mask_identifier`` (§7.3),
-``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``; plus the ``samplingHash``/``cacheKey`` helpers.
+``DATA_FIELDS``, ``EMPTY_VERDICT_LOG_HASH``, ``ENGINE_REASON_CODES``, ``ANSWER_SCHEMA_VERSIONS``, ``PROHIBITED_EDGE_TYPES``,
+``FUNCTION_ENTRY``, ``FLOW_ROWS``; plus the ``samplingHash``/``cacheKey`` helpers.
 """
 
 from __future__ import annotations
@@ -59,14 +62,29 @@ ARRAY_RULES = {
 #: V1: identity strings (§6) are stripped as well as NFC; ids are held to their patterns by the schema.
 #: ``rootPath``, ``urlPath``, ``verbPath``, ``accessPath`` (the last two beyond spec §6's list) and the elements of ``paths`` are path-like data compared field by field (AC-24), so held to the same bar.
 IDENTITY_KEYS = frozenset({"qname", "path", "keyPath", "calleeName", "keyNorm", "name", "rootPath", "urlPath", "verbPath", "accessPath", "paths"})
-SUBJECT_ID = {"symbol": "symbolId", "config": "entryId"}
+SUBJECT_ID = {"symbol": "symbolId", "config": "entryId", "unit": "unitId"}
+#: spec2 §1.1: the labels the validator accepts, against one schema; V17-V19 say what each label may carry.
+ANSWER_SCHEMA_VERSIONS = ("1.0", "1.1")
+#: spec2 §3 (V19): edge types that no hop of a 1.1 document may carry (the schema's enum keeps them: removal is major).
+PROHIBITED_EDGE_TYPES = frozenset({"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"})
+#: spec2 §5 (V18), per column (``request.direction``): the ``(edgeType, dir)`` rows that enter the ``function`` state (to a
+#: ``Symbol``), and the closed list of labelled rows that leave it. A hop on a labelled row is ``possible``.
+FUNCTION_ENTRY = {
+    "impact": frozenset({("HAS_CALL", "<-"), ("HAS_PARAM", "<-"), ("HAS_COND", "<-")}),
+    "depends-on": frozenset({("CALLS", "->"), ("CALLS_NAME", "->")}),
+}
+FLOW_ROWS = {
+    "impact": frozenset({("CALLS", "<-"), ("CALLS_NAME", "<-"), ("TO", "<-")}),
+    "depends-on": frozenset({("HAS_CALL", "->")}),
+}
+_FLOW_PREFIX = "flow-unavailable:"
 ANCHOR_ID = {"symbol": "symbolId", "contract": "cpId", "config": "entryId"}
 ANCHOR_HOP_KIND = {"symbol": "Symbol", "contract": "ContractPoint", "config": "ConfigEntry"}
 #: §5.2's per-kind fields: required, optional.
 KIND_FIELDS = {
     "Symbol": ({"qname"}, set()), "CallSite": ({"calleeName"}, set()), "Cond": (set(), {"code"}),
     "ContractPoint": ({"contractKind", "keyNorm"}, set()), "Link": (set(), {"lifted", "bound"}),
-    "ConfigEntry": ({"keyPath"}, {"launch"}), "Param": (set(), set()), "Ret": (set(), set()),
+    "ConfigEntry": ({"keyPath"}, {"launch"}), "Param": (set(), set()), "Ret": (set(), set()), "Unit": (set(), set()),
 }
 KIND_ONLY_FIELDS = frozenset().union(*(r | o for r, o in KIND_FIELDS.values()))
 #: §8 V15: languages determined by the extension alone (spec3 §3.3).
@@ -460,9 +478,12 @@ def _item_key(item: dict, roots: dict[str, str]):
         root = roots[item["unitId"]]
     except KeyError:
         raise AnswerError(f"items: unitId {item['unitId']} has no staleness.units entry (§6)") from None
-    pos = s["lineStart"] if s["type"] == "symbol" else s["line"]
+    if s["type"] == "unit":  # spec2 §3.5: the unit's rootPath in the path slot, 0 in the line slot
+        path, pos = root, 0
+    else:
+        path, pos = s["path"], s["lineStart"] if s["type"] == "symbol" else s["line"]
     return (item["repoId"], root, item["unitId"], item["distance"], 0 if item["status"] == "confirmed" else 1,
-            s["path"], pos, s[SUBJECT_ID[s["type"]]])
+            path, pos, s[SUBJECT_ID[s["type"]]])
 
 
 def canonicalize(doc: dict) -> dict:
@@ -506,7 +527,8 @@ def is_canonical(data: bytes) -> bool:
 
 
 def facts_bytes(doc: dict) -> bytes:
-    """§6: the canonical bytes without ``interpretation.provenance`` and, for a resolved answer, ``interpretation.lookups``.
+    """§6: the canonical bytes without ``interpretation.provenance`` and, for a resolved answer, ``interpretation.lookups``;
+    a ``"1.1"`` document also drops every ``staleness.units[].builtAt`` and ``failedAt`` (spec2 §4.3).
 
     A projection of a document the caller already holds as valid (it came from ``loads`` or went through ``dumps``): it
     deliberately does not re-validate, so facts of a document under construction can be compared, and an invalid one
@@ -516,6 +538,10 @@ def facts_bytes(doc: dict) -> bytes:
     interp.pop("provenance", None)
     if interp["status"] == "resolved":
         interp.pop("lookups", None)
+    if d["answerSchemaVersion"] == "1.1":  # spec2 §4.3: a build's wall-clock time is not a fact of the answer
+        for u in d["staleness"]["units"]:
+            u.pop("builtAt", None)
+            u.pop("failedAt", None)
     return canonical_line(d)
 
 
@@ -565,7 +591,44 @@ def _check_interpretation(doc: dict) -> None:  # V2
         _fail("V2", "recipe.queries", "duplicate query name (§4.1: names unique)")
 
 
-def _check_hops(where: str, item: dict) -> None:  # V3, V5, V6
+def _check_link(w: str, chain: list[dict], i: int, direction: str) -> str | None:  # V5
+    """The shape around a ``Link`` hop (spec2 §3.3, §7.2); returns the site id its ``lifted`` entries must name (None: no site)."""
+    hop = chain[i]
+    prev = chain[i - 1] if i else None
+    nxt = chain[i + 1] if i + 1 < len(chain) else None
+    if direction == "depends-on":
+        if prev is None or prev["kind"] != "CallSite" or hop.get("edgeType") != "VIA" or hop.get("dir") != "->":
+            _fail("V5", w, "in depends-on a Link hop is entered by VIA -> from its CallSite hop")
+        if nxt is None or (nxt.get("edgeType"), nxt.get("dir")) not in (("TO", "->"), ("TO_UNIT", "->")):
+            _fail("V5", w, "in depends-on a Link hop is left by TO -> or TO_UNIT ->")
+        return prev["id"]
+    if nxt is not None and nxt["kind"] == "ConfigEntry" and nxt.get("edgeType") == "BOUND_BY" and nxt.get("dir") == "->":
+        if i + 1 != len(chain) - 1:
+            _fail("V5", w, "a wiring ConfigEntry hop (BOUND_BY ->) is the chain's last hop")
+        bound = hop.get("bound", [])
+        if len(bound) != 1 or bound[0]["entryId"] != nxt["id"]:
+            _fail("V5", w, "the Link hop before a wiring ConfigEntry hop carries exactly that entry in bound")
+        return None  # no site was entered: the caller's lifted check then rejects any ``lifted`` entry
+    if nxt is None or nxt["kind"] != "CallSite" or nxt.get("edgeType") != "VIA" or nxt.get("dir") != "<-":
+        _fail("V5", w, "a Link hop is followed by its CallSite hop (VIA <-) or, last, by a wiring ConfigEntry hop (BOUND_BY ->)")
+    return nxt["id"]
+
+
+def _check_unit_hop(w: str, chain: list[dict], i: int) -> None:  # V5
+    hop = chain[i]
+    if hop["kind"] != "Unit":
+        if hop.get("edgeType") == "TO_UNIT":
+            _fail("V5", w, "TO_UNIT arrives only at a Unit hop")
+        return
+    if i != len(chain) - 1:
+        _fail("V5", w, "a Unit hop is the chain's last hop")
+    if hop.get("edgeType") != "TO_UNIT" or chain[i - 1]["kind"] != "Link":  # the Link's own exit check holds the dir
+        _fail("V5", w, "a Unit hop is entered from a Link hop by TO_UNIT ->")
+    if hop["unit"] != hop["id"]:
+        _fail("V5", w, "a Unit hop's unit equals its id")
+
+
+def _check_hops(where: str, item: dict, direction: str) -> None:  # V3, V5, V6
     chain = item["chain"]
     for i, hop in enumerate(chain):
         w = f"{where}.chain[{i}]"
@@ -578,7 +641,7 @@ def _check_hops(where: str, item: dict) -> None:  # V3, V5, V6
                 if f not in hop:
                     _fail("V3", w, f"missing {f}")
         if hop["kind"] not in ("ContractPoint", "Link"):
-            for f in ("path", "line", "repo", "unit"):
+            for f in (("repo", "unit") if hop["kind"] == "Unit" else ("path", "line", "repo", "unit")):
                 if f not in hop:
                     _fail("V3", w, f"{hop['kind']} hop is missing {f}")
         if ("candidateCount" in hop) != (hop.get("edgeType") == "VIA"):
@@ -592,17 +655,15 @@ def _check_hops(where: str, item: dict) -> None:  # V3, V5, V6
         for f in KIND_ONLY_FIELDS - required - optional:
             if f in hop:
                 _fail("V3", w, f"{f} does not belong to a {hop['kind']} hop")
-        if hop["kind"] == "Link" and (i + 1 >= len(chain) or chain[i + 1]["kind"] != "CallSite"
-                                      or chain[i + 1].get("edgeType") != "VIA" or chain[i + 1].get("dir") != "<-"):
-            _fail("V5", w, "a Link hop is followed by its CallSite hop (VIA <-)")
+        _check_unit_hop(w, chain, i)
         if hop["kind"] == "Link":
-            site = chain[i + 1]["id"] if i + 1 < len(chain) else None
+            site = _check_link(w, chain, i, direction)
             tied = [(x["siteId"], x["ord"]) for x in hop.get("lifted", [])]
             if len(set(tied)) != len(tied):
                 _fail("V3", f"{w}.lifted", "duplicate (siteId, ord)")
             for j, lf in enumerate(hop.get("lifted", [])):
                 if lf["siteId"] != site:
-                    _fail("V5", f"{w}.lifted[{j}]", "siteId is not the following call site's id")
+                    _fail("V5", f"{w}.lifted[{j}]", "siteId is not the link's own call site's id")
         ords = [b["ord"] for b in hop.get("bound", [])]
         if len(set(ords)) != len(ords):
             _fail("V3", f"{w}.bound", "duplicate ord")
@@ -675,6 +736,11 @@ def _check_staleness(doc: dict) -> None:  # V9
         need |= _units_of(it)
     if set(listed) != need:
         _fail("V9", "staleness.units", f"missing {sorted(need - set(listed))}, extra {sorted(set(listed) - need)}")
+    status = {u["unitId"]: u["buildStatus"] for u in doc["staleness"]["units"]}
+    for where, it in _all_items(doc):
+        for i, hop in enumerate(it["chain"]):
+            if hop["kind"] == "Unit" and status[hop["id"]] != "not-mapped":
+                _fail("V9", f"{where}.chain[{i}]", "a Unit hop's staleness entry is not-mapped (spec2 §3.5)")
 
 
 def _check_depth(doc: dict) -> None:  # V10
@@ -712,7 +778,11 @@ def _check_f4(doc: dict) -> None:  # V12
             elif hop["kind"] == "ContractPoint" and _contract_field(hop["contractKind"]):
                 _check_identifier(hop["contractKind"], hop["keyNorm"], w + ".keyNorm")
             for j, b in enumerate(hop.get("bound", [])):
-                _check_identifier("keyPath", b["keyPath"], f"{w}.bound[{j}].keyPath")
+                if "keyPath" in b:
+                    _check_identifier("keyPath", b["keyPath"], f"{w}.bound[{j}].keyPath")
+                for f in ("mountPath", "service", "envVar"):
+                    if f in b.get("launch", {}):
+                        _check_identifier(f, b["launch"][f], f"{w}.bound[{j}].launch.{f}")
 
 
 def _check_cycles(doc: dict) -> None:  # V13
@@ -760,6 +830,68 @@ def _check_spans(doc: dict) -> None:  # V16
             _fail("V16", f"{w}.ownedRegions", "ownedRegions is ascending (non-decreasing flat list)")
 
 
+_BOUND_1_1_FIELDS = ("launch", "port", "portOrigin", "packId")
+
+
+def _check_labels(doc: dict) -> None:  # V17
+    """Version labels (spec2 §7.2): a ``"1.0"`` document carries no 1.1 construct; a resolved ``"1.1"`` one is bounded at >= 2."""
+    if doc["answerSchemaVersion"] == "1.1":
+        if doc["interpretation"]["status"] == "resolved" and doc["depthBound"].get("bound", 0) < 2:
+            _fail("V17", "depthBound.bound", "a resolved 1.1 answer records a depth bound of at least 2 (spec2 §4.1)")
+        return
+    if "cacheBypass" in doc["interpretation"].get("provenance", {}):
+        _fail("V17", "interpretation.provenance.cacheBypass", "cacheBypass is a 1.1 field")
+    for where, it in _all_items(doc):
+        if it["subject"]["type"] == "unit":
+            _fail("V17", f"{where}.subject", "a unit subject is a 1.1 construct")
+        for i, hop in enumerate(it["chain"]):
+            w = f"{where}.chain[{i}]"
+            if hop["kind"] == "Unit":
+                _fail("V17", w, "a Unit hop is a 1.1 construct")
+            if hop["kind"] == "ConfigEntry" and hop.get("edgeType") == "BOUND_BY" and hop.get("dir") == "->":
+                _fail("V17", w, "a wiring ConfigEntry hop (BOUND_BY ->) is a 1.1 construct")
+            for j, b in enumerate(hop.get("bound", [])):
+                if any(f in b for f in _BOUND_1_1_FIELDS):  # a Bound without keyPath has launch (the schema's oneOf)
+                    _fail("V17", f"{w}.bound[{j}]", "a 1.0 Bound has keyPath and none of launch, port, portOrigin, packId")
+
+
+def _check_flow_rows(doc: dict) -> None:  # V18
+    """Spec2 §5 (a)-(e), 1.1 only: where the ``function`` state is entered, which rows leave it, and what they are labelled."""
+    if doc["answerSchemaVersion"] != "1.1":
+        return
+    column = doc["interpretation"].get("request", {}).get("direction", "impact")
+    entry, rows = FUNCTION_ENTRY[column], FLOW_ROWS[column]
+    lang = {u["unitId"]: u["lang"] for u in doc["staleness"]["units"]}
+    for where, it in _all_items(doc):
+        chain = it["chain"]
+        for i in range(1, len(chain)):
+            h, prev = chain[i], chain[i - 1]
+            w = f"{where}.chain[{i}]"
+            row = (h.get("edgeType"), h.get("dir"))
+            if h["state"] == "function" and (h["kind"] != "Symbol" or row not in entry):
+                _fail("V18", w, "(a) a function-state hop is a Symbol hop entered by an entry row of its column")
+            leaving = prev["state"] == "function"
+            if leaving and row not in rows:
+                _fail("V18", w, "(e) a hop after a function-state hop arrives by a labelled row of its column")
+            if leaving and h["status"] != "possible":
+                _fail("V18", w, "(b) a labelled-row hop leaving a function-state hop is possible")
+            reason = h.get("reason", "")
+            if reason.startswith(_FLOW_PREFIX):
+                if not leaving or row[0] == "CALLS_NAME":
+                    _fail("V18", w, "(c) flow-unavailable rides only a labelled row (not CALLS_NAME) leaving a function-state hop")
+                if reason[len(_FLOW_PREFIX):] != lang.get(prev.get("unit")):
+                    _fail("V18", w, "(d) the flow-unavailable language is the language of the departing hop's unit")
+
+
+def _check_prohibited_edges(doc: dict) -> None:  # V19
+    if doc["answerSchemaVersion"] != "1.1":
+        return
+    for where, it in _all_items(doc):
+        for i, hop in enumerate(it["chain"]):
+            if hop.get("edgeType") in PROHIBITED_EDGE_TYPES:
+                _fail("V19", f"{where}.chain[{i}].edgeType", f"{hop['edgeType']} is on no 1.1 hop (spec2 §3)")
+
+
 def _describe(error) -> str:
     """One short line for a schema error: the failing branch of a ``oneOf``, a ``not`` as what is forbidden."""
     while error.validator in ("oneOf", "anyOf") and error.context:
@@ -775,7 +907,7 @@ def _describe(error) -> str:
 
 
 def validate(doc: dict) -> None:
-    """Schema plus V1-V13, V15 and V16 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
+    """Schema plus V1-V13 and V15-V19 (V14 is ``unclassified_strings``, a property of the schema); raises ``AnswerError``."""
     if not isinstance(doc, dict):
         raise AnswerError("V1: an answer is one JSON object")
     _check_values(doc)
@@ -785,8 +917,9 @@ def validate(doc: dict) -> None:
         _fail("schema", _fmt_path(error.absolute_path), _describe(error))
     _check_interpretation(doc)
     anchors = {_anchor_id(a): ANCHOR_HOP_KIND[a["type"]] for a in doc["interpretation"].get("request", {}).get("anchors", [])}
+    direction = doc["interpretation"].get("request", {}).get("direction", "impact")
     for where, it in _all_items(doc):
-        _check_hops(where, it)
+        _check_hops(where, it, direction)
         _check_item_rules(where, it, anchors)
     _check_groups(doc)
     _check_staleness(doc)
@@ -798,3 +931,6 @@ def validate(doc: dict) -> None:
     _check_cycles(doc)
     _check_ids(doc)
     _check_spans(doc)
+    _check_labels(doc)
+    _check_flow_rows(doc)
+    _check_prohibited_edges(doc)

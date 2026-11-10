@@ -900,7 +900,7 @@ def test_every_object_of_the_schema_is_closed_and_it_names_its_spec():
     assert "NOT sufficient" in schema["description"] and "connected-code-graph-answer-spec" in schema["description"]
     assert set(schema["$defs"]) == {"Request", "AnchorSymbol", "AnchorContract", "AnchorConfig", "Scope", "Lookup", "Provenance", "Recipe",
                                     "Stamp", "DepthBound", "Unit", "Item", "SymbolSubject", "ConfigSubject", "Hop", "Lifted", "Bound",
-                                    "Launch", "Group"}
+                                    "Launch", "Group", "UnitSubject"}
     for path, node in answer._iter_schema(schema):
         if node.get("type") == "object":
             assert node.get("additionalProperties") is False, path
@@ -1659,6 +1659,140 @@ def test_the_classification_walker_flags_a_list_typed_string_and_the_array_probe
 
 # --- the schema's own contract, field by field (found by mutating the schema; hand-transcribed from spec §2-§5) ----------
 
+# --- 1.1 builders (``docs/plans/connected-code-graph-answer-spec2.md`` §8) ----------------------------------------
+
+def to_11(d: dict) -> dict:
+    d["answerSchemaVersion"] = "1.1"
+    d["depthBound"] = {"bound": 2, "unexplored": 0}
+    return d
+
+
+def b_11() -> dict:  # B-1.1
+    return to_11(golden())
+
+
+def b_prov_11() -> dict:  # B-prov-1.1
+    return to_11(b_prov())
+
+
+def b_config_launch_only() -> dict:
+    d = to_11(b_config())
+    b = d["items"][0]["chain"][1]["bound"][0]
+    del b["keyPath"]
+    b["launch"] = {"launchKind": "command", "argv0": "run.sh"}
+    return d
+
+
+CFG_UNIT = mk_unit("cfgu", "deploy", "graphmind-ai-lab")
+
+
+def _bound(ord_: int, tag: str, path: str, line: int, **extra) -> dict:
+    return {"ord": ord_, "entryId": H(tag), "repo": "graphmind-ai-lab", "unit": CFG_UNIT["unitId"], "path": path, "line": line, **extra}
+
+
+def chain_bounds() -> list[dict]:
+    return [_bound(0, "bm", ".mcp.json", 4, launch={"launchKind": "command", "argv0": "cypher-mcp/docker-run.sh"}),
+            _bound(1, "bd", "cypher-mcp/docker-run.sh", 9, launch={"launchKind": "command", "argv0": "docker"}),
+            _bound(2, "bc", "deploy/compose.yaml", 12, keyPath="services.server.ports[0]", port=8000, portOrigin="compose")]
+
+
+def b_chain() -> dict:  # B-chain
+    d = b_11()
+    d["items"][0]["chain"][2]["bound"] = chain_bounds()
+    d["staleness"]["units"].append(copy.deepcopy(CFG_UNIT))
+    return d
+
+
+def b_wire() -> dict:  # B-wire
+    d = b_chain()
+    chain = copy.deepcopy(d["items"][0]["chain"][:3])
+    compose = chain_bounds()[2]
+    del chain[2]["lifted"]
+    chain[2]["bound"] = [compose]
+    entry = hop("ConfigEntry", compose["entryId"], "end", CFG_UNIT["unitId"], compose["path"], compose["line"], repo="graphmind-ai-lab",
+                edge="BOUND_BY", direction="->", keyPath=compose["keyPath"])
+    chain.append(entry)
+    d["items"].append({"subject": {"type": "config", "entryId": entry["id"], "path": entry["path"], "line": entry["line"],
+                                   "keyPath": entry["keyPath"]},
+                       "repoId": "graphmind-ai-lab", "unitId": CFG_UNIT["unitId"], "status": "confirmed", "directness": "direct",
+                       "distance": 1, "viaData": False, "chain": chain})
+    return d
+
+
+def b_dep() -> dict:  # B-dep: a 1.0 depends-on document
+    u = U1["unitId"]
+    prov = mk_sym("prov", "svc/p.py", 30)
+    site = site_hop("ds", u, 14, "g", "value", "HAS_CALL", direction="->")
+    lifted = {"ord": 0, "siteId": site["id"], "kind": "CallSite", "id": site["id"], "repo": REPO, "unit": u, "path": "svc/a.py", "line": 14,
+              "urlPath": "a0", "name": "g"}
+    link = hop("Link", H("dl"), "contract", edge="VIA", direction="->", candidateCount=1, lifted=[lifted])
+    chain = [sym_hop(SA, u), site, link, sym_hop(prov, u, "end", edge="TO", direction="->")]
+    doc = mk_doc([anchor_of(SA)], [mk_item(prov, chain, 1)], units=[U1])
+    doc["interpretation"]["request"]["direction"] = "depends-on"
+    return doc
+
+
+def b_dep_11() -> dict:
+    d = to_11(b_dep())
+    link = d["items"][0]["chain"][2]
+    link["bound"] = [_bound(0, "bd0", "deploy/compose.yaml", 3, keyPath="services.web.ports[0]", port=8000, portOrigin="compose")]
+    d["staleness"]["units"].append(copy.deepcopy(CFG_UNIT))
+    return d
+
+
+U9 = mk_unit("u9", "svc9", status="not-mapped")
+
+
+def b_unit() -> dict:  # B-unit: a 1.1 depends-on document ending in a never-built unit
+    u = U1["unitId"]
+    site = site_hop("us", u, 14, "g", "value", "HAS_CALL", direction="->")
+    lifted = {"ord": 0, "siteId": site["id"], "kind": "CallSite", "id": site["id"], "repo": REPO, "unit": u, "path": "svc/a.py", "line": 14,
+              "urlPath": "a0", "name": "g"}
+    link = hop("Link", H("ul"), "contract", edge="VIA", direction="->", status="possible", reason="target-not-mapped", candidateCount=1,
+               lifted=[lifted])
+    unit = {"kind": "Unit", "id": U9["unitId"], "state": "end", "repo": REPO, "unit": U9["unitId"], "edgeType": "TO_UNIT", "dir": "->",
+            "status": "possible", "reason": "target-not-mapped"}
+    item = {"subject": {"type": "unit", "unitId": U9["unitId"]}, "repoId": REPO, "unitId": U9["unitId"], "status": "possible",
+            "reason": "target-not-mapped", "directness": "direct", "distance": 1, "viaData": False,
+            "chain": [sym_hop(SA, u), site, link, unit]}
+    doc = to_11(mk_doc([anchor_of(SA)], [item], units=[U1, U9]))
+    doc["interpretation"]["request"]["direction"] = "depends-on"
+    return doc
+
+
+U2 = {**mk_unit("u2", "web"), "lang": "javascript"}
+
+
+def b_flow() -> dict:  # B-flow: a 1.1 impact document in U1 (python), every chain built from fresh hop dicts
+    u, w = U1["unitId"], U2["unitId"]
+    fb, fc = mk_sym("fb", line=30), mk_sym("fc", line=40)
+    fw = mk_sym("fw", "web/w.js", 9, "javascript")
+    flow = dict(status="possible", reason="flow-unavailable:python")
+
+    def a_chain():
+        return [sym_hop(SA, u), site_hop("fa1", u, 12, "g", "value", "CALLS"), sym_hop(fb, u, "function", edge="HAS_CALL")]
+
+    chain_b = a_chain() + [site_hop("fb1", u, 14, "h", "value", "CALLS", **flow), sym_hop(fc, u, "function", edge="HAS_CALL")]
+    link = hop("Link", H("fl"), "contract", edge="TO", **flow)
+    via = hop("CallSite", H("fcs"), "contract", w, "web/w.js", 5, repo=REPO, edge="VIA", candidateCount=1, calleeName="x")
+    chain_c = a_chain() + [link, via, sym_hop(fw, w, "end", edge="HAS_CALL")]
+    items = [mk_item(fb, a_chain(), 1), mk_item(fc, chain_b, 2), mk_item(fw, chain_c, 2)]
+    return to_11(mk_doc([anchor_of(SA)], items, units=[U1, U2]))
+
+
+def b_dflow() -> dict:  # B-dflow: a 1.1 depends-on document: a callee entered at call level, its calls labelled
+    u = U1["unitId"]
+    g1, g2 = mk_sym("g1", "svc/g.py", 10), mk_sym("g2", "svc/g.py", 30)
+    flow = dict(status="possible", reason="flow-unavailable:python")
+    chain = [sym_hop(SA, u), site_hop("dc1", u, 12, "g1", "value", "HAS_CALL", direction="->"),
+             sym_hop(g1, u, "function", edge="CALLS", direction="->"),
+             site_hop("dc2", u, 14, "g2", "value", "HAS_CALL", direction="->", **flow),
+             sym_hop(g2, u, "end", edge="CALLS", direction="->")]
+    d = to_11(mk_doc([anchor_of(SA)], [mk_item(g2, chain, 2)], units=[U1]))
+    d["interpretation"]["request"]["direction"] = "depends-on"
+    return d
+
+
 def _first(lst):
     return lst[0]
 
@@ -1690,6 +1824,9 @@ INSTANCES = {
     "Hop.via": (golden, lambda d: d["items"][0]["chain"][3]),
     "Lifted": (golden, lambda d: d["items"][0]["chain"][2]["lifted"][1]),
     "Bound": (b_config, lambda d: d["items"][0]["chain"][1]["bound"][0]),
+    "Bound.keyPath": (b_config, lambda d: d["items"][0]["chain"][1]["bound"][0]),
+    "Bound.launch": (b_config_launch_only, lambda d: d["items"][0]["chain"][1]["bound"][0]),
+    "UnitSubject": (b_unit, lambda d: d["items"][0]["subject"]),
     "Launch": (b_launch, lambda d: d["items"][0]["chain"][1]["launch"]),
     "Group": (b_group, lambda d: d["groups"][0]),
 }
@@ -1706,7 +1843,8 @@ REQUIRED = {
     "Unit": "unitId repoId rootPath lang buildStatus", "Item": "subject repoId unitId status directness distance viaData chain",
     "SymbolSubject": "type symbolId qname path lineStart lineEnd", "ConfigSubject": "type entryId path line keyPath",
     "Hop": "kind id state", "Lifted": "ord siteId kind id repo unit path line urlPath name",
-    "Bound": "ord entryId repo unit path line keyPath", "Launch": "launchKind", "Group": "kind key reason count members",
+    "Bound": "ord entryId repo unit path line", "Bound.keyPath": "keyPath", "Bound.launch": "launch",
+    "UnitSubject": "type unitId", "Launch": "launchKind", "Group": "kind key reason count members",
 }
 REQUIRED_PAIRS = [(loc, f) for loc, fields in REQUIRED.items() for f in fields.split()]
 
@@ -1745,7 +1883,7 @@ PATTERNED = {  # class: (bad value, [(location, field)])
                      ("Provenance", "samplingHash"), ("Provenance", "cacheKey"), ("Stamp", "snapshotId"), ("Stamp", "verdictLogHash"),
                      ("Unit", "unitId"), ("SymbolSubject", "symbolId"), ("ConfigSubject", "entryId"), ("Lifted", "siteId"),
                      ("Lifted", "id"), ("Lifted", "unit"), ("Lifted", "viaSiteId"), ("Bound", "entryId"), ("Bound", "unit"),
-                     ("Hop", "id"), ("Hop", "unit"), ("Item", "unitId"), ("Group", "key")]),
+                     ("Hop", "id"), ("Hop", "unit"), ("Item", "unitId"), ("Group", "key"), ("UnitSubject", "unitId")]),
     "hex64": ("a" * 32, [("Provenance", "promptHash"), ("Provenance", "grammarHash")]),
     "hex40": ("a" * 39, [("Unit", "builtCommit")]),
     "repo": ("Not A Repo", [("AnchorSymbol", "repoId"), ("AnchorConfig", "repoId"), ("Lookup", "repoId"), ("Unit", "repoId"),
@@ -1808,9 +1946,10 @@ ENUMS = {  # location -> field -> allowed values (spec §3-§5)
     ("Unit", "buildStatus"): "fresh stale-kept not-mapped",
     ("Launch", "launchKind"): "command port env-default mount",
     ("Lifted", "kind"): "CallSite Symbol",
-    ("Hop", "kind"): "ContractPoint Symbol CallSite Param Ret Cond Link ConfigEntry",
+    ("Hop", "kind"): "ContractPoint Symbol CallSite Param Ret Cond Link ConfigEntry Unit",
     ("Hop", "edgeType"): ("CALLS CALLS_NAME HAS_CALL HAS_PARAM HAS_RETURN HAS_COND DATA CONTROLLED_BY VIA TO ON CONSUMES PROVIDES READS "
-                          "WRITES DEFINED_BY BOUND_BY LAUNCHES RAN DEPENDS_ON FROM_DEP"),
+                          "WRITES DEFINED_BY BOUND_BY LAUNCHES RAN DEPENDS_ON FROM_DEP TO_UNIT"),
+    ("Bound", "portOrigin"): "explicit env-default compose pack-default",
     ("Hop", "dir"): "<- ->", ("Hop", "status"): "confirmed possible", ("Hop", "state"): "value path function contract key end",
     ("Item", "status"): "confirmed possible", ("Item", "directness"): "direct indirect",
     ("Group", "kind"): "other-possible-callees runtime-built-access", ("Group", "reason"): "resolution-unverified runtime-built",
@@ -2287,3 +2426,388 @@ def test_verb_path_and_access_path_must_be_stripped():
     rejects(golden(), lambda d: d["items"][0]["chain"][2]["lifted"][0].update(verbPath=" a0.method"), "stripped")
     rejects(golden(), lambda d: d["items"][0]["chain"][2]["lifted"][0].update(verbPath="a0.method\t"), "stripped")
     rejects(b_data(), lambda d: d["items"][0]["chain"][2].update(accessPath="a0 "), "stripped")
+
+
+# --- P1-45: schema 1.1 and rules V17-V19 (``docs/plans/connected-code-graph-answer-spec2.md`` §7, §8) ----------------
+
+def _prov(d: dict) -> dict:
+    return d["interpretation"]["provenance"]
+
+
+def test_the_1_1_bases_validate_and_the_version_set_is_exactly_1_0_and_1_1():
+    for build in (b_11, b_prov_11, b_chain, b_wire, b_dep, b_dep_11, b_unit):
+        validate(build())
+    assert answer.ANSWER_SCHEMA_VERSIONS == ("1.0", "1.1")
+    for bad in ("1.2", "1", "2.0", "1.1.0", 11):
+        rejects(b_11(), lambda d, bad=bad: d.update(answerSchemaVersion=bad), "schema")
+    assert golden()["answerSchemaVersion"] == "1.0"
+
+
+def test_cache_bypass_is_true_only_needs_a_miss_and_stays_outside_the_facts():
+    base = b_prov_11()
+    accepts(base, lambda d: _prov(d).update(cacheBypass=True))
+    rejects(base, lambda d: _prov(d).update(cacheBypass=False), "schema")
+    rejects(base, lambda d: _prov(d).update(cacheBypass=True, cacheHit=True), "schema")
+    rejects(base, lambda d: _prov(d).update(cacheBypas=True), "schema")
+    rejects(b_prov(), lambda d: _prov(d).update(cacheBypass=True), "V17")
+    bypassed = copy.deepcopy(base)
+    _prov(bypassed)["cacheBypass"] = True
+    assert facts_bytes(bypassed) == facts_bytes(base)
+    assert dumps(bypassed) != dumps(base)
+
+
+def test_v19_the_set_is_the_four_names_and_each_is_rejected_on_a_1_1_hop_only():
+    assert answer.PROHIBITED_EDGE_TYPES == frozenset({"DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"})
+
+
+@pytest.mark.parametrize("edge", ["DEFINED_BY", "LAUNCHES", "DEPENDS_ON", "FROM_DEP"])
+def test_v19_each_prohibited_edge_type_is_rejected_on_a_1_1_hop_and_accepted_on_a_1_0_hop(edge):
+    rejects(b_11(), lambda d: d["items"][0]["chain"][1].update(edgeType=edge), "V19")
+    accepts(golden(), lambda d: d["items"][0]["chain"][1].update(edgeType=edge))
+
+
+@pytest.mark.parametrize("edge", ["BOUND_BY", "RAN", "PROVIDES"])
+def test_v19_controls_other_edge_types_stay_valid_on_a_1_1_hop(edge):
+    accepts(b_11(), lambda d: d["items"][0]["chain"][1].update(edgeType=edge))
+
+
+def test_v19_screens_group_members_too():
+    d = b_group()
+    to_11(d)
+    validate(d)
+    d["groups"][0]["members"][0]["chain"][1]["edgeType"] = "LAUNCHES"
+    with pytest.raises(AnswerError, match="V19"):
+        validate(d)
+
+
+def test_bound_shape_and_port_evidence():
+    base = b_chain()
+    bound = lambda d, i: d["items"][0]["chain"][2]["bound"][i]  # noqa: E731
+    rejects(base, lambda d: bound(d, 0).update(keyPath="a.b"), "schema")
+    rejects(base, lambda d: bound(d, 0).pop("launch"), "schema")
+    rejects(base, lambda d: bound(d, 0)["launch"].update(args="x"), "schema")
+    rejects(base, lambda d: bound(d, 2).pop("portOrigin"), "schema")
+    rejects(base, lambda d: bound(d, 2).pop("port"), "schema")
+    rejects(base, lambda d: bound(d, 2).update(packId="fastapi"), "schema")
+    rejects(base, lambda d: bound(d, 2).update(portOrigin="pack-default"), "schema")
+    rejects(base, lambda d: bound(d, 2).update(portOrigin="elsewhere"), "schema")
+    rejects(base, lambda d: bound(d, 2).update(port=0), "schema")
+    rejects(base, lambda d: bound(d, 2).update(port=65536), "schema")
+    rejects(base, lambda d: bound(d, 2).update(portOrigin="pack-default", packId="Bad Pack"), "schema")
+    accepts(base, lambda d: bound(d, 2).update(portOrigin="pack-default", packId="fastapi"))
+    accepts(base, lambda d: bound(d, 2).update(port=65535, portOrigin="env-default"))
+    rejects(base, lambda d: bound(d, 0)["launch"].update(service=UNMASKED), "V12")
+    rejects(base, lambda d: bound(d, 2).update(keyPath=f"a.{UNMASKED}"), "V12")
+    rejects(base, lambda d: d.update(answerSchemaVersion="1.0"), "V17")
+
+
+@pytest.mark.parametrize("field,value", [("launch", {"launchKind": "command", "argv0": "x"}), ("port", 80), ("portOrigin", "compose")])
+def test_v17_a_1_0_bound_carries_no_1_1_field(field, value):
+    d = b_config()
+    validate(d)
+    d["items"][0]["chain"][1]["bound"][0][field] = value
+    if field == "launch":
+        del d["items"][0]["chain"][1]["bound"][0]["keyPath"]
+    elif field == "port":
+        d["items"][0]["chain"][1]["bound"][0]["portOrigin"] = "compose"
+    else:
+        d["items"][0]["chain"][1]["bound"][0]["port"] = 80
+    with pytest.raises(AnswerError, match="V17"):
+        validate(d)
+
+
+def test_v17_a_1_0_bound_with_a_pack_id_is_rejected():
+    d = b_config()
+    d["items"][0]["chain"][1]["bound"][0].update(port=80, portOrigin="pack-default", packId="fastapi")
+    with pytest.raises(AnswerError, match="V17"):
+        validate(d)
+
+
+def test_wiring_items():
+    base = b_wire()
+    wire = lambda d: d["items"][1]["chain"]  # noqa: E731
+    extra = _bound(3, "bx", "deploy/other.yaml", 2, keyPath="services.other.ports[0]")
+    rejects(base, lambda d: wire(d)[2]["bound"].append(extra), "V5")
+    rejects(base, lambda d: wire(d)[2]["bound"][0].update(entryId=H("elsewhere")), "V5")
+    rejects(base, lambda d: wire(d)[2].update(lifted=copy.deepcopy(d["items"][0]["chain"][2]["lifted"])), "V5")
+    rejects(base, lambda d: wire(d)[2].pop("bound"), "V5")
+    rejects(base, lambda d: wire(d)[3].update(edgeType="READS"), "V5")
+    rejects(base, lambda d: wire(d)[3].update(dir="<-"), "V5")
+    rejects(base, lambda d: d.update(answerSchemaVersion="1.0"), "V17")
+
+
+def test_a_wiring_entry_hop_is_the_last_hop():
+    d = b_wire()
+    chain = d["items"][1]["chain"]
+    chain.append(copy.deepcopy(chain[0]))
+    chain[-1].update(kind="ConfigEntry", state="end", edgeType="READS", dir="<-", status="confirmed", id=H("tail"), repo="graphmind-ai-lab",
+                     unit=CFG_UNIT["unitId"], path="deploy/t.yaml", line=1, keyPath="a.b")
+    chain[-1].pop("contractKind", None)
+    chain[-1].pop("qname", None)
+    with pytest.raises(AnswerError, match="V5"):
+        validate(d)
+
+
+def test_depends_on_links():
+    validate(b_dep())
+    validate(b_dep_11())
+    chain = lambda d: d["items"][0]["chain"]  # noqa: E731
+
+    def to_edge(d):
+        link = chain(d)[2]
+        link.update(edgeType="TO")
+        del link["candidateCount"]
+
+    def symbol_before(d):
+        sym = sym_hop(mk_sym("zz", "svc/z.py", 8), U1["unitId"], "value", edge="HAS_CALL", direction="->")
+        chain(d)[1] = sym
+        chain(d)[2]["lifted"][0]["siteId"] = sym["id"]
+
+    def impact_exit(d):
+        chain(d)[3] = site_hop("x", U1["unitId"], 20, "g", "value", "VIA", candidateCount=1)
+
+    for base in (b_dep(), b_dep_11()):
+        rejects(base, to_edge, "V5")
+        rejects(base, symbol_before, "V5")
+        rejects(base, impact_exit, "V5")
+        rejects(base, lambda d: chain(d)[2]["lifted"][0].update(siteId=H("another")), "V5")
+        rejects(base, lambda d: chain(d)[2].update(dir="<-"), "V5")
+        rejects(base, lambda d: chain(d)[3].update(dir="<-"), "V5")
+
+
+def test_the_direction_is_read_from_the_request_so_an_impact_shaped_link_is_not_a_depends_on_one():
+    d = b_dep()
+    d["interpretation"]["request"]["direction"] = "impact"
+    with pytest.raises(AnswerError, match="V5"):
+        validate(d)
+
+
+def test_depth_bound_1_1():
+    rejects(b_11(), lambda d: d["depthBound"].pop("bound"), "V17")
+    rejects(b_11(), lambda d: d["depthBound"].update(bound=1), "V17")
+    accepts(b_11(), lambda d: d["depthBound"].update(bound=3))
+    amb = b_amb()
+    amb["answerSchemaVersion"] = "1.1"
+    validate(amb)
+    unres = b_unres()
+    unres["answerSchemaVersion"] = "1.1"
+    validate(unres)
+    validate(golden())
+
+
+def test_build_times_are_outside_a_1_1_documents_facts_and_inside_a_1_0_ones():
+    base = b_11()
+    later = copy.deepcopy(base)
+    later["staleness"]["units"][0]["builtAt"] = "2026-11-03T00:00:00Z"
+    assert facts_bytes(later) == facts_bytes(base)
+    assert dumps(later) != dumps(base)
+    stale = to_11(b_stale())
+    moved = copy.deepcopy(stale)
+    moved["staleness"]["units"][0]["failedAt"] = "2026-11-09T00:00:00Z"
+    moved["staleness"]["units"][0]["builtAt"] = "2026-11-08T00:00:00Z"
+    assert facts_bytes(moved) == facts_bytes(stale)
+    assert dumps(moved) != dumps(stale)
+    old = golden()
+    older = copy.deepcopy(old)
+    older["staleness"]["units"][0]["builtAt"] = "2026-11-03T00:00:00Z"
+    assert facts_bytes(older) != facts_bytes(old)
+    other = copy.deepcopy(base)
+    other["staleness"]["units"][0]["builtCommit"] = "b" * 40
+    assert facts_bytes(other) != facts_bytes(base)
+
+
+def test_to_unit_items():
+    base = b_unit()
+    hops = lambda d: d["items"][0]["chain"]  # noqa: E731
+    rejects(base, lambda d: d["staleness"]["units"].__setitem__(1, mk_unit("u9", "svc9")), "V9")
+    rejects(base, lambda d: hops(d)[3].update(edgeType="TO"), "V5")
+    rejects(base, lambda d: hops(d)[3].update(unit=U1["unitId"]), "V5")
+    rejects(base, lambda d: hops(d).pop(2), "V5")  # a Unit hop is entered from a Link hop
+    rejects(base, lambda d: hops(d)[3].update(dir="<-"), "V5")
+    rejects(base, lambda d: d["interpretation"]["request"].update(direction="impact"), "V5")
+    rejects(base, lambda d: d.update(answerSchemaVersion="1.0"), "V17")
+    rejects(b_dep_11(), lambda d: d["items"][0]["chain"][3].update(edgeType="TO_UNIT"), "V5")
+    assert answer.is_canonical(dumps(base))
+    assert loads(dumps(base)) == canonicalize(base)
+
+
+def test_a_unit_hop_is_the_last_hop_and_follows_a_link():
+    d = b_unit()
+    chain = d["items"][0]["chain"]
+    chain[2], chain[3] = chain[3], chain[2]
+    with pytest.raises(AnswerError, match="V5"):
+        validate(d)
+
+
+def test_a_unit_subject_sorts_by_its_units_root_path():
+    d = b_unit()
+    other = simple_item("o1", U1)
+    d["items"].append(other)
+    assert [it["subject"]["type"] for it in canonicalize(d)["items"]] == ["symbol", "unit"]
+    d["staleness"]["units"][0]["rootPath"] = "zz"
+    d["staleness"]["units"][1]["rootPath"] = "aa"
+    assert [it["subject"]["type"] for it in canonicalize(d)["items"]] == ["unit", "symbol"]
+
+
+def test_algorithm_version_pin_is_only_the_pattern():
+    accepts(b_11(), lambda d: d["recipe"]["algorithm"].update(version="1.1"))
+    rejects(b_11(), lambda d: d["recipe"]["algorithm"].update(version="1.1.0"), "schema")
+
+
+def test_engine_reason_codes_unchanged():
+    assert answer.ENGINE_REASON_CODES == {"function-level-continuation": "possible"}
+
+
+def _set_hop(d: dict, item: int, i: int, *, status: str | None = None, reason: str | None = None, **fields) -> None:
+    """Change one hop and make the item's status and reason follow v1 §5.1 (V7), so only the V18 clause under test can object."""
+    it = d["items"][item]
+    h = it["chain"][i]
+    h.update(fields)
+    if status:
+        h["status"] = status
+    if reason is None:
+        h.pop("reason", None)
+    else:
+        h["reason"] = reason
+    poss = [x for x in it["chain"][1:] if x.get("status") == "possible"]
+    it["status"] = "possible" if poss else "confirmed"
+    if poss:
+        it["reason"] = poss[0]["reason"]
+    else:
+        it.pop("reason", None)
+
+
+FLOW_UNAVAILABLE_PY = dict(status="possible", reason="flow-unavailable:python")
+
+
+def test_v18_labelled_rows():
+    base = b_flow()
+    validate(base)
+    validate(b_dflow())
+    # (c) flow-unavailable only on a row leaving a function-state hop
+    rejects(base, lambda d: _set_hop(d, 0, 1, **FLOW_UNAVAILABLE_PY), r"V18.*\(c\)")
+    rejects(b_11(), lambda d: _set_hop(d, 0, 1, **FLOW_UNAVAILABLE_PY), r"V18.*\(c\)")
+    # (b) a labelled-row hop leaving a function-state hop is possible
+    rejects(base, lambda d: _set_hop(d, 1, 3, status="confirmed"), r"V18.*\(b\)")
+    # (a) a function-state hop is a Symbol hop entered by an entry row of its column
+    rejects(base, lambda d: d["items"][0]["chain"][1].update(state="function"), r"V18.*\(a\)")
+    rejects(base, lambda d: d["items"][0]["chain"][2].update(edgeType="PROVIDES"), r"V18.*\(a\)")
+    rejects(base, lambda d: d["items"][0]["chain"][1].update(edgeType="HAS_CALL", state="function"), r"V18.*\(a\)")
+    rejects(base, lambda d: d["items"][0]["chain"][2].update(dir="->"), r"V18.*\(a\)")
+    # a labelled row of the other column is not labelled in this one
+    rejects(base, lambda d: d["items"][1]["chain"][3].update(edgeType="HAS_CALL", dir="->"), r"V18.*\(e\)")
+    # 1.0 documents are not held to V18
+    old = to_11(b_flow())
+    old["answerSchemaVersion"] = "1.0"
+    del old["depthBound"]["bound"]
+    _set_hop(old, 0, 1, **FLOW_UNAVAILABLE_PY)
+    validate(old)
+
+
+def test_v18_labelled_to_names_the_departing_unit():
+    base = b_flow()
+    js = "flow-unavailable:javascript"
+    rejects(base, lambda d: _set_hop(d, 1, 3, status="possible", reason=js), r"V18.*\(d\)")
+    rejects(base, lambda d: _set_hop(d, 2, 3, status="possible", reason=js), r"V18.*\(d\)")
+    rejects(base, lambda d: _set_hop(d, 2, 3, status="possible", reason="flow-unavailable:go"), r"V18.*\(d\)")
+
+
+def test_v18_function_state_exits():
+    base = b_flow()
+    # (e) the hop after a function-state hop is on a labelled row of the column
+    rejects(base, lambda d: _set_hop(d, 1, 3, status="confirmed", edgeType="PROVIDES", dir="->"), r"V18.*\(e\)")
+    rejects(base, lambda d: _set_hop(d, 1, 3, status="confirmed", edgeType="CALLS_NAME"), r"V18.*\(b\)")
+    # the labelled own-possible rows keep their own reason; flow-unavailable never rides CALLS_NAME (c)
+    accepts(base, lambda d: _set_hop(d, 1, 3, status="possible", reason="name-match", edgeType="CALLS_NAME"))
+    rejects(base, lambda d: _set_hop(d, 1, 3, status="possible", edgeType="CALLS_NAME", reason="flow-unavailable:python"), r"V18.*\(c\)")
+    deep = to_11(b_possible())
+    deep["depthBound"]["bound"] = 3
+    validate(deep)
+
+
+def test_v18_reads_the_column_from_the_request_direction():
+    base = b_dflow()
+    validate(base)
+    chain = lambda d: d["items"][0]["chain"]  # noqa: E731
+    rejects(base, lambda d: chain(d)[2].update(edgeType="HAS_CALL", dir="<-"), r"V18.*\(a\)")
+    rejects(base, lambda d: _set_hop(d, 0, 3, status="confirmed"), r"V18.*\(b\)")
+    rejects(base, lambda d: _set_hop(d, 0, 3, status="confirmed", edgeType="CALLS", dir="<-"), r"V18.*\(e\)")
+    rejects(base, lambda d: d["interpretation"]["request"].update(direction="impact"), "V5|V18")
+
+
+def test_v18_constants_are_keyed_by_direction():
+    assert set(answer.FUNCTION_ENTRY) == set(answer.FLOW_ROWS) == {"impact", "depends-on"}
+    assert answer.FLOW_ROWS["impact"] == frozenset({("CALLS", "<-"), ("CALLS_NAME", "<-"), ("TO", "<-")})
+    assert answer.FLOW_ROWS["depends-on"] == frozenset({("HAS_CALL", "->")})
+    assert answer.FUNCTION_ENTRY["impact"] == frozenset({("HAS_CALL", "<-"), ("HAS_PARAM", "<-"), ("HAS_COND", "<-")})
+    assert answer.FUNCTION_ENTRY["depends-on"] == frozenset({("CALLS", "->"), ("CALLS_NAME", "->")})
+
+
+def test_a_unit_hop_with_a_hop_after_it_is_rejected():
+    d = b_unit()
+    d["items"][0]["chain"].append(sym_hop(mk_sym("tail", "svc/t.py", 5), U1["unitId"], "end", edge="HAS_CALL", direction="->"))
+    with pytest.raises(AnswerError, match="V5"):
+        validate(d)
+
+
+def test_v17_each_1_1_construct_is_rejected_alone_on_a_1_0_document():
+    # a unit subject with no Unit hop (the subject id is the last hop's id)
+    d = b_dep()
+    last = d["items"][0]["chain"][-1]
+    d["items"][0]["subject"] = {"type": "unit", "unitId": last["id"]}
+    with pytest.raises(AnswerError, match=r"V17.*subject"):
+        validate(d)
+    # a Unit hop under a config subject
+    d = b_unit()
+    d["answerSchemaVersion"] = "1.0"
+    del d["depthBound"]["bound"]
+    d["items"][0]["subject"] = {"type": "config", "entryId": U9["unitId"], "path": "a.yaml", "line": 1, "keyPath": "a.b"}
+    with pytest.raises(AnswerError, match=r"V17.*chain\[3\]"):
+        validate(d)
+    # a wiring ConfigEntry hop whose Link Bound is a plain 1.0 one
+    d = b_wire()
+    d["items"] = [d["items"][1]]
+    d["staleness"]["units"] = [u for u in d["staleness"]["units"] if u["rootPath"] != "salesperson"]
+    d["answerSchemaVersion"] = "1.0"
+    del d["depthBound"]["bound"]
+    for f in ("port", "portOrigin"):
+        del d["items"][0]["chain"][2]["bound"][0][f]
+    with pytest.raises(AnswerError, match=r"V17.*chain\[3\]"):
+        validate(d)
+    d["answerSchemaVersion"] = "1.1"
+    d["depthBound"]["bound"] = 2
+    validate(d)
+
+
+def test_a_unit_subject_ties_the_symbol_items_of_its_unit_on_path_and_line_slots():
+    unit_id = U9["unitId"]
+    n = 0
+    while True:  # a symbol id that sorts before the unit id, so a wrong slot value shows in the order
+        sym = mk_sym(f"s{n}", "svc9", 1)
+        if sym["symbolId"] < unit_id:
+            break
+        n += 1
+    other = mk_item(sym, [sym_hop(SA, unit_id), sym_hop(sym, unit_id, "end", edge="CALLS_NAME", status="possible", reason="name-match")])
+    d = b_unit()
+    d["items"].append(other)
+    d["staleness"]["units"][1]["rootPath"] = "svc9"
+    assert [it["subject"]["type"] for it in canonicalize(d)["items"]] == ["unit", "symbol"]
+    far = copy.deepcopy(d)
+    far["items"][1]["subject"]["path"] = "aaa"  # a path before the unit's root sorts first
+    assert [it["subject"]["type"] for it in canonicalize(far)["items"]] == ["symbol", "unit"]
+
+
+@pytest.mark.parametrize("field,launch", [("mountPath", {"launchKind": "mount"}), ("envVar", {"launchKind": "env-default"}),
+                                          ("service", {"launchKind": "command"})])
+def test_v12_screens_each_bound_launch_field_as_its_own_kind(field, launch):
+    def set_(value):
+        return lambda d: d["items"][0]["chain"][2]["bound"][0].update(launch={**launch, field: value})
+
+    bad = f"/data/{UNMASKED}" if field == "mountPath" else UNMASKED
+    base = b_chain()
+    rejects(base, set_(bad), "V12")
+    accepts(base, set_(answer.mask_identifier(field, bad)))
+    # whole-string T6 trips on a dotted hex run that a keyPath's name tokens would each pass
+    rejects(base, set_("abcdef0123.456789abcd"), "V12")
+    if field == "mountPath":  # a mountPath is screened per segment, not as one string (T5 needs 20+ characters)
+        accepts(base, set_("/aaaaaaaaaa/sk-abcdefgh"))

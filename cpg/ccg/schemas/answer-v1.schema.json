@@ -2,13 +2,16 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "urn:ccg:answer-v1",
  "title": "Connected code graph canonical answer, schema v1",
- "description": "Canonical answer document, answerSchemaVersion \"1.0\" (docs/plans/connected-code-graph-answer-spec.md v1.2, S33/S34). This schema is necessary but NOT sufficient: ccg.answer.validate adds rules V1-V13 and V15 of the spec's section 8 (derivations, H3 anchor chaining, staleness set equality, id recomputation, the F-4 token screen) that JSON Schema cannot say. Every string-typed property carries exactly one of pattern/enum/const (engine-minted), x-ccg-minted, or x-ccg-data (free text from source, F-3).",
+ "description": "Canonical answer document, answerSchemaVersion \"1.0\" or \"1.1\" (docs/plans/connected-code-graph-answer-spec.md v1.3 and its P1 extension docs/plans/connected-code-graph-answer-spec2.md, S33/S34/P1-45). This schema is necessary but NOT sufficient: ccg.answer.validate adds rules V1-V13 and V15-V19 of the specs' validator sections (derivations, H3 anchor chaining, staleness set equality, id recomputation, the F-4 token screen, version labels, the flow-fallback rows) that JSON Schema cannot say. Every string-typed property carries exactly one of pattern/enum/const (engine-minted), x-ccg-minted, or x-ccg-data (free text from source, F-3).",
  "type": "object",
  "additionalProperties": false,
  "properties": {
   "answerSchemaVersion": {
    "type": "string",
-   "const": "1.0"
+   "enum": [
+    "1.0",
+    "1.1"
+   ]
   },
   "interpretation": {
    "type": "object",
@@ -534,6 +537,10 @@
     },
     "cacheHit": {
      "type": "boolean"
+    },
+    "cacheBypass": {
+     "type": "boolean",
+     "const": true
     }
    },
    "required": [
@@ -585,6 +592,20 @@
          ]
         }
        ]
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "cacheBypass"
+      ]
+     },
+     "then": {
+      "properties": {
+       "cacheHit": {
+        "const": false
+       }
       }
      }
     }
@@ -1239,6 +1260,27 @@
     "keyPath": {
      "type": "string",
      "x-ccg-data": true
+    },
+    "launch": {
+     "$ref": "#/$defs/Launch"
+    },
+    "port": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 65535
+    },
+    "portOrigin": {
+     "type": "string",
+     "enum": [
+      "explicit",
+      "env-default",
+      "compose",
+      "pack-default"
+     ]
+    },
+    "packId": {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9-]{0,39}$"
     }
    },
    "required": [
@@ -1247,8 +1289,69 @@
     "repo",
     "unit",
     "path",
-    "line",
-    "keyPath"
+    "line"
+   ],
+   "oneOf": [
+    {
+     "required": [
+      "keyPath"
+     ]
+    },
+    {
+     "required": [
+      "launch"
+     ]
+    }
+   ],
+   "allOf": [
+    {
+     "if": {
+      "required": [
+       "port"
+      ]
+     },
+     "then": {
+      "required": [
+       "portOrigin"
+      ]
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "portOrigin"
+      ]
+     },
+     "then": {
+      "required": [
+       "port"
+      ]
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "portOrigin": {
+        "const": "pack-default"
+       }
+      },
+      "required": [
+       "portOrigin"
+      ]
+     },
+     "then": {
+      "required": [
+       "packId"
+      ]
+     },
+     "else": {
+      "not": {
+       "required": [
+        "packId"
+       ]
+      }
+     }
+    }
    ]
   },
   "Hop": {
@@ -1265,7 +1368,8 @@
       "Ret",
       "Cond",
       "Link",
-      "ConfigEntry"
+      "ConfigEntry",
+      "Unit"
      ]
     },
     "id": {
@@ -1311,7 +1415,8 @@
       "LAUNCHES",
       "RAN",
       "DEPENDS_ON",
-      "FROM_DEP"
+      "FROM_DEP",
+      "TO_UNIT"
      ]
     },
     "dir": {
@@ -1409,6 +1514,9 @@
       },
       {
        "$ref": "#/$defs/ConfigSubject"
+      },
+      {
+       "$ref": "#/$defs/UnitSubject"
       }
      ]
     },
@@ -1586,6 +1694,24 @@
       }
      }
     }
+   ]
+  },
+  "UnitSubject": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "unit"
+    },
+    "unitId": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{32}$"
+    }
+   },
+   "required": [
+    "type",
+    "unitId"
    ]
   }
  }
