@@ -560,7 +560,7 @@ PRODUCTION_WS = "agent-team"
 DEFAULT_COPY = REPO_ROOT / "claude" / "knowledge" / "python-web-quirks.md"
 DEFAULT_MANIFEST = Path(__file__).resolve().parent / "pwq-kb-manifest.json"
 PRODUCED_BY = "cobb"
-GATE_TIMEOUT = 600  # seconds (D9: default 10 min)
+GATE_TIMEOUT = 1800  # seconds PER DOCUMENT (RCA: a document's extract chain on one local model can take ~30 min)
 GATE_POLL = 5
 FAILED = "failed"  # Document.status of a document whose background processing failed
 
@@ -741,6 +741,41 @@ class UnitResult:
     action: str  # skip | adopt | ingest | refuse
     documentId: str = ""
     note: str = ""
+    state: str = ""  # "" | failed | timeout: how the paced wait after a POST ended (any non-empty state makes the run exit non-zero)
+
+
+def _terminal(c, strict: bool) -> bool:
+    """A document's counts row is terminal. `strict` (pacing): every chunk embedded AND status not processing, or failed.
+    Non-strict (the embedding gate): every chunk embedded, or failed, or no chunks, or the document is absent."""
+    if c is None:
+        return not strict
+    if c["status"] == FAILED:
+        return True
+    complete = c["chunks"] > 0 and c["embedded"] >= c["chunks"]
+    return complete and c["status"] != "processing" if strict else (complete or c["chunks"] == 0)
+
+
+def wait_terminal(fetcher, ws: str, document_id: str, *, timeout: float, poll: float, sleep, monotonic, strict: bool):
+    """Poll `ws` (read-only) until the document is terminal or `timeout` seconds pass: (counts row, timed_out)."""
+    deadline = monotonic() + timeout
+    while True:
+        c = fetcher.embedding_counts(ws, [document_id]).get(document_id)
+        if _terminal(c, strict):
+            return c, False
+        if monotonic() >= deadline:
+            return c, True
+        sleep(poll)
+
+
+def _paced(fetcher, ws: str, unit_id: str, document_id: str, timeout, poll, sleep, monotonic) -> UnitResult:
+    c, timed_out = wait_terminal(fetcher, ws, document_id, timeout=timeout, poll=poll, sleep=sleep, monotonic=monotonic, strict=True)
+    if timed_out:
+        return UnitResult(unit_id, "ingest", document_id, f"still processing after {timeout:g} s", "timeout")
+    if c is not None and c["status"] == FAILED:
+        why = "chunks embedded; entities missing" if c["chunks"] and c["embedded"] >= c["chunks"] else \
+            f"{c['embedded']}/{c['chunks']} chunks embedded"
+        return UnitResult(unit_id, "ingest", document_id, f"failed ({why})", "failed")
+    return UnitResult(unit_id, "ingest", document_id)
 
 
 def _entry_dict(e: CopyEntry, document_id: str) -> dict:
@@ -753,8 +788,11 @@ def _post_body(e: CopyEntry) -> dict:
 
 
 def ingest(copy_text: str, *, ws: str, base_url: str, manifest_path, transport=urllib_transport, fetcher=None,
-           confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned) -> list[UnitResult]:
-    """Idempotent ingest of every copy unit (D8). Never posts over a different-text current document."""
+           confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned,
+           pace_timeout: float = GATE_TIMEOUT, poll: float = GATE_POLL, sleep=time.sleep, monotonic=time.monotonic) -> list[UnitResult]:
+    """Idempotent ingest of every copy unit (D8). Never posts over a different-text current document. Paced (RCA): after each
+    POST the next one waits until that document is terminal (`pace_timeout` per document); a failed or timed-out document
+    is reported in its result's `state` and the batch continues."""
     target = check_target(ws, base_url, targets, confirm_production)
     mpath = _manifest_path(target, manifest_path)
     fetcher = fetcher or CypherFetcher()
@@ -799,7 +837,7 @@ def ingest(copy_text: str, *, ws: str, base_url: str, manifest_path, transport=u
                 raise PostReceiptMismatch(
                     f"document {receipt['documentId']} (unit {e.id}) is not visible in the target workspace {ws} after the POST to "
                     f"{target.base_url}: it landed somewhere else; stopping. Find and delete the stray by that id")
-            results.append(UnitResult(e.id, "ingest", receipt["documentId"]))
+            results.append(_paced(fetcher, ws, e.id, receipt["documentId"], pace_timeout, poll, sleep, monotonic))
             new_entries[e.id] = _entry_dict(e, receipt["documentId"])
     in_copy = {e.id for e in entries}
     units = [new_entries[e.id] for e in entries if e.id in new_entries]
@@ -830,7 +868,8 @@ def retire(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path, 
 
 
 def replace(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path, transport=urllib_transport, fetcher=None,
-            confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned) -> None:
+            confirm_production: bool = False, targets: dict = TARGETS, read_source=read_pinned,
+            pace_timeout: float = GATE_TIMEOUT, poll: float = GATE_POLL, sleep=time.sleep, monotonic=time.monotonic) -> UnitResult:
     target, mpath, manifest, reg = _test_only_unit(copy_text, unit, ws, base_url, manifest_path, targets)
     entry = next((e for e in copy_entries(copy_text) if e.id == unit), None)
     if entry is None:
@@ -840,6 +879,7 @@ def replace(copy_text: str, *, unit: str, ws: str, base_url: str, manifest_path,
     receipt = client.post_document(_post_body(entry))
     manifest["units"] = [_entry_dict(entry, receipt["documentId"]) if u["id"] == unit else u for u in manifest["units"]]
     save_manifest(mpath, manifest)
+    return _paced(fetcher or CypherFetcher(), ws, unit, receipt["documentId"], pace_timeout, poll, sleep, monotonic)
 
 
 # --- gate (K-102 embedding hard gate) ----------------------------------------------------------
@@ -858,26 +898,23 @@ def run_gate(fetcher, ws: str, manifest: dict, *, timeout: float = GATE_TIMEOUT,
     ids = [u["documentId"] for u in manifest["units"]]
     registered = {u["id"] for u in manifest["units"]}
     absent = [i for i in (expected_ids or []) if i not in registered]
-    deadline = monotonic() + timeout
-    while True:
-        counts = fetcher.embedding_counts(ws, ids)
-        rows, pending = [], False
-        for u in manifest["units"]:
-            c = counts.get(u["documentId"])
-            if c is None:
-                rows.append((u["id"], "-", "-", "MISSING", False))
-            elif c["status"] == FAILED:
-                rows.append((u["id"], c["chunks"], c["embedded"], "FAILED", False))
-            elif c["chunks"] == 0:
-                rows.append((u["id"], 0, 0, "NO CHUNKS", False))
-            elif c["embedded"] < c["chunks"]:
-                rows.append((u["id"], c["chunks"], c["embedded"], f"UNEMBEDDED {c['chunks'] - c['embedded']}/{c['chunks']}", True))
-                pending = True
-            else:
-                rows.append((u["id"], c["chunks"], c["embedded"], "ok", False))
-        if not pending or monotonic() >= deadline:
-            break
-        sleep(poll)
+    for i in ids:  # each document gets its own `timeout` window, in manifest order
+        wait_terminal(fetcher, ws, i, timeout=timeout, poll=poll, sleep=sleep, monotonic=monotonic, strict=False)
+    counts = fetcher.embedding_counts(ws, ids)
+    rows = []
+    for u in manifest["units"]:
+        c = counts.get(u["documentId"])
+        if c is None:
+            rows.append((u["id"], "-", "-", "MISSING", False))
+        elif c["status"] == FAILED:
+            extra = " (chunks embedded; entities missing)" if c["chunks"] and c["embedded"] >= c["chunks"] else ""
+            rows.append((u["id"], c["chunks"], c["embedded"], "FAILED" + extra, False))
+        elif c["chunks"] == 0:
+            rows.append((u["id"], 0, 0, "NO CHUNKS", False))
+        elif c["embedded"] < c["chunks"]:
+            rows.append((u["id"], c["chunks"], c["embedded"], f"UNEMBEDDED {c['chunks'] - c['embedded']}/{c['chunks']}", True))
+        else:
+            rows.append((u["id"], c["chunks"], c["embedded"], "ok", False))
     rows += [(i, "-", "-", "ABSENT", False) for i in absent]
     table = "unit chunks embedded status\n" + "".join(f"{a} {b} {c} {d}\n" for a, b, c, d, _ in rows)
     return all(r[3] == "ok" for r in rows), table
@@ -1539,12 +1576,16 @@ def _kb_main(args, transport, fetcher, targets, searcher=None) -> int:
         kw = dict(ws=args.ws, base_url=args.base_url, manifest_path=args.manifest, transport=transport, fetcher=fetcher,
                   confirm_production=args.confirm_production, targets=targets)
         if args.cmd == "ingest":
-            results = ingest(text, **kw)
+            results = ingest(text, pace_timeout=args.timeout, poll=args.poll, **kw)
             for r in results:
                 print(f"{r.id} {r.action} {r.documentId} {r.note}".rstrip())
-            return 1 if any(r.action == "refuse" for r in results) else 0
-        (replace if args.cmd == "replace" else retire)(text, unit=args.unit, **kw)
-        print(f"{args.cmd} {args.unit}: done")
+            return 1 if any(r.action == "refuse" or r.state for r in results) else 0
+        if args.cmd == "replace":
+            r = replace(text, unit=args.unit, pace_timeout=args.timeout, poll=args.poll, **kw)
+            print(f"replace {args.unit}: " + (r.note if r.state else "done"))
+            return 1 if r.state else 0
+        retire(text, unit=args.unit, **kw)
+        print(f"retire {args.unit}: done")
         return 0
     target = check_target(args.ws, args.base_url or targets.get(args.ws, ""), targets, confirm_production=True)
     mpath = _manifest_path(target, args.manifest)
@@ -1594,8 +1635,12 @@ def main(argv: list[str] | None = None, *, transport=None, fetcher=None, targets
     p = sub.add_parser("verify-copy", help="recompute headers, compare bodies with the pin")
     common(p)
     p.add_argument("--copy", required=True, help="path of the copy to verify")
-    kbside(sub.add_parser("ingest", help="idempotent ingest of every copy unit"), True, flag=True)
-    kbside(sub.add_parser("replace", help="TEST target only: delete then re-post one unit"), True, unit=True, flag=True)
+    for name, help_, unit in (("ingest", "idempotent, paced ingest of every copy unit", False),
+                              ("replace", "TEST target only: delete then re-post one unit (paced)", True)):
+        p = sub.add_parser(name, help=help_)
+        kbside(p, True, unit=unit, flag=True)
+        p.add_argument("--timeout", type=float, default=GATE_TIMEOUT, help="seconds to wait per document to leave processing")
+        p.add_argument("--poll", type=float, default=GATE_POLL)
     kbside(sub.add_parser("retire", help="TEST target only: delete one unit's document"), True, unit=True, flag=True)
     p = sub.add_parser("gate", help="K-102 embedding gate over the manifest's documents")
     kbside(p, False)

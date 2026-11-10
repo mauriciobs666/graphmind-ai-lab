@@ -550,7 +550,23 @@ class FakeWorld:
         return [dict(documentId=d["documentId"], title=d["title"], text=d["text"], status=d["status"])
                 for d in self.srv(ws).docs.values() if d["current"] and (d["title"] in titles or d["documentId"] in ids)]
 
+    hold = 0  # polls a posted document stays `processing` before the fake server finishes it
+    fail_titles: frozenset = frozenset()  # documents whose background processing ends `failed` (embeds done, extract timed out)
+
+    def _settle(self, ws, i):
+        d = self.srv(ws).docs.get(i)
+        if d and d["status"] == "processing":
+            if d["title"] in self.fail_titles:
+                d["status"] = "failed"
+            elif self.polled.setdefault(i, 0) < self.hold:
+                self.polled[i] += 1
+            else:
+                d["status"] = "ready"
+
     def embedding_counts(self, ws, ids):
+        self.polled = getattr(self, "polled", {})
+        for i in ids:
+            self._settle(ws, i)
         return {i: (None if i not in self.srv(ws).docs else
                     dict(chunks=self.srv(ws).docs[i]["chunks"], embedded=self.srv(ws).docs[i]["embedded"],
                          status=self.srv(ws).docs[i]["status"])) for i in ids}
@@ -871,12 +887,143 @@ def t21_gate_fails_at_once_on_failed_status_and_on_a_missing_document():
     assert not ok and "MISSING" in table.split("u01")[1].split("\n")[0], table
 
 
-def t21_gate_with_zero_chunks_fails_and_defaults_are_ten_minutes():
+def t21_gate_with_zero_chunks_fails_and_defaults_are_thirty_minutes_per_document():
     w, mf = gate_setup()
     w.srv("pwq-test").docs[mf["units"][0]["documentId"]].update(chunks=0, embedded=0)
     (ok, table), _ = run_gate(w, mf, timeout=10, poll=5)
     assert not ok and "NO CHUNKS" in table
-    assert kb.GATE_TIMEOUT == 600 and kb.GATE_POLL == 5
+    assert kb.GATE_TIMEOUT == 1800 and kb.GATE_POLL == 5  # per document (RCA: a chain can need ~30 min)
+
+
+def paced_ingest(w, copy, clock, ws="pwq-test", **kw):
+    return kb.ingest(copy, ws=ws, base_url=FAKE_TARGETS[ws], manifest_path=tmpm(), transport=w.transport, fetcher=w,
+                     targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC, sleep=clock.sleep, monotonic=clock.monotonic, **kw)
+
+
+def t33_ingest_waits_for_each_document_to_leave_processing_before_the_next_post():
+    w, clock, seen = FakeWorld(), Clock(), []
+    w.hold = 3
+    sleep = clock.sleep
+    clock.sleep = lambda sec: (seen.append(w.post_count()), sleep(sec))
+    res = paced_ingest(w, mini_copy(), clock)
+    assert actions(res) == {"u01": "ingest", "u02": "ingest", "u03": "ingest"}
+    assert seen == [1, 1, 1, 2, 2, 2, 3, 3, 3], seen  # three polls after each POST, none sent early
+    assert all(r.state == "" for r in res)
+
+
+def t33_a_failed_document_is_reported_and_the_batch_continues_but_the_state_is_failed():
+    w, clock = FakeWorld(), Clock()
+    w.fail_titles = frozenset({"Beta title"})
+    res = paced_ingest(w, mini_copy(), clock)
+    assert w.post_count() == 3 and actions(res)["u03"] == "ingest"  # u03 still posted after u02 failed
+    states = {r.id: r.state for r in res}
+    assert states == {"u01": "", "u02": "failed", "u03": ""}, states
+    assert "entities missing" in next(r for r in res if r.id == "u02").note
+
+
+def t33_a_document_that_never_leaves_processing_times_out_per_document_and_the_batch_continues():
+    w, clock = FakeWorld(), Clock()
+    w.hold = 10 ** 9
+    res = paced_ingest(w, mini_copy(), clock, pace_timeout=30, poll=10)
+    assert w.post_count() == 3 and {r.id: r.state for r in res} == {"u01": "timeout", "u02": "timeout", "u03": "timeout"}
+    assert clock.t == 90  # a fresh 30 s window per document, not one shared window
+
+
+def t33_pacing_polls_the_target_workspace_not_another():
+    for ws, other in (("pwq-test", "agent-team"), ("agent-team", "pwq-test")):
+        w, clock = FakeWorld(), Clock()
+        asked = []
+        orig = w.embedding_counts
+        w.embedding_counts = lambda wsname, ids: (asked.append(wsname), orig(wsname, ids))[1]
+        paced_ingest(w, mini_copy(), clock, ws=ws, confirm_production=True)
+        assert asked and set(asked) == {ws}, (ws, asked)
+
+
+def t33_cli_ingest_exits_non_zero_when_any_unit_ended_failed_after_posting_all():
+    w = FakeWorld()
+    w.fail_titles = frozenset({kb.copy_entries(copy_text())[3].title})
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = kb.main(["ingest", "--copy", str(cp), "--manifest", str(tmpm()), "--ws", "pwq-test", "--base-url", TEST_URL],
+                       transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    assert code == 1 and w.post_count() == 36 and out.getvalue().count("failed") == 1, (code, out.getvalue()[-300:])
+    assert kb.main  # the flags exist
+    assert "--timeout" in subprocess.run([sys.executable, kb.__file__, "ingest", "-h"], capture_output=True, text=True).stdout
+
+
+def t33_replace_waits_for_the_new_document_and_reports_a_failed_one():
+    w, m, copy = FakeWorld(), tmpm(), mini_copy()
+    run_ingest(w, copy, manifest=m)
+    clock, seen = Clock(), []
+    sleep = clock.sleep
+    clock.sleep = lambda sec: (seen.append(w.post_count()), sleep(sec))
+    w.hold = 2
+    kw = dict(unit="u02", ws="pwq-test", base_url=TEST_URL, manifest_path=m, transport=w.transport, fetcher=w,
+              targets=FAKE_TARGETS, read_source=lambda p: MINI_SRC, sleep=clock.sleep, monotonic=clock.monotonic)
+    r = kb.replace(copy.replace("beta body", "beta EDITED"), **kw)
+    assert seen == [4, 4] and r.state == "", (seen, r)  # polled twice after the 4th POST (3 ingests + the re-post)
+    w.fail_titles = frozenset({"Beta title"})
+    r = kb.replace(copy.replace("beta body", "beta EDITED2"), **kw)
+    assert r.state == "failed"
+
+
+def t33_gate_gives_each_document_its_own_timeout_window():
+    w, mf = gate_setup()
+    docs = [w.srv("pwq-test").docs[u["documentId"]] for u in mf["units"]]
+    docs[0]["embedded"] = docs[1]["embedded"] = 0
+    clock = Clock()
+    orig = clock.sleep
+
+    def sleep(sec):
+        orig(sec)
+        if clock.t >= 50:
+            docs[0]["embedded"] = 2
+        if clock.t >= 100:
+            docs[1]["embedded"] = 2
+
+    ok, table = kb.run_gate(w, "pwq-test", mf, sleep=sleep, monotonic=clock.monotonic, timeout=60, poll=10)
+    assert ok, table  # u02 arrives at t=100, past one shared 60 s window but inside its own
+    docs[1]["embedded"] = 0
+    docs[0]["embedded"] = 0
+    clock2 = Clock()
+    ok, table = kb.run_gate(w, "pwq-test", mf, sleep=clock2.sleep, monotonic=clock2.monotonic, timeout=60, poll=10)
+    assert not ok and clock2.t == 120 and "UNEMBEDDED" in table, (clock2.t, table)  # each stuck document waited its own 60 s
+
+
+def t33_gate_polls_the_manifests_workspace_and_marks_failed_rows_whose_chunks_are_embedded():
+    w, mf = gate_setup()
+    w.srv("pwq-test").docs[mf["units"][2]["documentId"]]["status"] = "failed"
+    asked = []
+    orig = w.embedding_counts
+    w.embedding_counts = lambda wsname, ids: (asked.append(wsname), orig(wsname, ids))[1]
+    (ok, table), _ = run_gate(w, mf)
+    assert not ok and set(asked) == {"pwq-test"} and "FAILED" in table.split("u03")[1]
+    assert "chunks embedded; entities missing" in table.split("u03")[1].split("\n")[0], table
+
+
+def t33_an_absent_document_is_not_terminal_for_pacing_but_is_for_the_gate():
+    class Empty:
+        def embedding_counts(self, ws, ids):
+            return {}
+    for strict, want in ((True, (None, True)), (False, (None, False))):
+        clock = Clock()
+        got = kb.wait_terminal(Empty(), "pwq-test", "D", timeout=20, poll=10, sleep=clock.sleep, monotonic=clock.monotonic, strict=strict)
+        assert got == want, (strict, got)
+
+
+def t33_cli_replace_exits_non_zero_when_the_new_document_ends_failed():
+    w, m = FakeWorld(), tmpm()
+    cp = Path(tempfile.mkdtemp(), "copy.md")
+    cp.write_text(copy_text())
+    kw = dict(transport=w.transport, fetcher=w, targets=FAKE_TARGETS)
+    base = ["--copy", str(cp), "--manifest", str(m), "--ws", "pwq-test", "--base-url", TEST_URL]
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert kb.main(["ingest"] + base, **kw) == 0
+        assert kb.main(["replace", "--unit", "u01"] + base, **kw) == 0
+        w.fail_titles = frozenset({kb.copy_entries(copy_text())[0].title})
+        assert kb.main(["replace", "--unit", "u01"] + base, **kw) == 1
 
 
 def t21_gate_cli_exit_codes():
