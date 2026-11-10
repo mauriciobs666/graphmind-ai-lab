@@ -278,3 +278,58 @@ Printed line: `pooled with Set B (informational, not part of the verdict): (73+1
 
 - Not covered: per-query diagnosis (sealed by design); whether raw misses are the displaced queries; which chunk was returned (D-1); captures created after the S13b derivation (not enumerated; none named).
 - Raw tool output kept only in the session scratchpad.
+
+
+## W3 — staging fidelity check (4b, 2026-11-10)
+
+Unit W3 of `docs/plans/python-web-quirks-kb-path-ml.md` §6 (gate in §5). Read-only against `http://localhost:8210`, `ws:pwq-test` (4b, 2560 dims). Set A only; no sealed file, `--sealed-once`, `--probe` or `:8200` call. Reads of the FalkorDB graphs `ws:pwq-test` / `ws:agent-team` (read-only Cypher, for item 4 only); no writes, no git. Raw output: `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w3-*.txt`.
+
+CPG: not applicable — black-box fidelity check of a retrieval configuration; no code-level change under test.
+
+Hashes (sha256, as computed in this run): copy `claude/knowledge/python-web-quirks.md` `7d0fc38c054beb25827f2e98ec04cda689457d69e31a6bcb0e70fbfde3099479`; tool `claude/cobb/scripts/pwq_kb.py` `1d768401a58143a652158c6d1d5a907fdf123fb16bdfc0e06fed7a72657112b1`; skill `skills/agent-kb-retrieval/SKILL.md` `a8c1192359b7ddbed95de008d42097a5a44c676f20cde2c0d683da919aece2a4`; manifest `m-work.json` `a405a93c72febf93a74a3e7a95e73f8f41fc87e782eacfcf313240009a586a61`. The staging document-list sha256 was not computed (the list endpoint caps at 200 of 518); the id list is in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w3-ids-ws:pwq-test.csv`.
+
+### 1. Gate
+
+`pwq_kb.py gate --manifest m-work.json --copy … --ws pwq-test --base-url http://localhost:8210`: exit 0, last line `gate: clean` (every unit row `chunks == embedded`, `ok`). **PASS.**
+
+### 2. Set A through the server (floor 0.42 explicit)
+
+Command: `eval --set A --floor 0.42 [--sweep] --manifest … --copy … --ws pwq-test --base-url http://localhost:8210`. The tool's Set A mode scores only the **full form** of the 42 positives. The perturbed forms of the embedder note (first half, second half, every third word dropped) have no tool mode, so I generated them mechanically from `claude/cobb/scripts/fixtures/pwq-golden-set-a.json` into scratchpad files (script `w3_perturb.py`; positives only, negatives unchanged) and scored them with the same command plus `--set-a-path`. The note does not fix the rounding of "half"; I ran both and report both. This is a scoring-input choice made before looking at which matches, not a floor tune (floor stayed 0.42).
+
+| Form | Observed raw top-5 (all-workspace) | Offline note | Observed floor-applied hits @0.42 | Offline note | near FA | off FA |
+|---|---|---|---|---|---|---|
+| full | 42/42 | 42 | 42/42 | 42 | 0/7 | 0/7 |
+| first half (n//2 words) | 41/42 | 41 | 37/42 | 37 | 0/7 | 0/7 |
+| first half (ceil(n/2) words) | 41/42 | 41 | 38/42 | 37 | 0/7 | 0/7 |
+| second half | 38/42 (both roundings) | 38 | 26/42 (both) | 26 | 0/7 | 0/7 |
+| every 3rd word dropped | 41/42 | 41 | 36/42 | 36 | 0/7 | 0/7 |
+
+Full-form sweep (`--sweep`, rows 0.38 to 0.50): `recall_floor` 0.9286 / 0.9524 / 0.9524 / 1 at 0.38 / 0.39 / 0.40 / 0.41, 1 from 0.41 up; `near_fa` 0 through 0.42, 1 at 0.43 to 0.47, 2 from 0.48; `off_fa` 0 throughout. Consistent with the note (max best-unit positive 0.408, min near-negative 0.422; the sweep step of 0.01 cannot resolve those two values exactly, and I did not print them).
+
+Floor-applied sums: 42/37/26/36 against the note's 42/37/26/36 (n//2 rounding, exact) or 42/38/26/36 (ceil, +1 on the first-half form). Raw: 42/41/38/41 against 42/41/38/41, exact. Plan §5 tolerance is within 1 per form, near FA at most 1/7, off 0/7, gate clean: all met under either rounding.
+
+**Verdict: server reproduces offline: yes. Differences: none under n//2 rounding; +1 on first-half floor-applied (38 vs 37) under ceil rounding, inside tolerance.** Not reproduced by the tool, by design: nothing beyond Set A (no sealed data touched).
+
+### 3. Query construction (read from `claude/cobb/scripts/pwq_kb.py`, sealed files not read)
+
+- `extract_prefix` (line ~1004) pulls the fenced f-string literal under the skill's "query-instruction prefix" heading by pure string handling; `build_query` (~1031) is `template.replace("{situation}", situation, 1)`. Executed on the live skill: `build_query(t,'SIT')` = `'Instruct: Given a coding agent's description of its current situation, retrieve the distilled technique or rule that applies to it.\nQuery: SIT'`, identical to the literal at `skills/agent-kb-retrieval/SKILL.md` line 46. The same string goes to `GET /documents/search?q=…&limit=50` for every item (`fetch_all`, `searcher.search`).
+- Set loading (`load_set`, ~1035) reads each item's `query` field verbatim and nothing else; the tool prepends the template itself, so a set must store the situation text only. **Gap: nothing in the tool rejects a stored query that already starts with `Instruct:`** (grep for "instruct" finds only the skill-extraction code; the Set A fixture has 0 occurrences). A set stored with the prefix would be silently double-prefixed. I cannot confirm from code how B2's or B3's author stored their queries (sealed files not read, as instructed); that is the author-side assertion in the brief, unverified here. Recommendation: the scorer checks the B3 set for a leading `Instruct:` by a non-content probe (e.g. count of queries that start with it) before the seal, or W2 adds a validator line.
+
+### 4. What staging holds besides the 36 units
+
+Read-only Cypher via `GRAPH.RO_QUERY` (python, `w3-ids-*`) over `ws:pwq-test` and `ws:agent-team`:
+
+- Staging: 518 `Document`, all `currentVersion`; 36 are the unit documents (all 36 manifest ids present), 482 others. `sourceKind`: 514 `agent`, 4 `document`. No document title contains "pwq" and no test-only document exists that is absent from production, apart from the S7 captures below.
+- Production `ws:agent-team`: 505 `Document`: 36 unit documents (different documentIds from staging's), 465 shared with staging, 4 present only in production (`8a3f5632…` Joern 4.0.579 .pyi capture, `458d329e…` GRAPH.COPY, `ff3cedc8…` decision-models promptSha256, `e017d016…` leave-one-unit-out negatives): none restate a python-web-quirks unit (judged from titles).
+- **Staging-only others: 17, and they are exactly the 17 S7 capture ids** that H1 deleted from production (`docs/plans/python-web-quirks-kb-captures.md` §4; count of the 17 ids found in staging by id: 17, in production: 0). They restate unit gotchas, so with them present staging has *more* near-duplicate competition than production.
+- Where they bite on Set A: with all 17 present, full-form displacement is 2 positives (`non_unit_outranks_unit=2`, MRR 0.9722); excluding them it is 0 (MRR 1.0000). Perturbed-form figures under the exclusion: first half (n//2) floor-applied 37, raw 41; second half 26/38; drop-3rd 36/41; near 0/7, off 0/7 for all: identical hit counts to the unfiltered runs (the floor decides, as the path note says), only rank statistics improve.
+
+**Recommendation: yes, use `--exclude` for B3, the 17 S7 ids** (one `--exclude` per id, ids in `/tmp/claude-1000/-home-mauricio-prg-graphmind-ai-lab/c7ed45a3-38f2-4f0c-af72-d53860ccdf25/scratchpad/w3-s7-ids.txt`), because production has them deleted and the staging corpus should equal production's competitor set; it moves no hit count on Set A, and it is the same exclusion B used. No other exclusion: no staging-only test documents or newer captures exist. The 4 production-only captures are absent from staging; none is on-topic, so no action, but a capture newly added to `ws:agent-team` after this date is a competitor staging lacks (note for W4/W5 drift check). B3 scoring uses the same manifest.
+
+### 5. Latency sanity (read-only, 4b)
+
+Five distinct situation queries (skill prefix, `limit=50`) to `GET :8210/documents/search`: 0.059 s, 0.044 s, 0.063 s, 0.044 s, 0.057 s wall time each, 50 chunks returned each. Each call embeds the query with the 4b through LM Studio, so the default `--timeout` is ample. No timeouts or errors in any eval above (each B-size set is 156 queries, 12 s at this rate; the four forms of Set A ran in seconds).
+
+### Result
+
+W3 gate met: gate clean, Set A through :8210 reproduces the offline 4b figures (raw exact; floor-applied exact or +1 depending on the unspecified half-rounding), near FA 0/7, off 0/7. Open items for the caller: (a) `--exclude` the 17 S7 ids at B3; (b) the tool does not reject a pre-prefixed stored query (item 3); (c) staging document-list sha256 not recorded here. Floor stays 0.42; nothing was tuned.
