@@ -1,6 +1,6 @@
 # Connected code graph — egress broker and offline-build sandbox spec (P1, option C)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.4 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (P1) · **Version:** 1.4 · **Supersedes:** `docs/plans/connected-code-graph-egress-spec.md`, `docs/plans/connected-code-graph-egress-spec2.md` · **Extended by:** `docs/plans/connected-code-graph-egress-spec4.md` · **Reviews:** `docs/reviews/connected-code-graph-egress-spec3.md`, `docs/reviews/connected-code-graph-egress-spec3-security.md`
 
 *2026-11-10 (v1.4): §7.4's closed frontend set gains the two indexer entries.*
 
