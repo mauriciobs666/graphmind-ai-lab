@@ -334,3 +334,31 @@ def test_check_reports_rebuilt_informationally_until_the_marker_is_removed(proj)
 
 def test_check_without_a_rebuild_has_no_rebuilt_finding(proj):
     assert check.check(proj) == []
+
+
+# ---------------------------------------------------------------- N5: no private reaches
+def test_check_references_no_private_name_of_another_module():
+    import re
+    src = (SCRIPTS / "wilib" / "check.py").read_text(encoding="utf-8")
+    attr = re.findall(r"\b(?:store|headers|rebuild|alloc|events|project|rules)\._\w+", src)
+    imported = re.findall(r"from \.\w+ import [^\n]*\b_\w+", src)
+    assert attr == [] and imported == []
+
+
+def test_store_read_union_is_the_reconciled_union_and_reseeds(repo):
+    project.init(repo, "GAL", ["a"])
+    alloc.new(repo, "F")
+    store = Store(repo, "GAL")
+    store.flush()
+    store.journal_path.unlink()                       # journal lost; tracked copy remains
+    union = store.read_union()
+    assert [e["ev"] for e in union].count("new") == 3 and store.journal_path.exists()
+
+
+def test_public_header_helpers_match_the_family_rules(tmp_path):
+    assert headers.owner("feat-coordination.md", {"feat", "fe"}) == "feat"
+    assert headers.header_index(["# T\n", "\n", "> **Status:** active\n"]) == 2
+    root = tmp_path
+    (root / "docs" / "plans").mkdir(parents=True)
+    (root / "docs" / "plans" / "feat.md").write_text("# T\n")
+    assert [p.name for p in headers.family_files(root, "feat", {"feat"})] == ["feat.md"]

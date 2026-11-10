@@ -324,3 +324,44 @@ def test_successful_write_records_the_rebuilt_marker(committed):
     wi(committed, "rebuild", "--write")
     marker = json.loads((committed / ".work-items" / "project.json").read_text())["rebuilt"]
     assert marker["history_events"] > 10 and marker["reissue_accepted"] is False
+
+
+# ---------------------------------------------------------------- P9-2: stale ref tip
+@pytest.fixture
+def stale_tip(proj):
+    """Registry v1 (F0001) committed and kept on branch ``old``; main then commits v2 (F0001-F0005),
+    deletes the registry in a commit, and loses the journal: the only tip copy is the stale one."""
+    alloc.new(proj, "F")
+    commit_registry(proj, "v1")
+    git(proj, "branch", "old")
+    for _ in range(4):
+        alloc.new(proj, "F")                                   # F0002..F0005
+    commit_registry(proj, "v2")
+    lose_everything(proj)
+    return proj
+
+
+def test_rebuild_applies_history_when_an_older_copy_survives_on_another_ref(stale_tip):
+    r = wi(stale_tip, "rebuild", "--write")
+    assert r.returncode == 0, r.stderr
+    assert alloc.new(stale_tip, "F") == "GAL-F0006"            # history's maximum, not the stale tip's
+
+
+def test_rebuild_over_stale_tip_leaves_no_duplicate_events(stale_tip):
+    wi(stale_tip, "rebuild", "--write")
+    ids = [e["evid"] for e in Store(stale_tip, "GAL").read_journal()]      # raw: no dedup applied
+    assert len(ids) == len(set(ids))
+
+
+def test_rebuild_still_refuses_when_the_journal_is_present(stale_tip):
+    alloc.new(stale_tip, "F")                                  # a live journal again
+    r = wi(stale_tip, "rebuild", "--write")
+    assert r.returncode == 1 and "not lost" in r.stderr
+
+
+def test_rebuild_still_refuses_when_only_the_tracked_copy_is_present(proj):
+    alloc.new(proj, "F")
+    commit_registry(proj, "v1")
+    Store(proj, "GAL").journal_path.unlink()
+    r = wi(proj, "rebuild", "--write")
+    assert r.returncode == 1 and "not lost" in r.stderr

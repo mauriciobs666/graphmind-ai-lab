@@ -20,17 +20,17 @@ def _pattern(slug):
     return re.compile(re.escape(slug) + r"\d*(-[a-z]+)?\.md\Z")
 
 
-def _owner(name, slugs):
+def owner(name, slugs):
     """Longest registered slug whose family pattern matches ``name``."""
     hits = [s for s in slugs if _pattern(s).match(name)]
     return max(hits, key=len) if hits else None
 
 
-def _family_files(root, slug, slugs):
+def family_files(root, slug, slugs):
     """Family documents of ``slug``; only names matching its pattern are ever opened."""
     for kind in KINDS:
         for p in sorted([*root.glob(f"docs/{kind}/*.md"), *root.glob(f"*/docs/{kind}/*.md")]):
-            if p.is_file() and _owner(p.name, slugs) == slug:
+            if p.is_file() and owner(p.name, slugs) == slug:
                 yield p
 
 
@@ -49,7 +49,7 @@ def _fields(item):
     return out
 
 
-def _header_index(lines):
+def header_index(lines):
     """Index of the one-line header block: immediately under the H1, blank allowed."""
     if not lines or not lines[0].startswith("# "):
         return None
@@ -70,7 +70,7 @@ def _rewrite(line, wanted):
 def _sync_file(path, wanted):
     text = path.read_bytes().decode("utf-8")
     lines = text.splitlines(keepends=True)
-    i = _header_index(lines)
+    i = header_index(lines)
     if i is None:
         return False
     new = _rewrite(lines[i], wanted)
@@ -103,7 +103,7 @@ def sync(root, id_=None, store=None):
     changed = []
     for item in _targets(st, id_):
         wanted = _fields(item)
-        for path in _family_files(root, item.slug, slugs):
+        for path in family_files(root, item.slug, slugs):
             if _sync_file(path, wanted):
                 changed.append(path)
     return changed

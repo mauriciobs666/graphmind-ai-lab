@@ -32,7 +32,7 @@ def _git(root, *args):
     return r.stdout if r.returncode == 0 else None
 
 
-def _read(path):
+def read_text(path):
     try:
         return Path(path).read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -63,8 +63,13 @@ def _dedup(evs):
 class Transaction:
     """Handle valid only inside ``Store.transaction()``: state + stamped append."""
 
-    def __init__(self, store, evs):
+    def __init__(self, store, evs, lost=False):
         self._store, self._events, self._state = store, evs, None
+        self.lost = lost        # both on-disk copies were empty when the lock was taken
+
+    @property
+    def evids(self):
+        return {e["evid"] for e in self._events}
 
     @property
     def state(self):
@@ -127,10 +132,10 @@ class Store:
     def _reconcile(self):
         """Return the deduplicated union, first copying into the journal every
         tracked event it lacks (and, on a missing/empty journal, every ref's)."""
-        tracked = events.read_events(_read(self.registry_path))
+        tracked = events.read_events(read_text(self.registry_path))
         if self.journal_path is None:
             return _dedup(tracked)
-        journal = events.read_events(_read(self.journal_path))
+        journal = events.read_events(read_text(self.journal_path))
         incoming = list(tracked)
         if not journal:
             incoming += self._ref_events()
@@ -141,10 +146,25 @@ class Store:
             journal += missing
         return _dedup(journal + tracked)
 
+    def read_union(self):
+        """Raw deduplicated event union under the lock, with ``read_state``'s reconcile
+        (reseed, tracked-to-journal copy) semantics; the events are not folded."""
+        with self._locked():
+            return self._reconcile()
+
+    def read_tracked(self):
+        """Events of the tracked registry copy as written (duplicates kept)."""
+        return events.read_events(read_text(self.registry_path))
+
+    def read_journal(self):
+        """Events of the journal as written; empty when there is no journal."""
+        return events.read_events(read_text(self.journal_path)) if self.journal_path else []
+
     @contextmanager
     def transaction(self):
         with self._locked():
-            yield Transaction(self, self._reconcile())
+            lost = not self.read_tracked() and not self.read_journal()   # before any reseed
+            yield Transaction(self, self._reconcile(), lost)
 
     def read_state(self):
         with self._locked():
@@ -156,11 +176,11 @@ class Store:
         ``evid`` lines (keep first).  Idempotent; a no-op rewrite is skipped."""
         with self._locked():
             union = self._reconcile()
-            tracked = _dedup(events.read_events(_read(self.registry_path)))
+            tracked = _dedup(events.read_events(read_text(self.registry_path)))
             have = {e["evid"] for e in tracked}
             want = tracked + [e for e in union if e["evid"] not in have]
             text = "".join(events.dump_event(e) for e in want)
-            if text == _read(self.registry_path):
+            if text == read_text(self.registry_path):
                 return
             self.registry_path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.registry_path.with_name(self.registry_path.name + ".tmp")

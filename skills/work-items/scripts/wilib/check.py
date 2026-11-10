@@ -14,7 +14,7 @@ from collections import Counter, defaultdict, namedtuple
 from pathlib import Path
 
 from . import alloc, events, headers, project, rebuild, rules
-from .store import Store, _read
+from .store import Store, read_text
 
 Finding = namedtuple("Finding", "kind path detail informational", defaults=(False,))
 NAMESPACE_CANDIDATES = ("docs/BACKLOG.md", "*/docs/BACKLOG.md", "claude/*/kaizen/plan.md")
@@ -59,14 +59,14 @@ def _registry_findings(st, union, store):
         have = parent.id if parent else None
         if have != want:
             out.append(Finding("parent", "", f"{item.id}: parent is {have}, its path says {want}"))
-    tracked = events.read_events(_read(store.registry_path))
+    tracked = store.read_tracked()
     dup = sum(n - 1 for n in Counter(e["evid"] for e in tracked).values())
     if dup:
         out.append(Finding("duplicate-lines", str(store.registry_path.name),
                            f"{dup} duplicate registry line(s); the next flush removes them", True))
     if store.journal_path is not None:
         have = {e["evid"] for e in tracked}
-        loose = [e for e in events.read_events(_read(store.journal_path)) if e["evid"] not in have]
+        loose = [e for e in store.read_journal() if e["evid"] not in have]
         if loose:
             out.append(Finding("unflushed", "", f"{len(loose)} journal event(s) not in the "
                                "tracked registry: run wi flush", True))
@@ -79,7 +79,7 @@ def _requirement_text(root, st, slugs, feature_uid):
     slug = st.items[feature_uid].slug
     if not slug:
         return None
-    docs = [p for p in headers._family_files(root, slug, slugs) if p.parent.name == "requirements"]
+    docs = [p for p in headers.family_files(root, slug, slugs) if p.parent.name == "requirements"]
     return "\n".join(p.read_text(encoding="utf-8") for p in docs) if docs else None
 
 
@@ -126,14 +126,14 @@ def _document_findings(root, st, slugs, key, baseline, paths):
             continue
         rel = path.relative_to(root).as_posix()
         fields = rebuild.header_fields(path) or {}
-        item_toks = rebuild._tokens(fields.get("Item", ""))
+        item_toks = rebuild.tokens(fields.get("Item", ""))
         item_tok = item_toks[0] if item_toks else None
         for name in _HEADER_FIELDS:
             for token in token_re.findall(fields.get(name, "")):
                 hit = _classify(token, root, st, slugs)
                 if hit:
                     out.append(Finding(hit[0], rel, f"{name}: {hit[1]}"))
-        owner = headers._owner(path.name, slugs)
+        owner = headers.owner(path.name, slugs)
         if path.parent.name == "requirements" and rel not in baseline and item_tok is None:
             out.append(Finding("no-id", rel, "requirements document has no Item: header"))
         elif owner and item_tok is None:
@@ -240,11 +240,10 @@ def check(root, set_file=None, paths=None, store=None):
     root = Path(root)
     key = alloc.load_key(root)
     store = store or Store(root, key)
-    with store._locked():
-        union = store._reconcile()
+    union = store.read_union()
     st = events.fold(union)
     slugs = {i.slug for i in st.items.values() if i.slug}
-    baseline = set(_read(root / ".work-items" / "baseline.txt").split())
+    baseline = set(read_text(root / ".work-items" / "baseline.txt").split())
     paths = list(paths or [])
     out = _registry_findings(st, union, store)
     out += _document_findings(root, st, slugs, key, baseline, paths)

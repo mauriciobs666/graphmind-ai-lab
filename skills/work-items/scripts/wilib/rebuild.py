@@ -70,7 +70,7 @@ def iter_docs(root):
 def header_fields(path):
     """``{name: raw value}`` of the one-line header block, or None without a header block."""
     lines = Path(path).read_bytes().decode("utf-8", "replace").splitlines()
-    i = headers._header_index(lines)
+    i = headers.header_index(lines)
     if i is None:
         return None
     out = {}
@@ -90,7 +90,7 @@ def stem_slug(name):
     return stem
 
 
-def _tokens(value):
+def tokens(value):
     return _TICKS.findall(value) or ([value] if value and value != "—" else [])
 
 
@@ -109,7 +109,7 @@ def collect(roots):
         root = Path(root)
         for path in iter_docs(root):
             fields = header_fields(path)
-            toks = _tokens((fields or {}).get("Item", ""))
+            toks = tokens((fields or {}).get("Item", ""))
             if not toks:
                 continue
             if not _legal(toks[0]):
@@ -121,10 +121,10 @@ def collect(roots):
     for id_, docs in sorted(found.items()):
         aliases, legacy = [], None
         for _, fields in docs:      # the doc with the most aliases wins; ties keep the first
-            ids = [a for a in _tokens(fields.get("Aliases", "")) if ":" not in a]
+            ids = [a for a in tokens(fields.get("Aliases", "")) if ":" not in a]
             if len(ids) > len(aliases):
                 aliases = ids
-            for a in _tokens(fields.get("Aliases", "")):
+            for a in tokens(fields.get("Aliases", "")):
                 if ":" in a and legacy is None:
                     legacy = dict(zip(("home", "name"), a.split(":", 1)))
         slugs = sorted({stem_slug(Path(rel).name) for rel, _ in docs}, key=len)
@@ -251,14 +251,16 @@ def rebuild(root, roots=(), write=False, floors=(), accept_reissue=False, store=
         return ["dry run: nothing written (use --write)"] + lines
     store = store or Store(root, key)
     with store.transaction() as tx:
-        if tx.state.items:
+        if not tx.lost:     # the on-disk copies, not the state: opening reseeded from ref tips
             raise RebuildError(
                 f"the registry is not lost ({len(tx.state.items)} items present): refusing to "
                 "rebuild over it; delete both copies first if that is really intended")
         if not hist and not accept_reissue:
             raise RebuildError(REISSUE_RISK)
+        have = tx.evids                 # a stale ref tip's events were already reseeded
         for ev in hist:
-            tx.append(ev)               # keeps its evid and ts
+            if ev["evid"] not in have:
+                tx.append(ev)           # keeps its evid and ts
         for ev in evs:
             tx.append(ev)
     store.flush()
