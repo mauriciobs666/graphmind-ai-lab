@@ -425,3 +425,31 @@ Plan edits for the architect: (a) 3.9 and step 8b; (e) a note in 3.2/3.5 on `set
 
 ### Proposed REVIEW.md lines
 None.
+
+## Pass 11 (close re-check)
+
+**Scope.** Fixes `36b7c392` plus the uncommitted close docs (`skills/work-items/docs/SPEC.md` 2,433 words, `docs/HISTORY.md`, the `skills/README.md` row, the root `AGENTS.md` bullet) against the code. Executed: suite from `skills/work-items` with `model-bench/.venv` **and** `cpg/.venv`, each **505 passed**; ~110 `wi.py` invocations in a temp git repo (`…/scratchpad/p11/r`, `WI_KEYS_FILE` scratch lists; the real tree and its journal, including `GAL-I02-K0001`, untouched). CPG: considered, not relevant — spec and script package, no graph.
+
+**Verdict: approve with suggestions** — no blocker or major. This unblocks the close: HISTORY may be written last, then the archived flips.
+
+### Disposition of Pass 10 findings
+- **S-1 — fixed.** `link`/`set` with qualified minted legacy → 0; bare single-home `C-310` → 0; bare ambiguous `K-004` → 3 (lists every home and ID); declared-unminted `tico:K-009` → 5; undeclared `nope:K-009`/`Z-1`/`Q-1` → 4 (both commands).
+- **C-1 — fixed.** `mint-legacy --home nope` → exit 1 "unknown home", no ID burned (next mint took the next number); idempotent re-mint with `--home nope` returns the existing ID (spec states this); default home follows a declared legacy home (`tico` → `home: tico`).
+- **C-2 — fixed.** `key suggest` and `key claim` both exit 1 with a `wi:` message for a missing file, invalid JSON and a non-list; `[]` works; claim twice → "already claimed", reserved `FR` and malformed `a` refused.
+- **Spec edits — all present and true:** `set` title clause (CLI refuses `title=`, exit 1); retire/move/link targets ("move target" added); §10 (suggest errors on a missing file); `mint-legacy` `--home` refusal with no ID allocated.
+- **SPEC pointer rule — met.** Root `AGENTS.md` `skills/` bullet and `skills/README.md` row both cite `skills/work-items/docs/SPEC.md`; the spec has no `Version:`/revision note/history, numbering 1-11 kept.
+- **HISTORY consistency — mostly met.** Verified: all 23 cited hashes exist (`git cat-file -t` → commit) and the 18 implementation hashes are exactly the `git log -- skills/work-items` commits plus out-of-path `d70103b2`/`9da81acb`, in order; 505 passes under both runners; symlink `~/.claude/skills/work-items` exists; the committed registry holds three events (`I01`, `I02`, `GAL-F0001`); no unobservable figures. One nit below.
+
+### New findings
+- **N1 (minor, verified) — §9 does not state the `namespace` definer shape.** `check.py:21` matches only lines starting `## `/`### `/`#### `, `- **` or `| ` followed by `K-`/`C-` and digits. A plain `- K-001 …` bullet or `K-001:` line is not a definer: with such files `wi check` printed no `namespace` finding; with `## K-001` it did (no `legacy_paths` entry; home not in `legacy_namespaces`; both exercised). Add the three line shapes to the `namespace` row.
+- **N2 (nit) — HISTORY says reviews "Passes 4-10"**; after this pass it is 4-11. Also `check`'s `item-slug` prints "belongs to slug None" for a slug-less item (cosmetic; not worth a fix).
+
+### Re-audit of sections Pass 10 cleared (fresh sampling, all true)
+- **§3 exit codes** for every subcommand executed: usage 2 (`new X`, bare `retire`/`resolve`/`move`/`headers`, `headers x`, `promote --to S`, `link --remove --clear`, unknown/missing subcommand, `mint-legacy --type X`); 1 (unknown item for `retire`/`move`/`promote`/`headers sync`, promote of a non-K, bad relation, missing target, unknown attribute/component, malformed `attr=value`, `mint-legacy` without `home:`/undeclared home, matrix refusals `new I --parent F`, `new F --parent I01`, `check` findings); 4 (`resolve nothing`); `rebuild` dry run 0 with the reissue warning; `flush`/clean `check` 0.
+- **§4 `resolve --json`**: key set matches the 14 listed; `links` `{relates:[ids]}` (list form); slug match prints `[slug f1]`; FR/AC citation record (`type` FR, `links` `{}`, `matched_as` current); an FR under a kaizen item → 4.
+- **§9 kinds provoked:** `duplicate` (`--set`), `parent` (`ZZZ-S01`, an AC under an FR), `malformed`, `dangling`, `absent`, `no-id`, `family-no-item`, `family-mismatch`, `item-slug`, `namespace`; informational `unflushed`, `duplicate-lines` (removed by `flush`), `legacy-id`. `rebuilt` was not provoked here (executed in Pass 9).
+- **§7**: `.work-items/` after `init` holds `.gitignore` (`.lock`, `*.tmp`), `baseline.txt`, `project.json`, `registry.jsonl`; `.gitattributes` line present; `project.json` has only `key`, `components`, `legacy_namespaces` from `init` (no `legacy_paths`).
+- **Root `AGENTS.md`**: the diff is +2/-1 lines in one bullet; no line over 700 chars (the awk smell hits only pre-existing `skills/README.md` table rows, which the bar's `*AGENTS.md` glob does not cover); file is 3,196 words, over the ~2,500 smell before and after, not caused by this change.
+
+### Proposed REVIEW.md lines
+None.

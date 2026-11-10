@@ -66,7 +66,8 @@ engineering** (Claude Code and OpenCode artifacts).
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
   cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
-  `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified asyncio/Starlette/
+  `cpg-analysis` (the consumer side), `work-items` (work-item IDs + the `wi` CLI; live spec
+  `skills/work-items/docs/SPEC.md`), `python-web-quirks` (live-verified asyncio/Starlette/
   FastAPI/pydantic gotchas, incl. test-harness ones, for `coder`/`tdd-engineer`/`architect`/
   `analyst`/`qa-engineer`). OpenCode-only skills go in `opencode/skills/` (currently empty). Format ports across Claude Code/OpenCode/
   Kiro; tool-gating & activation behavior do not — verify per tool.
