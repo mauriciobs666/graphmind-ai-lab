@@ -1,0 +1,14 @@
+# Cross-initiative coordination — `needs` and scheme IDs
+
+> **Status:** active · **Owner:** `architect` · **Tracks:** —
+
+Answers the question left open by `docs/plans/work-item-numbering.md` §3.9 (consumer contract) and its step 13.
+
+## What exists
+Prose only. `docs/requirements/cross-initiative-coordination.md` (FR-4, FR-5, AC-3, AC-4) says a unit records `needs` as a fact; it names no syntax. There is **no plan** for that slug, **no ledger-format convention** for `needs`, and **no code**: `coordgraph` (designed in `claude/docs/plans/coordination-graph.md`, S1 parsers) is not built (no such directory), and `claude/teco/` does not mention `needs`. Nothing to test, so (b) is answered by analysis. Closest design text: backlog `Depends on` = comma-separated refs or `none`, qualified `<namespace>:<ID>` (coordination-graph plan, field table) — shape-agnostic. One real hazard: the item-heading regex `^### (?P<id>[A-Z]+-\d{3,})` (same plan, "Item heading") does **not** match `GAL-F0042` (letter before digits). It covers backlog headings, not `needs`, but any scheme-ID backlog heading would be invisible.
+
+## Decisions
+- **(a)** Yes. A need on a unit in *another* ledger cites a scheme ID: the feature (`GAL-F0042`) or, if the unit was registered as a task, `GAL-F0042-T03`. Units are not forced into the scheme (§3.9), so an unregistered foreign unit is cited `<ledger-slug>:<unit>` (e.g. `connected-code-graph-coordination:U7`). Within one ledger, the local unit id (`U3`).
+- **(b)** The parser must treat a need as an opaque token: split on commas, trim, `none` = explicit empty; never validate shape by regex. Resolution is a separate step: for a scheme token call `wi resolve <tok> --json` (SPEC §4); use `id`/`uid` (not the raw string) as identity, so a renamed or moved item (`matched_as: alias`) still matches; `retired` or exit 4 = unresolvable (AC-4 E). `wi` yields identity only, never status — status comes from the ledger mirror (FR-5).
+- **(c)** A row in ledger A whose prerequisite lives in ledger B cites B's scheme ID if one exists, else `<ledger-slug>:<unit>`; it never copies B's status.
+- **(d)** Owner `tico`: edit `docs/requirements/cross-initiative-coordination.md` FR-4, appending: "A need is recorded as the needed unit's task ID or feature ID when it has one (`GAL-F0042-T03`, `GAL-F0042`), otherwise `<ledger-slug>:<unit>`; within one ledger, its unit id. Needs are compared by resolved identity, never by raw text." Follow-ups to cite in the future plan (`architect`, `docs/plans/cross-initiative-coordination.md`): parser opacity (b) and the resolve step; the heading regex above goes to `architect`/`tico` for `claude/docs/plans/coordination-graph.md` (widen to `[A-Z]+-[A-Z]?\d{3,}` or equivalent) before S1 is built. No change to SPEC.md or the numbering plan is needed.
