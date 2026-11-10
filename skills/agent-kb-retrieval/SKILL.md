@@ -13,8 +13,8 @@ description: >-
   needs to look up a distilled technique/rule/pattern from the team knowledge base by
   describing its current situation, instead of re-deriving the convention from memory or
   restating it in a prompt. Consuming agents (teco, architect, tdd-engineer,
-  frontend-engineer, qa-engineer, analyst, data-scientist, graph-dba, devops) cite this
-  skill by one line; they do not duplicate its content.
+  frontend-engineer, qa-engineer, analyst, data-scientist, graph-dba, devops, coder, tico,
+  security-expert) cite this skill by one line; they do not duplicate its content.
 allowed-tools: mcp__falkor-chat-agent-team__search_documents, mcp__falkor-chat-agent-team__get_document
 ---
 
@@ -63,6 +63,33 @@ golden-set run (`claude/docs/plans/agent-knowledge-base-strategy.md` §7/§8).
 **Fixed at 5** — always call `search_documents(query=..., limit=5)`. Not user-tunable per
 call; a different value here is itself a drift signal, not a legitimate per-situation
 choice.
+
+## Python/web/test gotchas
+
+The KB also holds a content class of **Python/web/test gotchas** (asyncio, FastAPI/Starlette,
+pytest, urllib, import-timing traps): 36 units, each a whole gotcha, migrated from the retired
+`python-web-quirks` skill. The version-controlled copy of record is
+`claude/knowledge/python-web-quirks.md`; the KB is a rebuildable index of it. Query by
+situation before debugging a surprising behaviour.
+
+1. **Normal mode.** Prefixed query and floor exactly as above. Take the distinct `documentId`s
+   among the five chunks that score under the floor and `get_document` the best one: a tail
+   chunk carries no title, and `get_document` returns the title, versions, date and the whole
+   unit. When no chunk is under the floor, say "no gotcha in the KB matched" and run the
+   listing below before concluding there is none; an empty result is never the only signal.
+2. **Title listing** (one call, identical in both modes, no KB involved; keep under 10,000
+   bytes, check with `| wc -c`):
+
+```
+grep -n -E '^(<!-- (unit |preamble)|## )' claude/knowledge/python-web-quirks.md
+```
+
+   It prints the heading lines, one fence per unit and the two preamble fences. It reads the
+   copy, so it stays in step with the units by construction.
+3. **Degraded mode.** If `search_documents`/`get_document` errors, times out or is
+   unavailable, say so on the reply's first line ("knowledge base unreachable: <error>"), find
+   the unit with the listing and read it with `Read` (`offset` = its fence line, `limit` = next
+   fence line minus that line). Never read the whole file (~80 KB).
 
 ## Score floor — 0.43, with a named class of residual risk near tight score clusters
 
