@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import alloc, check, events, headers, legacy, links, move, project, rebuild, resolve, rules
+from . import alloc, check, events, headers, keys, legacy, links, move, project, rebuild, resolve, rules
 from .store import Store
 
 
@@ -72,6 +72,14 @@ def build_parser():
     ck.add_argument("--set", dest="set_file", help="JSON file: a list of {id: ...} entries")
     ck.add_argument("paths", nargs="*", help="limit the document scan to these paths")
     sub.add_parser("flush", help="copy journal events into the tracked registry")
+    ky = sub.add_parser("key", help="shared project keys (keys.json in the team repo)")
+    ksub = ky.add_subparsers(dest="key_cmd", required=True)
+    ks = ksub.add_parser("suggest", help="propose a free key for a project name (writes nothing)")
+    ks.add_argument("name")
+    kc = ksub.add_parser("claim", help="list a key; run only after the stakeholder agrees")
+    kc.add_argument("key")
+    kc.add_argument("--repo", required=True)
+    kc.add_argument("--no-pool", action="store_true", help="project does not feed the shared pool")
     i = sub.add_parser("init", help="create .work-items/ in the current directory")
     i.add_argument("--key", required=True)
     i.add_argument("--components", nargs="*", default=[], help="space- or comma-separated")
@@ -85,6 +93,13 @@ def main(argv=None, cwd=None):
         if args.cmd == "init":
             comps = [c for part in args.components for c in part.split(",") if c]
             project.init(Path(cwd or Path.cwd()).resolve(), args.key, comps)
+            return 0
+        if args.cmd == "key":
+            if args.key_cmd == "suggest":
+                print(keys.suggest(args.name))
+            else:
+                path = keys.claim(args.key, args.repo, feeds_pool=not args.no_pool)
+                print(f"claimed {args.key}; commit {path} in the team repo")
             return 0
         root = find_root(cwd or Path.cwd())
         if args.cmd == "new":
@@ -134,7 +149,7 @@ def main(argv=None, cwd=None):
         print(f"wi: {exc}", file=sys.stderr)
         return exc.code
     except (rules.IllegalParent, rules.MalformedId, alloc.AllocError, project.InitError,
-            events.EventError, check.CheckError) as exc:
+            events.EventError, check.CheckError, keys.KeyRefused) as exc:
         print(f"wi: {exc}", file=sys.stderr)
         return 1
     return 0
