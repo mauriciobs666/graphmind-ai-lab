@@ -33,16 +33,16 @@ Briefing line for every step: dev items and fixtures only; no writes to any shar
   with `APIRouter(prefix=…)` mounted with another prefix; a function holding `FastAPI()` plus a local `APIRouter()`)
   give `possible`; (7) the `fastmcp` `tool` rule yields `PROVIDES mcp_tool` `confirmed/key-match` for the 25
   `mcp.py` decorators and lists the look-alikes O-8 names (never silently including them); the `tool-call` rule
-  yields `CONSUMES mcp_tool`; (8) the 24 leaves the P0 leaf harness could only exercise at P1 are exercised
-  (`cpg/tests/test_rule_pack_leaf_mutation.py` reports them); (9) router-in-a-variable (O-3) and the MCP inner
+  yields `CONSUMES mcp_tool`; (8) 22 of the 24 leaves the P0 leaf harness could only exercise at P1 are exercised
+  (`cpg/tests/test_rule_pack_leaf_mutation.py` reports them); the other 2 are P1-17's; (9) router-in-a-variable (O-3) and the MCP inner
   path override (O-5) stay `possible`/prefix-only, asserted.
 - **Also:** the three packs the runtime runs (`fastapi`, `fetch`, `fastmcp`) carry `status: paper`, the only value
   `cpg/ccg/schemas/rule-pack-v1.schema.json` allows (format v1.5 is frozen), and are pinned to the spec's YAML blocks
   by `cpg/tests/test_rule_pack_schema.py`. **`status: paper` stays**: it is a v1 format token, not a claim that no
   runtime exists; no schema, `ccg/rulepack.py` or pin edit is made, and the P1-46 pack uses the same value. The step's
-  report notes that the token reads misleadingly once a runtime exists and leaves any change to a format successor. The 24 leaves of `cpg/tests/test_rule_pack_leaf_mutation.py` that only P1 can exercise
-  leave its "unexercised" set, and `test_each_leaf_behaves_as_classified` passes with the set empty (the set is
-  emptied by P1-16, P1-17 and P1-46 together).
+  report notes that the token reads misleadingly once a runtime exists and leaves any change to a format successor. Of the 24 leaves of `cpg/tests/test_rule_pack_leaf_mutation.py` that only P1 can exercise,
+  22 leave its "unexercised" set here; the 2 `fastmcp:urlBindings` leaves stay, because only the linker reads them
+  (emptied by P1-16, P1-17 and P1-46 together; `test_each_leaf_behaves_as_classified` passes with the set empty).
 - **Done / Gate:** `analyst` (execute the conformance test, do not read it; the report records the artifact sha256
   and `0 skipped`, index D9); mutation check on the lifting fixpoint and on status propagation.
 
@@ -54,7 +54,8 @@ under `scope.imports: mcp`, which a script never satisfies, yet fixture rows LNK
 provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Files:** `cpg/packs/shell-mcp-call/pack.yaml`, `cpg/packs/shell-mcp-call/negatives.yaml`,
   `cpg/tests/test_pack_shell_mcp_call.py`, the leaf-harness registration in
-  `cpg/tests/test_rule_pack_leaf_mutation.py`.
+  `cpg/tests/test_rule_pack_leaf_mutation.py`, and `SERVED` in `cpg/tests/test_packrt_generic.py`, which must
+  gain `shell-mcp-call` by hand or the pack goes unguarded.
 - **Behaviours:** a rule matching a call site of the command `mcp-call` in a shell `<script>` extracts the tool
   from argument `a0` and emits `CONSUMES mcp_tool` with the key; a literal gives `confirmed`/`key-match`; a value
   that is a shell variable or sits under `eval` gives `possible` with the registry's `shell-dynamic` code; the
@@ -71,7 +72,14 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Files:** `cpg/ccg/linker/__init__.py`, `matchers.py` (`exact`, `path-template`, `glob`/`prefix`, `regex`),
   `bind.py` (URL, env/Compose and launch bindings), `link.py` (`link(facts, bundles) -> Links`),
   `cpg/ccg/registry/reasons.yaml` (the `binding-confirmed` row's `on` list gains `VIA`), `cpg/tests/test_linker_*.py`,
-  `cpg/tests/slice/test_linker_conformance.py`. Two dispatches (matchers+link first).
+  `cpg/tests/slice/test_linker_conformance.py`, and the leaf harness `cpg/tests/test_rule_pack_leaf_mutation.py`: empty
+  `UNEXERCISED_UNTIL_P1` of the last 2 `fastmcp:urlBindings` leaves and extend `GATE` with P1-17's test files (`GATE`
+  runs only the runtime tests it names, so a leaf read only elsewhere stays a survivor). That edit is P1-17's
+  done-condition. Two dispatches (matchers+link first).
+- **Hand-off from the P1-16 gate (`ccg.packrt`):** (a) a fully unknown-key consumer exists only in `PackFacts.lifted`
+  (`resolved: False, leaf: True`); behaviour (3) reads it from there, not from `consumers`. (b) `run_packs` raises
+  `UnsupportedSubject` on `paper-inhouse-bus` (a `query` subject); six of the seven packs run over s14a, and the caller
+  names the pack set explicitly. (c) `matchers.py` reuses `ccg.packrt.httpkey.normalize_path_rfc`, no second normalizer.
 - **Interface:** `Link = (linkId, kind, keyNorm, provider anchor, consumer anchor, status, reason, paramMap,
   evidence: ordered BOUND_BY and LIFTED_VIA entries)`; ids from `ccg.ids.link_id` (one `Link` per consumer
   **symbol**, `-bundle-spec3.md` BF6); `status` is the weakest hop.
@@ -114,7 +122,8 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Behaviours:** (1) equivalence first: on the slice bundles the node and edge sets equal the slice's
   (38,121 nodes, 90,867 edges recorded in `-p0-graph.md` §1.1) plus only the deltas below; (2) D8's rule: `DATA`
   and `CALLS` store `status`/`reason` only when not the default; (3) `MOUNTED_BY {ord}` with `ord` by
-  (mount path, line), provider `symbolId` and mount `callSiteId` as ids (the assembler requirement of
+  (mount path, line) (the kinds a unit-level mount serves are not in `launch_facts`: P1-18 derives them from the pack's
+  `urlBindings[].kinds`, and `ccg.packrt` is unchanged), provider `symbolId` and mount `callSiteId` as ids (the assembler requirement of
   `-p0-graph.md` D5); (4) `SkippedFile` nodes under `Unit -[:SKIPS]->`; (5) `Unit.flowAvailable` from the registry,
   one row per language (python false, javascript false, others false, kotlin absent = unmeasured), each row citing
   the fitness report section; **no other code reads a flag from anywhere else**; (6) the **assembler imports
