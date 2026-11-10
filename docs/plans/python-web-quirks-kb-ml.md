@@ -16,23 +16,27 @@ beyond a few read-only probes.
 2. **Gate on Set B**, floor-applied, top-5 (chunks, as `search_documents` returns them):
    - positive recall **≥ 0.90** (≥ 76 of 84) **and** every one of the 42 sections hit by at least one
      of its two queries;
-   - negative rejection **≥ 0.90** (≥ 27 of 30; false accept counted against the 42 gotcha
-     documents), split: **15/15 off-domain** and **≥ 12/15 near-domain**.
+   - negative rejection **≥ 0.90** (≥ 27 of 30; false accept counted against the 36 unit
+     documents, §4.2), split: **15/15 off-domain** and **≥ 12/15 near-domain**.
 3. **Keep the 0.43 floor for now; it is unproven for this content** (§6). A measurement, not an
    argument, decides it, and any change goes into `skills/agent-kb-retrieval/SKILL.md` for all users (FR-7).
-4. **No K-100 blocker.** With the shipped chunker no section is embedded head-only (§7). The
+4. **No K-100 blocker.** With the shipped chunker no unit is embedded head-only (§7). The
    chunking risks that do exist are tail chunks carrying no title, and one document filling several
    of the five slots.
 
 ## 2. Findings from the real system (all observed this run)
 
-- `skills/python-web-quirks/SKILL.md`: 76,291 bytes; 42 `##` sections (split on `^## `); the section
-  text totals 74,228 characters (the rest is front matter). Section size in characters: min 668,
-  median 1,416.5, max 6,150 (section 26, line 681). Over 2,000: 10; over 3,000: 5; over 5,700: 1.
+- The source at pin `3fcb171c`: 76,291 bytes; 42 `##` sections (split on `^## `); the section
+  text totals 73,825 characters. Section size in characters: min 668, median 1,416.5, max 6,150
+  (section 26). Over 2,000: 10; over 3,000: 5; over 5,700: 1.
+- The migration ingests **36 unit documents** (42 sections; merged units: {2,34}, {21,22,23},
+  {24,25}, {29,39}, {30,40}; `pwq_kb.py units --pin 3fcb171c`). A unit's text carries a header block
+  (`Gotcha`, `Members`, `Versions`, `Verified`) before the bodies: unit text min 835, median 1,723.5,
+  max 6,554 characters (u21), 83,751 in total. Over 5,700: 2 (u21, u26).
 - Chunker `falkor-chat/server/falkorchat/chunking.py` default `size=1000, overlap=150`. Applied to
-  each section as its own document it yields **108 chunks**: 10 sections of 1 chunk, 15 of 2, 10 of 3,
-  1 of 4, 5 of 5, 1 of 9; longest chunk 1,118 characters. The live workspace's longest chunk is
-  1,139 characters, so ingestion in practice uses that chunker.
+  each unit as its own document it yields **129 chunks** (`units --chunks`): 1 chunk x 2 units, 2 x 10,
+  3 x 12, 4 x 4, 5 x 2, 6 x 2, 7 x 2, 9 x 1 (u21), 10 x 1 (u26); longest chunk 1,142 characters. The
+  live workspace's longest chunk is 1,139 characters, so ingestion in practice uses that chunker.
 - `search_documents` ranks **chunks**, no document dedupe, `score` = cosine distance
   (`falkor-chat/server/falkorchat/repository.py` `search_chunks`). Top-5 means five chunks.
 - `ws:agent-team` today: 476 documents, 767 chunks, 16 with no embedding (K-102 still live).
@@ -52,10 +56,19 @@ beyond a few read-only probes.
 
 ## 3. Golden set (Set A, dev)
 
-Scoring unit: the expected `documentId` of the migrated gotcha appears among the 5 returned chunks
-(any chunk of it) with `score <= 0.43`. Section numbers below are the 1-based order of the `##`
-headings (line = heading line). "Confusable" neighbours, used to diagnose a miss, not to excuse one:
-{2,34} {5,6} {7,8} {11,35} {15,19,20} {21,22,23,24,25} {26,27} {29,39} {30,40} {32,33} {36,38,42}.
+Scoring unit: the `documentId` of the **unit containing the query's section** appears among the 5
+returned chunks (any chunk of it) with `score <= 0.43`; a hit on a merged unit counts for each member
+section, so the gate does not separate sections inside a unit (the agent reads the whole unit).
+Section numbers below are the 1-based order of the `##` headings (line = heading line).
+"Confusable" neighbours, used to diagnose a miss, not to excuse one. Inside one unit (a hit
+anyway): {2,34} {21,22,23} {24,25} {29,39} {30,40}. Across units: {5,6} {7,8} {11,35} {15,19,20}
+{u21,u24} {26,27} {32,33} {36,38,42}.
+
+**Set A shape (checked by the tool, not by hand):** 42 positives, exactly one per section 1-42, and
+14 negatives, 7 `near` and 7 `off`, unique ids. Every scoring mode of Set A (not `--before`) refuses a
+set of another shape, because Set A's coverage and false-accept counts decide the floor (§6) and a
+partial set would report coverage "ok" (`validate_set_b` is the model). Today the tool has no such
+check for A (code change owed, §8); the fixture itself has 42 sections, 7 near, 7 off.
 
 ### 3.1 Positives (42, one per section)
 
@@ -183,14 +196,28 @@ xdist probe (0.4136) shows the floor cannot be expected to reject them all, and 
 **Scoring definition (decision for the stakeholder, my default stated):** AC-3 says negatives
 "return nothing above the score floor". Workspace-wide that is not a property of this feature: the
 xdist probe returned unrelated team documents under the floor. I score a false accept as **a hit
-under the floor whose `documentId` is one of the 42 gotchas**, and report workspace-wide hits as
+under the floor whose `documentId` is one of the 36 unit documents**, and report workspace-wide hits as
 information. Needs the stakeholder to confirm, or to reword AC-3.
+
+**Raw captures that restate a gotcha (rule `pwq_kb.py eval` implements).** A raw capture is not a
+unit, so (a) a hit on one **never counts as a positive hit** (the expected id is the unit's), and (b) a
+hit on one is **never a false accept** for a negative (false accepts count unit documents only). What
+a capture can do is displace a unit's chunks from the five slots, which is a measurement artifact, so
+captures are removed from the scored state: by deletion at H1 for the captures listed at S13b, and by
+id exclusion (`--exclude`, a 50-chunk window, drop the excluded documents' chunks, truncate to five)
+for any capture that appeared after that listing. The headline is the excluded run; the unfiltered
+numbers are printed beside it, and the gap is the duplicate-coverage finding. In `ws:pwq-test`,
+where the raw captures still exist before H1, the S12 sweep runs with the S7 list excluded, so it
+measures the post-H1 state. The existing rule (`scored_chunks`, `evaluate`, the T29 filtered/unfiltered
+printout) already matches this ruling in every clause; no code change. Limit: the exclusion window
+is 50 chunks, so it fails only if over 45 of a query's nearest chunks belong to excluded documents,
+which the 4 known captures cannot do.
 
 ### 4.3 Before and after (FR-12)
 
 - **Before** is not "whole skill loaded" (trivially 100% recall at ~76 KB). It is (i) the same sets
   run **before ingestion**: expected near-zero hits on gotcha documents, and any query whose answer
-  already comes back from another ws document is a duplicate-coverage finding (the 4 raw captures);
+  already comes back from another ws document is a duplicate-coverage finding (the raw captures);
   and (ii) a **lexical baseline** (BM25 or ripgrep scoring over the 42 sections, offline) on Set B.
   If semantic retrieval does not beat the lexical baseline on recall at equal top-5, the GraphRAG
   layer is not earning its cost for this content; report it either way.
@@ -216,14 +243,19 @@ works from the section text but writes only the situation an agent would be in.
    shared a 4-gram, **0 of 42** share a 4-gram and 0 share a 5-gram with their own section
    (script run this run; the first draft had 5 of 42 sharing a 4-gram).
 4. Set B only: each section gets two queries from different framings (one symptom/error, one
-   design-time "should I"), and for the 7 sections with >= 4 chunks (2, 4, 8, 11, 22, 26, 29) **one
-   of the two must target a fact that sits only in the section's last chunk** (the tail probe).
+   design-time "should I"), and for each of the 12 units with >= 4 chunks (u02 {2,34}, u04, u08,
+   u09, u11, u15, u21 {21-23}, u24 {24,25}, u26, u28, u29 {29,39}, u30 {30,40}) **at least one
+   positive of the unit's sections must target a fact that sits only in the unit's last chunk** (the
+   tail probe, flagged `tail` in the set; `units --chunks` gives each unit's chunk count).
 5. Negatives in B: 15 off-domain and 15 near-domain, near-domain ones written to *sound* like a
    section (same library, adjacent behavior) while no section answers them; the author checks that
    against the title list (FR-11), not the bodies.
 6. Freeze: B is stored (path to be set by `teco`, not in this repo's docs tree, since the note and
    brief are read by implementers) and its sha256 recorded before the migration implementer starts
-   chunk/title decisions. A is committed with this note.
+   chunk/title decisions. The sealed scoring takes that recorded value as a **required**
+   `--expect-sha256` argument and refuses before the sentinel, the gate or any search when the file's
+   hash differs (a B edited after freezing otherwise scores silently, and the sentinel's own
+   `setSha256` is written after the fact). `--probe`, which runs before the freeze, does not take it. A is committed with this note.
 
 **Hold-out discipline.** A may be run repeatedly and failures inspected; it is the only set used
 for any tuning (chunk-header decisions, document title format, any floor sweep). B is run **once**
@@ -233,9 +265,26 @@ The prefix and top-K stay the repo's literals (FR-7); they are not tunable here.
 45-pair set is a regression guard only if a floor or top-K change is proposed (its misses would hit
 other KBs).
 
-**Contamination channels to close:** (i) the 4 existing raw captures that mention the skill (§2),
-including one duplicating section 34, decided by `cobb` under the FR-10 path (retire or keep) before
-the B run, otherwise a correct answer from a duplicate scores as a miss; (ii) no B query or result
+**When the `--set B --probe` may rewrite a query (ruling).** The probe runs before ingestion, so its
+rank-1 document is never a unit; it detects a query that is already near-verbatim in an existing
+document. Rewrite a B query **only** if its rank-1 score is **< 0.25** (`LEAK_SCORE`), once, by B's
+author, then re-run the 4-gram check and freeze. A query that already surfaces from another document
+(rank-1 under the 0.43 floor, e.g. a raw capture) is **kept** and recorded as a duplicate-coverage
+finding: selecting queries by how the corpus answers them is tuning on B, and dropping the
+duplicate-covered queries would inflate recall by removing the cases the migration shares with
+captures (those are neutralized by deletion/exclusion, §4.2, not by editing B). `LEAK_SCORE = 0.25`
+is defensible as a tripwire, not as a calibrated threshold: read-only probes this run of six Set A
+queries (prefixed, `ws:agent-team`, before ingestion) had rank-1 scores 0.3657, 0.4107, 0.4169,
+0.4618, 0.5066, 0.5309, so 0.25 sits 0.115 below the lowest observed, and it fires only on a
+near-copy; erring toward not rewriting is the safe direction for hold-out. It does not detect a
+paraphrase of a unit's title (no unit exists yet); that is the 4-gram check's job (rule 3) and the
+residual limitation in §8. Do not move it on six points.
+
+**Contamination channels to close:** (i) the existing raw captures that mention the skill (§2),
+including one duplicating section 34 (probed this run: three of its chunks returned at 0.4606,
+0.4766 and 0.4882 for A34's query, so a restating capture can sit on either side of the floor),
+decided by `cobb` under the FR-10 path (retire or keep) before the B run; the scoring rule in §4.2
+neutralizes any that remain; (ii) no B query or result
 is pasted into any gotcha text, the title listing or the stub skill's description; (iii) the stub
 skill description (FR-6) is routing text and must not carry situation phrases lifted from A.
 
@@ -271,33 +320,33 @@ rate; the B result carries the evidence.
 
 **Sizes versus window.** The embedder window is about 2,048 tokens (K-100/K-099 in
 `falkor-chat/docs/BACKLOG.md`: about 9.7k characters of prose, about 5.7k of URL-dense text).
-Ingesting each gotcha as one document, with the shipped chunker, gives 108 chunks of at most 1,118
-characters, far inside the window. **No section is embedded head-only** and K-100, which is about
+Ingesting each of the 36 units as one document, with the shipped chunker, gives 129 chunks of at most
+1,142 characters, far inside the window. **No unit is embedded head-only** and K-100, which is about
 messages, is not a dependency. The "check chunk behaviour on the largest sections first" decision
 (requirements decision log) reduces to a count check plus a tail probe, not a truncation fix.
 
-**Where head-only would bite, if someone embedded whole sections** (chunking disabled or a large
-size): only section 26 (6,150 characters, 9 chunks by default) exceeds the 5.7k figure; sections 2, 4,
-8, 11 (3.4-3.6k) and 22, 29 (about 2.6-3.0k) are under it by characters. Token counts were not
+**Where head-only would bite, if someone embedded whole units** (chunking disabled or a large
+size): only u21 (6,554 characters, 9 chunks) and u26 (6,393, 10 chunks) exceed the 5.7k figure; seven
+more (u02, u04, u08, u09, u11, u24, u29) sit between 2.6k and 5.1k by characters. Token counts were not
 measured (no tokenizer run); identifier-dense text tokenizes worse than prose, so before approving any
-whole-section embedding, measure tokens for those 7.
+whole-unit embedding, measure tokens for those 9.
 
 **Risks that do exist, in order of expected effect:**
 
-1. **Tail chunks carry no identity.** 32 of 42 sections span >= 2 chunks; only chunk 0 holds the title
-   (the 150-character overlap is the only bridge). A tail hit is a body fragment without title or
+1. **Tail chunks carry no identity.** 34 of 36 units span >= 2 chunks; only chunk 0 holds the title and
+   header (the 150-character overlap is the only bridge). A tail hit is a body fragment without title or
    version pin, so FR-3 ("usable without a second lookup") and FR-5 fail for it; the agent needs
-   `get_document`. Measure: Set B tail-probe recall versus head-probe recall; if tail < head by
+   `get_document`. Measure: Set B tail-probe recall (the 12 units with >= 4 chunks, §5 rule 4) versus head-probe recall; if tail < head by
    more than 0.15, the fix is a design decision for `architect` (a per-chunk title/version header
    line), not a chunker change here (out of scope per the requirements).
-2. **Slot crowding.** `search_documents` has no document dedupe; sections with 4-9 chunks can fill
+2. **Slot crowding.** `search_documents` has no document dedupe; units with 4-10 chunks can fill
    several of the five slots, leaving fewer than five distinct gotchas. Score recall at the
    `documentId` level over the five chunks, and report the mean count of distinct documents per
    query.
-3. **Per-section dilution.** The prior-art DEF-1 mechanism (a dense identifier-heavy worked example
-   diluting the embedding) applies most to the 9-chunk section 26 and the 5-chunk ones; any recall
+3. **Per-unit dilution.** The prior-art DEF-1 mechanism (a dense identifier-heavy worked example
+   diluting the embedding) applies most to the 10-chunk u26, the 9-chunk u21 and the other multi-section units; any recall
    miss there is read against that.
-4. **K-102.** 16 chunks in `ws:agent-team` have no embedding today (observed). The per-gotcha
+4. **K-102.** 16 chunks in `ws:agent-team` have no embedding today (observed at plan time). The per-gotcha
    "every chunk embedded" check (AC-2) is a hard gate before any scoring run; otherwise a
    non-embedded chunk reads as a retrieval miss.
 
@@ -306,15 +355,19 @@ whole-section embedding, measure tokens for those 7.
 - **Approval needed:** targets in §1 (recall >= 0.90 + 42/42 coverage; negatives off-domain 15/15,
   near-domain >= 12/15), and Set A. Confidence in them is stated in §4: they discriminate ~0.95 from
   ~0.85 true recall, not finer.
-- **AC-3 wording:** confirm that negatives are scored against the 42 gotcha documents only (§4.2),
+- **AC-3 wording:** confirm that negatives are scored against the 36 unit documents only (§4.2),
   or accept that workspace-wide rejection is not measurable by this feature.
-- **Raw-capture duplicates (§5):** retire the 4 captures that mention the skill, or accept that the
-  duplicate of section 34 can outrank its own migrated section.
+- **Raw-capture duplicates (§4.2, §5):** retire the captures that mention the skill, or accept that the
+  duplicate of section 34 can outrank its own migrated section (the scoring rule excludes it either way).
 - **Set B author and storage:** `qa-engineer`, stored outside the implementers' reading path; `teco`
   sets the location.
 - **Estimates, not measurements:** the expected true recall (>= 0.95) is a prior; token counts per
   section (§7) are unmeasured; none of Set A's positives has been run against an ingested corpus.
 - **Dedicated limitation:** the leak check is lexical (n-grams); it does not detect a query that
   paraphrases the title closely in meaning. The before-ingestion run (§4.3) is the semantic check:
-  a query whose answer already surfaces from another document, or whose rank-1 score is
-  implausibly low (< 0.25) against a title-only probe, is re-written.
+  a query whose answer already surfaces from another document is kept and recorded; only one whose
+  rank-1 score is < 0.25 is re-written (§5 ruling). A title paraphrase is caught only by the post-ingestion
+  Set A run, never on B.
+- **Code owed (not mine to edit):** `validate_set_a` for the Set A scoring modes (§3); a required
+  `--expect-sha256` on `--sealed-once` (§5); a Set B check that every one of the 12 tail units has a
+  `tail`-flagged positive (the validator does not read the flags today).
