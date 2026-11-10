@@ -1,6 +1,6 @@
 # python-web-quirks on the knowledge base — another embedder, chunking, and the B3 design
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (U35; **Extends:** `docs/plans/python-web-quirks-kb-b2-ml.md`; relies on `docs/plans/python-web-quirks-kb-ml.md` §6)
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — (U35; **Extends:** `docs/plans/python-web-quirks-kb-b2-ml.md`; relies on `docs/plans/python-web-quirks-kb-ml.md` §6) · **Extended by:** `docs/plans/python-web-quirks-kb-path-ml.md`
 
 ## 1. Question and recommendation
 
