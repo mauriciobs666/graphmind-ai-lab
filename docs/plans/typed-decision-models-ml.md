@@ -257,10 +257,23 @@ generates or labels: it has seen seeds and intents.
   - A rare label costs about shortfall / P(label | design stratum) draws. The 0.2× planning figure is
     replaced by round 1's measured rates.
   - **Spend halt.** Before each top-up round, project its **total** tokens from the point's own
-    round 1, not from the pilot. The projection is (top-up items / round-1 items) × round 1's
-    labelling tokens, plus top-up generation runs × round 1's mean tokens per generation run.
-    Halt if that exceeds half of round 1's measured tokens. Both sides sum the same four classes:
-    input, cache-write, cache-read and output.
+    round 1, not from the pilot. The projection is (top-up seeds / round-1 seeds) × the live
+    round-1 labelling tokens, plus top-up generation runs × round 1's mean tokens per generation
+    run. Seeds, not accepted items, sit on both sides of the ratio: drops before labelling are
+    then priced at round 1's own rate, with no accept-rate estimate. Halt if the projection
+    exceeds half of round 1's **total spend**, which counts retired batches (a tranche relabel or
+    a labeler re-pin) because the bound compares a top-up with what round 1 actually cost. The
+    projection's rate counts live batches only, since a retired attempt does not recur in the
+    top-up. The halt reason prints both totals. Both sides sum the same four classes: input,
+    cache-write, cache-read and output.
+  - **A short cell with no labelled item (P̂ = 0)** may take one bounded probe: one generation
+    run (25 seeds) in the cell's design stratum, under the spend halt above. A hit gives P̂ > 0
+    and the normal projection. Zero hits leaves the halt and prints the Wilson upper bound for
+    P(label | design stratum) over the stratum's items so far (0.133 if the stratum held 25 items
+    and none had the label; at 50 items 0.071); a second probe is the stakeholder's choice. One
+    run is the unit because a run is what the pipeline can draw, it costs well under round 1's
+    half, and a true P of 0.1 still leaves a 7% chance of zero hits in 25 draws, so a miss is
+    weak evidence and is never read as "the label is absent".
   - **On a stakeholder "no"**, eval cells fill first. The point finalizes short, with every n
     printed, if each eval cell meets its floor (§Q1.3 table; join-in 100 per label, FR-11) and each
     calibration cell meets the eval floor (§Q2.4). Otherwise the point waits, with its data kept;
