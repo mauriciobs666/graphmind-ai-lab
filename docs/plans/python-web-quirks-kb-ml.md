@@ -225,6 +225,19 @@ which the 17 known documents (23 chunks, `docs/plans/python-web-quirks-kb-captur
   and (ii) a **lexical baseline** (BM25 or ripgrep scoring over the 42 sections, offline) on Set B.
   If semantic retrieval does not beat the lexical baseline on recall at equal top-5, the GraphRAG
   layer is not earning its cost for this content; report it either way.
+- **Recorded Set A baseline (S9, 2026-11-10, `ws:pwq-test` on :8210, `eval --set A --before --floor 0.43`,
+  window 50).** Unfiltered: 27 of 56 queries have a chunk under the floor in the top five, 26 positives
+  and 1 negative; 9 of the 26 are S7 captures (`d0b47b2c…` on A11 and A35, `9a5e835d…` A29, `1bfe7423…`
+  A36, `23d09f2b…` A37, `2d0168ef…` A38, `3cab6295…` A39, `95ab7144…` A41, `60aba8db…` A42). With the 17 S7
+  ids excluded: 22 of 56, 21 positives and 1 negative; A29, A36, A37, A42 fall back to a non-S7 document.
+  The 17 non-S7 documents hit by either run (pwq-test ids, title starts): `1b0f179a` unrecognized model
+  string residency; `1fc78198` reused write-query NULL contract; `25c486a8` class-level constant via pytest
+  plugin; `297b3ed4` max/min clamp NaN; `3074a9fa` pytest -k vs -m; `44a4e246` model-bench rank_report;
+  `4569e600`, `4b5729cb` verifying an uncommitted diff (a), (d); `60965549`, `c1cf2cce`, `ef4c32cc` mutation-
+  blind tests; `651d073b` MEDIAN done-condition; `6d88fecb` repo-wide smell check; `8e13f385`
+  `mcp__cypher__query` truncation; `a243a5e2` seed-placeholder; `abb4a255` coverage-probe silence;
+  `eb6e3699` manual sweep resume. Not near-zero, so "before" is a pre-existing-hit finding (§5), not a
+  clean zero. The tool lists no per-query negative id, so the negative's identity is not recorded.
 - **After**: Set B once, plus the two checks on Set A below.
 - Report both **raw top-5 recall** (no floor) and **floor-applied recall**; the gap is the floor's
   cost on positives. Also report MRR and rank of first expected-chunk (informational, no gate).

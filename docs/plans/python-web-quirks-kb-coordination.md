@@ -29,7 +29,7 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U19 | `architect` | `a263273e0c70d71c3` | accepted | G2 F11/F12/F14 plan stale sentences, relabel "pre-existing hit under floor" in `docs/plans/python-web-quirks-kb.md` | — | — |
 | U20 | `data-scientist` | `ae055d0d6689a023a` | accepted | G2 F11/F12 in `docs/plans/python-web-quirks-kb-ml.md` (relabel, post-H1 claim, stale counts, deflation ruling) | — | — |
 | U21 | `qa-engineer` | `aae2f63dfd7df43df` | accepted | G2 F13 in `docs/test-plans/python-web-quirks-kb.md` (TP-012, S15c scope, S14 pre-check order) | — | — |
-| U22 | `data-scientist` | `a261a24ca032a9b8c` | in-flight | S9: Set A baseline in `ws:pwq-test` (:8210), unfiltered and `--exclude` S7; ML note | — | — |
+| U22 | `data-scientist` | `a261a24ca032a9b8c` | accepted | S9: Set A baseline in `ws:pwq-test` (:8210), unfiltered and `--exclude` S7; ML note | — | — |
 
 
 
