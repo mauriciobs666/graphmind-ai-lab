@@ -46,6 +46,8 @@ Keep the whole suite green between cycles. If a change reddens unrelated tests, 
 > Beyond these three files, the whole team's distilled knowledge base is searchable in
 > `ws:agent-team` (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
 > `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
+>
+> The knowledge base also holds Python/web/test gotchas (asyncio, FastAPI/Starlette, pytest, urllib): query it by situation before debugging a surprising behaviour, via the convention in `skills/agent-kb-retrieval/SKILL.md`.
 
 - **Test behavior, not implementation.** Assert on observable outcomes and public contracts, not private internals. Tests should survive refactors that preserve behavior.
 - **Right altitude of test.** Default to the smallest, fastest test that can honestly pin the behavior — usually a unit test. When the real behavior lives at a seam a unit can't reach (a DB query, an HTTP contract, a cross-module workflow), write the integration or contract test that *actually* exercises it instead of mocking until the test proves nothing. Prefer many fast unit tests and a thin layer of slower higher-level tests, not the inverse.

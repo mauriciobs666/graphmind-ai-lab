@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** extended retrieval quote.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-07 — Distillation 6: raw entries dispositioned
 
 - **What:** `0729de87` (SubagentHandback ending, narrowed to host-dependent), `d5be833c` (hook_success persistence), `6d115b95` (several passes per transcript) promoted into two `claude-code.md` bullets; `3ab71d82` (`python -I` ignores `PYTHONPYCACHEPREFIX`) and `95ab7144` (`killpg` leader-only wait) promoted to `skills/python-web-quirks/SKILL.md`, each re-run; `c470c19d` (offline `tsc` in `ccg-toolchain-truth`) promoted to `cpg/infra/toolchain/README.md`. `d0a55c70` rejected as doc'd (`falkordb-quirks.md` lines 1256-1275). All swept entries are dispositioned, not deleted.

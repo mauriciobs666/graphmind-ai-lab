@@ -364,6 +364,32 @@ else
   failmsg "agent-kb-retrieval: skills/agent-kb-retrieval/SKILL.md not found — the retrieval-convention skill (K-030 Track 2 Stage 7) is missing"
 fi
 
+# 12. python-web-quirks discovery pointer (docs/plans/python-web-quirks-kb.md D7,
+#     S15b2): the fixed literal `Python/web/test gotchas` must appear in each of
+#     the eight consuming agents' prompts, and tico + security-expert must list
+#     both KB retrieval tools on their `tools:` line (the other six have no
+#     `tools:` line or already list both — see the plan's S15b1 report).
+echo
+pwq_lit='Python/web/test gotchas'
+pwq_agents=(coder tdd-engineer architect analyst qa-engineer frontend-engineer tico security-expert)
+pwq_miss=""
+for a in "${pwq_agents[@]}"; do
+  grep -qF "$pwq_lit" "$CL/$a/$a.md" || pwq_miss="$pwq_miss $a"
+done
+if [ -z "$pwq_miss" ]; then
+  pass "python-web-quirks pointer: literal '$pwq_lit' present in all ${#pwq_agents[@]} consuming agents"
+else
+  failmsg "python-web-quirks pointer: literal '$pwq_lit' MISSING in:$pwq_miss (docs/plans/python-web-quirks-kb.md D7)"
+fi
+for a in tico security-expert; do
+  tl=$(grep -m1 '^tools:' "$CL/$a/$a.md")
+  if printf '%s' "$tl" | grep -qF 'mcp__falkor-chat-agent-team__search_documents' && printf '%s' "$tl" | grep -qF 'mcp__falkor-chat-agent-team__get_document'; then
+    pass "python-web-quirks pointer: $a tools: lists search_documents + get_document"
+  else
+    failmsg "python-web-quirks pointer: $a tools: line lacks search_documents and/or get_document (D7/AC-10)"
+  fi
+done
+
 echo
 if [ "$fail" -eq 0 ]; then
   echo "RESULT: PASS — deterministic checks clean. The judgment checklist (agent-maintenance skill §4) still applies."

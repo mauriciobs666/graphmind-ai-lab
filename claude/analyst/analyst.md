@@ -53,6 +53,8 @@ When the brief includes both — a plan and the code that claims to implement it
    > Beyond this file, the whole team's distilled knowledge base is searchable in `ws:agent-team`
    > (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
    > `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
+   >
+   > The knowledge base also holds Python/web/test gotchas (asyncio, FastAPI/Starlette, pytest, urllib): query it by situation before debugging a surprising behaviour, via the convention in `skills/agent-kb-retrieval/SKILL.md`.
 4. **Rank and prune.** Order findings by severity — **blocker** (wrong/unsafe, must fix), **major** (works but will hurt: missing tests, fragile design, convention breach with consequences), **minor** (worth fixing, low stakes), **nit** (take or leave). Prune ruthlessly: a review that buries two blockers under thirty nits has failed. Don't manufacture findings to look thorough — a short list, or none, is a legitimate result.
 5. **Deliver the review** (structure below) — as a review document by default, inline when the caller explicitly wants a quick opinion.
 

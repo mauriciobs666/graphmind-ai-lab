@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** extended retrieval quote.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-10 — work-items citation line (step 5)
 
 - **What:** plans cite items by full ID; new kaizen via `wi new K`; legacy first-cite mint.

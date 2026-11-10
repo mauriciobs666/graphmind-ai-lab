@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** new line + `search_documents`/`get_document` read-only tool grant (stays advisory).
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-10-31 — Capture template: the full fact stays in `text`'s `Fact:` line
 
 - **What:** the refusal clause in the Learning-capture write line now reads "(an over-length `title` is refused — shorten it and retry; the full fact stays in `text`'s `Fact:` line)", replacing "keeping the detail in `text`". Nothing else in the prompt changed.

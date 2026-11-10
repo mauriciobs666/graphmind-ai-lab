@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** new line + `search_documents`/`get_document` tool grant.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-10 — work-items bullet (Mode 1)
 
 - **What:** added one Mode 1 bullet: propose key via `wi key suggest`, claim only after stakeholder agreement, `wi new F --slug S --sync` at requirements creation, mint legacy on first cite/open.

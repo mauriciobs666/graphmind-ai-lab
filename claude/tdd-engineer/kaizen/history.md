@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** extended retrieval quote.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-09 — plan.md: K-012 closed (review-only)
 
 - **What:** removed K-012. `falkor-chat/scripts/test_queries.sh` now has an edge-index plan helper (`Edge By Index Scan`), landed with falkor-chat K-092 (commit 767e663d; suite 461/461), so `assert_index_scan` is no longer blind to the §14.8 SUPERSEDES probe.

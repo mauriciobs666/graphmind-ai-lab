@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-11-10 — python-web-quirks-kb S15b1/S15b2: discovery pointer, grants, audit check 12
+
+- **What:** One-line `Python/web/test gotchas` pointer (citing `skills/agent-kb-retrieval/SKILL.md`) added to coder, tdd-engineer, architect, analyst, qa-engineer, frontend-engineer, tico, security-expert; tico and security-expert `tools:` gain `search_documents` + `get_document` (the other six had both or no `tools:` line). `scripts/audit-team.sh` check 12 greps the literal in the eight files and both tools on the two `tools:` lines; scratch-copy mutant (literal removed from coder) turned it red. Not logged here: S4/S7/S15a work (no cobb-side edits found in this run's scope).
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-10 — work-items: agent-maintenance, claude/AGENTS.md, tico/teco/architect
 
 - **What:** `agent-maintenance` SKILL.md gains one kaizen-citation line (§1, after the plan template); `claude/AGENTS.md` gains the flush rule beside the git-commit race paragraph, binding every committing role; tico/teco/architect prompts each gain one work-items bullet (see their histories).

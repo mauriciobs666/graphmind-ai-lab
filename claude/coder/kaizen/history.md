@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** new line.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-07 — Distillation 6: raw entries dispositioned
 
 - **What:** `629325c2` (mutation-test copy needs `results/` and `PYTHONPATH=<copy>`) and the fd 0 half of `c590ed3a` (pytest fd capture puts `/dev/null` on fd 0) promoted to `skills/python-web-quirks/SKILL.md`, re-run; the `-q -q` half duplicates distillation 5's section. `15de3552` rejected (FalkorDB facts doc'd in `falkordb-quirks.md`). All swept entries are dispositioned, not deleted.

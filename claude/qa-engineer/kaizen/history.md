@@ -2,6 +2,12 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-11-10 — `Python/web/test gotchas` pointer (D7)
+
+- **What:** extended retrieval quote.
+- **Why:** docs/plans/python-web-quirks-kb.md D7 (S15b1).
+- **Plan items:** —
+
 ## 2026-11-06 — Distillation 4: raw entries dispositioned
 
 - **What:** Entry swept (dispositioned, not deleted): `9f9c7e1e`. WDDM-counter half doc'd in the single-model fit report (Instrument caveat); the `pkill -f` self-kill half promoted to `skills/agent-standards/claude-code.md` after reproducing it (exit 144).
