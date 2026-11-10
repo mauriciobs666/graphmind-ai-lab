@@ -25,14 +25,14 @@ Requirements: `docs/requirements/python-web-quirks-kb.md` (Interviewing; stakeho
 | U16 | `architect` | `a4a56299792bbf4fe` | accepted | plan amendments (+115 words net by `wc -w`); `--pin-from-git` owned by S16d via `coder` (architect's call, accepted) | G2 → — | 50k tok / 10 tools |
 | U17 | `qa-engineer` | `ab42c5f094343303c` | accepted | S8: Set B frozen outside repo (84+30, 15/15, 12 tail units flagged, leakcheck 0 shared 4-grams, probe on :8210 only, 2 positives still under 0.25 kept per ruling (i), 36 duplicate-coverage queries recorded); **Set B sha256 `163efb061834345d3d34c72501c96dd11e8c20fdd48bcbd433ba4c617d5fd15c`** (teco re-hashed: match; mode 444; no sentinel); `docs/test-plans/python-web-quirks-kb.md` (TP-001..011; a stray `TP-012` mention for G2) | G2 → — | 167k tok / 32 tools |
 | G2 | `analyst` | `a23b879bd96fbcd50` | gated | `docs/reviews/python-web-quirks-kb-impl.md` Pass 3 (S4–S8; Set B path withheld from the reviewer by design) | → approve with suggestions; no blocker, F11 major ("duplicate coverage" label wrong for most of the 36; S12 reports first-unit-chunk rank + non-unit chunks below it; S14 `--exclude` only ledger-recorded deleted ids; `--sweep` prints no unfiltered numbers), F12 stale sentences (plan, ML note), F13 test-plan gaps (TP-012, S15c plan, S14 pre-check order), F14 F6 post-receipt check, F15 nits. Fixes owed: U18–U20 | 211k tok / 69 tools |
-| U18 | `tdd-engineer` | `a3bcf906217806472` | in-flight | G2 F11/F14 code: `--sweep` unfiltered print, S12/S14 first-unit-chunk-rank + non-unit aggregate (aggregate-only on sealed), `ingest` post-receipt visibility check; `pwq_kb.py` + selftest | G2 re-check → — | — |
+| U18 | `tdd-engineer` | `a3bcf906217806472` | accepted | G2 F11/F14 code: `--sweep` unfiltered print, S12/S14 first-unit-chunk-rank + non-unit aggregate (aggregate-only on sealed), `ingest` post-receipt visibility check; `pwq_kb.py` + selftest | G2 re-check → — | — |
 | U19 | `architect` | `a263273e0c70d71c3` | accepted | G2 F11/F12/F14 plan stale sentences, relabel "pre-existing hit under floor" in `docs/plans/python-web-quirks-kb.md` | — | — |
 | U20 | `data-scientist` | `ae055d0d6689a023a` | accepted | G2 F11/F12 in `docs/plans/python-web-quirks-kb-ml.md` (relabel, post-H1 claim, stale counts, deflation ruling) | — | — |
 | U21 | `qa-engineer` | `aae2f63dfd7df43df` | accepted | G2 F13 in `docs/test-plans/python-web-quirks-kb.md` (TP-012, S15c scope, S14 pre-check order) | — | — |
 
 
 
-Next: fix G2 findings (U18 code, U19 plan/ML/test-plan wording), then S9–S12. Plan `docs/plans/python-web-quirks-kb.md` committed (`a5215c45`).
+Next: S9 (ingest units into `ws:pwq-test`, scratch `--manifest`), S10-S12; S13 brief carries the F6 id-visibility step and the receipt check must be confirmed live on :8210 (synchronous document creation unverified).
 
 - 2026-11-09: stakeholder answers recorded in the requirements' decision log. New obligations from them: `cobb` edits `tico` and `security-expert` tool grants; `cobb` lists the 4 raw captures that mention the skill and the stakeholder deletes them; Set B author `qa-engineer`, storage outside implementers' reading path (teco decides at plan time).
 
