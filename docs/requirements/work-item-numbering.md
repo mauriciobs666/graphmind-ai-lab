@@ -1,6 +1,6 @@
 # Work-item numbering and terminology — Feature Requirements
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-04 · **Item:** `GAL-F0001`
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-11-04 · **Item:** `GAL-F0001`
 
 ## Intent
 One common vocabulary and one numbering scheme for every unit of work, so that any item can be cited, found and related to another without knowing which component or project it came from. It is the standard that the coordination work (overlap checks, parallel runs, the coordination graph) and green-field projects in other repos rely on.

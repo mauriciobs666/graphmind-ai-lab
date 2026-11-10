@@ -1,6 +1,6 @@
 # Work-item numbering and terminology — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — · **Item:** `GAL-F0001`
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — · **Item:** `GAL-F0001`
 
 Requirements: `docs/requirements/work-item-numbering.md` (Ready for design; analyst review `docs/reviews/work-item-numbering.md`, 3 passes). Chain so far is docs-only (design → review); verified deliverables are held uncommitted and land in one commit at the chain's terminal state. Build units (allocator/lookup/check tooling, skill) are drawn after the plan gate.
 
@@ -71,3 +71,9 @@ Build complete: steps 1–12 committed, 500 tests green, `wi check` clean on the
 Note: the real journal already holds a foreign event `GAL-I02-K0001` (python-web-quirks session, home `claude`) — first adoption by another session; NOT this coordination's to flush/commit.
 
 | C7 close re-check (fresh analyst) | `analyst` | `a2cb1cc0e27bf29d0` | in-flight | `docs/reviews/work-item-numbering.md` Pass 11 | — | — |
+
+| C7 → accepted | `analyst` | `a2cb1cc0e27bf29d0` | accepted | Pass 11 | approve with suggestions (N1 spec §9 definer shapes — folded; N2 HISTORY range — folded) |
+
+## Closed 2026-11-10
+
+Live spec `skills/work-items/docs/SPEC.md`; HISTORY `skills/work-items/docs/HISTORY.md`; documents archived. Open follow-ups live in HISTORY.md (P9-2, P9-4, N5, step 13 handoffs, foreign journal event GAL-I02-K0001 awaiting its owner's `wi flush`).
