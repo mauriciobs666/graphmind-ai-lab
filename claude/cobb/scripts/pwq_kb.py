@@ -569,6 +569,10 @@ class TargetRefused(KBError):
     """The guard (or a production-delete refusal) stopped the run before any request was made."""
 
 
+class PostReceiptMismatch(KBError):
+    """A POST's receipt id is not visible in the target workspace: the write landed somewhere else (F6/F14)."""
+
+
 @dataclass
 class Target:
     ws: str
@@ -791,6 +795,10 @@ def ingest(copy_text: str, *, ws: str, base_url: str, manifest_path, transport=u
                 new_entries[e.id] = reg
         else:
             receipt = client.post_document(_post_body(e))
+            if not fetcher.current_docs(ws, [], [receipt["documentId"]]):  # F6/F14: visible in the TARGET workspace, not elsewhere
+                raise PostReceiptMismatch(
+                    f"document {receipt['documentId']} (unit {e.id}) is not visible in the target workspace {ws} after the POST to "
+                    f"{target.base_url}: it landed somewhere else; stopping. Find and delete the stray by that id")
             results.append(UnitResult(e.id, "ingest", receipt["documentId"]))
             new_entries[e.id] = _entry_dict(e, receipt["documentId"])
     in_copy = {e.id for e in entries}
@@ -1140,6 +1148,20 @@ def name_hit(searcher, ws: str, chunks: list[dict]):
     return best["documentId"], (doc or {}).get("title"), best["score"]
 
 
+def displacement(pos: list[dict], windows: list[list[dict]], *, unit_doc: dict, feature_docs: set) -> dict:
+    """F11 diagnostic: per positive, the 1-based rank of its own unit's first chunk in the (exclusion-filtered, untruncated)
+    window, and the non-unit documents holding a chunk that scores strictly better. With no own-unit chunk in the window
+    every non-unit chunk counts as ahead. Aggregate keeps no query text."""
+    rows = []
+    for p, win in zip(pos, windows):
+        own = unit_doc.get(p["section"])
+        hit = next(((i, c) for i, c in enumerate(win) if c["documentId"] == own), None)
+        ahead = [c["documentId"] for c in win if c["documentId"] not in feature_docs and (hit is None or c["score"] < hit[1]["score"])]
+        rows.append({"id": p["id"], "rank": hit[0] + 1 if hit else None, "ahead": list(dict.fromkeys(ahead))})
+    return {"rows": rows, "n": len(rows), "unit_in_window": sum(r["rank"] is not None for r in rows),
+            "outranked": sum(bool(r["ahead"]) for r in rows), "documents": sorted({d for r in rows for d in r["ahead"]})}
+
+
 def evaluate(pos: list[dict], neg: list[dict], *, floor, unit_doc: dict, feature_docs: set) -> dict:
     """Metrics over already-fetched, already-truncated chunks. `floor=None`: no floor (BM25)."""
     under = (lambda c: True) if floor is None else (lambda c: c["score"] <= floor)
@@ -1387,11 +1409,17 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     pr, nr = build(excluded)
     if args.sweep:
         out(header)
-        rows = sweep(pr, nr, unit_doc=unit_doc, feature_docs=feature_docs, keep=args.floor)
-        for r in rows:
-            out(f"floor {r['floor']:g} recall_floor={r['recall_floor']:g} recall_raw={r['recall_raw']:g} "
-                f"near_fa={r['near_fa']} off_fa={r['off_fa']} adequate={r['adequate']}"
-                + (" <- current" if r["current"] else ""))
+        if excluded:
+            out("excluded: " + " ".join(sorted(excluded)))
+
+        def sweep_rows(prefix, p_, n_):
+            for r in sweep(p_, n_, unit_doc=unit_doc, feature_docs=feature_docs, keep=args.floor):
+                out(f"{prefix}floor {r['floor']:g} recall_floor={r['recall_floor']:g} recall_raw={r['recall_raw']:g} "
+                    f"near_fa={r['near_fa']} off_fa={r['off_fa']} adequate={r['adequate']}"
+                    + (" <- current" if r["current"] else ""))
+        sweep_rows("", pr, nr)
+        if excluded:  # ML 4.2 / D11: the filtered headline sits beside the unfiltered numbers
+            sweep_rows("unfiltered ", *build(frozenset()))
         return 0
     m = evaluate(pr, nr, floor=args.floor, unit_doc=unit_doc, feature_docs=feature_docs)
     if sentinel is not None:  # burnt only now: results exist, and nothing has been shown yet
@@ -1413,6 +1441,12 @@ def run_eval(args, *, searcher, fetcher, target: Target, mpath: Path, env=os.env
     else:
         out("metrics: " + fmt_metrics(m))
     out("ac3: " + " ".join(f"{k}={v}" for k, v in ac3_verdict(m).items()))
+    diag = displacement(pos, [scored_chunks(f, excluded, k=len(f)) for f in fetched_pos], unit_doc=unit_doc, feature_docs=feature_docs)
+    out(f"displacement: positives={diag['n']} unit_in_window={diag['unit_in_window']} "
+        f"non_unit_outranks_unit={diag['outranked']} documents={','.join(diag['documents']) or '-'}")
+    if which == "A":  # per-query lines only where failures may be inspected; Set B stays aggregate-only
+        for r in diag["rows"]:
+            out(f"RANK {r['id']} {r['rank'] or '-'} ahead={','.join(r['ahead']) or '-'}")
     if which == "A":  # Set A is the only set whose failures may be inspected
         for p in pr:
             if not any(c["documentId"] == unit_doc.get(p["section"]) and c["score"] <= args.floor for c in p["chunks"]):

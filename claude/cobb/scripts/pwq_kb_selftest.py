@@ -613,6 +613,29 @@ def t16_a_server_rejection_is_an_error_not_a_silent_skip():
     assert "400" in str(e)
 
 
+def misrouting(world, src, dst):
+    """A transport whose POSTs meant for `src` land on `dst` (a proxy/port mix-up the URL guard cannot see)."""
+    return lambda method, url, body=None: world.transport(method, url.replace(src, dst, 1) if url.startswith(src) else url, body)
+
+
+def t16_a_receipt_id_not_visible_in_the_target_workspace_stops_the_ingest_with_a_clear_message():
+    for ws, src, dst, other in (("agent-team", PROD_URL, TEST_URL, "pwq-test"), ("pwq-test", TEST_URL, PROD_URL, "agent-team")):
+        w, m = FakeWorld(), tmpm()
+        e = raises(kb.PostReceiptMismatch, kb.ingest, mini_copy(), ws=ws, base_url=FAKE_TARGETS[ws], manifest_path=m,
+                   transport=misrouting(w, src, dst), fetcher=w, confirm_production=True, targets=FAKE_TARGETS,
+                   read_source=lambda p: MINI_SRC)
+        assert ws in str(e) and next(iter(w.srv(other).docs)) in str(e), (ws, str(e))  # names the target and the stray id
+        assert w.post_count() == 1, w.post_count()  # halted at the first mismatch: no second post
+        # the CLI turns it into a non-zero exit with the message on stderr
+        w2, cp = FakeWorld(), Path(tempfile.mkdtemp(), "copy.md")
+        cp.write_text(copy_text())
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            code = kb.main(["ingest", "--copy", str(cp), "--manifest", str(tmpm()), "--ws", ws, "--base-url", FAKE_TARGETS[ws],
+                            "--confirm-production"], transport=misrouting(w2, src, dst), fetcher=w2, targets=FAKE_TARGETS)
+        assert code != 0 and "not visible" in err.getvalue() and ws in err.getvalue(), (code, err.getvalue())
+
+
 def t17_rerun_skips_every_unit_and_posts_nothing():
     w, m, copy = FakeWorld(), tmpm(), mini_copy()
     run_ingest(w, copy, manifest=m)
@@ -1543,6 +1566,71 @@ def t24_sweep_cli_prints_one_row_per_floor():
     rows = [ln for ln in out.split("\n") if ln.startswith("floor ")]
     assert len(rows) == 13 and rows[0].startswith("floor 0.38 ") and rows[-1].startswith("floor 0.5 ")
     assert "recall_floor=0 " in rows[0] + " " and "recall_floor=1 " in rows[3] + " "
+
+
+@small_set_a
+def t24_sweep_with_exclude_prints_the_unfiltered_rows_beside_the_filtered_headline():
+    w, m, doc_of = eval_env()
+    a = write_set(Path(tempfile.mkdtemp(), "a.json"), [dict(id="A01", section=1, query="s1")], [dict(id="NA1", kind="off", query="n1")])
+    # five excluded chunks ahead of the unit chunk: unfiltered the unit is rank 6 (outside the five), filtered rank 1
+    script = {"s1": [ck("CAPTURE", 0.10, i) for i in range(5)] + [ck(doc_of(1), 0.30)], "n1": [ck("TEAM", 0.3)]}
+    args = ["--sweep", "--set", "A", "--set-a-path", str(a), "--floor", "0.43", "--exclude", "CAPTURE"]
+    code, out, err = run_eval(args, FakeSearch(script, w), w, m)
+    assert code == 0, err
+    assert "excluded: CAPTURE" in out
+    filt = [ln for ln in out.split("\n") if ln.startswith("floor ")]
+    unf = [ln for ln in out.split("\n") if ln.startswith("unfiltered floor ")]
+    assert len(filt) == 13 and len(unf) == 13, (len(filt), len(unf))
+    assert "recall_floor=1 " in filt[-1] + " " and "recall_floor=0 " in unf[-1] + " ", (filt[-1], unf[-1])
+    # without --exclude there is nothing to compare: no unfiltered rows
+    code, out, err = run_eval(args[:-2], FakeSearch(script, w), w, m)
+    assert code == 0 and "unfiltered" not in out
+
+
+def t32_displacement_ranks_the_first_unit_chunk_and_names_the_non_unit_documents_ahead_of_it():
+    pos = [dict(id="p1", section=1), dict(id="p2", section=2), dict(id="p3", section=3), dict(id="p4", section=4), dict(id="p5", section=1)]
+    win = [
+        [ck("D1", 0.20), ck("X", 0.30)],                                   # unit first: rank 1, a non-unit only behind it
+        [ck("X", 0.20), ck("D2", 0.30), ck("D2", 0.31, 1)],                # X ahead of the unit: rank 2, outranked
+        [ck("D1", 0.10), ck("Y", 0.25), ck("Y", 0.26, 1), ck("D3", 0.4)],  # a OTHER unit's chunk (D1) ahead is not non-unit
+        [ck("X", 0.20), ck("Z", 0.30)],                                    # no own-unit chunk in the window
+        [ck("X", 0.10 + i / 100, i) for i in range(6)] + [ck("D1", 0.5)],  # unit chunk at rank 7: beyond any top-5 truncation
+    ]
+    d = kb.displacement(pos, win, unit_doc=SEC_DOC, feature_docs={"D1", "D2", "D3", "D4"})
+    assert [(r["id"], r["rank"], r["ahead"]) for r in d["rows"]] == [
+        ("p1", 1, []), ("p2", 2, ["X"]), ("p3", 4, ["Y"]), ("p4", None, ["X", "Z"]), ("p5", 7, ["X"])], d["rows"]
+    assert (d["n"], d["unit_in_window"], d["outranked"], d["documents"]) == (5, 4, 4, ["X", "Y", "Z"]), d
+    # equal score is not "below": only a strictly better non-unit chunk outranks
+    t = kb.displacement([dict(id="p1", section=1)], [[ck("X", 0.30), ck("D1", 0.30, 1)]], unit_doc=SEC_DOC, feature_docs={"D1"})
+    assert t["outranked"] == 0, t
+
+
+@small_set_a
+def t32_set_a_scoring_prints_the_displacement_aggregate_and_per_query_lines_after_exclusion():
+    w, m, doc_of = eval_env()
+    a = write_set(Path(tempfile.mkdtemp(), "a.json"),
+                  [dict(id="A01", section=1, query="s1"), dict(id="A02", section=2, query="s2"),
+                   dict(id="A03", section=3, query="s3")], [dict(id="NA1", kind="off", query="n1")])
+    script = {"s1": [ck("CAPTURE", 0.10), ck("TEAMDOC", 0.20), ck(doc_of(1), 0.30)],   # CAPTURE excluded; TEAMDOC outranks
+              "s2": [ck("CAPTURE", 0.10), ck(doc_of(2), 0.30), ck("TEAMDOC2", 0.35)],  # excluded only: nothing outranks
+              "s3": [ck("TEAMDOC3", 0.10 + i / 100, i) for i in range(6)] + [ck(doc_of(3), 0.42)],  # unit chunk at rank 7
+              "n1": [ck("TEAM", 0.3)]}
+    code, out, err = run_eval(["--set", "A", "--set-a-path", str(a), "--floor", "0.43", "--exclude", "CAPTURE"], FakeSearch(script, w), w, m)
+    assert code == 0, err
+    agg = next(ln for ln in out.split("\n") if ln.startswith("displacement: "))
+    assert "positives=3" in agg and "unit_in_window=3" in agg and "non_unit_outranks_unit=2" in agg, agg
+    assert "documents=TEAMDOC,TEAMDOC3" in agg and "CAPTURE" not in agg and "TEAMDOC2" not in agg, agg
+    assert "RANK A01 2 ahead=TEAMDOC" in out and "RANK A02 1 ahead=-" in out and "RANK A03 7 ahead=TEAMDOC3" in out, out
+
+
+def t32_sealed_once_prints_the_displacement_aggregate_only_no_per_query_lines_or_query_text():
+    w, m, doc_of = eval_env()
+    bp, script = b_set(tempfile.mkdtemp(), doc_of)
+    queries = [it["query"] for it in json.loads(bp.read_text())["positives"]]
+    code, out, err = run_eval(sealed(bp), FakeSearch(script, w), w, m)
+    assert code == 0, err
+    assert sum(1 for ln in out.split("\n") if ln.startswith("displacement: ")) == 1, out
+    assert "positives=84" in out and "RANK " not in out and not any(q and q in out for q in queries), out
 
 
 def t31_ac2_checks_title_situation_and_last_paragraph_per_unit_and_the_title_via_get_document():
