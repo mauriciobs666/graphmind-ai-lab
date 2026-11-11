@@ -244,7 +244,7 @@ def test_git_does_not_inherit_variables_that_redirect_it_to_another_repository(t
     assert bare != c1                                                              # premise: a bare git is redirected
     assert blame.git(mine, "rev-parse", "HEAD").decode().strip() == c1
     assert not [k for k in blame._env() if k.startswith("GIT_") and k not in
-                ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM")]
+                ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM", "GIT_ALLOW_PROTOCOL", "GIT_NO_LAZY_FETCH")]
 
 
 def test_last_changed_over_a_region_far_beyond_the_blamed_lines_is_bounded_and_ignores_the_unblamed_ones():

@@ -29,9 +29,9 @@ import posixpath
 import re
 import subprocess
 from pathlib import Path
-from typing import Iterable, NamedTuple
+from typing import Callable, Iterable, NamedTuple
 
-from ccg import ids
+from ccg import gitsafe, ids
 from ccg.manifest import Manifest, Repo
 
 #: ``export_kit.py``'s SKIP_DIRS plus caches and virtualenvs; applied to every directory segment.
@@ -75,11 +75,12 @@ def _skipped_dir(name: str) -> bool:
     return name in SKIP_DIRS or name.endswith(".egg-info")
 
 
+is_skipped_dir = _skipped_dir      # public name for callers outside this module (``ccg.build``)
+
+
 def _git_files(root: Path) -> list[str] | None:
     try:
-        out = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z"], capture_output=True, check=True, timeout=60
-        ).stdout
+        out = gitsafe.git(root, "ls-files", "-z")                      # the tree is untrusted: hardened git only
     except (OSError, subprocess.SubprocessError):
         return None
     files = [f for f in out.decode("utf-8", "surrogateescape").split("\0") if f]
@@ -145,8 +146,11 @@ def _excluder(repo: Repo):
 # --- classification ---------------------------------------------------------------------------------------------
 
 
-def _file_language(root: Path, rel: str) -> str | None:
-    """The per-file token (shell, config, markdown), or None."""
+def classify_file(rel: str, first_line: Callable[[], bytes]) -> str | None:
+    """The per-file token (shell, config, markdown), or None, from the path and, for an extensionless file only, its first line.
+
+    ``first_line`` is called at most once and only when the extension cannot decide: a caller reading a git blob and a caller
+    reading the work tree share this one rule (``ccg.build`` reads the commit's bytes)."""
     name = posixpath.basename(rel)
     ext = posixpath.splitext(name)[1].lower()
     if ext in (".sh", ".bash"):
@@ -155,15 +159,21 @@ def _file_language(root: Path, rel: str) -> str | None:
         return "markdown"
     if ext in _CONFIG_EXT or name == ".env" or name.startswith((".env.", "Dockerfile")):
         return "config"
-    if not ext:
+    if not ext and _shebang_is_shell(first_line()):
+        return "shell"
+    return None
+
+
+def _file_language(root: Path, rel: str) -> str | None:
+    """The per-file token (shell, config, markdown), or None."""
+    def head() -> bytes:
         try:
             with open(root / rel, "rb") as fh:
-                head = fh.readline(256)
+                return fh.readline(256)
         except OSError:
-            return None
-        if _shebang_is_shell(head):
-            return "shell"
-    return None
+            return b""
+
+    return classify_file(rel, head)
 
 
 def _shebang_is_shell(first_line: bytes) -> bool:

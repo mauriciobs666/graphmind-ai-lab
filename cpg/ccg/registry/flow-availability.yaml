@@ -1,0 +1,11 @@
+# Unit.flowAvailable per language (docs/plans/connected-code-graph-p1.md index D2). Data, not code: the assembler
+# (ccg/assemble/rows.py:load_flow_availability) is the one reader and writes Unit.flowAvailable from it (-p1-graph.md G5).
+# A language with no row (kotlin: unmeasured; c, shell, config, markdown: not measured) is written false.
+# A row flips only by an accepted re-measurement record (index §5). Rows are {language, flowAvailable, measurement}; the
+# measurement cites the report section and the pooled flow-pair recall it rests on (ML §8.4 needs >= 0.95).
+- {language: python, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 307/480 = 0.640"}
+- {language: javascript, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 60/151 = 0.397"}
+- {language: go, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 246/433 = 0.568"}
+- {language: java, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 314/465 = 0.675"}
+- {language: csharp, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 227/392 = 0.579"}
+- {language: cpp, flowAvailable: false, measurement: "docs/test-reports/connected-code-graph-p0-frontend-fitness-report.md §a2.2.6 (§a2.1): pooled flow-pair recall 116/349 = 0.332"}

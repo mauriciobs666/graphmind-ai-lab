@@ -491,6 +491,8 @@ STUB = textwrap.dedent('''\
     kind = {"joern-parse": "parse", "cpg-content-check.sc": "check", "astgen.sc": "astgen", "extract.sc": "extract"}[
         "joern-parse" if fe == "joern-parse" else script]
     if kind == stage:
+        if mode == "exit124":
+            sys.exit(124)
         if mode == "hang":
             def term(*_):
                 pathlib.Path(os.environ["STUB_MARK"]).write_text("terminated")
@@ -652,8 +654,9 @@ def test_a_hung_stage_is_terminated_with_sigterm_so_the_runner_can_clean_up(tmp_
     monkeypatch.setenv("STUB_MODE", "hang")
     monkeypatch.setenv("STUB_FAIL_STAGE", "parse")
     repo, sha, unit, units = small_repo(tmp_path)
-    with pytest.raises(run.RunnerError, match="timed out"):
+    with pytest.raises(run.RunnerTimeout, match="timed out") as ei:
         run.extract_unit(repo, unit, units, sha, area / "w", area=area, runner=runner, timeout=1.5)
+    assert isinstance(ei.value, run.RunnerError)
     assert (tmp_path / "mark").read_text() == "terminated"
 
 
@@ -876,3 +879,37 @@ def test_a_real_exit_zero_empty_cpg_is_refused(tmp_path, monkeypatch):
     repo, sha, unit, units = small_repo(tmp_path)
     with pytest.raises(run.EmptyCpgError):
         run.extract_unit(repo, unit, units, sha, area / "w", area=area, runner=wrapper)
+
+
+@pytest.mark.parametrize("stage", ["parse", "astgen", "extract.sc", "check"])
+def test_the_runners_own_exit_124_at_the_wall_cap_is_a_timeout_for_every_stage(tmp_path, stub, area, monkeypatch, stage):
+    """124 alone is ambiguous (cpg/sandbox/README.md): the stage's measured duration decides. A cap of 0 s makes any run 'at the cap'."""
+    runner, log = stub
+    monkeypatch.setenv("STUB_MODE", "exit124")
+    monkeypatch.setenv("STUB_FAIL_STAGE", {"parse": "parse", "astgen": "astgen", "extract.sc": "extract", "check": "check"}[stage])
+    repo, sha, unit, units = small_repo(tmp_path, "javascript")
+    with pytest.raises(run.RunnerTimeout, match="exited 124"):
+        run.extract_unit(repo, unit, units, sha, area / "w", area=area, runner=runner, wall_cap=0.0)
+
+
+def test_a_124_well_below_the_wall_cap_is_the_tools_own_exit_not_a_timeout(tmp_path, stub, area, monkeypatch):
+    runner, log = stub
+    monkeypatch.setenv("STUB_MODE", "exit124")
+    monkeypatch.setenv("STUB_FAIL_STAGE", "parse")
+    repo, sha, unit, units = small_repo(tmp_path)
+    with pytest.raises(run.RunnerError, match="exited 124") as ei:
+        run.extract_unit(repo, unit, units, sha, area / "w", area=area, runner=runner)
+    assert not isinstance(ei.value, run.RunnerTimeout)
+
+
+def test_the_wall_cap_default_is_the_sandbox_indexer_cap():
+    assert run.INDEXER_WALL_CAP_S == 1800 and run.INDEXER_WALL_CAP_S * 1000 == __import__("ccg.sandbox_audit", fromlist=["x"]).INDEXER_WALL_CAP_MS
+
+
+def test_only_exit_124_is_a_timeout_whatever_the_wall_cap(tmp_path, stub, area, monkeypatch):
+    runner, log = stub
+    monkeypatch.setenv("STUB_FAIL_STAGE", "parse")                      # the stub exits 3
+    repo, sha, unit, units = small_repo(tmp_path)
+    with pytest.raises(run.RunnerError, match="exited 3") as ei:
+        run.extract_unit(repo, unit, units, sha, area / "w", area=area, runner=runner, wall_cap=0.0)
+    assert not isinstance(ei.value, run.RunnerTimeout)

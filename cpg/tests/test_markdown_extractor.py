@@ -22,6 +22,7 @@ from extractors.markdown.extract import MarkdownError, extract_markdown
 from extractors.markdown.globs import Globs, ManifestError, load_globs
 
 CPG = Path(__file__).resolve().parents[1]
+EVAL_MANIFEST = CPG / "eval" / "eval-manifest.yaml"      # an eval/fixture input: the loader takes any manifest path
 REPO_ROOT = CPG.parent
 DATA = Path(__file__).parent / "data" / "markdown"
 REPO = "graphmind-ai-lab"
@@ -33,7 +34,7 @@ DOC_PATH = "docs/demo.md"
 
 @pytest.fixture(scope="module")
 def globs() -> Globs:
-    return load_globs()
+    return load_globs(EVAL_MANIFEST)
 
 
 def run(path: str, data: bytes, globs: Globs, **kw):
@@ -76,7 +77,7 @@ def test_classification_by_the_manifest_globs(globs, path, klass):
 
 
 def test_classifier_follows_the_manifest_it_is_given_not_a_built_in_list(tmp_path):
-    base = (CPG / "eval" / "eval-manifest.yaml").read_text()
+    base = EVAL_MANIFEST.read_text()
     mutated = base.replace('    - "**/AGENTS.md"\n', '    - "docs/**/*.md"\n', 1)
     assert mutated != base
     m = tmp_path / "m.yaml"
@@ -87,7 +88,7 @@ def test_classifier_follows_the_manifest_it_is_given_not_a_built_in_list(tmp_pat
 
 
 def test_except_list_wins_over_include(tmp_path):
-    base = (CPG / "eval" / "eval-manifest.yaml").read_text()
+    base = EVAL_MANIFEST.read_text()
     m = tmp_path / "m.yaml"
     m.write_text(base.replace('    - "skills/README.md"\n', '    - "skills/work-items/**"\n', 1))
     g = load_globs(m)
@@ -128,16 +129,40 @@ def test_glob_matching_is_not_exponential():
 
 # --- the loader fails loudly -------------------------------------------------------------------------------------------
 
+def test_the_manifest_path_is_a_required_argument_with_no_default():
+    with pytest.raises(TypeError):
+        load_globs()           # type: ignore[call-arg]
+    assert not hasattr(mdg, "MANIFEST")
+
+
+def test_loader_reads_a_system_manifest_block_too(tmp_path):
+    m = tmp_path / "system.yaml"
+    m.write_text("schemaVersion: 1\nsystem: s\npromptBearingMarkdown: {include: ['a/*.md'], except: ['a/x.md']}\n")
+    g = load_globs(m)
+    assert g.classify("a/b.md") == "prompt-md" and g.classify("a/x.md") == "doc"
+    m.write_text("schemaVersion: 1\nsystem: s\n")
+    with pytest.raises(ManifestError, match="promptBearingMarkdown"):
+        load_globs(m)
+
+
+def test_loader_refuses_a_duplicate_key(tmp_path):
+    m = tmp_path / "m.yaml"
+    m.write_text("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: [a], include: [b], except: []}\n")
+    with pytest.raises(ManifestError, match="duplicate"):
+        load_globs(m)
+
+
 def test_loader_fails_when_the_manifest_is_absent(tmp_path):
     with pytest.raises(ManifestError, match="absent"):
         load_globs(tmp_path / "nope.yaml")
 
 
 @pytest.mark.parametrize("text, match", [
-    ("schema: other\npromptBearingMarkdown: {include: ['a'], except: []}\n", "ccg-eval-manifest-v1"),
-    ("schema: ccg-eval-manifest-v1\n", "exactly the keys"),
-    ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['**/A.md']}\n", "exactly the keys"),
-    ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['**/A.md'], except: [], extra: 1}\n", "exactly the keys"),
+    ("schema: other\npromptBearingMarkdown: {include: ['a'], except: []}\n", "neither a system manifest"),
+    ("schema: ccg-eval-manifest-v1\n", "absent"),
+    ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {except: []}\n", "key include"),
+    ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['**/A.md'], except: [], extra: 1}\n", "key include"),
+    ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['/A.md'], except: []}\n", "include.0.: unsupported glob"),
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: [], except: []}\n", "include"),
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: '**/A.md', except: []}\n", "include"),
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: [1], except: []}\n", "unsupported glob"),
@@ -145,7 +170,7 @@ def test_loader_fails_when_the_manifest_is_absent(tmp_path):
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['a/[bc].md'], except: []}\n", "unsupported glob"),
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['a**b.md'], except: []}\n", "unsupported glob"),
     ("schema: ccg-eval-manifest-v1\npromptBearingMarkdown: {include: ['**/A.md'], except: [{a: 1}]}\n", "unsupported glob"),
-    ("- a list\n", "ccg-eval-manifest-v1"),
+    ("- a list\n", "neither a system manifest"),
     ("a: [unclosed\n", "unreadable"),
 ])
 def test_loader_fails_on_a_changed_shape(tmp_path, text, match):
@@ -156,7 +181,7 @@ def test_loader_fails_on_a_changed_shape(tmp_path, text, match):
 
 
 def test_loader_reads_the_committed_manifest():
-    g = load_globs()
+    g = load_globs(EVAL_MANIFEST)
     assert "**/AGENTS.md" in g.include and "claude/**/kaizen/**" in g.exclude
 
 
@@ -573,3 +598,81 @@ def test_bare_name_sentence_punctuation_still_matches(globs, text):
 def test_script_name_emits_only_the_script_not_its_stem(globs):
     got, _ = bare(globs, "run `a.sh` now\n", known=frozenset({"a"}))
     assert got == [(1, "a.sh")]
+
+
+@pytest.mark.parametrize("block", [
+    {"include": [f"d{i}/*.md" for i in range(65)]},
+    {"include": ["a.md"], "except": [f"d{i}" for i in range(65)]},
+    {"include": ["a" * 201]},
+])
+def test_the_validator_itself_caps_the_pattern_count_and_length(block):
+    from ccg.globs import check_block
+    with pytest.raises(ManifestError):
+        check_block(block)
+    assert len(check_block({"include": [f"d{i}/*.md" for i in range(64)], "except": ["a" * 200]}).include) == 64
+
+
+def test_loader_refuses_an_unhashable_key_with_the_typed_error(tmp_path):
+    m = tmp_path / "m.yaml"
+    m.write_text("schema: ccg-eval-manifest-v1\n? [a]\n: 1\npromptBearingMarkdown: {include: [a], except: []}\n")
+    with pytest.raises(ManifestError, match="scalar"):
+        load_globs(m)
+
+
+# --- differential: the hand matcher against an independent regex reference ---------------------------------------------
+
+def _reference(pattern: str):
+    """``/``-prefixed path, each non-``**`` segment ``/`` + its regex, each ``**`` zero or more whole segments."""
+    import re
+    rx = ""
+    for seg in pattern.split("/"):
+        if seg == "**":
+            rx += "(?:/[^/]+)*"
+        else:
+            rx += "/" + "".join("[^/]*" if c == "*" else "[^/]" if c == "?" else re.escape(c) for c in seg)
+    return re.compile(rx)
+
+
+def _sequences(tokens, max_len):
+    import itertools
+    for n in range(1, max_len + 1):
+        yield from itertools.product(tokens, repeat=n)
+
+
+def test_classify_agrees_with_an_independent_regex_over_a_systematic_pattern_and_path_grid():
+    pats = ["/".join(t) for t in _sequences(["a", "*", "**", "*.md", "?"], 4)]
+    paths = ["/".join(t) for t in _sequences(["a", "b", "x.md"], 5)]
+    assert (len(pats), len(paths)) == (780, 363)
+    hits = 0
+    for p in pats:
+        ref = _reference(p)
+        g = Globs(include=(p,), exclude=())
+        for path in paths:
+            want = ref.fullmatch("/" + path) is not None
+            assert (g.classify(path) == "prompt-md") is want, (p, path)
+            hits += want
+    assert 5000 < hits < 60000          # the grid really exercises both outcomes
+
+
+@pytest.mark.parametrize("pattern, path, ok", [
+    ("a/*.md", "a/b.md", True), ("a/*.md", "a/b.md/c", False), ("a/*.md", "a/b.md/c/d", False),
+    ("**/x.md", "x.md/y", False), ("*/**", "a", True), ("*/**", "a/b/c", True), ("a/**/b", "a/b", True),
+])
+def test_an_extra_trailing_segment_never_matches_and_a_trailing_double_star_takes_zero_or_more(pattern, path, ok):
+    assert (Globs(include=(pattern,), exclude=()).classify(path) == "prompt-md") is ok
+
+
+def test_the_path_caps_hold_at_the_cap_and_just_past_it():
+    g = Globs(include=("**",), exclude=())
+    assert g.classify("/".join(["a"] * 64)) == "prompt-md" and g.classify("/".join(["a"] * 65)) == "doc"
+    s = Globs(include=("*",), exclude=())
+    assert s.classify("a" * 255) == "prompt-md" and s.classify("a" * 256) == "doc"
+    assert g.classify("/".join(["a"] * 63 + ["a" * 255])) == "prompt-md"
+    assert g.classify("/".join(["a"] * 63 + ["a" * 256])) == "doc"
+
+
+@pytest.mark.parametrize("glob", ["/a.md", "a//b.md", "a/", "/", "//", "a/./b.md", "a/../b.md"])
+def test_empty_dot_and_dotdot_segments_are_refused_so_no_separate_slash_check_is_needed(glob):
+    from ccg.globs import check_block
+    with pytest.raises(ManifestError, match="unsupported glob"):
+        check_block({"include": [glob]})

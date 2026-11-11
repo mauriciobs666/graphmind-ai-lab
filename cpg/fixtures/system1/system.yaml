@@ -7,6 +7,9 @@ egress:
   local: []
   outbound: []
   hosted: []
+promptBearingMarkdown:   # fx-svc's agent prompts; its docs/README.md stays a `doc`
+  include:
+    - ".claude/agents/**/*.md"
 repos:
   - {repoId: fx-svc, path: fx-svc, policy: {egress: local-only}}
   - {repoId: fx-web, path: fx-web, policy: {egress: local-only}}

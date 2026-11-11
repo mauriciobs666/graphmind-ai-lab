@@ -14,6 +14,23 @@ egress:
       note: LM Studio on the Windows host, through WSL mirrored networking
   outbound: []
   hosted: []
+# The prompt-bearing Markdown globs: a copy of cpg/eval/eval-manifest.yaml's `promptBearingMarkdown` (census scope =
+# built scope); a test asserts the two are equal.
+promptBearingMarkdown:
+  include:
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "claude/**/*.md"
+    - "skills/**/*.md"
+    - "opencode/agents/**/*.md"
+    - "opencode/skills/**/*.md"
+    - ".kiro/steering/*.md"
+    - ".claude/commands/**/*.md"
+    - ".claude/agents/**/*.md"
+  except:
+    - "claude/**/kaizen/**"
+    - "claude/README.md"
+    - "skills/README.md"
 repos:
   - repoId: graphmind-ai-lab
     path: .

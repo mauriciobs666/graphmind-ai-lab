@@ -9,11 +9,12 @@ path (``git log -1``); ``header.history`` stays ``available``.
 """
 from __future__ import annotations
 
-import os
 import re
-import subprocess
+import subprocess  # noqa: F401  (tests patch ``blame.subprocess.run``: the one ``subprocess`` module gitsafe runs through)
 from datetime import datetime, timezone
 from pathlib import Path
+
+from ccg import gitsafe
 
 COMMIT_ID = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")           # a SHA-1 or a SHA-256 object id, lowercase
 _HDR = re.compile(r"^(" + COMMIT_ID.pattern + r") \d+ (\d+)(?: \d+)?$")
@@ -29,22 +30,17 @@ def is_commit_id(commit) -> bool:
     return isinstance(commit, str) and COMMIT_ID.fullmatch(commit) is not None
 
 
-def _env() -> dict[str, str]:
-    """The environment of every git call: no host or system configuration and no ``GIT_*`` variable (``GIT_CONFIG_*`` injection, ``GIT_DIR``-style redirection), so a result
-    depends on the repository's content only (the source repository is not trusted, spec3 §8.5)."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}     # GIT_DIR, GIT_WORK_TREE, ... redirect git over `-C`
-    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull, GIT_CONFIG_NOSYSTEM="1")
-    return env
+_env = gitsafe.environment      # kept for callers and tests that read the git environment through this module
 
 
 def git(repo, *args: str) -> bytes:
-    """Stdout of ``git`` run in ``repo``: literal pathspecs (a file named ``*.ts`` is that file), host configuration off, a
-    timeout. ``CalledProcessError`` on a git failure. (The repository's own ``blame.ignoreRevsFile`` is cleared by
-    ``blame`` with ``--ignore-revs-file=``: ``-c blame.ignoreRevsFile=`` does not reset it.)"""
-    argv = ["git", "--literal-pathspecs", "-C", str(repo), *args]
+    """Stdout of ``git`` run in ``repo`` through ``ccg.gitsafe`` (hardened environment and configuration, literal pathspecs,
+    a timeout, an output cap; the source repository is not trusted, spec3 §8.5). ``CalledProcessError`` on a git failure,
+    ``HistoryError`` on a timeout. (The repository's own ``blame.ignoreRevsFile`` is cleared by ``blame`` with
+    ``--ignore-revs-file=``: ``-c blame.ignoreRevsFile=`` does not reset it.)"""
     try:
-        return subprocess.run(argv, capture_output=True, check=True, timeout=GIT_TIMEOUT, env=_env()).stdout
-    except subprocess.TimeoutExpired as e:
+        return gitsafe.git(repo, *args, timeout=GIT_TIMEOUT)
+    except gitsafe.GitTimeout as e:
         raise HistoryError(f"git {args[0]} in {repo} timed out after {GIT_TIMEOUT} s") from e
 
 
@@ -84,7 +80,7 @@ def parse_porcelain(text: str):
 def blame(repo: Path, commit: str, repo_path: str):
     """Per-line ``({line: commit}, {commit: committer epoch})`` for a file at ``commit``."""
     _check(commit)
-    return parse_porcelain(git(repo, "blame", "--porcelain", "--ignore-revs-file=", commit, "--", repo_path).decode("utf-8", "surrogateescape"))
+    return parse_porcelain(git(repo, "blame", "--porcelain", "--no-textconv", "--ignore-revs-file=", commit, "--", repo_path).decode("utf-8", "surrogateescape"))
 
 
 def _stamp(epoch: int) -> str:
@@ -112,7 +108,7 @@ def last_changed(per_line, times, regions):
 def path_last_commit(repo: Path, commit: str, repo_path: str):
     """The committer date and id of the last commit up to ``commit`` that touched ``repo_path`` (spec4 §2 fallback)."""
     _check(commit)
-    out = git(repo, "log", "-1", "--format=%ct %H", commit, "--", repo_path).decode("ascii", "replace").split()
+    out = git(repo, "log", "-1", "--no-show-signature", "--format=%ct %H", commit, "--", repo_path).decode("ascii", "replace").split()
     if len(out) != 2:
         raise HistoryError(f"{repo_path!r} has no history at {commit[:12]}: no commit up to it touched that path")
     return _stamp(int(out[0])), out[1]

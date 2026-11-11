@@ -26,12 +26,14 @@ import signal
 import subprocess
 import sys
 import tarfile
+import threading
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from ccg import atrest
+from ccg import atrest, gitsafe
 from ccg.units import Unit
 
 HERE = Path(__file__).resolve().parent
@@ -49,6 +51,7 @@ LANGUAGES = {
     "javascript": ("jssrc", frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"})),
 }
 STAGE_TIMEOUT_S = 1800
+INDEXER_WALL_CAP_S = 1800      # the runner's own watchdog, ``SBX_INDEXER_WALL_S`` (cpg/sandbox/README.md); its exit 124 at this age is a timeout
 CAVEAT = ("Caveat: units are discovered from the git index, not from --commit (P1-20 owns discover_units(commit=...)); "
           "run with the index equal to the commit.")
 KILL_GRACE_S = 60
@@ -67,7 +70,12 @@ class EmptyCpgError(ExtractError):
 
 
 class RunnerError(ExtractError):
-    """A runner invocation failed for any other reason (refusal, backend, tool or script error, timeout)."""
+    """A runner invocation failed for any other reason (refusal, backend, tool or script error)."""
+
+
+class RunnerTimeout(RunnerError):
+    """A runner invocation ran past its wall-clock cap (``_run`` terminated it); a subclass, so ``except RunnerError`` still
+    catches it, and P1-44 maps it to its own failure code (``extract:timeout``)."""
 
 
 # --- staging ----------------------------------------------------------------------------------------------------
@@ -90,11 +98,10 @@ def descendant_roots(unit: Unit, units: Iterable[Unit]) -> list[str]:
 
 def _resolve_commit(repo: Path, commit: str) -> str:
     try:
-        out = subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}"],
-                             capture_output=True, check=True, timeout=60)
+        out = gitsafe.git(repo, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}", timeout=60)
     except (OSError, subprocess.SubprocessError) as e:
         raise StageError(f"{commit!r} is not a commit of {repo}") from e
-    return out.stdout.decode().strip()
+    return out.decode().strip()
 
 
 def is_staged_source(p: Path) -> bool:
@@ -114,8 +121,9 @@ def _count_sources(stage: Path, extensions: frozenset[str]) -> int:
 
 
 def _git(repo: Path, *args: str) -> list[str]:
-    """``git`` argv with literal pathspecs: a ``rootPath`` such as ``a*`` or ``a[1]`` names that directory, not a glob."""
-    return ["git", "--literal-pathspecs", "-C", str(repo), *args]
+    """``git`` argv of ``ccg.gitsafe`` (hardened configuration, literal pathspecs: a ``rootPath`` such as ``a*`` or ``a[1]`` names that
+    directory, not a glob); run it with ``gitsafe.environment()``."""
+    return gitsafe.checked_command(repo, *args)
 
 
 def _tree_entries(repo: Path, sha: str, root: str) -> list[tuple[str, str, str]]:
@@ -124,9 +132,8 @@ def _tree_entries(repo: Path, sha: str, root: str) -> list[tuple[str, str, str]]
     No ``--full-tree``: without it the pathspec and the listed paths are relative to ``repo``, as ``discover_units``'
     roots are, so a repository that is a subdirectory of its git work tree stages its own files (a bare ``ls-tree``
     inside it lists only that subtree, so its paths still start at ``root``'s own components)."""
-    argv = _git(repo, "ls-tree", "-r", "-z", sha) + ([] if root == "." else ["--", root])
     try:
-        out = subprocess.run(argv, capture_output=True, check=True, timeout=300).stdout
+        out = gitsafe.git(repo, "ls-tree", "-r", "-z", sha, paths=[] if root == "." else [root], timeout=300)
     except (OSError, subprocess.SubprocessError) as e:
         raise StageError(f"git ls-tree {root!r} at {sha[:12]} failed: {e}") from e
     entries = []
@@ -138,6 +145,11 @@ def _tree_entries(repo: Path, sha: str, root: str) -> list[tuple[str, str, str]]
         if typ == "blob":                                  # a submodule (`commit`) has no files of ours
             entries.append((mode, oid, path.decode("utf-8", "surrogateescape")))
     return entries
+
+
+MAX_BLOB_BYTES = 64 * 1024 * 1024        # one staged blob; the repository under analysis is hostile (a multi-GB blob is a memory/disk DoS)
+MAX_STAGE_BYTES = 1024 * 1024 * 1024     # all blobs of one unit
+STAGE_TIMEOUT = 600                      # seconds for the whole ``cat-file --batch`` stream
 
 
 def stage_unit(repo: str | Path, commit: str, unit: Unit, exclude: Sequence[str], dest: str | Path) -> int:
@@ -171,8 +183,20 @@ def stage_unit(repo: str | Path, commit: str, unit: Unit, exclude: Sequence[str]
         if not rel or any(rel == e or rel.startswith(e + "/") for e in rel_excl):
             continue
         wanted.append((mode, oid, rel))
-    proc = subprocess.Popen(_git(repo, "cat-file", "--batch"), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL)
+    try:
+        argv = _git(repo, "cat-file", "--batch")                       # checked like every ``gitsafe.git`` call, not by the ones before it
+    except gitsafe.GitError as e:
+        raise StageError(f"staging {root!r} at {sha[:12]} refused: {e}") from e
+    proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, env=gitsafe.environment())
+    timed_out = threading.Event()
+
+    def expire() -> None:                                                # a hung or endless git must not hold the build
+        timed_out.set()
+        proc.kill()
+    deadline = threading.Timer(STAGE_TIMEOUT, expire)
+    deadline.start()
+    staged = 0
     try:
         with tempfile.TemporaryFile(dir=dest.parent) as spool:
             with tarfile.open(fileobj=spool, mode="w") as out:
@@ -180,9 +204,17 @@ def stage_unit(repo: str | Path, commit: str, unit: Unit, exclude: Sequence[str]
                     proc.stdin.write(oid.encode() + b"\n")
                     proc.stdin.flush()
                     head = proc.stdout.readline().split()
+                    if timed_out.is_set():
+                        raise StageError(f"staging {root!r} at {sha[:12]} timed out after {STAGE_TIMEOUT} s")
                     if len(head) != 3 or head[1] != b"blob":
                         raise StageError(f"git cat-file: no blob {oid} for {rel!r}")
-                    data = proc.stdout.read(int(head[2]))
+                    size = int(head[2])
+                    staged += size
+                    if size > MAX_BLOB_BYTES:
+                        raise StageError(f"{rel!r} is {size} bytes: over the per-blob cap of {MAX_BLOB_BYTES}")
+                    if staged > MAX_STAGE_BYTES:
+                        raise StageError(f"staging {root!r} at {sha[:12]}: total over the cap of {MAX_STAGE_BYTES} bytes")
+                    data = proc.stdout.read(size)
                     proc.stdout.read(1)                                # the newline after the object
                     ti = tarfile.TarInfo(rel)
                     if mode == "120000":
@@ -191,6 +223,8 @@ def stage_unit(repo: str | Path, commit: str, unit: Unit, exclude: Sequence[str]
                     else:
                         ti.size, ti.mode = len(data), 0o755 if mode == "100755" else 0o644
                         out.addfile(ti, io.BytesIO(data))
+            if timed_out.is_set():                                       # the deadline fired inside the last read: its blob is truncated
+                raise StageError(f"staging {root!r} at {sha[:12]} timed out after {STAGE_TIMEOUT} s")
             spool.seek(0)
             with tarfile.open(fileobj=spool, mode="r:") as tar:
                 for m in tar:
@@ -198,6 +232,7 @@ def stage_unit(repo: str | Path, commit: str, unit: Unit, exclude: Sequence[str]
     except (tarfile.TarError, OSError, ValueError) as e:
         raise StageError(f"staging {root!r} at {sha[:12]} failed: {e}") from e
     finally:
+        deadline.cancel()
         proc.stdin.close()
         proc.stdout.close()
         proc.kill()
@@ -250,6 +285,7 @@ class Completed:
     rc: int
     stdout: bytes
     stderr: bytes
+    elapsed: float = 0.0       # seconds of wall-clock the invocation ran
 
 
 def _run(argv: Sequence[str], timeout: float, kill_grace: float = KILL_GRACE_S) -> Completed:
@@ -259,6 +295,7 @@ def _run(argv: Sequence[str], timeout: float, kill_grace: float = KILL_GRACE_S) 
     killed runner never reaches its cleanup, so its container runs to its end under ``--rm``. ``run.py`` cannot do it
     either (only the runner starts or removes containers), so the fallback only guarantees that no runner outlives the
     call. ``tests/test_joern_run.py`` pins the kill, not a container removal."""
+    started = time.monotonic()
     try:
         p = subprocess.Popen(list(argv), stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
                              start_new_session=True)
@@ -273,8 +310,8 @@ def _run(argv: Sequence[str], timeout: float, kill_grace: float = KILL_GRACE_S) 
         except subprocess.TimeoutExpired:
             p.kill()
             p.communicate()
-        raise RunnerError(f"runner invocation timed out after {timeout}s: {Path(argv[0]).name} {' '.join(argv[1:8])}") from None
-    return Completed(p.returncode, out, err)
+        raise RunnerTimeout(f"runner invocation timed out after {timeout}s: {Path(argv[0]).name} {' '.join(argv[1:8])}") from None
+    return Completed(p.returncode, out, err, time.monotonic() - started)
 
 
 def _new_with_suffix(out_dir: Path, before: set[str], suffix: str) -> Path:
@@ -317,7 +354,8 @@ class RawFacts:
 
 def extract_unit(repo: str | Path, unit: Unit, units: Iterable[Unit], commit: str, work: str | Path, *,
                  area: str | Path = atrest.WORK_ROOT, runner: str | Path = RUNNER,
-                 timeout: float = STAGE_TIMEOUT_S, kill_grace: float = KILL_GRACE_S) -> RawFacts:
+                 timeout: float = STAGE_TIMEOUT_S, kill_grace: float = KILL_GRACE_S,
+                 wall_cap: float = INDEXER_WALL_CAP_S) -> RawFacts:
     """Build the raw facts of ``unit`` at ``commit`` under ``work`` (``<work>/stage``, ``<work>/cpg``).
 
     ``repo`` is the git work tree of the unit's repository, ``units`` every unit of the system (the descendants of
@@ -342,9 +380,14 @@ def extract_unit(repo: str | Path, unit: Unit, units: Iterable[Unit], commit: st
         (work / f"{stage_name}.log").write_bytes(c.stdout + b"\n--stderr--\n" + c.stderr)
         return c
 
+    def exit_error(c: Completed) -> type[RunnerError]:
+        """Exit 124 is the runner's watchdog *or* a tool's own 124 (cpg/sandbox/README.md): it is a timeout only when the
+        invocation ran for the wall-clock cap. A boundary race that says 124 just under the cap stays a plain failure (fail-closed)."""
+        return RunnerTimeout if c.rc == 124 and c.elapsed >= wall_cap else RunnerError
+
     def need_ok(stage_name: str, c: Completed) -> None:
         if c.rc != 0:
-            raise RunnerError(f"unit {unit.repoId}:{unit.rootPath}: {stage_name} exited {c.rc} (see {work / (stage_name + '.log')})")
+            raise exit_error(c)(f"unit {unit.repoId}:{unit.rootPath}: {stage_name} exited {c.rc} (see {work / (stage_name + '.log')})")
 
     # 2. parse
     before = set(os.listdir(cpg_dir))
@@ -362,7 +405,7 @@ def extract_unit(repo: str | Path, unit: Unit, units: Iterable[Unit], commit: st
         if f"CONTENT /out/{cpg_file.name}=EMPTY" in out_text.splitlines():
             raise EmptyCpgError(f"unit {unit.repoId}:{unit.rootPath}: the parse produced a CPG with no non-external METHOD "
                                 f"although the unit has {stage_files} non-empty {lang} source files (R11, H12); see {check_txt}")
-        raise RunnerError(f"unit {unit.repoId}:{unit.rootPath}: content-check exited {c.rc} without a CONTENT=EMPTY verdict "
+        raise exit_error(c)(f"unit {unit.repoId}:{unit.rootPath}: content-check exited {c.rc} without a CONTENT=EMPTY verdict "
                           f"(runner or script failure, not an empty CPG); see {check_txt}")
     if f"CONTENT /out/{cpg_file.name}=ok" not in out_text.splitlines():
         raise RunnerError(f"unit {unit.repoId}:{unit.rootPath}: content-check printed no CONTENT=ok line; see {check_txt}")

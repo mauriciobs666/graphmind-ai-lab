@@ -2368,7 +2368,7 @@ def _load_md_extractor():
 
 def pm_md_violations(manifests, tree=None, globs_manifest=None, tools=None):
     extract_markdown, load_globs = _load_md_extractor()
-    globs = load_globs(globs_manifest) if globs_manifest else load_globs()
+    globs = load_globs(globs_manifest or M.SYSTEM / "system.yaml")      # the fixture system's own block
     tree = Path(tree) if tree else M.SYSTEM
     bad = []
     for repo, doc in manifests.items():
@@ -2411,8 +2411,8 @@ def test_ac6_pm_planted_failures_turn_it_red(manifests, tmp_path):
     # an emptied known_tools set: no call site at all
     assert len(pm_md_violations(manifests, tools=())) == 2
     # a manifest whose globs lack `.claude/agents/**/*.md`: the files classify `doc`
-    m = yaml.safe_load((CPG / "eval" / "eval-manifest.yaml").read_text())
-    m["promptBearingMarkdown"]["include"] = [g for g in m["promptBearingMarkdown"]["include"] if not g.startswith(".claude/agents")]
-    alt = tmp_path / "eval-manifest.yaml"
+    m = yaml.safe_load((M.SYSTEM / "system.yaml").read_text())
+    m["promptBearingMarkdown"]["include"] = ["claude/**/*.md"]
+    alt = tmp_path / "system.yaml"
     alt.write_text(yaml.safe_dump(m))
     assert len(pm_md_violations(manifests, globs_manifest=alt)) == 2

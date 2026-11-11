@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ccg:sandbox-record-v1",
+  "title": "ccg sandbox record, v1 (P1 values only; docs/plans/connected-code-graph-egress-spec3.md section 5.3). One per cpg/sandbox/offline-run.sh invocation, refusals included; a record of the test-only lib-launch path is rejected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "recordType", "auditId", "ts", "backend", "toolchain", "job", "egressMode", "network", "networkName",
+               "launcherArgv", "toolArgv", "frontend", "script", "flagCheck", "envKeys", "mounts", "preconditions", "refused",
+               "refusalReason", "exitCode", "codebases", "runId", "durationMs"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "recordType": {"const": "sandbox"},
+    "auditId": {"$ref": "#/$defs/uuid"},
+    "ts": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z(?!\\n)$"},
+    "backend": {"enum": ["container", "namespace"]},
+    "toolchain": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["image", "imageId"],
+         "properties": {"image": {"type": ["string", "null"]}, "imageId": {"type": ["string", "null"]}}},
+        {"type": "object", "additionalProperties": false, "required": ["joernVersion", "joernPath", "javaVersion"],
+         "properties": {"joernVersion": {"type": ["string", "null"]}, "joernPath": {"type": ["string", "null"]},
+                        "javaVersion": {"type": ["string", "null"]}}}
+      ]
+    },
+    "job": {"const": "parse"},
+    "egressMode": {"enum": ["offline", "controlled"]},
+    "network": {"const": "none"},
+    "networkName": {"type": "null"},
+    "launcherArgv": {"type": "array", "items": {"type": "string"}},
+    "toolArgv": {"type": "array", "items": {"type": "string"}},
+    "frontend": {"enum": ["", "pysrc2cpg", "jssrc2cpg", "javasrc2cpg", "jimple2cpg", "kotlin2cpg", "csharpsrc2cpg", "gosrc2cpg",
+                          "c2cpg", "joern-parse", "joern", "scip-typescript", "scip-python"]},
+    "script": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+         "properties": {"path": {"type": "string"}, "sha256": {"type": "string"}}}
+      ]
+    },
+    "flagCheck": {
+      "type": "object", "additionalProperties": false, "required": ["listDigest", "forbiddenHits", "allowedHits", "liftedHits"],
+      "properties": {"listDigest": {"type": ["string", "null"]},
+                     "forbiddenHits": {"type": "array", "items": {"type": "string"}},
+                     "allowedHits": {"type": "array", "items": {"type": "string"}},
+                     "liftedHits": {"type": "array", "maxItems": 0}}
+    },
+    "envKeys": {"type": "array", "items": {"type": "string"}},
+    "mounts": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["target", "source", "mode"],
+                                          "properties": {"target": {"type": "string"}, "source": {"type": "string"},
+                                                         "mode": {"type": "string"}}}},
+    "preconditions": {
+      "type": "object", "additionalProperties": false, "required": ["interopPE", "binfmtPinned", "seccomp", "vsock", "netnsDistinct"],
+      "properties": {"interopPE": {"enum": ["enabled", "disabled", "unreadable"]}, "binfmtPinned": {"type": "boolean"},
+                     "seccomp": {"type": ["string", "null"]}, "vsock": {"enum": ["blocked", "present", "absent"]},
+                     "netnsDistinct": {"type": "boolean"}}
+    },
+    "refused": {"type": "boolean"},
+    "refusalReason": {"enum": [null, "usage", "forbidden-flag", "forbidden-directive", "unknown-frontend", "mode-not-implemented",
+                               "backend-precondition", "backend-unavailable"]},
+    "exitCode": {"type": "integer"},
+    "codebases": {"type": "array", "items": {"type": "string"}},
+    "runId": {"type": "null"},
+    "durationMs": {"type": "integer", "minimum": 0}
+  },
+  "allOf": [
+    {"if": {"properties": {"refused": {"const": true}}, "required": ["refused"]},
+     "then": {"properties": {"refusalReason": {"type": "string"}}},
+     "else": {"properties": {"refusalReason": {"type": "null"}}}}
+  ],
+  "$defs": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?!\\n)$"}
+  }
+}

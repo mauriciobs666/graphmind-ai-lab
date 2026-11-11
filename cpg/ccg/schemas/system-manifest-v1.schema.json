@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:ccg:system-manifest-v1",
   "title": "ccg system manifest, v1 (P1 shape)",
-  "description": "Plan: docs/plans/connected-code-graph-p1-extraction.md P1-03. The `egress` section is validated against egress-v1.schema.json and checked by S1-S5 (docs/plans/connected-code-graph-egress-spec3.md section 4); this schema only requires it to be an object. `groupings` (P2) and a repository's `remote` (git fetch, deferred) are refused by the loader with their own messages before this schema runs. `policy.egress` states the mode enum inline; a test asserts it equals egress-v1's $defs/egressMode.",
+  "description": "Plan: docs/plans/connected-code-graph-p1-extraction.md P1-03. The `egress` section is validated against egress-v1.schema.json and checked by S1-S5 (docs/plans/connected-code-graph-egress-spec3.md section 4); this schema only requires it to be an object. The optional top-level `promptBearingMarkdown` block (P1-03a, docs/plans/connected-code-graph-p1-linking.md) lists the system's prompt-bearing Markdown globs; the glob alphabet and size caps are the ones of ccg/globs.py, whose validator the loader also applies (`..`, empty or partial-`**` segments). `groupings` (P2) and a repository's `remote` (git fetch, deferred) are refused by the loader with their own messages before this schema runs. `policy.egress` states the mode enum inline; a test asserts it equals egress-v1's $defs/egressMode.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "system", "egress", "repos"],
@@ -10,9 +10,20 @@
     "schemaVersion": {"const": 1},
     "system": {"type": "string"},
     "egress": {"type": "object"},
+    "promptBearingMarkdown": {"$ref": "#/$defs/promptBearingMarkdown"},
     "repos": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/repo"}}
   },
   "$defs": {
+    "glob": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._*?/-]+$"},
+    "promptBearingMarkdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["include"],
+      "properties": {
+        "include": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"$ref": "#/$defs/glob"}},
+        "except": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/glob"}}
+      }
+    },
     "relPath": {"type": "string", "minLength": 1, "maxLength": 512},
     "repo": {
       "type": "object",

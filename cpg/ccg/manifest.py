@@ -5,8 +5,9 @@ Plan: ``docs/plans/connected-code-graph-p1-extraction.md`` § P1-03. Egress sect
 
 A manifest is one YAML file: ``schemaVersion``, ``system`` (checked by ``ccg.sysname``), ``egress`` (the system's
 only allow-list), and ``repos``, each with ``repoId``, ``path``, optional ``exclusions`` and a mandatory
-``policy.egress``. ``groupings`` (P2) and a repository's ``remote`` (git fetch, deferred) are refused with their own
-messages. S6 (the local endpoint is on this machine) is the broker's check, not this module's.
+``policy.egress``. An optional top-level ``promptBearingMarkdown`` holds the prompt-bearing Markdown globs (validated by
+``ccg.globs.check_block``, exposed as ``Manifest.prompt_markdown``). ``groupings`` (P2) and a repository's ``remote`` (git
+fetch, deferred) are refused with their own messages. S6 (the local endpoint is on this machine) is the broker's check, not this module's.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from urllib.parse import urlsplit
 import jsonschema
 import yaml
 
+from ccg import globs as mdglobs
 from ccg import sysname
 
 SCHEMAS = Path(__file__).resolve().parent / "schemas"
@@ -61,6 +63,7 @@ class Manifest:
     system: str
     repos: tuple[Repo, ...]
     egress: Mapping[str, Any] = field(repr=False, default_factory=dict)
+    prompt_markdown: mdglobs.Globs | None = None  # the system's `promptBearingMarkdown` globs; None when not declared
 
 
 def _schema(name: str) -> dict:
@@ -73,6 +76,8 @@ def _validate(instance: Any, schema_name: str, what: str) -> None:
     if errors:
         e = errors[0]
         where = "/".join(str(p) for p in e.absolute_path) or "(root)"
+        if where.startswith("promptBearingMarkdown"):  # glob text is operator input: say where, never what
+            raise ManifestError(f"{what}: {where}: refused by the schema ({e.validator})")
         raise ManifestError(f"{what}: {where}: {e.message}")
 
 
@@ -220,7 +225,11 @@ def _construct_mapping(loader: _StrictLoader, node: yaml.MappingNode, deep: bool
     seen = set()
     for key_node, _ in node.value:
         key = loader.construct_object(key_node, deep=True)
-        if key in seen:
+        try:
+            dup = key in seen
+        except TypeError:  # a list or mapping used as a key
+            raise ManifestError("a manifest key must be a scalar") from None
+        if dup:
             raise ManifestError(f"duplicate key {key!r} in the manifest (line {key_node.start_mark.line + 1})")
         seen.add(key)
     return yaml.SafeLoader.construct_mapping(loader, node, deep)
@@ -254,6 +263,12 @@ def load_manifest(path: str | Path) -> Manifest:
     except sysname.SystemNameError as exc:
         raise ManifestError(f"system name: {exc}") from None
     check_egress(doc["egress"])
+    prompt_markdown = None
+    if "promptBearingMarkdown" in doc:
+        try:
+            prompt_markdown = mdglobs.check_block(doc["promptBearingMarkdown"])
+        except mdglobs.ManifestError as exc:
+            raise ManifestError(str(exc)) from None
 
     repos, seen = [], set()
     for raw in doc["repos"]:
@@ -285,4 +300,4 @@ def load_manifest(path: str | Path) -> Manifest:
                 content_check_files=files,
             )
         )
-    return Manifest(system=system, repos=tuple(repos), egress=doc["egress"])
+    return Manifest(system=system, repos=tuple(repos), egress=doc["egress"], prompt_markdown=prompt_markdown)

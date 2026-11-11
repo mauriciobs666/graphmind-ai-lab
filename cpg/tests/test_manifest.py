@@ -140,6 +140,23 @@ REJECTED = {
     "a repo path that climbs": lambda d: d["repos"][0].update(path="../x"),
     "an un-normalized repo path": lambda d: d["repos"][0].update(path="a//b"),
     "an exclusion that climbs": lambda d: d["repos"][0].update(exclusions={"paths": ["../x"]}),
+    "a promptBearingMarkdown that is not a mapping": lambda d: d.update(promptBearingMarkdown=["a"]),
+    "a promptBearingMarkdown without include": lambda d: d.update(promptBearingMarkdown={"except": ["a"]}),
+    "an empty include": lambda d: d.update(promptBearingMarkdown={"include": []}),
+    "an include that is a string": lambda d: d.update(promptBearingMarkdown={"include": "**/A.md"}),
+    "an unknown promptBearingMarkdown key": lambda d: d.update(promptBearingMarkdown={"include": ["a.md"], "also": []}),
+    "an absolute glob": lambda d: d.update(promptBearingMarkdown={"include": ["/etc/*.md"]}),
+    "a glob that climbs": lambda d: d.update(promptBearingMarkdown={"include": ["a/../b.md"]}),
+    "a glob that is a bare ..": lambda d: d.update(promptBearingMarkdown={"include": [".."]}),
+    "a glob with a NUL": lambda d: d.update(promptBearingMarkdown={"include": ["a\x00.md"]}),
+    "a glob with an empty segment": lambda d: d.update(promptBearingMarkdown={"include": ["a//b.md"]}),
+    "a glob with a partial **": lambda d: d.update(promptBearingMarkdown={"include": ["a**b.md"]}),
+    "a glob outside the alphabet": lambda d: d.update(promptBearingMarkdown={"include": ["a/[bc].md"]}),
+    "a non-string glob": lambda d: d.update(promptBearingMarkdown={"include": [1]}),
+    "a 201-character glob": lambda d: d.update(promptBearingMarkdown={"include": ["a" * 201]}),
+    "65 include globs": lambda d: d.update(promptBearingMarkdown={"include": [f"d{i}/*.md" for i in range(65)]}),
+    "65 except globs": lambda d: d.update(promptBearingMarkdown={"include": ["a.md"], "except": [f"d{i}" for i in range(65)]}),
+    "a non-string except glob": lambda d: d.update(promptBearingMarkdown={"include": ["a.md"], "except": [{"a": 1}]}),
     "an empty repoId after normalization": lambda d: d["repos"][0].update(repoId="!!!"),
     "two repos with one normalized name": lambda d: d["repos"].append(
         {"repoId": "shop-front", "path": "b", "policy": {"egress": "local-only"}}
@@ -451,3 +468,82 @@ def test_the_manifest_schema_requires_the_mode_and_has_no_boolean_twin():
     assert "egress" in policy["required"]
     assert "localOnly" not in policy["properties"] and "endpointAllowList" not in ms["properties"]
     assert policy["additionalProperties"] is False and ms["additionalProperties"] is False
+
+
+# --- P1-03a: promptBearingMarkdown ---------------------------------------------------------------------------------------
+
+
+def _block(doc: dict) -> dict:
+    d = good()
+    d["promptBearingMarkdown"] = doc
+    return d
+
+
+def test_the_proving_systems_prompt_globs_equal_the_eval_manifests_block():
+    ev = yaml.safe_load(EVAL_MANIFEST.read_text())["promptBearingMarkdown"]
+    g = mf.load_manifest(SYSTEM_YAML).prompt_markdown
+    assert g is not None
+    assert list(g.include) == ev["include"] and list(g.exclude) == ev["except"]
+    # anchors so the comparison cannot pass on two empty lists
+    assert len(g.include) == 9 and len(g.exclude) == 3 and "claude/**/kaizen/**" in g.exclude
+
+
+def test_the_fixture_systems_block_classifies_its_prompt_files_prompt_md_and_its_docs_doc():
+    g = mf.load_manifest(FIXTURE_YAML).prompt_markdown
+    assert g is not None
+    for p in (".claude/agents/agent.md", ".claude/agents/tools.md", ".claude/agents/exec.md"):
+        assert g.classify(p) == "prompt-md"
+    assert g.classify("docs/README.md") == "doc" and g.classify("README.md") == "doc"
+
+
+def test_a_manifest_without_the_block_loads_with_none(tmp_path):
+    assert mf.load_manifest(write(tmp_path, good())).prompt_markdown is None
+
+
+def test_the_block_is_read_with_include_and_optional_except(tmp_path):
+    g = mf.load_manifest(write(tmp_path, _block({"include": ["a/**/*.md"], "except": ["a/x/**"]}))).prompt_markdown
+    assert g.include == ("a/**/*.md",) and g.exclude == ("a/x/**",)
+    assert g.classify("a/b/c.md") == "prompt-md" and g.classify("a/x/c.md") == "doc"
+    g = mf.load_manifest(write(tmp_path, _block({"include": ["a/*.md"]}))).prompt_markdown
+    assert g.exclude == ()
+
+
+def test_the_manifest_and_load_globs_agree_on_the_fixture_prompt_files():
+    from extractors.markdown.globs import load_globs
+    a, b = mf.load_manifest(FIXTURE_YAML).prompt_markdown, load_globs(FIXTURE_YAML)
+    assert (a.include, a.exclude) == (b.include, b.exclude)
+    tree = FIXTURE_YAML.parent / "fx-svc"
+    mds = sorted(str(p.relative_to(tree)) for p in tree.rglob("*.md"))
+    assert len(mds) == 4 and [x for x in mds if b.classify(x) == "prompt-md"] == [x for x in mds if a.classify(x) == "prompt-md"]
+    assert [x for x in mds if a.classify(x) == "prompt-md"] == [
+        ".claude/agents/agent.md", ".claude/agents/exec.md", ".claude/agents/tools.md"]
+
+
+@pytest.mark.parametrize("secret", ["SECRET-GLOB-VALUE/../x", "S3CR3T\x00", "S3CR3T[a]", "/S3CR3T"])
+def test_a_refused_glob_is_not_echoed_in_the_message(tmp_path, secret):
+    with pytest.raises(ManifestError) as e:
+        mf.load_manifest(write(tmp_path, _block({"include": [secret]})))
+    assert "S3CR3T" not in str(e.value) and "SECRET-GLOB" not in str(e.value) and "promptBearingMarkdown" in str(e.value)
+
+
+def test_a_duplicate_key_inside_the_block_is_refused(tmp_path):
+    text = yaml.safe_dump(good(), sort_keys=False) + "promptBearingMarkdown:\n  include: [a.md]\n  include: [b.md]\n"
+    with pytest.raises(ManifestError, match="duplicate"):
+        mf.load_manifest(write(tmp_path, text))
+
+
+def test_the_widest_accepted_block_matches_a_hostile_path_in_bounded_time(tmp_path):
+    import time
+    inc = ["a*" * 100, "/".join(["**"] * 64)[:200]] + ["**/" * 20 + "*a*a*a*a*b.md"] * 62
+    g = mf.load_manifest(write(tmp_path, _block({"include": inc, "except": inc}))).prompt_markdown
+    hostile = "/".join(["a" * 255] * 63) + "/" + "a" * 254 + "c.md"
+    start = time.monotonic()
+    assert g.classify(hostile) == "doc"
+    assert time.monotonic() - start < 5
+
+
+@pytest.mark.parametrize("text", ["? [a]\n: 1\n", "schemaVersion: 1\n? {a: 1}\n: 2\n", "x:\n  ? [a]\n  : 1\n"])
+def test_an_unhashable_yaml_key_is_a_typed_value_free_refusal_not_a_type_error(tmp_path, text):
+    with pytest.raises(ManifestError) as e:
+        mf.load_manifest(write(tmp_path, text))
+    assert "scalar" in str(e.value)
