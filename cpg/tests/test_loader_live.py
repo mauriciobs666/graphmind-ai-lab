@@ -3,8 +3,8 @@
 Needs ``CCG_FALKORDB_PORT`` (the throwaway's port; 6379 and 6390 are refused, and the port must be published by a container labelled
 ``ccg-falkordb.throwaway=1``) and ``CCG_CONFIG_DIR`` (the scratch directory holding the throwaway's ``falkordb-admin.pass``; ``~/.config/ccg`` is
 refused). It also sets ``CCG_CREDENTIALS_DIR`` to a tmp dir, so nothing under ``~/.config/ccg`` is read or written. The ACL users it creates
-live and die inside the throwaway: they are the ``-p1-graph.md`` §7 lines for ``build`` and ``verdict`` (dispatch 2's ``acl.create_users``
-replaces this stand-in and asserts the full grant matrix); the load and the swap run under them, never as admin.
+live and die inside the throwaway: ``ccg.store.acl.create_users`` makes the four ``-p1-graph.md`` §7 users (``tests/test_acl_live.py`` asserts the grant
+matrix); the load and the swap run under them, never as admin.
 **A gate sets ``CCG_REQUIRE_LIVE=1``** (``CCG_REQUIRE_LIVE=1 pytest -m live tests/test_loader_live.py``, and asserts ``0 skipped``): a missing instance,
 configuration or docker CLI is then a FAILURE (an error per test), not the default skip that exits 0.
 Contract: ``-p1-graph.md`` §4, §7, §8 P1-19 (a), (b); ``-p1-linking.md`` P1-19 behaviours (1), (5), (6)."""
@@ -21,16 +21,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from loader_helpers import EMPTY_HASH, FORBIDDEN_PORTS, acl_setuser_lines, admin_password, skip_or_fail, throwaway_port, tiny_rows
+from loader_helpers import EMPTY_HASH, FORBIDDEN_PORTS, admin_password, skip_or_fail, throwaway_port, tiny_rows
 from test_ddl_live import EXPECTED_CONSTRAINT_PAIRS, EXPECTED_INDEX_PAIRS
 
 from ccg import sysname
+from ccg.store import acl
 from ccg.store import loader as L
 from ccg.store import swap as SW
 
 HOST = "127.0.0.1"
 _counter = itertools.count(1)
-SECRET = "p119a-test-secret"
 
 
 # ------------------------------------------------------------------------------------- pure guards (no network)
@@ -91,22 +91,12 @@ def test_the_gate_command_with_no_instance_skips_and_exits_zero_without_the_swit
     assert strict.returncode != 0 and "skipped" not in last and re.search(r"\d+ error", last), last
 
 
-def test_the_acl_lines_are_parsed_from_the_graph_note_section_7():
-    users = acl_setuser_lines("shop", "SEC")
-    assert set(users) == {sysname.acl_user(role, "shop") for role in ("build", "verdict", "engine", "raw")}
-    build, verdict = users[sysname.acl_user("build", "shop")], users[sysname.acl_user("verdict", "shop")]
-    assert ">SEC" in build and "%W~ccg_shop" in build and "~ccg_shop__*" in build and "+rename" in build
-    assert "(~ccg_shop:verdict_lock" in build and "(~ccg_shop:verdict_lock" in verdict and "+graph.ro_query" not in verdict
-    assert not any("<" in t for toks in users.values() for t in toks)
-    assert "+graph.query" in verdict and "+eval)" in verdict            # the continuation line (the lock selector) joined to the verdict user
-
-
 # ------------------------------------------------------------------------------------- fixtures
 
-def _acl_lines(system: str) -> dict[str, list[str]]:
-    """``build`` and ``verdict``, parsed from ``-p1-graph.md`` §7 (dispatch 2's ``acl.create_users`` replaces this stand-in)."""
-    users = acl_setuser_lines(system, SECRET)
-    return {sysname.acl_user(role, system): users[sysname.acl_user(role, system)] for role in ("build", "verdict")}
+@pytest.fixture(autouse=True)
+def _credentials_dir(tmp_path, monkeypatch):
+    """Every test: ACL credentials in a tmp dir, never ``~/.config/ccg``."""
+    monkeypatch.setenv("CCG_CREDENTIALS_DIR", str(tmp_path / "cred"))
 
 
 @pytest.fixture(scope="module")
@@ -119,20 +109,23 @@ def instance(tmp_path_factory):
         pw = admin_password()
     except FileNotFoundError as exc:
         skip_or_fail(f"throwaway admin password not readable ({exc})")
-    os.environ["CCG_CREDENTIALS_DIR"] = str(tmp_path_factory.mktemp("ccg-credentials"))
     admin = L.connect(HOST, port, username=None, password=pw)
     return SimpleNamespace(port=port, admin=admin)
 
 
 @pytest.fixture
 def env(instance):
+    from ccg import atrest                                  # another module may import this fixture without the autouse one above
+    real = Path.home() / ".config" / "ccg"
+    cred = Path(atrest.credentials_dir()).resolve()
+    if cred == real.resolve() or real.resolve() in cred.parents:
+        pytest.fail("CCG_CREDENTIALS_DIR is unset or names ~/.config/ccg: this fixture creates ACL users and writes their credentials file", pytrace=False)
     system = f"tl{next(_counter)}x{os.getpid() % 1000}"
     admin = instance.admin
-    users = _acl_lines(system)
-    for user, line in users.items():
-        admin.connection.execute_command("ACL", "SETUSER", user, *line)
-    build_db = L.connect(HOST, instance.port, username=sysname.acl_user("build", system), password=SECRET)
-    verdict_db = L.connect(HOST, instance.port, username=sysname.acl_user("verdict", system), password=SECRET)
+    users = acl.create_users(admin, system)                  # the four §7 users, passwords through ``ccg.atrest.write_acl``
+    pw = acl.read_credentials(system)
+    build_db = L.connect(HOST, instance.port, username=sysname.acl_user("build", system), password=pw["build"])
+    verdict_db = L.connect(HOST, instance.port, username=sysname.acl_user("verdict", system), password=pw["verdict"])
     live = sysname.live_key(system)
     e = SimpleNamespace(system=system, admin=admin, build_db=build_db, verdict_db=verdict_db, live=live, lock=sysname.lock_key(system),
                         port=instance.port)
@@ -289,7 +282,7 @@ class _KillAfter:
 
 
 def _child_load(port, system, n):
-    db = L.connect(HOST, port, username=sysname.acl_user("build", system), password=SECRET)
+    db = L.connect(HOST, port, username=sysname.acl_user("build", system), password=acl.read_credentials(system)["build"])
     L.load(_KillAfter(L.LiveStore(db, system), n), tiny_rows(system), system)
 
 

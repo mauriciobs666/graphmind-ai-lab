@@ -299,6 +299,28 @@ to the general fact here.
   ` `, `　`, `​` and `\x1f` are **safe** — index lookup finds them, the UNIQUE write
   succeeds. So a guard that strips/asserts with Python's `str.strip()`/`str.isspace()` (a strict
   superset) is sufficient. Not yet checked: relationship-scoped constraints.
+- **Three additions to the two entries above, from the C-1001 P1-19 id-hash fuzz** (verified 2026-11-11, v4.18.11 /
+  module `41811`, `ccg-falkordb-tw-16390` throwaway, `falkordb-py` parameters; the instance exited 139 twice, by design of
+  the probe). (1) **The crash also fires when the constraint is created AFTER the data**: `CREATE INDEX`, then `CREATE
+  (:Name {nameKey: <5000 bytes>})`, then `GRAPH.CONSTRAINT CREATE g UNIQUE NODE Name PROPERTIES 1 nameKey` kills the
+  server (`EnforceUniqueEntity`) — the load-then-constrain order of a bulk loader is not safe either; the guard must run
+  before the first write. (2) **A RANGE-indexed string over 4096 bytes is stored but not indexed: an equality anchor returns
+  0** (`MATCH (n:Name) WHERE n.nameKey = $v` -> 0 for 4097 `k`s and for 2049 `é`, i.e. 4098 bytes; 1 at 4096 bytes either
+  way) while `STARTS WITH` finds the node — bytes, not characters. (3) **The index-trim is two-sided wrong, not only a
+  miss**: with `' x '`, `'\tx\n'` and `'x'` stored, `WHERE f.path = 'x'` returns all three (false positives), `= ' x '`
+  returns 0; the six ASCII `' \t\n\v\f\r'` are trimmed (probed as `c+'x'+c` over every character below U+3100 that Python's
+  `isspace()` accepts plus U+001C-001F, U+0085, U+180E, U+200B, U+2060, U+FEFF, in a scratch script that is not kept in the tree; the gate
+  reviewer independently re-tried NBSP, EM SPACE, IDEOGRAPHIC SPACE, NEL and ZWSP: none trimmed), so treat "only those six" as probed, not proven. Also: a NUL in a
+  parameter value is refused up front (`Failed to parse query parameter 'v' value`), not stored. Consequence:
+  `ccg.store.loader._preflight` refuses any DDL-indexed string over 4096 UTF-8 bytes or edged with those six characters
+  before the build key exists (`tests/test_fuzz_idhash_live.py`, `tests/test_loader_unit.py`).
+  **ACL notes from the same unit** (verified 2026-11-11): `ACL SETUSER u ... +graph.config|get` logs a server-side `Deprecation warning: Allowing a
+  first arg of an otherwise blocked command is a misuse of ACL and may get disabled in the future` on every `SETUSER` of the build user; the
+  loader's `TIMEOUT_MAX` read and §7 depend on that form, so **upgrade trigger: on any engine bump, re-run `tests/test_acl_live.py` first and, if
+  the form is refused, replace it (the build user then needs another way to read `TIMEOUT_MAX`)**. `ACL SETUSER` with `>pw` ADDS a password and
+  neither it nor `off resetpass` ends an established connection: `ccg.store.acl.create_users` sends `reset` first and `CLIENT KILL USER <user>`
+  (a count, not an error, when the user has no sessions) after each `SETUSER`; an unvalidated grant line escalates (`~* +@all` gave the engine
+  user `FLUSHALL` and `CONFIG GET requirepass`), hence the closed grammar in `acl.py`.
 
 ## Concurrency & atomicity
 
@@ -1319,6 +1341,20 @@ to the general fact here.
   with a `Dependency(depId)` index (`Node By Index Scan`; index 2 MB at 20,000). A nonzero `TIMEOUT_MAX` also caps writes (entry above): a 4,000-row version of this write was killed at 3.01 s
   under `TIMEOUT_MAX 3000` with 0 committed (2026-11-04). Every label an edge batch matches by id needs its index before the
   load. Verify: `cpg/spikes/store/dep_index_probe.py`.
+- **`+graph.config|get` (Redis first-arg ACL rule) works on the module command: `GRAPH.CONFIG GET` allowed, `GRAPH.CONFIG SET`
+  `NOPERM`; and a two-key pattern `~ccg_<s> ~ccg_<s>__*` still grants `ccg_<s>___build_1`, the build key of a system named
+  `<s>_`** (verified 2026-11-09, Redis 8.6.3, module `41811`, throwaway on 6395, planted `ccg_shop*` keys). `COMMAND INFO
+  graph.config` lists no subcommands, yet `ACL SETUSER u -@all '+graph.config|get'` is accepted and enforced, so a loader
+  credential can read `TIMEOUT_MAX` without being able to lift it. Separately, `(~ccg_<s>__build_* +del)` as a selector lets a
+  user `DEL` its build keys while `DEL ccg_<s>` stays `NOPERM`; `DEL` on a graph key works. A system-name whitelist that
+  forbids `__` must also forbid a trailing `_`. Verify: the `ACL SETUSER` forms above, then `GRAPH.CONFIG GET/SET`, `DEL`,
+  `GRAPH.RO_QUERY` on each planted key via `redis-cli --user`. Design use: `docs/plans/connected-code-graph-p1-graph.md` §7.
+- **A write-only key selector `%W~<live>` lets `RENAME <build> <live>` succeed while refusing every read-needing path to
+  `<live>`: `GRAPH.QUERY`/`RO_QUERY`, `EXPIRE <live> 0`, `DEL`, and `RENAME <live> <elsewhere>`** (verified 2026-11-09, Redis
+  8.6.3, module `41811`, throwaway on 6396, user `ccg_build_shop` with `%W~ccg_shop ~ccg_shop__*` and `+del +expire` only in a
+  `(~ccg_shop__build_* ~ccg_shop__ov_* ...)` selector). Without it, a plain `+expire` on `~<live>` deletes the graph
+  (`EXPIRE ccg_shop 0` → key gone), so a "`DEL` refused" check alone is no protection. `EXISTS <live>` still answers.
+  `falkordb-py`'s constructor still connects. Verify: those commands via `redis-cli --user`.
 - **ACL lock grants: a flat `+del`/`+set` on a user's key pattern also reaches the graph keys in that pattern; scope them with
   a selector bound to the lock key, and a Lua release needs `+get` too** (verified 2026-11-04, Redis 8.6.3, module `41811`,
   users `ccg_build`/`ccg_verdict`/`ccg_engine`/`ccg_raw_p0` on scratch keys `ccg_p0spike__acl*`,
@@ -1349,3 +1385,9 @@ to the general fact here.
   (l:Link {linkId:$id}) SET l.verdict=$v, s.verdictLogOffset = CASE WHEN s.verdictLogOffset < $off THEN $off ELSE
   s.verdictLogOffset END` with an unknown `$id` set no verdict and still advanced the offset (`cpg/spikes/store/lock_replay.py`
   `PATCH_QUERY`).
+- **An empty string is stored but an index equality on it never matches** (verified 2026-11-11, v4.18.11 / module `41811`, throwaway
+  `ccg-falkordb-tw-16390`): with `CREATE INDEX FOR (n:File) ON (n.path)` and `(:File {path: ''})` stored, `WHERE n.path = $v` with
+  `$v = ''` returns `[]` while `x` finds its node and an index-bypassing `n.path + '' = ''` returns the node (the planner does use
+  `Node By Index Scan`). Seen as 20 of 20 label x property cells of the `tests/test_indexed_live.py` grid (96 values x 20 cells; the
+  same grid mis-indexes every value over 4,096 bytes (220) and every ASCII-whitespace-edged one (480), and no accepted value).
+  `ccg.indexed.check` flags empty, over-4,096-bytes, edge-whitespace and non-Unicode; the loader preflight and the assembler share it.

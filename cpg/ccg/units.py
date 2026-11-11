@@ -18,7 +18,9 @@ default) each shell, config and Markdown file is also a unit of its own, ``rootP
 extractors.
 
 Files come from ``git ls-files`` when the repository root is a non-empty git work tree (so untracked scratch files
-never change the units and the golden is the committed state), else from a directory walk. Exclusions are the repo's
+never change the units and the golden is the committed state), else from a directory walk. With a ``commit`` (P1-20: the commit
+a refresh builds) they come from ``git ls-tree -r -z --name-only <commit>`` instead, never from the index or the work tree: a
+staged-uncommitted or work-tree-deleted path makes no unit, and a listing that fails is an error, not a fallback to a walk. Exclusions are the repo's
 ``exclusions.paths`` and ``exclusions.contentCheck.files``, relative to the repo root; vendored and cache directories
 are skipped either way.
 """
@@ -28,8 +30,9 @@ import os
 import posixpath
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
-from typing import Callable, Iterable, NamedTuple
+from typing import Callable, Iterable, Mapping, NamedTuple
 
 from ccg import gitsafe, ids
 from ccg.manifest import Manifest, Repo
@@ -48,6 +51,8 @@ _SOURCE_EXT = {".py": "python", ".pyi": "python"} | {
 }
 _CONFIG_EXT = {".json", ".yaml", ".yml", ".toml"}
 _SHELLS = frozenset({"sh", "bash", "zsh"})
+_COMMIT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+MAX_SHEBANG_BLOB_BYTES = 1 << 20       # an extensionless blob over this is never fetched to look for a shebang
 
 
 class Unit(NamedTuple):
@@ -87,6 +92,14 @@ def _git_files(root: Path) -> list[str] | None:
     return files or None
 
 
+def _tree_files(root: Path, commit: str) -> list[str]:
+    """The blob paths of ``commit``'s tree (``git ls-tree -r -z --name-only``); ``commit`` must be a full object id, so it can never be an option."""
+    if not isinstance(commit, str) or not _COMMIT_ID.fullmatch(commit):
+        raise ValueError("commit must be a full lowercase object id")
+    out = gitsafe.git(root, "ls-tree", "-r", "-z", "--name-only", commit)
+    return [f for f in out.decode("utf-8", "surrogateescape").split("\0") if f]
+
+
 def _walk_files(root: Path) -> list[str]:
     out = []
     for dirpath, dirs, names in os.walk(root):
@@ -96,11 +109,26 @@ def _walk_files(root: Path) -> list[str]:
     return out
 
 
-def _list_files(root: Path) -> list[str]:
-    files = _git_files(root)
-    if files is None:
-        files = _walk_files(root)
-    return sorted(f for f in files if not any(_skipped_dir(seg) for seg in f.split("/")[:-1]))
+def _encodable(path: str) -> bool:
+    """A path that is valid Unicode (no surrogate-escaped byte of ``git ls-tree -z``) and so can form a unit id."""
+    try:
+        path.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _list_files(root: Path, commit: str | None = None, report: Counter | None = None) -> list[str]:
+    if commit is not None:
+        files = _tree_files(root, commit)
+    else:
+        files = _git_files(root)
+        if files is None:
+            files = _walk_files(root)
+    good = [f for f in files if _encodable(f)]
+    if report is not None:
+        report["undecodable_paths"] += len(files) - len(good)          # a count only, never the bytes
+    return sorted(f for f in good if not any(_skipped_dir(seg) for seg in f.split("/")[:-1]))
 
 
 def _glob_re(pattern: str) -> re.Pattern[str]:
@@ -176,6 +204,20 @@ def _file_language(root: Path, rel: str) -> str | None:
     return classify_file(rel, head)
 
 
+def _blob_language(root: Path, commit: str, rel: str) -> str | None:
+    """``_file_language`` over the bytes of ``commit`` (an extensionless file's first line is read from the blob, size-bounded first)."""
+    def head() -> bytes:
+        rev = f"{commit}:{rel}"
+        try:
+            if int(gitsafe.git(root, "cat-file", "-s", rev).strip() or 0) > MAX_SHEBANG_BLOB_BYTES:
+                return b""
+            return gitsafe.git(root, "cat-file", "blob", rev).split(b"\n", 1)[0][:256]
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return b""
+
+    return classify_file(rel, head)
+
+
 def _shebang_is_shell(first_line: bytes) -> bool:
     if not first_line.startswith(b"#!"):
         return False
@@ -204,10 +246,10 @@ def _fallback_root(path: str, lang: str, manifest_roots: set[tuple[str, str]]) -
     return "/".join(segs) or "."
 
 
-def _repo_units(root: Path, repo: Repo, per_file: bool) -> list[Unit]:
+def _repo_units(root: Path, repo: Repo, per_file: bool, commit: str | None = None, report: Counter | None = None) -> list[Unit]:
     repo_root = root / repo.path
     excluded = _excluder(repo)
-    files = [f for f in _list_files(repo_root) if not excluded(f)]
+    files = [f for f in _list_files(repo_root, commit, report) if not excluded(f)]
 
     manifest_roots: set[tuple[str, str]] = set()
     for f in files:
@@ -223,21 +265,36 @@ def _repo_units(root: Path, repo: Repo, per_file: bool) -> list[Unit]:
     found = {(d, lang) for d, lang in roots}
     if per_file:
         for f in files:
-            lang = _file_language(repo_root, f)
+            lang = _file_language(repo_root, f) if commit is None else _blob_language(repo_root, commit, f)
             if lang:
                 found.add((f, lang))
-    return [Unit(ids.unit_id(repo.repo_id, d, lang), repo.repo_id, d, lang) for d, lang in found]
+    out = []
+    for d, lang in found:
+        try:
+            out.append(Unit(ids.unit_id(repo.repo_id, d, lang), repo.repo_id, d, lang))
+        except (UnicodeEncodeError, ValueError, TypeError):             # cannot form an id: excluded and counted, never raised
+            if report is not None:
+                report["undecodable_paths"] += 1
+    return out
 
 
-def discover_units(repo_root: str | Path, manifest: Manifest, per_file: bool = True) -> list[Unit]:
+def discover_units(repo_root: str | Path, manifest: Manifest, per_file: bool = True,
+                   commit: str | Mapping[str, str] | None = None, report: Counter | None = None) -> list[Unit]:
     """Units of every repository of ``manifest``; each repo's ``path`` is resolved against ``repo_root``.
+
+    ``commit`` (default None: the index, as before) is the full object id whose tree is listed, or a ``{repoId: commit}`` mapping
+    for a manifest of several repositories (a repository missing from the mapping is an error).
+
+    A path that is not valid Unicode (surrogate-escaped bytes) or cannot form a unit id is **excluded**, never raised on; ``report`` (a
+    ``Counter``), when given, gets ``report["undecodable_paths"]`` incremented by the count (value-free: never the bytes).
 
     Sorted by ``(repoId, rootPath, language)``, so two runs over one tree are identical.
     """
     root = Path(repo_root)
     units: list[Unit] = []
     for repo in manifest.repos:
-        units.extend(_repo_units(root, repo, per_file))
+        sha = commit[repo.repo_id] if isinstance(commit, Mapping) else commit
+        units.extend(_repo_units(root, repo, per_file, sha, report))
     return sorted(units, key=lambda u: (u.repoId, u.rootPath, u.language))
 
 

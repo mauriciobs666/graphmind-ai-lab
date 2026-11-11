@@ -6,7 +6,7 @@ Contract: ``docs/plans/connected-code-graph-p1-graph.md`` §4 (DDL and load grou
 
 The sequence, in this order and no other, on ``build_key(system, snapshotId)``:
 
-1. refuse, before any store call, rows the loader may not write (an edge group outside the closed list, an unknown label, a row without its id property, a ``:Snapshot`` that names another system or model);
+1. refuse, before any store call, rows the loader may not write (an edge group outside the closed list, an unknown label, a row without its id property, an indexed string over 4,096 UTF-8 bytes or edged with ASCII whitespace, a ``:Snapshot`` that names another system or model);
 2. the DDL's indexes on the EMPTY key; nodes, then edges, in ``UNWIND`` batches of at most :data:`BATCH_MAX` rows over ONE connection
    with retries ZERO; every query carries ``timeout`` = ``TIMEOUT_MAX`` whenever that is nonzero; every edge batch is count-checked;
 3. the DDL's ``UNIQUE`` constraints, polled to ``OPERATIONAL`` (a ``FAILED`` fails the build);
@@ -26,6 +26,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from ccg import indexed
+from ccg.indexed import INDEXED_PROPS, INDEXED_VALUE_MAX_BYTES, INDEX_TRIMMED_CHARS  # noqa: F401  (re-exported: the loader's public names)
 from ccg.store import parse_ddl
 from ccg.sysname import build_key, check_system_name, live_key
 
@@ -81,6 +83,9 @@ EDGE_ORDER = (
 )
 
 SNAPSHOT_STATEMENT = "CREATE (s:Snapshot) SET s = $props"
+
+# The indexed-value predicate and the property list live in ``ccg.indexed`` (shared with the assembler, which refuses the one unit first; this
+# preflight is the fail-closed backstop).
 
 
 # ---------------------------------------------------------------------------------------------
@@ -272,6 +277,21 @@ def _preflight(rows, system: str) -> None:
             for prop in props:
                 if not isinstance(row, dict) or not isinstance(row.get(prop), str) or not row[prop]:
                     raise LoadError(f"{label} row {i} lacks {prop} (absent, or not a non-empty string)")
+            for prop in indexed.props_of(label):
+                bad = indexed.check(row.get(prop))
+                if bad is None:
+                    continue
+                if bad.reason == indexed.NOT_STR:
+                    raise LoadError(f"{label} row {i}: {prop} is not a string")
+                if bad.reason == indexed.UNICODE:
+                    raise LoadError(f"{label} row {i}: {prop} is not valid Unicode text")
+                if bad.reason == indexed.EMPTY:
+                    raise LoadError(f"{label} row {i}: {prop} is an empty string, which an equality anchor on the engine's index never matches")
+                if bad.reason == indexed.WHITESPACE:
+                    raise LoadError(f"{label} row {i}: {prop} starts or ends with ASCII whitespace, which the engine's index trims "
+                                    "(an equality anchor would miss it or match other values)")
+                raise LoadError(f"{label} row {i}: {prop} is {bad.size:,} UTF-8 bytes, over the {bad.limit:,} an indexed value may hold "
+                                "(the engine neither indexes it nor survives a unique constraint over it)")
     for group, edge_rows in rows.edges.items():
         for i, row in enumerate(edge_rows):
             if not isinstance(row, dict) or "s" not in row or "t" not in row:

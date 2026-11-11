@@ -403,3 +403,72 @@ def test_livestore_constraints_poll_forwards_the_timeout_too():
     db.select_graph = lambda key: type("G", (), {"query": lambda self, *a: (db.log.append((key,) + a), Res())[1]})()
     L.LiveStore(db, SYSTEM).constraints(BUILD_PREFIX + "1", 3_000)
     assert db.log == [(BUILD_PREFIX + "1", "CALL db.constraints()", None, 3_000)]
+
+
+# ---- P1-19 dispatch 2: the 4,096-byte bound on an indexed value (live-observed on v4.18.11: > 4,096 bytes is not indexed, an equality
+# anchor then MISSES it, and a UNIQUE constraint over it crashes the server; ``tests/test_fuzz_idhash_live.py`` has the observations) ----
+
+INDEXED_VALUE_MAX = 4096
+
+
+@pytest.mark.parametrize("label,prop,row", [("Name", "nameKey", 0), ("Symbol", "symbolId", 1), ("Repo", "repoId", 0), ("Link", "linkId", 1)])
+@pytest.mark.parametrize("value,ok", [("k" * 4096, True), ("é" * 2048, True), ("k" * 4097, False), ("é" * 2049, False), ("k" * 100_000, False)])
+def test_an_id_value_over_4096_utf8_bytes_is_refused_before_any_call(label, prop, row, value, ok):
+    rows = tiny_rows(SYSTEM)
+    rows.nodes[label][row][prop] = value
+    store = FakeStore()
+    if ok:
+        L.load(store, rows, SYSTEM)
+        return
+    with pytest.raises(L.LoadError, match=rf"{label} row {row}.*{prop}.*4,?096") as ei:
+        L.load(store, rows, SYSTEM)
+    assert store.calls == [] and value[:20] not in str(ei.value)
+
+
+@pytest.mark.parametrize("label,prop", [("Symbol", "qname"), ("Symbol", "nameNorm"), ("File", "path"), ("ContractPoint", "keyNorm"), ("ConfigEntry", "path")])
+def test_every_other_indexed_property_obeys_the_same_bound_and_an_unindexed_one_does_not(label, prop):
+    rows = tiny_rows(SYSTEM)
+    rows.nodes[label][0][prop] = "q" * 4097
+    with pytest.raises(L.LoadError, match=rf"{label} row 0.*{prop}"):
+        L.load(FakeStore(), rows, SYSTEM)
+    rows.nodes[label][0][prop] = "q" * 4096
+    L.load(FakeStore(), rows, SYSTEM)
+    rows.nodes["Name"][0]["name"] = "z" * 100_000                     # ``Name.name`` has no index: any length loads
+    L.load(FakeStore(), rows, SYSTEM)
+
+
+def test_a_lone_surrogate_in_an_indexed_value_is_a_load_error_not_a_unicode_error():
+    rows = tiny_rows(SYSTEM)
+    rows.nodes["Name"][0]["nameKey"] = "a\ud800b"
+    with pytest.raises(L.LoadError, match="Name row 0.*nameKey"):
+        L.load(FakeStore(), rows, SYSTEM)
+
+
+def test_the_bounded_properties_are_exactly_the_ddl_indexes():
+    from ccg.store import parse_ddl
+    assert L.INDEXED_PROPS == {(s[1], s[2]) for s in parse_ddl() if s[0] == "index"} and len(L.INDEXED_PROPS) == 20
+
+
+@pytest.mark.parametrize("ws", [" ", "\t", "\n", "\v", "\f", "\r"])
+@pytest.mark.parametrize("label,prop", [("Name", "nameKey"), ("File", "path"), ("Symbol", "qname"), ("ContractPoint", "keyNorm")])
+@pytest.mark.parametrize("shape", ["{w}x", "x{w}", "{w}x{w}", "{w}"])
+def test_an_indexed_value_edged_with_ascii_whitespace_is_refused_before_any_call(ws, label, prop, shape):
+    rows = tiny_rows(SYSTEM)
+    rows.nodes[label][0][prop] = shape.format(w=ws)
+    store = FakeStore()
+    with pytest.raises(L.LoadError, match=rf"{label} row 0.*{prop}.*whitespace"):
+        L.load(store, rows, SYSTEM)
+    assert store.calls == []
+
+
+@pytest.mark.parametrize("value", ["a b", "a\tb", "a\nb", "\u00a0x", "x\u2003", "\u3000x\u3000", "\u200bx", "x\u0085"])
+def test_interior_ascii_whitespace_and_edge_unicode_spaces_load(value):
+    rows = tiny_rows(SYSTEM)
+    rows.nodes["File"][0]["path"] = value                              # the engine trims only the six ASCII characters, and only at the ends
+    L.load(FakeStore(), rows, SYSTEM)
+
+
+def test_an_unindexed_property_may_be_whitespace_edged():
+    rows = tiny_rows(SYSTEM)
+    rows.nodes["Name"][0]["name"] = "  padded\n"
+    L.load(FakeStore(), rows, SYSTEM)

@@ -29,7 +29,7 @@ from typing import Any
 
 import jsonschema
 
-from ccg import bundle, ids
+from ccg import bundle, ids, indexed
 from ccg.assemble import snapshot as SN
 from ccg.assemble.snapshot import AssembleError
 from ccg.keynorm import PROVIDER, mask_http_segments
@@ -185,7 +185,7 @@ _HEADER_VALIDATOR = None
 def classify_bundle(records: Sequence[Mapping], audit_dir: Path) -> str | None:
     """``None`` when the assembler accepts the bundle, else the one code of ``FAIL_REASONS`` that names why. Value-free by construction:
     nothing of the bundle or of an exception is put in the result. Checks the header (version rule, schema) and every
-    ``sandboxAuditIds`` entry (``ccg.sandbox_audit.check_sandbox_ids``), and rule S6a of ``bundle.py`` for an empty list (the one body check made here). Input is ``bundle.read_bundle`` output: record bodies are not
+    ``sandboxAuditIds`` entry (``ccg.sandbox_audit.check_sandbox_ids``), and rule S6a of ``bundle.py`` for an empty list, and every indexed property (``ccg.indexed``: over 4,096 UTF-8 bytes, ASCII-whitespace-edged or not valid Unicode: ``bundle:unindexable``). Input is ``bundle.read_bundle`` output: record bodies are not
     checked here (that validation is ``read_bundle``'s), so a malformed body passes this function and fails later in ``build_rows``."""
     global _HEADER_VALIDATOR
     try:
@@ -205,6 +205,8 @@ def classify_bundle(records: Sequence[Mapping], audit_dir: Path) -> str | None:
             return "bundle:audit-missing"
         if not bundle.s6a_holds(h, (r.get("lang") for r in records[1:] if isinstance(r, Mapping) and r.get("type") == "file")):
             return "bundle:invalid"                                  # S6a: a caller that skipped bundle.loads is refused too
+        if indexed.first_bundle_violation(records) is not None:      # P1-18b: one unit's unindexable value fails that unit, not the system
+            return "bundle:unindexable"
         return None
     except Exception:                                                # noqa: BLE001 - any failure is "invalid", with no text
         return "bundle:invalid"
@@ -249,8 +251,10 @@ def find_step_8a_definitions(root: Path) -> list[Path]:
 # row helpers (the slice's, ported)
 # ---------------------------------------------------------------------------------------------------------------------
 def _clean(props: dict[str, Any]) -> dict[str, Any]:
-    """Drop absent values and strip strings (an unstripped indexed value is silently missed; graph note §3.4)."""
-    return {k: (v.strip() if isinstance(v, str) else v) for k, v in props.items() if v is not None}
+    """Drop absent values. A string is NEVER altered here: an identity value that the index cannot hold faithfully (edge whitespace, over the
+    byte bound, empty, not Unicode) is refused per unit at the gate (``classify_bundle``) or dropped with its fact (``cp-unindexable``), so a
+    stripped value can neither collide with a sibling nor hide from the loader's backstop (P1-18b)."""
+    return {k: v for k, v in props.items() if v is not None}
 
 
 def _symbol_depths(parents: dict[str, str | None]) -> dict[str, int]:
@@ -321,6 +325,9 @@ class _Builder:
         if ident in seen:
             return False
         seen.add(ident)
+        for prop in indexed.props_of(label):                        # an invariant, not a policy: every source was gated, so this never fires
+            if indexed.check(props.get(prop)) is not None:
+                raise AssembleError(f"{label}.{prop}: an unindexable value reached the row builder (a source skipped its gate)")
         self.rows.nodes.setdefault(label, []).append(_clean(props))
         return True
 
@@ -603,6 +610,9 @@ def _contracts(b: _Builder, facts: Any, links: Any, point_label: dict, symbol_id
         if p["key"] is None:
             b.drop("provider-key-none")
             continue
+        if indexed.check(p["key"]) is not None:                      # keyNorm is the pack's key, raw: only this builder sees it (P1-18b)
+            b.drop("cp-unindexable")
+            continue
         providers.setdefault((anchor, p["kind"], p["key"]), []).append(p)
     for (anchor, kind, key), group in providers.items():
         best = _best(group)
@@ -614,6 +624,9 @@ def _contracts(b: _Builder, facts: Any, links: Any, point_label: dict, symbol_id
             continue
         if c["key"] is None:
             b.drop("consumer-key-none")
+            continue
+        if indexed.check(c["key"]) is not None:
+            b.drop("cp-unindexable")
             continue
         consumers.setdefault((c["siteId"], c["kind"], c["key"]), []).append(c)
     for (site, kind, key), group in consumers.items():
@@ -634,6 +647,9 @@ def _contracts(b: _Builder, facts: Any, links: Any, point_label: dict, symbol_id
             raise AssembleError(f"link {lk.link_id}: a link whose provider is outside the snapshot is a corrupt input")
         if lk.provider is None and lk.to_unit is not None and lk.to_unit not in unit_index:
             raise AssembleError(f"link {lk.link_id}: TO_UNIT names a unit with no Unit row")
+        if lk.key_norm and indexed.check(lk.key_norm) is not None:  # the Link's ContractPoint is dropped, so the Link and every edge of it go too
+            b.drop("link-cp-unindexable")                           # own count: a Link carries its PROVIDER's key, so a site may lose a candidate (ambiguity)
+            continue
         b.node("Link", {"linkId": lk.link_id, "kind": lk.kind, "status": lk.status, "reason": lk.reason, "matcher": lk.matcher})
         # D6: no candidateCount; N is derived per VIA edge at read time
         if lk.provider is not None:

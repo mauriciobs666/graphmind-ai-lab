@@ -29,6 +29,7 @@ import os
 import re
 import secrets
 import stat
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -55,10 +56,39 @@ class AtRestError(PermissionError):
     """A path is outside its area, a symlink, exposed, foreign-owned or malformed."""
 
 
+class RealCredentialsDirTouched(AtRestError):
+    """Test mode (``CCG_FORBID_REAL_CREDENTIALS=1``) reached the real ``~/.config/ccg``."""
+
+
+#: ``tests/conftest.py`` sets this in the environment (child processes inherit it, ``importlib.reload`` keeps it): while it is ``1`` every
+#: key-area / credentials operation refuses a path under the real ``~/.config/ccg`` (``$HOME``'s and the password database's). Unset: no effect.
+FORBID_REAL_ENV = "CCG_FORBID_REAL_CREDENTIALS"
+
+
+def _real_credential_roots() -> set[Path]:
+    import pwd
+    homes = {Path(os.path.expanduser("~")), Path(pwd.getpwuid(os.getuid()).pw_dir)}
+    roots = {h / ".config" / "ccg" for h in homes}
+    return roots | {Path(os.path.realpath(r)) for r in roots}
+
+
+def assert_not_real_credentials(path: str | os.PathLike) -> None:
+    """The one test-mode choke point: raises :class:`RealCredentialsDirTouched` for ``path`` (lexically or by realpath) at or under the real
+    ``~/.config/ccg`` when ``CCG_FORBID_REAL_CREDENTIALS=1``; a no-op otherwise. Pure: it touches nothing."""
+    if os.environ.get(FORBID_REAL_ENV) != "1":
+        return
+    raw = os.path.abspath(os.fspath(path))
+    cands = {Path(raw), Path(os.path.realpath(raw))}
+    roots = _real_credential_roots()
+    if any(c == r or r in c.parents for c in cands for r in roots):
+        raise RealCredentialsDirTouched(f"test mode: {raw} is under the real ~/.config/ccg; give the test its own keys_root/CCG_CREDENTIALS_DIR")
+
+
 # ------------------------------------------------------------------ areas
 
 def _key_root(keys_root: str | os.PathLike | None) -> Path:
     k = Path(keys_root) if keys_root is not None else KEY_ROOT
+    assert_not_real_credentials(k)
     rk, rr = Path(os.path.realpath(k)), Path(os.path.realpath(REPO_ROOT))
     if rk == rr or rr in rk.parents:
         raise AtRestError(f"key area {k} is inside the repository {rr}; keys live outside it (-bundle-spec3.md §5.17)")
@@ -70,8 +100,12 @@ def _work_root(root: str | os.PathLike | None) -> Path:
 
 
 def credentials_dir(keys_root: str | os.PathLike | None = None) -> Path:
-    """``$CCG_CREDENTIALS_DIR`` if set, else the key area; refused if inside the repository."""
+    """``$CCG_CREDENTIALS_DIR`` if set, else the key area; refused if inside the repository. In test mode (``CCG_FORBID_REAL_CREDENTIALS=1``)
+    an explicit ``keys_root`` that names another directory than the variable is an error, never silently overridden."""
     env = os.environ.get("CCG_CREDENTIALS_DIR")
+    if env and keys_root is not None and os.environ.get(FORBID_REAL_ENV) == "1" \
+            and os.path.realpath(env) != os.path.realpath(keys_root):
+        raise AtRestError("test mode: keys_root and CCG_CREDENTIALS_DIR name different directories")
     return _key_root(env) if env else _key_root(keys_root)
 
 
@@ -86,6 +120,7 @@ def _name(kind: str, value: str) -> str:
 def _rel_parts(path: str | os.PathLike, area: Path) -> tuple[Path, tuple[str, ...]]:
     """(resolved area root, the path's components below it), lexically: no ``..``, strictly below the root."""
     raw = os.fspath(path)
+    assert_not_real_credentials(area)
     if "\0" in raw:
         raise AtRestError("a path with a NUL byte")
     if ".." in Path(raw).parts:
@@ -153,6 +188,7 @@ def _mkdir_private(d: Path) -> None:
 def _private_dir(d: Path, area: Path, is_key: bool) -> Path:
     """Create directory ``d`` (and its parents up to the area root) at 0700, refusing any symlink, then check it.
     A key area's root is created 0700 if absent (its parents, e.g. ~/.config/ccg, at 0700 too)."""
+    assert_not_real_credentials(area)
     if is_key and not os.path.lexists(area):
         os.makedirs(area.parent, mode=0o700, exist_ok=True)
         _mkdir_private(area)
@@ -177,7 +213,7 @@ def write_private(path: str | os.PathLike, data: bytes, area: str | os.PathLike)
     is_key = not _is_work(area)
     _private_dir(a_real.joinpath(*parts[:-1]) if parts[:-1] else a_real, area, is_key)
     target = _check_chain(a_real, parts, check_root=is_key)
-    tmp = target.with_name(f".{target.name}.{secrets.token_hex(4)}.tmp")
+    tmp = target.with_name(f".{target.name}.{secrets.token_hex(8)}.tmp")
     _write_new(tmp, data)
     try:
         os.replace(tmp, target)                             # rename never follows a link at the target
@@ -189,6 +225,7 @@ def write_private(path: str | os.PathLike, data: bytes, area: str | os.PathLike)
 
 def _write_new(p: Path, data: bytes) -> None:
     """Create ``p`` (must not exist) 0600 with ``data``, fsync'd; removes it again on any failure."""
+    assert_not_real_credentials(p)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
         os.fchmod(fd, 0o600)
@@ -211,7 +248,7 @@ def _unlink_quiet(p: Path) -> None:
         pass
 
 
-def read_private(path: str | os.PathLike, area: str | os.PathLike) -> bytes:
+def read_private(path: str | os.PathLike, area: str | os.PathLike, single_link: bool = False) -> bytes:
     """Read a file below ``area``. The name is checked first; then the open walks the chain itself: the area root,
     then each directory with ``O_DIRECTORY|O_NOFOLLOW`` relative to its parent's fd (owner and mode re-checked on
     each fd), then the leaf with ``O_NOFOLLOW``, its fd checked for owner, regular-file type and mode. A file or a
@@ -233,6 +270,8 @@ def read_private(path: str | os.PathLike, area: str | os.PathLike) -> bytes:
         if not stat.S_ISREG(st.st_mode):
             raise AtRestError(f"{p} is not a regular file")
         _check_stat(p, st)
+        if single_link and st.st_nlink != 1:
+            raise AtRestError(f"{p} has {st.st_nlink} hard links; a credentials file has exactly one")
         chunks = []
         while True:
             b = os.read(fd, 1 << 20)
@@ -297,6 +336,76 @@ def prune_unit(system: str, unit: str, keep_build: str, root: str | os.PathLike 
     return removed
 
 
+def prune_orphans(system: str, live_units: Iterable[str], root: str | os.PathLike | None = None) -> list[Path]:
+    """Retention for units that no longer exist: delete every completed bundle ``<unit>.<build>.bundle.jsonl`` whose ``<unit>`` is not in
+    ``live_units``. An in-progress write (a ``.tmp`` name) and any other name is never touched; a link is unlinked itself, never followed
+    (``ensure_private`` refuses it first, so the call raises :class:`AtRestError` on one). Returns the removed paths."""
+    r = _work_root(root)
+    d = bundle_dir(system, r)
+    live = frozenset(live_units)
+    removed = []
+    for f in sorted(d.iterdir()):
+        n = f.name
+        if not n.endswith(BUNDLE_SUFFIX):
+            continue
+        unit, _, build = n[:-len(BUNDLE_SUFFIX)].partition(".")
+        if unit in live or not _NAME_RE.fullmatch(unit) or not _NAME_RE.fullmatch(build):
+            continue                                        # not <unit>.<build>: never ours to delete
+        ensure_private(f, r)
+        f.unlink()
+        removed.append(f)
+    return removed
+
+
+#: The temp name of an interrupted bundle write: ``.<unit>.<build>.bundle.jsonl.<hex>.tmp``. Both writers (``write_private``, the one every
+#: build goes through, and ``ccg.bundle.write_bundle``) draw 8 random bytes (16 hex digits); 8 hex digits are still accepted, the name an
+#: older ``write_private`` left behind.
+_STALE_TMP_RE = re.compile(
+    rf"\.{_NAME_RE.pattern}\.{_NAME_RE.pattern}{re.escape(BUNDLE_SUFFIX)}\.(?:[0-9a-f]{{8}}|[0-9a-f]{{16}})\.tmp")
+
+
+def sweep_stale_tmp(system: str, older_than_s: float = 3600, root: str | os.PathLike | None = None,
+                    now: float | None = None) -> list[Path]:
+    """Remove the temp files a crashed bundle write left in ``system``'s bundle directory (and only there); returns the removed paths.
+
+    A file goes iff its name is exactly ``.<unit>.<build>.bundle.jsonl.<8 or 16 hex>.tmp``, it is a regular file (a link, a directory or
+    a device with that name is left alone) owned by this user, and its mtime is at least ``older_than_s`` seconds before ``now`` (a write
+    in progress is younger). Nothing else is touched: no completed bundle, no other directory, no file of another name. The directory is
+    reached through ``bundle_dir`` (lexical checks, no link below the area root) and then by file descriptor, ``O_NOFOLLOW``, and every
+    unlink is relative to that descriptor, so a directory swapped for a link after the check is not followed."""
+    if isinstance(older_than_s, bool) or not isinstance(older_than_s, (int, float)) or older_than_s < 0:
+        raise ValueError("older_than_s is a non-negative number of seconds")
+    r = _work_root(root)
+    d = bundle_dir(system, r)
+    cutoff = (time.time() if now is None else now) - older_than_s
+    removed: list[Path] = []
+    try:
+        fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as e:
+        raise AtRestError(f"{d}: cannot open without following links ({e.strerror})") from None
+    try:
+        _check_stat(d, os.fstat(fd))
+        with os.scandir(fd) as it:
+            names = sorted(e.name for e in it)
+        for name in names:
+            if not _STALE_TMP_RE.fullmatch(name):
+                continue
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mtime > cutoff:
+                continue
+            try:
+                os.unlink(name, dir_fd=fd)
+            except FileNotFoundError:
+                continue
+            removed.append(d / name)
+    finally:
+        os.close(fd)
+    return removed
+
+
 # ------------------------------------------------------------------ the HMAC key (key area)
 
 def key_path(system: str, keys_root: str | os.PathLike | None = None) -> Path:
@@ -352,6 +461,20 @@ def acl_path(system: str, keys_root: str | os.PathLike | None = None) -> Path:
     return credentials_dir(keys_root) / f"{_name('system', system)}.acl"
 
 
+def prepare_acl_target(system: str, keys_root: str | os.PathLike | None = None) -> Path:
+    """Everything ``write_acl`` would refuse, checked WITHOUT writing (the credentials dir is created 0700 as ``write_acl`` would): not in the
+    repository, no link on the way, own and private, the existing file (if any) not a link, the directory writable. ``create_users`` calls it
+    before the first ``ACL SETUSER``, so a bad directory cannot reset live credentials it then cannot store."""
+    d = credentials_dir(keys_root)
+    _private_dir(d, d, is_key=True)
+    p = acl_path(system, keys_root)
+    a_real, parts = _rel_parts(p, d)
+    _check_chain(a_real, parts, check_root=True)
+    if not os.access(d, os.W_OK | os.X_OK):
+        raise AtRestError(f"{d} is not writable")
+    return p
+
+
 def write_acl(system: str, data: bytes, keys_root: str | os.PathLike | None = None) -> Path:
     """Write the ACL file (P1-19's ``create_users``), 0600, in the credentials dir, which is created 0700."""
     d = credentials_dir(keys_root)
@@ -359,6 +482,52 @@ def write_acl(system: str, data: bytes, keys_root: str | os.PathLike | None = No
     return write_private(acl_path(system, keys_root), data, area=d)
 
 
+def remove_acl(system: str, keys_root: str | os.PathLike | None = None) -> bool:
+    """Remove ``system``'s ACL file (a regular file below the credentials dir; never a link). True if one was removed."""
+    d = credentials_dir(keys_root)
+    p = ensure_private(acl_path(system, keys_root), d)
+    try:
+        os.unlink(p)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+_ACL_TMP_RE = re.compile(rf"\.{_NAME_RE.pattern}\.acl\.(?:[0-9a-f]{{8}}|[0-9a-f]{{16}})\.tmp")
+
+
+def sweep_stale_acl_tmp(older_than_s: float = 3600, keys_root: str | os.PathLike | None = None, now: float | None = None) -> list[Path]:
+    """Remove the temp files a killed ``write_acl`` left in the credentials dir (``.<system>.acl.<8 hex>.tmp``, 0600, holding passwords):
+    regular files of this user at least ``older_than_s`` old, nothing else, each unlink relative to the directory descriptor."""
+    d = credentials_dir(keys_root)
+    if not os.path.lexists(d):
+        return []
+    cutoff = (time.time() if now is None else now) - older_than_s
+    try:
+        fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as e:
+        raise AtRestError(f"{d}: cannot open without following links ({e.strerror})") from None
+    removed: list[Path] = []
+    try:
+        _check_stat(d, os.fstat(fd))
+        with os.scandir(fd) as it:
+            names = sorted(e.name for e in it)
+        for name in names:
+            if not _ACL_TMP_RE.fullmatch(name):
+                continue
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mtime > cutoff:
+                    continue
+                os.unlink(name, dir_fd=fd)
+            except FileNotFoundError:
+                continue
+            removed.append(d / name)
+    finally:
+        os.close(fd)
+    return removed
+
+
 def read_acl(system: str, keys_root: str | os.PathLike | None = None) -> bytes:
     """Read the ACL file (the clients), under the credentials-dir checks."""
-    return read_private(acl_path(system, keys_root), area=credentials_dir(keys_root))
+    return read_private(acl_path(system, keys_root), area=credentials_dir(keys_root), single_link=True)

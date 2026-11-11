@@ -314,7 +314,8 @@ def test_bad_system_names_are_refused_before_any_path_exists(work, bad):
     assert not (work / "bundles").exists()
 
 
-def test_default_areas_bundles_in_the_work_area_keys_outside_the_repo():
+def test_default_areas_bundles_in_the_work_area_keys_outside_the_repo(monkeypatch):
+    monkeypatch.delenv(atrest.FORBID_REAL_ENV)                 # path arithmetic only: nothing is created in the real area
     assert atrest.WORK_ROOT == CPG / ".ccg-work"
     assert atrest.KEY_ROOT == Path.home() / ".config" / "ccg" / "keys"
     assert atrest.key_path("shop") == atrest.KEY_ROOT / "shop.hmac"
@@ -485,6 +486,7 @@ def test_key_area_accessors_refuse_work_area_paths_and_back(work, keys):
 # =============================================================================================
 
 def test_acl_path_default_and_env_override(keys, tmp_path, monkeypatch):
+    monkeypatch.delenv(atrest.FORBID_REAL_ENV)                 # path arithmetic only, and the env-wins rule of production
     assert atrest.acl_path("shop", keys_root=keys) == keys / "shop.acl"
     assert atrest.acl_path("shop") == atrest.KEY_ROOT / "shop.acl"
     alt = tmp_path / "creds"
@@ -1012,3 +1014,224 @@ def _header():
         "flowProjected": True, "fieldDepthCap": 3, "vendoredDirs": [], "history": "available",
         "counts": {t: 0 for t in bundle.RECORD_TYPES[1:]},
     }
+
+
+# (g) sweep of interrupted writes (P1-20)
+# =============================================================================================
+
+NOW = 2_000_000_000.0
+H8, H16 = "0123abcd", "0123456789abcdef"
+
+
+def _tmp(d: Path, name: str, age_s: float, data: bytes = b"partial") -> Path:
+    p = d / name
+    p.write_bytes(data)
+    p.chmod(0o600)
+    os.utime(p, (NOW - age_s, NOW - age_s))
+    return p
+
+
+def _sweep_dir(work) -> Path:
+    return atrest.bundle_dir("shop", work)
+
+
+def test_sweep_removes_old_temp_files_of_both_writers_and_returns_them(work):
+    d = _sweep_dir(work)
+    a = _tmp(d, f".u1.b1.bundle.jsonl.{H16}.tmp", 4000)          # ccg.bundle.write_bundle's name (16 hex)
+    b = _tmp(d, f".u2.b1.bundle.jsonl.{H8}.tmp", 4000)           # the name an older write_private left (8 hex)
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == [a, b]
+    assert not a.exists() and not b.exists()
+
+
+def test_prune_orphans_removes_only_completed_bundles_of_units_not_in_the_live_set(work):
+    d = _sweep_dir(work)
+    live = _tmp(d, "u1.b1.bundle.jsonl", 0)
+    gone = [_tmp(d, "u2.b1.bundle.jsonl", 0), _tmp(d, "u2.b2.bundle.jsonl", 0)]
+    tmp = _tmp(d, f".u3.b1.bundle.jsonl.{H16}.tmp", 0)            # an in-progress write is never touched
+    other = _tmp(d, "notes.txt", 0)
+    odd = _tmp(d, "u4.bundle.jsonl", 0)                           # no <build>
+    assert atrest.prune_orphans("shop", {"u1"}, work) == gone
+    assert sorted(p.name for p in d.iterdir()) == sorted(p.name for p in (live, tmp, other, odd))
+
+
+def test_prune_orphans_refuses_a_link_instead_of_following_it(work, tmp_path):
+    d = _sweep_dir(work)
+    target = tmp_path / "victim"
+    target.write_text("keep")
+    (d / "u9.b1.bundle.jsonl").symlink_to(target)
+    with pytest.raises(atrest.AtRestError):
+        atrest.prune_orphans("shop", set(), work)
+    assert target.read_text() == "keep"
+
+
+def _crash_after_create(monkeypatch, call):
+    """Run ``call`` with ``os.replace`` failing after the temp file exists and every writer-side cleanup suppressed: a crash's leftover."""
+    with monkeypatch.context() as m:
+        m.setattr(os, "replace", lambda *a, **k: (_ for _ in ()).throw(OSError("crash")))
+        m.setattr(atrest, "_unlink_quiet", lambda *a, **k: None)
+        m.setattr(Path, "unlink", lambda self, missing_ok=False: None)
+        with pytest.raises(OSError, match="crash"):
+            call()
+
+
+@pytest.mark.parametrize("writer", ["atrest.write_private", "atrest.write_bundle", "bundle.write_bundle"])
+def test_sweep_removes_the_leftover_of_each_real_writers_crash_by_the_name_that_writer_produced(work, monkeypatch, writer):
+    """The names come from the writers themselves (never planted): a writer that changes its temp name fails here, not in production."""
+    from ccg import bundle
+    d = _sweep_dir(work)
+    unit = _header()["unitId"]
+    if writer == "atrest.write_private":
+        call = lambda: atrest.write_private(atrest.bundle_path("shop", "u1", "b1", work), b"x", atrest._work_root(work))
+    elif writer == "atrest.write_bundle":
+        call = lambda: atrest.write_bundle("shop", unit, "b1", [_header()], work)
+    else:
+        call = lambda: bundle.write_bundle(d / f"{unit}.b1.bundle.jsonl", [_header()])
+    _crash_after_create(monkeypatch, call)
+    left = [p for p in d.iterdir()]
+    assert len(left) == 1 and left[0].name.endswith(".tmp") and left[0].name.startswith(".")
+    os.utime(left[0], (NOW - 4000, NOW - 4000))
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == left
+    assert list(d.iterdir()) == []
+
+
+def test_write_private_draws_sixteen_hex_digits_like_bundle_write_bundle(work, monkeypatch):
+    seen = []
+    real = atrest._write_new
+    monkeypatch.setattr(atrest, "_write_new", lambda p, data: (seen.append(p.name), real(p, data))[1])
+    atrest.write_private(atrest.bundle_path("shop", "u1", "b1", work), b"x", atrest._work_root(work))
+    assert re.fullmatch(r"\.u1\.b1\.bundle\.jsonl\.[0-9a-f]{16}\.tmp", seen[0])
+
+
+@pytest.mark.parametrize("age,gone", [(3601, True), (3600, True), (3599, False), (0, False)])
+def test_sweep_age_threshold_is_older_than_s(work, age, gone):
+    p = _tmp(_sweep_dir(work), f".u1.b1.bundle.jsonl.{H16}.tmp", age)
+    atrest.sweep_stale_tmp("shop", older_than_s=3600, root=work, now=NOW)
+    assert p.exists() is not gone
+
+
+def test_sweep_threshold_is_the_argument_not_a_constant(work):
+    p = _tmp(_sweep_dir(work), f".u1.b1.bundle.jsonl.{H16}.tmp", 100)
+    atrest.sweep_stale_tmp("shop", root=work, now=NOW)            # default 3600: a 100 s old file stays
+    assert p.exists()
+    atrest.sweep_stale_tmp("shop", older_than_s=50, root=work, now=NOW)
+    assert not p.exists()
+
+
+@pytest.mark.parametrize("bad", [-1, True, "3600", None])
+def test_sweep_refuses_a_malformed_threshold(work, bad):
+    with pytest.raises(ValueError):
+        atrest.sweep_stale_tmp("shop", older_than_s=bad, root=work, now=NOW)
+
+
+HOSTILE = [
+    f".u1.b1.bundle.jsonl.{H16.upper()}.tmp",                    # upper-case hex
+    f".u1.b1.bundle.jsonl.{H16}0.tmp",                           # 17 hex
+    f".u1.b1.bundle.jsonl.{H16[:12]}.tmp",                       # 12 hex
+    f".u1.b1.bundle.jsonl.{H16}.tmp.keep",                       # a longer name
+    f"u1.b1.bundle.jsonl.{H16}.tmp",                             # not hidden
+    f".u1.b1.bundle.jsonl.{H16}.tmp\n",                          # trailing newline
+    f".u1.b1.bundle.json.{H16}.tmp",                             # not a bundle name
+    f".u1.bundle.jsonl.{H16}.tmp",                               # no <build>
+    f".u 1.b1.bundle.jsonl.{H16}.tmp",                           # a space in the unit
+    f".u1.b1.bundle.jsonl.{H16}.tmp ",
+    f"..u1.b1.bundle.jsonl.{H16}.tmp",
+    f".{'u' * 65}.b1.bundle.jsonl.{H16}.tmp",                    # a unit longer than the name rule
+    f".u1.b1.bundle.jsonl.{H16}.tmp‮",
+    ".u1.b1.bundle.jsonl.tmp",
+    f".{H16}.tmp",
+    "u1.b1.bundle.jsonl",                                        # a completed bundle
+    ".sweep-me.tmp",
+]
+
+
+@pytest.mark.parametrize("name", HOSTILE)
+def test_sweep_leaves_every_other_name_alone(work, name):
+    p = _tmp(_sweep_dir(work), name, 10**6)
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == []
+    assert p.exists()
+
+
+def test_sweep_leaves_a_completed_bundle_and_an_in_progress_one(work):
+    done = atrest.write_bundle("shop", "u1", "b1", [_header()], root=work)
+    os.utime(done, (NOW - 10**6, NOW - 10**6))
+    young = _tmp(_sweep_dir(work), f".u1.b2.bundle.jsonl.{H16}.tmp", 5)
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == []
+    assert done.exists() and young.exists()
+
+
+def test_sweep_touches_only_this_systems_bundle_directory(work):
+    mine = _tmp(_sweep_dir(work), f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    other = _tmp(atrest.bundle_dir("other", work), f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    sub = _sweep_dir(work) / "sub"
+    sub.mkdir(mode=0o700)
+    nested = _tmp(sub, f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    top = _tmp(work, f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    elsewhere = _tmp(work / "bundles", f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == [mine]
+    assert other.exists() and nested.exists() and top.exists() and elsewhere.exists()
+
+
+def test_sweep_does_not_remove_a_link_a_directory_or_follow_either(work, tmp_path):
+    d = _sweep_dir(work)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep")
+    link = d / f".u1.b1.bundle.jsonl.{H16}.tmp"
+    link.symlink_to(victim)
+    os.utime(link, (NOW - 10**6, NOW - 10**6), follow_symlinks=False)
+    adir = d / f".u2.b1.bundle.jsonl.{H16}.tmp"
+    adir.mkdir(mode=0o700)
+    (adir / "inner").write_text("keep")
+    assert atrest.sweep_stale_tmp("shop", root=work, now=NOW) == []
+    assert link.is_symlink() and victim.read_text() == "keep" and (adir / "inner").exists()
+
+
+def test_sweep_refuses_a_bundle_directory_that_is_a_link(work, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    bait = _tmp(outside, f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    (work / "bundles").mkdir(mode=0o700)
+    (work / "bundles" / "shop").symlink_to(outside)
+    with pytest.raises(AtRestError, match="symlink"):
+        atrest.sweep_stale_tmp("shop", root=work, now=NOW)
+    assert bait.exists()
+
+
+def test_sweep_refuses_a_bundles_directory_that_is_a_link(work, tmp_path):
+    outside = tmp_path / "outside"
+    (outside / "shop").mkdir(parents=True, mode=0o700)
+    bait = _tmp(outside / "shop", f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    (work / "bundles").symlink_to(outside)
+    with pytest.raises(AtRestError, match="symlink"):
+        atrest.sweep_stale_tmp("shop", root=work, now=NOW)
+    assert bait.exists()
+
+
+def test_sweep_refuses_a_system_name_that_is_a_path(work):
+    for bad in ("../shop", "shop/x", "", "a\0b"):
+        with pytest.raises(AtRestError):
+            atrest.sweep_stale_tmp(bad, root=work, now=NOW)
+
+
+def test_sweep_of_an_absent_directory_removes_nothing(work):
+    assert atrest.sweep_stale_tmp("fresh", root=work, now=NOW) == []
+
+
+def test_sweep_opens_the_directory_without_following_a_link_swapped_in_after_the_name_check(work, tmp_path, monkeypatch):
+    outside = tmp_path / "outside"
+    outside.mkdir(mode=0o700)
+    bait = _tmp(outside, f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    link = tmp_path / "swapped"
+    link.symlink_to(outside)
+    monkeypatch.setattr(atrest, "bundle_dir", lambda system, root=None: link)       # what a swap between the check and the open looks like
+    with pytest.raises(AtRestError, match="cannot open"):
+        atrest.sweep_stale_tmp("shop", root=work, now=NOW)
+    assert bait.exists()
+
+
+def test_sweep_unlinks_relative_to_the_directory_it_opened(work, monkeypatch):
+    p = _tmp(_sweep_dir(work), f".u1.b1.bundle.jsonl.{H16}.tmp", 10**6)
+    calls = []
+    real = os.unlink
+    monkeypatch.setattr(os, "unlink", lambda path, *a, **k: (calls.append(k.get("dir_fd")), real(path, *a, **k))[1])
+    atrest.sweep_stale_tmp("shop", root=work, now=NOW)
+    assert calls and all(fd is not None for fd in calls) and not p.exists()

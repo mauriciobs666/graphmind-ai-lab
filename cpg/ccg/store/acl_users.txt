@@ -1,0 +1,9 @@
+ACL SETUSER ccg_build_<s> on ><secret> resetkeys resetchannels -@all
+    +graph.query +graph.ro_query +graph.explain +graph.constraint +graph.config|get +rename +exists +info
+    %W~ccg_<s> ~ccg_<s>__*
+    (~ccg_<s>:verdict_lock +set +get +del +eval)
+    (~ccg_<s>__build_* ~ccg_<s>__ov_* +del +expire)
+ACL SETUSER ccg_verdict_<s> on ><secret> resetkeys resetchannels -@all +graph.query +info ~ccg_<s>
+    (~ccg_<s>:verdict_lock +set +get +del +eval)
+ACL SETUSER ccg_engine_<s> on ><secret> resetkeys resetchannels -@all +graph.ro_query +graph.explain +info ~ccg_<s> ~ccg_<s>__ov_*
+ACL SETUSER ccg_raw_<s>    on ><secret> resetkeys resetchannels -@all +graph.ro_query +graph.explain +info ~ccg_<s> ~ccg_<s>__ov_*

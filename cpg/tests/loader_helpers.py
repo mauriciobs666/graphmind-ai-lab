@@ -244,23 +244,3 @@ def skip_or_fail(reason: str) -> None:
     if os.environ.get("CCG_REQUIRE_LIVE") == "1":
         pytest.fail(f"CCG_REQUIRE_LIVE=1 and the live tests cannot run: {reason}", pytrace=False)
     pytest.skip(reason)
-
-
-GRAPH_NOTE = Path(__file__).resolve().parents[2] / "docs" / "plans" / "connected-code-graph-p1-graph.md"
-
-
-def acl_setuser_lines(system: str, secret: str, note: Path = GRAPH_NOTE) -> dict[str, list[str]]:
-    """The ``ACL SETUSER`` lines of ``-p1-graph.md`` §7's code block -> ``{user name: argument tokens}``, ``<s>`` and ``<secret>`` filled in.
-    Parsed from the document, so the live tests cannot drift from it; a changed block shape fails loudly rather than yielding no users."""
-    text = note.read_text()
-    block = text.split("## 7. ACL users", 1)[1].split("```", 2)[1]
-    entries: list[list[str]] = []
-    for line in block.splitlines():
-        if line.startswith("ACL SETUSER "):
-            entries.append(line[len("ACL SETUSER "):].split())
-        elif line.strip() and entries:
-            entries[-1] += line.split()           # a continuation line of the previous user
-    users = {e[0].replace("<s>", system): [t.replace("<s>", system).replace("<secret>", secret) for t in e[1:]] for e in entries}
-    if len(users) != 4 or any("<" in t for toks in users.values() for t in toks):
-        raise AssertionError(f"§7's ACL block did not parse into four filled users: {sorted(users)}")
-    return users

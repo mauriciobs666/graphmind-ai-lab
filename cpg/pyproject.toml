@@ -67,7 +67,7 @@ include = ["ccg*", "extractors*", "clients*"]
 
 # Non-package data dirs a normal (non-editable) install would otherwise drop (S10, S17, …).
 [tool.setuptools.package-data]
-ccg = ["schemas/*.json", "registry/*.yaml", "store/*.cypher", "system.yaml"]
+ccg = ["schemas/*.json", "registry/*.yaml", "store/*.cypher", "store/*.txt", "system.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

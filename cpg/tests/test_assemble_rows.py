@@ -264,8 +264,8 @@ def test_the_schema_admits_every_real_record_of_the_runner():
 def test_fail_reasons_is_the_closed_set_of_p1_graph_g4():
     assert tuple(sorted(FAIL_REASONS)) == tuple(sorted((
         "manifest:never-built", "build:shallow-clone", "extract:failed", "extract:timeout", "bundle:invalid",
-        "bundle:schema-minor", "bundle:bind-key-check", "bundle:audit-missing")))
-    assert len(FAIL_REASONS) == 8 == len(set(FAIL_REASONS))
+        "bundle:schema-minor", "bundle:bind-key-check", "bundle:audit-missing", "bundle:unindexable")))
+    assert len(FAIL_REASONS) == 9 == len(set(FAIL_REASONS))
 
 
 def test_the_flow_registry_has_the_six_measured_languages_each_false_and_citing_the_report():
@@ -1170,7 +1170,8 @@ def test_the_assembly_code_list_covers_every_ccg_module_the_assembler_imports(tm
 def test_assembly_code_files_are_the_declared_globs_plus_reasons_and_nothing_else():
     files = SN.assembly_code_files(CPG)
     assert "ccg/registry/reasons.yaml" in files and "ccg/registry/flow-availability.yaml" not in files
-    assert not any(f.startswith(("ccg/engine", "ccg/front", "ccg/store")) for f in files)
+    assert not any(f.startswith(("ccg/engine", "ccg/front", "ccg/store/loader", "ccg/store/swap", "ccg/store/acl")) for f in files)
+    assert {"ccg/indexed.py", "ccg/store/__init__.py", "ccg/store/ddl_v1.cypher"} <= set(files)      # P1-18b: the predicate and the DDL it reads
     assert files == sorted(files)
     with pytest.raises(R.AssembleError):
         SN.assembly_code_files(CPG / "ccg")                                    # a root without the listed files is refused
@@ -1251,6 +1252,11 @@ def _planted_drops(tmp_path):
         "provider-handler-missing": [lambda: build(tmp_path, facts=facts_([prov(GHOST_SYM, "http", "K")]))],
         "provider-key-none": [lambda: build(tmp_path, facts=facts_([prov(HANDLER, "http", None)]))],
         "consumer-site-missing": [lambda: build(tmp_path, facts=facts_(cons_=[cons(CALLER, "http", "K", GHOST_CS)]))],
+        "cp-unindexable": [
+            lambda: build(tmp_path, facts=facts_([prov(HANDLER, "http", "K" * 4097)])),
+            lambda: build(tmp_path, facts=facts_(cons_=[cons(CALLER, "http", " K", SITE_A)])),
+            ],
+        "link-cp-unindexable": [lambda: build(tmp_path, links=links_of(mk_link(key="K" * 4097)), facts=facts_())],
         "consumer-key-none": [lambda: build(tmp_path, facts=facts_(cons_=[cons(CALLER, "http", None, SITE_A)]))],
         "link-param-map": [lambda: build(tmp_path, links=links_of(mk_link(param_map={"a": "b"})), facts=http_facts())],
         "via-site-missing": [lambda: build(tmp_path, links=links_of(mk_link(sites=[via(SITE_A), via(GHOST_CS)])), facts=http_facts())],
@@ -1300,6 +1306,14 @@ def _lk_raise(tmp_path, lk, **kw):
     return lambda: build(tmp_path, links=links_of(lk), facts=http_facts(), **kw)
 
 
+def _gate_bypassed_build(tmp_path):
+    from unittest import mock
+    b = world()
+    b[0][1]["path"] = "svc/a.py "
+    with mock.patch.object(R, "classify_bundle", lambda records, audit_dir: None):
+        return build(tmp_path, bundles=b)
+
+
 def _planted_raises(tmp_path):
     """longest constant text of each ``raise AssembleError`` message -> a planter that must raise it."""
     ok_stale = ("2026-11-02T01:02:03Z", "extract:failed")
@@ -1330,6 +1344,7 @@ def _planted_raises(tmp_path):
             tmp_path, packs=two_packs, pack_dirs={"fastapi": pack_dir(tmp_path), "other": pack_dir(tmp_path, "other")}),
         " is not in the P1 edge list (-p1-graph.md §4); no P1 pack emits it": _stale(
             tmp_path, facts=PackFacts([prov(SITE_A, "http", "K")], [], [], [], [], [], [])),
+        ": an unindexable value reached the row builder (a source skipped its gate)": lambda: _gate_bypassed_build(tmp_path),
         ": given twice": lambda: build(tmp_path, links=links_of(mk_link(), mk_link()), facts=http_facts()),
         ": (Link)-[:TO]->(ConfigEntry) is not in the P1 edge list (-p1-graph.md §4)": _lk_raise(
             tmp_path, mk_link(provider=H("ce", 1), kind="config_key", key="K")),

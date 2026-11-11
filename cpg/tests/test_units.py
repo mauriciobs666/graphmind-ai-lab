@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import itertools
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -296,6 +297,92 @@ def test_an_empty_git_tree_falls_back_to_walking_the_directory(tmp_path):
     assert [(u.rootPath, u.language) for u in got] == [("app", "python")]
 
 
+# --- P1-20 (8): units from a commit's tree -----------------------------------------------------------------------
+
+
+def _commit(root: Path, msg: str = "c") -> str:
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null", "PATH": "/usr/bin:/bin",
+           "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+    for args in (("add", "-A"), ("commit", "-q", "--allow-empty", "-m", msg)):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+    return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _pairs(units):
+    return [(u.rootPath, u.language) for u in units]
+
+
+def test_a_commit_lists_its_own_tree_not_the_index_nor_the_work_tree(tmp_path):
+    tree(tmp_path, {"app/pyproject.toml": "", "app/a.py": "", "gone.sh": "", "keep.sh": ""})
+    _git(tmp_path, "init", "-q")
+    sha = _commit(tmp_path)
+    (tmp_path / "gone.sh").unlink()                                    # deleted in the work tree only
+    tree(tmp_path, {"staged/pyproject.toml": ""})
+    _git(tmp_path, "add", "staged/pyproject.toml")                      # staged, never committed
+    tree(tmp_path, {"loose/b.py": ""})                                  # untracked
+    at_head = un.discover_units(tmp_path, manifest_of(("r", ".")), commit=sha)
+    assert _pairs(at_head) == [("app", "python"), ("app/pyproject.toml", "config"), ("gone.sh", "shell"), ("keep.sh", "shell")]
+    assert ("staged", "python") in _pairs(un.discover_units(tmp_path, manifest_of(("r", "."))))      # the default still reads the index
+
+
+def test_a_commit_selects_an_older_tree(tmp_path):
+    tree(tmp_path, {"a/pyproject.toml": ""})
+    _git(tmp_path, "init", "-q")
+    first = _commit(tmp_path)
+    tree(tmp_path, {"b/pyproject.toml": ""})
+    second = _commit(tmp_path, "c2")
+    m = manifest_of(("r", "."))
+    assert _pairs(un.discover_units(tmp_path, m, per_file=False, commit=first)) == [("a", "python")]
+    assert _pairs(un.discover_units(tmp_path, m, per_file=False, commit=second)) == [("a", "python"), ("b", "python")]
+
+
+def test_a_commit_per_repository_mapping_is_read_by_repo_id(tmp_path):
+    for name, f in (("one", "x/pyproject.toml"), ("two", "y/pyproject.toml")):
+        tree(tmp_path / name, {f: ""})
+        _git(tmp_path / name, "init", "-q")
+    shas = {"r1": _commit(tmp_path / "one"), "r2": _commit(tmp_path / "two")}
+    m = manifest_of(("r1", "one"), ("r2", "two"))
+    got = un.discover_units(tmp_path, m, per_file=False, commit=shas)
+    assert [(u.repoId, u.rootPath) for u in got] == [("r1", "x"), ("r2", "y")]
+    with pytest.raises(KeyError):
+        un.discover_units(tmp_path, m, per_file=False, commit={"r1": shas["r1"]})
+
+
+def test_a_shebang_is_read_from_the_commits_blob_not_the_work_tree(tmp_path):
+    tree(tmp_path, {"bin/run": "#!/bin/sh\necho\n", "bin/data": "no shebang\n"})
+    _git(tmp_path, "init", "-q")
+    sha = _commit(tmp_path)
+    (tmp_path / "bin/run").write_text("not a script now\n")             # the work tree changed after the commit
+    (tmp_path / "bin/data").write_text("#!/bin/bash\n")
+    got = un.discover_units(tmp_path, manifest_of(("r", ".")), commit=sha)
+    assert _pairs(got) == [("bin/run", "shell")]
+
+
+def test_an_oversize_extensionless_blob_is_not_fetched_for_a_shebang(tmp_path):
+    tree(tmp_path, {"big": "#!/bin/sh\n" + "x" * (un.MAX_SHEBANG_BLOB_BYTES + 1)})
+    _git(tmp_path, "init", "-q")
+    sha = _commit(tmp_path)
+    assert un.discover_units(tmp_path, manifest_of(("r", ".")), commit=sha) == []
+
+
+def test_a_commit_that_does_not_list_is_an_error_never_a_walk(tmp_path):
+    tree(tmp_path, {"app/a.py": ""})
+    _git(tmp_path, "init", "-q")
+    _commit(tmp_path)
+    with pytest.raises(subprocess.CalledProcessError):                  # a well-formed id the repository does not have
+        un.discover_units(tmp_path, manifest_of(("r", ".")), commit="0" * 40)
+
+
+@pytest.mark.parametrize("bad", ["HEAD", "main", "--all", "abc123", "A" * 40, "0" * 39, "", "0" * 40 + "\n"])
+def test_a_commit_must_be_a_full_lowercase_object_id(tmp_path, bad):
+    tree(tmp_path, {"app/a.py": ""})
+    _git(tmp_path, "init", "-q")
+    _commit(tmp_path)
+    with pytest.raises(ValueError):
+        un.discover_units(tmp_path, manifest_of(("r", ".")), commit=bad)
+
+
 # --- (8) the real repository and the fixture system --------------------------------------------------------------
 
 
@@ -495,3 +582,24 @@ def test_a_glob_exclusion_also_excludes_files_below_a_matching_directory(tmp_pat
 def test_a_directory_named_without_a_trailing_slash_excludes_what_is_below_it(tmp_path, entry):
     got = code(tmp_path, {"dep/x.py": "", "dep/sub/pyproject.toml": "", "depot/y.py": ""}, excl_paths=[entry])
     assert got == [("depot", "python")]
+
+
+def test_discover_units_excludes_and_counts_a_non_utf8_commit_path_without_raising(tmp_path):
+    import subprocess
+    from collections import Counter
+    env = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull, "PATH": os.environ["PATH"], "GIT_AUTHOR_NAME": "t",
+           "GIT_AUTHOR_EMAIL": "t@x.invalid", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x.invalid"}
+    repo = tmp_path / "r"
+    repo.mkdir()
+    for n in (b"ok.sh", b"bad\xff.sh", b"d\xc3(/z.py"):
+        p = Path(os.fsdecode(os.path.join(os.fsencode(repo), n)))
+        p.parent.mkdir(exist_ok=True)
+        p.write_bytes(b"#!/bin/sh\n")
+    run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, env=env).stdout.decode().strip()
+    run("init", "-q", "-b", "main")
+    run("add", "-A")
+    run("commit", "-q", "-m", "c")
+    rep = Counter()
+    units = un.discover_units(tmp_path, manifest_of(("r", "r")), commit=run("rev-parse", "HEAD"), report=rep)
+    assert [(u.rootPath, u.language) for u in units] == [("ok.sh", "shell")] and rep["undecodable_paths"] == 2
+    assert un.discover_units(tmp_path, manifest_of(("r", "r")), commit=run("rev-parse", "HEAD")) == units       # no report is fine too
