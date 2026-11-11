@@ -181,6 +181,8 @@ Index §5 is the design; `-p1-ml.md` question 2 fixes the numbers. Python only u
 4. **Decide** by `-p0-ml.md` §8.4: the record names the figure, the cluster interval, the omission rate and the
    spurious rate; if true, `cpg/ccg/registry/flow-availability.yaml` flips that row (a `graph-dba` edit, gated), and
    P1-42's AC-25 fixtures and P1-37's `flow` stratum are re-run in the true form.
+5. **P1-34a, tooling for steps 3–4** (`docs/plans/connected-code-graph-p1-flow-prereg.md` §0.1; owner `tdd-engineer`, gate `analyst`): flow-set `p1` paths, per-cell output directories and `--record`/`--join` on `s28_metrics.py`, the fail-closed `flowdraw-p1`, and the pinned decision script `flow_decide.py`; behaviour-preserving for the seeds, tested on a synthetic corpus only, committed before the record `ccg-p1-flow-python-v1`.
+6. **P1-34b, audit tooling** (`-flow-prereg.md` §0.2; owner `tdd-engineer`, gate `analyst`): `cpg/spikes/frontend-fitness/flow_p1_audit.py` (`flowaud-p1`, `adjlist-p1`), seeds `ccg-p1a-v1-flowaud|`/`ccg-p1a-v1-adj|`, synthetic fixtures, mutant-tested, committed before the record `ccg-p1-flow-python-v1`.
 - **Gate:** `analyst`; `data-scientist` owns the method. **Needs:** 09, `-ml`.
 
 ## P1-35 · AC-24 smoke harness and run — `qa-engineer`

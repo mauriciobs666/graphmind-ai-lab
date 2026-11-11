@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -27,7 +29,11 @@ sys.path.insert(0, str(HERE))
 import s28_core as C  # noqa: E402
 import yaml  # noqa: E402
 
+REPO = C.CPG.parent
 WORK = C.CPG / ".ccg-work" / "frontend-fitness" / "joern"
+EXTRACT_SC = C.CPG / "extractors" / "joern" / "extract.sc"   # the projection the P1 record pins
+RECORD_ID = "ccg-p1-flow-python-v1"
+DECISION_CELL = "fixed-new"
 Z = 1.959964
 SYNTH_NAMES = {"<module>", "<global>", "<body>", ":program", "<clinit>", "<fakeNew>", "<includes>"}
 
@@ -172,10 +178,108 @@ def pair_id(ordinal, pr):
     return (ordinal, pr["kind"], ckey(pr["source"]), ckey(pr["sink"]))
 
 
-def load_tags(lang):
+# ------------------------------------------------------------------------------------------------ flow sets (P1-34a)
+def flow_paths(lang, flow_set, cell=""):
+    """Every input/output path of one flow set.  p0 = the committed P0 names, unchanged; p1 = `-p1` names for EVERY file, so a p1 run can
+    neither read nor overwrite a P0 file.  `cell` ("" = the decision cell) tags a diagnostic cell's results so cells do not overwrite each
+    other; `cell` is `<projection>-<join>` (fixed-new, fixed-p0, shipped-new, shipped-p0) and gets its own directory results/p1/<cell>/.  Only the
+    decision cell (fixed-new) has adjudication outputs; for every other cell `misses`/`spurious` are None."""
+    if flow_set == "p0":
+        return {"sample": HERE / "sample" / f"{lang}-flow.jsonl", "truth": HERE / "truth" / f"{lang}.flow-final.jsonl",
+                "audit": HERE / "adjudication" / f"{lang}-flow-audit.jsonl",
+                "results": HERE / "results" / f"projection-{lang}.json", "answers": HERE / "results" / f"projection-{lang}.answers.jsonl",
+                "misses": HERE / "adjudication" / f"{lang}-flow-misses.jsonl", "spurious": HERE / "adjudication" / f"{lang}-flow-spurious.jsonl",
+                "spur_prefix": "ccg-p0a-v1-spur|"}
+    adj = (lambda n: HERE / "adjudication" / f"{lang}-flow-p1-{n}.jsonl") if cell == DECISION_CELL else (lambda n: None)
+    rdir = HERE / "results" / "p1" / cell
+    return {"sample": HERE / "sample" / f"{lang}-flow-p1.jsonl", "truth": HERE / "truth" / f"{lang}.flow-p1-final.jsonl",
+            "audit": HERE / "adjudication" / f"{lang}-flow-p1-audit.jsonl",
+            "results": rdir / f"projection-{lang}-p1.json", "answers": rdir / f"projection-{lang}-p1.answers.jsonl",
+            "misses": adj("misses"), "spurious": adj("spurious"), "spur_prefix": "ccg-p1a-v1-spur|"}
+
+
+def _file_sha(p):
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def resolve_path(p):
+    """A user-supplied input path (`--record`, `--run-record`): as given (absolute, or relative to the cwd) if it exists, else relative to the
+    repository root (so `cpg/eval/preregistration.jsonl` works from the repo root AND from cpg/); neither -> a value-free refusal."""
+    q = Path(p)
+    if q.exists():
+        return q
+    if not q.is_absolute() and (REPO / q).exists():
+        return REPO / q
+    raise SystemExit(f"{q.name}: not found (tried the current directory and the repository root)")
+
+
+def load_record(path, rid=None):
+    """A pre-registration record (default `ccg-p1-flow-python-v1`): a JSON object, or a JSON-lines file holding it (cpg/eval/preregistration.jsonl).
+    The sample digest lives in the later `ccg-p1-flow-python-v1-draw` record, which the same file must also hold."""
+    rid = rid or RECORD_ID
+    text = resolve_path(path).read_text(encoding="utf-8")
+    cands = []
+    try:
+        cands = [json.loads(text)]
+    except ValueError:
+        cands = [json.loads(l) for l in text.splitlines() if l.strip()]
+    for d in cands:
+        if isinstance(d, dict) and d.get("id") == rid:
+            return d
+    raise SystemExit(f"--record: no `{rid}` record in the file (a pre-registration record, not an s28-run.json; use --run-record for that)")
+
+
+def _pin_ok(pinned, f):
+    tok = str(pinned).split()[0] if pinned else ""   # s28_run.py's pin carries a trailing note after the digest
+    return bool(re.fullmatch(r"[0-9a-f]{64}", tok)) and f is not None and Path(f).is_file() and tok == _file_sha(f)
+
+
+def projection_of(runs, extract_pin):
+    """`fixed` iff both configurations ran the pinned extract.sc, else the shipped P0 projection (a shipped record has no extractSha256)."""
+    return "fixed" if all((runs.get(f"{c}.extract") or {}).get("extractSha256") == extract_pin for c in ("off", "on")) else "shipped"
+
+
+def check_record(rec, draw, lang, commit, sample_path, runs):
+    """Refuse (NOT-MEASURED:void) unless every script/sample pin of the record equals the file about to be used, and the run record `runs`
+    (the s28-run.json `runs` object in use) points at the pinned CPGs (`cpgs.off/on`) and, for the shipped projection, at the pinned shipped
+    facts (`shippedFacts.off/on`).  NOT checked here (no pin exists before the run): the FIXED facts files' digests, which `teco` takes from
+    the run record into the decision record, and the toolchain image id. -> the labels checked."""
+    def get(*keys):
+        v = rec
+        for k in keys:
+            v = v.get(k) if isinstance(v, dict) else None
+        return v
+    pins = [("s28_core.py", get("coreFreeze", "s28_core.py"), HERE / "s28_core.py"),
+            ("extract.sc", get("coreFreeze", "extract.sc"), EXTRACT_SC),
+            ("s28_run.py", get("tools", "s28_run.py"), HERE / "s28_run.py"),
+            ("s28_metrics.py", get("tools", "s28_metrics.py"), Path(__file__).resolve()),
+            ("run_fitness.py", get("tools", "run_fitness.py"), HERE / "run_fitness.py"),
+            ("flow_decide.py", get("tools", "flow_decide.py"), HERE / "flow_decide.py"),
+            ("flow-brief.template.md", get("tools", "flow-brief.template.md"), HERE / "flow-brief.template.md"),
+            ("flow_p1_audit.py", get("tools", "flow_p1_audit.py"), HERE / "flow_p1_audit.py"),
+            ("sample", (draw or {}).get("sampleSha256"), sample_path)]
+    bad = [label for label, pinned, f in pins if not _pin_ok(pinned, f)]
+    shipped = projection_of(runs, get("coreFreeze", "extract.sc")) == "shipped"
+    for c in ("off", "on"):
+        run = runs.get(f"{c}.extract") or {}
+        if not _pin_ok(get("cpgs", c), run.get("cpgFile")):
+            bad.append(f"cpgs.{c}")
+        if shipped and not _pin_ok(get("shippedFacts", c), run.get("factsFile")):
+            bad.append(f"shippedFacts.{c}")
+    if get("corpus", "commit") != commit:
+        bad.append("corpus.commit")
+    import run_fitness as rf   # the corpus tree the scorer reads must be the registered one (record row 1)
+    if get("corpus", "srcDigest") != rf.tree_digest(C.CORPORA / lang / "src"):
+        bad.append("corpus.srcDigest")
+    if bad:
+        raise SystemExit(f"NOT-MEASURED:void: record {RECORD_ID} does not match the files at run time: {', '.join(bad)}")
+    return [l for l, _, _ in pins] + ["cpgs.off", "cpgs.on"] + (["shippedFacts.off", "shippedFacts.on"] if shipped else []) + ["corpus.commit", "corpus.srcDigest"]
+
+
+def load_tags(lang, fp=None):
     tags = defaultdict(set)
     removed = defaultdict(list)  # pair id -> [convention] for pairs ruled invalid in Part F
-    fp = HERE / "adjudication" / f"{lang}-flow-audit.jsonl"
+    fp = fp or HERE / "adjudication" / f"{lang}-flow-audit.jsonl"
     for line in open(fp, encoding="utf-8"):
         d = json.loads(line)
         if "pair" not in d:
@@ -377,30 +481,74 @@ def analyse_cfg(lang, cfg, run, samp, gold, tags, removed, src, commit):
     return F, res, answers, spur_all, mm, methods_out, per_m
 
 
+def _adj_out(path):
+    """The adjudication output file; a diagnostic cell (path None) writes none, so it can never overwrite a ruling input."""
+    return open(path, "w", encoding="utf-8") if path else io.StringIO()
+
+
 def tuple_name(a):
     return "+".join(a.get("unresolvedEnds", []))
 
 
 # ------------------------------------------------------------------------------------------------ main
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("lang")
-    a = ap.parse_args()
+    ap.add_argument("--flow-set", choices=["p0", "p1"], default="p0", help="p0 (default): the committed P0 paths; p1: every path is a `-p1` name")
+    ap.add_argument("--record", help="p1 only, required: the pre-registration record (ccg-p1-flow-python-v1); refuses on any script/sample sha mismatch")
+    ap.add_argument("--join", choices=["new", "p0"], help="p1 only (default new): new = P1-09 scorer fix; p0 = JOIN_P0_ONLY, a diagnostic cell")
+    ap.add_argument("--run-record", help="p1 only: an s28-run.json other than the default (e.g. the shipped-P0 copy); the cell is then a diagnostic")
+    a = ap.parse_args(argv)
     lang = a.lang
+    fs = a.flow_set
+    if fs == "p0" and (a.record or a.join or a.run_record):
+        raise SystemExit("--record/--join/--run-record are p1 options; the p0 run is unchanged")
+    if fs == "p1" and not a.record:
+        raise SystemExit("--flow-set p1 needs --record (the pre-registration record whose pins gate the run)")
+    if fs == "p1" and lang != "python":
+        raise SystemExit("--flow-set p1 is defined for python only")
+    saved_join = C.JOIN_P0_ONLY
+    try:
+        return _main(a, lang, fs)
+    finally:
+        C.JOIN_P0_ONLY = saved_join
+
+
+def _main(a, lang, fs):
     base = WORK / lang
     if lang == "kotlin":
         return kotlin_unmeasured(base)
-    s28 = json.loads((base / "s28-run.json").read_text())["runs"]
+    join = a.join or "new"
+    run_path = Path(a.run_record) if a.run_record else base / "s28-run.json"
+    run_file = resolve_path(run_path) if a.run_record else run_path   # as given (cwd-relative) or repo-relative; `run_path` stays what the output records
+    cell, diag, projection = "", False, None
+    if fs == "p1":
+        rec = load_record(a.record)
+        P = flow_paths(lang, fs, DECISION_CELL)          # the sample path for the record check only
+        runs_ = json.loads(run_file.read_text())["runs"]
+        check_record(rec, load_record(a.record, RECORD_ID + "-draw"), lang, yaml.safe_load(open(HERE / "corpora.yaml"))["corpora"][lang]["commit"], P["sample"], runs_)
+        C.JOIN_P0_ONLY = join == "p0"
+        projection = projection_of(runs_, (rec.get("coreFreeze") or {}).get("extract.sc"))   # read from the run record, not from a flag
+        cell = f"{projection}-{join}"
+        diag = cell != DECISION_CELL
+    P = flow_paths(lang, fs, cell)
+    s28 = json.loads(run_file.read_text())["runs"]
     s27 = json.loads((base / "s27-run.json").read_text())["runs"]
     cfgs = yaml.safe_load(open(HERE / "corpora.yaml"))["corpora"][lang]
     commit = cfgs["commit"]
     src = C.Src(C.CORPORA / lang / "src")
-    samp = [json.loads(l) for l in open(HERE / "sample" / f"{lang}-flow.jsonl", encoding="utf-8")]
-    gold = [json.loads(l) for l in open(HERE / "truth" / f"{lang}.flow-final.jsonl", encoding="utf-8")]
-    tags, removed = load_tags(lang)
+    samp = [json.loads(l) for l in open(P["sample"], encoding="utf-8")]
+    gold = [json.loads(l) for l in open(P["truth"], encoding="utf-8")]
+    tags, removed = load_tags(lang, P["audit"])
     ek = EXTRACT_KEYS[lang]
-    out = {"lang": lang, "variant": "as-shipped (headline)", "truth": f"truth/{lang}.flow-final.jsonl", "goldenMethods": len(gold),
+    out = {"lang": lang, "variant": "as-shipped (headline)", "truth": f"truth/{P['truth'].name}", "goldenMethods": len(gold),
            "goldenPairs": sum(len(g["pairs"]) for g in gold), "corpusCommit": commit, "toolchainImage": None, "cfg": {}}
+    if fs == "p1":
+        out["flowSet"] = "p1"
+        out["cell"] = {"name": cell, "projection": projection, "join": "old (JOIN_P0_ONLY)" if join == "p0" else "new",
+                       "role": "DIAGNOSTIC: never a decision input" if diag else "decision", "record": RECORD_ID, "runRecord": str(run_path)}
+        if diag:
+            out["variant"] = f"DIAGNOSTIC cell {cell} ({projection} projection, " + ("old join" if join == "p0" else "new join") + "): " + out["variant"]
     out["asShippedExtract"] = {c: {"rc": s28[f"{c}.extract"]["rc"], "wallSeconds": s28[f"{c}.extract"]["wallSeconds"],
                                    "factsFile": s28[f"{c}.extract"].get("factsFile")} for c in ("off", "on") if f"{c}.extract" in s28}
     guard = ek.endswith("guard")
@@ -456,13 +604,11 @@ def main() -> int:
                     "preconditionOK": bool(ps and ps["p"] >= 0.95)}
     asshipped_ok = all(c in dec and dec[c]["pairsOK"] and dec[c]["recallOK"] and dec[c]["preconditionOK"] for c in ("off", "on"))
     out["flowAvailableProvisional"] = {
-        "value": bool(asshipped_ok and not guard), "perConfig": dec,
+        "value": None if diag else bool(asshipped_ok and not guard), "perConfig": dec,
         "rule": "ML §8.4: pooled flow pair recall >= 0.95 observed over >= 120 golden pairs in BOTH configurations, and projection success >= 0.95; "
                 "provisional: before the data-scientist's adjudication of misses and spurious pairs",
         "wouldBeIfGuarded": bool(asshipped_ok) if guard else None}
     # ---- write
-    res_dir = HERE / "results"
-    adj_dir = HERE / "adjudication"
     jd = lambda o: json.dumps(o, ensure_ascii=False, sort_keys=True)  # noqa: E731
     if "off" in allcfg:
         res_off, ans_off, spur, mm, methods_out, per_m, F = allcfg["off"]
@@ -474,14 +620,15 @@ def main() -> int:
         disc = [(k, ans_off[k]["connected"], on[1][k]["connected"]) for k in ans_off if ans_off[k]["connected"] != on[1][k]["connected"]]
         out["offOnDiscordantPairs"] = {"offOnlyConnected": sum(1 for _, a, b in disc if a), "onOnlyConnected": sum(1 for _, a, b in disc if b), "pairs": len(ans_off)}
     # answers
-    with open(res_dir / f"projection-{lang}.answers.jsonl", "w", encoding="utf-8") as fh:
+    P["answers"].parent.mkdir(parents=True, exist_ok=True)
+    with open(P["answers"], "w", encoding="utf-8") as fh:
         for key in sorted(ans_off):
             r = dict(ans_off[key])
             r["on"] = ({k: on[1][key].get(k) for k in ("status", "connected", "hops")} if on else None)
             fh.write(jd(r) + "\n")
     # misses: every labelled pair missed in either configuration
     nmiss = 0
-    with open(adj_dir / f"{lang}-flow-misses.jsonl", "w", encoding="utf-8") as fh:
+    with _adj_out(P["misses"]) as fh:
         for key in sorted(ans_off):
             ao, an = ans_off[key], (on[1][key] if on else None)
             if ao["connected"] and (an is None or an["connected"]):
@@ -498,7 +645,7 @@ def main() -> int:
             fh.write(jd(row) + "\n")
             nmiss += 1
     # spurious sample
-    seed = f"ccg-p0a-v1-spur|{lang}|{commit}"
+    seed = f"{P['spur_prefix']}{lang}|{commit}"
     rows = []
     for ordinal, kind, M, a_, b_, unres in spur:
         # a_ = source/def point, b_ = sink/use point (control: a_ = cond, b_ = point)
@@ -512,7 +659,7 @@ def main() -> int:
     if on:
         for ordinal, kind, M, a_, b_, unres in on[2]:
             on_spur.add(f"{ordinal}|{kind}|{C.point_label(M, a_)}|{C.point_label(M, b_)}")
-    with open(adj_dir / f"{lang}-flow-spurious.jsonl", "w", encoding="utf-8") as fh:
+    with _adj_out(P["spurious"]) as fh:
         for rank, r in enumerate(pick):
             M = r["M"]
             m_ = next(x for x in methods_out if x["ordinal"] == r["ordinal"])
@@ -533,13 +680,13 @@ def main() -> int:
                              "onOnlyPairsNotInOffPopulation": (len(on_spur - {r["key"] for r in rows}) if on else None),
                              "sharesEndpointWithUnresolvedGolden": sum(1 for r in pick if any(e in r["unres"].get(r["kind"], set()) for e in (r["src"], r["snk"]))),
                              "ruledInvalidByPartF": sum(1 for r in pick if removed.get(r["pid"]))}
-    out["missesFile"] = {"rows": nmiss, "path": f"adjudication/{lang}-flow-misses.jsonl"}
+    out["missesFile"] = {"rows": nmiss, "path": (f"adjudication/{P['misses'].name}" if P["misses"] else None)}
     out["definitions"] = C.DEFINITIONS
     out["definitions"]["strata"] = ("convention:* = the Part F audit's `convention` tag on a VALID decision (adjudication/<lang>-flow-audit.jsonl), joined to the "
                                     "final pair by (ordinal, kind, endpoint ids without line); provenance:* = the final-set provenance field; "
                                     "frontend-default-ignored-dir = labelled methods whose path has a directory segment the shipped frontend ignores by default (report §a1.4)")
-    (res_dir / f"projection-{lang}.json").write_text(json.dumps(out, indent=1, ensure_ascii=False, sort_keys=True))
-    print("wrote", res_dir / f"projection-{lang}.json")
+    P["results"].write_text(json.dumps(out, indent=1, ensure_ascii=False, sort_keys=True))
+    print("wrote", P["results"])
     return 0
 
 

@@ -1,6 +1,6 @@
 # Connected code graph — P1 method note (indexers, flow, interpreter, noise, first gate)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (P1) · **Reviews:** `docs/reviews/connected-code-graph-p1-ml.md`
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** C-1001 (P1) · **Reviews:** `docs/reviews/connected-code-graph-p1-ml.md` · **Extended by:** `docs/plans/connected-code-graph-p1-flow-prereg.md`
 
 Unit N-ML of `docs/plans/connected-code-graph-p1.md` §9. It answers that row's six questions for
 P1-15, P1-26, P1-34–P1-37, P1-39 and P1-47. It states only what P1 changes or fixes against the

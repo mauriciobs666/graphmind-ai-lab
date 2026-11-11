@@ -13,6 +13,7 @@ Stages (each is idempotent, writes under cpg/spikes/frontend-fitness/ or cpg/.cc
   frame    <lang>   tree-sitter census frame (ML §4.1)          -> frame/<lang>.jsonl
   draw     <lang>   hash-sort draw (ML §4.4)                    -> sample/<lang>.jsonl, .private.jsonl
   flowdraw <lang>   30 golden-flow methods (ML §6.4)            -> sample/<lang>-flow.jsonl
+  flowdraw-p1 python --exclude F --counts C --tier2-out T   P1 draw (prereg §3; `--set p1` on flowbrief/flowcheck) -> sample/python-flow-p1.jsonl, T, C
   c5pilot  <lang>   first 50 of the c5 hash sort of the frame   -> truth/<lang>.c5-pilot.jsonl
   brief    <lang>   fill ML §6.5's template                     -> sample/<lang>.brief.md
   flowbrief <lang>  fill flow-brief.template.md (S56)           -> sample/<lang>-flow.brief.md
@@ -49,6 +50,16 @@ CORPORA = WORK / "corpora"
 LANGS = ["python", "javascript", "java", "kotlin", "csharp", "go", "cpp"]
 SEED_PREFIX = {"sample": "ccg-p0a-v1|", "sym": "ccg-p0a-v1-sym|", "flow": "ccg-p0a-v1-flow|",
                "c5": "ccg-p0a-v1-c5|", "spur": "ccg-p0a-v1-spur|", "gen": "ccg-p0a-v1-gen|"}
+# Flow sets (P1-34a). `p0` is the committed P0 draw and keeps every historical path; `p1` routes every flow path to a `-p1` name so a
+# p1 run can never read-or-overwrite a P0 file. FLOW_SET is the process-wide selection (`--set`); path helpers also take it explicitly.
+FLOW_SETS = {"p0": "", "p1": "-p1"}
+FLOW_SET = "p0"
+SEED_PREFIX_P1 = {"flow": "ccg-p1a-v1-flow|", "spur": "ccg-p1a-v1-spur|"}
+FLOW_P1_TIER1, FLOW_P1_TIER2 = 30, 15
+# The registered P1 corpus: the real `ccg-p1a-v1-flow` seed is only ever drawn on a tree that hashes to this digest (prereg §0.1).
+P1_REAL_COMMIT = "0caf85e3ccb757801d15d6babe55a63477a486dd"
+P1_REAL_SRC_DIGEST = "365761fbdd26604c538f12beceb05811a8d77a32c8dd4ad01abc624a484800d6"
+P1_FRAME_COUNTS = (368, 338, 163)   # tier-1 population, after the P0 subtraction, tier-2 population (prereg §0): the frame depends on the grammar versions
 CAP = 500
 # ML §3.1 (v1.6): TS/JS is a CENSUS of the prod code: every frame site is labelled, in hash order, no cap, no stop rule.
 CENSUS_LANGS = {"javascript"}
@@ -512,7 +523,9 @@ def iter_frame(lang: str, root: Path, cfg: dict) -> Iterator[dict]:
 
 # ------------------------------------------------------------------ the hash-sort draw (ML §4.4)
 
-def seed_for(kind: str, lang: str, sha: str) -> str:
+def seed_for(kind: str, lang: str, sha: str, flow_set: str = "p0") -> str:
+    if flow_set == "p1":
+        return f"{SEED_PREFIX_P1[kind]}{lang}|{sha}"
     if kind == "sample":
         return f"ccg-p0a-v1|{lang}|{sha}"
     return f"{SEED_PREFIX[kind]}{lang}|{sha}"
@@ -1303,7 +1316,7 @@ def fetch(lang: str, force: bool = False) -> dict:
 def frame_path(lang): return HERE / "frame" / f"{lang}.jsonl"
 def sample_path(lang): return HERE / "sample" / f"{lang}.jsonl"
 def private_path(lang): return HERE / "sample" / f"{lang}.private.jsonl"
-def flow_path(lang): return HERE / "sample" / f"{lang}-flow.jsonl"
+def flow_path(lang, fs=None): return HERE / "sample" / f"{lang}-flow{FLOW_SETS[fs or FLOW_SET]}.jsonl"
 def brief_path(lang): return HERE / "sample" / f"{lang}.brief.md"
 
 
@@ -1376,7 +1389,7 @@ def build_flow(lang: str) -> list[dict]:
     return out
 
 
-def flow_tier2_path(lang): return HERE / "sample" / f"{lang}-flow-tier2.jsonl"
+def flow_tier2_path(lang, fs=None): return HERE / "sample" / f"{lang}-flow{FLOW_SETS[fs or FLOW_SET]}-tier2.jsonl"
 
 
 def build_flow_tier2(lang: str) -> list[dict]:
@@ -1391,6 +1404,8 @@ def build_flow_tier2(lang: str) -> list[dict]:
 
 
 def cmd_flowdraw(lang: str) -> dict:
+    if FLOW_SET != "p0":
+        raise SystemExit("flowdraw is the P0 draw; the p1 draw is `flowdraw-p1` (it applies the custodian exclusion)")
     cfg = corpus_cfg(lang)
     pop = flow_population(lang, src_dir(lang), cfg)
     order = hash_sort(pop, seed_for("flow", lang, cfg["commit"]))[:30]
@@ -1401,6 +1416,142 @@ def cmd_flowdraw(lang: str) -> dict:
     if lang in CENSUS_LANGS:
         res["tier2"] = write_jsonl(flow_tier2_path(lang), build_flow_tier2(lang))
     return res
+
+
+# ------------------------------------------------------------------ P1 flow draw (P1-34a; prereg §1.1, §3)
+# Frame = the P0-ML §6.4 population minus the 30 P0 methods minus every method whose span contains the definition line of a custodian-held
+# anchor (file and span, so an enclosing method of a nested anchor goes too). LEAK CONTROL: the exclusion file is read into memory only; the
+# unfiltered order is NEVER computed (no prefix count, no skipped position); only the two frame-wide exclusion counts leave.
+
+def _strict_rel(p: str) -> bool:
+    """The one accepted path form: relative to the corpus root, `/`-separated, no empty/`.`/`..` segment, no backslash, no leading slash."""
+    return bool(p) and "\\" not in p and all(seg not in ("", ".", "..") for seg in p.split("/"))
+
+
+def _line_count(f: Path) -> int:
+    data = f.read_bytes()
+    return data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+
+
+def _entry_in_corpus(src: Path, path: str, line: int, counts: dict) -> bool:
+    """The entry names a file of the corpus (exact strict path, resolved inside it) and 1 <= defLine <= the file's line count."""
+    if not _strict_rel(path):
+        return False
+    f = src / path
+    try:
+        if not f.is_file() or src.resolve() not in f.resolve().parents:
+            return False
+        n = counts.setdefault(path, _line_count(f))
+    except OSError:
+        return False
+    return 1 <= line <= n
+
+
+def load_exclusions(path: Path, src: Optional[Path] = None) -> list[tuple[str, int]]:
+    """JSON lines {"path", "defLine"} -> [(path, defLine)]. Memory only; an error names a line number, never its content.
+    With `src` (the corpus root) EVERY entry must also be a file of the corpus with 1 <= defLine <= its line count (fail closed: an entry in
+    the wrong path form would match nothing and the draw would silently be the unfiltered one)."""
+    out: list[tuple[str, int]] = []
+    counts: dict = {}
+    try:
+        f = open(path, encoding="utf-8")
+    except OSError:
+        raise SystemExit("exclusion file: cannot be read") from None      # no path, no strerror: neither is echoed
+    try:
+        with f:
+            for no, ln in enumerate(f, 1):
+                if not ln.strip():
+                    continue
+                try:
+                    d = json.loads(ln)
+                    ok = isinstance(d, dict) and isinstance(d["path"], str) and type(d["defLine"]) is int
+                except (ValueError, KeyError, RecursionError):
+                    ok = False
+                if not ok:
+                    raise SystemExit(f"exclusion file: line {no} is not {{\"path\": str, \"defLine\": int}}") from None
+                if src is not None and not _entry_in_corpus(src, d["path"], d["defLine"], counts):
+                    raise SystemExit(f"exclusion file: line {no} is not a file of the corpus with 1 <= defLine <= its line count") from None
+                out.append((d["path"], d["defLine"]))
+    except UnicodeDecodeError:
+        raise SystemExit("exclusion file: not valid UTF-8") from None     # the codec message carries a byte value and an offset: not echoed
+    return out
+
+
+def _is_excluded(m: dict, excl: list[tuple[str, int]]) -> bool:
+    return any(m["path"] == p and m["lineStart"] <= line <= m["lineEnd"] for p, line in excl)
+
+
+def draw_flow_p1(pop: list[dict], seed: str, n: int, drop_keys: set[str], excl: list[tuple[str, int]]) -> tuple[list[dict], int]:
+    """-> (first n rows of the FILTERED hash order, excluded in the frame). The unfiltered order is never sorted: the filter runs first."""
+    base = [m for m in pop if m["siteKey"] not in drop_keys]
+    k_frame = sum(1 for m in base if _is_excluded(m, excl))
+    kept = [m for m in base if not _is_excluded(m, excl)]
+    rows = [{"ordinal": i, "path": m["path"], "qname": m["qname"], "lineStart": m["lineStart"], "lineEnd": m["lineEnd"],
+             "source": m["source"]} for i, (_, m) in enumerate(hash_sort(kept, seed)[:n], start=1)]
+    return rows, k_frame
+
+
+def _p1_target(path: Path) -> Path:
+    if "-p1" not in path.name:
+        raise SystemExit(f"flowdraw-p1: refusing to write a non-p1 path: {path.name}")
+    return path
+
+
+def _versions() -> dict:
+    from importlib import metadata
+    return {"treeSitter": metadata.version("tree-sitter"), "grammarPython": metadata.version("tree-sitter-python")}
+
+
+def _write_all(items: list[tuple[Path, str]]) -> None:
+    """Atomic-or-nothing: stage EVERY output as a temp file first, rename only when all are staged. A failure while staging removes the temp
+    files and leaves no output (and echoes no path)."""
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for path, text in items:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            staged.append((tmp, path))
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+    except OSError:
+        for tmp, _ in staged:
+            tmp.unlink(missing_ok=True)
+        raise SystemExit("flowdraw-p1: cannot write the outputs; nothing written") from None
+    for tmp, path in staged:
+        os.replace(tmp, path)
+
+
+def cmd_flowdraw_p1(lang: str, exclude: Path, counts_out: Path, tier2_out: Path, expect: Optional[tuple] = None) -> dict:
+    if REPO in (tier2_out.resolve(), *tier2_out.resolve().parents):
+        raise SystemExit("flowdraw-p1: --tier2-out must be outside the repository")
+    cfg = corpus_cfg(lang)
+    p0 = read_jsonl(flow_path(lang, "p0"))                       # read only: the 30 P0 methods (public)
+    drop = {f"{r['path']}:{r['lineStart']}:{r['qname']}" for r in p0}
+    seed = seed_for("flow", lang, cfg["commit"], "p1")
+    registered = tree_digest(src_dir(lang)) == P1_REAL_SRC_DIGEST
+    if seed == seed_for("flow", lang, P1_REAL_COMMIT, "p1") and not registered:
+        raise SystemExit("flowdraw-p1: the registered seed is drawn only on the registered corpus (srcDigest mismatch); use another commit string for a test")
+    if expect is None:
+        if not registered:
+            raise SystemExit("flowdraw-p1: the registered frame counts apply to the registered corpus only; pass --expect-counts for another one")
+        expect = P1_FRAME_COUNTS
+    excl = load_exclusions(exclude, src_dir(lang))
+    if not excl:
+        raise SystemExit("exclusion file: no entries (an empty exclusion would draw the unfiltered order)")
+    pop1 = flow_population(lang, src_dir(lang), cfg)
+    pop2 = flow_population(lang, src_dir(lang), cfg, 26, 60)
+    if len(drop & {m["siteKey"] for m in pop1}) != len(drop):
+        raise SystemExit("flowdraw-p1: a P0 sample method is not in the P0-ML 6.4 population (corpus drift?)")
+    got = (len(pop1), len(pop1) - len(drop), len(pop2))          # asserted BEFORE the exclusion is applied
+    if got != tuple(expect):
+        raise SystemExit(f"flowdraw-p1: frame counts {got} differ from the expected {tuple(expect)} (population, minus P0, tier-2); nothing written")
+    rows1, k1f = draw_flow_p1(pop1, seed, FLOW_P1_TIER1, drop, excl)
+    rows2, k2f = draw_flow_p1(pop2, seed, FLOW_P1_TIER2, drop, excl)
+    res = {"excludedTier1Frame": k1f, "excludedTier2Frame": k2f}      # exactly these two integers leave (the digests are of public files: `sha256sum`)
+    _write_all([(tier2_out, "".join(jdump(r) + "\n" for r in rows2)),     # custodian-held: never inside the repo
+                (_p1_target(flow_path(lang, "p1")), "".join(jdump(r) + "\n" for r in rows1)),
+                (counts_out, json.dumps(res, indent=1, sort_keys=True) + "\n")])
+    return {**res, **_versions()}
 
 
 # ------------------------------------------------------------------ reference mapping (ML §5.2 "Mapping a reference answer to a site", §11 N1)
@@ -2027,8 +2178,8 @@ FLOW_TEMPLATE = HERE / "flow-brief.template.md"
 FLOW_BEGIN, FLOW_END = "<!-- BRIEF-BEGIN -->", "<!-- BRIEF-END -->"
 
 
-def flow_brief_path(lang): return HERE / "sample" / f"{lang}-flow.brief.md"
-def flow_label_path(lang): return HERE / "labels" / f"{lang}-flow.jsonl"
+def flow_brief_path(lang, fs=None): return HERE / "sample" / f"{lang}-flow{FLOW_SETS[fs or FLOW_SET]}.brief.md"
+def flow_label_path(lang, fs=None): return HERE / "labels" / f"{lang}-flow{FLOW_SETS[fs or FLOW_SET]}.jsonl"
 
 
 # Short-circuit operators per language: bundle spec §5.5 "short-circuit operands that guard a point".
@@ -2539,11 +2690,19 @@ def main(argv=None) -> int:
     s = sub.add_parser("genaudit")
     s.add_argument("lang", choices=["csharp"])
     s.add_argument("--select", action="store_true", help="S57 only (needs labels/): write the sites to check from source")
+    s = sub.add_parser("flowdraw-p1", help="P1 flow draw (prereg §3): applies the custodian exclusion, prints two counts only")
+    s.add_argument("lang", choices=["python"])
+    s.add_argument("--exclude", required=True, type=Path, help="custodian-private JSON lines {path, defLine}; read into memory only")
+    s.add_argument("--counts", required=True, type=Path, help="output: exactly excludedTier1Frame and excludedTier2Frame")
+    s.add_argument("--expect-counts", type=lambda t: tuple(int(x) for x in t.split(",")), help="population,minus-P0,tier-2 counts of a NON-registered corpus (tests); default 368,338,163 on the registered corpus only")
+    s.add_argument("--tier2-out", required=True, type=Path, help="where the 15-method tier-2 file goes; must be outside the repository (custodian-held)")
     for c in ("fetch", "census", "frame", "draw", "flowdraw", "c5pilot", "brief", "flowbrief", "flowcheck", "joern"):
         s = sub.add_parser(c)
         s.add_argument("lang", choices=LANGS)
         if c == "fetch":
             s.add_argument("--force", action="store_true")
+        if c in ("flowbrief", "flowcheck"):
+            s.add_argument("--set", dest="flow_set", choices=sorted(FLOW_SETS), default="p0", help="flow set: p0 (default) or p1 (-p1 paths)")
     s = sub.add_parser("refmap")
     s.add_argument("lang", choices=LANGS)
     s.add_argument("--mode", choices=["c5", "ref"], required=True)
@@ -2557,6 +2716,8 @@ def main(argv=None) -> int:
     s = sub.add_parser("verify")
     s.add_argument("langs", nargs="*", default=LANGS)
     a = ap.parse_args(argv)
+    global FLOW_SET
+    FLOW_SET = getattr(a, "flow_set", "p0")
     if a.cmd == "fetch":
         r = fetch(a.lang, a.force)
     elif a.cmd == "census":
@@ -2567,6 +2728,10 @@ def main(argv=None) -> int:
         r = cmd_draw(a.lang)
     elif a.cmd == "flowdraw":
         r = cmd_flowdraw(a.lang)
+    elif a.cmd == "flowdraw-p1":
+        r = cmd_flowdraw_p1(a.lang, a.exclude, a.counts, a.tier2_out, a.expect_counts)
+        print(json.dumps(r, indent=1, sort_keys=True))
+        return 0
     elif a.cmd == "c5pilot":
         r = cmd_c5pilot(a.lang)
     elif a.cmd == "brief":
