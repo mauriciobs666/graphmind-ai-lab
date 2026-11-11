@@ -1187,11 +1187,11 @@ rows:
   whyUnprovable: 'the only writer is an example file. Gate P3: env_var is a P3 kind'
 - id: AC6-PM-1
   kind: mcp_tool
-  item: 'Markdown prose: "call the get_item tool" in prompts/agent.md'
+  item: 'Markdown prose: "call the get_item tool" in .claude/agents/agent.md'
   consumer:
   - repoId: fx-svc
-    path: prompts/agent.md
-    qname: prompts/agent.md::<document>
+    path: .claude/agents/agent.md
+    qname: .claude/agents/agent.md::<document>
   status: possible
   reason: prompt-mention
   gate: P1
@@ -1206,11 +1206,11 @@ rows:
     qname: mcp/server.py::get_item
 - id: AC6-PM-2
   kind: mcp_tool
-  item: 'Markdown table cell: | reindex | rebuilds the index | in prompts/tools.md'
+  item: 'Markdown table cell: | reindex | rebuilds the index | in .claude/agents/tools.md'
   consumer:
   - repoId: fx-svc
-    path: prompts/tools.md
-    qname: prompts/tools.md::<document>
+    path: .claude/agents/tools.md
+    qname: .claude/agents/tools.md::<document>
   status: possible
   reason: prompt-mention
   gate: P1

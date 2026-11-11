@@ -149,8 +149,8 @@ PINNED_SHAS = {
         "branches": {},
     },
     'fx-svc': {
-        "commits": {'H0': '84b84c39ec47f4eed7de143d2a3ef24fc22c96ef', 'H1': 'd0d3507943073d8e9ba0241b3e13de2adafdbd1a', 'H2': 'b781625cca8461b3e12343d59893d3ce9fb472d3', 'H3': '5be852a0c27e46d8e917393069d425aa0c9de292', 'H4': 'b84ee092c9ebd378fa6b261a86498084670d6126'},
-        "branches": {'ov-svc': 'cade3bd0a6fde99a8fbc05054cb3cff36559fea2', 'tf-mid': '1ebdb0db1089549b2ed58f0d50c85465637178ce', 'tf-sink': 'ebdaeaac8d1334190126cadd07fdefb772fcfcd3', 'tf-src': 'ade6ee2ccba4ab7b578359275d7d13b2af7271ec'},
+        "commits": {'H0': 'e9eaec94de55c6e3f6f48bde9943dc7541bc8c71', 'H1': 'f07306e5e04f4be2d82529ee5e8d26e60be7e9b0', 'H2': '72543cc6fd3b76a34b097777d29003481babacbe', 'H3': '0c826e7677a69ad75abb4c936fdfd64ae8b6f802', 'H4': '3547b6ffbedb6826ff59c2922f0f4749bda60787'},
+        "branches": {'ov-svc': '3a6312f2df7b95fd9adb4b0ff7ddacb9bcbe72a4', 'tf-mid': '4ccf96f30043835fccb038f33b7241221ece991f', 'tf-sink': '4cc6371be31f2c67ca3c597c45254920653fc1de', 'tf-src': '9007d1e83d5bcfd1e7be9a0a9b8caa6272e9cdc8'},
     },
     'fx-web': {
         "commits": {'H0': '83926b1ce6a603de66e276a666bccdf5714d53ad', 'H1': '26ecd3c6e93ab35ad0744f905a89115688850b3e'},
@@ -2349,3 +2349,70 @@ def test_p1_form_planted_failing_inputs(manifests):
     bad = copy.deepcopy(manifests)
     row_by_id(bad["fx-svc"], "CD-2")["p1Form"]["caller"]["distance"] = 2
     assert any(x.startswith("CD-2") and "distance" in x for x in p1_form_violations(bad))
+
+
+# ======================================================================================== AC6-PM rows vs the Markdown extractor
+# A prompt-mention row whose consumer is a `.md` file must be (a) in a file the manifest globs classify `prompt-md` and
+# (b) give exactly one `possible`/`prompt-mention` call site naming the row's tool (the last `::` segment of its
+# trueTarget) on the row's line (the one line of the file that names the tool; rows carry no line field).
+
+def _load_md_extractor():
+    sys.path.insert(0, str(CPG))
+    try:
+        from extractors.markdown.extract import extract_markdown
+        from extractors.markdown.globs import load_globs
+    finally:
+        sys.path.remove(str(CPG))
+    return extract_markdown, load_globs
+
+
+def pm_md_violations(manifests, tree=None, globs_manifest=None, tools=None):
+    extract_markdown, load_globs = _load_md_extractor()
+    globs = load_globs(globs_manifest) if globs_manifest else load_globs()
+    tree = Path(tree) if tree else M.SYSTEM
+    bad = []
+    for repo, doc in manifests.items():
+        for r in doc.get("rows", []):
+            if not r["id"].startswith("AC6-PM-") or not r["consumer"][0]["path"].endswith(".md"):
+                continue
+            path, tool = r["consumer"][0]["path"], r["trueTarget"][0]["qname"].split("::")[-1]
+            if globs.classify(path) != "prompt-md":
+                bad.append(f"{r['id']}: {path} classifies {globs.classify(path)}, not prompt-md")
+                continue
+            data = (tree / repo / path).read_bytes()
+            want_line = [i for i, ln in enumerate(data.decode().splitlines(), 1) if tool in ln]
+            ex = extract_markdown(path, data, repo_id=repo, unit_id="svc", globs=globs,
+                                  known_tools=frozenset({tool} if tools is None else tools))
+            sites = [x for x in ex.records if x["type"] == "callsite"]
+            got = [(x["calleeName"], x["line"], x["status"], x["reason"]) for x in sites]
+            if got != [(tool, ln, "possible", "prompt-mention") for ln in want_line] or len(want_line) != 1:
+                bad.append(f"{r['id']}: call sites {got}, expected one {tool} possible/prompt-mention at line {want_line}")
+    return bad
+
+
+def test_ac6_pm_markdown_rows_classify_prompt_md_and_yield_their_mention(manifests):
+    assert pm_md_violations(manifests) == []
+    assert sum(1 for r in manifests["fx-svc"]["rows"] if r["id"].startswith("AC6-PM-") and r["consumer"][0]["path"].endswith(".md")) == 2
+
+
+def test_ac6_pm_planted_failures_turn_it_red(manifests, tmp_path):
+    # the defect P1-12 found: the row re-pathed to the pre-move `prompts/agent.md` (a `doc`); the file is copied there
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "AC6-PM-1")["consumer"][0]["path"] = "prompts/agent.md"
+    tree = tmp_path / "tree"
+    shutil.copytree(M.SYSTEM / "fx-svc", tree / "fx-svc")
+    (tree / "fx-svc" / "prompts").mkdir(exist_ok=True)
+    shutil.copy(tree / "fx-svc" / ".claude/agents/agent.md", tree / "fx-svc" / "prompts" / "agent.md")
+    assert any(x.startswith("AC6-PM-1") and "classifies doc" in x for x in pm_md_violations(bad, tree=tree))
+    # a row path swapped to the other row's file: the tool is not on any line there
+    bad = copy.deepcopy(manifests)
+    row_by_id(bad["fx-svc"], "AC6-PM-1")["consumer"][0]["path"] = ".claude/agents/tools.md"
+    assert any(x.startswith("AC6-PM-1") for x in pm_md_violations(bad))
+    # an emptied known_tools set: no call site at all
+    assert len(pm_md_violations(manifests, tools=())) == 2
+    # a manifest whose globs lack `.claude/agents/**/*.md`: the files classify `doc`
+    m = yaml.safe_load((CPG / "eval" / "eval-manifest.yaml").read_text())
+    m["promptBearingMarkdown"]["include"] = [g for g in m["promptBearingMarkdown"]["include"] if not g.startswith(".claude/agents")]
+    alt = tmp_path / "eval-manifest.yaml"
+    alt.write_text(yaml.safe_dump(m))
+    assert len(pm_md_violations(manifests, globs_manifest=alt)) == 2

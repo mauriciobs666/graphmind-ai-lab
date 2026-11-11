@@ -1,6 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.4 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.5 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+
+*2026-11-11 (v1.5): AC6-PM-1/-2 re-pathed to `.claude/agents/agent.md` and `.claude/agents/tools.md`, so the files match a `promptBearingMarkdown` glob and classify `prompt-md`.*
 
 *2026-11-10 (v1.4): the AC-6 example-config floor is met at P1 by a third row (AC6-EX-4, `http`, a Python `os.environ[...]` consumer; census 133 rows, P1 92); the P1 form of the flow-dependent rows (DF-1 to DF-3, CD, RV) is added with locator and distance (§5.5); the `OV-2` sentence of §5.1 corrected.*
 
@@ -226,8 +228,8 @@ are given so the extractor's side is checkable too.
 | AC6-EX-2 | http | `VITE_REPORTS_BASE` set **only** in `deploy/compose.example.yaml`; consumer of `GET /api/reports/{}` | the only binding is an example config. True: `svc:api/reports.py::report_view` | P `svc:api/reports.py::report_view` · C `web:app/src/ui/Reports.tsx::Reports` | p | example-config | P1 | | AC-6 |
 | AC6-EX-3 | env_var | `FX_DB_URL` set **only** in `svc:.env.example`, read in `db/orders.py::connect` | the only writer is an example file. **Gate P3**: `env_var` is a P3 kind | C `svc:db/orders.py::connect` | p | example-config | P3 | | AC-6 |
 | AC6-EX-4 | http | `FX_PEER_BASE` set **only** in `svc` of `deploy/compose.example.yaml` (`build.context: ..`, unit `svc`); `clients/peer.py::peer_health` does `requests.get(os.environ["FX_PEER_BASE"] + "/api/health")` | the only binding of the Python consumer is an example config. True: `svc:api/health.py::health` | P `svc:api/health.py::health` · C `svc:clients/peer.py::peer_health` | p | example-config | P1 | | AC-6 |
-| AC6-PM-1 | mcp_tool | Markdown **prose**: "call the `get_item` tool" in `prompts/agent.md` | a prompt names a tool; it does not call it. True: `get_item` | C `svc:prompts/agent.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
-| AC6-PM-2 | mcp_tool | Markdown **table cell**: `| reindex | rebuilds the index |` in `prompts/tools.md` | same | C `svc:prompts/tools.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
+| AC6-PM-1 | mcp_tool | Markdown **prose**: "call the `get_item` tool" in `.claude/agents/agent.md` | a prompt names a tool; it does not call it. True: `get_item` | C `svc:.claude/agents/agent.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
+| AC6-PM-2 | mcp_tool | Markdown **table cell**: `| reindex | rebuilds the index |` in `.claude/agents/tools.md` | same | C `svc:.claude/agents/tools.md::<document>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-PM-3 | mcp_tool | Python triple-quoted `SYSTEM_PROMPT` naming `list_orders` | same | C `svc:prompts/system.py::<module>` | p | prompt-mention | P1 | prompt mention | AC-6 |
 | AC6-TOP-1 | topic | name from an env var `os.environ["ORDERS_TOPIC"]`, set in no file of the repository | the value is absent. True: `kafka:orders.created` | C `svc:bus/producer.py::publish_dynamic` | p | config-derived | P2 | | AC-6 |
 | AC6-TOP-2 | topic | name from a config-file key `config.bus.topic` (JSON); the key is in no file of the repository | the key is not set. True: `kafka:orders.created` | C `web:app/src/bus/consumer.ts::onConfigured` | p | config-derived | P2 | | AC-6 |
