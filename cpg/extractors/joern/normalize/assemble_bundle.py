@@ -26,10 +26,11 @@ from . import blame as blame_mod
 from . import javascript, python
 from .core import (FIELD_CAP, Builder, Resolver, Source, collapse, fingerprint, import_symbol_id, kw_head, lang_files,
                    load_facts, name_norm, owned_regions, path_from, sha256, span_start, sym_name)
+from .mask import mask_cond_code
 
 #: The slice profile's header identity. A later step that changes output renames or re-versions it (the stamp reads it).
 NORMALIZER = "ccg-slice-normalize"
-NORMALIZER_VERSION = "0.2"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
+NORMALIZER_VERSION = "0.3"     # bumped with each registered delta of tests/slice/test_normalize_equivalence.py (the last delta pins the same literal)
 JOERN_VERSION = "v4.0.579"
 DEFAULT_VENDORED = ["_vendor", "node_modules", "third-party", "third_party", "vendor", "vendored"]
 
@@ -250,7 +251,7 @@ def assemble(*, lang: str, unit_root: str, repo_id: str, facts, stage, astgen_di
             pid = ids.point_id(sid, "cond", k)
             cond_pid[c["id"]] = pid
             records.append({"type": "cond", "id": pid, "symbolId": sid, "ordinal": k, "line": max(c["l"], 1),
-                            "code": collapse(c["code"], 200)})
+                            "code": mask_cond_code(collapse(mask_cond_code(c["code"]), 200))})  # mask, cut, mask again
 
     # call sites
     calls_by_scope = defaultdict(list)

@@ -187,6 +187,78 @@ def _drop_lambda_decorators(header, records):
     return removed
 
 
+# P1-06 (F-9): every stored `cond.code` the masker changes, written out BY HAND from the stored bundles and reviewed by eye
+# (id -> expected code). Not derived from `mask_cond_code`: a cond the masker changes that is not listed makes the byte
+# comparison fail. 41 + 2 = 43. A literal whose body holds a name-rule word ("key", "signal", "token", "conn", "session")
+# becomes "…"; "assistant", "Message", "wait" and the other words stay.
+P1_06_MASKED = {
+    "fcs": {
+        "09004242003bb47b8cb7a17714fa9631": 'not s["…"] == "assistant"',
+        "3f9cf0e8a06e5089a1c65f40d7ce6839": 'not s["…"] == "assistant"',
+        "7e519c77240d9560f73db4cd8bb9f3e8": 'not s["…"] == "assistant"',
+        "a3000c028e3570fa74a8e81dd0c7abac": 'not s["…"] == "assistant"',
+        "a5bf2cd16cfc4449e3e7dda95ed4f0ab": 'not s["…"] == "assistant"',
+        "ba0c3ec577670b2f399e94b23a5dfb11": 'not s["…"] == "assistant"',
+        "bb99aed46b63ed9bd25548c84bac4f96": 'not s["…"] == "assistant"',
+        "c5d15c493fc30e85a55def0a8b955884": 'not s["…"] == "assistant"',
+        "b2df3d62d332b4a218e8dc9c7ffe336f": 'not s["…"] == "ended"',
+        "be3a9360dd119875f839105ae026e32e": 's["…"] == "onboarding"',
+        "bef21a10b7e3dfc320c4a075ecf9b9b7": 'not s.get("…") == step_key',
+        "bac0d8a256395f15e1a6d4ca115fe045": 'step["…"] is not None and step["…"] not in seen_steps',
+        "d49917162bbacc02db16af61503bc66f": 'step["…"] is not None',
+        "122c1abca29f3bf2d7f351318ff76783": '"…" in str(exc)',
+        "d2c4c3fae6a0d08d0ba9c41b2b92d37e": '"…" in str(exc)',
+        "d43bbad43d1cd8baa1dd857a105d8240": '"…" in str(exc)',
+        "d5594bf47a1914b9c2f405218f22e9f8": '"…" in str(exc)',
+        "def365b32a429a4c57e39c653e6d8fcf": '"…" in str(exc)',
+        "e9bd70272e4ae40238be539655b7864e": '"…" in str(exc)',
+        "1afb3da0fab6d8f417dd883b0c44d8f4": 'r["…"] == "Message"',
+        "4850141e5b0912636b741c2de735bb70": 's["…"] == "Message"',
+        "4733ad4479982d4aed3ba5a09b2368c0": 'r["…"] == "Chunk"',
+        "41fec8db6f49f6cc8cd3c34de0c86881": 'not p["…"] == "Chunk"',
+        "32208fe36346fbdbcacab0deb71205e3": 'item["…"] == 0',
+        "71f0e16ed558681909e12b3425476ccc": 'not r.get("…", "Message") == "Message"',
+        "806f9abedf3afc57a3ebed31859754ab": 'not s["…"] == "m1"',
+        "9c7c6e38f0692ba2e781ee001be507aa": 'not s["…"] == "ch1"',
+        "5eb6e9835bdc4f71de6834b9649d15e9": 'step.get("type") == "wait" and config.get("…")',
+        "725214c0e4eb302a77c5e21d3fb3dd38": 'raw.get("…")',
+        "749d77590ea68f7c53aea6012654f624": 'd["path"] in ("…", "…")',
+        "82e16adf8bd8440d556fc5a784af3490": '"…" in warnings[1]',
+        "8dd66855f862e5ea34207916efe0b583": 'meta = graph.ro_query(Repository._READ_META_CYPHER.format(label = label), {"…":key, "version":version})',
+        "92988d794bcfff1e140852ea0febcc4a": '"…" in no_start',
+        # raw code is 283 characters: masking first leaves room for 25 more characters before the cut at 200
+        "a2a06f121ea91e3415f2020163c6b19a": 'not d["path"] in ("…", "…") or tmp44 = d["path"] d["path"].startswith("steps[") and not tmp45 = d["path"] d["path"].endswith((".type",".config")) or tmp46 = d["path"] d["path"].startswith("transitions',
+        "aaf1e9b66d15e9df8ac0f2033d4f3502": 'tmp25 = {} tmp25["…"] = shop.presenter_login(body.key) tmp25',
+        # raw code is 218 characters: 43 shrink to one, so the whole of it fits
+        "acff4327f7f52bce9c5edc90ecbb889c": 'receipt = tmp117 = {} tmp117["status"] = "error" tmp117["error"] = "each batch item must be a dict with a string \'text\' " "…" tmp117["errorType"] = "MalformedItemError" tmp117',
+        "b195b96abb852662424bc5be20414d28": 'two["…"] == ["a", "b"]',
+        "d9dd47dbd9ec49dfc966ecedfd969ef2": 'structure and "…" in structure',
+        "f0dcf3a45eb5e0d088d1bddc3c46dce0": 'run is None or run.get("status") != "waiting" or run.get("…") != step_key',
+        "f23240429d99245cd993446cf218d57f": 'not step_key is None or s["…"] == step_key',
+        "f8700da26e183023eb82d0832ff41eb4": '"…" not in one',
+    },
+    "sp": {
+        "9c15884fb9273f59f1be7cf9f6a0eacb": "action?.kind === 'fieldError' && action.field === \"…\"",
+        "bc2ae5073c05f00783febd768fd780aa": 'route === "…"',
+    },
+}
+
+
+
+@delta("p1-06-mask-cond-code", "0.3")
+def _mask_cond_code(header, records):
+    """P1-06: a string literal in a condition that fails the token screen or the name rule is written as `"…"`; only the
+    conds of `P1_06_MASKED` change, each to its hand-written text. No record is added or removed, so no count moves."""
+    want = {i: code for unit in P1_06_MASKED.values() for i, code in unit.items()}
+    touched = 0
+    for r in records:
+        if r["type"] == "cond" and r["id"] in want:
+            assert r["code"] != want[r["id"]]
+            r["code"] = want[r["id"]]
+            touched += 1
+    return touched
+
+
 def apply_deltas(lines: list[bytes], deltas=None) -> tuple[list[bytes], dict[str, int]]:
     """``lines`` (a stored bundle, header first) through ``deltas`` (default: ``DELTAS``); returns the expected canonical
     lines and, per delta name, how many records it touched."""
@@ -289,7 +361,8 @@ def test_no_delta_at_all_reproduces_the_stored_bundles_bytes_through_the_same_se
 def test_the_lambda_decorator_delta_removes_exactly_3_records_all_of_falkor_chat_server_and_none_of_salesperson():
     fcs, fcs_touched = apply_deltas(stored_lines("fcs"))
     sp, sp_touched = apply_deltas(stored_lines("sp"))
-    assert fcs_touched == {"drop-lambda-decorators": 3} and sp_touched == {"drop-lambda-decorators": 0}
+    assert (fcs_touched["drop-lambda-decorators"], sp_touched["drop-lambda-decorators"]) == (3, 0)
+    assert (fcs_touched["p1-06-mask-cond-code"], sp_touched["p1-06-mask-cond-code"]) == (41, 2)
     assert json.loads(fcs[0])["counts"]["decorator"] == 210 == json.loads(stored_lines("fcs")[0])["counts"]["decorator"] - 3
     assert sum(json.loads(x)["type"] == "decorator" for x in fcs[1:]) == 210
     assert json.loads(sp[0])["counts"]["decorator"] == 0
