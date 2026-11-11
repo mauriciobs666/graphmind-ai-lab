@@ -59,7 +59,7 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 - **Behaviours:** a rule matching a call site of the command `mcp-call` in a shell `<script>` extracts the tool
   from argument `a0` and emits `CONSUMES mcp_tool` with the key; a literal gives `confirmed`/`key-match`; a value
   that is a shell variable or a call site under `eval` gives `possible`/`runtime-built` on the `CONSUMES` edge (`shell-dynamic` is
-  registered only on `shell DATA` and `callsite`, so `validate_pack` rejects it there; the registry is not widened); the pack
+  registered only on `shell DATA` and `callsite`, so `validate_pack` rejects it on the `CONSUMES` edge, which stays so; the `Link` row gains it in P1-17); the pack
   matches the inner call site that `-p1-extraction.md` P1-10 10b adds for an `eval` string, so **P1-46 Needs 10b**; the
   negatives file (required by `ccg.rulepack.load_pack` for signature-style packs; add it regardless) covers a
   comment, a string containing the word, and `mcp-call` as an argument to another command; the pack passes
@@ -81,7 +81,7 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 
 - **Files:** `cpg/ccg/linker/__init__.py`, `matchers.py` (`exact`, `path-template`, `glob`/`prefix`, `regex`),
   `bind.py` (URL, env/Compose and launch bindings), `link.py` (`link(facts, bundles) -> Links`),
-  `cpg/ccg/registry/reasons.yaml` (the `binding-confirmed` row's `on` list gains `VIA`), `cpg/tests/test_linker_*.py`,
+  `cpg/ccg/registry/reasons.yaml` (the `on` lists gain: `binding-confirmed` +`VIA`; `shell-dynamic` and `prompt-mention` +`Link`, since the linker derives them from the site (behaviours (3), (7)); `lifted-role` is **not** widened, it stays a `CONSUMES` reason and never a `Link` reason (see Interface); `pack validation` is unaffected because it reads only the four pack-emitted edges; `test_the_registry_file_is_the_seeded_registry`'s seed is updated in the same edit, and bundle spec3 §7.2's table is amended at the feature's close), `cpg/tests/test_linker_*.py`,
   `cpg/tests/slice/test_linker_conformance.py`, and the leaf harness `cpg/tests/test_rule_pack_leaf_mutation.py`: empty
   `UNEXERCISED_UNTIL_P1` of the last 2 `fastmcp:urlBindings` leaves and extend `GATE` with P1-17's test files (`GATE`
   runs only the runtime tests it names, so a leaf read only elsewhere stays a survivor). That edit is P1-17's
@@ -99,9 +99,46 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   `fd00:ec2::254` is never bindable, whatever writer produced the bundle (P1-11 already withholds it, in `writer_rules.bind_fields`). (e) `port` facts carry no published/container distinction in P1 (`-p1-extraction.md` P1-11): a loopback consumer's match is reported with that residual until `portKind` exists. Tests: `../../../../etc`
   and `/var/run` bind nothing; same-name `.mcp.json` and Compose services stay apart; a metadata-address `bindValue` planted by
   hand binds nothing.
-- **Interface:** `Link = (linkId, kind, keyNorm, provider anchor, consumer anchor, status, reason, paramMap,
-  evidence: ordered BOUND_BY and LIFTED_VIA entries)`; ids from `ccg.ids.link_id` (one `Link` per consumer
-  **symbol**, `-bundle-spec3.md` BF6); `status` is the weakest hop.
+- **Interface:** `Link = (linkId, kind, keyNorm, provider anchor, consumer anchor, status, reason, matcher, paramMap,
+  evidence: ordered BOUND_BY and LIFTED_VIA entries)`; ids from `ccg.ids.link_id` (one `Link` per (provider, consumer
+  **symbol**), `-bundle-spec3.md` BF6, `-p0-graph.md` D6, as the slice oracle `assemble.py` builds it).
+  - **`keyNorm` and the `linkId` inputs:** `Link.keyNorm` is the **provider's** `keyNorm` (the `ContractPoint` the `Link` is `ON`);
+    `linkId = link_id(kind, provider keyNorm, provider anchor, consumer symbol)`. Sites of one consumer symbol with different consumer
+    keys (`GET /a/1`, `GET /a/2` against `GET /a/{}`) are `VIA` entries of **one** `Link`; the consumer's key lives on each `Via`
+    (`consumerKey`, D2) and is what `candidateCount` (D6) groups by. A keyless or name-only provider has `keyNorm` `""`. A link into a
+    never-built unit has no provider, so `keyNorm` is the consumer's key (`""` if keyless) and the anchor is below. A keyless and a keyed
+    consumer site reaching one provider share one `Link`. `-bundle-spec3.md` BF6 is silent on which key and on the unit anchor: its
+    one-line amendment (provider key; the `"unit:"`/`"unmapped:"` anchors below) is owed at the feature's close.
+  - **Status:** a *site's* status is the weakest hop on its chain; `Link.status` is the **best over its sites**
+    (`-p1-graph.md` §2, v1 D2, which governs). `Link.reason` follows O-9 (behaviour (9)) and is always a registry row valid on
+    `Link`: never `lifted-role`, which is the `CONSUMES` edge's reason, so an unbound confirmed `http`/`mcp_tool` link reads
+    `key-match` and a bound one `binding-confirmed`. Fixture rows LNK-10/11 therefore expect `key-match`, and LNK-12 (which has the
+    `localhost:8200/mcp` binding) `binding-confirmed`; the `reason: lifted-role` on those rows in `fx-web.yaml`, `fx-job.yaml`,
+    `fx-svc.yaml` and `cross.yaml` is the consumer edge's and is corrected before P1-41.
+  - **`matcher`** (a stored `Link` prop, `-p1-graph.md` G12) is the strongest matcher a key comparison applied (of the best site, lowest `siteId` on a tie, when a link has several): one of `exact`,
+    `path-template`, `glob`, `prefix`, `regex`; `name` for a `name-only-provider` link; `none` where no key comparison ran
+    (`unknown-key`, `binding-narrowed`, `target-not-mapped`). The linker's tests assert membership in this closed set.
+  - **`paramMap`** is always `{}` in P1: no pack declares one and the graph does not store it (G12 counts it in
+    `dropped["link-param-map"]`). The first pack that declares a mapping owns adding it (a P2 item, owner `architect`).
+  - **`linkId` anchor of a link with no provider:** `"unit:" + unitId` for a never-built unit, `"unmapped:" + ref` for a target outside every
+    manifest repo (trust rule (b)); neither can equal a hex symbol or entry id.
+  - **Dispatch-1 fix-ups (before it is committed):** the `reasons.yaml` rows above, the `linkId` anchor, and the regex guard of
+    behaviour (14). **Dispatch 2 changes the seam (briefing):**
+    - *Anchors.* A `configEntry` record has `id, repoId, path, line, keyPath, example` and **no `unitId`**; a `launchFact` has `id, path`
+      and no `repoId` either. `_Index` therefore walks the **bundles** (not the flattened `Corpus`): the header's `unitId` and `repoId`
+      apply to every `configEntry`/`launchFact` record of that bundle, so `unit(anchor)` is the bundle's unit; `role(anchor)` is `example`
+      iff a `configEntry`'s `example` is true or its `file` record (looked up by `(repoId, path)`) has `role = example`, else that file's
+      role (a `launchFact`'s file by the bundle's `repoId` and its `path`). Providers and consumers anchored on a record id therefore
+      survive a unit-restricted binding and weaken under `example-config`.
+    - *`Binding`* gains `weaken: tuple[str, str] | None` (`("possible", <reason>)`, the reason a registry code valid on `Link`, checked in
+      `__post_init__`) for a possible hop inside the chain (the inferred Compose rule, trust rule (e)'s loopback residual); `_causes` places
+      it with the binding causes, after `port-shared`. `unmapped_unit: str | None` is replaced by
+      `unmapped: Unmapped | None`, `Unmapped(unit_id: str | None, ref: str)`: `unit_id` is the never-built unit, or `None` for a path outside
+      every manifest repo; `ref` is a stable value-free hex id (`tuple_id(["unmapped", normalised path])` in the second case, the unit id
+      in the first). `Link.to_unit = unit_id`; the assembler writes `TO_UNIT` iff it is not `None`; the `Link` is `possible`/`target-not-mapped`
+      either way.
+    - Tests: a config-entry provider and a config-entry consumer under a one-unit binding; an `example` config entry gives `example-config`;
+      a `weaken` chain gives a `possible` link with its reason; an out-of-manifest `mountPath` gives `target-not-mapped` with `to_unit None`.
 - **Behaviours:** (1) both keys known and matching → `confirmed`/`key-match`; (2) partial or name-only → `possible`
   (`partial-key`, `name-only-provider`); (3) a fully unknown key with no binding → one `possible` link per
   provider of the kind (`unknown-key`), none collapsed; **the link's reason is the consumer call site's own when that is `shell-dynamic`**: a `possible`/`shell-dynamic` site (an `eval` string, P1-10 10b) gives the `Link` reason `shell-dynamic`, which wins over `unknown-key` and `runtime-built` (the linker derives it from the site, since the `CONSUMES` edge cannot carry it), as fixture row LNK-20 expects, which stays `gate: P1` as written once 10b, P1-46 and this rule land; (4) **URL binding:** a consumer URL's port is matched to
@@ -129,7 +166,8 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   under runtime-built URLs at scale"); (12) **F-13:** every `http` key goes through `ccg.keynorm` and the RFC 3986 order (percent-decode before dot-segment resolution): a test asserts `GET /a/%2E%2E/b` becomes `GET /b` in `matchers.py`, never the old order; (13) **`bindParts` key
   epoch (`-bundle-spec5.md` §5.4, BR-1–BR-3):** `bind_parts_usable` gates every bundle's parts, an unusable bundle's
   URL entries bind by parts derived from `bindValue`, and `link()` returns the `bind-key-mismatch <unitId>` lines
-  beside its links for P1-20's refresh report.
+  beside its links for P1-20's refresh report; (14) **regex keys are repo-derived text under Python `re`, which is not linear time:** a `keyForm: regex` key (the `kafka` pack's `pattern`) and a `link` matcher `regex` are matched only when `matchers.py`'s guard admits the pattern: `ccg.rulepack.regex_problem` clean, no quantified group that holds a quantifier or an alternation (`(a+)+`, `(a|b)*`), at most 3 unbounded quantifiers, and the literal it is matched against at most 256 characters. A refused pattern matches nothing and is **counted** in `Links.counts["refused_patterns"]`, never silently dropped. No timeout (an in-thread one is unreliable). Tests: `(a+)+$` against `aaaa…!` returns at once and is counted; a plain pattern still matches. `ccg.rulepack` is unchanged (pack regexes are pack-authored). The `matchers.py` docstring's "RE2 subset" claim is reworded to "the RE2 subset plus this guard" (it is true only with the guard). A linear-time engine (an NFA over the RE2 subset, or an RE2 binding, a dependency decision) is a P2 item, owner `architect`.
+- **Test owed (mutant F5):** `{**}` is accepted only in the last provider segment: `GET /a/{**}/b` against `GET /a/x/b` does not match. **Registry test (M3):** every reason a `Link` or `Via` emits is asserted to be a registry code whose `on` list holds `Link` (a `Via` reason: `Link` or `VIA`), not only its status. The `packs=` error says "no rule of the given packs consumes lifting X" when packs were passed.
 - **Done / Gate:** conformance with the slice's 11 links and chains; the fixture rows LNK-* of the test plan that
   gate at P1 pass in P1-41. `analyst`; mutation check on status weakening and port-sharing.
 
