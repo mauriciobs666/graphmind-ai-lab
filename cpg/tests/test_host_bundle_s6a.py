@@ -3,8 +3,8 @@
 The architect's check: S6a (every ``file.lang`` equals ``header.unit.lang`` when ``sandboxAuditIds`` is empty) is stricter than set
 membership, so it must hold for what the committed extractors really emit. The fixture repositories (``cpg/fixtures/system1``: shell
 scripts, json/yaml/toml/Dockerfile/Compose/pom.xml/requirements/.env config files, Markdown prompt files) are committed to a throwaway
-git repository and every host unit is built through the real ``ccg.build`` path (read only: ``build.py`` is not edited); the written
-bundle then has its ``sandboxAuditIds`` emptied and must validate.
+git repository and every host unit is built through the real ``ccg.build`` path (read only: ``build.py`` is not edited). The builder itself emits
+``sandboxAuditIds: []`` for a host unit, so the written bundle must validate as built.
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from extractors.markdown.globs import load_globs
 
 CPG = Path(__file__).resolve().parent.parent
 FIXTURES = CPG / "fixtures" / "system1"
-AUDIT = "0f8fad5b-d9cb-469f-a165-70867728950e"
 SYSTEM = "sys1"
 
 
@@ -48,7 +47,7 @@ def real_host_bundles(tmp_path_factory):
     units = [u for u in discover_units(repo, manifest) if u.language in bundle.HOST_LANGS]              # one file per unit
     units += [Unit(ids.unit_id("r", root, lang), "r", root, lang)                                       # and whole directories
               for root in (".", "fx-svc", "fx-job") for lang in bundle.HOST_LANGS]
-    ctx = build.BuildContext(units=tuple(units), root=work, keys_root=keys, audit_ids=(AUDIT,), built_at="2026-11-11T00:00:00Z",
+    ctx = build.BuildContext(units=tuple(units), root=work, keys_root=keys, built_at="2026-11-11T00:00:00Z",
                              globs=load_globs(CPG / "eval" / "eval-manifest.yaml"))
     out = []
     for u in units:
@@ -64,13 +63,14 @@ def test_the_fixture_yields_host_units_of_all_three_languages_and_a_multi_file_o
     assert sum(1 for b in real_host_bundles for r in b if r["type"] == "file") > 10
 
 
-def test_every_real_host_bundle_passes_s6a_with_an_empty_list(real_host_bundles):
-    """Real config units hold json/yaml/toml/Dockerfile/Compose/pom.xml files; their ``file.lang`` is still ``config``."""
+def test_every_real_host_bundle_passes_s6a_with_the_empty_list_the_builder_emits(real_host_bundles):
+    """Real config units hold json/yaml/toml/Dockerfile/Compose files; their ``file.lang`` is still ``config``."""
     for recs in real_host_bundles:
+        assert recs[0]["sandboxAuditIds"] == [], recs[0]["unit"]
         assert all(r["lang"] == recs[0]["unit"]["lang"] for r in recs if r["type"] == "file"), recs[0]["unit"]
-        emptied = [{**recs[0], "sandboxAuditIds": []}, *recs[1:]]
-        bundle.validate(emptied)
-        bundle.validate(recs)                                   # and a host bundle that names an id stays valid
+        bundle.validate(recs)
+        named = [{**recs[0], "sandboxAuditIds": ["0f8fad5b-d9cb-469f-a165-70867728950e"]}, *recs[1:]]
+        bundle.validate(named)                                  # a host bundle that names an id stays valid
 
 
 def test_a_real_host_bundle_with_one_foreign_file_label_is_refused(real_host_bundles):
@@ -78,7 +78,7 @@ def test_a_real_host_bundle_with_one_foreign_file_label_is_refused(real_host_bun
         i = next((n for n, r in enumerate(recs) if r["type"] == "file"), None)
         if i is None:
             continue
-        bad = [{**recs[0], "sandboxAuditIds": []}, *recs[1:]]
+        bad = list(recs)
         bad[i] = {**bad[i], "lang": "python"}
         with pytest.raises(bundle.BundleError, match="S6a"):
             bundle.validate(bad)
