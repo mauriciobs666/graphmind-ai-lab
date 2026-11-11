@@ -1,6 +1,6 @@
 # Connected code graph — fact-bundle spec, S15 amendments (v1 freeze)
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Supersedes:** `docs/plans/connected-code-graph-bundle-spec3.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Extended by:** `docs/plans/connected-code-graph-bundle-spec5.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md` (Pass 4, Pass 5)
+> **Status:** active · **Owner:** `architect` · **Tracks:** C-1001 (M10) · **Supersedes:** `docs/plans/connected-code-graph-bundle-spec3.md` · **Extends:** `docs/plans/connected-code-graph.md` · **Extended by:** `docs/plans/connected-code-graph-bundle-spec5.md`, `docs/plans/connected-code-graph-bundle-spec6.md` · **Reviews:** `docs/reviews/connected-code-graph-p0.md` (Pass 4, Pass 5)
 
 This is the successor `docs/plans/connected-code-graph-bundle-spec3.md` §1 requires when the slice
 forces an SL-7 delta (`docs/plans/connected-code-graph-p0-2.md` §2 D5). It states only the seven
