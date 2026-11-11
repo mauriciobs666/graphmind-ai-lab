@@ -33,8 +33,9 @@ A **labelled item** is an accepted item with votes 1 to 3. Its **majority** is `
   and not counted.
 - **`promptExamples`** (ML P4-n2): items whose message contains, verbatim, an example sentence of
   the point's hand-off prompt (`HANDOFF_EXAMPLES`), per example and distinct; it drops nothing and
-  is reported beside FR-10. `build` counts every accepted item: the eval split exists only at
-  `finalize`, which passes its items to `prompt_example_counts`.
+  is reported beside FR-10. `build(state)` counts every accepted item (a campaign in flight has no
+  eval split); `finalize` passes `build` its eval split's items, so a train or calibration item
+  carrying an example does not count.
 - **`missingCueCheck`** (guard only; plan5 §3.6): round 1's `pilot.CueCheck` over all of its
   `understanding` items, exploratory, with `failed` omitted.
 - **`rounds`**, **`templates`** and **`retired`** (plan6 §3.8): each round's draws, items and
@@ -331,8 +332,10 @@ def retired_report(state: campaign.State) -> dict[str, Any]:
     return out
 
 
-def build(state: campaign.State) -> dict[str, Any]:
-    """The whole `diagnostics.json` for a folded campaign (module docstring)."""
+def build(state: campaign.State, *,
+          eval_items: Sequence[Mapping[str, Any]] | None = None) -> dict[str, Any]:
+    """The whole `diagnostics.json` for a folded campaign (module docstring). `eval_items` is
+    `finalize`'s eval split; `None` counts the accepted items."""
     role = state.init["point"]
     classes = [labels.vote_key(v) for v in load_point(role).expected]
     rows = labelled_items(state)
@@ -344,7 +347,9 @@ def build(state: campaign.State) -> dict[str, Any]:
         "cells": cell_comparison(rows),
         "screenHits": screen_hits(state),
         "turnCut": turn_cut(role, rows),
-        "promptExamples": prompt_example_counts(role, [r["item"] for r in state.items.values()]),
+        "promptExamples": prompt_example_counts(
+            role, [r["item"] for r in state.items.values()] if eval_items is None
+            else eval_items),
         "rounds": rounds_report(state),
         "templates": templates_report(state),
         "retired": retired_report(state),
@@ -354,11 +359,13 @@ def build(state: campaign.State) -> dict[str, Any]:
     return report
 
 
-def write(state: campaign.State, out_dir: Path) -> Path:
+def write(state: campaign.State, out_dir: Path, *,
+          eval_items: Sequence[Mapping[str, Any]] | None = None) -> Path:
     """`diagnostics.json` in `out_dir`, beside `generation.json`."""
     path = out_dir / FILE_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(build(state), indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    report = build(state, eval_items=eval_items)
+    text = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     campaign._write_atomic(path, text.encode("utf-8"))
     return path
 

@@ -2,6 +2,51 @@
 
 > Dated log of actual changes to the `decision-models` component. Most recent first.
 
+## 2026-11-10 — typed-decision-models U5.10b — `finalize`, dataset files, hand-offs
+
+**What:** the second half of U5.10 (plan4 §3.6 "Cells, then splits", §3.7, §4.1 and §5 rows; plan2
+§3.5; plan5 §3.3/§3.5; plan6 §3.7, §3.8 "U5.10 hand-offs", §5 row). Plan, note and live specs
+untouched.
+
+- `finalize.py` and `driver finalize --root --dataset-version [--data-dir] [--short]`: builds
+  `items.jsonl`, `splits.json`, `generation.json` (§3.7's keys) and `diagnostics.json` in a
+  `.partial` directory and renames it into `data/<role>/<name>/`, then appends `finalized` (its
+  RNG seed joins the held set). `train` is `[]`; only items in a split reach `items.jsonl`.
+  Refusals write nothing: not `full`, no install, halt open, unfinished or unlabelled; a changed
+  `rubric_hash` against `state.tranche["rubric"]` (both hashes named; none checked without a
+  tranche); the one-hash rule (a second generator-template hash needs a template-halt `resolve`
+  between the two hashes' first runs: `State.template_resolutions` against `Attempt.epoch`, live
+  batches only); mixed or equal models (only `ingested` runs count); a short cell (the top-up is due, or after
+  `--decline-topup` the text names `--short` and `--reopen-topup`); `--short` needs the decline and
+  every cell's eval and calibration n at `evalFloorPerCell` after the splits.
+- `diagnostics.build`/`write` take the eval split's items for `promptExamples`.
+- `campaign.py`: the whole-point tranche recheck's halt and its routes (`recheck-halt`;
+  `resolve` with a changed rubric appends `point-relabel`, which relabels every item's three
+  votes; the second failure needs `resolve --stakeholder-ref` alone, appending `recheck-accepted`,
+  and a re-pin on it is refused);
+  `State.recheck_failures`, `recheck_accepted`, `template_resolutions`, `finalized_versions`
+  (a retry that finds a version directory with no `finalized` event says so, never overwrites).
+  `items.jsonl` is written with `exchange.dump_line` (P31-M1).
+- `tests/test_finalize.py` (60 tests) over `tests/finalize_bench.py` (rounds in the ledger, run
+  records from `audit_run` on the transcript fixtures: clean, `incomplete`, `maxTurns` cut,
+  `spawnPromptMismatch`), including plan6 §3.7's comparison of the output with
+  `dataset-shape.jsonl` for all three roles, a form-dropped guard campaign and a join-in one.
+- Choices (open to the gate): `tier` is the plan's fixed `opus`/`sonnet`; `effort` the install's
+  pin; `model` the ingested runs' (one per role, else refused); itemIds number the kept items in
+  seed-id order; `--short` needs a recorded decline; the second recheck failure's clearing
+  (`recheck-accepted`) lets `finalize` go on with ties counted, since the plan gives no other
+  outcome; the dataset name is `--dataset-version`, a plain name.
+
+**Verification:** suite 1678 -> 1738 passed (all 60 new, in `tests/test_finalize.py`), ruff clean.
+76 scratch mutants over `finalize.py`, `campaign.py`, `diagnostics.py` and the shape comparison
+(split lists swapped, cell key swapped or by intent, each `dropped` key swapped, prompt examples over
+all items, hash-rule bounds and live-batch filter, floor halves, decline and name of
+`--reopen-topup`, recheck thresholds and routes): 8 survived the first pass and were killed by
+added tests; none survives. Gate fix round (Pass 31: M1, M2, m1, m2, m3): 14 more scratch mutants
+(raw `json.dumps`, item-id start and `gj` prefix, `short=short`, unsorted runs, whole-item copy,
+`len(names)` test, non-ingested runs, `genRound`, orphan hint, the re-pin refusal's three
+branches), all killed.
+
 ## 2026-11-10 — typed-decision-models U5.10a — install hashes, shingles, splits, FR-8 scope
 
 **What:** the first half of U5.10 (plan4 §3.6 "Cells, then splits", §4.1 row; plan2 §3.5; note

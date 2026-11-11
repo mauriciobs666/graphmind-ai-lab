@@ -4,14 +4,17 @@
 
 `init`, `resolve` and `status` (U5.6); `run`, `pause [--now]` and `resume` (U6.3, the runner and
 stop switch in `decisionmodels.runner`); `install` (U5.7, `decisionmodels.install`) and
-`smoke-fixture` (the label smoke's items, `decisionmodels.smoke`). `finalize` (U5.10) joins later;
-`next` and `ingest` are library entry points of `campaign.Campaign` that `run` calls, listed for
-no session.
+`smoke-fixture` (the label smoke's items, `decisionmodels.smoke`); `finalize` (U5.10,
+`decisionmodels.finalize`). `next` and `ingest` are library entry points of
+`campaign.Campaign` that `run` calls, listed for no session.
 
 - `init --point <role> --phase smoke|pilot|full --root <dir> [--fixture <items.jsonl>]
   [--batch-timeout 45m] [--launch-fail-bound 6h]`
 - `resolve --root <dir> --decision <text> [--skip-batch | --repin-instructions |
-  --decline-topup | --reopen-topup | --probe-topup | --repin-model generator|labeler <id>]`
+  --decline-topup | --reopen-topup | --probe-topup | --repin-model generator|labeler <id>]
+  [--stakeholder-ref <text>]`
+- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--short]`: writes
+  `<data-dir>/<role>/<name>/` (default: the component's `data/`)
 - `install --root <dir> [--agents-dir <dir>]`
 - `smoke-fixture --out <items.jsonl> [--count 50]`
 - `run --root <dir>`: exits 0 when it stops (done, halt, usage stop, pause, a held lock, a
@@ -19,7 +22,8 @@ no session.
 - `pause --root <dir> [--now]` and `resume --root <dir>`
 - `status --root <dir>`
 
-A refusal prints one line to stderr and exits 1. Every command but `run` has then written nothing;
+A refusal prints one line to stderr and exits 1. Every command but `run` has then written nothing
+(`finalize`'s one exception: a failed whole-point tranche recheck appends its `recheck-halt`);
 `run` has appended nothing, and a refusal after it took the lock (the install record, the user
 settings) leaves the reason in `store/refusal` for `status`. Its root and no-campaign refusals
 come first and write nothing: `status` refuses a missing campaign the same way, and prints a root
@@ -33,8 +37,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from . import install, runner, smoke
-from .campaign import PHASES, Campaign, CampaignRefused, parse_duration
+from . import finalize, install, runner, smoke
+from .campaign import DATA_DIR, PHASES, Campaign, CampaignRefused, parse_duration
 from .points import ROLES
 
 
@@ -70,12 +74,22 @@ def _parser() -> argparse.ArgumentParser:
     action.add_argument("--probe-topup", action="store_true",
                         help="an unboundedCell halt: draw one 25-seed run of that stratum")
     action.add_argument("--repin-model", nargs=2, metavar=("ROLE", "MODEL"))
+    resolve.add_argument("--stakeholder-ref", help="the second failure of finalize's whole-point "
+                         "tranche recheck: who decided, and where it is recorded")
 
     inst = commands.add_parser("install", help="install the agent definitions and guard; record "
                                                "the declared expectations")
     inst.add_argument("--root", required=True, type=Path)
     inst.add_argument("--agents-dir", type=Path, default=install.AGENTS_DIR,
                       help="another directory of the same sources (the smoke's maxTurns copy)")
+
+    fin = commands.add_parser("finalize", help="write the dataset version of a finished campaign")
+    fin.add_argument("--root", required=True, type=Path)
+    fin.add_argument("--dataset-version", required=True)
+    fin.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    fin.add_argument("--short", action="store_true",
+                     help="after resolve --decline-topup: finalize with short cells if each meets "
+                          "its floor")
 
     fixture = commands.add_parser("smoke-fixture", help="write the label smoke's items.jsonl")
     fixture.add_argument("--out", required=True, type=Path)
@@ -121,6 +135,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             lines = (runner.pause(args.root, now=args.now) if args.command == "pause"
                      else runner.resume(args.root))
             print("\n".join(lines))
+        elif args.command == "finalize":
+            print("\n".join(finalize.finalize(camp, version=args.dataset_version,
+                                              data_dir=args.data_dir, short=args.short)))
         elif args.command == "install":
             print("\n".join(install.install(args.root, agents_dir=args.agents_dir)))
         elif args.command == "init":
@@ -133,7 +150,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 decision=args.decision, skip_batch=args.skip_batch,
                 repin_instructions=args.repin_instructions, decline_topup=args.decline_topup,
                 reopen_topup=args.reopen_topup, probe_topup=args.probe_topup,
-                repin_model=tuple(args.repin_model) if args.repin_model else None)))
+                repin_model=tuple(args.repin_model) if args.repin_model else None,
+                stakeholder_ref=args.stakeholder_ref)))
         else:
             print("\n".join(camp.status()))
     except CampaignRefused as exc:

@@ -55,7 +55,8 @@ generated-text screen, form obedience, the template halts and the generator rest
 `Campaign.begin_round`, `decisionmodels/screen.py`; no `driver` subcommand queues a round yet), the
 votes of a settled round (U5.8b: `Campaign.queue_votes`, `decisionmodels/labels.py`), and the guard
 pilot (U5.8c: `decisionmodels/pilot.py`, below), and rounds and top-up (U5.9: the message-type
-tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`, below).
+tranche, the top-up planner, the spend halt and `decisionmodels/diagnostics.py`, below), and
+`finalize` with the cells, splits and `generation.json` (U5.10: `decisionmodels/finalize.py`).
 Labelling requests render all three points' items (U5.2b-render: the join-in and message-type
 renderers, pinned by byte-copies of model-bench's render vectors and `normalize-turns.jsonl`).
 The layout the later units fill is plan4 §3.1 over v1.3 §3.4; delivery is recorded in
@@ -98,18 +99,47 @@ or `AGENTS.md`. Run these from `decision-models/`:
   a `--skip-batch` drop closed a round or pool, the halt that raised. A `spend` halt (below) is
   let through by a plain `resolve`, or ended by `--decline-topup`; a `rubric` halt is cleared only
   once the rubric has changed; an `unboundedCell` halt refuses a plain `resolve` (below).
-- `finalize` (U5.10b) is not built yet; the pure parts it will call exist (U5.10a, below). `run` refuses a campaign that has no `install` record.
+- `run` refuses a campaign that has no `install` record.
+- `finalize --root <dir> --dataset-version <name> [--data-dir <dir>] [--short]` (U5.10) turns a
+  finished `full` campaign into `data/<role>/<name>/`: `items.jsonl`, `splits.json`,
+  `generation.json` and `diagnostics.json`. It prints every cell's final n and the `dropped`
+  counts, and never overwrites a version (a directory with no `finalized` event, left by a crash
+  between the rename and the event, is named as such in the refusal: move it aside or pick
+  another name). It refuses (writing nothing) a campaign that is not
+  finished, halted or unlabelled, and:
+  - a message-type point whose `rubric.md` changed since the tranche was labelled (both hashes are
+    named; restoring the file clears it; a rubric fix after the tranche passed means a new
+    campaign);
+  - a second generator-template hash unless its first run came after a `resolve` of a template
+    halt (only runs after the last generator restart count);
+  - a short cell: with no decline recorded the top-up is still due; after `resolve
+    --decline-topup` the text names `finalize --short` and `resolve --reopen-topup`. **`--short`**
+    (needs that decline) finalizes only when every cell's eval and calibration n meet the point's
+    floor after the splits, and otherwise refuses with the store intact.
+  A message-type point is also rechecked over every labelled item with the tranche's 3% rule. A
+  failure appends a halt (`recheck`, the one write a refusal makes); `resolve` then needs a changed
+  rubric and relabels the whole point (all three votes). The second failure is cleared only by
+  `resolve --decision ... --stakeholder-ref "<who decided, where recorded>"` given alone (a
+  `--repin-model` or `--repin-instructions` beside it is refused, and a ref on a halt that is not
+  a second recheck failure is refused too), after which `finalize` goes ahead with the ties
+  counted as `voteTie` drops.
 
-### Cells, splits and the side-check hashes (U5.10a)
+### Cells, splits and the side-check hashes (U5.10)
 
-`finalize` will call three pure parts, built and tested ahead of it. `decisionmodels/shingles.py`
+`finalize` calls `decisionmodels/shingles.py`, which
 tokenizes (NFKC, lowercase, non-letter/digit to space) and cuts 8-token shingles over an item's
 evidence text only (a guard's `condition` and the agent's name are not evidence).
 `decisionmodels/split.py` `make_splits` drops, first, every generated item whose evidence shares a
 shingle with a side-check item; cuts each cell (design stratum × label) at random to its target,
 counting the surplus; assigns eval, then calibration, then train within each cell by seed; and drops
 last, and counts, any eval item that shares a shingle with a calibration or train item. Nothing is
-refilled, so the printed n shows the loss.
+refilled, so the printed n shows the loss. A cell is keyed by the item's **majority** label.
+`train` is empty (note §Q1.3's train column is U8's), so `splits.json` is `{rngSeed, eval, train:
+[], calibration}`; only items in a split reach `items.jsonl` (one line per item, the U+2028, U+0085 and U+2029
+line separators escaped as in `exchange.dump_line`, since model-bench splits on them), and `generation.json` is plan4 §3.7's
+(`model` from the ingested runs' transcripts, `promptSha256` from the last-issued run with `rubric`
+from `campaign.rubric_hash`, `runs[]` from the runs after the last restart). Its shape is checked in
+`tests/test_finalize.py` against `tests/fixtures/decision-contract/dataset-shape.jsonl`.
 
 The side-check items are never read by `decisionmodels/`. A human runs
 `.venv/bin/python scripts/import_side_check_shingles.py` once; it reads
@@ -148,10 +178,10 @@ In a `full` campaign `driver run` keeps going after round 1 is labelled:
   `points/message-type-classifier/rubric.md`, then `resolve`, which relabels the tranche under the
   changed rubric hash (and refuses while the hash is unchanged).
 - **`diagnostics.json`** (`decisionmodels/diagnostics.py`, written beside `generation.json` by
-  `finalize` once U5.10 exists; `python -m decisionmodels.diagnostics --root <campaign> --out
-  <dir>` writes it now): pair and intent-label agreement per class, position and balance effects,
+  `finalize`; `python -m decisionmodels.diagnostics --root <campaign> --out <dir>` writes it for a
+  campaign in flight): pair and intent-label agreement per class, position and balance effects,
   round 1 against top-up per cell, screen hits by intent, difficulty and pattern, intent-label
-  agreement split by turn cut, a count of items that repeat a hand-off prompt example, guard's
+  agreement split by turn cut, a count of items that repeat a hand-off prompt example (over the eval split at `finalize`), guard's
   round-1 cue check (without its verdict), and per-round, per-template and retired-run totals.
   It is exploratory and gates nothing.
 

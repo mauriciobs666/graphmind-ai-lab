@@ -173,7 +173,7 @@ PILOT_BLOCKS = (MAIN_BLOCK, RECHECK_BLOCK)
 
 ROLE_OF_KIND = {"generate": "generator", "label": "labeler"}
 _CLEARING_EVENTS = ("resolved", "generation-restart", "labelling-restart", "tranche-restart",
-                    "topup-declined", "probe-requested")
+                    "topup-declined", "probe-requested", "point-relabel", "recheck-accepted")
 #: A batch's `retired_by`: what retired it. Only a labelling or tranche relabel's retirements
 #: count in round 1's total spend (plan6 §3.8 "The spend projection"); a generation restart
 #: discards the round, so its retirements belong to no round.
@@ -263,6 +263,7 @@ class State:
     pins: dict[str, str] = field(default_factory=dict)
     instructions: dict[str, list[list[str]]] = field(default_factory=dict)
     held_rng_seeds: set[int] = field(default_factory=set)
+    finalized_versions: set[str] = field(default_factory=set)
     seeds: dict[str, Seed] = field(default_factory=dict)
     batches: dict[str, Batch] = field(default_factory=dict)
     attempts: list[Attempt] = field(default_factory=list)
@@ -317,6 +318,13 @@ class State:
     #: `{"designStratum": ...}`, since a point with no stratum has `None`) until a `topup-plan`,
     #: a `topup-declined` or a generation restart.
     probe: dict[str, Any] | None = None
+    #: plan4 §3.6's whole-point recheck at `finalize` (message type): how many times it has
+    #: failed (`recheck-halt` events since the last generator restart), whether a stakeholder
+    #: accepted the second failure (`recheck-accepted`), and the `epoch` each cleared template
+    #: halt left behind (`finalize`'s one-hash rule compares it with an attempt's `epoch`).
+    recheck_failures: int = 0
+    recheck_accepted: bool = False
+    template_resolutions: list[int] = field(default_factory=list)
 
     def generation_drops(self) -> dict[str, Any]:
         """plan5 §3.5's `dropped` keys for seeds dropped on a third hit, counted under the third
@@ -681,6 +689,15 @@ def fold(events: Iterable[Mapping[str, Any]]) -> State:
                           "bound": event["bound"]}
         elif kind == "topup-reopened":
             state.topup_declined = False
+        elif kind == "recheck-halt":
+            state.recheck_failures += 1
+            state.halt = {"event": kind, "batch": None, "reason": "recheck",
+                          "voidClass": "rubric", "drops": event["drops"],
+                          "items": event["items"], "rubric": event["rubric"],
+                          "second": state.recheck_failures >= 2}
+        elif kind == "finalized":
+            state.held_rng_seeds.add(event["rngSeed"])
+            state.finalized_versions.add(event["datasetVersion"])
         elif kind == "votes":
             # Fresh, as for `generated`: a crashed ingest re-run replaces its earlier record.
             state.staged[event["opaque"]] = {"votes": dict(event["answers"]),
@@ -895,6 +912,8 @@ def _restart_generation(state: State) -> None:
     state.spend_approved.clear()
     state.topup_declined = False
     state.probe = None
+    state.recheck_failures = 0
+    state.recheck_accepted = False
     state.rounds.clear()
     state.seed_round.clear()
     state.staged.clear()
@@ -1002,6 +1021,8 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
     halted = state.halt
     state.halt = None
     state.epoch += 1
+    if halted is not None and halted.get("voidClass") == "template":
+        state.template_resolutions.append(state.epoch)
     if halted is not None and halted["event"] == "cue-check-halt":
         state.cue_halt_resolved = True
     batch = state.batches.get(halted["batch"]) if halted else None
@@ -1020,6 +1041,12 @@ def _fold_resolution(state: State, event: Mapping[str, Any]) -> None:
         state.instructions[event["role"]] = [list(pair) for pair in event["instructions"]]
     if event["event"] == "tranche-restart":
         _restart_tranche(state, event["rubric"])
+    if event["event"] == "point-relabel":
+        _restart_labelling(state)
+        if state.tranche is not None:
+            state.tranche.update(rubric=event["rubric"], relabels=state.tranche["relabels"] + 1)
+    if event["event"] == "recheck-accepted":
+        state.recheck_accepted = True
     if event["event"] == "topup-declined":
         state.topup_declined = True
         state.probe = None
@@ -2108,7 +2135,8 @@ class Campaign:
     def resolve(self, *, decision: str, skip_batch: bool = False,
                 repin_instructions: bool = False, decline_topup: bool = False,
                 reopen_topup: bool = False, probe_topup: bool = False,
-                repin_model: tuple[str, str] | None = None) -> list[str]:
+                repin_model: tuple[str, str] | None = None,
+                stakeholder_ref: str | None = None) -> list[str]:
         """`driver resolve` (plan4 §3.3 "Halt", plan6 §3.5): clear the halt with one recorded
         decision. Retry re-issues the halted batch under a new name; `--skip-batch` drops it
         into `safeguardSkipped`; a re-pin records its new model or instructions set. A `rubric`
@@ -2121,7 +2149,12 @@ class Campaign:
         `probe-requested`: one run of 25 seeds of the cell's stratum), `--decline-topup` or
         `--repin-model generator`. `--reopen-topup` is the one action valid with no halt open: it
         needs a recorded decline and appends `topup-reopened`, so the next `driver run` plans
-        again. Returns the lines it prints (plan6 §3.8): the halt it cleared and, when the drop
+        again. A `recheck` halt (`finalize`'s whole-point tranche rule failed, plan4 §3.6) is
+        cleared, like the tranche's, by a changed rubric hash and relabels the whole point
+        (`point-relabel`); its second failure is cleared only by `--stakeholder-ref` alone (a re-pin
+        is refused), which records the stakeholder's acceptance (`recheck-accepted`) and relabels
+        nothing. Returns the lines
+        it prints (plan6 §3.8): the halt it cleared and, when the drop
         closed a round or pool, the halt that raised, else the line that `driver run` resumes."""
         if not decision.strip():
             raise CampaignRefused("--decision needs a text")
@@ -2143,6 +2176,14 @@ class Campaign:
                 return ["top-up reopened; the next `driver run` plans the top-up again"]
             if halt is None:
                 raise CampaignRefused("the campaign is not halted")
+            second_recheck = halt.get("reason") == "recheck" and halt.get("second")
+            if stakeholder_ref is not None and not second_recheck:
+                raise CampaignRefused("--stakeholder-ref is for the second failure of "
+                                      "`finalize`'s whole-point tranche recheck (plan4 §3.6)")
+            if second_recheck and (repin_model is not None or repin_instructions):
+                raise CampaignRefused(
+                    "the second failure of the whole-point recheck is cleared only by "
+                    "`--stakeholder-ref`, alone: a re-pin neither clears it nor carries the ref")
             event: dict[str, Any] = {"event": "resolved", "decision": decision,
                                      "batch": halt["batch"], "reason": halt.get("reason")}
             if decline_topup:
@@ -2169,6 +2210,21 @@ class Campaign:
                     [entry["path"], entry["sha256"]] for entry in run["instructions"]])
             elif repin_model is not None:
                 event.update(self._repin_model(state, *repin_model))
+            elif second_recheck:
+                if not (stakeholder_ref or "").strip():
+                    raise CampaignRefused(
+                        "the recheck failed a second time, so the label set may not separate: "
+                        "only the stakeholder clears it; give --stakeholder-ref "
+                        "(who decided, and where it is recorded)")
+                event.update(event="recheck-accepted", action="accept-recheck",
+                             stakeholderRef=stakeholder_ref.strip())
+            elif halt.get("voidClass") == "rubric" and halt.get("reason") == "recheck":
+                now = rubric_hash(state.init["point"])
+                if now == state.tranche["rubric"]:
+                    raise CampaignRefused(
+                        "the rubric is unchanged since the point was labelled "
+                        f"({now[:12]}): fix it first, then resolve")
+                event.update(event="point-relabel", action="relabel-point", rubric=now)
             elif halt.get("voidClass") == "rubric":
                 now = rubric_hash(state.init["point"])
                 if now == state.tranche["rubric"]:
@@ -2258,7 +2314,9 @@ def _halt_text(halt: Mapping[str, Any]) -> str:
         text += f" on {halt['batch']}"
     parts = []
     if halt.get("voidClass") == "rubric":
-        parts.append(f"{halt['drops']} voteTie drops in {halt['items']} tranche items under "
+        scope = "labelled items of the whole point" if halt.get("reason") == "recheck" \
+            else "tranche items"
+        parts.append(f"{halt['drops']} voteTie drops in {halt['items']} {scope} under "
                      f"rubric {halt['rubric'][:12]}")
     if halt.get("voidClass") == "spend":
         projection = halt["projection"]

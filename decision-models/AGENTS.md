@@ -17,11 +17,12 @@ reconciliation, halts, generation runs, votes, tranche, top-up), `diagnostics.py
 obedience, pure), `labels.py` (majority of three, `labelVotes`, pure), `pilot.py` (the guard pilot's CLI and pure
 screen/cue-check, below), `runner.py` (`driver run`, `pause [--now]`, `resume`), `install.py`
 (`driver install`), `smoke.py` (the label smoke's fixture) and `driver.py` (CLI: `init`, `install`,
-`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`), plus `shingles.py` and `split.py`
-(pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6; `scripts/import_side_check_shingles.py`
-writes `data/guard-judge/side-check-shingles.txt`, hashes only). `agents/` holds the three agent
-definitions, spawn templates, `guard_hook.py` and `settings.json`. `finalize` and everything after
-it (plan4 §4.1 U5.10b onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
+`resolve`, `run`, `pause`, `resume`, `status`, `smoke-fixture`, `finalize`), plus `shingles.py` and
+`split.py` (pure: the 8-token shingle rule and cells-then-splits, plan4 §3.6;
+`scripts/import_side_check_shingles.py` writes `data/guard-judge/side-check-shingles.txt`, hashes
+only) and `finalize.py` (the dataset writer). `agents/` holds the three agent definitions, spawn
+templates, `guard_hook.py` and `settings.json`. Fitting (U6) and what follows it are unbuilt
+(`docs/HISTORY.md`). U5.7's live smoke ran; its facts are in
 `docs/test-reports/live-smoke-report.md`.
 
 ## Load-bearing invariants
@@ -68,9 +69,17 @@ it (plan4 §4.1 U5.10b onward) are unbuilt (`docs/HISTORY.md`). U5.7's live smok
   `spawnTemplate`, `guardHook` hash installed bytes and must match the first install's;
   `requestTemplate` and `rubric` (`campaign.rubric_hash`) hash `points/` files and are recorded fresh
   on every install, so a `generator.md`/`rubric.md` edit appends a second `expectations` event.
-- **Splits** (`split.make_splits`) run in a fixed order: side-check drop, random subsample per
-  cell (surplus counted), split by seed (eval first), eval-vs-calibration/train shingle drop last,
-  never refilled. Shingles cover evidence text only; a hash cannot be turned back into text.
+- **Splits and `finalize`** (`split.make_splits`, `finalize.py`) run in a fixed order: side-check
+  drop, random subsample per cell (keyed by the **majority** label; surplus counted), split by seed
+  (eval first), eval-vs-calibration/train shingle drop last, never refilled; `train` is empty. A
+  refusal writes nothing (the one exception is the whole-point tranche recheck's `recheck-halt`,
+  whose second failure only `resolve --stakeholder-ref` alone clears; a re-pin is refused);
+  `items.jsonl` goes through `exchange.dump_line` (model-bench's importer uses `splitlines()`);
+  `--short` needs a recorded `--decline-topup` and every cell at its floor; `generation.json` holds
+  one model per role and the last-issued run's hashes; the one-hash rule reads only post-restart
+  runs (`State.template_resolutions` against `Attempt.epoch`). `tests/test_finalize.py` checks the
+  output against the contract vector (plan6 §3.7). Shingles cover evidence text only; a hash cannot
+  be turned back into text.
 - **Requests are closed and id-blind** (plan4 §3.2, plan5 §3.4). `exchange.request_errors` is the
   one schema check; the writer runs it before any request leaves it. No `*Id` key
   reaches a generation request, whatever `points/` declares.
