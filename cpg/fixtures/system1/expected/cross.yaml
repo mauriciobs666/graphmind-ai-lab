@@ -240,7 +240,7 @@ rows:
   kind: http
   keyNorm: GET /api/search
   status: confirmed
-  reason: lifted-role
+  reason: key-match
   gate: P1
   stratum: fixture-dev
   serves:
@@ -259,7 +259,7 @@ rows:
   kind: http
   keyNorm: POST /api/v1/orders
   status: confirmed
-  reason: lifted-role
+  reason: key-match
   gate: P1
   stratum: fixture-dev
   serves:
@@ -278,7 +278,7 @@ rows:
   kind: mcp_tool
   keyNorm: reindex
   status: confirmed
-  reason: lifted-role
+  reason: binding-confirmed
   gate: P1
   stratum: fixture-dev
   serves:

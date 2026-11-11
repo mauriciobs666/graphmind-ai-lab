@@ -385,7 +385,7 @@ rows:
     qname: app/src/api/client.ts::request
   keyNorm: GET /api/search
   status: confirmed
-  reason: lifted-role
+  reason: key-match
   gate: P1
   shape: client wrapper
   serves:
@@ -408,7 +408,7 @@ rows:
     qname: job/api_client.py::ApiClient.post
   keyNorm: POST /api/v1/orders
   status: confirmed
-  reason: lifted-role
+  reason: key-match
   gate: P1
   shape: client wrapper
   serves:
@@ -431,7 +431,7 @@ rows:
     qname: app/src/mcp/client.ts::callTool
   keyNorm: reindex
   status: confirmed
-  reason: lifted-role
+  reason: binding-confirmed
   gate: P1
   shape: client wrapper
   serves:
