@@ -974,7 +974,7 @@ fi
 
 # ================================================================== tests 21-26: the indexer entries (P1-48b)
 # egress-spec3 §7.4 / §10.1. Fixtures are plain files written here; nothing in this block runs npm, pip or uv.
-if want 21 || want 22 || want 23 || want 24 || want 26; then
+if want 21 || want 22 || want 23 || want 24 || want 26 || want 27; then
   IDX_TAG=$(env -i PATH=/usr/bin:/bin "$HERE/../../infra/toolchain/build.sh" --indexer --print-tag 2>/dev/null)
   IDX_IMAGE="${CCG_TEST_INDEXER_IMAGE:-$IDX_TAG}"
   IDX_OK=0
@@ -1279,6 +1279,165 @@ if want 26; then
     chk "(26) the lib-launch envKeys carry PYTHONSAFEPATH" grep -qx PYTHONSAFEPATH "$T/last-envkeys"
   else
     norun_idx "26 (planted json.py)"
+  fi
+fi
+
+# ================================================================== test 27: the indexer wall-clock watchdog (egress-spec4 §1, §2)
+if want 27; then
+  section "test 27: indexer wall-clock watchdog (library mode; the constant is reassigned after sourcing)"
+  # The constant is not an input: exported into the environment, it stays the literal 1800 after sourcing.
+  got=$( export SBX_INDEXER_WALL_S=3; . "$RUNNER"; echo "$SBX_INDEXER_WALL_S" )
+  chk "(27) library mode: an exported SBX_INDEXER_WALL_S=3 does not change the constant (got $got)" test "$got" = 1800
+  chk "(27) the runner assigns the constant unconditionally, to the literal 1800" bash -c 'test "$(grep -c "^SBX_INDEXER_WALL_S=1800\$" "$1")" = 1 && ! grep -q "SBX_INDEXER_WALL_S:-" "$1"' _ "$RUNNER"
+  # The timer's identity check, without a container: a timer armed for a live process whose recorded start
+  # time does not match (the shape of a recycled PID) sends nothing; armed with the right start time, it does.
+  got=$( . "$RUNNER"; SBX_INDEXER_WALL_S=2; sleep 30 & X=$!
+         sbx_wd_arm "$X" 1; sleep 3.5; kill -0 "$X" 2>/dev/null && echo ALIVE || echo DEAD; kill -KILL "$X" 2>/dev/null; wait "$X" 2>/dev/null )
+  chk "(27) timer identity: a recorded start time that does not match the process: no signal is sent (got $got)" test "$got" = ALIVE
+  got=$( . "$RUNNER"; SBX_INDEXER_WALL_S=2; sleep 30 & X=$!
+         sbx_wd_arm "$X"; sleep 3.5; wait "$X" 2>/dev/null; echo "rc=$?" )
+  chk "(27) timer identity (control): with the process's own start time the cap's USR2 ends it (got $got)" test "$got" = rc=140
+  # An unreadable start time: no timer is armed (the identity check would fail open), and the launch is refused.
+  got=$( . "$RUNNER"; SBX_INDEXER_WALL_S=2; sbx_pid_start() { return 1; }; sbx_wd_arm >/dev/null 2>&1; echo "rc=$? pid=${SBX_WD_PID:-none}" )
+  chk "(27) no readable start time: sbx_wd_arm arms no timer and fails (got $got)" test "$got" = "rc=1 pid=none"
+  # A newline in the process name cannot hide field 22 from sbx_pid_start.
+  NLN=$'a\n) 9 9 9'; cp /bin/sleep "$T/$NLN" 2>/dev/null; "$T/$NLN" 30 & NLP=$!
+  want=$(python3 -I -c 'import sys; d=open("/proc/%s/stat" % sys.argv[1], "rb").read().decode(); print(d.rsplit(")", 1)[1].split()[19])' "$NLP" 2>&1)
+  got=$( . "$RUNNER"; sbx_pid_start "$NLP" )
+  kill -KILL "$NLP" 2>/dev/null; wait "$NLP" 2>/dev/null; rm -f "$T/$NLN"
+  chk "(27) start time read for a process whose name contains a newline and ') ' (got '$got', want '$want')" bash -c 'test -n "$1" && test "$1" = "$2"' _ "$got" "$want"
+  # wd_run <wall s> <indexer 0|1> <slow-removal 0|1> <src> <out> -- tool... : one library-mode launch (separate bash,
+  # SIGINT restored to its default so the test can deliver one), its auditId in $T/wd-aid.
+  cat > "$T/wd-run.sh" <<'EOW'
+#!/bin/bash
+wall=$1; ind=$2; slow=$3; src=$4; out=$5; shift 6
+export CCG_AUDIT_DIR="$PROBE_AUDIT"
+. "$RUNNER"
+sbx_init
+echo "$SBX_AUDIT_ID" > "$WD_AID_FILE"
+[ "$ind" = 1 ] && SBX_INDEXER=1
+sbx_resolve_backend container || { echo "LIB-REFUSED $SBX_REFUSAL_DETAIL"; sbx_cleanup; exit 99; }
+SBX_RECORD_FRONTEND=lib-launch
+SBX_INDEXER_WALL_S=$wall
+if [ "${WD_LOCK:-0}" = 1 ]; then exec {SBX_LOCK_FD}<"$out"; flock -n "$SBX_LOCK_FD" || exit 98; fi   # the runner's --output lock
+if [ "$slow" = 1 ]; then   # the signal handler's removal takes 10 s, so the watchdog can fire inside it
+  eval "$(declare -f sbx_remove_own | sed '1s/sbx_remove_own/sbx_remove_own_real/')"
+  sbx_remove_own() { sleep 10; sbx_remove_own_real; }
+fi
+rc=0; sbx_launch "$src" "$out" "" "" -- "$@" || rc=$?
+sbx_write_record "$rc" ""; sbx_cleanup; exit "$rc"
+EOW
+  chmod +x "$T/wd-run.sh"
+  wd_start() { # same args as wd_run; background, SIGINT default; sets WDPID
+    WD_LOCK="${WD_LOCK:-0}" WD_AID_FILE="$T/wd-aid" RUNNER="$RUNNER" PROBE_AUDIT="$PROBE_AUDIT" \
+      timeout -k 15 "${RUN_TIMEOUT:-300}" python3 -I -c 'import os,signal,sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' "$T/wd-run.sh" "$@" > "$T/wd-out.txt" 2>&1 &
+    WDPID=$!
+  }
+  wd_nrec() { [ -f "$PROBE_AUDIT/sandbox.jsonl" ] && wc -l < "$PROBE_AUDIT/sandbox.jsonl" || echo 0; }
+  wd_rec() { python3 -I -c 'import json,sys; r=json.loads(open(sys.argv[1]).readlines()[-1]); sys.exit(0 if eval(sys.argv[2], {"r": r}) else 1)' "$PROBE_AUDIT/sandbox.jsonl" "$1"; }
+  if [ "$IDX_OK" = 1 ]; then
+    W27=$T/wd-src; O27=$T/wd-out; mkdir -p "$W27" "$O27"; echo 'x' > "$W27/m.py"
+    HANG=(/bin/sh -c 'trap "" TERM; while :; do sleep 1; done')
+    # (a) the watchdog: an indexer-class launch whose tool ignores TERM is KILLed at the cap.
+    n0=$(wd_nrec); t0=$(date +%s)
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 4 1 0 "$W27" "$O27" -- "${HANG[@]}"; wait "$WDPID"; WRC=$?; t1=$(date +%s)
+    aid=$(cat "$T/wd-aid"); SIGNAL_AIDS+=("$aid")
+    chk "(27) watchdog: the runner exits 124 (rc $WRC after $((t1 - t0)) s)" test "$WRC" = 124
+    chk "(27) watchdog: exactly one record was written" test "$(( $(wd_nrec) - n0 ))" = 1
+    chk "(27) watchdog: the record has exitCode 124 and refused false" wd_rec "r['exitCode']==124 and r['refused'] is False and r['refusalReason'] is None and r['auditId']=='$aid'"
+    chk "(27) watchdog: no container labelled with its auditId remains" test -z "$(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid")"
+    chk "(27) watchdog: no volume labelled with its auditId remains" test -z "$(docker volume ls -q --filter "label=ccg.sandbox.auditId=$aid")"
+    chk "(27) watchdog: no scratch of that run is left in /tmp" test -z "$(ls -d /tmp/ccg-sbx."$aid".* 2>/dev/null)"
+    # (b) a normal exit before the cap: exit 0, a record with exitCode 0, and no stale timer signalling later.
+    n0=$(wd_nrec)
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 4 1 0 "$W27" "$O27" -- /bin/true; wait "$WDPID"; WRC=$?
+    SIGNAL_AIDS+=("$(cat "$T/wd-aid")")
+    chk "(27) control: a tool that exits before the cap exits 0 (rc $WRC) with one record, exitCode 0" bash -c 'test "$1" = 0 && test "$2" = 1' _ "$WRC" "$(( $(wd_nrec) - n0 ))"
+    chk "(27) control: the record has exitCode 0 and refused false" wd_rec "r['exitCode']==0 and r['refused'] is False"
+    chk "(27) control: a disarmed timer leaves no 'Killed' job notice on stderr" test -z "$(grep -a Killed "$T/wd-out.txt")"
+    # (b2) a normal exit leaves no orphan timer sleep (an unusual cap, 29 s, so the sleep is recognisable).
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 23 1 0 "$W27" "$O27" -- /bin/true; wait "$WDPID"; WRC=$?
+    SIGNAL_AIDS+=("$(cat "$T/wd-aid")")
+    sleep 1
+    chk "(27) control: after a normal exit (rc $WRC) no 'sleep 23' timer process remains" bash -c '! pgrep -fx "sleep 23" >/dev/null'
+    pkill -fx "sleep 23" 2>/dev/null || true
+  else
+    norun_idx "27 (watchdog on the indexer image)"
+  fi
+  # (c) a Joern frontend is not capped: a launch that outlives the cap still exits 0.
+  n0=$(wd_nrec)
+  wd_start 3 0 0 "$SRC" "$OUTD" -- /bin/sleep 7; wait "$WDPID"; WRC=$?
+  SIGNAL_AIDS+=("$(cat "$T/wd-aid")")
+  chk "(27) a non-indexer launch is not capped: it outlives the cap and exits 0 (rc $WRC)" test "$WRC" = 0
+  chk "(27) a non-indexer launch: the record has exitCode 0" wd_rec "r['exitCode']==0 and r['refused'] is False"
+  # (d) first wins: INT is delivered, then the watchdog's USR2 arrives while the INT handler is still removing
+  # containers (10 s): exit 130, no record, no watchdog.
+  if [ "$IDX_OK" = 1 ]; then
+    n0=$(wd_nrec)
+    rm -f "$T/wd-aid"
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 27 1 1 "$W27" "$O27" -- "${HANG[@]}"
+    # the INT must land while the sandbox runs (its handler is installed): wait for the container, then signal
+    wdc=""; for i in $(seq 1 60); do
+      [ -s "$T/wd-aid" ] && wdc=$(docker ps -q --filter "label=ccg.sandbox.auditId=$(cat "$T/wd-aid")"); [ -n "$wdc" ] && break; sleep 0.25; done
+    chk "(27) first wins: the sandbox container is running when the INT is sent" test -n "$wdc"
+    wdr=$(pgrep -P "$WDPID" | head -1)      # the runner itself (timeout forwards INT, not USR2)
+    kill -INT "$wdr" 2>/dev/null
+    # The signal handler's own `jobs -p` KILL loop already ends the timer, so the timer cannot be what fires
+    # inside the handler's window; deliver the timer's signal (USR2) by hand, while the handler is removing.
+    sleep 2; kill -USR2 "$wdr" 2>/dev/null
+    wait "$WDPID"; WRC=$?
+    aid=$(cat "$T/wd-aid"); SIGNAL_AIDS+=("$aid")
+    chk "(27) first wins: INT, then the timer's USR2 during the handler's removal: exit 130, not 124 (rc $WRC)" test "$WRC" = 130
+    chk "(27) first wins: no record was written" test "$(( $(wd_nrec) - n0 ))" = 0
+    sleep 1
+    chk "(27) first wins: its container is gone" test -z "$(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid")"
+    chk "(27) after a signalled exit the timer is ended too: no 'sleep 27' remains" bash -c '! pgrep -fx "sleep 27" >/dev/null'
+    pkill -fx "sleep 27" 2>/dev/null || true
+    # (e) a second TERM while the INT handler is removing is ignored: the removal completes (exit 130, no
+    # record, container gone), it does not die with 143 and leave the container running.
+    n0=$(wd_nrec); rm -f "$T/wd-aid"
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 60 1 1 "$W27" "$O27" -- "${HANG[@]}"
+    wdc=""; for i in $(seq 1 60); do
+      [ -s "$T/wd-aid" ] && wdc=$(docker ps -q --filter "label=ccg.sandbox.auditId=$(cat "$T/wd-aid")"); [ -n "$wdc" ] && break; sleep 0.25; done
+    wdr=$(pgrep -P "$WDPID" | head -1); kill -INT "$wdr" 2>/dev/null; sleep 2; kill -TERM "$wdr" 2>/dev/null
+    wait "$WDPID"; WRC=$?; aid=$(cat "$T/wd-aid"); SIGNAL_AIDS+=("$aid"); sleep 1
+    chk "(27) a second TERM during the INT handler's removal is ignored: exit 130 (rc $WRC), no record" bash -c 'test "$1" = 130 && test "$2" = 0' _ "$WRC" "$(( $(wd_nrec) - n0 ))"
+    chk "(27) a second TERM during the INT handler's removal: the container is still removed" test -z "$(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid")"
+    docker rm -f -v $(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid") >/dev/null 2>&1 || true
+    # (e2) the same during the watchdog's own removal: exit 124 with its record, one expiry log line, and a
+    # second USR2 and a TERM sent inside the removal window change nothing.
+    n0=$(wd_nrec); rm -f "$T/wd-aid"; t0=$(date +%s)
+    CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 5 1 1 "$W27" "$O27" -- "${HANG[@]}"
+    wdr=""; for i in $(seq 1 60); do wdr=$(pgrep -P "$WDPID" | head -1); [ -n "$wdr" ] && [ -s "$T/wd-aid" ] && break; sleep 0.25; done
+    # wait until the watchdog's handler has logged (its removal then takes 10 s), however slowly the container started
+    for i in $(seq 1 120); do grep -aq 'wall-clock limit' "$T/wd-out.txt" 2>/dev/null && break; sleep 0.25; done
+    sleep 0.5
+    kill -USR2 "$wdr" 2>/dev/null; kill -TERM "$wdr" 2>/dev/null
+    wait "$WDPID"; WRC=$?; aid=$(cat "$T/wd-aid"); SIGNAL_AIDS+=("$aid"); sleep 1
+    chk "(27) a TERM and a second USR2 during the watchdog's removal change nothing: exit 124 (rc $WRC), one record" bash -c 'test "$1" = 124 && test "$2" = 1' _ "$WRC" "$(( $(wd_nrec) - n0 ))"
+    chk "(27) the watchdog logged its expiry exactly once (a second USR2 did not re-enter the handler)" test "$(grep -ac 'wall-clock limit' "$T/wd-out.txt")" = 1
+    chk "(27) during the watchdog's removal: the container is removed" test -z "$(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid")"
+    docker rm -f -v $(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid") >/dev/null 2>&1 || true
+    # (f) a runner killed with SIGKILL (no handler runs): its timer must not pin the --output lock and must
+    # signal nothing at the cap (it checks the runner's start time). The Docker client the runner started is
+    # ended by removing the container, so the only possible holder left is the timer or its sleep. Cap 47 s: the timer's first step is 30 s, and at its end the runner is gone, so it must exit then.
+    rm -f "$T/wd-aid"; WD_LOCK=1 CCG_TOOLCHAIN_IMAGE=$IDX_IMAGE wd_start 47 1 0 "$W27" "$O27" -- "${HANG[@]}"
+    wdc=""; for i in $(seq 1 60); do
+      [ -s "$T/wd-aid" ] && wdc=$(docker ps -q --filter "label=ccg.sandbox.auditId=$(cat "$T/wd-aid")"); [ -n "$wdc" ] && break; sleep 0.25; done
+    aid=$(cat "$T/wd-aid"); SIGNAL_AIDS+=("$aid")
+    wdr=$(pgrep -P "$WDPID" | head -1); kill -KILL "$wdr" 2>/dev/null; wait "$WDPID" 2>/dev/null
+    docker rm -f -v $(docker ps -aq --filter "label=ccg.sandbox.auditId=$aid") >/dev/null 2>&1 || true
+    sleep 1.5
+    chk "(27) SIGKILLed runner: the --output lock is free once its container is gone (the orphan timer does not pin it)" bash -c 'exec 9<"$1"; flock -n 9' _ "$O27"
+    sleep 31
+    chk "(27) SIGKILLed runner: one 30 s step after arming, the orphan timer has exited (no 'sleep 47' or 'sleep 17')" bash -c '! pgrep -fx "sleep (47|17)" >/dev/null'
+    pkill -fx "sleep (47|17)" 2>/dev/null || true
+    docker volume ls -q --filter "label=ccg.sandbox.auditId=$aid" | xargs -r docker volume rm >/dev/null 2>&1 || true
+    # a SIGKILLed runner runs no cleanup: remove its scratch (the test's own, named by its auditId)
+    for d in /tmp/ccg-sbx."$aid".* "$T"/.ccg-ovl-"$aid".*; do
+      [ -d "$d" ] || continue; rmdir "$d/work/work" 2>/dev/null; chmod -R u+w "$d" 2>/dev/null; rm -rf "$d"; done
+  else
+    norun_idx "27 (first wins)"
   fi
 fi
 

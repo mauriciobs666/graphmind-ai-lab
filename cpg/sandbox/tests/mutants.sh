@@ -96,10 +96,10 @@ M = [
  ("YB", "14", "p3-m3: the world-writable ancestor test disabled", [(R, """    if (( 0$(stat -c '%a' "$p") & 02 )); then SBX_DCFG_FAIL="$real sits under world-writable $p"; return 1; fi\n""", "    :\n")]),
  ("YC", "15", "p3-n1: env keys from compgen -e (non-identifier entries unseen)", [(R, """  while IFS= read -r -d '' k; do\n    case "${k%%=*}" in""", """  for k in $(compgen -e); do\n    case "$k" in"""), (R, '  done < "/proc/$$/environ" 2>/dev/null\n', "  done\n")]),
  ("YH", "15", "p4: closed-env values read from live shell variables, not the exec'd block", [(R, '  [ "${blk[PATH]:-}" = "$SBX_PATH" ] && [ "${blk[HOME]:-}" = "$home" ] || ok=0\n', '  [ "${PATH:-}" = "$SBX_PATH" ] && [ "${HOME:-}" = "$home" ] || ok=0\n')]),
- ("YD", "13", "p3-m1: the rejected design -- rm the container by name, then kill the client", [(R, '  local j\n  for j in $(jobs -p); do kill -KILL "$j" 2>/dev/null; done\n  wait 2>/dev/null\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n', '  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi\n  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi\n')]),
+ ("YD", "13", "p3-m1: the rejected design -- rm the container by name, then kill the client", [(R, '  sbx_kill_jobs "$wd"\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n  sbx_cleanup\n  exit', '  if [ "$SBX_BACKEND" = container ]; then docker rm -f -v "ccg-sbx-$SBX_AUDIT_ID" >/dev/null 2>&1 || true; fi\n  if [ -n "${SBX_CHILD:-}" ]; then kill "$SBX_CHILD" 2>/dev/null; wait "$SBX_CHILD" 2>/dev/null; fi\n  sbx_cleanup\n  exit')]),
  ("YE", "13", "p3-m1: client killed first, but one removal pass (no settle loop)", [(R, "  while ((quiet < 3 && n < 50)); do", "  while ((quiet < 1 && n < 1)); do")]),
  ("YG", "2", "p4-m1: sbx_cleanup stops removing SBX_SCRATCH (every invocation leaks it)", [(R, '    [ -n "$d" ] && [ -d "$d" ] || continue\n', '    [ -n "$d" ] && [ -d "$d" ] || continue\n    [ "$d" = "$SBX_SCRATCH" ] && continue\n')]),
- ("YF", "12", "p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up)", [(R, 'kill -KILL "$j"', 'kill -TERM "$j"')]),
+ ("YF", "12", "p3-m1: the client gets TERM, not KILL (docker run proxies it and stays up)", [(R, '  sbx_kill_jobs "$wd"\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n  sbx_cleanup\n  exit', '  local j\n  for j in $(jobs -p); do [ "$j" = "$wd" ] || { kill -TERM "$j" 2>/dev/null; wait "$j" 2>/dev/null; }; done\n  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n  sbx_cleanup\n  exit')]),
  # --- P1-48b: the indexer entries (egress-spec3 §7.4, §10.1 (21)-(26)) ---
  ("I01", "21,22", "(21) scip-python dropped from SBX_FRONTENDS", [(R, "joern scip-typescript scip-python)", "joern scip-typescript)")]),
  ("I02", "21", "(21) the two indexer names swapped (order is the contract)", [(R, "joern scip-typescript scip-python)", "joern scip-python scip-typescript)")]),
@@ -163,6 +163,22 @@ M = [
  ("J15", "22", "containment follows an absolute symlink by its host path (the realpath-only rule)", [(R, '      [[ $t == /* ]] && return 1\n', '      if [[ $t == /* ]]; then cur=$(realpath -e -- "$t") || return 1; [[ $cur == "$src" || $cur == "$src"/* ]] || return 1; continue; fi\n')]),
  ("J16", "22", "a containment refusal no longer outranks a missing mandatory element (usage first)", [(R, '      # Containment is forbidden-class: it outranks a missing mandatory element (usage).\n', '      if ((${#SBX_IDX_MISSING[@]})); then sbx_refuse 64 usage "mandatory element missing"; fi\n')]),
  ("J17", "22", "--environment no longer required to be a regular file (the -f check dropped: a directory or a FIFO passes)", [(R, '{ [ "${a[i]}" = --environment ] && [ -f "$SBX_IDX_REAL" ]; }', '[ "${a[i]}" = --environment ]')]),
+ # --- indexer wall-clock watchdog (egress-spec4 §1) ---
+ ("K01", "27", "(27) the wall-clock cap is applied to every frontend, not only the indexers", [(R, 'if [ "${SBX_INDEXER:-0}" = 1 ]; then\n    trap \'sbx_on_wall\' USR2', 'if true; then\n    trap \'sbx_on_wall\' USR2')]),
+ ("K02", "27", "(27) the watchdog (and the signal handler) send TERM instead of KILL to the client", [(R, '    kill -KILL "$j" 2>/dev/null; wait "$j" 2>/dev/null\n', '    kill -TERM "$j" 2>/dev/null; wait "$j" 2>/dev/null\n')]),
+ ("K03", "27", "(27) the watchdog skips the removal of the run's containers", [(R, '  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi\n  sbx_write_record 124 ""', '  sbx_write_record 124 ""')]),
+ ("K04a", "27", "(27) first wins: sbx_on_signal no longer ignores USR2 (a late timer signal re-enters as a watchdog)", [(R, "  trap '' USR2\n  local wd=${SBX_WD_PID:-}\n  sbx_wd_disarm\n", "  local wd=${SBX_WD_PID:-}\n  sbx_wd_disarm\n")]),
+ ("K04b", "27", "(27) first wins: sbx_on_wall no longer ignores USR2 (a second USR2 re-enters the watchdog handler)", [(R, "sbx_on_wall() {\n  trap '' USR2\n", "sbx_on_wall() {\n")]),
+ ("K06", "27", "(27) the timer signals without checking that the runner is the same process (PID reuse)", [(R, '      [ "$(sbx_pid_start "$me")" = "$st" ] || exit 0\n', "")]),
+ ("K07", "27", "(27) the timer keeps the runner's --output lock fd open", [(R, '    if [ -n "${SBX_LOCK_FD:-}" ]; then exec {SBX_LOCK_FD}<&-; fi\n', "")]),
+ ("K08", "27", "(27) sbx_on_signal resets INT/TERM/HUP to the default during the removal (a second TERM aborts it)", [(R, "  sbx_wd_disarm\n  trap '' INT TERM HUP\n", "  sbx_wd_disarm\n  trap - INT TERM HUP\n")]),
+ ("K09", "27", "(27) sbx_on_wall resets INT/TERM/HUP to the default during the removal", [(R, "  trap '' USR2\n  trap '' INT TERM HUP\n  sbx_log \"indexer", "  trap '' USR2\n  trap - INT TERM HUP\n  sbx_log \"indexer")]),
+ ("K10", "27", "(27) the disarm does not stop the timer (its sleep outlives a normal exit)", [(R, '  kill -TERM "$SBX_WD_PID" 2>/dev/null\n  SBX_WD_PID=""', '  SBX_WD_PID=""')]),
+ ("K05", "27", "(27) the wall-clock constant is read from the environment", [(R, '\nSBX_INDEXER_WALL_S=1800\n', '\nSBX_INDEXER_WALL_S=${SBX_INDEXER_WALL_S:-1800}\n')]),
+ ("K11", "27", "(27) sbx_on_signal does not disarm the timer (its sleep outlives a signalled exit)", [(R, "  local wd=${SBX_WD_PID:-}\n  sbx_wd_disarm\n", "  local wd=${SBX_WD_PID:-}\n")]),
+ ("K12", "27", "(27) no check that the runner's start time was read (the identity check fails open)", [(R, '  if [ -z "$st" ]; then sbx_log "watchdog: the runner\'s start time is unreadable, no timer armed"; return 1; fi\n', "")]),
+ ("K13", "27", "(27) /proc stat read line by line (a newline in the process name hides field 22)", [(R, "IFS= read -r -d '' l <", "IFS= read -r l <")]),
+ ("K14", "27", "(27) the timer's step is the whole remainder (an orphan outlives a dead runner up to the cap)", [(R, "((step > 30)) && step=30", ":")]),
 ]
 for mid, tests, desc, edits in M:
     if sel and mid not in sel: continue

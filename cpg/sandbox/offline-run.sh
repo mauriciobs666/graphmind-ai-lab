@@ -46,6 +46,9 @@ SBX_ALLOWED_LIST="$SBX_DIR/allowed-flags.txt"
 SBX_JOERN_IMG_HOME=/opt/joern/joern-cli
 SBX_JAVA_OPTS='-Xmx2g'
 SBX_LABEL=ccg.sandbox
+# Wall-clock cap for indexer entries (egress-spec4 §1), in seconds. A constant assigned unconditionally:
+# no environment variable sets it. Tests reassign it after sourcing this file (library mode).
+SBX_INDEXER_WALL_S=1800
 SBX_LABEL_VALUE=s08
 SBX_DOCKER_HOST=unix:///var/run/docker.sock     # pinned daemon: a different socket is a runner edit
 SBX_DCFG_REL=.local/state/ccg/docker-config      # under the passwd HOME (egress-spec2 §1.7)
@@ -742,24 +745,107 @@ sbx_launch() {
   # exits 128+n. No record is written: a killed runner leaves none (§5.3).
   trap 'sbx_on_signal 2' INT; trap 'sbx_on_signal 15' TERM; trap 'sbx_on_signal 1' HUP
   rc=0
+  # Indexer entries only: a wall-clock watchdog (egress-spec4 §1). USR2 is the timer's signal.
+  SBX_WD_PID=""
+  if [ "${SBX_INDEXER:-0}" = 1 ]; then
+    trap 'sbx_on_wall' USR2
+    # No readable start time means no safe timer, and an indexer must not run uncapped: refuse the launch.
+    sbx_wd_arm || { trap - INT TERM HUP; trap '' USR2; SBX_LAUNCH_SETUP_FAIL="watchdog: the runner's start time is unreadable"; return 69; }
+  fi
   "${SBX_LAUNCHER[@]}" < /dev/null &
   SBX_CHILD=$!
   wait "$SBX_CHILD" || rc=$?
   SBX_CHILD=""
+  # USR2 is ignored before the timer is cancelled: a timer that fires just now cannot reclassify a
+  # run whose tool already exited. The disposition stays "ignored" after this point (harmless: the
+  # runner only starts its record writer afterwards; the sandbox client was started with the handler,
+  # which a child resets to the default).
+  trap '' USR2
+  sbx_wd_disarm
   trap - INT TERM HUP
   return "$rc"
 }
+# /proc/<pid>/stat field 22 (process start time in clock ticks): with the PID, it identifies a process
+# even after PID reuse. Prints nothing and returns 1 when the process is gone.
+sbx_pid_start() { # <pid>
+  local l=""
+  # -d '' reads the whole file: a newline in the process's comm cannot truncate the line before field 22.
+  IFS= read -r -d '' l < "/proc/$1/stat" 2>/dev/null || [ -n "$l" ] || return 1
+  l=${l##*) }
+  set -- $l
+  echo "${20}"
+}
+# The timer: a background subshell that waits SBX_INDEXER_WALL_S (in steps of at most 30 s, so an
+# orphan outliving a dead runner exits within 30 s) and then sends USR2 to the runner, but only if
+# the runner is still the same process (start time recorded at arm). It closes the runner's --output
+# lock fd, so it never pins the lock. A TERM ends it and its sleep (no wait on it by the runner).
+# <pid> <start> are a test seam (default: this shell and its own start time).
+sbx_wd_arm() { # [<pid> [<start>]]
+  local me=${1:-$BASHPID} st=${2:-}
+  [ -n "$st" ] || st=$(sbx_pid_start "$me")
+  # An empty start time would make the identity check pass for a dead runner too (fail open): no timer.
+  if [ -z "$st" ]; then sbx_log "watchdog: the runner's start time is unreadable, no timer armed"; return 1; fi
+  (
+    trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM
+    if [ -n "${SBX_LOCK_FD:-}" ]; then exec {SBX_LOCK_FD}<&-; fi
+    end=$((SECONDS + SBX_INDEXER_WALL_S))
+    while ((SECONDS < end)); do
+      step=$((end - SECONDS)); ((step > 30)) && step=30
+      sleep "$step" &
+      wait $! || exit 0
+      [ "$(sbx_pid_start "$me")" = "$st" ] || exit 0
+    done
+    kill -USR2 "$me" 2>/dev/null
+  ) > /dev/null 2>&1 < /dev/null &
+  SBX_WD_PID=$!
+}
+# Cancel the timer with TERM (its trap ends its sleep and itself). The runner does not `wait` on it: a
+# wait on a timer that is just firing hung intermittently (measured: 2 runs in 8).
+sbx_wd_disarm() {
+  [ -n "${SBX_WD_PID:-}" ] || return 0
+  kill -TERM "$SBX_WD_PID" 2>/dev/null
+  SBX_WD_PID=""
+}
+# KILL every background job of this shell except <skip> (the timer, which ends itself on its TERM), and
+# wait for each one killed.
+sbx_kill_jobs() { # [<skip pid>]
+  local j
+  for j in $(jobs -p); do
+    [ "$j" = "${1:-}" ] && continue
+    kill -KILL "$j" 2>/dev/null; wait "$j" 2>/dev/null
+  done
+}
+# The watchdog's expiry: sbx_on_signal's steps as a variant (KILL the client, remove this run's
+# containers, clean up), then the invocation's one record, unrefused, exit 124. First wins: it
+# ignores USR2 first and the caller-signal handler ignores it too, so a signalled run writes no record.
+# The timer has already sent its signal and ended, so there is nothing to cancel (no kill of a
+# possibly recycled PID). A second INT/TERM/HUP is ignored: it must not abort the removal.
+sbx_on_wall() {
+  trap '' USR2
+  trap '' INT TERM HUP
+  sbx_log "indexer wall-clock limit (${SBX_INDEXER_WALL_S} s) reached: stopping the sandbox"
+  local wd=${SBX_WD_PID:-}
+  SBX_WD_PID=""
+  sbx_kill_jobs "$wd"
+  if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi
+  sbx_write_record 124 ""
+  sbx_cleanup
+  trap - EXIT
+  exit 124
+}
 sbx_on_signal() { # <signal number>
-  trap - INT TERM HUP
+  trap '' USR2
+  local wd=${SBX_WD_PID:-}
+  sbx_wd_disarm
+  trap '' INT TERM HUP
   sbx_log "signal $1: stopping the sandbox (no record is written)"
   # The client goes first (review S08 p3-m1). Removing the container while `docker run` may still
   # be between its create and start calls misses a container the daemon completes afterwards, and
   # `--rm` never fires for one that never started. KILL, not TERM: a TERMed `docker run` proxies
   # the signal to the container and keeps running. `jobs -p`, not $SBX_CHILD: the trap can run
   # after the `&` but before SBX_CHILD is assigned. bwrap (--die-with-parent) dies the same way.
-  local j
-  for j in $(jobs -p); do kill -KILL "$j" 2>/dev/null; done
-  wait 2>/dev/null
+  # A second INT/TERM/HUP is ignored: it must not abort the removal.
+  sbx_kill_jobs "$wd"
   if [ "$SBX_BACKEND" = container ]; then sbx_remove_own; fi
   sbx_cleanup
   exit $((128 + $1))

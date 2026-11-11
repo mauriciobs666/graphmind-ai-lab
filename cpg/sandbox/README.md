@@ -75,6 +75,12 @@ cpg/sandbox/offline-run.sh --backend container --mode offline --frontend scip-py
 - `128+n`: the runner got signal *n* (INT, TERM or HUP) while the sandbox ran. It removed every
   container and volume labelled with its `auditId` and wrote no record (§5.3: a killed runner
   leaves none).
+- `124`: an indexer entry ran past its wall-clock cap, `SBX_INDEXER_WALL_S` (1800 s). See
+  **Indexer wall-clock watchdog** below. The one record is written, `refused: false`, `exitCode: 124`.
+  124 means "watchdog timeout **or** a tool that exited 124 itself": the tool's own status passes through,
+  so a consumer must not read 124 as proof that the cap fired (`durationMs` against the cap tells them apart).
+  A race at the cap boundary can record 124 for a run that had just succeeded; that is fail-closed (no
+  artifact is used).
 
 **Audit record.** Every invocation, refusals included, appends one `sandbox` record (§5.3) to
 `$CCG_AUDIT_DIR/sandbox.jsonl`. The default is `cpg/.audit/`, which is gitignored.
@@ -173,6 +179,37 @@ or HUP, `sbx_on_signal` does three things, in this order:
    measured that: 11 of 20 and 17 of 40 trials.
 3. **It cleans its scratch and exits `128+n`.** The `--output` lock is held throughout, so it is
    never free while our container still writes.
+
+**Indexer wall-clock watchdog** (egress-spec4 §1). For `scip-typescript` and `scip-python` only (Joern
+frontends are unchanged), `sbx_launch` starts a timer: a background subshell that waits
+`SBX_INDEXER_WALL_S` (in steps of at most 30 s) and then sends the runner `USR2`. The constant is `1800`,
+assigned unconditionally; no environment variable sets it (a test sources the runner and reassigns it,
+which is the only hook). On expiry `sbx_on_wall` takes `sbx_on_signal`'s steps (KILL the client,
+`sbx_remove_own`, `sbx_cleanup`), then writes the invocation's one record with `exitCode: 124`,
+`refused: false`, and exits 124. A bare `timeout` would not do: a hung node may ignore the TERM that
+`docker run` proxies.
+- **Cancelled on normal exit.** USR2 is set to ignored first, then the timer gets TERM (its trap ends it
+  and its sleep); the runner never `wait`s on the timer (a wait hung intermittently). The disposition stays
+  "ignored" afterwards, which is harmless: the sandbox client is started while the handler is set, and a
+  child resets a handled signal to the default.
+- **First wins.** Each handler ignores USR2 on entry, so a signalled run never also writes a watchdog
+  record. Both handlers also **ignore** INT/TERM/HUP while they remove containers: a second signal cannot
+  abort the removal and leave the container running. On expiry the timer has already ended, so the
+  handler does not signal its (possibly recycled) PID.
+- **A runner killed without a trap** (SIGKILL, OOM) cannot cancel its timer. The timer therefore closes the
+  runner's `--output` lock fd (it never pins the lock), checks every 30 s and at the cap that the runner is
+  still the same process (`/proc/<pid>/stat` start time, recorded at arm; a bare `kill -0` would not catch
+  PID reuse), and exits silently if not. It sends USR2 only to the runner it armed for. No `pkill`
+  is used, so nothing is needed beyond bash and procfs.
+- With INT/TERM/HUP ignored during cleanup, a wedged cleanup (for example a hung Docker daemon) is ended
+  only by SIGKILL, which leaves the container. P1-15 must therefore run the runner under `timeout -k` (or
+  otherwise escalate to KILL) after cap + 60 s, and compare `durationMs` with the cap, since exit 124 alone
+  is ambiguous.
+- If the runner's start time cannot be read (`/proc` unreadable), no timer can be armed safely, and an
+  indexer must not run uncapped: the launch is refused (69, `backend-unavailable`). The start time is read
+  with `read -d ''`, so a newline in the runner's process name cannot hide field 22.
+- A 124 record is not a successful indexer run: it has no artifact, and P1-15's own timeout must exceed
+  the cap plus 60 s.
 
 A `SIGKILL` to the runner cannot be trapped: the container then runs to its end under `--rm`,
 and the lock is free meanwhile. The launch stays one `docker run`. Splitting it into `docker
@@ -347,6 +384,24 @@ Two tests were added beyond §10's numbering:
   added, or a different `PATH` value in the block, it must re-exec. With a closed block whose
   shell `PATH`/`HOME` are changed after exec, it must not.
 
+- **Test 27, the indexer wall-clock watchdog** (library mode: the test reassigns `SBX_INDEXER_WALL_S`
+  to a few seconds after sourcing). A planted indexer that ignores TERM is KILLed: exit 124, one record
+  (`exitCode: 124`, `refused: false`), no container, volume or scratch left. Controls: a tool that exits
+  before the cap exits 0 with a 0 record, leaves no `Killed` notice on stderr and no orphan `sleep`; a
+  non-indexer launch that outlives the cap is not capped; an exported `SBX_INDEXER_WALL_S=3` leaves the
+  constant at `1800`. First wins: an INT while the sandbox runs, then the timer's `USR2` sent by hand
+  while the INT handler's removal (slowed to 10 s) is running, gives exit 130 and no record (the real
+  timer is already ended by then, so the signal is delivered directly). A second TERM during that removal
+  is ignored (exit 130, container removed); a TERM and a second USR2 during the watchdog's removal change
+  nothing (exit 124, one record, one expiry log line). A SIGKILLed runner: once its container is removed,
+  the `--output` lock is free and no timer `sleep` survives the cap. Identity check without a container: a
+  timer armed with a start time that does not match a live process signals nothing; with the right start
+  time it does. With no readable start time `sbx_wd_arm` arms nothing and fails; a process name holding a
+  newline and `) ` still yields the right start time. The SIGKILL test uses a 47 s cap, so the timer's
+  first 30 s step ends with the runner gone and the orphan exits then (about 30 s of extra waiting).
+  After a signalled exit (INT) no timer `sleep` remains. The timer sleeps use odd values (23, 27, 47) so
+  the tests' `pgrep -fx` matches cannot be confused with another session's `sleep`.
+
 **Hygiene** (S08 review p2-m1, p2-n2, p3-m2). The suite fails if any of the following is left at
 the end. Each check counts only what this run made, so another session's sandbox work cannot
 turn it red:
@@ -417,9 +472,14 @@ Test 5 also pins the labels the scoped check relies on: `--label ccg.sandbox.aud
 - the S08-gate round: M22–M31, X1–X6, X8–X10 and M32–M35;
 - the ES2 v1.2 / Pass 2 follow-up: M37–M42 (`-p` dropped is M30, now also run against test 11);
 - P3-7's M43;
-- the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM;
+- the Pass 3 follow-up: YA–YB (p3-m3, test 14), YC (p3-n1, test 15), and YD–YF (p3-m1; YD and YF re-anchored on the `sbx_on_signal` lines once `sbx_on_wall` held identical ones). YD is the rejected design (remove first, then kill), YE kills first but removes only once, and YF sends the client TERM;
 - P1-48b's indexer mutants I01–I41 (the grammar, output, image label, backend and mode rules, the pass-list's `PYTHONSAFEPATH`, the indexer flag lists; the "Tests run" column names the test that must turn each red). A path-check mutant that admits `--cwd /` makes `scip-python` index the whole image: the suite's per-run `timeout` turns that hang into a red test;
 - P1-48b's fix round J01–J17 (`--project-version`, the path component class, symlink containment, launch by image ID, containment-before-usage precedence);
+- the indexer wall-clock watchdog K01–K14 (all test 27): K01 cap on a Joern frontend, K02 TERM for KILL,
+  K03 removal skipped, K04a/K04b either handler no longer ignores USR2, K05 constant read from the
+  environment, K06 no runner-identity check in the timer, K07 the timer keeps the lock fd, K08/K09 either
+  handler resets INT/TERM/HUP to the default during removal, K10 the disarm does not stop the timer, K11 `sbx_on_signal` does not disarm it, K12 no check
+  that the start time was read, K13 the stat file read line by line, K14 the 30 s step is the whole remainder;
 - the Pass 4 follow-up: YG (p4-m1, `sbx_cleanup` stops removing the scratch, test 2) and YH
   (closed-env values read from live shell variables, test 15). M38 and M39 were re-anchored to
   the values-from-block lines, with the same breaks.
@@ -545,3 +605,18 @@ Outside the harness, because it leaves residue by design: **M36**, which drops `
 | J15 | containment follows an absolute symlink by its host path (the realpath-only rule) | 22 | killed | 22 symlink: scip-typescript --cwd /src/lnk_hostabs is refused |
 | J16 | a containment refusal no longer outranks a missing mandatory element (usage first) | 22 | killed | 22 precedence: an escaping --cwd outranks a missing --project-version |
 | J17 | --environment no longer required to be a regular file (the -f check dropped: a directory or a FIFO passes) | 22 | killed | 22 --environment names a directory (/src/sub): refused |
+| K01 | (27) the wall-clock cap is applied to every frontend, not only the indexers | 27 | killed | (27) a non-indexer launch is not capped: it outlives the cap and exits 0 (rc 124) |
+| K02 | (27) the watchdog (and the signal handler) send TERM instead of KILL to the client | 27 | killed (timeout) | test run exceeded 150 s |
+| K03 | (27) the watchdog skips the removal of the run's containers | 27 | killed | (27) watchdog: no container labelled with its auditId remains |
+| K04a | (27) first wins: sbx_on_signal no longer ignores USR2 (a late timer signal re-enters as a watchdog) | 27 | killed | (27) first wins: INT, then the timer's USR2 during the handler's removal: exit 130, not 124 (rc 124) |
+| K04b | (27) first wins: sbx_on_wall no longer ignores USR2 (a second USR2 re-enters the watchdog handler) | 27 | killed | (27) the watchdog logged its expiry exactly once (a second USR2 did not re-enter the handler) |
+| K05 | (27) the wall-clock constant is read from the environment | 27 | killed | (27) library mode: an exported SBX_INDEXER_WALL_S=3 does not change the constant (got 3) |
+| K06 | (27) the timer signals without checking that the runner is the same process (PID reuse) | 27 | killed | (27) timer identity: a recorded start time that does not match the process: no signal is sent (got DEAD) |
+| K07 | (27) the timer keeps the runner's --output lock fd open | 27 | killed | (27) SIGKILLed runner: the --output lock is free once its container is gone (the orphan timer does not pin it) |
+| K08 | (27) sbx_on_signal resets INT/TERM/HUP to the default during the removal (a second TERM aborts it) | 27 | killed | (27) a second TERM during the INT handler's removal is ignored: exit 130 (rc 143), no record |
+| K09 | (27) sbx_on_wall resets INT/TERM/HUP to the default during the removal | 27 | killed | (27) a TERM and a second USR2 during the watchdog's removal change nothing: exit 124 (rc 143), one record |
+| K10 | (27) the disarm does not stop the timer (its sleep outlives a normal exit) | 27 | killed | (27) control: after a normal exit (rc 0) no 'sleep 29' timer process remains |
+| K11 | (27) sbx_on_signal does not disarm the timer (its sleep outlives a signalled exit) | 27 | killed | (27) after a signalled exit the timer is ended too: no 'sleep 27' remains |
+| K12 | (27) no check that the runner's start time was read (the identity check fails open) | 27 | killed | (27) no readable start time: sbx_wd_arm arms no timer and fails (got rc=0 pid=295820) |
+| K13 | (27) /proc stat read line by line (a newline in the process name hides field 22) | 27 | killed | (27) start time read for a process whose name contains a newline and ') ' (got '', want '939397') |
+| K14 | (27) the timer's step is the whole remainder (an orphan outlives a dead runner up to the cap) | 27 | killed | (27) SIGKILLed runner: one 30 s step after arming, the orphan timer has exited (no 'sleep 47' or 'sleep 17') |
