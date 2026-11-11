@@ -329,8 +329,8 @@ def test_a_real_unbuildable_unit_fails_alone(world):
 def test_a_unit_the_build_never_reported_is_not_mapped_as_never_built(world, monkeypatch, spies):
     real = RF.build_units
 
-    def drop_one(units, repos, commits, system, ctx=None, *, build=None):
-        rep = real(units, repos, commits, system, ctx, build=build)
+    def drop_one(units, repos, commits, system, ctx=None, **kw):
+        rep = real(units, repos, commits, system, ctx, **kw)
         return rep.__class__(tuple(r for r in rep.results if r.unit.unitId != uid("docs/note.md", "markdown")), rep.known_tools, rep.skipped_docs)
 
     monkeypatch.setattr(RF, "build_units", drop_one)
@@ -766,7 +766,7 @@ def test_after_a_good_refresh_each_unit_keeps_exactly_one_bundle(world):
     RF.refresh(SYSTEM, **world.kw(make_target()[0]))
     commit(world.repo(), {"conf/app.yaml": "name: app\nport: 9090\n", "bin/run.sh": "#!/bin/sh\necho 2\n", "docs/note.md": "# N\n\nx\n"})
     rep = RF.refresh(SYSTEM, **world.kw(make_target()[0]))
-    names = sorted(p.name for p in atrest.bundle_dir(SYSTEM, world.work).iterdir())
+    names = sorted(p.name for p in atrest.bundle_dir(SYSTEM, world.work).iterdir() if p.name.endswith(atrest.BUNDLE_SUFFIX))
     assert names == sorted(f"{uid(*u)}.{rep.heads['r1']}.bundle.jsonl" for u in ALL_UNITS) and rep.pruned == 3
 
 
@@ -928,7 +928,7 @@ def test_a_full_refresh_removes_the_bundles_of_units_that_no_longer_exist(world)
     commit(world.repo(), {"docs/note.md": None})
     rep = RF.refresh(SYSTEM, **world.kw(make_target()[0]))
     names = [p.name for p in atrest.bundle_dir(SYSTEM, world.work).iterdir()]
-    assert not [n for n in names if n.startswith(gone)] and len(names) == 2 and rep.pruned == 3     # 2 old builds of the live units + the orphan
+    assert not [n for n in names if n.startswith(gone)] and len(names) == 4 and rep.pruned == 4     # 2 old builds + the orphan's bundle and its state
 
 
 def test_a_scoped_refresh_never_removes_orphans(tmp_path):
@@ -979,8 +979,8 @@ def test_a_unit_the_build_never_reported_keeps_its_last_good_bundle_with_the_ext
     victim = uid("docs/note.md", "markdown")
     real = RF.build_units
 
-    def drop_one(units, repos, commits, system, ctx=None, *, build=None):
-        rep = real(units, repos, commits, system, ctx, build=build)
+    def drop_one(units, repos, commits, system, ctx=None, **kw):
+        rep = real(units, repos, commits, system, ctx, **kw)
         return rep.__class__(tuple(r for r in rep.results if r.unit.unitId != victim), rep.known_tools, rep.skipped_docs)
 
     monkeypatch.setattr(RF, "build_units", drop_one)

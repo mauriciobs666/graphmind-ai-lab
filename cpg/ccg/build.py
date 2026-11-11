@@ -451,13 +451,18 @@ def known_tools_of(bundles: Iterable[list[dict]]) -> frozenset[str]:
 
 
 def build_units(units: Sequence[Unit], repos: Mapping[str, str | Path], commits: Mapping[str, str], system: str,
-                ctx: BuildContext | None = None, *, build: Callable[..., BundleResult] | None = None) -> BuildReport:
+                ctx: BuildContext | None = None, *, build: Callable[..., BundleResult] | None = None,
+                carried_code_bundles: Iterable[list[dict]] = (), all_units: Sequence[Unit] | None = None) -> BuildReport:
     """Build every unit: code units first, then ``known_tools`` once, then shell, config and markdown units.
 
-    ``repos`` maps a ``repoId`` to its git work tree and ``commits`` to the commit built. Each unit fails alone."""
+    ``repos`` maps a ``repoId`` to its git work tree and ``commits`` to the commit built. Each unit fails alone.
+
+    A caller that builds only a subset of the system's units (a scoped refresh) passes the rest so the system-wide inputs do not shrink
+    with the subset: ``carried_code_bundles`` are the code bundles of the units it does not build (they join the freshly built ones in
+    ``known_tools``) and ``all_units`` is the full unit list (``ctx.units``, what the code extractor and the config vocabulary read)."""
     build = build or build_unit
     ctx = ctx or BuildContext()
-    ctx.units = tuple(units)
+    ctx.units = tuple(units if all_units is None else all_units)
     ordered = sorted(units, key=lambda u: (_ORDER.get(u.language, len(KINDS)), u.repoId, u.rootPath))
     code = [u for u in ordered if u.language in CODE_KINDS]
     rest = [u for u in ordered if u.language not in CODE_KINDS]
@@ -469,7 +474,7 @@ def build_units(units: Sequence[Unit], repos: Mapping[str, str | Path], commits:
         if r.ok:
             code_bundles.append(bundle.loads(atrest.read_bundle(system, u.unitId, r.commit, ctx.root)))
     if any(u.language == "markdown" for u in rest):                    # once per build, after every code bundle exists
-        ctx.known_tools = known_tools_of(code_bundles)
+        ctx.known_tools = known_tools_of([*code_bundles, *carried_code_bundles])
     for u in rest:
         results.append(build(u, repos[u.repoId], commits[u.repoId], system, ctx))
     skipped = sum(r.report.get("skippedDocs", 0) for r in results)

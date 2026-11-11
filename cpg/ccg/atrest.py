@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
@@ -37,6 +38,7 @@ WORK_ROOT = Path(__file__).resolve().parent.parent / ".ccg-work"
 REPO_ROOT = WORK_ROOT.parent.parent
 KEY_ROOT = Path.home() / ".config" / "ccg" / "keys"
 BUNDLE_SUFFIX = ".bundle.jsonl"
+STATE_SUFFIX = ".state.json"
 KEY_BYTES = 32
 BIND_KEYCHECK_TAG = "ccg.bindParts.keycheck.v1"
 # bindKeyCheck of the two published -bundle-spec5.md §9 test keys: EH-30 (bytes 00..1f) and §9.4's K2
@@ -311,6 +313,63 @@ def read_bundle(system: str, unit: str, build: str, root: str | os.PathLike | No
     return read_private(bundle_path(system, unit, build, root), area=_work_root(root))
 
 
+# --- per-unit carried state (work area): the refresh's marker of a unit whose last refresh failed
+
+_STATE_STATUSES = ("fresh", "stale-kept")
+_STATE_KEYS = frozenset({"status", "builtCommit", "failedAt", "failReason"})
+_STAMP_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z")
+_REASON_RE = re.compile(r"[a-z]+:[a-z][a-z0-9-]*")
+
+
+def unit_state_path(system: str, unit: str, root: str | os.PathLike | None = None) -> Path:
+    """Where the carried state of ``unit`` lives, beside its bundles (the directory is created, the file is not)."""
+    return bundle_dir(system, root) / f"{_name('unit', unit)}{STATE_SUFFIX}"
+
+
+def _check_state(state: object) -> dict:
+    if not isinstance(state, dict) or set(state) != _STATE_KEYS:
+        raise AtRestError("unit state: not exactly status, builtCommit, failedAt, failReason")
+    status, commit, at, reason = (state[k] for k in ("status", "builtCommit", "failedAt", "failReason"))
+    if status not in _STATE_STATUSES or not isinstance(commit, str) or not _NAME_RE.fullmatch(commit):
+        raise AtRestError("unit state: bad status or builtCommit")
+    marked = (at, reason) != (None, None)
+    if marked != (status == "stale-kept") or (marked and not (isinstance(at, str) and _STAMP_RE.fullmatch(at)
+                                                              and isinstance(reason, str) and _REASON_RE.fullmatch(reason))):
+        raise AtRestError("unit state: the failure marker does not match the status")
+    return dict(state)
+
+
+def write_unit_state(system: str, unit: str, status: str, built_commit: str, failed_at: str | None = None,
+                     fail_reason: str | None = None, root: str | os.PathLike | None = None) -> Path:
+    """Record ``unit``'s status after a refresh (``fresh`` or ``stale-kept``; the latter carries ``failedAt`` and one failure code), atomically,
+    0600. The record is value-free by construction: four closed fields, no text from a repository. Overwrites the unit's previous record."""
+    state = _check_state({"status": status, "builtCommit": built_commit, "failedAt": failed_at, "failReason": fail_reason})
+    data = (json.dumps(state, sort_keys=True) + "\n").encode("ascii")
+    return write_private(unit_state_path(system, unit, root), data, area=_work_root(root))
+
+
+def read_unit_state(system: str, unit: str, root: str | os.PathLike | None = None) -> dict | None:
+    """The record :func:`write_unit_state` left, or None when the unit has none. A record that is a link, not a regular file, not
+    parseable or not exactly the four closed fields raises :class:`AtRestError` (the caller decides what a bad record means)."""
+    p = unit_state_path(system, unit, root)
+    if not os.path.lexists(p):
+        return None
+    try:
+        return _check_state(json.loads(read_private(p, area=_work_root(root))))
+    except (ValueError, UnicodeDecodeError):
+        raise AtRestError("unit state: not a JSON record") from None
+
+
+def clear_unit_state(system: str, unit: str, root: str | os.PathLike | None = None) -> bool:
+    """Remove ``unit``'s record (a link is unlinked itself, never followed); True if one existed."""
+    p = unit_state_path(system, unit, root)
+    if not os.path.lexists(p):
+        return False
+    ensure_private(p, _work_root(root))
+    p.unlink()
+    return True
+
+
 def prune_unit(system: str, unit: str, keep_build: str, root: str | os.PathLike | None = None) -> list[Path]:
     """Retention: delete every completed bundle of ``unit`` except build ``keep_build`` (the last good one).
 
@@ -346,6 +405,12 @@ def prune_orphans(system: str, live_units: Iterable[str], root: str | os.PathLik
     removed = []
     for f in sorted(d.iterdir()):
         n = f.name
+        if n.endswith(STATE_SUFFIX):                        # a unit's carried state goes with the unit
+            if _NAME_RE.fullmatch(n[:-len(STATE_SUFFIX)]) and n[:-len(STATE_SUFFIX)] not in live:
+                ensure_private(f, r)
+                f.unlink()
+                removed.append(f)
+            continue
         if not n.endswith(BUNDLE_SUFFIX):
             continue
         unit, _, build = n[:-len(BUNDLE_SUFFIX)].partition(".")
@@ -361,7 +426,7 @@ def prune_orphans(system: str, live_units: Iterable[str], root: str | os.PathLik
 #: build goes through, and ``ccg.bundle.write_bundle``) draw 8 random bytes (16 hex digits); 8 hex digits are still accepted, the name an
 #: older ``write_private`` left behind.
 _STALE_TMP_RE = re.compile(
-    rf"\.{_NAME_RE.pattern}\.{_NAME_RE.pattern}{re.escape(BUNDLE_SUFFIX)}\.(?:[0-9a-f]{{8}}|[0-9a-f]{{16}})\.tmp")
+    rf"\.{_NAME_RE.pattern}\.(?:{_NAME_RE.pattern}{re.escape(BUNDLE_SUFFIX)}|{re.escape(STATE_SUFFIX[1:])})\.(?:[0-9a-f]{{8}}|[0-9a-f]{{16}})\.tmp")
 
 
 def sweep_stale_tmp(system: str, older_than_s: float = 3600, root: str | os.PathLike | None = None,

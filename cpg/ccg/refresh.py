@@ -18,8 +18,18 @@ bundle is ``not-mapped`` (its reason is that code too, or ``manifest:never-built
 
 **The head is the local clone's** (``staleness.HEAD_NOTE``): nothing is fetched. A full rebuild is the default. ``scope`` (a set of ``repoId``)
 selects which units are **rebuilt**, never which units the graph holds (plan (2a)): every manifest unit is discovered and loaded, an
-out-of-scope unit from its last good bundle unchanged (``fresh``, its own ``builtCommit``; the staleness reader shows any drift) or
-``not-mapped``/``manifest:never-built`` when it has none, so a scoped refresh never swaps a partial graph over the live key.
+out-of-scope unit from its last good bundle with its own ``builtCommit`` and its **previous status and failure marker carried** (the
+staleness reader shows any commit drift; it cannot show that the last refresh of the unit failed) or ``not-mapped``/``manifest:never-built`` when
+it has none, so a scoped refresh never swaps a partial graph over the live key. The marker is read from the work directory, not the live graph
+(the build credential holds the live key write-only): after each refresh ``atrest.write_unit_state`` records the status of every unit that
+refresh rebuilt (``fresh``, or ``stale-kept`` with ``failedAt`` and its code), and a carried unit reads only its own record. A unit that was
+``stale-kept`` therefore stays ``stale-kept`` with the same ``failedAt`` and ``failReason`` across scoped refreshes until it is rebuilt; a rebuild
+overwrites the record; a unit with no record is ``fresh``. A record that is unreadable, a link, malformed, names a code outside ``FAIL_REASONS``
+or belongs to another build than the bundle carried **fails closed**: the unit is ``stale-kept`` with ``extract:failed`` and the refresh time.
+The record is a bind-key-mismatch-blind snapshot of the rebuild only (a mismatch is recomputed on every refresh and never recorded).
+Scoped or full, the build stage always sees the whole system: the carried fresh code bundles join ``known_tools`` and ``ctx.units`` is the full
+unit list, so a Markdown unit rebuilt in a scoped refresh matches the bytes a full refresh builds. A carried code unit that is ``stale-kept``
+adds no tools, as a failed code build adds none in a full refresh.
 ``override`` (``"local"``/``"hosted"``), only when given, opens a broker ``refresh`` run first and fails with the broker's own error if there
 is no broker: there is no fallback, and the run's ``policy`` record id is in the report (the token never is).
 
@@ -49,7 +59,7 @@ from typing import Callable, Iterable, Sequence
 from ccg import atrest, bundle, rulepack
 from ccg.assemble import NotMappedUnit, build_rows, classify_bundle
 from ccg.broker.client import BrokerClient
-from ccg.build import BuildContext, BundleResult, UnknownUnitKind, build_unit, build_units
+from ccg.build import CODE_KINDS, BuildContext, BundleResult, UnknownUnitKind, build_unit, build_units
 from ccg.linker import Binder, link
 from ccg.manifest import Manifest, load_manifest
 from ccg.packrt import run_packs
@@ -133,6 +143,8 @@ class RefreshReport:
     pruned: int = 0
     #: retention failures after the swap (a link or a foreign file in the bundle directory): the graph is live, the count is all that is kept
     prune_errors: int = 0
+    #: unit-state records that could not be written or cleared after the swap (the graph is live; a lost record reads as ``fresh`` next time)
+    state_errors: int = 0
     unattested_units: list[str] = field(default_factory=list)
     bind_key_mismatch: list[str] = field(default_factory=list)
     dropped: dict[str, int] = field(default_factory=dict)
@@ -165,7 +177,7 @@ class RefreshReport:
         out = [f"refresh {t(self.system)}: {len(self.fresh)} fresh, {len(self.stale_kept)} stale-kept, {len(self.not_mapped)} not-mapped "
                f"({t(self.head_note)})",
                f"swept {self.swept} stale temp file(s); unknownKind {self.unknown_kind}; skippedDocs {self.skipped_docs}; undecodablePaths {self.undecodable_paths}; pruned {self.pruned}; "
-               f"prune errors {self.prune_errors}"]
+               f"prune errors {self.prune_errors}; state errors {self.state_errors}"]
         out += [f"{t(u.status)} {t(u.unit_id)} {t(u.language)} {t(u.root_path)} {t(u.fail_reason or '')}".rstrip()
                 for u in self.units if u.status != FRESH]
         out += [f"unattested {len(self.unattested_units)}: {', '.join(t(i) for i in self.unattested_units)}" if self.unattested_units
@@ -328,14 +340,30 @@ def _resolve(system: str, unit: Unit, result: BundleResult | None, root, audit_d
     return NOT_MAPPED, None, None, None, reason or NEVER_BUILT
 
 
-def _carry(system: str, unit: Unit, root, audit_dir: Path):
-    """An out-of-scope unit (not rebuilt): its last good bundle as ``fresh`` with its own ``builtCommit`` (nothing failed), else ``not-mapped``
-    (``manifest:never-built`` when no bundle is stored, the gate's code for the newest one when every stored bundle is refused)."""
+def _carried_marker(system: str, unit_id: str, build: str, root, failed_at: str) -> tuple[str, str | None, str | None]:
+    """``(status, failedAt, reason)`` of a carried unit from its own unit-state record: none is ``fresh``; a bad or foreign record fails closed."""
+    closed = (STALE_KEPT, failed_at, "extract:failed")
+    try:
+        state = atrest.read_unit_state(system, unit_id, root)
+    except atrest.AtRestError:
+        return closed
+    if state is None:
+        return FRESH, None, None
+    if state["builtCommit"] != build or state["failReason"] not in (None, *FAIL_REASONS):
+        return closed
+    return state["status"], state["failedAt"], state["failReason"]
+
+
+def _carry(system: str, unit: Unit, root, audit_dir: Path, failed_at: str):
+    """An out-of-scope unit (not rebuilt): its last good bundle with its own ``builtCommit`` and its carried status and failure marker
+    (:func:`_carried_marker`), else ``not-mapped`` (``manifest:never-built`` when no bundle is stored, the gate's code for the newest
+    one when every stored bundle is refused)."""
     refused = None
     for build in _stored_builds(system, unit.unitId, root):
         records, code = _gate(system, unit.unitId, build, root, audit_dir)
         if records is not None:
-            return FRESH, records, build, None, None
+            status, when, reason = _carried_marker(system, unit.unitId, build, root, failed_at)
+            return status, records, build, when, reason
         refused = refused or code
     return NOT_MAPPED, None, None, None, refused or NEVER_BUILT
 
@@ -417,6 +445,7 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
         units = discover_units(root, mf, commit=report.heads, report=found)
         report.undecodable_paths = found["undecodable_paths"]
     rebuilt = [u for u in units if scope_ids is None or u.repoId in scope_ids]
+    in_scope = {u.unitId for u in rebuilt}
     if not units:
         raise RefreshError("the manifest's repositories yield no unit at their heads", report)
 
@@ -432,7 +461,9 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
 
     ctx = BuildContext(root=work_root, keys_root=keys_root, built_at=built_at, manifest=manifest_path)
     with _Timed(report, "build", clock):
-        built = build_units(rebuilt, repos, report.heads, system, ctx, build=one)
+        carried = {u.unitId: _carry(system, u, work_root, audit, failed_at) for u in units if u.unitId not in in_scope}
+        carried_code = [c[1] for u in units if u.language in CODE_KINDS and (c := carried.get(u.unitId)) and c[0] == FRESH]
+        built = build_units(rebuilt, repos, report.heads, system, ctx, build=one, carried_code_bundles=carried_code, all_units=units)
     report.unknown_kind, report.skipped_docs = unknown[0], built.skipped_docs
     results = {r.unit.unitId: r for r in built.results}
 
@@ -441,11 +472,11 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
     unit_reports: dict[str, UnitReport] = {}
     not_mapped: list[NotMappedUnit] = []
     stale: dict[str, tuple[str, str]] = {}
-    in_scope = {u.unitId for u in rebuilt}
+    rebuilt_state: dict[str, tuple[str, str, str | None, str | None]] = {}      # what the next scoped refresh carries for a unit rebuilt now
     with _Timed(report, "resolve", clock):
         for u in units:
             status, records, commit, when, reason = (_resolve(system, u, results.get(u.unitId), work_root, audit, failed_at)
-                                                     if u.unitId in in_scope else _carry(system, u, work_root, audit))
+                                                     if u.unitId in in_scope else carried[u.unitId])
             ur = UnitReport(u.unitId, u.repoId, u.rootPath, u.language, status, commit, when, reason)
             unit_reports[u.unitId] = ur
             if records is None:
@@ -454,6 +485,7 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
             records_by_unit[u.unitId] = records
             if u.unitId in in_scope:
                 kept[u.unitId] = commit
+                rebuilt_state[u.unitId] = (status, commit, when, reason)
             if status == STALE_KEPT:
                 stale[u.unitId] = (when, reason)
         report.units = [unit_reports[u.unitId] for u in units]
@@ -499,6 +531,15 @@ def _run(report: RefreshReport, mf: Manifest, manifest_path: Path, root: Path, t
             report.pruned += len(atrest.prune_unit(system, unit_id, build_id, work_root))
         except atrest.AtRestError:
             report.prune_errors += 1
+    for u in rebuilt:                                              # a rebuilt unit overwrites its own carried state (none: no bundle, no state)
+        try:
+            if u.unitId in rebuilt_state:
+                status, commit, when, reason = rebuilt_state[u.unitId]
+                atrest.write_unit_state(system, u.unitId, status, commit, when, reason, work_root)
+            else:
+                atrest.clear_unit_state(system, u.unitId, work_root)
+        except atrest.AtRestError:
+            report.state_errors += 1
     if scope_ids is None:                                          # a full refresh knows every live unit: the rest are orphans
         try:
             report.pruned += len(atrest.prune_orphans(system, {u.unitId for u in units}, work_root))
