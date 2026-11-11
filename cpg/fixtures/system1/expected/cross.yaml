@@ -298,7 +298,7 @@ rows:
   kind: http
   keyNorm: GET /api/items/1
   status: confirmed
-  reason: binding-confirmed
+  reason: key-match
   gate: P1
   stratum: fixture-dev
   serves:
@@ -312,7 +312,6 @@ rows:
   consumer:
   - fx-web:app/src/api/items.ts::getDefaultItem
   refs:
-  - fx-svc:deploy/compose.yaml @services.web.environment.VITE_API_BASE
   - fx-web:app/src/api/items.ts::DEFAULT_ITEM
 - id: LNK-14
   kind: http
@@ -337,7 +336,7 @@ rows:
   kind: http
   keyNorm: POST /job/trigger
   status: confirmed
-  reason: binding-confirmed
+  reason: key-match
   gate: P1
   stratum: fixture-dev
   serves:
@@ -350,8 +349,6 @@ rows:
   - fx-job:job/trigger_server.py::trigger
   consumer:
   - fx-svc:clients/jobs.py::trigger_job
-  refs:
-  - fx-svc:deploy/compose.yaml @services.job.ports
 - id: LNK-17
   kind: http
   keyNorm: GET /api/items/{?}

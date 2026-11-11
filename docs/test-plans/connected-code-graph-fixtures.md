@@ -1,8 +1,8 @@
 # Connected code graph — fixture system test plan (S35)
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.6 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** C-1001 (M10) · **Extends:** `docs/plans/connected-code-graph-p0-2.md` · **Version:** 1.7 · **Reviews:** `docs/reviews/connected-code-graph-fixtures.md`, `docs/reviews/connected-code-graph-fixtures-ml.md`
 
-*2026-11-11 (v1.6): LNK-45 added (P1-11b's `bash -c 'exec "$CLAUDE_PROJECT_DIR/scripts/run-mcp.sh"'` `.mcp.json` server `fx-svc-exec`, with prompt mention `.claude/agents/exec.md`); census 134 rows, positives 122, P1 93, LNK 45; fx-svc SHAs repinned. AC6-PM-1/-2 stay re-pathed to `.claude/agents/agent.md` and `.claude/agents/tools.md` (`prompt-md`).*
+*2026-11-11 (v1.7): Q-ENV deferred to P2, so LNK-13 and LNK-15 expect `key-match` at P1 (their Compose bindings are P2 notes) and AB-4 waits for P2 on LNK-15; LNK-45 (P1-11b `bash -c exec` server `fx-svc-exec`, prompt mention `.claude/agents/exec.md`) added; census 134 rows, positives 122, P1 93; fx-svc SHAs repinned.*
 
 *2026-11-10 (v1.4): the AC-6 example-config floor is met at P1 by a third row (AC6-EX-4, `http`, a Python `os.environ[...]` consumer; census 133 rows, P1 92); the P1 form of the flow-dependent rows (DF-1 to DF-3, CD, RV) is added with locator and distance (§5.5); the `OV-2` sentence of §5.1 corrected.*
 
@@ -151,9 +151,9 @@ answer must contain.
 | LNK-10 | http | `GET /api/search`, TS wrapper `request()` reached by a two-level field path `api.search.query` (AC-1 lifting chain) | P `svc:api/search.py::search` · C `web:app/src/api/index.ts::api.search.query` (wrapper `web:app/src/api/client.ts::request`) | c | key-match | P1 | client wrapper | LNK |
 | LNK-11 | http | `POST /api/v1/orders`, Python wrapper `ApiClient.post` | P `svc:api/orders.py::create_order` · C `job:job/run_report.py::requeue` (wrapper `job:job/api_client.py::ApiClient.post`) | c | key-match | P1 | client wrapper | LNK |
 | LNK-12 | mcp_tool | `reindex`, TS `callTool(name)` wrapper | P `svc:mcp/server.py::reindex` · C `web:app/src/ui/Admin.tsx::onReindex` (wrapper `web:app/src/mcp/client.ts::callTool`) | c | binding-confirmed | P1 | client wrapper | LNK |
-| LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding) | P `svc:api/items.py::read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | binding-confirmed | P1 | config-bound base URL | LNK |
+| LNK-13 | http | `GET /api/items/{}` (constant `DEFAULT_ITEM = 1`); base URL is `VITE_API_BASE`, set by Compose service `web` to service `api` (Env/Compose binding, **P2**: the consumer's variable name is in no bundle record at P1, Q-ENV) | P `svc:api/items.py::read_item` · C `web:app/src/api/items.ts::getDefaultItem` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
 | LNK-14 | http | `GET /api/health`; base URL `base_url` in `config/job.yaml` (origin `http://api:8000`, the Compose service `api` of LNK-22, so it binds to unit `svc` alone), read by `job/settings.py` | P `svc:api/health.py::health` · C `job:job/run_report.py::preflight` | c | binding-confirmed | P1 | config-bound base URL | LNK |
-| LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 (`job` Compose service: build context `../../fx-job`, port 8300, unit `job`) | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | binding-confirmed | P1 | config-bound base URL | LNK |
+| LNK-15 | http | `POST /job/trigger`; base URL `os.environ.get("FX_JOB_URL", "http://localhost:8300")`; fx-job's Compose port is 8300 (`job` Compose service: build context `../../fx-job`, port 8300, unit `job`; the binding is **P2**, Q-ENV) | P `job:job/trigger_server.py::trigger` · C `svc:clients/jobs.py::trigger_job` | c | key-match (P2: binding-confirmed) | P1 | config-bound base URL | LNK |
 | LNK-16 | http | `GET /job/status` fetched from `http://localhost:8000`; `fx-svc` (Compose) **and** `fx-job` (`scripts/dev.sh`) both claim 8000. True target: `job:job/trigger_server.py::status` | P `job:job/trigger_server.py::status` · C `web:app/src/ui/JobStatus.tsx::JobStatus` | p | port-shared | P1 | | LNK |
 | LNK-17 | http | `` fetch(`/api/items/${id}`) `` where `id` is a component prop: key `GET /api/items/{?}`. True target: `read_item` | P `svc:api/items.py::read_item` · C `web:app/src/ui/Item.tsx::ItemView` | p | partial-key | P1 | | LNK |
 | LNK-18 | http | URL binding: `http://localhost:8200/mcp` (consumer); ports 8000 and 8200 are launch configs of **one** unit (`svc`: `.mcp.json` and Compose) | P `svc:mcp/server.py::main` (`POST /mcp`) · C `web:app/src/mcp/client.ts::connect` | c | binding-confirmed | P1 | | LNK |
@@ -182,7 +182,7 @@ answer must contain.
 | LNK-43 | http | `GET /tools/run` fetched by `run_tool`; `svc-tools` is never built | P `svc:tools/app.py::run` · C `svc:api/orders.py::run_tool` | p | target-not-mapped | P1 | | LNK |
 | LNK-44 | data_entity | `sql:table:order_report`: written by `INSERT INTO order_report` in `fx-job`, read by `SELECT * FROM order_report` (no column key, so no column link); no DDL in any repository | P `job:job/run_report.py::write_report` · C `svc:api/reports.py::report_view` | c | key-match | P3 | | LNK, OV-1 |
 
-A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15) is a P1 check owed to the S30 owner; `OV-2` plants the same binding as a P3 overlay assertion and is not a P1 row.
+A Compose build context that leaves its own repository and resolves to a sibling repository's unit (`../../fx-job`, LNK-15) is a **P2** check (Q-ENV: the consumer's `os.environ` variable name is in no P1 bundle record, so LNK-15 reads `key-match` at P1; the resolution itself is asserted at P1 on real extractor records by `test_linker_bind.py`); `OV-2` plants the same binding as a P3 overlay assertion and is not a P1 row.
 
 **LNK-45 (v1.6).** The one fixture for P1-11b's `bash -c 'exec "$CLAUDE_PROJECT_DIR/<path>"'` `.mcp.json` form: server `fx-svc-exec` beside the direct-command server `fx-svc` (LNK-21), the same script `scripts/run-mcp.sh` (no `hooks/` segment, 18 characters, no secret segment), so the unit is `svc` through the script's own `targetArg` (`python -m fx_svc.mcp.server`). The consumer is a prompt mention in the new `.claude/agents/exec.md`, because a `.mcp.json` entry alone produces no `Link`; the manifest row is derived by reading `ccg/linker/bind.py` `_launch_chains` and `link.py` (a confirmed bound site is `binding-confirmed`), not run: the live build of this chain is `P1T-09`'s. No negative row (a disallowed `-c` string staying redacted) is planted: it would need a new `NC-8`, the `NEGATIVES` set, `TP-012` and four family counts for one writer unit test that `cpg/tests/test_writer_rules.py` already pins; `P1T-09` carries the variant as a scratch-copy mutation.
 
@@ -357,7 +357,7 @@ an `http` link (the callers fetch a service endpoint): `legacy` serves `GET /leg
 | AB-1 | `SC-FAIL-UNIT` | `svc-legacy` builds at H1 and fails at every later commit (H2 onward, never reverted); the scenario builds H1, then H4. Differs from LNK-42 by having a previous refresh | the other units update; the answer crossing `svc-legacy` states "from the previous refresh" (H1) with the failure reason (stale-kept) | P1 | AC-9b |
 | AB-2 | `SC-NEVER-UNIT` | `svc-tools` is never built (excluded from the build set) | `svc-tools` is reported "not mapped" in the unit report; its link is LNK-43 | P1 | AC-9b |
 | AB-3 | `SC-FAIL-REPO` | `fx-job` builds at H1 and fails at H2 | an impact answer reaching `job:job/run_report.py::load_orders` (B1S-R) and `render_row` (LNK-26) states they are from the previous refresh, and why; `fx-svc` and `fx-web` are current | P3 | AC-9b |
-| AB-4 | `SC-NEVER-REPO` | `fx-job` is never built | LNK-15 (`POST /job/trigger`) and LNK-16 (`GET /job/status`) are `possible`, `target-not-mapped`; a query for a path in `fx-job` answers "not mapped", not "not found" | P3 | AC-9b |
+| AB-4 | `SC-NEVER-REPO` | `fx-job` is never built | LNK-15 (`POST /job/trigger`) and LNK-16 (`GET /job/status`) LNK-16 is `possible`, `target-not-mapped`; LNK-15 is unbound at P1 (Q-ENV), so it keeps `key-match` and gets no `target-not-mapped` link until P2; a query for a path in `fx-job` answers "not mapped", not "not found" | P3 | AC-9b |
 
 ### 5.8 Multi-repository overlay (`OV-*`, AC-19)
 
@@ -486,7 +486,7 @@ planting).
 | constant across files | 3 | 4 | 4 | LNK-04, 06, 37 (+05 at P2) |
 | template literal | 3 | 4 | 4 | LNK-07, 08, 38 (+09 at P2) |
 | client wrapper | 3 | 3 | 3 | LNK-10..12 |
-| config-bound base URL | 3 | 3 | 3 | LNK-13..15 |
+| config-bound base URL | 3 | 3 | 3 | LNK-13..15 (13 and 15 read `key-match` until P2, the shape count is unchanged) |
 | runtime-built key | 3 | 3 | 4 | AC6-URL-1..3 (+LNK-29 at P3) |
 | dynamic import | 3 | 3 | 3 | AC6-DYN-1..3 |
 | DI or reflection | 3 | 5 | 5 | LNK-30, 39, 40 (+31, 32 at P2) |

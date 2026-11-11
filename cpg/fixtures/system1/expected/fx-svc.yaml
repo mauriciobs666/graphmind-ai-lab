@@ -448,19 +448,16 @@ rows:
   - repoId: fx-web
     path: app/src/api/items.ts
     qname: app/src/api/items.ts::getDefaultItem
-  aux:
-  - repoId: fx-svc
-    path: deploy/compose.yaml
-    keyPath: services.web.environment.VITE_API_BASE
   keyNorm: GET /api/items/1
   providerKeyNorm: GET /api/items/{}
   status: confirmed
-  reason: binding-confirmed
+  reason: key-match
   gate: P1
   shape: config-bound base URL
   serves:
   - LNK
   stratum: fixture-dev
+  note: 'P2 (Q-ENV): the VITE_API_BASE Compose binding (deploy/compose.yaml services.web.environment.VITE_API_BASE) is not read at P1, the consumer''s variable name is in no bundle record; P2 returns the reason to binding-confirmed'
 - id: LNK-14
   kind: http
   item: GET /api/health; base URL base_url in config/job.yaml, read by job/settings.py
@@ -491,18 +488,15 @@ rows:
   - repoId: fx-svc
     path: clients/jobs.py
     qname: clients/jobs.py::trigger_job
-  aux:
-  - repoId: fx-svc
-    path: deploy/compose.yaml
-    keyPath: services.job.ports
   keyNorm: POST /job/trigger
   status: confirmed
-  reason: binding-confirmed
+  reason: key-match
   gate: P1
   shape: config-bound base URL
   serves:
   - LNK
   stratum: fixture-dev
+  note: 'P2 (Q-ENV): the Compose service job (deploy/compose.yaml services.job.ports, build context ../../fx-job to unit job) is not read at P1, the consumer''s variable name is in no bundle record; P2 returns the reason to binding-confirmed'
 - id: LNK-17
   kind: http
   item: 'fetch(`/api/items/${id}`) where id is a component prop: key GET /api/items/{?}. True target: read_item'
