@@ -282,7 +282,7 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
 
 ## P1-44a · host `sandboxAuditIds` (spec6) — `coder`
 
-- **Files:** `cpg/ccg/schemas/bundle-v1.schema.json` (the `if`/`else` conditional), `cpg/ccg/bundle.py` (`HOST_LANGS`, defined once; rule S6a), `cpg/ccg/sandbox_audit.py` (imports `HOST_LANGS`, the host-empty branch of `check_sandbox_ids`, `attestation`; P1-18's file, delivered), `cpg/ccg/assemble/rows.py` (`unattested_units` in the assembly report; the `minItems` pop and its comment removed), and the tests of `-bundle-spec6.md` §3 (1)-(3), (5). **Gate:** `analyst` + `security-expert`. **Needs:** 18 (delivered). **Blocks:** P1-44 close and P1-20.
+- **Files:** `cpg/ccg/schemas/bundle-v1.schema.json` (the `if`/`else` conditional), `cpg/ccg/bundle.py` (`HOST_LANGS`, defined once; rule S6a), `cpg/ccg/sandbox_audit.py` (imports `HOST_LANGS`, the host-empty branch of `check_sandbox_ids`, `attestation`; P1-18's file, delivered), `cpg/ccg/assemble/rows.py` (`unattested_units` in the assembly report; the `minItems` pop and its comment removed), and the tests of `-bundle-spec6.md` §3 (1)-(3), (5). **Gate:** `analyst` + `security-expert`. **Needs:** 18 (delivered). **Blocks:** P1-44 close and P1-20. Also in this step: `classify_bundle` applies S6a itself, `maxItems: 64`, `attestation` by language, the `HOST_KINDS`/`HOST_LANGS` drift test (spec6 §1-§3). **P2 backlog item (owner `architect`, stakeholder-level):** stored bundles carry no integrity tag, so anyone who can write the work directory can author a bundle; an HMAC tag on bundles, like the entry keys, is the candidate, not decided.
 
 ## P1-20 · refresh — `coder`
 
@@ -292,7 +292,7 @@ provider including `fx-job`'s second `reindex`, NC-5) gate at P1.
   `override=None`, and only when one is given opens a broker `refresh` run, fails if the broker is absent, and names
   the `policy` record in its report (`-egress-spec3.md` §2.1, §2.5); `cpg/tests/test_refresh.py`,
   `cpg/tests/test_refresh_live.py`.
-- **Behaviours:** (0) **`Links.bind_key_mismatch`** lines (value-free `bind-key-mismatch <unitId>`) are mapped by `refresh` to that unit's `bundle:bind-key-check` `failReason` and a line in the refresh report (the code is in `FAIL_REASONS`; `classify_bundle` never produces it, only the linker does); (1) per unit: `build_unit` (P1-44) inside its own try; a failure keeps the unit's last good
+- **Behaviours:** (00) **P1-20 passes records only through `read_bundle`/`classify_bundle`**, and `unattested_units` from the assembly report (spec6 §2) appears in the refresh report (no consumer yet); (0) **`Links.bind_key_mismatch`** lines (value-free `bind-key-mismatch <unitId>`) are mapped by `refresh` to that unit's `bundle:bind-key-check` `failReason` and a line in the refresh report (the code is in `FAIL_REASONS`; `classify_bundle` never produces it, only the linker does); (1) per unit: `build_unit` (P1-44) inside its own try; a failure keeps the unit's last good
   bundle marked `stale-kept {built commit, failed at, reason}`, the reason the one code P1-44 (3) assigned (value-free:
   never exception text; P1-20 sets none itself); a never-built unit is `not-mapped`, and every link
   into it is `possible`/`target-not-mapped` (AC-9b); (2) units are built **one at a time** (6 GB host); (3) after
