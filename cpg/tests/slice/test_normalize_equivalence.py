@@ -458,13 +458,49 @@ def _without_exempt(data: bytes) -> list[bytes]:
     return [json.dumps(header, sort_keys=True).encode()] + lines[1:]
 
 
+#: P1-09 (projection fix, `extract.sc`) adds def->use records the slice's stored `salesperson` bundle never had: 112 `data` and 5
+#: `controlledBy`. They are listed BY HAND, in bundle order, as canonical lines in `tests/data/p1_09_sp_projection_extras.jsonl`
+#: (derived once from a real live run; the allow-list pins every field of each record, not just the id). The live bundle must be the
+#: stored one plus exactly these, so any other record changing, going missing, or appearing makes the live test fail.
+P1_09_SP_EXTRAS = CPG / "tests" / "data" / "p1_09_sp_projection_extras.jsonl"
+P1_09_SP_EXTRA_COUNTS = {"data": 112, "controlledBy": 5}
+#: the golden hash of the shipped `extract.sc` this allow-list was derived under: a further script change must be decided HERE.
+EXTRACT_SC_GOLDEN = CPG / "tests" / "golden" / "projection" / "extract.sc.sha256"
+
+
+def assert_is_stored_plus_p1_09_extras(data: bytes, extras_file: Path = P1_09_SP_EXTRAS, counts: dict | None = None,
+                                       expected: bytes | None = None) -> None:
+    """``data`` (a live `salesperson` bundle, header `sandboxAuditIds` exempt) equals the expected stored bundle plus exactly the
+    allow-listed records (in bundle order), and its header equals the expected one with the `counts` raised by ``counts``."""
+    counts = P1_09_SP_EXTRA_COUNTS if counts is None else counts
+    extras = extras_file.read_bytes().split(b"\n")[:-1]
+    assert len(set(extras)) == len(extras)
+    assert collections.Counter(json.loads(x)["type"] for x in extras) == counts
+    got = _without_exempt(data)
+    want = _without_exempt(expected_bytes("sp") if expected is None else expected)
+    listed = set(extras)
+    assert [x for x in got[1:] if x in listed] == [x for x in extras]          # every allow-listed record, once, in order
+    assert [x for x in got[1:] if x not in listed] == want[1:]                 # and nothing else differs
+    want_header = json.loads(want[0])
+    for kind, n in counts.items():
+        want_header["counts"][kind] += n
+    assert json.loads(got[0]) == want_header
+
+
+@pytest.mark.slice
+def test_extract_sc_is_the_one_the_p1_09_allow_list_was_derived_under():
+    assert hashlib.sha256(run.EXTRACT_SC.read_bytes()).hexdigest() == EXTRACT_SC_GOLDEN.read_text(encoding="utf-8").strip()
+
+
 @pytest.mark.slice
 @pytest.mark.live
 def test_two_real_joern_runs_of_one_unit_give_one_bundle_and_it_is_the_stored_one(tmp_path, monkeypatch):
     """The raw `d`/`cb` facts differ in file order between Joern runs (they agree as multisets); the bundle must not. The unit is
     `salesperson` (JS, the smaller one): two full extractions through the runner at the slice's pinned commit, each normalized
-    with the stored header's `builtAt` and the slice's script, then compared with each other and with the stored bundle,
-    header `sandboxAuditIds` (new audit ids every run) exempt."""
+    with the stored header's `builtAt` and the slice's script, then compared with each other and with the stored bundle plus the
+    hand-listed P1-09 projection records (`P1_09_SP_EXTRAS`), header `sandboxAuditIds` (new audit ids every run) exempt."""
+    assert hashlib.sha256(run.EXTRACT_SC.read_bytes()).hexdigest() == EXTRACT_SC_GOLDEN.read_text(encoding="utf-8").strip(), \
+        "extract.sc changed: re-derive P1_09_SP_EXTRAS (and decide the stored-bundle delta) before this test means anything"
     monkeypatch.setenv("CCG_AUDIT_DIR", str(tmp_path / "audit"))     # never the real cpg/.audit/sandbox.jsonl
     stored_header = json.loads(stored_lines("sp")[0])
     unit = Unit(ids.unit_id(REPO_ID, SP_ROOT, "javascript"), REPO_ID, SP_ROOT, "javascript")
@@ -482,7 +518,8 @@ def test_two_real_joern_runs_of_one_unit_give_one_bundle_and_it_is_the_stored_on
         out.append(path.read_bytes())
     assert raws[0].sandbox_audit_ids != raws[1].sandbox_audit_ids          # every run has its own audit ids ...
     assert _without_exempt(out[0]) == _without_exempt(out[1])             # ... and they are all that tells the bundles apart
-    assert _without_exempt(out[0]) == _without_exempt(out[1]) == _without_exempt(expected_bytes("sp"))
+    for data in out:
+        assert_is_stored_plus_p1_09_extras(data)
 
 
 @pytest.mark.slice
