@@ -711,7 +711,7 @@ is invalid, and refused, unless for **every** id in `header.sandboxAuditIds`:
 
 Each error string names the id and the failed condition. **The check is presence-only:** it proves a
 successful offline invocation with that id exists, not that the bundle's inputs came from it, because
-the record carries no output digest (§6, input 13).
+the record carries no output digest (§6, input 13). **An empty `sandboxAuditIds`** is valid only for a host-extractor language (`shell`, `config`, `markdown`; `-bundle-spec6.md`) with `egressMode` `offline`, and proves nothing about any sandboxed invocation: `check_sandbox_ids` returning `[]` for it means *valid*, never *attested*. `ccg.sandbox_audit.attestation(header, audit_dir)` returns `sandboxed`, `host-unattested` or `invalid`, and the assembly report lists the `host-unattested` units as `unattested_units`.
 
 ## 6. Deferred: proxied streams (git fetch and the controlled download path)
 
