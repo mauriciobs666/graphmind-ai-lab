@@ -1,0 +1,10 @@
+title = "t"
+[server]
+host = "localhost"
+port = 8000
+[[workers]]
+name = "a"
+base_url = "http://localhost:8010/"
+[[workers]]
+name = "b"
+base_url = "http://localhost:8011/"

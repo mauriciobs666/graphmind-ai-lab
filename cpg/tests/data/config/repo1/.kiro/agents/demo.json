@@ -1,0 +1,6 @@
+{
+  "name": "demo",
+  "mcpServers": {"falkor-chat": {"url": "http://localhost:8000/mcp"}},
+  "tools": ["@falkor-chat/send_message"],
+  "model": null
+}

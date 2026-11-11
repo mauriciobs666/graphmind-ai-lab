@@ -1,0 +1,1 @@
+{"server": {"host": "localhost", "port": 8000, "paths": ["/a", "/b"]}, "name.with.dot": "x", "empty": ""}

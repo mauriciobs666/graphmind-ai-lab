@@ -174,3 +174,41 @@ def test_neither_module_reads_a_key_file_itself(mod):
     for needle in ("open(", "read_bytes", "read_text", "environ", "expanduser", "read_private"):
         assert needle not in src, f"{mod} touches key storage ({needle}); only ccg.atrest.hmac_key may"
     assert not re.search(r"\.hmac(?!_key)", src), f"{mod} names a key file"
+
+
+# --- value_hash_fields: the FIELD an extractor may emit (the tripwire forbids writing the key by hand) ---------
+
+def test_value_hash_fields_is_the_single_valuehash_field_of_an_independent_hmac():
+    rid = ids.config_entry_id(REPO, PATH, "server.port")
+    got = wr.value_hash_fields(KEY, rid, "8200")
+    assert got == {"valueHash": _ref(KEY, rid, "8200")} and list(got) == ["valueHash"]
+    assert "value_hash_fields" in wr.__all__
+
+
+def test_value_hash_fields_domain_is_the_records_own_id_and_is_validated():
+    rid = ids.config_entry_id(REPO, PATH, "server.port")
+    other = ids.config_entry_id(REPO, PATH, "client.port")
+    assert wr.value_hash_fields(KEY, rid, "8200") != wr.value_hash_fields(KEY, other, "8200")
+    for bad in ("server.port", "ccg.bindParts.host.v1", "A" * 32, rid + "0", "", None):
+        with pytest.raises(ValueError, match="32-hex"):
+            wr.value_hash_fields(KEY, bad, "8200")
+
+
+def test_value_hash_fields_key_is_the_key_not_the_text():
+    rid = ids.config_entry_id(REPO, PATH, "k")
+    other_key = bytes(range(96, 128))
+    assert wr.value_hash_fields(KEY, rid, "v") != wr.value_hash_fields(other_key, rid, "v")
+    assert wr.value_hash_fields(other_key, rid, "v") == {"valueHash": _ref(other_key, rid, "v")}
+
+
+def test_value_hash_fields_hashes_the_text_unstripped():
+    rid = ids.config_entry_id(REPO, PATH, "k")
+    assert wr.value_hash_fields(KEY, rid, " 8200\n") == {"valueHash": _ref(KEY, rid, " 8200\n")}
+
+
+def test_value_hash_fields_returns_nothing_for_unencodable_text_the_caller_drops_the_entry():
+    rid = ids.config_entry_id(REPO, PATH, "k")
+    assert wr.value_hash_fields(KEY, rid, "ab\ud800") == {}
+    assert not wr.encodable("ab\ud800")
+    with pytest.raises(ValueError, match="32-hex"):         # the domain is still validated first
+        wr.value_hash_fields(KEY, "bad", "ab\ud800")

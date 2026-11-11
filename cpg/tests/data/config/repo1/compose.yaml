@@ -1,0 +1,33 @@
+name: demo
+services:
+  falkordb:
+    image: falkordb/falkordb:v4
+    ports:
+      - "${DB_PORT:-6379}:6379"
+      - "127.0.0.1:3000:3000/tcp"
+  api:
+    build:
+      context: ../../fx-job
+    container_name: api-box
+    ports:
+      - "8200:8000"
+      - 9000
+      - target: 80
+        published: 8080
+        protocol: udp
+    expose:
+      - "7000"
+    environment:
+      - FALKORDB_HOST=falkordb
+      - API_BASE=http://api-box:8000
+      - SECRET_TOKEN=hunter2
+      - BARE_PASSTHROUGH
+    command: uvicorn app:app --host 0.0.0.0 --port 8000
+  web:
+    image: web
+    build: ./web
+    entrypoint: ["node", "server.js"]
+    environment:
+      VITE_API_BASE: http://api:8000
+      OTHER_HOST: acme
+      WS_ID: ${WS_ID:-acme}

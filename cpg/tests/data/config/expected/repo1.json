@@ -1,0 +1,1112 @@
+{
+ ".env": {
+  "entries": [
+   [
+    "APP_PORT",
+    2,
+    "8200",
+    "8200"
+   ],
+   [
+    "DB_HOST",
+    3,
+    "falkordb",
+    "falkordb"
+   ],
+   [
+    "API_KEY",
+    4,
+    "abc123",
+    null
+   ],
+   [
+    "WS_ID",
+    5,
+    "${WS_ID:-acme}",
+    null
+   ]
+  ],
+  "facts": [
+   {
+    "envVar": "WS_ID",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 5,
+    "ordinal": 0,
+    "origin": "env-default",
+    "type": "launchFact"
+   }
+  ]
+ },
+ ".env.example": {
+  "entries": [
+   [
+    "APP_PORT",
+    2,
+    "8200",
+    "8200"
+   ],
+   [
+    "DB_HOST",
+    3,
+    "falkordb",
+    "falkordb"
+   ],
+   [
+    "API_KEY",
+    4,
+    "abc123",
+    null
+   ],
+   [
+    "WS_ID",
+    5,
+    "${WS_ID:-acme}",
+    null
+   ]
+  ],
+  "facts": [
+   {
+    "envVar": "WS_ID",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 5,
+    "ordinal": 0,
+    "origin": "env-default",
+    "type": "launchFact"
+   }
+  ]
+ },
+ ".kiro/agents/demo.json": {
+  "entries": [
+   [
+    "name",
+    2,
+    "demo",
+    null
+   ],
+   [
+    "mcpServers.falkor-chat.url",
+    3,
+    "http://localhost:8000/mcp",
+    "http://localhost:8000/mcp"
+   ],
+   [
+    "tools[0]",
+    4,
+    "@falkor-chat/send_message",
+    null
+   ],
+   [
+    "model",
+    5,
+    "null",
+    null
+   ]
+  ],
+  "facts": []
+ },
+ ".mcp.json": {
+  "entries": [
+   [
+    "mcpServers.cypher.command",
+    4,
+    "bash",
+    null
+   ],
+   [
+    "mcpServers.cypher.args[0]",
+    5,
+    "-c",
+    null
+   ],
+   [
+    "mcpServers.cypher.args[1]",
+    5,
+    "run.sh",
+    null
+   ],
+   [
+    "mcpServers.cypher.args[2]",
+    5,
+    "--port",
+    null
+   ],
+   [
+    "mcpServers.cypher.args[3]",
+    5,
+    "8200",
+    null
+   ],
+   [
+    "mcpServers.cypher.env.FALKORDB_HOST",
+    6,
+    "host.docker.internal",
+    "host.docker.internal"
+   ],
+   [
+    "mcpServers.cypher.env.FALKORDB_PORT",
+    6,
+    "6379",
+    "6379"
+   ],
+   [
+    "mcpServers.cypher.env.API_TOKEN",
+    6,
+    "t0ps3cret",
+    null
+   ],
+   [
+    "mcpServers.cypher.timeout",
+    7,
+    "60000",
+    null
+   ],
+   [
+    "mcpServers.team.type",
+    9,
+    "streamable-http",
+    null
+   ],
+   [
+    "mcpServers.team.url",
+    9,
+    "http://localhost:8200/mcp",
+    "http://localhost:8200/mcp"
+   ]
+  ],
+  "facts": [
+   {
+    "args": [
+     "-c",
+     "run.sh",
+     "--port",
+     "8200"
+    ],
+    "command": "bash",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 4,
+    "ordinal": 0,
+    "origin": "explicit",
+    "service": "cypher",
+    "type": "launchFact"
+   }
+  ]
+ },
+ "Dockerfile": {
+  "entries": [
+   [
+    "ARG.BASE_PORT",
+    1,
+    "8300",
+    "8300"
+   ],
+   [
+    "ENV.APP_PORT",
+    6,
+    "8300",
+    "8300"
+   ],
+   [
+    "ENV.LOG_LEVEL",
+    6,
+    "info",
+    null
+   ],
+   [
+    "EXPOSE[0]",
+    8,
+    "8300/tcp",
+    null
+   ],
+   [
+    "EXPOSE[1]",
+    8,
+    "9300",
+    null
+   ],
+   [
+    "entrypoint[0]",
+    10,
+    "tini",
+    null
+   ],
+   [
+    "entrypoint[1]",
+    10,
+    "--",
+    null
+   ],
+   [
+    "command[0]",
+    11,
+    "uvicorn",
+    null
+   ],
+   [
+    "command[1]",
+    11,
+    "job.trigger_server:app",
+    null
+   ],
+   [
+    "command[2]",
+    11,
+    "--host",
+    null
+   ],
+   [
+    "command[3]",
+    11,
+    "0.0.0.0",
+    null
+   ],
+   [
+    "command[4]",
+    11,
+    "--port",
+    null
+   ],
+   [
+    "command[5]",
+    11,
+    "${APP_PORT:-8300}",
+    null
+   ]
+  ],
+  "facts": [
+   {
+    "args": [
+     "--"
+    ],
+    "command": "tini",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 10,
+    "ordinal": 0,
+    "origin": "explicit",
+    "type": "launchFact"
+   },
+   {
+    "args": [
+     "uvicorn",
+     "job.trigger_server:app",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "<redacted>"
+    ],
+    "command": "<redacted>",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 11,
+    "ordinal": 1,
+    "origin": "explicit",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 8,
+    "ordinal": 0,
+    "origin": "explicit",
+    "port": 8300,
+    "protocol": "tcp",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 8,
+    "ordinal": 1,
+    "origin": "explicit",
+    "port": 9300,
+    "protocol": "tcp",
+    "type": "launchFact"
+   },
+   {
+    "default": "8300",
+    "envVar": "APP_PORT",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 11,
+    "ordinal": 0,
+    "origin": "env-default",
+    "type": "launchFact"
+   }
+  ]
+ },
+ "app.toml": {
+  "entries": [
+   [
+    "title",
+    1,
+    "t",
+    null
+   ],
+   [
+    "server.host",
+    3,
+    "localhost",
+    "localhost"
+   ],
+   [
+    "server.port",
+    4,
+    "8000",
+    "8000"
+   ],
+   [
+    "workers[0].name",
+    6,
+    "a",
+    null
+   ],
+   [
+    "workers[0].base_url",
+    7,
+    "http://localhost:8010/",
+    "http://localhost:8010/"
+   ],
+   [
+    "workers[1].name",
+    9,
+    "b",
+    null
+   ],
+   [
+    "workers[1].base_url",
+    10,
+    "http://localhost:8011/",
+    "http://localhost:8011/"
+   ]
+  ],
+  "facts": []
+ },
+ "app.yaml": {
+  "entries": [
+   [
+    "base.url",
+    2,
+    "http://localhost:9100/",
+    "http://localhost:9100/"
+   ],
+   [
+    "svc.url",
+    2,
+    "http://localhost:9100/",
+    "http://localhost:9100/"
+   ],
+   [
+    "svc.alias_secret_url.url",
+    2,
+    "http://localhost:9100/",
+    null
+   ],
+   [
+    "base.secret_url",
+    3,
+    "http://localhost:9101/",
+    null
+   ],
+   [
+    "svc.secret_url",
+    3,
+    "http://localhost:9101/",
+    null
+   ],
+   [
+    "svc.alias_secret_url.secret_url",
+    3,
+    "http://localhost:9101/",
+    null
+   ],
+   [
+    "svc.port",
+    6,
+    "8100",
+    "8100"
+   ],
+   [
+    "svc.peer_port",
+    7,
+    "8100",
+    "8100"
+   ]
+  ],
+  "facts": []
+ },
+ "compose.yaml": {
+  "entries": [
+   [
+    "name",
+    1,
+    "demo",
+    null
+   ],
+   [
+    "services.falkordb.image",
+    4,
+    "falkordb/falkordb:v4",
+    null
+   ],
+   [
+    "services.falkordb.ports[0]",
+    6,
+    "${DB_PORT:-6379}:6379",
+    null
+   ],
+   [
+    "services.falkordb.ports[1]",
+    7,
+    "127.0.0.1:3000:3000/tcp",
+    null
+   ],
+   [
+    "services.api.build.context",
+    10,
+    "../../fx-job",
+    null
+   ],
+   [
+    "services.api.container_name",
+    11,
+    "api-box",
+    null
+   ],
+   [
+    "services.api.ports[0]",
+    13,
+    "8200:8000",
+    null
+   ],
+   [
+    "services.api.ports[1]",
+    14,
+    "9000",
+    "9000"
+   ],
+   [
+    "services.api.ports[2].target",
+    15,
+    "80",
+    null
+   ],
+   [
+    "services.api.ports[2].published",
+    16,
+    "8080",
+    null
+   ],
+   [
+    "services.api.ports[2].protocol",
+    17,
+    "udp",
+    null
+   ],
+   [
+    "services.api.expose[0]",
+    19,
+    "7000",
+    "7000"
+   ],
+   [
+    "services.api.environment.FALKORDB_HOST",
+    21,
+    "falkordb",
+    "falkordb"
+   ],
+   [
+    "services.api.environment.API_BASE",
+    22,
+    "http://api-box:8000",
+    "http://api-box:8000"
+   ],
+   [
+    "services.api.environment.SECRET_TOKEN",
+    23,
+    "hunter2",
+    null
+   ],
+   [
+    "services.api.command",
+    25,
+    "uvicorn app:app --host 0.0.0.0 --port 8000",
+    null
+   ],
+   [
+    "services.web.image",
+    27,
+    "web",
+    null
+   ],
+   [
+    "services.web.build",
+    28,
+    "./web",
+    null
+   ],
+   [
+    "services.web.entrypoint[0]",
+    29,
+    "node",
+    null
+   ],
+   [
+    "services.web.entrypoint[1]",
+    29,
+    "server.js",
+    null
+   ],
+   [
+    "services.web.environment.VITE_API_BASE",
+    31,
+    "http://api:8000",
+    "http://api:8000"
+   ],
+   [
+    "services.web.environment.OTHER_HOST",
+    32,
+    "acme",
+    null
+   ],
+   [
+    "services.web.environment.WS_ID",
+    33,
+    "${WS_ID:-acme}",
+    null
+   ]
+  ],
+  "facts": [
+   {
+    "args": [
+     "app:app",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8000"
+    ],
+    "command": "uvicorn",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 25,
+    "ordinal": 0,
+    "origin": "compose",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "args": [
+     "server.js"
+    ],
+    "command": "node",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 29,
+    "ordinal": 1,
+    "origin": "compose",
+    "service": "web",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 6,
+    "ordinal": 0,
+    "origin": "compose",
+    "port": 6379,
+    "protocol": "tcp",
+    "service": "falkordb",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 7,
+    "ordinal": 1,
+    "origin": "compose",
+    "port": 3000,
+    "protocol": "tcp",
+    "service": "falkordb",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 13,
+    "ordinal": 2,
+    "origin": "compose",
+    "port": 8200,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 13,
+    "ordinal": 3,
+    "origin": "compose",
+    "port": 8000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 14,
+    "ordinal": 4,
+    "origin": "compose",
+    "port": 9000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 15,
+    "ordinal": 5,
+    "origin": "compose",
+    "port": 80,
+    "protocol": "udp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 16,
+    "ordinal": 6,
+    "origin": "compose",
+    "port": 8080,
+    "protocol": "udp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 19,
+    "ordinal": 7,
+    "origin": "compose",
+    "port": 7000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "default": "6379",
+    "envVar": "DB_PORT",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 6,
+    "ordinal": 0,
+    "origin": "env-default",
+    "type": "launchFact"
+   },
+   {
+    "envVar": "WS_ID",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 33,
+    "ordinal": 1,
+    "origin": "env-default",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "mount",
+    "line": 10,
+    "mountPath": "../../fx-job",
+    "ordinal": 0,
+    "origin": "compose",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "mount",
+    "line": 28,
+    "mountPath": "./web",
+    "ordinal": 1,
+    "origin": "compose",
+    "service": "web",
+    "type": "launchFact"
+   }
+  ]
+ },
+ "examples/compose.example.yaml": {
+  "entries": [
+   [
+    "name",
+    1,
+    "demo",
+    null
+   ],
+   [
+    "services.falkordb.image",
+    4,
+    "falkordb/falkordb:v4",
+    null
+   ],
+   [
+    "services.falkordb.ports[0]",
+    6,
+    "${DB_PORT:-6379}:6379",
+    null
+   ],
+   [
+    "services.falkordb.ports[1]",
+    7,
+    "127.0.0.1:3000:3000/tcp",
+    null
+   ],
+   [
+    "services.api.build.context",
+    10,
+    "../../fx-job",
+    null
+   ],
+   [
+    "services.api.container_name",
+    11,
+    "api-box",
+    null
+   ],
+   [
+    "services.api.ports[0]",
+    13,
+    "8200:8000",
+    null
+   ],
+   [
+    "services.api.ports[1]",
+    14,
+    "9000",
+    "9000"
+   ],
+   [
+    "services.api.ports[2].target",
+    15,
+    "80",
+    null
+   ],
+   [
+    "services.api.ports[2].published",
+    16,
+    "8080",
+    null
+   ],
+   [
+    "services.api.ports[2].protocol",
+    17,
+    "udp",
+    null
+   ],
+   [
+    "services.api.expose[0]",
+    19,
+    "7000",
+    "7000"
+   ],
+   [
+    "services.api.environment.FALKORDB_HOST",
+    21,
+    "falkordb",
+    "falkordb"
+   ],
+   [
+    "services.api.environment.API_BASE",
+    22,
+    "http://api-box:8000",
+    "http://api-box:8000"
+   ],
+   [
+    "services.api.environment.SECRET_TOKEN",
+    23,
+    "hunter2",
+    null
+   ],
+   [
+    "services.api.command",
+    25,
+    "uvicorn app:app --host 0.0.0.0 --port 8000",
+    null
+   ],
+   [
+    "services.web.image",
+    27,
+    "web",
+    null
+   ],
+   [
+    "services.web.build",
+    28,
+    "./web",
+    null
+   ],
+   [
+    "services.web.entrypoint[0]",
+    29,
+    "node",
+    null
+   ],
+   [
+    "services.web.entrypoint[1]",
+    29,
+    "server.js",
+    null
+   ],
+   [
+    "services.web.environment.VITE_API_BASE",
+    31,
+    "http://api:8000",
+    "http://api:8000"
+   ],
+   [
+    "services.web.environment.OTHER_HOST",
+    32,
+    "acme",
+    null
+   ],
+   [
+    "services.web.environment.WS_ID",
+    33,
+    "${WS_ID:-acme}",
+    null
+   ]
+  ],
+  "facts": [
+   {
+    "args": [
+     "app:app",
+     "--host",
+     "0.0.0.0",
+     "--port",
+     "8000"
+    ],
+    "command": "uvicorn",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 25,
+    "ordinal": 0,
+    "origin": "compose",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "args": [
+     "server.js"
+    ],
+    "command": "node",
+    "hasDefaultHash": false,
+    "kind": "command",
+    "line": 29,
+    "ordinal": 1,
+    "origin": "compose",
+    "service": "web",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 6,
+    "ordinal": 0,
+    "origin": "compose",
+    "port": 6379,
+    "protocol": "tcp",
+    "service": "falkordb",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 7,
+    "ordinal": 1,
+    "origin": "compose",
+    "port": 3000,
+    "protocol": "tcp",
+    "service": "falkordb",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 13,
+    "ordinal": 2,
+    "origin": "compose",
+    "port": 8200,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 13,
+    "ordinal": 3,
+    "origin": "compose",
+    "port": 8000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 14,
+    "ordinal": 4,
+    "origin": "compose",
+    "port": 9000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 15,
+    "ordinal": 5,
+    "origin": "compose",
+    "port": 80,
+    "protocol": "udp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 16,
+    "ordinal": 6,
+    "origin": "compose",
+    "port": 8080,
+    "protocol": "udp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "port",
+    "line": 19,
+    "ordinal": 7,
+    "origin": "compose",
+    "port": 7000,
+    "protocol": "tcp",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "default": "6379",
+    "envVar": "DB_PORT",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 6,
+    "ordinal": 0,
+    "origin": "env-default",
+    "type": "launchFact"
+   },
+   {
+    "envVar": "WS_ID",
+    "hasDefaultHash": true,
+    "kind": "env-default",
+    "line": 33,
+    "ordinal": 1,
+    "origin": "env-default",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "mount",
+    "line": 10,
+    "mountPath": "../../fx-job",
+    "ordinal": 0,
+    "origin": "compose",
+    "service": "api",
+    "type": "launchFact"
+   },
+   {
+    "hasDefaultHash": false,
+    "kind": "mount",
+    "line": 28,
+    "mountPath": "./web",
+    "ordinal": 1,
+    "origin": "compose",
+    "service": "web",
+    "type": "launchFact"
+   }
+  ]
+ },
+ "settings.ini": {
+  "entries": [
+   [
+    "top",
+    1,
+    "1",
+    null
+   ],
+   [
+    "server.host",
+    3,
+    "localhost",
+    "localhost"
+   ],
+   [
+    "server.port",
+    4,
+    "8000",
+    "8000"
+   ],
+   [
+    "db.password",
+    7,
+    "hunter2",
+    null
+   ]
+  ],
+  "facts": []
+ },
+ "settings.json": {
+  "entries": [
+   [
+    "server.host",
+    1,
+    "localhost",
+    "localhost"
+   ],
+   [
+    "server.port",
+    1,
+    "8000",
+    "8000"
+   ],
+   [
+    "server.paths[0]",
+    1,
+    "/a",
+    null
+   ],
+   [
+    "server.paths[1]",
+    1,
+    "/b",
+    null
+   ],
+   [
+    "[\"name.with.dot\"]",
+    1,
+    "x",
+    null
+   ],
+   [
+    "empty",
+    1,
+    "",
+    null
+   ]
+  ],
+  "facts": []
+ }
+}

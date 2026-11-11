@@ -242,6 +242,12 @@ def owned_field_writes(source: str) -> list[int]:
     return hits
 
 
+def _private_function(name: str) -> bool:
+    """A private bundle name that carries logic (`_port`, `_bind_grammar`); an UPPER_CASE private constant
+    (`_UUID`, a regex the masker reads) is data, not a rule decision."""
+    return name.startswith("_") and not name.startswith("__") and not name[1:].isupper()
+
+
 def forbidden_references(source: str) -> list[str]:
     """What `source` reaches that only writer_rules may: the rule-deciding bundle names, bundle's private names, the
     key accessors of ccg.atrest, ccg.valuehash. Importing `ccg.atrest`/`ccg.bundle` for their write, validate and
@@ -255,7 +261,7 @@ def forbidden_references(source: str) -> list[str]:
             for a in node.names:
                 if mod == "ccg" and a.name == "valuehash":
                     out.append("ccg.valuehash")
-                if mod == "ccg.bundle" and (a.name in _RULE_NAMES or a.name.startswith("_") or a.name == "*"):
+                if mod == "ccg.bundle" and (a.name in _RULE_NAMES or _private_function(a.name) or a.name == "*"):
                     out.append(f"ccg.bundle.{a.name}")
                 if mod == "ccg.atrest" and (a.name in _KEY_NAMES or a.name == "*"):
                     out.append(f"ccg.atrest.{a.name}")
@@ -263,8 +269,7 @@ def forbidden_references(source: str) -> list[str]:
             out += [a.name for a in node.names if a.name in _FORBIDDEN_MODULES]
         elif isinstance(node, ast.Attribute):
             if node.attr in _RULE_NAMES or node.attr in _KEY_NAMES or (
-                    node.attr.startswith("_") and not node.attr.startswith("__")
-                    and isinstance(node.value, ast.Name) and node.value.id == "bundle"):
+                    _private_function(node.attr) and isinstance(node.value, ast.Name) and node.value.id == "bundle"):
                 out.append(node.attr)
         elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant) \
                 and isinstance(node.args[0].value, str) and node.args[0].value in _FORBIDDEN_MODULES:
@@ -339,7 +344,8 @@ def test_guard_flags_every_form_of_reaching_the_rule_deciding_names(src):
 @pytest.mark.parametrize("src", [
     "from ccg import bundle\nbundle.screen_fails(x) or bundle.name_fails(x)", "from ccg.bundle import JS_TEST_EXTENSIONS",
     "from ccg import atrest\natrest.ensure_private(p, a)\natrest.write_bundle(s, u, b, r)", "from ccg import ids, atrest",
-    "from ccg.bundle import validate, dumps",
+    "from ccg.bundle import validate, dumps", "from ccg import bundle\nbundle._UUID.match(x) and bundle._HEXCH",
+    "from ccg.bundle import _UUID",
 ])
 def test_guard_allows_what_the_normalizer_legitimately_uses(src):
     assert not forbidden_references(src)
@@ -692,3 +698,138 @@ def test_write_bundle_never_unlinks_a_file_it_did_not_create(tmp_path, monkeypat
     with pytest.raises(FileExistsError):
         bundle.write_bundle(tmp_path / "a.bundle.jsonl", _records())
     assert planted.read_text() == "not ours"
+
+
+# --- B1: an args-only argv has no program, so argv[0] is redacted and every element is an argument ------------
+
+NO_PROGRAM = [
+    (["--password", "hunter2"], "hunter2"),
+    (["--password", "hunter2lower", "--port", "8000"], "hunter2lower"),
+    (["-p", "hunter2lower"], "hunter2lower"),
+    (["--api-key", "HUNTER2UPPER"], "HUNTER2UPPER"),
+    (["--api-key", "Abc"], "Abc"),
+    (["--token", "x7"], "x7"),
+    (["-pHunter2lower"], "Hunter2lower"),
+]
+
+
+@pytest.mark.parametrize("argv,secret", NO_PROGRAM)
+def test_flag_first_argv_never_leaks_and_command_is_the_redaction_sentinel(argv, secret):
+    got = wr.launch_argv_fields(argv)
+    assert got["command"] == bundle.REDACTED
+    assert secret not in repr(got)
+    assert len(got["args"]) == len(argv)                     # every element is kept as an argument, in order
+
+
+@pytest.mark.parametrize("argv,secret", NO_PROGRAM)
+def test_program_known_false_gives_the_same_result_as_a_leading_flag(argv, secret):
+    assert wr.launch_argv_fields(argv, program_known=False) == wr.launch_argv_fields(argv)
+
+
+@pytest.mark.parametrize("argv", [["8000"], ["hunter2lower"], ["serve", "--password", "hunter2lower"], ["x"]])
+def test_a_dockerfile_cmd_beside_an_entrypoint_has_no_program(argv):         # explicit: no leading dash to detect
+    got = wr.launch_argv_fields(argv, program_known=False)
+    assert got["command"] == bundle.REDACTED and len(got["args"]) == len(argv)
+    if "--password" in argv:                         # a bare unflagged positional is §1.6.1's named residual
+        assert "hunter2lower" not in repr(got)
+
+
+def test_flag_first_list_with_ordinary_flags_stays_intact():
+    argv = ["--port", "8000", "--host", "x"]
+    assert wr.launch_argv_fields(argv) == {"command": bundle.REDACTED, "args": argv}
+
+
+def test_a_known_program_is_unchanged():
+    argv = ["uvicorn", "app:app", "--port", "8000"]
+    assert wr.launch_argv_fields(argv) == {"command": "uvicorn", "args": argv[1:]}
+    assert wr.launch_argv_fields(argv, program_known=True) == wr.launch_argv_fields(argv)
+    got = wr.launch_argv_fields(["redis-cli", "--password", "hunter2lower"])
+    assert got["command"] == "redis-cli" and "hunter2lower" not in repr(got)
+
+
+@pytest.mark.parametrize("argv", [["-jar", "app.jar"], ["--"], ["-"], ["-<redacted>", "x"], ["--password=x"]])
+def test_command_never_holds_a_flag(argv):
+    assert not wr.launch_argv_fields(argv)["command"].startswith("-")
+
+
+def test_a_flag_first_result_is_a_gate_fixed_point_and_audits_clean():
+    got = wr.launch_argv_fields(["--password", "hunter2lower"])
+    assert audit([{"type": "launchFact", "id": ids.launch_fact_id("r", "c.yml", "command", 0), "kind": "command", **got}]) == []
+
+
+def test_audit_flags_a_command_that_is_a_flag():
+    rec = {"type": "launchFact", "id": ids.launch_fact_id("r", "c.yml", "command", 0), "kind": "command",
+           "command": "--password", "args": [bundle.REDACTED]}
+    assert audit([rec])
+
+
+def test_launch_argv_fields_still_rejects_an_empty_argv_with_program_known_false():
+    with pytest.raises(ValueError, match="argv"):
+        wr.launch_argv_fields([], program_known=False)
+
+
+# --- M3: link-local and cloud-metadata targets are withheld -----------------------------------
+# Cited list: docs/plans/connected-code-graph-egress-spec4.md §6 (`fec0::/10`, `100::/64`, `fd00:ec2::254`,
+# `100.100.100.200`) plus 169.254.0.0/16 and fe80::/10 (P1-11 security review M3).
+
+FORBIDDEN_TARGETS = [
+    "169.254.169.254", "169.254.0.1", "169.254.255.255", "169.254.169.254:80", "http://169.254.169.254/",
+    "http://169.254.169.254:80/", "http://169.254.169.254", "https://169.254.169.254/",
+    "0xa9fea9fe", "http://0xa9fea9fe/", "0251.0376.0251.0376", "2852039166", "http://2852039166/", "0xa9.0xfe.0xa9.0xfe",
+    "169.16689662", "http://169.0xfea9fe/",
+    "[fe80::1]", "fe80::1", "[fe80::1]:8080", "http://[fe80::1]/", "http://[fe80::1]:80/", "[febf::1]", "fe80::",
+    "[fec0::1]", "http://[fec0::1]/", "[100::1]", "http://[100::1]:80/",
+    "fd00:ec2::254", "[fd00:ec2::254]", "[fd00:ec2::254]:80", "http://[fd00:ec2::254]/", "https://[fd00:ec2::254]:443",
+    "100.100.100.200", "100.100.100.200:80", "http://100.100.100.200/", "http://100.100.100.200:8080",
+    "[::ffff:a9fe:a9fe]", "http://[::ffff:a9fe:a9fe]/", "[::a9fe:a9fe]", "[64:ff9b::a9fe:a9fe]",
+    "[::ffff:6464:64c8]", "[::ffff:a9fe:1]",
+]
+ALLOWED_TARGETS = [
+    "169.253.169.254", "169.255.0.1", "100.100.100.201", "100.100.100.199", "100.64.0.1", "10.0.0.5", "127.0.0.1",
+    "http://10.0.0.5:8080/api", "[fe7f::1]", "[fe7f:ffff::1]", "[fd00:ec2::255]",
+    "[fd00:ec2::253]", "[2001:db8::5]", "http://[2001:db8::5]:8080/v1", "[100:0:0:1::1]", "[::1]", "localhost:80",
+    "falkordb:6379", "ntfy.sh", "[::ffff:a00:1]",
+]
+
+
+@pytest.mark.parametrize("value", FORBIDDEN_TARGETS)
+def test_link_local_and_metadata_targets_are_withheld_everywhere(value):
+    assert bind("x.addr", value, declared_services=frozenset({"falkordb", "0xa9fea9fe"})) is None
+    assert bind("x.url", value, declared_services=DECL) is None
+    assert wr.bind_fields("x.url", value, binding_role=True, declared_services=DECL) == {}
+    assert default("X_PORT", value) is None
+    assert default("X_PORT", value, declared_services=frozenset({"0xa9fea9fe"})) is None
+
+
+@pytest.mark.parametrize("value", [v for v in ALLOWED_TARGETS if bundle.value_grammar_ok(v)])
+def test_neighbouring_addresses_are_not_withheld(value):
+    assert bind("x.addr", value) == value
+    assert default("X_PORT", value) == value
+
+
+def test_the_forbidden_list_is_withheld_on_every_url_form_of_the_same_host():
+    for host in ("169.254.169.254", "[fe80::1]", "[fd00:ec2::254]", "100.100.100.200"):
+        for form in ("{h}", "{h}:80", "http://{h}", "http://{h}/", "http://{h}:80/", "https://{h}:443/", "ws://{h}:1/"):
+            v = form.format(h=host)
+            if bundle.value_grammar_ok(v):
+                assert bind("x.url", v) is None, v
+
+
+def test_w2_declared_service_set_is_the_callers_not_this_modules():
+    """A declared service named like a metadata alias binds only if the CALLER passes it (P1-11 restricts the set to
+    primary compose files); an address literal is withheld whatever the set says."""
+    assert bind("x.addr", "metadata") is None
+    assert bind("x.addr", "metadata", declared_services=frozenset({"metadata"})) == "metadata"
+    assert bind("x.addr", "169.254.169.254", declared_services=frozenset({"169.254.169.254"})) is None
+
+
+@pytest.mark.parametrize("host,expected", [
+    ("0251.0376.0251.0376", "169.254.169.254"), ("2852039166", "169.254.169.254"), ("0xa9fea9fe", "169.254.169.254"),
+    ("169.16689662", "169.254.169.254"), ("169.254.43518", "169.254.169.254"), ("0xa9.0xfe.0xa9.0xfe", "169.254.169.254"),
+    ("0251.0xfe.169.0376", "169.254.169.254"), ("1", "0.0.0.1"), ("0", "0.0.0.0"), ("0177.1", "127.0.0.1"),
+    ("256.1.1.1", None), ("1.2.3.256", None), ("1.2.3.4.5", None), ("0x1ffffffff", None), ("1.16777216", None),
+    ("1.2.65536", None), ("08", None), ("0xg", None), ("a.b", None), ("", None),
+])
+def test_inet_aton_reads_the_numeric_forms_resolvers_accept(host, expected):
+    got = wr._inet_aton(host)
+    assert (str(got) if got is not None else None) == expected

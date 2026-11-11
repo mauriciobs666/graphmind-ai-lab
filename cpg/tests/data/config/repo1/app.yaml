@@ -1,0 +1,8 @@
+base: &base
+  url: http://localhost:9100/
+  secret_url: http://localhost:9101/
+svc:
+  <<: *base
+  port: &p 8100
+  peer_port: *p
+  alias_secret_url: *base

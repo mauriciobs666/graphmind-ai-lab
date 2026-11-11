@@ -24,7 +24,11 @@ Obligations:
   that does not parse, or text with no UTF-8 encoding (``encodable``), withholds. A withheld field is *absent*, never
   ``null``. Text that cannot be encoded is never hashed (``valueHash`` is required, so the *entry* is dropped by the
   config extractor, P1-11); ``default_fields`` then returns ``{}``.
-- **SA-1** ``launchFact.command``/``args`` exist only as the output of ``ccg.bundle.gate_argv``.
+- **SA-1** ``launchFact.command``/``args`` exist only as the output of ``ccg.bundle.gate_argv``; an argv with no program
+  is gated behind a ``<redacted>`` argv[0] and ``command`` never holds a flag.
+- **Targets** a link-local or cloud-metadata host (169.254.0.0/16, fe80::/10, fec0::/10, 100::/64, fd00:ec2::254,
+  100.100.100.200, in any URL or numeric form) is never a ``bindValue`` or ``default``. W2's declared-service set is the
+  caller's: P1-11 passes only services of primary-role Compose files.
 - **§1.7.5** ``valueHash``/``defaultHash`` are ``entry_hmac`` over the record's own 32-hex id.
 
 Whether an entry is in a *binding role* (SA-3, F-6) is P1-11's decision and arrives as ``binding_role``.
@@ -32,6 +36,7 @@ Every function returns data to write; none of them reads a key (``system_key`` d
 """
 from __future__ import annotations
 
+import ipaddress
 import re
 from collections.abc import Collection, Iterable, Mapping
 
@@ -39,7 +44,7 @@ from ccg import atrest, bundle, ids
 from ccg.valuehash import entry_hmac
 
 __all__ = ["encodable", "bind_value", "bind_fields", "launch_default", "default_fields", "launch_argv_fields",
-           "value_hash", "default_hash", "config_entry_value_hash", "system_key", "audit_records"]
+           "value_hash", "value_hash_fields", "default_hash", "config_entry_value_hash", "system_key", "audit_records"]
 
 _RECORD_ID = re.compile(r"[0-9a-f]{32}")
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -57,22 +62,91 @@ def encodable(text: object) -> bool:
     return True
 
 
+def _host_of(value: str) -> str | None:
+    """The host of ``value`` (``host``, ``ipv6``, ``hostport`` or ``url``; brackets removed), ``None`` for a bare
+    ``port``. Only sound on a value that already passed the §1.7.2 grammar."""
+    if bundle._port(value):
+        return None
+    if bundle._ipv6(value):
+        return value
+    m = _URL_AUTHORITY.match(value)
+    host = m.group(1) if m else value
+    if host.startswith("["):
+        return host[1:host.index("]")] if "]" in host else host
+    i = host.rfind(":")
+    return host[:i] if i > 0 else host
+
+
 def _single_label_host(value: str) -> str | None:
     """The host of ``value`` if it is a single label other than ``localhost``, else ``None``. Private: it is only
     sound on a value that already passed the §1.7.2 grammar (which admits lowercase ASCII hosts only)."""
-    if bundle._port(value) or bundle._ipv6(value):
-        return None
-    m = _URL_AUTHORITY.match(value)
-    host = m.group(1) if m else value
-    if not host.startswith("["):
-        i = host.rfind(":")
-        host = host[:i] if i > 0 else host
-    if host == "localhost" or "." in host or host.startswith("[") or not re.fullmatch(r"[a-z0-9-]+", host):
+    host = _host_of(value)
+    if host is None or host == "localhost" or "." in host or ":" in host or not re.fullmatch(r"[a-z0-9-]+", host):
         return None
     return host
 
 
+# Never carried as a bindValue or a default, whatever the form of the URL: link-local and cloud-metadata targets.
+# 169.254.0.0/16 and fe80::/10 (P1-11 security review M3), plus the list deferred in
+# `docs/plans/connected-code-graph-egress-spec4.md` §6: `fec0::/10`, `100::/64`, `fd00:ec2::254`, `100.100.100.200`.
+_V4_NETS = (ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("100.100.100.200/32"))
+_V6_NETS = (ipaddress.ip_network("fe80::/10"), ipaddress.ip_network("fec0::/10"), ipaddress.ip_network("100::/64"),
+            ipaddress.ip_network("fd00:ec2::254/128"))
+_INET_PART = re.compile(r"0[xX][0-9a-fA-F]+|[0-9]+")
+
+
+def _v4_forbidden(ip: ipaddress.IPv4Address) -> bool:
+    return any(ip in n for n in _V4_NETS)
+
+
+def _inet_aton(host: str) -> ipaddress.IPv4Address | None:
+    """``host`` read the way ``inet_aton`` does (1-4 parts, decimal, ``0x`` hex or leading-0 octal; the last part
+    fills the remaining bytes), ``None`` if it is not such a form. Resolvers read these as addresses."""
+    parts = host.split(".")
+    if not (1 <= len(parts) <= 4) or not all(_INET_PART.fullmatch(p) for p in parts):
+        return None
+    try:
+        nums = [int(p, 16) if p[:2] in ("0x", "0X") else int(p, 8) if len(p) > 1 and p[0] == "0" else int(p, 10)
+                for p in parts]
+    except ValueError:
+        return None
+    n = len(nums)
+    if any(x > 255 for x in nums[:-1]) or nums[-1] >= 256 ** (5 - n):
+        return None
+    total = 0
+    for x in nums[:-1]:
+        total = total * 256 + x
+    return ipaddress.IPv4Address(total * 256 ** (5 - n) + nums[-1])
+
+
+def _forbidden_target(value: str) -> bool:
+    """True iff the host of ``value`` is a link-local or cloud-metadata address, in any form the parsers read as one
+    (dotted, ``inet_aton`` decimal/hex/octal/short forms, bracketed or bare IPv6, IPv4-mapped/compatible/NAT64)."""
+    host = _host_of(value)
+    if host is None:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = _inet_aton(host)
+        return ip is not None and _v4_forbidden(ip)
+    if ip.version == 4:
+        return _v4_forbidden(ip)
+    if any(ip in n for n in _V6_NETS):
+        return True
+    raw = ip.packed
+    if ip.ipv4_mapped is not None:
+        return _v4_forbidden(ip.ipv4_mapped)
+    if raw[:12] == bytes(12) or raw[:12] == bytes.fromhex("0064ff9b0000000000000000"):     # ::/96, 64:ff9b::/96
+        return _v4_forbidden(ipaddress.IPv4Address(raw[12:]))
+    return False
+
+
 def _w2_ok(value: str, declared_services: Collection[str]) -> bool:
+    """W2, then the link-local/metadata withholding. ``declared_services`` is the CALLER's set (P1-11 restricts it to
+    primary-role Compose files); this module never widens it, and an address literal is withheld even if listed."""
+    if _forbidden_target(value):
+        return False
     host = _single_label_host(value)
     return host is None or host in {s.lower() for s in declared_services}
 
@@ -130,11 +204,17 @@ def default_fields(key: bytes, launch_fact_id: str, env_var: str, value: str, **
     return out
 
 
-def launch_argv_fields(argv: list[str]) -> dict:
-    """``{"command", "args"}`` of a ``command`` ``launchFact``, through the argv gate (§1.6.1, SA-1)."""
+def launch_argv_fields(argv: list[str], *, program_known: bool = True) -> dict:
+    """``{"command", "args"}`` of a ``command`` ``launchFact``, through the argv gate (§1.6.1, SA-1).
+
+    An argv with no program (``program_known=False``: a Dockerfile ``CMD`` beside an ``ENTRYPOINT``; or detected,
+    when the first element starts with ``-``) gives ``gate_argv`` no context for argv[0], so a short value after
+    ``--password`` would pass. Such a list is gated as ``[REDACTED, *argv]``: ``command`` is ``"<redacted>"`` (§1.6's
+    value for an argv[0] that fails) and every element is an argument. A ``command`` never holds a flag."""
     if not argv:
         raise ValueError("argv must hold at least argv[0]")
-    gated = bundle.gate_argv(list(argv))
+    no_program = not program_known or argv[0].startswith("-")
+    gated = bundle.gate_argv([bundle.REDACTED, *argv] if no_program else list(argv))
     return {"command": gated[0], "args": gated[1:]}
 
 
@@ -147,6 +227,15 @@ def _record_id(record_id: str) -> str:
 def value_hash(key: bytes, config_entry_id: str, text: str) -> str:
     """``valueHash = entry_hmac(key, r["id"], text)`` (§1.7.5)."""
     return entry_hmac(key, _record_id(config_entry_id), text)
+
+
+def value_hash_fields(key: bytes, config_entry_id: str, text: str) -> dict:
+    """``{"valueHash": ...}`` for the ``configEntry`` whose own 32-hex id is ``config_entry_id`` (the domain; anything
+    else raises the same ``ValueError`` as ``value_hash``), the one way an extractor emits the field. Text with no
+    UTF-8 encoding is never hashed: the result is ``{}``, and the caller must drop the whole entry (check
+    ``encodable`` at the value-read step), because ``valueHash`` is required and cannot be withheld alone."""
+    rid = _record_id(config_entry_id)
+    return {"valueHash": value_hash(key, rid, text)} if encodable(text) else {}
 
 
 def default_hash(key: bytes, launch_fact_id: str, text: str) -> str:
@@ -217,7 +306,9 @@ def _audit_launch_fact(r, tag, rid, key, declared, texts, out) -> None:
     kind = r.get("kind")
     if kind == "command":
         argv = [r.get("command"), *(r.get("args") if isinstance(r.get("args"), list) else [None])]
-        if not all(isinstance(a, str) for a in argv) or bundle.gate_argv(argv) != argv:
+        if isinstance(argv[0], str) and argv[0].startswith("-"):
+            out.append(f"{tag}: command is a flag (an args-only argv gets command \"<redacted>\")")
+        elif not all(isinstance(a, str) for a in argv) or bundle.gate_argv(argv) != argv:
             out.append(f"{tag}: command/args are not a fixed point of gate_argv (SA-1)")
         return
     has = [f for f in ("default", "defaultHash") if f in r]

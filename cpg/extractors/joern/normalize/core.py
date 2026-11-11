@@ -16,6 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ccg import ids
+from extractors.common.errors import SourceRefused  # noqa: F401  (re-exported: the one class, identity not a copy)
 
 IDENT = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*\Z")
 FIELD_CAP = 3
@@ -67,11 +68,6 @@ def path_from(head: str, fields: list[str]) -> tuple[str, bool]:
 
 def kw_head(name: str) -> str:
     return "kw" + quote_field(name)
-
-
-class SourceRefused(RuntimeError):
-    """A source file the normalizer will not read: its name leaves the stage (``..``, an absolute name, a symlink out), or its
-    bytes are not UTF-8, or it cannot be read. The unit fails; nothing is skipped silently."""
 
 
 class Source:

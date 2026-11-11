@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cypher": {
+      "command": "bash",
+      "args": ["-c", "run.sh", "--port", "8200"],
+      "env": {"FALKORDB_HOST": "host.docker.internal", "FALKORDB_PORT": "6379", "API_TOKEN": "t0ps3cret"},
+      "timeout": 60000
+    },
+    "team": {"type": "streamable-http", "url": "http://localhost:8200/mcp"}
+  }
+}
