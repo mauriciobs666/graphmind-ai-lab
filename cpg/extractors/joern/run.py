@@ -97,12 +97,18 @@ def _resolve_commit(repo: Path, commit: str) -> str:
     return out.stdout.decode().strip()
 
 
+def is_staged_source(p: Path) -> bool:
+    """A staged file that counts as source: a regular (not symlink) non-empty file. The one predicate of
+    ``_count_sources`` and of ``skipped.candidate_sources`` (P1-08), so the two cannot disagree."""
+    return not p.is_symlink() and p.stat().st_size > 0
+
+
 def _count_sources(stage: Path, extensions: frozenset[str]) -> int:
     n = 0
     for dirpath, _dirs, names in os.walk(stage):
         for name in names:
             p = Path(dirpath, name)
-            if p.suffix in extensions and not p.is_symlink() and p.stat().st_size > 0:
+            if p.suffix in extensions and is_staged_source(p):
                 n += 1
     return n
 
