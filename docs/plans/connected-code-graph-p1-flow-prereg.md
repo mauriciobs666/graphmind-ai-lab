@@ -54,7 +54,7 @@ P1-34a is **behaviour-preserving for everything the seed depends on** (frame, `s
                 "s28_core.py": "aaba9b1371d6dc6939eb3363576ac5053e8121dd253fd362d21e6a608c5ad615", "JOIN_P0_ONLY": false,
                 "extract.sc": "6cdb498f3e9482a44322e5ef81b2dedc699165ab90d49b12b441d2a9d226ca7d"},
  "tools": {"s28_run.py": "54fc1bea7830e1ba45981ea39485b9cd2893647ebdbe73d3fdb42332d31a09b2 (cebc4245; no --guard; --extract cpg/extractors/joern/extract.sc)",
-           "s28_metrics.py": "f7cc52af… (full sha256 recorded at U2 from `sha256sum`)", "run_fitness.py": "a8989bce… (same)", "flow_decide.py": "ef2f93c2… (same)", "flow_p1_audit.py": "ac2d158a… (same; not to change again)", "flow-brief.template.md": "<recorded at U2 from `sha256sum`>"},
+           "s28_metrics.py": "f7cc52af… (full sha256 recorded at U2 from `sha256sum`)", "run_fitness.py": "f748cc23… (same)", "flow_decide.py": "ef2f93c2… (same)", "flow_p1_audit.py": "ac2d158a… (same; not to change again)", "flow-brief.template.md": "<recorded at U2 from `sha256sum`>"},
  "cpgs": {"off": "a30c83636120146fd13f69c7d0772a2fad137a8231f1b2701c848c4182bf01ac", "on": "fc06c0c32a5c38026103986b99f6668bc16d2e0148ef628699a1cc7d3598bb60"},
  "shippedFacts": {"off": "a970a79cc4ceb67ae0fa76ce21f69b51cda0d1bda5accb0fc52935153bc4f5b0", "on": "2292a32e76f757cf2fce856b77e78db1dccb88ed2d9b486597e0846b7ed98890", "note": "the P0 shipped projection's facts; the P0 run record has no script sha, so the files are pinned by digest only"},
  "seeds": {"flow": "ccg-p1a-v1-flow|python|<commit>", "spur": "ccg-p1a-v1-spur|python|<commit>", "flowaud": "ccg-p1a-v1-flowaud|python|…", "adj": "ccg-p1a-v1-adj|python|<commit>"},
