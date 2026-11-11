@@ -16,16 +16,16 @@
 - {code: resolved-receiver, status: confirmed, "on": ["READS field", "WRITES field"]}
 - {code: key-match, status: confirmed, "on": [CONSUMES, Link, PROVIDES]}
 - {code: lifted-role, status: confirmed, "on": [CONSUMES]}
-- {code: binding-confirmed, status: confirmed, "on": [Link]}
+- {code: binding-confirmed, status: confirmed, "on": [Link, VIA]}
 - {code: name-match, status: possible, "on": [CALLS_NAME, callsite]}
 - {code: resolution-unverified, status: possible, "on": ["CALLS_NAME candidates of a resolved site"]}
 - {code: field-truncated, status: possible, "on": [DATA, fieldAccess]}
 - {code: field-name-match, status: possible, "on": ["READS field", "WRITES field"]}
-- {code: shell-dynamic, status: possible, "on": ["shell DATA", callsite]}
+- {code: shell-dynamic, status: possible, "on": ["shell DATA", callsite, Link]}
 - {code: runtime-built, status: possible, "on": [CONSUMES, READS, WRITES, valueSet, "PROVIDES topic"]}
 - {code: dynamic-import, status: possible, "on": ["CONSUMES library_api", "call reach"]}
 - {code: example-config, status: possible, "on": [Link, BOUND_BY, Finding]}
-- {code: prompt-mention, status: possible, "on": ["callsite (mention)", CONSUMES]}
+- {code: prompt-mention, status: possible, "on": ["callsite (mention)", CONSUMES, Link]}
 - {code: partial-key, status: possible, "on": [Link, PROVIDES, CONSUMES]}
 - {code: name-only-provider, status: possible, "on": [Link]}
 - {code: unknown-key, status: possible, "on": [Link]}

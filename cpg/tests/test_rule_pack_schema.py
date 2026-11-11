@@ -75,6 +75,9 @@ def seeded_registry() -> dict[str, dict]:
     for code in ("runtime-built", "config-derived"):
         reg[code]["on"].append("PROVIDES topic")  # O-16, spec §1.9's closing paragraph
     reg["advisory-unscored"] = {"status": "none", "on": ["Finding"]}  # spec3 §7.4
+    reg["binding-confirmed"]["on"].append("VIA")  # P1-17: docs/plans/connected-code-graph-p1-graph.md §2 (O-9)
+    for code in ("shell-dynamic", "prompt-mention"):  # P1-17 (3), (7): the linker derives them from the site; lifted-role is NOT widened
+        reg[code]["on"].append("Link")
     for code in ("test", "frontend-ignore"):  # spec4: "both codes join the §7 registry ... on header.skippedFiles"
         reg[code] = {"status": "none", "on": ["header.skippedFiles"]}
     return reg

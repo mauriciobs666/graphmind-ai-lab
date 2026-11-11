@@ -57,3 +57,31 @@ The O-9 per-site rule is correctly built and well mutated: dropping the `siteId`
 
 1. (`architect`) B1: the provider or the consumer key in `linkId`/`Link.keyNorm`; the answer decides dispatch 2's conformance.
 2. (`architect`, concurrent) the registry gaps of M3: this review found, independently, the unregistered `Link`/`VIA` reasons and that `lifted-role` is never emitted on a `Link`.
+
+## Pass 2
+
+Scope: the re-worked dispatch 1 (`link.py` 409 lines, `matchers.py` 262) against the architect's rulings (plan P1-17 Interface, behaviour (14), fix-up bullets). Run: `test_linker_matchers/link`, `test_rule_pack_schema`, `test_answer` 1486 passed; linker alone 144 passed. Own repros and 8 new mutants (fresh scratch copy each), all killed: provider key replaced by consumer key; `unit:`/`unmapped:` prefix swapped; `weaken` dropped; `example` flag dropped; site key dropped from the dedupe key; scan ignoring alternation; text cap raised; `refused_patterns` zeroed.
+
+**Verdict: approve with suggestions.** No blocker.
+
+### Dispositions
+
+- **B1: fixed (own repro).** Provider `GET /a/{}`, one symbol, sites `GET /a/1` and `GET /a/2`: one Link (`key_norm 'GET /a/{}'`), two Vias with their own `consumer_key`. A keyed (`GET /a/1`) and a keyless site: one Link, Vias `confirmed`/`possible`. Never-built anchors: `Unmapped('U1','U1')` and `Unmapped(None,'R1')` give distinct Links, `to_unit` `U1` / `None`, both `possible`/`target-not-mapped`, no provider; consumer key kept as `key_norm`. The consistency worry did not materialize: `Via.consumer_key` and the `(siteId, consumer key)` site key keep candidateCount's grouping input intact (mutant `p5` killed).
+- **M1: fixed for the exponential case, residual polynomial gap (F10).** `(a+)+b` against `'a'*N+'c'`: 0.0 s at N=22, 26, 40, 200, refused and counted (`refused` set holds the pattern).
+- **M2: fixed (read against `bundle-v1.schema.json`).** `header.unitId`, `header.unit.repoId`, `file.{repoId,unitId,role}`, `configEntry.{repoId,path,example}` (no `unitId`), `launchFact.{id,path}` (no `repoId`) all match what `_Index` reads. Verified by tests and mutant `p4` (the `example` flag) that entry-anchored providers survive a unit binding and weaken under `example-config`; `Binding.weaken` and `Unmapped` exist and are tested.
+- **M3: fixed.** The reasons test now asserts `on` membership (`:372-391`); `reasons.yaml` gains `shell-dynamic` and `prompt-mention` on `Link`; `lifted-role` stays `CONSUMES`-only (`:398`) and is never emitted on a Link (the plan's LNK-10/11 correction is owed in the fixtures before P1-41).
+- **F5, F6: fixed** (rows `{**}` mid-position and the packs-named-but-no-rule message present; not re-mutated).
+
+### New findings
+
+**F10 (minor, verified) the regex guard is not a polynomial bound.** It counts only `*`, `+` and open `{n,}` as unbounded, so bounded quantifiers stack free. `a{1,3}(?:a)a{1,3}[ab]{0,5}a*[ab]?(?:a){2,}b?a+` is admitted (one unbounded `*`, one `+`, one `{2,}`) and takes 1.45 s on `'a'*255+'!'`; a 6000-pattern random fuzz found three admitted patterns over a 1 s alarm. Per (pattern, text) pair, with no timeout and every consumer-by-provider pair retried, a hostile repo can still stall the build, at 100 pairs minutes rather than hours. Fix: count every quantifier (bounded included) and cap total, or memoise `(pattern, text)` results and cap the pairs per pattern; add the pattern above as a must-refuse row. Not exponential, so not a blocker; the P2 linear-time engine in plan (14) closes it.
+
+**F11 (minor, verified) `weaken` validation accepts reasons whose registry status is `confirmed`.** `_link_reason_codes()` keeps every code on `Link`, so `("possible","key-match")`, `("possible","binding-confirmed")` and `("possible","unknown-key")` construct. Run: a `weaken=("possible","binding-confirmed")` binding yields a `possible` Link and Via with reason `binding-confirmed`, violating the registry status/reason pairing the reasons test enforces for linker output. `bind.py` is trusted internal code, so low impact. Fix: also require `row["status"] == "possible"` (and consider excluding `unknown-key`/`binding-narrowed`, which are the match's own); a test per rejected code.
+
+**F12 (minor, verified) `refused_patterns` counts distinct patterns, and a fine pattern is counted for a long text.** `match_keys('mcp_tool','regex','ab+','a'*300, …)` adds `'ab+'` to `refused`. The 256-character text rule refuses the pair, the pattern is fine for every shorter literal. The figure therefore overstates refused patterns and understates refused pairs. Fix: count refusals by reason (`pattern` vs `text-length`) or document the metric as "patterns that were refused at least once".
+
+**F13 (nit) `Unmapped.ref` is not tied to `unit_id`.** `Unmapped('U1','OTHER')` is accepted and the `linkId` anchor follows `ref`, so two refs for one unit give two Links. Validate `ref == unit_id` when `unit_id` is set.
+
+### Proposed REVIEW.md lines
+
+None.
