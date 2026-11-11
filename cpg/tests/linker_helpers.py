@@ -6,9 +6,15 @@ A fact has the shape ``ccg.packrt.run_packs`` emits (``_Run._item`` plus ``edge`
 """
 from __future__ import annotations
 
+from ccg import ids
 from ccg.linker import Binding, BoundEntry, Unmapped
 from ccg.packrt import PackFacts
 from packrt_helpers import call, file_, sym
+
+
+def hid(name: str) -> str:
+    """A stable 32-hex id for a readable name (an ``Unmapped.ref`` must be hex and value-free)."""
+    return ids.tuple_id(["test", name])
 
 
 def sym_in(sid: str, unit: str, name: str | None = None, role: str = "primary", path: str | None = None):

@@ -24,6 +24,8 @@ from json.decoder import JSONDecodeError, scanstring
 
 import yaml
 
+from ccg.units import is_mcp_json
+
 MAX_BYTES = 512 * 1024          # a larger file is skipped (counted), not parsed
 MAX_DEPTH = 32                  # nesting depth of a keyPath, and of a JSON document
 MAX_NODES = 50_000              # nodes visited by one walk, aliases expanded: a YAML alias bomb stops here
@@ -759,10 +761,6 @@ def compose_declared_services(root: Node) -> set[str]:
 
 def _base(path: str) -> str:
     return path.rsplit("/", 1)[-1]
-
-
-def is_mcp_json(path: str) -> bool:
-    return re.fullmatch(r"\.mcp(?:\..+)?\.json", _base(path)) is not None
 
 
 def is_kiro_agent(path: str) -> bool:

@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from typing import NamedTuple, Protocol
 
 from ccg import ids
-from ccg.linker.matchers import Match, match_keys
+from ccg.linker.matchers import MAX_REGEX_PAIRS, Match, RegexBudget, match_keys
 from ccg.packrt.extract import Corpus
 from ccg.packrt.run import PackFacts
 from ccg.rulepack import load_registry_rows
@@ -58,6 +58,7 @@ _STRENGTH = {"confirmed": 0, "possible": 1}
 _EVIDENCE_ORDER = {"LIFTED_VIA": 0, "BOUND_BY": 1}
 # Reasons a Link or VIA may carry as a consumer fact's own (registry rows on Link, plus the two the plan names for it).
 _OWN_REASONS = frozenset({"prompt-mention", "shell-dynamic", "partial-key", "example-config"})
+_HEX32 = re.compile(r"[0-9a-f]{32}")
 _MCP_TOOL = re.compile(r"mcp__[A-Za-z0-9][A-Za-z0-9-]{0,63}__([A-Za-z0-9_][A-Za-z0-9_-]{0,63})")
 
 
@@ -70,18 +71,32 @@ class BoundEntry:
     pack_id: str | None = None          # iff port_origin == 'pack-default'
 
 
-def _link_reason_codes() -> frozenset[str]:
-    """The registry codes whose ``on`` list holds ``Link`` (``Link (TO_UNIT)`` counts: it is a ``Link`` row)."""
-    return frozenset(r["code"] for r in load_registry_rows() if any(t == "Link" or t.startswith("Link ") for t in r["on"]))
+#: The match's own reasons: a binding chain never supplies them (``unknown-key`` and ``binding-narrowed`` describe the consumer's key
+#: and the narrowing itself).
+_MATCH_REASONS = frozenset({"unknown-key", "binding-narrowed"})
+
+
+def _weaken_reason_codes() -> frozenset[str]:
+    """The reasons a binding hop may weaken a site with (F11): registry status ``possible``, a ``Link`` row (``Link (TO_UNIT)``
+    counts), and not the match's own."""
+    return frozenset(r["code"] for r in load_registry_rows()
+                     if r["status"] == "possible" and any(t == "Link" or t.startswith("Link ") for t in r["on"])) - _MATCH_REASONS
 
 
 @dataclass(frozen=True)
 class Unmapped:
     """The chain ends outside the built code: ``unit_id`` is a never-built unit, or ``None`` for a path outside every manifest
     repo (trust rule b). ``ref`` is a stable, value-free id: the unit id in the first case, ``tuple_id(["unmapped", normalised
-    path])`` in the second; it is the ``linkId`` anchor (``"unit:"+ref`` or ``"unmapped:"+ref``)."""
+    path])`` in the second; it is the ``linkId`` anchor (``"unit:"+ref`` or ``"unmapped:"+ref``). Both are checked (F13): a ``ref`` is 32 lowercase hex
+    characters and equals ``unit_id`` when there is one, so no path text can ride in it."""
     unit_id: str | None
     ref: str
+
+    def __post_init__(self) -> None:
+        if not (isinstance(self.ref, str) and _HEX32.fullmatch(self.ref)):
+            raise ValueError("Unmapped.ref must be 32 lowercase hex characters (a value-free id)")
+        if self.unit_id is not None and self.ref != self.unit_id:
+            raise ValueError("Unmapped.ref must equal unit_id when there is a unit")
 
 
 @dataclass(frozen=True)
@@ -94,21 +109,31 @@ class Binding:
     edge, so by O-9 it could not change a reason).
     ``unmapped``: the chain ends outside the built code, so there is no provider: the link has no ``TO``, is
     ``possible``/``target-not-mapped``, and ``Link.to_unit`` is ``unmapped.unit_id`` (``TO_UNIT`` iff not ``None``).
-    ``weaken``: ``("possible", <reason>)`` for a possible hop inside the chain (the inferred Compose rule, trust rule e's loopback
-    residual); the reason must be a registry code valid on ``Link``. It ranks after ``port-shared``.
+    ``unit_entries``: optional, ``((unit, entries), ...)``: the chain that reaches each unit of ``units``; a link to a provider in one of them
+    carries only that unit's entries (:meth:`entries_for`), never another unit's launch. Without it every unit shares ``entries``.
+    ``weaken``: ``("possible", <reason>)`` for a possible hop inside the chain (an example-role file on the chain); the reason must be
+    a registry code valid on ``Link`` whose status is ``possible`` and that is not the match's own (F11). It ranks after ``port-shared``.
     """
     units: tuple[str, ...] = ()
     entries: tuple[BoundEntry, ...] = ()
     unmapped: Unmapped | None = None
     weaken: tuple[str, str] | None = None
+    unit_entries: tuple[tuple[str, tuple[BoundEntry, ...]], ...] = ()
+
+    def entries_for(self, unit: str | None) -> tuple[BoundEntry, ...]:
+        """The chain that reaches ``unit`` (the whole ``entries`` when the binding carries no per-unit chains or ``unit`` is not one of them)."""
+        for u, es in self.unit_entries:
+            if u == unit:
+                return es
+        return self.entries
 
     def __post_init__(self) -> None:
         if not self.entries:
             raise ValueError("a Binding needs at least one chain entry")
         if self.weaken is not None:
             status, reason = self.weaken
-            if status != "possible" or reason not in _link_reason_codes():
-                raise ValueError(f"weaken must be ('possible', <a registry reason valid on Link>), got {self.weaken!r}")
+            if status != "possible" or reason not in _weaken_reason_codes():
+                raise ValueError(f"weaken must be ('possible', <a possible registry reason valid on Link>), got {self.weaken!r}")
 
 
 class Bindings(Protocol):
@@ -118,8 +143,9 @@ class Bindings(Protocol):
     ``None``), ``anchorId``, ``line``) and returns a :class:`Binding`, or ``None`` when no chain selects a unit: the site then
     degrades to the unbound rules (``key-match`` for a confirmed literal match, ``unknown-key`` for no key). A binding
     restricts the candidate providers to its ``units``; a key that matches a provider outside them makes no link.
+    A prompt-mention consumer also carries ``server`` (the ``<server>`` of ``mcp__<server>__<tool>``, else ``None``).
     ``key_mismatches()`` (optional) returns the ``bind-key-mismatch <unitId>`` lines for the refresh report (BR-1 to BR-3);
-    they are returned beside the links. The provider must resolve lexically and never dial or open a path (trust rule a).
+    they are returned beside the links. ``counts()`` (optional) returns extra figures merged into ``Links.counts``. The provider must resolve lexically and never dial or open a path (trust rule a).
     """
 
     def bind(self, consumer: dict) -> Binding | None: ...
@@ -215,9 +241,16 @@ def _tool_name(callee: str) -> str:
     return callee
 
 
+def _server_name(callee: str) -> str | None:
+    """The MCP server of an ``mcp__<server>__<tool>`` mention (the key drops it; a binding can select by it), else ``None``."""
+    m = re.fullmatch(r"mcp__([A-Za-z0-9][A-Za-z0-9-]{0,63})__[A-Za-z0-9_][A-Za-z0-9_-]{0,63}", callee)
+    return m.group(1) if m else None
+
+
 def _mentions(corpus: Corpus) -> list[dict]:
     return [{"siteId": cid, "anchorId": c["symbolId"], "kind": "mcp_tool", "key": _tool_name(c["calleeName"]),
-             "keyForm": "literal", "line": c["line"], "status": "possible", "reason": "prompt-mention", "hops": []}
+             "keyForm": "literal", "line": c["line"], "status": "possible", "reason": "prompt-mention", "hops": [],
+             "server": _server_name(c["calleeName"])}
             for cid, c in sorted(corpus.callsites.items()) if c["callKind"] == "mention"]
 
 
@@ -262,7 +295,8 @@ class _Index:
 
 
 # -- one consumer against the providers -----------------------------------------------------------
-def _candidates(c: dict, providers: list[dict], matcher: str, ix: _Index, binding: Binding | None, refused: set):
+def _candidates(c: dict, providers: list[dict], matcher: str, ix: _Index, binding: Binding | None, refused: set,
+                refused_text: set, budget: RegexBudget):
     """``(provider fact, Match-or-reason)`` for each provider of ``c``'s kind that the key (and any binding) admits."""
     for p in providers:
         if binding is not None and ix.unit(p["anchorId"]) not in binding.units:
@@ -274,7 +308,7 @@ def _candidates(c: dict, providers: list[dict], matcher: str, ix: _Index, bindin
                 yield p, Match("name", True), "name-only-provider"
         else:
             got = match_keys(c["kind"], matcher, p["key"], c["key"], provider_form=p.get("keyForm", "literal"),
-                             consumer_form=c["keyForm"], refused=refused)
+                             consumer_form=c["keyForm"], refused=refused, refused_text=refused_text, budget=budget)
             if got is not None:
                 yield p, got, "partial-key"
 
@@ -307,12 +341,16 @@ def _causes(c: dict, p: dict | None, match: Match, match_reason: str, ix: _Index
     return causes
 
 
-def link(facts: PackFacts, bundles: list[list[dict]], *, packs=(), bindings: Bindings | None = None) -> Links:
+def link(facts: PackFacts, bundles: list[list[dict]], *, packs=(), bindings: Bindings | None = None,
+         regex_pairs: int = MAX_REGEX_PAIRS) -> Links:
     """Link ``facts`` over ``bundles``; ``packs`` (as loaded by ``load_pack``) supply ``link`` matchers and the kind of a lifted
-    leaf; ``bindings`` is the seam of :class:`Bindings`."""
+    leaf; ``bindings`` is the seam of :class:`Bindings`;
+    ``regex_pairs`` bounds the regex (pattern, literal) pairs evaluated (:class:`~ccg.linker.matchers.RegexBudget`)."""
     corpus, packs = Corpus(bundles), list(packs)
     ix = _Index(corpus, bundles)
     refused: set = set()
+    refused_text: set = set()
+    budget = RegexBudget(regex_pairs)
     matchers = {"http": "path-template"} | _matchers_by_kind(packs)
     providers: dict[str, list[dict]] = defaultdict(list)
     for p in sorted(facts.providers, key=lambda f: (f["kind"], f["key"] or "", f["anchorId"], f["siteId"])):
@@ -330,12 +368,15 @@ def link(facts: PackFacts, bundles: list[list[dict]], *, packs=(), bindings: Bin
         if binding is not None and binding.unmapped is not None:
             _add(groups, c, None, Match("none", False), "partial-key", ix, corpus, binding)
             continue
-        for p, match, why in _candidates(c, providers.get(c["kind"], ()), matchers.get(c["kind"], "exact"), ix, binding, refused):
+        for p, match, why in _candidates(c, providers.get(c["kind"], ()), matchers.get(c["kind"], "exact"), ix, binding, refused, refused_text, budget):
             _add(groups, c, p, match, why, ix, corpus, binding)
     links = sorted((_build(lid, g) for lid, g in groups.items()),
                    key=lambda l: (l.kind, l.key_norm, l.provider or l.to_unit or "", l.consumer, l.link_id))
     mismatches = list(bindings.key_mismatches()) if bindings is not None and hasattr(bindings, "key_mismatches") else []
-    return Links(links, mismatches, count_links(links, len(refused)))
+    counts = count_links(links, len(refused), len(refused_text), budget.exhausted)
+    if bindings is not None and hasattr(bindings, "counts"):          # e.g. the loopback published-vs-container residual (trust rule e)
+        counts |= dict(bindings.counts())
+    return Links(links, mismatches, counts)
 
 
 def _add(groups, c, p, match, why, ix, corpus, binding) -> None:
@@ -347,6 +388,7 @@ def _add(groups, c, p, match, why, ix, corpus, binding) -> None:
         anchor, key = p["anchorId"], p["key"] or ""                # the ContractPoint the link is ON
     lid = ids.link_id(c["kind"], key, anchor, c["anchorId"])
     g = groups.setdefault(lid, {"kind": c["kind"], "key": key, "provider": None if p is None else p["anchorId"],
+                                "unit": None if p is None else ix.unit(p["anchorId"]),
                                 "consumer": c["anchorId"], "to_unit": None if unmapped is None else unmapped.unit_id, "sites": {}})
     causes = _causes(c, p, match, why, ix, corpus, binding)
     status, reason = causes[0] if causes else ("confirmed", "key-match")
@@ -357,11 +399,11 @@ def _add(groups, c, p, match, why, ix, corpus, binding) -> None:
     g["sites"][k] = {"consumer": c, "status": status, "reason": reason, "binding": binding, "matcher": match.matcher}
 
 
-def _evidence(sid: str, site: dict) -> list[dict]:
+def _evidence(sid: str, site: dict, unit: str | None) -> list[dict]:
     out = [{"edge": "LIFTED_VIA", "siteId": sid} | dict(h) for h in site["consumer"]["hops"]]
     seen: set[str] = set()
     b = site["binding"]
-    for e in (b.entries if b is not None else ()):
+    for e in (b.entries_for(unit) if b is not None else ()):
         if e.entry_id in seen:                       # one edge per (link, site, entry), at the entry's lowest ord
             continue
         seen.add(e.entry_id)
@@ -378,7 +420,7 @@ def _build(lid: str, g: dict) -> Link:
     first_of_site: dict[str, dict] = {}
     for sid, _ in order:
         first_of_site.setdefault(sid, g["sites"][(sid, _)])
-    evidence = [e for sid, s in sorted(first_of_site.items()) for e in _evidence(sid, s)]     # one chain per site, not per key
+    evidence = [e for sid, s in sorted(first_of_site.items()) for e in _evidence(sid, s, g["unit"])]     # one chain per site, not per key
     evidence.sort(key=lambda e: (e["siteId"], _EVIDENCE_ORDER[e["edge"]], e["ord"]))
     bound_sites = {e["siteId"] for e in evidence if e["edge"] == "BOUND_BY"}
     vias = []
@@ -393,7 +435,7 @@ def _build(lid: str, g: dict) -> Link:
 
 
 # -- (11) counts ----------------------------------------------------------------------------------
-def count_links(links: list[Link], refused_patterns: int = 0) -> dict:
+def count_links(links: list[Link], refused_patterns: int = 0, refused_texts: int = 0, refused_regex_pairs: int = 0) -> dict:
     """Totals by kind, status and reason, and the unknown-key fan-out: how many consumer sites had no key and the most
     providers one of them links to (the "Link counts under runtime-built URLs at scale" figure)."""
     fan: Counter = Counter()
@@ -406,4 +448,5 @@ def count_links(links: list[Link], refused_patterns: int = 0) -> dict:
             "by_status": dict(sorted(Counter(l.status for l in links).items())),
             "by_reason": dict(sorted(Counter(l.reason for l in links).items())),
             "unknown_key_consumers": len(fan), "max_fan_out": max(fan.values(), default=0),
-            "refused_patterns": refused_patterns}
+            "refused_patterns": refused_patterns, "refused_texts": refused_texts,
+            "refused_regex_pairs": refused_regex_pairs}

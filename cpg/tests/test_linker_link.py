@@ -7,7 +7,7 @@ import pytest
 
 from ccg import ids
 from ccg.linker import Links, Unmapped, link
-from linker_helpers import (FakeBindings, binding, cons, facts, lifted_leaf, mention, prov, shell_site, sym_in)
+from linker_helpers import (FakeBindings, binding, cons, facts, hid, lifted_leaf, mention, prov, shell_site, sym_in)
 from packrt_helpers import call
 
 
@@ -303,9 +303,9 @@ def test_an_unknown_key_narrowed_by_a_binding_links_the_units_providers_binding_
 def test_a_binding_into_a_unit_never_built_gives_a_possible_target_not_mapped_link_without_a_provider():
     b = bundle(sym_in("P", "svc"), sym_in("C", "web"))
     got = one(link(facts([prov("P", "http", "GET /a")], [cons("C", "http", "GET /a", "s1")]), [b],
-                   bindings=FakeBindings({"s1": binding(unmapped=Unmapped("fx-job-unit", "fx-job-unit"))})))
-    assert (got.status, got.reason, got.provider, got.to_unit) == ("possible", "target-not-mapped", None, "fx-job-unit")
-    assert got.link_id == ids.link_id("http", "GET /a", "unit:fx-job-unit", "C")        # no provider: the consumer's key
+                   bindings=FakeBindings({"s1": binding(unmapped=Unmapped(hid("fx-job-unit"), hid("fx-job-unit")))})))
+    assert (got.status, got.reason, got.provider, got.to_unit) == ("possible", "target-not-mapped", None, hid("fx-job-unit"))
+    assert got.link_id == ids.link_id("http", "GET /a", "unit:" + hid("fx-job-unit"), "C")        # no provider: the consumer's key
     assert got.key_norm == "GET /a" and got.matcher == "none"
 
 
@@ -380,7 +380,7 @@ def test_every_link_and_via_reason_is_a_registry_code_valid_on_link_with_the_reg
           cons("C2", "http", "GET /a", "s8")]
     b += sym_in("C1", "web", path="web/c1.py") + sym_in("C2", "web", path="web/c2.py")
     bd = FakeBindings({"s1": binding("svc"), "s2": binding("svc", "job"), "s3": binding("svc"),
-                       "s4": binding(unmapped=Unmapped("u9", "u9")), "s8": binding(unmapped=Unmapped("u9", "u9"))})
+                       "s4": binding(unmapped=Unmapped(hid("u9"), hid("u9"))), "s8": binding(unmapped=Unmapped(hid("u9"), hid("u9")))})
     got = link(facts(ps, cs), [b], bindings=bd)
     emitted = {l.reason for l in got.links} | {v.reason for l in got.links for v in l.sites}
     assert {"key-match", "binding-confirmed", "example-config", "partial-key", "unknown-key", "binding-narrowed", "port-shared",
@@ -448,10 +448,10 @@ def test_the_link_matcher_is_that_of_the_best_site_lowest_site_id_on_a_tie():
 
 def test_a_link_into_a_path_outside_every_manifest_repo_is_anchored_unmapped_and_has_no_to_unit():
     b = bundle(sym_in("P", "svc"), sym_in("C", "web"))
-    bd = FakeBindings({"s1": binding(unmapped=Unmapped(None, "ab12"))})
+    bd = FakeBindings({"s1": binding(unmapped=Unmapped(None, hid("ab12")))})
     got = one(link(facts([prov("P", "http", "GET /a")], [cons("C", "http", "GET /a", "s1")]), [b], bindings=bd))
     assert (got.status, got.reason, got.provider, got.to_unit) == ("possible", "target-not-mapped", None, None)
-    assert got.link_id == ids.link_id("http", "GET /a", "unmapped:ab12", "C")
+    assert got.link_id == ids.link_id("http", "GET /a", "unmapped:" + hid("ab12"), "C")
 
 
 def test_the_registry_lets_binding_confirmed_appear_on_a_via():
@@ -634,3 +634,77 @@ def test_a_config_entry_in_a_doc_file_is_not_a_caller():
     from linker_helpers import cfg_bundle
     pf = facts([prov("PE", "env_var", "PORT")], [cons("CE", "env_var", "PORT", "s1")])
     assert link(pf, [cfg_bundle("svc", "PE"), cfg_bundle("web", "CE", path="w/m.md", file_role="doc")]).links == []
+
+
+# --- F11 / F13 (analyst Pass 2) ---------------------------------------------------------------------
+@pytest.mark.parametrize("bad", ["key-match", "binding-confirmed", "verdict-confirmed", "unknown-key", "binding-narrowed"])
+def test_f11_weaken_refuses_a_reason_whose_registry_status_is_not_possible_or_that_is_the_matchs_own(bad):
+    from ccg.linker import Binding, BoundEntry
+    with pytest.raises(ValueError):
+        Binding(("svc",), (BoundEntry("e1"),), weaken=("possible", bad))
+
+
+@pytest.mark.parametrize("good", ["partial-key", "port-shared", "example-config", "name-only-provider", "target-not-mapped"])
+def test_f11_weaken_accepts_a_possible_registry_reason_valid_on_link(good):
+    from ccg.linker import Binding, BoundEntry
+    Binding(("svc",), (BoundEntry("e1"),), weaken=("possible", good))
+
+
+def test_f13_unmapped_ref_must_be_a_value_free_hex_id():
+    for bad in ("U1", "ab12", "../../etc", "G" * 32, hid("x").upper(), hid("x") + "0", ""):
+        with pytest.raises(ValueError):
+            Unmapped(None, bad)
+    Unmapped(None, hid("x"))
+
+
+def test_f13_unmapped_ref_is_tied_to_the_unit_id_when_there_is_one():
+    with pytest.raises(ValueError):
+        Unmapped(hid("u1"), hid("other"))
+    with pytest.raises(ValueError):
+        Unmapped("not-hex", "not-hex")
+    Unmapped(hid("u1"), hid("u1"))
+
+
+def test_f12_the_counts_report_refused_patterns_and_refused_texts_apart():
+    b = bundle(sym_in("P", "svc"), sym_in("C", "web"))
+    pf = facts([prov("P", "topic", "kafka:" + "a" * 300), prov("P", "topic", "kafka:aaaa", site="x")],
+               [cons("C", "topic", "kafka:ab*", "s1", form="regex"), cons("C", "topic", "kafka:(a+)+$", "s2", form="regex")])
+    got = link(pf, [b])
+    assert got.counts["refused_patterns"] == 1 and got.counts["refused_texts"] == 1
+
+
+def test_a_prompt_mention_consumer_carries_its_server_to_the_bindings_seam():
+    seen = {}
+
+    class Spy(FakeBindings):
+        def bind(self, consumer):
+            seen[consumer["siteId"]] = consumer.get("server", "absent")
+            return None
+    b = bundle(sym_in("P", "svc"), sym_in("D", "prompts", path="p/d.md")) + [mention("m1", "D", "mcp__cypher__query"), mention("m2", "D", "./x.sh")]
+    link(facts([prov("P", "mcp_tool", "query")], []), [b], bindings=Spy({}))
+    assert seen == {"m1": "cypher", "m2": None}
+
+
+def test_extra_counts_of_the_bindings_are_merged_into_the_links_counts():
+    class WithCounts(FakeBindings):
+        def counts(self):
+            return {"loopback_port_residual": 2}
+    b = bundle(sym_in("P", "svc"))
+    assert link(facts([], []), [b], bindings=WithCounts({})).counts["loopback_port_residual"] == 2
+
+
+# --- SEC B1: a hard pair budget across (pattern, literal) pairs of one link run ------------------------
+def test_a_link_run_stops_evaluating_regex_pairs_past_its_budget_and_counts_them():
+    b = bundle(sym_in("P1", "svc"), sym_in("P2", "svc"), sym_in("P3", "svc"), sym_in("C", "web"))
+    provs = [prov(f"P{i}", "topic", f"kafka:t{i}") for i in (1, 2, 3)]
+    pf = facts(provs, [cons("C", "topic", "kafka:t.", "s1", form="regex")])
+    full = link(pf, [b])
+    assert len(full.links) == 3 and full.counts["refused_regex_pairs"] == 0
+    got = link(pf, [b], regex_pairs=2)
+    assert len(got.links) == 2 and got.counts["refused_regex_pairs"] == 1
+
+
+def test_the_default_link_budget_is_the_matchers_constant():
+    import inspect
+    from ccg.linker import matchers
+    assert inspect.signature(link).parameters["regex_pairs"].default == matchers.MAX_REGEX_PAIRS == 800

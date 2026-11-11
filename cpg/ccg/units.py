@@ -60,6 +60,17 @@ class Unit(NamedTuple):
 # --- file listing and exclusion --------------------------------------------------------------------------------
 
 
+_MCP_JSON = re.compile(r"\.mcp(?:\..+)?\.json")
+
+
+def is_mcp_json(path: str) -> bool:
+    """True iff ``path`` is an MCP server configuration file: a basename ``.mcp.json``, ``.mcp.<x>.json`` (``.mcp.example.json``,
+    ``.mcp.local.json``), outside a vendored ``node_modules`` directory. The one predicate of the config extractor (its ``mcp-json``
+    format) and of the linker's binder (a server's entry is read only from such a file); ``.mcp.json.example`` is not one."""
+    *dirs, base = path.split("/")
+    return _MCP_JSON.fullmatch(base) is not None and "node_modules" not in dirs
+
+
 def _skipped_dir(name: str) -> bool:
     return name in SKIP_DIRS or name.endswith(".egg-info")
 

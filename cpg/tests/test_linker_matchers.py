@@ -4,6 +4,8 @@ Keys here are already ``keyNorm`` strings, as the pack runtime emits them: a mat
 writer's key again (bundle spec3 §6 step 6: a key is normalized once). ``http_key`` is the one entry for a raw URL or path
 the linker derives itself, and it follows the RFC 3986 order (F-13).
 """
+import re
+
 import pytest
 
 from ccg.linker import matchers as m
@@ -168,7 +170,7 @@ def test_ambiguous_or_heavily_quantified_patterns_are_refused(pattern):
 
 
 @pytest.mark.parametrize("pattern,text", [(r"^orders\..*", "orders.created"), ("(ab)?c", "abc"), ("(?:ab)+", "abab"),
-                                          ("a+b+c+", "aabbcc"), ("a+?b+?c+?", "abc"), ("[a+]+", "a+a"), ("[^]+*+*]", "a"), ("[]+*+*]", "]"), (r"\(a+\)+", "(aa)))"), ("a{2,3}", "aaa"), (r"a\+\+b", "a++b")])
+                                          ("a+b+", "aabb"), ("a+?b+?", "ab"), ("[a+]+", "a+a"), ("[^]+*+*]", "a"), ("[]+*+*]", "]"), (r"\(a+\)+", "(aa)))"), ("a{2,3}", "aaa"), (r"a\+\+b", "a++b")])
 def test_plain_patterns_still_match_and_are_not_reported(pattern, text):
     refused: set = set()
     assert _regex(pattern, text, refused) == m.Match("regex", False) and refused == set()
@@ -176,10 +178,281 @@ def test_plain_patterns_still_match_and_are_not_reported(pattern, text):
 
 def test_a_text_longer_than_256_characters_is_refused():
     refused: set = set()
-    assert _regex("a+", "a" * 257, refused) is None and refused == {"a+"}
+    assert _regex("a+", "a" * 257, refused) is None and refused == set()          # F12: the pattern is fine, the text is not
     assert _regex("a+", "a" * 256) == m.Match("regex", False)
 
 
-def test_exactly_three_unbounded_quantifiers_are_allowed_and_four_are_not():
-    assert m.regex_refusal("a*b*c*", "x") is None
-    assert m.regex_refusal("a*b*c*d*", "x") is not None
+def test_exactly_two_unbounded_quantifiers_are_allowed_and_three_are_not():
+    assert m.regex_refusal("a*b*", "x") is None
+    assert m.regex_refusal("a*b*c*", "x") is not None
+
+
+# --- F10 / F12 (analyst Pass 2): every quantifier counts; the refusal cause is reported apart --------
+ANALYST = r"a{1,3}(?:a)a{1,3}[ab]{0,5}a*[ab]?(?:a){2,}b?a+"
+
+
+def test_f10_the_analysts_stacked_bounded_quantifier_pattern_is_refused_at_once():
+    import time
+    refused: set = set()
+    t = time.perf_counter()
+    assert _regex(ANALYST, "a" * 255 + "!", refused) is None
+    assert time.perf_counter() - t < 0.3 and refused == {ANALYST}
+
+
+def test_f10_bounded_quantifiers_count_toward_the_total_cap_which_is_four():
+    # literal rows (SEC M1 / analyst N2): the expected cap is written here, never read from the constant under test
+    assert m.regex_refusal("a?a?a?a?", "x") is None
+    assert m.regex_refusal("a?a?a?a?a?", "x") is not None
+    assert m.regex_refusal("a{1,2}a{1,2}a{1,2}a{1,2}", "x") is None
+    assert m.regex_refusal("a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}", "x") is not None
+    assert m.regex_refusal("(?:ab){2}" * 5, "x") is not None
+
+
+def test_the_unbounded_cap_is_two_not_three_and_a_bounded_quantifier_is_not_unbounded():
+    assert m.regex_refusal("a*b+", "x") is None
+    assert m.regex_refusal("a*b+c{2,}", "x") is not None
+
+
+def test_f10_a_lazy_marker_is_part_of_its_quantifier_not_a_second_one():
+    assert m.regex_refusal("a??b??c??d??", "x") is None and m.regex_refusal("a??b??c??d??e??", "x") is not None
+
+
+def test_f10_a_seeded_fuzz_finds_no_admitted_pattern_slower_than_the_budget():
+    import random, signal, time
+
+    class Slow(Exception):
+        pass
+
+    def alarm(*_):
+        raise Slow
+    atoms = ["a", "b", "(?:a)", "(?:ab)", "[ab]", ".", "[a-c]"]
+    quants = ["", "", "*", "+", "?", "{2}", "{1,3}", "{0,5}", "{2,}", "*?", "+?", "{1,2}?"]
+    texts = ["a" * 255 + "!", "a" * 256, "ab" * 128, "a" * 200 + "b" * 55 + "!"]
+    rng, old = random.Random(11), signal.signal(signal.SIGALRM, alarm)
+    try:
+        for _ in range(600):
+            pattern = "".join(rng.choice(atoms) + rng.choice(quants) for _ in range(rng.randint(2, 14)))
+            if m.regex_refusal(pattern, "x" * 256) is not None:
+                continue
+            for text in texts:
+                signal.setitimer(signal.ITIMER_REAL, 0.5)
+                t = time.perf_counter()
+                try:
+                    re.fullmatch(pattern, text)
+                except Slow:
+                    pytest.fail(f"admitted but over 0.5 s: {pattern!r}")
+                finally:
+                    signal.setitimer(signal.ITIMER_REAL, 0)
+                assert time.perf_counter() - t < 0.3, (pattern, text)
+    finally:
+        signal.signal(signal.SIGALRM, old)
+
+
+def test_f12_a_fine_pattern_with_a_too_long_text_is_not_counted_as_a_refused_pattern():
+    refused, long_text = set(), set()
+    got = m.match_keys("topic", "exact", "kafka:" + "a" * 300, "kafka:ab+", consumer_form="regex",
+                       refused=refused, refused_text=long_text)
+    assert got is None and refused == set() and long_text == {"a" * 300}
+
+
+def test_f12_a_bad_pattern_is_counted_as_a_pattern_and_not_as_a_text():
+    refused, long_text = set(), set()
+    m.match_keys("topic", "exact", "kafka:aaaa", "kafka:(a+)+$", consumer_form="regex", refused=refused, refused_text=long_text)
+    assert refused == {"(a+)+$"} and long_text == set()
+
+
+@pytest.mark.parametrize("pattern", ["a+(?:a)*?[a-c]+a{0,5}a{1,2}?a", "a{0,5}(?:a)+(?:a)+[a-c]*?[a-c]{0,5}", "[ab]{0,5}[a-c]{2,}a+?a{0,5}a*?"])
+def test_f10_patterns_the_fuzz_found_slow_under_a_cap_of_five_are_refused(pattern):
+    assert m.regex_refusal(pattern, "x") is not None
+
+
+# --- SEC B1 (P1-17 security review): the quantifier grammar `re` really accepts ---------------------
+# `{,N}` and `{,}` are `{0,N}` and `*` to Python's parser; the scanner once read them as literal braces.
+def _timed_none(pattern, text):
+    import time
+    refused: set = set()
+    t = time.perf_counter()
+    got = _regex(pattern, text, refused)
+    return got, time.perf_counter() - t, refused
+
+
+@pytest.mark.parametrize("pattern", ["(a+){,}b", "(a+){,99}b", "(a|aa){,99}b", "(a*){,}b", "(a+){,}?b", "(a*){0,}b"])
+def test_b1_a_quantified_group_holding_a_quantifier_is_refused_in_every_brace_spelling(pattern):
+    got, took, refused = _timed_none(pattern, "a" * 30 + "c")
+    assert got is None and took < 0.3 and refused == {pattern}
+
+
+@pytest.mark.parametrize("pattern", [r"\w{,255}" * 6 + "x", r"\w{,}" * 8, "a{,}a{,}a{,}", "a{3,}a{4,}a{5,}", "a{,5}" * 5])
+def test_b1_stacked_brace_quantifiers_hit_the_caps_whatever_their_spelling(pattern):
+    got, took, refused = _timed_none(pattern, "a" * 255)
+    assert got is None and took < 0.3 and refused == {pattern}
+
+
+def test_b1_the_control_spellings_are_refused_too():
+    assert m.regex_refusal("(a+)+b", "x") is not None and m.regex_refusal("(a|a)*b", "x") is not None
+
+
+@pytest.mark.parametrize("pattern,text", [("a{,5}", "aaa"), ("a{,}", "aaaa"), ("a{2,}", "aaa"), ("a{,5}b{,5}", "aab"), ("a{,}?b", "aab"),
+                                          (r"a\{,5}", "a{,5}"), ("[a{,5}]+", "a"), ("a{x}", "a{x}"), ("a{}", "a{}"), ("a{ 5}", "a{ 5}"),
+                                          ("a{,", "a{,")])
+def test_b1_a_real_quantifier_is_counted_and_a_literal_brace_is_not_refused(pattern, text):
+    refused: set = set()
+    assert _regex(pattern, text, refused) == m.Match("regex", False) and refused == set()
+
+
+def test_b1_a_brace_that_is_a_quantifier_counts_and_one_that_is_a_literal_does_not():
+    assert m.regex_refusal("a{,5}" * 4, "x") is None and m.regex_refusal("a{,5}" * 5, "x") is not None      # quantifiers: 4 vs 5
+    assert m.regex_refusal("a{x}" * 9, "x") is None and m.regex_refusal(r"a\{,5}" * 9, "x") is None       # literals: no count
+
+
+@pytest.mark.parametrize("pattern", ["a{,}+", "a*+b", "a{2}+", "a?+"])
+def test_b1_possessive_forms_are_refused(pattern):
+    assert m.regex_refusal(pattern, "x") is not None
+
+
+@pytest.mark.parametrize("pattern", ["(?=a)b", "a(?!b)", "(?<=a)b", "(?<!a)b", r"(a)\1", "(?P<n>a)(?P=n)", "(?>a)b", "(a)?(?(1)b|c)"])
+def test_b1_constructs_outside_the_re2_subset_are_refused(pattern):
+    assert m.regex_refusal(pattern, "x") is not None
+
+
+def test_b1_a_pattern_the_parser_chokes_on_is_refused_not_raised():
+    for pattern in ("a{99999999999}", "a{1,99999999999}", "(" * 300 + "a" + ")" * 300, "(a"):
+        assert m.regex_refusal(pattern, "x") is not None
+
+
+def test_b1_a_construct_the_guard_cannot_classify_is_refused_by_default(monkeypatch):
+    monkeypatch.setattr(m, "_parse", lambda pattern: [("SOME_FUTURE_OPCODE", None)])
+    assert m.regex_refusal("a", "x") is not None
+
+
+def test_b1_with_no_parser_to_classify_with_every_pattern_is_refused(monkeypatch):
+    monkeypatch.setattr(m, "_parse", None)
+    assert m.regex_refusal("a", "x") is not None
+
+
+# -- the second bypass of the same guard: unquantified alternation groups multiply (2^n) -------------
+@pytest.mark.parametrize("pattern", ["(a|a)" * 30 + "b", "(?:a|a)" * 30 + "b", "(a|ab)" * 30 + "b"])
+def test_b1_many_alternation_groups_in_a_row_are_refused_they_backtrack_exponentially(pattern):
+    got, took, refused = _timed_none(pattern, "a" * 30 + "c")
+    assert got is None and took < 0.3 and refused == {pattern}
+
+
+def test_b1_a_few_alternations_still_match():
+    assert _regex(r"orders\.(created|updated|deleted)", "orders.updated") == m.Match("regex", False)
+    assert m.regex_refusal("(a|bc)(d|ef)(g|hi)", "x") is None             # 3 bars
+    assert m.regex_refusal("(a|bc)(d|ef)(g|hi)(j|kl)", "x") is None       # 4 bars
+    assert m.regex_refusal("(a|bc)(d|ef)(g|hi)(j|kl)(m|no)", "x") is not None
+
+
+# -- a hard work budget across (pattern, literal) pairs ----------------------------------------------
+def _budget_run(budget, pairs):
+    refused: set = set()
+    out = [m.match_keys("topic", "exact", f"kafka:{lit}", f"kafka:{pat}", consumer_form="regex", refused=refused, budget=budget)
+           for pat, lit in pairs]
+    return out, refused
+
+
+def test_a_pair_budget_stops_evaluation_after_its_limit_and_counts_the_rest():
+    budget = m.RegexBudget(3)
+    pairs = [("a+", "a" * i) for i in range(1, 7)]
+    got, _ = _budget_run(budget, pairs)
+    assert [g is not None for g in got] == [True, True, True, False, False, False]
+    assert budget.exhausted == 3
+
+
+def test_a_repeated_pair_is_evaluated_once_and_costs_one():
+    budget = m.RegexBudget(2)
+    got, _ = _budget_run(budget, [("a+", "aa")] * 5 + [("b+", "bb")])
+    assert all(g is not None for g in got) and budget.exhausted == 0
+
+
+def test_a_refused_pattern_costs_no_budget():
+    budget = m.RegexBudget(1)
+    got, refused = _budget_run(budget, [("(a+)+b", "aa")] * 3 + [("a+", "aa")])
+    assert got[-1] is not None and refused == {"(a+)+b"} and budget.exhausted == 0
+
+
+def test_the_default_budget_is_finite_and_literal():
+    assert m.MAX_REGEX_PAIRS == 800
+
+
+# -- a wide bounded quantifier costs as much as `*` (n^4 admitted at 0.46 s per pair before) -----------
+@pytest.mark.parametrize("pattern", [r"\w*\w*\w{0,255}\w{0,255}x", r"\w{,255}\w{,255}\w{,255}\w{,255}x", r"[\s\S]*[\s\S]*[\s\S]{,255}[\s\S]{,255}x",
+                                     r"\w*\w{,255}\w{,255}\w{,255}x"])
+def test_wide_bounded_quantifiers_count_as_unbounded_and_the_n4_patterns_are_refused_at_once(pattern):
+    got, took, refused = _timed_none(pattern, "a" * 255 + "!")
+    assert got is None and took < 0.3 and refused == {pattern}
+
+
+def test_the_wide_cap_is_two_and_a_span_of_eight_is_narrow_nine_is_wide():
+    assert m.regex_refusal("a{0,9}a{0,9}", "x") is None and m.regex_refusal("a{0,9}a{0,9}a{0,9}", "x") is not None
+    assert m.regex_refusal("a{0,8}" * 4, "x") is None and m.regex_refusal("a{3,12}a{3,12}a{3,12}", "x") is not None
+    assert m.regex_refusal("a{3,11}" * 4, "x") is None
+
+
+# -- what the tree sees and the text scan cannot: a verbose-mode comment hides a paren from the text --------------
+def test_b1_a_quantified_alternation_group_hidden_from_a_text_scan_by_a_verbose_comment_is_refused():
+    pattern = "(?x)(a|aa#)\n)*b"
+    assert re.fullmatch(pattern, "aab") and not re.fullmatch(pattern, "c")          # the engine reads (a|aa)*b
+    got, took, refused = _timed_none(pattern, "a" * 30 + "c")
+    assert got is None and took < 0.3 and refused == {pattern}
+
+
+@pytest.mark.parametrize("raised", [OverflowError, RecursionError, re.error, ValueError])
+def test_b1_a_parser_that_raises_anything_gives_a_refusal(monkeypatch, raised):
+    def boom(pattern):
+        raise raised("x")
+    monkeypatch.setattr(m, "_parse", boom)
+    assert m.regex_refusal("a", "x") is not None
+
+
+def test_a_repeated_pair_is_matched_by_the_engine_once(monkeypatch):
+    calls = []
+    real = re.fullmatch
+    monkeypatch.setattr(m.re, "fullmatch", lambda p, t, *a: calls.append((p, t)) or real(p, t, *a))
+    budget = m.RegexBudget(10)
+    _budget_run(budget, [("a+", "aa")] * 5 + [("b+", "bb")] * 2)
+    assert calls == [("a+", "aa"), ("b+", "bb")]
+
+
+# -- the cost model (security Pass 2 R1): the product of the factors, refused above a ceiling ---------------------------
+CORNER_1 = "(?:a.|.a)" * 4 + r"\w*\w*\w{0,8}\w{0,8}x"                 # 147 ms admitted before
+CORNER_2 = "(?i)" + CORNER_1                                              # 406 ms
+CORNER_3 = r"(?is)\S{0,8}[a-z]{2,9}\S{3,}a{,}(?:a|.)(?:.|a)(?:a|.)(?:.|a)x"  # 440 ms
+
+
+@pytest.mark.parametrize("pattern", [CORNER_1, CORNER_2, CORNER_3])
+def test_r1_the_known_slow_admitted_patterns_are_refused_at_once(pattern):
+    got, took, refused = _timed_none(pattern, "a" * 255 + "!")
+    assert got is None and took < 0.05 and refused == {pattern}
+
+
+def test_r1_the_cost_ceiling_is_a_product_with_literal_rows():
+    ok = lambda p: m.regex_refusal(p, "x") is None
+    assert ok(r"\w*\w*") and ok(r"\w*\w{0,3}")                          # 257*257 = 66k; 257*4 = 1k... both under 100k
+    assert not ok(r"\w*\w*\w?")                                         # 132k: a third overlapping factor
+    assert ok(r"\w*\w{0,8}\w{0,8}") and not ok(r"\w*\w{0,9}\w{0,9}\w{0,3}")      # 257*81 = 20.8k; 257*100*4 = 103k
+    assert ok("(?:a.|.a)" * 4) and ok("(a|bc)(d|ef)(g|hi)(j|kl)")        # branch multiplicities: 16 and 16
+    assert not ok("(?:a.|.a)" * 4 + r"\w*\w*")                           # 16 * 66k
+
+
+def test_r1_a_widening_flag_multiplies_the_cost_by_four():
+    ok = lambda p: m.regex_refusal(p, "x") is None
+    assert ok(r"\w*\w{0,8}\w{0,8}") and ok(r"(?i)\w*\w{0,8}")           # 20.8k; 257*9*4 = 9.3k
+    assert ok(r"\w*\w*") and not ok(r"(?i)\w*\w*")                      # 66k; 264k
+    assert ok(r"(?i)\w*\w{0,8}\w{0,8}") and not ok(r"(?i)\w*\w{0,8}\w{0,8}\w{0,1}")   # 257*81*4 = 83k; *2 more = 167k (a factor of 2 would admit it)
+    assert not ok(r"(?s)\w*\w*") and not ok(r"(?:(?i:\w*\w*))")
+
+
+def test_r1_the_pair_budget_is_sized_from_the_measured_worst_pair_not_the_typical_one():
+    assert m.MAX_REGEX_PAIRS == 800 and m.MAX_COST == 100_000         # worst admitted pair measured 12.2 ms: 800 pairs bound a run near 10 s
+
+
+def test_p5_the_cost_ceiling_boundary_is_inclusive_and_the_widening_factor_is_four():
+    ok = lambda p: m.regex_refusal(p, "x") is None
+    assert m.WIDENING_FACTOR == 4
+    assert ok(r"a{0,249}b{0,199}c?")                                    # 250 * 200 * 2 = 100000 = MAX_COST exactly: admitted (>, not >=)
+    assert not ok(r"a{0,249}b{0,200}c?")                                # 250 * 201 * 2 = 100500
+    assert ok(r"(?i)a{0,249}b{0,49}c?")                                 # 25000 * 4 = 100000 exactly: admitted
+    assert ok(r"(?i)a{0,249}b{0,47}c?")                                 # 24000 * 4 = 96000 (a factor of 5 would refuse it)
+    assert not ok(r"(?i)a{0,249}b{0,58}c?")                             # 29500: x4 = 118000 refused, x3 = 88500 would admit it

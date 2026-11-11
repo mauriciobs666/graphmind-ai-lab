@@ -1,0 +1,18 @@
+Evidence for the matchers.py regex cost guard (ccg.linker.matchers: MAX_COST, WIDENING_FACTOR, MAX_REGEX_PAIRS).
+Tracked summary of untracked working files (cpg/.ccg-work/p1-17b/corner-search.txt, gitignored). Figures are as recorded there or as reported.
+
+Corner-biased search (P1-17 fix batch b), 3 seeds (3, 4, 5).
+  Generator (the script itself was not kept; described from the recorded worst patterns): random concatenations of corner shapes --
+  'a', '\w', '\S', '\W', '.', classes, alternation groups ((a|aa), (?:a.|.a), (?:.|.), (?:\w|\S)) -- each with a random quantifier
+  from a corner set (*, +, ?, lazy forms, {n}, {n,m}, {,n}, {n,}, spans up to 255, malformed braces), sometimes inside a class or brace nest.
+  Each candidate the guard (regex_pattern_refusal) admitted was run with re against worst-case 256-character texts and timed.
+  Totals over the three seeds: 188,857 candidates generated, 53,623 admitted.
+  Worst admitted pair: 12.2 ms (seed 4, at the 256-character text cap). Admitted pairs over 50 ms: 0. Over 300 ms: 0.
+  Worst time by decimal digits of the model cost: 1-3 digits <= 0.3 ms, 4 digits <= 1.3 ms, 5 digits 12.2 ms.
+
+Reported by reviewers (not reproducible from the repository):
+  Security reviewer: worst admitted pair 11.4 ms.
+  Analyst Pass 5: a 75 s fuzz over 726,550 generated patterns (86,478 admitted), worst admitted pair 2.6 ms.
+
+Consequence: MAX_REGEX_PAIRS = 800 pairs bound a run near 10 s at the worst measured pair. A measured bound, not a proof (Python re cannot
+be interrupted); a linear-time engine or a killable worker is P2.
